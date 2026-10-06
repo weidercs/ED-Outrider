@@ -43,7 +43,7 @@ also run 24/7 on a home server in Docker.
 | ⛽ **Fuel you can trust** | Jumps left at max range and at your pace, laden range, fuel per hop, how scoopable your recent stars have been, and a nudge to top up before a dry stretch. |
 | 🧭 **Decide where to go** | Unfinished systems nearby, the nearest buyers for your data, bookmarks and a next stop, stellar phenomena, and a search across Spansh. |
 | 🛣 **Neutron Highway** | Plot a neutron route with Spansh for any ship you have flown; Outrider follows it as you fly and says the next stop. |
-| 💰 **Road to Riches** | Plot a [Spansh Road to Riches](https://spansh.co.uk/riches) route in the Riches tab; Outrider follows it as you fly, shows what is left to scan and map in each system from your journal, and says it on arrival. |
+| 💰 **Road to Riches** | Plot a [Spansh Road to Riches](https://spansh.co.uk/riches) route in the Plot Route tab; Outrider follows it as you fly, shows what is left to scan and map in each system from your journal, and says it on arrival. |
 | 📜 **Your logbook** | Every journal event in a searchable log, every exobiology sample and what became of it, and a schematic of the system. |
 | 📈 **The long view** | Each trip from sale to sale with what it actually paid, what each ship loss cost, your best finds, ranks and career statistics. |
 | 🗣 **A voice with personality** | A natural neural voice, down to business, sarcastic or sweet, briefing you on arrival and warning before you leave something unfinished. |
@@ -412,24 +412,14 @@ for your next visit and listed under Materials' **Mining sites**.
 The map's sizes and the leash distance are in the thresholds table under Alerts; the spoken leash warning
 always uses the config file's `rig_warn`.
 
-## 💰 Road to Riches
-
-The **Riches** tab plots a [Spansh Road to Riches](https://spansh.co.uk/riches) route: a chain of systems whose planets
-are worth scanning (and mapping). Give it a start (default: where you are), a range (default: your ship's), and
-Spansh's own options (radius, number of systems, minimum value, maximum distance, mapping value). Outrider follows the
-route as you jump, marks every body you have scanned or mapped (read from your journal), says on arrival how many
-bodies are worth the stop and the next system, and copies the next system's name to the clipboard like the Highway
-does. The route is kept until you clear it or plot another. Spansh publishes no description of this API:
-`scripts/riches_probe.py` checks it against the live site.
-
 ## 🛣 The Neutron Highway
 
-The **Highway** tab plots a route with [Spansh](https://spansh.co.uk), using neutron stars as boosts, and
-follows it as you fly. One route is kept (following it needs no network) until you plot another or
-**Clear route**.
+The **Plot Route** tab plots a route with [Spansh](https://spansh.co.uk), using neutron stars as boosts (or a
+Road to Riches, below), and follows it as you fly. One route of each kind is kept (following it needs no network)
+until you plot another or **Clear route**.
 
 <p align="center">
-  <img src="docs/images/highway.png" alt="The Highway tab: the jump list, and the route on a map of the galaxy's regions" width="900">
+  <img src="docs/images/highway.png" alt="The Plot Route tab: the jump list, and the route on a map of the galaxy's regions" width="900">
 </p>
 
 - **Two plotters.** **Exact** (the default) plans every jump with its fuel and refuel stops from your ship's own
@@ -454,6 +444,15 @@ follows it as you fly. One route is kept (following it needs no network) until y
   `wl-copy` or `xclip`, see Getting started; Windows: built in; on the game PC only).
 - **The voice:** "Next Neutron Highway Stop: Hwy Stop 38, with three jumps left to refuel. Boost your FSD to
   continue.", plus refuel stops, detours, "Back on the highway", "Highway complete" and the fuel warning.
+
+**Road to Riches.** The third plotter, **Road to Riches**, asks Spansh for a chain of systems whose planets are worth
+scanning (and mapping): from where you are (or From), with your ship's range, and Spansh's own options (radius, number
+of systems, maximum distance, minimum value, mapping value, avoiding Thargoid systems, a loop back). The list then
+shows each system with what is left to do there, the bodies by name under the one you are at and the next, ✔ scanned
+and ✔✔ mapped from your journal; on arrival the voice says how many bodies are worth the stop and the best of them,
+and once they are done, the next system. It is not auto-targeted: a Road to Riches is for stopping, not hurrying past.
+With a Highway route as well, a switch above the heading picks which one the tab shows; only the one plotted last
+copies its next system to the clipboard. (Road to Riches is thshurka's contribution.)
 
 **Auto-target** (Linux, Windows experimental; on the game PC only, off by default; the tab's **Auto-target the next system** box). After an FSD supercharge
 in a route system it waits 5 s, then presses keys to make the next route system your target: it opens the galaxy

@@ -2,8 +2,11 @@
 bodies are still to do, and the line said on arriving. Pure helpers: the route's state, its tables and the plot
 under way live in ed_outrider.State, as the Neutron Highway's do (outrider/highway.py).
 
-Spansh publishes no description of this API: the field names below follow what other tools read from it (EDXD,
-issue 176) and are read leniently. A missing field is a missing value, a body or system that is not a dict or has no
+Spansh publishes no description of this API. Checked against the live site on 2026-10-06 (tests/fixtures/
+spansh_riches.json is that answer, trimmed): POST /api/riches/route with form fields, then /api/results/{job}; each
+system has name, id64, x, y, z, jumps and bodies, each body name, type, subtype, distance_to_arrival,
+estimated_scan_value, estimated_mapping_value, is_terraformable and id64 (a string). scripts/riches_probe.py checks it
+again. Fields are read leniently: a missing field is a missing value, a body or system that is not a dict or has no
 name is skipped, and an answer with no usable system is a RichesError."""
 import math
 
@@ -58,7 +61,9 @@ def riches_rows(result):
                 "ls": _num(b.get("distance_to_arrival")),
                 "scan": _num(b.get("estimated_scan_value"), int), "map": _num(b.get("estimated_mapping_value"), int),
                 "terraformable": 1 if b.get("is_terraformable") or b.get("terraforming_state") == "Candidate for terraforming"
-                else 0, "body_id": bid if bid is not None and bid >= 0 else None})
+                else 0,
+                # the game's BodyID, as body_id is everywhere else: a body id64's top 9 bits
+                "body_id": bid >> 55 if bid is not None and 0 <= bid < 2 ** 64 else None})
         rows.append({"system": name.strip(), "id64": id64 if id64 is not None and 0 <= id64 < 2 ** 63 else None,
                      "x": _num(s.get("x")), "y": _num(s.get("y")), "z": _num(s.get("z")),
                      "jumps": max(0, _num(s.get("jumps"), int) or 0) if rows else 0, "bodies": bodies})

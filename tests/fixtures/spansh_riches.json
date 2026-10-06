@@ -1,0 +1,96 @@
+{
+ "job": "6C34549E-C19E-11F1-A4DF-BCCA51CAC7E0",
+ "status": "ok",
+ "state": "completed",
+ "parameters": {
+  "avoid_thargoids": 1,
+  "loop": "0",
+  "max_distance": "50000",
+  "max_results": "5",
+  "min_value": "300000",
+  "radius": "50",
+  "range": "50",
+  "source": "Colonia",
+  "use_mapping_value": "1"
+ },
+ "result": [
+  {
+   "bodies": [],
+   "id64": "3238296097059",
+   "jumps": 1,
+   "name": "Colonia",
+   "x": -9530.5,
+   "y": -910.28125,
+   "z": 19808.125
+  },
+  {
+   "bodies": [
+    {
+     "distance_to_arrival": 364.229681,
+     "estimated_mapping_value": 588537,
+     "estimated_scan_value": 161983,
+     "id": 324260340562174546,
+     "id64": "324260340562174546",
+     "is_terraformable": true,
+     "landmark_value": null,
+     "name": "Eol Prou PC-K c9-4 A 6",
+     "subtype": "High metal content world",
+     "type": "Planet"
+    },
+    {
+     "distance_to_arrival": 505.072694,
+     "estimated_mapping_value": 1024955,
+     "estimated_scan_value": 282098,
+     "id": 360289137581138514,
+     "id64": "360289137581138514",
+     "is_terraformable": true,
+     "landmark_value": null,
+     "name": "Eol Prou PC-K c9-4 A 7",
+     "subtype": "Water world",
+     "type": "Planet"
+    }
+   ],
+   "id64": "1167391498834",
+   "jumps": 1,
+   "name": "Eol Prou PC-K c9-4",
+   "x": -9520.09375,
+   "y": -927.65625,
+   "z": 19846.25
+  },
+  {
+   "bodies": [
+    {
+     "distance_to_arrival": 1447.694857,
+     "estimated_mapping_value": 900938,
+     "estimated_scan_value": 247965,
+     "id": 468387701322486059,
+     "id64": "468387701322486059",
+     "is_terraformable": true,
+     "landmark_value": null,
+     "name": "Eol Prou WY-R d4-388 A 7",
+     "subtype": "Water world",
+     "type": "Planet"
+    },
+    {
+     "distance_to_arrival": 8849.71421,
+     "estimated_mapping_value": 621045,
+     "estimated_scan_value": 170930,
+     "id": 612502889398341931,
+     "id64": "612502889398341931",
+     "is_terraformable": true,
+     "landmark_value": null,
+     "name": "Eol Prou WY-R d4-388 BC 3",
+     "subtype": "High metal content world",
+     "type": "Planet"
+    }
+   ],
+   "id64": "13340075954475",
+   "jumps": 1,
+   "name": "Eol Prou WY-R d4-388",
+   "x": -9497.1875,
+   "y": -919.5625,
+   "z": 19830.8125
+  }
+ ],
+ "_note": "A real Spansh Road to Riches answer (POST /api/riches/route, then /api/results/{job}), recorded 2026-10-06 from Colonia and trimmed to three systems, two bodies each."
+}

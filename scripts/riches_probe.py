@@ -1,10 +1,11 @@
 """One-off probe of Spansh's Road to Riches API: finds out whether it takes POST or GET, and saves the real answer.
 
-    python scripts/riches_probe.py "Sol" 50          (start system, jump range in ly)
+    python scripts/riches_probe.py "Colonia" 50 [out.json]    (start system, jump range in ly, where to save the answer)
 
-It asks for a small route (5 systems), tries POST (form fields) and then GET, polls the job and writes the finished
-answer to tests/fixtures/spansh_riches.json, then prints which method worked and the field names it saw. Compare
-those with outrider/riches.py (riches_rows) and RICHES_METHOD in ed_outrider.py. Not part of the tests or of Outrider."""
+It asks for a small route (5 systems), tries POST (form fields) and then GET, polls the job and saves the finished
+answer (riches_probe.json in the current folder unless given; tests/fixtures/spansh_riches.json is a trimmed copy of
+one, so it is not overwritten by default), then prints which method worked and the field names it saw. Compare those
+with outrider/riches.py (riches_rows) and RICHES_METHOD in ed_outrider.py. Not part of the tests or of Outrider."""
 import json
 import sys
 import time
@@ -33,6 +34,7 @@ def call(method, url, params=None):
 def main():
     frm = sys.argv[1] if len(sys.argv) > 1 else "Sol"
     rng = sys.argv[2] if len(sys.argv) > 2 else "50"
+    out_path = sys.argv[3] if len(sys.argv) > 3 else "riches_probe.json"
     params = {"from": frm, "range": rng, "radius": 25, "max_results": 5, "max_distance": 50000, "min_value": 100000,
               "use_mapping_value": 1, "avoid_thargoids": 1, "loop": 0}
     for method in ("POST", "GET"):
@@ -49,11 +51,11 @@ def main():
         else:
             print("the job did not finish in 2 minutes")
             continue
-        with open("tests/fixtures/spansh_riches.json", "w", encoding="utf-8") as f:
+        with open(out_path, "w", encoding="utf-8") as f:
             json.dump(res, f, ensure_ascii=False, indent=1)
         r = res.get("result", res) if isinstance(res, dict) else res
         first = r[0] if isinstance(r, list) and r else {}
-        print(method, "worked: saved tests/fixtures/spansh_riches.json")
+        print(method, "worked: saved", out_path)
         print("answer keys:", sorted(res) if isinstance(res, dict) else type(res).__name__)
         print("system keys:", sorted(first) if isinstance(first, dict) else first)
         bodies = first.get("bodies") if isinstance(first, dict) else None

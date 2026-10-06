@@ -230,7 +230,7 @@ SPANSH_GENERIC_ROUTE = "https://spansh.co.uk/api/generic/route"  # the exact plo
 SPANSH_RESULTS = "https://spansh.co.uk/api/results/{job}"
 # Road to Riches: answers {job} like the plotters above; the route (systems with their bodies) is in the results
 SPANSH_RICHES = "https://spansh.co.uk/api/riches/route"
-RICHES_METHOD = "POST"      # form fields; to be confirmed against the live API (scripts/riches_probe.py)
+RICHES_METHOD = "POST"      # form fields (checked against the live API 2026-10-06; scripts/riches_probe.py checks it again)
 RICHES = {"radius": 25, "max_results": 25, "max_distance": 50000, "min_value": 100000,   # defaults of the plot form
           "use_mapping_value": True, "avoid_thargoids": True, "loop": False}
 RICHES_AHEAD = 100          # route systems GET /api/riches lists from where you are...

@@ -18,8 +18,8 @@ def body(name, subtype, ls, scan, mapped, **kw):
                  "estimated_scan_value": scan, "estimated_mapping_value": mapped}, **kw)
 
 
-# A synthetic answer in the layout other tools read from Spansh's Road to Riches (EDXD issue 176): made-up systems, not
-# a recorded answer. Replace it with a real one once scripts/riches_probe.py has fetched it.
+# A synthetic answer in Spansh's Road to Riches layout (made-up systems, for the route logic); RichesRows.test_real_answer
+# reads a real one (tests/fixtures/spansh_riches.json).
 RESULT = [
     {"name": "Alpha Rich", "id64": 1001, "x": 0, "y": 0, "z": 0, "jumps": 0,
      "bodies": [body("Alpha Rich 1", "Earth-like world", 500, 1200000, 3000000, is_terraformable=False),
@@ -45,6 +45,22 @@ class RichesRows(unittest.TestCase):
         # the answer may hold the list under "result" or "systems"
         self.assertEqual(len(riches.riches_rows({"result": RESULT})), 3)
         self.assertEqual(len(riches.riches_rows({"systems": RESULT})), 3)
+
+    def test_real_answer(self):
+        """A real answer (recorded 2026-10-06 from Colonia, trimmed): the systems and bodies as Spansh sends them, the
+        body's id64 (a string) giving the game's BodyID (its top 9 bits), as body_id is everywhere else."""
+        import json
+        import os
+        with open(os.path.join(os.path.dirname(__file__), "fixtures", "spansh_riches.json"), encoding="utf-8") as f:
+            answer = json.load(f)
+        rows = riches.riches_rows(answer["result"])
+        self.assertEqual([r["system"] for r in rows], ["Colonia", "Eol Prou PC-K c9-4", "Eol Prou WY-R d4-388"])
+        self.assertEqual((rows[1]["id64"], rows[1]["jumps"], len(rows[1]["bodies"])), (1167391498834, 1, 2))
+        b = rows[1]["bodies"][0]
+        self.assertEqual((b["name"], b["subtype"], b["terraformable"], b["body_id"], round(b["ls"])),
+                         ("Eol Prou PC-K c9-4 A 6", "High metal content world", 1, 9, 364))
+        self.assertEqual((b["scan"], b["map"]), (161983, 588537))
+        self.assertEqual([x["body_id"] for x in rows[2]["bodies"]], [13, 17])   # "A 7" and "BC 3"
 
     def test_lenient_and_errors(self):
         rows = riches.riches_rows([

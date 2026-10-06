@@ -2,6 +2,14 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-06 · Road to Riches: the review's loose ends
+- Spansh's Road to Riches API, which publishes no description, checked against the live site: the code's notes say
+  what it takes and answers, and `tests/fixtures/spansh_riches.json` is a real answer (trimmed) that a test reads.
+  `scripts/riches_probe.py` saves to its own file rather than over that fixture.
+- A Road to Riches body's `body_id` is the game's BodyID (from its id64), as everywhere else in Outrider.
+- README: Road to Riches is described in the Neutron Highway section (one tab, Plot Route); AGENT_GUIDE and
+  DESIGN_NOTES cover it.
+
 ## 2026-10-06 · Road to Riches moves into the Plot Route tab (formerly Highway)
 - Road to Riches (thshurka's PR #1: a Spansh route of systems with valuable planets, followed as you fly) is a route
   type of the tab now, not a tab of its own: the plotter switch reads Exact / Neutron / **Road to Riches**, which shows
