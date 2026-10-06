@@ -2,6 +2,9 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-06 · Version 2026.10.15
+- Road to Riches (thshurka's contribution), as a route type of the Plot Route tab (formerly Highway).
+
 ## 2026-10-06 · Road to Riches: the review's loose ends
 - Spansh's Road to Riches API, which publishes no description, checked against the live site: the code's notes say
   what it takes and answers, and `tests/fixtures/spansh_riches.json` is a real answer (trimmed) that a test reads.
