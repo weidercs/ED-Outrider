@@ -43,6 +43,7 @@ also run 24/7 on a home server in Docker.
 | ⛽ **Fuel you can trust** | Jumps left at max range and at your pace, laden range, fuel per hop, how scoopable your recent stars have been, and a nudge to top up before a dry stretch. |
 | 🧭 **Decide where to go** | Unfinished systems nearby, the nearest buyers for your data, bookmarks and a next stop, stellar phenomena, and a search across Spansh. |
 | 🛣 **Neutron Highway** | Plot a neutron route with Spansh for any ship you have flown; Outrider follows it as you fly and says the next stop. |
+| 💰 **Road to Riches** | Plot a [Spansh Road to Riches](https://spansh.co.uk/riches) route in the Riches tab; Outrider follows it as you fly, shows what is left to scan and map in each system from your journal, and says it on arrival. |
 | 📜 **Your logbook** | Every journal event in a searchable log, every exobiology sample and what became of it, and a schematic of the system. |
 | 📈 **The long view** | Each trip from sale to sale with what it actually paid, what each ship loss cost, your best finds, ranks and career statistics. |
 | 🗣 **A voice with personality** | A natural neural voice, down to business, sarcastic or sweet, briefing you on arrival and warning before you leave something unfinished. |
@@ -410,6 +411,16 @@ for your next visit and listed under Materials' **Mining sites**.
 
 The map's sizes and the leash distance are in the thresholds table under Alerts; the spoken leash warning
 always uses the config file's `rig_warn`.
+
+## 💰 Road to Riches
+
+The **Riches** tab plots a [Spansh Road to Riches](https://spansh.co.uk/riches) route: a chain of systems whose planets
+are worth scanning (and mapping). Give it a start (default: where you are), a range (default: your ship's), and
+Spansh's own options (radius, number of systems, minimum value, maximum distance, mapping value). Outrider follows the
+route as you jump, marks every body you have scanned or mapped (read from your journal), says on arrival how many
+bodies are worth the stop and the next system, and copies the next system's name to the clipboard like the Highway
+does. The route is kept until you clear it or plot another. Spansh publishes no description of this API:
+`scripts/riches_probe.py` checks it against the live site.
 
 ## 🛣 The Neutron Highway
 

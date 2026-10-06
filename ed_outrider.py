@@ -194,6 +194,9 @@ from outrider.highway import (   # the Neutron Highway's route helpers and the d
     HIGHWAY_BG_TYPES, Clipboard, HighwayError, highway_bg_file, highway_match, highway_refuel_in, highway_rows,
     highway_text,
 )
+from outrider.riches import (   # Road to Riches: Spansh's route of systems with valuable bodies
+    RichesError, body_value, norm_name, riches_match, riches_rows, riches_text, todo,
+)
 try:  # one-line summaries of every journal event, for the Log view
     import outrider.log
 except ImportError:
@@ -225,6 +228,13 @@ SPANSH_STATION_SEARCH = "https://spansh.co.uk/api/stations/search"
 SPANSH_ROUTE = "https://spansh.co.uk/api/route"                  # the neutron plotter: from, to, range, efficiency
 SPANSH_GENERIC_ROUTE = "https://spansh.co.uk/api/generic/route"  # the exact plotter: the ship's figures, fuel too
 SPANSH_RESULTS = "https://spansh.co.uk/api/results/{job}"
+# Road to Riches: answers {job} like the plotters above; the route (systems with their bodies) is in the results
+SPANSH_RICHES = "https://spansh.co.uk/api/riches/route"
+RICHES_METHOD = "POST"      # form fields; to be confirmed against the live API (scripts/riches_probe.py)
+RICHES = {"radius": 25, "max_results": 25, "max_distance": 50000, "min_value": 100000,   # defaults of the plot form
+          "use_mapping_value": True, "avoid_thargoids": True, "loop": False}
+RICHES_AHEAD = 100          # route systems GET /api/riches lists from where you are...
+RICHES_DONE = 10            # ...and done systems above them (the most recent)
 SPANSH_SYSTEM_NAMES = "https://spansh.co.uk/api/systems/field_values/system_names"   # system names as you type
 SPANSH_SYSTEM_SEARCH = "https://spansh.co.uk/api/search/systems"   # ?q=name: {results: [{id64, name, x, y, z}]}
 HIGHWAY = {"clipboard": True, "autotarget": False, "autotarget_delay": 5.0, "efficiency": 60,   # [highway] defaults
@@ -1362,6 +1372,16 @@ CREATE TABLE IF NOT EXISTS fleet_loadouts (
 CREATE TABLE IF NOT EXISTS highway_route (
     idx INTEGER PRIMARY KEY, system TEXT, id64 INTEGER, x REAL, y REAL, z REAL, distance REAL, fuel_used REAL,
     fuel_left REAL, neutron INTEGER, refuel INTEGER, jumps INTEGER, remaining REAL);
+-- Road to Riches: the one active route Spansh plotted (idx 0 is where it starts) with the bodies it names per system,
+-- and its plot and progress in meta 'riches' (options, created_ts, since_ts, at, furthest, off_route, arrival_ts, done_ts,
+-- said_done: the row whose "all done" was said). Which bodies you have done is never stored here: it is read from
+-- own_bodies / own_mapped (the journal) when asked. Live only (a plot cannot be rebuilt from journals), so a journal
+-- re-read keeps it (not in RESET_JOURNAL_DATA); backups carry it.
+CREATE TABLE IF NOT EXISTS riches_route (
+    idx INTEGER PRIMARY KEY, system TEXT, id64 INTEGER, x REAL, y REAL, z REAL, jumps INTEGER);
+CREATE TABLE IF NOT EXISTS riches_bodies (
+    idx INTEGER, n INTEGER, name TEXT, type TEXT, subtype TEXT, ls REAL, scan INTEGER, map INTEGER,
+    terraformable INTEGER, body_id INTEGER, PRIMARY KEY (idx, n));
 CREATE INDEX IF NOT EXISTS route_xyz ON route_systems (x, y, z);
 CREATE INDEX IF NOT EXISTS visits_xyz ON visits (x, y, z);
 """
@@ -2048,6 +2068,7 @@ class Journals:
         # lat, lon, target: ("rig" | "site", id), n, minerals {name: tons}, tons, said}
         self.burst = None
         self._hw_rows = (None, [])   # (route id, highway_route rows): the Highway's route, read once per plot
+        self._rc_rows = (None, [])   # (route id, riches_route rows with their bodies): Road to Riches, read once per plot
         self.reload()
 
     def moment(self, kind, ts, **kw):
@@ -2171,6 +2192,100 @@ class Journals:
         if self._hw_rows[0] != hw.get("id"):
             self._hw_rows = (hw.get("id"), [dict(r) for r in self.db.execute("SELECT * FROM highway_route ORDER BY idx")])
         return self._hw_rows[1]
+
+    def riches_route(self, rc):
+        """The active Road to Riches route's systems, each with its `bodies` (cached per plot: a new plot has a new id)."""
+        if not rc:
+            return []
+        if self._rc_rows[0] != rc.get("id"):
+            rows = [dict(r, bodies=[]) for r in self.db.execute("SELECT * FROM riches_route ORDER BY idx")]
+            by = {r["idx"]: r for r in rows}
+            for b in self.db.execute("SELECT * FROM riches_bodies ORDER BY idx, n"):
+                if b["idx"] in by:
+                    by[b["idx"]]["bodies"].append(dict(b))
+            self._rc_rows = (rc.get("id"), rows)
+        return self._rc_rows[1]
+
+    def riches_marks(self, id64):
+        """(scanned, mapped): the norm_name'd names of the bodies of a system you have scanned / mapped, from the
+        journal (own_bodies, own_mapped)."""
+        scanned = {norm_name(r[0]) for r in self.db.execute("SELECT name FROM own_bodies WHERE system=?", (id64,))}
+        mapped = {norm_name(r[0]) for r in self.db.execute(
+            "SELECT b.name FROM own_mapped m JOIN own_bodies b ON b.system = m.system AND b.body_id = m.body_id "
+            "WHERE m.system=?", (id64,))}
+        return scanned, mapped
+
+    def riches_left(self, rc, rows, i):
+        """The bodies of route row i still to do (scan, and the map when the route counts mapping), from the journal."""
+        r = rows[i]
+        scanned, mapped = self.riches_marks(r["id64"]) if r["id64"] is not None else (set(), set())
+        mapping = bool((rc.get("options") or {}).get("use_mapping_value"))
+        return [b for b in todo(r["bodies"], scanned, mapped, mapping) if not b["done"]]
+
+    def riches_arrival(self, id64, name, ts):
+        """A jump into a system with a Road to Riches route active: progress (the row you are at, the furthest
+        reached), the detour when the system is not on the route, back on it, and the end (the last system with nothing
+        left to do there). Only arrivals newer than the position the route was plotted at (since_ts) and than the last
+        one applied count, so a journal re-read never moves it; the spoken moments only for a jump just now
+        (live_event). Same rules as highway_arrival."""
+        rc = meta_get(self.db, "riches")
+        if not rc:
+            return
+        since = rc.get("since_ts")
+        if (ts < since if since else ts <= (rc.get("created_ts") or "")) or ts <= (rc.get("arrival_ts") or ""):
+            return
+        rows = self.riches_route(rc)
+        if not rows:
+            return
+        at, furthest, done = rc.get("at"), rc.get("furthest"), bool(rc.get("done_ts"))
+        i = riches_match(rows, id64, name, at if at is not None else furthest or 0)
+        rc["arrival_ts"] = ts
+        say = None
+        if i is None:
+            rc["at"] = None
+            if not done and furthest is not None and not rc.get("off_route"):
+                rc["off_route"] = {"ts": ts, "system": name, "id64": id64}
+                say = ("off_route", "Off route: detour.", 0)
+        else:
+            back = bool(rc.get("off_route"))
+            rc.update(at=i, furthest=max(i, furthest if furthest is not None else i), off_route=None)
+            left = self.riches_left(rc, rows, i)
+            if done:
+                pass   # finished: the route stays visible, quietly, until cleared
+            elif not left and i == len(rows) - 1:
+                rc.update(done_ts=ts, said_done=i)
+                say = ("complete", riches_text(rows, i, left), 0)
+            else:
+                if not left:
+                    rc["said_done"] = i   # nothing to do here: no "all done" to say later
+                say = ("back" if back else "next", ("Back on the route. " if back else "") + riches_text(rows, i, left), len(left))
+        meta_set(self.db, "riches", rc)
+        if say and live_event(ts):
+            nxt = rows[i + 1]["system"] if i is not None and i + 1 < len(rows) else None
+            self.moment("riches", ts, what=say[0], text=say[1], system=name, index=i, next=nxt, left=say[2])
+
+    def riches_progress(self, id64, ts):
+        """After a Scan or a mapping in the system you are at on a Road to Riches route: when that was the last body
+        to do, say so once (the next stop, or the end of the route). Marked in meta whether or not it is spoken, so a
+        re-read says nothing later."""
+        rc = meta_get(self.db, "riches")
+        if not rc or rc.get("at") is None or rc.get("done_ts"):
+            return
+        rows = self.riches_route(rc)
+        i = rc["at"]
+        if i >= len(rows) or rows[i]["id64"] is None or rows[i]["id64"] != id64 or rc.get("said_done") == i:
+            return
+        if not rows[i]["bodies"] or self.riches_left(rc, rows, i):
+            return
+        rc["said_done"] = i
+        last = i == len(rows) - 1
+        if last:
+            rc["done_ts"] = ts
+        meta_set(self.db, "riches", rc)
+        if live_event(ts):
+            nxt = None if last else rows[i + 1]["system"]
+            self.moment("riches", ts, what="complete" if last else "done", system=rows[i]["system"], index=i, next=nxt,
+                        left=0, text=("Everything here is done. " + ("Road to Riches complete." if last else f"Next stop: {nxt}.")))
 
     def highway_arrival(self, id64, name, ts):
         """A jump into a system with a Highway route active: progress (the row you are at, the furthest reached),
@@ -2526,6 +2641,8 @@ class Journals:
             return
         if name in SCAN_EVENTS:
             self.handle_scan(name, ev, ts)
+            if name in ("Scan", "SAAScanComplete"):
+                self.riches_progress(ev.get("SystemAddress"), ts)
             return
         if name in DATA_EVENTS:
             if name == "Died":
@@ -2659,6 +2776,7 @@ class Journals:
         # F10), not a relog where you already were
         if name in ("FSDJump", "CarrierJump", "Location") and current and not relog:
             self.highway_arrival(id64, ev.get("StarSystem"), ts)
+            self.riches_arrival(id64, ev.get("StarSystem"), ts)
 
     def note_region(self, prev, id64, x, y, z, ts):
         """A jump from `prev` into a galactic region not announced this session: the arrival briefing opens with it
@@ -4327,10 +4445,11 @@ class Spansh:
                  "x": x.get("system_x"), "y": x.get("system_y"), "z": x.get("system_z")}
                 for x in d.get("results") or []]
 
-    async def plot(self, url, params, poll=None, timeout=None):
+    async def plot(self, url, params, poll=None, timeout=None, method="GET"):
         """A Spansh route job (the neutron or the exact plotter): submit it, then ask for its result every `poll` s
         (HIGHWAY_POLL_S) until it is done or `timeout` s (HIGHWAY_PLOT_TIMEOUT) pass. One plot at a time. The result
-        dict, or HighwayError in words for the page (Spansh's own error, unreachable, timed out)."""
+        dict, or HighwayError in words for the page (Spansh's own error, unreachable, timed out). method: how the job
+        is submitted ("GET" with the query, "POST" with form fields); the results are always asked with GET."""
         poll = HIGHWAY_POLL_S if poll is None else poll
         timeout = HIGHWAY_PLOT_TIMEOUT if timeout is None else timeout
         if self.session is None:
@@ -4338,7 +4457,7 @@ class Spansh:
         async with self.sem_plot:
             loop = asyncio.get_running_loop()
             deadline = loop.time() + timeout
-            d = await self._plot_get(url, params)
+            d = await self._plot_get(url, params, method)
             while d.get("result") is None:
                 job = d.get("job")
                 if not isinstance(job, str) or not re.fullmatch(r"[\w-]{1,100}", job):
@@ -4349,10 +4468,12 @@ class Spansh:
                 d = await self._plot_get(SPANSH_RESULTS.format(job=job), None)
             return d["result"]
 
-    async def _plot_get(self, url, params):
+    async def _plot_get(self, url, params, method="GET"):
         """One request of a plot: Spansh's JSON answer (queued, or the result), or HighwayError."""
         try:
-            async with self.session.get(url, params=params) as r:
+            call = (self.session.post(url, data={k: str(v) for k, v in (params or {}).items()}) if method == "POST"
+                    else self.session.get(url, params=params))
+            async with call as r:
                 try:
                     d = await r.json(content_type=None)
                 except ValueError:
@@ -4837,6 +4958,10 @@ class State:
         # too much fuel for the next jump (highway_heavy_check): {key: (route id, row, arrival), live, said, t, look,
         # heavy: {need_t, have_t, distance, boost, next} or None}
         self._hw_heavy = {"key": None, "live": False, "said": False, "t": None, "look": None, "heavy": None}
+        # Road to Riches: the plot under way (as highway_plotting), its task, the arrival whose next system was copied
+        self.riches_plotting = None
+        self.riches_task = None
+        self._rc_copied = (meta_get(db, "riches") or {}).get("arrival_ts")
 
     def bump(self):
         self.version += 1
@@ -8936,6 +9061,194 @@ class State:
             cb.copy(name)
         return True
 
+    # ---- Road to Riches (outrider/riches.py): Spansh's route of systems with valuable bodies ----
+
+    def riches_state(self):
+        """(meta, rows) of the active route, or (None, [])."""
+        rc = meta_get(self.db, "riches")
+        rows = self.journals.riches_route(rc) if rc else []
+        return (rc, rows) if rc and rows else (None, [])
+
+    @staticmethod
+    def riches_next(rc, rows):
+        """The index of the next route system after where you are (None once you are at the end)."""
+        at, furthest = rc.get("at"), rc.get("furthest")
+        i = at + 1 if at is not None else furthest + 1 if furthest is not None else 0
+        return i if i < len(rows) else None
+
+    def riches_system_out(self, rc, rows, i):
+        """Route row i for the page: the system, and its bodies with what you have scanned and mapped (journal)."""
+        r = rows[i]
+        mapping = bool((rc.get("options") or {}).get("use_mapping_value"))
+        scanned, mapped = self.journals.riches_marks(r["id64"]) if r["id64"] is not None else (set(), set())
+        bodies = todo(r["bodies"], scanned, mapped, mapping)
+        left = [b for b in bodies if not b["done"]]
+        return {"i": i, "system": r["system"], "id": str(r["id64"]) if r["id64"] is not None else None,
+                "x": r["x"], "y": r["y"], "z": r["z"], "jumps": r["jumps"], "left": len(left),
+                "value": sum(body_value(b, mapping) or 0 for b in bodies),
+                "value_left": sum(body_value(b, mapping) or 0 for b in left),
+                "bodies": [{k: b[k] for k in ("name", "type", "subtype", "ls", "scan", "map", "terraformable", "scanned",
+                                              "mapped", "done")} for b in bodies]}
+
+    def riches_view(self):
+        """GET /api/riches: the route with its progress (RICHES_AHEAD systems from where you are and the RICHES_DONE
+        before), the plot under way, and what the plot form needs (position, range, defaults, clipboard)."""
+        rc, rows = self.riches_state()
+        route = None
+        if rc:
+            nx = self.riches_next(rc, rows)
+            at = rc.get("at")
+            base = at if at is not None else (nx if nx is not None else len(rows))
+            first = max(0, base - RICHES_DONE)
+            route = dict({k: rc.get(k) for k in ("id", "options", "created_ts", "at", "furthest", "off_route",
+                                                  "arrival_ts", "done_ts")},
+                         **{"from": rows[0]["system"], "to": rows[-1]["system"], "count": len(rows), "first": first,
+                            "next": nx, "systems": [self.riches_system_out(rc, rows, i)
+                                                    for i in range(first, min(len(rows), first + RICHES_DONE + RICHES_AHEAD))]})
+        cb = self.clipboard.info() if self.clipboard else {"enabled": self.highway_cfg["clipboard"], "available": False,
+                                                           "tool": None, "why": "not started", "last": None}
+        ship = self.fleet_ship((self.journals.ship or {}).get("ship_id"))
+        fig = (ship or {}).get("figures") or {}
+        cargo = (self.journals.cargo or {}).get("count") or 0
+        return {"route": route, "plotting": self.riches_plotting, "position": with_id(self.journals.pos),
+                "range": round(fleet_range(fig, cargo), 2) if ship and fleet_range(fig, cargo) else None,
+                "defaults": dict(RICHES), "clipboard": cb}
+
+    def riches_start_plot(self, body):
+        """POST /api/riches/plot: check the request, start the Spansh job in the background, (answer, HTTP status).
+        {from (default: where you are), to (optional), range (default: the current ship's), radius, max_results,
+        max_distance, min_value, use_mapping_value, avoid_thargoids, loop}."""
+        if self.riches_task and not self.riches_task.done():
+            return {"error": "a route is being plotted already"}, 409
+        name = lambda v: " ".join(v.split()) if isinstance(v, str) else ""
+        frm = name(body.get("from")) or (self.journals.pos or {}).get("name") or ""
+        to = name(body.get("to"))
+        if not frm or len(frm) > FIND_NAME_MAX or len(to) > FIND_NAME_MAX:
+            return {"error": f"give the start system's name (up to {FIND_NAME_MAX} characters)"}, 400
+
+        def number(k, lo, hi, conv=float, default=None):
+            v = body.get(k)
+            if v is None or v == "":
+                return default
+            try:
+                if isinstance(v, bool) or not isinstance(v, (int, float, str)):
+                    raise ValueError(k)
+                v = conv(float(v))
+            except (ValueError, OverflowError):
+                raise ValueError(f"{k} is not a number") from None
+            if not (lo <= v <= hi):
+                raise ValueError(f"{k} is out of range ({lo:g} to {hi:g})")
+            return v
+
+        def flag(k):
+            v = body.get(k, RICHES[k])
+            if not isinstance(v, bool):
+                raise ValueError(f"{k} must be true or false")
+            return v
+        ship = self.fleet_ship((self.journals.ship or {}).get("ship_id"))
+        cargo = (self.journals.cargo or {}).get("count") or 0
+        try:
+            rng = number("range", 1, 1000, float, fleet_range((ship or {}).get("figures") or {}, cargo) if ship else None)
+            if not rng:
+                return {"error": "give the jump range (ly), or fly a ship Outrider has seen a Loadout of"}, 400
+            opts = {"range": round(rng, 2), "radius": number("radius", 1, 1000, float, RICHES["radius"]),
+                    "max_results": number("max_results", 1, 500, int, RICHES["max_results"]),
+                    "max_distance": number("max_distance", 1, 1000000, float, RICHES["max_distance"]),
+                    "min_value": number("min_value", 0, 1000000000, int, RICHES["min_value"]),
+                    "use_mapping_value": flag("use_mapping_value"), "avoid_thargoids": flag("avoid_thargoids"),
+                    "loop": flag("loop")}
+        except ValueError as e:
+            return {"error": str(e)}, 400
+        params = dict(opts, **{"from": frm}, **({"to": to} if to else {}))
+        for k in ("use_mapping_value", "avoid_thargoids", "loop"):
+            params[k] = int(params[k])
+        self.riches_plotting = {"state": "running", "from": frm, "to": to or None, "started": iso_ts(time.time()),
+                                "error": None}
+        self.riches_task = asyncio.get_running_loop().create_task(self._riches_plot(params, {"options": opts}))
+        self.bump()
+        return {"ok": True, "plotting": self.riches_plotting}, 202
+
+    async def _riches_plot(self, params, meta):
+        p = self.riches_plotting
+        try:
+            result = await self.spansh.plot(SPANSH_RICHES, params, method=RICHES_METHOD)
+            self.riches_store(riches_rows(result), meta)
+            p.update(state="done")
+            self.riches_copy_next(force=True)   # you are usually at its start: the first hop is ready to paste
+        except (HighwayError, RichesError) as e:
+            p.update(state="failed", error=str(e))
+        except Exception as e:  # noqa: BLE001 -- say it on the page rather than lose it in a task
+            import traceback
+            traceback.print_exc()
+            p.update(state="failed", error=f"{type(e).__name__}: {e}")
+        finally:
+            p["ended"] = iso_ts(time.time())
+            self.bump()
+
+    def riches_store(self, rows, meta):
+        """A new route replaces the old one: its rows and bodies, and its meta with where you are on it now."""
+        self.db.execute("DELETE FROM riches_route")
+        self.db.execute("DELETE FROM riches_bodies")
+        self.db.executemany("INSERT INTO riches_route (idx, system, id64, x, y, z, jumps) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            [(i, r["system"], r["id64"], r["x"], r["y"], r["z"], r["jumps"]) for i, r in enumerate(rows)])
+        self.db.executemany(
+            "INSERT INTO riches_bodies (idx, n, name, type, subtype, ls, scan, map, terraformable, body_id)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [(i, n, b["name"], b["type"], b["subtype"], b["ls"], b["scan"], b["map"], b["terraformable"], b["body_id"])
+             for i, r in enumerate(rows) for n, b in enumerate(r["bodies"])])
+        pos = self.journals.pos
+        i = riches_match(rows, pos["id64"], pos["name"]) if pos else None
+        now = time.time()
+        rc = dict(meta, id=f"{now:.6f}", created_ts=iso_ts(now), since_ts=(pos or {}).get("ts"), at=i, furthest=i,
+                  off_route=None, arrival_ts=None, done_ts=None, said_done=None)
+        meta_set(self.db, "riches", rc)
+        self.db.commit()
+        self._rc_copied = None
+        return rc
+
+    def riches_clear(self):
+        """POST /api/riches/clear: forget the route (and stop a plot under way)."""
+        if self.riches_task and not self.riches_task.done():
+            self.riches_task.cancel()
+            if self.riches_plotting:
+                self.riches_plotting.update(state="failed", error="cancelled")
+        self.db.execute("DELETE FROM riches_route")
+        self.db.execute("DELETE FROM riches_bodies")
+        meta_set(self.db, "riches", None)
+        self.db.commit()
+        self.bump()
+
+    def riches_copy_next(self, force=False):
+        """After an arrival on the route (live, HIGHWAY_LIVE_S), or a new plot (force): copy the next system's name to
+        the desktop clipboard, once per arrival (the same clipboard and switch as the Highway's)."""
+        rc, rows = self.riches_state()
+        cb = self.clipboard
+        if not rc or not cb or not cb.enabled or not cb.tool:
+            return False
+        key = rc.get("arrival_ts") or rc.get("created_ts")
+        if key == self._rc_copied and not force:
+            return False
+        self._rc_copied = key
+        if rc.get("at") is None or rc.get("done_ts"):
+            return False
+        if not force and not (rc.get("arrival_ts") and live_event(rc["arrival_ts"]) and
+                              time.time() - ts_seconds(rc["arrival_ts"]) <= HIGHWAY_LIVE_S):
+            return False
+        nx = self.riches_next(rc, rows)
+        if nx is None:
+            return False
+        name = rows[nx]["system"]
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop:
+            fut = loop.run_in_executor(None, cb.copy, name)
+            fut.add_done_callback(lambda _f: self.bump())
+        else:
+            cb.copy(name)
+        return True
+
     # ---- auto-target (outrider/target.py): after a supercharge on the route, target the next system with key presses ----
     def autotarget_target(self, manual=False):
         """({name, id64, here, route, index}, None) when you are at a route system with a next one, else (None, why
@@ -9474,7 +9787,7 @@ class State:
                                ("apply_own_changes", self.apply_own_changes), ("maybe_classify_target", self.maybe_classify_target),
                                ("maybe_unsold", self.maybe_unsold), ("maybe_sale_left", self.maybe_sale_left),
                                ("maybe_locate_carrier", self.maybe_locate_carrier), ("maybe_find_sellers", self.maybe_find_sellers),
-                               ("maybe_backup_on_quit", self.maybe_backup_on_quit), ("highway_copy_next", self.highway_copy_next),
+                               ("maybe_backup_on_quit", self.maybe_backup_on_quit), ("highway_copy_next", self.highway_copy_next), ("riches_copy_next", self.riches_copy_next),
                                ("highway_heavy_check", self.highway_heavy_check), ("maybe_autotarget", self.maybe_autotarget)):
                 try:
                     step()
@@ -10745,6 +11058,21 @@ def make_app(state, hosts=None):
         state.highway_clear()
         return web.json_response({"ok": True})
 
+    async def riches_view(_):
+        return web.json_response(state.riches_view())
+
+    async def riches_plot_view(request):
+        """Plot a Road to Riches route with Spansh (in the background: GET /api/riches shows how it went)."""
+        body = await json_object(request)
+        if body is None:
+            return web.json_response({"error": "expected a JSON object"}, status=400)
+        out, status = state.riches_start_plot(body)
+        return web.json_response(out, status=status)
+
+    async def riches_clear_view(_):
+        state.riches_clear()
+        return web.json_response({"ok": True})
+
     async def highway_autotarget_view(request):
         """The Highway tab's auto-target toggle and delay: {enabled?: bool, delay?: seconds 0-60}."""
         body = await json_object(request)
@@ -11201,6 +11529,9 @@ def make_app(state, hosts=None):
     app.router.add_get("/api/highway/background", highway_background_view)
     app.router.add_get("/api/regions", regions_view)
     app.router.add_post("/api/highway/plot", highway_plot_view)
+    app.router.add_get("/api/riches", riches_view)
+    app.router.add_post("/api/riches/plot", riches_plot_view)
+    app.router.add_post("/api/riches/clear", riches_clear_view)
     app.router.add_post("/api/highway/clear", highway_clear_view)
     app.router.add_post("/api/highway/autotarget", pc_only(highway_autotarget_view))
     app.router.add_post("/api/highway/autotarget/test", pc_only(highway_autotarget_test_view))

@@ -17,7 +17,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
 <header>
   <div class="topbar">
     <h1>ED Outrider</h1>
-    <span class="views"><button data-view="overview">Overview</button><button data-view="near">Nearby</button><button data-view="here">Here</button><button data-view="bio">Samples</button><button data-view="bm" id="bmViewBtn">Bookmarks</button><button data-view="search">Search</button><button data-view="map">Map</button><button data-view="hwy" title="the Neutron Highway: plot a route with Spansh and follow it as you fly">Highway</button><button data-view="hist">History</button><button data-view="log">Log</button><button data-view="mat">Materials</button><button data-view="firsts">My firsts</button><button data-view="now" title="big text for a second monitor (or open the page with ?mode=now)">Now</button><button id="nowPop" title="open Now in a window of its own, to drag to another monitor (it stays on Now)">↗</button></span>
+    <span class="views"><button data-view="overview">Overview</button><button data-view="near">Nearby</button><button data-view="here">Here</button><button data-view="bio">Samples</button><button data-view="bm" id="bmViewBtn">Bookmarks</button><button data-view="search">Search</button><button data-view="map">Map</button><button data-view="hwy" title="the Neutron Highway: plot a route with Spansh and follow it as you fly">Highway</button><button data-view="rich" title="Road to Riches: a Spansh route of systems with valuable planets, and what is left to scan and map in each">Riches</button><button data-view="hist">History</button><button data-view="log">Log</button><button data-view="mat">Materials</button><button data-view="firsts">My firsts</button><button data-view="now" title="big text for a second monitor (or open the page with ?mode=now)">Now</button><button id="nowPop" title="open Now in a window of its own, to drag to another monitor (it stays on Now)">↗</button></span>
     <span class="icons"><button type="button" id="audioPill" class="audiopill" hidden title="the browser holds back Outrider's voice and sounds until you click on the page: click here">🔇 Click Here To Allow Audio</button><button type="button" id="updPill" class="updpill" hidden title="a newer Outrider is out: click for what's new and how to update">⬆ Update</button><span id="linkPill" class="linkpill" role="status" title="the page's link to Outrider"></span><button id="sound" class="icon" title="sounds">🔊</button><button id="speechBtn" class="icon" title="spoken alerts">🗣</button><span class="hushwrap"><button id="hushBtn" class="icon hushbtn" title="hush the voice for a while (danger lines still speak)" aria-haspopup="true">▾</button><span id="hushLbl" class="hushlbl" hidden></span>
       <span id="hushMenu" class="hushmenu" hidden><b>Hush the voice</b><button type="button" data-hush="10m">10 minutes</button><button type="button" data-hush="30m">30 minutes</button><button type="button" data-hush="jump">until the next jump</button><button type="button" data-hush="off">cancel the hush</button><span class="unk">hull, heat, interdiction and fuel still speak, and what you ask for</span></span></span><button id="alertsBtn" class="icon" title="settings: alerts, voice, thresholds, the server">⚙</button><span id="lastSaidLine" class="lastsaid" hidden><button type="button" id="lastSaidBtn" class="icon" title="say it again">▶</button><span id="lastSaidText"></span></span></span>
   </div>
@@ -344,6 +344,41 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     </div>
   </div>
 </section>
+<section id="richView" hidden>
+  <div id="richPanes">
+    <div id="richHead"></div>
+    <div class="pane" id="richPane"><div id="richList"></div></div>
+    <div id="richTotal" hidden></div>
+    <details id="richPlot">
+      <summary>Plot a route</summary>
+      <form id="richForm" autocomplete="off">
+        <div class="srow">
+          <label>From <input type="text" id="richFrom" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100" placeholder="where you are"></label>
+          <label>To <input type="text" id="richTo" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100" placeholder="optional: a destination"></label>
+        </div>
+        <div class="srow">
+          <label title="the jump range to plot with: the current ship's laden range unless you type another">Range <input type="number" id="richRange" min="1" max="1000" step="any" inputmode="decimal"> ly</label>
+          <label title="how far from the route a system may be to be included (ly)">Radius <input type="number" id="richRadius" min="1" max="1000" step="any" inputmode="decimal"> ly</label>
+          <label title="how many systems the route has">Systems <input type="number" id="richMax" min="1" max="500" step="1" inputmode="numeric"></label>
+        </div>
+        <div class="srow">
+          <label title="ignore bodies farther than this from the arrival star (ls)">Max distance <input type="number" id="richDist" min="1" max="1000000" step="any" inputmode="decimal"> ls</label>
+          <label title="the least a body must be worth to count (credits)">Min value <input type="number" id="richMin" min="0" max="1000000000" step="1" inputmode="numeric"> cr</label>
+        </div>
+        <div class="srow">
+          <label title="count the detailed-surface-scan bonus as well as the scan"><input type="checkbox" id="richMapping"> include mapping value</label>
+          <label><input type="checkbox" id="richThargoid"> avoid Thargoid-hit systems</label>
+          <label title="end the route where it began"><input type="checkbox" id="richLoop"> loop</label>
+        </div>
+        <div class="srow">
+          <button type="submit" id="richGo" class="go">Plot</button>
+          <button type="button" id="richClear">Clear route</button>
+          <span id="richStatus" role="status"></span>
+        </div>
+      </form>
+    </details>
+  </div>
+</section>
 <section id="searchView" hidden>
   <div class="pane" id="searchPane">
   <form id="findForm" class="srow">
@@ -431,6 +466,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     <button type="button" class="tb-page" data-view="search">Search</button>
     <button type="button" class="tb-page" data-view="map">Map</button>
     <button type="button" class="tb-page" data-view="hwy">Highway</button>
+    <button type="button" class="tb-page" data-view="rich">Riches</button>
   </div>
   <button type="button" class="tb-group" data-group="records" aria-expanded="false">Records</button>
   <div class="tb-pages" data-pages="records">

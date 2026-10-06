@@ -979,3 +979,31 @@ body.notgamepc .pcOnly, body.notgamepc [data-aim] { display: none !important; }
 :root[data-theme] body:not(.tablet) .updpill { border-radius: var(--desk-pill, 999px); font-family: var(--desk-pill-font, var(--tb-font-display));
   text-transform: var(--desk-pill-case, var(--tb-case)); letter-spacing: min(var(--tb-track), .5px); }
 :root[data-theme] body:not(.tablet) .tile .lbl { color: var(--desk-lbl, var(--muted)); }
+
+/* Road to Riches: the header, the systems with their bodies, the plot form */
+#richView { margin-top: 12px; }
+#richPanes { display: flex; flex-direction: column; gap: 8px; }
+#richHead { font-size: 13px; } #richHead .hwyttl { font-size: 16px; font-weight: 600; }
+#richHead .hwystate { margin: 2px 0; } #richHead .hwydone { color: var(--good); font-weight: 600; } #richHead .copy { cursor: copy; }
+.richsys { margin-top: 8px; font-size: 13px; } .richsys .num { color: var(--muted); font-variant-numeric: tabular-nums; }
+.richsys .copy { cursor: copy; font-weight: 600; }
+.richsys.done { color: var(--muted); } .richsys.next { color: var(--accent); } .richsys.at .copy { color: var(--accent); }
+.richleft { color: var(--info); } .richnone { color: var(--good); }
+.richbodies { width: calc(100% - 12px); table-layout: fixed; font-size: 12px; margin: 2px 0 0 12px; }
+.richbodies col.c1 { width: 30%; } .richbodies col.c2 { width: 28%; } .richbodies col.c3, .richbodies col.c4, .richbodies col.c5 { width: 11%; } .richbodies col.c6 { width: 9%; }
+.richbodies td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+#richTotal { flex: 0 0 auto; font-size: 13px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; } .richbodies td { padding: 1px 8px; }
+.richbodies tr.done td { color: var(--muted); } .richbodies td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.richbodies td.richc { text-align: center; color: var(--good); }
+#richPlot { border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; font-size: 13px; }
+#richPlot > summary { cursor: pointer; color: var(--accent); font-weight: 600; padding: 2px 0; }
+#richForm .srow { gap: 8px 16px; margin: 6px 0; }
+#richForm input[type=text], #richForm input[type=number] { background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: 6px; padding: 2px 6px; }
+#richForm input[type=text] { width: 16em; } #richForm input[type=number] { width: 6em; }
+#richForm button { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 2px 10px; cursor: pointer; }
+#richForm button:disabled { opacity: .5; cursor: default; } #richForm button.go { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+#richStatus { color: var(--muted); } #richStatus.err { color: var(--bad); } #richStatus.ok { color: var(--good); }
+body.app #richPanes { flex: 1 1 0; min-height: 0; }
+body.app #richHead, body.app #richPlot, body.app #richTotal { flex: 0 0 auto; }
+body.app #richPlot { max-height: 45vh; overflow: auto; }

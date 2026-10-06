@@ -1083,6 +1083,73 @@ const settle = async maxMs => {
     allOk = allOk && goodS3;
     console.log(goodS3 ? "OK" : "FAIL", "| batch S3 |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(got)}` : "variant shown, codex title per variant, find by name opens Here, long name refused", errors.slice(before));
   }
+  // Road to Riches tab: the systems with their bodies (done, next, you-are-here), the plot form's body and its polling,
+  // the arrival moment's spoken line, and the clear button's two clicks. Every request is answered here.
+  {
+    const w = dom.window, d = w.document, before = errors.length, realFetch = w.fetch, calls = [];
+    const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), {status, headers: {"Content-Type": "application/json"}}));
+    const body = (name, scan, o = {}) => Object.assign({name, type: "Planet", subtype: "Water world", ls: 1200, scan, map: scan * 3,
+      terraformable: 0, scanned: false, mapped: false, done: false}, o);
+    const sys = (i, name, left, bodies) => ({i, system: name, id: String(8000 + i), jumps: i ? 7 : 0, left, value: 1e6, value_left: left * 5e5, bodies});
+    const route = {from: "Rich A", to: "Rich C", count: 3, first: 0, next: 2, at: 1, furthest: 1, off_route: null, created_ts: "2026-10-01T10:00:00Z",
+      options: {}, systems: [sys(0, "Rich A", 0, [body("Rich A 1", 100000, {scanned: true, mapped: true, done: true})]),
+        sys(1, "Rich B", 1, [body("Rich B 2", 900000, {scanned: true}), body("Rich B 3", 400000)]),
+        sys(2, "Rich C", 1, [body("Rich C 1", 700000, {subtype: "Earth-like world"})])]};
+    const payload = (rt, plotting = null) => ({route: rt, plotting, position: {name: "Rich B", id: "8001"}, range: 61.5,
+      defaults: {radius: 25, max_results: 25, max_distance: 50000, min_value: 100000, use_mapping_value: true, avoid_thargoids: true, loop: false},
+      clipboard: {enabled: false, available: false}});
+    let answer = () => json(payload(route));
+    w.fetch = (u, o) => {
+      const url = String(u);
+      if (url.startsWith("api/riches")) { calls.push([url, o && o.method || "GET", o && o.body ? JSON.parse(o.body) : null]); return answer(url, o); }
+      return realFetch(u, o);
+    };
+    if (!d.getElementById("nowView").hidden) { d.getElementById("nowBack").click(); await sleep(300); }
+    d.querySelector('[data-view="rich"]').click(); await sleep(600);
+    const got = {};
+    got.shown = !d.getElementById("richView").hidden;
+    got.systems = [...d.querySelectorAll("#richList .richsys")].map(e => e.className.replace("richsys ", "") + ":" + e.dataset.i).join();
+    got.bodies = d.querySelectorAll("#richList .richbodies tr").length;   // A is all done (folded), B and C list theirs
+    got.marks = [...d.querySelectorAll("#richList td.richc")].map(e => e.textContent).join("|");
+    got.head = d.getElementById("richHead").textContent.replace(/\s+/g, " ");
+    got.formFolded = !d.getElementById("richPlot").open;
+    got.range = d.getElementById("richRange").value;
+    // a plot: the form's body, then polled until done
+    d.getElementById("richTo").value = "Far Away"; let polls = 0;
+    answer = url => {
+      if (url === "api/riches/plot") return json({ok: true, plotting: {state: "running", from: "Rich B", to: "Far Away", started: new Date().toISOString()}}, 202);
+      polls++;
+      return json(payload(polls < 3 ? null : route, polls < 3 ? {state: "running", from: "Rich B", to: "Far Away", started: new Date().toISOString()} : {state: "done", from: "Rich B", to: "Far Away"}));
+    };
+    d.getElementById("richGo").click(); await sleep(300);
+    got.plotBody = (calls.find(c => c[0] === "api/riches/plot") || [])[2];
+    got.running = d.getElementById("richStatus").textContent;
+    await sleep(5400);
+    got.polls = polls;
+    // clear: the first click only asks
+    answer = url => url === "api/riches/clear" ? json({ok: true}) : json(payload(null));
+    calls.length = 0;
+    d.getElementById("richClear").click(); await sleep(50);
+    got.clearFirst = [calls.length, d.getElementById("richClear").textContent];
+    d.getElementById("richClear").click(); await sleep(400);
+    got.cleared = [calls.map(c => c[0] + " " + c[1]).join(), d.getElementById("richPane").hidden];
+    got.nav = w.eval("VIEW_PANE.rich === 'richPane' && TABLET_VIEWS.includes('rich') && SPEECH_SYS_BOUND.has('riches') && ALERTS.some(a => a[0] === 'riches')");
+    w.fetch = realFetch;
+    d.querySelector('[data-view="overview"]').click(); await sleep(200);
+    const want = {shown: true, systems: "done:0,at:1,next:2", bodies: 3, marks: "✔||", formFolded: true, range: "61.5",
+      plotBody: {from: undefined, to: "Far Away", range: 61.5, radius: 25, max_results: 25, max_distance: 50000, min_value: 100000,
+                 use_mapping_value: true, avoid_thargoids: true, loop: false},
+      clearFirst: [0, "Click again to clear"], cleared: ["api/riches/clear POST,api/riches GET", true], nav: true};
+    delete want.plotBody.from;
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    if (!(/Rich A → Rich C/.test(got.head) && /you are at system 2 of 3/.test(got.head))) bad.push("head");
+    if (!/^Asking Spansh/.test(got.running)) bad.push("running");
+    if (!(got.polls >= 3)) bad.push("polls");
+    const goodRC = !bad.length && errors.length === before;
+    allOk = allOk && goodRC;
+    console.log(goodRC ? "OK" : "FAIL", "| riches tab |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
+      : "systems done/at/next, bodies and marks, form with the ship's range, plot body and polling, clear", errors.slice(before));
+  }
   // G2.2, F48, F64: a bad server copy (a list that is not a list, a null object, a number for 'saved') does not stop
   // the page: a fresh browser still starts polling
   {

@@ -2549,6 +2549,7 @@ class JournalsRegistry(unittest.TestCase):
     # meta key -> why it is NOT cleared by RESET_JOURNAL_DATA
     KEPT_THROUGH_REREAD = {
         "highway": "live-only: the Highway route (DESIGN_NOTES), cannot be rebuilt from journals",
+        "riches": "live-only: the Road to Riches route (Spansh's plot), cannot be rebuilt from journals",
         "next_stop": "live-only: the player's chosen next stop (stamp_next_stop keeps it through the re-read)",
         "docked": "rebuilt by the re-read (Docked/Undocked replayed in order, Undocked guarded by fresh()); kept so "
                   "the docked state is not blank while it runs",

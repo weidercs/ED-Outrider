@@ -37,7 +37,7 @@ const TABLET = typeof document !== "undefined" && !!document.body && document.bo
 // group: the nav group shown while you browse another one; beforeMap: the page to go back to when the surface map hides
 // (null: you were on Now already, or chose a page since); mapWas: whether the map showed at the last draw
 const TB = {group: null, beforeMap: null, mapWas: false, bannerTimer: null, bannerKey: null,
-            groups: {explore: ["now", "near", "here", "bio"], navigate: ["bm", "search", "map", "hwy"], records: ["hist", "log", "mat", "firsts"]},
+            groups: {explore: ["now", "near", "here", "bio"], navigate: ["bm", "search", "map", "hwy", "rich"], records: ["hist", "log", "mat", "firsts"]},
             themes: ["lcars", "elite", "babylon5", "narn", "minbari", "centauri", "sith", "alliance", "dark"], railPending: {}, railEdit: null};
 // Where you are, as the exact id64 string (position.id). The JSON number position.id64 loses the last digits above
 // 2^53, so string comparisons with the server's exact ids (arrival, Here, moments) must use this.
@@ -1274,7 +1274,7 @@ function star(s) {
 }
 
 // the tablet keeps its own page (a desktop browser opening /tablet to try it must not lose its view) and has no Overview
-const TABLET_VIEWS = ["now", "near", "here", "bio", "bm", "search", "map", "hwy", "hist", "log", "mat", "firsts"];
+const TABLET_VIEWS = ["now", "near", "here", "bio", "bm", "search", "map", "hwy", "rich", "hist", "log", "mat", "firsts"];
 let view = TABLET ? store.get("tabletView", "now") : store.get("view", "near");
 if (TABLET && !TABLET_VIEWS.includes(view)) view = "now";
 const saveView = () => store.set(TABLET ? "tabletView" : "view", view);
@@ -1342,7 +1342,7 @@ function keepPanes(fn) {
 function paneTop(...ids) { for (const id of ids) { const p = document.getElementById(id); if (p) p.scrollTop = 0; delete paneScroll[id]; } }
 // each view's main pane: Page Up/Down and Home/End scroll it while nothing that scrolls or types has the focus
 const VIEW_PANE = {overview: "nearPane", near: "nearPane", here: "hereMain", bio: "bioPane", bm: "bmPane", search: "searchPane",
-                   hist: "histPane", log: "logPane", mat: "matPane", firsts: "firstsPane", hwy: "hwyPane"};
+                   hist: "histPane", log: "logPane", mat: "matPane", firsts: "firstsPane", hwy: "hwyPane", rich: "richPane"};
 // ---- Compact tables: a table wider than its box (its pane, the Overview's split, a phone) switches to its short forms
 // (compact: level 1), then to tighter ones that also drop or merge low-value columns (compact2: level 2), and back once
 // there is room again. Decided by fit, not by screen size, so a wide pane looks exactly as it always did.
@@ -1426,6 +1426,7 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["scoop", "fuel scooping filled the tank", null],
   ["scoopstop", "fuel scooping stopped early (not above 90%, nor when you jump)", null],
   ["supercharge", "the frame shift drive supercharged in a neutron star or white dwarf cone", null],
+  ["riches", "Road to Riches (a route plotted in the Riches tab): on arriving at a route system, the bodies still worth scanning or mapping there and the next stop, and route complete", null],
   ["highway", "the Neutron Highway (a route plotted in the Highway tab): the next stop on arriving at a route system (with the boost and refuel stops), off route, back on the highway, and highway complete", null],
   ["autotarget", "the Neutron Highway's auto-target (when it is on, or a test): whether the next route system was targeted", null],
   ["find", "a valuable body just scanned (over your highlight levels)", "find"],
@@ -1611,7 +1612,7 @@ const JUMP_LINE_WAIT = 8000;   // ms: the jump line's latest start after the cha
 // ms after Status.json says "in the tunnel" (it says so about 2 s before the countdown ends): the line then starts
 // with the tunnel itself (the author's timing, in game 2026-10-03)
 const JUMP_TUNNEL_DELAY = 2500;
-const SPEECH_SYS_BOUND = new Set(["find", "signals", "jump", "honk", "brief", "fss", "mapped", "approach", "bodybrief", "jumponium", "highway", "autotarget"]);
+const SPEECH_SYS_BOUND = new Set(["find", "signals", "jump", "honk", "brief", "fss", "mapped", "approach", "bodybrief", "jumponium", "highway", "riches", "autotarget"]);
 // a rig confirmation answers your own press, like a line asked for
 const speechPrio = (kind, tag) => DANGER.has(tag) || kind === "hull" || kind === "fuel" ? 0 : kind === "manual" || kind === "rigs" ? 1
   : ["find", "signals", "codex", "bodybrief", "supercharge", "jumponium"].includes(kind) ? 3 : 2;
@@ -2476,6 +2477,7 @@ function render() {
   renderSearch(bms);
   document.getElementById("mapView").hidden = view !== "map";
   document.getElementById("hwyView").hidden = view !== "hwy";
+  document.getElementById("richView").hidden = view !== "rich";
   hwyRunTrack();
   renderHwyLine();
   document.body.classList.toggle("nowmode", view === "now");
@@ -2484,6 +2486,7 @@ function render() {
   nowWake();
   if (view === "map") { loadMap(); drawMap(); }
   if (view === "hwy") loadHwy();
+  if (view === "rich") loadRich();
   refreshPop();
   const jr = effRange();
   let rows = data.systems.filter(s => sysId(s) !== sysId(p))
@@ -4693,6 +4696,145 @@ function renderHwy() {
   drawHwyStatus();
   drawHwyMap();
 }
+// ---- Road to Riches: Spansh's route of systems with valuable bodies (api/riches) ----
+// api/riches: {route: {from, to, count, first, next, at, furthest, off_route, options, systems: [{i, system, jumps, left,
+// value, value_left, bodies: [{name, type, subtype, ls, scan, map, terraformable, scanned, mapped, done}]}]}|null,
+// plotting, position, range, defaults, clipboard}
+const RICH_POLL_MS = 1500;
+const R = {data: null, key: null, loading: false, poll: null, error: null, status: null, routeId: undefined, filled: false};
+const rEl = id => document.getElementById(id);
+const richKey = () => String(version);   // any change of the page's data (a scan, a jump) asks again
+async function loadRich(force = false) {
+  const key = richKey();
+  if (!force && (key === R.key || R.loading)) return renderRich();
+  R.key = key; R.loading = true;
+  const g = newRequest("rich");
+  let d;
+  try { d = await apiJson("api/riches"); } catch (err) { d = {error: err.message}; }
+  if (!isNewest("rich", g)) return;
+  R.loading = false;
+  if (d.error) { R.error = d.error; R.key = null; } else { R.error = null; R.data = d; }
+  if (d.plotting && d.plotting.state === "running" && !R.poll) richPoll();
+  renderRich();
+}
+function richPoll() {
+  clearTimeout(R.poll);
+  R.poll = setTimeout(async () => {
+    R.poll = null;
+    await loadRich(true);
+    const p = R.data && R.data.plotting;
+    if (p && p.state === "running" && !R.poll) richPoll();
+  }, RICH_POLL_MS);
+}
+const richCr = n => n == null ? "" : credits(n);
+function richBodyHtml(b) {
+  const mark = b.scanned ? (b.mapped ? "✔✔" : "✔") : "";
+  const kind = [b.subtype || b.type || "", b.terraformable ? "terraformable" : ""].filter(Boolean).join(" · ");
+  return `<tr class="${b.done ? "done" : ""}"><td class="name">${esc(b.name)}</td><td>${esc(kind)}</td>` +
+    `<td class="num">${b.ls != null ? Math.round(b.ls).toLocaleString("en-US") : ""}</td>` +
+    `<td class="num">${richCr(b.scan)}</td><td class="num">${richCr(b.map)}</td><td class="richc" title="✔ scanned, ✔✔ scanned and mapped (from your journal)">${mark}</td></tr>`;
+}
+function richSysHtml(s, rt) {
+  const cls = s.i === rt.at ? "at" : s.i === rt.next ? "next" : rt.at != null && s.i < rt.at ? "done" : "ahead";
+  const head = `<div class="richsys ${cls}" data-i="${s.i}"><span class="num">${s.i}</span> ` +
+    `<span class="copy" data-name="${esc(s.system)}" title="click to copy">${esc(s.system)}</span>` +
+    (s.jumps ? ` <span class="unk">${s.jumps} ${jumpsWord(s.jumps)}</span>` : "") +
+    ` · <span class="${s.left ? "richleft" : "richnone"}">${s.left ? `${s.left} left, ≈${richCr(s.value_left)} cr` : "all done"}</span>` +
+    (cls === "next" ? ` <span class="unk">← next</span>` : cls === "at" ? ` <span class="unk">← you are here</span>` : "") + `</div>`;
+  const rows = s.bodies.length && (cls === "at" || cls === "next" || s.left) ?
+    `<table class="richbodies"><colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"><col class="c5"><col class="c6"></colgroup><tbody>${s.bodies.map(richBodyHtml).join("")}</tbody></table>` : "";
+  return head + rows;
+}
+function richHeadHtml(d) {
+  const rt = d.route;
+  if (!rt) return `<div class="hwyttl">Road to Riches</div><div class="unk">No route yet: plot one below. Spansh picks systems whose planets are worth scanning${""} and orders them as a route.</div>`;
+  const left = rt.systems.reduce((n, s) => n + (s.left || 0), 0);
+  const where = rt.at != null ? `you are at system ${rt.at + 1} of ${rt.count}` : rt.off_route ? `off the route (last on it: system ${(rt.furthest ?? 0) + 1} of ${rt.count})` : `not on the route yet`;
+  const state = rt.done_ts ? `<div class="hwystate hwydone">Route complete.</div>` :
+    rt.next != null ? `<div class="hwystate">Next: <b class="copy" data-name="${esc(rt.systems.find(s => s.i === rt.next)?.system || "")}">${esc(rt.systems.find(s => s.i === rt.next)?.system || "")}</b></div>` : "";
+  return `<div class="hwyttl">${esc(rt.from)} → ${esc(rt.to)}</div>` +
+    `<div class="hwystats">${where} · <b>${left}</b> bodies left in the systems listed</div>${state}`;
+}
+function renderRich() {
+  if (view !== "rich") return;
+  const d = R.data;
+  if (!d) { rEl("richHead").innerHTML = R.error ? `<div class="err">Could not load Road to Riches: ${esc(hwyErr(R.error))}</div>` : "loading…"; return; }
+  const rt = d.route;
+  rEl("richHead").innerHTML = richHeadHtml(d);
+  rEl("richPane").hidden = !rt;
+  const tot = rEl("richTotal");
+  tot.hidden = !rt;
+  if (rt) {
+    const sy = rt.systems, sum = k => sy.reduce((n, x) => n + (x[k] || 0), 0), left = sum("left");
+    tot.innerHTML = `Left in the ${sy.length} systems listed: <b>${left}</b> ${left === 1 ? "body" : "bodies"}, <b>≈${credits(sum("value_left"))} cr</b>` +
+      ` · done <b>${credits(Math.max(0, sum("value") - sum("value_left")))} cr</b> of <b>${credits(sum("value"))} cr</b>`;
+  }
+  rEl("richClear").disabled = !rt && !(d.plotting && d.plotting.state === "running");
+  const html = rt ? rt.systems.map(s => richSysHtml(s, rt)).join("") : "";
+  if (rEl("richList").innerHTML !== html) rEl("richList").innerHTML = html;
+  fillRichForm(d);
+  const rid = rt ? rt.options && rt.created_ts : null;
+  if (rid !== R.routeId) { rEl("richPlot").open = !rid; R.routeId = rid; }
+  drawRichStatus();
+}
+function fillRichForm(d) {
+  const f = d.defaults || {}, o = (d.route && d.route.options) || {};
+  const set = (id, v) => { const el = rEl(id); if (el && document.activeElement !== el && !R.filled) el.value = v ?? ""; };
+  set("richFrom", ""); set("richRange", d.range); set("richRadius", o.radius ?? f.radius); set("richMax", o.max_results ?? f.max_results);
+  set("richDist", o.max_distance ?? f.max_distance); set("richMin", o.min_value ?? f.min_value);
+  if (!R.filled) {
+    rEl("richMapping").checked = !!(o.use_mapping_value ?? f.use_mapping_value);
+    rEl("richThargoid").checked = !!(o.avoid_thargoids ?? f.avoid_thargoids);
+    rEl("richLoop").checked = !!(o.loop ?? f.loop);
+  }
+  R.filled = true;
+  rEl("richFrom").placeholder = d.position ? d.position.name : "where you are";
+}
+function setRichStatus(text, cls = "") { R.status = {text, cls}; drawRichStatus(); }
+function drawRichStatus() {
+  const el = rEl("richStatus"), p = R.data && R.data.plotting;
+  let text = "", cls = "";
+  if (p && p.state === "running") {
+    const secs = p.started ? Math.max(0, Math.round((Date.now() - new Date(p.started)) / 1000)) : null;
+    text = `Asking Spansh for a route from ${p.from}…${secs != null ? ` ${secs} s` : ""}`; cls = "busy";
+  } else if (p && p.state === "failed" && R.watch) { text = `Could not plot the route: ${p.error}`; cls = "err"; }
+  else if (p && p.state === "done" && R.watch) { R.watch = false; text = "Route plotted."; cls = "ok"; }
+  else if (R.status) ({text, cls} = R.status);
+  el.textContent = text; el.className = cls;
+  rEl("richGo").disabled = !!(p && p.state === "running");
+}
+rEl("richForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const num = id => { const v = rEl(id).value.trim(); return v === "" ? undefined : Number(v); };
+  const b = {from: rEl("richFrom").value.trim() || undefined, to: rEl("richTo").value.trim() || undefined,
+             range: num("richRange"), radius: num("richRadius"), max_results: num("richMax"), max_distance: num("richDist"),
+             min_value: num("richMin"), use_mapping_value: rEl("richMapping").checked, avoid_thargoids: rEl("richThargoid").checked,
+             loop: rEl("richLoop").checked};
+  for (const k of Object.keys(b)) if (b[k] === undefined) delete b[k];
+  R.status = null;
+  setRichStatus("Asking Spansh…", "busy");
+  let r;
+  try { r = await apiJson("api/riches/plot", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(b)}); }
+  catch (err) { r = {error: err.message}; }
+  if (r.error) return setRichStatus(`Could not plot the route: ${hwyErr(r.error)}.`, "err");
+  R.status = null; R.watch = true;
+  if (R.data) R.data.plotting = r.plotting;
+  drawRichStatus();
+  richPoll();
+});
+rEl("richClear").onclick = async () => {
+  const btn = rEl("richClear");
+  if (!R.clearArmed) {
+    R.clearArmed = setTimeout(() => { R.clearArmed = null; btn.textContent = "Clear route"; }, 4000);
+    btn.textContent = "Click again to clear"; return;
+  }
+  clearTimeout(R.clearArmed); R.clearArmed = null; btn.textContent = "Clear route";
+  let r;
+  try { r = await apiJson("api/riches/clear", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"}); }
+  catch (err) { r = {error: err.message}; }
+  setRichStatus(r.error ? `Could not clear the route: ${hwyErr(r.error)}.` : "Route cleared.", r.error ? "err" : "");
+  await loadRich(true);
+};
 // ---- the top-down map: X across, Z up (north: towards the galactic core, as galaxy maps show it) ----
 // A view is {cx, cz, scale (px per ly), w, h}: the world point at the canvas centre. Pure functions, so tests can check them.
 const HWY_MIN_SCALE = 1e-4, HWY_MAX_SCALE = 40;
@@ -6047,6 +6189,8 @@ function onData() {
         else alertOut("sell", `Undocked with ${credits(u.total)} cr still aboard`, `Still to sell: ${leftToSell(u)}.`,   // part of it was sold here
                       {sound: "alert", say: () => line("unsold_urgent", {value: credits(u.total)})});
       }
+      else if (m.kind === "riches" && m.text)   // Road to Riches: what is left in the system you arrived at, and where next
+        alertOut("riches", m.text.replace(/\.$/, ""), "", {tag: "riches", say: m.text});
       else if (m.kind === "highway" && m.text)   // the Neutron Highway's arrival line, detour, back on it, complete: plain words for now
         alertOut("highway", m.text.replace(/\.$/, ""), "", {tag: "highway", say: m.text});
       else if (m.kind === "autotarget" && m.text)   // auto-target's result: "Successfully targeted ..." / "Failed to target ..."

@@ -208,6 +208,14 @@ class _HwSession:
             raise item
         return _HwResp(*item)
 
+    def post(self, url, data=None):
+        """A job submitted with form fields (Road to Riches): recorded as ("POST", url, fields), answered like get()."""
+        self.calls.append(("POST", url, dict(data or {})))
+        item = self.script.pop(0) if len(self.script) > 1 else self.script[0]
+        if isinstance(item, Exception):
+            raise item
+        return _HwResp(*item)
+
 
 # The author's keyboard bindings for auto-target, copied (read only) from the active preset "HCS X56 Attempt 1"
 # (StartPreset.4.start, HCS X56 Attempt 1.4.2.binds): the joystick bindings first, the keyboard ones second, as there
