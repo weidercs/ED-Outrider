@@ -2,6 +2,18 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-06 · Road to Riches moves into the Plot Route tab (formerly Highway)
+- Road to Riches (thshurka's PR #1: a Spansh route of systems with valuable planets, followed as you fly) is a route
+  type of the tab now, not a tab of its own: the plotter switch reads Exact / Neutron / **Road to Riches**, which shows
+  its options (radius, systems, max distance, min value, mapping, Thargoid systems, loop) and shares From, To, Ship and
+  Range. The tab, renamed **Plot Route**, shows the route plotted last; with a Highway route and a Riches route both, a
+  switch above the heading picks the one shown (per device) and Clear route clears that one. The Riches systems are a
+  table like the Highway's (bodies listed under the system you are at, the next and any with work left, by their short
+  names), and the route is drawn on the tab's galaxy map.
+- With both routes, only the one plotted last copies its next system to the clipboard on arrival.
+- The header is back to one line at 1600 px in every theme, the tablet's Navigate group to four pages, and
+  `scripts/verify.sh` passes again. A browser or tablet left on the old Riches tab opens Plot Route.
+
 ## 2026-10-05 · Version 2026.10.14
 - The Update pill, a second tablet without the rail, the compact layout for smaller tablets, and the clipboard tools
   named in the README, requirements.txt and the launcher.

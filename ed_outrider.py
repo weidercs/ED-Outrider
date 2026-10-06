@@ -9041,6 +9041,8 @@ class State:
         if key == self._hw_copied and not force:
             return False
         self._hw_copied = key
+        if self.route_newest() != "highway":   # a Road to Riches plotted since has the clipboard
+            return False
         if hw.get("at") is None or hw.get("done_ts"):
             return False
         if not force and not (hw.get("arrival_ts") and live_event(hw["arrival_ts"]) and
@@ -9103,7 +9105,7 @@ class State:
             route = dict({k: rc.get(k) for k in ("id", "options", "created_ts", "at", "furthest", "off_route",
                                                   "arrival_ts", "done_ts")},
                          **{"from": rows[0]["system"], "to": rows[-1]["system"], "count": len(rows), "first": first,
-                            "next": nx, "systems": [self.riches_system_out(rc, rows, i)
+                            "next": nx, "points": [[r["x"], r["z"]] for r in rows], "systems": [self.riches_system_out(rc, rows, i)
                                                     for i in range(first, min(len(rows), first + RICHES_DONE + RICHES_AHEAD))]})
         cb = self.clipboard.info() if self.clipboard else {"enabled": self.highway_cfg["clipboard"], "available": False,
                                                            "tool": None, "why": "not started", "last": None}
@@ -9218,6 +9220,14 @@ class State:
         self.db.commit()
         self.bump()
 
+    def route_newest(self):
+        """"highway" or "riches": of the two routes, the one plotted last (None without either). With both, only that
+        one copies its next system to the clipboard on arrival: one copy per jump, not two racing for it."""
+        hw, rc = meta_get(self.db, "highway"), meta_get(self.db, "riches")
+        if not (hw and rc):
+            return "highway" if hw else "riches" if rc else None
+        return "riches" if (rc.get("created_ts") or "") > (hw.get("created_ts") or "") else "highway"
+
     def riches_copy_next(self, force=False):
         """After an arrival on the route (live, HIGHWAY_LIVE_S), or a new plot (force): copy the next system's name to
         the desktop clipboard, once per arrival (the same clipboard and switch as the Highway's)."""
@@ -9229,6 +9239,8 @@ class State:
         if key == self._rc_copied and not force:
             return False
         self._rc_copied = key
+        if self.route_newest() != "riches":   # a Highway route plotted since has the clipboard
+            return False
         if rc.get("at") is None or rc.get("done_ts"):
             return False
         if not force and not (rc.get("arrival_ts") and live_event(rc["arrival_ts"]) and

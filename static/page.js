@@ -37,7 +37,7 @@ const TABLET = typeof document !== "undefined" && !!document.body && document.bo
 // group: the nav group shown while you browse another one; beforeMap: the page to go back to when the surface map hides
 // (null: you were on Now already, or chose a page since); mapWas: whether the map showed at the last draw
 const TB = {group: null, beforeMap: null, mapWas: false, bannerTimer: null, bannerKey: null,
-            groups: {explore: ["now", "near", "here", "bio"], navigate: ["bm", "search", "map", "hwy", "rich"], records: ["hist", "log", "mat", "firsts"]},
+            groups: {explore: ["now", "near", "here", "bio"], navigate: ["bm", "search", "map", "hwy"], records: ["hist", "log", "mat", "firsts"]},
             themes: ["lcars", "elite", "babylon5", "narn", "minbari", "centauri", "sith", "alliance", "dark"], railPending: {}, railEdit: null};
 // Where you are, as the exact id64 string (position.id). The JSON number position.id64 loses the last digits above
 // 2^53, so string comparisons with the server's exact ids (arrival, Here, moments) must use this.
@@ -1274,8 +1274,9 @@ function star(s) {
 }
 
 // the tablet keeps its own page (a desktop browser opening /tablet to try it must not lose its view) and has no Overview
-const TABLET_VIEWS = ["now", "near", "here", "bio", "bm", "search", "map", "hwy", "rich", "hist", "log", "mat", "firsts"];
+const TABLET_VIEWS = ["now", "near", "here", "bio", "bm", "search", "map", "hwy", "hist", "log", "mat", "firsts"];
 let view = TABLET ? store.get("tabletView", "now") : store.get("view", "near");
+if (view === "rich") view = "hwy";   // Road to Riches had a tab of its own for a day (PR #1): it is a route type of Plot Route now
 if (TABLET && !TABLET_VIEWS.includes(view)) view = "now";
 const saveView = () => store.set(TABLET ? "tabletView" : "view", view);
 let viewBeforeNow = view === "now" ? "overview" : view;
@@ -1342,7 +1343,7 @@ function keepPanes(fn) {
 function paneTop(...ids) { for (const id of ids) { const p = document.getElementById(id); if (p) p.scrollTop = 0; delete paneScroll[id]; } }
 // each view's main pane: Page Up/Down and Home/End scroll it while nothing that scrolls or types has the focus
 const VIEW_PANE = {overview: "nearPane", near: "nearPane", here: "hereMain", bio: "bioPane", bm: "bmPane", search: "searchPane",
-                   hist: "histPane", log: "logPane", mat: "matPane", firsts: "firstsPane", hwy: "hwyPane", rich: "richPane"};
+                   hist: "histPane", log: "logPane", mat: "matPane", firsts: "firstsPane", hwy: "hwyPane"};
 // ---- Compact tables: a table wider than its box (its pane, the Overview's split, a phone) switches to its short forms
 // (compact: level 1), then to tighter ones that also drop or merge low-value columns (compact2: level 2), and back once
 // there is room again. Decided by fit, not by screen size, so a wide pane looks exactly as it always did.
@@ -1426,8 +1427,8 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["scoop", "fuel scooping filled the tank", null],
   ["scoopstop", "fuel scooping stopped early (not above 90%, nor when you jump)", null],
   ["supercharge", "the frame shift drive supercharged in a neutron star or white dwarf cone", null],
-  ["riches", "Road to Riches (a route plotted in the Riches tab): on arriving at a route system, the bodies still worth scanning or mapping there and the next stop, and route complete", null],
-  ["highway", "the Neutron Highway (a route plotted in the Highway tab): the next stop on arriving at a route system (with the boost and refuel stops), off route, back on the highway, and highway complete", null],
+  ["riches", "Road to Riches (a route plotted in Plot Route): on arriving at a route system, the bodies still worth scanning or mapping there and the next stop, and route complete", null],
+  ["highway", "the Neutron Highway (a route plotted in Plot Route): the next stop on arriving at a route system (with the boost and refuel stops), off route, back on the highway, and highway complete", null],
   ["autotarget", "the Neutron Highway's auto-target (when it is on, or a test): whether the next route system was targeted", null],
   ["find", "a valuable body just scanned (over your highlight levels)", "find"],
   ["jumponium", "a landable body just scanned has a material your FSD injections are short of (premium or standard at 2 or fewer): said with the FSS debrief, or alone when the FSS never completes", "find"],
@@ -2477,7 +2478,6 @@ function render() {
   renderSearch(bms);
   document.getElementById("mapView").hidden = view !== "map";
   document.getElementById("hwyView").hidden = view !== "hwy";
-  document.getElementById("richView").hidden = view !== "rich";
   hwyRunTrack();
   renderHwyLine();
   document.body.classList.toggle("nowmode", view === "now");
@@ -2485,8 +2485,7 @@ function render() {
   if (view === "now") renderNow(); else renderSurface();   // Now's map, or the on-body strip's copy
   nowWake();
   if (view === "map") { loadMap(); drawMap(); }
-  if (view === "hwy") loadHwy();
-  if (view === "rich") loadRich();
+  if (view === "hwy") { loadHwy(); loadRich(); }
   refreshPop();
   const jr = effRange();
   let rows = data.systems.filter(s => sysId(s) !== sysId(p))
@@ -4268,7 +4267,7 @@ mapCanvas.addEventListener("wheel", e => {
 }, {passive: false});
 addEventListener("resize", () => drawMap());
 
-// ---- the Neutron Highway: the Highway tab (the route's jump list, the plot form, a top-down map) and the highway
+// ---- the Neutron Highway: the Plot Route tab (the route's jump list, the plot form, a top-down map) and the highway
 // line under the header (Overview, Nearby, Here). The server plots with Spansh in the background (POST
 // api/highway/plot answers 202, or 409 while a plot is under way), follows the route as you fly, and GET api/highway
 // gives the route (the last HIGHWAY_DONE rows done and the next 200 ahead, every point for the map), the plot under
@@ -4282,6 +4281,8 @@ const H = {data: null, key: null, loading: false, poll: null, error: null, statu
 // the form's last options (per browser): the plotter, the exact plotter's ticks and the neutron plotter's efficiency.
 // The ship, its cargo and range follow the journals instead (a remembered cargo would be stale the next day).
 // conservative / conservative_ly: null until changed here ([highway] conservative and conservative_ly then)
+// Road to Riches, the tab's other route type: its api/riches answer, polling and form (see "Road to Riches" below)
+const R = {data: null, key: null, loading: false, poll: null, error: null, watch: false, filled: false, nextShown: null};
 const hwyCfg = Object.assign({plotter: "exact", injections: false, exclude_secondary: false, supercharged: false, efficiency: null,
                               conservative: null, conservative_ly: null}, store.get("highway", {}));
 const saveHwyCfg = () => store.set("highway", hwyCfg);
@@ -4468,8 +4469,12 @@ function hwyConsShow() {
 function hwyFormShow() {
   const p = hwyPlotter();
   hForm.classList.toggle("neutron", p === "neutron");
-  hForm.querySelector(".hwy-nopt").hidden = p !== "neutron";
+  hForm.querySelector(".hwy-nopt").hidden = p === "exact";
+  hForm.querySelectorAll(".hwy-nonly").forEach(e => { e.hidden = p !== "neutron"; });
   hForm.querySelector(".hwy-xopt").hidden = p !== "exact";
+  hForm.querySelectorAll(".hwy-ropt").forEach(e => { e.hidden = p !== "riches"; });
+  hForm.querySelector(".hwy-cons").hidden = p === "riches";   // Spansh's Road to Riches takes the range as it is
+  hEl("hwyTo").placeholder = p === "riches" ? "optional: where to end" : "destination system";
   // the neutron plotter can do without a ship (type the range); the exact one needs a Loadout
   const none = hEl("hwyShip").querySelector('option[value=""]');
   if (none) { none.disabled = p === "exact"; none.hidden = p === "exact"; }
@@ -4495,10 +4500,11 @@ function fillHwyForm(hd) {
   if (document.activeElement !== eff) eff.value = hwyCfg.efficiency ?? (hd.defaults && hd.defaults.efficiency) ?? 60;
   hEl("hwyCons").checked = hwyCfg.conservative ?? !!(hd.defaults && hd.defaults.conservative);
   if (document.activeElement !== hEl("hwyConsLy")) hEl("hwyConsLy").value = hwyConsSaved();
+  fillRichForm(R.data);
   hwyFormShow();
 }
 {
-  const p = hForm.querySelector(`[name=hwyPlotter][value="${hwyCfg.plotter === "neutron" ? "neutron" : "exact"}"]`); if (p) p.checked = true;
+  const p = hForm.querySelector(`[name=hwyPlotter][value="${["neutron", "riches"].includes(hwyCfg.plotter) ? hwyCfg.plotter : "exact"}"]`); if (p) p.checked = true;
   hEl("hwyInject").checked = !!hwyCfg.injections; hEl("hwyNoSec").checked = !!hwyCfg.exclude_secondary; hEl("hwySuper").checked = !!hwyCfg.supercharged;
   hForm.querySelectorAll("[name=hwyPlotter]").forEach(r => r.onchange = () => { hwyCfg.plotter = hwyPlotter(); saveHwyCfg(); hwyFormShow(); });
   for (const [id, k] of [["hwyInject", "injections"], ["hwyNoSec", "exclude_secondary"], ["hwySuper", "supercharged"]])
@@ -4549,9 +4555,12 @@ const hwyErr = e => /^HTTP 5/.test(e || "") ? "Outrider's server had a problem (
   ? "Outrider did not answer (is it still running?)" : e;
 function setHwyStatus(text, cls = "") { H.status = {text, cls}; drawHwyStatus(); }
 function drawHwyStatus() {
-  const el = hEl("hwyStatus"), p = H.data && H.data.plotting;
+  const el = hEl("hwyStatus"), p = H.data && H.data.plotting, rp = R.data && R.data.plotting;
   let text = "", cls = "";
-  if (p && p.state === "running") {
+  if (rp && rp.state === "running") {
+    const secs = rp.started ? Math.max(0, Math.round((Date.now() - new Date(rp.started)) / 1000)) : null;
+    text = `Asking Spansh for a Road to Riches route from ${rp.from}…${secs != null ? ` ${secs} s` : ""}`; cls = "busy";
+  } else if (p && p.state === "running") {
     const secs = p.started ? Math.max(0, Math.round((Date.now() - new Date(p.started)) / 1000)) : null;
     text = `Plotting ${p.from} → ${p.to} with Spansh (${p.plotter} plotter)…${secs != null ? ` ${secs} s` : ""}`; cls = "busy";
   } else if (H.status) ({text, cls} = H.status);
@@ -4561,6 +4570,7 @@ function drawHwyStatus() {
 }
 hForm.addEventListener("submit", async e => {
   e.preventDefault();
+  if (hwyPlotter() === "riches") return richSubmit();
   const b = hwyBody();
   if (!b.to) return setHwyStatus("Type the destination system.", "err");
   if (b.plotter === "neutron" && b.range == null) return setHwyStatus("Give the jump range (ly) for the neutron plotter.", "err");
@@ -4570,7 +4580,7 @@ hForm.addEventListener("submit", async e => {
   try { r = await apiJson("api/highway/plot", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(b)}); }
   catch (err) { r = {error: err.message}; }
   if (r.error) return setHwyStatus(`Could not plot the route: ${hwyErr(r.error)}.`, "err");
-  H.status = null; H.watch = true;
+  store.set("hwyShow", "hwy"); H.status = null; H.watch = true;
   if (H.data) H.data.plotting = r.plotting;
   drawHwyStatus();
   hwyPoll();
@@ -4582,11 +4592,13 @@ hEl("hwyClear").onclick = async () => {
     btn.textContent = "Click again to clear"; return;
   }
   clearTimeout(H.clearArmed); H.clearArmed = null; btn.textContent = "Clear route";
+  const rich = routeKind() === "rich" && ((R.data && R.data.route) || (R.data && R.data.plotting && R.data.plotting.state === "running"));
   let r;
-  try { r = await apiJson("api/highway/clear", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"}); }
+  try { r = await apiJson(rich ? "api/riches/clear" : "api/highway/clear", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"}); }
   catch (err) { r = {error: err.message}; }
   setHwyStatus(r.error ? `Could not clear the route: ${hwyErr(r.error)}.` : "Route cleared.", r.error ? "err" : "");
-  await loadHwy(true);
+  store.set("hwyShow", "");
+  await (rich ? loadRich(true) : loadHwy(true));
 };
 document.addEventListener("click", e => {
   if (!e.target.closest || !e.target.closest("#hwyDoneBtn")) return;
@@ -4677,17 +4689,19 @@ function renderHwy() {
   drawHwyAuto();
   const hd = H.data;
   if (!hd) { hEl("hwyHead").innerHTML = H.error ? `<div class="err">Could not load the highway: ${esc(hwyErr(H.error))}</div>` : "loading…"; drawHwyStatus(); return; }
-  const r = hd.route;
-  hEl("hwyHead").innerHTML = hwyHeadHtml(hd);
+  const r = hd.route, rd = R.data, rr = rd && rd.route, kind = routeKind(), rich = kind === "rich" && !!rr;
+  const busy = [hd.plotting, rd && rd.plotting].some(p => p && p.state === "running");
+  hEl("hwyHead").innerHTML = (r && rr ? routeKindHtml(kind) : "") + (rich ? richHeadHtml(rd) + hwyClipHtml(hd.clipboard) : hwyHeadHtml(hd));
   // no route: no empty list, the form right under the heading
-  hEl("hwyPanes").classList.toggle("noroute", !r); hEl("hwyPane").hidden = !r;
-  hEl("hwyClear").disabled = !r && !(hd.plotting && hd.plotting.state === "running");
+  hEl("hwyPanes").classList.toggle("noroute", !r && !rr); hEl("hwyPane").hidden = !r || rich; hEl("richPane").hidden = !rich;
+  hEl("hwyClear").disabled = !(rich ? rr : r) && !busy;
   renderHwyList(hd);
+  renderRichList(rich ? rd : null);
   fillHwyForm(hd);
   // a new route (or none): the form folds away while one is followed, and opens when there is none
-  const rid = r ? r.id : null;
+  const rid = rich ? `rich|${rr.id}` : r ? r.id : null;
   if (rid !== H.routeId) {
-    if (H.routeId !== undefined && rid && H.watch) { const nj = (r.summary || {}).jumps_total ?? r.count - 1; setHwyStatus(`Plotted: ${nj.toLocaleString()} ${jumpsWord(nj)} to ${r.to}.`, "ok"); }
+    if (H.routeId !== undefined && rid && H.watch && !rich) { const nj = (r.summary || {}).jumps_total ?? r.count - 1; setHwyStatus(`Plotted: ${nj.toLocaleString()} ${jumpsWord(nj)} to ${r.to}.`, "ok"); }
     H.watch = false;
     hEl("hwyPlot").open = !rid; H.routeId = rid; HM.auto = true;
   }
@@ -4696,17 +4710,17 @@ function renderHwy() {
   drawHwyStatus();
   drawHwyMap();
 }
-// ---- Road to Riches: Spansh's route of systems with valuable bodies (api/riches) ----
-// api/riches: {route: {from, to, count, first, next, at, furthest, off_route, options, systems: [{i, system, jumps, left,
-// value, value_left, bodies: [{name, type, subtype, ls, scan, map, terraformable, scanned, mapped, done}]}]}|null,
-// plotting, position, range, defaults, clipboard}
-const RICH_POLL_MS = 1500;
-const R = {data: null, key: null, loading: false, poll: null, error: null, status: null, routeId: undefined, filled: false};
-const rEl = id => document.getElementById(id);
+// ---- Road to Riches: a route type of Plot Route (api/riches): Spansh's chain of systems whose bodies are worth
+// scanning (and mapping), followed as you fly. The tab shows one route: the Highway's, the Riches one, or with both this
+// device's choice (hwyShow), else the newer. The server keeps each on its own (its tables, plot and progress).
+// api/riches: {route: {id, from, to, count, first, next, at, furthest, off_route, options, created_ts, done_ts, points,
+// systems: [{i, system, x, z, jumps, left, value, value_left, bodies: [{name, type, subtype, ls, scan, map,
+// terraformable, scanned, mapped, done}]}]} | null, plotting, position, range, defaults, clipboard}
+const RICH_POLL_MS = 1500, RICH_COLS = 6;
 const richKey = () => String(version);   // any change of the page's data (a scan, a jump) asks again
 async function loadRich(force = false) {
   const key = richKey();
-  if (!force && (key === R.key || R.loading)) return renderRich();
+  if (!force && (key === R.key || R.loading)) return;
   R.key = key; R.loading = true;
   const g = newRequest("rich");
   let d;
@@ -4714,8 +4728,15 @@ async function loadRich(force = false) {
   if (!isNewest("rich", g)) return;
   R.loading = false;
   if (d.error) { R.error = d.error; R.key = null; } else { R.error = null; R.data = d; }
-  if (d.plotting && d.plotting.state === "running" && !R.poll) richPoll();
-  renderRich();
+  const p = R.data && R.data.plotting;
+  if (p && p.state === "running" && !R.poll) richPoll();
+  if (R.watch && p && p.state !== "running") {   // the plot this page asked for has ended: say how
+    R.watch = false;
+    const rt = R.data.route;
+    setHwyStatus(p.state === "done" && rt ? `Plotted: a Road to Riches of ${rt.count} systems.`
+      : `Could not plot the route: ${p.error || "?"}.`, p.state === "done" ? "ok" : "err");
+  }
+  renderHwy();
 }
 function richPoll() {
   clearTimeout(R.poll);
@@ -4726,115 +4747,107 @@ function richPoll() {
     if (p && p.state === "running" && !R.poll) richPoll();
   }, RICH_POLL_MS);
 }
-const richCr = n => n == null ? "" : credits(n);
-function richBodyHtml(b) {
+// which route the tab shows: "hwy" or "rich"
+function routeKind() {
+  const hr = H.data && H.data.route, rr = R.data && R.data.route;
+  if (hr && rr) {
+    const pick = store.get("hwyShow", "");
+    if (pick === "hwy" || pick === "rich") return pick;
+    return String(rr.created_ts || "") > String(hr.created_ts || "") ? "rich" : "hwy";
+  }
+  return rr ? "rich" : "hwy";
+}
+// with both routes: a switch above the heading
+const routeKindHtml = kind => `<div class="seg hwykind" role="radiogroup" aria-label="the route shown">` +
+  [["hwy", "Highway"], ["rich", "Road to Riches"]].map(([k, t]) =>
+    `<label><input type="radio" name="hwyKind" value="${k}"${k === kind ? " checked" : ""}>${t}</label>`).join("") + `</div>`;
+hEl("hwyHead").addEventListener("change", e => {
+  if (e.target.name !== "hwyKind") return;
+  store.set("hwyShow", e.target.value); HM.auto = true; renderHwy();
+});
+function richHeadHtml(d) {
+  const rt = d.route, sy = rt.systems, sum = k => sy.reduce((n, x) => n + (x[k] || 0), 0), left = sum("left"), o = rt.options || {};
+  const where = rt.at != null ? `you are at system ${rt.at + 1} of ${rt.count}`
+    : rt.off_route ? `off the route (last on it: system ${(rt.furthest ?? 0) + 1} of ${rt.count})` : `not on the route yet (${rt.count} systems)`;
+  const nx = rt.next != null ? sy.find(s => s.i === rt.next) : null;
+  const how = `Road to Riches · ${o.range != null ? `${o.range} ly range · ` : ""}within ${o.radius ?? "?"} ly · bodies from ` +
+    `${credits(o.min_value ?? 0)} cr${o.use_mapping_value ? ", mapping counted" : ""}${o.loop ? " · loop" : ""}`;
+  return `<div class="hwyttl">To ${esc(rt.to)} <span class="unk">from ${esc(rt.from)}</span></div>` +
+    `<div class="hwystats">${where} · <b>${left}</b> ${left === 1 ? "body" : "bodies"} left, <b>≈${credits(sum("value_left"))} cr</b>` +
+    ` · done <b>${credits(Math.max(0, sum("value") - sum("value_left")))} cr</b> of <b>${credits(sum("value"))} cr</b>` +
+    `${rt.count > sy.length ? " (the systems listed)" : ""}</div>` +
+    (rt.done_ts ? `<div class="hwystate hwydone">Road to Riches complete.</div>`
+      : nx ? `<div class="hwystate">Next: <b class="copy" data-name="${esc(nx.system)}" title="click to copy">${esc(nx.system)}</b>` +
+             `${nx.left ? ` · ${nx.left} to do there` : ""}</div>` : "") +
+    `<div class="unk hwyhow">${esc(how)}${rt.created_ts ? ` · plotted ${esc(when(rt.created_ts))}` : ""}</div>`;
+}
+function richBodyHtml(b, system) {
   const mark = b.scanned ? (b.mapped ? "✔✔" : "✔") : "";
   const kind = [b.subtype || b.type || "", b.terraformable ? "terraformable" : ""].filter(Boolean).join(" · ");
-  return `<tr class="${b.done ? "done" : ""}"><td class="name">${esc(b.name)}</td><td>${esc(kind)}</td>` +
-    `<td class="num">${b.ls != null ? Math.round(b.ls).toLocaleString("en-US") : ""}</td>` +
-    `<td class="num">${richCr(b.scan)}</td><td class="num">${richCr(b.map)}</td><td class="richc" title="✔ scanned, ✔✔ scanned and mapped (from your journal)">${mark}</td></tr>`;
+  const val = [b.scan != null ? credits(b.scan) : "", b.map != null ? `map ${credits(b.map)}` : ""].filter(Boolean).join(" · ");
+  return `<tr class="richbody${b.done ? " done" : ""}"><td class="richmark" title="✔ scanned, ✔✔ scanned and mapped (your journal)">${mark}</td>` +
+    `<td colspan="${RICH_COLS - 1}"><b title="${esc(b.name)}">${esc(bodyShort(b.name, system))}</b> <span class="unk">· ${esc(kind)}` +
+    `${b.ls != null ? ` · ${Math.round(b.ls).toLocaleString("en-US")} ls` : ""}${val ? ` · ${val} cr` : ""}</span></td></tr>`;
 }
-function richSysHtml(s, rt) {
+// a body's name without its system's ("Smojooe CM-E b25-5 A 1" in Smojooe CM-E b25-5: "A 1")
+const bodyShort = (name, system) => name && system && name.toLowerCase().startsWith(system.toLowerCase() + " ") ? name.slice(system.length + 1) : name;
+function richRowHtml(s, rt) {
   const cls = s.i === rt.at ? "at" : s.i === rt.next ? "next" : rt.at != null && s.i < rt.at ? "done" : "ahead";
-  const head = `<div class="richsys ${cls}" data-i="${s.i}"><span class="num">${s.i}</span> ` +
-    `<span class="copy" data-name="${esc(s.system)}" title="click to copy">${esc(s.system)}</span>` +
-    (s.jumps ? ` <span class="unk">${s.jumps} ${jumpsWord(s.jumps)}</span>` : "") +
-    ` · <span class="${s.left ? "richleft" : "richnone"}">${s.left ? `${s.left} left, ≈${richCr(s.value_left)} cr` : "all done"}</span>` +
-    (cls === "next" ? ` <span class="unk">← next</span>` : cls === "at" ? ` <span class="unk">← you are here</span>` : "") + `</div>`;
-  const rows = s.bodies.length && (cls === "at" || cls === "next" || s.left) ?
-    `<table class="richbodies"><colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"><col class="c5"><col class="c6"></colgroup><tbody>${s.bodies.map(richBodyHtml).join("")}</tbody></table>` : "";
-  return head + rows;
+  const row = `<tr class="richsys ${cls}" data-i="${s.i}"><td class="num">${s.i}</td>` +
+    `<td class="name" data-name="${esc(s.system)}" title="click to copy">${nameWords(s.system)}</td>` +
+    `<td class="num">${s.i && s.jumps ? s.jumps : ""}</td>` +
+    `<td class="num ${s.left ? "richleft" : "richnone"}">${s.left ? s.left : s.bodies.length ? "done" : ""}</td>` +
+    `<td class="num">${s.left ? "≈" + credits(s.value_left) : ""}</td><td class="num">${s.value ? credits(s.value) : ""}</td></tr>`;
+  // the bodies under the system you are at, the next one, and any with work left; the rest fold away
+  return row + (s.bodies.length && (cls === "at" || cls === "next" || s.left) ? s.bodies.map(b => richBodyHtml(b, s.system)).join("") : "");
 }
-function richHeadHtml(d) {
-  const rt = d.route;
-  if (!rt) return `<div class="hwyttl">Road to Riches</div><div class="unk">No route yet: plot one below. Spansh picks systems whose planets are worth scanning${""} and orders them as a route.</div>`;
-  const left = rt.systems.reduce((n, s) => n + (s.left || 0), 0);
-  const where = rt.at != null ? `you are at system ${rt.at + 1} of ${rt.count}` : rt.off_route ? `off the route (last on it: system ${(rt.furthest ?? 0) + 1} of ${rt.count})` : `not on the route yet`;
-  const state = rt.done_ts ? `<div class="hwystate hwydone">Route complete.</div>` :
-    rt.next != null ? `<div class="hwystate">Next: <b class="copy" data-name="${esc(rt.systems.find(s => s.i === rt.next)?.system || "")}">${esc(rt.systems.find(s => s.i === rt.next)?.system || "")}</b></div>` : "";
-  return `<div class="hwyttl">${esc(rt.from)} → ${esc(rt.to)}</div>` +
-    `<div class="hwystats">${where} · <b>${left}</b> bodies left in the systems listed</div>${state}`;
+function renderRichList(d) {
+  const rt = d && d.route, el = hEl("richRows");
+  const more = rt ? rt.count - rt.first - rt.systems.length : 0;
+  const html = !rt ? "" : rt.systems.map(s => richRowHtml(s, rt)).join("") +
+    (more > 0 ? `<tr class="hwymore"><td colspan="${RICH_COLS}" class="unk">+${more.toLocaleString()} more after these</td></tr>` : "");
+  if (el.innerHTML !== html) el.innerHTML = html;
+  // the system you are at (or the next) in view in the pane when it moves, not on every redraw
+  const nk = rt ? `${rt.id}|${rt.at}|${rt.next}` : null;
+  if (rt && R.nextShown !== nk) { R.nextShown = nk; const row = el.querySelector("tr.at, tr.next"); if (row && paneOf(row)) revealIn(row); }
 }
-function renderRich() {
-  if (view !== "rich") return;
-  const d = R.data;
-  if (!d) { rEl("richHead").innerHTML = R.error ? `<div class="err">Could not load Road to Riches: ${esc(hwyErr(R.error))}</div>` : "loading…"; return; }
-  const rt = d.route;
-  rEl("richHead").innerHTML = richHeadHtml(d);
-  rEl("richPane").hidden = !rt;
-  const tot = rEl("richTotal");
-  tot.hidden = !rt;
-  if (rt) {
-    const sy = rt.systems, sum = k => sy.reduce((n, x) => n + (x[k] || 0), 0), left = sum("left");
-    tot.innerHTML = `Left in the ${sy.length} systems listed: <b>${left}</b> ${left === 1 ? "body" : "bodies"}, <b>≈${credits(sum("value_left"))} cr</b>` +
-      ` · done <b>${credits(Math.max(0, sum("value") - sum("value_left")))} cr</b> of <b>${credits(sum("value"))} cr</b>`;
-  }
-  rEl("richClear").disabled = !rt && !(d.plotting && d.plotting.state === "running");
-  const html = rt ? rt.systems.map(s => richSysHtml(s, rt)).join("") : "";
-  if (rEl("richList").innerHTML !== html) rEl("richList").innerHTML = html;
-  fillRichForm(d);
-  const rid = rt ? rt.options && rt.created_ts : null;
-  if (rid !== R.routeId) { rEl("richPlot").open = !rid; R.routeId = rid; }
-  drawRichStatus();
-}
+// the form's Road to Riches options: the route's own, else the server's defaults (once, then they are yours)
 function fillRichForm(d) {
-  const f = d.defaults || {}, o = (d.route && d.route.options) || {};
-  const set = (id, v) => { const el = rEl(id); if (el && document.activeElement !== el && !R.filled) el.value = v ?? ""; };
-  set("richFrom", ""); set("richRange", d.range); set("richRadius", o.radius ?? f.radius); set("richMax", o.max_results ?? f.max_results);
+  if (!d || R.filled) return;
+  const f = d.defaults || {}, o = (d.route && d.route.options) || {}, set = (id, v) => { hEl(id).value = v ?? ""; };
+  set("richRadius", o.radius ?? f.radius); set("richMax", o.max_results ?? f.max_results);
   set("richDist", o.max_distance ?? f.max_distance); set("richMin", o.min_value ?? f.min_value);
-  if (!R.filled) {
-    rEl("richMapping").checked = !!(o.use_mapping_value ?? f.use_mapping_value);
-    rEl("richThargoid").checked = !!(o.avoid_thargoids ?? f.avoid_thargoids);
-    rEl("richLoop").checked = !!(o.loop ?? f.loop);
-  }
+  hEl("richMapping").checked = !!(o.use_mapping_value ?? f.use_mapping_value);
+  hEl("richThargoid").checked = !!(o.avoid_thargoids ?? f.avoid_thargoids);
+  hEl("richLoop").checked = !!(o.loop ?? f.loop);
   R.filled = true;
-  rEl("richFrom").placeholder = d.position ? d.position.name : "where you are";
 }
-function setRichStatus(text, cls = "") { R.status = {text, cls}; drawRichStatus(); }
-function drawRichStatus() {
-  const el = rEl("richStatus"), p = R.data && R.data.plotting;
-  let text = "", cls = "";
-  if (p && p.state === "running") {
-    const secs = p.started ? Math.max(0, Math.round((Date.now() - new Date(p.started)) / 1000)) : null;
-    text = `Asking Spansh for a route from ${p.from}…${secs != null ? ` ${secs} s` : ""}`; cls = "busy";
-  } else if (p && p.state === "failed" && R.watch) { text = `Could not plot the route: ${p.error}`; cls = "err"; }
-  else if (p && p.state === "done" && R.watch) { R.watch = false; text = "Route plotted."; cls = "ok"; }
-  else if (R.status) ({text, cls} = R.status);
-  el.textContent = text; el.className = cls;
-  rEl("richGo").disabled = !!(p && p.state === "running");
-}
-rEl("richForm").addEventListener("submit", async e => {
-  e.preventDefault();
-  const num = id => { const v = rEl(id).value.trim(); return v === "" ? undefined : Number(v); };
-  const b = {from: rEl("richFrom").value.trim() || undefined, to: rEl("richTo").value.trim() || undefined,
-             range: num("richRange"), radius: num("richRadius"), max_results: num("richMax"), max_distance: num("richDist"),
-             min_value: num("richMin"), use_mapping_value: rEl("richMapping").checked, avoid_thargoids: rEl("richThargoid").checked,
-             loop: rEl("richLoop").checked};
+// the request a Road to Riches plot makes (from, to, ship and range are the form's shared fields; the server checks it all)
+function richBody() {
+  const num = id => hEl(id).value.trim() === "" ? undefined : Number(hEl(id).value);
+  const b = {from: hEl("hwyFrom").value.trim() || undefined, to: hEl("hwyTo").value.trim() || undefined, range: num("hwyRange"),
+             radius: num("richRadius"), max_results: num("richMax"), max_distance: num("richDist"), min_value: num("richMin"),
+             use_mapping_value: hEl("richMapping").checked, avoid_thargoids: hEl("richThargoid").checked, loop: hEl("richLoop").checked};
   for (const k of Object.keys(b)) if (b[k] === undefined) delete b[k];
-  R.status = null;
-  setRichStatus("Asking Spansh…", "busy");
+  return b;
+}
+async function richSubmit() {
+  const b = richBody();
+  H.status = null;
+  setHwyStatus("Asking Spansh…", "busy");
   let r;
   try { r = await apiJson("api/riches/plot", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(b)}); }
   catch (err) { r = {error: err.message}; }
-  if (r.error) return setRichStatus(`Could not plot the route: ${hwyErr(r.error)}.`, "err");
-  R.status = null; R.watch = true;
+  if (r.error) return setHwyStatus(`Could not plot the route: ${hwyErr(r.error)}.`, "err");
+  store.set("hwyShow", "rich"); H.status = null; R.watch = true;
   if (R.data) R.data.plotting = r.plotting;
-  drawRichStatus();
+  drawHwyStatus();
   richPoll();
-});
-rEl("richClear").onclick = async () => {
-  const btn = rEl("richClear");
-  if (!R.clearArmed) {
-    R.clearArmed = setTimeout(() => { R.clearArmed = null; btn.textContent = "Clear route"; }, 4000);
-    btn.textContent = "Click again to clear"; return;
-  }
-  clearTimeout(R.clearArmed); R.clearArmed = null; btn.textContent = "Clear route";
-  let r;
-  try { r = await apiJson("api/riches/clear", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"}); }
-  catch (err) { r = {error: err.message}; }
-  setRichStatus(r.error ? `Could not clear the route: ${hwyErr(r.error)}.` : "Route cleared.", r.error ? "err" : "");
-  await loadRich(true);
-};
+}
+// the map draws a Riches route as it draws the Highway's (no neutrons, no refuel rings)
+const richMapRoute = rt => ({plotter: "riches", from: rt.from, to: rt.to, at: rt.at, furthest: rt.furthest, points: rt.points || [],
+  neutrons: [], summary: {complete: !!rt.done_ts}, done: [], ahead: rt.systems.map(s => ({i: s.i, system: s.system, x: s.x, z: s.z}))});
+const hwyMapRoute = () => routeKind() === "rich" && R.data && R.data.route ? richMapRoute(R.data.route) : H.data && H.data.route;
 // ---- the top-down map: X across, Z up (north: towards the galactic core, as galaxy maps show it) ----
 // A view is {cx, cz, scale (px per ly), w, h}: the world point at the canvas centre. Pure functions, so tests can check them.
 const HWY_MIN_SCALE = 1e-4, HWY_MAX_SCALE = 40;
@@ -5119,7 +5132,7 @@ function drawHwyBackground(g, v, w, h, C, dpr) {
 const HM = {v: null, auto: true, drag: null, named: [], img: null, imgV: null, imgOk: false, imgLight: null};
 const hwyCanvas = hEl("hwyCanvas");
 function hwyMapPoints() {
-  const hd = H.data, r = hd && hd.route, pos = data && data.position;
+  const r = hwyMapRoute(), pos = data && data.position;
   const pts = r ? (r.points || []).slice() : [];
   if (pos && pos.x != null) pts.push([pos.x, pos.z]);
   return pts;
@@ -5133,10 +5146,10 @@ function drawHwyMap() {
   if (view !== "hwy") return;
   const wrap = hEl("hwyMapWrap"), w = wrap.clientWidth, h = wrap.clientHeight;
   const g = w > 0 && h > 0 && hwyCanvas.getContext ? hwyCanvas.getContext("2d") : null;
-  const r = H.data && H.data.route, pos = data && data.position;
+  const r = hwyMapRoute(), pos = data && data.position;
   const bg = H.data && H.data.background;
   hEl("hwyMapNote").innerHTML = (r ? `<span class="lg-done">━ done</span> <span class="lg-ahead">━ ahead</span> <span class="lg-n">◆ neutron</span>` +
-    (r.plotter === "neutron" ? "" : ` <span class="lg-f">○ refuel</span>`) +
+    (r.plotter === "exact" ? ` <span class="lg-f">○ refuel</span>` : "") +
     ` <span class="lg-you">● you</span> <span>↑ +Z (core)</span>` : "No route: plot one to see it here.") +
     (bg && bg.why ? ` <span class="warnc" title="${esc(bg.name || "")}">background image: ${esc(bg.why)}</span>` : "");
   hwyLayerButtons();

@@ -1083,16 +1083,21 @@ const settle = async maxMs => {
     allOk = allOk && goodS3;
     console.log(goodS3 ? "OK" : "FAIL", "| batch S3 |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(got)}` : "variant shown, codex title per variant, find by name opens Here, long name refused", errors.slice(before));
   }
-  // Road to Riches tab: the systems with their bodies (done, next, you-are-here), the plot form's body and its polling,
-  // the arrival moment's spoken line, and the clear button's two clicks. Every request is answered here.
+  // Road to Riches, a route type of Plot Route (it had a tab of its own for a day: PR #1): no tab button; the plotter
+  // switch shows its options and plots through api/riches/plot (polled); its systems with their bodies (done, at, next)
+  // in the tab's list; with a Highway route too, a switch picks the route shown; Clear route clears the one shown.
+  // Every request is answered here.
   {
     const w = dom.window, d = w.document, before = errors.length, realFetch = w.fetch, calls = [];
     const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), {status, headers: {"Content-Type": "application/json"}}));
     const body = (name, scan, o = {}) => Object.assign({name, type: "Planet", subtype: "Water world", ls: 1200, scan, map: scan * 3,
       terraformable: 0, scanned: false, mapped: false, done: false}, o);
-    const sys = (i, name, left, bodies) => ({i, system: name, id: String(8000 + i), jumps: i ? 7 : 0, left, value: 1e6, value_left: left * 5e5, bodies});
-    const route = {from: "Rich A", to: "Rich C", count: 3, first: 0, next: 2, at: 1, furthest: 1, off_route: null, created_ts: "2026-10-01T10:00:00Z",
-      options: {}, systems: [sys(0, "Rich A", 0, [body("Rich A 1", 100000, {scanned: true, mapped: true, done: true})]),
+    const sys = (i, name, left, bodies) => ({i, system: name, x: i * 10, y: 0, z: i * 5, id: String(8000 + i), jumps: i ? 7 : 0, left,
+      value: 1e6, value_left: left * 5e5, bodies});
+    const route = {id: "r1", from: "Rich A", to: "Rich C", count: 3, first: 0, next: 2, at: 1, furthest: 1, off_route: null,
+      created_ts: "2026-10-06T10:00:00Z", options: {range: 61.5, radius: 25, min_value: 100000, use_mapping_value: true},
+      points: [[0, 0], [10, 5], [20, 10]],
+      systems: [sys(0, "Rich A", 0, [body("Rich A 1", 100000, {scanned: true, mapped: true, done: true})]),
         sys(1, "Rich B", 1, [body("Rich B 2", 900000, {scanned: true}), body("Rich B 3", 400000)]),
         sys(2, "Rich C", 1, [body("Rich C 1", 700000, {subtype: "Earth-like world"})])]};
     const payload = (rt, plotting = null) => ({route: rt, plotting, position: {name: "Rich B", id: "8001"}, range: 61.5,
@@ -1104,51 +1109,70 @@ const settle = async maxMs => {
       if (url.startsWith("api/riches")) { calls.push([url, o && o.method || "GET", o && o.body ? JSON.parse(o.body) : null]); return answer(url, o); }
       return realFetch(u, o);
     };
-    if (!d.getElementById("nowView").hidden) { d.getElementById("nowBack").click(); await sleep(300); }
-    d.querySelector('[data-view="rich"]').click(); await sleep(600);
     const got = {};
-    got.shown = !d.getElementById("richView").hidden;
-    got.systems = [...d.querySelectorAll("#richList .richsys")].map(e => e.className.replace("richsys ", "") + ":" + e.dataset.i).join();
-    got.bodies = d.querySelectorAll("#richList .richbodies tr").length;   // A is all done (folded), B and C list theirs
-    got.marks = [...d.querySelectorAll("#richList td.richc")].map(e => e.textContent).join("|");
-    got.head = d.getElementById("richHead").textContent.replace(/\s+/g, " ");
-    got.formFolded = !d.getElementById("richPlot").open;
-    got.range = d.getElementById("richRange").value;
-    // a plot: the form's body, then polled until done
-    d.getElementById("richTo").value = "Far Away"; let polls = 0;
+    got.noTab = !d.querySelector('[data-view="rich"]') && d.querySelector('.views [data-view="hwy"]').textContent;
+    if (!d.getElementById("nowView").hidden) { d.getElementById("nowBack").click(); await sleep(300); }
+    w.localStorage.removeItem("hwyShow");
+    d.querySelector('[data-view="hwy"]').click(); await sleep(300);
+    await w.eval("R.filled = false; loadRich(true)"); await sleep(300);   // earlier checks loaded the real (empty) answer
+    got.shown = [!d.getElementById("hwyView").hidden, !d.getElementById("richPane").hidden, d.getElementById("hwyPane").hidden];
+    got.systems = [...d.querySelectorAll("#richRows tr.richsys")].map(e => e.className.replace("richsys ", "") + ":" + e.dataset.i).join();
+    got.bodies = d.querySelectorAll("#richRows tr.richbody").length;   // A is all done (folded), B and C list theirs
+    got.marks = [...d.querySelectorAll("#richRows td.richmark")].map(e => e.textContent).join("|");
+    got.head = d.getElementById("hwyHead").textContent.replace(/\s+/g, " ");
+    got.formFolded = !d.getElementById("hwyPlot").open;
+    // the plotter switch: Road to Riches' options, the neutron-only and exact-only ones hidden, To optional
+    const pick = v => { const r = d.querySelector(`[name=hwyPlotter][value="${v}"]`); r.checked = true; r.dispatchEvent(new w.Event("change")); };
+    pick("riches");
+    const vis = sel => [...d.querySelectorAll(sel)].map(e => !e.hidden);
+    got.form = [vis(".hwy-ropt").join(), vis(".hwy-nonly").join(), vis(".hwy-xopt").join(), vis(".hwy-cons").join(), d.getElementById("hwyTo").placeholder];
+    // a plot: the shared fields and Riches' own, posted to api/riches/plot, then polled until done
+    d.getElementById("hwyTo").value = "Far Away"; d.getElementById("hwyRange").value = "61.5"; let polls = 0;
     answer = url => {
       if (url === "api/riches/plot") return json({ok: true, plotting: {state: "running", from: "Rich B", to: "Far Away", started: new Date().toISOString()}}, 202);
       polls++;
-      return json(payload(polls < 3 ? null : route, polls < 3 ? {state: "running", from: "Rich B", to: "Far Away", started: new Date().toISOString()} : {state: "done", from: "Rich B", to: "Far Away"}));
+      return json(payload(polls < 3 ? route : route, polls < 3 ? {state: "running", from: "Rich B", to: "Far Away", started: new Date().toISOString()} : {state: "done", from: "Rich B", to: "Far Away"}));
     };
-    d.getElementById("richGo").click(); await sleep(300);
+    d.getElementById("hwyGo").click(); await sleep(300);
     got.plotBody = (calls.find(c => c[0] === "api/riches/plot") || [])[2];
-    got.running = d.getElementById("richStatus").textContent;
+    got.running = d.getElementById("hwyStatus").textContent;
     await sleep(5400);
-    got.polls = polls;
-    // clear: the first click only asks
+    got.done = [polls >= 3, d.getElementById("hwyStatus").textContent];
+    // with a Highway route as well: the switch, and the Highway's list when it is picked
+    w.eval(`H.data = Object.assign({}, H.data, {route: {id: "h1", plotter: "neutron", from: "Hw A", to: "Hw Z", count: 2, created_ts: "2026-10-06T09:00:00Z",
+      points: [[0, 0], [100, 100]], summary: {jumps_total: 1}, done: [], ahead: [{i: 1, system: "Hw Z", x: 100, z: 100}], options: {}}}); renderHwy()`);
+    const kinds = () => [...d.querySelectorAll("[name=hwyKind]")].map(e => e.value + (e.checked ? "*" : "")).join();
+    got.both = [kinds(), !d.getElementById("richPane").hidden];
+    const hw = d.querySelector('[name=hwyKind][value="hwy"]'); hw.checked = true; hw.dispatchEvent(new w.Event("change", {bubbles: true}));
+    got.picked = [kinds(), !d.getElementById("hwyPane").hidden, d.getElementById("richPane").hidden, w.localStorage.getItem("hwyShow")];
+    const rc = d.querySelector('[name=hwyKind][value="rich"]'); rc.checked = true; rc.dispatchEvent(new w.Event("change", {bubbles: true}));
+    // Clear route clears the route shown (Road to Riches here); the first click only asks
     answer = url => url === "api/riches/clear" ? json({ok: true}) : json(payload(null));
     calls.length = 0;
-    d.getElementById("richClear").click(); await sleep(50);
-    got.clearFirst = [calls.length, d.getElementById("richClear").textContent];
-    d.getElementById("richClear").click(); await sleep(400);
-    got.cleared = [calls.map(c => c[0] + " " + c[1]).join(), d.getElementById("richPane").hidden];
-    got.nav = w.eval("VIEW_PANE.rich === 'richPane' && TABLET_VIEWS.includes('rich') && SPEECH_SYS_BOUND.has('riches') && ALERTS.some(a => a[0] === 'riches')");
+    d.getElementById("hwyClear").click(); await sleep(50);
+    got.clearFirst = [calls.length, d.getElementById("hwyClear").textContent];
+    d.getElementById("hwyClear").click(); await sleep(500);
+    got.cleared = calls.map(c => c[0] + " " + c[1]).join();
+    got.nav = w.eval("!VIEW_PANE.rich && !TABLET_VIEWS.includes('rich') && SPEECH_SYS_BOUND.has('riches') && ALERTS.some(a => a[0] === 'riches')");
     w.fetch = realFetch;
+    pick("exact");
+    w.localStorage.removeItem("hwyShow");
+    await w.eval("loadHwy(true)"); await w.eval("loadRich(true)");
     d.querySelector('[data-view="overview"]').click(); await sleep(200);
-    const want = {shown: true, systems: "done:0,at:1,next:2", bodies: 3, marks: "✔||", formFolded: true, range: "61.5",
-      plotBody: {from: undefined, to: "Far Away", range: 61.5, radius: 25, max_results: 25, max_distance: 50000, min_value: 100000,
+    const want = {noTab: "Plot Route", shown: [true, true, true], systems: "done:0,at:1,next:2", bodies: 3, marks: "✔||",
+      formFolded: true, form: ["true,true", "false,false", "false", "false", "optional: where to end"],
+      plotBody: {to: "Far Away", range: 61.5, radius: 25, max_results: 25, max_distance: 50000, min_value: 100000,
                  use_mapping_value: true, avoid_thargoids: true, loop: false},
-      clearFirst: [0, "Click again to clear"], cleared: ["api/riches/clear POST,api/riches GET", true], nav: true};
-    delete want.plotBody.from;
+      both: ["hwy,rich*", true], picked: ["hwy*,rich", true, true, '"hwy"'], clearFirst: [0, "Click again to clear"],
+      cleared: "api/riches/clear POST,api/riches GET", nav: true};
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
-    if (!(/Rich A → Rich C/.test(got.head) && /you are at system 2 of 3/.test(got.head))) bad.push("head");
+    if (!(/To Rich C/.test(got.head) && /you are at system 2 of 3/.test(got.head) && /Next: Rich C/.test(got.head))) bad.push("head");
     if (!/^Asking Spansh/.test(got.running)) bad.push("running");
-    if (!(got.polls >= 3)) bad.push("polls");
+    if (!(got.done[0] && /Plotted: a Road to Riches of 3 systems/.test(got.done[1]))) bad.push("done");
     const goodRC = !bad.length && errors.length === before;
     allOk = allOk && goodRC;
-    console.log(goodRC ? "OK" : "FAIL", "| riches tab |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
-      : "systems done/at/next, bodies and marks, form with the ship's range, plot body and polling, clear", errors.slice(before));
+    console.log(goodRC ? "OK" : "FAIL", "| riches in plot route |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
+      : "no tab of its own, the plotter switch and its options, plot and polling, systems/bodies/marks, the both-routes switch, clear", errors.slice(before));
   }
   // G2.2, F48, F64: a bad server copy (a list that is not a list, a null object, a number for 'saved') does not stop
   // the page: a fresh browser still starts polling

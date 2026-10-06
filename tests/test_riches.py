@@ -237,6 +237,27 @@ class RichesRoute(unittest.TestCase):
         self.assertFalse(self.state.riches_copy_next())   # once per arrival
         self.assertEqual(cb.copied, ["Beta Rich", "Gamma Rich"])
 
+    def test_two_routes_one_clipboard(self):
+        """A Highway route and a Road to Riches route at once: only the one plotted last copies its next system (one
+        copy per jump), and the tab's map gets the whole Riches route's points."""
+        cb = types_ns(enabled=True, tool="wl-copy", copied=[])
+        cb.copy = lambda text: cb.copied.append(text) or True
+        cb.info = lambda: {"enabled": True, "available": True}
+        self.state.clipboard = cb
+        self.assertIsNone(self.state.route_newest())
+        self.store()
+        self.assertEqual(self.state.route_newest(), "riches")
+        self.assertEqual(self.state.riches_view()["route"]["points"], [[0, 0], [20, 0], [45, 0]])
+        # a Highway route plotted after it takes the clipboard over
+        ed_outrider.meta_set(self.db, "highway", {"id": "h", "created_ts": "2999-01-01T00:00:00Z", "at": 0})
+        self.assertEqual(self.state.route_newest(), "highway")
+        self.jump(-10, 1002, "Beta Rich", 20)
+        self.assertFalse(self.state.riches_copy_next())
+        self.assertEqual(cb.copied, [])
+        # cleared: Road to Riches has it again
+        ed_outrider.meta_set(self.db, "highway", None)
+        self.assertEqual(self.state.route_newest(), "riches")
+
     # ---- the plot ----
 
     def spansh(self, script):
