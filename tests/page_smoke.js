@@ -1232,6 +1232,49 @@ const settle = async maxMs => {
     allOk = allOk && goodGH;
     console.log(goodGH ? "OK" : "FAIL", "| settings github |", goodGH ? "the GitHub link and the version, desktop and tablet" : JSON.stringify(got), errors.slice(before));
   }
+  // Cargo: the Carrier tile's tritium only with a tritium sell order (else as before, one line); the Materials tab's
+  // Cargo (the ship with what you paid, the carrier's marks and its sync line); Recount lists only what is not confirmed
+  {
+    const w = dom.window, d = w.document, before = errors.length;
+    const got = w.eval(`(() => {
+      const saved = data.carrier, o = {};
+      data.carrier = {name: "Out Of The Blue", callsign: "G0X-85Z", system: "Smojooe AR-E b25-8", aboard: true, here: true,
+                      has_uc: true, has_vista: true, fuel: 668, tritium: {depot: 668, total: 14199, jumps: 151}};
+      renderCarrier();
+      o.with = document.getElementById("carrierLine").textContent;
+      o.trit = (document.getElementById("carrierTrit") || {}).textContent;
+      data.carrier = Object.assign({}, data.carrier, {tritium: null});
+      renderCarrier();
+      o.without = document.getElementById("carrierLine").textContent;
+      o.tritGone = !document.getElementById("carrierTrit");
+      data.carrier = saved; renderCarrier();
+      renderCargo({ship: {name: "Caspian Explorer", capacity: 64, lines: [{id: "platinum", name: "Platinum", count: 64, avg: 45210,
+                     avg_text: "Avg 45,210 cr/t (2 lots)", stolen: 0, mission: 0}]},
+                   carrier: {name: "Out Of The Blue", total: 16085, reported: 16085, gap: 0, market_ts: "2026-10-07T10:11:28Z",
+                     lines: [{id: "tritium", name: "Tritium", count: 13531, state: "confirmed", ts: "2026-10-07T10:11:28Z", moves: []},
+                             {id: "water", name: "Water", count: 10, state: "seen", ts: "2026-09-30T20:50:05Z", moves: ["+10 t moved from your ship (2026-09-30)"]},
+                             {id: "metaalloys", name: "Meta-Alloys", count: 3, state: "entered", ts: "2026-10-07T10:30:00Z", moves: []}]}});
+      const list = document.getElementById("cargoList");
+      o.ship = list.querySelector('tr[data-from="ship"]').textContent;
+      o.marks = [...list.querySelectorAll('tr[data-from="carrier"] .st')].map(x => x.textContent).join("");
+      o.sync = list.textContent.includes("✓ in sync: 16,085 t");
+      openRecount();
+      o.recount = [...document.querySelectorAll("#recountRows input[data-rc]")].map(i => i.dataset.rc).join();
+      o.total = document.getElementById("recountTotal").textContent;
+      tabClose(document.getElementById("recountDlg"));
+      return o;
+    })()`);
+    const bad = [];
+    if (!/Tritium in Depot: 668 t/.test(got.with) || got.trit !== "Total Tritium: 14,199 t (151 jumps)") bad.push("tile with tritium");
+    if (!/UC ✓ · Vista ✓ · 668 t tritium/.test(got.without) || !got.tritGone) bad.push("tile without");
+    if (!/Platinum · Avg 45,210 cr\/t \(2 lots\)64 t/.test(got.ship)) bad.push("ship");
+    if (got.marks !== "✓◷✎" || !got.sync) bad.push("carrier");
+    if (got.recount !== "water,metaalloys" || !/Total 13,544 t · the carrier reports 16,085 t · 2,541 t short/.test(got.total)) bad.push("recount");
+    const goodCG = !bad.length && errors.length === before;
+    allOk = allOk && goodCG;
+    console.log(goodCG ? "OK" : "FAIL", "| cargo |", goodCG ? "the tile's tritium (and without), the ship's Avg, the carrier's marks, Recount's lines" :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+  }
   // G2.2, F48, F64: a bad server copy (a list that is not a list, a null object, a number for 'saved') does not stop
   // the page: a fresh browser still starts polling
   {

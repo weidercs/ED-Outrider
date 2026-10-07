@@ -1,0 +1,1955 @@
+{
+"note": "The author's carrier (G0X-85Z) on 2026-10-07: its journal events from the live folder (trimmed to the fields Outrider reads) and the Market.json read at 10:11:28. With Meta-Alloys 3 and Modular Terminals 6 entered (Recount) the fold is 16,085 t, CarrierStats' Cargo then.",
+"events": [
+{
+"timestamp": "2026-09-26T14:10:12Z",
+"event": "Undocked",
+"MarketID": 128666762
+},
+{
+"timestamp": "2026-09-26T14:16:56Z",
+"event": "Docked",
+"StationType": "FleetCarrier",
+"MarketID": 3700251648,
+"Taxi": false,
+"Multicrew": false
+},
+{
+"timestamp": "2026-09-26T14:18:12Z",
+"event": "Undocked",
+"MarketID": 3700251648
+},
+{
+"timestamp": "2026-09-26T14:20:36Z",
+"event": "Docked",
+"StationType": "FleetCarrier",
+"MarketID": 3700251648,
+"Taxi": false,
+"Multicrew": false
+},
+{
+"timestamp": "2026-09-26T14:26:41Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 200,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 10894,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 12836
+}
+},
+{
+"timestamp": "2026-09-26T14:26:44Z",
+"event": "Undocked",
+"MarketID": 3700251648
+},
+{
+"timestamp": "2026-09-26T14:26:59Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 200,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 10894,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 12836
+}
+},
+{
+"timestamp": "2026-09-26T14:27:22Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 200,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 10894,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 12836
+}
+},
+{
+"timestamp": "2026-09-26T14:34:33Z",
+"event": "Docked",
+"StationType": "Orbis",
+"MarketID": 128666762,
+"Taxi": false,
+"Multicrew": false
+},
+{
+"timestamp": "2026-09-26T14:56:55Z",
+"event": "Undocked",
+"MarketID": 128666762
+},
+{
+"timestamp": "2026-09-26T15:02:49Z",
+"event": "Docked",
+"StationType": "FleetCarrier",
+"MarketID": 3700251648,
+"Taxi": false,
+"Multicrew": false
+},
+{
+"timestamp": "2026-09-26T15:03:58Z",
+"event": "Undocked",
+"MarketID": 3700251648
+},
+{
+"timestamp": "2026-09-26T15:08:50Z",
+"event": "Docked",
+"StationType": "Orbis",
+"MarketID": 128666762,
+"Taxi": false,
+"Multicrew": false
+},
+{
+"timestamp": "2026-09-26T15:28:13Z",
+"event": "Undocked",
+"MarketID": 128666762
+},
+{
+"timestamp": "2026-09-26T15:34:58Z",
+"event": "Docked",
+"StationType": "FleetCarrier",
+"MarketID": 3700251648,
+"Taxi": false,
+"Multicrew": false
+},
+{
+"timestamp": "2026-09-26T15:47:24Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 164,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 10894,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 12836
+}
+},
+{
+"timestamp": "2026-09-26T15:48:06Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 164,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 10894,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 12836
+}
+},
+{
+"timestamp": "2026-09-26T16:08:13Z",
+"event": "Undocked",
+"MarketID": 3700251648
+},
+{
+"timestamp": "2026-09-26T17:26:11Z",
+"event": "CargoTransfer",
+"Transfers": [
+{
+"Type": "magnesite",
+"Count": 11,
+"Direction": "toship"
+},
+{
+"Type": "haematite",
+"Count": 33,
+"Direction": "toship"
+},
+{
+"Type": "gold",
+"Count": 22,
+"Direction": "toship"
+}
+]
+},
+{
+"timestamp": "2026-09-26T18:01:46Z",
+"event": "Docked",
+"StationType": "Coriolis",
+"MarketID": 3230724864,
+"Taxi": false,
+"Multicrew": false
+},
+{
+"timestamp": "2026-09-26T18:02:10Z",
+"event": "MarketSell",
+"MarketID": 3230724864,
+"Type": "haematite",
+"Count": 33,
+"SellPrice": 2256,
+"TotalSale": 74448,
+"AvgPricePaid": 0
+},
+{
+"timestamp": "2026-09-26T18:02:13Z",
+"event": "MarketSell",
+"MarketID": 3230724864,
+"Type": "gold",
+"Count": 22,
+"SellPrice": 35342,
+"TotalSale": 777524,
+"AvgPricePaid": 0
+},
+{
+"timestamp": "2026-09-26T18:02:16Z",
+"event": "MarketSell",
+"MarketID": 3230724864,
+"Type": "magnesite",
+"Count": 11,
+"SellPrice": 36989,
+"TotalSale": 406879,
+"AvgPricePaid": 0
+},
+{
+"timestamp": "2026-09-26T18:02:40Z",
+"event": "Undocked",
+"MarketID": 3230724864
+},
+{
+"timestamp": "2026-09-26T18:42:50Z",
+"event": "Docked",
+"StationType": "FleetCarrier",
+"MarketID": 3700251648,
+"Taxi": false,
+"Multicrew": false
+},
+{
+"timestamp": "2026-09-26T18:43:52Z",
+"event": "Undocked",
+"MarketID": 3700251648
+},
+{
+"timestamp": "2026-09-26T18:50:26Z",
+"event": "Docked",
+"StationType": "Coriolis",
+"MarketID": 4256091651,
+"Taxi": false,
+"Multicrew": false
+},
+{
+"timestamp": "2026-09-26T18:50:56Z",
+"event": "MarketBuy",
+"MarketID": 4256091651,
+"Type": "tritium",
+"Count": 1153,
+"BuyPrice": 53155,
+"TotalCost": 61287715
+},
+{
+"timestamp": "2026-09-26T18:51:30Z",
+"event": "Undocked",
+"MarketID": 4256091651
+},
+{
+"timestamp": "2026-09-26T18:55:21Z",
+"event": "Docked",
+"StationType": "FleetCarrier",
+"MarketID": 3700251648,
+"Taxi": false,
+"Multicrew": false
+},
+{
+"timestamp": "2026-09-26T18:55:38Z",
+"event": "CargoTransfer",
+"Transfers": [
+{
+"Type": "tritium",
+"Count": 1153,
+"Direction": "tocarrier"
+}
+]
+},
+{
+"timestamp": "2026-09-26T18:58:42Z",
+"event": "Undocked",
+"MarketID": 3700251648
+},
+{
+"timestamp": "2026-09-26T19:05:31Z",
+"event": "Docked",
+"StationType": "Coriolis",
+"MarketID": 4256091651,
+"Taxi": false,
+"Multicrew": false
+},
+{
+"timestamp": "2026-09-26T19:07:53Z",
+"event": "MarketBuy",
+"MarketID": 4256091651,
+"Type": "tritium",
+"Count": 1153,
+"BuyPrice": 53168,
+"TotalCost": 61302704
+},
+{
+"timestamp": "2026-09-26T19:08:19Z",
+"event": "Undocked",
+"MarketID": 4256091651
+},
+{
+"timestamp": "2026-09-26T19:12:27Z",
+"event": "Docked",
+"StationType": "FleetCarrier",
+"MarketID": 3700251648,
+"Taxi": false,
+"Multicrew": false
+},
+{
+"timestamp": "2026-09-26T19:12:55Z",
+"event": "CargoTransfer",
+"Transfers": [
+{
+"Type": "tritium",
+"Count": 302,
+"Direction": "tocarrier"
+}
+]
+},
+{
+"timestamp": "2026-09-26T19:14:51Z",
+"event": "Undocked",
+"MarketID": 3700251648
+},
+{
+"timestamp": "2026-09-26T19:20:27Z",
+"event": "Docked",
+"StationType": "Coriolis",
+"MarketID": 4256091651,
+"Taxi": false,
+"Multicrew": false
+},
+{
+"timestamp": "2026-09-26T19:20:46Z",
+"event": "MarketBuy",
+"MarketID": 4256091651,
+"Type": "tritium",
+"Count": 1153,
+"BuyPrice": 53168,
+"TotalCost": 61302704
+},
+{
+"timestamp": "2026-09-26T19:21:05Z",
+"event": "Undocked",
+"MarketID": 4256091651
+},
+{
+"timestamp": "2026-09-26T19:25:59Z",
+"event": "Docked",
+"StationType": "FleetCarrier",
+"MarketID": 3700251648,
+"Taxi": false,
+"Multicrew": false
+},
+{
+"timestamp": "2026-09-26T19:26:20Z",
+"event": "CargoTransfer",
+"Transfers": [
+{
+"Type": "tritium",
+"Count": 1153,
+"Direction": "tocarrier"
+}
+]
+},
+{
+"timestamp": "2026-09-26T19:26:25Z",
+"event": "Undocked",
+"MarketID": 3700251648
+},
+{
+"timestamp": "2026-09-26T19:32:49Z",
+"event": "Docked",
+"StationType": "Coriolis",
+"MarketID": 4256091651,
+"Taxi": false,
+"Multicrew": false
+},
+{
+"timestamp": "2026-09-26T19:33:06Z",
+"event": "MarketBuy",
+"MarketID": 4256091651,
+"Type": "tritium",
+"Count": 1153,
+"BuyPrice": 53168,
+"TotalCost": 61302704
+},
+{
+"timestamp": "2026-09-26T19:33:22Z",
+"event": "Undocked",
+"MarketID": 4256091651
+},
+{
+"timestamp": "2026-09-26T19:37:31Z",
+"event": "Docked",
+"StationType": "FleetCarrier",
+"MarketID": 3700251648,
+"Taxi": false,
+"Multicrew": false
+},
+{
+"timestamp": "2026-09-26T19:38:19Z",
+"event": "CargoTransfer",
+"Transfers": [
+{
+"Type": "tritium",
+"Count": 1153,
+"Direction": "tocarrier"
+}
+]
+},
+{
+"timestamp": "2026-09-26T19:40:49Z",
+"event": "Undocked",
+"MarketID": 3700251648
+},
+{
+"timestamp": "2026-09-26T19:47:41Z",
+"event": "Docked",
+"StationType": "Coriolis",
+"MarketID": 4256091651,
+"Taxi": false,
+"Multicrew": false
+},
+{
+"timestamp": "2026-09-26T19:48:13Z",
+"event": "MarketBuy",
+"MarketID": 4256091651,
+"Type": "tritium",
+"Count": 1153,
+"BuyPrice": 53168,
+"TotalCost": 61302704
+},
+{
+"timestamp": "2026-09-26T19:48:30Z",
+"event": "Undocked",
+"MarketID": 4256091651
+},
+{
+"timestamp": "2026-09-26T19:53:52Z",
+"event": "Docked",
+"StationType": "FleetCarrier",
+"MarketID": 3700251648,
+"Taxi": false,
+"Multicrew": false
+},
+{
+"timestamp": "2026-09-26T19:54:42Z",
+"event": "CargoTransfer",
+"Transfers": [
+{
+"Type": "tritium",
+"Count": 1153,
+"Direction": "tocarrier"
+}
+]
+},
+{
+"timestamp": "2026-09-26T19:54:46Z",
+"event": "Undocked",
+"MarketID": 3700251648
+},
+{
+"timestamp": "2026-09-26T20:00:43Z",
+"event": "Docked",
+"StationType": "Coriolis",
+"MarketID": 4256091651,
+"Taxi": false,
+"Multicrew": false
+},
+{
+"timestamp": "2026-09-26T20:01:09Z",
+"event": "MarketBuy",
+"MarketID": 4256091651,
+"Type": "tritium",
+"Count": 1153,
+"BuyPrice": 53168,
+"TotalCost": 61302704
+},
+{
+"timestamp": "2026-09-26T20:01:32Z",
+"event": "Undocked",
+"MarketID": 4256091651
+},
+{
+"timestamp": "2026-09-26T20:06:21Z",
+"event": "Docked",
+"StationType": "FleetCarrier",
+"MarketID": 3700251648,
+"Taxi": false,
+"Multicrew": false
+},
+{
+"timestamp": "2026-09-26T20:07:05Z",
+"event": "CargoTransfer",
+"Transfers": [
+{
+"Type": "tritium",
+"Count": 1153,
+"Direction": "tocarrier"
+}
+]
+},
+{
+"timestamp": "2026-09-26T20:08:23Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 1000,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16961,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 6769
+}
+},
+{
+"timestamp": "2026-09-26T20:10:35Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 1000,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16961,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 6769
+}
+},
+{
+"timestamp": "2026-09-26T20:29:04Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 885,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16961,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 6769
+}
+},
+{
+"timestamp": "2026-09-26T20:35:18Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 885,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16961,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 6769
+}
+},
+{
+"timestamp": "2026-09-26T20:55:38Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 773,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16961,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 6769
+}
+},
+{
+"timestamp": "2026-09-26T20:57:24Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 773,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16961,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 6769
+}
+},
+{
+"timestamp": "2026-09-26T21:14:51Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 660,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16961,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 6769
+}
+},
+{
+"timestamp": "2026-09-26T21:18:54Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 660,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16961,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 6769
+}
+},
+{
+"timestamp": "2026-09-26T21:48:23Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 546,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16961,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 6769
+}
+},
+{
+"timestamp": "2026-09-26T21:49:14Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 546,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16961,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 6769
+}
+},
+{
+"timestamp": "2026-09-26T22:21:46Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 432,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16961,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 6769
+}
+},
+{
+"timestamp": "2026-09-26T22:22:42Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 432,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16961,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 6769
+}
+},
+{
+"timestamp": "2026-09-26T22:46:29Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 319,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16961,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 6769
+}
+},
+{
+"timestamp": "2026-09-26T22:47:32Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 319,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16961,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 6769
+}
+},
+{
+"timestamp": "2026-09-26T23:04:42Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 207,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16961,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 6769
+}
+},
+{
+"timestamp": "2026-09-26T23:18:21Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 207,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16961,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 6769
+}
+},
+{
+"timestamp": "2026-09-26T23:36:14Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 94,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16961,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 6769
+}
+},
+{
+"timestamp": "2026-09-26T23:41:26Z",
+"event": "CargoTransfer",
+"Transfers": [
+{
+"Type": "tritium",
+"Count": 934,
+"Direction": "toship"
+}
+]
+},
+{
+"timestamp": "2026-09-26T23:41:42Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 1000,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16027,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 7703
+}
+},
+{
+"timestamp": "2026-09-26T23:42:23Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 1000,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16027,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 7703
+}
+},
+{
+"timestamp": "2026-09-27T00:01:16Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 889,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16027,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 7703
+}
+},
+{
+"timestamp": "2026-09-27T00:04:05Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 889,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16027,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 7703
+}
+},
+{
+"timestamp": "2026-09-27T00:27:05Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 778,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16027,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 7703
+}
+},
+{
+"timestamp": "2026-09-27T00:28:37Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 778,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16027,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 7703
+}
+},
+{
+"timestamp": "2026-09-27T17:49:47Z",
+"event": "CargoTransfer",
+"Transfers": [
+{
+"Type": "tritium",
+"Count": 28,
+"Direction": "tocarrier"
+}
+]
+},
+{
+"timestamp": "2026-09-27T17:51:26Z",
+"event": "Undocked",
+"MarketID": 3700251648
+},
+{
+"timestamp": "2026-09-29T03:21:54Z",
+"event": "Docked",
+"StationType": "FleetCarrier",
+"MarketID": 3700251648,
+"Taxi": false,
+"Multicrew": false
+},
+{
+"timestamp": "2026-09-30T02:42:05Z",
+"event": "Undocked",
+"MarketID": 3700251648
+},
+{
+"timestamp": "2026-09-30T02:55:13Z",
+"event": "Undocked",
+"MarketID": 3700251648
+},
+{
+"timestamp": "2026-09-30T03:52:20Z",
+"event": "Docked",
+"StationType": "FleetCarrier",
+"MarketID": 3700251648,
+"Taxi": false,
+"Multicrew": false
+},
+{
+"timestamp": "2026-09-30T20:50:05Z",
+"event": "CargoTransfer",
+"Transfers": [
+{
+"Type": "water",
+"Count": 10,
+"Direction": "tocarrier"
+},
+{
+"Type": "methanolmonohydratecrystals",
+"Type_Localised": "Methanol Monohydrate Crystals",
+"Count": 20,
+"Direction": "tocarrier"
+}
+]
+},
+{
+"timestamp": "2026-09-30T20:53:32Z",
+"event": "Undocked",
+"MarketID": 3700251648
+},
+{
+"timestamp": "2026-10-03T20:58:35Z",
+"event": "Docked",
+"StationType": "FleetCarrier",
+"MarketID": 3700251648,
+"Taxi": false,
+"Multicrew": false
+},
+{
+"timestamp": "2026-10-03T20:59:24Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 668,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16085,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 7645
+}
+},
+{
+"timestamp": "2026-10-03T22:46:57Z",
+"event": "Undocked",
+"MarketID": 3700251648
+},
+{
+"timestamp": "2026-10-07T04:34:03Z",
+"event": "Docked",
+"StationType": "FleetCarrier",
+"MarketID": 3700251648,
+"Taxi": false,
+"Multicrew": false
+},
+{
+"timestamp": "2026-10-07T04:35:10Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 668,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16085,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 7645
+}
+},
+{
+"timestamp": "2026-10-07T04:35:41Z",
+"event": "CarrierTradeOrder",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"BlackMarket": false,
+"Commodity": "emergencypowercells",
+"Commodity_Localised": "Emergency Power Cells",
+"SaleOrder": 1024,
+"Price": 2308
+},
+{
+"timestamp": "2026-10-07T04:35:50Z",
+"event": "CarrierTradeOrder",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"BlackMarket": false,
+"Commodity": "combatstabilisers",
+"Commodity_Localised": "Combat Stabilisers",
+"SaleOrder": 105,
+"Price": 3392
+},
+{
+"timestamp": "2026-10-07T04:36:00Z",
+"event": "CarrierTradeOrder",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"BlackMarket": false,
+"Commodity": "silver",
+"SaleOrder": 7,
+"Price": 36553
+},
+{
+"timestamp": "2026-10-07T04:36:11Z",
+"event": "CarrierTradeOrder",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"BlackMarket": false,
+"Commodity": "methanolmonohydratecrystals",
+"Commodity_Localised": "Methanol Monohydrate Crystals",
+"SaleOrder": 20,
+"Price": 2492
+},
+{
+"timestamp": "2026-10-07T04:36:22Z",
+"event": "CarrierTradeOrder",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"BlackMarket": false,
+"Commodity": "thargoidheart",
+"Commodity_Localised": "Thargoid Heart",
+"SaleOrder": 1,
+"Price": 140275
+},
+{
+"timestamp": "2026-10-07T04:36:29Z",
+"event": "CarrierTradeOrder",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"BlackMarket": false,
+"Commodity": "unknownartifact",
+"Commodity_Localised": "Thargoid Sensor",
+"SaleOrder": 1,
+"Price": 304180
+},
+{
+"timestamp": "2026-10-07T04:36:38Z",
+"event": "CarrierTradeOrder",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"BlackMarket": false,
+"Commodity": "resonatingseparators",
+"Commodity_Localised": "Resonating Separators",
+"SaleOrder": 12,
+"Price": 5692
+},
+{
+"timestamp": "2026-10-07T04:36:44Z",
+"event": "CarrierTradeOrder",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"BlackMarket": false,
+"Commodity": "battleweapons",
+"Commodity_Localised": "Battle Weapons",
+"SaleOrder": 124,
+"Price": 7137
+},
+{
+"timestamp": "2026-10-07T04:36:49Z",
+"event": "CarrierTradeOrder",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"BlackMarket": false,
+"Commodity": "personalweapons",
+"Commodity_Localised": "Personal Weapons",
+"SaleOrder": 182,
+"Price": 4508
+},
+{
+"timestamp": "2026-10-07T04:36:54Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 668,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16085,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 7645
+}
+},
+{
+"timestamp": "2026-10-07T09:46:54Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 668,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16085,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 7645
+}
+},
+{
+"timestamp": "2026-10-07T09:47:38Z",
+"event": "CarrierTradeOrder",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"BlackMarket": false,
+"Commodity": "articulationmotors",
+"Commodity_Localised": "Articulation Motors",
+"SaleOrder": 5,
+"Price": 7420
+},
+{
+"timestamp": "2026-10-07T09:48:53Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 668,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16085,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 7645
+}
+},
+{
+"timestamp": "2026-10-07T09:51:58Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 668,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16085,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 7645
+}
+},
+{
+"timestamp": "2026-10-07T09:56:55Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 668,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16085,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 7645
+}
+},
+{
+"timestamp": "2026-10-07T09:57:45Z",
+"event": "CarrierTradeOrder",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"BlackMarket": false,
+"Commodity": "emergencypowercells",
+"Commodity_Localised": "Emergency Power Cells",
+"SaleOrder": 1024,
+"Price": 230800
+},
+{
+"timestamp": "2026-10-07T09:58:12Z",
+"event": "CarrierTradeOrder",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"BlackMarket": false,
+"Commodity": "osmium",
+"SaleOrder": 34,
+"Price": 4405100
+},
+{
+"timestamp": "2026-10-07T09:59:03Z",
+"event": "CarrierTradeOrder",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"BlackMarket": false,
+"Commodity": "platinum",
+"SaleOrder": 1018,
+"Price": 5550500
+},
+{
+"timestamp": "2026-10-07T09:59:27Z",
+"event": "CarrierTradeOrder",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"BlackMarket": false,
+"Commodity": "silver",
+"PurchaseOrder": 1,
+"Price": 1828
+},
+{
+"timestamp": "2026-10-07T09:59:36Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 668,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16085,
+"CargoSpaceReserved": 1,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 7644
+}
+},
+{
+"timestamp": "2026-10-07T10:05:58Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 668,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16085,
+"CargoSpaceReserved": 1,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 7644
+}
+},
+{
+"timestamp": "2026-10-07T10:06:38Z",
+"event": "CarrierTradeOrder",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"BlackMarket": false,
+"Commodity": "tritium",
+"PurchaseOrder": 10,
+"Price": 2565
+},
+{
+"timestamp": "2026-10-07T10:06:43Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 668,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16085,
+"CargoSpaceReserved": 11,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 7634
+}
+},
+{
+"timestamp": "2026-10-07T10:08:24Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 668,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16085,
+"CargoSpaceReserved": 11,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 7634
+}
+},
+{
+"timestamp": "2026-10-07T10:09:01Z",
+"event": "CarrierTradeOrder",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"BlackMarket": false,
+"Commodity": "tritium",
+"SaleOrder": 13531,
+"Price": 5129400
+},
+{
+"timestamp": "2026-10-07T10:09:31Z",
+"event": "CarrierTradeOrder",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"BlackMarket": false,
+"Commodity": "silver",
+"SaleOrder": 7,
+"Price": 1193918
+},
+{
+"timestamp": "2026-10-07T10:10:08Z",
+"event": "CarrierTradeOrder",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"BlackMarket": false,
+"Commodity": "painite",
+"SaleOrder": 2,
+"Price": 1541255
+},
+{
+"timestamp": "2026-10-07T10:10:19Z",
+"event": "CarrierTradeOrder",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"BlackMarket": false,
+"Commodity": "thargoidheart",
+"Commodity_Localised": "Thargoid Heart",
+"CancelTrade": true
+},
+{
+"timestamp": "2026-10-07T10:10:24Z",
+"event": "CarrierTradeOrder",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"BlackMarket": false,
+"Commodity": "unknownartifact",
+"Commodity_Localised": "Thargoid Sensor",
+"CancelTrade": true
+},
+{
+"timestamp": "2026-10-07T10:10:30Z",
+"event": "CarrierTradeOrder",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"BlackMarket": false,
+"Commodity": "resonatingseparators",
+"Commodity_Localised": "Resonating Separators",
+"CancelTrade": true
+},
+{
+"timestamp": "2026-10-07T10:10:34Z",
+"event": "CarrierTradeOrder",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"BlackMarket": false,
+"Commodity": "battleweapons",
+"Commodity_Localised": "Battle Weapons",
+"CancelTrade": true
+},
+{
+"timestamp": "2026-10-07T10:10:38Z",
+"event": "CarrierTradeOrder",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"BlackMarket": false,
+"Commodity": "personalweapons",
+"Commodity_Localised": "Personal Weapons",
+"CancelTrade": true
+},
+{
+"timestamp": "2026-10-07T10:10:48Z",
+"event": "CarrierTradeOrder",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"BlackMarket": false,
+"Commodity": "water",
+"CancelTrade": true
+},
+{
+"timestamp": "2026-10-07T10:11:23Z",
+"event": "CarrierStats",
+"CarrierID": 3700251648,
+"CarrierType": "FleetCarrier",
+"FuelLevel": 668,
+"SpaceUsage": {
+"TotalCapacity": 25000,
+"Crew": 1270,
+"Cargo": 16085,
+"CargoSpaceReserved": 0,
+"ShipPacks": 0,
+"ModulePacks": 0,
+"FreeSpace": 7645
+}
+}
+],
+"market": {
+"timestamp": "2026-10-07T10:11:28Z",
+"MarketID": 3700251648,
+"StationType": "FleetCarrier",
+"Items": [
+{
+"id": 128049152,
+"Name": "$platinum_name;",
+"Name_Localised": "Platinum",
+"Category": "$MARKET_category_metals;",
+"Category_Localised": "Metals",
+"BuyPrice": 5550500,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 2,
+"DemandBracket": 0,
+"Stock": 1018,
+"Demand": 0,
+"Consumer": false,
+"Producer": true,
+"Rare": false
+},
+{
+"id": 128049154,
+"Name": "$gold_name;",
+"Name_Localised": "Gold",
+"Category": "$MARKET_category_metals;",
+"Category_Localised": "Metals",
+"BuyPrice": 2356,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 0,
+"DemandBracket": 0,
+"Stock": 0,
+"Demand": 0,
+"Consumer": false,
+"Producer": false,
+"Rare": false
+},
+{
+"id": 128049155,
+"Name": "$silver_name;",
+"Name_Localised": "Silver",
+"Category": "$MARKET_category_metals;",
+"Category_Localised": "Metals",
+"BuyPrice": 1193918,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 2,
+"DemandBracket": 0,
+"Stock": 7,
+"Demand": 0,
+"Consumer": false,
+"Producer": true,
+"Rare": false
+},
+{
+"id": 128049175,
+"Name": "$copper_name;",
+"Name_Localised": "Copper",
+"Category": "$MARKET_category_metals;",
+"Category_Localised": "Metals",
+"BuyPrice": 32,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 0,
+"DemandBracket": 0,
+"Stock": 0,
+"Demand": 0,
+"Consumer": false,
+"Producer": false,
+"Rare": false
+},
+{
+"id": 128049176,
+"Name": "$aluminium_name;",
+"Name_Localised": "Aluminium",
+"Category": "$MARKET_category_metals;",
+"Category_Localised": "Metals",
+"BuyPrice": 127,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 0,
+"DemandBracket": 0,
+"Stock": 0,
+"Demand": 0,
+"Consumer": false,
+"Producer": false,
+"Rare": false
+},
+{
+"id": 128049178,
+"Name": "$fruitandvegetables_name;",
+"Name_Localised": "Fruit and Vegetables",
+"Category": "$MARKET_category_foods;",
+"Category_Localised": "Foods",
+"BuyPrice": 25,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 0,
+"DemandBracket": 0,
+"Stock": 0,
+"Demand": 0,
+"Consumer": false,
+"Producer": false,
+"Rare": false
+},
+{
+"id": 128049180,
+"Name": "$grain_name;",
+"Name_Localised": "Grain",
+"Category": "$MARKET_category_foods;",
+"Category_Localised": "Foods",
+"BuyPrice": 20,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 0,
+"DemandBracket": 0,
+"Stock": 0,
+"Demand": 0,
+"Consumer": false,
+"Producer": false,
+"Rare": false
+},
+{
+"id": 128049184,
+"Name": "$foodcartridges_name;",
+"Name_Localised": "Food Cartridges",
+"Category": "$MARKET_category_foods;",
+"Category_Localised": "Foods",
+"BuyPrice": 13,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 0,
+"DemandBracket": 0,
+"Stock": 0,
+"Demand": 0,
+"Consumer": false,
+"Producer": false,
+"Rare": false
+},
+{
+"id": 128049197,
+"Name": "$polymers_name;",
+"Name_Localised": "Polymers",
+"Category": "$MARKET_category_industrial_materials;",
+"Category_Localised": "Industrial materials",
+"BuyPrice": 16,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 0,
+"DemandBracket": 0,
+"Stock": 0,
+"Demand": 0,
+"Consumer": false,
+"Producer": false,
+"Rare": false
+},
+{
+"id": 128049199,
+"Name": "$semiconductors_name;",
+"Name_Localised": "Semiconductors",
+"Category": "$MARKET_category_industrial_materials;",
+"Category_Localised": "Industrial materials",
+"BuyPrice": 55,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 0,
+"DemandBracket": 0,
+"Stock": 0,
+"Demand": 0,
+"Consumer": false,
+"Producer": false,
+"Rare": false
+},
+{
+"id": 128049200,
+"Name": "$superconductors_name;",
+"Name_Localised": "Superconductors",
+"Category": "$MARKET_category_industrial_materials;",
+"Category_Localised": "Industrial materials",
+"BuyPrice": 328,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 0,
+"DemandBracket": 0,
+"Stock": 0,
+"Demand": 0,
+"Consumer": false,
+"Producer": false,
+"Rare": false
+},
+{
+"id": 128049217,
+"Name": "$powergenerators_name;",
+"Name_Localised": "Power Generators",
+"Category": "$MARKET_category_machinery;",
+"Category_Localised": "Machinery",
+"BuyPrice": 120,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 0,
+"DemandBracket": 0,
+"Stock": 0,
+"Demand": 0,
+"Consumer": false,
+"Producer": false,
+"Rare": false
+},
+{
+"id": 128049218,
+"Name": "$waterpurifiers_name;",
+"Name_Localised": "Water Purifiers",
+"Category": "$MARKET_category_machinery;",
+"Category_Localised": "Machinery",
+"BuyPrice": 23,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 0,
+"DemandBracket": 0,
+"Stock": 0,
+"Demand": 0,
+"Consumer": false,
+"Producer": false,
+"Rare": false
+},
+{
+"id": 128049225,
+"Name": "$computercomponents_name;",
+"Name_Localised": "Computer Components",
+"Category": "$MARKET_category_technology;",
+"Category_Localised": "Technology",
+"BuyPrice": 36,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 0,
+"DemandBracket": 0,
+"Stock": 0,
+"Demand": 0,
+"Consumer": false,
+"Producer": false,
+"Rare": false
+},
+{
+"id": 128049236,
+"Name": "$nonlethalweapons_name;",
+"Name_Localised": "Non-Lethal Weapons",
+"Category": "$MARKET_category_weapons;",
+"Category_Localised": "Weapons",
+"BuyPrice": 93,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 0,
+"DemandBracket": 0,
+"Stock": 0,
+"Demand": 0,
+"Consumer": false,
+"Producer": false,
+"Rare": false
+},
+{
+"id": 128049670,
+"Name": "$combatstabilisers_name;",
+"Name_Localised": "Combat Stabilisers",
+"Category": "$MARKET_category_medicines;",
+"Category_Localised": "Medicines",
+"BuyPrice": 3392,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 2,
+"DemandBracket": 0,
+"Stock": 105,
+"Demand": 0,
+"Consumer": false,
+"Producer": true,
+"Rare": false
+},
+{
+"id": 128668550,
+"Name": "$painite_name;",
+"Name_Localised": "Painite",
+"Category": "$MARKET_category_minerals;",
+"Category_Localised": "Minerals",
+"BuyPrice": 1541255,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 2,
+"DemandBracket": 0,
+"Stock": 2,
+"Demand": 0,
+"Consumer": false,
+"Producer": true,
+"Rare": false
+},
+{
+"id": 128671118,
+"Name": "$osmium_name;",
+"Name_Localised": "Osmium",
+"Category": "$MARKET_category_metals;",
+"Category_Localised": "Metals",
+"BuyPrice": 4405100,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 2,
+"DemandBracket": 0,
+"Stock": 34,
+"Demand": 0,
+"Consumer": false,
+"Producer": true,
+"Rare": false
+},
+{
+"id": 128672302,
+"Name": "$ceramiccomposites_name;",
+"Name_Localised": "Ceramic Composites",
+"Category": "$MARKET_category_industrial_materials;",
+"Category_Localised": "Industrial materials",
+"BuyPrice": 21,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 0,
+"DemandBracket": 0,
+"Stock": 0,
+"Demand": 0,
+"Consumer": false,
+"Producer": false,
+"Rare": false
+},
+{
+"id": 128673851,
+"Name": "$liquidoxygen_name;",
+"Name_Localised": "Liquid oxygen",
+"Category": "$MARKET_category_chemicals;",
+"Category_Localised": "Chemicals",
+"BuyPrice": 69,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 0,
+"DemandBracket": 0,
+"Stock": 0,
+"Demand": 0,
+"Consumer": false,
+"Producer": false,
+"Rare": false
+},
+{
+"id": 128673852,
+"Name": "$methanolmonohydratecrystals_name;",
+"Name_Localised": "Methanol Monohydrate Crystals",
+"Category": "$MARKET_category_minerals;",
+"Category_Localised": "Minerals",
+"BuyPrice": 2492,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 2,
+"DemandBracket": 0,
+"Stock": 20,
+"Demand": 0,
+"Consumer": false,
+"Producer": true,
+"Rare": false
+},
+{
+"id": 128673855,
+"Name": "$insulatingmembrane_name;",
+"Name_Localised": "Insulating Membrane",
+"Category": "$MARKET_category_industrial_materials;",
+"Category_Localised": "Industrial materials",
+"BuyPrice": 531,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 0,
+"DemandBracket": 0,
+"Stock": 0,
+"Demand": 0,
+"Consumer": false,
+"Producer": false,
+"Rare": false
+},
+{
+"id": 128673856,
+"Name": "$cmmcomposite_name;",
+"Name_Localised": "CMM Composite",
+"Category": "$MARKET_category_industrial_materials;",
+"Category_Localised": "Industrial materials",
+"BuyPrice": 299,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 0,
+"DemandBracket": 0,
+"Stock": 0,
+"Demand": 0,
+"Consumer": false,
+"Producer": false,
+"Rare": false
+},
+{
+"id": 128673857,
+"Name": "$coolinghoses_name;",
+"Name_Localised": "Micro-weave Cooling Hoses",
+"Category": "$MARKET_category_industrial_materials;",
+"Category_Localised": "Industrial materials",
+"BuyPrice": 92,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 0,
+"DemandBracket": 0,
+"Stock": 0,
+"Demand": 0,
+"Consumer": false,
+"Producer": false,
+"Rare": false
+},
+{
+"id": 128673859,
+"Name": "$articulationmotors_name;",
+"Name_Localised": "Articulation Motors",
+"Category": "$MARKET_category_machinery;",
+"Category_Localised": "Machinery",
+"BuyPrice": 7420,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 2,
+"DemandBracket": 0,
+"Stock": 5,
+"Demand": 0,
+"Consumer": false,
+"Producer": true,
+"Rare": false
+},
+{
+"id": 128673861,
+"Name": "$emergencypowercells_name;",
+"Name_Localised": "Emergency Power Cells",
+"Category": "$MARKET_category_machinery;",
+"Category_Localised": "Machinery",
+"BuyPrice": 230800,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 2,
+"DemandBracket": 0,
+"Stock": 1024,
+"Demand": 0,
+"Consumer": false,
+"Producer": true,
+"Rare": false
+},
+{
+"id": 128682047,
+"Name": "$medicaldiagnosticequipment_name;",
+"Name_Localised": "Medical Diagnostic Equipment",
+"Category": "$MARKET_category_technology;",
+"Category_Localised": "Technology",
+"BuyPrice": 148,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 0,
+"DemandBracket": 0,
+"Stock": 0,
+"Demand": 0,
+"Consumer": false,
+"Producer": false,
+"Rare": false
+},
+{
+"id": 128924326,
+"Name": "$serendibite_name;",
+"Name_Localised": "Serendibite",
+"Category": "$MARKET_category_minerals;",
+"Category_Localised": "Minerals",
+"BuyPrice": 8632,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 0,
+"DemandBracket": 0,
+"Stock": 0,
+"Demand": 0,
+"Consumer": false,
+"Producer": false,
+"Rare": false
+},
+{
+"id": 128924328,
+"Name": "$musgravite_name;",
+"Name_Localised": "Musgravite",
+"Category": "$MARKET_category_minerals;",
+"Category_Localised": "Minerals",
+"BuyPrice": 9927,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 0,
+"DemandBracket": 0,
+"Stock": 0,
+"Demand": 0,
+"Consumer": false,
+"Producer": false,
+"Rare": false
+},
+{
+"id": 128961249,
+"Name": "$tritium_name;",
+"Name_Localised": "Tritium",
+"Category": "$MARKET_category_chemicals;",
+"Category_Localised": "Chemicals",
+"BuyPrice": 5129400,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 2,
+"DemandBracket": 0,
+"Stock": 13531,
+"Demand": 0,
+"Consumer": false,
+"Producer": true,
+"Rare": false
+},
+{
+"id": 129031238,
+"Name": "$steel_name;",
+"Name_Localised": "Steel",
+"Category": "$MARKET_category_metals;",
+"Category_Localised": "Metals",
+"BuyPrice": 209,
+"SellPrice": 0,
+"MeanPrice": 0,
+"StockBracket": 0,
+"DemandBracket": 0,
+"Stock": 0,
+"Demand": 0,
+"Consumer": false,
+"Producer": false,
+"Rare": false
+}
+]
+}
+}

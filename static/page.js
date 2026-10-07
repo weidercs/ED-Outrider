@@ -295,8 +295,14 @@ function renderCarrier() {
                  : line("carrier_departs", {minutes: mins, carrier: c.name}, `Your carrier departs in ${mins} minutes, and you are not aboard.`)});
     }
   }
+  // the tritium: only while it is on a sell order at your carrier (its count confirmed) the depot gets its name and the
+  // total and the 500 ly jumps it gives take one line; otherwise the depot as before
+  const tr = c.tritium;
   cl.innerHTML = val(esc(c.name), esc(c.callsign || "")) + ln(where) + ln(meet) + ln(plan) +
-    ln(`${c.has_uc ? "UC ✓" : "no UC"} · ${c.has_vista ? "Vista ✓" : "no Vista"}${c.fuel != null ? ` · ${c.fuel} t tritium` : ""}`);
+    ln(`${c.has_uc ? "UC ✓" : "no UC"} · ${c.has_vista ? "Vista ✓" : "no Vista"}` +
+       (tr ? ` · Tritium in Depot: <b>${tr.depot.toLocaleString()} t</b>` : c.fuel != null ? ` · ${c.fuel} t tritium` : "")) +
+    (tr ? `<div class="ln" id="carrierTrit" title="Total 500 ly Jumps Available: the jumps all your tritium gives at 500 ly, if the depot is topped up from the hold as it runs low">` +
+          `Total Tritium: <b>${tr.total.toLocaleString()} t</b>${tr.jumps != null ? ` (<b>${tr.jumps.toLocaleString()}</b> jumps)` : ""}</div>` : "");
 }
 // the countdown ticks without new data
 setInterval(() => { if (data && data.carrier && data.carrier.planned) { renderCarrier(); if (tilesFolded) renderTilesLine(); } }, 1000);
@@ -3508,7 +3514,7 @@ mFilter.oninput = () => renderMat();
 async function loadMat() {
   // the sources list depends on where you are and what you have scanned; the stale note on the materials snapshot
   const m0 = data && data.materials;
-  const key = `${m0 && m0.version}|${m0 && m0.stale}|${data && data.scan_version}|${posId()}|${data && data.run_id}`;
+  const key = `${m0 && m0.version}|${m0 && m0.stale}|${data && data.scan_version}|${posId()}|${data && data.run_id}|${data && data.cargo_version}`;
   if (key === matKey) return;
   matKey = key;
   document.getElementById("matStatus").textContent = "loading…";
@@ -3525,6 +3531,7 @@ function openMatSources() {
 function renderMat() {
   const m = matData, st = document.getElementById("matStatus");
   if (!m || m.error) { st.textContent = m ? m.error : ""; return; }
+  renderCargo(m.cargo);
   const held = m.rows.filter(r => r.count);
   st.innerHTML = !m.snapshot_ts ? "No Materials snapshot in your journals yet: log in to the game once." :
     `${held.length} materials held, ${held.reduce((n, r) => n + r.count, 0).toLocaleString()} units · snapshot ${esc(m.snapshot_ts.replace("T", " ").slice(0, 16))} UTC` +
@@ -3562,6 +3569,100 @@ function renderMat() {
       }).join("")).join("") + `</div>`;
   }).join("") || `<div class="unk">No materials match.</div>`;
 }
+
+// ---- Cargo (the Materials tab): the ship's hold (exact) and your carrier's (tracked: outrider/cargo.py) ----
+const CARGO_MARK = {
+  confirmed: ["✓", "c", "confirmed: on a sell order at your carrier, read from its market"],
+  seen: ["◷", "l", "last seen: tracked from your journal (no sell order at your carrier confirms it)"],
+  entered: ["✎", "e", "entered by you (Recount)"],
+};
+const tons = n => `${(n || 0).toLocaleString()} t`;
+let cargoData = null;
+// the carrier's total against what it reports: in sync, or the gap to recount
+function cargoSyncHtml(c) {
+  if (c.reported == null) return `<span class="unk">its own total comes with its next statistics (open the carrier's management)</span>`;
+  if (!c.gap) return `<span class="good" title="CarrierStats ${esc(shortDay(c.reported_ts || ""))}, with your transfers since">✓ in sync: ${tons(c.total)}, as the carrier reports</span>`;
+  return `<span class="warnc" title="the carrier reports ${tons(c.reported)} (CarrierStats ${esc(shortDay(c.reported_ts || ""))}, with your transfers since)">⚠ ` +
+    (c.gap > 0 ? `${tons(c.gap)} not accounted for` : `${tons(-c.gap)} more than the carrier reports`) + `</span>`;
+}
+function cargoLineTitle(x) {
+  const mark = CARGO_MARK[x.state] || CARGO_MARK.seen;
+  return [mark[2] + (x.ts ? ` (${shortDay(x.ts)})` : ""), ...(x.moves || [])].join("\n");
+}
+function renderCargo(cg) {
+  cargoData = cg || null;
+  const el = document.getElementById("cargoList");
+  if (!cg) { el.innerHTML = ""; return; }
+  const s = cg.ship || {lines: []}, c = cg.carrier;
+  const ship = s.type || (s.name || "").trim() ? shipLabel(s.name, s.type) : "";
+  let h = `<h3 class="subhead">Cargo</h3><div class="csub">Ship${ship ? ` · ${esc(ship)}` : ""}${s.capacity ? ` · ${tons(s.capacity)} hold` : ""}</div>`;
+  h += s.lines.length ? `<table class="cargoTable"><tbody>` + s.lines.map(x =>
+    `<tr data-cid="${esc(x.id)}" data-from="ship"><td>${esc(x.name)}${x.avg_text ? ` <span class="unk" title="what you paid: the game's method, the average over your purchases; a sale or transfer leaves it">· ${esc(x.avg_text)}</span>` : ""}` +
+    `${x.stolen ? ` <span class="noscoop">${x.stolen} stolen</span>` : ""}${x.mission ? ` <span class="unk">· ${x.mission} for a mission</span>` : ""}</td>` +
+    `<td class="num">${tons(x.count)}</td><td class="num cact"></td></tr>`).join("") + `</tbody></table>` : `<div class="unk">Nothing in the hold.</div>`;
+  if (c) {
+    h += `<div class="csub">Carrier${c.name ? ` · ${esc(c.name)}` : ""} · ${cargoSyncHtml(c)}</div>` +
+      `<div class="unk clegend">${Object.values(CARGO_MARK).map(m => `<span class="st ${m[1]}">${m[0]}</span> ${m[1] === "c" ? "confirmed (sell order)" : m[1] === "l" ? "last seen" : "entered by you"}`).join(" · ")}` +
+      ` <button type="button" class="mini" id="recountBtn" title="enter the counts Outrider cannot confirm (the game's Inventory screen at your carrier lists them all)">Recount…</button></div>`;
+    if (!c.market_ts) h += `<div class="hint">Open your carrier's commodity market once while docked there: its sell orders confirm what it holds.</div>`;
+    h += c.lines.length ? `<table class="cargoTable"><tbody>` + c.lines.map(x => {
+      const mark = CARGO_MARK[x.state] || CARGO_MARK.seen;
+      return `<tr data-cid="${esc(x.id)}" data-from="carrier"><td><span class="st ${mark[1]}" title="${esc(cargoLineTitle(x))}">${mark[0]}</span> ${esc(x.name)}</td>` +
+        `<td class="num">${tons(x.count)}</td><td class="num cact"></td></tr>`;
+    }).join("") + `</tbody></table>` : `<div class="unk">Nothing tracked at your carrier yet.</div>`;
+  }
+  el.innerHTML = h;
+}
+// Recount: the lines Outrider cannot confirm (last seen, entered), and any you add
+function openRecount() {
+  const c = cargoData && cargoData.carrier;
+  if (!c) return;
+  const conf = c.lines.filter(x => x.state === "confirmed");
+  document.getElementById("recountHint").textContent = `The lines Outrider can only track (no sell order at your carrier): correct any you know better, 0 removes one. ` +
+    `The sell-ordered ones are confirmed every time you open your carrier's market (${conf.length} line${conf.length === 1 ? "" : "s"}, ${tons(conf.reduce((n, x) => n + x.count, 0))}).`;
+  document.getElementById("recountRows").innerHTML = c.lines.filter(x => x.state !== "confirmed").map(x =>
+    `<tr><td>${esc(x.name)}</td><td class="num"><input type="number" min="0" max="100000" step="1" class="qn" data-rc="${esc(x.id)}" data-was="${x.count}" value="${x.count}"></td>` +
+    `<td class="unk">${x.state === "entered" ? "entered" : "last seen"}</td></tr>`).join("");
+  recountTotal();
+  tabShow(document.getElementById("recountDlg"));
+}
+function recountTotal() {
+  const c = cargoData && cargoData.carrier;
+  if (!c) return;
+  let total = c.lines.filter(x => x.state === "confirmed").reduce((n, x) => n + x.count, 0);
+  document.querySelectorAll("#recountRows input.qn").forEach(i => { total += Math.max(0, parseInt(i.value, 10) || 0); });
+  document.getElementById("recountTotal").innerHTML = `Total ${tons(total)}` + (c.reported != null ? ` · the carrier reports ${tons(c.reported)} · ` +
+    (total === c.reported ? `<span class="good">✓ in sync</span>` : `<span class="warnc">${tons(Math.abs(c.reported - total))} ${total < c.reported ? "short" : "over"}</span>`) : "");
+}
+document.getElementById("recountRows").addEventListener("input", recountTotal);
+document.getElementById("recountAdd").onclick = () => {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td><input type="text" class="qn rcname" placeholder="commodity" maxlength="80" spellcheck="false"></td>` +
+    `<td class="num"><input type="number" min="0" max="100000" step="1" class="qn" data-rc="" data-was="" value=""></td><td class="unk">new</td>`;
+  document.getElementById("recountRows").appendChild(tr);
+  tr.querySelector(".rcname").focus();
+};
+document.getElementById("recountSave").onclick = async () => {
+  const counts = {};
+  for (const i of document.querySelectorAll("#recountRows input.qn[data-rc]")) {
+    const name = i.dataset.rc || (i.closest("tr").querySelector(".rcname") || {}).value || "";
+    if (!name.trim() || i.value === "" || i.value === i.dataset.was) continue;
+    const n = Number(i.value);
+    if (!Number.isInteger(n) || n < 0) return toast(`${name}: whole tons, 0 or more`);
+    counts[name.trim()] = n;
+  }
+  if (!Object.keys(counts).length) return tabClose(document.getElementById("recountDlg"));
+  let r;
+  try { r = await apiJson("api/cargo/recount", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({counts})}); }
+  catch (err) { r = {error: err.message}; }
+  if (r.error) return toast(`could not save the counts: ${r.error}`);
+  tabClose(document.getElementById("recountDlg"));
+  if (matData) { matData.cargo = r.cargo; renderCargo(r.cargo); }
+  matKey = null;
+};
+document.getElementById("cargoList").addEventListener("click", e => {
+  if (e.target.closest("#recountBtn")) return openRecount();
+});
 
 // Mining sites: one row per body you mined in the SRV (saved rig spots and unmarked sites, or tons in the journals)
 function matSitesHtml(list) {

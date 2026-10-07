@@ -2555,6 +2555,7 @@ class JournalsRegistry(unittest.TestCase):
                   "the docked state is not blank while it runs",
         "last_event_ts": "only ever raised (written when a line is newer), so replayed older lines leave it right",
         "last_play_ts": "rebuilt by the re-read (it ends on the newest playing event); kept meanwhile",
+        "commodity_names": "a cache of the journal's commodity display names: a re-read only learns them again",
     }
 
     @staticmethod

@@ -202,6 +202,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     <span id="matStatus" class="unk"></span>
   </div>
   <div class="pane" id="matPane">
+  <div id="cargoBox"><div id="cargoList"></div><div id="cargoLook" hidden></div></div>
   <div id="matSynth"></div>
   <div id="matTables"><div id="matSources"></div><div id="matSites"></div></div>
   <div id="matGrid"></div>
@@ -702,6 +703,20 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       <div id="speechBans" class="hint"></div>
       <div id="speechLog"></div></details>
     </div>
+  </form>
+</dialog>
+<dialog id="recountDlg" class="recountdlg" aria-labelledby="recountTitle">
+  <form method="dialog">
+    <h3 id="recountTitle">Recount your carrier</h3>
+    <p class="hint" id="recountHint"></p>
+    <table id="recountRows"></table>
+    <div class="btns">
+      <button type="button" id="recountAdd" title="a commodity Outrider has not seen at your carrier">+ Add a commodity</button>
+      <span class="grow"></span>
+      <button type="button" data-close>Cancel</button>
+      <button type="button" id="recountSave" class="primary">Save</button>
+    </div>
+    <div id="recountTotal" class="hint"></div>
   </form>
 </dialog>
 <dialog id="updDialog" class="upddlg" aria-labelledby="updTitle">

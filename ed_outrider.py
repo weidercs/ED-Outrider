@@ -175,6 +175,7 @@ try:  # exobiology spawn rules: which species a body could host
 except ImportError:
     outrider.bio = None
 import outrider.materials  # engineering materials and synthesis recipes (no dependencies)
+import outrider.cargo      # the ship's hold and your carrier's, folded from the journal (no dependencies)
 import outrider.tts        # spoken alerts; Piper itself is optional (the page falls back to browser speech)
 import outrider.speech     # the words for spoken alerts, per personality (resources/speech.json)
 import outrider.honk       # auto honk: holds Primary Fire on arrival (optional; Linux with evdev, Windows experimental)
@@ -1104,9 +1105,15 @@ SRV_TRACKED = frozenset(SRV_EVENTS) | {"ApproachBody", "LeaveBody", "Touchdown",
 MATERIAL_EVENTS = ("Materials", "MaterialCollected", "MaterialDiscarded", "Synthesis", "EngineerCraft",
                    "MaterialTrade", "TechnologyBroker", "ScientificResearch", "MissionCompleted",
                    "EngineerContribution")
+# Cargo (outrider/cargo.py): the ship's hold and your carrier's. Cargo, Docked, Undocked, CarrierStats (SHIP_EVENTS)
+# and MiningRefined (SRV_EVENTS) are read here too; these are only for cargo.
+CARGO_ONLY = ("MarketBuy", "MarketSell", "CargoTransfer", "CarrierTradeOrder", "CarrierDepositFuel", "CollectCargo",
+              "EjectCargo")
+CARGO_EVENTS = frozenset(CARGO_ONLY) | {"Cargo", "Docked", "Undocked", "CarrierStats", "MiningRefined"}
+CARRIER_CARGO_EVENTS = ("CarrierStats", "CarrierTradeOrder", "CargoTransfer", "MarketBuy", "MarketSell")
 WANTED = tuple(f'"event":"{e}"'.encode()
                for e in POSITION_EVENTS + STAR_CLASS_EVENTS + SCAN_EVENTS + DATA_EVENTS + SHIP_EVENTS
-               + CMDR_EVENTS + MATERIAL_EVENTS + BODY_EVENTS + SRV_EVENTS + ("Loadout", "Shutdown"))
+               + CMDR_EVENTS + MATERIAL_EVENTS + BODY_EVENTS + SRV_EVENTS + CARGO_ONLY + ("Loadout", "Shutdown"))
 
 # Bump when the journal parser learns new events: forces a one-off re-read of every journal.
 # 27: sale pages keyed by journal position (same-second 'Sell all' pages were dropped before); logins.
@@ -1121,7 +1128,8 @@ WANTED = tuple(f'"event":"{e}"'.encode()
 # 37: the Nomad's LaunchVessel keeps the body you are on: a Rhino launched after it records its mining (own_mined).
 # 38: bio_sales keyed by journal line (two Vista sales in one second); a Vista visit's x5 check made as one.
 # 39: the vehicle you are in rebuilt from the journals (a live fallback forgot the Rhino at every launch).
-PARSER_VERSION = 39
+# 40: cargo: the ship's hold (ship_cargo) and your carrier's history (cargo_events).
+PARSER_VERSION = 40
 # Scans read off a nav beacon (as outrider.unsold.NAV_BEACON_SCANS): their Was* flags are not the game's record of the body.
 NAV_BEACON_SCANS = ("NavBeaconDetail", "NavBeacon")
 
@@ -1386,6 +1394,17 @@ CREATE TABLE IF NOT EXISTS riches_bodies (
 -- Exomastery (the same slot, meta riches kind "exo"): the species Spansh lists on each route body. Live only, as above.
 CREATE TABLE IF NOT EXISTS riches_species (
     idx INTEGER, n INTEGER, k INTEGER, genus TEXT, species TEXT, value INTEGER, count INTEGER, PRIMARY KEY (idx, n, k));
+-- Cargo (outrider/cargo.py). Your carrier's history, one row per journal line (src "file:offset"): CarrierStats,
+-- CarrierTradeOrder, CargoTransfer (with "_at", the market you were docked at), MarketBuy and MarketSell; market is
+-- the carrier or market it concerns. Journal-derived: cleared by RESET_JOURNAL_DATA.
+CREATE TABLE IF NOT EXISTS cargo_events (src TEXT PRIMARY KEY, ts TEXT, event TEXT, market INTEGER, data TEXT);
+-- Your carrier's Market.json, each one read (the game overwrites the file at the next market). Live only: a journal
+-- re-read keeps them (not in RESET_JOURNAL_DATA); backups carry them.
+CREATE TABLE IF NOT EXISTS carrier_markets (ts TEXT, market_id INTEGER, items TEXT, PRIMARY KEY (ts, market_id));
+-- The counts you entered for your carrier's lines (Recount; count 0 removes a line). Live only, as above.
+CREATE TABLE IF NOT EXISTS carrier_counts (
+    ts TEXT, carrier INTEGER, commodity TEXT, count INTEGER, name TEXT, PRIMARY KEY (ts, carrier, commodity));
+CREATE INDEX IF NOT EXISTS cargo_events_market ON cargo_events (market, ts);
 CREATE INDEX IF NOT EXISTS route_xyz ON route_systems (x, y, z);
 CREATE INDEX IF NOT EXISTS visits_xyz ON visits (x, y, z);
 """
@@ -1398,7 +1417,8 @@ DELETE FROM own_firsts; DELETE FROM own_mapped; DELETE FROM own_footfall; DELETE
 DELETE FROM own_genera; DELETE FROM own_organic; DELETE FROM codex; DELETE FROM bio_sales;
 DELETE FROM own_barycentres; DELETE FROM phenomena; DELETE FROM sale_events; DELETE FROM logins;
 DELETE FROM own_mined; DELETE FROM meta WHERE key IN ('srv_state', 'vehicle', 'ship_marker', 'body_here');
-DELETE FROM fleet_loadouts;
+DELETE FROM fleet_loadouts; DELETE FROM cargo_events;
+DELETE FROM meta WHERE key IN ('ship_cargo', 'cargo_dock');
 DELETE FROM meta WHERE key IN ('ship', 'carrier', 'fuel_hist', 'last_scoop', 'commander', 'materials', 'last_session', 'cargo');
 DELETE FROM meta WHERE key LIKE 'legacy:%' OR key IN ('pos', 'prev', 'jump_range', 'state_ts');
 """
@@ -2073,6 +2093,7 @@ class Journals:
         self.burst = None
         self._hw_rows = (None, [])   # (route id, highway_route rows): the Highway's route, read once per plot
         self._rc_rows = (None, [])   # (route id, riches_route rows with their bodies): Road to Riches, read once per plot
+        self.cargo_version = 0     # bumped by every cargo change (the ship's hold, a carrier event or market read)
         self.reload()
 
     def moment(self, kind, ts, **kw):
@@ -2464,6 +2485,14 @@ class Journals:
         # the last hop of the route the game plotted (NavRoute.json): a plain attribute, so auto-target's worker thread
         # can read it (it counts a multi-hop plot to the next Highway system as targeted, review F2)
         self.navroute_end = route_end(meta_get(db, "route"))
+        # cargo (outrider/cargo.py): the ship's hold folded as it is read; the market you are docked at, for a
+        # CargoTransfer (it names no carrier). Kept here, not taken from self.docked: a re-read replays the docks in
+        # order, where docked keeps its newest. commodity_names: the journal's display names, learned (a cache, never
+        # cleared: a re-read only learns them again).
+        self.ship_cargo = meta_get(db, "ship_cargo") or outrider.cargo.new_ship()
+        self.cargo_dock = meta_get(db, "cargo_dock")
+        self.commodity_names = meta_get(db, "commodity_names", {})
+        self.cargo_version += 1
 
     def import_legacy(self):
         for d in LEGACY_DIRS:
@@ -2556,6 +2585,10 @@ class Journals:
         if name in ("FSSSignalDiscovered", "SupercruiseDestinationDrop"):
             self.handle_phenomenon(name, ev, ts)
             return
+        if name in CARGO_EVENTS:
+            self.handle_cargo(name, ev, ts)
+            if name in CARGO_ONLY:
+                return
         if name in SRV_TRACKED:
             self.track_srv(name, ev, ts)
             if name in SRV_EVENTS:
@@ -2609,6 +2642,7 @@ class Journals:
                              "booster_ly": GUARDIAN_BOOST.get(int(booster.group(1)), 0) if booster else 0,
                              "fit_key": fit_key,
                              "rebuy": ev.get("Rebuy"), "hull_value": ev.get("HullValue"), "modules_value": ev.get("ModulesValue"),
+                             "cargo_capacity": ev.get("CargoCapacity"),
                              "ts": ts}
                 meta_set(self.db, "ship", self.ship)
             return
@@ -3240,6 +3274,82 @@ class Journals:
             c["earned"] = (c.get("earned") or 0) + int(amount)
             self.cmdr_changed = True
             meta_set(self.db, "commander", c)
+
+    def handle_cargo(self, name, ev, ts):
+        """The ship's hold (folded now, outrider.cargo.ship_apply) and your carrier's history (stored per journal line
+        in cargo_events, folded when asked: State.cargo_summary). Docked and Undocked only keep the market you are at."""
+        self.learn_names([ev] + (ev.get("Inventory") if name == "Cargo" and isinstance(ev.get("Inventory"), list) else []))
+        if name in ("Docked", "Undocked"):
+            at = ev.get("MarketID") if name == "Docked" and not ev.get("Taxi") and not ev.get("Multicrew") else None
+            if at != self.cargo_dock:
+                self.cargo_dock = at
+                meta_set(self.db, "cargo_dock", at)
+            return
+        if name in CARRIER_CARGO_EVENTS:
+            market = ev.get("MarketID") if name in ("MarketBuy", "MarketSell") else \
+                self.cargo_dock if name == "CargoTransfer" else ev.get("CarrierID")
+            if name in ("CarrierStats", "CarrierTradeOrder") and ev.get("CarrierType", "FleetCarrier") != "FleetCarrier":
+                market = None   # a squadron's carrier: not yours to track
+            if market is not None:
+                data = dict(ev, _at=self.cargo_dock) if name == "CargoTransfer" else ev
+                if self.db.execute("INSERT OR IGNORE INTO cargo_events VALUES (?, ?, ?, ?, ?)",
+                                   (self.line_source or f"{ts}:{name}", ts, name, market, json.dumps(data))).rowcount:
+                    self.cargo_version += 1
+        if name == "CarrierDepositFuel" and self.carrier and ev.get("CarrierID") == self.carrier.get("id") \
+                and isinstance(ev.get("Total"), int) and self.fresh("carrier", ts, self.carrier_ts()):
+            self.carrier["fuel"] = ev["Total"]   # the depot after it (the tile's tritium)
+            self.carrier["stats_ts"] = max(self.carrier.get("stats_ts") or "", ts)
+            meta_set(self.db, "carrier", self.carrier)
+        sc = self.ship_cargo
+        if ts < (sc.get("ts") or "") and name != "Cargo":
+            return   # older than the hold already folded (a legacy folder read late)
+        if name == "Cargo" and ts < (sc.get("snap_ts") or ""):
+            return
+        if outrider.cargo.ship_apply(sc, ev):
+            meta_set(self.db, "ship_cargo", sc)
+            self.cargo_version += 1
+
+    def learn_names(self, items):
+        """Keep the commodity display names these events or inventory items give (outrider.cargo.learn)."""
+        if any([outrider.cargo.learn(self.commodity_names, x) for x in items if isinstance(x, dict)]):
+            meta_set(self.db, "commodity_names", self.commodity_names)
+
+    def read_cargo_file(self, d):
+        """Cargo.json: the ship's whole hold, rewritten with every Cargo event (which then lists only the count). True if
+        it changed the hold. A file older than what is folded (another live folder's) is ignored."""
+        try:
+            with open(os.path.join(d, "Cargo.json"), encoding="utf-8") as f:
+                c = json.load(f)
+        except (OSError, ValueError):
+            return False
+        sc, ts = self.ship_cargo, c.get("timestamp") if isinstance(c, dict) else None
+        if not isinstance(ts, str) or c.get("Vessel", "Ship") != "Ship" or not isinstance(c.get("Inventory"), list) \
+                or ts < (sc.get("ts") or "") or ts <= (sc.get("snap_ts") or ""):
+            return False
+        self.learn_names(c["Inventory"])
+        outrider.cargo.ship_snapshot(sc, c["Inventory"], c.get("Count"), ts)
+        meta_set(self.db, "ship_cargo", sc)
+        self.cargo_version += 1
+        return True
+
+    def read_market(self, d):
+        """Market.json: kept when it is your carrier's (it lists the commodities with orders: a sell order's Stock is
+        the holding). The game overwrites it at the next market, so each one is stored as it is read. True if new."""
+        try:
+            with open(os.path.join(d, "Market.json"), encoding="utf-8") as f:
+                m = json.load(f)
+        except (OSError, ValueError):
+            return False
+        c = self.carrier or {}
+        if not isinstance(m, dict) or m.get("StationType") != "FleetCarrier" or m.get("MarketID") is None \
+                or m.get("MarketID") != c.get("id") or not isinstance(m.get("Items"), list) \
+                or not isinstance(m.get("timestamp"), str):
+            return False
+        if not self.db.execute("INSERT OR IGNORE INTO carrier_markets VALUES (?, ?, ?)",
+                               (m["timestamp"], m["MarketID"], json.dumps(m["Items"]))).rowcount:
+            return False
+        self.cargo_version += 1
+        return True
 
     def handle_ship(self, name, ev, ts):
         if name == "HullDamage":
@@ -4920,6 +5030,11 @@ class State:
         self.arrival_seq = 0
         self.tail_error = None     # last journal-tailing exception, shown on the page
         self.materials_version = 0  # bumps when the materials inventory changes (Materials view keys on it)
+        self.counts_version = 0     # bumps with every Recount (the carrier's fold is cached on it and cargo_version)
+        self._carrier_fold = (None, None)   # (key, outrider.cargo.carrier_fold's answer)
+        # Spansh's commodity names ({ts, norm: {letters-only: name}}): the lookup asks by these; cached a week (meta,
+        # live-only)
+        self.spansh_commodities = meta_get(db, "spansh_commodities")
         self.scan_version = 0      # bumps only when your own scan data changes (Here/History views key on it)
         # bumps on a jump, a sale or a death: History refetches on this, not on every scan (its ledger is a
         # full pass over your bodies, run on the event loop)
@@ -5050,6 +5165,7 @@ class State:
                       if self.target and pos else with_id(self.target),
             "arrival": self.arrival,
             "scan_version": self.scan_version, "history_version": self.history_version,
+            "cargo_version": f"{self.journals.cargo_version}.{self.counts_version}",   # the Materials tab's Cargo
             # read: moves with every journal line consumed (the Log tails on it; journal is to the second)
             "freshness": {"journal": self.journals.last_event_ts, "read": sum(self.journals.offsets.values()),
                           "status": (self.journals.status_json or {}).get("ts"),
@@ -6293,7 +6409,110 @@ class State:
                 "ts": c.get("ts"), "here": bool(pos and pos["id64"] == c["id64"]),
                 # when it last arrived somewhere new (the page's arrival alert), and whether that is only
                 # the booked jump's destination, not yet confirmed by the journal
-                "moved_ts": c.get("moved_ts"), "assumed": bool(c.get("assumed"))}
+                "moved_ts": c.get("moved_ts"), "assumed": bool(c.get("assumed")),
+                # only while tritium is on a sell order at your carrier (confirmed): else the tile is as before
+                "tritium": self.carrier_tritium()}
+
+    def carrier_cargo(self):
+        """Your carrier's hold, folded from its history (outrider.cargo.carrier_fold): cached until a cargo change."""
+        cid = (self.journals.carrier or {}).get("id")
+        key = (cid, self.journals.cargo_version, self.counts_version)
+        if self._carrier_fold[0] == key:
+            return self._carrier_fold[1]
+        events, markets, counts = [], [], []
+        if cid is not None:
+            events = [(r["ts"], json.loads(r["data"])) for r in
+                      self.db.execute("SELECT ts, data FROM cargo_events WHERE market = ? ORDER BY ts", (cid,))]
+            markets = [(r["ts"], json.loads(r["items"])) for r in
+                       self.db.execute("SELECT ts, items FROM carrier_markets WHERE market_id = ?", (cid,))]
+            counts = [(r["ts"], r["commodity"], r["count"], r["name"]) for r in
+                      self.db.execute("SELECT * FROM carrier_counts WHERE carrier = ?", (cid,))]
+        st = outrider.cargo.carrier_fold(cid, events, markets, counts)
+        self._carrier_fold = (key, st)
+        return st
+
+    def commodity_name(self, i, extra=None):
+        """A commodity's display name: the journal's, else Spansh's list (the lookup's names), else the id's."""
+        names = dict(extra or {}, **self.journals.commodity_names)
+        return outrider.cargo.display(i, names, (self.spansh_commodities or {}).get("norm"))
+
+    def cargo_summary(self):
+        """The Materials tab's Cargo: the ship's hold (exact, with what you paid) and your carrier's (tracked)."""
+        j, sc = self.journals, self.journals.ship_cargo
+        ship = j.ship or {}
+        lines = [{"id": i, "name": self.commodity_name(i), "count": x["count"], "avg": round(x["avg"]) if x.get("avg") else None,
+                  "priced": x["priced"], "lots": x["lots"], "avg_text": outrider.cargo.avg_text(x),
+                  "stolen": x.get("stolen") or 0, "mission": x.get("mission") or 0}
+                 for i, x in sc["lines"].items()]
+        lines.sort(key=lambda x: (-x["count"], x["name"]))
+        out = {"ship": {"name": ship.get("name"), "type": ship.get("type"), "lines": lines,
+                        "count": sc["count"] if sc.get("count") is not None else sum(x["count"] for x in lines),
+                        "capacity": ship.get("cargo_capacity"), "pad": outrider.cargo.SHIP_PAD.get((ship.get("type") or "").lower()),
+                        "ts": sc.get("ts") or None},
+               "carrier": None}
+        c = j.carrier or {}
+        if c.get("id") is None:
+            return out
+        st = self.carrier_cargo()
+        lines = []
+        for i, x in st["lines"].items():
+            order = st["orders"].get(i) or {}
+            lines.append({"id": i, "name": self.commodity_name(i, st["names"]), "count": x["count"], "state": x["state"],
+                          "ts": x["ts"], "order": order.get("kind"),
+                          "moves": [outrider.cargo.move_text(m) for m in x["moves"]]})
+        lines.sort(key=lambda x: (-x["count"], x["name"]))
+        total, reported = outrider.cargo.carrier_total(st), outrider.cargo.carrier_reported(st)
+        out["carrier"] = {"name": c.get("name"), "callsign": c.get("callsign"), "lines": lines, "total": total,
+                          "reported": reported, "reported_ts": (st["stats"] or {}).get("ts"),
+                          "gap": reported - total if reported is not None else None, "market_ts": st["market_ts"],
+                          "aboard": bool((j.docked or {}).get("market_id") == c.get("id") and c.get("id") is not None)}
+        return out
+
+    def carrier_tritium(self):
+        """The Carrier tile's tritium, only while tritium is on a sell order at your carrier (a confirmed line): the
+        depot, the depot plus the hold, and how many 500 ly jumps that gives (outrider.cargo.carrier_jumps)."""
+        c = self.journals.carrier or {}
+        if c.get("id") is None:
+            return None
+        st = self.carrier_cargo()
+        line, stats = st["lines"].get("tritium"), st["stats"] or {}
+        if not line or line["state"] != "confirmed" or not isinstance(c.get("fuel"), int):
+            return None
+        used = stats["used"] + st["after_stats"] if isinstance(stats.get("used"), int) else None
+        return {"depot": c["fuel"], "total": c["fuel"] + line["count"],
+                "jumps": outrider.cargo.carrier_jumps(c["fuel"], line["count"], used)}
+
+    def cargo_recount(self, counts):
+        """POST /api/cargo/recount {counts: {commodity: tons}}: your counts for carrier lines Outrider cannot confirm.
+        A name not seen yet ("Add a commodity") is matched to a known one, letters only. Confirmed lines (a sell order
+        at your carrier) are left as the market says."""
+        cid = (self.journals.carrier or {}).get("id")
+        if cid is None:
+            return {"error": "no carrier in your journals"}, 409
+        if not isinstance(counts, dict) or not counts or len(counts) > 300:
+            return {"error": "expected {counts: {commodity: tons}}"}, 400
+        st = self.carrier_cargo()
+        known = {outrider.cargo.norm(i): i for i in set(st["lines"]) | set(self.journals.commodity_names) | set(st["names"])}
+        known.update({outrider.cargo.norm(n): i for i, n in {**st["names"], **self.journals.commodity_names}.items()})
+        rows, skipped = [], []
+        for key, n in counts.items():
+            if not isinstance(key, str) or not key.strip() or len(key) > 80 or isinstance(n, bool) \
+                    or not isinstance(n, int) or not 0 <= n <= 100000:
+                return {"error": f"bad count for {str(key)[:80]!r}: whole tons, 0 to 100,000"}, 400
+            i = known.get(outrider.cargo.norm(key)) or outrider.cargo.norm(key)
+            if not i:
+                return {"error": f"not a commodity name: {key[:80]!r}"}, 400
+            if (st["lines"].get(i) or {}).get("state") == "confirmed":
+                skipped.append(i)
+                continue
+            rows.append((i, n, None if i in st["lines"] or i in self.journals.commodity_names else key.strip()))
+        ts = iso_ts(time.time())
+        self.db.executemany("INSERT OR REPLACE INTO carrier_counts VALUES (?, ?, ?, ?, ?)",
+                            [(ts, cid, i, n, name) for i, n, name in rows])
+        self.db.commit()
+        self.counts_version += 1
+        self.bump()
+        return {"ok": True, "saved": len(rows), "skipped": skipped, "cargo": self.cargo_summary()}, 200
 
     def docked_summary(self):
         """Where you are docked, if anywhere, and whether it buys exploration data."""
@@ -9871,6 +10090,16 @@ class State:
                 if m and route_mtimes.get(nr) != m:
                     route_mtimes[nr] = m
                     self.journals.read_navroute(d)
+                for fname, read in (("Cargo.json", self.journals.read_cargo_file), ("Market.json", self.journals.read_market)):
+                    fp = os.path.join(d, fname)
+                    try:
+                        m = os.path.getmtime(fp)
+                    except OSError:
+                        m = None
+                    if m and route_mtimes.get(fp) != m:
+                        route_mtimes[fp] = m
+                        if read(d):
+                            self.bump()
                 sj = os.path.join(d, "Status.json")
                 try:
                     m = os.path.getmtime(sj)
@@ -11580,7 +11809,16 @@ def make_app(state, hosts=None):
         inv["stale"] = bool((state.materials_summary() or {}).get("stale"))
         inv["sources"] = state.material_sources()
         inv["mining_sites"] = state.mining_sites()
+        inv["cargo"] = state.cargo_summary()
         return web.json_response(inv)
+
+    async def cargo_recount_view(request):
+        """POST /api/cargo/recount {counts: {commodity: tons}}: your counts for your carrier's untracked lines."""
+        body = await json_object(request)
+        if body is None:
+            return web.json_response({"error": "expected {counts: {commodity: tons}}"}, status=400)
+        out, status = state.cargo_recount(body.get("counts"))
+        return web.json_response(out, status=status)
 
     async def log_view(request):
         if not outrider.log:
@@ -11629,6 +11867,7 @@ def make_app(state, hosts=None):
     app.router.add_get("/api/organics", organics_view)
     app.router.add_get("/api/log", log_view)
     app.router.add_get("/api/materials", materials_view)
+    app.router.add_post("/api/cargo/recount", cargo_recount_view)
     app.router.add_post("/api/radius", radius_view)
     app.router.add_get("/api/say", say_view)
     app.router.add_post("/api/say/play", pc_only(say_play_view))
