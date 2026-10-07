@@ -2,6 +2,14 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-07 · Expressway to Exomastery
+- Plot Route's fourth plotter, Spansh's Expressway to Exomastery: systems whose bodies carry valuable life already
+  reported. It shares Road to Riches' slot (one survey route; a new plot of either replaces it). Each body lists its
+  species with value, ✓ sampled (your journal) and ✦ new to your codex in the region; the voice says on arrival how
+  many species are left on how many bodies and the best ("14 species on two bodies here: the best, Frutexa Flammasis
+  on ABC 2 e, about 10.3 million credits"), and the next stop once all are sampled (its own alert, Exomastery). Known
+  life: the page says first footfall is unlikely.
+
 ## 2026-10-07 · Settings link to the project on GitHub
 - Settings shows **GitHub ↗** (the project's page: source, releases, README, issues) and the version running, at the
   top beside its title; the tablet's Settings sheet lists both projects (Outrider and the Android app). The payload

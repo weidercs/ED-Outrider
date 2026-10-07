@@ -1128,6 +1128,18 @@ const settle = async maxMs => {
     pick("riches");
     const vis = sel => [...d.querySelectorAll(sel)].map(e => !e.hidden);
     got.form = [vis(".hwy-ropt").join(), vis(".hwy-nonly").join(), vis(".hwy-xopt").join(), vis(".hwy-cons").join(), d.getElementById("hwyTo").placeholder];
+    // Exomastery: the same options but Road to Riches' own; the Plot button says it replaces the slot's route
+    pick("exo");
+    got.exoForm = [vis(".hwy-ropt").join(), vis(".rich-only").join(), d.getElementById("hwyGo").textContent];
+    // an Exomastery route in the list: each body's species, ✓ sampled, ✦ new to your codex
+    w.eval(`R.data = Object.assign({}, R.data, {route: Object.assign({}, R.data.route, {kind: "exo", systems: R.data.route.systems.map(s =>
+      Object.assign({}, s, {bodies: s.i === 1 ? [{name: "Rich B 2", ls: 900, done: false, left: 1, species: [
+        {genus: "Frutexa", species: "Frutexa Flammasis", value: 10326000, count: 5, done: true, new: true},
+        {genus: "Tubus", species: "Tubus Rosarium", value: 2637500, count: 9, done: false, new: true}]}] : []}))})}); renderHwy()`);
+    got.exoRows = [...d.querySelectorAll("#richRows .exosp")].map(e => e.textContent.replace(/\s+/g, " ").trim()).join("|");
+    got.exoHead = /Exomastery \(known life/.test(d.getElementById("hwyHead").textContent);
+    await w.eval("R.filled = false; loadRich(true)"); await sleep(300);   // back to the Road to Riches route
+    pick("riches");
     // a plot: the shared fields and Riches' own, posted to api/riches/plot, then polled until done
     d.getElementById("hwyTo").value = "Far Away"; d.getElementById("hwyRange").value = "61.5"; let polls = 0;
     answer = url => {
@@ -1162,9 +1174,11 @@ const settle = async maxMs => {
     await w.eval("loadHwy(true)"); await w.eval("loadRich(true)");
     d.querySelector('[data-view="overview"]').click(); await sleep(200);
     const want = {noTab: "Plot Route", shown: [true, true, true], systems: "done:0,at:1,next:2", bodies: 3, marks: "✔||",
+      exoForm: ["true,true", "false,false", "Plot (replaces your Road to Riches route)"],
+      exoRows: "✓ Frutexa Flammasis 10.3M · Tubus Rosarium 2.6M ✦", exoHead: true,
       aims: "survey:0,survey:2", formFolded: true, form: ["true,true", "false,false", "false", "false", "optional: where to end"],
       plotBody: {to: "Far Away", range: 61.5, radius: 25, max_results: 25, max_distance: 50000, min_value: 100000,
-                 use_mapping_value: true, avoid_thargoids: true, loop: false},
+                 use_mapping_value: true, avoid_thargoids: true, loop: false, kind: "riches"},
       both: ["hwy,rich*", true], picked: ["hwy*,rich", true, true, '"hwy"'], clearFirst: [0, "Click again to clear"],
       cleared: "api/riches/clear POST,api/riches GET", nav: true};
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));

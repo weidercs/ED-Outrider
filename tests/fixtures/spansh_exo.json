@@ -1,0 +1,266 @@
+{
+ "job": "054660C4-C20C-11F1-BCCE-B6E48BB68D72",
+ "status": "ok",
+ "state": "completed",
+ "parameters": {
+  "loop": "0",
+  "max_distance": "50000",
+  "max_results": "3",
+  "min_value": "1000000",
+  "radius": "25",
+  "range": "50",
+  "source": "Colonia"
+ },
+ "result": [
+  {
+   "bodies": [],
+   "id64": "3238296097059",
+   "jumps": 1,
+   "name": "Colonia",
+   "x": -9530.5,
+   "y": -910.28125,
+   "z": 19808.125
+  },
+  {
+   "bodies": [
+    {
+     "distance_to_arrival": 1973.483819,
+     "estimated_mapping_value": 2221,
+     "estimated_scan_value": 500,
+     "id": 1008834259478991139,
+     "id64": "1008834259478991139",
+     "landmark_value": 22947000,
+     "landmarks": [
+      {
+       "count": 5,
+       "subtype": "Frutexa Flammasis",
+       "type": "Frutexa",
+       "value": 10326000
+      },
+      {
+       "count": 9,
+       "subtype": "Tubus Rosarium",
+       "type": "Tubus",
+       "value": 2637500
+      },
+      {
+       "count": 5,
+       "subtype": "Cactoida Lapis",
+       "type": "Cactoida",
+       "value": 2483600
+      },
+      {
+       "count": 8,
+       "subtype": "Osseus Spiralis",
+       "type": "Osseus",
+       "value": 2404700
+      },
+      {
+       "count": 5,
+       "subtype": "Tussock Catena",
+       "type": "Tussock",
+       "value": 1766600
+      },
+      {
+       "count": 9,
+       "subtype": "Fungoida Setisis",
+       "type": "Fungoida",
+       "value": 1670100
+      },
+      {
+       "count": 4,
+       "subtype": "Bacterium Alcyoneum",
+       "type": "Bacterium",
+       "value": 1658500
+      }
+     ],
+     "name": "Eol Prou PX-T d3-813 ABC 2 e",
+     "subtype": "Rocky body",
+     "type": "Planet"
+    },
+    {
+     "distance_to_arrival": 1978.59947,
+     "estimated_mapping_value": 2221,
+     "estimated_scan_value": 500,
+     "id": 828690274384171299,
+     "id64": "828690274384171299",
+     "landmark_value": 29051600,
+     "landmarks": [
+      {
+       "count": 4,
+       "subtype": "Frutexa Flammasis",
+       "type": "Frutexa",
+       "value": 10326000
+      },
+      {
+       "count": 3,
+       "subtype": "Concha Aureolas",
+       "type": "Concha",
+       "value": 7774700
+      },
+      {
+       "count": 7,
+       "subtype": "Tubus Rosarium",
+       "type": "Tubus",
+       "value": 2637500
+      },
+      {
+       "count": 5,
+       "subtype": "Cactoida Lapis",
+       "type": "Cactoida",
+       "value": 2483600
+      },
+      {
+       "count": 3,
+       "subtype": "Osseus Spiralis",
+       "type": "Osseus",
+       "value": 2404700
+      },
+      {
+       "count": 6,
+       "subtype": "Tussock Catena",
+       "type": "Tussock",
+       "value": 1766600
+      },
+      {
+       "count": 3,
+       "subtype": "Bacterium Alcyoneum",
+       "type": "Bacterium",
+       "value": 1658500
+      }
+     ],
+     "name": "Eol Prou PX-T d3-813 ABC 2 a",
+     "subtype": "Rocky body",
+     "type": "Planet"
+    }
+   ],
+   "id64": "27942948000035",
+   "jumps": 1,
+   "name": "Eol Prou PX-T d3-813",
+   "x": -9524.375,
+   "y": -904.1875,
+   "z": 19789.125
+  },
+  {
+   "bodies": [
+    {
+     "distance_to_arrival": 203.144967,
+     "estimated_mapping_value": 2221,
+     "estimated_scan_value": 500,
+     "id": 936794420105486922,
+     "id64": "936794420105486922",
+     "landmark_value": 46880300,
+     "landmarks": [
+      {
+       "count": 31,
+       "subtype": "Tussock Virgam",
+       "type": "Tussock",
+       "value": 14313700
+      },
+      {
+       "count": 22,
+       "subtype": "Osseus Discus",
+       "type": "Osseus",
+       "value": 12934900
+      },
+      {
+       "count": 33,
+       "subtype": "Clypeus Lacrimam",
+       "type": "Clypeus",
+       "value": 8418000
+      },
+      {
+       "count": 18,
+       "subtype": "Concha Renibus",
+       "type": "Concha",
+       "value": 4572400
+      },
+      {
+       "count": 19,
+       "subtype": "Fungoida Gelata",
+       "type": "Fungoida",
+       "value": 3330300
+      },
+      {
+       "count": 21,
+       "subtype": "Bacterium Tela",
+       "type": "Bacterium",
+       "value": 1949000
+      },
+      {
+       "count": 27,
+       "subtype": "Stratum Paleas",
+       "type": "Stratum",
+       "value": 1362000
+      }
+     ],
+     "name": "Eol Prou LW-L c8-166 8 b",
+     "subtype": "Rocky body",
+     "type": "Planet"
+    },
+    {
+     "distance_to_arrival": 205.406288,
+     "estimated_mapping_value": 2221,
+     "estimated_scan_value": 500,
+     "id": 972823217124450890,
+     "id64": "972823217124450890",
+     "landmark_value": 46880300,
+     "landmarks": [
+      {
+       "count": 18,
+       "subtype": "Tussock Virgam",
+       "type": "Tussock",
+       "value": 14313700
+      },
+      {
+       "count": 15,
+       "subtype": "Osseus Discus",
+       "type": "Osseus",
+       "value": 12934900
+      },
+      {
+       "count": 19,
+       "subtype": "Clypeus Lacrimam",
+       "type": "Clypeus",
+       "value": 8418000
+      },
+      {
+       "count": 12,
+       "subtype": "Concha Renibus",
+       "type": "Concha",
+       "value": 4572400
+      },
+      {
+       "count": 19,
+       "subtype": "Fungoida Gelata",
+       "type": "Fungoida",
+       "value": 3330300
+      },
+      {
+       "count": 15,
+       "subtype": "Bacterium Tela",
+       "type": "Bacterium",
+       "value": 1949000
+      },
+      {
+       "count": 19,
+       "subtype": "Stratum Paleas",
+       "type": "Stratum",
+       "value": 1362000
+      }
+     ],
+     "name": "Eol Prou LW-L c8-166 8 c",
+     "subtype": "Rocky body",
+     "type": "Planet"
+    }
+   ],
+   "id64": "45697612423754",
+   "jumps": 1,
+   "name": "Eol Prou LW-L c8-166",
+   "x": -9516.6875,
+   "y": -922.28125,
+   "z": 19806.625
+  }
+ ],
+ "_note": "A real Spansh Expressway to Exomastery answer (POST /api/exobiology/route, then /api/results/{job}), recorded 2026-10-07 from Colonia and trimmed to three systems, two bodies each."
+}

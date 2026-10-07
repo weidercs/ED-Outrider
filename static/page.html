@@ -294,7 +294,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       <summary>Plot a route</summary>
       <form id="hwyForm" autocomplete="off">
         <div class="srow">
-          <span class="seg" role="radiogroup" aria-label="plotter"><label title="every jump with its fuel, from your ship's own figures (Spansh's galaxy plotter)"><input type="radio" name="hwyPlotter" value="exact" checked>Exact</label><label title="neutron stars as boosts, waypoints only (Spansh's neutron plotter): any ship, from its range"><input type="radio" name="hwyPlotter" value="neutron">Neutron</label><label title="a chain of systems whose planets are worth scanning (and mapping), from where you are (Spansh's Road to Riches): stop, scan, move on"><input type="radio" name="hwyPlotter" value="riches">Road to Riches</label></span>
+          <span class="seg" role="radiogroup" aria-label="plotter"><label title="every jump with its fuel, from your ship's own figures (Spansh's galaxy plotter)"><input type="radio" name="hwyPlotter" value="exact" checked>Exact</label><label title="neutron stars as boosts, waypoints only (Spansh's neutron plotter): any ship, from its range"><input type="radio" name="hwyPlotter" value="neutron">Neutron</label><label title="a chain of systems whose planets are worth scanning (and mapping), from where you are (Spansh's Road to Riches): stop, scan, move on"><input type="radio" name="hwyPlotter" value="riches">Road to Riches</label><label title="a chain of systems with valuable life already reported on their bodies (Spansh's Expressway to Exomastery): land, sample, move on. Known life: first footfall is unlikely"><input type="radio" name="hwyPlotter" value="exo">Exomastery</label></span>
           <label>From <input type="text" id="hwyFrom" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100" placeholder="where you are"></label>
           <label class="hwyto">To <input type="text" id="hwyTo" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100" placeholder="destination system" list="hwyNames"></label>
           <datalist id="hwyNames"></datalist>
@@ -326,8 +326,8 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
           <label title="the least a body must be worth to count (credits)">Min value <input type="number" id="richMin" min="0" max="1000000000" step="1" inputmode="numeric"> cr</label>
         </div>
         <div class="srow hwy-ropt" hidden>
-          <label title="count the detailed-surface-scan bonus as well as the scan"><input type="checkbox" id="richMapping"> include mapping value</label>
-          <label><input type="checkbox" id="richThargoid"> avoid Thargoid-hit systems</label>
+          <label class="rich-only" title="count the detailed-surface-scan bonus as well as the scan"><input type="checkbox" id="richMapping"> include mapping value</label>
+          <label class="rich-only"><input type="checkbox" id="richThargoid"> avoid Thargoid-hit systems</label>
           <label title="end the route where it began"><input type="checkbox" id="richLoop"> loop back to the start</label>
         </div>
         <div class="srow">

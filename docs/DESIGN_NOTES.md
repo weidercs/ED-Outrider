@@ -128,7 +128,11 @@ upstream project's choices, not rules of the game.
 - **Road to Riches is a route type of Plot Route, not a tab** (thshurka's PR #1 gave it its own; moved 2026-10-06):
   both are Spansh routes you plot and follow, and a 15th header button wrapped the header in several themes. The
   server keeps each route on its own (tables, plot, progress, speech); the page shows one, with a switch when both
-  exist, and only the newer copies its next system. It is never auto-targeted: a Road to Riches is for stopping.
+  exist, and only the newer copies its next system. It is never auto-targeted on its own: a Road to Riches is for
+  stopping; 🎯 on any route system is the player's click (2026-10-07).
+- **One survey slot: Road to Riches or Exomastery** (the author, 2026-10-07): rarely flown together, and the route
+  switch stays two-way. Exomastery's bodies carry life other commanders reported: the page says "known life" and
+  never implies first footfall. Progress is the journal's samples by BodyID and species name.
 - **Auto-target presses keys in the galaxy map** (opt-in, Linux, Windows experimental since 2026-10-05; decided with the author 2026-10-01): open the map,
   the search box (UI_Up highlights "Search the Galaxy", UI_Select puts the cursor in it; found in game 2026-10-02 — UI_Right, Auto_Neutron's older step, moves along the tab column to Trade Routes, and UI_Select alone opens the current system; `autotarget_search` changes it), type the name (US keymap; a name it cannot type is pasted when a
   clipboard tool exists), Enter twice after short waits (the search lists its suggestion a moment after the name goes in, and an Enter before that selects nothing; found in game 2026-10-02; `autotarget_submit`), the plot-route step (configurable: the map's focus after a search varies), close the

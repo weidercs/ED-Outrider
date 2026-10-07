@@ -194,8 +194,8 @@ from outrider.highway import (   # the Neutron Highway's route helpers and the d
     HIGHWAY_BG_TYPES, Clipboard, HighwayError, highway_bg_file, highway_match, highway_refuel_in, highway_rows,
     highway_text,
 )
-from outrider.riches import (   # Road to Riches: Spansh's route of systems with valuable bodies
-    RichesError, body_value, norm_name, riches_match, riches_rows, riches_text, todo,
+from outrider.riches import (   # Road to Riches / Exomastery: Spansh's survey routes (systems with valuable bodies / life)
+    RichesError, body_value, exo_left, exo_text, exo_todo, norm_name, riches_match, riches_rows, riches_text, todo,
 )
 try:  # one-line summaries of every journal event, for the Log view
     import outrider.log
@@ -230,6 +230,7 @@ SPANSH_GENERIC_ROUTE = "https://spansh.co.uk/api/generic/route"  # the exact plo
 SPANSH_RESULTS = "https://spansh.co.uk/api/results/{job}"
 # Road to Riches: answers {job} like the plotters above; the route (systems with their bodies) is in the results
 SPANSH_RICHES = "https://spansh.co.uk/api/riches/route"
+SPANSH_EXO = "https://spansh.co.uk/api/exobiology/route"   # Expressway to Exomastery: the same job, bodies with species
 RICHES_METHOD = "POST"      # form fields (checked against the live API 2026-10-06; scripts/riches_probe.py checks it again)
 RICHES = {"radius": 25, "max_results": 25, "max_distance": 50000, "min_value": 100000,   # defaults of the plot form
           "use_mapping_value": True, "avoid_thargoids": True, "loop": False}
@@ -1382,6 +1383,9 @@ CREATE TABLE IF NOT EXISTS riches_route (
 CREATE TABLE IF NOT EXISTS riches_bodies (
     idx INTEGER, n INTEGER, name TEXT, type TEXT, subtype TEXT, ls REAL, scan INTEGER, map INTEGER,
     terraformable INTEGER, body_id INTEGER, PRIMARY KEY (idx, n));
+-- Exomastery (the same slot, meta riches kind "exo"): the species Spansh lists on each route body. Live only, as above.
+CREATE TABLE IF NOT EXISTS riches_species (
+    idx INTEGER, n INTEGER, k INTEGER, genus TEXT, species TEXT, value INTEGER, count INTEGER, PRIMARY KEY (idx, n, k));
 CREATE INDEX IF NOT EXISTS route_xyz ON route_systems (x, y, z);
 CREATE INDEX IF NOT EXISTS visits_xyz ON visits (x, y, z);
 """
@@ -2200,9 +2204,15 @@ class Journals:
         if self._rc_rows[0] != rc.get("id"):
             rows = [dict(r, bodies=[]) for r in self.db.execute("SELECT * FROM riches_route ORDER BY idx")]
             by = {r["idx"]: r for r in rows}
+            bodies = {}
             for b in self.db.execute("SELECT * FROM riches_bodies ORDER BY idx, n"):
                 if b["idx"] in by:
-                    by[b["idx"]]["bodies"].append(dict(b))
+                    bodies[(b["idx"], b["n"])] = d = dict(b, species=[])
+                    by[b["idx"]]["bodies"].append(d)
+            for x in self.db.execute("SELECT * FROM riches_species ORDER BY idx, n, k"):
+                if (x["idx"], x["n"]) in bodies:
+                    bodies[(x["idx"], x["n"])]["species"].append(
+                        {"genus": x["genus"], "species": x["species"], "value": x["value"], "count": x["count"]})
             self._rc_rows = (rc.get("id"), rows)
         return self._rc_rows[1]
 
@@ -2215,9 +2225,17 @@ class Journals:
             "WHERE m.system=?", (id64,))}
         return scanned, mapped
 
+    def exo_sampled(self, id64):
+        """{(BodyID, species name lower-cased)}: the species you have finished sampling in a system (the journal's)."""
+        return {(r[0], (r[1] or "").lower()) for r in self.db.execute(
+            "SELECT body_id, species_name FROM own_organic WHERE system=? AND done_ts IS NOT NULL", (id64,))}
+
     def riches_left(self, rc, rows, i):
-        """The bodies of route row i still to do (scan, and the map when the route counts mapping), from the journal."""
+        """What route row i still has to do, from the journal: Road to Riches, its bodies (scan, and the map when the
+        route counts mapping); Exomastery, its (body, species) pairs not yet sampled, best first."""
         r = rows[i]
+        if rc.get("kind") == "exo":
+            return exo_left(r["bodies"], self.exo_sampled(r["id64"]) if r["id64"] is not None else set())
         scanned, mapped = self.riches_marks(r["id64"]) if r["id64"] is not None else (set(), set())
         mapping = bool((rc.get("options") or {}).get("use_mapping_value"))
         return [b for b in todo(r["bodies"], scanned, mapped, mapping) if not b["done"]]
@@ -2237,6 +2255,7 @@ class Journals:
         rows = self.riches_route(rc)
         if not rows:
             return
+        exo = rc.get("kind") == "exo"
         at, furthest, done = rc.get("at"), rc.get("furthest"), bool(rc.get("done_ts"))
         i = riches_match(rows, id64, name, at if at is not None else furthest or 0)
         rc["arrival_ts"] = ts
@@ -2254,15 +2273,16 @@ class Journals:
                 pass   # finished: the route stays visible, quietly, until cleared
             elif not left and i == len(rows) - 1:
                 rc.update(done_ts=ts, said_done=i)
-                say = ("complete", riches_text(rows, i, left), 0)
+                say = ("complete", (exo_text if exo else riches_text)(rows, i, left), 0)
             else:
                 if not left:
                     rc["said_done"] = i   # nothing to do here: no "all done" to say later
-                say = ("back" if back else "next", ("Back on the route. " if back else "") + riches_text(rows, i, left), len(left))
+                say = ("back" if back else "next", ("Back on the route. " if back else "") + (exo_text if exo else riches_text)(rows, i, left),
+                       len(left))
         meta_set(self.db, "riches", rc)
         if say and live_event(ts):
             nxt = rows[i + 1]["system"] if i is not None and i + 1 < len(rows) else None
-            self.moment("riches", ts, what=say[0], text=say[1], system=name, index=i, next=nxt, left=say[2])
+            self.moment("exo" if exo else "riches", ts, what=say[0], text=say[1], system=name, index=i, next=nxt, left=say[2])
 
     def riches_progress(self, id64, ts):
         """After a Scan or a mapping in the system you are at on a Road to Riches route: when that was the last body
@@ -2275,7 +2295,8 @@ class Journals:
         i = rc["at"]
         if i >= len(rows) or rows[i]["id64"] is None or rows[i]["id64"] != id64 or rc.get("said_done") == i:
             return
-        if not rows[i]["bodies"] or self.riches_left(rc, rows, i):
+        exo = rc.get("kind") == "exo"
+        if not (any(b.get("species") for b in rows[i]["bodies"]) if exo else rows[i]["bodies"]) or self.riches_left(rc, rows, i):
             return
         rc["said_done"] = i
         last = i == len(rows) - 1
@@ -2284,8 +2305,10 @@ class Journals:
         meta_set(self.db, "riches", rc)
         if live_event(ts):
             nxt = None if last else rows[i + 1]["system"]
-            self.moment("riches", ts, what="complete" if last else "done", system=rows[i]["system"], index=i, next=nxt,
-                        left=0, text=("Everything here is done. " + ("Road to Riches complete." if last else f"Next stop: {nxt}.")))
+            done_text = "Every species here is sampled. " if exo else "Everything here is done. "
+            self.moment("exo" if exo else "riches", ts, what="complete" if last else "done", system=rows[i]["system"], index=i,
+                        next=nxt, left=0, text=done_text + (("Exomastery complete." if exo else "Road to Riches complete.") if last
+                                                            else f"Next stop: {nxt}."))
 
     def highway_arrival(self, id64, name, ts):
         """A jump into a system with a Highway route active: progress (the row you are at, the furthest reached),
@@ -2641,7 +2664,7 @@ class Journals:
             return
         if name in SCAN_EVENTS:
             self.handle_scan(name, ev, ts)
-            if name in ("Scan", "SAAScanComplete"):
+            if name in ("Scan", "SAAScanComplete", "ScanOrganic"):   # a body scanned / mapped, a species sampled
                 self.riches_progress(ev.get("SystemAddress"), ts)
             return
         if name in DATA_EVENTS:
@@ -9083,8 +9106,23 @@ class State:
         return i if i < len(rows) else None
 
     def riches_system_out(self, rc, rows, i):
-        """Route row i for the page: the system, and its bodies with what you have scanned and mapped (journal)."""
+        """Route row i for the page: the system, and its bodies with what you have scanned and mapped (Road to Riches)
+        or its species with what you have sampled and what would be new to your codex there (Exomastery: by species,
+        in the system's region, which never over-flags), from the journal."""
         r = rows[i]
+        if rc.get("kind") == "exo":
+            region = (outrider.bio.region_name(r["x"], r["y"], r["z"])
+                      if outrider.bio and None not in (r["x"], r["y"], r["z"]) else None)
+            known = codex_species(self.db, region)[1] if region else None
+            bodies = exo_todo(r["bodies"], self.journals.exo_sampled(r["id64"]) if r["id64"] is not None else set())
+            sp_all = [x for b in bodies for x in b["species"]]
+            return {"i": i, "system": r["system"], "id": str(r["id64"]) if r["id64"] is not None else None,
+                    "x": r["x"], "y": r["y"], "z": r["z"], "jumps": r["jumps"], "left": sum(b["left"] for b in bodies),
+                    "value": sum(x["value"] or 0 for x in sp_all), "value_left": sum(x["value"] or 0 for x in sp_all if not x["done"]),
+                    "bodies": [{"name": b["name"], "type": b["type"], "subtype": b["subtype"], "ls": b["ls"], "done": b["done"],
+                                "left": b["left"], "species": [dict(x, new=known is not None and x["species"].lower() not in known)
+                                                               for x in b["species"]]}
+                               for b in bodies if b["species"]]}
         mapping = bool((rc.get("options") or {}).get("use_mapping_value"))
         scanned, mapped = self.journals.riches_marks(r["id64"]) if r["id64"] is not None else (set(), set())
         bodies = todo(r["bodies"], scanned, mapped, mapping)
@@ -9108,7 +9146,8 @@ class State:
             first = max(0, base - RICHES_DONE)
             route = dict({k: rc.get(k) for k in ("id", "options", "created_ts", "at", "furthest", "off_route",
                                                   "arrival_ts", "done_ts")},
-                         **{"from": rows[0]["system"], "to": rows[-1]["system"], "count": len(rows), "first": first,
+                         **{"kind": rc.get("kind") or "riches", "from": rows[0]["system"], "to": rows[-1]["system"],
+                            "count": len(rows), "first": first,
                             "next": nx, "points": [[r["x"], r["z"]] for r in rows], "systems": [self.riches_system_out(rc, rows, i)
                                                     for i in range(first, min(len(rows), first + RICHES_DONE + RICHES_AHEAD))]})
         cb = self.clipboard.info() if self.clipboard else {"enabled": self.highway_cfg["clipboard"], "available": False,
@@ -9126,6 +9165,9 @@ class State:
         max_distance, min_value, use_mapping_value, avoid_thargoids, loop}."""
         if self.riches_task and not self.riches_task.done():
             return {"error": "a route is being plotted already"}, 409
+        kind = body.get("kind", "riches")   # the survey slot's route type: Road to Riches, or Expressway to Exomastery
+        if kind not in ("riches", "exo"):
+            return {"error": "kind must be riches or exo"}, 400
         name = lambda v: " ".join(v.split()) if isinstance(v, str) else ""
         frm = name(body.get("from")) or (self.journals.pos or {}).get("name") or ""
         to = name(body.get("to"))
@@ -9165,19 +9207,22 @@ class State:
                     "loop": flag("loop")}
         except ValueError as e:
             return {"error": str(e)}, 400
+        if kind == "exo":   # Exomastery has no mapping value; its life is what counts
+            opts.pop("use_mapping_value")
         params = dict(opts, **{"from": frm}, **({"to": to} if to else {}))
         for k in ("use_mapping_value", "avoid_thargoids", "loop"):
-            params[k] = int(params[k])
-        self.riches_plotting = {"state": "running", "from": frm, "to": to or None, "started": iso_ts(time.time()),
+            if k in params:
+                params[k] = int(params[k])
+        self.riches_plotting = {"state": "running", "kind": kind, "from": frm, "to": to or None, "started": iso_ts(time.time()),
                                 "error": None}
-        self.riches_task = asyncio.get_running_loop().create_task(self._riches_plot(params, {"options": opts}))
+        self.riches_task = asyncio.get_running_loop().create_task(self._riches_plot(params, {"options": opts, "kind": kind}))
         self.bump()
         return {"ok": True, "plotting": self.riches_plotting}, 202
 
     async def _riches_plot(self, params, meta):
         p = self.riches_plotting
         try:
-            result = await self.spansh.plot(SPANSH_RICHES, params, method=RICHES_METHOD)
+            result = await self.spansh.plot(SPANSH_EXO if meta.get("kind") == "exo" else SPANSH_RICHES, params, method=RICHES_METHOD)
             self.riches_store(riches_rows(result), meta)
             p.update(state="done")
             self.riches_copy_next(force=True)   # you are usually at its start: the first hop is ready to paste
@@ -9203,6 +9248,11 @@ class State:
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [(i, n, b["name"], b["type"], b["subtype"], b["ls"], b["scan"], b["map"], b["terraformable"], b["body_id"])
              for i, r in enumerate(rows) for n, b in enumerate(r["bodies"])])
+        self.db.execute("DELETE FROM riches_species")
+        self.db.executemany(
+            "INSERT INTO riches_species (idx, n, k, genus, species, value, count) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [(i, n, k, x["genus"], x["species"], x["value"], x["count"])
+             for i, r in enumerate(rows) for n, b in enumerate(r["bodies"]) for k, x in enumerate(b.get("species") or [])])
         pos = self.journals.pos
         i = riches_match(rows, pos["id64"], pos["name"]) if pos else None
         now = time.time()
@@ -9222,6 +9272,7 @@ class State:
         self.cancel_autotarget(route="survey")
         self.db.execute("DELETE FROM riches_route")
         self.db.execute("DELETE FROM riches_bodies")
+        self.db.execute("DELETE FROM riches_species")
         meta_set(self.db, "riches", None)
         self.db.commit()
         self.bump()

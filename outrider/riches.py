@@ -1,5 +1,8 @@
-"""Road to Riches (spansh.co.uk/riches): Spansh's answer as route rows, which row a system is, which of a system's
-bodies are still to do, and the line said on arriving. Pure helpers: the route's state, its tables and the plot
+"""Road to Riches (spansh.co.uk/riches) and Expressway to Exomastery (spansh.co.uk/exobiology), the survey routes:
+Spansh's answer as route rows, which row a system is, which of a system's bodies (or species) are still to do, and the
+lines said on arriving. Exomastery's answer is Road to Riches' layout with each body's species added (`landmarks`:
+{type: genus, subtype: species, value, count}, and `landmark_value`): bodies where life is already reported, so the
+values are base values (first footfall is unlikely). Pure helpers: the route's state, its tables and the plot
 under way live in ed_outrider.State, as the Neutron Highway's do (outrider/highway.py).
 
 Spansh publishes no description of this API. Checked against the live site on 2026-10-06 (tests/fixtures/
@@ -63,7 +66,9 @@ def riches_rows(result):
                 "terraformable": 1 if b.get("is_terraformable") or b.get("terraforming_state") == "Candidate for terraforming"
                 else 0,
                 # the game's BodyID, as body_id is everywhere else: a body id64's top 9 bits
-                "body_id": bid >> 55 if bid is not None and 0 <= bid < 2 ** 64 else None})
+                "body_id": bid >> 55 if bid is not None and 0 <= bid < 2 ** 64 else None,
+                # Exomastery: the species Spansh lists on it (none on a Road to Riches body)
+                "species": _species(b.get("landmarks"))})
         rows.append({"system": name.strip(), "id64": id64 if id64 is not None and 0 <= id64 < 2 ** 63 else None,
                      "x": _num(s.get("x")), "y": _num(s.get("y")), "z": _num(s.get("z")),
                      "jumps": max(0, _num(s.get("jumps"), int) or 0) if rows else 0, "bodies": bodies})
@@ -72,6 +77,19 @@ def riches_rows(result):
     if len(rows) > RICHES_MAX_SYSTEMS:
         raise RichesError(f"a route of {len(rows)} systems is longer than Outrider keeps ({RICHES_MAX_SYSTEMS})")
     return rows
+
+
+def _species(landmarks):
+    """A body's `landmarks` (Exomastery) as [{genus, species, value, count}], best first; lenient (a broken entry
+    is skipped)."""
+    out = []
+    for x in landmarks if isinstance(landmarks, list) else []:
+        if not isinstance(x, dict) or not isinstance(x.get("subtype"), str) or not x["subtype"].strip():
+            continue
+        out.append({"genus": x["type"].strip() if isinstance(x.get("type"), str) else None,
+                    "species": " ".join(x["subtype"].split()), "value": _num(x.get("value"), int),
+                    "count": _num(x.get("count"), int)})
+    return sorted(out, key=lambda x: -(x["value"] or 0))
 
 
 def riches_match(rows, id64, name, near=0):
@@ -137,3 +155,45 @@ def riches_text(rows, i, left):
     if best.get("ls") is not None:
         text += f", {round(best['ls']):d} light seconds out"
     return text + "."
+
+
+def exo_todo(bodies, sampled):
+    """Exomastery: the bodies with their species marked `done` (a completed sample of it on that body: `sampled` is a
+    set of (BodyID, species name lower-cased) from the journal), each body `done` once all its species are, and
+    `left` (its species not done)."""
+    out = []
+    for b in bodies:
+        sp = [dict(x, done=(b.get("body_id"), x["species"].lower()) in sampled) for x in b.get("species") or []]
+        left = [x for x in sp if not x["done"]]
+        out.append(dict(b, species=sp, left=len(left), done=bool(sp) and not left))
+    return out
+
+
+def exo_left(bodies, sampled):
+    """The species still to sample in a system: [(body, species)], best first."""
+    return sorted(((b, x) for b in exo_todo(bodies, sampled) for x in b["species"] if not x["done"]),
+                  key=lambda bx: -(bx[1]["value"] or 0))
+
+
+def body_short(name, system):
+    """A body's name without its system's ("Eol Prou PX-T d3-813 ABC 2 e" -> "ABC 2 e")."""
+    return name[len(system) + 1:] if name.lower().startswith(system.lower() + " ") else name
+
+
+def exo_text(rows, i, left):
+    """The line said on arriving at an Exomastery route row: how many species on how many bodies are left to sample,
+    the best of them and its body, then nothing more (the next stop is said once they are sampled). `left` is
+    exo_left()'s. Plain words, as riches_text."""
+    here = rows[i]
+    last = i == len(rows) - 1
+    nxt = None if last else rows[i + 1]["system"]
+    if not left:
+        return (f"Every species in {here['system']} is sampled. " if any(b.get("species") for b in here["bodies"]) else "") + (
+            "Exomastery complete." if last else f"Next stop: {nxt}.")
+    n, bodies = len(left), len({b["name"] for b, _x in left})
+    b, best = left[0]
+    words = lambda k, one, many: f"{number_words(k) if k < 11 else k} {one if k == 1 else many}"
+    text = f"{words(n, 'species', 'species').capitalize()} on {words(bodies, 'body', 'bodies')} here: the best, {best['species']}"
+    text += f" on {body_short(b['name'], here['system'])}"
+    val = money(best.get("value"))
+    return text + (f", about {val} credits." if val else ".")

@@ -43,7 +43,7 @@ also run 24/7 on a home server in Docker.
 | ⛽ **Fuel you can trust** | Jumps left at max range and at your pace, laden range, fuel per hop, how scoopable your recent stars have been, and a nudge to top up before a dry stretch. |
 | 🧭 **Decide where to go** | Unfinished systems nearby, the nearest buyers for your data, bookmarks and a next stop, stellar phenomena, and a search across Spansh. |
 | 🛣 **Neutron Highway** | Plot a neutron route with Spansh for any ship you have flown; Outrider follows it as you fly and says the next stop. |
-| 💰 **Road to Riches** | Plot a [Spansh Road to Riches](https://spansh.co.uk/riches) route in the Plot Route tab; Outrider follows it as you fly, shows what is left to scan and map in each system from your journal, and says it on arrival. |
+| 💰 **Road to Riches, Exomastery** | Plot a [Spansh Road to Riches](https://spansh.co.uk/riches) or [Expressway to Exomastery](https://spansh.co.uk/exobiology) route in the Plot Route tab; Outrider follows it as you fly, shows what is left to scan and map in each system from your journal, and says it on arrival. |
 | 📜 **Your logbook** | Every journal event in a searchable log, every exobiology sample and what became of it, and a schematic of the system. |
 | 📈 **The long view** | Each trip from sale to sale with what it actually paid, what each ship loss cost, your best finds, ranks and career statistics. |
 | 🗣 **A voice with personality** | A natural neural voice, down to business, sarcastic or sweet, briefing you on arrival and warning before you leave something unfinished. |
@@ -450,9 +450,21 @@ scanning (and mapping): from where you are (or From), with your ship's range, an
 of systems, maximum distance, minimum value, mapping value, avoiding Thargoid systems, a loop back). The list then
 shows each system with what is left to do there, the bodies by name under the one you are at and the next, ✔ scanned
 and ✔✔ mapped from your journal; on arrival the voice says how many bodies are worth the stop and the best of them,
-and once they are done, the next system. It is not auto-targeted: a Road to Riches is for stopping, not hurrying past.
+and once they are done, the next system. It is not auto-targeted on its own: a Road to Riches is for stopping, not hurrying past.
 With a Highway route as well, a switch above the heading picks which one the tab shows; only the one plotted last
 copies its next system to the clipboard. (Road to Riches is thshurka's contribution.)
+
+**Exomastery.** The fourth plotter, Spansh's **Expressway to Exomastery**, plots systems whose bodies carry valuable
+life already reported by other commanders, with the same options as Road to Riches (no mapping value). It shares Road
+to Riches' place: one survey route at a time, a new plot of either replaces it. Each body lists its species with their
+value, ✓ once you have sampled them and ✦ when one would be new to your codex in that region; the voice says on
+arrival how many species are left on how many bodies and the best of them, and the next stop once they are sampled.
+It is known life, so first footfall (×5) is unlikely: the values shown are the base ones.
+
+**The route line and 🎯.** The line under the tiles shows the next stop of whichever route the tab shows (🛣 the
+Highway, 💰 Road to Riches, 🧬 Exomastery). A 🎯 beside that next system, and beside every system in the tab's lists,
+targets it in the galaxy map for you (game PC only, after a 5 s countdown to click back into the game; on the tablet,
+the row's sheet has 🎯 Target).
 
 **Auto-target** (Linux, Windows experimental; on the game PC only, off by default; the tab's **Auto-target the next system** box). After an FSD supercharge
 in a route system it waits 5 s, then presses keys to make the next route system your target: it opens the galaxy

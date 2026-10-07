@@ -404,3 +404,90 @@ class RichesRoute(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _exo_answer():
+    import json
+    import os
+    with open(os.path.join(os.path.dirname(__file__), "fixtures", "spansh_exo.json"), encoding="utf-8") as f:
+        return json.load(f)
+
+
+class ExoRoute(unittest.TestCase):
+    """Expressway to Exomastery in the survey slot (the author, 2026-10-07): Spansh's answer with each body's species,
+    progress from the journal's samples (own_organic, by BodyID and species), its own lines and alert (`exo`), and the
+    plot through its own endpoint. A real answer: tests/fixtures/spansh_exo.json (from Colonia, 2026-10-07)."""
+    setUp = RichesRoute.setUp
+    spansh = RichesRoute.spansh
+    ts = hwy_ts
+    jump = hwy_jump
+
+    def store_exo(self):
+        rows = riches.riches_rows(_exo_answer()["result"])
+        self.jump(-100, rows[0]["id64"], rows[0]["system"], 0)
+        self.state.riches_store(rows, {"options": {}, "kind": "exo"})
+        return rows
+
+    def analyse(self, s, addr, body_id, species):
+        self.j.handle({"event": "ScanOrganic", "timestamp": self.ts(s), "ScanType": "Analyse", "SystemAddress": addr,
+                       "Body": body_id, "Genus": "$Codex_Ent_X;", "Genus_Localised": species.split()[0],
+                       "Species": "$Codex_Ent_" + species.replace(" ", "_") + ";", "Species_Localised": species})
+
+    def test_rows_with_species(self):
+        rows = riches.riches_rows(_exo_answer()["result"])
+        b = rows[1]["bodies"][0]
+        self.assertEqual((b["name"], b["body_id"], len(b["species"])), ("Eol Prou PX-T d3-813 ABC 2 e", 28, 7))
+        self.assertEqual(b["species"][0], {"genus": "Frutexa", "species": "Frutexa Flammasis", "value": 10326000, "count": 5})
+        self.assertEqual([x["value"] for x in b["species"]], sorted((x["value"] for x in b["species"]), reverse=True))
+        self.assertEqual(riches._species([None, {"subtype": ""}, {"subtype": "Tubus Rosarium", "value": "x"}]),
+                         [{"genus": None, "species": "Tubus Rosarium", "value": None, "count": None}])
+
+    def test_arrival_progress_and_done(self):
+        rows = self.store_exo()
+        sys1 = rows[1]
+        self.jump(-10, sys1["id64"], sys1["system"], 20)
+        what, text = self.moments_exo()[-1]
+        self.assertEqual(what, "next")
+        self.assertTrue(text.startswith("14 species on two bodies here: the best, Frutexa Flammasis on ABC 2 e, about 10.3 million"), text)
+        s = self.state.survey_summary()
+        self.assertEqual((s["kind"], s["at"], s["left_here"]), ("exo", 1, 14))
+        out = self.state.riches_view()["route"]
+        self.assertEqual(out["kind"], "exo")
+        row = out["systems"][1]
+        self.assertEqual((row["left"], len(row["bodies"]), len(row["bodies"][0]["species"])), (14, 2, 7))
+        # every species sampled on both bodies: the last says so, once, with the next stop
+        n = 0
+        for b in sys1["bodies"]:
+            for x in b["species"]:
+                n += 1
+                self.analyse(-5 + n * 0.01, sys1["id64"], b["body_id"], x["species"])
+        self.assertEqual(self.state.survey_summary()["left_here"], 0)
+        self.assertEqual(self.moments_exo()[-1], ("done", f"Every species here is sampled. Next stop: {rows[2]['system']}."))
+        self.assertEqual(len([m for m in self.moments_exo() if m[0] == "done"]), 1)
+        self.assertEqual(self.state.riches_view()["route"]["systems"][1]["left"], 0)
+
+    def moments_exo(self):
+        return [(m["what"], m["text"]) for m in self.j.moments if m["kind"] == "exo"]
+
+    def test_plot_exo(self):
+        self.jump(-100, 1001, "Alpha Rich", 0)
+        sp = self.spansh([(200, {"job": "e1", "status": "queued"}), (200, {"job": "e1", "status": "ok", "result": _exo_answer()["result"]})])
+        self.assertEqual(self.state.riches_start_plot({"kind": "moon"})[1], 400)
+
+        async def go():
+            with unittest.mock.patch.object(ed_outrider, "HIGHWAY_POLL_S", 0.01):
+                out = self.state.riches_start_plot({"kind": "exo", "range": 50, "radius": 25, "min_value": 1000000})
+                await self.state.riches_task
+            return out
+        out = asyncio.run(go())
+        self.assertEqual(out[1], 202)
+        method, url, fields = sp.session.calls[0]
+        self.assertEqual((method, url), ("POST", ed_outrider.SPANSH_EXO))
+        self.assertNotIn("use_mapping_value", fields)   # Exomastery has none
+        meta, rows = self.state.riches_state()
+        self.assertEqual((meta["kind"], len(rows), len(rows[1]["bodies"][0]["species"])), ("exo", 3, 7))
+        # one slot: a Road to Riches plot replaces it
+        self.state.riches_store(riches.riches_rows(RESULT), {"options": {}})
+        meta, rows = self.state.riches_state()
+        self.assertEqual((meta.get("kind"), rows[0]["system"], self.db.execute("SELECT COUNT(*) FROM riches_species").fetchone()[0]),
+                         (None, "Alpha Rich", 0))

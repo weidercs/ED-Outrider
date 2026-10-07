@@ -1427,6 +1427,7 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["scoop", "fuel scooping filled the tank", null],
   ["scoopstop", "fuel scooping stopped early (not above 90%, nor when you jump)", null],
   ["supercharge", "the frame shift drive supercharged in a neutron star or white dwarf cone", null],
+  ["exo", "Expressway to Exomastery (a route plotted in Plot Route): on arriving at a route system, the species still to sample there and the best of them, and once they are sampled the next stop, and route complete", null],
   ["riches", "Road to Riches (a route plotted in Plot Route): on arriving at a route system, the bodies still worth scanning or mapping there and the next stop, and route complete", null],
   ["highway", "the Neutron Highway (a route plotted in Plot Route): the next stop on arriving at a route system (with the boost and refuel stops), off route, back on the highway, and highway complete", null],
   ["autotarget", "the Neutron Highway's auto-target (when it is on, or a test): whether the next route system was targeted", null],
@@ -1613,7 +1614,7 @@ const JUMP_LINE_WAIT = 8000;   // ms: the jump line's latest start after the cha
 // ms after Status.json says "in the tunnel" (it says so about 2 s before the countdown ends): the line then starts
 // with the tunnel itself (the author's timing, in game 2026-10-03)
 const JUMP_TUNNEL_DELAY = 2500;
-const SPEECH_SYS_BOUND = new Set(["find", "signals", "jump", "honk", "brief", "fss", "mapped", "approach", "bodybrief", "jumponium", "highway", "riches", "autotarget"]);
+const SPEECH_SYS_BOUND = new Set(["find", "signals", "jump", "honk", "brief", "fss", "mapped", "approach", "bodybrief", "jumponium", "highway", "riches", "exo", "autotarget"]);
 // a rig confirmation answers your own press, like a line asked for
 const speechPrio = (kind, tag) => DANGER.has(tag) || kind === "hull" || kind === "fuel" ? 0 : kind === "manual" || kind === "rigs" ? 1
   : ["find", "signals", "codex", "bodybrief", "supercharge", "jumponium"].includes(kind) ? 3 : 2;
@@ -4507,9 +4508,14 @@ function hwyFormShow() {
   hForm.querySelector(".hwy-nopt").hidden = p === "exact";
   hForm.querySelectorAll(".hwy-nonly").forEach(e => { e.hidden = p !== "neutron"; });
   hForm.querySelector(".hwy-xopt").hidden = p !== "exact";
-  hForm.querySelectorAll(".hwy-ropt").forEach(e => { e.hidden = p !== "riches"; });
-  hForm.querySelector(".hwy-cons").hidden = p === "riches";   // Spansh's Road to Riches takes the range as it is
-  hEl("hwyTo").placeholder = p === "riches" ? "optional: where to end" : "destination system";
+  const survey = p === "riches" || p === "exo";
+  hForm.querySelectorAll(".hwy-ropt").forEach(e => { e.hidden = !survey; });
+  hForm.querySelectorAll(".rich-only").forEach(e => { e.hidden = p !== "riches"; });
+  hForm.querySelector(".hwy-cons").hidden = survey;   // Spansh's survey routes take the range as it is
+  hEl("hwyTo").placeholder = survey ? "optional: where to end" : "destination system";
+  // one survey slot: a Road to Riches or an Exomastery plot replaces the survey route there is
+  const rr = R.data && R.data.route;
+  hEl("hwyGo").textContent = survey && rr ? `Plot (replaces your ${(SURVEY[rr.kind] || SURVEY.riches).name} route)` : "Plot";
   // the neutron plotter can do without a ship (type the range); the exact one needs a Loadout
   const none = hEl("hwyShip").querySelector('option[value=""]');
   if (none) { none.disabled = p === "exact"; none.hidden = p === "exact"; }
@@ -4539,7 +4545,7 @@ function fillHwyForm(hd) {
   hwyFormShow();
 }
 {
-  const p = hForm.querySelector(`[name=hwyPlotter][value="${["neutron", "riches"].includes(hwyCfg.plotter) ? hwyCfg.plotter : "exact"}"]`); if (p) p.checked = true;
+  const p = hForm.querySelector(`[name=hwyPlotter][value="${["neutron", "riches", "exo"].includes(hwyCfg.plotter) ? hwyCfg.plotter : "exact"}"]`); if (p) p.checked = true;
   hEl("hwyInject").checked = !!hwyCfg.injections; hEl("hwyNoSec").checked = !!hwyCfg.exclude_secondary; hEl("hwySuper").checked = !!hwyCfg.supercharged;
   hForm.querySelectorAll("[name=hwyPlotter]").forEach(r => r.onchange = () => { hwyCfg.plotter = hwyPlotter(); saveHwyCfg(); hwyFormShow(); });
   for (const [id, k] of [["hwyInject", "injections"], ["hwyNoSec", "exclude_secondary"], ["hwySuper", "supercharged"]])
@@ -4594,7 +4600,7 @@ function drawHwyStatus() {
   let text = "", cls = "";
   if (rp && rp.state === "running") {
     const secs = rp.started ? Math.max(0, Math.round((Date.now() - new Date(rp.started)) / 1000)) : null;
-    text = `Asking Spansh for a Road to Riches route from ${rp.from}…${secs != null ? ` ${secs} s` : ""}`; cls = "busy";
+    text = `Asking Spansh for ${rp.kind === "exo" ? "an Exomastery" : "a Road to Riches"} route from ${rp.from}…${secs != null ? ` ${secs} s` : ""}`; cls = "busy";
   } else if (p && p.state === "running") {
     const secs = p.started ? Math.max(0, Math.round((Date.now() - new Date(p.started)) / 1000)) : null;
     text = `Plotting ${p.from} → ${p.to} with Spansh (${p.plotter} plotter)…${secs != null ? ` ${secs} s` : ""}`; cls = "busy";
@@ -4605,7 +4611,7 @@ function drawHwyStatus() {
 }
 hForm.addEventListener("submit", async e => {
   e.preventDefault();
-  if (hwyPlotter() === "riches") return richSubmit();
+  if (hwyPlotter() === "riches" || hwyPlotter() === "exo") return richSubmit(hwyPlotter());
   const b = hwyBody();
   if (!b.to) return setHwyStatus("Type the destination system.", "err");
   if (b.plotter === "neutron" && b.range == null) return setHwyStatus("Give the jump range (ly) for the neutron plotter.", "err");
@@ -4770,7 +4776,7 @@ async function loadRich(force = false) {
   if (R.watch && p && p.state !== "running") {   // the plot this page asked for has ended: say how
     R.watch = false;
     const rt = R.data.route;
-    setHwyStatus(p.state === "done" && rt ? `Plotted: a Road to Riches of ${rt.count} systems.`
+    setHwyStatus(p.state === "done" && rt ? `Plotted: ${rt.kind === "exo" ? "an Exomastery route" : "a Road to Riches"} of ${rt.count} systems.`
       : `Could not plot the route: ${p.error || "?"}.`, p.state === "done" ? "ok" : "err");
   }
   renderHwy();
@@ -4796,7 +4802,7 @@ function routeKind() {
 }
 // with both routes: a switch above the heading
 const routeKindHtml = kind => `<div class="seg hwykind" role="radiogroup" aria-label="the route shown">` +
-  [["hwy", "Highway"], ["rich", "Road to Riches"]].map(([k, t]) =>
+  [["hwy", "Highway"], ["rich", (SURVEY[(R.data && R.data.route && R.data.route.kind) || "riches"] || SURVEY.riches).name]].map(([k, t]) =>
     `<label><input type="radio" name="hwyKind" value="${k}"${k === kind ? " checked" : ""}>${t}</label>`).join("") + `</div>`;
 hEl("hwyHead").addEventListener("change", e => {
   if (e.target.name !== "hwyKind") return;
@@ -4807,18 +4813,27 @@ function richHeadHtml(d) {
   const where = rt.at != null ? `you are at system ${rt.at + 1} of ${rt.count}`
     : rt.off_route ? `off the route (last on it: system ${(rt.furthest ?? 0) + 1} of ${rt.count})` : `not on the route yet (${rt.count} systems)`;
   const nx = rt.next != null ? sy.find(s => s.i === rt.next) : null;
-  const how = `Road to Riches · ${o.range != null ? `${o.range} ly range · ` : ""}within ${o.radius ?? "?"} ly · bodies from ` +
-    `${credits(o.min_value ?? 0)} cr${o.use_mapping_value ? ", mapping counted" : ""}${o.loop ? " · loop" : ""}`;
+  const exo = rt.kind === "exo", what = exo ? "species" : left === 1 ? "body" : "bodies";
+  const how = `${exo ? "Exomastery (known life: first footfall unlikely)" : "Road to Riches"} · ${o.range != null ? `${o.range} ly range · ` : ""}` +
+    `within ${o.radius ?? "?"} ly · ${exo ? "life" : "bodies"} from ${credits(o.min_value ?? 0)} cr${o.use_mapping_value ? ", mapping counted" : ""}${o.loop ? " · loop" : ""}`;
   return `<div class="hwyttl">To ${esc(rt.to)} <span class="unk">from ${esc(rt.from)}</span></div>` +
-    `<div class="hwystats">${where} · <b>${left}</b> ${left === 1 ? "body" : "bodies"} left, <b>≈${credits(sum("value_left"))} cr</b>` +
+    `<div class="hwystats">${where} · <b>${left}</b> ${what} left, <b>≈${credits(sum("value_left"))} cr</b>` +
     ` · done <b>${credits(Math.max(0, sum("value") - sum("value_left")))} cr</b> of <b>${credits(sum("value"))} cr</b>` +
     `${rt.count > sy.length ? " (the systems listed)" : ""}</div>` +
-    (rt.done_ts ? `<div class="hwystate hwydone">Road to Riches complete.</div>`
+    (rt.done_ts ? `<div class="hwystate hwydone">${exo ? "Exomastery" : "Road to Riches"} complete.</div>`
       : nx ? `<div class="hwystate">Next: <b class="copy" data-name="${esc(nx.system)}" title="click to copy">${esc(nx.system)}</b>` +
-             `${nx.left ? ` · ${nx.left} to do there` : ""}</div>` : "") +
+             `${nx.left ? ` · ${nx.left} ${exo ? "species to sample" : "to do"} there` : ""}</div>` : "") +
     `<div class="unk hwyhow">${esc(how)}${rt.created_ts ? ` · plotted ${esc(when(rt.created_ts))}` : ""}</div>`;
 }
+function exoBodyHtml(b, system) {
+  const sp = (b.species || []).map(x => `<span class="${x.done ? "exodone" : ""}" title="${esc(x.genus || "")}${x.count ? ` · reported ${x.count}×` : ""}">` +
+    `${x.done ? "✓ " : ""}${esc(x.species)} ${x.value != null ? credits(x.value) : ""}${x.new && !x.done ? ` <span class="exonew" title="new to your codex in this region">✦</span>` : ""}</span>`).join(" · ");
+  return `<tr class="richbody${b.done ? " done" : ""}"><td class="richmark" title="species sampled on this body (your journal)">${b.done ? "✓" : ""}</td>` +
+    `<td colspan="${RICH_COLS - 1}"><b title="${esc(b.name)}">${esc(bodyShort(b.name, system))}</b> <span class="unk">· ${b.ls != null ? `${Math.round(b.ls).toLocaleString("en-US")} ls` : ""}</span>` +
+    `<div class="exosp">${sp}</div></td></tr>`;
+}
 function richBodyHtml(b, system) {
+  if (b.species) return exoBodyHtml(b, system);
   const mark = b.scanned ? (b.mapped ? "✔✔" : "✔") : "";
   const kind = [b.subtype || b.type || "", b.terraformable ? "terraformable" : ""].filter(Boolean).join(" · ");
   const val = [b.scan != null ? credits(b.scan) : "", b.map != null ? `map ${credits(b.map)}` : ""].filter(Boolean).join(" · ");
@@ -4868,8 +4883,9 @@ function richBody() {
   for (const k of Object.keys(b)) if (b[k] === undefined) delete b[k];
   return b;
 }
-async function richSubmit() {
-  const b = richBody();
+async function richSubmit(kind = "riches") {
+  const b = Object.assign(richBody(), {kind});
+  if (kind === "exo") { delete b.use_mapping_value; delete b.avoid_thargoids; }
   H.status = null;
   setHwyStatus("Asking Spansh…", "busy");
   let r;
@@ -6239,8 +6255,8 @@ function onData() {
         else alertOut("sell", `Undocked with ${credits(u.total)} cr still aboard`, `Still to sell: ${leftToSell(u)}.`,   // part of it was sold here
                       {sound: "alert", say: () => line("unsold_urgent", {value: credits(u.total)})});
       }
-      else if (m.kind === "riches" && m.text)   // Road to Riches: what is left in the system you arrived at, and where next
-        alertOut("riches", m.text.replace(/\.$/, ""), "", {tag: "riches", say: m.text});
+      else if ((m.kind === "riches" || m.kind === "exo") && m.text)   // a survey route: what is left where you arrived, and where next
+        alertOut(m.kind, m.text.replace(/\.$/, ""), "", {tag: m.kind, say: m.text});
       else if (m.kind === "highway" && m.text)   // the Neutron Highway's arrival line, detour, back on it, complete: plain words for now
         alertOut("highway", m.text.replace(/\.$/, ""), "", {tag: "highway", say: m.text});
       else if (m.kind === "autotarget" && m.text)   // auto-target's result: "Successfully targeted ..." / "Failed to target ..."
