@@ -2,6 +2,16 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-07 · Uploads: EDDN, EDSM and Inara (off by default)
+- `[uploads]`: Outrider can do what EDMarketConnector does. `eddn` shares what the game shows everyone (arrivals,
+  scans, signals, stations, and a market, outfitting or shipyard once opened) with EDDN; `edsm` and `inara` send your
+  flight log to your own account with your API key. Each is off until switched on; only live play is sent, never
+  past journals; never with --simulate. Settings shows what went out, what waits and any refusal.
+- `outrider/uplink.py` reads the journals on its own. Every EDDN message is checked in the tests against EDDN's
+  own schemas (`tests/fixtures/eddn`): personal fields and the player's language removed, a system's name and
+  position added only when the event agrees with the last arrival, a refused message never sent again.
+- The README's "uploads: never" is now "only if you switch them on". No Frontier sign-in, as before.
+
 ## 2026-10-07 · `scripts/verify.sh` passes on Windows (Git Bash)
 - `verify.sh` finds a Windows venv (`.venv/Scripts/python.exe`), names its scratch folder the Windows way so the
   scratch config's paths mean something to Python, and stops the server through a stop file (Ctrl-C to the server:

@@ -186,6 +186,7 @@ import outrider.rail       # the tablet's control rail: contexts, default sets, 
 import outrider.ask        # questions by voice (POST /api/ask): fixed phrases, then an optional AI layer
 import outrider.config_edit  # the Settings dialog's Server settings: every config key, edited in place
 import outrider.mcp        # the MCP bridge's [mcp] settings (the bridge itself runs as python3 -m outrider.mcp)
+import outrider.uplink     # [uploads]: EDDN, EDSM and Inara (each off by default), from its own tail of the live journal
 from outrider.core import iso_ts, ts_seconds   # journal timestamps
 from outrider.fsd import (   # the frame shift drive's maths: range, fuel per jump, the fuel model, fleet figures
     FSD_RANGE_MODS, GUARDIAN_BOOST, conservative_optimal_mass, conservative_range, fleet_figures, fleet_range, fsd_range,
@@ -923,6 +924,7 @@ def settings_from(cfg, args, env_journals=None, detected=((), ())):
         # [mcp]: read by the MCP bridge (python3 -m outrider.mcp), not the server; here so --write-config writes it
         **outrider.mcp.mcp_settings(cfg),
         "assistant": outrider.ask.assistant_settings(cfg),   # the voice's optional AI layer (off by default)
+        "uploads": outrider.uplink.uploads_settings(cfg),   # EDDN, EDSM, Inara (each off by default)
     }
 
 
@@ -1052,6 +1054,15 @@ api_key = {q(st["assistant"]["api_key"])}   # stays on this PC ("" for a local m
 model = {q(st["assistant"]["model"])}   # one that can call tools
 timeout = {st["assistant"]["timeout"]:g}   # seconds for the whole answer
 max_rounds = {st["assistant"]["max_rounds"]}   # tool rounds before it must answer
+
+[uploads]
+eddn = {"true" if st["uploads"]["eddn"] else "false"}   # send what the game shows everyone (systems, scans, signals, stations, markets, outfitting, shipyards) to EDDN, the shared network Spansh, EDSM and Inara read; live play only, nothing personal
+eddn_test = {"true" if st["uploads"]["eddn_test"] else "false"}   # mark every EDDN message as a test (the schemas' /test form): for trying it out, listeners ignore them
+edsm = {"true" if st["uploads"]["edsm"] else "false"}   # send your flight log to your EDSM account (needs edsm_api_key)
+edsm_commander = {q(st["uploads"]["edsm_commander"])}   # your commander's name on EDSM ("" = the name in the journal)
+edsm_api_key = {q(st["uploads"]["edsm_api_key"])}   # from edsm.net: My account, API key; stays on this PC
+inara = {"true" if st["uploads"]["inara"] else "false"}   # send your travel, ranks, credits, ships, materials and missions to your Inara account (needs inara_api_key)
+inara_api_key = {q(st["uploads"]["inara_api_key"])}   # from inara.cz: Settings, API key; stays on this PC
 
 [mcp]
 {"url = " + q(st["mcp_url"]) if st["mcp_url"] else "# url = " + q("http://127.0.0.1:8025")}   # the running Outrider for the MCP bridge (python3 -m outrider.mcp); default: this PC at [server] port
@@ -5092,6 +5103,7 @@ class State:
         # last asked for the payload (S24: whether an answer will be said on the PC)
         self.ask_phrases = outrider.ask.load_phrases()
         self.assistant = dict(outrider.ask.ASSISTANT)
+        self.uplink = None         # outrider.uplink.Uplink: the uploads ([uploads]; set by run())
         self.speaker_seen = None
         self.speaker_audio_blocked = False   # the speaking window's browser holds audio back until a click (the tablet says so)
         self.autohonk = dict(AUTOHONK)
@@ -5217,6 +5229,8 @@ class State:
             "version": self.version, "run_id": RUN_ID, "page_stamp": stamp["page"], "restart_needed": stamp["restart_needed"],
             "game_pc": self.game_pc,   # False: the page leaves out what needs the game PC
             "outrider": outrider.__version__,   # Settings' line beside the GitHub link
+            # the uploads: per service {on, sent, dropped, waiting, last, error}; None before run() made them
+            "uploads": self.uplink.info() if self.uplink else None,
             # a newer release ({version, current, url, kind}: kind says how to update this install), else None
             "update": dict(self.update_available, current=outrider.__version__, kind=install_kind())
             if self.update_available else None,
@@ -12611,6 +12625,10 @@ async def run(args, st):
     firsts_task = asyncio.create_task(state.watch_firsts()) if st["watch_firsts"] else None
     update_task = asyncio.create_task(state.watch_updates()) if st["update_check"] else None
     print("update check: " + ("on (GitHub's latest release, once a day)" if st["update_check"] else "off ([server] update_check)"))
+    # the uploads read the newest journal themselves and send live lines only; never with --simulate
+    state.uplink = outrider.uplink.Uplink(st["uploads"], LIVE_DIRS, off="--simulate" if state.simulate else None)
+    uplink_task = asyncio.create_task(state.uplink.run()) if state.uplink.active else None
+    print("uploads: " + state.uplink.status_line())
     print("firsts watch: " + ("on (your unsold firsts on Spansh: one request every 10-30 s, each system once a day)"
                               if st["watch_firsts"] else "off ([spansh] watch_firsts)"))
 
@@ -12651,7 +12669,7 @@ async def run(args, st):
             state.targeter.cancel.set()   # a sequence pressing keys lets go and stops now
         tasks = [t for t in (watcher, rules_task, state.refresh_task, state.target_task, state.unsold_task, state.seller_task,
                              state.carrier_task, state.searcher.task, state.honk_test_task, button_task,   # the quit backup: finish_backup
-                             firsts_task, update_task, state.highway_task, state.autotarget_task, state.autotarget_test_task) if t]
+                             firsts_task, update_task, uplink_task, state.highway_task, state.autotarget_task, state.autotarget_test_task) if t]
         for t in tasks:
             t.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)

@@ -39,6 +39,7 @@ Outrider folder; they default to `data/ed_outrider.sqlite`, `data/backups` and `
 | `[copilot]` | `enabled`, `device`, `button`, `hold_ms`, `double_ms` |
 | `[assistant]` | `enabled`, `base_url`, `api_key`, `model`, `timeout`, `max_rounds`: the voice's optional AI layer |
 | `[mcp]` | `url`, `max_rows`, `password`: for the MCP bridge (see Ask an AI about your game) |
+| `[uploads]` | `eddn`, `eddn_test`, `edsm`, `edsm_commander`, `edsm_api_key`, `inara`, `inara_api_key`: see Uploads below |
 | `[highway]` | `clipboard`, `efficiency`, `conservative`, `conservative_ly`, `background_image`, `background_extent`, `background_opacity`; auto-target: `autotarget`, `autotarget_delay`, `autotarget_entry`, `autotarget_map_wait`, `autotarget_search_wait`, `autotarget_key_delay`, `autotarget_keys`, `autotarget_search`, `autotarget_submit`, `autotarget_plot`, `autotarget_dry_run` |
 
 Command-line flags override the file for a single run:
@@ -55,6 +56,27 @@ Command-line flags override the file for a single run:
 | `--simulate` | For screenshots and demos: the panels show the last known values (fuel...) as if the game were running; auto honk, auto-target, the co-pilot button and the clipboard are off |
 
 </details>
+
+<a id="uploads"></a>
+### Uploads (off by default)
+
+Outrider can do what EDMarketConnector does, so you need not run both. Each is a switch in `[uploads]` (Settings →
+Server settings, or the config file), **off until you turn it on**, and takes effect at the next start:
+
+- **`eddn = true`** shares what the game shows everyone with [EDDN](https://github.com/EDCD/EDDN), the network
+  Spansh, EDSM and Inara read: the systems you arrive in, your scans, signals, stations, and a station's market,
+  outfitting and shipyard once you open that screen. Nothing personal goes with it (no position on a body, fuel,
+  fines, reputation or your language); your commander's name is the sender, which EDDN scrambles.
+  `eddn_test = true` marks every message as a test.
+- **`edsm = true`** sends your flight log to your own [EDSM](https://www.edsm.net) account: put its API key
+  (EDSM: My account → API key) in `edsm_api_key`, and your name there in `edsm_commander` if it differs from the
+  game's.
+- **`inara = true`** sends your travel, credits, ranks, reputation, ships, materials, missions and combat log to
+  your own [Inara](https://inara.cz) account: put its API key (Inara: Settings → API key) in `inara_api_key`.
+- **Live play only.** What you do while Outrider runs is sent; past journals never are. Settings shows what went
+  out, what waits and any refusal in the service's own words. EDSM and Inara take the live galaxy only, and nothing
+  from a session aboard another commander's ship.
+- Still **no Frontier sign-in**: where EDMC can fetch a market on docking, Outrider sends it when you open it.
 
 ## 🧭 Good to know
 

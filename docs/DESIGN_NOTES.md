@@ -9,8 +9,17 @@ upstream project's choices, not rules of the game.
 - **No keyboard shortcuts.** A deliberate upstream choice, declined more than once; clickable things are reachable with
   Tab and act on Enter/Space instead.
 - **No VoiceAttack integration.** Not used upstream; the co-pilot button and the page cover the same ground.
-- **Nothing is uploaded.** No EDDN sender, no accounts; outside calls are read-only lookups (Spansh, EDSM,
-  GitHub for bio rules, Hugging Face for voices).
+- **Nothing is uploaded unless you switch it on.** `[uploads]` (each off by default; `outrider/uplink.py`) can send
+  what the game shows everyone to EDDN, and your flight log to your own EDSM and Inara accounts, as EDMarketConnector
+  does. Otherwise outside calls are read-only lookups (Spansh, EDSM, GitHub for bio rules, Hugging Face for voices).
+  Still no Frontier sign-in: markets, outfitting and shipyards go out only once you open that screen in game (the
+  game then writes the file), where EDMC can ask Frontier on docking.
+- **Uploads are live play only, and kept in memory.** An event older than five minutes is never sent (no backfill of
+  past journals, and journals synced from another PC with a delay send nothing); what waits for a service that
+  cannot be reached (up to 500 per service) is lost when Outrider stops. For Inara: travel, credits, ranks,
+  reputation, engineers, Powerplay, statistics, the ship you fly, materials, missions and combat; not a ship's
+  module list, suits or community goals. EDSM and Inara have not been tried against the real services yet
+  (the tests use the documented shapes); EDDN's messages are checked against EDDN's own schemas.
 - **Survey odds are odds, not contents.** The mining tooltip shows what a community survey found at that kind of
   ground; the game never says what a location holds.
 - **No hand-logging of mining location contents.** Considered and left out for now; "Mined previously" records

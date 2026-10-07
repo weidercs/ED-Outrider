@@ -230,3 +230,15 @@
 # model = ""                # one that can call tools (try it with real questions)
 # timeout = 20              # seconds for the whole answer (2 to 120)
 # max_rounds = 4            # tool rounds before it must answer (1 to 8)
+
+[uploads]
+# What EDMarketConnector does, done here; each off until you turn it on, and only live play is ever sent
+# (docs/guide/settings.md, Uploads). Nothing is sent anywhere while all three are false.
+# eddn = false              # share what the game shows everyone (systems, scans, signals, stations, markets,
+#                           # outfitting, shipyards) with EDDN, the network Spansh, EDSM and Inara read
+# eddn_test = false         # mark every EDDN message as a test (listeners ignore them): for trying it out
+# edsm = false              # send your flight log to your EDSM account
+# edsm_commander = ""       # your commander's name on EDSM ("" = the name in the journal)
+# edsm_api_key = ""         # from edsm.net: My account, API key; stays on this PC
+# inara = false             # send travel, ranks, credits, ships, materials and missions to your Inara account
+# inara_api_key = ""        # from inara.cz: Settings, API key; stays on this PC

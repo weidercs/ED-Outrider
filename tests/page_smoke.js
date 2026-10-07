@@ -2967,6 +2967,13 @@ const settle = async maxMs => {
     if (!(got.polls >= 3 && /^Plotted: 399 jumps to Hwy End/.test(got.afterPlot[0]) && got.afterPlot[1] && got.afterPlot[2] === 200)) bad.push("afterPlot");
     if (JSON.stringify(got.exactBody) !== JSON.stringify({plotter: "exact", to: "Colonia", ship_id: 7, cargo: 4, injections: true, exclude_secondary: false, supercharged: false, refuel_every_scoopable: true, conservative: false})) bad.push("exactBody");
     if (got.refuelOff !== false) bad.push("refuelOff");
+    // Settings' line about the uploads: off by default and says so; on, what went out, what waits and the refusal
+    got.uploads = [d.getElementById("uploadsLine").textContent, w.eval(`uploadsText({eddn: {on: true, test: true, sent: 1234, dropped: 1,
+      waiting: 2, error: "EDDN could not be reached (503)"}, edsm: {on: false, sent: 0, dropped: 0, waiting: 0}, inara: {on: true, sent: 3,
+      dropped: 0, waiting: 0, error: null}, off: null})`), w.eval(`uploadsText({eddn: {on: true, sent: 0}, off: "--simulate"})`), w.eval("uploadsText(null)")];
+    if (JSON.stringify(got.uploads) !== JSON.stringify(["Uploads: off. Nothing is sent anywhere ([uploads] below turns EDDN, EDSM or Inara on).",
+      `Uploads (live play only): EDDN (test): ${(1234).toLocaleString()} sent, 2 waiting, 1 dropped (EDDN could not be reached (503)) · Inara: 3 sent.`,
+      "Uploads: off (--simulate).", ""])) bad.push("uploads");
     if (!(got.err[0] === "Could not plot the route: a route is being plotted already." && got.err[1] === "err")) bad.push("err");
     if (!(got.saved && got.saved.plotter === "exact" && got.saved.injections === true && got.saved.refuel_every_scoopable === true)) bad.push("saved");
     if (!(JSON.stringify(p.v) === "[50,25,2]" && JSON.stringify(p.a) === "[10,110]" && JSON.stringify(p.b) === "[210,10]" && p.one && p.none === null

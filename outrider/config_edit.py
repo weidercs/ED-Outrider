@@ -16,8 +16,10 @@ except ImportError:  # Python < 3.11
 SECTION_TITLES = {"journals": "Journal folders", "server": "Server: network, password, paths, backups",
                   "defaults": "Defaults for new browsers", "spansh": "Spansh", "speech": "Speech on this PC",
                   "autohonk": "Auto honk", "copilot": "Co-pilot button", "highway": "Neutron Highway and auto-target",
-                  "assistant": "Voice: the AI layer", "mcp": "MCP bridge (AI clients)"}
-SECRETS = {("server", "password"), ("assistant", "api_key"), ("mcp", "password")}   # never sent to the page, only "set" or not
+                  "assistant": "Voice: the AI layer", "uploads": "Uploads: EDDN, EDSM, Inara",
+                  "mcp": "MCP bridge (AI clients)"}
+SECRETS = {("server", "password"), ("assistant", "api_key"), ("mcp", "password"),
+           ("uploads", "edsm_api_key"), ("uploads", "inara_api_key")}   # never sent to the page, only "set" or not
 # keys with a fixed set of values, shown as a choice (ed_outrider.py adds [speech] server_player's, from outrider.tts)
 CHOICES = {("server", "game_pc"): ("auto", "true", "false"), ("highway", "autotarget_entry"): ("type", "paste")}
 HEADER = re.compile(r"^\s*\[\s*([A-Za-z0-9_.-]+)\s*\]")

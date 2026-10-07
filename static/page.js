@@ -2602,6 +2602,8 @@ function render() {
   drawUpdatePill();
   for (const id of ["setVersion", "tabOutVer"]) { const el = document.getElementById(id), v = data.outrider ? `version ${data.outrider}` : "";
     if (el && el.textContent !== v) el.textContent = v; }
+  { const el = document.getElementById("uploadsLine"), v = uploadsText(data.uploads);
+    if (el && el.textContent !== v) el.textContent = v; }
   // a server away from the game PC ([server] game_pc false): what needs that PC is left out (body.notgamepc hides every
   // .pcOnly: Settings' Auto honk, "play on this PC", the Highway's auto-target box and 🎯 / Retry, the tablet's rail)
   document.body.classList.toggle("notgamepc", data.game_pc === false);
@@ -4521,6 +4523,17 @@ const H = {data: null, key: null, loading: false, poll: null, error: null, statu
 // conservative / conservative_ly: null until changed here ([highway] conservative and conservative_ly then)
 // Road to Riches, the tab's other route type: its api/riches answer, polling and form (see "Road to Riches" below)
 const R = {data: null, key: null, loading: false, poll: null, error: null, watch: false, filled: false, nextShown: null};
+// Settings' line about the uploads ([uploads]: EDDN, EDSM, Inara), from the payload's `uploads`: what is on, how much
+// went out, what waits, and the latest problem in the service's own words. Pure.
+function uploadsText(u) {
+  if (!u) return "";
+  if (u.off) return `Uploads: off (${u.off}).`;
+  const one = (name, s) => !s || !s.on ? null : `${name}${s.test ? " (test)" : ""}: ${s.sent.toLocaleString()} sent` +
+    (s.waiting ? `, ${s.waiting.toLocaleString()} waiting` : "") + (s.dropped ? `, ${s.dropped.toLocaleString()} dropped` : "") +
+    (s.error ? ` (${s.error})` : "");
+  const on = [one("EDDN", u.eddn), one("EDSM", u.edsm), one("Inara", u.inara)].filter(Boolean);
+  return on.length ? `Uploads (live play only): ${on.join(" · ")}.` : "Uploads: off. Nothing is sent anywhere ([uploads] below turns EDDN, EDSM or Inara on).";
+}
 const hwyCfg = Object.assign({plotter: "exact", injections: false, exclude_secondary: false, supercharged: false, refuel_every_scoopable: false,
                               efficiency: null,
                               conservative: null, conservative_ly: null}, store.get("highway", {}));

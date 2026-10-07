@@ -180,7 +180,7 @@ anything. Nothing extra to install.
   `--url` and `--password`), and it signs in.
 - If Outrider isn't running, the tools say so. `[mcp] max_rows` caps how many rows a list answers with (25).
   `python3 -m outrider.mcp --list` shows the tools.
-- **Privacy:** Outrider uploads nothing, but what the tools answer goes to your AI client's provider like anything
+- **Privacy:** the tools themselves upload nothing, but what they answer goes to your AI client's provider like anything
   else you type into it. A client running a local model keeps everything on your PC.
 
 ---
