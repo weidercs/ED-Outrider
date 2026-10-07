@@ -1,0 +1,566 @@
+{
+"note": "A real answer of Spansh's /api/stations/search (2026-10-07): stations within 500 ly of Sol taking 64 t of Platinum, best price first, carriers included (the first two are fleet carriers). Trimmed: a few fields and commodities per station.",
+"count": 10000,
+"results": [
+{
+"name": "Q1M-90Q",
+"system_name": "HIP 42168",
+"system_id64": 84188009186,
+"system_x": 203.21875,
+"system_y": -78.25,
+"system_z": 69.40625,
+"distance": 228.556667788592,
+"distance_to_arrival": 1475.424461,
+"type": "Drake-Class Carrier",
+"has_large_pad": true,
+"large_pads": 8,
+"medium_pads": 4,
+"small_pads": 4,
+"market_updated_at": "2026-10-06T12:37:31Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Autodock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Contacts"
+},
+{
+"name": "Universal Cartographics"
+},
+{
+"name": "Crew Lounge"
+},
+{
+"name": "Restock"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+},
+{
+"name": "Shipyard"
+},
+{
+"name": "Workshop"
+},
+{
+"name": "Flight Controller"
+},
+{
+"name": "Station Operations"
+},
+{
+"name": "Station Menu"
+},
+{
+"name": "Fleet Carrier Management"
+},
+{
+"name": "Fleet Carrier Fuel"
+},
+{
+"name": "Redemption Office"
+},
+{
+"name": "Social Space"
+},
+{
+"name": "Vista Genomics"
+},
+{
+"name": "Pioneer Supplies"
+}
+],
+"market": [
+{
+"buy_price": 0,
+"category": "Metals",
+"commodity": "Platinum",
+"demand": 4767,
+"sell_price": 310250,
+"supply": 0
+}
+],
+"market_id": 3703373824
+},
+{
+"name": "CAZU",
+"system_name": "Col 285 Sector CC-K a38-2",
+"system_id64": 40525700549504,
+"system_x": -237.125,
+"system_y": -38.84375,
+"system_z": 61.34375,
+"distance": 247.992254320826,
+"distance_to_arrival": 394.136959,
+"type": "Drake-Class Carrier",
+"has_large_pad": true,
+"large_pads": 16,
+"medium_pads": 8,
+"small_pads": 8,
+"market_updated_at": "2026-10-01T19:59:31Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Autodock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Contacts"
+},
+{
+"name": "Crew Lounge"
+},
+{
+"name": "Restock"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+},
+{
+"name": "Shipyard"
+},
+{
+"name": "Workshop"
+},
+{
+"name": "Flight Controller"
+},
+{
+"name": "Station Operations"
+},
+{
+"name": "Station Menu"
+},
+{
+"name": "Fleet Carrier Management"
+},
+{
+"name": "Fleet Carrier Fuel"
+},
+{
+"name": "Social Space"
+},
+{
+"name": "Squadron Bank"
+}
+],
+"market": [
+{
+"buy_price": 0,
+"category": "Metals",
+"commodity": "Platinum",
+"demand": 2071,
+"sell_price": 305255,
+"supply": 0
+}
+],
+"market_id": 3703334656
+},
+{
+"name": "Jung Base",
+"system_name": "HIP 11402",
+"system_id64": 182309554531,
+"system_x": 115.65625,
+"system_y": -315.15625,
+"system_z": -60.84375,
+"distance": 341.177068385593,
+"distance_to_arrival": 46084.888145,
+"type": "Planetary Outpost",
+"has_large_pad": true,
+"large_pads": 2,
+"medium_pads": 4,
+"small_pads": 4,
+"market_updated_at": "2026-10-02T21:02:05Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Autodock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Contacts"
+},
+{
+"name": "Universal Cartographics"
+},
+{
+"name": "Missions"
+},
+{
+"name": "Outfitting"
+},
+{
+"name": "Restock"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+},
+{
+"name": "Workshop"
+},
+{
+"name": "Missions Generated"
+},
+{
+"name": "Interstellar Factors Contact"
+},
+{
+"name": "Flight Controller"
+},
+{
+"name": "Station Operations"
+},
+{
+"name": "Powerplay"
+},
+{
+"name": "Search and Rescue"
+},
+{
+"name": "Station Menu"
+},
+{
+"name": "Shop"
+},
+{
+"name": "Livery"
+},
+{
+"name": "Social Space"
+},
+{
+"name": "System Colonisation"
+}
+],
+"market": [
+{
+"buy_price": 50241,
+"category": "Metals",
+"commodity": "Gold",
+"demand": 1,
+"sell_price": 49178,
+"supply": 92833
+},
+{
+"buy_price": 0,
+"category": "Minerals",
+"commodity": "Painite",
+"demand": 45600,
+"sell_price": 211587,
+"supply": 0
+},
+{
+"buy_price": 0,
+"category": "Metals",
+"commodity": "Platinum",
+"demand": 17850,
+"sell_price": 302844,
+"supply": 0
+},
+{
+"buy_price": 41934,
+"category": "Metals",
+"commodity": "Silver",
+"demand": 1,
+"sell_price": 40530,
+"supply": 151605
+}
+],
+"market_id": 4265167875
+},
+{
+"name": "Canis Stella Domum",
+"system_name": "Wredguia YN-S c17-5",
+"system_id64": 1457772303002,
+"system_x": -293.21875,
+"system_y": 12.46875,
+"system_z": -304.5625,
+"distance": 422.955105755179,
+"distance_to_arrival": 226945.127262,
+"type": "Coriolis Starport",
+"has_large_pad": true,
+"large_pads": 7,
+"medium_pads": 14,
+"small_pads": 8,
+"market_updated_at": "2026-10-05T17:20:50Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Autodock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Contacts"
+},
+{
+"name": "Universal Cartographics"
+},
+{
+"name": "Missions"
+},
+{
+"name": "Outfitting"
+},
+{
+"name": "Crew Lounge"
+},
+{
+"name": "Restock"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+},
+{
+"name": "Shipyard"
+},
+{
+"name": "Workshop"
+},
+{
+"name": "Missions Generated"
+},
+{
+"name": "Interstellar Factors Contact"
+},
+{
+"name": "Flight Controller"
+},
+{
+"name": "Station Operations"
+},
+{
+"name": "Powerplay"
+},
+{
+"name": "Search and Rescue"
+},
+{
+"name": "Station Menu"
+},
+{
+"name": "Shop"
+},
+{
+"name": "Livery"
+},
+{
+"name": "Social Space"
+},
+{
+"name": "Vista Genomics"
+},
+{
+"name": "System Colonisation"
+}
+],
+"market": [
+{
+"buy_price": 49834,
+"category": "Metals",
+"commodity": "Gold",
+"demand": 1,
+"sell_price": 49178,
+"supply": 25869
+},
+{
+"buy_price": 0,
+"category": "Minerals",
+"commodity": "Painite",
+"demand": 4284,
+"sell_price": 211587,
+"supply": 0
+},
+{
+"buy_price": 0,
+"category": "Metals",
+"commodity": "Platinum",
+"demand": 4798,
+"sell_price": 302844,
+"supply": 0
+},
+{
+"buy_price": 41594,
+"category": "Metals",
+"commodity": "Silver",
+"demand": 1,
+"sell_price": 40530,
+"supply": 41563
+},
+{
+"buy_price": 0,
+"category": "Chemicals",
+"commodity": "Tritium",
+"demand": 18985,
+"sell_price": 61894,
+"supply": 0
+}
+],
+"market_id": 4282994435
+},
+{
+"name": "Zahn City",
+"system_name": "Wregoe WL-L c21-31",
+"system_id64": 8605537407674,
+"system_x": 274.375,
+"system_y": -24.5625,
+"system_z": -127.25,
+"distance": 303.442778017949,
+"distance_to_arrival": 440.438532,
+"type": "Ocellus Starport",
+"has_large_pad": true,
+"large_pads": 4,
+"medium_pads": 9,
+"small_pads": 8,
+"market_updated_at": "2026-10-07T01:59:42Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Autodock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Contacts"
+},
+{
+"name": "Universal Cartographics"
+},
+{
+"name": "Missions"
+},
+{
+"name": "Outfitting"
+},
+{
+"name": "Crew Lounge"
+},
+{
+"name": "Restock"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+},
+{
+"name": "Shipyard"
+},
+{
+"name": "Workshop"
+},
+{
+"name": "Missions Generated"
+},
+{
+"name": "Interstellar Factors Contact"
+},
+{
+"name": "Flight Controller"
+},
+{
+"name": "Station Operations"
+},
+{
+"name": "Powerplay"
+},
+{
+"name": "Search and Rescue"
+},
+{
+"name": "Station Menu"
+},
+{
+"name": "Shop"
+},
+{
+"name": "Livery"
+},
+{
+"name": "Social Space"
+},
+{
+"name": "Vista Genomics"
+},
+{
+"name": "System Colonisation"
+}
+],
+"market": [
+{
+"buy_price": 0,
+"category": "Metals",
+"commodity": "Gold",
+"demand": 45860,
+"sell_price": 56526,
+"supply": 0
+},
+{
+"buy_price": 0,
+"category": "Minerals",
+"commodity": "Painite",
+"demand": 29902,
+"sell_price": 211587,
+"supply": 0
+},
+{
+"buy_price": 0,
+"category": "Metals",
+"commodity": "Platinum",
+"demand": 150647,
+"sell_price": 302844,
+"supply": 0
+},
+{
+"buy_price": 0,
+"category": "Metals",
+"commodity": "Silver",
+"demand": 432154,
+"sell_price": 49426,
+"supply": 0
+},
+{
+"buy_price": 58138,
+"category": "Chemicals",
+"commodity": "Tritium",
+"demand": 1,
+"sell_price": 56943,
+"supply": 1689
+}
+],
+"market_id": 4315698947
+}
+]
+}

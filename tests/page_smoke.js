@@ -1275,6 +1275,51 @@ const settle = async maxMs => {
     console.log(goodCG ? "OK" : "FAIL", "| cargo |", goodCG ? "the tile's tritium (and without), the ship's Avg, the carrier's marks, Recount's lines" :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
   }
+  // The Sell / Buy lookup: a line's Sell asks the server (stubbed here: the scratch server has no Spansh) with that
+  // line's commodity, tons and hold; a row opens on a click; Closest and the carriers box ask again
+  {
+    const w = dom.window, d = w.document, before = errors.length;
+    w.eval(`window.__asked = []; window.__realApi = apiJson;
+      apiJson = async (u, o) => {
+        if (!String(u).startsWith("api/cargo/lookup")) return __realApi(u, o);
+        __asked.push(String(u));
+        return {commodity: "Platinum", mode: "sell", tons: 64, from: "ship", where: "Sol", avg: 45210, sort: "price", within: 500,
+                age: 14, carriers: false, pad: "L", pad_known: true, count: 2, rows: [
+          {station: "Jung Base", system: "HIP 11402", id64: "123", distance: 341.2, jumps: 7, ls: 46085, far: true, type: "Planetary Outpost",
+           carrier: false, pad: "L", price: 302844, qty: 17850, value: 19382016, profit: 16488576, age_s: 400000, services: ["Market"],
+           uc: false, vista: false, also: [{name: "Gold", price: 50000, demand: 10, tons: 10}]},
+          {station: "Zahn City", system: "Wregoe WL-L c21-31", id64: "456", distance: 303.4, jumps: 7, ls: 440, far: false, type: "Ocellus Starport",
+           carrier: false, pad: "L", price: 302844, qty: 150647, value: 19382016, profit: 16488576, age_s: 30000,
+           services: ["Market", "Universal Cartographics", "Vista Genomics"], uc: true, vista: true, also: []}]};
+      };`);
+    d.querySelector('#cargoList tr[data-from="ship"] [data-look="sell"]').click();
+    await sleep(50);
+    const got = {};
+    const look = d.getElementById("cargoLook");
+    got.head = (look.querySelector(".lookhead") || {}).textContent;
+    got.rows = look.querySelectorAll("tr.lookrow").length;
+    got.far = /⚠ far from the star/.test(look.textContent);
+    got.sel = !!d.querySelector('#cargoList tr.sel[data-cid="platinum"]');
+    look.querySelectorAll("tr.lookrow")[1].click();
+    got.detail = (look.querySelector("tr.lookdetail") || {}).textContent || "";
+    look.querySelector('[data-lk="near"]').click(); await sleep(50);
+    const box = look.querySelector('[data-lk="carriers"]'); box.checked = true; box.dispatchEvent(new w.Event("change", {bubbles: true})); await sleep(50);
+    got.asked = w.eval("__asked.slice()");
+    look.querySelector('[data-lk="close"]').click();
+    got.closed = look.hidden;
+    w.eval("apiJson = __realApi");
+    const a = got.asked.map(u => new URLSearchParams(u.split("?")[1]));
+    const bad = [];
+    if (!/^Sell 64 t Platinum · you paid Avg 45,210 cr\/t/.test(got.head || "") || got.rows !== 2 || !got.far || !got.sel) bad.push("answer");
+    if (!/sell your exploration data and samples here too/.test(got.detail) || !/Plot route here/.test(got.detail)) bad.push("row");
+    if (a.length !== 3 || a[0].get("commodity") !== "platinum" || a[0].get("tons") !== "64" || a[0].get("from") !== "ship" ||
+        a[1].get("sort") !== "near" || a[2].get("carriers") !== "1") bad.push("asked");
+    if (!got.closed) bad.push("close");
+    const goodLK = !bad.length && errors.length === before;
+    allOk = allOk && goodLK;
+    console.log(goodLK ? "OK" : "FAIL", "| cargo lookup |", goodLK ? "Sell asks for the line, the answer and an opened row, Closest and carriers ask again" :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+  }
   // G2.2, F48, F64: a bad server copy (a list that is not a list, a null object, a number for 'saved') does not stop
   // the page: a fresh browser still starts polling
   {

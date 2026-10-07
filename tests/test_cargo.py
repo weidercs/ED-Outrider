@@ -292,5 +292,88 @@ class CargoState(unittest.TestCase):
             self.assertEqual(self.state.cargo_recount(bad)[1], 400, bad)
 
 
+class Lookup(unittest.TestCase):
+    """The Sell / Buy lookup: Spansh's station search (outrider.cargo.market_query / market_rows, State.cargo_lookup)."""
+
+    def test_query(self):
+        ref = {"x": 1, "y": 2, "z": 3}
+        q = cargo.market_query("Platinum", "sell", 64, ref, within=500, age_days=14, now=1791000000, pad="L")
+        f = q["filters"]
+        self.assertEqual(f["market"], [{"name": "Platinum", "demand": {"value": [64, 999999999], "comparison": "<=>"}}])
+        self.assertNotIn(cargo.CARRIER_TYPE, f["type"]["value"])   # fleet carriers left out
+        self.assertEqual(f["has_large_pad"], {"value": True})
+        self.assertEqual(f["market_updated_at"]["value"][0], "2026-09-19T04:00:00Z")   # 14 days before
+        self.assertEqual(f["distance"], {"min": "0", "max": "500"})
+        self.assertEqual(q["sort"], [{"market_sell_price": [{"name": "Platinum", "direction": "desc"}]},
+                                     {"distance": {"direction": "asc"}}])   # the same price nearer first
+        self.assertEqual(q["reference_coords"], ref)
+        q = cargo.market_query("Tritium", "buy", 500, ref, pad="M", carriers=True, sort="near")
+        self.assertEqual(list(q["filters"]["market"][0]), ["name", "supply"])
+        self.assertNotIn("type", q["filters"])
+        self.assertIn("medium_pads", q["filters"])
+        self.assertEqual(q["sort"], [{"distance": {"direction": "asc"}}])
+        self.assertEqual(cargo.market_query("Gold", "buy", 1, ref)["sort"][0],
+                         {"market_buy_price": [{"name": "Gold", "direction": "asc"}]})
+
+    def test_rows_from_a_real_answer(self):
+        with open(os.path.join(os.path.dirname(__file__), "fixtures", "spansh_market.json"), encoding="utf-8") as f:
+            answer = json.load(f)
+        rows = cargo.market_rows(answer["results"], "Platinum", "sell", 64, holding=[("Gold", 10), ("Platinum", 64)],
+                                 avg=45210, laden=50, now=1791400000)
+        self.assertEqual([r["carrier"] for r in rows], [True, True, False, False, False])
+        jung = rows[2]
+        self.assertEqual((jung["station"], jung["system"], jung["price"], jung["far"], jung["jumps"]),
+                         ("Jung Base", "HIP 11402", 302844, True, 7))
+        self.assertEqual(jung["profit"], (302844 - 45210) * 64)
+        self.assertEqual(jung["value"], 302844 * 64)
+        self.assertEqual([a["name"] for a in jung["also"]], ["Gold"])   # what else it buys from your hold
+        self.assertTrue(rows[4]["uc"])
+        self.assertEqual(rows[4]["services"][:2], ["Refuel", "Repair"])   # the ones that matter, not every desk
+        self.assertNotIn("Dock", rows[4]["services"])
+        self.assertGreater(jung["age_s"], 0)
+
+    def setUp(self):
+        self.db = ed_outrider.open_db(":memory:")
+        self.addCleanup(self.db.close)
+        self.j = ed_outrider.Journals(self.db)
+        with open(os.path.join(os.path.dirname(__file__), "fixtures", "spansh_market.json"), encoding="utf-8") as f:
+            answer = json.load(f)
+        self.bodies = []
+
+        async def market_search(body):
+            self.bodies.append(body)
+            return answer
+
+        async def commodity_names():
+            return ["Gold", "Meta-Alloys", "Platinum", "Silver", "Tritium"]
+        self.sp = types.SimpleNamespace(cached=lambda i: (None, None), market_search=market_search,
+                                        commodity_names=commodity_names)
+        self.state = ed_outrider.State(self.db, self.j, self.sp, 25)
+
+    def look(self, **q):
+        import asyncio
+        return asyncio.run(self.state.cargo_lookup({k: str(v) for k, v in q.items()}))
+
+    def test_state_lookup(self):
+        self.assertEqual(self.look(commodity="platinum", mode="steal")[1], 400)
+        self.assertEqual(self.look(commodity="platinum", mode="sell", within=123)[1], 400)
+        self.assertEqual(self.look(commodity="platinum", mode="sell")[1], 409)   # no position yet
+        self.j.pos = {"id64": 10477373803, "name": "Sol", "x": 0, "y": 0, "z": 0}
+        self.assertEqual(self.look(commodity="unobtainium", mode="sell")[1], 404)
+        self.j.ship = {"name": "Sample", "type": "explorer_nx", "cargo_capacity": 64}
+        self.j.ship_cargo = cargo.new_ship()
+        cargo.ship_apply(self.j.ship_cargo, ev("2026-10-07T09:00:00Z", "MarketBuy", Type="platinum", Count=64, BuyPrice=45210))
+        out, status = self.look(commodity="platinum", mode="sell", tons=64, **{"from": "ship"})
+        self.assertEqual(status, 200)
+        self.assertEqual((out["commodity"], out["pad"], out["avg"], len(out["rows"])), ("Platinum", "L", 45210, 5))
+        self.assertEqual(self.bodies[-1]["filters"]["has_large_pad"], {"value": True})   # the ship needs a large pad
+        self.assertEqual(out["rows"][2]["profit"], (302844 - 45210) * 64)
+        # a journal name matched to Spansh's spelling, letters only; Spansh's list is fetched once
+        self.j.commodity_names["metaalloys"] = "Meta Alloys"
+        out, status = self.look(commodity="metaalloys", mode="buy", pad="any", carriers=1)
+        self.assertEqual((status, out["commodity"], out["pad"]), (200, "Meta-Alloys", None))
+        self.assertNotIn("type", self.bodies[-1]["filters"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -422,3 +422,93 @@ def jumps_estimate(ly, laden_range):
     if not ly or not laden_range or laden_range <= 0:
         return None
     return max(1, math.ceil(ly / laden_range))
+
+
+# ---- the Sell / Buy lookup (Spansh's station search, read only) ----
+
+# Spansh's station types without the fleet carriers ("Drake-Class Carrier"): stale carrier orders from years ago top
+# every price list otherwise. Checked against /api/stations/field_values/type (2026-10-07).
+CARRIER_TYPE = "Drake-Class Carrier"
+STATION_TYPES = ("Asteroid base", "Coriolis Starport", "Dodec Starport", "Mega ship", "Ocellus Starport",
+                 "Orbis Starport", "Outpost", "Planetary Construction Depot", "Planetary Outpost", "Planetary Port",
+                 "Settlement", "Space Construction Depot", "Surface Settlement")
+LOOKUP_WITHIN = (50, 100, 250, 500, 1000, 2500, 10000)   # ly: the page's choices (best price needs a limit)
+FAR_LS = 5000             # a station further than this from the star is marked (a long supercruise)
+LOOKUP_SIZE = 20
+# The services a row lists (Spansh lists every desk and screen): the ones that matter between hauls, in this order
+SERVICES_SHOWN = ("Refuel", "Repair", "Restock", "Universal Cartographics", "Vista Genomics", "Shipyard", "Outfitting",
+                  "Interstellar Factors Contact", "Black Market")
+
+
+def market_query(name, mode, tons, ref, within=500, age_days=14, now=None, pad=None, carriers=False, sort="price"):
+    """Spansh's /api/stations/search body: stations that take all `tons` of `name` (mode "sell": demand) or have that
+    much (mode "buy": supply), within `within` ly of ref {x, y, z}, data newer than age_days, best price or nearest
+    first. pad "L" or "M" keeps the stations your ship can land at."""
+    now = time.time() if now is None else now
+    qty = "demand" if mode == "sell" else "supply"
+    filters = {"market": [{"name": name, qty: {"value": [int(tons), 999999999], "comparison": "<=>"}}],
+               "market_updated_at": {"value": [_iso(now - age_days * 86400), _iso(now + 86400)], "comparison": "<=>"},
+               "distance": {"min": "0", "max": str(within)}}
+    if not carriers:
+        filters["type"] = {"value": list(STATION_TYPES)}
+    if pad == LARGE:
+        filters["has_large_pad"] = {"value": True}
+    elif pad == MEDIUM:
+        filters["medium_pads"] = {"value": [1, 9999], "comparison": "<=>"}
+    near = {"distance": {"direction": "asc"}}
+    if sort == "near":
+        order = [near]
+    elif mode == "sell":   # the same price nearer first
+        order = [{"market_sell_price": [{"name": name, "direction": "desc"}]}, near]
+    else:
+        order = [{"market_buy_price": [{"name": name, "direction": "asc"}]}, near]
+    return {"filters": filters, "sort": order, "reference_coords": {"x": ref["x"], "y": ref["y"], "z": ref["z"]},
+            "size": LOOKUP_SIZE, "page": 0}
+
+
+def _when(v):
+    """Spansh's market time: an ISO string or epoch seconds -> epoch seconds (None if neither)."""
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        return float(v)
+    if isinstance(v, str) and v:
+        s = _secs(v.replace(" ", "T"))
+        return float(s) if s else None
+    return None
+
+
+def market_rows(results, name, mode, tons, holding=(), avg=None, laden=None, now=None):
+    """Spansh's stations as the lookup's rows. holding: [(name, tons)] of what you carry (the station's other buys
+    from it, when selling); avg: what you paid per ton (the profit); laden: your range now (a jump count)."""
+    now = time.time() if now is None else now
+    rows = []
+    for r in results or []:
+        if not isinstance(r, dict):
+            continue
+        market = {m.get("commodity"): m for m in r.get("market") or [] if isinstance(m, dict)}
+        m = market.get(name)
+        if not m:
+            continue
+        price = m.get("sell_price" if mode == "sell" else "buy_price") or 0
+        qty = m.get("demand" if mode == "sell" else "supply") or 0
+        offered = {s.get("name") for s in r.get("services") or [] if isinstance(s, dict)}
+        services = [s for s in SERVICES_SHOWN if s in offered]
+        updated = _when(r.get("market_updated_at"))
+        also = []
+        if mode == "sell":
+            for other, held in holding:
+                o = market.get(other)
+                if other != name and o and (o.get("demand") or 0) > 0 and (o.get("sell_price") or 0) > 0:
+                    also.append({"name": other, "price": o["sell_price"], "demand": o["demand"], "tons": held})
+            also.sort(key=lambda a: -a["price"] * a["tons"])
+        ly = round(r.get("distance") or 0, 1)
+        ls = round(r.get("distance_to_arrival") or 0)
+        rows.append({"station": r.get("name"), "system": r.get("system_name"), "id64": str(r.get("system_id64") or ""),
+                     "distance": ly, "jumps": jumps_estimate(ly, laden), "ls": ls, "far": ls > FAR_LS,
+                     "type": r.get("type"), "carrier": r.get("type") == CARRIER_TYPE,
+                     "pad": LARGE if r.get("has_large_pad") or r.get("large_pads") else MEDIUM if r.get("medium_pads") else SMALL,
+                     "price": price, "qty": qty, "value": price * tons,
+                     "profit": round((price - avg) * tons) if mode == "sell" and avg else None,
+                     "age_s": round(now - updated) if updated else None, "services": services,
+                     "uc": "Universal Cartographics" in services, "vista": "Vista Genomics" in services,
+                     "also": also[:5], "x": r.get("system_x"), "y": r.get("system_y"), "z": r.get("system_z")})
+    return rows

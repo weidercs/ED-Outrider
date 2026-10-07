@@ -3599,7 +3599,7 @@ function renderCargo(cg) {
   h += s.lines.length ? `<table class="cargoTable"><tbody>` + s.lines.map(x =>
     `<tr data-cid="${esc(x.id)}" data-from="ship"><td>${esc(x.name)}${x.avg_text ? ` <span class="unk" title="what you paid: the game's method, the average over your purchases; a sale or transfer leaves it">· ${esc(x.avg_text)}</span>` : ""}` +
     `${x.stolen ? ` <span class="noscoop">${x.stolen} stolen</span>` : ""}${x.mission ? ` <span class="unk">· ${x.mission} for a mission</span>` : ""}</td>` +
-    `<td class="num">${tons(x.count)}</td><td class="num cact"></td></tr>`).join("") + `</tbody></table>` : `<div class="unk">Nothing in the hold.</div>`;
+    `<td class="num">${tons(x.count)}</td><td class="num cact">${LOOK_BTNS}</td></tr>`).join("") + `</tbody></table>` : `<div class="unk">Nothing in the hold.</div>`;
   if (c) {
     h += `<div class="csub">Carrier${c.name ? ` · ${esc(c.name)}` : ""} · ${cargoSyncHtml(c)}</div>` +
       `<div class="unk clegend">${Object.values(CARGO_MARK).map(m => `<span class="st ${m[1]}">${m[0]}</span> ${m[1] === "c" ? "confirmed (sell order)" : m[1] === "l" ? "last seen" : "entered by you"}`).join(" · ")}` +
@@ -3608,11 +3608,16 @@ function renderCargo(cg) {
     h += c.lines.length ? `<table class="cargoTable"><tbody>` + c.lines.map(x => {
       const mark = CARGO_MARK[x.state] || CARGO_MARK.seen;
       return `<tr data-cid="${esc(x.id)}" data-from="carrier"><td><span class="st ${mark[1]}" title="${esc(cargoLineTitle(x))}">${mark[0]}</span> ${esc(x.name)}</td>` +
-        `<td class="num">${tons(x.count)}</td><td class="num cact"></td></tr>`;
+        `<td class="num">${tons(x.count)}</td><td class="num cact">${LOOK_BTNS}</td></tr>`;
     }).join("") + `</tbody></table>` : `<div class="unk">Nothing tracked at your carrier yet.</div>`;
   }
+  h += `<div class="csub">Buy something else</div><div class="cfind"><input type="text" id="cargoFindName" placeholder="commodity" maxlength="80" spellcheck="false">` +
+    `<input type="number" id="cargoFindTons" placeholder="tons" min="1" max="100000" step="1"><button type="button" class="mini" id="cargoFind">Find</button></div>`;
   el.innerHTML = h;
+  markLookRow();
 }
+const LOOK_BTNS = `<button type="button" class="mini" data-look="sell" title="where to sell it: Spansh's stations that take all of it">Sell</button>` +
+  `<button type="button" class="mini" data-look="buy" title="where to buy more: Spansh's stations that have this much">Buy</button>`;
 // Recount: the lines Outrider cannot confirm (last seen, entered), and any you add
 function openRecount() {
   const c = cargoData && cargoData.carrier;
@@ -3662,6 +3667,120 @@ document.getElementById("recountSave").onclick = async () => {
 };
 document.getElementById("cargoList").addEventListener("click", e => {
   if (e.target.closest("#recountBtn")) return openRecount();
+  const b = e.target.closest("[data-look]");
+  if (b) {
+    const tr = b.closest("tr"), from = tr.dataset.from, cg = cargoData || {};
+    const line = ((from === "ship" ? cg.ship : cg.carrier) || {lines: []}).lines.find(x => x.id === tr.dataset.cid);
+    if (!line) return;
+    return startLook({commodity: line.id, label: line.name, mode: b.dataset.look, tons: line.count, from, key: `${from}:${line.id}`});
+  }
+  if (e.target.closest("#cargoFind")) {
+    const name = document.getElementById("cargoFindName").value.trim(), n = parseInt(document.getElementById("cargoFindTons").value, 10) || 1;
+    if (!name) return document.getElementById("cargoFindName").focus();
+    startLook({commodity: name, label: name, mode: "buy", tons: n, from: "here", key: null});
+  }
+});
+document.getElementById("cargoList").addEventListener("keydown", e => {
+  if (e.key === "Enter" && e.target.closest(".cfind input")) { e.preventDefault(); document.getElementById("cargoFind").click(); }
+});
+
+// ---- The Sell / Buy lookup: Spansh's stations for one commodity (GET /api/cargo/lookup, read only) ----
+// LK: what is asked (commodity, label, mode, tons, from: ship | carrier | here, key: the line it came from) and how
+// (sort, within, age, carriers); answer: the server's; open: the station row opened
+const LK = {q: null, sort: "price", within: 500, age: 14, carriers: false, answer: null, open: null, busy: false};
+function startLook(q) { LK.q = q; LK.open = null; loadLook(); }
+async function loadLook() {
+  const q = LK.q, el = document.getElementById("cargoLook");
+  if (!q) { el.hidden = true; return; }
+  el.hidden = false;
+  LK.busy = true; renderLook();
+  markLookRow();
+  const g = newRequest("look");
+  const params = new URLSearchParams({commodity: q.commodity, mode: q.mode, tons: q.tons, from: q.from, sort: LK.sort,
+                                      within: LK.within, age: LK.age, carriers: LK.carriers ? "1" : "0", pad: "auto"});
+  let r;
+  try { r = await apiJson(`api/cargo/lookup?${params}`); } catch (err) { r = {error: err.message}; }
+  if (!isNewest("look", g)) return;
+  LK.busy = false; LK.answer = r;
+  renderLook();
+}
+function markLookRow() {
+  document.querySelectorAll("#cargoList tr.sel").forEach(t => t.classList.remove("sel"));
+  const k = LK.q && LK.q.key;
+  if (k) { const [from, id] = k.split(":"); const tr = document.querySelector(`#cargoList tr[data-from="${from}"][data-cid="${CSS.escape(id)}"]`); if (tr) tr.classList.add("sel"); }
+}
+const ageText = s => s == null ? "" : s < 3600 ? `${Math.max(1, Math.round(s / 60))} min old` : s < 172800 ? `${Math.round(s / 3600)} h old` : `${Math.round(s / 86400)} d old`;
+const signedCr = n => (n < 0 ? "−" : "+") + credits(Math.abs(n));
+function renderLook() {
+  const el = document.getElementById("cargoLook"), q = LK.q, a = LK.answer;
+  if (!q) { el.hidden = true; el.innerHTML = ""; return; }
+  const sell = q.mode === "sell";
+  const avg = a && !a.error && a.avg;
+  let h = `<h3 class="subhead lookhead">${sell ? "Sell" : "Buy"} ${tons(q.tons)} ${esc(a && a.commodity || q.label)}` +
+    (avg ? ` <span class="unk">· you paid ${q.tons ? "Avg " : ""}${Math.round(avg).toLocaleString()} cr/t</span>` : "") +
+    `<button type="button" class="mini lookclose" data-lk="close" title="close the lookup">✕</button></h3>`;
+  h += `<div class="lookbar"><span class="seg2"><button type="button" class="mini${LK.sort === "price" ? " on" : ""}" data-lk="price">Best price</button>` +
+    `<button type="button" class="mini${LK.sort === "near" ? " on" : ""}" data-lk="near">Closest</button></span>` +
+    `<label>within <select data-lk="within">${[50, 100, 250, 500, 1000, 2500, 10000].map(v => `<option value="${v}"${v === LK.within ? " selected" : ""}>${v.toLocaleString()} ly</option>`).join("")}</select></label>` +
+    `<label>data under <select data-lk="age">${[1, 3, 7, 14, 30, 90].map(v => `<option value="${v}"${v === LK.age ? " selected" : ""}>${v} d</option>`).join("")}</select></label>` +
+    `<label title="fleet carriers' orders are often years old: left out unless ticked"><input type="checkbox" data-lk="carriers"${LK.carriers ? " checked" : ""}> carriers</label>` +
+    (a && !a.error ? `<span class="unk">${a.pad === "L" ? "large pad" : a.pad === "M" ? "medium pad" : a.pad_known ? "" : "any pad (your ship's size is not known)"}` +
+      ` · ${sell ? `where they take all ${tons(q.tons)}` : `where they have ${tons(q.tons)}`}</span>` : "") + `</div>`;
+  if (LK.busy) h += `<div class="unk">asking Spansh…</div>`;
+  else if (!a || a.error) h += `<div class="noscoop">${esc(a ? a.error : "")}</div>`;
+  else if (!a.rows.length) h += `<div class="unk">No station within ${a.within.toLocaleString()} ly ${sell ? "takes" : "has"} ${tons(q.tons)} with data under ${a.age} days. Try further, or older data.</div>`;
+  else {
+    h += `<table class="lookTable"><thead><tr><th>Station</th><th class="num">Distance</th><th class="num">From star</th><th class="num">Price</th>` +
+      `<th class="num">${sell ? "Demand" : "Supply"}</th><th class="num">${sell ? `Your ${tons(q.tons)}` : "Cost"}</th><th class="num">Data</th></tr></thead><tbody>` +
+      a.rows.map((r, n) => {
+        const open = LK.open === n;
+        let row = `<tr class="lookrow${open ? " open" : ""}" data-n="${n}"><td><span class="tw">${open ? "▾" : "▸"}</span> <b>${esc(r.station)}</b>` +
+          `${r.carrier ? ` <span class="unk">(carrier)</span>` : ""}<div class="unk">${esc(r.system)}</div></td>` +
+          `<td class="num">${r.distance.toLocaleString()} ly${r.jumps ? `<div class="unk">≈ ${r.jumps} jump${r.jumps === 1 ? "" : "s"}</div>` : ""}</td>` +
+          `<td class="num${r.far ? " warnc" : ""}">${r.ls.toLocaleString()} ls${r.far ? `<div class="small">⚠ far from the star</div>` : ""}</td>` +
+          `<td class="num">${r.price.toLocaleString()}<div class="unk">cr/t</div></td><td class="num">${r.qty.toLocaleString()}</td>` +
+          `<td class="num"><b>${credits(r.value)} cr</b>${r.profit != null ? `<div class="small ${r.profit >= 0 ? "good" : "warnc"}">profit ${signedCr(r.profit)}</div>` : ""}</td>` +
+          `<td class="num unk">${ageText(r.age_s)}</td></tr>`;
+        if (open) row += `<tr class="lookdetail"><td colspan="7">` +
+          (sell ? `<div class="dline"><span class="dk">Also buys from your hold</span>${r.also.length ? r.also.map(x => `${esc(x.name)} ${x.price.toLocaleString()} cr/t`).join(" · ") : `<span class="unk">nothing else you carry</span>`}</div>` : "") +
+          `<div class="dline"><span class="dk">Services</span>${r.services.length ? esc(r.services.join(" · ")) : `<span class="unk">not reported</span>`}` +
+          `${r.uc || r.vista ? ` <span class="good">· sell your ${r.uc && r.vista ? "exploration data and samples" : r.uc ? "exploration data" : "samples"} here too</span>` : ""}</div>` +
+          `<div class="dline"><span class="dk">Pads</span>${r.pad === "L" ? "large" : r.pad === "M" ? "medium" : "small only"} · ${esc(r.type || "")}</div>` +
+          `<div class="lookacts"><button type="button" class="mini" data-lk="copy" data-name="${esc(r.system)}">Copy system</button>` +
+          (r.id64 ? `<button type="button" class="mini" data-lk="bm" data-id="${esc(r.id64)}" data-name="${esc(r.system)}">☆ Bookmark</button>` : "") +
+          `<button type="button" class="mini primary" data-lk="plot" data-name="${esc(r.system)}">Plot route here</button></div></td></tr>`;
+        return row;
+      }).join("") + `</tbody></table>`;
+    h += `<div class="hint">Spansh's stations, measured from ${q.from === "carrier" ? "your carrier" : "you"}${a.where ? ` (${esc(a.where)})` : ""}. ` +
+      `Prices and ${sell ? "demand" : "supply"} as players last reported them.</div>`;
+  }
+  el.innerHTML = h;
+}
+document.getElementById("cargoLook").addEventListener("click", e => {
+  const b = e.target.closest("[data-lk]");
+  if (b) {
+    const k = b.dataset.lk;
+    if (k === "close") { LK.q = null; LK.answer = null; renderLook(); return markLookRow(); }
+    if (k === "price" || k === "near") { if (LK.sort !== k) { LK.sort = k; LK.open = null; loadLook(); } return; }
+    if (k === "copy") return copyText(b.dataset.name);
+    if (k === "bm") return openBookmark(b.dataset.id, b.dataset.name);
+    if (k === "plot") {
+      document.getElementById("hwyTo").value = b.dataset.name;
+      const v = document.querySelector('[data-view="hwy"]'); if (v) v.click();
+      return toast(`Plot Route: to ${b.dataset.name}`);
+    }
+    return;
+  }
+  const tr = e.target.closest("tr.lookrow");
+  if (tr) { const n = Number(tr.dataset.n); LK.open = LK.open === n ? null : n; renderLook(); }
+});
+document.getElementById("cargoLook").addEventListener("change", e => {
+  const k = e.target.dataset && e.target.dataset.lk;
+  if (k === "within") LK.within = Number(e.target.value);
+  else if (k === "age") LK.age = Number(e.target.value);
+  else if (k === "carriers") LK.carriers = e.target.checked;
+  else return;
+  LK.open = null; loadLook();
 });
 
 // Mining sites: one row per body you mined in the SRV (saved rig spots and unmarked sites, or tons in the journals)

@@ -225,6 +225,9 @@ SPANSH_SEARCH = "https://spansh.co.uk/api/systems/search"
 SPANSH_DUMP = "https://spansh.co.uk/api/dump/{id64}"
 SPANSH_BODY_SEARCH = "https://spansh.co.uk/api/bodies/search"
 SPANSH_STATION_SEARCH = "https://spansh.co.uk/api/stations/search"
+# Spansh's commodity names (its min_max keys): the Sell / Buy lookup asks by them; cached a week (meta spansh_commodities)
+SPANSH_COMMODITIES = "https://spansh.co.uk/api/stations/field_values/commodities"
+COMMODITIES_MAX_AGE_S = 7 * 86400
 # The Neutron Highway's plotters: each answers {job} and the route is fetched from the results URL once done
 SPANSH_ROUTE = "https://spansh.co.uk/api/route"                  # the neutron plotter: from, to, range, efficiency
 SPANSH_GENERIC_ROUTE = "https://spansh.co.uk/api/generic/route"  # the exact plotter: the ship's figures, fuel too
@@ -4578,6 +4581,31 @@ class Spansh:
                  "x": x.get("system_x"), "y": x.get("system_y"), "z": x.get("system_z")}
                 for x in d.get("results") or []]
 
+    async def market_search(self, body):
+        """The Sell / Buy lookup: one page of Spansh's station search (outrider.cargo.market_query's body)."""
+        if self.session is None:
+            raise ClientError("no network session")
+        async with self.sem_fast:
+            async with self.session.post(SPANSH_STATION_SEARCH, json=body) as r:
+                r.raise_for_status()
+                d = await r.json()
+        if not isinstance(d, dict):
+            raise ClientError("Spansh's answer is not a station list")
+        return d
+
+    async def commodity_names(self):
+        """Spansh's commodity names, as it spells them (the keys of its min_max)."""
+        if self.session is None:
+            raise ClientError("no network session")
+        async with self.sem_fast:
+            async with self.session.get(SPANSH_COMMODITIES) as r:
+                r.raise_for_status()
+                d = await r.json()
+        names = sorted(k for k in (d.get("min_max") if isinstance(d, dict) else None) or {} if isinstance(k, str) and k)
+        if not names:
+            raise ClientError("Spansh sent no commodity names")
+        return names
+
     async def plot(self, url, params, poll=None, timeout=None, method="GET"):
         """A Spansh route job (the neutron or the exact plotter): submit it, then ask for its result every `poll` s
         (HIGHWAY_POLL_S) until it is done or `timeout` s (HIGHWAY_PLOT_TIMEOUT) pass. One plot at a time. The result
@@ -6467,6 +6495,79 @@ class State:
                           "gap": reported - total if reported is not None else None, "market_ts": st["market_ts"],
                           "aboard": bool((j.docked or {}).get("market_id") == c.get("id") and c.get("id") is not None)}
         return out
+
+    async def commodity_list(self):
+        """Spansh's commodity names by their letters ({norm: name}), fetched once a week; the last copy if Spansh
+        cannot be reached (None without one)."""
+        sc = self.spansh_commodities or {}
+        if sc.get("norm") and time.time() - (sc.get("ts") or 0) < COMMODITIES_MAX_AGE_S:
+            return sc["norm"]
+        try:
+            names = await self.spansh.commodity_names()
+        except (ClientError, asyncio.TimeoutError, ValueError) as e:
+            print(f"Spansh's commodity names could not be read: {e}", file=sys.stderr)
+            return sc.get("norm")
+        self.spansh_commodities = {"ts": time.time(), "norm": {outrider.cargo.norm(n): n for n in names}}
+        meta_set(self.db, "spansh_commodities", self.spansh_commodities)
+        self.db.commit()
+        return self.spansh_commodities["norm"]
+
+    async def cargo_lookup(self, q):
+        """GET /api/cargo/lookup: where to sell (or buy) tons of a commodity, from Spansh's station search (read only).
+
+        q: commodity (a journal id or a name), mode sell | buy, tons, from ship | carrier | here (where the distances
+        are measured from, and whose hold the profit and "also buys" read), sort price | near, within (ly), age (days),
+        carriers (1: fleet carriers too), pad auto | L | M | any. Returns ({...rows}, 200) or ({error}, status)."""
+        mode, src = q.get("mode"), q.get("from") or "here"
+        if mode not in ("sell", "buy") or src not in ("ship", "carrier", "here"):
+            return {"error": "expected mode sell or buy, from ship, carrier or here"}, 400
+        text = str(q.get("commodity") or "").strip()[:80]
+        try:
+            tons = int(q.get("tons") or 1)
+            within = int(q.get("within") or 500)
+            age = int(q.get("age") or 14)
+        except ValueError:
+            return {"error": "tons, within and age are whole numbers"}, 400
+        if not text or not 1 <= tons <= 100000 or within not in outrider.cargo.LOOKUP_WITHIN or not 1 <= age <= 365:
+            return {"error": f"a commodity, 1 to 100,000 t, within one of {outrider.cargo.LOOKUP_WITHIN} ly, 1 to 365 days"}, 400
+        names = await self.commodity_list()
+        if not names:
+            return {"error": "Spansh's commodity list cannot be read just now: try again later"}, 502
+        i = outrider.cargo.cid(text)
+        name = names.get(outrider.cargo.norm(self.commodity_name(i))) or names.get(outrider.cargo.norm(text))
+        if not name:
+            return {"error": f"Spansh has no market data for {text!r}"}, 404
+        c = self.carrier_summary() or {}
+        if src == "carrier":
+            ref, where = (c if c.get("x") is not None else None), c.get("system")
+        else:
+            ref, where = self.journals.pos, (self.journals.pos or {}).get("name")
+        if not ref or ref.get("x") is None:
+            return {"error": "your carrier's position is not known yet" if src == "carrier" else "your position is not known yet"}, 409
+        cg = self.cargo_summary()
+        ship = cg["ship"]
+        pad = q.get("pad") or "auto"
+        if pad == "auto":
+            pad = ship.get("pad")
+        elif pad not in (outrider.cargo.LARGE, outrider.cargo.MEDIUM):
+            pad = None
+        body = outrider.cargo.market_query(name, mode, tons, ref, within=within, age_days=age, pad=pad,
+                                           carriers=q.get("carriers") in ("1", "true"),
+                                           sort="near" if q.get("sort") == "near" else "price")
+        try:
+            d = await self.spansh.market_search(body)
+        except (ClientError, asyncio.TimeoutError, ValueError) as e:
+            return {"error": f"Spansh's station search failed: {e}"}, 502
+        lines = (cg["carrier"] or {}).get("lines", []) if src == "carrier" else ship["lines"]
+        holding = [(names.get(outrider.cargo.norm(x["name"])) or x["name"], x["count"]) for x in lines]
+        own = next((x for x in ship["lines"] if x["id"] == i), None) if src == "ship" else None
+        avg = own["avg"] if own and own.get("avg") else None
+        rows = outrider.cargo.market_rows(d.get("results"), name, mode, tons, holding=holding, avg=avg,
+                                          laden=self.range_now() or (self.journals.ship or {}).get("max_range"))
+        return {"commodity": name, "mode": mode, "tons": tons, "from": src, "where": where, "avg": avg,
+                "sort": "near" if q.get("sort") == "near" else "price", "within": within, "age": age,
+                "carriers": q.get("carriers") in ("1", "true"), "pad": pad, "pad_known": bool(ship.get("pad")),
+                "count": d.get("count"), "rows": rows}, 200
 
     def carrier_tritium(self):
         """The Carrier tile's tritium, only while tritium is on a sell order at your carrier (a confirmed line): the
@@ -11812,6 +11913,12 @@ def make_app(state, hosts=None):
         inv["cargo"] = state.cargo_summary()
         return web.json_response(inv)
 
+    async def cargo_lookup_view(request):
+        """GET /api/cargo/lookup?commodity=&mode=sell|buy&tons=&from=ship|carrier|here&sort=&within=&age=&carriers=&pad=:
+        Spansh's stations for it (State.cargo_lookup). Read only: nothing is stored but Spansh's name list."""
+        out, status = await state.cargo_lookup(dict(request.query))
+        return web.json_response(out, status=status)
+
     async def cargo_recount_view(request):
         """POST /api/cargo/recount {counts: {commodity: tons}}: your counts for your carrier's untracked lines."""
         body = await json_object(request)
@@ -11868,6 +11975,7 @@ def make_app(state, hosts=None):
     app.router.add_get("/api/log", log_view)
     app.router.add_get("/api/materials", materials_view)
     app.router.add_post("/api/cargo/recount", cargo_recount_view)
+    app.router.add_get("/api/cargo/lookup", cargo_lookup_view)
     app.router.add_post("/api/radius", radius_view)
     app.router.add_get("/api/say", say_view)
     app.router.add_post("/api/say/play", pc_only(say_play_view))

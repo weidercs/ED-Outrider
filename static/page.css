@@ -745,6 +745,18 @@ body.nowmode header, body.nowmode main { display: none; }
 .st { display: inline-block; width: 16px; text-align: center; cursor: help; }
 .st.c { color: var(--good); } .st.l { color: var(--warn); } .st.e { color: var(--info); }
 .clegend { margin-bottom: 4px; }
+.cargoTable .cact button { margin-left: 4px; } .cargoTable tr.sel td { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.cfind { display: flex; gap: 6px; align-items: center; } .cfind input { width: 12em; } .cfind input[type=number] { width: 6em; }
+.lookhead { display: flex; align-items: baseline; gap: 6px; } .lookhead .lookclose { margin-left: auto; }
+.lookbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 4px 0 8px; font-size: 13px; }
+.seg2 button { border-radius: 0; margin: 0; } .seg2 button:first-child { border-radius: 6px 0 0 6px; } .seg2 button:last-child { border-radius: 0 6px 6px 0; }
+.seg2 button.on { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.lookTable { width: 100%; font-size: 13px; } .lookTable td { vertical-align: top; } .lookTable td.num { white-space: nowrap; }
+.lookTable tr.lookrow { cursor: pointer; } .lookTable tr.lookrow.open td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.lookTable .tw { color: var(--accent); } .lookTable .small { font-size: 11px; }
+.lookTable tr.lookdetail td { background: color-mix(in srgb, var(--accent) 6%, transparent); padding: 6px 12px 10px 28px; white-space: normal; }
+.lookdetail .dline { margin: 3px 0; } .lookdetail .dk { display: inline-block; width: 170px; color: var(--muted); font-size: 12px; }
+.lookacts { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
 #recountDlg { width: min(560px, 94vw); } #recountRows { width: 100%; font-size: 13px; } #recountRows td { padding: 3px 6px; }
 #recountRows input.qn { width: 7em; text-align: right; } #recountRows input.rcname { width: 14em; text-align: left; }
 #matTables > div { flex: 1 1 440px; min-width: 0; }
