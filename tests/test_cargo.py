@@ -7,10 +7,13 @@ import json
 import os
 import shutil
 import tempfile
+import time
 import types
 import unittest
+import unittest.mock
+import asyncio
 
-from support import ed_outrider  # also puts the repository root on sys.path
+from support import _HwSession, ed_outrider, hwy_jump, hwy_ts  # also puts the repository root on sys.path
 import outrider.cargo as cargo  # noqa: E402
 
 CARRIER = 3700251648
@@ -373,6 +376,107 @@ class Lookup(unittest.TestCase):
         out, status = self.look(commodity="metaalloys", mode="buy", pad="any", carriers=1)
         self.assertEqual((status, out["commodity"], out["pad"]), (200, "Meta-Alloys", None))
         self.assertNotIn("type", self.bodies[-1]["filters"])
+
+
+def trade_answer():
+    with open(os.path.join(os.path.dirname(__file__), "fixtures", "spansh_trade.json"), encoding="utf-8") as f:
+        return json.load(f)
+
+
+class TradeRoute(unittest.TestCase):
+    """Spansh's trade planner as the survey slot's third type (outrider.cargo.trade_rows / trade_text, State
+    trade_start_plot, Journals.trade_progress). A real answer: tests/fixtures/spansh_trade.json (from Sol, 2026-10-07)."""
+    ts = hwy_ts
+    jump = hwy_jump
+
+    def setUp(self):
+        self.db = ed_outrider.open_db(":memory:")
+        self.addCleanup(self.db.close)
+        self.j = ed_outrider.Journals(self.db)
+        self.state = ed_outrider.State(self.db, self.j, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        self.now = time.time()
+        self.rows = cargo.trade_rows(trade_answer()["result"])
+
+    def moments(self):
+        return [(m["what"], m["text"]) for m in self.j.moments if m["kind"] == "trade"]
+
+    def market(self, s, name, stop, commodity):
+        self.j.line_source = f"Journal.test.log:{s}"
+        self.j.handle({"event": name, "timestamp": self.ts(s), "MarketID": stop["market_id"],
+                       "Type": cargo.norm(commodity), "Type_Localised": commodity, "Count": 400,
+                       "BuyPrice" if name == "MarketBuy" else "SellPrice": 100})
+
+    def test_rows(self):
+        r = self.rows
+        self.assertEqual([x["station"] for x in r], ["Abraham Lincoln", "Titus City", "Shimizu Hub", "Gareth Edwards Park"])
+        self.assertEqual((r[0]["buy"][0]["name"], r[0]["buy"][0]["amount"], r[0]["sell"]), ("Biowaste", 400, []))
+        self.assertEqual((r[1]["sell"][0]["name"], r[1]["buy"][0]["name"], r[1]["profit"]), ("Biowaste", "Silver", 15200))
+        self.assertEqual((r[3]["cumulative"], r[3]["buy"], round(r[3]["distance"], 1)), (14691200, [], 8.4))
+        self.assertEqual(cargo.trade_rows({"error": "x"}), [])
+        self.assertEqual(cargo.trade_text(r, 1, cargo.trade_left(r[1], {"sold": ["Biowaste"]})),
+                         "Dock at Titus City: buy 400 tonnes of Silver for Shimizu Hub.")
+
+    def test_progress(self):
+        """Docked at the start: buying the hop's goods says the next stop; arriving says what to sell and buy; the
+        trades made say the hop's profit; the last sale ends the route. Each once."""
+        r = self.rows
+        self.jump(-100, r[0]["id64"], r[0]["system"], 0)
+        self.state.riches_store(r, {"options": {}, "kind": "trade"})
+        self.market(-90, "MarketBuy", r[0], "Biowaste")
+        self.assertEqual(self.moments()[-1], ("done", "Next stop: Titus City in Yin Sector GW-W c1-26, 27 light years."))
+        self.jump(-80, r[1]["id64"], r[1]["system"], 27)
+        self.assertEqual(self.moments()[-1], ("next", "Dock at Titus City: sell 400 tonnes of Biowaste, then buy 400 tonnes of Silver for Shimizu Hub."))
+        s = self.state.survey_summary()
+        self.assertEqual((s["kind"], s["at"], s["left_here"], s["next"]["station"]), ("trade", 1, 2, "Shimizu Hub"))
+        self.market(-70, "MarketSell", r[1], "Biowaste")
+        self.market(-69, "MarketSell", r[1], "Biowaste")   # a second page of the same sale: nothing new
+        self.market(-60, "MarketBuy", r[2], "Silver")      # another market: not this stop's
+        self.assertEqual(self.state.survey_summary()["left_here"], 1)
+        self.market(-50, "MarketBuy", r[1], "Silver")
+        self.assertEqual(self.moments()[-1], ("done", "Hop 1 done, about 15,200 credits. Next stop: Shimizu Hub in Chara, 28 light years."))
+        view = self.state.riches_view()["route"]["systems"][1]
+        self.assertEqual((view["station"], view["left"], view["sell"][0]["done"], view["buy"][0]["done"]), ("Titus City", 0, True, True))
+        for k, (s1, s2) in enumerate(((-40, -35), (-30, -25)), start=2):
+            self.jump(s1, r[k]["id64"], r[k]["system"], 30 * k)
+            self.market(s2, "MarketSell", r[k], r[k]["sell"][0]["name"])
+            if r[k]["buy"]:
+                self.market(s2 + 1, "MarketBuy", r[k], r[k]["buy"][0]["name"])
+        self.assertEqual(self.moments()[-1], ("complete", "Trade route complete: about 14,691,200 credits in all."))
+        self.assertTrue(self.state.survey_summary()["complete"])
+        self.assertEqual(len([m for m in self.moments() if m[0] == "done"]), 3)   # stops 0, 1 and 2, once each
+
+    def test_plot(self):
+        self.jump(-100, self.rows[0]["id64"], "Sol", 0)
+        sp = ed_outrider.Spansh(self.db)
+        sp.session = _HwSession([(200, {"job": "t1", "status": "queued"}),
+                                 (200, {"job": "t1", "status": "ok", "result": trade_answer()["result"]})])
+        self.state.spansh = sp
+        self.assertEqual(self.state.riches_start_plot({"kind": "trade", "station": "Abraham Lincoln"})[1], 400)   # no capital
+        self.assertEqual(self.state.riches_start_plot({"kind": "trade", "capital": 5, "max_cargo": 400})[1], 400)  # no station
+        self.j.ship = {"name": "Hauler", "type": "Type9", "cargo_capacity": 400}
+
+        async def go():
+            with unittest.mock.patch.object(ed_outrider, "HIGHWAY_POLL_S", 0.01):
+                out = self.state.riches_start_plot({"kind": "trade", "station": "Abraham Lincoln", "capital": 50000000,
+                                                    "max_hops": 3, "allow_planetary": True})
+                await self.state.riches_task
+            return out
+        out = asyncio.run(go())
+        self.assertEqual(out[1], 202)
+        method, url, fields = sp.session.calls[0]
+        self.assertEqual((method, url), ("POST", ed_outrider.SPANSH_TRADE))
+        self.assertGreater(ed_outrider.TRADE_PLOT_TIMEOUT, ed_outrider.HIGHWAY_PLOT_TIMEOUT)   # a 4-hop plot took 136 s
+        self.assertEqual({k: fields[k] for k in ("system", "station", "starting_capital", "max_cargo", "max_hops",
+                                                 "max_price_age", "requires_large_pad", "allow_planetary")},
+                         {"system": "Sol", "station": "Abraham Lincoln", "starting_capital": "50000000", "max_cargo": "400",
+                          "max_hops": "3", "max_price_age": str(14 * 86400), "requires_large_pad": "1", "allow_planetary": "1"})
+        meta, rows = self.state.riches_state()
+        self.assertEqual((meta["kind"], len(rows), rows[1]["station"], meta["at"]), ("trade", 4, "Titus City", 0))
+        # one slot: a Road to Riches plot replaces it, its stops with it
+        self.state.riches_store([dict(rows[0], bodies=[])], {"options": {}})
+        self.assertEqual(self.state.riches_state()[0].get("kind"), None)
+        self.state.riches_clear()
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM trade_stops").fetchone()[0], 0)
 
 
 if __name__ == "__main__":

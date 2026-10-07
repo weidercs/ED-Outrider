@@ -1,0 +1,156 @@
+{
+"note": "A real answer of Spansh's trade planner (/api/trade/route, then /api/results/{job}; 2026-10-07): from Abraham Lincoln (Sol), 400 t hold, 50M capital, 3 hops of up to 30 ly, large pad, data under 14 days.",
+"parameters": {
+"max_cargo": "400",
+"max_hop_distance": "30",
+"max_hops": "3",
+"max_price_age": "1209600",
+"max_system_distance": "5000",
+"requires_large_pad": 1,
+"starting_capital": "50000000",
+"starting_station_id": 45534
+},
+"result": [
+{
+"commodities": [
+{
+"amount": 400,
+"destination_commodity": {
+"buy_price": 153,
+"demand": 1,
+"sell_price": 92,
+"supply": 132411
+},
+"name": "Biowaste",
+"profit": 38,
+"source_commodity": {
+"buy_price": 54,
+"demand": 1,
+"sell_price": 32,
+"supply": 78658
+},
+"total_profit": 15200
+}
+],
+"cumulative_profit": 15200,
+"destination": {
+"distance_to_arrival": 1219,
+"market_id": 4267971075,
+"market_updated_at": 1790854074,
+"station": "Titus City",
+"system": "Yin Sector GW-W c1-26",
+"system_id64": 7230745252562,
+"x": 19.125,
+"y": 15.4375,
+"z": -12.28125
+},
+"distance": 27.4756461764323,
+"source": {
+"distance_to_arrival": 504,
+"market_id": 128016896,
+"market_updated_at": 1791367785,
+"station": "Abraham Lincoln",
+"system": "Sol",
+"system_id64": 10477373803,
+"x": 0,
+"y": 0,
+"z": 0
+},
+"total_profit": 15200
+},
+{
+"commodities": [
+{
+"amount": 400,
+"destination_commodity": {
+"buy_price": 0,
+"demand": 4327,
+"sell_price": 49239,
+"supply": 0
+},
+"name": "Silver",
+"profit": 14685,
+"source_commodity": {
+"buy_price": 34554,
+"demand": 1,
+"sell_price": 33652,
+"supply": 99891
+},
+"total_profit": 5874000
+}
+],
+"cumulative_profit": 5889200,
+"destination": {
+"distance_to_arrival": 12,
+"market_id": 4207861507,
+"market_updated_at": 1791360639,
+"station": "Shimizu Hub",
+"system": "Chara",
+"system_id64": 869470833003,
+"x": -4.84375,
+"y": 26.65625,
+"z": -4.78125
+},
+"distance": 27.5065688177388,
+"source": {
+"distance_to_arrival": 1219,
+"market_id": 4267971075,
+"market_updated_at": 1790854074,
+"station": "Titus City",
+"system": "Yin Sector GW-W c1-26",
+"system_id64": 7230745252562,
+"x": 19.125,
+"y": 15.4375,
+"z": -12.28125
+},
+"total_profit": 5874000
+},
+{
+"commodities": [
+{
+"amount": 400,
+"destination_commodity": {
+"buy_price": 0,
+"demand": 0,
+"sell_price": 26339,
+"supply": 0
+},
+"name": "Agronomic Treatment",
+"profit": 22005,
+"source_commodity": {
+"buy_price": 4334,
+"demand": 1,
+"sell_price": 4218,
+"supply": 758
+},
+"total_profit": 8802000
+}
+],
+"cumulative_profit": 14691200,
+"destination": {
+"distance_to_arrival": 829,
+"market_id": 128142840,
+"market_updated_at": 1791362556,
+"station": "Gareth Edwards Park",
+"system": "Wyrd",
+"system_id64": 5031654888146,
+"x": -11.625,
+"y": 31.53125,
+"z": -3.9375
+},
+"distance": 8.39421768987438,
+"source": {
+"distance_to_arrival": 12,
+"market_id": 4207861507,
+"market_updated_at": 1791360639,
+"station": "Shimizu Hub",
+"system": "Chara",
+"system_id64": 869470833003,
+"x": -4.84375,
+"y": 26.65625,
+"z": -4.78125
+},
+"total_profit": 8802000
+}
+]
+}

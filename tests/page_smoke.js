@@ -1190,6 +1190,54 @@ const settle = async maxMs => {
     console.log(goodRC ? "OK" : "FAIL", "| riches in plot route |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "no tab of its own, the plotter switch and its options, plot and polling, systems/bodies/marks, the both-routes switch, clear", errors.slice(before));
   }
+  // a trade route in the slot (Spansh's trade planner): the Trade plotter's own options (no destination, ship or range),
+  // its stops with what to sell and buy, its own heading row, the line under the tiles with the station, its alert
+  {
+    const w = dom.window, d = w.document, before = errors.length;
+    d.querySelector('[data-view="hwy"]').click(); await sleep(100);
+    const stop = (i, station, system, extra) => Object.assign({i, system, station, id: String(900 + i), x: i * 20, y: 0, z: 0, jumps: null,
+      ls: 500, distance: i ? 27.5 : null, profit: 0, cumulative: 0, age_s: 7200, left: 0, value: 0, value_left: 0, bodies: [], sell: [], buy: []}, extra);
+    const got = w.eval(`(() => {
+      const saved = R.data, savedS = data.survey, o = {};
+      R.data = Object.assign({}, R.data || {}, {plotting: null, route: {id: "t1", kind: "trade", from: "Sol", to: "Wyrd", count: 3, first: 0,
+        at: 1, next: 2, furthest: 1, created_ts: "2026-10-07T12:00:00Z", points: [[0, 0], [20, 0], [40, 0]],
+        options: {max_cargo: 400, capital: 50000000, max_hop_distance: 30, max_system_distance: 5000, max_price_age_days: 14},
+        systems: ${JSON.stringify([
+          stop(0, "Abraham Lincoln", "Sol", {buy: [{name: "Biowaste", amount: 400, price: 54, supply: 78658, done: true}]}),
+          stop(1, "Titus City", "Yin Sector GW-W c1-26", {profit: 15200, cumulative: 15200, left: 1,
+            sell: [{name: "Biowaste", amount: 400, price: 92, demand: 1, done: true}], buy: [{name: "Silver", amount: 400, price: 4000, supply: 9000, done: false}]}),
+          stop(2, "Shimizu Hub", "Chara", {profit: 5874000, cumulative: 5889200, left: 1, sell: [{name: "Silver", amount: 400, price: 18685, demand: 5000, done: false}]})])}}});
+      renderHwy();
+      o.head = document.getElementById("hwyHead").textContent;
+      o.th = [...document.querySelectorAll("#richTable thead th")].map(t => t.textContent).join("|");
+      o.rows = [...document.querySelectorAll("#richRows tr.richsys")].map(t => t.className.replace("richsys ", "")).join();
+      o.goods = [...document.querySelectorAll("#richRows tr.richbody")].map(t => t.textContent.replace(/\\s+/g, " ").trim()).join("|");
+      const r = document.querySelector('[name=hwyPlotter][value="trade"]'); r.checked = true; r.dispatchEvent(new Event("change", {bubbles: true}));
+      const vis = sel => [...document.querySelectorAll(sel)].map(e => !e.hidden).join();
+      o.form = [vis(".trade-opt"), vis(".hwyto"), vis(".hwy-shiprow"), vis(".hwy-ropt"), document.getElementById("hwyGo").textContent];
+      const e = document.querySelector('[name=hwyPlotter][value="exact"]'); e.checked = true; e.dispatchEvent(new Event("change", {bubbles: true}));
+      o.back = vis(".hwyto") + "|" + vis(".hwy-shiprow");
+      data.survey = {kind: "trade", id: "t1", created_ts: "2026-10-07T12:00:00Z", destination: "Wyrd", total: 2, index: 2, at: 1, complete: false,
+                     off_route: false, left_here: 1, next: {name: "Chara", id: "902", jumps: null, station: "Shimizu Hub", distance: 27.5}};
+      o.line = surveyLineHtml(data.survey).replace(/<[^>]+>/g, "");
+      o.alert = ALERTS.some(a => a[0] === "trade") && SPEECH_SYS_BOUND.has("trade");
+      R.data = saved; data.survey = savedS; renderHwy();
+      return o;
+    })()`);
+    const bad = [];
+    if (!/Trade route from Abraham Lincoln/.test(got.head) || !/you are at stop 1 of 2/.test(got.head) || !/Next: Shimizu Hub, Chara · sell Silver/.test(got.head)) bad.push("head");
+    if (got.th !== "#|Station|ly|Left|Hop profit|Total") bad.push("th");
+    if (got.rows !== "done,at,next") bad.push("rows");
+    if (!/✓ Sell 400 t Biowaste at 92 cr\/t · demand 1 · Buy 400 t Silver at 4,000 cr\/t · supply 9,000/.test(got.goods)) bad.push("goods");
+    if (JSON.stringify(got.form) !== JSON.stringify(["true,true,true", "false", "false", "false,false", "Plot (replaces your trade route)"]) || got.back !== "true|true") bad.push("form");
+    if (!/💱 Next: Shimizu Hub, Chara · 27.5 ly · 2 of 2 · 1 trade to make here/.test(got.line)) bad.push("line");
+    if (!got.alert) bad.push("alert");
+    d.querySelector('[data-view="overview"]').click(); await sleep(100);
+    const goodTR = !bad.length && errors.length === before;
+    allOk = allOk && goodTR;
+    console.log(goodTR ? "OK" : "FAIL", "| trade route |", goodTR ? "the Trade plotter's options, the stops and their goods, the heading row, the line, the alert" :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+  }
   // the line under the tiles for every route (the author, 2026-10-07): a survey route's own (💰 Road to Riches, 🧬
   // Exomastery), the Highway's, and with both the one Plot Route shows (this device's choice, else the newer)
   {

@@ -1435,6 +1435,7 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["supercharge", "the frame shift drive supercharged in a neutron star or white dwarf cone", null],
   ["exo", "Expressway to Exomastery (a route plotted in Plot Route): on arriving at a route system, the species still to sample there and the best of them, and once they are sampled the next stop, and route complete", null],
   ["riches", "Road to Riches (a route plotted in Plot Route): on arriving at a route system, the bodies still worth scanning or mapping there and the next stop, and route complete", null],
+  ["trade", "a trade route (plotted in Plot Route): on arriving at a stop, what to sell and buy there; once that is done, the hop's profit and the next stop; and route complete", null],
   ["highway", "the Neutron Highway (a route plotted in Plot Route): the next stop on arriving at a route system (with the boost and refuel stops), off route, back on the highway, and highway complete", null],
   ["autotarget", "the Neutron Highway's auto-target (when it is on, or a test): whether the next route system was targeted", null],
   ["find", "a valuable body just scanned (over your highlight levels)", "find"],
@@ -1620,7 +1621,7 @@ const JUMP_LINE_WAIT = 8000;   // ms: the jump line's latest start after the cha
 // ms after Status.json says "in the tunnel" (it says so about 2 s before the countdown ends): the line then starts
 // with the tunnel itself (the author's timing, in game 2026-10-03)
 const JUMP_TUNNEL_DELAY = 2500;
-const SPEECH_SYS_BOUND = new Set(["find", "signals", "jump", "honk", "brief", "fss", "mapped", "approach", "bodybrief", "jumponium", "highway", "riches", "exo", "autotarget"]);
+const SPEECH_SYS_BOUND = new Set(["find", "signals", "jump", "honk", "brief", "fss", "mapped", "approach", "bodybrief", "jumponium", "highway", "riches", "exo", "trade", "autotarget"]);
 // a rig confirmation answers your own press, like a line asked for
 const speechPrio = (kind, tag) => DANGER.has(tag) || kind === "hull" || kind === "fuel" ? 0 : kind === "manual" || kind === "rigs" ? 1
   : ["find", "signals", "codex", "bodybrief", "supercharge", "jumponium"].includes(kind) ? 3 : 2;
@@ -4570,8 +4571,9 @@ function lineKind(hw, sv) {
 }
 // a survey route's line (Road to Riches 💰, Exomastery 🧬): the next system, how far, where you are on it, and what is
 // left to do where you are
-const SURVEY = {riches: {glyph: "💰", name: "Road to Riches", left: n => `${n} ${n === 1 ? "body" : "bodies"} to do here`},
-                exo: {glyph: "🧬", name: "Exomastery", left: n => `${n} species to sample here`}};
+const SURVEY = {riches: {glyph: "💰", name: "Road to Riches", what: "Road to Riches route", left: n => `${n} ${n === 1 ? "body" : "bodies"} to do here`},
+                exo: {glyph: "🧬", name: "Exomastery", what: "Exomastery route", left: n => `${n} species to sample here`},
+                trade: {glyph: "💱", name: "Trade route", what: "trade route", left: n => `${n} trade${n === 1 ? "" : "s"} to make here`}};
 function surveyLineHtml(s, {short = false, glyph = true} = {}) {
   if (!s) return "";
   const k = SURVEY[s.kind] || SURVEY.riches;
@@ -4581,7 +4583,7 @@ function surveyLineHtml(s, {short = false, glyph = true} = {}) {
   if (s.off_route) return `${g}<span class="hwyoff">Off Route: Detour</span>${short ? "" : ` · ${k.name}`}`;
   const n = s.next;
   if (!n) return `${g}${k.name} to ${hwyName(s.destination)}${left}`;
-  const bits = [`${s.index === 0 && s.at == null ? "Start" : "Next"}: ${hwyName(n.name)}${short ? hwyAimBtn(n.name, "survey", s.index) : ""}`];
+  const bits = [`${s.index === 0 && s.at == null ? "Start" : "Next"}: ${n.station ? `${esc(n.station)}, ` : ""}${hwyName(n.name)}${short ? hwyAimBtn(n.name, "survey", s.index) : ""}`];
   if (n.jumps > 1) bits.push(`${n.jumps} jumps`);
   if (n.distance != null) bits.push(`${Number(n.distance).toFixed(1)} ly`);
   bits.push(`${s.index} of ${s.total}`);
@@ -4728,14 +4730,19 @@ function hwyFormShow() {
   hForm.querySelector(".hwy-nopt").hidden = p === "exact";
   hForm.querySelectorAll(".hwy-nonly").forEach(e => { e.hidden = p !== "neutron"; });
   hForm.querySelector(".hwy-xopt").hidden = p !== "exact";
-  const survey = p === "riches" || p === "exo";
+  const trade = p === "trade", survey = p === "riches" || p === "exo", slot = survey || trade;
   hForm.querySelectorAll(".hwy-ropt").forEach(e => { e.hidden = !survey; });
   hForm.querySelectorAll(".rich-only").forEach(e => { e.hidden = p !== "riches"; });
-  hForm.querySelector(".hwy-cons").hidden = survey;   // Spansh's survey routes take the range as it is
+  // a trade route starts at a station with your capital and hold: no destination, ship, cargo or range
+  hForm.querySelectorAll(".trade-opt").forEach(e => { e.hidden = !trade; });
+  hForm.querySelector(".hwyto").hidden = trade;
+  hForm.querySelector(".hwy-shiprow").hidden = trade;
+  if (trade) hForm.querySelector(".hwy-nopt").hidden = true;
+  hForm.querySelector(".hwy-cons").hidden = slot;   // Spansh's survey and trade routes take the range as it is
   hEl("hwyTo").placeholder = survey ? "optional: where to end" : "destination system";
-  // one survey slot: a Road to Riches or an Exomastery plot replaces the survey route there is
+  // one slot: a Road to Riches, an Exomastery or a trade plot replaces the route there is
   const rr = R.data && R.data.route;
-  hEl("hwyGo").textContent = survey && rr ? `Plot (replaces your ${(SURVEY[rr.kind] || SURVEY.riches).name} route)` : "Plot";
+  hEl("hwyGo").textContent = slot && rr ? `Plot (replaces your ${(SURVEY[rr.kind] || SURVEY.riches).what})` : "Plot";
   // the neutron plotter can do without a ship (type the range); the exact one needs a Loadout
   const none = hEl("hwyShip").querySelector('option[value=""]');
   if (none) { none.disabled = p === "exact"; none.hidden = p === "exact"; }
@@ -4765,7 +4772,7 @@ function fillHwyForm(hd) {
   hwyFormShow();
 }
 {
-  const p = hForm.querySelector(`[name=hwyPlotter][value="${["neutron", "riches", "exo"].includes(hwyCfg.plotter) ? hwyCfg.plotter : "exact"}"]`); if (p) p.checked = true;
+  const p = hForm.querySelector(`[name=hwyPlotter][value="${["neutron", "riches", "exo", "trade"].includes(hwyCfg.plotter) ? hwyCfg.plotter : "exact"}"]`); if (p) p.checked = true;
   hEl("hwyInject").checked = !!hwyCfg.injections; hEl("hwyNoSec").checked = !!hwyCfg.exclude_secondary; hEl("hwySuper").checked = !!hwyCfg.supercharged;
   hForm.querySelectorAll("[name=hwyPlotter]").forEach(r => r.onchange = () => { hwyCfg.plotter = hwyPlotter(); saveHwyCfg(); hwyFormShow(); });
   for (const [id, k] of [["hwyInject", "injections"], ["hwyNoSec", "exclude_secondary"], ["hwySuper", "supercharged"]])
@@ -4820,7 +4827,7 @@ function drawHwyStatus() {
   let text = "", cls = "";
   if (rp && rp.state === "running") {
     const secs = rp.started ? Math.max(0, Math.round((Date.now() - new Date(rp.started)) / 1000)) : null;
-    text = `Asking Spansh for ${rp.kind === "exo" ? "an Exomastery" : "a Road to Riches"} route from ${rp.from}…${secs != null ? ` ${secs} s` : ""}`; cls = "busy";
+    text = `Asking Spansh for ${rp.kind === "exo" ? "an Exomastery route" : rp.kind === "trade" ? "a trade route" : "a Road to Riches route"} from ${rp.from}…${secs != null ? ` ${secs} s` : ""}`; cls = "busy";
   } else if (p && p.state === "running") {
     const secs = p.started ? Math.max(0, Math.round((Date.now() - new Date(p.started)) / 1000)) : null;
     text = `Plotting ${p.from} → ${p.to} with Spansh (${p.plotter} plotter)…${secs != null ? ` ${secs} s` : ""}`; cls = "busy";
@@ -4831,7 +4838,7 @@ function drawHwyStatus() {
 }
 hForm.addEventListener("submit", async e => {
   e.preventDefault();
-  if (hwyPlotter() === "riches" || hwyPlotter() === "exo") return richSubmit(hwyPlotter());
+  if (["riches", "exo", "trade"].includes(hwyPlotter())) return richSubmit(hwyPlotter());
   const b = hwyBody();
   if (!b.to) return setHwyStatus("Type the destination system.", "err");
   if (b.plotter === "neutron" && b.range == null) return setHwyStatus("Give the jump range (ly) for the neutron plotter.", "err");
@@ -4996,7 +5003,8 @@ async function loadRich(force = false) {
   if (R.watch && p && p.state !== "running") {   // the plot this page asked for has ended: say how
     R.watch = false;
     const rt = R.data.route;
-    setHwyStatus(p.state === "done" && rt ? `Plotted: ${rt.kind === "exo" ? "an Exomastery route" : "a Road to Riches"} of ${rt.count} systems.`
+    setHwyStatus(p.state === "done" && rt ? (rt.kind === "trade" ? `Plotted: a trade route of ${rt.count - 1} hop${rt.count === 2 ? "" : "s"}.`
+      : `Plotted: ${rt.kind === "exo" ? "an Exomastery route" : "a Road to Riches"} of ${rt.count} systems.`)
       : `Could not plot the route: ${p.error || "?"}.`, p.state === "done" ? "ok" : "err");
   }
   renderHwy();
@@ -5029,6 +5037,7 @@ hEl("hwyHead").addEventListener("change", e => {
   store.set("hwyShow", e.target.value); HM.auto = true; renderHwy();
 });
 function richHeadHtml(d) {
+  if (d.route.kind === "trade") return tradeHeadHtml(d);
   const rt = d.route, sy = rt.systems, sum = k => sy.reduce((n, x) => n + (x[k] || 0), 0), left = sum("left"), o = rt.options || {};
   const where = rt.at != null ? `you are at system ${rt.at + 1} of ${rt.count}`
     : rt.off_route ? `off the route (last on it: system ${(rt.furthest ?? 0) + 1} of ${rt.count})` : `not on the route yet (${rt.count} systems)`;
@@ -5063,7 +5072,44 @@ function richBodyHtml(b, system) {
 }
 // a body's name without its system's ("Smojooe CM-E b25-5 A 1" in Smojooe CM-E b25-5: "A 1")
 const bodyShort = (name, system) => name && system && name.toLowerCase().startsWith(system.toLowerCase() + " ") ? name.slice(system.length + 1) : name;
+// ---- a trade route (Spansh's trade planner) in the same slot: one row per stop, what to sell and buy there ----
+const RICH_HEAD = hEl("richTable").tHead.innerHTML;
+const TRADE_HEAD = `<tr><th class="num" title="the stop's number (0: where you start)">#</th><th>Station</th>` +
+  `<th class="num" title="light years from the stop before">ly</th><th class="num" title="trades still to make there (your journal)">Left</th>` +
+  `<th class="num" title="the profit of the hop that ends here (Spansh's prices)">Hop profit</th><th class="num" title="the profit so far, at this stop">Total</th></tr>`;
+function tradeHeadHtml(d) {
+  const rt = d.route, sy = rt.systems, o = rt.options || {}, last = sy[sy.length - 1];
+  const where = rt.at != null ? `you are at stop ${rt.at} of ${rt.count - 1}` : rt.off_route ? "off the route" : `not on the route yet`;
+  const nx = rt.next != null ? sy.find(s => s.i === rt.next) : null;
+  return `<div class="hwyttl">Trade route from ${esc(sy[0] ? sy[0].station : rt.from)} <span class="unk">${esc(rt.from)}</span></div>` +
+    `<div class="hwystats">${where} · ${rt.count - 1} hop${rt.count === 2 ? "" : "s"} · <b>≈${credits((last && last.cumulative) || 0)} cr</b> profit in all (Spansh's prices)</div>` +
+    (rt.done_ts ? `<div class="hwystate hwydone">Trade route complete.</div>`
+      : nx ? `<div class="hwystate">Next: <b>${esc(nx.station || "")}</b>, <b class="copy" data-name="${esc(nx.system)}" title="click to copy">${esc(nx.system)}</b>` +
+             `${nx.sell.length ? ` · sell ${esc(nx.sell.map(c => c.name).join(", "))}` : ""}</div>` : "") +
+    `<div class="unk hwyhow">${o.max_cargo != null ? `${o.max_cargo} t hold · ` : ""}${o.capital != null ? `${credits(o.capital)} cr capital · ` : ""}` +
+    `hops up to ${o.max_hop_distance ?? "?"} ly · stations within ${(o.max_system_distance ?? 0).toLocaleString()} ls · data under ${o.max_price_age_days ?? "?"} d` +
+    `${rt.created_ts ? ` · plotted ${esc(when(rt.created_ts))}` : ""}</div>`;
+}
+function tradeGoods(c, verb) {
+  return `<span class="${c.done ? "exodone" : ""}">${c.done ? "✓ " : ""}${verb} ${c.amount.toLocaleString()} t ${esc(c.name)}` +
+    `${c.price ? ` <span class="unk">at ${c.price.toLocaleString()} cr/t${verb === "Sell" && c.demand ? ` · demand ${c.demand.toLocaleString()}` : ""}` +
+      `${verb === "Buy" && c.supply ? ` · supply ${c.supply.toLocaleString()}` : ""}</span>` : ""}</span>`;
+}
+function tradeRowHtml(s, rt) {
+  const cls = s.i === rt.at ? "at" : s.i === rt.next ? "next" : rt.at != null && s.i < rt.at ? "done" : "ahead";
+  const row = `<tr class="richsys ${cls}" data-i="${s.i}"><td class="num">${s.i}</td>` +
+    `<td class="name" data-name="${esc(s.system)}" title="click to copy the system"><b>${esc(s.station || "")}</b> <span class="unk">${nameWords(s.system)}</span>` +
+    `${cls === "at" ? "" : hwyAimBtn(s.system, "survey", s.i, true)}</td>` +
+    `<td class="num">${s.distance ? s.distance.toFixed(1) : ""}</td>` +
+    `<td class="num ${s.left ? "richleft" : "richnone"}">${s.left ? s.left : s.sell.length || s.buy.length ? "done" : ""}</td>` +
+    `<td class="num">${s.profit ? credits(s.profit) : ""}</td><td class="num">${s.cumulative ? credits(s.cumulative) : ""}</td></tr>`;
+  const goods = [...s.sell.map(c => tradeGoods(c, "Sell")), ...s.buy.map(c => tradeGoods(c, "Buy"))];
+  return row + (goods.length && (cls === "at" || cls === "next" || s.left) ? `<tr class="richbody${s.left ? "" : " done"}"><td class="richmark"></td>` +
+    `<td colspan="${RICH_COLS - 1}"><div class="tradegoods">${goods.join(" · ")}${s.ls != null ? ` <span class="unk">· ${s.ls.toLocaleString("en-US")} ls from the star</span>` : ""}` +
+    `${s.age_s != null ? ` <span class="unk">· prices ${ageText(s.age_s)}</span>` : ""}</div></td></tr>` : "");
+}
 function richRowHtml(s, rt) {
+  if (rt.kind === "trade") return tradeRowHtml(s, rt);
   const cls = s.i === rt.at ? "at" : s.i === rt.next ? "next" : rt.at != null && s.i < rt.at ? "done" : "ahead";
   const row = `<tr class="richsys ${cls}" data-i="${s.i}"><td class="num">${s.i}</td>` +
     `<td class="name" data-name="${esc(s.system)}" title="click to copy">${nameWords(s.system)}${cls === "at" ? "" : hwyAimBtn(s.system, "survey", s.i, true)}</td>` +
@@ -5075,6 +5121,8 @@ function richRowHtml(s, rt) {
 }
 function renderRichList(d) {
   const rt = d && d.route, el = hEl("richRows");
+  const head = rt && rt.kind === "trade" ? TRADE_HEAD : RICH_HEAD, th = hEl("richTable").tHead;
+  if (th.innerHTML !== head) th.innerHTML = head;
   const more = rt ? rt.count - rt.first - rt.systems.length : 0;
   const html = !rt ? "" : rt.systems.map(s => richRowHtml(s, rt)).join("") +
     (more > 0 ? `<tr class="hwymore"><td colspan="${RICH_COLS}" class="unk">+${more.toLocaleString()} more after these</td></tr>` : "");
@@ -5092,6 +5140,13 @@ function fillRichForm(d) {
   hEl("richMapping").checked = !!(o.use_mapping_value ?? f.use_mapping_value);
   hEl("richThargoid").checked = !!(o.avoid_thargoids ?? f.avoid_thargoids);
   hEl("richLoop").checked = !!(o.loop ?? f.loop);
+  const t = d.trade || {}, to = (d.route && d.route.kind === "trade" && d.route.options) || {};
+  set("tradeStation", t.station ?? to.station); set("tradeCapital", t.capital); set("tradeCargo", t.max_cargo ?? to.max_cargo);
+  set("tradeHops", to.max_hops ?? t.max_hops); set("tradeHopLy", to.max_hop_distance ?? t.max_hop_distance);
+  set("tradeLs", to.max_system_distance ?? t.max_system_distance); set("tradeAge", to.max_price_age_days ?? t.max_price_age_days);
+  const flags = {tradeLarge: "requires_large_pad", tradePlanetary: "allow_planetary", tradePlayer: "allow_player_owned",
+                 tradeProhibited: "allow_prohibited", tradePermit: "permit", tradeUnique: "unique"};
+  for (const [id, k] of Object.entries(flags)) hEl(id).checked = !!(to[k] ?? t[k]);
   R.filled = true;
 }
 // the request a Road to Riches plot makes (from, to, ship and range are the form's shared fields; the server checks it all)
@@ -5103,8 +5158,19 @@ function richBody() {
   for (const k of Object.keys(b)) if (b[k] === undefined) delete b[k];
   return b;
 }
+// the request a trade plot makes (the From system is the form's; the rest are the trade options)
+function tradeBody() {
+  const num = id => hEl(id).value.trim() === "" ? undefined : Number(hEl(id).value);
+  const b = {kind: "trade", from: hEl("hwyFrom").value.trim() || undefined, station: hEl("tradeStation").value.trim() || undefined,
+             capital: num("tradeCapital"), max_cargo: num("tradeCargo"), max_hops: num("tradeHops"), max_hop_distance: num("tradeHopLy"),
+             max_system_distance: num("tradeLs"), max_price_age_days: num("tradeAge"), requires_large_pad: hEl("tradeLarge").checked,
+             allow_planetary: hEl("tradePlanetary").checked, allow_player_owned: hEl("tradePlayer").checked,
+             allow_prohibited: hEl("tradeProhibited").checked, permit: hEl("tradePermit").checked, unique: hEl("tradeUnique").checked};
+  for (const k of Object.keys(b)) if (b[k] === undefined) delete b[k];
+  return b;
+}
 async function richSubmit(kind = "riches") {
-  const b = Object.assign(richBody(), {kind});
+  const b = kind === "trade" ? tradeBody() : Object.assign(richBody(), {kind});
   if (kind === "exo") { delete b.use_mapping_value; delete b.avoid_thargoids; }
   H.status = null;
   setHwyStatus("Asking Spansh…", "busy");
@@ -6475,7 +6541,7 @@ function onData() {
         else alertOut("sell", `Undocked with ${credits(u.total)} cr still aboard`, `Still to sell: ${leftToSell(u)}.`,   // part of it was sold here
                       {sound: "alert", say: () => line("unsold_urgent", {value: credits(u.total)})});
       }
-      else if ((m.kind === "riches" || m.kind === "exo") && m.text)   // a survey route: what is left where you arrived, and where next
+      else if ((m.kind === "riches" || m.kind === "exo" || m.kind === "trade") && m.text)   // the slot's route: what is left where you arrived, and where next
         alertOut(m.kind, m.text.replace(/\.$/, ""), "", {tag: m.kind, say: m.text});
       else if (m.kind === "highway" && m.text)   // the Neutron Highway's arrival line, detour, back on it, complete: plain words for now
         alertOut("highway", m.text.replace(/\.$/, ""), "", {tag: "highway", say: m.text});

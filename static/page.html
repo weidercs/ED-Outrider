@@ -295,12 +295,31 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       <summary>Plot a route</summary>
       <form id="hwyForm" autocomplete="off">
         <div class="srow">
-          <span class="seg" role="radiogroup" aria-label="plotter"><label title="every jump with its fuel, from your ship's own figures (Spansh's galaxy plotter)"><input type="radio" name="hwyPlotter" value="exact" checked>Exact</label><label title="neutron stars as boosts, waypoints only (Spansh's neutron plotter): any ship, from its range"><input type="radio" name="hwyPlotter" value="neutron">Neutron</label><label title="a chain of systems whose planets are worth scanning (and mapping), from where you are (Spansh's Road to Riches): stop, scan, move on"><input type="radio" name="hwyPlotter" value="riches">Road to Riches</label><label title="a chain of systems with valuable life already reported on their bodies (Spansh's Expressway to Exomastery): land, sample, move on. Known life: first footfall is unlikely"><input type="radio" name="hwyPlotter" value="exo">Exomastery</label></span>
+          <span class="seg" role="radiogroup" aria-label="plotter"><label title="every jump with its fuel, from your ship's own figures (Spansh's galaxy plotter)"><input type="radio" name="hwyPlotter" value="exact" checked>Exact</label><label title="neutron stars as boosts, waypoints only (Spansh's neutron plotter): any ship, from its range"><input type="radio" name="hwyPlotter" value="neutron">Neutron</label><label title="a chain of systems whose planets are worth scanning (and mapping), from where you are (Spansh's Road to Riches): stop, scan, move on"><input type="radio" name="hwyPlotter" value="riches">Road to Riches</label><label title="a chain of systems with valuable life already reported on their bodies (Spansh's Expressway to Exomastery): land, sample, move on. Known life: first footfall is unlikely"><input type="radio" name="hwyPlotter" value="exo">Exomastery</label><label title="station to station: what to buy at each and where to sell it (Spansh's trade planner), from the station you start at"><input type="radio" name="hwyPlotter" value="trade">Trade</label></span>
           <label>From <input type="text" id="hwyFrom" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100" placeholder="where you are"></label>
           <label class="hwyto">To <input type="text" id="hwyTo" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100" placeholder="destination system" list="hwyNames"></label>
           <datalist id="hwyNames"></datalist>
         </div>
-        <div class="srow">
+        <div class="srow trade-opt" hidden>
+          <label title="the station to start from, in the From system (filled in while you are docked)">Station <input type="text" id="tradeStation" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100"></label>
+          <label title="the credits you can spend on the first load (your balance, from the journal)">Capital <input type="number" id="tradeCapital" min="0" step="1" inputmode="numeric"> cr</label>
+          <label title="the tons you can carry (your ship's hold, from its Loadout)">Hold <input type="number" id="tradeCargo" min="1" max="10000" step="1" inputmode="numeric"> t</label>
+        </div>
+        <div class="srow trade-opt" hidden>
+          <label title="how many station-to-station hops">Hops <input type="number" id="tradeHops" min="1" max="20" step="1" inputmode="numeric"></label>
+          <label title="the furthest one hop may go (ly)">Hop distance <input type="number" id="tradeHopLy" min="1" max="1000" step="1" inputmode="numeric"> ly</label>
+          <label title="leave out stations further than this from their star (ls)">From star <input type="number" id="tradeLs" min="1" max="1000000" step="1" inputmode="numeric"> ls</label>
+          <label title="leave out prices older than this">Data under <input type="number" id="tradeAge" min="1" max="365" step="1" inputmode="numeric"> d</label>
+        </div>
+        <div class="srow trade-opt" hidden>
+          <label><input type="checkbox" id="tradeLarge"> large pad</label>
+          <label><input type="checkbox" id="tradePlanetary"> planetary stations</label>
+          <label title="fleet carriers and other player-owned markets"><input type="checkbox" id="tradePlayer"> player-owned</label>
+          <label><input type="checkbox" id="tradeProhibited"> prohibited goods</label>
+          <label><input type="checkbox" id="tradePermit"> permit systems</label>
+          <label title="no station twice"><input type="checkbox" id="tradeUnique"> unique stops</label>
+        </div>
+        <div class="srow hwy-shiprow">
           <label>Ship <select id="hwyShip"></select></label>
           <label>Cargo <input type="number" id="hwyCargo" min="0" max="100000" step="1" inputmode="numeric"> t</label>
         </div>

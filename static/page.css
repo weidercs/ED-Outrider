@@ -1030,4 +1030,6 @@ body.app #richPane { grid-column: 1; grid-row: 2; }
 .sethead .setlinks { font-size: 12px; margin-left: 10px; } .sethead .setlinks a { color: var(--accent); }
 /* Exomastery: a body's species under its system (✓ sampled, ✦ new to your codex in the region) */
 #richTable .exosp { font-size: 12px; line-height: 1.45; } #richTable .exosp .exodone { color: var(--muted); }
+#tradeCapital { width: 10em; } #tradeStation { width: 14em; }
+#richTable .tradegoods { font-size: 12px; line-height: 1.45; white-space: normal; } #richTable .tradegoods .exodone { color: var(--muted); }
 #richTable .exonew { color: var(--accent); }

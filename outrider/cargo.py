@@ -512,3 +512,86 @@ def market_rows(results, name, mode, tons, holding=(), avg=None, laden=None, now
                      "uc": "Universal Cartographics" in services, "vista": "Vista Genomics" in services,
                      "also": also[:5], "x": r.get("system_x"), "y": r.get("system_y"), "z": r.get("system_z")})
     return rows
+
+
+# ---- Spansh's trade planner: a Plot Route type in the survey slot (State.riches_*) ----
+
+# the plot form's defaults (Spansh's own field names, but the data age in days; the station, capital, hold and pad come
+# from your journal)
+TRADE = {"max_hops": 5, "max_hop_distance": 30, "max_system_distance": 5000, "max_price_age_days": 14,
+         "allow_planetary": False, "allow_player_owned": False, "allow_prohibited": False, "permit": False, "unique": False}
+
+
+def _trade_place(p):
+    p = p if isinstance(p, dict) else {}
+    return {"system": p.get("system"), "id64": p.get("system_id64"), "x": p.get("x"), "y": p.get("y"), "z": p.get("z"),
+            "station": p.get("station"), "market_id": p.get("market_id"),
+            "ls": round(p["distance_to_arrival"]) if isinstance(p.get("distance_to_arrival"), (int, float)) else None,
+            "updated": _when(p.get("market_updated_at"))}
+
+
+def trade_rows(result):
+    """Spansh's trade route (a list of hops: source -> destination with the commodities to carry) as the survey slot's
+    stops: the first source station, then each hop's destination. A stop: {system, id64, x, y, z, jumps (None),
+    bodies ([]), station, market_id, ls, updated (epoch s), distance (ly from the stop before), sell [{name, amount,
+    price, demand}] (what the hop before brought here), buy [{name, amount, price, supply, sell_price}] (for the hop
+    after), profit (of the hop that ends here), cumulative}. [] when the answer is not a route."""
+    hops = result if isinstance(result, list) else (result or {}).get("result") if isinstance(result, dict) else None
+    stops = []
+    for h in hops or []:
+        if not isinstance(h, dict) or not isinstance(h.get("source"), dict) or not isinstance(h.get("destination"), dict):
+            continue
+        src = _trade_place(h["source"])
+        if not stops or stops[-1]["market_id"] != src["market_id"]:
+            stops.append(dict(src, jumps=None, bodies=[], distance=None, sell=[], buy=[], profit=0,
+                              cumulative=stops[-1]["cumulative"] if stops else 0))
+        cs = [c for c in h.get("commodities") or [] if isinstance(c, dict) and c.get("name")]
+        stops[-1]["buy"] = [{"name": c["name"], "amount": _n(c.get("amount")),
+                             "price": (c.get("source_commodity") or {}).get("buy_price"),
+                             "supply": (c.get("source_commodity") or {}).get("supply"),
+                             "sell_price": (c.get("destination_commodity") or {}).get("sell_price")} for c in cs]
+        stops.append(dict(_trade_place(h["destination"]), jumps=None, bodies=[],
+                          distance=round(h["distance"], 2) if isinstance(h.get("distance"), (int, float)) else None,
+                          sell=[{"name": c["name"], "amount": _n(c.get("amount")),
+                                 "price": (c.get("destination_commodity") or {}).get("sell_price"),
+                                 "demand": (c.get("destination_commodity") or {}).get("demand")} for c in cs],
+                          buy=[], profit=h.get("total_profit") or 0,
+                          cumulative=h.get("cumulative_profit") or (stops[-1]["cumulative"] + (h.get("total_profit") or 0))))
+    return stops if len(stops) > 1 and all(s["system"] and s["station"] for s in stops) else []
+
+
+def trade_left(stop, done):
+    """What is still to do at a stop: ("sell", c) for what the hop before brought, then ("buy", c) for the hop after,
+    leaving out what your journal shows done there (done: {"sold": [names], "bought": [names]})."""
+    done = done or {}
+    return [("sell", c) for c in stop.get("sell") or [] if c["name"] not in (done.get("sold") or [])] + \
+           [("buy", c) for c in stop.get("buy") or [] if c["name"] not in (done.get("bought") or [])]
+
+
+def _goods(cs):
+    return " and ".join(f"{c['amount']:,} tonnes of {c['name']}" for c in cs)
+
+
+def trade_text(rows, i, left):
+    """The spoken line on arriving at a trade stop: where to dock and what to sell and buy there."""
+    r = rows[i]
+    sells, buys = [c for k, c in left if k == "sell"], [c for k, c in left if k == "buy"]
+    parts = []
+    if sells:
+        parts.append(f"sell {_goods(sells)}")
+    if buys:
+        nxt = rows[i + 1]["station"] if i + 1 < len(rows) else None
+        parts.append(f"buy {_goods(buys)}" + (f" for {nxt}" if nxt else ""))
+    if not parts:
+        return f"{r['station']}: nothing left to trade here." + (f" Next stop: {rows[i + 1]['station']}." if i + 1 < len(rows) else "")
+    return f"Dock at {r['station']}: {', then '.join(parts)}."
+
+
+def trade_done_text(rows, i):
+    """Said once the trades at stop i are done: the hop's profit and the next stop, or the route's end."""
+    r = rows[i]
+    if i == len(rows) - 1:
+        return f"Trade route complete: about {r['cumulative']:,} credits in all."
+    nxt = rows[i + 1]
+    head = f"Hop {i} done, about {r['profit']:,} credits. " if i else ""
+    return head + f"Next stop: {nxt['station']} in {nxt['system']}" + (f", {nxt['distance']:.0f} light years." if nxt.get("distance") else ".")

@@ -195,6 +195,7 @@ from outrider.highway import (   # the Neutron Highway's route helpers and the d
     HIGHWAY_BG_TYPES, Clipboard, HighwayError, highway_bg_file, highway_match, highway_refuel_in, highway_rows,
     highway_text,
 )
+from outrider.cargo import trade_done_text, trade_left, trade_rows, trade_text   # the slot's third type: trade routes
 from outrider.riches import (   # Road to Riches / Exomastery: Spansh's survey routes (systems with valuable bodies / life)
     RichesError, body_value, exo_left, exo_text, exo_todo, norm_name, riches_match, riches_rows, riches_text, todo,
 )
@@ -235,6 +236,8 @@ SPANSH_RESULTS = "https://spansh.co.uk/api/results/{job}"
 # Road to Riches: answers {job} like the plotters above; the route (systems with their bodies) is in the results
 SPANSH_RICHES = "https://spansh.co.uk/api/riches/route"
 SPANSH_EXO = "https://spansh.co.uk/api/exobiology/route"   # Expressway to Exomastery: the same job, bodies with species
+SPANSH_TRADE = "https://spansh.co.uk/api/trade/route"      # the trade planner: the same job, station-to-station hops
+TRADE_PLOT_TIMEOUT = 600    # s: the trade planner is slow (4 hops from Sol took 136 s on 2026-10-07)
 RICHES_METHOD = "POST"      # form fields (checked against the live API 2026-10-06; scripts/riches_probe.py checks it again)
 RICHES = {"radius": 25, "max_results": 25, "max_distance": 50000, "min_value": 100000,   # defaults of the plot form
           "use_mapping_value": True, "avoid_thargoids": True, "loop": False}
@@ -1408,6 +1411,11 @@ CREATE TABLE IF NOT EXISTS carrier_markets (ts TEXT, market_id INTEGER, items TE
 CREATE TABLE IF NOT EXISTS carrier_counts (
     ts TEXT, carrier INTEGER, commodity TEXT, count INTEGER, name TEXT, PRIMARY KEY (ts, carrier, commodity));
 CREATE INDEX IF NOT EXISTS cargo_events_market ON cargo_events (market, ts);
+-- A trade route (the same slot, meta riches kind "trade"; outrider/cargo.py trade_rows): each stop's station and what to
+-- sell and buy there (JSON lists). What you have done is in meta riches' "trade". Live only, as above.
+CREATE TABLE IF NOT EXISTS trade_stops (
+    idx INTEGER PRIMARY KEY, station TEXT, market_id INTEGER, ls REAL, updated REAL, distance REAL, sell TEXT, buy TEXT,
+    profit INTEGER, cumulative INTEGER);
 CREATE INDEX IF NOT EXISTS route_xyz ON route_systems (x, y, z);
 CREATE INDEX IF NOT EXISTS visits_xyz ON visits (x, y, z);
 """
@@ -2237,6 +2245,11 @@ class Journals:
                 if (x["idx"], x["n"]) in bodies:
                     bodies[(x["idx"], x["n"])]["species"].append(
                         {"genus": x["genus"], "species": x["species"], "value": x["value"], "count": x["count"]})
+            for t in self.db.execute("SELECT * FROM trade_stops ORDER BY idx") if rc.get("kind") == "trade" else ():
+                if t["idx"] in by:
+                    by[t["idx"]].update(station=t["station"], market_id=t["market_id"], ls=t["ls"], updated=t["updated"],
+                                        distance=t["distance"], sell=json.loads(t["sell"] or "[]"),
+                                        buy=json.loads(t["buy"] or "[]"), profit=t["profit"], cumulative=t["cumulative"])
             self._rc_rows = (rc.get("id"), rows)
         return self._rc_rows[1]
 
@@ -2258,6 +2271,8 @@ class Journals:
         """What route row i still has to do, from the journal: Road to Riches, its bodies (scan, and the map when the
         route counts mapping); Exomastery, its (body, species) pairs not yet sampled, best first."""
         r = rows[i]
+        if rc.get("kind") == "trade":   # the sales and purchases still to make at that stop (your MarketSell / MarketBuy)
+            return trade_left(r, (rc.get("trade") or {}).get(str(i)))
         if rc.get("kind") == "exo":
             return exo_left(r["bodies"], self.exo_sampled(r["id64"]) if r["id64"] is not None else set())
         scanned, mapped = self.riches_marks(r["id64"]) if r["id64"] is not None else (set(), set())
@@ -2279,7 +2294,8 @@ class Journals:
         rows = self.riches_route(rc)
         if not rows:
             return
-        exo = rc.get("kind") == "exo"
+        exo, kind = rc.get("kind") == "exo", rc.get("kind") or "riches"
+        text = trade_text if kind == "trade" else exo_text if exo else riches_text
         at, furthest, done = rc.get("at"), rc.get("furthest"), bool(rc.get("done_ts"))
         i = riches_match(rows, id64, name, at if at is not None else furthest or 0)
         rc["arrival_ts"] = ts
@@ -2297,16 +2313,53 @@ class Journals:
                 pass   # finished: the route stays visible, quietly, until cleared
             elif not left and i == len(rows) - 1:
                 rc.update(done_ts=ts, said_done=i)
-                say = ("complete", (exo_text if exo else riches_text)(rows, i, left), 0)
+                say = ("complete", trade_done_text(rows, i) if kind == "trade" else text(rows, i, left), 0)
             else:
                 if not left:
                     rc["said_done"] = i   # nothing to do here: no "all done" to say later
-                say = ("back" if back else "next", ("Back on the route. " if back else "") + (exo_text if exo else riches_text)(rows, i, left),
-                       len(left))
+                say = ("back" if back else "next", ("Back on the route. " if back else "") + text(rows, i, left), len(left))
         meta_set(self.db, "riches", rc)
         if say and live_event(ts):
             nxt = rows[i + 1]["system"] if i is not None and i + 1 < len(rows) else None
-            self.moment("exo" if exo else "riches", ts, what=say[0], text=say[1], system=name, index=i, next=nxt, left=say[2])
+            self.moment(kind, ts, what=say[0], text=say[1], system=name, index=i, next=nxt, left=say[2])
+
+    def trade_progress(self, ev, ts):
+        """A MarketSell or MarketBuy at the trade route's stop you are at: the trades made there, and once they are all
+        made the hop's profit and the next stop, or the route's end (once; marked in meta whether or not it is spoken,
+        so a re-read says nothing later)."""
+        rc = meta_get(self.db, "riches")
+        if not rc or rc.get("kind") != "trade" or rc.get("at") is None or rc.get("done_ts"):
+            return
+        since = rc.get("since_ts") or rc.get("created_ts") or ""
+        if ts < since:
+            return
+        rows = self.riches_route(rc)
+        i = rc["at"]
+        if i >= len(rows) or ev.get("MarketID") != rows[i].get("market_id"):
+            return
+        sold = ev.get("event") == "MarketSell"
+        wanted = {outrider.cargo.norm(c["name"]): c["name"] for c in rows[i].get("sell" if sold else "buy") or []}
+        names = {outrider.cargo.norm(n) for n in (ev.get("Type_Localised"), ev.get("Type"), self.commodity_names.get(
+            outrider.cargo.cid(ev.get("Type")))) if n}
+        hit = next((wanted[n] for n in names if n in wanted), None)
+        if not hit:
+            return
+        done = rc.setdefault("trade", {}).setdefault(str(i), {"sold": [], "bought": []})
+        key = "sold" if sold else "bought"
+        if hit in done[key]:
+            return
+        done[key].append(hit)
+        if trade_left(rows[i], done) or rc.get("said_done") == i:
+            meta_set(self.db, "riches", rc)
+            return
+        rc["said_done"] = i
+        last = i == len(rows) - 1
+        if last:
+            rc["done_ts"] = ts
+        meta_set(self.db, "riches", rc)
+        if live_event(ts):
+            self.moment("trade", ts, what="complete" if last else "done", system=rows[i]["system"], index=i,
+                        next=None if last else rows[i + 1]["system"], left=0, text=trade_done_text(rows, i))
 
     def riches_progress(self, id64, ts):
         """After a Scan or a mapping in the system you are at on a Road to Riches route: when that was the last body
@@ -3288,6 +3341,8 @@ class Journals:
                 self.cargo_dock = at
                 meta_set(self.db, "cargo_dock", at)
             return
+        if name in ("MarketBuy", "MarketSell"):
+            self.trade_progress(ev, ts)   # a trade route's stop: the trades made there
         if name in CARRIER_CARGO_EVENTS:
             market = ev.get("MarketID") if name in ("MarketBuy", "MarketSell") else \
                 self.cargo_dock if name == "CargoTransfer" else ev.get("CarrierID")
@@ -9430,6 +9485,16 @@ class State:
         or its species with what you have sampled and what would be new to your codex there (Exomastery: by species,
         in the system's region, which never over-flags), from the journal."""
         r = rows[i]
+        if rc.get("kind") == "trade":   # a stop: its station, what to sell and buy there, with what your journal shows done
+            done = (rc.get("trade") or {}).get(str(i)) or {}
+            left = trade_left(r, done)
+            return {"i": i, "system": r["system"], "id": str(r["id64"]) if r["id64"] is not None else None,
+                    "x": r["x"], "y": r["y"], "z": r["z"], "jumps": None, "station": r.get("station"), "ls": r.get("ls"),
+                    "distance": r.get("distance"), "profit": r.get("profit") or 0, "cumulative": r.get("cumulative") or 0,
+                    "age_s": round(time.time() - r["updated"]) if r.get("updated") else None, "left": len(left),
+                    "value": r.get("profit") or 0, "value_left": 0, "bodies": [],
+                    "sell": [dict(c, done=c["name"] in (done.get("sold") or [])) for c in r.get("sell") or []],
+                    "buy": [dict(c, done=c["name"] in (done.get("bought") or [])) for c in r.get("buy") or []]}
         if rc.get("kind") == "exo":
             region = (outrider.bio.region_name(r["x"], r["y"], r["z"])
                       if outrider.bio and None not in (r["x"], r["y"], r["z"]) else None)
@@ -9477,7 +9542,17 @@ class State:
         cargo = (self.journals.cargo or {}).get("count") or 0
         return {"route": route, "plotting": self.riches_plotting, "position": with_id(self.journals.pos),
                 "range": round(fleet_range(fig, cargo), 2) if ship and fleet_range(fig, cargo) else None,
-                "defaults": dict(RICHES), "clipboard": cb}
+                "defaults": dict(RICHES), "trade": self.trade_defaults(), "clipboard": cb}
+
+    def trade_defaults(self):
+        """The trade plot form's defaults: outrider.cargo.TRADE, and from your journal the station you are docked at,
+        your credits, your ship's hold and whether it needs a large pad."""
+        j, ship = self.journals, self.journals.ship or {}
+        dk = self.docked_summary() or {}
+        pos = j.pos or {}
+        return dict(outrider.cargo.TRADE, station=dk.get("station") if dk.get("system") in (None, pos.get("name")) else None,
+                    capital=(self.commander_summary() or {}).get("credits"), max_cargo=ship.get("cargo_capacity"),
+                    requires_large_pad=outrider.cargo.SHIP_PAD.get((ship.get("type") or "").lower()) == outrider.cargo.LARGE)
 
     def riches_start_plot(self, body):
         """POST /api/riches/plot: check the request, start the Spansh job in the background, (answer, HTTP status).
@@ -9485,9 +9560,11 @@ class State:
         max_distance, min_value, use_mapping_value, avoid_thargoids, loop}."""
         if self.riches_task and not self.riches_task.done():
             return {"error": "a route is being plotted already"}, 409
-        kind = body.get("kind", "riches")   # the survey slot's route type: Road to Riches, or Expressway to Exomastery
-        if kind not in ("riches", "exo"):
-            return {"error": "kind must be riches or exo"}, 400
+        kind = body.get("kind", "riches")   # the slot's route type: Road to Riches, Expressway to Exomastery, or trade
+        if kind not in ("riches", "exo", "trade"):
+            return {"error": "kind must be riches, exo or trade"}, 400
+        if kind == "trade":
+            return self.trade_start_plot(body)
         name = lambda v: " ".join(v.split()) if isinstance(v, str) else ""
         frm = name(body.get("from")) or (self.journals.pos or {}).get("name") or ""
         to = name(body.get("to"))
@@ -9539,11 +9616,72 @@ class State:
         self.bump()
         return {"ok": True, "plotting": self.riches_plotting}, 202
 
+    def trade_start_plot(self, body):
+        """POST /api/riches/plot {kind: "trade"}: Spansh's trade planner from a station (default: the one you are docked
+        at), with your capital and hold (defaults from your journal), hops, hop distance (ly), distance from the star
+        (ls), data age (days) and the pad and allow flags. The route takes the survey slot, as a survey route does."""
+        d = self.trade_defaults()
+        name = lambda v: " ".join(v.split()) if isinstance(v, str) else ""
+        frm = name(body.get("from")) or (self.journals.pos or {}).get("name") or ""
+        station = name(body.get("station")) or (d["station"] if not name(body.get("from")) else "") or ""
+        if not frm or not station or len(frm) > FIND_NAME_MAX or len(station) > FIND_NAME_MAX:
+            return {"error": "give the system and the station to start from (docked, they are filled in)"}, 400
+
+        def whole(k, lo, hi, default):
+            v = body.get(k)
+            if v is None or v == "":
+                v = default
+            if isinstance(v, bool) or not isinstance(v, (int, float, str)):
+                raise ValueError(f"{k} is not a number")
+            try:
+                v = int(float(v))
+            except (ValueError, OverflowError):
+                raise ValueError(f"{k} is not a number") from None
+            if not lo <= v <= hi:
+                raise ValueError(f"{k} is out of range ({lo:,} to {hi:,})")
+            return v
+
+        def flag(k, default):
+            v = body.get(k, default)
+            if not isinstance(v, bool):
+                raise ValueError(f"{k} must be true or false")
+            return v
+        try:
+            if d["capital"] is None and body.get("capital") in (None, ""):
+                raise ValueError("give your capital (credits): no LoadGame read yet")
+            if d["max_cargo"] is None and body.get("max_cargo") in (None, ""):
+                raise ValueError("give the hold (t): no Loadout read yet")
+            opts = {"station": station, "capital": whole("capital", 0, 10 ** 13, d["capital"]),
+                    "max_cargo": whole("max_cargo", 1, 10000, d["max_cargo"]),
+                    "max_hops": whole("max_hops", 1, 20, d["max_hops"]),
+                    "max_hop_distance": whole("max_hop_distance", 1, 1000, d["max_hop_distance"]),
+                    "max_system_distance": whole("max_system_distance", 1, 1000000, d["max_system_distance"]),
+                    "max_price_age_days": whole("max_price_age_days", 1, 365, d["max_price_age_days"]),
+                    "requires_large_pad": flag("requires_large_pad", d["requires_large_pad"])}
+            opts.update({k: flag(k, d[k]) for k in ("allow_planetary", "allow_player_owned", "allow_prohibited", "permit", "unique")})
+        except ValueError as e:
+            return {"error": str(e)}, 400
+        params = {"system": frm, "station": station, "starting_capital": opts["capital"], "max_cargo": opts["max_cargo"],
+                  "max_hops": opts["max_hops"], "max_hop_distance": opts["max_hop_distance"],
+                  "max_system_distance": opts["max_system_distance"], "max_price_age": opts["max_price_age_days"] * 86400,
+                  **{k: int(opts[k]) for k in ("requires_large_pad", "allow_planetary", "allow_player_owned",
+                                               "allow_prohibited", "permit", "unique")}}
+        self.riches_plotting = {"state": "running", "kind": "trade", "from": f"{station}, {frm}", "to": None,
+                                "started": iso_ts(time.time()), "error": None}
+        self.riches_task = asyncio.get_running_loop().create_task(self._riches_plot(params, {"options": opts, "kind": "trade"}))
+        self.bump()
+        return {"ok": True, "plotting": self.riches_plotting}, 202
+
     async def _riches_plot(self, params, meta):
         p = self.riches_plotting
+        kind = meta.get("kind")
         try:
-            result = await self.spansh.plot(SPANSH_EXO if meta.get("kind") == "exo" else SPANSH_RICHES, params, method=RICHES_METHOD)
-            self.riches_store(riches_rows(result), meta)
+            result = await self.spansh.plot(SPANSH_TRADE if kind == "trade" else SPANSH_EXO if kind == "exo" else SPANSH_RICHES,
+                                            params, method=RICHES_METHOD, timeout=TRADE_PLOT_TIMEOUT if kind == "trade" else None)
+            rows = trade_rows(result) if kind == "trade" else riches_rows(result)
+            if kind == "trade" and not rows:
+                raise RichesError("Spansh found no trade route from there with these limits")
+            self.riches_store(rows, meta)
             p.update(state="done")
             self.riches_copy_next(force=True)   # you are usually at its start: the first hop is ready to paste
         except (HighwayError, RichesError) as e:
@@ -9568,6 +9706,12 @@ class State:
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [(i, n, b["name"], b["type"], b["subtype"], b["ls"], b["scan"], b["map"], b["terraformable"], b["body_id"])
              for i, r in enumerate(rows) for n, b in enumerate(r["bodies"])])
+        self.db.execute("DELETE FROM trade_stops")
+        self.db.executemany(
+            "INSERT INTO trade_stops (idx, station, market_id, ls, updated, distance, sell, buy, profit, cumulative)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [(i, r["station"], r["market_id"], r["ls"], r["updated"], r["distance"], json.dumps(r["sell"]),
+              json.dumps(r["buy"]), r["profit"], r["cumulative"]) for i, r in enumerate(rows) if "station" in r])
         self.db.execute("DELETE FROM riches_species")
         self.db.executemany(
             "INSERT INTO riches_species (idx, n, k, genus, species, value, count) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -9593,6 +9737,7 @@ class State:
         self.db.execute("DELETE FROM riches_route")
         self.db.execute("DELETE FROM riches_bodies")
         self.db.execute("DELETE FROM riches_species")
+        self.db.execute("DELETE FROM trade_stops")
         meta_set(self.db, "riches", None)
         self.db.commit()
         self.bump()
@@ -9612,7 +9757,7 @@ class State:
             "complete": bool(rc.get("done_ts")), "off_route": bool(rc.get("off_route")),
             "left_here": len(self.journals.riches_left(rc, rows, at)) if at is not None else None,
             "next": nxt and {"name": nxt["system"], "id": str(nxt["id64"]) if nxt["id64"] is not None else None,
-                             "jumps": nxt["jumps"],
+                             "jumps": nxt["jumps"], "station": nxt.get("station"),
                              "distance": round(dist(pos, nxt), 1) if pos and None not in (nxt["x"], nxt["y"], nxt["z"])
                              else None},
         }
