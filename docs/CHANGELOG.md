@@ -2,6 +2,14 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-07 · 🎯 on any route system
+- A small 🎯 beside every system in Plot Route's lists (Highway and Road to Riches; not the one you are in, passed
+  ones included) and beside the next system in the line under the tiles for either route: it targets that system in
+  the galaxy map, after the usual 5 s countdown (none from the tablet, whose row sheet has a 🎯 Target button). The
+  same run as Target next; game PC only, hidden in server mode. A survey route is still never targeted on its own.
+- `POST /api/highway/target` takes `{route: "highway" | "survey", index}` (without it, Target next as before); a
+  cleared or replaced route stops only a run aimed at it.
+
 ## 2026-10-07 · The route line for every route
 - The line under the tiles (Overview, Nearby, Here, and the tablet's strip) shows a Road to Riches route too, not
   only the Highway's: "💰 Next: X · 12.3 ly · 2 of 5 · 2 bodies to do here" (🧬 for Exomastery, coming next). With

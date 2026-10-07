@@ -4320,11 +4320,14 @@ function hwyLineHtml(s, {short = false, glyph = true} = {}) {
 }
 let hwyRun = null;   // the run this page started (test now, Target next, Retry): {seq, kind, system, n, dry, done, msg}
 // Target next (review Q4): beside the line's next system; the run's countdown shows on it while this page's run counts
-function hwyAimBtn(name) {
-  const r = hwyRun, mine = r && r.kind === "next" && !r.done;
-  const label = !mine ? "🎯 target" : r.n > 0 ? `🎯 in ${r.n} s` : "🎯 targeting…";
-  return ` <button type="button" class="mini hwyaim" data-aim="next" ${mine ? "disabled " : ""}` +
-    `title="target ${esc(name)} in the galaxy map, 5 s from now: click back into the game meanwhile">${label}</button>`;
+// 🎯 on a route system (the author, 2026-10-07): route "highway" | "survey" and its row, or (no route) the Highway's
+// Target next as before (the next system, off the route the nearest); `icon`: just 🎯 (a list's rows)
+function hwyAimBtn(name, route = null, index = null, icon = false) {
+  const key = route ? `${route}:${index}` : "next", r = hwyRun, mine = r && r.kind === "next" && !r.done && (r.key || "next") === key;
+  const label = !mine ? (icon ? "🎯" : "🎯 target") : r.n > 0 ? `🎯 in ${r.n} s` : "🎯 targeting…";
+  return ` <button type="button" class="mini hwyaim${icon ? " icon" : ""}" data-aim="next"` +
+    (route ? ` data-route="${route}" data-index="${index}"` : "") + `${mine ? " disabled" : ""}` +
+    ` title="target ${esc(name)} in the galaxy map${TABLET ? "" : ", 5 s from now: click back into the game meanwhile"}">${label}</button>`;
 }
 // the strip under the header: only on Overview, Nearby and Here, only with a route
 function renderHwyLine() {
@@ -4355,7 +4358,7 @@ function surveyLineHtml(s, {short = false, glyph = true} = {}) {
   if (s.off_route) return `${g}<span class="hwyoff">Off Route: Detour</span>${short ? "" : ` · ${k.name}`}`;
   const n = s.next;
   if (!n) return `${g}${k.name} to ${hwyName(s.destination)}${left}`;
-  const bits = [`${s.index === 0 && s.at == null ? "Start" : "Next"}: ${hwyName(n.name)}`];
+  const bits = [`${s.index === 0 && s.at == null ? "Start" : "Next"}: ${hwyName(n.name)}${short ? hwyAimBtn(n.name, "survey", s.index) : ""}`];
   if (n.jumps > 1) bits.push(`${n.jumps} jumps`);
   if (n.distance != null) bits.push(`${Number(n.distance).toFixed(1)} ly`);
   bits.push(`${s.index} of ${s.total}`);
@@ -4399,6 +4402,7 @@ const hwyFuel = v => v == null ? "" : fuelT(v);
 function hwyRowHtml(r, cls, retry = false) {
   return `<tr class="${cls}" data-i="${r.i}"><td class="num">${r.i}</td>` +
     `<td class="name" data-name="${esc(r.system)}" title="click to copy">${nameWords(r.system)}` +
+    (/\bat\b/.test(cls) ? "" : hwyAimBtn(r.system, "highway", r.i, true)) +
     (retry ? ` <button type="button" class="mini hwyretry" data-aim="next" title="auto-target failed here: try again, 5 s from now (click back into the game meanwhile)">⟳ Retry</button>` : "") +
     `</td>` +
     `<td class="num">${r.i > 0 && r.distance != null ? r.distance.toFixed(1) : ""}</td>` +
@@ -4673,20 +4677,22 @@ function hwyRunTrack() {
     : `${w} failed: ${t.why || "?"}`;
 }
 // start a run: "test now" (kind test) or Target next / Retry (kind next), then count down to it on the page
-async function hwyAutoStart(kind) {
+async function hwyAutoStart(kind, aim = null) {
   const url = kind === "test" ? "api/highway/autotarget/test" : "api/highway/target", w = kind === "test" ? "test" : "target";
   const show = msg => { hwyRun = {seq: null, kind, done: true, msg}; drawHwyAuto(); renderHwyLine(); if (kind !== "test") toast(msg); };
   let r, j;
   // no countdown from the tablet: the game keeps the keyboard focus (the desktop page's click took it)
-  const opts = TABLET && kind !== "test" ? {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({countdown: 0})} : {method: "POST"};
+  const body = Object.assign(TABLET && kind !== "test" ? {countdown: 0} : {}, aim || {});
+  const opts = Object.keys(body).length ? {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)} : {method: "POST"};
   try { r = await fetch(url, opts); j = await r.json(); }
   catch { show("could not reach Outrider"); return; }
   if (!r.ok) { show(`cannot ${w}: ${j.error || "?"}`); return; }
-  const mine = hwyRun = {seq: j.seq, kind, system: j.system, n: j.in, dry: j.dry_run, done: false, msg: ""};
+  const mine = hwyRun = {seq: j.seq, kind, key: aim ? `${aim.route}:${aim.index}` : "next", system: j.system, n: j.in, dry: j.dry_run, done: false, msg: ""};
   const tick = () => {
     if (mine.done || mine !== hwyRun) return;
     mine.msg = mine.n > 0 ? `click into the game: targeting ${j.system} in ${mine.n} s${j.dry_run ? " (dry run)" : ""}` : `targeting ${j.system}…`;
     drawHwyAuto(); renderHwyLine();
+    if (view === "hwy") renderHwy();   // the list's 🎯 counts down too
     if (mine.n > 0) { mine.n--; setTimeout(tick, 1000); }
   };
   tick();
@@ -4711,7 +4717,7 @@ document.addEventListener("click", e => {
   const b = e.target.closest("[data-aim]");
   if (!b) return;
   e.stopPropagation(); e.preventDefault();
-  if (!b.disabled) hwyAutoStart(b.dataset.aim);
+  if (!b.disabled) hwyAutoStart(b.dataset.aim, b.dataset.route ? {route: b.dataset.route, index: Number(b.dataset.index)} : null);
 }, true);
 function renderHwy() {
   if (view !== "hwy") return;
@@ -4823,7 +4829,7 @@ const bodyShort = (name, system) => name && system && name.toLowerCase().startsW
 function richRowHtml(s, rt) {
   const cls = s.i === rt.at ? "at" : s.i === rt.next ? "next" : rt.at != null && s.i < rt.at ? "done" : "ahead";
   const row = `<tr class="richsys ${cls}" data-i="${s.i}"><td class="num">${s.i}</td>` +
-    `<td class="name" data-name="${esc(s.system)}" title="click to copy">${nameWords(s.system)}</td>` +
+    `<td class="name" data-name="${esc(s.system)}" title="click to copy">${nameWords(s.system)}${cls === "at" ? "" : hwyAimBtn(s.system, "survey", s.i, true)}</td>` +
     `<td class="num">${s.i && s.jumps ? s.jumps : ""}</td>` +
     `<td class="num ${s.left ? "richleft" : "richnone"}">${s.left ? s.left : s.bodies.length ? "done" : ""}</td>` +
     `<td class="num">${s.left ? "≈" + credits(s.value_left) : ""}</td><td class="num">${s.value ? credits(s.value) : ""}</td></tr>`;
@@ -7397,6 +7403,7 @@ function tabSetup() {
     tabClose(document.getElementById("tabSheet"));
     if (b.dataset.act === "here") showInHere(b.dataset.id);
     else if (b.dataset.act === "updskip") skipUpdate();
+    else if (b.dataset.act === "aim") hwyAutoStart("next", {route: b.dataset.route, index: Number(b.dataset.index)});
     else if (b.dataset.act === "bm") openBookmark(b.dataset.id, b.dataset.name);
   });
   document.getElementById("tabBanner").onclick = () => tabBannerHide();
@@ -7520,12 +7527,12 @@ function tabBanner(kind, title, body) {
 }
 function tabBannerHide() { clearTimeout(TB.bannerTimer); document.getElementById("tabBanner").hidden = true; }
 // ---- the detail sheet: every fact in a table row, its full forms (the compact table hides some) ----
-const TAB_SHEET_TABLES = ["nearTable", "firstsTable", "leftTable", "bioTable", "codexTable", "bmTable", "sTable", "hwyTable", "tripTable", "topTable"];
+const TAB_SHEET_TABLES = ["nearTable", "firstsTable", "leftTable", "bioTable", "codexTable", "bmTable", "sTable", "hwyTable", "richTable", "tripTable", "topTable"];
 // what keeps its own tap: links and buttons, the ☆, a pop-up cell, ⌖ Here, a body that opens its own panel
 const TAB_OWN_TAP = "button, a, input, select, label, summary, [data-bm], [data-aim], [data-pop], [data-goto], [data-body], [data-sbodypop], [data-sort], [data-rescanpop]";
 function tabRowTap(e) {
   const tr = e.target.closest && e.target.closest("tbody tr"), table = tr && tr.closest("table");
-  if (!table || !TAB_SHEET_TABLES.includes(table.id) || e.target.closest(TAB_OWN_TAP) || tr.cells.length < 2) return;
+  if (!table || !TAB_SHEET_TABLES.includes(table.id) || e.target.closest(TAB_OWN_TAP) || tr.cells.length < 2 || tr.classList.contains("richbody")) return;
   e.preventDefault(); e.stopPropagation();
   tabOpenRow(table, tr);
 }
@@ -7545,14 +7552,15 @@ function tabRowFacts(table, tr) {
 }
 function tabOpenRow(table, tr) {
   const nameEl = tr.querySelector("[data-name]"), name = nameEl ? nameEl.dataset.name : tr.cells[0].textContent.trim();
-  const bm = tr.querySelector("[data-bm]");
+  const bm = tr.querySelector("[data-bm]"), aim = tr.querySelector("[data-aim][data-route]");   // 🎯 on a route row
   // the system's id: a link to it, else its ☆ (Search's results and Bookmarks have no other)
   const idEl = tr.querySelector("[data-id], [data-goto]"), id = idEl ? idEl.dataset.id || idEl.dataset.goto : bm ? bm.dataset.bm : null;
   document.getElementById("tabSheetTitle").textContent = name;
   document.getElementById("tabSheetList").innerHTML = tabRowFacts(table, tr).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join("");
   document.getElementById("tabSheetActs").innerHTML =
     (id ? `<button type="button" class="tb-btn" data-act="here" data-id="${esc(id)}">Show in Here</button>` : "") +
-    (bm ? `<button type="button" class="tb-btn" data-act="bm" data-id="${esc(bm.dataset.bm)}" data-name="${esc(bm.dataset.name || name)}">Bookmark…</button>` : "");
+    (bm ? `<button type="button" class="tb-btn" data-act="bm" data-id="${esc(bm.dataset.bm)}" data-name="${esc(bm.dataset.name || name)}">Bookmark…</button>` : "") +
+    (aim && data && data.game_pc !== false ? `<button type="button" class="tb-btn" data-act="aim" data-route="${esc(aim.dataset.route)}" data-index="${esc(aim.dataset.index)}">🎯 Target</button>` : "");
   tabShow(document.getElementById("tabSheet"));
 }
 // ---- the settings sheet: the theme, dim, this screen's size (CSS px), the app's version, sign out, and the app's own

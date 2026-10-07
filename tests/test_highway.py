@@ -1811,6 +1811,64 @@ class HighwayAutoTarget(unittest.TestCase):
         hwy_jump(self, 3, end["id64"], end["name"], end["x"])
         self.assertIn(T(manual=True)[1], ("you are at the end of the route", "the highway is complete"))
 
+    def test_aim_any_route_system(self):
+        """🎯 on any system of a route (the author, 2026-10-07): the Highway's or the survey route's (Road to Riches /
+        Exomastery), checked (a row of the route plotted now, not where you are, with an id64), through the same run as
+        Target next; the request's route and index validated; a survey route cleared stops a run aimed at it."""
+        import asyncio
+        import outrider.riches as riches
+        from aiohttp.test_utils import TestClient, TestServer
+        self.state.honker, self.state.targeter = self.honker, self.targeter
+        self.j.status_json = self.status
+        R = self.state.route_target
+        self.assertEqual(R("highway", 1), (None, "no route is plotted"))
+        self.assertEqual(R("moon", 1)[1], "route must be highway or survey")
+        hwy_plot_exact(self)
+        hwy_jump(self, 1, 101, "Neu A", 50)
+        self.assertEqual(R("highway", 99)[1], "the route has no system 99")
+        self.assertEqual(R("highway", True)[1], "index must be a whole number")
+        here = self.state.highway_state()[0]["at"]
+        self.assertEqual(R("highway", here)[1], "you are in Neu A already")
+        self.assertEqual((R("highway", 2)[0]["name"], R("highway", 2)[0]["index"]), ("Bridge B", 2))
+        self.assertEqual(R("highway", 0)[0]["name"], self.state.highway_state()[1][0]["system"])   # back to a passed one too
+        # a survey route: its rows, by index
+        rows = riches.riches_rows([{"name": "Neu A", "id64": 101, "x": 50, "y": 0, "z": 0, "jumps": 0, "bodies": []},
+                                   {"name": "Bridge B", "id64": self.game.systems["Bridge B"], "x": 70, "y": 0, "z": 0, "jumps": 1,
+                                    "bodies": []}])
+        self.state.riches_store(rows, {"options": {}})
+        self.assertEqual((R("survey", 1)[0]["name"], R("survey", 1)[0]["route"]), ("Bridge B", self.state.riches_state()[0]["id"]))
+
+        async def go():
+            out = {}
+            async with TestClient(TestServer(ed_outrider.make_app(self.state))) as c:
+                async def post(body):
+                    r = await c.post("/api/highway/target", json=body)
+                    return r.status, await r.json()
+                out["bad"] = [(await post(b))[0] for b in ({"route": "moon", "index": 1}, {"route": "survey", "index": "1"},
+                                                            {"route": "survey"}, {"index": 1})]
+                out["started"] = await post({"route": "survey", "index": 1, "countdown": 0})
+                await self.state.autotarget_test_task
+                out["last"] = dict(self.state.autotarget_last)
+            return out
+        out = asyncio.run(go())
+        self.assertEqual(out["bad"], [400, 400, 400, 400])
+        self.assertEqual((out["started"][0], out["started"][1]["system"]), (200, "Bridge B"))
+        self.assertEqual((out["last"]["done"], out["last"]["system"]), (True, "Bridge B"))
+        # a run aimed at the survey route stops when that route is cleared (the Highway's clear would not touch it)
+        self.state.autotarget_test_countdown = 0.2
+        self.status["destination"] = None
+
+        async def stop():
+            body, status = self.state.start_autotarget_run("next", aim=("survey", 1))
+            self.assertEqual(status, 200, body)
+            await asyncio.sleep(0.05)
+            self.state.riches_clear()
+            await self.state.autotarget_test_task
+        writes = len(self.game.writes)
+        asyncio.run(stop())
+        self.assertEqual(len(self.game.writes), writes)
+        self.assertEqual((self.state.autotarget_test["state"], self.state.autotarget_test["why"]), ("failed", "stopped"))
+
     def test_target_next_stops_with_the_route(self):   # the Batch 4 lifecycle: a cleared route stops it too
         import asyncio
         self.wire()

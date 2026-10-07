@@ -1119,6 +1119,8 @@ const settle = async maxMs => {
     got.systems = [...d.querySelectorAll("#richRows tr.richsys")].map(e => e.className.replace("richsys ", "") + ":" + e.dataset.i).join();
     got.bodies = d.querySelectorAll("#richRows tr.richbody").length;   // A is all done (folded), B and C list theirs
     got.marks = [...d.querySelectorAll("#richRows td.richmark")].map(e => e.textContent).join("|");
+    // 🎯 beside every route system but the one you are in (row 1 here)
+    got.aims = [...d.querySelectorAll("#richRows [data-aim]")].map(b => b.dataset.route + ":" + b.dataset.index).join();
     got.head = d.getElementById("hwyHead").textContent.replace(/\s+/g, " ");
     got.formFolded = !d.getElementById("hwyPlot").open;
     // the plotter switch: Road to Riches' options, the neutron-only and exact-only ones hidden, To optional
@@ -1160,7 +1162,7 @@ const settle = async maxMs => {
     await w.eval("loadHwy(true)"); await w.eval("loadRich(true)");
     d.querySelector('[data-view="overview"]').click(); await sleep(200);
     const want = {noTab: "Plot Route", shown: [true, true, true], systems: "done:0,at:1,next:2", bodies: 3, marks: "✔||",
-      formFolded: true, form: ["true,true", "false,false", "false", "false", "optional: where to end"],
+      aims: "survey:0,survey:2", formFolded: true, form: ["true,true", "false,false", "false", "false", "optional: where to end"],
       plotBody: {to: "Far Away", range: 61.5, radius: 25, max_results: 25, max_distance: 50000, min_value: 100000,
                  use_mapping_value: true, avoid_thargoids: true, loop: false},
       both: ["hwy,rich*", true], picked: ["hwy*,rich", true, true, '"hwy"'], clearFirst: [0, "Click again to clear"],
@@ -1184,6 +1186,8 @@ const settle = async maxMs => {
     w.eval(`view = "near"; data.highway = null; data.survey = {kind: "riches", id: "s1", created_ts: "2026-10-07T10:00:00Z", destination: "Rich Z",
       total: 5, index: 2, at: 1, complete: false, off_route: false, left_here: 2, next: {name: "Rich C", jumps: 1, distance: 12.34}}; renderHwyLine()`);
     got.riches = line();
+    const aim = d.querySelector("#hwyLine [data-aim]");
+    got.aim = aim && [aim.dataset.route, aim.dataset.index].join(":");
     w.eval(`data.survey.kind = "exo"; data.survey.left_here = 3; renderHwyLine()`);
     got.exo = line();
     w.eval(`data.highway = {id: "h1", created_ts: "2026-10-07T09:00:00Z", destination: "Hw Z", total: 9, index: 4, at: 3,
@@ -1195,8 +1199,8 @@ const settle = async maxMs => {
     got.done = line();
     w.localStorage.removeItem("hwyShow");
     w.__keep = keep; w.eval("[data.highway, data.survey, view] = window.__keep; renderHwyLine()");
-    const want = {riches: "💰 Next: Rich C · 12.3 ly · 2 of 5 · 2 bodies to do here", exo: "🧬 Next: Rich C · 12.3 ly · 2 of 5 · 3 species to sample here",
-      both: "🧬", picked: "🛣", done: "🧬 Exomastery complete"};
+    const want = {riches: "💰 Next: Rich C 🎯 target · 12.3 ly · 2 of 5 · 2 bodies to do here", exo: "🧬 Next: Rich C 🎯 target · 12.3 ly · 2 of 5 · 3 species to sample here",
+      both: "🧬", picked: "🛣", done: "🧬 Exomastery complete", aim: "survey:2"};
     const bad = Object.keys(want).filter(k => !String(got[k]).startsWith(want[k]));
     const goodRL = !bad.length && errors.length === before;
     allOk = allOk && goodRL;

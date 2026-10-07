@@ -4943,6 +4943,7 @@ class State:
         self.autotarget_task = None
         self._autotarget_cancel = None   # threading.Event: the automatic run's own token (switch-off, route cleared/replaced)
         self._autotarget_next_cancel = None   # the same for a Target next / Retry run (route cleared/replaced only)
+        self._autotarget_next_route = "highway"   # the route that run aims at: "highway" or "survey" (🎯 on a survey row)
         self.autotarget_last = None   # {system, ts, done, phase, label, why, dry_run, test}: the latest run's result
         self.targeter = None          # outrider.target.Targeter, set at start (None in tests)
         self.autotarget_running = None   # the target a sequence is pressing keys for now
@@ -9191,6 +9192,7 @@ class State:
 
     def riches_store(self, rows, meta):
         """A new route replaces the old one: its rows and bodies, and its meta with where you are on it now."""
+        self.cancel_autotarget(route="survey")   # a 🎯 run aimed at the old route's system
         self.db.execute("DELETE FROM riches_route")
         self.db.execute("DELETE FROM riches_bodies")
         self.db.executemany("INSERT INTO riches_route (idx, system, id64, x, y, z, jumps) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -9216,6 +9218,7 @@ class State:
             self.riches_task.cancel()
             if self.riches_plotting:
                 self.riches_plotting.update(state="failed", error="cancelled")
+        self.cancel_autotarget(route="survey")
         self.db.execute("DELETE FROM riches_route")
         self.db.execute("DELETE FROM riches_bodies")
         meta_set(self.db, "riches", None)
@@ -9312,6 +9315,29 @@ class State:
         if r["id64"] is None:
             return None, f"{r['system']} has no id64 to check the target against"
         return {"name": r["system"], "id64": r["id64"], "here": pos["id64"], "route": hw.get("id"), "index": nx}, None
+
+    def route_target(self, route, index):
+        """({name, id64, here, route, index}, None) for 🎯 on a system of a route ("highway" or "survey": Road to Riches /
+        Exomastery), or (None, why not): a row of the route plotted now, not the system you are in, with an id64 (the
+        target is checked against Status.json's Destination by id64)."""
+        if route not in ("highway", "survey"):
+            return None, "route must be highway or survey"
+        if isinstance(index, bool) or not isinstance(index, int):
+            return None, "index must be a whole number"
+        meta, rows = self.highway_state() if route == "highway" else self.riches_state()
+        if not meta:
+            return None, "no route is plotted"
+        if not 0 <= index < len(rows):
+            return None, f"the route has no system {index}"
+        pos = self.journals.pos
+        if not pos or pos.get("id64") is None:
+            return None, "your position is not known yet"
+        r = rows[index]
+        if r["id64"] is None:
+            return None, f"{r['system']} has no id64 to check the target against"
+        if r["id64"] == pos["id64"]:
+            return None, f"you are in {r['system']} already"
+        return {"name": r["system"], "id64": r["id64"], "here": pos["id64"], "route": meta.get("id"), "index": index}, None
 
     def autotarget_test_target(self):
         """({name, id64, here}, None) for "test now": the nearest system in the Nearby list within 90% of the range
@@ -9503,9 +9529,13 @@ class State:
 
     def cancel_autotarget(self, route=False):
         """Stop the automatic run, wherever it is: the delay, the wait for auto honk, or between two keys. route: the
-        route was cleared or replaced, which also stops a Target next run (its target was on that route). A "test now"
-        run needs no route and is left alone."""
-        for tok in (self._autotarget_cancel, self._autotarget_next_cancel if route else None):
+        route was cleared or replaced ("survey" for Road to Riches / Exomastery; True or "highway" for the Highway's),
+        which also stops a Target next / 🎯 run aimed at a system of that route. A "test now" run needs no route and is
+        left alone."""
+        which = "highway" if route is True else route
+        aimed = self._autotarget_next_route
+        for tok in (self._autotarget_cancel if which != "survey" else None,
+                    self._autotarget_next_cancel if which and which == aimed else None):
             if tok is not None:
                 tok.set()
 
@@ -9542,18 +9572,20 @@ class State:
         whether or not auto-target is on. (response, HTTP status)."""
         return self.start_autotarget_run("test")
 
-    def start_autotarget_run(self, kind="test", countdown=None):
+    def start_autotarget_run(self, kind="test", countdown=None, aim=None):
         """A run the page asked for, after a countdown (time to click back into the game: the click took the keyboard
         focus), whether or not auto-target is on. kind "test": "test now", against a system a plain jump away (no
         route needed); "next": Target next / Retry (review Q4), against the next route system or, off the route, the
-        closest one. Refused, saying why, when it could not run. (response, HTTP status)."""
+        closest one; with `aim` (route, index): 🎯 on that system of that route (route_target). Refused, saying why,
+        when it could not run. (response, HTTP status)."""
         t, h = self.targeter, self.honker
         if not t or not t.available:
             return {"error": (h.status if h else "not started")}, 400
         if (self.autotarget_test_task and not self.autotarget_test_task.done()) or \
                 (self.autotarget_task and not self.autotarget_task.done()):
             return {"error": "auto-target is already running"}, 409
-        tgt, why = self.autotarget_test_target() if kind == "test" else self.autotarget_target(manual=True)
+        tgt, why = (self.autotarget_test_target() if kind == "test" else self.route_target(*aim) if aim
+                    else self.autotarget_target(manual=True))
         if not tgt:
             return {"error": why}, 400
         _steps, missing = t.plan()
@@ -9571,6 +9603,7 @@ class State:
         cancel = None
         if kind == "next":   # a cleared or replaced route stops it (cancel_autotarget)
             self._autotarget_next_cancel = cancel = threading.Event()
+            self._autotarget_next_route = aim[0] if aim else "highway"
         self.autotarget_test = test
         self.autotarget_test_task = asyncio.get_running_loop().create_task(self._autotarget_test(tgt, test, dry, cancel))
         self.bump()
@@ -11138,7 +11171,12 @@ def make_app(state, hosts=None):
         if cd is not None and (isinstance(cd, bool) or not isinstance(cd, (int, float)) or not math.isfinite(cd)
                                or not 0 <= cd <= 10):
             return web.json_response({"error": "countdown must be 0 to 10 seconds"}, status=400)
-        out, status = state.start_autotarget_run("next", cd)
+        aim = None
+        if "route" in body or "index" in body:   # 🎯 on a system of a route: {route: "highway" | "survey", index}
+            aim = (body.get("route"), body.get("index"))
+            if aim[0] not in ("highway", "survey") or isinstance(aim[1], bool) or not isinstance(aim[1], int):
+                return web.json_response({"error": "route must be highway or survey, index a whole number"}, status=400)
+        out, status = state.start_autotarget_run("next", cd, aim)
         return web.json_response(out, status=status)
 
     async def highway_background_view(_):
