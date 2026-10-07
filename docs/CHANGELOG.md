@@ -13,6 +13,11 @@ Newest first, one entry per commit.
   the platform, a database in a temporary folder is closed before the folder goes (`support.temp_dir`), and tests of
   file modes, symlinks and `tzset` are skipped where the system has none.
 
+## 2026-10-07 · Refuel at every fuel star: a tick in Plot Route
+- The exact plotter's options have **refuel at every fuel star** (off by default, remembered per browser): ticked,
+  Spansh plans a top-up at every scoopable star (`refuel_every_scoopable`); left empty, only where the tank needs it,
+  as since the entry below. The route's header says when it was plotted that way.
+
 ## 2026-10-07 · Exact plotter: no refuel at every scoopable star
 - The exact plotter asks Spansh with `refuel_every_scoopable` off, so a route refuels only where the tank needs it
   rather than stopping to top up at every fuel star.

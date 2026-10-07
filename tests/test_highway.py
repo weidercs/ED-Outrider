@@ -273,7 +273,8 @@ class HighwayH1(unittest.TestCase):
         self.assertEqual([x["system"] for x in r["ahead"]], ["Neu A", "Bridge B", "Scoop C", "Neu D", "End"])
         self.assertEqual([(x["i"], x["system"], x["neutron"], x["fuel_left"]) for x in r["done"]], [(0, "Start", True, 32.0)])
         self.assertEqual(r["neutrons"], [0, 1, 4])
-        self.assertEqual(r["options"], {"cargo": 3, "injections": True, "exclude_secondary": False, "supercharged": False})
+        self.assertEqual(r["options"], {"cargo": 3, "injections": True, "exclude_secondary": False, "supercharged": False,
+                                        "refuel_every_scoopable": False})
         self.assertEqual(cb.copied, ["Neu A", "Waypoint"])   # each new plot from where you are: its first hop is copied
         p = out["payload"]
         self.assertEqual((p["next"]["name"], p["next"]["neutron"], p["next"]["distance"], p["index"], p["total"],
@@ -309,6 +310,18 @@ class HighwayH1(unittest.TestCase):
                                   "supercharge_multiplier": 6, "base_mass": round(410.5 + 0.63, 3), "tank_size": 32.0,
                                   "internal_tank_size": 0.63, "max_fuel_per_jump": 6.8, "range_boost": 10.5, "cargo": 4,
                                   "refuel_every_scoopable": 0})
+        # "refuel at every fuel star" ticked: Spansh is asked for its every-scoopable stops, and the route says so;
+        # anything but true (a string, a number) is off
+        for sent, want in ((True, 1), ("yes", 0), (1, 0)):
+            sp.session = _HwSession([(200, {"job": "e", "status": "ok", "result": self.EXACT})])
+
+            async def again():
+                out, status = self.state.highway_start_plot({"from": "Start", "to": "End", "refuel_every_scoopable": sent})
+                await self.state.highway_task
+                return status
+            self.assertEqual(asyncio.run(again()), 202)
+            self.assertEqual(sp.session.calls[0][1]["refuel_every_scoopable"], want)
+            self.assertIs(self.state.highway_view()["route"]["options"]["refuel_every_scoopable"], bool(want))
         # a failed plot keeps the route you had and says why
         sp.session = _HwSession([(400, {"error": "Could not find system End"})])
 

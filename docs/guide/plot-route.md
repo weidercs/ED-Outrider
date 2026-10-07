@@ -16,6 +16,8 @@ until you plot another or **Clear route**.
   figures (drive, masses, tanks, Guardian booster, engineering) and your cargo. **Neutron** plans waypoints only,
   from a range, the supercharge (×4, or ×6 with the SCO Mk II) and an efficiency: for a ship you haven't flown, or
   a quick plot.
+- **Refuel at every fuel star** (exact plotter, off by default): ticked, the route stops to top up at every
+  scoopable star on the way; left empty, it refuels only where the tank needs it.
 - **Ship.** Any ship you have flown, as of its latest Loadout. The neutron plotter's **Range** starts at that
   ship's laden range; type another to override it.
 - **Conservative range** (off by default): jumps a margin (5 ly) shorter than the ship's range, leaving room for a
