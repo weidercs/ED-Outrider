@@ -44,7 +44,8 @@ also run 24/7 on a home server in Docker.
 | 🧭 **Decide where to go** | Unfinished systems nearby, the nearest buyers for your data, bookmarks and a next stop, stellar phenomena, and a search across Spansh. |
 | 🛣 **Neutron Highway** | Plot a neutron route with Spansh for any ship you have flown; Outrider follows it as you fly and says the next stop. |
 | 💰 **Road to Riches, Exomastery** | Plot a [Spansh Road to Riches](https://spansh.co.uk/riches) or [Expressway to Exomastery](https://spansh.co.uk/exobiology) route in the Plot Route tab; Outrider follows it as you fly, shows what is left to scan and map in each system from your journal, and says it on arrival. |
-| 📦 **Cargo and your carrier** | Your hold with what you paid, your fleet carrier's cargo and tritium tracked from your journal, where to sell or buy any of it (Spansh's markets), and Spansh's trade planner as a route to follow. |
+| 📦 **Cargo and your carrier** | Your hold with what you paid, and your fleet carrier's cargo and tritium tracked from your journal, with no Frontier sign-in. |
+| 💱 **Trading, kept small** | Where to sell or buy what you carry, from Spansh's markets, and Spansh's trade planner as a route Outrider follows and talks you through. |
 | 📜 **Your logbook** | Every journal event in a searchable log, every exobiology sample and what became of it, and a schematic of the system. |
 | 📈 **The long view** | Each trip from sale to sale with what it actually paid, what each ship loss cost, your best finds, ranks and career statistics. |
 | 🗣 **A voice with personality** | A natural neural voice, down to business, sarcastic or sweet, briefing you on arrival and warning before you leave something unfinished. |
@@ -150,7 +151,7 @@ search any text, click a row for the raw event.
 <tr>
 <td width="50%" valign="top">
 <b>Materials</b> — your <b>Cargo</b> (the ship's hold and your carrier's, with Sell and Buy: see Cargo and your
-carrier), materials against their caps, and how many FSD injections, limpets, SRV refuels and
+carrier, and Trading), materials against their caps, and how many FSD injections, limpets, SRV refuels and
 repairs and Rhino rig restocks you can make now. <b>Mining sites</b> lists each body your SRV mined: minerals
 and tons, saved spots, the last date and the distance.
 <br><br><img src="docs/images/materials.png" alt="Materials">
@@ -458,19 +459,13 @@ copies its next system to the clipboard. (Road to Riches is thshurka's contribut
 
 **Exomastery.** The fourth plotter, Spansh's **Expressway to Exomastery**, plots systems whose bodies carry valuable
 life already reported by other commanders, with the same options as Road to Riches (no mapping value). It shares Road
-to Riches' place: one survey route at a time, a new plot of either replaces it. Each body lists its species with their
+to Riches' place (and a trade route's): one of them at a time, a new plot replaces it. Each body lists its species with their
 value, ✓ once you have sampled them and ✦ when one would be new to your codex in that region; the voice says on
 arrival how many species are left on how many bodies and the best of them, and the next stop once they are sampled.
 It is known life, so first footfall (×5) is unlikely: the values shown are the base ones.
 
-**Trade.** The fifth plotter asks Spansh's [trade planner](https://spansh.co.uk/trade) for station-to-station hops:
-what to buy at each station and where to sell it. It starts at a station (the one you are docked at), with your
-credits and hold from the journal, and Spansh's options (hops, hop distance, distance from the star, data age, pad,
-planetary and player-owned stations, prohibited goods, permit systems). It takes the same place as Road to Riches and
-Exomastery: one of the three at a time. The list shows each stop with what to sell and buy there and the profit so far;
-on arrival the voice says where to dock and what to trade, ticks the goods off as your journal shows you selling and
-buying them, then says the hop's profit and the next stop. The prices are what players last reported: a stop can have
-moved on.
+**Trade.** The fifth plotter: Spansh's trade planner, station-to-station hops from where you are docked, in the
+same place as Road to Riches and Exomastery (one of the three at a time). See **💱 Trading** below.
 
 **The route line and 🎯.** The line under the tiles shows the next stop of whichever route the tab shows (🛣 the
 Highway, 💰 Road to Riches, 🧬 Exomastery, 💱 a trade route). A 🎯 beside that next system, and beside every system in the tab's lists,
@@ -527,11 +522,36 @@ The **Materials** tab starts with your **Cargo**.
   how many 500 ly jumps that gives ("Total Tritium: 14,199 t (151 jumps)", worked out jump by jump with the game's
   fuel formula). Without one the tile is as before. No carrier, no tile; a carrier being decommissioned says so in
   red with the scrap date, and once it is gone, "Decommissioned" and the date (a carrier bought since takes its place).
-- **Sell / Buy** on any line asks Spansh's markets where to sell all of it (or buy that much): best price or
-  closest, within a distance, data under an age, your ship's pad size, fleet carriers left out unless ticked (their
-  orders are often years old). Each station shows how far it is (and how far from its star), the price, demand or
-  supply, what your load earns and the profit over what you paid; opened, what else it buys from your hold, its
-  services, and Copy, Bookmark or Plot route here. **Buy something else** looks up any commodity.
+## 💱 Trading
+
+Outrider is an explorer's tool first, so trading stays small: where to sell or buy what you carry, and a trade
+route to follow. Both come from [Spansh](https://spansh.co.uk)'s market data, read only; prices and demand are what
+players last reported, so the newer the data, the safer the trip.
+
+<p align="center">
+  <img src="docs/images/cargo.png" alt="The Materials tab's Cargo with a Sell lookup open: the carrier's platinum, stations that take all of it, one opened" width="900">
+</p>
+
+- **Sell / Buy** on any line of your Cargo asks where to sell all of it (or buy that much): best price or closest,
+  within a distance, data under an age, your ship's pad size, fleet carriers left out unless ticked (their orders
+  are often years old). Each station shows how far it is (and how far from its star), the price, demand or supply,
+  what your load earns and the profit over what you paid. Opened, it lists what else it buys from your hold and its
+  services (and whether it buys exploration data and samples too), with Copy, Bookmark and **Plot route here**.
+  **Buy something else** looks up any commodity.
+- **Trade routes.** Plot Route's **Trade** plotter asks Spansh's [trade planner](https://spansh.co.uk/trade) for
+  station-to-station hops from the station you are docked at, with your credits and hold (from the journal), and its
+  options: hops, hop distance, distance from the star, data age, pad, planetary and player-owned stations,
+  prohibited goods, permit systems. It can take a few minutes to plot. It shares a place with Road to Riches and
+  Exomastery (one of the three at a time).
+
+<p align="center">
+  <img src="docs/images/trade.png" alt="Plot Route with a trade route: each stop with what to sell and buy there, and the route on the map" width="900">
+</p>
+
+- **Following it:** each stop lists what to sell and buy there, the hop's profit and the total so far. On arrival
+  the voice says where to dock and what to trade; your sales and purchases there tick the goods off (your journal),
+  then it says the hop's profit and the next stop (its own alert, Trade route). 💱 in the line under the tiles, with
+  🎯 on the next system.
 
 ## 🎯 Auto honk
 

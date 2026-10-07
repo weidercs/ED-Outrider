@@ -2,6 +2,12 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-07 · README: Trading, and fresh screenshots
+- A short **💱 Trading** section (Sell / Buy and trade routes) with two new screenshots (`cargo.png`: Cargo with a
+  lookup open; `trade.png`: a trade route in Plot Route); Sell / Buy moved there from Cargo and your carrier, and Plot
+  Route's Trade paragraph points to it. Every view screenshot, the four-theme sheet and the tablet retaken on the
+  current page (Plot Route, the Carrier tile's tritium, Materials' Cargo).
+
 ## 2026-10-07 · A carrier decommissioned or replaced
 - A carrier being decommissioned shows it in red on its tile and in Cargo ("Decommissioning: scrapped 9 Oct ·
   4.85B cr back"); once scrapped, "Decommissioned" with the date, kept rather than hidden so a mistake shows. A
