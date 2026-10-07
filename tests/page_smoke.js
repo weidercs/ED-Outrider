@@ -2886,6 +2886,8 @@ const settle = async maxMs => {
     radio("exact").click(); radio("exact").dispatchEvent(new w.Event("change"));
     got.exactFields = [d.querySelector(".hwy-nopt").hidden, d.querySelector(".hwy-xopt").hidden];
     d.getElementById("hwyInject").checked = true; d.getElementById("hwyInject").dispatchEvent(new w.Event("change"));
+    got.refuelOff = d.getElementById("hwyRefuel").checked;   // "refuel at every fuel star": off until ticked
+    d.getElementById("hwyRefuel").checked = true; d.getElementById("hwyRefuel").dispatchEvent(new w.Event("change"));
     sel.value = "7"; sel.dispatchEvent(new w.Event("change"));
     answer = url => url === "api/highway/plot" ? json({error: "a route is being plotted already"}, 409) : json(hwyPayload(fx));
     calls.length = 0;
@@ -2893,6 +2895,7 @@ const settle = async maxMs => {
     got.exactBody = (calls.find(c => c[0] === "api/highway/plot") || [])[2];
     got.err = [d.getElementById("hwyStatus").textContent, d.getElementById("hwyStatus").className];
     got.saved = w.eval("JSON.parse(localStorage.getItem('highway'))");
+    d.getElementById("hwyRefuel").checked = false; d.getElementById("hwyRefuel").dispatchEvent(new w.Event("change"));
     // a plot that failed at Spansh: said in plain words
     w.eval(`H.status = null; H.data.plotting = {state: "failed", error: "Spansh found no route between those systems"}; drawHwyStatus()`);
     got.failed = d.getElementById("hwyStatus").textContent;
@@ -2962,9 +2965,10 @@ const settle = async maxMs => {
     if (JSON.stringify(got.plotBody) !== JSON.stringify({plotter: "neutron", to: "Colonia", ship_id: 3, cargo: 0, range: 48.5, efficiency: 60, supercharge_multiplier: 6, conservative: false})) bad.push("plotBody");
     if (!/^Plotting Hwy Stop 37 → Colonia with Spansh \(neutron plotter\)…/.test(got.running)) bad.push("running");
     if (!(got.polls >= 3 && /^Plotted: 399 jumps to Hwy End/.test(got.afterPlot[0]) && got.afterPlot[1] && got.afterPlot[2] === 200)) bad.push("afterPlot");
-    if (JSON.stringify(got.exactBody) !== JSON.stringify({plotter: "exact", to: "Colonia", ship_id: 7, cargo: 4, injections: true, exclude_secondary: false, supercharged: false, conservative: false})) bad.push("exactBody");
+    if (JSON.stringify(got.exactBody) !== JSON.stringify({plotter: "exact", to: "Colonia", ship_id: 7, cargo: 4, injections: true, exclude_secondary: false, supercharged: false, refuel_every_scoopable: true, conservative: false})) bad.push("exactBody");
+    if (got.refuelOff !== false) bad.push("refuelOff");
     if (!(got.err[0] === "Could not plot the route: a route is being plotted already." && got.err[1] === "err")) bad.push("err");
-    if (!(got.saved && got.saved.plotter === "exact" && got.saved.injections === true)) bad.push("saved");
+    if (!(got.saved && got.saved.plotter === "exact" && got.saved.injections === true && got.saved.refuel_every_scoopable === true)) bad.push("saved");
     if (!(JSON.stringify(p.v) === "[50,25,2]" && JSON.stringify(p.a) === "[10,110]" && JSON.stringify(p.b) === "[210,10]" && p.one && p.none === null
           && JSON.stringify(p.asym) === "[[50,60],[250,260]]" && JSON.stringify(p.zoomKeeps) === "[10,110]" && p.zs === 4
           && JSON.stringify(p.back) === "[33,44]" && JSON.stringify(p.nice) === "[100,5000,2]")) bad.push("proj");
@@ -3498,7 +3502,7 @@ const settle = async maxMs => {
       off: [false, "5", true, ""], noteX4: "≈ 4 ly shorter jumps, about 16 ly on a ×4 neutron jump",
       noteX6: "≈ 4 ly shorter jumps, about 24 ly on a ×6 neutron jump",
       body: {plotter: "exact", to: "Colonia", ship_id: 3, cargo: 0, injections: true, exclude_secondary: false, supercharged: false,
-             conservative: true, conservative_ly: 4},
+             refuel_every_scoopable: false, conservative: true, conservative_ly: 4},
       defaults: [true, "7", "≈ 7 ly shorter jumps, about 42 ly on a ×6 neutron jump"], plain: [false, "5", true]};
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
     if (!(/conservative −5 ly/.test(got.head) && /⚠ too much fuel for the next jump: ≤ 36 t, you have 140 t/.test(got.head))) bad.push("head");
