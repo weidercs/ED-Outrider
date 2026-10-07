@@ -1297,6 +1297,13 @@ const settle = async maxMs => {
       renderCarrier();
       o.without = document.getElementById("carrierLine").textContent;
       o.tritGone = !document.getElementById("carrierTrit");
+      // decommissioning, then decommissioned: in red with the date, never a hidden tile
+      data.carrier = Object.assign({}, data.carrier, {decommission: {ts: "2026-10-02T10:00:00Z", scrap_ts: "2026-10-09T12:00:00Z", refund: 4850000000, done: false}});
+      renderCarrier();
+      o.pending = [document.getElementById("carrierLine").textContent, !!document.querySelector("#carrierLine .noscoop"), !document.getElementById("tCarrier").hidden];
+      data.carrier = Object.assign({}, data.carrier, {decommission: Object.assign({}, data.carrier.decommission, {done: true})});
+      renderCarrier();
+      o.gone = [document.getElementById("carrierLine").textContent, !document.getElementById("tCarrier").hidden];
       data.carrier = null; renderCarrier();   // no carrier in the journals: no tile, the row closes up
       o.noTile = [document.getElementById("tCarrier").hidden, document.getElementById("tiles").classList.contains("nocarrier")];
       data.carrier = saved; renderCarrier();
@@ -1325,6 +1332,8 @@ const settle = async maxMs => {
     if (!/Tritium in Depot: 668 t/.test(got.with) || got.trit !== "Total Tritium: 14,199 t (151 jumps)") bad.push("tile with tritium");
     if (!/UC ✓ · Vista ✓ · 668 t tritium/.test(got.without) || !got.tritGone) bad.push("tile without");
     if (JSON.stringify(got.noTile) !== "[true,true]" || !got.tileBack) bad.push("no carrier tile");
+    if (!/Decommissioning: scrapped (Oct 9|9 Oct) · 4\.85B cr back/.test(got.pending[0]) || !/aboard/.test(got.pending[0]) || !got.pending[1] || !got.pending[2]) bad.push("decommissioning");
+    if (!/Out Of The Blue.*Decommissioned (Oct 9|9 Oct)/.test(got.gone[0]) || /aboard/.test(got.gone[0]) || !got.gone[1]) bad.push("decommissioned");
     if (JSON.stringify(got.noCarrier) !== "[false,false]") bad.push("no carrier cargo");
     if (!/Platinum · Avg 45,210 cr\/t \(2 lots\)64 t/.test(got.ship)) bad.push("ship");
     if (got.marks !== "✓◷✎" || !got.sync) bad.push("carrier");

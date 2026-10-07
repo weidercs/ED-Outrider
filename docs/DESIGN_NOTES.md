@@ -265,6 +265,13 @@ upstream project's choices, not rules of the game.
   nearer first) or closest, within a distance (best price needs one), fleet carriers out unless ticked (their orders
   are often years old and top every list), the pad from the ship's type (`SHIP_PAD`; an unknown ship gets no pad
   filter and says so). No commodity analytics or profit-per-hour: a lookup, not a trading tool.
+- **A decommissioned carrier is shown in red, never hidden** (the author, 2026-10-07): if Outrider got it wrong, a
+  vanished tile would hide the mistake. `CarrierDecommission` (requested, `ScrapTime` about a week on) shows
+  "Decommissioning: scrapped <date>" with the refund; after ScrapTime (the scrapping itself writes nothing)
+  "Decommissioned <date>", and the tritium lines go. `CarrierCancelDecommission` undoes it. Carriers cannot be sold
+  in the game, so there is no "sold". A carrier bought since (`CarrierBuy`, or the first `CarrierStats` of another
+  id) starts its state afresh: before PARSER_VERSION 41 a new id inherited the old one's place and booked jump. No
+  carrier in the journals at all: no tile.
 - **Trade routes share the slot with the survey routes** (the author: "one slot is fine"): Road to Riches,
   Exomastery or a trade route, a new plot of any replacing it. Its stops are the stations (a hop's straight line,
   not its jumps: 🎯 targets the system and the game plots the way), progress is your MarketSell / MarketBuy at the
@@ -319,6 +326,8 @@ upstream project's choices, not rules of the game.
 These were built and tested with synthetic events, recorded files, fakes or headless browsers, but not
 confirmed while playing. Treat reports about them as likely real.
 
+- `CarrierBuy`, `CarrierDecommission` and `CarrierCancelDecommission`: written to Frontier's journal manual, never seen
+  in the author's journals (the carrier was bought before them).
 - Status.json Flags2 on-foot-in-station bits (3, 13, 14) counting as docked.
 - Auto honk end to end since it reads the binding from the controls preset; the fire-group and combat-mode waits.
 - The co-pilot button on a real device (`python3 -m outrider.button --listen`), including rig marking in a live Rhino.

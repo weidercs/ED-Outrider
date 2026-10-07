@@ -148,6 +148,52 @@ class CarrierFold(unittest.TestCase):
         self.assertEqual((cargo.carrier_total(st), cargo.carrier_reported(st)), (130, 130))
 
 
+class CarrierLife(unittest.TestCase):
+    """A carrier decommissioned (shown in red, never hidden) and a new one bought: Journals.handle_ship's carrier
+    state, State.carrier_summary / carrier_decommission. Frontier's documented events: not yet seen in a real journal."""
+
+    def setUp(self):
+        self.db = ed_outrider.open_db(":memory:")
+        self.addCleanup(self.db.close)
+        self.j = ed_outrider.Journals(self.db)
+        self.state = ed_outrider.State(self.db, self.j, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        self.j.handle(stats("2026-10-01T10:00:00Z", 100))
+        self.j.handle(ev("2026-10-01T10:00:01Z", "CarrierLocation", CarrierType="FleetCarrier", CarrierID=CARRIER,
+                         StarSystem="Old Place", SystemAddress=111))
+        self.j.handle(ev("2026-10-01T10:00:02Z", "CarrierJumpRequest", CarrierID=CARRIER, SystemName="Far",
+                         SystemAddress=222, DepartureTime="2026-10-01T10:20:00Z"))
+
+    def test_decommission(self):
+        future = time.time() + 7 * 86400
+        self.j.handle(ev("2026-10-02T10:00:00Z", "CarrierDecommission", CarrierID=CARRIER, ScrapRefund=4850000000,
+                         ScrapTime=future))
+        d = self.state.carrier_summary()["decommission"]
+        self.assertEqual((d["done"], d["refund"], d["scrap_ts"]), (False, 4850000000, ed_outrider.iso_ts(future)))
+        self.j.handle(ev("2026-10-03T10:00:00Z", "CarrierCancelDecommission", CarrierID=CARRIER))
+        self.assertIsNone(self.state.carrier_summary()["decommission"])
+        self.j.handle(ev("2026-10-04T10:00:00Z", "CarrierDecommission", CarrierID=CARRIER, ScrapRefund=1, ScrapTime=1000))
+        c = self.state.carrier_summary()
+        self.assertTrue(c["decommission"]["done"])   # scrapped: still shown (in red), its tritium no longer
+        self.assertIsNone(c["tritium"])
+        self.assertEqual(c["carrier_id"], str(CARRIER))
+        self.assertTrue(self.state.cargo_summary()["carrier"]["decommission"]["done"])
+
+    def test_new_carrier(self):
+        self.j.handle(ev("2026-10-04T10:00:00Z", "CarrierDecommission", CarrierID=CARRIER, ScrapRefund=1, ScrapTime=1000))
+        self.j.handle(ev("2026-10-20T10:00:00Z", "CarrierBuy", CarrierID=999, Callsign="ABC-123", Location="New Place",
+                         SystemAddress=333, BoughtAtMarket=1, Price=5000000000, Variant="CarrierDockB"))
+        c = self.state.carrier_summary()
+        self.assertEqual((c["carrier_id"], c["callsign"], c["system"], c["decommission"], c["planned"]),
+                         ("999", "ABC-123", "New Place", None, None))
+        self.assertEqual(self.state.cargo_summary()["carrier"]["lines"], [])   # the old one's cargo is not its
+
+    def test_new_carrier_from_its_stats(self):
+        """No CarrierBuy read (an older journal gone): the first CarrierStats of another id starts afresh."""
+        self.j.handle(dict(stats("2026-10-20T10:00:00Z", 0), CarrierID=999, Name="NEW ONE"))
+        self.assertEqual((self.j.carrier["id"], self.j.carrier.get("system"), self.j.carrier.get("planned")), (999, None, None))
+        self.assertIsNone(self.state.carrier_summary())   # where it is comes with its CarrierLocation
+
+
 class ShipHold(unittest.TestCase):
     """ship_apply: the hold and what you paid (average cost)."""
 

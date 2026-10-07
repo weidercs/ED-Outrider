@@ -2,6 +2,13 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-07 · A carrier decommissioned or replaced
+- A carrier being decommissioned shows it in red on its tile and in Cargo ("Decommissioning: scrapped 9 Oct ·
+  4.85B cr back"); once scrapped, "Decommissioned" with the date, kept rather than hidden so a mistake shows. A
+  carrier bought since replaces it (`CarrierBuy`, or a `CarrierStats` of another id, which before this inherited the
+  old carrier's place and booked jump). No carrier at all: no Carrier tile. Trade routes say they can take a few
+  minutes to plot. PARSER_VERSION 41.
+
 ## 2026-10-07 · Version 2026.10.16
 - Cargo and your carrier in the Materials tab, Sell / Buy from Spansh's markets, trade routes in Plot Route; and since
   2026.10.15: Expressway to Exomastery, the route line for every route, 🎯 on any route system, the Settings link to

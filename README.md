@@ -525,7 +525,8 @@ The **Materials** tab starts with your **Cargo**.
     public, read-only services, so your Frontier account is never involved.
 - **The Carrier tile** shows its tritium while tritium is on a sell order: the depot, the total with the hold, and
   how many 500 ly jumps that gives ("Total Tritium: 14,199 t (151 jumps)", worked out jump by jump with the game's
-  fuel formula). Without one the tile is as before.
+  fuel formula). Without one the tile is as before. No carrier, no tile; a carrier being decommissioned says so in
+  red with the scrap date, and once it is gone, "Decommissioned" and the date (a carrier bought since takes its place).
 - **Sell / Buy** on any line asks Spansh's markets where to sell all of it (or buy that much): best price or
   closest, within a distance, data under an age, your ship's pad size, fleet carriers left out unless ticked (their
   orders are often years old). Each station shows how far it is (and how far from its star), the price, demand or

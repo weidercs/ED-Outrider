@@ -1066,6 +1066,7 @@ SCAN_EVENTS = ("Scan", "FSSDiscoveryScan", "FSSAllBodiesFound", "SAASignalsFound
 # Your fleet carrier, and fuel: where it is, what it carries, how much is in the tank.
 SHIP_EVENTS = ("FuelScoop", "RefuelAll", "RefuelPartial", "CarrierStats", "CarrierJump", "CarrierJumpRequest",
                "CarrierJumpCancelled", "CarrierLocation", "Docked", "Undocked",
+               "CarrierBuy", "CarrierDecommission", "CarrierCancelDecommission",   # a new carrier; giving one up
                "Cargo",   # the hold's tonnage: the ship's mass, for the fuel model
                # hull and danger: live alerts only (hull % is kept; the rest are moments, not state)
                "HullDamage", "RepairAll", "Repair", "RepairDrone", "HeatDamage", "Interdicted",
@@ -1135,7 +1136,9 @@ WANTED = tuple(f'"event":"{e}"'.encode()
 # 38: bio_sales keyed by journal line (two Vista sales in one second); a Vista visit's x5 check made as one.
 # 39: the vehicle you are in rebuilt from the journals (a live fallback forgot the Rhino at every launch).
 # 40: cargo: the ship's hold (ship_cargo) and your carrier's history (cargo_events).
-PARSER_VERSION = 40
+# 41: your carrier bought (CarrierBuy) or decommissioned (CarrierDecommission, CarrierCancelDecommission); a new one's
+#     CarrierStats starts its state afresh instead of inheriting the old one's place.
+PARSER_VERSION = 41
 # Scans read off a nav beacon (as outrider.unsold.NAV_BEACON_SCANS): their Was* flags are not the game's record of the body.
 NAV_BEACON_SCANS = ("NavBeaconDetail", "NavBeacon")
 
@@ -3500,8 +3503,26 @@ class Journals:
         if name == "CarrierStats":
             if ev.get("CarrierType", "FleetCarrier") != "FleetCarrier" or stale():
                 return
+            if c.get("id") not in (None, ev.get("CarrierID")):
+                c = {}   # another carrier (the old one decommissioned): nothing of the old one's place or plans
             c.update(id=ev.get("CarrierID"), name=ev.get("Name"), callsign=ev.get("Callsign"),
                      fuel=ev.get("FuelLevel"), jump_range=ev.get("JumpRangeCurr"), stats_ts=ts)
+        elif name == "CarrierBuy":
+            # a new carrier: its state starts here (its name comes with its first CarrierStats)
+            if stale() or ev.get("CarrierID") is None:
+                return
+            c = {"id": ev.get("CarrierID"), "callsign": ev.get("Callsign"), "system": ev.get("Location"),
+                 "id64": ev.get("SystemAddress"), "x": None, "y": None, "z": None, "ts": ts, "bought_ts": ts}
+        elif name in ("CarrierDecommission", "CarrierCancelDecommission"):
+            # decommissioning takes about a week (ScrapTime, epoch s) and can be cancelled until then; the scrapping
+            # itself writes nothing, so after ScrapTime it is gone (the tile says so in red rather than vanish)
+            if ev.get("CarrierID") != c.get("id") or stale():
+                return
+            scrap = ev.get("ScrapTime")
+            c["decommission"] = None if name == "CarrierCancelDecommission" else {
+                "ts": ts, "refund": ev.get("ScrapRefund"),
+                "scrap_ts": iso_ts(scrap) if isinstance(scrap, (int, float)) and not isinstance(scrap, bool) else None}
+            c["stats_ts"] = max(c.get("stats_ts") or "", ts)
         elif name == "CarrierLocation":
             # written at every login, and (since 2025) at the departure time of a booked jump
             if ev.get("CarrierType", "FleetCarrier") != "FleetCarrier" or ev.get("CarrierID") != c.get("id") or stale():
@@ -6484,6 +6505,7 @@ class State:
                 planned["jump_ly"] = round(dist(c, {"x": where[1], "y": where[2], "z": where[3]}), 1) if c.get("x") is not None else None
         docked = self.journals.docked
         return {"name": c.get("name"), "callsign": c.get("callsign"), "system": c.get("system"),
+                "carrier_id": str(c["id"]) if c.get("id") is not None else None,   # which carrier (a new one: no "arrived")
                 "aboard": bool(docked and c.get("id") and docked.get("market_id") == c.get("id")),
                 "id64": str(c["id64"]), "distance": round(d, 1) if d is not None else None,
                 "fuel": c.get("fuel"), "jump_range": c.get("jump_range"), "planned": planned,
@@ -6493,8 +6515,21 @@ class State:
                 # when it last arrived somewhere new (the page's arrival alert), and whether that is only
                 # the booked jump's destination, not yet confirmed by the journal
                 "moved_ts": c.get("moved_ts"), "assumed": bool(c.get("assumed")),
+                # decommissioning: {ts, refund, scrap_ts, done (scrap time passed)}, shown in red
+                "decommission": self.carrier_decommission(),
                 # only while tritium is on a sell order at your carrier (confirmed): else the tile is as before
-                "tritium": self.carrier_tritium()}
+                "tritium": None if (self.carrier_decommission() or {}).get("done") else self.carrier_tritium()}
+
+    def carrier_decommission(self):
+        """Your carrier's decommissioning, if requested and not cancelled: {ts, refund, scrap_ts, done}."""
+        d = (self.journals.carrier or {}).get("decommission")
+        if not d:
+            return None
+        try:
+            done = bool(d.get("scrap_ts")) and time.time() >= ts_seconds(d["scrap_ts"])
+        except (TypeError, ValueError):
+            done = False
+        return dict(d, done=done)
 
     def carrier_cargo(self):
         """Your carrier's hold, folded from its history (outrider.cargo.carrier_fold): cached until a cargo change."""
@@ -6548,6 +6583,7 @@ class State:
         out["carrier"] = {"name": c.get("name"), "callsign": c.get("callsign"), "lines": lines, "total": total,
                           "reported": reported, "reported_ts": (st["stats"] or {}).get("ts"),
                           "gap": reported - total if reported is not None else None, "market_ts": st["market_ts"],
+                          "decommission": self.carrier_decommission(),
                           "aboard": bool((j.docked or {}).get("market_id") == c.get("id") and c.get("id") is not None)}
         return out
 

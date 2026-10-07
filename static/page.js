@@ -267,6 +267,13 @@ function renderCarrier() {
   document.getElementById("tCarrier").hidden = none;
   document.getElementById("tiles").classList.toggle("nocarrier", none);
   if (!c) { cl.innerHTML = val(`<span class="unk">none seen</span>`); return; }
+  // decommissioned (or being): in red with the date, rather than the tile vanishing (a mistake would go unseen)
+  const dc = c.decommission;
+  if (dc && dc.done) {
+    cl.innerHTML = val(esc(c.name || c.callsign || "your carrier"), esc(c.callsign || "")) +
+      ln(`<span class="noscoop" title="its decommissioning was requested ${esc(shortDay(dc.ts || ""))}; a carrier bought since shows here instead">Decommissioned ${esc(shortDay(dc.scrap_ts || dc.ts || ""))}</span>`);
+    return;
+  }
   const fmtLy = d => d.toLocaleString("en-US", {maximumFractionDigits: 1});
   let where = c.aboard ? "<b>aboard</b>" : c.here ? "<b>in this system</b>"
     : `<span class="copy" data-name="${esc(c.system)}" title="click to copy">${esc(c.system)}</span>` + (c.distance != null ? ` · <b>${fmtLy(c.distance)} ly</b>` : "");
@@ -302,7 +309,9 @@ function renderCarrier() {
   // the tritium: only while it is on a sell order at your carrier (its count confirmed) the depot gets its name and the
   // total and the 500 ly jumps it gives take one line; otherwise the depot as before
   const tr = c.tritium;
-  cl.innerHTML = val(esc(c.name), esc(c.callsign || "")) + ln(where) + ln(meet) + ln(plan) +
+  const dcLine = dc ? `<span class="noscoop" title="cancel it in the carrier's management until then">Decommissioning: scrapped ${esc(shortDay(dc.scrap_ts || ""))}` +
+    `${dc.refund ? ` · ${credits(dc.refund)} cr back` : ""}</span>` : "";
+  cl.innerHTML = val(esc(c.name), esc(c.callsign || "")) + ln(dcLine) + ln(where) + ln(meet) + ln(plan) +
     ln(`${c.has_uc ? "UC ✓" : "no UC"} · ${c.has_vista ? "Vista ✓" : "no Vista"}` +
        (tr ? ` · Tritium in Depot: <b>${tr.depot.toLocaleString()} t</b>` : c.fuel != null ? ` · ${c.fuel} t tritium` : "")) +
     (tr ? `<div class="ln" id="carrierTrit" title="Total 500 ly Jumps Available: the jumps all your tritium gives at 500 ly, if the depot is topped up from the hold as it runs low">` +
@@ -3606,7 +3615,8 @@ function renderCargo(cg) {
     `${x.stolen ? ` <span class="noscoop">${x.stolen} stolen</span>` : ""}${x.mission ? ` <span class="unk">· ${x.mission} for a mission</span>` : ""}</td>` +
     `<td class="num">${tons(x.count)}</td><td class="num cact">${LOOK_BTNS}</td></tr>`).join("") + `</tbody></table>` : `<div class="unk">Nothing in the hold.</div>`;
   if (c) {
-    h += `<div class="csub">Carrier${c.name ? ` · ${esc(c.name)}` : ""} · ${cargoSyncHtml(c)}</div>` +
+    const dc = c.decommission;
+    h += `<div class="csub">Carrier${c.name ? ` · ${esc(c.name)}` : ""} · ${dc ? `<span class="noscoop">${dc.done ? "Decommissioned" : "Decommissioning: scrapped"} ${esc(shortDay(dc.scrap_ts || dc.ts || ""))}</span>` : cargoSyncHtml(c)}</div>` +
       `<div class="unk clegend">${Object.values(CARGO_MARK).map(m => `<span class="st ${m[1]}">${m[0]}</span> ${m[1] === "c" ? "confirmed (sell order)" : m[1] === "l" ? "last seen" : "entered by you"}`).join(" · ")}` +
       ` <button type="button" class="mini" id="recountBtn" title="enter the counts Outrider cannot confirm (the game's Inventory screen at your carrier lists them all)">Recount…</button></div>`;
     if (!c.market_ts) h += `<div class="hint">Open your carrier's commodity market once while docked there: its sell orders confirm what it holds.</div>`;
@@ -6183,7 +6193,7 @@ if (soundOn === null) soundOn = true;  // provisional until the payload's defaul
 if (soundOn) audio();
 drawSoundBtn();
 
-let runId = null, lastArrival = null, lastUnsoldLevel = null, lastCarrierMoved = null, lastCodexTs = null, lastDockTs = null;
+let runId = null, lastArrival = null, lastUnsoldLevel = null, lastCarrierMoved = null, lastCarrierId = null, lastCodexTs = null, lastDockTs = null;
 let undiscSaid = null;   // the system whose arrival alert said "undiscovered" out loud (the briefing skips the word)
 let lastMomentSeq = 0, lastSaleTs = null, lastPosId, lastLowFlag = false, hullLatch = 0, saleBanner = null;
 let lastUnderJumps = false, fuelTargetSys = null;   // the "under N jumps" latch; the system a fuel_target card came from
@@ -6656,6 +6666,10 @@ function onData() {
   }
   // the carrier arrived somewhere new: moved_ts, not ts (which also changes at every login and every dock at it)
   const c = data.carrier;
+  if (c && c.carrier_id !== lastCarrierId) {   // a new carrier (the old one decommissioned): no "arrived" for it
+    if (lastCarrierId != null) lastCarrierMoved = c.moved_ts;
+    lastCarrierId = c.carrier_id;
+  }
   if (c && c.moved_ts !== lastCarrierMoved) {
     if (lastCarrierMoved) { alertOut("carrier", `${c.name} ${c.assumed ? "should now be" : "is"} at ${c.system}`,
                                      (c.distance != null ? `${c.distance} ly from you` : "") + (c.assumed ? (c.distance != null ? " · " : "") + "the booked jump (not yet confirmed)" : ""),
