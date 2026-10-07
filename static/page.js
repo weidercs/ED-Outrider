@@ -4515,7 +4515,7 @@ const HWY_AHEAD = 200, HWY_POLL_MS = 1500, HWY_SUGGEST_MS = 300;
 const hEl = id => document.getElementById(id);
 const H = {data: null, key: null, loading: false, poll: null, error: null, status: null, routeId: undefined, nextShown: null,
            doneOpen: store.get("hwyDoneOpen", false) === true, shipSel: null, cargoAuto: true, rangeAuto: true,
-           fleetSig: null, suggestT: null, suggestQ: null, clearArmed: null};
+           fleetSig: null, clearArmed: null};
 // the form's last options (per browser): the plotter, the exact plotter's ticks and the neutron plotter's efficiency.
 // The ship, its cargo and range follow the journals instead (a remembered cargo would be stale the next day).
 // conservative / conservative_ly: null until changed here ([highway] conservative and conservative_ly then)
@@ -4802,18 +4802,22 @@ function fillHwyForm(hd) {
   hEl("hwyCargo").oninput = () => { H.cargoAuto = false; hwyFollowShip(); };
   hEl("hwyRange").oninput = () => { H.rangeAuto = false; hEl("hwyRangeReset").hidden = !hwyShip(); };
   hEl("hwyRangeReset").onclick = () => { H.rangeAuto = true; hwyFollowShip(); };
-  // name suggestions as you type the destination (Spansh's system names, through the server), debounced
-  hEl("hwyTo").addEventListener("input", () => {
-    clearTimeout(H.suggestT);
-    const q = hEl("hwyTo").value.trim();
-    if (q.length < 3 || q === H.suggestQ) return;
-    H.suggestT = setTimeout(async () => {
-      H.suggestQ = q;
-      let d; try { d = await apiJson(`api/highway/systems?q=${encodeURIComponent(q)}`); } catch { d = null; }
-      if (!d || d.error || H.suggestQ !== q || !Array.isArray(d.values)) return;
-      hEl("hwyNames").innerHTML = d.values.slice(0, 20).map(v => `<option value="${esc(v)}"></option>`).join("");
-    }, HWY_SUGGEST_MS);
-  });
+  // name suggestions as you type a system, From as well as To (Spansh's system names, through the server), debounced;
+  // each field its own list and its own last question
+  for (const [id, list] of [["hwyTo", "hwyNames"], ["hwyFrom", "hwyFromNames"]]) {
+    const st = {t: null, q: null};
+    hEl(id).addEventListener("input", () => {
+      clearTimeout(st.t);
+      const q = hEl(id).value.trim();
+      if (q.length < 3 || q === st.q) return;
+      st.t = setTimeout(async () => {
+        st.q = q;
+        let d; try { d = await apiJson(`api/highway/systems?q=${encodeURIComponent(q)}`); } catch { d = null; }
+        if (!d || d.error || st.q !== q || !Array.isArray(d.values)) return;
+        hEl(list).innerHTML = d.values.slice(0, 20).map(v => `<option value="${esc(v)}"></option>`).join("");
+      }, HWY_SUGGEST_MS);
+    });
+  }
 }
 // the request the form makes: what each plotter takes (the server checks it again)
 function hwyBody() {

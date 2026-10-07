@@ -2900,6 +2900,12 @@ const settle = async maxMs => {
     answer = url => url.startsWith("api/highway/systems") ? json({q: "Col", values: ["Colonia", "Col 285 Sector AA-A c1"]}) : json(hwyPayload(fx));
     const to = d.getElementById("hwyTo"); to.value = "Col"; to.dispatchEvent(new w.Event("input")); await sleep(600);
     got.suggest = [...d.querySelectorAll("#hwyNames option")].map(o => o.value).join("|");
+    // and the start's, in its own list (the author, 2026-10-07: From did not suggest)
+    answer = url => url.startsWith("api/highway/systems") ? json({q: "Sol", values: ["Sol", "Solati"]}) : json(hwyPayload(fx));
+    const from = d.getElementById("hwyFrom"); from.value = "Sol"; from.dispatchEvent(new w.Event("input")); await sleep(600);
+    got.suggestFrom = [from.getAttribute("list"), [...d.querySelectorAll("#hwyFromNames option")].map(o => o.value).join("|"),
+                       [...d.querySelectorAll("#hwyNames option")].map(o => o.value).join("|")];
+    from.value = "";
     // clear: two clicks (the first only asks)
     answer = url => url === "api/highway/clear" ? json({ok: true}) : json(hwyPayload(null));
     calls.length = 0;
@@ -2937,7 +2943,8 @@ const settle = async maxMs => {
     const want = {ahead: 200, next: "38", doneFolded: 0, doneOpen: Array.from({length: 20}, (_, k) => String(18 + k)), at: "37",
       clip: true, fit: true, formFolded: true, ship: "7", cargo: "4", neutronFields: [false, true], override: ["40", false],
       exactFields: [true, false], failed: "Could not plot the route: Spansh found no route between those systems.",
-      suggest: "Colonia|Col 285 Sector AA-A c1", clearFirst: [0, "Click again to clear"],
+      suggest: "Colonia|Col 285 Sector AA-A c1", suggestFrom: ["hwyFromNames", "Sol|Solati", "Colonia|Col 285 Sector AA-A c1"],
+      clearFirst: [0, "Click again to clear"],
       cleared: ["api/highway/clear POST,api/highway GET", "No route yet.", true],
       lineNext: "🛣 Next: Hwy Stop 38 🎯 target · 4.2 ly · 38 of 399 · refuel in 3 jumps", lineOnMap: "",
       lineOff: "🛣 Off Route: Detour · nearest Hwy Stop 39 12.0 ly 🎯 target", lineDone: "🛣 Highway complete", opened: "hwy", lineGone: "",

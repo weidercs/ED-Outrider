@@ -2,6 +2,9 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-07 · From suggests system names too
+- Plot Route's **From** field suggests Spansh's system names as you type, as **To** already did (each its own list).
+
 ## 2026-10-07 · README: Trading, and fresh screenshots
 - A short **💱 Trading** section (Sell / Buy and trade routes) with two new screenshots (`cargo.png`: Cargo with a
   lookup open; `trade.png`: a trade route in Plot Route); Sell / Buy moved there from Cargo and your carrier, and Plot
