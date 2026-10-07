@@ -2,6 +2,10 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-07 · Exact plotter: no refuel at every scoopable star
+- The exact plotter asks Spansh with `refuel_every_scoopable` off, so a route refuels only where the tank needs it
+  rather than stopping to top up at every fuel star.
+
 ## 2026-10-07 · The README split into a front page and a guide
 - The README (1,000 lines) is now a front page: what Outrider is, at a glance, a short start and an index of the
   guide. The guide is `docs/guide/`: Install and run, The views, Plot Route, Cargo and trading, Voice and alerts,

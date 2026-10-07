@@ -307,7 +307,8 @@ class HighwayH1(unittest.TestCase):
                                   "use_injections": 0, "exclude_secondary": 1, "fuel_power": 2.5025,
                                   "fuel_multiplier": f["fuel_multiplier"], "optimal_mass": f["optimal_mass"],
                                   "supercharge_multiplier": 6, "base_mass": round(410.5 + 0.63, 3), "tank_size": 32.0,
-                                  "internal_tank_size": 0.63, "max_fuel_per_jump": 6.8, "range_boost": 10.5, "cargo": 4})
+                                  "internal_tank_size": 0.63, "max_fuel_per_jump": 6.8, "range_boost": 10.5, "cargo": 4,
+                                  "refuel_every_scoopable": 0})
         # a failed plot keeps the route you had and says why
         sp.session = _HwSession([(400, {"error": "Could not find system End"})])
 

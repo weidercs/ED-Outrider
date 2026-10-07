@@ -9345,7 +9345,10 @@ class State:
                           "fuel_multiplier": fig["fuel_multiplier"], "optimal_mass": short[0] if short else fig["optimal_mass"],
                           "supercharge_multiplier": fig["supercharge"], "base_mass": round(fig["unladen"] + reserve, 3),
                           "tank_size": fig["fuel_main"], "internal_tank_size": reserve,
-                          "max_fuel_per_jump": fig["max_fuel"], "range_boost": fig.get("booster_ly") or 0, "cargo": cargo}
+                          "max_fuel_per_jump": fig["max_fuel"], "range_boost": fig.get("booster_ly") or 0, "cargo": cargo,
+                          # Spansh's "Refuel every scoopable" (on by default) stops at every fuel star; off, the route
+                          # refuels only where the tank needs it (its must_refuel jumps)
+                          "refuel_every_scoopable": 0}
                 options = {"cargo": cargo, "injections": flag("injections"), "exclude_secondary": flag("exclude_secondary"),
                            "supercharged": flag("supercharged")}
                 if short:
