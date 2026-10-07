@@ -2,6 +2,31 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-07 · Version 2026.10.16
+- Cargo and your carrier in the Materials tab, Sell / Buy from Spansh's markets, trade routes in Plot Route; and since
+  2026.10.15: Expressway to Exomastery, the route line for every route, 🎯 on any route system, the Settings link to
+  GitHub. README, AGENT_GUIDE, DESIGN_NOTES and JOURNAL_REFERENCE cover the cargo and trade parts.
+
+## 2026-10-07 · Trade routes
+- Plot Route's fifth plotter, Spansh's trade planner: station-to-station hops from the station you are docked at,
+  with your credits and hold from the journal. It shares the slot with Road to Riches and Exomastery. Each stop lists
+  what to sell and buy; on arrival the voice says where to dock and what to trade, your sales and purchases there tick
+  the goods off, then the hop's profit and the next stop are said (its own alert, Trade route). 💱 in the route line.
+
+## 2026-10-07 · Sell / Buy
+- Every ship and carrier line in Cargo has Sell and Buy: Spansh's stations that take all of it (or have that much),
+  best price or closest, within a distance, data under an age, fleet carriers out unless ticked, your ship's pad. A
+  row gives the distance (and from the star), price, demand or supply, what your load earns and the profit over what
+  you paid; opened, what else it buys from your hold, its services, Copy, Bookmark and Plot route here.
+
+## 2026-10-07 · Cargo and your carrier
+- The Materials tab's Cargo: your ship's hold with what you paid (the game's average cost), and your fleet carrier's
+  hold, tracked: ✓ confirmed by a sell order at the carrier (its market lists each with its stock), ◷ last seen from
+  your journal, ✎ entered (Recount). The total is checked against the carrier's own. No Frontier sign-in: this is the
+  only way to track it without one, and the README says so.
+- The Carrier tile shows the tritium while it is on a sell order: "Tritium in Depot", and "Total Tritium: 14,199 t
+  (151 jumps)" (500 ly jumps, by the carrier fuel formula fitted to 27 real jumps).
+
 ## 2026-10-07 · Expressway to Exomastery
 - Plot Route's fourth plotter, Spansh's Expressway to Exomastery: systems whose bodies carry valuable life already
   reported. It shares Road to Riches' slot (one survey route; a new plot of either replaces it). Each body lists its

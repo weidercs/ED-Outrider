@@ -1437,9 +1437,12 @@ const settle = async maxMs => {
   // as failed) or is dropped when it waited too long; never the browser's voice
   {
     const w = dom.window, before = errors.length, real = w.fetch, reported = [], said = [];
+    const LOST_PREP = /text=(Lost contact with Outrider\.|No alerts until it is back\.)/;
     w.fetch = (u, o) => {
       if (/api\/speaker\/audio/.test(String(u))) { reported.push(JSON.parse(o.body).blocked); return Promise.resolve({ok: true, json: async () => ({ok: true})}); }
-      if (/^api\/say\?/.test(String(u))) { said.push("piper"); return Promise.resolve({ok: false, status: 500}); }
+      // the "lost contact" line made in advance (prepareLostLine, on a render that sees the Piper voice set below) is not
+      // a line said: only the held lines count here
+      if (/^api\/say\?/.test(String(u)) && !LOST_PREP.test(decodeURIComponent(String(u)))) { said.push("piper"); return Promise.resolve({ok: false, status: 500}); }
       return real(u, o);
     };
     const got = await w.eval(`(async () => {

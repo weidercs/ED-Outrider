@@ -26,7 +26,8 @@ rules that keep the journal data, the page and the voice consistent. See also `J
 | `outrider/core.py` | Small shared helpers with no dependencies: `iso_ts`, `ts_seconds` (journal timestamps) |
 | `outrider/fsd.py` | The frame shift drive's maths, pure: the drive tables (`FSD_DATA`, `FSD_POWER`, `GUARDIAN_BOOST`...), `fsd_range`, `hop_fuel`, the fuel model fitted to your jumps (`fuel_model`, `jumps_left`), a fleet ship's plotter inputs (`fleet_figures`/`fleet_range`/`fleet_model`), `max_fuel_for_jump`/`jump_in_reach`, `conservative_range`/`conservative_optimal_mass` |
 | `outrider/highway.py` | The Highway's route helpers: `highway_rows` (Spansh's answer as rows), `highway_match`, `highway_refuel_in`, `highway_text` (the spoken line), `highway_bg_file`, `HighwayError`, `class Clipboard` (wl-copy/xclip; `winkeys.set_clipboard` on Windows). The route's state and auto-target stay in `ed_outrider.State` (their constants are patched by verify.sh and the tests on `ed_outrider`, the Spansh URLs among them) |
-| `outrider/riches.py` | The survey routes, Road to Riches (thshurka's PR #1) and Exomastery, pure: `riches_rows` (Spansh's answer as rows, both kinds; the body's `body_id` is its id64's top 9 bits, the game's BodyID; an Exomastery body's `species` from its `landmarks`), `exo_todo`/`exo_left`/`exo_text` (species sampled by BodyID and name from `own_organic`), `riches_match`, `todo` (what is left, from the journal's `own_bodies`/`own_mapped` by name), `riches_text`. The route's state, `riches_route`/`riches_bodies`/`riches_species` and meta `riches` (live-only; `kind` "riches" | "exo": one survey slot), the plot, `riches_arrival`/`riches_progress` and `route_newest` (with a Highway route too, only the newer copies to the clipboard) are in `ed_outrider.py`; `scripts/riches_probe.py` re-checks Spansh's undocumented API (checked 2026-10-06; `tests/fixtures/spansh_riches.json` is a real answer) |
+| `outrider/riches.py` | The survey routes, Road to Riches (thshurka's PR #1) and Exomastery, pure: `riches_rows` (Spansh's answer as rows, both kinds; the body's `body_id` is its id64's top 9 bits, the game's BodyID; an Exomastery body's `species` from its `landmarks`), `exo_todo`/`exo_left`/`exo_text` (species sampled by BodyID and name from `own_organic`), `riches_match`, `todo` (what is left, from the journal's `own_bodies`/`own_mapped` by name), `riches_text`. The route's state, `riches_route`/`riches_bodies`/`riches_species`/`trade_stops` and meta `riches` (live-only; `kind` "riches" | "exo" | "trade": one slot, a trade route's stops in `trade_stops` and what you did there in meta `riches` "trade"), the plot, `riches_arrival`/`riches_progress` and `route_newest` (with a Highway route too, only the newer copies to the clipboard) are in `ed_outrider.py`; `scripts/riches_probe.py` re-checks Spansh's undocumented API (checked 2026-10-06; `tests/fixtures/spansh_riches.json` is a real answer) |
+| `outrider/cargo.py` | Cargo, pure: `cid` (the journal's commodity ids), `learn`/`display` (names), `ship_apply`/`ship_snapshot` (the ship's hold with average cost: `avg`, `priced`, `lots`, `avg_text`), `carrier_fold` (your carrier's hold from its history in time order: `cargo_events`, the `carrier_markets` snapshots, your `carrier_counts`; the rules in its docstring), `carrier_total`/`carrier_reported`, `carrier_burn`/`carrier_jumps` (the carrier's fuel, checked against real jumps), `SHIP_PAD`, the Sell / Buy lookup (`market_query`, `market_rows`, `STATION_TYPES` without fleet carriers) and trade routes (`TRADE`, `trade_rows`, `trade_left`, `trade_text`, `trade_done_text`). In `ed_outrider.py`: `Journals.handle_cargo` (stores the carrier's events, folds the ship's), `read_cargo_file`/`read_market` (the live files, by mtime in `tick`), `trade_progress`; `State.carrier_cargo` (the fold, cached on `cargo_version`/`counts_version`), `cargo_summary`, `carrier_tritium`, `cargo_recount`, `cargo_lookup`, `commodity_list` (Spansh's names, a week), `trade_start_plot`/`trade_defaults` |
 | `outrider/unsold.py` | The unsold cartographic + exobiology estimate (its own journal pass, run in a thread); also journal-folder auto-detection. Works alone from the command line |
 | `outrider/bio.py` | Exobiology predictor: spawn rules, colour variants, values; `--backtest`, `--update-rules`; `region_layer` (the region map for the Highway map: the run-length grid, names, label points) |
 | `outrider/log.py` | The Log view: one-line summaries, read straight from the journal files on request |
@@ -74,7 +75,9 @@ rules that keep the journal data, the page and the voice consistent. See also `J
    `handle_body`, `track_srv`...). It writes rows (visits, jumps, own_bodies, own_organic, sale_events...) and
    JSON state in `meta` (position, ship, carrier, fuel history...), and appends **moments**
    (`Journals.moment(kind, ts, ...)`) to a 16-entry deque with a growing `seq`.
-4. **Status.json / NavRoute.json** are read when their mtime changes (`read_status`, `read_navroute`).
+4. **Status.json / NavRoute.json / Cargo.json / Market.json** are read when their mtime changes (`read_status`,
+   `read_navroute`, `read_cargo_file`, `read_market`: only your carrier's Market.json is kept, as the game
+   overwrites it at the next market).
 5. **Commit, then follow-up.** After the commit the tick runs the follow-ups, each on its own (one that raises is
    reported by `follow_up_failed` and the rest still run; a database error stops them): `watch_status` (scoop, FSS,
    the hyperspace tunnel `watch_tunnel`, surface map, rig leash), `maybe_refresh` (the local cache at once, then the
@@ -85,11 +88,12 @@ rules that keep the journal data, the page and the voice consistent. See also `J
    returns `State.payload()`: position, systems, target, moments (priced by `moments_summary`), fuel,
    surface map, speech info and more. Other views fetch their own endpoints: `/api/system/{id64}`,
    `/api/body`, `/api/history`, `/api/organics`, `/api/log`, `/api/materials`, `/api/map`, `/api/search`,
-   `/api/firsts`, `/api/left`, `/api/find`, `/api/export`, `/api/highway` (+ `/systems?q=`, `/background`; POST `/plot`,
+   `/api/firsts`, `/api/left`, `/api/find`, `/api/export`, `/api/cargo/lookup` (Spansh's markets, read only; POST
+   `/api/cargo/recount` {counts} for your carrier's untracked lines; `/api/materials` carries `cargo`), `/api/highway` (+ `/systems?q=`, `/background`; POST `/plot`,
    `/clear`, `/autotarget` {enabled, delay}, `/autotarget/test`, `/target` {countdown?}: Target next / Retry), `/api/regions` (the Highway map's region grid), `/api/status` and `/api/status.txt`, `/api/version`, `/api/auth/signin`
    and `/signout` (see the app's contract below). The pages: `/`, `/tablet` (the same page, tablet layout), `/signin`;
    `/userfonts/{name}` serves a font from `data/fonts/`. The payload carries only the highway line's facts
-   (`highway_summary`); the Plot Route tab fetches the route itself (`/api/highway`, and `/api/riches` with POST `/api/riches/plot` {kind: "riches" | "exo"} and `/clear` for the survey slot). The payload's `survey` (`State.survey_summary`) is the survey route's line, as `highway` the Highway's. POST `/api/highway/target` {route: "highway" | "survey", index} targets any route system (`State.route_target`; no body: Target next). The payload's `update` ({version, current, url, kind}
+   (`highway_summary`); the Plot Route tab fetches the route itself (`/api/highway`, and `/api/riches` with POST `/api/riches/plot` {kind: "riches" | "exo" | "trade"} and `/clear` for the slot). The payload's `survey` (`State.survey_summary`) is the survey route's line, as `highway` the Highway's. POST `/api/highway/target` {route: "highway" | "survey", index} targets any route system (`State.route_target`; no body: Target next). The payload's `update` ({version, current, url, kind}
    or null) is a newer GitHub release (`State.watch_updates`, `newer_release`, `install_kind`): the Update pill.
 7. **Page.** `poll()` in `page.js` calls `onData()` (alerts) and `render()` (views). Moments with
    `seq > lastMomentSeq` become `alertOut(kind, title, body, {say})`: sound, desktop notification and a
@@ -153,8 +157,10 @@ Ids: a system id64 can exceed 2^53, so the page compares the string `id` fields,
   sale_events...) and meta keys must be cleared in `RESET_JOURNAL_DATA`, or a re-read doubles them.
   Live-only data (positions from Status.json, button presses, Spansh answers, estimates made at the time:
   `sample_points`, `surface_rigs`, `surface_sites`, `mining_locations`, `arrival_verdicts`, `sale_estimates`,
-  `firsts_watch`, `bookmarks`, `highway_route` with its meta `highway`, `riches_route` / `riches_bodies` with meta `riches`, the Spansh cache) cannot be rebuilt and
-  must **stay out** of it (backups carry them). `fleet_loadouts` (the latest Loadout per ShipID) is journal-derived.
+  `firsts_watch`, `bookmarks`, `highway_route` with its meta `highway`, `riches_route` / `riches_bodies` / `trade_stops` with meta `riches`,
+  `carrier_markets` (each Market.json read at your carrier), `carrier_counts` (your Recount), the Spansh cache) cannot be rebuilt and
+  must **stay out** of it (backups carry them). `fleet_loadouts` (the latest Loadout per ShipID) and `cargo_events` (your
+  carrier's history, per journal line) with meta `ship_cargo` and `cargo_dock` are journal-derived.
   Say which kind a new table is in its schema comment.
 - **Out-of-order and replayed lines.** Legacy folders are imported late and a re-read replays everything:
   guard current-state updates with `self.fresh(key, ts, ...)`, and anything that should only happen during

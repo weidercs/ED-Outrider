@@ -237,6 +237,38 @@ upstream project's choices, not rules of the game.
   quiet play. The tablet's pill says just "linked" (the ticking seconds distracted the author; 2026-10-04) and shows
   the age only once stale.
 - **The README stays short and user-facing;** implementation detail lives in code comments and these notes.
+- **Your carrier's cargo: a sell order confirms it, period** (the author, 2026-10-07). The carrier's Market.json
+  lists only commodities with an order: a sell order shows its Stock, the holding; a buy order shows only what it
+  still wants (silver: Stock 0, Demand 1, with 7 t aboard). So a sell order's Stock is the count, with no special
+  cases for a partial order ("too many eventualities... at least until someone complains"), and the README tells
+  players to put a deterrent-priced sell order on what they want counted. The rest is folded from the journal in
+  time order (`outrider/cargo.py` `carrier_fold`, rules in its docstring): your transfers and trades there, a sell
+  order's amount as a floor (the game sells only what is held), a buy order's filled part worked out at the next
+  market, Recount for what nothing shows. Checked on the author's carrier: its whole history (back to 2025) folds
+  to 16,076 t against the 16,085 t it reports, the 9 t gap being the two lines no order ever showed.
+- **Why not Frontier's companion API** (the author, 2026-10-07): it would list the carrier's cargo whole, but it
+  means signing in to Frontier (as EDMC and Inara do). Outrider never does: it reads the player's own journal files
+  and makes only read-only queries to public services (Spansh, EDSM, GitHub, Hugging Face), so the player's Frontier
+  account is never involved. The sell-order method is the price of that, and the README says so.
+- **Old carrier history is trusted only while it adds up.** Unjournaled trades (other players buying from an old
+  sell order) leave old lines wrong: the author's 2025 colonisation hauling left 34,000 t tracked that was long gone.
+  At a market read that finds the carrier holding less than is tracked, tracked lines with no news for 30 days go
+  (`SEEN_STALE_DAYS`); a real one that went with them shows as the gap, for Recount.
+- **What you paid is the game's average cost** (a purchase reweights it, a sale or transfer leaves it, the game's
+  own `AvgPricePaid` on a sale corrects it): "Avg 45,210 cr/t (2 lots)", one purchase without "Avg", "on 40 of 64 t"
+  when mined or transferred tons have no price. Only the ship's hold has it; the carrier's lines do not carry it over.
+- **The carrier's tritium shows only while tritium is on a sell order** (the author): only then is the hold's count
+  confirmed; otherwise the tile is as before. The jumps use the fuel per jump `round(5 + ly × (25000 + used + depot)
+  / 200000)`, fitted to the author's 27 recorded carrier jumps (exact on 26; without the depot's own weight it reads
+  1 to 2 t low), jump by jump at 500 ly with the hold topping the depot up.
+- **The Sell / Buy lookup asks Spansh's station search, never its own market data:** best price (the same price
+  nearer first) or closest, within a distance (best price needs one), fleet carriers out unless ticked (their orders
+  are often years old and top every list), the pad from the ship's type (`SHIP_PAD`; an unknown ship gets no pad
+  filter and says so). No commodity analytics or profit-per-hour: a lookup, not a trading tool.
+- **Trade routes share the slot with the survey routes** (the author: "one slot is fine"): Road to Riches,
+  Exomastery or a trade route, a new plot of any replacing it. Its stops are the stations (a hop's straight line,
+  not its jumps: 🎯 targets the system and the game plots the way), progress is your MarketSell / MarketBuy at the
+  stop's market, and its plot gets 600 s (Spansh's trade planner is slow).
 
 ## Known limits
 
@@ -271,6 +303,14 @@ upstream project's choices, not rules of the game.
   scale bar's "centre:" says the region under the middle).
 - **The too-heavy check needs a live arrival:** after an Outrider restart in a route system it waits for the next
   arrival there (as the clipboard copy does). It trusts the fuel model's range scaling, not Spansh's own code.
+- **Your carrier's untracked lines can be wrong** until a market read or a Recount: other players' purchases from a
+  sell order are journaled nowhere, nor is a sell order that ends without a CancelTrade (cargo moved out under it).
+  The total check against CarrierStats shows the gap; it is only as fresh as the last time the carrier management
+  or market was opened.
+- **Market.json is read only when it changes and only kept for your own carrier;** a market opened while Outrider
+  was not running is gone (the game overwrites the file at the next market), so the next one confirms instead.
+- **Trade prices are what players last reported** (Spansh, via EDDN): a stop's price or demand can have moved on, and
+  a route from a station Spansh does not know fails with Spansh's own words.
 - **The Highway's ship list is as of each ship's latest Loadout;** an `EngineerCraft` after it is not applied, and a
   ship never flown (no Loadout) can only be plotted with the neutron plotter and a typed range.
 

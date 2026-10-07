@@ -42,11 +42,16 @@ the code; the constants named are in `ed_outrider.py` unless another file is giv
 | `LoadGame`, `Commander`, `Rank`, `Progress`, `Promotion`, `Statistics`, `Shutdown` | Logins and sessions, credits at login, ranks, career statistics, the quit (recap, quit backup). |
 | `Loadout` | Ship, jump range, fuel capacity, unladen mass, FSD and Guardian booster, engineering modifiers, hull and core module health, rebuy. Also the latest one per `ShipID` goes to `fleet_loadouts` (`note_fleet`, `fleet_figures` in `outrider/fsd.py`): the Highway's ship list and the exact plotter's inputs. |
 | `EngineerCraft` | Engineering that moves the jump range before the next `Loadout`. |
-| `Cargo` (`Vessel: Ship`) | Tonnes in the hold: the ship's mass for the fuel model. |
+| `Cargo` (`Vessel: Ship`) | Tonnes in the hold: the ship's mass for the fuel model. With `Inventory` (at login) the whole hold (`outrider.cargo.ship_snapshot`); otherwise only the count, the list being in Cargo.json. |
+| `MarketBuy`, `MarketSell` | What you paid (`BuyPrice`; `MarketSell.AvgPricePaid` is the game's own average cost, 0 when unknown). At your carrier's `MarketID`, your own trades there (`cargo_events`). At a trade route's stop, its progress. |
+| `CargoTransfer` | `Transfers[]` of `Type`, `Count`, `Direction` (`tocarrier`, `toship`, `tosrv`). It names no carrier: it counts for yours only while docked at it (`Journals.cargo_dock`, replayed in order). |
+| `CarrierTradeOrder` | Your carrier's orders: `SaleOrder` n, `PurchaseOrder` n or `CancelTrade`, with `Price`; `BlackMarket` orders are left out. |
+| `CarrierDepositFuel` | Tritium from the **ship's** hold into the carrier's depot (`Amount`, `Total`: the depot after). |
+| `CollectCargo`, `EjectCargo` | Cargo scooped or jettisoned (the ship's hold; no price). |
 | `FuelScoop`, `RefuelAll`, `RefuelPartial` | Last refuel. |
 | `HullDamage`, `Repair`, `RepairAll`, `RepairDrone`, `AfmuRepairs`, `HeatDamage`, `Interdicted`, `JetConeBoost` | Hull and module health, danger alerts. `JetConeBoost` is the FSD supercharge signal (neutron or white dwarf cone, `BoostValue` the multiplier): the next jump's range, the "supercharged" moment, and the Highway's auto-target trigger. |
 | `Docked`, `Undocked` | Docked state and services (`exploration` = Universal Cartographics, `vistagenomics`), dock/undock alerts. |
-| `CarrierStats`, `CarrierLocation`, `CarrierJumpRequest`, `CarrierJumpCancelled` | Your fleet carrier. |
+| `CarrierStats`, `CarrierLocation`, `CarrierJumpRequest`, `CarrierJumpCancelled` | Your fleet carrier. `CarrierStats` also gives its cargo total (`SpaceUsage.Cargo`: the cargo check), the capacity in use (`TotalCapacity - FreeSpace`) and the depot (`FuelLevel`): the tritium's jumps. |
 | `NavRouteClear` | The plotted route was cleared. |
 | `FSSSignalDiscovered`, `SupercruiseDestinationDrop` | Notable stellar phenomena (`$Fixed_Event_Life_*`). |
 | `Materials`, `MaterialCollected`, `MaterialDiscarded`, `Synthesis`, `MaterialTrade`, `TechnologyBroker`, `ScientificResearch`, `MissionCompleted`, `EngineerContribution` | The materials inventory (`outrider.materials.apply`; each login's `Materials` is a full snapshot). |
@@ -65,6 +70,11 @@ the code; the constants named are in `ed_outrider.py` unless another file is giv
 - **NavRoute.json** (`read_navroute`): `Route[]` of `StarSystem`, `SystemAddress`, `StarPos`, `StarClass`; the
   route strip, star classes and "unreported" systems. An empty route means it was cleared. The last hop is the
   system plotted to (`navroute_end`: auto-target's check for a waypoint beyond one jump).
+- **Cargo.json** (`read_cargo_file`): the ship's whole hold (`Inventory[]` of `Name`, `Name_Localised`, `Count`,
+  `Stolen`, `MissionID`), rewritten with every `Cargo` event (whose own line then has only the count).
+- **Market.json** (`read_market`): the market you last opened, with `MarketID`, `StationType` and `Items[]`
+  (`Name` as `$platinum_name;`, `Name_Localised`, `BuyPrice`, `SellPrice`, `Stock`, `Demand`). Only your own
+  carrier's is kept (`carrier_markets`): the game overwrites the file at the next market.
 - **Controls bindings** (`outrider/honk.py`): the active preset's `.binds` file in the game's Options/Bindings folder,
   for Primary Fire's keyboard binding and auto-target's (`GalaxyMapOpen`, `UI_Right`/`Left`/`Up`/`Down`, `UI_Select`,
   `UI_Back`, `CycleNextPanel`, and the galaxy map camera's `CamYaw*`, `CamZoom*`, `CamTranslate*`). `StartPreset.4.start` names a preset per line (General, Ship, SRV, On foot): the `UI_*`
@@ -72,6 +82,18 @@ the code; the constants named are in `ed_outrider.py` unless another file is giv
   `Device="Keyboard"` slot whose `Modifier`s are all keyboard keys can be pressed.
 
 ## Traps and facts learned
+
+**Your fleet carrier's cargo** (checked in game with the author, 2026-10-07)
+- Its Market.json lists only commodities with an order. A sell order shows `Stock` (the holding) and `BuyPrice` (what
+  a visitor pays); a buy order shows `Stock` 0 and `Demand` (what it still wants), hiding what is aboard (silver:
+  Stock 0, Demand 1, with 7 t there). Commodities with no order are not listed at all.
+- The in-game Inventory screen at the carrier lists everything, but viewing it writes nothing.
+- Opening the carrier's management or market writes `CarrierStats` just before Market.json.
+- `CargoTransfer` names no carrier; `CarrierDepositFuel` takes from the ship's hold (moving tritium from the carrier
+  to the depot is a transfer to the ship, then a deposit).
+- Other players' trades with your carrier write nothing in your journal.
+- A carrier jump burns `round(5 + ly × (25000 + used + depot) / 200000)` t (`used` = TotalCapacity - FreeSpace, the
+  cargo included; `depot` = FuelLevel before the jump): exact on 26 of the author's 27 recorded jumps.
 
 **Status.json**
 - It is rewritten only when something in it changes. A player standing still (a stopped Rhino included)

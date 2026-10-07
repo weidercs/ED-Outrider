@@ -44,6 +44,7 @@ also run 24/7 on a home server in Docker.
 | 🧭 **Decide where to go** | Unfinished systems nearby, the nearest buyers for your data, bookmarks and a next stop, stellar phenomena, and a search across Spansh. |
 | 🛣 **Neutron Highway** | Plot a neutron route with Spansh for any ship you have flown; Outrider follows it as you fly and says the next stop. |
 | 💰 **Road to Riches, Exomastery** | Plot a [Spansh Road to Riches](https://spansh.co.uk/riches) or [Expressway to Exomastery](https://spansh.co.uk/exobiology) route in the Plot Route tab; Outrider follows it as you fly, shows what is left to scan and map in each system from your journal, and says it on arrival. |
+| 📦 **Cargo and your carrier** | Your hold with what you paid, your fleet carrier's cargo and tritium tracked from your journal, where to sell or buy any of it (Spansh's markets), and Spansh's trade planner as a route to follow. |
 | 📜 **Your logbook** | Every journal event in a searchable log, every exobiology sample and what became of it, and a schematic of the system. |
 | 📈 **The long view** | Each trip from sale to sale with what it actually paid, what each ship loss cost, your best finds, ranks and career statistics. |
 | 🗣 **A voice with personality** | A natural neural voice, down to business, sarcastic or sweet, briefing you on arrival and warning before you leave something unfinished. |
@@ -148,7 +149,8 @@ search any text, click a row for the raw event.
 </tr>
 <tr>
 <td width="50%" valign="top">
-<b>Materials</b> — materials against their caps, and how many FSD injections, limpets, SRV refuels and
+<b>Materials</b> — your <b>Cargo</b> (the ship's hold and your carrier's, with Sell and Buy: see Cargo and your
+carrier), materials against their caps, and how many FSD injections, limpets, SRV refuels and
 repairs and Rhino rig restocks you can make now. <b>Mining sites</b> lists each body your SRV mined: minerals
 and tons, saved spots, the last date and the distance.
 <br><br><img src="docs/images/materials.png" alt="Materials">
@@ -415,7 +417,7 @@ always uses the config file's `rig_warn`.
 ## 🛣 The Neutron Highway
 
 The **Plot Route** tab plots a route with [Spansh](https://spansh.co.uk), using neutron stars as boosts (or a
-Road to Riches, below), and follows it as you fly. One route of each kind is kept (following it needs no network)
+Road to Riches, an Exomastery or a trade route, below), and follows it as you fly. One route of each kind is kept (following it needs no network)
 until you plot another or **Clear route**.
 
 <p align="center">
@@ -461,8 +463,17 @@ value, ✓ once you have sampled them and ✦ when one would be new to your code
 arrival how many species are left on how many bodies and the best of them, and the next stop once they are sampled.
 It is known life, so first footfall (×5) is unlikely: the values shown are the base ones.
 
+**Trade.** The fifth plotter asks Spansh's [trade planner](https://spansh.co.uk/trade) for station-to-station hops:
+what to buy at each station and where to sell it. It starts at a station (the one you are docked at), with your
+credits and hold from the journal, and Spansh's options (hops, hop distance, distance from the star, data age, pad,
+planetary and player-owned stations, prohibited goods, permit systems). It takes the same place as Road to Riches and
+Exomastery: one of the three at a time. The list shows each stop with what to sell and buy there and the profit so far;
+on arrival the voice says where to dock and what to trade, ticks the goods off as your journal shows you selling and
+buying them, then says the hop's profit and the next stop. The prices are what players last reported: a stop can have
+moved on.
+
 **The route line and 🎯.** The line under the tiles shows the next stop of whichever route the tab shows (🛣 the
-Highway, 💰 Road to Riches, 🧬 Exomastery). A 🎯 beside that next system, and beside every system in the tab's lists,
+Highway, 💰 Road to Riches, 🧬 Exomastery, 💱 a trade route). A 🎯 beside that next system, and beside every system in the tab's lists,
 targets it in the galaxy map for you (game PC only, after a 5 s countdown to click back into the game; on the tablet,
 the row's sheet has 🎯 Target).
 
@@ -492,6 +503,34 @@ targeted neutron jump target Hwy Stop 38" (or "Failed to…") under its own aler
   it enters a name a US keyboard layout can't type) needs the clipboard: `wl-copy` or `xclip` on Linux.
 - **Frontier's rules:** this is key-press automation like auto honk (and tools such as Auto_Neutron). Whether to
   use it is your call.
+
+## 📦 Cargo and your carrier
+
+The **Materials** tab starts with your **Cargo**.
+
+- **Your ship's hold** is exact (the game writes it whole). Each commodity shows what you paid: the game's own
+  average over your purchases ("Avg 45,210 cr/t (2 lots)"; mined or transferred tons have no price).
+- **Your fleet carrier's hold** is not written anywhere whole, so Outrider tracks it:
+  - ✓ **confirmed**: a commodity on a **sell order** at your carrier. Opening its commodity market lists every sell
+    order with its stock, and that stock is the count. Put a sell order (at a price nobody will pay) on everything
+    you want counted.
+  - ◷ **last seen**: everything else, followed from your journal (transfers, your own buying and selling there,
+    orders set and cancelled). Other players' trades with your carrier are written nowhere in your journal: a buy
+    order's filled part is worked out the next time you open the market.
+  - ✎ **entered**: a count you typed in. **Recount…** lists the lines Outrider cannot confirm; the game's Inventory
+    screen at your carrier shows them all.
+  - The total is checked against the carrier's own ("✓ in sync: 16,085 t", or the tons not accounted for).
+  - This is the only way to track a carrier's cargo without signing in to Frontier's servers (their companion API,
+    as EDMC and Inara do). Outrider deliberately never does that: it reads your own journal files and queries only
+    public, read-only services, so your Frontier account is never involved.
+- **The Carrier tile** shows its tritium while tritium is on a sell order: the depot, the total with the hold, and
+  how many 500 ly jumps that gives ("Total Tritium: 14,199 t (151 jumps)", worked out jump by jump with the game's
+  fuel formula). Without one the tile is as before.
+- **Sell / Buy** on any line asks Spansh's markets where to sell all of it (or buy that much): best price or
+  closest, within a distance, data under an age, your ship's pad size, fleet carriers left out unless ticked (their
+  orders are often years old). Each station shows how far it is (and how far from its star), the price, demand or
+  supply, what your load earns and the profit over what you paid; opened, what else it buys from your hold, its
+  services, and Copy, Bookmark or Plot route here. **Buy something else** looks up any commodity.
 
 ## 🎯 Auto honk
 
@@ -891,6 +930,7 @@ Changing Outrider yourself, or with a coding agent? Start with [`docs/AGENT_GUID
 | `outrider/unsold.py` | The unsold-data estimate; also works on its own (`python3 -m outrider.unsold --help`) |
 | `outrider/log.py` | One-line summaries of journal events for the Log view |
 | `outrider/materials.py` | Material names, grades and caps, synthesis recipes, and the running inventory |
+| `outrider/cargo.py` | Cargo: the ship's hold and your carrier's (folded from the journal), the carrier's tritium, the Sell / Buy lookup and trade routes |
 | `outrider/tts.py` | Spoken alerts with Piper (optional), and playing lines and sounds on the PC |
 | `resources/speech.json` | The spoken lines, yours to edit (bans go in `data/speech_banned.json`) |
 | `outrider/speech.py` | Loads and checks `speech.json` |
