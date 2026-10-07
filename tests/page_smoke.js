@@ -1217,6 +1217,7 @@ const settle = async maxMs => {
       o.form = [vis(".trade-opt"), vis(".hwyto"), vis(".hwy-shiprow"), vis(".hwy-ropt"), document.getElementById("hwyGo").textContent];
       const e = document.querySelector('[name=hwyPlotter][value="exact"]'); e.checked = true; e.dispatchEvent(new Event("change", {bubbles: true}));
       o.back = vis(".hwyto") + "|" + vis(".hwy-shiprow");
+      o.slowHidden = document.getElementById("tradeSlow").hidden;   // the slow-plot note only with Trade
       data.survey = {kind: "trade", id: "t1", created_ts: "2026-10-07T12:00:00Z", destination: "Wyrd", total: 2, index: 2, at: 1, complete: false,
                      off_route: false, left_here: 1, next: {name: "Chara", id: "902", jumps: null, station: "Shimizu Hub", distance: 27.5}};
       o.line = surveyLineHtml(data.survey).replace(/<[^>]+>/g, "");
@@ -1229,7 +1230,8 @@ const settle = async maxMs => {
     if (got.th !== "#|Station|ly|Left|Hop profit|Total") bad.push("th");
     if (got.rows !== "done,at,next") bad.push("rows");
     if (!/✓ Sell 400 t Biowaste at 92 cr\/t · demand 1 · Buy 400 t Silver at 4,000 cr\/t · supply 9,000/.test(got.goods)) bad.push("goods");
-    if (JSON.stringify(got.form) !== JSON.stringify(["true,true,true", "false", "false", "false,false", "Plot (replaces your trade route)"]) || got.back !== "true|true") bad.push("form");
+    if (JSON.stringify(got.form) !== JSON.stringify(["true,true,true,true", "false", "false", "false,false", "Plot (replaces your trade route)"]) ||
+        got.back !== "true|true" || !got.slowHidden) bad.push("form");
     if (!/💱 Next: Shimizu Hub, Chara · 27.5 ly · 2 of 2 · 1 trade to make here/.test(got.line)) bad.push("line");
     if (!got.alert) bad.push("alert");
     d.querySelector('[data-view="overview"]').click(); await sleep(100);
@@ -1295,7 +1297,10 @@ const settle = async maxMs => {
       renderCarrier();
       o.without = document.getElementById("carrierLine").textContent;
       o.tritGone = !document.getElementById("carrierTrit");
+      data.carrier = null; renderCarrier();   // no carrier in the journals: no tile, the row closes up
+      o.noTile = [document.getElementById("tCarrier").hidden, document.getElementById("tiles").classList.contains("nocarrier")];
       data.carrier = saved; renderCarrier();
+      o.tileBack = !document.getElementById("tCarrier").hidden || !saved;
       renderCargo({ship: {name: "Caspian Explorer", capacity: 64, lines: [{id: "platinum", name: "Platinum", count: 64, avg: 45210,
                      avg_text: "Avg 45,210 cr/t (2 lots)", stolen: 0, mission: 0}]},
                    carrier: {name: "Out Of The Blue", total: 16085, reported: 16085, gap: 0, market_ts: "2026-10-07T10:11:28Z",
@@ -1310,11 +1315,17 @@ const settle = async maxMs => {
       o.recount = [...document.querySelectorAll("#recountRows input[data-rc]")].map(i => i.dataset.rc).join();
       o.total = document.getElementById("recountTotal").textContent;
       tabClose(document.getElementById("recountDlg"));
+      const sample = cargoData;
+      renderCargo({ship: {name: "Caspian Explorer", capacity: 64, lines: []}, carrier: null});   // no carrier: no carrier part
+      o.noCarrier = [/Carrier/.test(document.getElementById("cargoList").textContent), !!document.getElementById("recountBtn")];
+      renderCargo(sample);   // the lookup check below starts from these lines
       return o;
     })()`);
     const bad = [];
     if (!/Tritium in Depot: 668 t/.test(got.with) || got.trit !== "Total Tritium: 14,199 t (151 jumps)") bad.push("tile with tritium");
     if (!/UC ✓ · Vista ✓ · 668 t tritium/.test(got.without) || !got.tritGone) bad.push("tile without");
+    if (JSON.stringify(got.noTile) !== "[true,true]" || !got.tileBack) bad.push("no carrier tile");
+    if (JSON.stringify(got.noCarrier) !== "[false,false]") bad.push("no carrier cargo");
     if (!/Platinum · Avg 45,210 cr\/t \(2 lots\)64 t/.test(got.ship)) bad.push("ship");
     if (got.marks !== "✓◷✎" || !got.sync) bad.push("carrier");
     if (got.recount !== "water,metaalloys" || !/Total 13,544 t · the carrier reports 16,085 t · 2,541 t short/.test(got.total)) bad.push("recount");

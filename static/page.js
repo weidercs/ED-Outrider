@@ -262,6 +262,10 @@ let carrierWarned = null;
 function renderCarrier() {
   const c = data && data.carrier, cl = document.getElementById("carrierLine");
   const val = (v, title) => `<div class="val"${title ? ` title="${title}"` : ""}>${v}</div>`, ln = v => v ? `<div class="ln">${v}</div>` : "";
+  // no carrier in your journals: no tile (the other five share the row); it comes back with the first CarrierStats
+  const none = !!data && !c;
+  document.getElementById("tCarrier").hidden = none;
+  document.getElementById("tiles").classList.toggle("nocarrier", none);
   if (!c) { cl.innerHTML = val(`<span class="unk">none seen</span>`); return; }
   const fmtLy = d => d.toLocaleString("en-US", {maximumFractionDigits: 1});
   let where = c.aboard ? "<b>aboard</b>" : c.here ? "<b>in this system</b>"
