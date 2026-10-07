@@ -11,7 +11,7 @@ import unittest
 import unittest.mock
 
 from support import (  # also puts the repository root on sys.path
-    scan, voice_honk, voice_jump, voice_moments, voice_organic, voice_planet, voice_sampling_body,
+    scan, voice_honk, voice_jump, voice_moments, voice_organic, voice_planet, voice_sampling_body, user_docs,
 )
 import outrider.bio  # noqa: E402
 import ed_outrider  # noqa: E402
@@ -1018,8 +1018,7 @@ class MappedCallout(unittest.TestCase):
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         with open(os.path.join(root, "ed_outrider.toml.example"), encoding="utf-8") as f:
             self.assertIn("# speak_mapped = false", f.read().split("[defaults]", 1)[1].split("\n[", 1)[0])
-        with open(os.path.join(root, "README.md"), encoding="utf-8") as f:
-            self.assertIn("`speak_mapped`", f.read())
+        self.assertIn("`speak_mapped`", user_docs())
         self.assertIn("sayMapped", ed_outrider.BROWSER_SETTINGS)
         self.assertIn("speak_mapped", self.state.payload()["defaults"])
 

@@ -13,7 +13,7 @@ import unittest.mock
 import sqlite3
 
 from support import (  # also puts the repository root on sys.path
-    RHINO_SESSION, button_fake_evdev, scan,
+    RHINO_SESSION, button_fake_evdev, scan, user_docs,
 )
 import outrider.materials  # noqa: E402
 import ed_outrider  # noqa: E402
@@ -661,8 +661,7 @@ class BatchGHonkBackups(unittest.TestCase):
         out = self.cli(["--help"]).stdout
         self.assertIn("--restore", out)
         self.assertIn("--list-backups", out)
-        with open(os.path.join(os.path.dirname(ed_outrider.__file__), "README.md"), encoding="utf-8") as f:
-            readme = f.read()
+        readme = user_docs()
         self.assertIn("--restore", readme)
         self.assertIn("--list-backups", readme)
 
@@ -874,8 +873,7 @@ class BatchBVoiceControl(unittest.TestCase):
         section = example.split("[copilot]", 1)[1]
         for key in ("enabled = false", "device", "button", "hold_ms = 600", "double_ms = 350"):
             self.assertIn(f"# {key}", section)
-        with open(os.path.join(root, "README.md"), encoding="utf-8") as f:
-            readme = f.read()
+        readme = user_docs()
         for words in ("[copilot]", "uaccess", "`input` group", "latching", "Spoken lines", "Cut this line", "sound only"):
             self.assertIn(words, readme)
 

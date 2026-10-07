@@ -1,6 +1,6 @@
 # ED Outrider as a server: Outrider running 24/7 on another computer, reading the game's journals from a share.
 # Away from the game PC, what needs it is off ([server] game_pc = auto: off inside this container): auto honk,
-# auto-target, the tablet's rail, the co-pilot button, the clipboard, sound played on the PC. See the README,
+# auto-target, the tablet's rail, the co-pilot button, the clipboard, sound played on the PC. See docs/guide/install.md,
 # "Running as a server (Docker)". Built where it runs (x86-64 or arm64): docker compose up -d --build
 FROM python:3.12-slim
 # published as ghcr.io/weslocke/ed-outrider (these labels link the package to the repository)

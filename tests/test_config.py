@@ -11,7 +11,7 @@ import unittest.mock
 import sqlite3
 
 from support import (  # also puts the repository root on sys.path
-    _FakeResponse, guard_status, make_controls, org, scan,
+    _FakeResponse, guard_status, make_controls, org, scan, user_docs,
 )
 import outrider.bio  # noqa: E402
 import ed_outrider  # noqa: E402
@@ -87,8 +87,7 @@ class Config(unittest.TestCase):
         with open(os.path.join(root, "ed_outrider.py"), encoding="utf-8") as f:
             head = f.read().split("from aiohttp import", 1)[0]
         self.assertNotIn(".venv", head.split('"""', 2)[-1])   # no .venv on sys.path before the aiohttp import
-        with open(os.path.join(root, "README.md"), encoding="utf-8") as f:
-            readme = " ".join(f.read().split())
+        readme = " ".join(user_docs().split())
         self.assertIn("aiohttp must then be installed for that `python3` too", readme)
         self.assertNotIn("is found even when you start Outrider with plain", readme)
 

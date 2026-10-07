@@ -236,7 +236,9 @@ upstream project's choices, not rules of the game.
   with nothing new, so "stale" starts at 30 s without an answer; the desktop's "linked · N s" counts up to that in
   quiet play. The tablet's pill says just "linked" (the ticking seconds distracted the author; 2026-10-04) and shows
   the age only once stale.
-- **The README stays short and user-facing;** implementation detail lives in code comments and these notes.
+- **The README is a front page; the guide is `docs/guide/`** (the author, 2026-10-07: the single README had grown to
+  1,000 lines). Plain Markdown in the repository, not a wiki or a docs site: versioned with the code, changed in the
+  same commit as a feature, no build step. Implementation detail lives in code comments and these notes.
 - **Your carrier's cargo: a sell order confirms it, period** (the author, 2026-10-07). The carrier's Market.json
   lists only commodities with an order: a sell order shows its Stock, the holding; a buy order shows only what it
   still wants (silver: Stock 0, Demand 1, with 7 t aboard). So a sell order's Stock is the count, with no special

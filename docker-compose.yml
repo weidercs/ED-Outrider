@@ -1,4 +1,4 @@
-# ED Outrider as a server (see the README, "Running as a server (Docker)"). From this folder:
+# ED Outrider as a server (see docs/guide/install.md, "Running as a server (Docker)"). From this folder:
 #   docker compose up -d --build        start (and rebuild after a git pull)
 #   docker compose logs -f               its log
 #   docker compose down                  stop
@@ -20,7 +20,7 @@ services:
     environment:
       - TZ=${TZ:-UTC}
     volumes:
-      # the game's journal folder, read-only: a host folder where an NFS or CIFS share is mounted (the README shows
+      # the game's journal folder, read-only: a host folder where an NFS or CIFS share is mounted (docs/guide/install.md shows
       # both), or the named volume "journals" below instead
       - ${JOURNALS:-./docker/journals}:/journals:ro
       - ./docker/data:/app/data      # the database, backups, Piper voices

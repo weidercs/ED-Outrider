@@ -71,8 +71,8 @@ rail, the co-pilot button, the clipboard and sound played on the PC. Everything 
 
 2. Make the game's journal folder reachable here, read-only: share it from the game PC over NFS or CIFS and mount
    it. NFS: mount it with actimeo=1, or NFS shows the journal's growth up to a minute late and the alerts come late
-   and all at once (Outrider warns at start). The README's "Running as a server (Docker)" has the export and mount
-   lines.
+   and all at once (Outrider warns at start). The guide's "Running as a server (Docker)" has the export and mount
+   lines: https://github.com/weslocke/ED-Outrider/blob/main/docs/guide/install.md
 
 3. Settings:
      cp .env.example .env      then set JOURNALS to that mount (and UID/GID: id -u, id -g)

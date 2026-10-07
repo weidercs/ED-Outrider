@@ -11,7 +11,7 @@ import unittest.mock
 
 from support import (  # also puts the repository root on sys.path
     AUTHOR_BINDS, FakeGame, HWY_EXACT, _HwSession, _fake_evdev, hwy_jump, hwy_plot_exact, hwy_ts, make_controls,
-    outrider_honk, types_ns, use_fake_time,
+    outrider_honk, types_ns, use_fake_time, user_docs,
 )
 import outrider.bio  # noqa: E402
 import ed_outrider  # noqa: E402
@@ -858,8 +858,7 @@ class HighwayH1(unittest.TestCase):
         here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         with open(os.path.join(here, "ed_outrider.toml.example"), encoding="utf-8") as f:
             example = f.read()
-        with open(os.path.join(here, "README.md"), encoding="utf-8") as f:
-            readme = f.read()
+        readme = user_docs()
         for key in ("clipboard", "autotarget", "autotarget_delay", "efficiency", "conservative", "conservative_ly",
                     "autotarget_entry", "autotarget_map_wait", "autotarget_search_wait", "autotarget_key_delay",
                     "autotarget_keys", "autotarget_plot", "autotarget_dry_run"):
@@ -1027,8 +1026,7 @@ class HighwayMap(unittest.TestCase):
         here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         with open(os.path.join(here, "ed_outrider.toml.example"), encoding="utf-8") as f:
             example = f.read()
-        with open(os.path.join(here, "README.md"), encoding="utf-8") as f:
-            readme = f.read()
+        readme = user_docs()
         for key in ("background_image", "background_extent", "background_opacity"):
             self.assertIn(f"# {key} = ", example[example.index("[highway]"):])
             self.assertIn(f"`{key}`", readme[readme.index("| `[highway]`"):].split("\n")[0])

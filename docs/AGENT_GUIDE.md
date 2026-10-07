@@ -54,8 +54,8 @@ rules that keep the journal data, the page and the voice consistent. See also `J
 | `resources/mining_odds.json` | Planetary mining survey odds per ground type (EDFM, CC BY-SA 4.0); read only, never edit by hand |
 | `ed_outrider.toml.example` | Every config key, commented. The real `ed_outrider.toml` is git-ignored |
 | `data/` | The player's own files, git-ignored as a whole: `ed_outrider.sqlite` (default `db`), `browser_defaults.json` (beside the database), `speech_banned.json`, `backups/` (default `backup_dir`), `piper-voices/` (with `voices.json`, Piper's catalogue cached a week), `fonts/` (the player's own theme fonts, served at `/userfonts/`). Created on first start |
-| `docs/` | These notes; `docs/images/` the README screenshots |
-| `tests/test_*.py`, `tests/support.py` | Unit tests by subject (`test_state`, `test_values`, `test_spansh`, `test_speech`, `test_devices`, `test_fuel`, `test_highway`, `test_config`, `test_pages`, `test_tablet` (themes, emblems, fonts, contrast), `test_rail`, `test_ask`, `test_mcp`, `test_auth`, `test_settings`, `test_server_mode` (server mode, Docker packaging, the launchers); unittest, in-memory SQLite). `support.py` holds the shared fixtures and fakes (`FakeGame`, `_fake_evdev`, `_HwSession`, `scan`, `T`...) and the helpers test classes share; import from it, never import a test class into another file (it would run twice). One file runs alone as `python3 -m unittest tests.test_highway` |
+| `docs/` | These notes; `docs/guide/` the user guide (the README links each page); `docs/images/` its screenshots (how they are taken: the author's private notes, `project/screenshots/`) |
+| `tests/test_*.py`, `tests/support.py` | Unit tests by subject (`test_state`, `test_values`, `test_spansh`, `test_speech`, `test_devices`, `test_fuel`, `test_highway`, `test_config`, `test_pages`, `test_tablet` (themes, emblems, fonts, contrast), `test_rail`, `test_ask`, `test_mcp`, `test_auth`, `test_settings`, `test_server_mode` (server mode, Docker packaging, the launchers), `test_docs` (every doc link and anchor; `user_docs()` in support.py is the README and the guide as one text, for tests of what the docs say); unittest, in-memory SQLite). `support.py` holds the shared fixtures and fakes (`FakeGame`, `_fake_evdev`, `_HwSession`, `scan`, `T`...) and the helpers test classes share; import from it, never import a test class into another file (it would run twice). One file runs alone as `python3 -m unittest tests.test_highway` |
 | `tests/page_smoke.js` | Loads the page in jsdom from a running server, opens every view, drives many page functions |
 | `tests/fixtures/journals/` | Synthetic sample journals, `Status.json` and `NavRoute.json` (made-up commander and systems) |
 | `scripts/verify.sh` | Runs everything below in one go against a throwaway server |
@@ -225,8 +225,8 @@ Ids: a system id64 can exceed 2^53, so the page compares the string `id` fields,
 - **Config keys.** A new key needs: parsing in `settings_from` (with a sane default and a warning on a bad
   value), `config_text` (so `--write-config` writes it, WITH a `# help` comment on its line: Settings' Server
   settings lists every key from `config_text` through `outrider/config_edit.py` and shows that comment as its help;
-  `test_settings.py` checks every key has one and can be written back), `ed_outrider.toml.example`, and the README
-  Settings section. Server defaults for browser settings also go in `payload()["defaults"]` and `run()`.
+  `test_settings.py` checks every key has one and can be written back), `ed_outrider.toml.example`, and the guide's
+  Settings page (`docs/guide/settings.md`). Server defaults for browser settings also go in `payload()["defaults"]` and `run()`.
 - **Endpoints.** Every request passes `request_guard`: unknown Host names are refused, and a request another
   site's page sends is refused (Origin / `Sec-Fetch-Site`; `http://` or `https://` of the same Host, for an HTTPS proxy
   on the LAN; an `allowed_hosts` name is also answered without a port). The sign-in page's `next` passes `safe_next`
@@ -244,9 +244,9 @@ Ids: a system id64 can exceed 2^53, so the page compares the string `id` fields,
   SIGTERM, or `docker stop` hangs for the whole grace period. The compose project is named `ed-outrider` (one
   project for a checkout and every bundle). A release, after bumping `outrider.__version__` and pushing: `scripts/docker_bundle.sh`; tag the image
   `ghcr.io/weslocke/ed-outrider:<version>` and `:latest` and push both; then a GitHub Release `v<version>` on that
-  commit with `dist/docker-compose.yml`, `dist/env.example` and the bundle attached (the README fetches the first two
+  commit with `dist/docker-compose.yml`, `dist/env.example` and the bundle attached (the install guide fetches the first two
   from `releases/latest/download/`, so every release must carry them), its notes leading with the registry. The
-  README's Docker section and the bundle's INSTALL.txt (written by the script) must agree on the install and update steps.
+  guide's Docker section (`docs/guide/install.md`) and the bundle's INSTALL.txt (written by the script) must agree on the install and update steps.
 - **Stopping.** SIGTERM (docker stop, systemd) sets `run()`'s stop event: the same cleanup as Ctrl-C (tasks
   cancelled, commit, the quit backup, "stopped cleanly", exit 0). `verify.sh` stops its scratch server that way and
   fails if it does not stop cleanly.
@@ -336,7 +336,10 @@ should show it. Check `JOURNAL_REFERENCE.md` for the event's quirks.
 - Alerts are for the out of the ordinary. Routine systems stay quiet.
 - Nothing is uploaded. Outside calls are read-only lookups (Spansh, EDSM, GitHub for rules and the update check
   (`[server] update_check`), Hugging Face for voices).
-- The README stays tight: user-facing, short bullets. Implementation detail belongs in code comments.
+- The README is the front page: what Outrider is, a short start and the guide's index. The user guide is
+  `docs/guide/` (one page per topic, a nav bar on each); keep it user-facing, short bullets. A new feature goes on its
+  topic's page; a section moved between pages keeps an `<a id>` for its old anchor in the README's index (old links
+  still land). `test_docs.py` checks every relative link and anchor. Implementation detail belongs in code comments.
 - Per-player defaults (names the voice uses, thresholds, voice) are only defaults; never hard-code a
   player's preference.
 - Keep optional parts optional: the server must run without Piper, evdev, network or journals.

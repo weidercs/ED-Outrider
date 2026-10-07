@@ -13,6 +13,18 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import ed_outrider  # noqa: E402
 
 
+def user_docs():
+    """The user documentation as one text: README.md and every page of docs/guide/ (the README is a front page since
+    2026-10-07; tests that check what the docs say read all of it)."""
+    import glob
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    parts = []
+    for path in [os.path.join(root, "README.md")] + sorted(glob.glob(os.path.join(root, "docs", "guide", "*.md"))):
+        with open(path, encoding="utf-8") as f:
+            parts.append(f.read())
+    return "\n".join(parts)
+
+
 def T(s):
     return dt.datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc)
 

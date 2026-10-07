@@ -93,7 +93,7 @@ ED Outrider for Android (a separate repository) wraps it with a wake word that a
 fixed phrases, then an optional OpenAI-compatible AI with the read-only tools of outrider/tools.py). [server] password
 signs devices in (outrider/auth.py). python3 -m outrider.mcp serves the same read-only tools to an AI client over MCP.
 In Docker ([server] game_pc auto: off in a container) everything that presses keys, reads devices or plays on this
-PC is off and left out of the pages; see the README and scripts/docker_bundle.sh.
+PC is off and left out of the pages; see docs/guide/install.md and scripts/docker_bundle.sh.
 
 The database backs itself up (a dated zip, the newest kept) at start when a day old and after quitting
 the game (each copy checked with quick_check and the zip with testzip before older ones rotate out), and
@@ -952,7 +952,7 @@ def config_text(st):
 [server]
 host = {q(st["host"])}   # "0.0.0.0" to reach the page from another device on your network
 port = {st["port"]}   # the page's port: http://<this PC>:<port>/
-allowed_hosts = {lst(st["allowed_hosts"])}   # extra names the page may be opened by (a LAN setup; see the README)
+allowed_hosts = {lst(st["allowed_hosts"])}   # extra names the page may be opened by (a LAN setup; see docs/guide/install.md)
 password = {q(st["password"])}   # devices on your network sign in with it ("" = none); this PC itself never needs it
 game_pc = {q(st["game_pc"] if st["game_pc"] == "auto" else ("true" if st["game_pc"] else "false"))}   # is this the PC the game runs on? "auto" (off inside a container, e.g. Docker), "true" or "false". Off: no auto honk, auto-target, tablet rail, co-pilot button, clipboard or playing on this PC
 update_check = {"true" if st["update_check"] else "false"}   # once a day, ask GitHub whether a newer Outrider release is out, and say so on the page (only the request: nothing about you is sent)
@@ -11181,8 +11181,8 @@ def nfs_cache_warnings(dirs, mounts=None, realpath=os.path.realpath, read=_read_
         acregmax = next((int(o.split("=", 1)[1]) for o in opts if o.startswith("acregmax=") and o.split("=", 1)[1].isdigit()), 60)
         if acregmax > NFS_CACHE_OK:
             out.append(f"warning: the journal folder {d} is on NFS ({point}), which may show a journal's growth up to "
-                       f"{acregmax} s late: alerts then come late and all at once. Mount it with actimeo=1 (see the "
-                       "README, \"Running as a server\"), then restart Outrider.")
+                       f"{acregmax} s late: alerts then come late and all at once. Mount it with actimeo=1 (see "
+                       "docs/guide/install.md, \"Running as a server\"), then restart Outrider.")
     return out
 
 
@@ -11194,7 +11194,7 @@ def exposure_warnings(host, password, extra):
     if public:
         out.append(f"warning: [server] allowed_hosts has {', '.join(public)}, which looks like an internet name. Do not "
                    "expose Outrider to the internet: it serves your journals, its password only stops accidents on your "
-                   "own network, and it gets no security updates (see the README).")
+                   "own network, and it gets no security updates (see docs/guide/install.md).")
     if host not in ("127.0.0.1", "localhost", "::1") and not password:
         out.append("warning: listening on your network with no [server] password: anyone who can reach this computer can "
                    "read your journals' contents and edit bookmarks. Set one, and never forward this port to the internet.")

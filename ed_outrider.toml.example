@@ -53,7 +53,7 @@
 # shipped ones.
 # db = "data/ed_outrider.sqlite"   # browser_defaults.json is kept next to it
 # backup_dir = "data/backups"   # backups: dated zips of the database, and every live journal copied once into
-#                          # data/backups/journals (restore: --legacy data/backups/journals; see the README)
+#                          # data/backups/journals (restore: --legacy data/backups/journals; see docs/guide/install.md)
 # backup_keep = 7          # dated database zips kept (outrider-<database name>-*.zip; older ones are deleted
 #                          # after a new one is written); the journal archive is never pruned
 # backup_every_days = 1    # an automatic backup at start when the last one is older than this, and when the game
@@ -214,7 +214,7 @@
 
 [mcp]
 # The MCP bridge, for asking an AI client (Claude Code, the Claude desktop app) about your game: the client starts
-# python3 -m outrider.mcp, which reads the running Outrider (read-only; see the README). Not used by the server.
+# python3 -m outrider.mcp, which reads the running Outrider (read-only; see docs/guide/voice-and-alerts.md). Not used by the server.
 # url = "http://127.0.0.1:8025"   # where Outrider runs; default: this PC at [server] port
 # max_rows = 25             # rows in a list a tool answers with (1 to 200); how many were left out is counted
 # password = ""            # an Outrider on another computer (a server) asks for its [server] password: the bridge
