@@ -7781,7 +7781,7 @@ class State:
     def history(self, days):
         """Your sessions (gaps of 2 h+ split them), newest first, with what each one achieved,
         plus an all-time row that ignores `days`."""
-        since = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - days * 86400))
+        since = iso_ts(time.time() - days * 86400)
         sessions = self.sessions(since)
         for s_ in sessions:
             # a session owns everything from its login (or first jump) until the next session's window starts
@@ -7870,7 +7870,7 @@ class State:
     def organics(self, days):
         """Every exobiology sample run (newest first) with what it is worth and whether it was banked,
         plus your codex entries over the same period."""
-        since = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - days * 86400))
+        since = iso_ts(time.time() - days * 86400)
         runs = [dict(r) for r in self.db.execute(
             """SELECT o.*, b.name AS body_name, f.was_footfalled FROM own_organic o
                LEFT JOIN own_bodies b ON b.system = o.system AND b.body_id = o.body_id
@@ -12314,7 +12314,8 @@ def listen_problem(host, port):
                 '"0.0.0.0" every address it has)')
     try:
         with socket.socket(socket.AF_INET6 if ":" in host else socket.AF_INET) as sock:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            if os.name == "posix":   # as the server binds; on Windows it would refuse a port in use as "forbidden"
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind((host, port))
         return None
     except socket.gaierror as e:
@@ -12713,7 +12714,9 @@ async def finish_backup(state, wait=None):
 
 
 def main(argv=None):
-    sys.stdout.reconfigure(line_buffering=True)
+    # errors: a stdout that is not UTF-8 (Windows, piped or redirected: cp1252) prints "?" for what it lacks, so
+    # --help and the log lines still come out
+    sys.stdout.reconfigure(line_buffering=True, errors="replace")
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0],
                                 epilog=__doc__.split("\n\n", 1)[1],
                                 formatter_class=argparse.RawDescriptionHelpFormatter)

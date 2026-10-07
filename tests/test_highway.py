@@ -550,27 +550,29 @@ class HighwayH1(unittest.TestCase):
             ran.append((argv, kw))
             return types_ns(returncode=0)
         which = lambda name: "/usr/bin/" + name
-        cb = ed_outrider.Clipboard(True, which=which, run=run, env={"WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0"})
+        import functools
+        Clipboard = functools.partial(ed_outrider.Clipboard, platform="linux")   # the Linux tools, wherever the tests run
+        cb = Clipboard(True, which=which, run=run, env={"WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0"})
         self.assertEqual((cb.tool, cb.argv), ("wl-copy", ["wl-copy"]))
         self.assertTrue(cb.copy("Neu A"))
         argv, kw = ran[0]
         self.assertEqual((argv, kw["input"], kw.get("shell", False), kw["timeout"]), (["wl-copy"], b"Neu A", False, 5))
-        x11 = ed_outrider.Clipboard(True, which=lambda n: n == "xclip" and "/usr/bin/xclip", run=run, env={"DISPLAY": ":0"})
+        x11 = Clipboard(True, which=lambda n: n == "xclip" and "/usr/bin/xclip", run=run, env={"DISPLAY": ":0"})
         self.assertEqual(x11.argv, ["xclip", "-selection", "clipboard"])
-        none = ed_outrider.Clipboard(True, which=which, run=run, env={})
+        none = Clipboard(True, which=which, run=run, env={})
         self.assertEqual((none.tool, none.info()["available"]), (None, False))
         self.assertIn("wl-copy", none.info()["why"])
         self.assertFalse(none.copy("X"))
-        off = ed_outrider.Clipboard(False, which=which, run=run, env={"DISPLAY": ":0"})
+        off = Clipboard(False, which=which, run=run, env={"DISPLAY": ":0"})
         self.assertFalse(off.copy("X"))
         self.assertEqual(len(ran), 1)
-        bad = ed_outrider.Clipboard(True, which=which, run=lambda *a, **k: types_ns(returncode=1), env={"DISPLAY": ":0"})
+        bad = Clipboard(True, which=which, run=lambda *a, **k: types_ns(returncode=1), env={"DISPLAY": ":0"})
         self.assertFalse(bad.copy("X"))
         self.assertEqual(bad.info()["last"]["error"], "xclip failed")
 
         def boom(*a, **k):
             raise OSError("no such file")
-        self.assertFalse(ed_outrider.Clipboard(True, which=which, run=boom, env={"DISPLAY": ":0"}).copy("X"))
+        self.assertFalse(Clipboard(True, which=which, run=boom, env={"DISPLAY": ":0"}).copy("X"))
 
     def test_clipboard_on_live_arrivals_only(self):
         copied = []
@@ -1006,8 +1008,9 @@ class HighwayMap(unittest.TestCase):
         back = tomllib.loads(ed_outrider.config_text(st))["highway"]
         self.assertEqual((back["background_image"], back["background_extent"], back["background_opacity"]),
                          ("pics/galaxy.png", [-40000, 40000, -20000, 70000], 0.4))
-        self.assertEqual(ed_outrider.settings_from({"highway": {"background_image": "/abs/g.JPG"}}, args, None, ([], []))
-                         ["highway"]["background_image"], "/abs/g.JPG")
+        absolute = os.path.abspath("/abs/g.JPG")   # with the drive on Windows
+        self.assertEqual(ed_outrider.settings_from({"highway": {"background_image": absolute}}, args, None, ([], []))
+                         ["highway"]["background_image"], absolute)
         # a file that is not an image type, a bad extent and an opacity out of range: reported, the defaults used
         for cfg, key, want in [({"background_image": "ed_outrider.toml"}, "background_image", ""),
                                ({"background_image": "data/ed_outrider.sqlite"}, "background_image", ""),
@@ -1060,6 +1063,9 @@ class HighwayAutoTarget(unittest.TestCase):
         with open(os.path.join(self.binds, "HCS X56 Attempt 1.4.2.binds"), "w") as f:
             f.write(AUTHOR_BINDS)
         outrider.honk._bindings_cache.clear()
+        p = unittest.mock.patch.object(outrider.honk, "EXPERIMENTAL", "")   # Linux's wording, wherever the tests run
+        p.start()
+        self.addCleanup(p.stop)
         # quick timings for tests (the defaults are for the game)
         for k, v in (("TAP_S", 0.002), ("VERIFY_WAIT", 0.4), ("POLL_S", 0.01), ("LOCK_WAIT", 2.0)):
             p = unittest.mock.patch.object(outrider.target, k, v)

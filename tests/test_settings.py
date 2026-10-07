@@ -12,7 +12,7 @@ import tomllib
 import unittest
 import unittest.mock
 
-from support import ed_outrider
+from support import can_symlink, ed_outrider
 
 import outrider.auth  # noqa: E402
 import outrider.config_edit as ce  # noqa: E402
@@ -210,16 +210,19 @@ class WritingFile(TempConfig):
             return r.status, await r.json()
         return self.client(go)
 
+    @unittest.skipIf(os.name == "nt", "Windows has no file modes")
     def test_mode_kept(self):
         os.chmod(self.path, 0o600)
         self.assertEqual(self.save({"server": {"radius": 40}})[0], 200)
         self.assertEqual(os.stat(self.path).st_mode & 0o777, 0o600)
 
+    @unittest.skipIf(os.name == "nt", "Windows has no file modes")
     def test_new_file_private(self):
         os.remove(self.path)
         self.assertEqual(self.save({"server": {"radius": 40}})[0], 200)
         self.assertEqual(os.stat(self.path).st_mode & 0o777, 0o600)
 
+    @unittest.skipUnless(can_symlink(), "this account may not make symbolic links")
     def test_through_a_symlink(self):
         real = os.path.join(self.tmp, "real", "outrider.toml")
         os.makedirs(os.path.dirname(real))

@@ -9,5 +9,6 @@ def ts_seconds(ts):
 
 
 def iso_ts(t):
-    """time.time() -> a journal-style UTC timestamp."""
-    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t))
+    """time.time() -> a journal-style UTC timestamp. A time before 1970 (a "since" many years back) reads as 1970:
+    Windows' gmtime refuses a negative one, and no journal is that old."""
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(max(0, t)))

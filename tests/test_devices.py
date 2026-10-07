@@ -13,7 +13,7 @@ import unittest.mock
 import sqlite3
 
 from support import (  # also puts the repository root on sys.path
-    RHINO_SESSION, button_fake_evdev, scan, user_docs,
+    RHINO_SESSION, button_fake_evdev, scan, temp_dir, user_docs,
 )
 import outrider.materials  # noqa: E402
 import ed_outrider  # noqa: E402
@@ -628,7 +628,7 @@ class BatchGHonkBackups(unittest.TestCase):
             self.assertEqual(ed_outrider.list_backups(os.path.join(d, "none"), "x.sqlite")[0][:11], "no backups:")
             cfg = os.path.join(d, "t.toml")
             with open(cfg, "w") as f:
-                f.write(f'[server]\nbackup_dir = "{out}"\n')
+                f.write(f"[server]\nbackup_dir = '{out}'\n")   # a literal string: Windows' backslashes as they are
             dbp = os.path.join(d, "x.sqlite")
             got = self.cli(["--config", cfg, "--db", dbp, "--list-backups"])
             self.assertEqual(len(got.stdout.strip().splitlines()), 2)
@@ -1157,21 +1157,20 @@ class MiningLocations(unittest.TestCase):
         self.assertEqual(merged[0]["mining"], 12)
 
     def test_old_database_gets_the_column(self):
-        import tempfile
-        with tempfile.TemporaryDirectory() as d:
-            path = os.path.join(d, "old.sqlite")
-            con = sqlite3.connect(path)
-            con.execute("CREATE TABLE own_signals (system INTEGER, name TEXT, bio INTEGER, geo INTEGER, ts TEXT, "
-                        "PRIMARY KEY (system, name))")
-            con.commit()
-            con.close()
-            db = ed_outrider.open_db(path)
-            self.addCleanup(db.close)
-            self.assertIn("mining", {r["name"] for r in db.execute("PRAGMA table_info(own_signals)")})
-            j = ed_outrider.Journals(db)
-            j.handle({"event": "FSSBodySignals", "timestamp": "2026-01-01T00:02:00Z", "SystemAddress": 1, "BodyID": 3,
-                      "BodyName": "S1 A 1", "Signals": [{"Type": self.MINE, "Count": 5}]})
-            self.assertEqual(db.execute("SELECT mining FROM own_signals").fetchone()[0], 5)
+        d = temp_dir(self)
+        path = os.path.join(d, "old.sqlite")
+        con = sqlite3.connect(path)
+        con.execute("CREATE TABLE own_signals (system INTEGER, name TEXT, bio INTEGER, geo INTEGER, ts TEXT, "
+                    "PRIMARY KEY (system, name))")
+        con.commit()
+        con.close()
+        db = ed_outrider.open_db(path)
+        self.addCleanup(db.close)
+        self.assertIn("mining", {r["name"] for r in db.execute("PRAGMA table_info(own_signals)")})
+        j = ed_outrider.Journals(db)
+        j.handle({"event": "FSSBodySignals", "timestamp": "2026-01-01T00:02:00Z", "SystemAddress": 1, "BodyID": 3,
+                  "BodyName": "S1 A 1", "Signals": [{"Type": self.MINE, "Count": 5}]})
+        self.assertEqual(db.execute("SELECT mining FROM own_signals").fetchone()[0], 5)
 
 
 class MinedPreviously(unittest.TestCase):
@@ -1278,32 +1277,31 @@ class MinedPreviously(unittest.TestCase):
                 f.write("".join(json.dumps(e, separators=(",", ":")) + "\n" for e in evs))   # the game writes "event":"X"
 
     def test_a_reread_gives_the_same_totals(self):
-        import tempfile
-        with tempfile.TemporaryDirectory() as d:
-            jdir = os.path.join(d, "j"); os.mkdir(jdir)
-            self.write_journals(jdir)
-            path = os.path.join(d, "m.sqlite")
-            db = ed_outrider.open_db(path)
-            ed_outrider.Journals(db).scan_dir(jdir)
-            db.commit()
-            before = self.mined(db)
-            self.assertEqual({k: v[0] for k, v in before.items()},
-                             {(19, "Water"): 2, (19, "Methanol Monohydrate Crystals"): 1, (12, "Gold"): 2})
-            # the same file read again (a line handled twice) adds nothing: offsets, and the source guard
-            j = ed_outrider.Journals(db)
-            j.line_source = "Journal.2026-09-30T030000.01.log:999"
-            j.srv_state[j.session_key()] = {"at": None, "srv": {"system": self.SYS, "body_id": 12, "ts": ""}}
-            ev = {"event": "MiningRefined", "timestamp": "2026-09-30T03:01:00Z", "Type": "$gold_name;", "Type_Localised": "Gold"}
-            j.handle(ev); j.handle(ev)
-            self.assertEqual(self.mined(db)[(12, "Gold")][0], 3)
-            db.close()
-            db = ed_outrider.open_db(path, rescan=True)
-            self.addCleanup(db.close)
-            self.assertEqual(db.execute("SELECT count(*) FROM own_mined").fetchone()[0], 0)
-            self.assertIsNone(ed_outrider.meta_get(db, "srv_state"))
-            ed_outrider.Journals(db).scan_dir(jdir)
-            db.commit()
-            self.assertEqual(self.mined(db), before)
+        d = temp_dir(self)
+        jdir = os.path.join(d, "j"); os.mkdir(jdir)
+        self.write_journals(jdir)
+        path = os.path.join(d, "m.sqlite")
+        db = ed_outrider.open_db(path)
+        ed_outrider.Journals(db).scan_dir(jdir)
+        db.commit()
+        before = self.mined(db)
+        self.assertEqual({k: v[0] for k, v in before.items()},
+                         {(19, "Water"): 2, (19, "Methanol Monohydrate Crystals"): 1, (12, "Gold"): 2})
+        # the same file read again (a line handled twice) adds nothing: offsets, and the source guard
+        j = ed_outrider.Journals(db)
+        j.line_source = "Journal.2026-09-30T030000.01.log:999"
+        j.srv_state[j.session_key()] = {"at": None, "srv": {"system": self.SYS, "body_id": 12, "ts": ""}}
+        ev = {"event": "MiningRefined", "timestamp": "2026-09-30T03:01:00Z", "Type": "$gold_name;", "Type_Localised": "Gold"}
+        j.handle(ev); j.handle(ev)
+        self.assertEqual(self.mined(db)[(12, "Gold")][0], 3)
+        db.close()
+        db = ed_outrider.open_db(path, rescan=True)
+        self.addCleanup(db.close)
+        self.assertEqual(db.execute("SELECT count(*) FROM own_mined").fetchone()[0], 0)
+        self.assertIsNone(ed_outrider.meta_get(db, "srv_state"))
+        ed_outrider.Journals(db).scan_dir(jdir)
+        db.commit()
+        self.assertEqual(self.mined(db), before)
 
     def test_session_key_drops_the_part_number(self):
         self.j.line_source = "Journal.2026-09-30T023726.02.log:12345"
@@ -1532,20 +1530,19 @@ class SurfaceRigs(unittest.TestCase):
         self.assertEqual({n: r["tons"] for n, r in self.out().items()}, {1: 10, 2: 2})
 
     def test_tables_survive_a_journal_reread(self):
-        import tempfile
-        with tempfile.TemporaryDirectory() as d:
-            path = os.path.join(d, "s.sqlite")
-            db = ed_outrider.open_db(path)
-            db.execute("INSERT INTO surface_rigs (system, body_id, n, lat, lon, placed_ts, minerals, tons) VALUES (1, 2, 1, 0, 0, 'x', '{}', 0)")
-            db.execute("INSERT INTO surface_sites (system, body_id, lat, lon, minerals, tons) VALUES (1, 2, 0, 0, '{}', 3)")
-            db.execute("INSERT INTO mining_locations VALUES (1, 2, 3, 'B', 0, 0, 'x')")
-            ed_outrider.meta_set(db, "vehicle", {"srv_type": "mev_rhino", "ts": "x"})
-            db.commit(); db.close()
-            db = ed_outrider.open_db(path, rescan=True)
-            self.addCleanup(db.close)
-            for t in ("surface_rigs", "surface_sites", "mining_locations"):
-                self.assertEqual(db.execute(f"SELECT count(*) FROM {t}").fetchone()[0], 1, t)
-            self.assertIsNone(ed_outrider.meta_get(db, "vehicle"))   # journal-derived: rebuilt by the re-read
+        d = temp_dir(self)
+        path = os.path.join(d, "s.sqlite")
+        db = ed_outrider.open_db(path)
+        db.execute("INSERT INTO surface_rigs (system, body_id, n, lat, lon, placed_ts, minerals, tons) VALUES (1, 2, 1, 0, 0, 'x', '{}', 0)")
+        db.execute("INSERT INTO surface_sites (system, body_id, lat, lon, minerals, tons) VALUES (1, 2, 0, 0, '{}', 3)")
+        db.execute("INSERT INTO mining_locations VALUES (1, 2, 3, 'B', 0, 0, 'x')")
+        ed_outrider.meta_set(db, "vehicle", {"srv_type": "mev_rhino", "ts": "x"})
+        db.commit(); db.close()
+        db = ed_outrider.open_db(path, rescan=True)
+        self.addCleanup(db.close)
+        for t in ("surface_rigs", "surface_sites", "mining_locations"):
+            self.assertEqual(db.execute(f"SELECT count(*) FROM {t}").fetchone()[0], 1, t)
+        self.assertIsNone(ed_outrider.meta_get(db, "vehicle"))   # journal-derived: rebuilt by the re-read
         self.assertNotIn("surface_", ed_outrider.RESET_JOURNAL_DATA)
         self.assertNotIn("mining_locations", ed_outrider.RESET_JOURNAL_DATA)
 

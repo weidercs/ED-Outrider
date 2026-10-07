@@ -201,7 +201,19 @@ def download_voice_files(files, voices_dir, progress=None, timeout=60):
                 pass
         raise
     for part, dest in sorted(parts, key=lambda x: x[1].endswith(".onnx")):   # config first, model last
-        os.replace(part, dest)
+        _move_in(part, dest)
+
+
+def _move_in(part, dest, waits=(0.05, 0.1, 0.2, 0.4, 0.8)):
+    """os.replace, tried again for a moment: Windows refuses it ("Access is denied") while another download of the
+    same voice is moving its copy in, or a scanner has the file open."""
+    for wait in (*waits, None):
+        try:
+            return os.replace(part, dest)
+        except PermissionError:
+            if wait is None:
+                raise
+            time.sleep(wait)
 
 
 def _import_piper():

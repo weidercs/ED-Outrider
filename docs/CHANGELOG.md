@@ -2,6 +2,17 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-07 · `scripts/verify.sh` passes on Windows (Git Bash)
+- `verify.sh` finds a Windows venv (`.venv/Scripts/python.exe`), names its scratch folder the Windows way so the
+  scratch config's paths mean something to Python, and stops the server through a stop file (Ctrl-C to the server:
+  Windows has no SIGTERM to send).
+- Fixed on Windows: all-time views asking for a date before 1970 (`iso_ts` reads it as 1970), `--help` and the log on a
+  piped or redirected stdout (cp1252), a port in use reported as "forbidden" rather than "already in use", and two
+  downloads of one voice at once failing with "Access is denied" (the move into place is tried again).
+- Tests no longer assume Linux: absolute paths, TOML paths, the clipboard tools and key wording are pinned or asked of
+  the platform, a database in a temporary folder is closed before the folder goes (`support.temp_dir`), and tests of
+  file modes, symlinks and `tzset` are skipped where the system has none.
+
 ## 2026-10-07 · Exact plotter: no refuel at every scoopable star
 - The exact plotter asks Spansh with `refuel_every_scoopable` off, so a route refuels only where the tank needs it
   rather than stopping to top up at every fuel star.

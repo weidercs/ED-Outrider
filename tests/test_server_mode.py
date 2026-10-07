@@ -121,13 +121,17 @@ class Packaging(unittest.TestCase):
         """R1: a fresh clone has docker/data, config and journals (Docker would make missing ones as root, and the
         container could not write them); the entrypoint checks it can write before anything else."""
         import subprocess
+
+        def ignored(path):   # safe.directory: a checkout another account owns (a Windows drive) is still asked
+            rc = subprocess.run(["git", "-c", "safe.directory=*", "check-ignore", "-q", path], cwd=self.ROOT).returncode
+            self.assertIn(rc, (0, 1), f"git check-ignore {path} failed")
+            return rc == 0
         for d in ("data", "config", "journals"):
             keep = os.path.join("docker", d, ".gitkeep")
             self.assertTrue(os.path.exists(os.path.join(self.ROOT, keep)), keep)
-            ignored = subprocess.run(["git", "check-ignore", "-q", keep], cwd=self.ROOT).returncode == 0
-            self.assertFalse(ignored, f"{keep} must be tracked")
-            self.assertEqual(subprocess.run(["git", "check-ignore", "-q", os.path.join("docker", d, "x.sqlite")], cwd=self.ROOT).returncode, 0)
-        self.assertEqual(subprocess.run(["git", "check-ignore", "-q", "data/ed_outrider.sqlite"], cwd=self.ROOT).returncode, 0)
+            self.assertFalse(ignored(keep), f"{keep} must be tracked")
+            self.assertTrue(ignored(os.path.join("docker", d, "x.sqlite")))
+        self.assertTrue(ignored("data/ed_outrider.sqlite"))
         entry = self.read("docker/entrypoint.sh")
         self.assertLess(entry.index(".write-test"), entry.index("--write-config"))
         self.assertIn("sleep infinity", entry)   # waits, not a restart loop

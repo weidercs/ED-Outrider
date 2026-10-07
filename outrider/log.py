@@ -16,6 +16,8 @@ import time
 from collections import ChainMap, OrderedDict
 from glob import glob, escape as glob_escape
 
+from outrider.core import iso_ts
+
 C = 299792458.0
 
 # ---------------------------------------------------------------------------
@@ -351,7 +353,7 @@ def window(files, days, now=None):
     """The files that can hold events from the last `days`: every file started since then (with a
     day of slack) plus the one before, which may run into the window."""
     now = time.time() if now is None else now
-    since = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now - days * 86400 - 86400))
+    since = iso_ts(now - days * 86400 - 86400)[:19]
     first = next((i for i, (k, _) in enumerate(files) if k[0] >= since), len(files))
     return files[max(0, first - 1):]
 
@@ -536,7 +538,7 @@ def read_log(dirs, days=7, before=None, after=None, limit=200, cats=None, q=None
 
     chosen = window(files, days, now)
     cur = parse_cursor(before) if before else None
-    since = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime((time.time() if now is None else now) - days * 86400))
+    since = iso_ts((time.time() if now is None else now) - days * 86400)
     done = False
     for k, p in reversed(chosen):
         base = os.path.basename(p)

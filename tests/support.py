@@ -25,6 +25,27 @@ def user_docs():
     return "\n".join(parts)
 
 
+def temp_dir(test):
+    """A temporary folder, removed once the test's later cleanups have run: a database opened in it is closed by
+    then (Windows cannot delete an open file)."""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp()
+    test.addCleanup(shutil.rmtree, d)
+    return d
+
+
+def can_symlink():
+    """Whether this account may make symbolic links (Windows: only with Developer Mode or as an administrator)."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        try:
+            os.symlink(os.path.join(d, "a"), os.path.join(d, "b"))
+        except (OSError, NotImplementedError, AttributeError):
+            return False
+    return True
+
+
 def T(s):
     return dt.datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc)
 

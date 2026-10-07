@@ -31,6 +31,22 @@ class Config(unittest.TestCase):
         out = subprocess.run([sys.executable, ed_outrider.__file__, "--help"], capture_output=True, text=True, timeout=60)
         self.assertIn("[journals] live names the live", " ".join(out.stdout.split()))
 
+    def test_help_prints_on_a_stdout_that_is_not_utf8(self):
+        """Windows gives a piped or redirected stdout cp1252: --help (its text has characters outside it) must still
+        print, not end in a UnicodeEncodeError."""
+        import subprocess, sys
+        out = subprocess.run([sys.executable, ed_outrider.__file__, "--help"], capture_output=True, text=True, timeout=60,
+                             env=dict(os.environ, PYTHONIOENCODING="ascii"))
+        self.assertEqual((out.returncode, out.stderr), (0, ""))
+        self.assertIn("--write-config", out.stdout)
+
+    def test_a_since_before_1970_is_1970(self):
+        """All-time views ask for the last 100 years: Windows' gmtime refuses a time before 1970, so it reads as 1970."""
+        import outrider.log
+        self.assertEqual(ed_outrider.iso_ts(-5.0e8), "1970-01-01T00:00:00Z")
+        self.assertEqual(ed_outrider.iso_ts(86400), "1970-01-02T00:00:00Z")
+        self.assertEqual(outrider.log.window([(("2026-01-01T00:00:00",), "a")], 36500), [(("2026-01-01T00:00:00",), "a")])
+
     def test_listen_problem_names_the_cause(self):   # F20
         import socket
         with socket.socket() as busy:
@@ -571,7 +587,8 @@ class Batch5ConfigCli(unittest.TestCase):
         st = self.settings({"server": {"db": "from-config.sqlite"}})[0]
         self.assertEqual(st["db"], os.path.join(ed_outrider.SCRIPT_DIR, "from-config.sqlite"))
         self.assertEqual(self.settings({})[0]["db"], ed_outrider.DB_PATH)
-        self.assertEqual(self.settings({}, db="/abs/x.sqlite")[0]["db"], "/abs/x.sqlite")
+        absolute = os.path.abspath("/abs/x.sqlite")   # with the drive on Windows
+        self.assertEqual(self.settings({}, db=absolute)[0]["db"], absolute)
 
     def test_spansh_limits(self):   # F50
         st = self.settings({"spansh": {"concurrency": 0, "map_max_pages": -2, "map_max_radius": 1}})[0]
@@ -637,7 +654,7 @@ class Batch5ConfigCli(unittest.TestCase):
             os.utime(os.path.join(binds, "My X56.4.2.binds"), (time.time() + 5, time.time() + 5))
             keys, what = h.combo()
             self.assertIsNone(keys)
-            self.assertIn("no evdev equivalent for KEY_FROBNICATE", what)
+            self.assertIn(f"no {outrider.honk.KEYS_WORD} equivalent for KEY_FROBNICATE", what)
 
     def test_binding_read_errors_and_cache(self):   # F59
         import tempfile
@@ -768,6 +785,29 @@ class Batch5ConfigCli(unittest.TestCase):
                 [files[0], (files[1][0], {"md5_digest": hashlib.md5(b"model").hexdigest()})])
             self.assertEqual(sorted(os.listdir(d)), ["en_GB-x-low.onnx", "en_GB-x-low.onnx.json"])
             self.assertEqual(outrider.tts.installed_voices(d), ["en_GB-x-low"])
+
+    def test_download_waits_out_a_busy_destination(self):
+        """Windows refuses os.replace while another download of the same voice moves its copy in: tried again, not
+        failed (and still an error when it never lets go)."""
+        import tempfile
+        import outrider.tts
+        real, refused = os.replace, []
+
+        def busy(src, dst):
+            if len(refused) < 2:
+                refused.append(dst)
+                raise PermissionError(13, "Access is denied")
+            return real(src, dst)
+        with tempfile.TemporaryDirectory() as d:
+            part, dest = os.path.join(d, "v.onnx.x.part"), os.path.join(d, "v.onnx")
+            with open(part, "w") as f:
+                f.write("model")
+            with unittest.mock.patch.object(outrider.tts.os, "replace", busy):
+                outrider.tts._move_in(part, dest, waits=(0, 0, 0))
+            self.assertEqual((len(refused), os.listdir(d)), (2, ["v.onnx"]))
+            refused.clear()
+            with unittest.mock.patch.object(outrider.tts.os, "replace", busy), self.assertRaises(PermissionError):
+                outrider.tts._move_in(dest, part, waits=(0,))
 
     def test_voice_lab_download_and_pump(self):   # F88, F44
         import tempfile, types, queue
@@ -1097,6 +1137,7 @@ class ToolingSafety(unittest.TestCase):
             text = f.read().replace("\\\n", " ")
         line = re.search(r'"\$PY" - (--config .*?) >"\$TMP/server\.log"', text).group(1)
         with tempfile.TemporaryDirectory() as tmp:
+            tmp = tmp.replace(os.sep, "/")   # as verify.sh writes it: Windows' backslashes are escapes to TOML and shlex
             os.mkdir(os.path.join(tmp, "journals"))
             with open(os.path.join(tmp, "scratch.toml"), "w") as f:
                 f.write(f'[journals]\nlive = ["{tmp}/journals"]\nlegacy = []\n')

@@ -6,7 +6,8 @@
 #   scripts/verify.sh
 #
 # Needs: pip install -r requirements.txt -r requirements-dev.txt, and npm install (jsdom) in the repo root.
-# Environment: PYTHON (default .venv/bin/python if present, else python3), NODE_MODULES (default ./node_modules),
+# Environment: PYTHON (default .venv/bin/python, or .venv/Scripts/python.exe on Windows, if present, else python3),
+# NODE_MODULES (default ./node_modules),
 # PORT (default: a free one picked at random), VERBOSE=1 (print every smoke line and the server log).
 # ED_JOURNALS is ignored: the scratch server always reads the fixture journals (--journals).
 #
@@ -14,18 +15,26 @@
 # port 8025, never plays audio, never presses keys (auto honk off) or opens input devices (co-pilot off), makes
 # no backups, and stays offline (Spansh, EDSM, GitHub and voice downloads are pointed at a closed local port).
 # Everything it makes goes in a mktemp folder that is deleted at the end; the server is stopped by its PID.
+#
+# Windows: run it from Git Bash (bash scripts/verify.sh). The scratch folder is then named the Windows way (C:/...),
+# and the server is asked to stop through a file (see below): Windows has no SIGTERM to send.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 
 PY=${PYTHON:-}
 if [ -z "$PY" ]; then
-  if [ -x .venv/bin/python ]; then PY=.venv/bin/python; else PY=python3; fi
+  if [ -x .venv/bin/python ]; then PY=.venv/bin/python
+  elif [ -x .venv/Scripts/python.exe ]; then PY=.venv/Scripts/python.exe   # a venv made by Windows' Python
+  else PY=python3; fi
 fi
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) WINDOWS=1 ;; *) WINDOWS="" ;; esac
 MODS=${NODE_MODULES:-node_modules}
 FAIL=0
 step() { printf '\n=== %s\n' "$*"; }
 
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/outrider-verify.XXXXXX") || exit 1
+# Git Bash's /tmp/... means nothing to Windows' Python in the scratch config: C:/Users/.../Temp/... works for both
+if [ -n "$WINDOWS" ]; then TMP=$(cygpath -m "$TMP") || exit 1; fi
 PID=""
 cleanup() {
   if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
@@ -103,9 +112,9 @@ EOF
   # Offline: every outside service goes to a closed local port, the bio-rules check keeps the shipped copy
   # (it would otherwise rewrite resources/bio_rules.json) and a missing Piper voice is not downloaded.
   # --journals: the fixture copy, whatever ED_JOURNALS says (the flag beats the environment, which beats the config)
-  "$PY" - --config "$TMP/scratch.toml" --db "$TMP/scratch.sqlite" --port "$PORT" --host 127.0.0.1 --journals "$TMP/journals" \
+  OUTRIDER_VERIFY_STOP="$TMP/stop" "$PY" - --config "$TMP/scratch.toml" --db "$TMP/scratch.sqlite" --port "$PORT" --host 127.0.0.1 --journals "$TMP/journals" \
       >"$TMP/server.log" 2>&1 <<'EOF' &
-import sys
+import os, sys
 sys.path.insert(0, ".")
 import ed_outrider, outrider.tts
 OFF = "http://127.0.0.1:9/offline"
@@ -120,6 +129,16 @@ ed_outrider.Clipboard.TOOLS = ()   # the desktop clipboard is never touched by t
 if outrider.bio:
     outrider.bio.update_if_newer = lambda path=None, log=print: None
 outrider.tts.Speaker._download = lambda self, name, status=None: False
+if os.name == "nt":
+    # Windows has no SIGTERM to send (Git Bash's kill ends the process outright): verify.sh makes this file instead
+    # and the server stops as on Ctrl-C, the only clean stop there is on Windows
+    import signal, threading, time
+
+    def stop_on_file(path=os.environ["OUTRIDER_VERIFY_STOP"]):
+        while not os.path.exists(path):
+            time.sleep(0.2)
+        signal.raise_signal(signal.SIGINT)
+    threading.Thread(target=stop_on_file, daemon=True).start()
 ed_outrider.main(sys.argv[1:])
 EOF
   PID=$!
@@ -141,9 +160,17 @@ EOF
     if [ "$bad" != 0 ] || [ "$ok" = 0 ] || [ "$smoke_rc" != 0 ]; then FAIL=1; fi
     if [ -n "${VERBOSE:-}" ]; then echo "--- server log"; cat "$TMP/server.log"; fi
     # SIGTERM (docker stop, systemd) stops it as Ctrl-C does: its cleanup runs and it exits 0
-    kill -TERM "$PID" 2>/dev/null; wait "$PID"; rc=$?; PID=""
+    # (Windows: the stop file, which is Ctrl-C to the server; ended by its PID if that does nothing within 30 s)
+    if [ -n "$WINDOWS" ]; then
+      : > "$TMP/stop"
+      for _ in $(seq 1 150); do kill -0 "$PID" 2>/dev/null || break; sleep 0.2; done
+      kill "$PID" 2>/dev/null
+    else
+      kill -TERM "$PID" 2>/dev/null
+    fi
+    wait "$PID"; rc=$?; PID=""
     if [ "$rc" != 0 ] || ! grep -q "stopped cleanly" "$TMP/server.log"; then
-      echo "the scratch server did not stop cleanly on SIGTERM (exit $rc):"; tail -15 "$TMP/server.log"; FAIL=1
+      echo "the scratch server did not stop cleanly when asked to (exit $rc):"; tail -15 "$TMP/server.log"; FAIL=1
     fi
     if grep -q "Traceback" "$TMP/server.log"; then
       echo "server log has a traceback:"; grep -n -A12 "Traceback" "$TMP/server.log" | head -40; FAIL=1

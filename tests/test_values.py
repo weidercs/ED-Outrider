@@ -897,7 +897,7 @@ class BatchS1(unittest.TestCase):
             self.assertNotIn("warning", out)
             with open(self.state.speech_path, "w") as f:
                 f.write("{}")
-            with open(self.state.config_path, "w") as f:
+            with open(self.state.config_path, "w", newline="\n") as f:
                 f.write("radius = 25\n")
             with unittest.mock.patch.object(ed_outrider, "BACKUP_DIR", os.path.join(d, "b2")), \
                     unittest.mock.patch.object(ed_outrider, "LIVE_DIRS", []):

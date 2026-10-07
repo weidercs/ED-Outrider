@@ -13,8 +13,8 @@ import unittest.mock
 import sqlite3
 
 from support import (  # also puts the repository root on sys.path
-    BIO_M_SYSTEM, CANDS, death, guard_status, make_controls, org, outrider_honk, sale, scan, voice_honk, voice_jump,
-    voice_moments, voice_organic, voice_planet, voice_sampling_body,
+    BIO_M_SYSTEM, CANDS, can_symlink, death, guard_status, make_controls, org, outrider_honk, sale, scan, temp_dir,
+    voice_honk, voice_jump, voice_moments, voice_organic, voice_planet, voice_sampling_body,
 )
 import outrider.bio  # noqa: E402
 import outrider.materials  # noqa: E402
@@ -160,6 +160,9 @@ class TickSafety(unittest.TestCase):
         bad = self.write("Journal.2026-01-02T000000.01.log", [self.jump("2026-01-02T00:00:00Z", 2, 10)])
         self.write("Journal.2026-01-03T000000.01.log", [self.jump("2026-01-03T00:00:00Z", 3, 20)])
         os.chmod(bad, 0)
+        if os.access(bad, os.R_OK):   # root reads it anyway, and Windows has no such mode
+            os.chmod(bad, 0o644)
+            self.skipTest("a file cannot be made unreadable here")
         try:
             err = io.StringIO()
             with contextlib.redirect_stderr(err):
@@ -991,33 +994,33 @@ class Batch3Server(unittest.TestCase):
             self.assertEqual(self.state.system_value(1, "S1", recs, None)["value_parts"]["bio_left"], 19_010_800)
 
     def test_local_search_runs_off_the_loop(self):   # F22
-        import asyncio, tempfile, threading
-        with tempfile.TemporaryDirectory() as d:
-            path = os.path.join(d, "odd name.sqlite")
-            db = ed_outrider.open_db(path)
-            self.addCleanup(db.close)
-            j = ed_outrider.Journals(db)
-            j.handle({"event": "FSDJump", "timestamp": "2026-01-01T00:00:00Z", "StarSystem": "S1", "SystemAddress": 1,
-                      "StarPos": [0, 0, 0]})
-            j.handle(scan("2026-01-01T00:01:00Z", "S1", 1, 0, "S1", star=True)[2])
-            db.commit()
-            state = ed_outrider.State(db, j, ed_outrider.Spansh(db), 25)
-            state.db_path = path
-            s = ed_outrider.Searcher(state)
-            seen = []
-            real = s.match
+        import asyncio, threading
+        d = temp_dir(self)
+        path = os.path.join(d, "odd name.sqlite")
+        db = ed_outrider.open_db(path)
+        self.addCleanup(db.close)
+        j = ed_outrider.Journals(db)
+        j.handle({"event": "FSDJump", "timestamp": "2026-01-01T00:00:00Z", "StarSystem": "S1", "SystemAddress": 1,
+                  "StarPos": [0, 0, 0]})
+        j.handle(scan("2026-01-01T00:01:00Z", "S1", 1, 0, "S1", star=True)[2])
+        db.commit()
+        state = ed_outrider.State(db, j, ed_outrider.Spansh(db), 25)
+        state.db_path = path
+        s = ed_outrider.Searcher(state)
+        seen = []
+        real = s.match
 
-            def match(conn, *a):
-                seen.append((threading.current_thread() is threading.main_thread(), conn is db))
-                return real(conn, *a)
-            s.match = match
+        def match(conn, *a):
+            seen.append((threading.current_thread() is threading.main_thread(), conn is db))
+            return real(conn, *a)
+        s.match = match
 
-            async def go():
-                s.start({"source": "local", "radius": 50, "stars": ["K"]})
-                await s.task
-            asyncio.run(go())
-            self.assertEqual(seen, [(False, False)])       # a worker thread, with its own connection
-            self.assertEqual([r["name"] for r in s.result["results"]], ["S1"])
+        async def go():
+            s.start({"source": "local", "radius": 50, "stars": ["K"]})
+            await s.task
+        asyncio.run(go())
+        self.assertEqual(seen, [(False, False)])       # a worker thread, with its own connection
+        self.assertEqual([r["name"] for r in s.result["results"]], ["S1"])
 
 
 class Batch4Page(unittest.TestCase):
@@ -1339,6 +1342,7 @@ class BatchAIntegrity(unittest.TestCase):
         self.assertEqual(rows[1]["systems"][0]["name"], "S2")   # where you were
         self.assertEqual(self.state.history(3650 * 3)["all_time"]["mapped"], 1)
 
+    @unittest.skipUnless(hasattr(time, "tzset"), "the time zone cannot be changed in a running process here (Windows)")
     def test_session_gaps_in_utc(self):   # F50: 1.5 h across the UK clocks going back is one session
         old = os.environ.get("TZ")
         os.environ["TZ"] = "Europe/London"
@@ -1513,6 +1517,7 @@ class BatchAIntegrity(unittest.TestCase):
         self.assertEqual(len(outrider.log.journal_files([d])), 1)
         self.assertEqual(len(outrider.unsold.journal_files([d])), 1)
 
+    @unittest.skipUnless(can_symlink(), "this account may not make symbolic links")
     def test_one_file_two_paths_read_once(self):   # F11
         a = os.path.join(self.tmp, "a")
         path = self.write(a, "Journal.2026-01-01T000000.01.log", [{"event": "Fileheader"}])
@@ -2488,40 +2493,39 @@ class SchemaUpgrade(unittest.TestCase):
 
     def test_oldest_database_upgrades_to_the_current_schema(self):
         import sqlite3
-        import tempfile
         root = os.path.dirname(os.path.abspath(__file__))
         with open(os.path.join(root, "fixtures", "schema_0046634.sql"), encoding="utf-8") as f:
             old_schema = f.read()
-        with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "old.sqlite")
-            old = sqlite3.connect(path)
-            old.executescript(old_schema)
-            old.execute("INSERT INTO spansh_systems (id64, updated_at, summary, fetched_ts) VALUES (?, ?, ?, ?)",
-                        (42, "2026-09-01 00:00:00", json.dumps({"name": "Old Sys", "x": 1.5, "y": -2.0, "z": 300.25}), 1.0))
-            old.commit()
-            old.close()
-            db = ed_outrider.open_db(path)
-            self.addCleanup(db.close)
-            fresh = ed_outrider.open_db(":memory:")
-            self.addCleanup(fresh.close)
+        tmp = temp_dir(self)
+        path = os.path.join(tmp, "old.sqlite")
+        old = sqlite3.connect(path)
+        old.executescript(old_schema)
+        old.execute("INSERT INTO spansh_systems (id64, updated_at, summary, fetched_ts) VALUES (?, ?, ?, ?)",
+                    (42, "2026-09-01 00:00:00", json.dumps({"name": "Old Sys", "x": 1.5, "y": -2.0, "z": 300.25}), 1.0))
+        old.commit()
+        old.close()
+        db = ed_outrider.open_db(path)
+        self.addCleanup(db.close)
+        fresh = ed_outrider.open_db(":memory:")
+        self.addCleanup(fresh.close)
 
-            def tables(conn):
-                return {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        def tables(conn):
+            return {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
 
-            def columns(conn, table):
-                return {(r[1], (r[2] or "").upper()) for r in conn.execute(f"PRAGMA table_info({table})")}
+        def columns(conn, table):
+            return {(r[1], (r[2] or "").upper()) for r in conn.execute(f"PRAGMA table_info({table})")}
 
-            def indexes(conn):
-                return {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index' AND sql IS NOT NULL")}
+        def indexes(conn):
+            return {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index' AND sql IS NOT NULL")}
 
-            self.assertLessEqual(tables(fresh), tables(db))
-            for t in sorted(tables(fresh)):
-                missing = columns(fresh, t) - columns(db, t)
-                self.assertFalse(missing, f"{t} lacks {sorted(missing)} after the upgrade")
-            self.assertLessEqual(indexes(fresh), indexes(db))
-            row = db.execute("SELECT x, y, z FROM spansh_systems WHERE id64 = 42").fetchone()
-            self.assertEqual(tuple(row), (1.5, -2.0, 300.25))
-            self.assertEqual(ed_outrider.meta_get(db, "parser_version"), ed_outrider.PARSER_VERSION)
+        self.assertLessEqual(tables(fresh), tables(db))
+        for t in sorted(tables(fresh)):
+            missing = columns(fresh, t) - columns(db, t)
+            self.assertFalse(missing, f"{t} lacks {sorted(missing)} after the upgrade")
+        self.assertLessEqual(indexes(fresh), indexes(db))
+        row = db.execute("SELECT x, y, z FROM spansh_systems WHERE id64 = 42").fetchone()
+        self.assertEqual(tuple(row), (1.5, -2.0, 300.25))
+        self.assertEqual(ed_outrider.meta_get(db, "parser_version"), ed_outrider.PARSER_VERSION)
 
 
 class JournalsRegistry(unittest.TestCase):

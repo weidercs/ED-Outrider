@@ -117,7 +117,10 @@ Ids: a system id64 can exceed 2^53, so the page compares the string `id` fields,
   --check static/page.js`, then starts a scratch server on a free port with a fresh database built from
   `tests/fixtures/journals`, a temporary config and no network, runs `tests/page_smoke.js`, and stops the
   server by its PID. All of it happens in a `mktemp` folder that is deleted afterwards. `VERBOSE=1` prints
-  every smoke line and the server log.
+  every smoke line and the server log. On Windows run it from Git Bash (`bash scripts/verify.sh`): it uses
+  `.venv/Scripts/python.exe` and stops the server through a stop file (Ctrl-C to it; there is no SIGTERM), and the
+  tests of file modes, symlinks and `tzset` are skipped. A test's database in a temporary folder: `temp_dir(self)`
+  (`tests/support.py`), which removes the folder after the database is closed.
 - By hand: `python3 -m unittest discover tests` (one file: `python3 -m unittest tests.test_highway`);
   `node tests/page_smoke.js <port> [node_modules]` against a scratch server only: it clicks and POSTs, needs the port
   and refuses 8025. Waits in it: `settle(maxMs)` (the page's requests answered and quiet) rather than a fixed sleep,
