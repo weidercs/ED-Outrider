@@ -2,6 +2,11 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-07 · The route line for every route
+- The line under the tiles (Overview, Nearby, Here, and the tablet's strip) shows a Road to Riches route too, not
+  only the Highway's: "💰 Next: X · 12.3 ly · 2 of 5 · 2 bodies to do here" (🧬 for Exomastery, coming next). With
+  both routes it shows the one Plot Route shows. The payload's `survey` carries it; the Highway's summary its plot time.
+
 ## 2026-10-06 · Version 2026.10.15
 - Road to Riches (thshurka's contribution), as a route type of the Plot Route tab (formerly Highway).
 

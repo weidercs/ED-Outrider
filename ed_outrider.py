@@ -5002,6 +5002,7 @@ class State:
             "next_stop": self.next_stop_summary(),
             "route": self.route_summary(),
             "highway": self.highway_summary(),
+            "survey": self.survey_summary(),   # Road to Riches / Exomastery: the line under the tiles, as the Highway's
             "backup": dict(meta_get(self.db, "last_backup") or {}, running=bool(self.backup_task and not self.backup_task.done()),
                            every_days=BACKUP_EVERY_DAYS, keep=BACKUP_KEEP),
             "last_session": self.last_session(),
@@ -8697,7 +8698,8 @@ class State:
         nxt = rows[nx] if nx is not None else None
         here = rows[at] if at is not None else None
         return {
-            "id": hw["id"], "plotter": hw.get("plotter"), "destination": rows[-1]["system"], "total": n - 1,
+            "id": hw["id"], "plotter": hw.get("plotter"), "created_ts": hw.get("created_ts"),
+            "destination": rows[-1]["system"], "total": n - 1,
             "index": nx, "at": at, "furthest": hw.get("furthest"), "complete": bool(hw.get("done_ts")),
             "off_route": bool(hw.get("off_route")), "nearest": self.highway_nearest(hw, rows),
             "jumps_total": sum(r["jumps"] or 0 for r in rows),
@@ -9219,6 +9221,26 @@ class State:
         meta_set(self.db, "riches", None)
         self.db.commit()
         self.bump()
+
+    def survey_summary(self):
+        """The survey route's (Road to Riches, Exomastery) facts for the line under the tiles, or None with no route:
+        as highway_summary, the next system (jumps, ly from here), where you are on it, and what is left where you are."""
+        rc, rows = self.riches_state()
+        if not rc:
+            return None
+        pos, n = self.journals.pos, len(rows)
+        at, nx = rc.get("at"), self.riches_next(rc, rows)
+        nxt = rows[nx] if nx is not None else None
+        return {
+            "kind": rc.get("kind") or "riches", "id": rc.get("id"), "created_ts": rc.get("created_ts"),
+            "destination": rows[-1]["system"], "total": n - 1, "index": nx, "at": at,
+            "complete": bool(rc.get("done_ts")), "off_route": bool(rc.get("off_route")),
+            "left_here": len(self.journals.riches_left(rc, rows, at)) if at is not None else None,
+            "next": nxt and {"name": nxt["system"], "id": str(nxt["id64"]) if nxt["id64"] is not None else None,
+                             "jumps": nxt["jumps"],
+                             "distance": round(dist(pos, nxt), 1) if pos and None not in (nxt["x"], nxt["y"], nxt["z"])
+                             else None},
+        }
 
     def route_newest(self):
         """"highway" or "riches": of the two routes, the one plotted last (None without either). With both, only that

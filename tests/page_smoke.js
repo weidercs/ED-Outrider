@@ -1174,6 +1174,34 @@ const settle = async maxMs => {
     console.log(goodRC ? "OK" : "FAIL", "| riches in plot route |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "no tab of its own, the plotter switch and its options, plot and polling, systems/bodies/marks, the both-routes switch, clear", errors.slice(before));
   }
+  // the line under the tiles for every route (the author, 2026-10-07): a survey route's own (💰 Road to Riches, 🧬
+  // Exomastery), the Highway's, and with both the one Plot Route shows (this device's choice, else the newer)
+  {
+    const w = dom.window, d = w.document, before = errors.length, got = {};
+    const line = () => d.getElementById("hwyLine").textContent.replace(/\s+/g, " ").trim();
+    const keep = w.eval("[data.highway, data.survey, view]");
+    w.localStorage.removeItem("hwyShow");
+    w.eval(`view = "near"; data.highway = null; data.survey = {kind: "riches", id: "s1", created_ts: "2026-10-07T10:00:00Z", destination: "Rich Z",
+      total: 5, index: 2, at: 1, complete: false, off_route: false, left_here: 2, next: {name: "Rich C", jumps: 1, distance: 12.34}}; renderHwyLine()`);
+    got.riches = line();
+    w.eval(`data.survey.kind = "exo"; data.survey.left_here = 3; renderHwyLine()`);
+    got.exo = line();
+    w.eval(`data.highway = {id: "h1", created_ts: "2026-10-07T09:00:00Z", destination: "Hw Z", total: 9, index: 4, at: 3,
+      next: {name: "Hw E", neutron: true, jumps: 1, distance: 5}}; renderHwyLine()`);
+    got.both = line().slice(0, 2);   // the survey route: plotted after the Highway's
+    w.localStorage.setItem("hwyShow", JSON.stringify("hwy")); w.eval("renderHwyLine()");
+    got.picked = line().slice(0, 2);
+    w.eval(`data.survey.complete = true; data.highway = null; renderHwyLine()`);
+    got.done = line();
+    w.localStorage.removeItem("hwyShow");
+    w.__keep = keep; w.eval("[data.highway, data.survey, view] = window.__keep; renderHwyLine()");
+    const want = {riches: "💰 Next: Rich C · 12.3 ly · 2 of 5 · 2 bodies to do here", exo: "🧬 Next: Rich C · 12.3 ly · 2 of 5 · 3 species to sample here",
+      both: "🧬", picked: "🛣", done: "🧬 Exomastery complete"};
+    const bad = Object.keys(want).filter(k => !String(got[k]).startsWith(want[k]));
+    const goodRL = !bad.length && errors.length === before;
+    allOk = allOk && goodRL;
+    console.log(goodRL ? "OK" : "FAIL", "| route line |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(got)}` : "a survey route's line (💰, 🧬), the Highway's, the one shown with both, complete", errors.slice(before));
+  }
   // G2.2, F48, F64: a bad server copy (a list that is not a list, a null object, a number for 'saved') does not stop
   // the page: a fresh browser still starts polling
   {

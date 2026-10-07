@@ -253,6 +253,21 @@ class RichesRoute(unittest.TestCase):
         self.assertFalse(self.state.riches_copy_next())   # once per arrival
         self.assertEqual(cb.copied, ["Beta Rich", "Gamma Rich"])
 
+    def test_survey_summary(self):
+        """The line under the tiles for a survey route (the payload's `survey`): the next system, where you are on it,
+        what is left where you are; None without a route. The Highway's summary carries its plot time too (which of
+        the two the line shows)."""
+        self.assertIsNone(self.state.survey_summary())
+        self.store()
+        s = self.state.survey_summary()
+        self.assertEqual((s["kind"], s["at"], s["index"], s["total"], s["complete"], s["off_route"]), ("riches", 0, 1, 2, False, False))
+        self.assertEqual((s["next"]["name"], s["next"]["jumps"]), ("Beta Rich", 1))
+        self.assertEqual(s["left_here"], 2)   # Alpha Rich's two bodies, neither scanned
+        self.jump(-10, 1002, "Beta Rich", 20)
+        s = self.state.survey_summary()
+        self.assertEqual((s["at"], s["index"], s["next"]["name"], s["left_here"]), (1, 2, "Gamma Rich", 1))
+        self.assertEqual(self.state.payload()["survey"]["at"], 1)   # in the page's payload
+
     def test_two_routes_one_clipboard(self):
         """A Highway route and a Road to Riches route at once: only the one plotted last copies its next system (one
         copy per jump), and the tab's map gets the whole Riches route's points."""

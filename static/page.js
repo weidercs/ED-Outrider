@@ -4328,9 +4328,38 @@ function hwyAimBtn(name) {
 }
 // the strip under the header: only on Overview, Nearby and Here, only with a route
 function renderHwyLine() {
-  const el = hEl("hwyLine"), s = data && data.highway;
-  const html = s && ["overview", "near", "here"].includes(view) ? hwyLineHtml(s, {short: true}) : "";
+  const el = hEl("hwyLine"), hw = data && data.highway, sv = data && data.survey, kind = lineKind(hw, sv);
+  const html = !["overview", "near", "here"].includes(view) ? "" : kind === "rich" ? surveyLineHtml(sv, {short: true})
+    : hw ? hwyLineHtml(hw, {short: true}) : "";
   if (el.innerHTML !== html) el.innerHTML = html;
+}
+// the route the line shows: the one Plot Route shows (this device's choice with both, else the one plotted last)
+function lineKind(hw, sv) {
+  if (hw && sv) {
+    const pick = store.get("hwyShow", "");
+    if (pick === "hwy" || pick === "rich") return pick;
+    return String(sv.created_ts || "") > String(hw.created_ts || "") ? "rich" : "hwy";
+  }
+  return sv ? "rich" : "hwy";
+}
+// a survey route's line (Road to Riches 💰, Exomastery 🧬): the next system, how far, where you are on it, and what is
+// left to do where you are
+const SURVEY = {riches: {glyph: "💰", name: "Road to Riches", left: n => `${n} ${n === 1 ? "body" : "bodies"} to do here`},
+                exo: {glyph: "🧬", name: "Exomastery", left: n => `${n} species to sample here`}};
+function surveyLineHtml(s, {short = false, glyph = true} = {}) {
+  if (!s) return "";
+  const k = SURVEY[s.kind] || SURVEY.riches;
+  const g = glyph ? `<span class="hwyg" aria-hidden="true" title="${k.name}">${k.glyph}</span> ` : "";
+  if (s.complete) return `${g}<span class="hwydone">${k.name} complete</span>`;
+  const left = s.left_here ? ` · ${k.left(s.left_here)}` : "";
+  if (s.off_route) return `${g}<span class="hwyoff">Off Route: Detour</span>${short ? "" : ` · ${k.name}`}`;
+  const n = s.next;
+  if (!n) return `${g}${k.name} to ${hwyName(s.destination)}${left}`;
+  const bits = [`${s.index === 0 && s.at == null ? "Start" : "Next"}: ${hwyName(n.name)}`];
+  if (n.jumps > 1) bits.push(`${n.jumps} jumps`);
+  if (n.distance != null) bits.push(`${Number(n.distance).toFixed(1)} ly`);
+  bits.push(`${s.index} of ${s.total}`);
+  return g + bits.join(" · ") + left;
 }
 hEl("hwyLine").addEventListener("click", e => {   // the name copies (the page's copy handler); anywhere else opens the tab
   if (e.target.closest(".copy[data-name]")) return;
