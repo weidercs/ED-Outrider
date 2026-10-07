@@ -4974,6 +4974,7 @@ class State:
         return {
             "version": self.version, "run_id": RUN_ID, "page_stamp": stamp["page"], "restart_needed": stamp["restart_needed"],
             "game_pc": self.game_pc,   # False: the page leaves out what needs the game PC
+            "outrider": outrider.__version__,   # Settings' line beside the GitHub link
             # a newer release ({version, current, url, kind}: kind says how to update this install), else None
             "update": dict(self.update_available, current=outrider.__version__, kind=install_kind())
             if self.update_available else None,

@@ -1206,6 +1206,18 @@ const settle = async maxMs => {
     allOk = allOk && goodRL;
     console.log(goodRL ? "OK" : "FAIL", "| route line |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(got)}` : "a survey route's line (💰, 🧬), the Highway's, the one shown with both, complete", errors.slice(before));
   }
+  // Settings links to the project on GitHub, with the version running (desktop at the top; the tablet's sheet too)
+  {
+    const w = dom.window, d = w.document, before = errors.length;
+    w.eval('data.outrider = "2026.10.99"; render()');
+    const a = d.querySelector(".sethead .setlinks a"), t = d.querySelectorAll("#tabSettings a[href*='github.com']");
+    const got = [a && a.href, a && a.target, d.getElementById("setVersion").textContent, [...t].map(x => x.href).join()];
+    const want = ["https://github.com/weslocke/ED-Outrider", "_blank", "version 2026.10.99",
+                  "https://github.com/weslocke/ED-Outrider,https://github.com/weslocke/ED-Outrider-Android"];
+    const goodGH = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && goodGH;
+    console.log(goodGH ? "OK" : "FAIL", "| settings github |", goodGH ? "the GitHub link and the version, desktop and tablet" : JSON.stringify(got), errors.slice(before));
+  }
   // G2.2, F48, F64: a bad server copy (a list that is not a list, a null object, a number for 'saved') does not stop
   // the page: a fresh browser still starts polling
   {

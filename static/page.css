@@ -1000,3 +1000,6 @@ body.notgamepc .pcOnly, body.notgamepc [data-aim] { display: none !important; }
 #hwyHead .hwykind { margin-bottom: 6px; font-size: 13px; }
 #hwyHead .hwydone { color: var(--good); font-weight: 600; }
 body.app #richPane { grid-column: 1; grid-row: 2; }
+
+/* Settings' top line: the project on GitHub and the version running */
+.sethead .setlinks { font-size: 12px; margin-left: 10px; } .sethead .setlinks a { color: var(--accent); }

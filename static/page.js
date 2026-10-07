@@ -2579,6 +2579,8 @@ function render() {
   refocus("rows", fkRows);
   document.getElementById("updateLine").hidden = !data.restart_needed;
   drawUpdatePill();
+  for (const id of ["setVersion", "tabOutVer"]) { const el = document.getElementById(id), v = data.outrider ? `version ${data.outrider}` : "";
+    if (el && el.textContent !== v) el.textContent = v; }
   // a server away from the game PC ([server] game_pc false): what needs that PC is left out (body.notgamepc hides every
   // .pcOnly: Settings' Auto honk, "play on this PC", the Highway's auto-target box and 🎯 / Retry, the tablet's rail)
   document.body.classList.toggle("notgamepc", data.game_pc === false);

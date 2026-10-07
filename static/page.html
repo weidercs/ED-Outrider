@@ -504,7 +504,9 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     <label class="tb-row" id="tabRailRow"><input type="checkbox" id="tabRailOn"> Show the game controls <span class="tb-note">the ship, SRV and on-foot buttons on the right; off gives the pages the whole width (a second tablet, say)</span></label>
     <label class="tb-row"><input type="checkbox" id="tabAudio"> Play alerts here <span class="tb-note">the voice and the alert sounds, on this tablet, even when a PC browser plays them too</span></label>
     <div class="tb-acts" id="tabAlertsRow" hidden><button type="button" id="tabAlertsBtn" class="tb-btn">Choose alerts…</button></div>
-    <dl class="tb-facts"><dt>Screen</dt><dd id="tabViewport"></dd><dt>App</dt><dd id="tabAppVer"></dd><dt>Sign-in</dt><dd id="tabSignState"></dd></dl>
+    <dl class="tb-facts"><dt>Screen</dt><dd id="tabViewport"></dd><dt>App</dt><dd id="tabAppVer"></dd><dt>Sign-in</dt><dd id="tabSignState"></dd>
+      <dt>Project</dt><dd><a href="https://github.com/weslocke/ED-Outrider" target="_blank" rel="noopener">ED Outrider on GitHub ↗</a> <span id="tabOutVer" class="unk"></span><br>
+        <a href="https://github.com/weslocke/ED-Outrider-Android" target="_blank" rel="noopener">The Android app on GitHub ↗</a></dd></dl>
     <div class="tb-acts"><button type="button" id="tabSignOut" class="tb-btn">Sign out</button></div>
     <div id="tabAppBox" hidden><h3 class="tb-sub">Tablet app</h3>
       <div class="tb-acts"><button type="button" id="tabAppServer" class="tb-btn">Server…</button><button type="button" id="tabAppVoice" class="tb-btn">Voice…</button><button type="button" id="tabAppMenu" class="tb-btn">App menu…</button></div>
@@ -528,6 +530,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
 <dialog id="alertDialog" class="settingsdlg" aria-labelledby="settingsTitle">
   <form method="dialog">
     <div class="sethead"><h3 id="settingsTitle">Settings</h3>
+      <span class="setlinks"><a href="https://github.com/weslocke/ED-Outrider" target="_blank" rel="noopener" title="ED Outrider on GitHub: the source, releases, the README and issues">GitHub ↗</a> <span id="setVersion" class="unk"></span></span>
       <span class="setfold"><button type="button" id="setOpenAll" title="open every section">open all</button><button type="button" id="setCloseAll" title="close every section">close all</button></span>
       <button type="button" data-close class="primary">Done</button>
       <nav id="alertChips" class="chips" aria-label="sections"></nav></div>

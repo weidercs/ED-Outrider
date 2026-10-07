@@ -2,6 +2,11 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-07 · Settings link to the project on GitHub
+- Settings shows **GitHub ↗** (the project's page: source, releases, README, issues) and the version running, at the
+  top beside its title; the tablet's Settings sheet lists both projects (Outrider and the Android app). The payload
+  carries the version (`outrider`).
+
 ## 2026-10-07 · 🎯 on any route system
 - A small 🎯 beside every system in Plot Route's lists (Highway and Road to Riches; not the one you are in, passed
   ones included) and beside the next system in the line under the tiles for either route: it targets that system in
