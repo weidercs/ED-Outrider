@@ -2,6 +2,19 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · Version 2026.10.17
+- Nearest place to dock (stations and carriers, the DSSA's carriers, "nearest station" by voice), and since 2026.10.16:
+  the README split into a front page and a guide (`docs/guide/`).
+
+## 2026-10-08 · Nearest place to dock
+- **📍 Nearest…** beside Plot Route's To lists the nearest stations and fleet carriers you can dock at and use: what
+  each has (UC, Vista, repair, refuel, shipyard), its pads, distance (and from the star), docking (yours, open to all,
+  or a ⚠ for friends, squadron or not reported) and how old its report is. Filters for stations / carriers, services,
+  data under N days (30), permit systems, remembered per device; **Plot here** fills To and plots. Sources: Spansh,
+  the Deep Space Support Array's carriers (EDAstro, fetched when the finder opens, at most hourly; marked 🛰 DSSA) and
+  your own carrier. By voice: "nearest station", "nearest carrier", "nearest Vista", "nearest repair"...; for AI
+  clients a read-only `nearest_dock` tool.
+
 ## 2026-10-07 · The README split into a front page and a guide
 - The README (1,000 lines) is now a front page: what Outrider is, at a glance, a short start and an index of the
   guide. The guide is `docs/guide/`: Install and run, The views, Plot Route, Cargo and trading, Voice and alerts,

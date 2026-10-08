@@ -10,7 +10,7 @@ upstream project's choices, not rules of the game.
   Tab and act on Enter/Space instead.
 - **No VoiceAttack integration.** Not used upstream; the co-pilot button and the page cover the same ground.
 - **Nothing is uploaded.** No EDDN sender, no accounts; outside calls are read-only lookups (Spansh, EDSM,
-  GitHub for bio rules, Hugging Face for voices).
+  GitHub for bio rules, Hugging Face for voices, EDAstro for the DSSA carrier list when the Nearest finder opens).
 - **Survey odds are odds, not contents.** The mining tooltip shows what a community survey found at that kind of
   ground; the game never says what a location holds.
 - **No hand-logging of mining location contents.** Considered and left out for now; "Mined previously" records
@@ -250,7 +250,7 @@ upstream project's choices, not rules of the game.
   to 16,076 t against the 16,085 t it reports, the 9 t gap being the two lines no order ever showed.
 - **Why not Frontier's companion API** (the author, 2026-10-07): it would list the carrier's cargo whole, but it
   means signing in to Frontier (as EDMC and Inara do). Outrider never does: it reads the player's own journal files
-  and makes only read-only queries to public services (Spansh, EDSM, GitHub, Hugging Face), so the player's Frontier
+  and makes only read-only queries to public services (Spansh, EDSM, GitHub, Hugging Face, EDAstro), so the player's Frontier
   account is never involved. The sell-order method is the price of that, and the README says so.
 - **Old carrier history is trusted only while it adds up.** Unjournaled trades (other players buying from an old
   sell order) leave old lines wrong: the author's 2025 colonisation hauling left 34,000 t tracked that was long gone.
@@ -274,6 +274,13 @@ upstream project's choices, not rules of the game.
   in the game, so there is no "sold". A carrier bought since (`CarrierBuy`, or the first `CarrierStats` of another
   id) starts its state afresh: before PARSER_VERSION 41 a new id inherited the old one's place and booked jump. No
   carrier in the journals at all: no tile.
+- **Nearest place to dock is a finder, not a route type** (the author, 2026-10-08): finding the place is a search and
+  getting there is just a destination, so "Plot here" fills To and the Highway's plotters, following, 🎯 and auto-target
+  do the rest. Docking other than "All" is a warning, never a reason to hide (friends, squadron, or not reported:
+  Outrider cannot see the owner's lists, and Spansh has no setting for some carriers). The DSSA list (EDAstro) is
+  fetched only when the finder opens, at most hourly and conditionally, its last copy kept; the voice and the AI's tool
+  never fetch it (`cached=1`). DSSA carriers carry a badge (the author's ask). Reports older than 30 days are hidden by
+  default, with the count said: carriers move, and Spansh keeps reports years old.
 - **Trade routes share the slot with the survey routes** (the author: "one slot is fine"): Road to Riches,
   Exomastery or a trade route, a new plot of any replacing it. Its stops are the stations (a hop's straight line,
   not its jumps: 🎯 targets the system and the game plots the way), progress is your MarketSell / MarketBuy at the
