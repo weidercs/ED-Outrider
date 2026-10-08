@@ -10932,7 +10932,8 @@ def compute_unsold():
         system_values[r["system"]] = system_values.get(r["system"], 0) + r["value"]
     return {
         "carto": {k: ex[k] for k in ("estimated_value", "estimated_payout", "payout_ratio", "payout_note", "npc_crew",
-                                     "bodies", "systems", "first_discoveries", "mapped", "last_sold", "cutoff")},
+                                     "bodies", "systems", "first_discoveries", "mapped", "last_sold", "cutoff",
+                                     "full_scan_bonus", "full_scan_systems")},
         "system_values": system_values,
         "bio": {k: bio[k] for k in ("estimated_value", "base_value", "max_value", "samples",
                                     "x5_runs", "x1_runs", "unknown_runs", "bonus_rate", "bonus_rate_source", "unknown_species",

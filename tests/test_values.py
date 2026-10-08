@@ -2031,3 +2031,25 @@ class NearBody(unittest.TestCase):
         self.assertEqual(self.state.on_body()["how"], "landed")
         self.status(ed_outrider.FLAG_IN_SRV, 0)                          # the SRV: on_body's
         self.assertIsNone(self.state.near_body())
+
+
+class FullScanBonus(unittest.TestCase):
+    """Plugin gaps D: the sale's Bonus field, 1,000 cr per body of a system you found complete while every star and
+    planet was undiscovered (Pioneer's rule, narrowed by the author's sales). In the payout estimate, apart from it."""
+
+    def events(self, disc_planet=False, count=3, all_found=True):
+        from support import scan
+        ev = [scan("2026-01-01T00:00:00Z", "Sys", 1, 0, "Sys", star=True),
+              scan("2026-01-01T00:01:00Z", "Sys", 1, 1, "Sys 1"),
+              scan("2026-01-01T00:02:00Z", "Sys", 1, 2, "Sys 2", disc=disc_planet)]
+        if all_found:
+            ev.append((T("2026-01-01T00:03:00Z"), None, {"event": "FSSAllBodiesFound", "timestamp": "2026-01-01T00:03:00Z",
+                                                          "SystemName": "Sys", "SystemAddress": 1, "Count": count}))
+        return ev
+
+    def test_bonus(self):
+        ex = outrider.unsold.analyse(self.events(), ARGS)["exploration"]
+        self.assertEqual((ex["full_scan_bonus"], ex["full_scan_systems"]), (3000, 1))
+        self.assertEqual(ex["estimated_payout"], ex["estimated_value"] + 3000)   # base estimate unchanged, the bonus on top
+        for kw in ({"disc_planet": True}, {"all_found": False}, {"count": 4}):   # someone found one first / not all found
+            self.assertEqual(outrider.unsold.analyse(self.events(**kw), ARGS)["exploration"]["full_scan_bonus"], 0, kw)

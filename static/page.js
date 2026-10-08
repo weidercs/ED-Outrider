@@ -2460,6 +2460,8 @@ function unsoldHtml(u) {
     `<li><span>${c.bodies.toLocaleString()} bodies in ${c.systems.toLocaleString()} systems</span><b>${cr(c.estimated_payout ?? c.estimated_value)}</b></li>` +
     (c.payout_note ? `<li><span class="bn">${esc(c.payout_note)}${c.payout_ratio && c.payout_ratio < 0.999 ? ` (${cr(c.estimated_value)} before the cut)` : ""}</span></li>` : "") +
     `<li><span>${c.first_discoveries.toLocaleString()} first discoveries · ${c.mapped.toLocaleString()} mapped</span></li>` +
+    (c.full_scan_bonus ? `<li><span class="bn" title="1,000 cr per body of a system you found complete (every body) while all of it was undiscovered: the sale's bonus">` +
+                         `incl. full-scan bonus · ${c.full_scan_systems} system${c.full_scan_systems === 1 ? "" : "s"}</span><b>${cr(c.full_scan_bonus)}</b></li>` : "") +
     (u.firsts ? `<li><span class="bn">🏁 ${u.firsts.systems} systems (arrival star) · ${u.firsts.stars} stars · ` +
                 `${u.firsts.planets} planets first discovered · ${u.firsts.mapped} first mapped</span></li>` : "") +
     `</ul></div>` +

@@ -210,6 +210,11 @@ upstream project's choices, not rules of the game.
 - **History's sessions are split by 2 h without a jump.** A session's window runs from its login (the latest one
   within 2 h before its first jump) to the next session's; a login no jump followed, 2 h or more after anything
   else, opens a session with no jumps (review F31), whose "end" is its last login (nothing later is known).
+- **The full-scan bonus is in the payout estimate** (plugin gaps D): 1,000 cr per body of a system you found complete
+  (FSSAllBodiesFound's Count) while every star and planet was undiscovered. The sale pays it as `Bonus`, apart from
+  `BaseValue`, which the calibration still compares against, so it is added only to `estimated_payout` and shown on
+  its own line. Pioneer's form (non-bodies counted, the main star's discovery only) fits the sales worse. No belt
+  counter: the honk's Count leaves belt clusters out and the game never says how many a system has.
 - **No x5 in a populated system** (BioScan's rule; plugin gaps C). The author's Vista sales say so: 0 of 8 runs in a
   populated system paid it, 208 of 208 elsewhere (`project/value-checks/RESULTS-2026-10-08.md`). A system's
   Population comes from its FSDJump / Location / CarrierJump (`system_population`); `own_firsts.bio_x5` holds the

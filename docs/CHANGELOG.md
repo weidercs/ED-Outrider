@@ -2,6 +2,13 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · The full-scan bonus in the unsold estimate (plugin gaps D)
+- The unsold total now counts the bonus Universal Cartographics pays on top of the base value: 1,000 cr per body of
+  a system you found complete (every body) while every star and planet in it was undiscovered. It shows on its own
+  line in the Unsold pop-up. Checked on your sales first (`project/value-checks`): the paid bonus is 0.86-1.11 of this
+  in 13 of 15 sales. Pioneer's other value rules stay out because your sales do not bear them out (the full-map bonus,
+  honk-only bodies, terraformable ranges); your own carrier pays in full, as before.
+
 ## 2026-10-08 · Bio marks: populated systems, new anywhere, bio possible, flying low, why not (plugin gaps C)
 - **No ×5 in populated systems:** Vista Genomics never pays the first-footfall bonus where people live (checked on
   your sales: 0 of 8 runs there, 208 of 208 elsewhere), so bio there is valued ×1 everywhere: Here, Samples, the
