@@ -4119,6 +4119,67 @@ const settle = async maxMs => {
     allOk = allOk && goodM;
     console.log(goodM ? "OK" : "FAIL", "| server mode |", goodM ? "auto honk, auto-target, play on this PC left out; back on the game PC" : JSON.stringify([off, on]), errors.slice(before));
   }
+  // review 2026-10-08 #15-#18: answers that arrive out of order. An older, slower request lands after a newer one:
+  // its answer (or its failure) must not replace the newer one's
+  {
+    const w = dom.window, before = errors.length, realF = w.fetch, got = {};
+    const here = w.eval("posId()");
+    const sys = here ? await (await realF("api/system/" + here)).json() : null;
+    const firsts = await (await realF("api/firsts")).json();
+    const later = (body, ms, fail) => new Promise((res, rej) => setTimeout(() => fail ? rej(new TypeError(fail))
+      : res(new Response(JSON.stringify(body), {headers: {"Content-Type": "application/json"}})), ms));
+    let nSys = 0, nFirsts = 0;
+    w.fetch = (u, o) => {
+      const s = String(u);
+      if (here && s === "api/system/" + here && w.__ooo === "onbody") return nSys++ === 0 ? later(Object.assign({}, sys, {marker: "old"}), 200) : later(Object.assign({}, sys, {marker: "new"}), 10);
+      if (s === "api/system/88") return later({error: "late"}, 400);
+      if (/^api\/find\?name=slow/.test(s)) return later({error: "slow lookup"}, 200);
+      if (/^api\/find\?name=fast/.test(s)) return later({error: "fast lookup"}, 10);
+      if (s.startsWith("api/firsts") && w.__ooo === "firsts") return nFirsts++ === 0 ? later(null, 200, "old failure") : later(firsts, 10);
+      return realF(u, o);
+    };
+    // #15: two on-body fetches, the first slower
+    if (here) {
+      w.__ooo = "onbody";
+      got.onbody = await w.eval(`(async () => {
+        const ob = data.on_body, od = obData, ok = obKey, sv = data.scan_version;
+        data.on_body = {system: posId(), body: "X 1", how: "landed"}; obKey = null;
+        const p1 = loadOnBody(); data.scan_version = sv + 1; const p2 = loadOnBody();
+        await Promise.all([p1, p2]);
+        const m = obData && obData.marker;
+        data.on_body = ob; obData = od; obKey = ok; data.scan_version = sv; renderOnBody();
+        return m; })()`);
+    } else got.onbody = "new";
+    w.__ooo = null;
+    // #16: pinning another system shows "loading…", not the old system's bodies under the new heading
+    got.pin = w.eval(`(() => { const had = !!hereData; pinSystem("88");
+      const r = [had, hereData === null, /loading/.test(document.getElementById("hereHead").textContent)];
+      unpinSystem(); return r; })()`);
+    // #17: two lookups, the first slower: the second's answer stays
+    w.document.getElementById("findName").value = "slow";
+    w.document.getElementById("findForm").dispatchEvent(new w.Event("submit", {cancelable: true}));
+    w.document.getElementById("findName").value = "fast";
+    w.document.getElementById("findForm").dispatchEvent(new w.Event("submit", {cancelable: true}));
+    await sleep(350);
+    got.find = w.document.getElementById("findStatus").textContent;
+    // #18: a slow failure of an older firsts request after a newer good answer
+    w.__ooo = "firsts";
+    got.firsts = await w.eval(`(async () => {
+      const sv = data.scan_version; firstsKey = null;
+      const p1 = loadFirsts(); data.scan_version = sv + 1; const p2 = loadFirsts();
+      await Promise.all([p1, p2]);
+      const ok = !!firstsData && !firstsData.error;
+      data.scan_version = sv; firstsKey = null; return ok; })()`);
+    w.__ooo = null;
+    await sleep(450);   // the pinned system's late answer lands after the unpin: dropped
+    w.fetch = realF;
+    w.eval("loadFirsts(); render()");
+    await sleep(300);
+    const want = {onbody: "new", pin: [true, true, true], find: "fast lookup", firsts: true};
+    const goodO = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && goodO;
+    console.log(goodO ? "OK" : "FAIL", "| answers out of order |", goodO ? "on-body strip, a pin's loading, Find, a failed older firsts: the newest answer kept" : JSON.stringify(got), errors.slice(before));
+  }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",
     headers: Object.assign({"Content-Type": "application/json"}, origin ? {Origin: origin} : {})}).then(r => r.status);

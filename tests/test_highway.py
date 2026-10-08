@@ -1933,6 +1933,40 @@ class HighwayAutoTarget(unittest.TestCase):
         self.assertEqual(len(self.game.writes), writes)
         self.assertEqual((self.state.autotarget_test["state"], self.state.autotarget_test["why"]), ("failed", "stopped"))
 
+    def test_supercharge_during_a_manual_run_starts_no_second(self):
+        """Review 2026-10-08 #1: a supercharge while Target next (or 🎯, or the co-pilot's tap) is counting down or
+        pressing keys started the automatic run as well, two galaxy-map sequences one behind the other, the second
+        overwriting the first's cancel token. One sequence at a time, whichever kind came first."""
+        import asyncio
+        self.wire()
+        self.state.autotarget_test_countdown = 0.15
+
+        async def go():
+            body, status = self.state.start_autotarget_run("next")
+            self.assertEqual(status, 200, body)
+            self.j.handle({"event": "JetConeBoost", "timestamp": self.ts(2), "BoostValue": 4})
+            second = self.state.maybe_autotarget()
+            await self.state.autotarget_test_task
+            return second
+        self.assertFalse(asyncio.run(go()))
+        self.assertIsNone(self.state.autotarget_task)
+        self.assertEqual(self.moments(), [(True, "Successfully targeted neutron jump target Bridge B")])
+
+    def test_run_tokens_are_per_run(self):
+        """Each run's own cancel token belongs to its thread: one run starting never hides another's."""
+        import threading
+        mine, other = threading.Event(), threading.Event()
+        self.targeter.run_cancel = mine
+        seen = []
+        t = threading.Thread(target=lambda: (setattr(self.targeter, "run_cancel", other), seen.append(self.targeter.run_cancel)))
+        t.start()
+        t.join()
+        self.assertIs(seen[0], other)
+        self.assertIs(self.targeter.run_cancel, mine)   # this thread's run still sees its own token
+        mine.set()
+        self.assertTrue(self.targeter.cancelled())
+        self.targeter.run_cancel = None
+
     def test_target_next_stops_with_the_route(self):   # the Batch 4 lifecycle: a cleared route stops it too
         import asyncio
         self.wire()

@@ -233,12 +233,18 @@ class ButtonWatch:
             async for e in dev.async_read_loop():
                 if e.type != ev.ecodes.EV_KEY or e.code != code:
                     continue
+                t = stamp(e)
+                # a lone tap whose wait ran out before this event (the settle timer not yet fired) is handed over
+                # first: then on_press sees the countdown that tap started and can cancel it, instead of the tap
+                # starting after the press was reported (review 2026-10-08 #19)
+                for x in g.due(t):
+                    self._hand(x)
                 if e.value == 1 and self.on_press:
                     try:
                         self.on_press()
                     except Exception as err:   # never let it stop the button
                         print(f"co-pilot button: a press failed: {err!r}", file=sys.stderr)
-                for x in g.feed(stamp(e), e.value):
+                for x in g.feed(t, e.value):
                     self._hand(x)
                 if timer:
                     timer.cancel()

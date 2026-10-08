@@ -336,7 +336,9 @@ def _carrier_market(st, items, ts):
         elif _n(it.get("Demand")) and _n(it.get("SellPrice")):
             buys[i] = it
     for i, it in sells.items():
-        st["lines"][i] = {"count": _n(it["Stock"]), "state": "confirmed", "ts": ts, "moves": []}
+        # the market confirms the count; the line's recent moves (the hover text) are kept (review 2026-10-08 #10)
+        st["lines"][i] = {"count": _n(it["Stock"]), "state": "confirmed", "ts": ts,
+                          "moves": (st["lines"].get(i) or {}).get("moves", [])}
         st["orders"][i] = {"kind": "sell", "amount": _n(it["Stock"]), "price": it.get("BuyPrice")}
     for i in list(st["orders"]):
         # every open sell order is listed with its stock: one the market does not list sold out, or ended

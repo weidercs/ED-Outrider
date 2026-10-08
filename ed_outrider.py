@@ -233,6 +233,7 @@ SPANSH_SEARCH = "https://spansh.co.uk/api/systems/search"
 SPANSH_DUMP = "https://spansh.co.uk/api/dump/{id64}"
 SPANSH_BODY_SEARCH = "https://spansh.co.uk/api/bodies/search"
 SPANSH_STATION_SEARCH = "https://spansh.co.uk/api/stations/search"
+DOCK_CACHE_S = 120   # s: the Nearest finder reuses its last search this long (a filter change re-filters it)
 # Spansh's commodity names (its min_max keys): the Sell / Buy lookup asks by them; cached a week (meta spansh_commodities)
 SPANSH_COMMODITIES = "https://spansh.co.uk/api/stations/field_values/commodities"
 COMMODITIES_MAX_AGE_S = 7 * 86400
@@ -1149,7 +1150,10 @@ WANTED = tuple(f'"event":"{e}"'.encode()
 # 40: cargo: the ship's hold (ship_cargo) and your carrier's history (cargo_events).
 # 41: your carrier bought (CarrierBuy) or decommissioned (CarrierDecommission, CarrierCancelDecommission); a new one's
 #     CarrierStats starts its state afresh instead of inheriting the old one's place.
-PARSER_VERSION = 41
+# 42: a Location that says Docked (a login or respawn docked) counts as a dock: carrier transfers made straight after
+#     were dropped; the SRV's refinery and scoop stay out of the ship's hold; an older Location's relog is judged
+#     against the arrival before it (a legacy folder read late counted every login as a visit).
+PARSER_VERSION = 42
 # Scans read off a nav beacon (as outrider.unsold.NAV_BEACON_SCANS): their Was* flags are not the game's record of the body.
 NAV_BEACON_SCANS = ("NavBeaconDetail", "NavBeacon")
 
@@ -2349,8 +2353,19 @@ class Journals:
             return
         rows = self.riches_route(rc)
         i = rc["at"]
-        if i >= len(rows) or ev.get("MarketID") != rows[i].get("market_id"):
+        if i >= len(rows):
             return
+        if ev.get("MarketID") != rows[i].get("market_id"):
+            # the next stop in the same system: no jump moves the route there (riches_arrival), so a trade at its
+            # station does (review 2026-10-08 #5: a route with two stops in one system stalled at the first)
+            j = i + 1
+            while j < len(rows) and rows[j].get("system") == rows[i].get("system") \
+                    and rows[j].get("market_id") != ev.get("MarketID"):
+                j += 1
+            if j >= len(rows) or rows[j].get("system") != rows[i].get("system"):
+                return
+            rc.update(at=j, furthest=max(j, rc.get("furthest") if rc.get("furthest") is not None else j))
+            i = j
         sold = ev.get("event") == "MarketSell"
         wanted = {outrider.cargo.norm(c["name"]): c["name"] for c in rows[i].get("sell" if sold else "buy") or []}
         names = {outrider.cargo.norm(n) for n in (ev.get("Type_Localised"), ev.get("Type"), self.commodity_names.get(
@@ -2751,6 +2766,13 @@ class Journals:
         if name in SHIP_EVENTS and name != "CarrierJump":  # CarrierJump is also a position event
             self.handle_ship(name, ev, ts)
             return
+        if name == "Location" and ev.get("Docked") and not ev.get("Taxi") and not ev.get("Multicrew"):
+            # a session that starts docked (a login, a respawn after a death) writes no Docked event: the Location
+            # line says Docked with the station's name, type, MarketID and services instead. It is a dock for the
+            # hold's market and the docked state (review 2026-10-08 #2: a carrier transfer straight after logging in
+            # at your carrier was dropped for want of a market). The position itself is handled below.
+            self.handle_cargo("Docked", ev, ts)
+            self.handle_ship("Docked", ev, ts)
         if name in STAR_CLASS_EVENTS:
             # Targeting a system reveals its main star class, even if nobody has scanned it.
             if ev.get("SystemAddress") and ev.get("StarClass"):
@@ -2834,9 +2856,17 @@ class Journals:
         id64, star_pos = ev.get("SystemAddress"), ev.get("StarPos")
         if id64 is None or not star_pos:
             return
-        # A Location in the system you're already in (a relog) is not an arrival: not a visit, not movement.
-        relog = ev.get("event") == "Location" and bool(self.pos) and self.pos["id64"] == id64
         current = ts >= (self.pos or {}).get("ts", "")   # not an old arrival read after newer ones
+        # A Location in the system you're already in (a relog) is not an arrival: not a visit, not movement. An older
+        # line (a legacy folder imported after the live ones) is judged against the arrival before it, not against
+        # where you are today (review 2026-10-08 #9: every old login counted as a visit and broke the flown path).
+        if ev.get("event") != "Location":
+            relog = False
+        elif current:
+            relog = bool(self.pos) and self.pos["id64"] == id64
+        else:
+            before = self.db.execute("SELECT id64 FROM jumps WHERE ts < ? ORDER BY ts DESC LIMIT 1", (ts,)).fetchone()
+            relog = bool(before) and before["id64"] == id64
         # an Apex shuttle or another commander's ship (multicrew) moved you: where you are and the jump row
         # still count, but its fuel, its jump and its charge are not your ship's (no pace sample, no auto honk)
         ride = bool(ev.get("Taxi") or ev.get("Multicrew"))
@@ -3377,6 +3407,9 @@ class Journals:
             return   # older than the hold already folded (a legacy folder read late)
         if name == "Cargo" and ts < (sc.get("snap_ts") or ""):
             return
+        if name in ("MiningRefined", "CollectCargo", "EjectCargo") and self.vehicle \
+                and ts >= (self.vehicle.get("ts") or ""):
+            return   # the SRV's refinery and scoop (its own Cargo says Vessel SRV): not the ship's hold (review #8)
         if outrider.cargo.ship_apply(sc, ev):
             meta_set(self.db, "ship_cargo", sc)
             self.cargo_version += 1
@@ -4654,8 +4687,11 @@ class Spansh:
         return time.time() - row["fetched_ts"] if row and row["fetched_ts"] else None
 
     async def stations(self, service, pos, size=20):
-        """The stations nearest `pos` offering `service` (e.g. "Universal Cartographics"), nearest first."""
-        body = {"filters": {"services": {"value": [service]}, "distance": {"min": "0", "max": "20000"}},
+        """The stations nearest `pos` offering `service` (e.g. "Universal Cartographics"), nearest first. Spansh's
+        services filter is a list of {name} (each one required); the {"value": [...]} shape was ignored without a
+        word, so these were simply the nearest stations, offering the service or not (found 2026-10-08 with the
+        review's #6). The answer is checked as well."""
+        body = {"filters": {"services": [{"name": service}], "distance": {"min": "0", "max": "20000"}},
                 "reference_coords": {"x": pos["x"], "y": pos["y"], "z": pos["z"]},
                 "sort": [{"distance": {"direction": "asc"}}], "size": size, "page": 0}
         async with self.sem_fast:
@@ -4666,7 +4702,8 @@ class Spansh:
                  "distance": round(x.get("distance") or 0, 1), "type": x.get("type"), "updated_at": x.get("updated_at"),
                  "ls": round(x.get("distance_to_arrival") or 0), "large_pad": bool(x.get("has_large_pad")),
                  "x": x.get("system_x"), "y": x.get("system_y"), "z": x.get("system_z")}
-                for x in d.get("results") or []]
+                for x in d.get("results") or []
+                if service in {v.get("name") for v in x.get("services") or [] if isinstance(v, dict)}]
 
     async def market_search(self, body):
         """The Sell / Buy lookup: one page of Spansh's station search (outrider.cargo.market_query's body)."""
@@ -4680,17 +4717,23 @@ class Spansh:
             raise ClientError("Spansh's answer is not a station list")
         return d
 
-    async def dock_search(self, pos):
+    async def dock_search(self, pos, need=()):
         """Stations and fleet carriers nearest `pos` (two pages of the station search, each nearest first, out to
-        outrider.dock.SEARCH_LY). Carriers are not filtered by service here: Spansh's filter keeps carriers that lack it."""
+        outrider.dock.SEARCH_LY) that offer every service in `need` (outrider.dock's names). Without that filter the
+        50 nearest were all there was to choose from: near the bubble a Vista station 40 ly away went unseen (review
+        2026-10-08 #6). outrider.dock.nearest still checks each row's own list."""
         if self.session is None:
             raise ClientError("no network session")
         ref = {"x": pos["x"], "y": pos["y"], "z": pos["z"]}
         types = [t for t in outrider.cargo.STATION_TYPES if "Construction" not in t]
+        spansh_names = {short: name for name, short in outrider.dock.SPANSH_SERVICES.items()}
+        services = [{"name": spansh_names[n]} for n in need if n in spansh_names]
         out = []
         for kinds in (types, [outrider.cargo.CARRIER_TYPE]):
-            body = {"filters": {"type": {"value": kinds}, "distance": {"min": "0", "max": str(outrider.dock.SEARCH_LY)}},
-                    "sort": [{"distance": {"direction": "asc"}}], "reference_coords": ref,
+            filters = {"type": {"value": kinds}, "distance": {"min": "0", "max": str(outrider.dock.SEARCH_LY)}}
+            if services:
+                filters["services"] = services   # a list of {name}: each one required
+            body = {"filters": filters, "sort": [{"distance": {"direction": "asc"}}], "reference_coords": ref,
                     "size": outrider.dock.SEARCH_SIZE, "page": 0}
             async with self.sem_fast:
                 async with self.session.post(SPANSH_STATION_SEARCH, json=body) as r:
@@ -5260,6 +5303,7 @@ class State:
         # Road to Riches: the plot under way (as highway_plotting), its task, the arrival whose next system was copied
         self.riches_plotting = None
         self.riches_task = None
+        self.dock_cache = {}   # the Nearest finder's last Spansh search and permit check (DOCK_CACHE_S)
         self._rc_copied = (meta_get(db, "riches") or {}).get("arrival_ts")
 
     def bump(self):
@@ -6794,8 +6838,12 @@ class State:
         if fetch and time.time() - (d.get("checked") or 0) > outrider.dock.DSSA_MAX_AGE_S:
             try:
                 status, data, etag, modified = await self.spansh.get_if_changed(DSSA_URL, d.get("etag"), d.get("modified"))
+                if status == 200 and not isinstance(data, list):
+                    # an answer of another shape (an error object, a maintenance notice): a failed check, so the old
+                    # copy is kept and asked for again next time (review 2026-10-08 #14: it counted as a fresh check)
+                    raise ValueError("it answered in an unexpected shape")
                 d = dict(d, checked=time.time(), error=None)
-                if status == 200 and isinstance(data, list):
+                if status == 200:
                     d.update(data=data, etag=etag, modified=modified)
                 meta_set(self.db, "dssa", d)
                 self.db.commit()
@@ -6824,8 +6872,17 @@ class State:
         pad = q.get("pad") or "auto"
         pad = outrider.cargo.SHIP_PAD.get((ship.get("type") or "").lower()) if pad == "auto" else pad if pad in ("L", "M") else None
         errors = []
+        # the same place and services asked again within DOCK_CACHE_S (each tick of the finder's other filters) is
+        # answered from the last search instead of two more requests (review 2026-10-08 #13)
+        key = (pos.get("id64"), pos.get("x"), pos.get("y"), pos.get("z"), tuple(sorted(need)))
+        hit = self.dock_cache.get("search")
         try:
-            spansh = outrider.dock.spansh_rows(await self.spansh.dock_search(pos))
+            if hit and hit[0] == key and time.time() - hit[1] < DOCK_CACHE_S:
+                found = hit[2]
+            else:
+                found = await self.spansh.dock_search(pos, need)
+                self.dock_cache["search"] = (key, time.time(), found)
+            spansh = outrider.dock.spansh_rows(found)
         except (ClientError, asyncio.TimeoutError, ValueError) as e:
             spansh = []
             errors.append(f"Spansh could not be reached ({e})")
@@ -6838,8 +6895,14 @@ class State:
         rows = outrider.dock.merge(spansh, dssa, own)
         permits = set()
         if q.get("permit") != "1":
+            ids = sorted({r["id64"] for r in rows if r.get("id64") is not None})
+            hit = self.dock_cache.get("permits")
             try:
-                permits = await self.spansh.permit_ids([r["id64"] for r in rows if r.get("id64") is not None])
+                if hit and hit[0] == ids and time.time() - hit[1] < DOCK_CACHE_S:
+                    permits = hit[2]
+                else:
+                    permits = await self.spansh.permit_ids(ids)
+                    self.dock_cache["permits"] = (ids, time.time(), permits)
             except (ClientError, asyncio.TimeoutError, ValueError) as e:
                 errors.append(f"permit systems could not be checked ({e})")
         laden = self.range_now() or ship.get("max_range")
@@ -10305,11 +10368,24 @@ class State:
             loop = asyncio.get_running_loop()
         except RuntimeError:   # no event loop (a test driving tick() by hand): nothing to schedule
             return False
-        if self.autotarget_task and not self.autotarget_task.done():
-            return False   # one sequence at a time
+        if self.autotarget_busy():
+            return False   # one sequence at a time: an automatic one, or a run the page or the button asked for
         self._autotarget_cancel = cancel = threading.Event()
         self.autotarget_task = loop.create_task(self._autotarget(tgt, cancel=cancel))
         return True
+
+    def background_tasks(self):
+        """The State's own background tasks, all cancelled at shutdown before the database closes (a survey or trade
+        plot can run up to TRADE_PLOT_TIMEOUT: review 2026-10-08 #7, it was left running into the closed session)."""
+        return [t for t in (self.refresh_task, self.target_task, self.unsold_task, self.seller_task, self.carrier_task,
+                            self.searcher.task, self.honk_test_task, self.highway_task, self.riches_task,
+                            self.autotarget_task, self.autotarget_test_task) if t]
+
+    def autotarget_busy(self):
+        """A galaxy-map sequence is pending or running: the automatic one (after a supercharge) or one the page or the
+        co-pilot button asked for. Only one may run at a time (review 2026-10-08 #1: a supercharge during Target next
+        started a second run that overwrote the first's cancel token)."""
+        return any(t and not t.done() for t in (self.autotarget_task, self.autotarget_test_task))
 
     def start_autotarget_test(self):
         """The Highway tab's "test now": one run against the nearest system a plain jump away (autotarget_test_target),
@@ -10325,8 +10401,7 @@ class State:
         t, h = self.targeter, self.honker
         if not t or not t.available:
             return {"error": (h.status if h else "not started")}, 400
-        if (self.autotarget_test_task and not self.autotarget_test_task.done()) or \
-                (self.autotarget_task and not self.autotarget_task.done()):
+        if self.autotarget_busy():
             return {"error": "auto-target is already running"}, 409
         tgt, why = (self.autotarget_test_target() if kind == "test" else self.route_target(*aim) if aim
                     else self.autotarget_target(manual=True))
@@ -11527,8 +11602,9 @@ def make_app(state, hosts=None):
     async def session_guard(request, handler):
         """[server] password: a request from another device needs a session (a cookie, or the app's Bearer token)
         except AUTH_OPEN and the overlays' OPEN_GETS. This PC itself (loopback) never needs one: the desktop page,
-        curl, OBS and the MCP bridge work as before. request_guard's checks run first, whatever the session."""
-        if not state.password or outrider.auth.is_loopback(request.remote) or request.path in AUTH_OPEN \
+        curl, OBS and the MCP bridge work as before; a request a reverse proxy on this PC forwarded is another device's
+        (outrider.auth.from_this_pc). request_guard's checks run first, whatever the session."""
+        if not state.password or outrider.auth.from_this_pc(request.remote, request.headers) or request.path in AUTH_OPEN \
                 or request.path in OPEN_GETS:
             return await handler(request)
         if state.session_ok(outrider.auth.request_token(request.headers, request.cookies)):
@@ -11548,7 +11624,7 @@ def make_app(state, hosts=None):
     def signed_in(request):
         """What /api/version reports: whether this request may use Outrider now (no password asked of it, or a
         live session)."""
-        return not state.password or outrider.auth.is_loopback(request.remote) or \
+        return not state.password or outrider.auth.from_this_pc(request.remote, request.headers) or \
             state.session_ok(outrider.auth.request_token(request.headers, request.cookies))
 
     async def version_view(request):
@@ -11569,7 +11645,7 @@ def make_app(state, hosts=None):
             return web.json_response({"error": "expected {\"password\": \"...\"}", "code": "bad_request"}, status=400)
         if not state.password:   # nothing to sign in to: every device may use it
             return web.json_response({"ok": True, "token": ""})
-        who = str(request.remote)
+        who = outrider.auth.client_key(request.remote, request.headers)
         wait = state.signin_limit.wait(who)
         if wait:
             return web.json_response({"error": f"too many wrong passwords: try again in {wait} s", "code": "rate_limited"},
@@ -11601,6 +11677,9 @@ def make_app(state, hosts=None):
         return web.Response(text=SIGNIN_PAGE, content_type="text/html")
 
     def parse_id64(raw):
+        if isinstance(raw, bool) or isinstance(raw, float) and not raw.is_integer():
+            # JSON's 1e999 is float inf: int() would raise OverflowError, which no caller expects (review #12)
+            raise ValueError("id64 must be a whole number")
         v = int(raw)
         if not 0 <= v < 2 ** 63:
             raise ValueError("id64 out of range")
@@ -12841,9 +12920,8 @@ async def run(args, st):
     finally:
         if state.targeter:
             state.targeter.cancel.set()   # a sequence pressing keys lets go and stops now
-        tasks = [t for t in (watcher, rules_task, state.refresh_task, state.target_task, state.unsold_task, state.seller_task,
-                             state.carrier_task, state.searcher.task, state.honk_test_task, button_task,   # the quit backup: finish_backup
-                             firsts_task, update_task, state.highway_task, state.autotarget_task, state.autotarget_test_task) if t]
+        tasks = [t for t in (watcher, rules_task, button_task, firsts_task, update_task,   # the quit backup: finish_backup
+                             *state.background_tasks()) if t]
         for t in tasks:
             t.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)

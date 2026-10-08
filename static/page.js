@@ -689,8 +689,14 @@ async function loadOnBody() {
   const key = `${ob.system}|${data.scan_version}`;
   if (key === obKey) return renderOnBody();
   obKey = key;
-  // a thrown fetch (the server restarting, a dropped connection) is an error like a JSON one: asked again next time
-  try { obData = await apiJson(`api/system/${ob.system}`); } catch (err) { obData = {error: err.message}; }
+  // a thrown fetch (the server restarting, a dropped connection) is an error like a JSON one: asked again next time.
+  // Each scan or sample bumps scan_version, so several can be in flight: only the newest one's answer is kept, an
+  // older one landing later must not put older counts back (review 2026-10-08 #15)
+  const g = newRequest("onbody");
+  let got;
+  try { got = await apiJson(`api/system/${ob.system}`); } catch (err) { got = {error: err.message}; }
+  if (!isNewest("onbody", g)) return;
+  obData = got;
   if (obData && obData.error) obKey = null;
   renderOnBody();
 }
@@ -2685,13 +2691,19 @@ let hereKey = null, hereData = null;
 // another system into it until the ✕ is clicked.
 let pinnedSystem = null;
 const shownSystem = () => pinnedSystem || posId();
+// Here switched to another system by hand (a pin, an unpin, a body opened elsewhere): the last system's answer is not
+// drawn under the new heading while the new one loads (review 2026-10-08 #16); "loading…" until it lands
+function forgetOtherHere() {
+  if (hereData && String(hereData.id64) !== String(shownSystem())) { hereData = null; hereKey = null; hereRefreshError = null; }
+}
 function pinSystem(id) {
   // the system you are in is not "pinned": Here shows it anyway, with its to-do line
   pinnedSystem = posId() === String(id) ? null : String(id);
+  forgetOtherHere();
   if (view === "overview" && ovState.collapsed) { ovState.collapsed = false; saveOv(); }   // else the pin shows nothing
   if (selectedBody) closeBody(); hidePop(); render(); renderHere(); paneTop("hereMain");
 }
-function unpinSystem() { pinnedSystem = null; if (selectedBody) closeBody(); render(); renderHere(); paneTop("hereMain"); }
+function unpinSystem() { pinnedSystem = null; forgetOtherHere(); if (selectedBody) closeBody(); render(); renderHere(); paneTop("hereMain"); }
 let hereRefreshError = null;
 async function loadHere() {
   const id = shownSystem(); if (!id) return;
@@ -3376,7 +3388,9 @@ async function loadFirsts() {
   if (key === firstsKey) return;
   firstsKey = key;
   document.getElementById("fStatus").textContent = "loading…";
-  try { const f = await apiJson("api/firsts"); if (key === firstsKey) firstsData = f; else return; } catch (err) { firstsData = {error: err.message}; }
+  // an answer or a failure for a key that is no longer the newest is dropped: a slow failure must not replace a newer
+  // good answer (review 2026-10-08 #18; the same in loadMat, loadBio and loadHistory)
+  try { const f = await apiJson("api/firsts"); if (key === firstsKey) firstsData = f; else return; } catch (err) { if (key !== firstsKey) return; firstsData = {error: err.message}; }
   if (firstsData && firstsData.error) firstsKey = null;   // retried at the next render
   renderFirsts();
 }
@@ -3532,7 +3546,7 @@ async function loadMat() {
   if (key === matKey) return;
   matKey = key;
   document.getElementById("matStatus").textContent = "loading…";
-  try { const m = await apiJson("api/materials"); if (key === matKey) matData = m; else return; } catch (err) { matData = {error: err.message}; }
+  try { const m = await apiJson("api/materials"); if (key === matKey) matData = m; else return; } catch (err) { if (key !== matKey) return; matData = {error: err.message}; }
   if (matData && matData.error) matKey = null;   // retried at the next render
   renderMat();
 }
@@ -3992,6 +4006,7 @@ function openBodyIn(id, name) {
   id = String(id);
   view = "here"; saveView();
   pinnedSystem = posId() === id ? null : id;
+  forgetOtherHere();
   hidePop();
   selectedBody = name; selectedSystem = id; bodyData = null;
   const panel = document.getElementById("bodyPanel");
@@ -4053,8 +4068,10 @@ document.getElementById("findForm").addEventListener("submit", async e => {
   const name = document.getElementById("findName").value.trim(), st = document.getElementById("findStatus");
   if (!name) return;
   st.textContent = `looking up ${name}…`;
+  const g = newRequest("find");   // a slower earlier lookup (EDSM) must not land after a newer one (review #17)
   let d;
   try { d = await apiJson(`api/find?name=${encodeURIComponent(name)}`); } catch (err) { d = {error: err.message}; }
+  if (!isNewest("find", g)) return;
   if (d.error) { st.textContent = d.error; return; }
   foundSys[d.id] = d;
   const v = d.visited;
@@ -4068,7 +4085,7 @@ async function loadBio() {
   if (key === bioKey) return;
   bioKey = key;
   document.getElementById("bStatus").textContent = "loading…";
-  try { const b = await apiJson(`api/organics?days=${bDays.value}`); if (key === bioKey) bioData = b; else return; } catch (err) { bioData = {error: err.message}; }
+  try { const b = await apiJson(`api/organics?days=${bDays.value}`); if (key === bioKey) bioData = b; else return; } catch (err) { if (key !== bioKey) return; bioData = {error: err.message}; }
   if (bioData && bioData.error) bioKey = null;   // retried at the next render
   renderBio();
 }
@@ -4132,7 +4149,7 @@ async function loadHistory() {
   if (key === histKey) return;
   histKey = key;
   document.getElementById("hStatus").textContent = "loading…";
-  try { const h = await apiJson(`api/history?days=${hDays.value}`); if (key === histKey) histData = h; else return; } catch (err) { histData = {error: err.message}; }
+  try { const h = await apiJson(`api/history?days=${hDays.value}`); if (key === histKey) histData = h; else return; } catch (err) { if (key !== histKey) return; histData = {error: err.message}; }
   if (histData && histData.error) histKey = null;   // retried at the next render
   renderHistory();
 }

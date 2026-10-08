@@ -99,6 +99,9 @@ def spansh_rows(results):
         carrier = r.get("type") == CARRIER_TYPE
         services = {SPANSH_SERVICES[s.get("name")] for s in r.get("services") or []
                     if isinstance(s, dict) and s.get("name") in SPANSH_SERVICES}
+        xyz = [_num(r.get(k)) for k in ("system_x", "system_y", "system_z")]
+        if None in xyz:
+            xyz = [None] * 3   # one coordinate missing: no place to measure from (review 2026-10-08 #20)
         large = carrier or bool(r.get("has_large_pad") or r.get("large_pads"))
         medium = carrier or large or bool(r.get("medium_pads"))
         rows.append({"kind": "carrier" if carrier else "station",
@@ -106,7 +109,7 @@ def spansh_rows(results):
                      "name": str(r.get("carrier_name") or "").strip() if carrier else r["name"],
                      "station_type": None if carrier else r.get("type"),
                      "system": r.get("system_name"), "id64": r.get("system_id64"),
-                     "x": _num(r.get("system_x")), "y": _num(r.get("system_y")), "z": _num(r.get("system_z")),
+                     "x": xyz[0], "y": xyz[1], "z": xyz[2],
                      "ls": _num(r.get("distance_to_arrival")), "services": services,
                      "pads": "L M" if carrier else " ".join(p for p, on in (("L", large), ("M", medium), ("S", True)) if on),
                      "large": large, "medium": medium,
@@ -150,7 +153,9 @@ def merge(spansh, dssa, own=None):
             out.append(d)
             continue
         fresher = d if (d["seen"] or 0) >= (s["seen"] or 0) else s
-        s.update(dssa=True, until=d["until"], name=s["name"] or d["name"], away=d["away"],
+        # "last seen at" only when the DSSA sighting is the fresher report: a newer Spansh one placing it home
+        # contradicts it (review 2026-10-08 #21)
+        s.update(dssa=True, until=d["until"], name=s["name"] or d["name"], away=d["away"] if fresher is d else None,
                  services=s["services"] | d["services"], access=s["access"] or "All", source="DSSA + Spansh",
                  seen=max(d["seen"] or 0, s["seen"] or 0) or None,
                  **{k: fresher[k] for k in ("system", "x", "y", "z")})
@@ -172,7 +177,7 @@ def nearest(rows, pos, need=(), stations=True, carriers=True, pad=None, age_days
     for r in rows:
         if r["kind"] == "station" and not stations or r["kind"] == "carrier" and not carriers and not r.get("own"):
             continue
-        if r["x"] is None or not pos:
+        if None in (r["x"], r["y"], r["z"]) or not pos:
             continue
         if not need <= r["services"]:
             hidden["service"] += 1
@@ -204,7 +209,9 @@ def nearest(rows, pos, need=(), stations=True, carriers=True, pad=None, age_days
 def spoken(result, need=(), kind=None):
     """The voice's answer ("nearest station", "nearest Vista"... asked of Outrider): the nearest place and what to know
     about it, in one sentence or two. kind: "station" or "carrier" when the question named one."""
-    rows = [r for r in result["rows"] if not r.get("here")]
+    # your own carrier where you are is no answer (you are at it); any other place in this system is the nearest of
+    # all, so it stays (review 2026-10-08 #4: every place in your system was skipped)
+    rows = [r for r in result["rows"] if not (r.get("here") and r.get("own"))]
     what = " and ".join({"UC": "Universal Cartographics", "Vista": "Vista Genomics"}.get(n, n.lower()) for n in need)
     place = kind or "place to dock"
     if not rows:
@@ -212,9 +219,10 @@ def spoken(result, need=(), kind=None):
     r = rows[0]
     sort = "fleet carrier" if r["kind"] == "carrier" else (r.get("station_type") or "station").lower()
     name = r["name"] or r["callsign"]
+    where = (f", here in {r['system']}" if r["system"] else ", in this system") if r.get("here") else \
+        f", {round(r['ly']):,} light years away{', in ' + r['system'] if r['system'] else ''}"
     out = (f"Nearest {place}{' with ' + what if what else ''}: {name}, a {sort}"
-           f"{' of the Deep Space Support Array' if r.get('dssa') else ''}, {round(r['ly']):,} light years away"
-           f"{', in ' + r['system'] if r['system'] else ''}.")
+           f"{' of the Deep Space Support Array' if r.get('dssa') else ''}{where}.")
     if r["warn"]:
         out += " Careful: " + ", ".join(r["warn"]) + "."
     return out

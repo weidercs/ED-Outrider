@@ -38,7 +38,10 @@ upstream project's choices, not rules of the game.
 - **Listens on 127.0.0.1 by default; a password is optional.** Opening it to the network is an explicit setting; the
   Host and cross-site guards stop other web sites, not people on your network. `[server] password` stops those: a
   device that is not this PC needs a session (the `outrider_session` cookie, or `Authorization: Bearer` for the
-  Android app's own calls). Loopback never does, so the desktop page, curl, OBS and a local MCP bridge work as before.
+  Android app's own calls). Loopback never does, so the desktop page, curl, OBS and a local MCP bridge work as before;
+  but a loopback request carrying a forwarding header is a reverse proxy on this PC serving another device, so it
+  needs a session too (`outrider.auth.from_this_pc`; wrong passwords count against the client the proxy names). No
+  setting: nothing on the PC itself sends those headers (review 2026-10-08 #3: the password was bypassed).
   A token is `<id>.<HMAC>` under a key made from the password and a per-install secret (DB meta `session_secret`),
   so sessions survive a restart with nothing kept in memory, all end when the password changes, and signing out
   revokes one id (meta `revoked_sessions`, the last 500). Plain http: the password crosses the network in clear,

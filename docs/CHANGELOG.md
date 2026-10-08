@@ -2,6 +2,31 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · The review's fixes (21 bugs) and the Spansh services filter
+- From a review of the whole code (five areas, each finding checked by a second reader trying to disprove it): 21
+  bugs confirmed, all fixed, each with a test that fails without it.
+- **Auto-target and the co-pilot button:** a supercharge while Target next, 🎯 or the button's tap was counting down
+  or pressing keys no longer starts a second galaxy-map run (each run keeps its own stop token). A second press that
+  comes just after the double-tap window but before the tap was settled now cancels that tap's targeting, as meant.
+  A survey or trade plot still running is stopped at shutdown.
+- **Journal data (a re-read of the journals at the first start, parser 42):** a session that starts docked (a
+  login, a respawn) counts as docked, so a carrier transfer straight after it is no longer lost. The Rhino's
+  refinery and scoop stay out of the ship's hold. A legacy folder imported late no longer counts each old login as a
+  visit (or breaks the flown path). A market read keeps a carrier line's recent moves.
+- **The password and the API:** behind a reverse proxy on the Outrider PC (Caddy, nginx) the password applied to
+  nobody: a forwarded request now counts as another device's, and wrong passwords count against that device. An odd
+  session token is a JSON 401, not a crash; an id of 1e999 (or 1.5) is a 400. A DSSA answer of the wrong shape is a
+  failed check, said in the finder and asked again, not a fresh copy.
+- **Nearest and trade routes:** "nearest Vista" (and the rest) by voice no longer skips the places in your own
+  system. Spansh's services filter was being sent in a shape Spansh ignores, so the finder saw only the 50 nearest
+  stations and **the Unsold tile's nearest Universal Cartographics / Vista Genomics sellers could be stations without
+  them**: both now ask in the shape Spansh honours, and the sellers are checked. The finder reuses its search for two
+  minutes while you change its other filters. A row with a missing coordinate no longer breaks the answer; a DSSA
+  carrier newer reported at home loses the "last seen at" warning. A trade route with two stops in one system moves
+  on to the second with your trades there.
+- **The page:** answers arriving out of order no longer overwrite newer ones (the on-body strip, Find, My firsts,
+  Materials, Biology, History), and pinning another system shows "loading…" rather than the last system's bodies.
+
 ## 2026-10-08 · The Nearby tab's table no longer takes the Nearest finder's styles
 - The finder's table had the Nearby tab's id (`nearTable`), so since 2026.10.17 its styles (13px text, its cell
   padding and lines) also reached the Nearby tab's table, and on the tablet a tap on a finder row opened the Nearby

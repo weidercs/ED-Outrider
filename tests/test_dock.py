@@ -79,6 +79,31 @@ class Rows(unittest.TestCase):
         self.assertIsNone(dock.own_row({"id": 1, "x": 1, "y": 2, "z": 3, "decommission": {"done": True}}))
 
 
+    def test_missing_coordinate(self):
+        """Review 2026-10-08 #20: a Spansh row with system_x but no y or z crashed the whole answer."""
+        raw = [dict(r) for r in fixture("spansh_dock.json")["results"][:3]]
+        raw[0]["system_y"] = None
+        rows = dock.spansh_rows(raw)
+        self.assertEqual((rows[0]["x"], rows[0]["y"], rows[0]["z"]), (None, None, None))
+        out = dock.nearest(rows, HERE, age_days=36500, now=NOW)
+        self.assertNotIn(rows[0]["name"], [r["name"] for r in out["rows"] if r["kind"] == rows[0]["kind"]])
+        rows[1]["z"] = None   # a row built elsewhere with a hole: skipped, not a TypeError
+        dock.nearest(rows, HERE, age_days=36500, now=NOW)
+
+    def test_merge_away_only_from_the_fresher(self):
+        """Review 2026-10-08 #21: a newer Spansh report placing a DSSA carrier home kept the older DSSA sighting's
+        "last seen at" warning."""
+        v = next(r for r in dssa() if r["callsign"] == "V8Z-06T")   # away at Procyon in the list
+        sp = [{"kind": "carrier", "callsign": "V8Z-06T", "name": "", "system": "Preou Auscs PI-T C3-8", "id64": 9,
+               "x": 1.0, "y": 2.0, "z": 3.0, "ls": 1.0, "services": set(), "pads": "L M", "large": True, "medium": True,
+               "access": "All", "seen": (v["seen"] or 0) + 86400, "source": "Spansh", "dssa": False, "until": "", "away": None}]
+        k = next(r for r in dock.merge(sp, dssa()) if r["callsign"] == "V8Z-06T")
+        self.assertEqual((k["system"], k["away"]), ("Preou Auscs PI-T C3-8", None))
+        sp[0]["seen"] = (v["seen"] or 0) - 86400   # the DSSA sighting fresher: the warning stays
+        k = next(r for r in dock.merge(sp, dssa()) if r["callsign"] == "V8Z-06T")
+        self.assertEqual(k["away"], "Procyon")
+
+
 class Nearest(unittest.TestCase):
 
     def rows(self):
@@ -120,6 +145,13 @@ class Nearest(unittest.TestCase):
         out = dock.nearest(self.rows(), HERE, need={"Vista"}, pad="L", age_days=30, laden=76.2, now=NOW)
         self.assertEqual(dock.spoken(out, ["Vista"]), "Nearest place to dock with Vista Genomics: KBT-B8Z, a fleet carrier, "
                                                       "712 light years away, in Smojooe QI-T d3-37.")
+        # Review 2026-10-08 #4: a place in your own system is the nearest of all (only your own carrier, where you
+        # are, is skipped: you are at it)
+        here = dict(next(r for r in self.rows() if r["name"] == "May Terminal"), x=HERE["x"], y=HERE["y"], z=HERE["z"],
+                    system=HERE["name"])
+        out = dock.nearest(self.rows() + [here], HERE, need={"Vista"}, age_days=36500, now=NOW)
+        self.assertEqual(dock.spoken(out, ["Vista"], "station"),
+                         "Nearest station with Vista Genomics: May Terminal, a coriolis starport, here in Smojooe AR-E b25-8.")
         out = dock.nearest(self.rows(), HERE, carriers=False, need={"UC"}, age_days=30, now=NOW)
         self.assertTrue(dock.spoken(out, ["UC"], "station").startswith(
             "Nearest station with Universal Cartographics: May Terminal, a coriolis starport, 2,111 light years away"))
@@ -132,8 +164,9 @@ class FakeSpansh:
     def __init__(self, dssa_answers):
         self.dssa_answers, self.calls = list(dssa_answers), []
 
-    async def dock_search(self, pos):
+    async def dock_search(self, pos, need=()):
         self.calls.append("search")
+        self.needs = getattr(self, "needs", []) + [list(need)]
         return fixture("spansh_dock.json")["results"]
 
     async def permit_ids(self, ids):
@@ -191,6 +224,69 @@ class Endpoint(unittest.TestCase):
         ed_outrider.meta_set(self.db, "dssa", dict(ed_outrider.meta_get(self.db, "dssa"), checked=0))
         self.ask(cached=1)   # the voice and the AI never fetch
         self.assertNotIn("dssa", [c[0] for c in self.sp.calls[n:]])
+
+
+    def test_filter_changes_reuse_the_search(self):
+        """Review 2026-10-08 #13: every tick in the finder made the same three Spansh requests again. The search and
+        the permit check are reused for DOCK_CACHE_S; a different set of services is a new search (it is in the
+        request since #6)."""
+        self.j.pos = dict(HERE)
+        self.ask(age=30)
+        self.ask(age=90, pad="M")
+        self.ask(age=90, stations=0)
+        self.assertEqual((self.sp.calls.count("search"), self.sp.calls.count("permits")), (1, 1))
+        self.ask(need="vista")
+        self.assertEqual(self.sp.calls.count("search"), 2)
+        self.assertEqual(self.sp.needs[-1], ["Vista"])
+        self.state.dock_cache["search"] = (self.state.dock_cache["search"][0], time.time() - 999,
+                                           self.state.dock_cache["search"][2])
+        self.ask(need="vista")   # stale: asked again
+        self.assertEqual(self.sp.calls.count("search"), 3)
+
+    def test_dssa_odd_answer_is_a_failed_check(self):
+        """Review 2026-10-08 #14: a 200 that is not a list (an error object, a notice) was stamped as a fresh check
+        with no error, so nothing asked again for an hour and the footer said all was well."""
+        self.j.pos = dict(HERE)
+        self.sp.dssa_answers = [(200, {"error": "maintenance"}, '"e2"', "Fri"),
+                                (200, fixture("dssa_carriers.json")["carriers"], '"e1"', "Thu")]
+        out, _ = self.ask(age=3650)
+        self.assertEqual(out["dssa"]["count"], 0)
+        self.assertTrue(out["errors"])
+        self.assertIsNone((ed_outrider.meta_get(self.db, "dssa") or {}).get("checked"))
+        out, _ = self.ask(age=3650)   # asked again at once, not an hour later
+        self.assertEqual(out["dssa"]["count"], 6)
+
+
+class SpanshRequests(unittest.TestCase):
+    """The station search's body: Spansh's services filter is a list of {name}, each required. The {"value": [...]}
+    shape was ignored without a word (found 2026-10-08 with the review's #6): the finder saw only the 50 nearest, and
+    the Unsold tile's nearest Universal Cartographics / Vista sellers were just the nearest stations."""
+
+    def setUp(self):
+        from support import _HwSession
+        self.db = ed_outrider.open_db(":memory:")
+        self.addCleanup(self.db.close)
+        self.sp = ed_outrider.Spansh(self.db)
+        self.Session = _HwSession
+
+    def test_dock_search_sends_the_services(self):
+        self.sp.session = self.Session([(200, {"results": []})])
+        asyncio.run(self.sp.dock_search(HERE, ["UC", "Vista"]))
+        bodies = [c[2] for c in self.sp.session.calls]
+        self.assertEqual(len(bodies), 2)   # stations, then carriers
+        for b in bodies:
+            self.assertEqual(b["filters"]["services"], [{"name": "Universal Cartographics"}, {"name": "Vista Genomics"}])
+        self.sp.session = self.Session([(200, {"results": []})])
+        asyncio.run(self.sp.dock_search(HERE))
+        self.assertNotIn("services", self.sp.session.calls[0][2]["filters"])
+
+    def test_sellers_offer_the_service(self):
+        uc = {"name": "Has UC", "system_name": "A", "system_id64": 1, "distance": 5, "services": [{"name": "Universal Cartographics"}]}
+        none = {"name": "Settlement", "system_name": "B", "system_id64": 2, "distance": 3, "services": [{"name": "Refuel"}]}
+        self.sp.session = self.Session([(200, {"results": [none, uc]})])
+        got = asyncio.run(self.sp.stations("Universal Cartographics", HERE))
+        self.assertEqual([x["name"] for x in got], ["Has UC"])
+        self.assertEqual(self.sp.session.calls[0][2]["filters"]["services"], [{"name": "Universal Cartographics"}])
 
 
 class Voice(unittest.TestCase):

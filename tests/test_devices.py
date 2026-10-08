@@ -772,6 +772,36 @@ class BatchBVoiceControl(unittest.TestCase):
         self.assertTrue(all(d.closed for d in Dev.opened))        # every device it opened was closed again
         self.assertGreater(len([d for d in Dev.opened if d.path.endswith("5")]), 1)   # and it looked again
 
+        # Review 2026-10-08 #19: a second press that comes after the double-tap window but before the settle timer
+        # fires (kernel times 110 ms apart, read in one go): the lone tap is handed over BEFORE the press is
+        # reported, so the press can cancel the targeting that tap starts instead of arriving first and missing it.
+        ev2, Dev2 = self.fake_evdev([])
+
+        class Stamped:
+            def __init__(self, value, secs):
+                self.type, self.code, self.value, self.secs = 1, 300, value, secs
+
+            def timestamp(self):
+                return self.secs
+
+        async def burst(dev):
+            for value, secs in ((1, 1000.0), (0, 1000.02), (1, 1000.13), (0, 1000.15)):
+                yield Stamped(value, secs)
+            raise OSError(19, "No such device")
+        Dev2.async_read_loop = burst
+        got2, presses2 = [], []
+
+        async def go2():
+            w = outrider.button.ButtonWatch("X-56", "BTN_TRIGGER_HAPPY5", got2.append, hold_ms=600, double_ms=100,
+                                            evdev=ev2, on_press=lambda: presses2.append(list(got2)))
+            with unittest.mock.patch.object(outrider.button, "RETRY", 5):
+                t = asyncio.ensure_future(w.run())
+                await asyncio.sleep(0.05)
+                t.cancel()
+                await asyncio.gather(t, return_exceptions=True)
+        asyncio.run(go2())
+        self.assertEqual(presses2, [[], ["status"]])   # the first tap was settled when the second press came
+
         async def bad(button):
             w = outrider.button.ButtonWatch("X-56", button, got.append, evdev=ev)
             await w.run()   # returns at once: nothing to listen for
