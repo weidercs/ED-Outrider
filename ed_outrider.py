@@ -9305,6 +9305,12 @@ class State:
         held = self.eddn_hold.is_held(name)
         if held:
             return [(r["id"], "dropped", f"not sent: {name} refused repeatedly ({held})", None)]
+        if name in outrider.eddn.STATION_SCHEMAS:   # a market an hour old is not news (EDDN was unreachable meanwhile)
+            try:
+                if time.time() - ts_seconds(r["created"]) > outrider.eddn.STATION_MAX_AGE_S:
+                    return [(r["id"], "dropped", "not sent: station data over an hour old", None)]
+            except (TypeError, ValueError):
+                pass
         async with self.upload_session.post(outrider.eddn.UPLOAD_URL, data=gzip.compress(r["message"].encode("utf-8")),
                                             headers={"Content-Encoding": "gzip", "Content-Type": "application/json"}) as resp:
             text = (await resp.text())[:300]

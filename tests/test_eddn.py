@@ -278,6 +278,77 @@ class Signals(unittest.TestCase):
         self.assertEqual(E.build({"timestamp": "2026-10-08T10:07:00Z", "event": "Music"}, s, "v"), [])
 
 
+@unittest.skipUnless(jsonschema, "jsonschema is not installed (requirements-dev.txt)")
+class StationData(unittest.TestCase):
+    """Part F: commodity/3, outfitting/2, shipyard/2, fcmaterials_journal/1 from the journal folder's files (only the
+    file the event wrote: its time and MarketID), each sent only when changed; dockinggranted / dockingdenied."""
+
+    def setUp(self):
+        self.s = session()
+        self.s.feed(FSDJUMP)
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir)
+        self.s.dir = self.dir
+        self.t = "2026-10-08T10:40:00Z"
+
+    def file(self, name, body):
+        with open(os.path.join(self.dir, name), "w", encoding="utf-8") as f:
+            json.dump(dict({"timestamp": self.t, "MarketID": 128, "StationName": "Abraham Lincoln", "StarSystem": "Sol"}, **body), f)
+
+    def ev(self, name, **kw):
+        return dict({"timestamp": self.t, "event": name, "MarketID": 128, "StationName": "Abraham Lincoln", "StarSystem": "Sol"}, **kw)
+
+    def test_market(self):
+        self.file("Market.json", {"event": "Market", "StationType": "Orbis", "Items": [
+            {"id": 1, "Name": "$gold_name;", "Name_Localised": "Gold", "Category": "$MARKET_category_metals;", "BuyPrice": 9000,
+             "SellPrice": 8800, "MeanPrice": 9100, "StockBracket": 2, "DemandBracket": 0, "Stock": 500, "Demand": 0,
+             "Consumer": False, "Producer": True, "Rare": False},
+            {"id": 2, "Name": "$drones_name;", "Category": "$MARKET_category_nonmarketable;", "BuyPrice": 101, "SellPrice": 0,
+             "MeanPrice": 101, "StockBracket": 3, "DemandBracket": 0, "Stock": 9999, "Demand": 0}]})
+        [(name, env)] = E.build(self.ev("Market"), self.s, "v")
+        valid(env, "commodity-v3.0.json")
+        m = env["message"]
+        self.assertEqual((name, env["$schemaRef"], m["stationType"], [c["name"] for c in m["commodities"]]),
+                         ("commodity", "https://eddn.edcd.io/schemas/commodity/3", "Orbis", ["gold"]))
+        self.assertEqual(set(m["commodities"][0]) & {"Producer", "Rare", "id", "Category"}, set())
+        self.assertEqual(E.build(self.ev("Market"), self.s, "v"), [])          # unchanged: not again
+
+    def test_wrong_file_waits(self):
+        self.file("Market.json", {"event": "Market", "MarketID": 999, "Items": []})   # the last station's file
+        self.assertEqual(E.build(self.ev("Market"), self.s, "v"), [])
+        self.file("Market.json", {"event": "Market", "Items": []})                   # now this one's (an empty market goes)
+        [(name, env)] = E.build({"timestamp": self.t, "event": "Music"}, self.s, "v")
+        valid(env, "commodity-v3.0.json")
+        self.assertEqual(env["message"]["commodities"], [])
+
+    def test_outfitting_shipyard_fcmaterials(self):
+        self.file("Outfitting.json", {"event": "Outfitting", "Horizons": True, "Items": [
+            {"id": 1, "Name": "hpt_pulselaser_fixed_small", "BuyPrice": 2000}, {"id": 2, "Name": "int_planetapproachsuite", "BuyPrice": 500},
+            {"id": 3, "Name": "anaconda_armour_grade1", "BuyPrice": 0}, {"id": 4, "Name": "paintjob_x", "BuyPrice": 0}]})
+        [(name, env)] = E.build(self.ev("Outfitting"), self.s, "v")
+        valid(env, "outfitting-v2.0.json")
+        self.assertEqual(env["message"]["modules"], ["Hpt_pulselaser_fixed_small", "anaconda_Armour_grade1"])   # EDMC's capitalising
+        self.file("Shipyard.json", {"event": "Shipyard", "AllowCobraMkIV": False, "PriceList": [
+            {"id": 1, "ShipType": "sidewinder", "ShipPrice": 30000}, {"id": 2, "ShipType": "adder", "ShipPrice": 80000}]})
+        [(name, env)] = E.build(self.ev("Shipyard"), self.s, "v")
+        valid(env, "shipyard-v2.0.json")
+        self.assertEqual(env["message"]["ships"], ["adder", "sidewinder"])
+        with open(os.path.join(self.dir, "FCMaterials.json"), "w", encoding="utf-8") as f:
+            json.dump({"timestamp": self.t, "event": "FCMaterials", "MarketID": 3700251648, "CarrierName": "OUT OF THE BLUE",
+                       "CarrierID": "G0X-85Z", "Items": [{"id": 128961524, "Name": "$aerogel_name;", "Name_Localised": "Aerogel",
+                                                         "Price": 500, "Stock": 0, "Demand": 10}]}, f)
+        [(name, env)] = E.build({"timestamp": self.t, "event": "FCMaterials", "MarketID": 3700251648, "CarrierName": "OUT OF THE BLUE",
+                                 "CarrierID": "G0X-85Z"}, self.s, "v")
+        valid(env, "fcmaterials_journal-v1.0.json")
+        self.assertNotIn("Name_Localised", env["message"]["Items"][0])
+
+    def test_docking(self):
+        [(name, env)] = E.build(self.ev("DockingGranted", LandingPad=12, StationType="Orbis"), self.s, "v")
+        valid(env, "dockinggranted-v1.0.json")
+        [(name, env)] = E.build(self.ev("DockingDenied", Reason="NoSpace", StationType="Orbis"), self.s, "v")
+        valid(env, "dockingdenied-v1.0.json")
+
+
 class Answers(unittest.TestCase):
 
     def test_outcome(self):
@@ -371,6 +442,13 @@ class SenderAndPipeline(unittest.TestCase):
         self.state.upload_session = _Session([ConnectionError("unreachable")])
         with self.assertRaises(ConnectionError):                 # the loop backs off
             asyncio.run(self.state.eddn_send([dict(rows[0], schema="fsssignaldiscovered")]))
+
+    def test_stale_station_data_is_not_sent(self):
+        s = session()
+        U.enqueue(self.db, "eddn", "commodity", "J:1", iso_ts(time.time() - 7200), s, {"$schemaRef": "x", "message": {}})
+        [row] = self.rows()
+        self.state.upload_session = _Session([])
+        self.assertEqual(asyncio.run(self.state.eddn_send([row]))[0][1], "dropped")
 
     def test_available_in_the_summary(self):
         self.assertTrue(self.state.uploads_summary()["eddn"]["available"])

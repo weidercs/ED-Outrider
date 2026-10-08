@@ -2,6 +2,12 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · Uploads, part F: EDDN's station data (branch EDMC-Functionality)
+- Markets (commodity/3), outfitting, shipyards and your carrier's bartender materials, read from the journal folder's
+  files when their event comes, only the file that event wrote (its time and MarketID; tried again on the next lines
+  while NFS catches up), each sent only when it changed; station data that could not be sent within an hour is
+  dropped, not sent late. Docking granted and denied too. With this, EDDN carries everything EDMC sends from the journal.
+
 ## 2026-10-08 · Uploads, part E: EDDN's signals (branch EDMC-Functionality)
 - The signals the FSS lists (stations, fleet carriers, tourist beacons, combat zones) go to EDDN as one message per
   run, sent with the line that ends it: Spansh learns where fleet carriers are from these. Mission targets never go,
