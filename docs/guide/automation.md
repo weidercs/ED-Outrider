@@ -40,7 +40,10 @@ Docker), where the HOTAS is plugged in:
   half a second after the press, so keep your hands off the controls). It targets the next system of your Road to
   Riches, Exomastery or trade route first, then the Highway's. Success or failure is said as for auto-target; with
   nothing to target, the voice says so in its personality. Out of the ship (the SRV, on foot, a fighter) a tap does
-  nothing. It needs auto-target's key bindings (see [auto-target](plot-route.md)). It works whether or not
+  nothing. A press during that half second cancels it before any key (a double tap that came a little slow) and
+  gives the status report instead. A double tap's second press must come within 400 ms of the first release
+  (`double_ms` under `[copilot]`; a tap waits that long to be sure it is one). It needs auto-target's key bindings
+  (see [auto-target](plot-route.md)). It works whether or not
   auto-target after a supercharge is on: leave that off and tap the button when you are ready instead.
 - **Double tap:** a status report: fuel and jumps (and any core module under your level), on a Highway route the
   boost and the next route system, the next stop, what is aboard against your rebuy, and the nearest unvisited

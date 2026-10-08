@@ -8,7 +8,9 @@ Newest first, one entry per commit.
   Success or failure is said as for auto-target; with nothing to target, a new line in each personality ("Are you on
   drugs? You don't have a system plotted for me to target."). A **double tap** is the status report (it was the tap),
   a **hold** the hush. "Say the last line again" is no longer on the button. Out of the ship a tap does nothing; in
-  the Rhino every press still marks rigs.
+  the Rhino every press still marks rigs. A press during the half-second wait cancels the targeting before any key
+  and counts as the double tap it was meant to be (the status report); the double-tap window's default is now 400 ms
+  (`[copilot] double_ms`, was 350), so a slow double tap reads as one. A `double_ms` already in your config stays.
 
 ## 2026-10-08 · Version 2026.10.17
 - Nearest place to dock (stations and carriers, the DSSA's carriers, "nearest station" by voice), the co-pilot

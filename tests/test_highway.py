@@ -1830,6 +1830,24 @@ class HighwayAutoTarget(unittest.TestCase):
         self.status["destination"] = None
         asyncio.run(press())
         self.assertEqual(self.state.autotarget_last["system"], "Bridge B")
+        # a press while a tap's targeting counts down (a double press slower than double_ms) cancels it before any key,
+        # and that press's own tap is the status report it was meant to be, not a second target
+        self.state.COPILOT_TARGET_DELAY_S = 0.3
+        self.status["destination"] = None
+        writes, seq = len(self.game.writes), self.state.copilot["seq"]
+
+        async def slow_double():
+            self.state.copilot_gesture("status")
+            await asyncio.sleep(0.05)
+            self.state.copilot_press()
+            self.state.copilot_gesture("status")
+            await self.state.autotarget_test_task
+        asyncio.run(slow_double())
+        self.assertEqual(len(self.game.writes), writes)   # nothing pressed
+        self.assertEqual((self.state.copilot["seq"], self.state.copilot["action"]), (seq + 1, "status"))
+        self.assertEqual(self.state.autotarget_test["state"], "failed")
+        self.state.copilot_press()   # nothing counting down: a press changes nothing
+        self.assertFalse(self.state._copilot_cancelled)
         # double: the status report; hold: the hush
         self.state.copilot_gesture("again")
         self.assertEqual(self.state.copilot["action"], "status")

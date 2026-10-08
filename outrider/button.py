@@ -32,7 +32,7 @@ import time
 
 from .honk import _import_evdev
 
-HOLD_MS, DOUBLE_MS = 600, 350
+HOLD_MS, DOUBLE_MS = 600, 400   # a slow double press must not read as two taps: a tap in the ship targets
 RETRY = 5.0   # s between tries to (re)open the device: unplugged, suspended, not there yet
 
 
@@ -147,8 +147,11 @@ class ButtonWatch:
     A device that goes away (unplugged, suspend) is closed and looked for again every RETRY s; `status` says
     what it is doing, for the alerts dialog. Never grabs the device and never writes to it."""
 
-    def __init__(self, device, button, on_gesture, hold_ms=HOLD_MS, double_ms=DOUBLE_MS, evdev=None):
+    def __init__(self, device, button, on_gesture, hold_ms=HOLD_MS, double_ms=DOUBLE_MS, evdev=None, on_press=None):
         self.device, self.button, self.on_gesture = device, button, on_gesture
+        # on_press(): every press as it happens, before any gesture is decided (a press during a tap's targeting
+        # countdown cancels it: State.copilot_press)
+        self.on_press = on_press
         self.hold_ms, self.double_ms = hold_ms, double_ms
         self.evdev = evdev   # tests hand in a stand-in; None imports the real one
         self.status = "starting"
@@ -230,6 +233,11 @@ class ButtonWatch:
             async for e in dev.async_read_loop():
                 if e.type != ev.ecodes.EV_KEY or e.code != code:
                     continue
+                if e.value == 1 and self.on_press:
+                    try:
+                        self.on_press()
+                    except Exception as err:   # never let it stop the button
+                        print(f"co-pilot button: a press failed: {err!r}", file=sys.stderr)
                 for x in g.feed(stamp(e), e.value):
                     self._hand(x)
                 if timer:

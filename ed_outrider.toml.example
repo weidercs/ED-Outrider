@@ -166,7 +166,7 @@
 #                                  # devices that match, the one that has the button)
 # button = "BTN_TRIGGER_HAPPY5"    # the button's evdev name, or its code number, as --listen prints it
 # hold_ms = 600                    # held this long (ms) or more: a hold
-# double_ms = 350                  # a second press within this long (ms) of the first release: a double tap
+# double_ms = 400                  # a second press within this long (ms) of the first release: a double tap
 
 [highway]
 # The Neutron Highway: a route plotted with Spansh (neutron stars as boosts) that Outrider follows as you fly.

@@ -5182,6 +5182,8 @@ class State:
         self.arrival_seq = 0
         self.tail_error = None     # last journal-tailing exception, shown on the page
         self.materials_version = 0  # bumps when the materials inventory changes (Materials view keys on it)
+        self._copilot_run = (None, None)   # (the run a tap started, its cancel token): a press while it counts cancels it
+        self._copilot_cancelled = False    # that press's own gesture is the double press it meant
         self.counts_version = 0     # bumps with every Recount (the carrier's fold is cached on it and cargo_version)
         self._carrier_fold = (None, None)   # (key, outrider.cargo.carrier_fold's answer)
         # Spansh's commodity names ({ts, norm: {letters-only: name}}): the lookup asks by these; cached a week (meta,
@@ -5513,12 +5515,29 @@ class State:
         if self.in_rhino():
             self.mark_rig(time.time())
             return
+        if self._copilot_cancelled:
+            # this press stopped a tap's targeting while it counted down: a double press too slow for double_ms.
+            # What was meant was the double press, so a tap now is the status report, not another target.
+            self._copilot_cancelled = False
+            if gesture == "status":
+                self.copilot_action("status")
+                return
         if gesture == "status":
             ctx, _ = outrider.rail.context_of(self.journals.status_json, (self.journals.vehicle or {}).get("srv_type"))
             if ctx == "ship":
                 self.copilot_target()
             return
         self.copilot_action("status" if gesture == "again" else gesture)
+
+    def copilot_press(self):
+        """Every press of the co-pilot button as it happens (before its gesture is known): one during a tap's targeting
+        countdown cancels that run before any key is pressed (silently: the run sees its token), and its own gesture is
+        then read as the double press it was meant to be (copilot_gesture)."""
+        run, cancel = self._copilot_run
+        if run is not None and run.get("state") == "counting" and cancel is not None and not cancel.is_set():
+            cancel.set()
+            self._copilot_cancelled = True
+            self.bump()
 
     def copilot_next(self):
         """(start_autotarget_run's kind and aim, None) for the co-pilot button's press, or (None, why there is nothing to
@@ -5557,6 +5576,8 @@ class State:
             out, status = self.start_autotarget_run(kind, countdown=self.COPILOT_TARGET_DELAY_S, aim=aim)
         except RuntimeError:   # no event loop (a test calling it bare): nothing can run
             out, status = {"error": "auto-target is not running"}, 500
+        if status < 400:
+            self._copilot_run = (self.autotarget_test, self._autotarget_next_cancel)
         if status >= 400:
             self.journals.moment("autotarget", ts, ok=False, what="refused", why=out.get("error"),
                                  text=f"Not targeting: {out.get('error') or 'auto-target is not available'}.")
@@ -12738,7 +12759,7 @@ async def run(args, st):
     if st["copilot"]["enabled"]:   # read-only: never grabs the device, never presses anything
         cp = st["copilot"]
         state.button = outrider.button.ButtonWatch(cp["device"], cp["button"], lambda g: state.copilot_gesture(g),
-                                             cp["hold_ms"], cp["double_ms"])
+                                             cp["hold_ms"], cp["double_ms"], on_press=lambda: state.copilot_press())
         button_task = asyncio.create_task(state.button.run())
     print("co-pilot button: " + (f"{st['copilot']['button'] or '?'} on {st['copilot']['device'] or '?'}"
                                  if st["copilot"]["enabled"] else "off ([copilot] enabled)"))
