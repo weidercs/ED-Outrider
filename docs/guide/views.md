@@ -118,8 +118,9 @@ what to do next, the body you have targeted, and the nearest unvisited system.
 - On a planet, the **surface map** appears under the lines (see below).
 
 The **header** shows the galactic region, ranks, fuel, hull, any core module under your level (`module_warn`,
-80%; as of the last Loadout or repair, since the journal logs nothing in between), your carrier's jump countdown,
-the nearest places to sell, and the last backup.
+80%; as of the last Loadout or repair, since the journal logs nothing in between), your carrier's jump countdown
+(and its tritium while it is on a sell order: see [Cargo and trading](cargo-and-trading.md)), the nearest places to
+sell, and the last backup.
 
 The **fuel tile** counts jumps as the ship gets lighter ("≈6 jumps at max range (484 ly), 3,500 at your pace"),
 for any drive, engineered or not, from your own Loadout and jumps. Nearby shows laden range and the targeted

@@ -53,7 +53,7 @@ also run 24/7 on a home server in Docker.
 | ⛏️ **Rhino mining** | A heading-up surface map on Now with your rigs, sample points and ship, and every collection kept per body. |
 | 📱 **A tablet in the cockpit** | Every page in a touch layout with nine themes, alerts as banners, game buttons on a control rail, and the voice on the tablet if you like. |
 | 🎙️ **Ask out loud** | "Hey Vespa, status report": answered in the voice from what Outrider knows, with an optional AI for anything else. |
-| 🎯 **Automation (game PC; Linux, Windows experimental)** | Auto honk fires the Discovery Scanner on arrival, auto-target targets the next Highway system, and one HOTAS button asks for a status report. |
+| 🎯 **Automation (game PC; Linux, Windows experimental)** | Auto honk fires the Discovery Scanner on arrival, auto-target targets the next route system after a supercharge, and one HOTAS button (Linux) targets the next route system with a tap, gives a status report with a double tap and hushes with a hold. |
 
 ## 🚀 Getting started
 

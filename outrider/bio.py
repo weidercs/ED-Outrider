@@ -524,7 +524,7 @@ REGION_CELL = 4096 / 83   # ly per grid cell (_cached_region's 83 cells per 4096
 
 
 def region_layer():
-    """The region map for the Highway tab's galaxy map, or None without rules: klightspeed's grid as it is shipped
+    """The region map for the Plot Route tab's galaxy map, or None without rules: klightspeed's grid as it is shipped
     (`rows`: one list per row of [run length, region number] pairs, row 0 at the smallest Z, each run going +X from
     the origin; 0 is outside the map), the names, and a label point per region (`labels`: n, name, x, z, cells).
     A row's cells are `cell` ly square from `origin` [x, z], so a position's cell is the one region_number() reads.

@@ -28,10 +28,13 @@ years (EDSM as a fallback when Spansh is down) and serves http://127.0.0.1:8025/
   Map        3D canvas of the neighbourhood with your path, first discoveries, boost stars
              (neutron / white dwarf) and your carrier; fills the window; left-drag rotates,
              right-drag moves, the wheel zooms
-  Highway    the Neutron Highway: a route plotted with Spansh (the exact plotter from a flown ship's Loadout, or
-             the neutron plotter from a range), followed as you fly (next stop, detour, back on it, complete): the
+  Plot Route a route plotted with Spansh and followed as you fly: the Neutron Highway (the exact plotter from a
+             flown ship's Loadout, or the neutron plotter from a range), and in one slot of its own a Road to Riches,
+             an Expressway to Exomastery (outrider/riches.py) or a trade route (outrider/cargo.py: station to station,
+             what to sell and buy); next stop, detour, back on it, complete: the
              jump list, a top-down map on the galactic regions (or your own galaxy image), a line under the tiles on
-             Overview / Nearby / Here, the next system put on
+             Overview / Nearby / Here, 🎯 on any route system, "📍 Nearest…" (the nearest station or fleet carrier
+             you can dock at and use: Spansh, the DSSA's carriers, your own; outrider/dock.py), the next system put on
              the desktop clipboard (wl-copy / xclip, or Windows') and said on arrival; optionally (Linux, Windows experimental;
              off by default) the
              next system targeted after a supercharge, or on demand with 🎯 Target next / ⟳ Retry, by key
@@ -42,7 +45,9 @@ years (EDSM as a fallback when Spansh is down) and serves http://127.0.0.1:8025/
              each death cost including exobiology), your most valuable finds; exports
   Log        every journal event with a one-line summary (outrider/log.py), filtered by category, time and
              text, read straight from the journal files and updated live
-  Materials  engineering materials against their caps, and how many FSD injections and other
+  Materials  Cargo: your ship's hold with what you paid and your fleet carrier's hold, tracked from sell orders and
+             the journal (outrider/cargo.py), with Sell / Buy from Spansh's markets; then
+             engineering materials against their caps, and how many FSD injections and other
              syntheses (limpets, SRV refuel and repair, Rhino rig restocks) you can make (outrider/materials.py);
              Mining sites: each body your SRV mined, with minerals and tons, saved rig spots, mining locations
   My firsts  unsold first discoveries, and visited systems nearby with work worth going back for
@@ -58,7 +63,8 @@ The header shows the current system (coordinates, visit count), the commander (c
 sales since, ship), fuel (jumps left simulated from your ship's mass and your own jumps, the laden range, how
 scoopable your recent stars were, jumps since the last scoop and FSD boosts on hand), core modules under
 module_warn health, your
-carrier (distance, UC / Vista services), the latest codex first, unsold firsts, and the unsold
+carrier (distance, UC / Vista services, its tritium and 500 ly jumps while tritium is on a sell order; decommissioning
+in red), the latest codex first, unsold firsts, and the unsold
 cartographic + exobiology estimate from outrider/unsold.py. Targeting a system plays a sound: fanfare if
 neither Spansh nor EDSM has heard of it, upbeat if it is not fully scanned, thud if you have been
 there or it is fully scanned, plus an alert if you are leaving unfinished work behind. Arriving
@@ -257,7 +263,7 @@ HIGHWAY = {"clipboard": True, "autotarget": False, "autotarget_delay": 5.0, "eff
            "autotarget_key_delay": 0.05, "autotarget_keys": {}, "autotarget_plot": list(outrider.target.DEFAULT_PLOT),
            "autotarget_search": list(outrider.target.DEFAULT_SEARCH), "autotarget_submit": list(outrider.target.DEFAULT_SUBMIT),
            "autotarget_dry_run": False}
-AUTOTARGET_TEST_COUNTDOWN = 5   # s: the Highway tab's "test now": time to click into the game before the sequence
+AUTOTARGET_TEST_COUNTDOWN = 5   # s: the Plot Route tab's "test now": time to click into the game before the sequence
 AUTOTARGET_HONK_WAIT = 60       # s an auto-target waits for an auto honk on the same arrival to finish (honk first)
 # The Highway map's optional background image ([highway] background_image): only the configured file is served
 # (GET /api/highway/background), and only one of these image types, checked by its first bytes too (no SVG: it can
@@ -1028,11 +1034,11 @@ double_ms = {st["copilot"]["double_ms"]}   # ms between a tap's release and the 
 
 [highway]   # the Neutron Highway: a Spansh route that Outrider follows as you fly
 clipboard = {"true" if st["highway"]["clipboard"] else "false"}   # on arriving at a route system, copy the next one's name to the desktop clipboard (wl-copy or xclip on Linux; built in on Windows)
-# Auto-target (Linux, Windows experimental; off by default; the Highway tab can switch it): after a neutron supercharge on the route, press keys
+# Auto-target (Linux, Windows experimental; off by default; the Plot Route tab can switch it): after a neutron supercharge on the route, press keys
 # in the galaxy map to make the next route system the target (outrider/target.py; python3 -m outrider.target --show
 # prints the steps with your keys). The keys go to whichever window has focus. It is key-press automation of the same
 # kind as auto honk: check Frontier's rules for yourself.
-autotarget = {"true" if st["highway"]["autotarget"] else "false"}   # auto-target the next route system after a supercharge (the Highway tab switches it too)
+autotarget = {"true" if st["highway"]["autotarget"] else "false"}   # auto-target the next route system after a supercharge (the Plot Route tab switches it too)
 autotarget_delay = {st["highway"]["autotarget_delay"]:g}   # seconds after the supercharge (0 to 60)
 autotarget_entry = {q(st["highway"]["autotarget_entry"])}   # "type" the name on the virtual keyboard (US layout), or "paste" it (wl-copy/xclip, then Ctrl+V)
 autotarget_map_wait = {st["highway"]["autotarget_map_wait"]:g}   # seconds to wait for the galaxy map to open (and close) before giving up
@@ -10107,7 +10113,7 @@ class State:
                 if k.startswith("autotarget_") and k[len("autotarget_"):] in outrider.target.DEFAULTS}
 
     def autotarget_info(self):
-        """The Highway tab's auto-target block (in the payload, so the result shows as it comes)."""
+        """The Plot Route tab's auto-target block (in the payload, so the result shows as it comes)."""
         cfg, t, h = self.highway_cfg, self.targeter, self.honker
         info = {"enabled": bool(cfg["autotarget"]), "delay": cfg["autotarget_delay"], "entry": cfg.get("autotarget_entry"),
                 "dry_run": bool(cfg.get("autotarget_dry_run")), "available": bool(t and t.available),
@@ -10249,7 +10255,7 @@ class State:
         return {"ok": True, "id": id_, "label": b["label"], "before": b["state"], "confirm_s": outrider.rail.RAIL_CONFIRM_S}, 200
 
     def set_autotarget(self, enabled=None, delay=None):
-        """The Highway tab's toggle and delay (remembered over restarts, like auto honk's toggle)."""
+        """The Plot Route tab's toggle and delay (remembered over restarts, like auto honk's toggle)."""
         if enabled is not None:
             self.highway_cfg["autotarget"] = bool(enabled)
         if delay is not None:

@@ -1450,7 +1450,7 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["riches", "Road to Riches (a route plotted in Plot Route): on arriving at a route system, the bodies still worth scanning or mapping there and the next stop, and route complete", null],
   ["trade", "a trade route (plotted in Plot Route): on arriving at a stop, what to sell and buy there; once that is done, the hop's profit and the next stop; and route complete", null],
   ["highway", "the Neutron Highway (a route plotted in Plot Route): the next stop on arriving at a route system (with the boost and refuel stops), off route, back on the highway, and highway complete", null],
-  ["autotarget", "the Neutron Highway's auto-target (when it is on, or a test): whether the next route system was targeted", null],
+  ["autotarget", "auto-target (after a supercharge when it is on, a test, Target next, 🎯, the co-pilot button's tap): whether the system was targeted, and nothing to target when the button found none", null],
   ["find", "a valuable body just scanned (over your highlight levels)", "find"],
   ["jumponium", "a landable body just scanned has a material your FSD injections are short of (premium or standard at 2 or fewer): said with the FSS debrief, or alone when the FSS never completes", "find"],
   ["sampling", "leaving a body with exobiology unfinished (untouched genera only if you landed there); a species completed", "alert"],

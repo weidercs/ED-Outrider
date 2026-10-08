@@ -172,11 +172,11 @@
 # The Neutron Highway: a route plotted with Spansh (neutron stars as boosts) that Outrider follows as you fly.
 # clipboard = true          # on arriving at a route system, copy the next system's name to the desktop clipboard
 #                           # (wl-copy under Wayland, xclip under X11; Linux), ready to paste into the galaxy map
-# Auto-target (Linux, Windows experimental; off by default; the Highway tab can switch it): after an FSD supercharge in a route system,
+# Auto-target (Linux, Windows experimental; off by default; the Plot Route tab can switch it): after an FSD supercharge in a route system,
 # press keys in the galaxy map to make the next route system the target (outrider/target.py), through the same
 # virtual keyboard as auto honk. The keys go to whichever window has focus. It is key-press automation of the same
 # kind as auto honk: whether it fits Frontier's rules is your call. python3 -m outrider.target --show prints the steps.
-# The Highway tab's 🎯 Target next (and ⟳ Retry) runs the same steps on demand, after a 5 s countdown, whether or not
+# The Plot Route tab's 🎯 Target next (and ⟳ Retry, and the co-pilot button's tap) runs the same steps on demand, after a 5 s countdown, whether or not
 # autotarget is on.
 # autotarget = false
 # autotarget_delay = 5      # seconds after the supercharge (0 to 60)

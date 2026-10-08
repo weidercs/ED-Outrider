@@ -29,6 +29,12 @@ upstream project's choices, not rules of the game.
 - **One window speaks** with the page open in several, so nothing is said twice.
 - **Auto honk is off until ticked,** because its key presses go to whichever window has focus.
 - **The co-pilot button only reads the device,** never grabs it; unbinding it in the game is the player's job.
+- **The co-pilot button's layout** (the author, 2026-10-08): flying the ship, a tap targets the next route system
+  (the survey / trade route's first, then the Highway's; "nothing to target" said in the personality when there is
+  none), a double tap is the status report, a hold the hush; out of the ship a tap does nothing; the Rhino keeps rig
+  marking. "Say again" left the button (the page keeps it). A tap is only known once `double_ms` (400 ms, was 350)
+  passes, then 0.5 s more before any key; a press in that half second cancels the run and counts as the slow double
+  tap it was (the status report), so a slow double tap never opens the galaxy map.
 - **Listens on 127.0.0.1 by default; a password is optional.** Opening it to the network is an explicit setting; the
   Host and cross-site guards stop other web sites, not people on your network. `[server] password` stops those: a
   device that is not this PC needs a session (the `outrider_session` cookie, or `Authorization: Bearer` for the
@@ -147,7 +153,8 @@ upstream project's choices, not rules of the game.
   Target next and Retry (review Q4) are one action, POST /api/highway/target: a run the page asks for, like "test
   now" but against the route (the next system; off the route the closest one, as the line's "nearest"; before the
   start, the start), with or without the toggle; {countdown} 0-10 s, 5 by default for the desktop page (the click
-  took the keyboard focus), 0 for the tablet. Not on the X56 co-pilot button (the author's decision). Clearing or
+  took the keyboard focus), 0 for the tablet. On the co-pilot button since 2026-10-08 (the author's later call: see the
+  button's layout below). Clearing or
   replacing the route stops it like the automatic run; switching the toggle off does not (it is not the toggle's
   run). Retry shows only while the failed run's row (autotarget_last's route and index) is still the one Target next
   would aim at.
@@ -339,7 +346,10 @@ confirmed while playing. Treat reports about them as likely real.
   in the author's journals (the carrier was bought before them).
 - Status.json Flags2 on-foot-in-station bits (3, 13, 14) counting as docked.
 - Auto honk end to end since it reads the binding from the controls preset; the fire-group and combat-mode waits.
-- The co-pilot button on a real device (`python3 -m outrider.button --listen`), including rig marking in a live Rhino.
+- The co-pilot button on a real device (`python3 -m outrider.button --listen`), including rig marking in a live Rhino,
+  and its tap targeting the next route system in a live game (the slow double tap's cancel included).
+- The Nearest finder's Plot here and the "nearest station" voice answer from the app in a live session (checked against
+  live Spansh and DSSA data on a scratch server only).
 - Rig leash warnings, rigs lost on SRVDestroyed, death or relog, the rigs-still-out warning's timing, and
   `Destination.Body` for a mining location (assumed to be the planet).
 - The rig restock recipe (3 Iron, 2 Nickel, 1 Mechanical Equipment), taken from a community guide.

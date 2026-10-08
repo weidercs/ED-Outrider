@@ -2,7 +2,7 @@
 question into text and sends it to POST /api/ask; the answer is said on the PC and shown as a caption everywhere.
 
 First the fixed commands, matched without any AI (resources/ask.json: editable phrases): status report, fuel,
-unsold, next jump, what's left here, nearest unvisited, hush, unhush. Their answers come from the same read-only tools
+unsold, next jump, what's left here, nearest unvisited, nearest station (or carrier, Vista, repair...), hush, unhush. Their answers come from the same read-only tools
 the MCP bridge serves (outrider/tools.py), called in-process. Then, only when [assistant] enabled is true, an optional
 AI layer for anything else: an OpenAI-compatible chat-completions endpoint (Ollama, Venice.ai, OpenAI...) given those
 same tools. It runs on the PC; the key never leaves it. Nothing is sent anywhere unless it is configured.

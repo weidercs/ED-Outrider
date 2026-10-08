@@ -2,6 +2,14 @@
 
 Newest first, one entry per commit.
 
+
+## 2026-10-08 · Docs brought up to date
+- The README's Automation row, the guide's header-tile and button wording, the program's own description
+  (`--help`: Plot Route with its route types and the Nearest finder, Cargo in Materials, the Carrier tile's
+  tritium), "Plot Route" where config help and comments still said "the Highway tab", the alerts dialog's auto-target
+  description, AGENT_GUIDE (the button's gestures and State methods, the tools' cached nearest read, the voice's
+  question text), DESIGN_NOTES (the button's layout replaces the old "not on the button" decision; what is not yet
+  tried in a live game).
 ## 2026-10-08 · The co-pilot button targets the next route system
 - The co-pilot button's layout (the author's): flying the ship, a **tap** targets the next route system in the galaxy
   map, half a second after the press: the Road to Riches / Exomastery / trade route's next first, else the Highway's.
