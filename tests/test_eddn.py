@@ -239,6 +239,45 @@ class RouteCodexSettlement(unittest.TestCase):
         self.assertEqual(E.build({k: v for k, v in ev.items() if k != "Latitude"}, self.s, "v"), [])   # a login at a port
 
 
+@unittest.skipUnless(jsonschema, "jsonschema is not installed (requirements-dev.txt)")
+class Signals(unittest.TestCase):
+    """Part E: a run of FSSSignalDiscovered lines, sent as one message when the next other line comes."""
+
+    def sig(self, name, addr, **kw):
+        return dict({"timestamp": "2026-10-08T10:05:00Z", "event": "FSSSignalDiscovered", "SystemAddress": addr, "SignalName": name,
+                     "SignalName_Localised": name}, **kw)
+
+    def test_odyssey_order(self):
+        s = session()
+        s.feed(dict(FSDJUMP, SystemAddress=1, StarSystem="Before"))
+        addr = FSDJUMP["SystemAddress"]
+        lines = [self.sig("OUT OF THE BLUE G0X-85Z", addr, IsStation=True, SignalType="FleetCarrier"),
+                 self.sig("$USS_Type_MissionTarget;", addr, USSType="$USS_Type_MissionTarget;"),
+                 self.sig("Distress call", addr, USSType="$USS_Type_DistressSignal;", TimeRemaining=600, ThreatLevel=0)]
+        for ev in lines:                                         # written before the jump: held back
+            self.assertEqual(E.build(ev, s, "v"), [])
+        s.feed(FSDJUMP)                                          # the hub feeds the session first, then builds
+        out = E.build(FSDJUMP, s, "v")
+        self.assertEqual([n for n, _ in out], ["fsssignaldiscovered", "journal"])
+        env = out[0][1]
+        valid(env, "fsssignaldiscovered-v1.0.json")
+        m = env["message"]
+        self.assertEqual([x["SignalName"] for x in m["signals"]], ["OUT OF THE BLUE G0X-85Z", "Distress call"])   # no mission target
+        self.assertNotIn("TimeRemaining", m["signals"][1])
+        self.assertEqual((m["StarSystem"], m["timestamp"]), ("Smojooe AR-E b25-8", "2026-10-08T10:05:00Z"))
+
+    def test_horizons_order_and_another_system(self):
+        s = session()
+        s.feed(FSDJUMP)
+        addr = FSDJUMP["SystemAddress"]
+        self.assertEqual(E.build(self.sig("A station", addr), s, "v"), [])
+        self.assertEqual(E.build(self.sig("Elsewhere", 999), s, "v"), [])
+        out = E.build({"timestamp": "2026-10-08T10:06:00Z", "event": "Music", "MusicTrack": "x"}, s, "v")
+        self.assertEqual([x["SignalName"] for x in out[0][1]["message"]["signals"]], ["A station"])   # the stray one dropped
+        E.build(self.sig("Far", 999), s, "v")                    # a batch whose first is another system's: all dropped
+        self.assertEqual(E.build({"timestamp": "2026-10-08T10:07:00Z", "event": "Music"}, s, "v"), [])
+
+
 class Answers(unittest.TestCase):
 
     def test_outcome(self):

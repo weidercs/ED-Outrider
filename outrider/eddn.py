@@ -195,9 +195,36 @@ def settlement_message(ev, session):
     return m
 
 
+SIGNAL_KEYS = ("timestamp", "SignalName", "SignalType", "IsStation", "USSType", "SpawningState", "SpawningFaction",
+               "SpawningPower", "OpposingPower", "ThreatLevel")
+
+
+def signals_message(ev, session):
+    """fsssignaldiscovered/1: a run of FSSSignalDiscovered lines is gathered and sent as one message when the next
+    other line comes (Odyssey writes them before the jump that takes you there, Horizons after it: either way the
+    session is in that system by then). Signals of another system are dropped, the whole batch when its first is;
+    mission targets never go (EDDN refuses them). This is how Spansh learns where fleet carriers are."""
+    if ev.get("event") == "FSSSignalDiscovered":
+        session.pending.setdefault("signals", []).append(ev)
+        return None
+    batch = session.pending.pop("signals", None)
+    if not batch or not session.located(batch[0].get("SystemAddress")):
+        return None
+    signals = [{k: x[k] for k in SIGNAL_KEYS if k in x} for x in batch
+               if x.get("SystemAddress") == session.addr and x.get("USSType") != "$USS_Type_MissionTarget;"
+               and x.get("SignalName")]
+    if not signals:
+        return None
+    return {"event": "FSSSignalDiscovered", "timestamp": signals[0]["timestamp"], "SystemAddress": session.addr,
+            "StarSystem": session.system, "StarPos": list(session.pos), "signals": signals}
+
+
 def build(ev, session, software_version, test=False):
     """The EDDN messages a journal event makes: [(schema name, envelope)]."""
     out = []
+    sig = signals_message(ev, session)   # first: a waiting batch goes out with the line that ends it
+    if sig is not None:
+        out.append(("fsssignaldiscovered", envelope("fsssignaldiscovered", sig, session, software_version, 1, test)))
     m = journal_message(ev, session)
     if m is not None:
         out.append(("journal", envelope("journal", m, session, software_version, 1, test)))

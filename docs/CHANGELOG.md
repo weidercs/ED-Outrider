@@ -2,6 +2,11 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · Uploads, part E: EDDN's signals (branch EDMC-Functionality)
+- The signals the FSS lists (stations, fleet carriers, tourist beacons, combat zones) go to EDDN as one message per
+  run, sent with the line that ends it: Spansh learns where fleet carriers are from these. Mission targets never go,
+  nor a signal of another system.
+
 ## 2026-10-08 · Uploads, part D: EDDN's routes, codex entries, settlements (branch EDMC-Functionality)
 - A plotted route (from NavRoute.json, only the file that NavRoute event wrote: checked against its time, tried again on
   the next lines while NFS catches up), codex entries (the body named only from the live Status.json, its id only when
