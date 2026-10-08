@@ -2,6 +2,12 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · Uploads, part A4: catching up (branch EDMC-Functionality)
+- Each upload remembers how far through the journals it has got (a mark). What was played while Outrider was not
+  running is sent at the next start, up to a week back (the author's cap); a journal re-read or a restore sends
+  nothing twice; switching an upload on starts from that moment. Lines NFS delivers late are no longer lost either.
+- A stopped Outrider's lease file stays with its marks, so another one switched on starts where it stopped.
+
 ## 2026-10-08 · Uploads, part F: EDDN's station data (branch EDMC-Functionality)
 - Markets (commodity/3), outfitting, shipyards and your carrier's bartender materials, read from the journal folder's
   files when their event comes, only the file that event wrote (its time and MarketID; tried again on the next lines

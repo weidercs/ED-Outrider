@@ -15,10 +15,16 @@ the config file; the page's switch wins).
 
 `[eddn] test = true` sends to EDDN's test schemas only: nothing reaches the live data. Good for a first try.
 
-## What is never sent
+## Catching up, and what is never sent
 
-- Anything Outrider reads while catching up: at start, on a journal re-read, after a restore, or from a legacy folder.
-  Only lines the running game writes, at most five minutes old.
+Each upload remembers how far through your journals it has got. If Outrider was not running while you played (or
+the server was down), the next start sends what you played meanwhile, up to a week back; anything older is skipped.
+A journal re-read or a restore sends nothing twice, and switching an upload on starts from that moment: your history
+is never uploaded. What cannot be caught up: markets, outfitting, shipyards and plotted routes come from files the
+game rewrites each time, so for those Outrider sends only what it saw while running; a late codex entry has no body
+name (that comes from the live Status.json).
+
+- Anything older than a week, or from a legacy folder (journals imported once).
 - Anything from the game's beta, or from the Legacy game (3.8): Settings says so ("unavailable: the Legacy game").
 - Anything while you are crew in another commander's ship.
 - Anything under `--simulate`.
@@ -29,9 +35,12 @@ Two Outriders reading the same journals (the game PC's and a server's), or Outri
 twice: EDDN has no way to tell. So:
 
 - Each uploading Outrider leaves a small note in your journal folder (`.outrider/uploads-<id>.json`, rewritten every
-  minute, removed when it stops). Another Outrider that sees a fresh note will not start the same upload ("Already
-  uploading from erangel"); if both started at once, both hold and say so until you switch one off. A note left by a
-  crash goes stale after five minutes.
+  minute). Another Outrider that sees a fresh note will not start the same upload ("Already uploading from erangel");
+  if both started at once, both hold and say so until you switch one off. A note left by a crash goes stale after
+  five minutes. When an Outrider stops, its note stays with how far it got: switch the upload on in another one and it
+  starts there, with nothing missed and nothing sent twice.
+- Catching up cannot know who else uploaded while it was down: if EDMC (or a read-only Outrider, which leaves no note)
+  sent that time, it is sent again. Keep one uploader.
 - An Outrider that cannot write in the journal folder (a read-only share) can still read the others' notes. If
   another one already uploads, it refuses ("Filesystem is read-only and another instance is set for upload");
   otherwise it asks first: "Is this the only Outrider uploading? Other instances can't see this one".

@@ -25,7 +25,8 @@ import time
 
 from outrider.core import ts_seconds
 
-MAX_AGE_S = 300          # a live line older than this (by this machine's clock) is not uploaded: NFS delay, clock skew
+MAX_AGE_S = 7 * 86400    # a line older than this (by this machine's clock) is never uploaded, even on a catch-up (the
+#                          author's cap: a forgotten instance must not send months of play; listeners may refuse old data)
 SKEW_S = 300             # ...and one stamped this far in the future still counts (the game PC's clock ahead)
 SOURCE_RE = re.compile(r"^Journal(Beta|Alpha)?\.")
 
@@ -240,27 +241,43 @@ def counts(db, service):
             "last_sent": last[0] if last else None}
 
 
+def position(path_or_name, offset):
+    """A journal line's place, comparable across instances reading the same folder: (file name, byte offset). Journal
+    file names sort by their time."""
+    return (os.path.basename(path_or_name), int(offset))
+
+
 class UploadHub:
     """Every live-folder line goes through line(). builders: {service: fn(ev, session) -> [(schema, message)]}: what a
     line uploads to that service (the EDDN and EDSM parts add theirs). enabled(service) -> bool says which are on now
-    (the settings, the leases, simulate). Lines are queued only in "live" mode, recent, and from a session nothing
-    blocks."""
+    (the settings, the leases, simulate).
 
-    def __init__(self, db, builders=None, enabled=None, clock=time.time, max_age=MAX_AGE_S):
+    Each service has a mark (marks[service] = [file name, offset, timestamp]): how far its lines have been queued. A
+    line is queued only after its service's mark, at most MAX_AGE_S old, from a session nothing blocks; the mark then
+    moves on. The mark survives a journal re-read (it lives in the database's meta, not in the journal tables), so a
+    re-read sends nothing again; catch_up() sends what was played while Outrider was not running (from the mark to
+    where the start-up scan got to). A service with no mark yet starts at the line it first sees (switching it on
+    sets one: State.set_upload)."""
+
+    def __init__(self, db, builders=None, enabled=None, clock=time.time, max_age=MAX_AGE_S, save=None):
         self.db = db
         self.builders = dict(builders or {})
         self.enabled = enabled or (lambda service: False)
         self.clock, self.max_age = clock, max_age
+        self.save = save                 # save(marks): stores the marks (State: meta upload_marks)
         self.session = Session()
-        self.primed = set()          # files whose top this session has read
-        self.queued = 0              # messages queued since start (the status view)
+        self.primed = set()              # files whose top this session has read
+        self.queued = 0                  # messages queued since start (the status view)
+        self.marks, self.marks_dirty = {}, False
 
     def active(self):
         return any(self.enabled(s) for s in self.builders)
 
-    def prime(self, path, upto):
-        """Feed the session the lines of `path` before byte `upto` (state only): a file met part way through."""
-        self.primed.add(os.path.basename(path))
+    def prime(self, path, upto, session=None):
+        """Feed a session the lines of `path` before byte `upto` (state only): a file met part way through."""
+        session = session or self.session
+        if session is self.session:
+            self.primed.add(os.path.basename(path))
         try:
             with open(path, "rb") as f:
                 data = f.read(upto)
@@ -273,11 +290,48 @@ class UploadHub:
                 except ValueError:
                     continue
                 if isinstance(ev, dict):
-                    self.session.feed(ev, os.path.basename(path))
+                    session.feed(ev, os.path.basename(path))
+
+    def after_mark(self, service, pos):
+        m = self.marks.get(service)
+        return m is None or (m[0], m[1]) < pos
+
+    def set_mark(self, service, pos, ts=None):
+        self.marks[service] = [pos[0], pos[1], ts]
+        self.marks_dirty = True
+
+    def flush(self):
+        """Store the marks (in the tick's transaction) when they moved."""
+        if self.marks_dirty and self.save:
+            self.save(dict(self.marks))
+        self.marks_dirty = False
+
+    def _queue(self, ev, b, offset, session, services):
+        """Build and queue `ev` for each of `services` (whose mark it is after), moving their marks."""
+        n = 0
+        pos = position(b, offset)
+        recent = live_line(ev.get("timestamp"), self.clock(), self.max_age)
+        for service in services:
+            if not self.after_mark(service, pos):
+                continue
+            self.set_mark(service, pos, ev.get("timestamp"))
+            if not recent or session.blocked():
+                continue
+            try:
+                messages = self.builders[service](ev, session) or []
+            except (KeyError, TypeError, ValueError, AttributeError, IndexError) as e:   # an odd line: skip it
+                print(f"{service}: a line could not be prepared ({type(e).__name__}: {e})")
+                continue
+            for i, (schema, message) in enumerate(messages):
+                if enqueue(self.db, service, schema, f"{b}:{offset}" + (f"#{i}" if i else ""), ev.get("timestamp"),
+                           session, message):
+                    n += 1
+        self.queued += n
+        return n
 
     def line(self, path, offset, raw, mode):
-        """One journal line (bytes) at `offset` of `path`. mode: "catchup" (state only) or "live" (may queue).
-        Returns the number of messages queued. Database errors propagate (the tick is rolled back)."""
+        """One journal line (bytes) at `offset` of `path`. mode: "catchup" (the start-up scan: state only) or "live"
+        (the running tail: may queue). Returns the number of messages queued. Database errors propagate."""
         b = os.path.basename(path)
         if b not in self.primed:
             self.prime(path, offset)
@@ -289,22 +343,50 @@ class UploadHub:
         if not isinstance(ev, dict):
             return 0
         self.session.feed(ev, b)
-        if mode != "live" or not live_line(ev.get("timestamp"), self.clock(), self.max_age) or self.session.blocked():
+        if mode != "live":
             return 0
+        return self._queue(ev, b, offset, self.session, [s for s in self.builders if self.enabled(s)])
+
+    def catch_up(self, service, dirs, upto):
+        """Queue what `service` missed: the live folders' lines after its mark, up to where the reader has got to
+        (upto: {path: offset}, the start-up scan's), through a session of their own. Lines over MAX_AGE_S old only
+        move the mark. A line already queued is not queued again (the outbox's UNIQUE). Returns the number queued."""
+        if service not in self.builders or service not in self.marks:
+            return 0
+        start = self.marks[service][0]
+        files = {}
+        for d in dirs:
+            for p in glob_journals(d):
+                b = os.path.basename(p)
+                if b >= start and (b not in files or upto.get(p, 0) > upto.get(files[b], 0)):
+                    files[b] = p
         n = 0
-        for service, build in self.builders.items():
-            if not self.enabled(service):
+        session = Session()
+        for b in sorted(files):
+            p = files[b]
+            end = upto.get(p)
+            if end is None:
                 continue
             try:
-                messages = build(ev, self.session) or []
-            except (KeyError, TypeError, ValueError, AttributeError, IndexError) as e:   # an odd line: skip it
-                print(f"{service}: a line could not be prepared ({type(e).__name__}: {e})")
+                with open(p, "rb") as f:
+                    data = f.read(end)
+            except OSError:
                 continue
-            for i, (schema, message) in enumerate(messages):
-                if enqueue(self.db, service, schema, f"{b}:{offset}" + (f"#{i}" if i else ""), ev.get("timestamp"),
-                           self.session, message):
-                    n += 1
-        self.queued += n
+            session.dir = os.path.dirname(p)
+            at = 0
+            for raw in data.split(b"\n"):
+                here, at = at, at + len(raw) + 1
+                if not raw.strip() or at > end + 1:
+                    continue
+                try:
+                    ev = json.loads(raw)
+                except ValueError:
+                    continue
+                if not isinstance(ev, dict):
+                    continue
+                session.feed(ev, b)
+                n += self._queue(ev, b, here, session, [service])
+        self.flush()
         return n
 
     def status(self, st):
@@ -313,12 +395,18 @@ class UploadHub:
         self.session.status_body = st.get("body") if st.get("live") else None
 
     def snapshot(self):
-        return (self.session.snapshot(), set(self.primed), self.queued)
+        return (self.session.snapshot(), set(self.primed), self.queued, copy.deepcopy(self.marks), self.marks_dirty)
 
     def restore(self, snap):
-        s, primed, self.queued = snap
+        s, primed, self.queued, marks, self.marks_dirty = snap
         self.session.restore(s)
         self.primed = set(primed)
+        self.marks = copy.deepcopy(marks)
+
+
+def glob_journals(d):
+    import glob
+    return sorted(glob.glob(os.path.join(glob.escape(d), "Journal.*.log")))
 
 
 # ---- settings ----
@@ -448,6 +536,32 @@ class Leases:
                     out[m.group(1)] = {"host": str(info.get("host") or "another Outrider"),
                                        "services": [s for s in info.get("services") or [] if s in SERVICES]}
         return out
+
+
+def lease_marks(journal_dirs, instance):
+    """The furthest mark per service in the other instances' lease files, live or not (a stopped instance leaves its
+    file with no services and its last marks: a handover note). {service: [file, offset, ts]}."""
+    out = {}
+    for d in journal_dirs:
+        folder = os.path.join(d, LEASE_DIR)
+        try:
+            names = os.listdir(folder)
+        except OSError:
+            continue
+        for n in names:
+            m = re.fullmatch(r"uploads-([A-Za-z0-9_-]+)\.json", n)
+            if not m or m.group(1) == instance:
+                continue
+            try:
+                with open(os.path.join(folder, n), encoding="utf-8") as f:
+                    info = json.load(f)
+            except (OSError, ValueError):
+                continue
+            for service, mark in ((info or {}).get("marks") or {}).items() if isinstance(info, dict) else ():
+                if service in SERVICES and isinstance(mark, list) and len(mark) >= 2 and isinstance(mark[1], int):
+                    if service not in out or (mark[0], mark[1]) > (out[service][0], out[service][1]):
+                        out[service] = list(mark[:3])
+    return out
 
 
 def edmc_uploads(home=None, environ=None, platform=None, running=None):

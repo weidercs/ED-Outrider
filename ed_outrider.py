@@ -2711,6 +2711,8 @@ class Journals:
                     print(f"journal line skipped ({type(e).__name__}: {e}): {line[:200]!r}", file=sys.stderr)
                 finally:
                     self.line_source = ""
+        if self.uploads is not None and self.upload_mode == "live":
+            self.uploads.flush()   # the uploads' marks moved with these lines: stored in the same transaction
         self.db.execute("INSERT OR REPLACE INTO journal_files (path, offset) VALUES (?, ?)",
                         (path, start + end))
         self.offsets[path] = start + end
@@ -5467,7 +5469,10 @@ class State:
         self.upload_cfg = json.loads(json.dumps(outrider.uploads.DEFAULTS))
         self.upload_senders, self.upload_tasks, self.upload_session = {}, {}, None
         self.upload_status = {}   # service -> {error, at, held}: the last round's outcome for the status view
-        self.uploads_hub = outrider.uploads.UploadHub(db, {"eddn": self.eddn_build}, enabled=self.upload_on)
+        self.uploads_hub = outrider.uploads.UploadHub(db, {"eddn": self.eddn_build}, enabled=self.upload_on,
+                                                      save=lambda marks: meta_set(self.db, "upload_marks", marks))
+        marks = meta_get(db, "upload_marks")   # how far each service has queued (live-only: a re-read keeps it)
+        self.uploads_hub.marks = {k: v for k, v in marks.items() if isinstance(v, list)} if isinstance(marks, dict) else {}
         self.upload_senders["eddn"] = self.eddn_send
         self.eddn_hold = outrider.eddn.SchemaHold()
         journals.uploads = self.uploads_hub
@@ -9236,16 +9241,20 @@ class State:
             self._lease_beat = 0
         self._lease_beat += 1
         wanted = [s for s in outrider.uploads.SERVICES if self.upload_wanted(s)]
-        info = {"host": socket.gethostname(), "services": wanted, "beat": self._lease_beat, "version": outrider.__version__}
+        info = {"host": socket.gethostname(), "services": wanted, "beat": self._lease_beat, "version": outrider.__version__,
+                "marks": self.uploads_hub.marks}
         self.lease_writable = {d: outrider.uploads.write_lease(d, self.leases.instance, info) for d in LIVE_DIRS}
         self.lease_others = self.leases.others(LIVE_DIRS)
         self.edmc = outrider.uploads.edmc_uploads() if self.game_pc else None
 
     def drop_leases(self):
-        """At shutdown: this instance's leases go (another may take over at once)."""
+        """At shutdown: this instance's leases claim nothing any more (another may take over at once), but keep its
+        marks as a handover note: an instance switched on later starts where this one stopped."""
         if self.leases:
+            info = {"host": socket.gethostname(), "services": [], "stopped": True, "version": outrider.__version__,
+                    "marks": self.uploads_hub.marks}
             for d in LIVE_DIRS:
-                outrider.uploads.write_lease(d, self.leases.instance, None)
+                outrider.uploads.write_lease(d, self.leases.instance, info)
 
     async def watch_leases(self):
         while True:
@@ -9255,12 +9264,37 @@ class State:
                 print(f"uploads: lease check failed ({type(e).__name__}: {e})", file=sys.stderr)
             await asyncio.sleep(LEASE_EVERY_S)
 
+    def journal_end(self):
+        """Where the reader has got to in the live journals, as a mark: (file name, the byte before the next line)
+        (a mark is the last line handled; the next line starts at the offset the reader has reached)."""
+        live = {os.path.normpath(d) for d in LIVE_DIRS}
+        ends = [outrider.uploads.position(p, o) for p, o in self.journals.offsets.items()
+                if os.path.normpath(os.path.dirname(p)) in live]
+        return (max(ends)[0], max(ends)[1] - 1) if ends else None
+
+    def upload_start_mark(self, service):
+        """Where a service switched on starts: another instance's handover mark when one is visible (it stopped
+        there: no gap, nothing twice), else where the reader is now (switching on never uploads your history)."""
+        theirs = outrider.uploads.lease_marks(LIVE_DIRS, self.leases.instance if self.leases else "").get(service)
+        end = self.journal_end()
+        if theirs and (end is None or (theirs[0], theirs[1]) <= end):
+            return (theirs[0], theirs[1]), theirs[2] if len(theirs) > 2 else None
+        return end, None
+
     def set_upload(self, service, on):
-        """The page's switch for one service (remembered over restarts). Switching it on again clears a hold."""
+        """The page's switch for one service (remembered over restarts). Switching it on again clears a hold; switching
+        it on from off sets its starting mark (upload_start_mark) and catches up from there."""
+        was = self.upload_wanted(service)
         ov = dict(meta_get(self.db, "uploads_on") or {})
         ov[service] = bool(on)
         meta_set(self.db, "uploads_on", ov)
         self.upload_status.pop(service, None)
+        if on and not was:
+            pos, ts = self.upload_start_mark(service)
+            if pos:
+                self.uploads_hub.set_mark(service, pos, ts)
+                self.uploads_hub.flush()
+                self.uploads_hub.catch_up(service, LIVE_DIRS, dict(self.journals.offsets))
         self.db.commit()
         self.bump()
 
@@ -9359,8 +9393,29 @@ class State:
             out.insert(0, {"commander": cur, "name": cur, "set": False})
         return out
 
+    def catch_up_uploads(self):
+        """At start: each service that is on queues what was played while Outrider was not running (from its mark to
+        where the start-up scan got to, at most a week back); one with no mark yet starts where the reader is."""
+        n = 0
+        for service in self.uploads_hub.builders:
+            if not self.upload_wanted(service):
+                continue
+            if service not in self.uploads_hub.marks:
+                pos, ts = self.upload_start_mark(service)
+                if pos:
+                    self.uploads_hub.set_mark(service, pos, ts)
+                continue
+            n += self.uploads_hub.catch_up(service, LIVE_DIRS, dict(self.journals.offsets))
+        self.uploads_hub.flush()
+        self.db.commit()
+        if n:
+            print(f"uploads: {n} message{'' if n == 1 else 's'} from while Outrider was not running, queued")
+        return n
+
     def start_uploads(self):
         """The sending loops (one per service with a sender), and the lease watch, started in run()."""
+        self.refresh_leases()
+        self.catch_up_uploads()
         if self.lease_task is None:
             self.lease_task = asyncio.get_running_loop().create_task(self.watch_leases())
         for service, send in self.upload_senders.items():

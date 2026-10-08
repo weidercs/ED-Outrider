@@ -112,8 +112,9 @@ class HubThroughTheReader(unittest.TestCase):
         self.assertTrue(r["source"].startswith("Journal.2026-10-08T100000.01.log:"))
 
     def test_old_lines_legacy_folders_and_off(self):
-        self.write(header(now_ts(3600)), loadgame(now_ts(3599)), location(now_ts(3598)))
-        self.j.scan_dir(self.dir, upload="live")                # live, but an hour old: nothing
+        week = 8 * 86400
+        self.write(header(now_ts(week)), loadgame(now_ts(week - 1)), location(now_ts(week - 2)))
+        self.j.scan_dir(self.dir, upload="live")                # live, but over a week old: nothing (the cap)
         self.assertEqual(self.rows(), [])
         self.write({"timestamp": now_ts(1), "event": "Music", "MusicTrack": "Exploration"})
         self.j.scan_dir(self.dir)                               # a legacy folder: the hub never sees it
@@ -302,8 +303,11 @@ class OneUploaderAtATime(unittest.TestCase):
         self.state.refresh_leases()
         self.assertFalse(self.state.upload_on("eddn"))
         self.assertEqual(self.state.uploads_summary()["eddn"]["held"], "also uploading from erangel")
-        self.state.drop_leases()
-        self.assertFalse(os.path.exists(mine))
+        self.state.drop_leases()                                 # stopped: no claim, but a handover note
+        with open(mine, encoding="utf-8") as f:
+            note = json.load(f)
+        self.assertEqual((note["services"], note["stopped"]), ([], True))
+        self.assertIn("marks", note)
 
     def test_stale_lease_by_our_own_clock(self):
         clock = [1000.0]
@@ -366,3 +370,98 @@ class EdsmAccounts(unittest.TestCase):
         self.state.set_edsm_account("Briadin", remove=True)
         self.assertEqual(self.state.edsm_accounts(), {})
         self.assertNotIn("edsm_accounts", ed_outrider.RESET_JOURNAL_DATA)                        # a re-read keeps them
+
+
+class MarksAndCatchUp(unittest.TestCase):
+    """Part A4 (the author's idea): each service's mark says how far it has queued; at start it catches up from there
+    (what was played while Outrider was not running, at most a week back); a re-read sends nothing again; switching on
+    starts at another instance's handover mark, else now."""
+
+    def setUp(self):
+        import types
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir)
+        p = unittest.mock.patch.object(ed_outrider, "LIVE_DIRS", [self.dir])
+        p.start()
+        self.addCleanup(p.stop)
+        self.db = ed_outrider.open_db(":memory:")
+        self.addCleanup(self.db.close)
+        self.j = ed_outrider.Journals(self.db)
+        self.state = ed_outrider.State(self.db, self.j, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        self.state.game_pc = False
+        self.path = os.path.join(self.dir, "Journal.2026-10-08T100000.01.log")
+        echo = lambda ev, session: [("echo/1", {"event": ev["event"]})] if ev["event"] in ("FSDJump", "Scan") else []
+        self.state.uploads_hub.builders = {"eddn": echo}
+
+    def write(self, *events):
+        with open(self.path, "a", encoding="utf-8") as f:
+            for e in events:
+                f.write(json.dumps(e) + "\n")
+
+    def jump(self, ago, name="B"):
+        return {"timestamp": now_ts(ago), "event": "FSDJump", "StarSystem": name, "SystemAddress": hash(name) % 1000,
+                "StarPos": [1, 2, 3]}
+
+    def queued(self):
+        return [json.loads(r["message"]) for r in self.db.execute("SELECT message FROM upload_queue ORDER BY id")]
+
+    def test_switching_on_starts_now_then_live_then_catch_up(self):
+        self.write(header(now_ts(7200)), loadgame(now_ts(7199)), self.jump(7000, "Old"))
+        self.j.scan_dir(self.dir, commit_each=True, upload="catchup")
+        self.state.set_upload("eddn", True)                      # on: from now, never the history before it
+        self.assertEqual(self.queued(), [])
+        self.write(self.jump(600, "Live"))                       # ten minutes ago, read live (NFS late): sent
+        self.j.scan_dir(self.dir, upload="live")
+        self.db.commit()
+        self.assertEqual(len(self.queued()), 1)
+        mark = ed_outrider.meta_get(self.db, "upload_marks")["eddn"]
+        # Outrider stops; the game goes on; Outrider starts again
+        self.write(self.jump(300, "WhileDown1"), self.jump(200, "WhileDown2"))
+        db2 = self.db
+        j2 = ed_outrider.Journals(db2)
+        j2.scan_dir(self.dir, commit_each=True, upload="catchup")   # the start-up scan (no hub yet)
+        import types
+        st2 = ed_outrider.State(db2, j2, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        st2.game_pc = False
+        st2.uploads_hub.builders = {"eddn": self.state.uploads_hub.builders["eddn"]}
+        self.assertEqual(st2.uploads_hub.marks["eddn"], mark)
+        self.assertEqual(st2.catch_up_uploads(), 2)              # the two jumps made while it was down
+        self.assertEqual(st2.catch_up_uploads(), 0)              # once
+        self.assertEqual(len(self.queued()), 3)
+
+    def test_a_reread_sends_nothing_again(self):
+        self.write(header(now_ts(600)), loadgame(now_ts(599)))
+        self.j.scan_dir(self.dir, commit_each=True, upload="catchup")
+        self.state.set_upload("eddn", True)
+        self.write(self.jump(100))
+        self.j.scan_dir(self.dir, upload="live")
+        self.db.commit()
+        self.db.executescript(ed_outrider.RESET_JOURNAL_DATA)    # a parser bump: every journal read from 0 again
+        j2 = ed_outrider.Journals(self.db)
+        j2.scan_dir(self.dir, commit_each=True, upload="catchup")
+        import types
+        st2 = ed_outrider.State(self.db, j2, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        st2.uploads_hub.builders = {"eddn": self.state.uploads_hub.builders["eddn"]}
+        self.assertEqual(st2.catch_up_uploads(), 0)
+        self.assertEqual(len(self.queued()), 1)
+
+    def test_handover_from_another_instance(self):
+        self.write(header(now_ts(900)), loadgame(now_ts(899)), self.jump(800, "A"), self.jump(700, "Bsys"))
+        self.j.scan_dir(self.dir, commit_each=True, upload="catchup")
+        with open(self.path, "rb") as f:
+            lines = f.read().split(b"\n")
+        at_a = sum(len(x) + 1 for x in lines[:2])                # the other instance stopped after the first jump
+        U.write_lease(self.dir, "otherpc1", {"host": "erangel", "services": [], "stopped": True,
+                                             "marks": {"eddn": [os.path.basename(self.path), at_a, now_ts(800)]}})
+        self.state.set_upload("eddn", True)                      # starts at its mark: the second jump is caught up
+        self.assertEqual([m["event"] for m in self.queued()], ["FSDJump"])
+        self.assertEqual(len(self.queued()), 1)
+
+    def test_cap(self):
+        self.write(header(now_ts(9 * 86400)), loadgame(now_ts(9 * 86400 - 1)))
+        self.j.scan_dir(self.dir, commit_each=True, upload="catchup")
+        self.state.set_upload("eddn", True)
+        self.state.uploads_hub.set_mark("eddn", (os.path.basename(self.path), 0))
+        self.write(self.jump(8 * 86400, "TooOld"), self.jump(60, "Fresh"))
+        self.j.offsets[self.path] = os.path.getsize(self.path)
+        self.assertEqual(self.state.uploads_hub.catch_up("eddn", [self.dir], dict(self.j.offsets)), 1)   # over a week: skipped
