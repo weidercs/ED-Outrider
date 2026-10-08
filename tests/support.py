@@ -12,6 +12,15 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import ed_outrider  # noqa: E402
 
+# Never the player's own journal folders: the server auto-detects them at import, and anything that writes into a live
+# folder (the uploads' lease files) would write into the real one. A test that needs folders sets its own.
+ed_outrider.LIVE_DIRS[:] = []
+ed_outrider.LEGACY_DIRS[:] = []
+# ...nor EDMC's config on this PC (the uploads' check reads it): a test that wants it passes its own home folder
+import outrider.uploads  # noqa: E402
+_edmc_uploads = outrider.uploads.edmc_uploads
+outrider.uploads.edmc_uploads = lambda home=None, **kw: _edmc_uploads(home=home, **kw) if home else None
+
 
 def user_docs():
     """The user documentation as one text: README.md and every page of docs/guide/ (the README is a front page since

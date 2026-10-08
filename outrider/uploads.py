@@ -374,3 +374,122 @@ async def upload_loop(service, db, send, on, clock=time.time, sleep=None, report
             await sleep(IDLE_S * 15)   # waiting on the player (a refused key): look again now and then
         else:
             await sleep(GAP_S)
+
+
+# ---- one uploader at a time: lease files in the journal folder (the author's idea, 2026-10-08) ----
+
+LEASE_DIR = ".outrider"   # a subfolder of the journal folder: Elite and other tools read only its top level
+LEASE_STALE_S = 300       # another instance's lease counts while its content changed this recently (by OUR clock)
+
+
+def lease_path(journal_dir, instance):
+    return os.path.join(journal_dir, LEASE_DIR, f"uploads-{instance}.json")
+
+
+def write_lease(journal_dir, instance, info):
+    """Write (atomically) this instance's lease, or remove it when info is None. False when the folder cannot be
+    written (a read-only mount: other instances then cannot see this one)."""
+    path = lease_path(journal_dir, instance)
+    try:
+        if info is None:
+            if os.path.exists(path):
+                os.remove(path)
+            return True
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(info, f)
+        os.replace(tmp, path)
+        return True
+    except OSError:
+        return False
+
+
+class Leases:
+    """The other instances' leases, judged by when their content last changed as seen by this instance's own clock
+    (the two machines' clocks are never compared). A crashed instance's file goes stale after LEASE_STALE_S."""
+
+    def __init__(self, instance, clock=time.time):
+        self.instance, self.clock = instance, clock
+        self.seen = {}   # path -> (content, when we saw it change)
+
+    def others(self, journal_dirs):
+        """{instance id: {host, services}} of the live leases in these folders (not ours)."""
+        now, out = self.clock(), {}
+        for d in journal_dirs:
+            folder = os.path.join(d, LEASE_DIR)
+            try:
+                names = os.listdir(folder)
+            except OSError:
+                continue
+            for n in names:
+                m = re.fullmatch(r"uploads-([A-Za-z0-9_-]+)\.json", n)
+                if not m or m.group(1) == self.instance:
+                    continue
+                path = os.path.join(folder, n)
+                try:
+                    with open(path, encoding="utf-8") as f:
+                        content = f.read()
+                    info = json.loads(content)
+                except (OSError, ValueError):
+                    continue
+                prev = self.seen.get(path)
+                if not prev or prev[0] != content:
+                    self.seen[path] = prev = (content, now)
+                if now - prev[1] <= LEASE_STALE_S and isinstance(info, dict):
+                    out[m.group(1)] = {"host": str(info.get("host") or "another Outrider"),
+                                       "services": [s for s in info.get("services") or [] if s in SERVICES]}
+        return out
+
+
+def edmc_uploads(home=None, environ=None, platform=None, running=None):
+    """Whether EDMarketConnector on THIS computer is running with its own EDDN / EDSM / Inara uploads on:
+    {running, eddn, edsm, inara} or None when it is not installed here. Its config is config.toml (EDMC 6) in
+    ~/.local/share/EDMarketConnector (Linux) or %LOCALAPPDATA%\\EDMarketConnector (Windows): settings.output has
+    the EDDN bits (1 station data, 2048 the rest), edsm_out and inara_out are 0/1."""
+    import sys
+    try:
+        import tomllib
+    except ImportError:  # Python < 3.11
+        return None
+    environ = os.environ if environ is None else environ
+    platform = platform or sys.platform
+    home = home or os.path.expanduser("~")
+    if platform == "win32":
+        base = environ.get("LOCALAPPDATA") or os.path.join(home, "AppData", "Local")
+    else:
+        base = environ.get("XDG_DATA_HOME") or os.path.join(home, ".local", "share")
+    path = os.path.join(base, "EDMarketConnector", "config.toml")
+    try:
+        with open(path, "rb") as f:
+            st = tomllib.load(f).get("settings") or {}
+    except (OSError, ValueError):
+        return None
+    out = int(st.get("output") or 0) if str(st.get("output") or "0").lstrip("-").isdigit() else 0
+    is_running = running() if running else edmc_running(platform)
+    return {"running": bool(is_running), "eddn": bool(out & (1 | 2048)), "edsm": bool(st.get("edsm_out")),
+            "inara": bool(st.get("inara_out"))}
+
+
+def edmc_running(platform):
+    """Whether an EDMarketConnector process runs on this computer (Linux: /proc; Windows: tasklist)."""
+    if platform == "win32":
+        import subprocess
+        try:
+            out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq EDMarketConnector.exe", "/NH"], capture_output=True,
+                                 text=True, timeout=5).stdout
+        except (OSError, subprocess.SubprocessError):
+            return False
+        return "EDMarketConnector" in out
+    try:
+        pids = [p for p in os.listdir("/proc") if p.isdigit()]
+    except OSError:
+        return False
+    for p in pids:
+        try:
+            with open(f"/proc/{p}/cmdline", "rb") as f:
+                if b"EDMarketConnector" in f.read():
+                    return True
+        except OSError:
+            continue
+    return False

@@ -160,8 +160,10 @@ import mimetypes
 import os
 import random
 import re
+import secrets
 import shutil
 import signal
+import socket
 import sqlite3
 import sys
 import threading
@@ -285,6 +287,7 @@ HIGHWAY_HEAVY_SLACK = 0.5    # t: fuel over the most the next jump allows by mor
 HIGHWAY_HEAVY_EVERY_S = 3.0  # s between two looks at it while the fuel changes in a route system (scooping)
 HIGHWAY_CONSERVATIVE_MAX = 50.0   # ly: the largest conservative margin taken
 NEAR_BODY_ALT = 5000         # m: below this over a body in your ship, the on-body strip shows its bio card
+LEASE_EVERY_S = 60           # s: this instance's upload lease rewritten, the others' read, EDMC's switches checked
 BIO_TAGS_SHOWN = 40          # the surface map draws at most this many tagged plants (nearest first)
 SELLER_REFRESH_LY = 100      # look for the nearest places to sell again after moving this far
 SELLER_REFRESH_S = 6 * 3600  # ...or this long (carriers move)
@@ -5465,6 +5468,10 @@ class State:
         self.upload_status = {}   # service -> {error, at, held}: the last round's outcome for the status view
         self.uploads_hub = outrider.uploads.UploadHub(db, {}, enabled=self.upload_on)
         journals.uploads = self.uploads_hub
+        # one uploader at a time (PLAN-edmc-functionality "One uploader at a time"): leases in the journal folders,
+        # and EDMC on this PC. Refreshed by watch_leases every LEASE_EVERY_S.
+        self.lease_others, self.lease_writable, self.edmc = {}, {}, None
+        self.leases, self.lease_task = None, None
         self._rc_copied = (meta_get(db, "riches") or {}).get("arrival_ts")
 
     def bump(self):
@@ -9171,15 +9178,79 @@ class State:
 
     # ---- uploads (EDDN, EDSM) ----
 
-    def upload_on(self, service):
-        """Whether `service` uploads now: the page's switch (else the config), never in --simulate, never while it
-        waits on the player (a key EDSM refused)."""
+    def upload_wanted(self, service):
+        """The page's switch for `service` (else the config): what this instance means to do."""
         if self.simulate or service not in self.upload_cfg:
-            return False
-        if (self.upload_status.get(service) or {}).get("held"):
             return False
         ov = (meta_get(self.db, "uploads_on") or {}).get(service)
         return bool(ov) if isinstance(ov, bool) else bool(self.upload_cfg[service].get("enabled"))
+
+    def upload_conflict(self, service):
+        """Why `service` must not send from here now although wanted: another Outrider's live lease claims it, or
+        EDMC on this PC is running with its own upload of it on. None when nothing stands in the way."""
+        other = next((o for o in self.lease_others.values() if service in o["services"]), None)
+        if other:
+            return f"also uploading from {other['host']}"
+        e = self.edmc or {}
+        if e.get("running") and e.get(service):
+            return f"EDMC on this PC sends to {service.upper()} too: switch its {service.upper()} off (or this one)"
+        return None
+
+    def upload_on(self, service):
+        """Whether `service` uploads now: wanted (the page's switch, else the config), never in --simulate, not while
+        another uploader has it (upload_conflict), not while it waits on the player (a key EDSM refused)."""
+        if not self.upload_wanted(service) or (self.upload_status.get(service) or {}).get("held"):
+            return False
+        return self.upload_conflict(service) is None
+
+    def check_upload_start(self, service, confirmed):
+        """Before the page switches `service` on: None to go ahead, else (code, words). Another live lease claiming it
+        refuses (worded for a read-only folder too); a folder this instance cannot write asks first, since other
+        instances cannot see this one (the author's rules, 2026-10-08)."""
+        self.refresh_leases()
+        readonly = bool(self.lease_writable) and not any(self.lease_writable.values())
+        other = next((o for o in self.lease_others.values() if service in o["services"]), None)
+        if other:
+            return ("other_instance", "Filesystem is read-only and another instance is set for upload" if readonly
+                    else f"Already uploading from {other['host']}: switch it off there first")
+        e = self.edmc or {}
+        if e.get("running") and e.get(service):
+            return ("edmc", f"EDMC on this PC is sending to {service.upper()}: switch its {service.upper()} off first")
+        if readonly and not confirmed:
+            return ("confirm_needed", "Is this the only Outrider uploading? Other instances can't see this one")
+        return None
+
+    def refresh_leases(self):
+        """Write this instance's lease (the services it means to send) in every live journal folder it can write, and
+        read the others' (and EDMC's switches on the game PC). Cheap: a few small files."""
+        if self.leases is None:
+            iid = meta_get(self.db, "instance_id")
+            if not isinstance(iid, str) or not re.fullmatch(r"[A-Za-z0-9_-]{6,40}", iid):
+                iid = secrets.token_hex(6)
+                meta_set(self.db, "instance_id", iid)
+                self.db.commit()
+            self.leases = outrider.uploads.Leases(iid)
+            self._lease_beat = 0
+        self._lease_beat += 1
+        wanted = [s for s in outrider.uploads.SERVICES if self.upload_wanted(s)]
+        info = {"host": socket.gethostname(), "services": wanted, "beat": self._lease_beat, "version": outrider.__version__}
+        self.lease_writable = {d: outrider.uploads.write_lease(d, self.leases.instance, info) for d in LIVE_DIRS}
+        self.lease_others = self.leases.others(LIVE_DIRS)
+        self.edmc = outrider.uploads.edmc_uploads() if self.game_pc else None
+
+    def drop_leases(self):
+        """At shutdown: this instance's leases go (another may take over at once)."""
+        if self.leases:
+            for d in LIVE_DIRS:
+                outrider.uploads.write_lease(d, self.leases.instance, None)
+
+    async def watch_leases(self):
+        while True:
+            try:
+                self.refresh_leases()
+            except Exception as e:   # never stop watching
+                print(f"uploads: lease check failed ({type(e).__name__}: {e})", file=sys.stderr)
+            await asyncio.sleep(LEASE_EVERY_S)
 
     def set_upload(self, service, on):
         """The page's switch for one service (remembered over restarts). Switching it on again clears a hold."""
@@ -9209,14 +9280,57 @@ class State:
             st = self.upload_status.get(service) or {}
             out[service] = dict(outrider.uploads.counts(self.db, service), on=self.upload_on(service),
                                 configured=bool(self.upload_cfg.get(service, {}).get("enabled")),
-                                available=service in self.upload_senders, error=st.get("error"), held=st.get("held"),
+                                available=service in self.upload_senders, error=st.get("error"),
+                                held=st.get("held") or (self.upload_conflict(service) if self.upload_wanted(service) else None),
                                 blocked=self.BLOCKED_WORDS.get(blocked) if blocked in ("beta", "legacy", "crew") else None)
         out["eddn"]["test"] = bool(self.upload_cfg["eddn"].get("test"))
+        out["edsm"]["accounts"] = self.edsm_account_list()
+        out["readonly"] = bool(self.lease_writable) and not any(self.lease_writable.values())
         out["simulate"] = bool(self.simulate)
         return out
 
+    def edsm_accounts(self):
+        """{in-game commander: {name: EDSM commander name, key: API key}} (meta edsm_accounts, live-only: kept through a
+        journal re-read, in the backups with the rest of the database). Never served: edsm_accounts_view says only
+        which commanders have one."""
+        a = meta_get(self.db, "edsm_accounts")
+        return {k: v for k, v in a.items() if isinstance(v, dict)} if isinstance(a, dict) else {}
+
+    def set_edsm_account(self, commander, name=None, key=None, remove=False):
+        """Add, change or remove one in-game commander's EDSM account. An empty key keeps the one stored. (answer,
+        status)."""
+        commander = str(commander or "").strip()
+        if not commander or len(commander) > 64:
+            return {"error": "commander: the in-game commander's name"}, 400
+        accounts = self.edsm_accounts()
+        if remove:
+            accounts.pop(commander, None)
+        else:
+            old = accounts.get(commander) or {}
+            name = str(name or "").strip()[:64] or old.get("name") or commander
+            key = str(key or "").strip() or old.get("key")
+            if not key or not re.fullmatch(r"[0-9a-fA-F]{20,64}", key):
+                return {"error": "api_key: the key from www.edsm.net/settings/api (40 hexadecimal characters)"}, 400
+            accounts[commander] = {"name": name, "key": key}
+        meta_set(self.db, "edsm_accounts", accounts)
+        self.upload_status.pop("edsm", None)   # a new key: try again
+        self.db.commit()
+        self.bump()
+        return {"ok": True, "accounts": self.edsm_account_list()}, 200
+
+    def edsm_account_list(self):
+        """For the page: [{commander, name, set}] (never the key), the commander in the journals first if missing."""
+        accounts = self.edsm_accounts()
+        out = [{"commander": c, "name": a.get("name") or c, "set": bool(a.get("key"))} for c, a in sorted(accounts.items())]
+        cur = (self.journals.commander or {}).get("name")
+        if cur and cur not in accounts:
+            out.insert(0, {"commander": cur, "name": cur, "set": False})
+        return out
+
     def start_uploads(self):
-        """The sending loops (one per service with a sender), started in run()."""
+        """The sending loops (one per service with a sender), and the lease watch, started in run()."""
+        if self.lease_task is None:
+            self.lease_task = asyncio.get_running_loop().create_task(self.watch_leases())
         for service, send in self.upload_senders.items():
             if service not in self.upload_tasks:
                 self.upload_tasks[service] = asyncio.get_running_loop().create_task(outrider.uploads.upload_loop(
@@ -10692,7 +10806,8 @@ class State:
         plot can run up to TRADE_PLOT_TIMEOUT: review 2026-10-08 #7, it was left running into the closed session)."""
         return [t for t in (self.refresh_task, self.target_task, self.unsold_task, self.seller_task, self.carrier_task,
                             self.searcher.task, self.honk_test_task, self.highway_task, self.riches_task,
-                            self.autotarget_task, self.autotarget_test_task, *self.upload_tasks.values()) if t]
+                            self.autotarget_task, self.autotarget_test_task, self.lease_task,
+                            *self.upload_tasks.values()) if t]
 
     def autotarget_busy(self):
         """A galaxy-map sequence is pending or running: the automatic one (after a supercharge) or one the page or the
@@ -12615,8 +12730,23 @@ def make_app(state, hosts=None):
         body = await json_object(request)
         if body is None or body.get("service") not in outrider.uploads.SERVICES or not isinstance(body.get("on"), bool):
             return web.json_response({"error": "expected {service: \"eddn\" or \"edsm\", on: true or false}"}, status=400)
+        if body["on"]:
+            why = state.check_upload_start(body["service"], body.get("confirm") is True)
+            if why:
+                return web.json_response({"error": why[1], "code": why[0]}, status=409)
         state.set_upload(body["service"], body["on"])
+        state.refresh_leases()   # the lease says so at once
         return web.json_response(state.uploads_summary())
+
+    async def edsm_account_view(request):
+        """POST /api/uploads/edsm {commander, name?, api_key?, remove?}: an in-game commander's EDSM account (the key
+        stays here; nothing answers with it)."""
+        body = await json_object(request)
+        if body is None:
+            return web.json_response({"error": "expected a JSON object"}, status=400)
+        out, status = state.set_edsm_account(body.get("commander"), body.get("name"), body.get("api_key"),
+                                             remove=body.get("remove") is True)
+        return web.json_response(out, status=status)
 
     async def autohonk_view(request):
         try:
@@ -12805,6 +12935,7 @@ def make_app(state, hosts=None):
     app.router.add_post("/api/speaker/audio", speaker_audio_view)
     app.router.add_post("/api/autohonk", pc_only(autohonk_view))
     app.router.add_post("/api/uploads", uploads_view)
+    app.router.add_post("/api/uploads/edsm", edsm_account_view)
     app.router.add_post("/api/autohonk/test", pc_only(autohonk_test_view))
     app.router.add_post("/api/autohonk/forget", pc_only(autohonk_forget_view))
     app.router.add_get("/api/firsts", firsts_view)
@@ -13270,6 +13401,7 @@ async def run(args, st):
             await state.player.close()   # a line playing here ends now, and its request with it
         await runner.cleanup()
         await spansh.close()
+        state.drop_leases()   # another Outrider may take the uploads over at once
         await state.upload_session.close()
         db.commit()
         db.close()

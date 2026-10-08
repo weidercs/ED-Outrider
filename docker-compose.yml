@@ -23,6 +23,10 @@ services:
       # the game's journal folder, read-only: a host folder where an NFS or CIFS share is mounted (docs/guide/install.md shows
       # both), or the named volume "journals" below instead
       - ${JOURNALS:-./docker/journals}:/journals:ro
+      # uploads (EDDN, EDSM): so another Outrider can see this one is uploading, a writable folder for its note only
+      # (docs/guide/uploads.md). Create it on the share first (mkdir -p "$JOURNALS/.outrider", as its owner), then
+      # uncomment; without it this Outrider asks "is this the only one uploading?" before it starts.
+      # - ${JOURNALS:-./docker/journals}/.outrider:/journals/.outrider
       - ./docker/data:/app/data      # the database, backups, Piper voices
       - ./docker/config:/config      # ed_outrider.toml (written on the first run; Settings edits it)
 # Instead of a host mount, Docker can mount the share itself: replace the JOURNALS line above with

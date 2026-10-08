@@ -9,6 +9,7 @@ import shutil
 import tempfile
 import time
 import unittest
+import unittest.mock
 
 from support import ed_outrider  # also puts the repository root on sys.path
 import outrider.uploads as U  # noqa: E402
@@ -270,3 +271,98 @@ class Loop(unittest.TestCase):
         self.assertEqual(reports[0], "ConnectionError: unreachable")
         states = {json.loads(r["message"])["i"]: r["state"] for r in db.execute("SELECT * FROM upload_queue")}
         self.assertEqual(states, {0: "sent", 1: "dropped", 2: "queued"})
+
+
+class OneUploaderAtATime(unittest.TestCase):
+    """Lease files in the journal folder (.outrider/uploads-<id>.json) and EDMC's switches on this PC."""
+
+    def setUp(self):
+        import types
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir)
+        self.db = ed_outrider.open_db(":memory:")
+        self.addCleanup(self.db.close)
+        self.state = ed_outrider.State(self.db, ed_outrider.Journals(self.db), types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        self.state.game_pc = False
+        p = unittest.mock.patch.object(ed_outrider, "LIVE_DIRS", [self.dir])
+        p.start()
+        self.addCleanup(p.stop)
+
+    def other(self, services, iid="otherpc1", host="erangel"):
+        U.write_lease(self.dir, iid, {"host": host, "services": services, "beat": time.time()})
+
+    def test_lease_written_and_others_seen(self):
+        self.state.set_upload("eddn", True)
+        self.state.refresh_leases()
+        mine = os.path.join(self.dir, ".outrider", f"uploads-{self.state.leases.instance}.json")
+        with open(mine, encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["services"], ["eddn"])
+        self.assertTrue(self.state.upload_on("eddn"))
+        self.other(["eddn"])                                    # another Outrider claims it too: this one holds
+        self.state.refresh_leases()
+        self.assertFalse(self.state.upload_on("eddn"))
+        self.assertEqual(self.state.uploads_summary()["eddn"]["held"], "also uploading from erangel")
+        self.state.drop_leases()
+        self.assertFalse(os.path.exists(mine))
+
+    def test_stale_lease_by_our_own_clock(self):
+        clock = [1000.0]
+        leases = U.Leases("me", clock=lambda: clock[0])
+        self.other(["edsm"])
+        self.assertIn("otherpc1", leases.others([self.dir]))
+        clock[0] += U.LEASE_STALE_S + 1                          # unchanged for 5 minutes: a crashed instance
+        self.assertEqual(leases.others([self.dir]), {})
+        self.other(["edsm"], host="erangel again")               # it beats again
+        self.assertIn("otherpc1", leases.others([self.dir]))
+
+    def test_starting_rules(self):
+        self.other(["eddn"])
+        self.assertEqual(self.state.check_upload_start("eddn", False)[0], "other_instance")
+        self.assertIn("Already uploading from erangel", self.state.check_upload_start("eddn", False)[1])
+        self.assertIsNone(self.state.check_upload_start("edsm", False))
+        # a read-only folder: a claim refuses with the author's words; none asks first
+        with unittest.mock.patch.object(U, "write_lease", lambda *a, **k: False):
+            self.assertEqual(self.state.check_upload_start("eddn", False),
+                             ("other_instance", "Filesystem is read-only and another instance is set for upload"))
+            self.assertEqual(self.state.check_upload_start("edsm", False)[0], "confirm_needed")
+            self.assertIsNone(self.state.check_upload_start("edsm", True))
+
+    def test_edmc_on_this_pc(self):
+        home = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, home)
+        os.makedirs(os.path.join(home, ".local", "share", "EDMarketConnector"))
+        with open(os.path.join(home, ".local", "share", "EDMarketConnector", "config.toml"), "w") as f:
+            f.write('[settings]\noutput = 2065\nedsm_out = 1\ninara_out = 0\n')
+        got = U.edmc_uploads(home=home, environ={}, platform="linux", running=lambda: True)
+        self.assertEqual(got, {"running": True, "eddn": True, "edsm": True, "inara": False})
+        self.assertIsNone(U.edmc_uploads(home=self.dir, environ={}, platform="linux"))   # not installed here
+        self.state.edmc = got
+        self.state.set_upload("eddn", True)
+        self.assertFalse(self.state.upload_on("eddn"))
+        self.assertIn("EDMC on this PC", self.state.upload_conflict("eddn"))
+
+
+class EdsmAccounts(unittest.TestCase):
+    """EDSM's commander name and API key per in-game commander: stored here (meta), never served back."""
+
+    def setUp(self):
+        import types
+        self.db = ed_outrider.open_db(":memory:")
+        self.addCleanup(self.db.close)
+        self.j = ed_outrider.Journals(self.db)
+        self.state = ed_outrider.State(self.db, self.j, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        self.j.handle(loadgame("2026-10-08T10:00:00Z", cmdr="Briadin"))
+
+    def test_accounts(self):
+        key = "0123456789abcdef0123456789abcdef01234567"
+        self.assertEqual(self.state.edsm_account_list(), [{"commander": "Briadin", "name": "Briadin", "set": False}])
+        self.assertEqual(self.state.set_edsm_account("Briadin", "", "nope")[1], 400)                 # not a key
+        out, status = self.state.set_edsm_account("Briadin", "Briadin EDSM", key)
+        self.assertEqual((status, out["accounts"]), (200, [{"commander": "Briadin", "name": "Briadin EDSM", "set": True}]))
+        self.assertEqual(self.state.set_edsm_account("Briadin", "Renamed", "")[1], 200)             # an empty key keeps it
+        self.assertEqual(self.state.edsm_accounts()["Briadin"], {"name": "Renamed", "key": key})
+        self.assertNotIn(key, json.dumps(self.state.uploads_summary()))                          # never served
+        self.assertNotIn(key, json.dumps(self.state.payload(), default=str))
+        self.state.set_edsm_account("Briadin", remove=True)
+        self.assertEqual(self.state.edsm_accounts(), {})
+        self.assertNotIn("edsm_accounts", ed_outrider.RESET_JOURNAL_DATA)                        # a re-read keeps them

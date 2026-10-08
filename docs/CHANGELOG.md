@@ -2,6 +2,18 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · Uploads, part A3: one uploader at a time, EDSM accounts, Settings → Uploads (branch EDMC-Functionality)
+- Lease files in the journal folder (`.outrider/uploads-<id>.json`): an uploading Outrider says so there every minute;
+  another one refuses to start the same upload, both hold if they started together, a crashed one's note goes stale
+  after five minutes (by the reader's own clock). A read-only folder refuses when another claims it ("Filesystem is
+  read-only and another instance is set for upload") and otherwise asks first. EDMC running on this PC with its own
+  EDDN/EDSM upload on holds that upload.
+- EDSM's commander name and API key per in-game commander, kept in the database and never served back
+  (`POST /api/uploads/edsm`). Settings → Uploads: the switches, what each sent, why it is held.
+- Docker: an optional writable `.outrider` mount (commented out: the folder must exist on the share first). The guide
+  has an Uploads page. Still nothing is sent: EDDN comes next.
+- Tests never touch the real journal folders or EDMC's config any more (support.py blanks them).
+
 ## 2026-10-08 · Uploads, part A2: switches, the sending loop, the status (branch EDMC-Functionality)
 - `[eddn] enabled / test` and `[edsm] enabled` (off by default), and `POST /api/uploads {service, on}` for the page's
   switch, which wins over the config and is remembered; never in `--simulate`. The payload's `uploads` says, per

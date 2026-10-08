@@ -2498,6 +2498,7 @@ function unsoldHtml(u) {
 }
 
 function render() {
+  renderUploads();
   if (!data) return;
   if (TABLET) tabAutoView();   // the surface map's switch to Now and back, before the views are shown
   const bms = bmMap();
@@ -7299,6 +7300,66 @@ function starWords(cls, lum) {
   }
   return LUMINOSITY_WORDS[l] || LUMINOSITY_WORDS[l.replace(/[ab]+$/, "")] || "";   // "Vab", "IIIb": their class
 }
+// ---- Settings → Uploads (EDDN, EDSM): the switches, what each has sent, why it is held, EDSM's accounts ----
+const UPLOAD_NAMES = {eddn: ["EDDN", "the data network Spansh, EDSM, Inara and others read: systems, scans, signals, markets, as they happen"],
+                      edsm: ["EDSM", "your flight log and scans, to your EDSM account (in batches: each jump, docking)"]};
+let uploadsDrawn = "";
+function uploadsHtml(u) {
+  if (!u) return `<div class="unk">not known yet</div>`;
+  const row = s => {
+    const x = u[s] || {}, [name, what] = UPLOAD_NAMES[s];
+    const state = !x.available ? `<span class="unk">coming in a later version</span>`
+      : x.blocked ? `<span class="warnc">unavailable: ${esc(x.blocked)}</span>`
+      : x.held ? `<span class="bad">held: ${esc(x.held)}</span>`
+      : x.on ? `<span class="ok">on</span>${s === "eddn" && x.test ? ` <span class="warnc" title="[eddn] test: EDDN's test schemas, nothing reaches the live data">(test only)</span>` : ""}` : `<span class="unk">off</span>`;
+    const nums = [x.queued ? `${x.queued} waiting` : "", x.sent_24h ? `${x.sent_24h} sent today` : "", x.dropped_24h ? `${x.dropped_24h} refused` : ""].filter(Boolean).join(" · ");
+    return `<label class="mod"><input type="checkbox" data-upload="${s}"${x.on || (x.held && !x.blocked) ? " checked" : ""}${x.available && !u.simulate ? "" : " disabled"}> ` +
+      `<b>${name}</b> <span class="hint">${esc(what)}</span></label><div class="hint">${state}${nums ? " · " + esc(nums) : ""}` +
+      `${x.error && !x.held ? ` · <span class="bad" title="${esc(x.error)}">last error</span>` : ""}</div>`;
+  };
+  const acc = ((u.edsm || {}).accounts || []).map(a =>
+    `<div class="edsmacc" data-cmdr="${esc(a.commander)}"><b>${esc(a.commander)}</b> → EDSM <input type="text" class="edsmName" value="${esc(a.name)}" maxlength="64" size="14" title="your commander name on EDSM">` +
+    ` key <input type="password" class="edsmKey" autocomplete="new-password" placeholder="${a.set ? "set (type to change)" : "API key"}" size="22">` +
+    ` <button type="button" class="try edsmSave">Save</button>${a.set ? ` <a href="#" class="edsmRemove">remove</a>` : ""}</div>`).join("");
+  return row("eddn") + row("edsm") +
+    `<div class="hint">EDSM accounts, per in-game commander (your key is at <a href="https://www.edsm.net/en/settings/api" target="_blank" rel="noopener">edsm.net → Settings → API key</a>; it stays on this Outrider):</div>` +
+    (acc || `<div class="unk">no commander seen yet</div>`) + `<div class="hint" id="uploadsMsg"></div>` +
+    (u.simulate ? `<div class="unk">--simulate: nothing is uploaded</div>` : "");
+}
+function renderUploads() {
+  const box = document.getElementById("uploadsBox");
+  if (!box || !data) return;
+  // a field being typed in is not redrawn under the player's fingers
+  if (box.contains(document.activeElement) && document.activeElement.tagName === "INPUT" && document.activeElement.type !== "checkbox") return;
+  const html = uploadsHtml(data.uploads);
+  if (html !== uploadsDrawn) { box.innerHTML = html; uploadsDrawn = html; }
+}
+async function setUpload(service, on, confirmed) {
+  const msg = document.getElementById("uploadsMsg");
+  const j = await apiJson("api/uploads", {method: "POST", headers: {"Content-Type": "application/json"},
+                                         body: JSON.stringify({service, on, confirm: !!confirmed})});
+  if (j.code === "confirm_needed" && confirm(j.error)) return setUpload(service, on, true);
+  if (msg) msg.textContent = j.error || "";
+  if (!j.error) { data.uploads = j; }
+  uploadsDrawn = ""; renderUploads();
+}
+document.getElementById("uploadsBox").addEventListener("change", e => {
+  const box = e.target.closest("[data-upload]");
+  if (box) setUpload(box.dataset.upload, box.checked);
+});
+document.getElementById("uploadsBox").addEventListener("click", async e => {
+  const row = e.target.closest(".edsmacc"); if (!row) return;
+  const save = e.target.closest(".edsmSave"), remove = e.target.closest(".edsmRemove");
+  if (!save && !remove) return;
+  e.preventDefault();
+  const body = remove ? {commander: row.dataset.cmdr, remove: true}
+    : {commander: row.dataset.cmdr, name: row.querySelector(".edsmName").value, api_key: row.querySelector(".edsmKey").value};
+  const j = await apiJson("api/uploads/edsm", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  const msg = document.getElementById("uploadsMsg");
+  if (msg) msg.textContent = j.error || (remove ? "removed" : "saved");
+  if (!j.error && data.uploads && data.uploads.edsm) data.uploads.edsm.accounts = j.accounts;
+  uploadsDrawn = ""; renderUploads();
+});
 // Canonn's Bioforge: what is known of a codex entry across the galaxy (where it grows, the conditions)
 const bioforgeLink = id => Number.isInteger(id) && id > 0
   ? ` <a href="https://bioforge.canonn.tech/?entryid=${id}" target="_blank" rel="noopener" title="Canonn Bioforge: where this grows and in what conditions">stats ↗</a>` : "";
