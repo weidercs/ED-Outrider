@@ -767,12 +767,12 @@ body.nowmode header, body.nowmode main { display: none; }
 .nearbar .lbl { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
 .nearbar input[type=number] { width: 4.5em; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; text-align: right; }
 .nearscroll { max-height: min(62vh, 640px); overflow: auto; }
-#nearTable { width: 100%; font-size: 13px; border-collapse: collapse; } #nearTable td { padding: 5px 6px; vertical-align: top; border-bottom: 1px solid var(--line); }
-#nearTable th { position: sticky; top: 0; background: var(--panel); } #nearTable td.num { white-space: nowrap; } #nearTable .small { font-size: 11px; }
-#nearTable .has { white-space: normal; max-width: 200px; } #nearTable .src { text-align: right; white-space: nowrap; }
-#nearTable .dk { white-space: normal; max-width: 190px; }
-#nearTable .tagx { display: inline-block; font-size: 11px; padding: 0 5px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); opacity: .4; margin: 1px 0; }
-#nearTable .tagx.on { opacity: 1; color: var(--text); border-color: color-mix(in srgb, var(--good) 60%, var(--line)); }
+#dockTable { width: 100%; font-size: 13px; border-collapse: collapse; } #dockTable td { padding: 5px 6px; vertical-align: top; border-bottom: 1px solid var(--line); }
+#dockTable th { position: sticky; top: 0; background: var(--panel); } #dockTable td.num { white-space: nowrap; } #dockTable .small { font-size: 11px; }
+#dockTable .has { white-space: normal; max-width: 200px; } #dockTable .src { text-align: right; white-space: nowrap; }
+#dockTable .dk { white-space: normal; max-width: 190px; }
+#dockTable .tagx { display: inline-block; font-size: 11px; padding: 0 5px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); opacity: .4; margin: 1px 0; }
+#dockTable .tagx.on { opacity: 1; color: var(--text); border-color: color-mix(in srgb, var(--good) 60%, var(--line)); }
 .dssa { font-weight: 700; color: var(--info); }
 .dssabadge { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 9px; font-size: 11px; font-weight: 700; color: var(--info);
   border: 1px solid var(--info); background: color-mix(in srgb, var(--info) 14%, transparent); vertical-align: 1px; }

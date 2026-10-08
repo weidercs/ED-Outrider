@@ -2,6 +2,10 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · The Nearby tab's table no longer takes the Nearest finder's styles
+- The finder's table had the Nearby tab's id (`nearTable`), so since 2026.10.17 its styles (13px text, its cell
+  padding and lines) also reached the Nearby tab's table, and on the tablet a tap on a finder row opened the Nearby
+  tab's detail sheet. The finder's table is `dockTable` now, and a test keeps every id in the page used once.
 
 ## 2026-10-08 · Docs brought up to date
 - The README's Automation row, the guide's header-tile and button wording, the program's own description
