@@ -91,6 +91,47 @@ targeted neutron jump target Hwy Stop 38" (or "Failed to…") under its own aler
 - **Frontier's rules:** this is key-press automation like auto honk (and tools such as Auto_Neutron). Whether to
   use it is your call.
 
+## 📍 Nearest place to dock
+
+**📍 Nearest…** beside To finds the nearest stations and fleet carriers you can dock at and use, and plots there.
+
+<p align="center">
+  <img src="../images/nearest.png" alt="Nearest place to dock: stations and carriers with UC and Vista, nearest first, with their docking and how old each report is" width="900">
+</p>
+
+- **Filters:**
+  - stations and/or fleet carriers;
+  - what it must have (Universal Cartographics, Vista Genomics, repair, refuel, shipyard);
+  - your ship's pad size (from its type);
+  - **Data under** N days (30 by default);
+  - permit systems, left out unless ticked.
+
+  They are remembered on this device.
+- **Each row shows** how far it is (and a rough jump count), how far from its star (far ones marked), what it has, its
+  pads, its docking, and where the report came from and how old it is.
+- **Plot here** puts the system in To and plots it with the plotter chosen above. Following the route works as usual.
+- **Docking:**
+  - "yours" for your own carrier, "open to all";
+  - a **⚠ warning** for carriers set to friends or squadron only (Outrider cannot see the owner's list), and for those
+    with no docking setting reported at all.
+
+  None of these are hidden: the warning is there so you can decide.
+- **Where the data comes from:**
+  - [Spansh](https://spansh.co.uk) for stations and carriers, as players last reported them. A carrier is only where
+    someone with an uploader last docked: that is why every row says how old its report is, and why older reports are
+    hidden (raise Data under to see them).
+  - The **[Deep Space Support Array](https://inara.cz/elite/squadron-about/13586/)'s** carrier list, as
+    [EDAstro](https://edastro.com) publishes it. These are carriers stationed for years in the black for explorers,
+    open to all, each marked **🛰 DSSA** with how long it stays. The list is fetched only when you open the finder, at
+    most once an hour, and only downloaded when it has changed. The last copy is kept, so the finder works offline.
+  - Your own carrier, from your journal.
+- **By voice** (the Android app): "nearest station", "nearest carrier", "nearest Vista", "nearest cartographics",
+  "nearest repair", "where can I dock". The voice uses the DSSA list Outrider already has; it never fetches it.
+
+<p align="center">
+  <img src="../images/nearest-dssa.png" alt="A DSSA carrier in the list: its badge, how long it is stationed, and when it was last seen docked" width="900">
+</p>
+
 ---
 
 [ED Outrider](../../README.md) · [Install and run](install.md) · [The views](views.md) · **Plot Route** · [Cargo and trading](cargo-and-trading.md) · [Voice and alerts](voice-and-alerts.md) · [Automation](automation.md) · [On a tablet](tablet.md) · [Settings and good to know](settings.md) · [For the curious](for-developers.md)

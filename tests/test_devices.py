@@ -748,10 +748,11 @@ class BatchBVoiceControl(unittest.TestCase):
         # a tap, then a double tap, then a hold, then the device goes away
         ev, Dev = self.fake_evdev([(0, 1), (0.02, 0), (0.25, 1), (0.02, 0), (0.03, 1), (0.02, 0),
                                    (0.25, 1), (0.2, 0), (0.05, 2)])
-        got = []
+        got, presses = [], []
 
         async def go():
-            w = outrider.button.ButtonWatch("X-56", "BTN_TRIGGER_HAPPY5", got.append, hold_ms=150, double_ms=100, evdev=ev)
+            w = outrider.button.ButtonWatch("X-56", "BTN_TRIGGER_HAPPY5", got.append, hold_ms=150, double_ms=100, evdev=ev,
+                                            on_press=lambda: presses.append(len(got)))
             seen = set()
             with unittest.mock.patch.object(outrider.button, "RETRY", 0.05):
                 t = asyncio.ensure_future(w.run())
@@ -765,9 +766,41 @@ class BatchBVoiceControl(unittest.TestCase):
         self.assertIn("listening to Saitek X-56 Throttle for BTN_TRIGGER_HAPPY5", seen)
         self.assertEqual(got[:3], ["status", "again", "hush"])
         self.assertTrue(set(got) <= {"status", "again", "hush"})
+        # on_press: every press as it happens, before its gesture is decided (the autorepeat is not a press)
+        self.assertEqual(presses[:4], [0, 1, 1, 2])
         self.assertTrue(any("No such device; looking again" in x for x in seen), seen)   # the unplug, then a retry
         self.assertTrue(all(d.closed for d in Dev.opened))        # every device it opened was closed again
         self.assertGreater(len([d for d in Dev.opened if d.path.endswith("5")]), 1)   # and it looked again
+
+        # Review 2026-10-08 #19: a second press that comes after the double-tap window but before the settle timer
+        # fires (kernel times 110 ms apart, read in one go): the lone tap is handed over BEFORE the press is
+        # reported, so the press can cancel the targeting that tap starts instead of arriving first and missing it.
+        ev2, Dev2 = self.fake_evdev([])
+
+        class Stamped:
+            def __init__(self, value, secs):
+                self.type, self.code, self.value, self.secs = 1, 300, value, secs
+
+            def timestamp(self):
+                return self.secs
+
+        async def burst(dev):
+            for value, secs in ((1, 1000.0), (0, 1000.02), (1, 1000.13), (0, 1000.15)):
+                yield Stamped(value, secs)
+            raise OSError(19, "No such device")
+        Dev2.async_read_loop = burst
+        got2, presses2 = [], []
+
+        async def go2():
+            w = outrider.button.ButtonWatch("X-56", "BTN_TRIGGER_HAPPY5", got2.append, hold_ms=600, double_ms=100,
+                                            evdev=ev2, on_press=lambda: presses2.append(list(got2)))
+            with unittest.mock.patch.object(outrider.button, "RETRY", 5):
+                t = asyncio.ensure_future(w.run())
+                await asyncio.sleep(0.05)
+                t.cancel()
+                await asyncio.gather(t, return_exceptions=True)
+        asyncio.run(go2())
+        self.assertEqual(presses2, [[], ["status"]])   # the first tap was settled when the second press came
 
         async def bad(button):
             w = outrider.button.ButtonWatch("X-56", button, got.append, evdev=ev)
@@ -856,7 +889,7 @@ class BatchBVoiceControl(unittest.TestCase):
         import tomllib
         args = argparse.Namespace(journals=None, legacy=None, host=None, port=None, radius=None, db=None)
         st = lambda cfg: ed_outrider.settings_from(cfg, args, None, ([], []))["copilot"]
-        self.assertEqual(st({}), {"enabled": False, "device": "", "button": "", "hold_ms": 600, "double_ms": 350})
+        self.assertEqual(st({}), {"enabled": False, "device": "", "button": "", "hold_ms": 600, "double_ms": 400})
         got = st({"copilot": {"enabled": True, "device": "X-56 Rhino Throttle", "button": 300, "hold_ms": 50, "double_ms": 5000}})
         self.assertEqual(got, {"enabled": True, "device": "X-56 Rhino Throttle", "button": "300", "hold_ms": 200, "double_ms": 1000})
         with unittest.mock.patch("sys.stderr"):
@@ -865,13 +898,13 @@ class BatchBVoiceControl(unittest.TestCase):
             self.assertEqual(st({"copilot": {"device": 5}})["device"], "")
         full = ed_outrider.settings_from({"copilot": {"device": "X-56", "button": "BTN_TRIGGER_HAPPY5"}}, args, None, ([], []))
         back = tomllib.loads(ed_outrider.config_text(full))["copilot"]
-        self.assertEqual(back, {"enabled": False, "device": "X-56", "button": "BTN_TRIGGER_HAPPY5", "hold_ms": 600, "double_ms": 350})
+        self.assertEqual(back, {"enabled": False, "device": "X-56", "button": "BTN_TRIGGER_HAPPY5", "hold_ms": 600, "double_ms": 400})
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         with open(os.path.join(root, "ed_outrider.toml.example"), encoding="utf-8") as f:
             example = f.read()
         self.assertIn("copilot", tomllib.loads(example))
         section = example.split("[copilot]", 1)[1]
-        for key in ("enabled = false", "device", "button", "hold_ms = 600", "double_ms = 350"):
+        for key in ("enabled = false", "device", "button", "hold_ms = 600", "double_ms = 400"):
             self.assertIn(f"# {key}", section)
         readme = user_docs()
         for words in ("[copilot]", "uaccess", "`input` group", "latching", "Spoken lines", "Cut this line", "sound only"):
@@ -1428,18 +1461,21 @@ class SurfaceRigs(unittest.TestCase):
         self.assertEqual(self.state.copilot["seq"], 0)       # no status report, say again...
         self.assertIsNone(self.state.hush)                    # ...or hush
         self.assertEqual(self.texts(), ["Rig 1 placed.", "Rig 1 picked up.", "Rig 1 placed."])
-        # outside the Rhino (on foot, in the ship, in a Scarab) the button works as before
+        # outside the Rhino (on foot, in the ship, in a Scarab) the button works as usual: a double press is the status
+        # report, a hold the hush (the single press targets the next route system in the ship: test_highway)
         self.status(70, flags=(1 << 1) | ed_outrider.FLAG_IN_MAIN_SHIP)   # landed, back in the ship a minute on
         self.state.watch_surface(self.base + 70)
         self.assertIsNone(self.j.vehicle)
-        self.state.copilot_gesture("status")
+        self.state.copilot_gesture("again")
         self.state.copilot_gesture("hush")
         self.assertEqual((self.state.copilot["seq"], self.state.copilot["action"]), (2, "hush"))
         self.assertIsNotNone(self.state.hush)
         self.launch(80, "testbuggy")
         self.status(81)
+        self.state.copilot_gesture("status")   # a single press in a Scarab: nothing to target there, nothing done
+        self.assertEqual(self.state.copilot["seq"], 2)
         self.state.copilot_gesture("again")
-        self.assertEqual(self.state.copilot["action"], "again")
+        self.assertEqual(self.state.copilot["action"], "status")
         self.assertEqual(len(self.texts()), 3)
         # the page's own requests (the Now bar) never mark rigs, even in the Rhino
         self.launch(90)

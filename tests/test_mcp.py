@@ -54,6 +54,9 @@ FIX = {
                                 {"name": "Carbon", "grade": 1, "category": "Raw", "count": 290, "cap": 300},
                                 {"name": "Tellurium", "grade": 4, "category": "Raw", "count": 0, "cap": 150}],
                        "synthesis": [{"name": "FSD injection premium", "craftable": 2, "limit": "Polonium"}]},
+    "/api/nearest": {"rows": [{"kind": "carrier", "name": "", "callsign": "KBT-B8Z", "system": "Smojooe QI-T d3-37", "ly": 711.5,
+                               "ls": 235, "services": ["UC", "Vista"], "pads": "L M", "dssa": False, "own": False, "warn": [],
+                               "age_s": 1000000}], "hidden": {"old": 6}, "pad": "L"},
 }
 ARGS = {"body_detail": {"name": "Start A 1"}, "left_behind": {"radius_ly": 50}, "travel_history": {"days": 2},
         "materials": {"name": "polo"}, "nearby_systems": {"sort": "value"}}

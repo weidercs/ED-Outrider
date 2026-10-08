@@ -159,7 +159,9 @@ bookmarks, and Outrider says so at start.
 
 An HTTPS reverse proxy on your own network (Caddy, nginx, a NAS's) works too: put its name in
 `[server] allowed_hosts` (say `outrider.lan`); Outrider answers it with or without a port and accepts its `https://`
-pages.
+pages. A proxy running on the Outrider PC itself is fine with a password too: Outrider sees its forwarding header
+(`X-Forwarded-For`, `Forwarded` or `X-Real-IP`, which Caddy and nginx add) and asks each device to sign in, as it
+would without the proxy.
 
 > [!CAUTION]
 > **Do not expose Outrider to the internet** (no port forwarding, no public name, no tunnel). It serves your
