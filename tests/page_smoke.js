@@ -4201,10 +4201,12 @@ const settle = async maxMs => {
                         accounts: [{commander: "Briadin", name: "Briadin", set: true}]}, simulate: false, readonly: false};
       const box = document.createElement("div"); box.innerHTML = uploadsHtml(u);
       const t = box.textContent;
-      return [/EDDN/.test(t) && /\(test only\)/.test(t), /2 waiting · 40 sent today · 1 refused/.test(t), /held: also uploading from erangel/.test(t),
+      return [/EDDN/.test(t) && /\(test schemas only\)/.test(t), /2 waiting · 40 sent today · 1 refused/.test(t), /held: also uploading from erangel/.test(t),
               box.querySelectorAll("[data-upload]").length, !!box.querySelector('.edsmacc[data-cmdr="Briadin"] .edsmKey[placeholder^="set"]'),
-              /unavailable: the Legacy/.test(uploadsHtml({eddn: {available: true, blocked: "the Legacy game (3.8): nobody takes its data"}, edsm: {}}))]; })()`);
-    const goodU = JSON.stringify(got) === JSON.stringify([true, true, true, 2, true, true]) && errors.length === before;
+              /unavailable: the Legacy/.test(uploadsHtml({eddn: {available: true, blocked: "the Legacy game (3.8): nobody takes its data"}, edsm: {}})),
+              // test mode is said whatever the state: here while EDDN is unavailable
+              /\(test schemas only\)/.test(uploadsHtml({eddn: {available: true, test: true, blocked: "the game version is not known yet"}, edsm: {}}))]; })()`);
+    const goodU = JSON.stringify(got) === JSON.stringify([true, true, true, 2, true, true, true]) && errors.length === before;
     allOk = allOk && goodU;
     console.log(goodU ? "OK" : "FAIL", "| uploads settings |", goodU ? "the switches, a hold, test only, EDSM's account without its key" : JSON.stringify(got), errors.slice(before));
   }

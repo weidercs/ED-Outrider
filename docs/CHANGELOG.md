@@ -2,6 +2,11 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · Uploads: test mode said out loud (branch EDMC-Functionality)
+- The console says at start whether EDDN and EDSM are on, and "TEST: EDDN's test schemas only" when
+  `OUTRIDER_EDDN_TEST` is set. Settings → Uploads shows "(test schemas only)" whatever EDDN's state; before, the tag
+  disappeared while EDDN was held or unavailable.
+
 ## 2026-10-08 · Uploads: switched in one place (branch EDMC-Functionality)
 - EDDN and EDSM are switched only in Settings → Uploads. The switch applies at once and writes `[eddn] enabled` /
   `[edsm] enabled` into the config file, so the next start keeps it; those two sections are no longer among the Server

@@ -231,6 +231,17 @@ class StateSwitches(unittest.TestCase):
         st.simulate = True
         self.assertFalse(st.upload_on("edsm"))
 
+    def test_startup_line(self):
+        """The console says whether each upload is on, and EDDN's test schemas whenever OUTRIDER_EDDN_TEST is set."""
+        st = self.state
+        with unittest.mock.patch.dict(os.environ, {U.TEST_ENV: ""}):
+            self.assertEqual(st.uploads_line(), "uploads: EDDN off, EDSM off (switched in Settings -> Uploads)")
+        st.upload_cfg["eddn"]["enabled"] = True
+        with unittest.mock.patch.dict(os.environ, {U.TEST_ENV: "1"}):
+            self.assertEqual(st.uploads_line(), "uploads: EDDN on (TEST: EDDN's test schemas only, OUTRIDER_EDDN_TEST is set), "
+                                                "EDSM off (switched in Settings -> Uploads)")
+            self.assertTrue(st.uploads_summary()["eddn"]["test"])
+
     def test_written_in_place(self):
         """The switch rewrites only its own key: the rest of the file and its comments stay; a file that cannot be
         written still switches for this run."""

@@ -7311,10 +7311,12 @@ function uploadsHtml(u) {
     const state = !x.available ? `<span class="unk">coming in a later version</span>`
       : x.blocked ? `<span class="warnc">unavailable: ${esc(x.blocked)}</span>`
       : x.held ? `<span class="bad">held: ${esc(x.held)}</span>`
-      : x.on ? `<span class="ok">on</span>${s === "eddn" && x.test ? ` <span class="warnc" title="[eddn] test: EDDN's test schemas, nothing reaches the live data">(test only)</span>` : ""}` : `<span class="unk">off</span>`;
+      : x.on ? `<span class="ok">on</span>` : `<span class="unk">off</span>`;
+    // OUTRIDER_EDDN_TEST: said whatever the state, so a developer's run is never mistaken for a live one
+    const test = s === "eddn" && x.test ? ` <span class="warnc" title="OUTRIDER_EDDN_TEST is set: EDDN's test schemas only, nothing reaches the live data">(test schemas only)</span>` : "";
     const nums = [x.queued ? `${x.queued} waiting` : "", x.sent_24h ? `${x.sent_24h} sent today` : "", x.dropped_24h ? `${x.dropped_24h} refused` : ""].filter(Boolean).join(" · ");
     return `<label class="mod"><input type="checkbox" data-upload="${s}"${x.on || (x.held && !x.blocked) ? " checked" : ""}${x.available && !u.simulate ? "" : " disabled"}> ` +
-      `<b>${name}</b> <span class="hint">${esc(what)}</span></label><div class="hint">${state}${nums ? " · " + esc(nums) : ""}` +
+      `<b>${name}</b> <span class="hint">${esc(what)}</span></label><div class="hint">${state}${test}${nums ? " · " + esc(nums) : ""}` +
       `${x.error && !x.held ? ` · <span class="bad" title="${esc(x.error)}">last error</span>` : ""}</div>`;
   };
   const acc = ((u.edsm || {}).accounts || []).map(a =>

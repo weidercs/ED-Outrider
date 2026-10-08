@@ -9421,6 +9421,14 @@ class State:
             print(f"uploads: {n} message{'' if n == 1 else 's'} from while Outrider was not running, queued")
         return n
 
+    def uploads_line(self):
+        """The start-up line: each upload on or off, and EDDN's test schemas when the developer's OUTRIDER_EDDN_TEST
+        is set (said even while EDDN is off, so a test run is never mistaken for a live one)."""
+        parts = [f"{s.upper()} {'on' if self.upload_wanted(s) else 'off'}" for s in outrider.uploads.SERVICES]
+        if outrider.uploads.eddn_test_mode():
+            parts[0] += f" (TEST: EDDN's test schemas only, {outrider.uploads.TEST_ENV} is set)"
+        return "uploads: " + ", ".join(parts) + ("" if self.simulate else " (switched in Settings -> Uploads)")
+
     def start_uploads(self):
         """The sending loops (one per service with a sender), and the lease watch, started in run()."""
         self.refresh_leases()
@@ -13450,6 +13458,7 @@ async def run(args, st):
     print("update check: " + ("on (GitHub's latest release, once a day)" if st["update_check"] else "off ([server] update_check)"))
     print("firsts watch: " + ("on (your unsold firsts on Spansh: one request every 10-30 s, each system once a day)"
                               if st["watch_firsts"] else "off ([spansh] watch_firsts)"))
+    print(state.uploads_line())
 
     hosts = allowed_hosts(args.host, args.port, st["allowed_hosts"])
     runner = web.AppRunner(make_app(state, hosts))
