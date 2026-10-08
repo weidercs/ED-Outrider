@@ -4212,6 +4212,20 @@ const settle = async maxMs => {
     allOk = allOk && goodU;
     console.log(goodU ? "OK" : "FAIL", "| uploads settings |", goodU ? "the switches, a hold, test only, EDSM's account without its key" : JSON.stringify(got), errors.slice(before));
   }
+  // the Data tile's upload line: per service in use, sent / waiting / refused, test and dry-run marks; empty when none
+  {
+    const w = dom.window, before = errors.length;
+    const got = w.eval(`(() => {
+      const t = h => { const d = document.createElement("div"); d.innerHTML = h; return d.textContent; };
+      return [t(uploadLineHtml({eddn: {on: true, sent_24h: 1234, queued: 2, dropped_24h: 1, test: true}, edsm: {on: true, sent_24h: 59, dry_run: true, dry_24h: 18, new_24h: 2, new_total: 40}})),
+              uploadLineHtml({eddn: {on: false}, edsm: {on: false}}), uploadLineHtml(null),
+              t(uploadLineHtml({eddn: {on: false, sent_24h: 3}, edsm: {on: true, held: "203 EDSM refused the commander name or API key"}}))]; })()`);
+    const want = ["EDDN (test) 1,234 sent · 2 waiting · 1 refused \u00a0 EDSM (dry run) 59 sent · 18 dry run · 2 new to EDSM", "", "",
+                  "EDDN 3 sent off \u00a0 EDSM 0 sent held"];
+    const goodL = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && goodL;
+    console.log(goodL ? "OK" : "FAIL", "| uploads in the Data tile |", goodL ? "per service, test/dry-run marks, nothing when unused" : JSON.stringify(got), errors.slice(before));
+  }
   // uploads H: the Here view's "New to EDSM" badge (EDSM's systemCreated), absent otherwise
   {
     const w = dom.window, before = errors.length;

@@ -59,5 +59,6 @@ twice: EDDN has no way to tell. So:
 
 ## Status
 
-Settings → Uploads shows, per service: on or off, what is waiting, what was sent and refused in the last day, and why
+The header's Data tile shows, live, what each upload in use sent, has waiting and had refused in the last day, and
+for EDSM how many systems were new to it. Settings → Uploads shows, per service: on or off, what is waiting, what was sent and refused in the last day, and why
 nothing can be sent now (held by another uploader, a key EDSM refused, the beta or Legacy game).

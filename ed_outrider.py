@@ -9338,6 +9338,10 @@ class State:
                                 blocked=self.BLOCKED_WORDS.get(blocked) if blocked in ("beta", "legacy", "crew") else None)
         out["eddn"]["test"] = outrider.uploads.eddn_test_mode()
         out["edsm"]["dry_run"] = outrider.edsm.dry_run()
+        # systems new to EDSM by your uploads (EDSM's systemCreated): the last day's and all of them
+        day_ago = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - 86400))
+        out["edsm"]["new_24h"], out["edsm"]["new_total"] = self.db.execute(
+            "SELECT count(CASE WHEN ts >= ? THEN 1 END), count(*) FROM edsm_new_systems", (day_ago,)).fetchone()
         out["edsm"]["accounts"] = self.edsm_account_list()
         out["readonly"] = bool(self.lease_writable) and not any(self.lease_writable.values())
         out["simulate"] = bool(self.simulate)

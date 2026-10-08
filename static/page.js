@@ -460,6 +460,7 @@ function renderStrip() {
   fl.innerHTML = val(`<span class="dot ${dot}"></span>${text}`);
   sl.innerHTML = problems.length ? problems.join(" · ") : /^asking|^fetching/.test(data.status || "") ? esc(data.status) : "Spansh ok";
   document.getElementById("backupLine").innerHTML = backupHtml(data.backup || {});
+  document.getElementById("uploadLine").innerHTML = uploadLineHtml(data.uploads);
   // docked somewhere that buys data with a worthwhile amount aboard: say so plainly
   const dk = data.docked, sellHere = sellableHere(dk, data.unsold), se = document.getElementById("sell");
   if (lossCard && Date.now() < lossCard.until) {
@@ -7305,6 +7306,24 @@ function starWords(cls, lum) {
 const UPLOAD_NAMES = {eddn: ["EDDN", "the data network Spansh, EDSM, Inara and others read: systems, scans, signals, markets, as they happen"],
                       edsm: ["EDSM", "your flight log and scans, to your EDSM account (in batches: each jump, docking)"]};
 let uploadsDrawn = "";
+// the Data tile's line: per upload that is on (or sent anything in the last day), what it sent, what waits and what
+// was refused, live with each payload; nothing when no upload is in use
+function uploadLineHtml(u) {
+  if (!u) return "";
+  const parts = ["eddn", "edsm"].map(s => {
+    const x = u[s] || {}, [name] = UPLOAD_NAMES[s];
+    if (!x.on && !x.sent_24h && !x.queued && !x.dry_24h) return "";
+    const bits = [`${(x.sent_24h || 0).toLocaleString("en-US")} sent`];
+    if (x.queued) bits.push(`${x.queued.toLocaleString("en-US")} waiting`);
+    if (x.dropped_24h) bits.push(`<span class="warnc">${x.dropped_24h.toLocaleString("en-US")} refused</span>`);
+    if (x.dry_24h) bits.push(`${x.dry_24h.toLocaleString("en-US")} dry run`);
+    if (s === "edsm" && x.new_total) bits.push(`<span title="systems EDSM had never heard of until your upload: ${x.new_total.toLocaleString("en-US")} in all">${(x.new_24h || 0).toLocaleString("en-US")} new to EDSM</span>`);
+    const mode = s === "eddn" && x.test ? " (test)" : s === "edsm" && x.dry_run ? " (dry run)" : "";
+    const state = x.held ? ` <span class="bad" title="${esc(x.held)}">held</span>` : !x.on ? ` <span class="unk">off</span>` : "";
+    return `<b>${name}</b>${mode} ${bits.join(" · ")}${state}`;
+  }).filter(Boolean);
+  return parts.length ? `<span title="uploads in the last 24 hours (Settings → Uploads has the detail)">${parts.join(" &nbsp; ")}</span>` : "";
+}
 function uploadsHtml(u) {
   if (!u) return `<div class="unk">not known yet</div>`;
   const row = s => {

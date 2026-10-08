@@ -251,6 +251,11 @@ class Sender(unittest.TestCase):
         self.assertEqual([tuple(r) for r in self.db.execute("SELECT system, name, ts FROM edsm_new_systems")],
                          [(18207037532889, "Smojooe AR-E b25-8", "2026-10-08T10:05:00Z")])   # the jump, not the scan
         self.assertEqual(self.state.scan_version, v + 1)                    # the Here view asks again
+        self.db.execute("INSERT INTO edsm_new_systems VALUES (101, 'Old', '2020-01-01T00:00:00Z')")
+        self.db.execute("INSERT INTO edsm_new_systems VALUES (102, 'Recent', ?)", (iso_ts(time.time() - 60),))
+        e = self.state.uploads_summary()["edsm"]
+        jump_recent = time.time() - ed_outrider.ts_seconds("2026-10-08T10:05:00Z") <= 86400
+        self.assertEqual((e["new_24h"], e["new_total"]), (1 + jump_recent, 3))  # the Data tile's "new to EDSM"
         self.state.locate = lambda id64: ("Smojooe AR-E b25-8", -4177.09, -1.0, 3324.53)
         self.assertEqual(self.state.system_detail(18207037532889)["new_to_edsm"], "2026-10-08T10:05:00Z")
         self.state.locate = lambda id64: ("Elsewhere", 0.0, 0.0, 0.0)
