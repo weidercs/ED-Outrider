@@ -77,6 +77,8 @@ class Session:
         self.status_body = None               # Status.json's BodyName (set by the hub from the live reading)
         self.market_id = self.station = None
         self.ship_id = None
+        self.dir = None                       # the journal folder of the line (NavRoute.json, Market.json... live there)
+        self.pending = {}                     # what waits on a companion file: {"navroute": (event, tries)}
 
     # ---- what the line's session is ----
     @property
@@ -279,6 +281,7 @@ class UploadHub:
         b = os.path.basename(path)
         if b not in self.primed:
             self.prime(path, offset)
+        self.session.dir = os.path.dirname(path)
         try:
             ev = json.loads(raw)
         except ValueError:
@@ -303,6 +306,11 @@ class UploadHub:
                     n += 1
         self.queued += n
         return n
+
+    def status(self, st):
+        """The live Status.json reading: the body it names (EDDN's codex entries say it only then)."""
+        st = st or {}
+        self.session.status_body = st.get("body") if st.get("live") else None
 
     def snapshot(self):
         return (self.session.snapshot(), set(self.primed), self.queued)

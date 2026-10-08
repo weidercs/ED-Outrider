@@ -103,6 +103,98 @@ def fss_message(ev, session):
     return schema, m
 
 
+NAVROUTE_WINDOW_S = 5     # NavRoute.json must be the one this NavRoute event wrote (EDMC's check)
+NAVROUTE_TRIES = 11       # ...asked again on the lines after it while it is not (written late, NFS)
+
+
+def _seconds(ts):
+    from outrider.core import ts_seconds
+    try:
+        return ts_seconds(str(ts))
+    except (TypeError, ValueError):
+        return None
+
+
+def navroute_message(ev, session):
+    """navroute/1: the route NavRoute.json holds, once the file is the one this NavRoute event wrote (within
+    NAVROUTE_WINDOW_S of it). A NavRoute event starts the wait; every later line tries the file again, up to
+    NAVROUTE_TRIES. None while waiting, and for a cleared route (NavRouteClear, no Route)."""
+    import json
+    import os
+    if ev.get("event") == "NavRoute":
+        session.pending["navroute"] = [ev.get("timestamp"), 0]
+    elif ev.get("event") == "NavRouteClear":
+        session.pending.pop("navroute", None)
+        return None
+    wait = session.pending.get("navroute")
+    if not wait or not session.dir:
+        return None
+    wait[1] += 1
+    try:
+        with open(os.path.join(session.dir, "NavRoute.json"), encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        data = None
+    a, b = _seconds((data or {}).get("timestamp")), _seconds(wait[0])
+    if a is None or b is None or abs(a - b) > NAVROUTE_WINDOW_S:
+        if wait[1] >= NAVROUTE_TRIES:
+            session.pending.pop("navroute", None)
+        return None
+    session.pending.pop("navroute", None)
+    route = [{"StarSystem": h.get("StarSystem"), "SystemAddress": h.get("SystemAddress"), "StarPos": h.get("StarPos"),
+              "StarClass": h.get("StarClass")} for h in (data.get("Route") or []) if isinstance(h, dict)]
+    route = [h for h in route if h["StarSystem"] and isinstance(h["SystemAddress"], int)
+             and isinstance(h["StarPos"], list) and len(h["StarPos"]) == 3 and isinstance(h["StarClass"], str)]
+    if not route:
+        return None
+    return {"timestamp": data.get("timestamp"), "event": "NavRoute", "Route": route}
+
+
+CODEX_KEYS = ("timestamp", "event", "System", "StarPos", "SystemAddress", "Name", "Region", "EntryID", "Category",
+              "Latitude", "Longitude", "SubCategory", "NearestDestination", "VoucherAmount", "Traits", "BodyID", "BodyName")
+
+
+def codex_message(ev, session):
+    """codexentry/1: the entry, the position after the cross-check; BodyName only from Status.json and BodyID only
+    when that is the body you approached (close binaries: EDMC's rule). None when a required name is empty."""
+    if ev.get("event") != "CodexEntry" or not session.located(ev.get("SystemAddress")):
+        return None
+    m = {k: ev[k] for k in CODEX_KEYS if k in ev}
+    m["System"] = ev.get("System") or session.system
+    m["StarPos"] = list(session.pos)
+    if not all(m.get(k) for k in ("System", "Name", "Region", "Category", "SubCategory")) or \
+            any(not t for t in m.get("Traits") or []):
+        return None
+    if "BodyName" not in m and session.status_body:
+        m["BodyName"] = session.status_body
+        if "BodyID" not in m and session.body == session.status_body and session.body_id is not None:
+            m["BodyID"] = session.body_id
+    return m
+
+
+SETTLEMENT_KEYS = ("timestamp", "event", "StarSystem", "StarPos", "StationGovernment", "StationAllegiance",
+                   "StationEconomies", "StationFaction", "StationServices", "StationEconomy", "SystemAddress", "Name",
+                   "MarketID", "BodyID", "BodyName", "Latitude", "Longitude")
+
+
+def settlement_message(ev, session):
+    """approachsettlement/1 (MarketID when the event has one); None without a position on the body (a login at a
+    port) or a place."""
+    if ev.get("event") != "ApproachSettlement" or not session.located(ev.get("SystemAddress")):
+        return None
+    if ev.get("Latitude") is None or ev.get("Longitude") is None:
+        return None
+    m = unlocalised({k: ev[k] for k in SETTLEMENT_KEYS if k in ev})
+    m["StarSystem"] = ev.get("StarSystem") or session.system
+    m["StarPos"] = list(session.pos)
+    if isinstance(m.get("StationFaction"), dict):
+        m["StationFaction"] = {k: v for k, v in m["StationFaction"].items() if k in ("Name", "FactionState")}
+    if isinstance(m.get("StationEconomies"), list):
+        m["StationEconomies"] = [{k: v for k, v in e.items() if k in ("Name", "Proportion")}
+                                 for e in m["StationEconomies"] if isinstance(e, dict)]
+    return m
+
+
 def build(ev, session, software_version, test=False):
     """The EDDN messages a journal event makes: [(schema name, envelope)]."""
     out = []
@@ -112,6 +204,11 @@ def build(ev, session, software_version, test=False):
     f = fss_message(ev, session)
     if f is not None:
         out.append((f[0], envelope(f[0], f[1], session, software_version, 1, test)))
+    for schema, make in (("codexentry", codex_message), ("approachsettlement", settlement_message),
+                         ("navroute", navroute_message)):
+        m = make(ev, session)
+        if m is not None:
+            out.append((schema, envelope(schema, m, session, software_version, 1, test)))
     return out
 
 

@@ -173,6 +173,72 @@ class FssFamily(unittest.TestCase):
         self.assertEqual(E.build(ev, self.s, "v"), [])
 
 
+@unittest.skipUnless(jsonschema, "jsonschema is not installed (requirements-dev.txt)")
+class RouteCodexSettlement(unittest.TestCase):
+    """Part D: navroute from NavRoute.json (only the file this event wrote), codexentry (the body from Status.json),
+    approachsettlement."""
+
+    def setUp(self):
+        self.s = session()
+        self.s.feed(FSDJUMP)
+        self.addr = FSDJUMP["SystemAddress"]
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir)
+        self.s.dir = self.dir
+
+    def navfile(self, ts, route=True):
+        with open(os.path.join(self.dir, "NavRoute.json"), "w", encoding="utf-8") as f:
+            json.dump({"timestamp": ts, "event": "NavRoute", "Route": [
+                {"StarSystem": "Smojooe AR-E b25-8", "SystemAddress": self.addr, "StarPos": [-4177.09, -1.0, 3324.53], "StarClass": "M"},
+                {"StarSystem": "Next", "SystemAddress": 22, "StarPos": [-4100.0, 0.0, 3300.0], "StarClass": "K"}] if route else []}, f)
+
+    def test_navroute_waits_for_its_file(self):
+        self.navfile("2026-10-08T09:00:00Z")                              # an older route's file
+        self.assertEqual(E.build({"timestamp": "2026-10-08T10:10:00Z", "event": "NavRoute"}, self.s, "v"), [])
+        self.navfile("2026-10-08T10:10:01Z")                              # written now (NFS: a line later)
+        [(name, env)] = E.build({"timestamp": "2026-10-08T10:10:02Z", "event": "Music", "MusicTrack": "x"}, self.s, "v")
+        valid(env, "navroute-v1.0.json")
+        self.assertEqual((name, [h["StarSystem"] for h in env["message"]["Route"]]), ("navroute", ["Smojooe AR-E b25-8", "Next"]))
+        self.assertEqual(E.build({"timestamp": "2026-10-08T10:10:03Z", "event": "Music"}, self.s, "v"), [])   # once
+        self.navfile("2026-10-08T09:00:00Z")
+        E.build({"timestamp": "2026-10-08T11:00:00Z", "event": "NavRoute"}, self.s, "v")
+        for i in range(E.NAVROUTE_TRIES):                                 # never the right file: given up
+            E.build({"timestamp": "2026-10-08T11:00:01Z", "event": "Music"}, self.s, "v")
+        self.assertNotIn("navroute", self.s.pending)
+        E.build({"timestamp": "2026-10-08T12:00:00Z", "event": "NavRoute"}, self.s, "v")
+        self.assertEqual(E.build({"timestamp": "2026-10-08T12:00:01Z", "event": "NavRouteClear"}, self.s, "v"), [])
+        self.assertNotIn("navroute", self.s.pending)
+
+    def test_codex(self):
+        ev = {"timestamp": "2026-10-08T10:20:00Z", "event": "CodexEntry", "EntryID": 2310101, "Name": "$Codex_Ent_Tussocks_01_A_Name;",
+              "Name_Localised": "Tussock Pennata - Teal", "SubCategory": "$Codex_SubCategory_Organic_Structures;",
+              "SubCategory_Localised": "Organic structures", "Category": "$Codex_Category_Biology;", "Category_Localised": "Biological",
+              "Region": "$Codex_RegionName_18;", "Region_Localised": "Inner Orion Spur", "System": "Smojooe AR-E b25-8",
+              "SystemAddress": self.addr, "Latitude": 1.5, "Longitude": 2.5, "IsNewEntry": True, "VoucherAmount": 50000}
+        self.s.feed({"event": "ApproachBody", "timestamp": "2026-10-08T10:15:00Z", "Body": "Smojooe AR-E b25-8 A 1", "BodyID": 5})
+        self.s.status_body = "Smojooe AR-E b25-8 A 1"
+        [(name, env)] = E.build(ev, self.s, "v")
+        valid(env, "codexentry-v1.0.json")
+        m = env["message"]
+        self.assertEqual((name, m["BodyName"], m["BodyID"], "IsNewEntry" in m, "Name_Localised" in m), ("codexentry", "Smojooe AR-E b25-8 A 1", 5, False, False))
+        self.s.status_body = "Smojooe AR-E b25-8 A 2"                    # a close binary: the name, not the other's id
+        m = E.build(ev, self.s, "v")[0][1]["message"]
+        self.assertEqual((m["BodyName"], "BodyID" in m), ("Smojooe AR-E b25-8 A 2", False))
+        self.s.status_body = None
+        self.assertNotIn("BodyName", E.build(ev, self.s, "v")[0][1]["message"])
+        self.assertEqual(E.build(dict(ev, Region=""), self.s, "v"), [])   # an empty required name: not sent
+
+    def test_settlement(self):
+        ev = {"timestamp": "2026-10-08T10:30:00Z", "event": "ApproachSettlement", "Name": "Hamilton Base", "MarketID": 3820000000,
+              "StationFaction": {"Name": "Them", "FactionState": "Boom", "Happiness": "x"}, "StationGovernment": "$government_Corporate;",
+              "StationGovernment_Localised": "Corporate", "StationEconomies": [{"Name": "$economy_Industrial;", "Name_Localised": "Industrial", "Proportion": 1.0}],
+              "SystemAddress": self.addr, "BodyID": 5, "BodyName": "Smojooe AR-E b25-8 A 1", "Latitude": 10.0, "Longitude": 20.0}
+        [(name, env)] = E.build(ev, self.s, "v")
+        valid(env, "approachsettlement-v1.0.json")
+        self.assertEqual((name, env["message"]["MarketID"], env["message"]["StationFaction"]), ("approachsettlement", 3820000000, {"Name": "Them", "FactionState": "Boom"}))
+        self.assertEqual(E.build({k: v for k, v in ev.items() if k != "Latitude"}, self.s, "v"), [])   # a login at a port
+
+
 class Answers(unittest.TestCase):
 
     def test_outcome(self):

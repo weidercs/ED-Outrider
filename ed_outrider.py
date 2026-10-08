@@ -11112,6 +11112,7 @@ class State:
                     route_mtimes[sj] = m
                     before = self.journals.status_json
                     self.journals.read_status(d)
+                    self.uploads_hub.status(self.journals.status_json)   # EDDN's codex entries name the body from it
                     gist = lambda st: st and (round(st.get("fuel_main") or 0, 1), st.get("flags"), st.get("flags2"),
                                               st.get("body"), json.dumps(st.get("destination")), st.get("live"),
                                               st.get("selected_weapon"))

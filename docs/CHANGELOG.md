@@ -2,6 +2,11 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · Uploads, part D: EDDN's routes, codex entries, settlements (branch EDMC-Functionality)
+- A plotted route (from NavRoute.json, only the file that NavRoute event wrote: checked against its time, tried again on
+  the next lines while NFS catches up), codex entries (the body named only from the live Status.json, its id only when
+  it is the body you approached), and settlements you approach (not a login at a port, which has no position).
+
 ## 2026-10-08 · Uploads, part C: EDDN's FSS family (branch EDMC-Functionality)
 - The honk (FSSDiscoveryScan), all bodies found, a body's signals, barycentres and nav beacon scans go to EDDN too,
   each built from only the keys its schema lists (a field Frontier adds later cannot get it refused), the system's
