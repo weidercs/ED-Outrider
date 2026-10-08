@@ -412,17 +412,26 @@ def glob_journals(d):
 # ---- settings ----
 
 SERVICES = ("eddn", "edsm")
-DEFAULTS = {"eddn": {"enabled": False, "test": False}, "edsm": {"enabled": False}}
+DEFAULTS = {"eddn": {"enabled": False}, "edsm": {"enabled": False}}
+TEST_ENV = "OUTRIDER_EDDN_TEST"   # a developer's switch, not a setting: EDDN's /test schemas while trying sender code
 
 
 def upload_settings(cfg):
-    """[eddn] enabled / test and [edsm] enabled from the config (bools; anything else is the default, off). EDSM's
-    commander names and API keys are not here: they live in the database (State.edsm_accounts), set from the page."""
+    """[eddn] enabled and [edsm] enabled from the config (written there by Settings -> Uploads, the only place to
+    switch them; hidden from the Server settings): bools, anything else off."""
     out = {}
     for service, keys in DEFAULTS.items():
         sec = cfg.get(service) if isinstance(cfg.get(service), dict) else {}
         out[service] = {k: sec[k] if isinstance(sec.get(k), bool) else v for k, v in keys.items()}
     return {"uploads": out}
+
+
+def eddn_test_mode(environ=None):
+    """Whether EDDN messages go to its test schemas: only when the developer starts Outrider with OUTRIDER_EDDN_TEST=1
+    (EDDN asks that new sender code be tried there first). Players have no setting for it: the switch to send is in
+    Settings -> Uploads, and that is the only one."""
+    environ = os.environ if environ is None else environ
+    return str(environ.get(TEST_ENV, "")).strip().lower() in ("1", "true", "yes", "on")
 
 
 # ---- sending ----

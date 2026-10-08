@@ -943,7 +943,7 @@ def settings_from(cfg, args, env_journals=None, detected=((), ())):
         # [mcp]: read by the MCP bridge (python3 -m outrider.mcp), not the server; here so --write-config writes it
         **outrider.mcp.mcp_settings(cfg),
         "assistant": outrider.ask.assistant_settings(cfg),   # the voice's optional AI layer (off by default)
-        **outrider.uploads.upload_settings(cfg),              # [eddn], [edsm]: uploads, off by default
+        **outrider.uploads.upload_settings(cfg),              # [eddn], [edsm]: written by Settings -> Uploads
     }
 
 
@@ -1080,16 +1080,13 @@ max_rows = {st["mcp_rows"]}   # how many rows a list in a tool's answer holds (t
 password = {q(st["mcp_password"])}   # an Outrider on another computer (a server) asks for its [server] password: the bridge signs in with this ("" on this PC)
 
 [eddn]
-# EDDN, the Elite Dangerous Data Network: what your journals say as you play (systems, scans, signals, markets),
-# sent as it happens for Spansh, EDSM, Inara and others to read. Off unless you switch it on; the page's Settings
-# switch wins over this. Only one Outrider (or EDMC) should send it: see the guide's Uploads page.
-enabled = {"true" if st["uploads"]["eddn"]["enabled"] else "false"}   # send to EDDN as you play (off by default)
-test = {"true" if st["uploads"]["eddn"]["test"] else "false"}   # send to EDDN's test schemas only: nothing reaches the live data (for trying it out)
+# EDDN uploads: switched on and off in the page's Settings -> Uploads, which writes this. Off by default.
+enabled = {"true" if st["uploads"]["eddn"]["enabled"] else "false"}   # send to EDDN as you play
 
 [edsm]
-# EDSM, the Elite Dangerous Star Map: your flight log and scans, sent to your EDSM account in batches (each jump,
-# docking). Your EDSM commander name and API key are set in the page's Settings, per in-game commander.
-enabled = {"true" if st["uploads"]["edsm"]["enabled"] else "false"}   # send your flight log and scans to EDSM (off by default)
+# EDSM uploads: switched on and off in the page's Settings -> Uploads, which writes this (the key is set there too).
+enabled = {"true" if st["uploads"]["edsm"]["enabled"] else "false"}   # send your flight log and scans to EDSM
+
 """
 
 POSITION_EVENTS = ("FSDJump", "CarrierJump", "Location")
@@ -5464,8 +5461,8 @@ class State:
         self.riches_plotting = None
         self.riches_task = None
         self.dock_cache = {}   # the Nearest finder's last Spansh search and permit check (DOCK_CACHE_S)
-        # uploads (EDDN, EDSM: opt-in, off by default; outrider/uploads.py). upload_cfg is the config's; the page's
-        # switch (meta uploads_on) wins over it. senders: {service: async fn(rows)} (the services add theirs).
+        # uploads (EDDN, EDSM: opt-in, off by default; outrider/uploads.py): switched in Settings -> Uploads, which
+        # writes [eddn]/[edsm] enabled into the config file. senders: {service: async fn(rows)} (the services add theirs).
         self.upload_cfg = json.loads(json.dumps(outrider.uploads.DEFAULTS))
         self.upload_senders, self.upload_tasks, self.upload_session = {}, {}, None
         self.upload_status = {}   # service -> {error, at, held}: the last round's outcome for the status view
@@ -5599,19 +5596,25 @@ class State:
         the password and the AI key only as set or not. Applied at the next start."""
         path = self.config_file()
         st, problems = self._config_settings(load_config(path) if os.path.exists(path) else {})
-        secs = outrider.config_edit.entries(config_text(st), config_choices())
+        # [eddn]/[edsm] are switched in Settings -> Uploads only (one place): not listed among the Server settings
+        secs = [s for s in outrider.config_edit.entries(config_text(st), config_choices())
+                if s["section"] not in outrider.config_edit.HIDDEN_SECTIONS]
         for sec in secs:
             for k in sec["keys"]:
                 if (sec["section"], k["key"]) in outrider.config_edit.SECRETS:
                     k.update(secret=True, set=bool(k["value"]), value=None)
         return {"path": path, "exists": os.path.exists(path), "sections": secs, "problems": problems}
 
-    def config_save(self, changes):
+    def config_save(self, changes, hidden=False):
         """POST /api/config {section: {key: value}}: those keys written into the config file in place (comments kept,
         the old file kept as .bak), only if the result reads back and settings_from finds nothing new wrong with it.
-        (answer, status); the server uses the new values at its next start."""
+        (answer, status); the server uses the new values at its next start. hidden: the sections the page's own
+        switches write (config_edit.HIDDEN_SECTIONS: Settings -> Uploads) may be written; the Server list never can."""
         if not isinstance(changes, dict) or not changes or not all(isinstance(v, dict) for v in changes.values()):
             return {"error": "expected {section: {key: value}}"}, 400
+        if not hidden and set(changes) & outrider.config_edit.HIDDEN_SECTIONS:
+            sec = min(set(changes) & outrider.config_edit.HIDDEN_SECTIONS)
+            return {"error": f"[{sec}] is switched in Settings -> Uploads"}, 400
         path = self.config_file()
         cfg_now = load_config(path) if os.path.exists(path) else {}
         st, before = self._config_settings(cfg_now)
@@ -9187,11 +9190,11 @@ class State:
     # ---- uploads (EDDN, EDSM) ----
 
     def upload_wanted(self, service):
-        """The page's switch for `service` (else the config): what this instance means to do."""
-        if self.simulate or service not in self.upload_cfg:
+        """The page's switch for `service` (Settings -> Uploads, the only one; off until switched on): what this
+        instance means to do."""
+        if self.simulate or service not in outrider.uploads.SERVICES:
             return False
-        ov = (meta_get(self.db, "uploads_on") or {}).get(service)
-        return bool(ov) if isinstance(ov, bool) else bool(self.upload_cfg[service].get("enabled"))
+        return bool(self.upload_cfg.get(service, {}).get("enabled"))
 
     def upload_conflict(self, service):
         """Why `service` must not send from here now although wanted: another Outrider's live lease claims it, or
@@ -9282,12 +9285,17 @@ class State:
         return end, None
 
     def set_upload(self, service, on):
-        """The page's switch for one service (remembered over restarts). Switching it on again clears a hold; switching
-        it on from off sets its starting mark (upload_start_mark) and catches up from there."""
+        """The page's switch for one service, applied at once and written into the config file ([eddn]/[edsm]
+        enabled) for the next start. Switching it on again clears a hold; switching it on from off sets its starting
+        mark (upload_start_mark) and catches up from there. A note when the file could not keep it, else None."""
         was = self.upload_wanted(service)
-        ov = dict(meta_get(self.db, "uploads_on") or {})
-        ov[service] = bool(on)
-        meta_set(self.db, "uploads_on", ov)
+        self.upload_cfg.setdefault(service, {})["enabled"] = bool(on)
+        out, status = self.config_save({service: {"enabled": bool(on)}}, hidden=True)
+        note = None
+        if status != 200:
+            note = (f"{service.upper()} is {'on' if on else 'off'} until Outrider stops, but the config file could not "
+                    f"keep it: {out.get('error')}")
+            print(f"uploads: {note}", file=sys.stderr)
         self.upload_status.pop(service, None)
         if on and not was:
             pos, ts = self.upload_start_mark(service)
@@ -9297,6 +9305,7 @@ class State:
                 self.uploads_hub.catch_up(service, LIVE_DIRS, dict(self.journals.offsets))
         self.db.commit()
         self.bump()
+        return note
 
     def upload_report(self, service, outcome):
         """A sending round's outcome (outrider.uploads.upload_loop): the last error, and a hold (stop until the player
@@ -9316,19 +9325,19 @@ class State:
         for service in outrider.uploads.SERVICES:
             st = self.upload_status.get(service) or {}
             out[service] = dict(outrider.uploads.counts(self.db, service), on=self.upload_on(service),
-                                configured=bool(self.upload_cfg.get(service, {}).get("enabled")),
                                 available=service in self.upload_senders, error=st.get("error"),
                                 held=st.get("held") or (self.upload_conflict(service) if self.upload_wanted(service) else None),
                                 blocked=self.BLOCKED_WORDS.get(blocked) if blocked in ("beta", "legacy", "crew") else None)
-        out["eddn"]["test"] = bool(self.upload_cfg["eddn"].get("test"))
+        out["eddn"]["test"] = outrider.uploads.eddn_test_mode()
         out["edsm"]["accounts"] = self.edsm_account_list()
         out["readonly"] = bool(self.lease_writable) and not any(self.lease_writable.values())
         out["simulate"] = bool(self.simulate)
         return out
 
     def eddn_build(self, ev, session):
-        """What a live journal line sends to EDDN (outrider.eddn.build), to its test schemas under [eddn] test."""
-        return outrider.eddn.build(ev, session, outrider.__version__, test=bool(self.upload_cfg["eddn"].get("test")))
+        """What a live journal line sends to EDDN (outrider.eddn.build), to its test schemas when the developer's
+        OUTRIDER_EDDN_TEST is set."""
+        return outrider.eddn.build(ev, session, outrider.__version__, test=outrider.uploads.eddn_test_mode())
 
     async def eddn_send(self, rows):
         """Send one queued EDDN message (EDDN takes one per request): gzip, both content headers, a 20 s timeout. The
@@ -12823,9 +12832,9 @@ def make_app(state, hosts=None):
             why = state.check_upload_start(body["service"], body.get("confirm") is True)
             if why:
                 return web.json_response({"error": why[1], "code": why[0]}, status=409)
-        state.set_upload(body["service"], body["on"])
+        note = state.set_upload(body["service"], body["on"])
         state.refresh_leases()   # the lease says so at once
-        return web.json_response(state.uploads_summary())
+        return web.json_response(dict(state.uploads_summary(), **({"note": note} if note else {})))
 
     async def edsm_account_view(request):
         """POST /api/uploads/edsm {commander, name?, api_key?, remove?}: an in-game commander's EDSM account (the key
@@ -13401,7 +13410,7 @@ async def run(args, st):
     print("co-pilot button: " + (f"{st['copilot']['button'] or '?'} on {st['copilot']['device'] or '?'}"
                                  if st["copilot"]["enabled"] else "off ([copilot] enabled)"))
     state.highway_cfg = dict(st["highway"])
-    state.upload_cfg = json.loads(json.dumps(st["uploads"]))   # [eddn], [edsm]: off unless switched on
+    state.upload_cfg = json.loads(json.dumps(st["uploads"]))   # [eddn]/[edsm] enabled, as Settings -> Uploads wrote them
     saved = meta_get(db, "autotarget")   # the Highway tab's toggle and delay beat the config file once used
     if isinstance(saved, dict):
         if isinstance(saved.get("enabled"), bool):

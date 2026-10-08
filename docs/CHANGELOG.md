@@ -2,6 +2,14 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · Uploads: switched in one place (branch EDMC-Functionality)
+- EDDN and EDSM are switched only in Settings → Uploads. The switch applies at once and writes `[eddn] enabled` /
+  `[edsm] enabled` into the config file, so the next start keeps it; those two sections are no longer among the Server
+  settings, and the database's separate copy of the switch is gone. If the file cannot be written, the page says the
+  switch holds only until Outrider stops.
+- EDDN's test schemas are a developer's switch, the environment variable `OUTRIDER_EDDN_TEST=1`, not a setting:
+  `[eddn] test` in the config is no longer read.
+
 ## 2026-10-08 · Uploads, part A4: catching up (branch EDMC-Functionality)
 - Each upload remembers how far through the journals it has got (a mark). What was played while Outrider was not
   running is sent at the next start, up to a week back (the author's cap); a journal re-read or a restore sends

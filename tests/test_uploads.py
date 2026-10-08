@@ -181,31 +181,48 @@ class HubThroughTheReader(unittest.TestCase):
 class Settings(unittest.TestCase):
 
     def test_config(self):
-        self.assertEqual(U.upload_settings({})["uploads"], {"eddn": {"enabled": False, "test": False}, "edsm": {"enabled": False}})
-        got = U.upload_settings({"eddn": {"enabled": True, "test": "yes"}, "edsm": {"enabled": True}})["uploads"]
-        self.assertEqual(got, {"eddn": {"enabled": True, "test": False}, "edsm": {"enabled": True}})   # a non-bool is the default
+        self.assertEqual(U.upload_settings({})["uploads"], {"eddn": {"enabled": False}, "edsm": {"enabled": False}})
+        got = U.upload_settings({"eddn": {"enabled": True, "test": True}, "edsm": {"enabled": "yes"}})["uploads"]
+        self.assertEqual(got, {"eddn": {"enabled": True}, "edsm": {"enabled": False}})   # a non-bool is the default
+
+    def test_test_mode_is_the_developers(self):
+        """EDDN's test schemas: an environment variable, never a setting (nothing in the config reads it)."""
+        self.assertFalse(U.eddn_test_mode({}))
+        self.assertTrue(U.eddn_test_mode({U.TEST_ENV: "1"}))
+        self.assertFalse(U.eddn_test_mode({U.TEST_ENV: "0"}))
+        self.assertNotIn("test", U.upload_settings({"eddn": {"test": True}})["uploads"]["eddn"])
 
 
 class StateSwitches(unittest.TestCase):
-    """The config's [eddn]/[edsm] enabled, the page's switch over it, never in --simulate, held on a refused key."""
+    """[eddn]/[edsm] enabled, switched only in Settings -> Uploads, which writes the config file; never in --simulate,
+    held on a refused key."""
 
     def setUp(self):
+        import tempfile
         import types
         self.db = ed_outrider.open_db(":memory:")
         self.addCleanup(self.db.close)
         self.j = ed_outrider.Journals(self.db)
         self.state = ed_outrider.State(self.db, self.j, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.state.config_path = os.path.join(tmp.name, "ed_outrider.toml")
+
+    def written(self):
+        return U.upload_settings(ed_outrider.load_config(self.state.config_path))["uploads"]
 
     def test_switches(self):
         st = self.state
         self.assertIs(self.j.uploads, st.uploads_hub)
         self.assertEqual((st.upload_on("eddn"), st.upload_on("edsm"), st.upload_on("inara")), (False, False, False))
-        st.upload_cfg["eddn"]["enabled"] = True
+        st.upload_cfg["eddn"]["enabled"] = True                  # as the config said at the start
         self.assertTrue(st.upload_on("eddn"))
-        st.set_upload("eddn", False)                            # the page's switch wins over the config
+        st.set_upload("eddn", False)
         self.assertFalse(st.upload_on("eddn"))
+        self.assertEqual(self.written()["eddn"]["enabled"], False)   # written into the config file
         st.set_upload("edsm", True)
         self.assertTrue(st.upload_on("edsm"))
+        self.assertEqual(self.written(), {"eddn": {"enabled": False}, "edsm": {"enabled": True}})
         st.upload_report("edsm", {"error": None, "at": 1, "results": [(1, "held", "203 Commander name/API Key not found", None)]})
         self.assertFalse(st.upload_on("edsm"))                   # waiting on the player
         self.assertEqual(st.uploads_summary()["edsm"]["held"], "203 Commander name/API Key not found")
@@ -213,6 +230,32 @@ class StateSwitches(unittest.TestCase):
         self.assertTrue(st.upload_on("edsm"))
         st.simulate = True
         self.assertFalse(st.upload_on("edsm"))
+
+    def test_written_in_place(self):
+        """The switch rewrites only its own key: the rest of the file and its comments stay; a file that cannot be
+        written still switches for this run."""
+        with open(self.state.config_path, "w", encoding="utf-8") as f:
+            f.write('# mine\n[server]\nport = 8030   # kept\n\n[eddn]\nenabled = false\n')
+        self.state.set_upload("eddn", True)
+        with open(self.state.config_path, encoding="utf-8") as f:
+            text = f.read()
+        self.assertIn("# mine", text)
+        self.assertIn("port = 8030   # kept", text)
+        self.assertIn("[eddn]\nenabled = true", text)
+        self.assertIsNone(self.state.set_upload("eddn", True))
+        self.state.config_path = os.path.join(self.state.config_path, "not-a-folder", "x.toml")
+        with unittest.mock.patch("sys.stderr"):
+            note = self.state.set_upload("eddn", False)
+        self.assertFalse(self.state.upload_on("eddn"))
+        self.assertTrue(note.startswith("EDDN is off until Outrider stops, but the config file could not keep it"), note)
+
+    def test_not_among_server_settings(self):
+        secs = [s["section"] for s in self.state.config_info()["sections"]]
+        self.assertNotIn("eddn", secs)
+        self.assertNotIn("edsm", secs)
+        out, status = self.state.config_save({"eddn": {"enabled": True}})   # POST /api/config: not this way
+        self.assertEqual((status, out["error"]), (400, "[eddn] is switched in Settings -> Uploads"))
+        self.assertFalse(os.path.exists(self.state.config_path))
 
     def test_endpoint(self):
         import asyncio
@@ -389,6 +432,9 @@ class MarksAndCatchUp(unittest.TestCase):
         self.j = ed_outrider.Journals(self.db)
         self.state = ed_outrider.State(self.db, self.j, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
         self.state.game_pc = False
+        cfg_dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, cfg_dir)
+        self.state.config_path = os.path.join(cfg_dir, "ed_outrider.toml")   # where the switch is written
         self.path = os.path.join(self.dir, "Journal.2026-10-08T100000.01.log")
         echo = lambda ev, session: [("echo/1", {"event": ev["event"]})] if ev["event"] in ("FSDJump", "Scan") else []
         self.state.uploads_hub.builders = {"eddn": echo}
@@ -423,6 +469,9 @@ class MarksAndCatchUp(unittest.TestCase):
         import types
         st2 = ed_outrider.State(db2, j2, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
         st2.game_pc = False
+        st2.config_path = self.state.config_path                 # the switch, as run() reads it from the config file
+        st2.upload_cfg = U.upload_settings(ed_outrider.load_config(st2.config_path))["uploads"]
+        self.assertTrue(st2.upload_on("eddn"))
         st2.uploads_hub.builders = {"eddn": self.state.uploads_hub.builders["eddn"]}
         self.assertEqual(st2.uploads_hub.marks["eddn"], mark)
         self.assertEqual(st2.catch_up_uploads(), 2)              # the two jumps made while it was down

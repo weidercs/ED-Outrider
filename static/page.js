@@ -7339,8 +7339,8 @@ async function setUpload(service, on, confirmed) {
   const j = await apiJson("api/uploads", {method: "POST", headers: {"Content-Type": "application/json"},
                                          body: JSON.stringify({service, on, confirm: !!confirmed})});
   if (j.code === "confirm_needed" && confirm(j.error)) return setUpload(service, on, true);
-  if (msg) msg.textContent = j.error || "";
-  if (!j.error) { data.uploads = j; }
+  if (msg) msg.textContent = j.error || j.note || "";   // note: switched, but the config file could not keep it
+  if (!j.error) { delete j.note; data.uploads = j; }
   uploadsDrawn = ""; renderUploads();
 }
 document.getElementById("uploadsBox").addEventListener("change", e => {

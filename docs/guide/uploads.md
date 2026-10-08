@@ -3,8 +3,9 @@
 # Uploads: EDDN and EDSM
 
 Outrider can send what your journals say to two community services, as EDMC does, so you need not run EDMC just to
-upload. **Both are off unless you switch them on**, in Settings → Uploads (or `[eddn] enabled` / `[edsm] enabled` in
-the config file; the page's switch wins).
+upload. **Both are off unless you switch them on**, in Settings → Uploads: the switch applies at once and is kept in
+the config file (`[eddn] enabled`, `[edsm] enabled`) for the next start. That is the only place to switch them: they
+are not among the Server settings.
 
 - **EDDN**, the Elite Dangerous Data Network: systems, scans, signals, codex entries, markets, sent as they happen.
   Spansh, EDSM, Inara and others read it. EDDN gets your commander name, hashed by EDDN itself; personal details
@@ -12,8 +13,6 @@ the config file; the page's switch wins).
 - **EDSM**, the Elite Dangerous Star Map: your flight log and scans, to your own EDSM account, in batches (each jump,
   docking). It needs your EDSM commander name and API key (edsm.net → Settings → API key), per in-game commander, set
   in Settings → Uploads. The key stays on this Outrider: the page never shows it again.
-
-`[eddn] test = true` sends to EDDN's test schemas only: nothing reaches the live data. Good for a first try.
 
 ## Catching up, and what is never sent
 
