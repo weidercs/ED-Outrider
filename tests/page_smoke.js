@@ -1388,6 +1388,54 @@ const settle = async maxMs => {
     console.log(goodLK ? "OK" : "FAIL", "| cargo lookup |", goodLK ? "Sell asks for the line, the answer and an opened row, Closest and carriers ask again" :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
   }
+  // Nearest place to dock: the finder beside To asks api/nearest (stubbed: the scratch server has no Spansh), shows the
+  // rows with the DSSA badge and the docking warnings, asks again when a filter changes (remembered per device), and
+  // Plot here fills To and posts the plot
+  {
+    const w = dom.window, d = w.document, before = errors.length;
+    w.eval(`window.__nAsked = []; window.__nReal = apiJson;
+      apiJson = async (u, o) => {
+        const s = String(u);
+        if (s.startsWith("api/highway/plot")) { __nAsked.push(s + " " + (o && o.body)); return {ok: true, plotting: {state: "running", from: "Here", to: "X", started: new Date().toISOString()}}; }
+        if (!s.startsWith("api/nearest")) return __nReal(u, o);
+        __nAsked.push(s);
+        return {where: "Smojooe AR-E b25-8", pad: "L", ship: "explorer_nx", laden: 76.2, age: 30, need: ["UC"], more: 0,
+                hidden: {old: 6, pad: 0, permit: 0, service: 4}, errors: [], dssa: {count: 101, checked: Date.now() / 1000 - 600},
+                rows: [
+          {kind: "carrier", name: "OUT OF THE BLUE", callsign: "G0X-85Z", system: "Smojooe AR-E b25-8", ly: 0, here: true, own: true, ls: 0,
+           services: ["UC", "Vista"], pads: "L M", warn: [], source: "journal", age_s: null},
+          {kind: "carrier", name: "", callsign: "JBK-48M", system: "Smojooe CX-A c27-15", ly: 723.6, jumps: 10, ls: 0, services: ["UC", "Vista", "Repair"],
+           pads: "L M", warn: ["docking not reported"], source: "Spansh", age_s: 1800000},
+          {kind: "carrier", name: "[IGAU] Paradox Destiny", callsign: "K3K-L1N", system: "Prai Hypoo TX-B d4", ly: 6826.5, jumps: 90, ls: null,
+           services: ["UC", "Vista"], pads: "L M", warn: [], source: "DSSA", dssa: true, until: "September 1, 2032", age_s: 250000}]};
+      };`);
+    d.getElementById("hwyNearest").click(); await sleep(60);
+    const got = {};
+    const dlg = d.getElementById("nearDlg");
+    got.open = dlg.open;
+    got.rows = [...d.querySelectorAll("#nearRows tr")].map(t => t.textContent.replace(/\s+/g, " ").trim());
+    got.badge = !!d.querySelector("#nearRows .dssabadge");
+    got.foot = d.getElementById("nearFoot").textContent;
+    const uc = dlg.querySelector('[data-nneed="UC"]'); uc.checked = true; uc.dispatchEvent(new w.Event("change", {bubbles: true})); await sleep(60);
+    got.stored = w.localStorage.getItem("nearest");
+    d.querySelector('#nearRows [data-nplot="Smojooe CX-A c27-15"]').click(); await sleep(80);
+    got.to = d.getElementById("hwyTo").value;
+    got.closed = !dlg.open;
+    got.asked = w.eval("__nAsked.slice()");
+    w.eval("apiJson = __nReal; localStorage.removeItem('nearest')");
+    d.getElementById("hwyTo").value = "";
+    const bad = [];
+    if (!got.open || got.rows.length !== 3 || !/yours/.test(got.rows[0]) || !/aboard/.test(got.rows[0])) bad.push("rows");
+    if (!/⚠ docking not reported/.test(got.rows[1]) || !/≈ 10 jumps/.test(got.rows[1]) || !got.badge || !/stationed until September 1, 2032/.test(got.rows[2])) bad.push("row details");
+    if (!/Hidden: 6 reported more than 30 days ago/.test(got.foot) || !/101 carriers/.test(got.foot)) bad.push("foot");
+    const q = got.asked.filter(u => u.startsWith("api/nearest")).map(u => new URLSearchParams(u.split("?")[1]));
+    if (q.length !== 2 || q[1].get("need") !== "UC" || !/"need":\["UC"\]/.test(got.stored || "")) bad.push("filter");
+    if (got.to !== "Smojooe CX-A c27-15" || !got.closed || !got.asked.some(u => u.startsWith("api/highway/plot") && /Smojooe CX-A c27-15/.test(u))) bad.push("plot");
+    const goodNR = !bad.length && errors.length === before;
+    allOk = allOk && goodNR;
+    console.log(goodNR ? "OK" : "FAIL", "| nearest dock |", goodNR ? "the finder's rows, the DSSA badge and warnings, a filter asks again (kept), Plot here plots" :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+  }
   // G2.2, F48, F64: a bad server copy (a list that is not a list, a null object, a number for 'saved') does not stop
   // the page: a fresh browser still starts polling
   {

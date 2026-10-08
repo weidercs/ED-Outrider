@@ -3584,6 +3584,86 @@ function renderMat() {
   }).join("") || `<div class="unk">No materials match.</div>`;
 }
 
+// ---- Nearest place to dock (GET api/nearest, outrider/dock.py): a finder beside Plot Route's To. Stations and
+// fleet carriers you can land at and use, from Spansh, the DSSA list and your own carrier; "Plot here" fills To and
+// plots with the plotter chosen. The filters are this device's (store "nearest", not a shared setting). ----
+const NEAR_NEEDS = [["UC", "Universal Cartographics"], ["Vista", "Vista Genomics"], ["Repair", "repair"], ["Refuel", "refuel"], ["Shipyard", "shipyard"]];
+const NR = Object.assign({stations: true, carriers: true, need: [], age: 30, permit: false},
+                         (v => v && typeof v === "object" && !Array.isArray(v) ? v : {})(store.get("nearest", {})), {answer: null, busy: false});
+const saveNearest = () => store.set("nearest", {stations: NR.stations, carriers: NR.carriers, need: NR.need, age: NR.age, permit: NR.permit});
+const nearAgo = s => s == null ? "" : s < 3600 ? `${Math.max(1, Math.round(s / 60))} min ago` : s < 172800 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} d ago`;
+function openNearest() {
+  const d = document.getElementById("nearDlg");
+  document.getElementById("nearNeeds").innerHTML = NEAR_NEEDS.map(([k, t]) =>
+    `<label><input type="checkbox" data-nneed="${k}"${NR.need.includes(k) ? " checked" : ""}> ${t}</label>`).join("");
+  d.querySelector('[data-nf="stations"]').checked = NR.stations; d.querySelector('[data-nf="carriers"]').checked = NR.carriers;
+  d.querySelector('[data-nf="age"]').value = NR.age; d.querySelector('[data-nf="permit"]').checked = NR.permit;
+  tabShow(d);
+  loadNearest();
+}
+async function loadNearest() {
+  NR.busy = true; renderNearest();
+  const g = newRequest("near");
+  const params = new URLSearchParams({stations: NR.stations ? "1" : "0", carriers: NR.carriers ? "1" : "0", need: NR.need.join(","),
+                                      age: NR.age, permit: NR.permit ? "1" : "0", pad: "auto"});
+  let r;
+  try { r = await apiJson(`api/nearest?${params}`); } catch (err) { r = {error: err.message}; }
+  if (!isNewest("near", g)) return;
+  NR.busy = false; NR.answer = r;
+  renderNearest();
+}
+function nearRowHtml(r) {
+  const who = r.kind === "carrier" ? `<b>${esc(r.name || r.callsign)}</b>${r.name ? ` <span class="unk">${esc(r.callsign)}</span>` : ""}` : `<b>${esc(r.name)}</b>`;
+  const badge = r.dssa ? ` <span class="dssabadge" title="Deep Space Support Array carrier: stationed for explorers, open to all${r.until ? `, until ${esc(r.until)}` : ""}">🛰 DSSA</span>` : "";
+  const kind = r.kind === "carrier" ? `Fleet carrier${r.own ? " · yours" : r.dssa && r.until ? ` · stationed until ${esc(r.until)}` : ""}` : esc(r.station_type || "Station");
+  const has = NEAR_NEEDS.map(([k]) => `<span class="tagx${(r.services || []).includes(k) ? " on" : ""}">${k}</span>`).join(" ");
+  const dock = r.own ? `<span class="good">yours</span>` : r.warn && r.warn.length ? `<span class="warnc">⚠ ${esc(r.warn.join(", "))}</span>` : "open to all";
+  const src = r.own ? "your journal" : r.dssa ? `<span class="dssa">DSSA</span><br>docked there ${nearAgo(r.age_s)}` : `${esc(r.source)}<br>reported ${nearAgo(r.age_s)}`;
+  return `<tr><td>${who}${badge}<div class="unk">${kind} · ${esc(r.system || "")}</div></td>` +
+    `<td class="num">${r.here ? "here" : `${Math.round(r.ly).toLocaleString()} ly`}${r.jumps ? `<div class="unk">≈ ${r.jumps} jump${r.jumps === 1 ? "" : "s"}</div>` : ""}</td>` +
+    `<td class="num${r.far ? " warnc" : ""}">${r.ls == null ? `<span class="unk">?</span>` : `${r.ls.toLocaleString()} ls`}${r.far ? `<div class="small">⚠ far from the star</div>` : ""}</td>` +
+    `<td class="has">${has}</td><td class="num">${esc(r.pads || "")}</td><td class="dk">${dock}</td><td class="src unk">${src}</td>` +
+    `<td class="num">${r.here ? `<span class="unk">${r.own ? "aboard" : "here"}</span>` : `<button type="button" class="mini go" data-nplot="${esc(r.system || "")}">Plot here</button>`}</td></tr>`;
+}
+function renderNearest() {
+  const a = NR.answer, rows = document.getElementById("nearRows"), foot = document.getElementById("nearFoot");
+  document.getElementById("nearWhere").textContent = a && a.where ? `· from ${a.where}` : "";
+  document.getElementById("nearPad").textContent = !a || a.error ? "" : a.pad === "L" ? `large (your ${shipName(a.ship || "")})` :
+    a.pad === "M" ? `medium (your ${shipName(a.ship || "")})` : "any (your ship's size is not known)";
+  if (NR.busy && !a) { rows.innerHTML = `<tr><td colspan="8" class="unk">asking Spansh…</td></tr>`; foot.textContent = ""; return; }
+  if (!a || a.error) { rows.innerHTML = `<tr><td colspan="8" class="noscoop">${esc(a ? a.error : "")}</td></tr>`; foot.textContent = ""; return; }
+  rows.innerHTML = a.rows.length ? a.rows.map(nearRowHtml).join("") :
+    `<tr><td colspan="8" class="unk">Nothing matches: raise Data under, or tick fewer services.</td></tr>`;
+  const h = a.hidden || {}, hid = [];
+  if (h.old) hid.push(`${h.old} reported more than ${a.age} days ago (carriers move; raise Data under to see them)`);
+  if (h.pad) hid.push(`${h.pad} without a pad for your ship`);
+  if (h.permit) hid.push(`${h.permit} in permit systems`);
+  if (h.service) hid.push(`${h.service} without ${a.need.join(" and ")}`);
+  const d = a.dssa || {}, checked = d.checked ? nearAgo(Date.now() / 1000 - d.checked) : null;
+  foot.innerHTML = (NR.busy ? "asking again… " : "") + (hid.length ? `Hidden: ${esc(hid.join("; "))}. ` : "") +
+    `Distances are straight lines${a.laden ? `; jumps at your laden range (${a.laden} ly)` : ""}.` +
+    (a.more ? ` ${a.more} more further away.` : "") + `<br>Sources: Spansh (stations and carriers, as players last reported them) · ` +
+    `the DSSA carrier list from EDAstro${d.count ? ` (${d.count} carriers${checked ? `, checked ${checked}` : ""})` : ""} · your own carrier from your journal.` +
+    ((a.errors || []).length ? `<br><span class="warnc">${esc(a.errors.join("; "))}</span>` : "") +
+    ` <b>Plot here</b> puts the system in To and plots it with the plotter chosen.`;
+}
+document.getElementById("hwyNearest").onclick = openNearest;
+document.getElementById("nearDlg").addEventListener("change", e => {
+  const t = e.target, f = t.dataset && t.dataset.nf;
+  if (t.dataset && t.dataset.nneed) NR.need = [...document.querySelectorAll("#nearNeeds [data-nneed]")].filter(x => x.checked).map(x => x.dataset.nneed);
+  else if (f === "age") { const v = parseInt(t.value, 10); if (!(v >= 1 && v <= 3650)) return; NR.age = v; }
+  else if (f) NR[f] = t.checked;
+  else return;
+  saveNearest(); loadNearest();
+});
+document.getElementById("nearRows").addEventListener("click", e => {
+  const b = e.target.closest("[data-nplot]"); if (!b) return;
+  hEl("hwyTo").value = b.dataset.nplot;
+  if (!["exact", "neutron", "riches", "exo"].includes(hwyPlotter())) { const x = hForm.querySelector('[name=hwyPlotter][value="exact"]'); x.checked = true; x.dispatchEvent(new Event("change", {bubbles: true})); }
+  tabClose(document.getElementById("nearDlg"));
+  hForm.dispatchEvent(new Event("submit", {cancelable: true, bubbles: true}));
+});
+
 // ---- Cargo (the Materials tab): the ship's hold (exact) and your carrier's (tracked: outrider/cargo.py) ----
 const CARGO_MARK = {
   confirmed: ["✓", "c", "confirmed: on a sell order at your carrier, read from its market"],

@@ -142,7 +142,7 @@ async def fixed_answer(command, get, rows=10, text=""):
         if d.get("error"):
             return d["error"]
         return dock.spoken({"rows": [dict(p, ly=p["distance_ly"], here=not p["distance_ly"], warn=p["warnings"],
-                                          station_type=None if p["kind"] == "carrier" else "station")
+                                          station_type=p.get("station_type"))
                                      for p in d.get("places") or []]}, need, kind)
     if command == "nearest_unvisited":
         n = await tools.call("nearest_unvisited", {}, get, rows)

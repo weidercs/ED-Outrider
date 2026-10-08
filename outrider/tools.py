@@ -176,6 +176,7 @@ async def nearest_dock(get, args, rows):
         return {"error": d["error"]}
     def brief(r):
         return {"name": r.get("name") or r.get("callsign"), "callsign": r.get("callsign") or None, "kind": r.get("kind"),
+                "station_type": r.get("station_type"),
                 "system": r.get("system"), "distance_ly": r.get("ly"), "from_star_ls": rnd(r.get("ls"), 0),
                 "services": r.get("services"), "pads": r.get("pads"), "dssa": bool(r.get("dssa")), "yours": bool(r.get("own")),
                 "warnings": r.get("warn") or [], "report_age_days": rnd((r.get("age_s") or 0) / 86400) if r.get("age_s") is not None else None}
