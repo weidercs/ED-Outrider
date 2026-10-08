@@ -108,7 +108,9 @@ follows your system's light mode. Each browser keeps its own choice, and the tab
 </p>
 
 **Now** is the cockpit view for a second monitor or a tablet, in big text: the system, the target, fuel,
-what to do next, the body you have targeted, and the nearest unvisited system.
+what to do next, the body you have targeted, and the nearest unvisited system. The target says how much of it is
+known ("3/12 known", Spansh's bodies of its count) and what EDSM has ("EDSM 5/12", or "not logged"): two databases
+with different reporters.
 
 - An **at-risk line** shows what is aboard against your rebuy ("🗺 380M · 🧬 412M aboard · 3.2× rebuy").
 - **This session** since your login: "2 h 14 · 74 jumps · 612 ly · 6 new systems · 11 mapped · 4 samples ·

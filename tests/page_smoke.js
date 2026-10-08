@@ -4162,9 +4162,12 @@ const settle = async maxMs => {
       const keep = [data.on_body, data.near_body];
       data.on_body = null; data.near_body = {body: "A 1", full: "S A 1", how: "flying low", alt: 2300, system: "0"};
       renderOnBody(); o.over = document.getElementById("onbody").textContent.startsWith("Over A 1 (flying low, 2.3 km)");
+      o.counts = [targetCounts({known: 3, count: 12, edsm: {known: 5, count: 12}}), targetCounts({known: 2, edsm: {missing: true}}), targetCounts({})]
+        .map(h => h.replace(/<[^>]+>/g, "").trim());
       [data.on_body, data.near_body] = keep; renderOnBody();
       return o; })()`);
-    const want = {tag: "🧬? 2 to check in the FSS🧬? 2", filters: '{"hideDone":true,"minSig":3}', why: true, over: true};
+    const want = {tag: "🧬? 2 to check in the FSS🧬? 2", filters: '{"hideDone":true,"minSig":3}', why: true, over: true,
+                  counts: ["3/12 known · EDSM 5/12", "2 known · EDSM: not logged", ""]};
     const goodC = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodC;
     console.log(goodC ? "OK" : "FAIL", "| bio marks |", goodC ? "bio possible, Here's filters, flying-low card, the ruled-out genera" : JSON.stringify(got), errors.slice(before));

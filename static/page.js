@@ -746,6 +746,14 @@ function tagText(sm) {
     `tagged: <b>${surfDist(t.dist)}</b>, ${esc(turn)}</span>`;
 }
 let clearAnnounced = null, tagAnnounced = null;
+// how much of a targeted system is known: Spansh's bodies of its body count, and EDSM's beside it (SystemStatusOverlay)
+function targetCounts(t) {
+  if (!t) return "";
+  const sp = t.count ? `${t.known || 0}/${t.count} known` : t.known ? `${t.known} known` : "";
+  const e = t.edsm, ed = !e ? "" : e.missing ? "EDSM: not logged" : `EDSM ${e.known}${e.count ? "/" + e.count : ""}`;
+  const parts = [sp, ed].filter(Boolean);
+  return parts.length ? ` <span class="unk" title="bodies Spansh knows of the system's count (and EDSM's own reports)">${esc(parts.join(" · "))}</span>` : "";
+}
 function renderOnBody() {
   const el = document.getElementById("onbody"), ob = obNow();
   if (!ob) { el.innerHTML = ""; return; }
@@ -791,7 +799,7 @@ function renderNow() {
     const label = {"unreported": "never reported — new discovery!", "no bodies": "no scan data", "partial": "partly scanned",
       "explored": "fully scanned", "visited": "you've been here"}[t.status] || t.status;
     const hz = hazardNote(t.star_class);
-    lines.push(`<div class="now-line">➜ <b>${esc(t.name)}</b> <span class="t-${t.status.replace(" ", "")}">${esc(label)}</span>` +
+    lines.push(`<div class="now-line">➜ <b>${esc(t.name)}</b> <span class="t-${t.status.replace(" ", "")}">${esc(label)}</span>${targetCounts(t)}` +
       (t.star_class ? ` <span class="${/^[OBAFGKM](_|$)/.test(t.star_class) ? "ok" : "noscoop"}">${esc(t.star_class)}${/^[OBAFGKM](_|$)/.test(t.star_class) ? " ⛽" : " ✕"}</span>` : "") +
       (hz ? ` <span class="hazard">⚠ ${esc(hz)}</span>` : "") + `</div>`);
   }
@@ -2601,7 +2609,7 @@ function render() {
       : hop.fuel != null
       ? ` · <span title="fuel this jump burns, and the max-range jumps the tank holds after it">${fuelT(hop.fuel)} t · leaves ${hop.left} max jump${hop.left === 1 ? "" : "s"}</span>` : "";
     tEl.innerHTML = `Target: <b>${esc(t.name)}</b>${hop ? ` · ${hop.ly.toFixed(1)} ly` : row ? ` · ${row.distance.toFixed(2)} ly` : ""}${cost}${sc}` +
-      ` · <span class="t-${t.status.replace(" ", "")}">${label}${src}</span>` + (hz ? ` · <span class="hazard">⚠ ${hz}</span>` : "");
+      ` · <span class="t-${t.status.replace(" ", "")}">${label}${src}</span>${targetCounts(t)}` + (hz ? ` · <span class="hazard">⚠ ${hz}</span>` : "");
   }
   renderLeaving(t && t.leaving);
   renderRoute();

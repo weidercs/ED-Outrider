@@ -289,6 +289,7 @@ SELLER_REFRESH_LY = 100      # look for the nearest places to sell again after m
 SELLER_REFRESH_S = 6 * 3600  # ...or this long (carriers move)
 EDSM_SYSTEM = "https://www.edsm.net/api-v1/system"
 EDSM_SPHERE = "https://www.edsm.net/api-v1/sphere-systems"
+EDSM_BODIES = "https://www.edsm.net/api-system-v1/bodies"   # ?systemName=: {name, bodyCount, bodies: [{type...}]}
 BOOST_STARS = ["Neutron Star"] + [f"White Dwarf ({c}) Star" for c in
                                   ("D", "DA", "DAB", "DAZ", "DAV", "DB", "DBZ", "DBV", "DQ", "DC", "DCV")]
 SPANSH_PAGE = 500          # largest page size the search endpoint honours
@@ -4953,6 +4954,18 @@ class Spansh:
                 d = await r.json()
         return d if isinstance(d, dict) and d.get("name") else None
 
+    async def edsm_bodies(self, name):
+        """EDSM's view of a system's bodies: {known: stars and planets it has, count: its body count (None unknown)},
+        or {known: 0, count: None, missing: True} when EDSM has no record of it."""
+        async with self.sem_fast:
+            async with self.session.get(EDSM_BODIES, params={"systemName": name}) as r:
+                r.raise_for_status()
+                d = await r.json()
+        if not isinstance(d, dict) or not d.get("name"):
+            return {"known": 0, "count": None, "missing": True}
+        bodies = [b for b in d.get("bodies") or [] if isinstance(b, dict) and b.get("type") in ("Star", "Planet")]
+        return {"known": len(bodies), "count": d.get("bodyCount") if isinstance(d.get("bodyCount"), int) else None}
+
     async def edsm_sphere(self, pos, radius):
         """EDSM's systems within `radius` (at most EDSM_SPHERE_MAX: its API's documented limit; a larger radius is
         cut to it, and the refresh's status says so: review F48)."""
@@ -8616,7 +8629,10 @@ class State:
         """
         id64 = t["id64"]
         source = "spansh"
+        known = count = None   # how many of its bodies Spansh knows, of how many (Now's target line: "3/12 known")
         visited = self.db.execute("SELECT 1 FROM visits WHERE id64=?", (id64,)).fetchone()
+        if id64 in self.systems:
+            known, count = self.systems[id64].get("bodies_known"), self.systems[id64].get("body_count")
         if visited:
             status = "visited"
         elif id64 in self.systems and self.systems[id64]["source"] == "spansh":
@@ -8660,9 +8676,19 @@ class State:
                  "explored": "thud", "visited": "thud"}.get(status)
         self.target_seq += 1
         self.target = dict(t, status=status, sound=sound, seq=self.target_seq,
-                           fresh=key != self.startup_target_key, source=source,
+                           fresh=key != self.startup_target_key, source=source, known=known, count=count, edsm=None,
                            leaving=self.leaving_summary(self.journals.pos["id64"]) if self.journals.pos else None)
         self.bump()
+        # EDSM beside Spansh (SystemStatusOverlay's two columns): its own reporters may know more bodies. After the
+        # sound, so it never delays it; one request, and only for a system Spansh knows (else EDSM was asked above)
+        if source == "spansh" and status in ("no bodies", "partial", "explored"):
+            try:
+                e = await self.spansh.edsm_bodies(t["name"])
+            except Exception:
+                return
+            if key == self.target_key and self.target and self.target.get("id64") == id64:
+                self.target = dict(self.target, edsm=e)
+                self.bump()
 
     def maybe_refresh(self):
         pos = self.journals.pos

@@ -2,6 +2,12 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · The targeted system's body counts, Spansh and EDSM (plugin gaps E)
+- Targeting a system now shows how much of it is known: Spansh's bodies of its body count ("3/12 known"), on Now's
+  target line and the header's, even outside the Nearby sphere; and EDSM's own count beside it ("EDSM 5/12", or "EDSM:
+  not logged"), as SystemStatusOverlay showed. EDSM is asked once per target, after the target's sound, so the sound is
+  never late.
+
 ## 2026-10-08 · The full-scan bonus in the unsold estimate (plugin gaps D)
 - The unsold total now counts the bonus Universal Cartographics pays on top of the base value: 1,000 cr per body of
   a system you found complete (every body) while every star and planet in it was undiscovered. It shows on its own

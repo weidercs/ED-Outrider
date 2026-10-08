@@ -745,3 +745,55 @@ class ReviewBatchE(unittest.TestCase):
         self.assertEqual(self.db.execute("SELECT count(*) FROM own_bodies").fetchone()[0], 2)   # the bodies still show
         self.j.handle(scan("2026-01-01T00:02:00Z", "Old", 3, 2, "Old A NavBeaconDetail")[2])     # your own scan counts
         self.assertEqual(self.db.execute("SELECT count(*) FROM own_firsts").fetchone()[0], 1)
+
+
+class TargetCounts(unittest.TestCase):
+    """Plugin gaps E (SystemStatusOverlay): the targeted system's known bodies of its count, and EDSM's beside Spansh."""
+
+    def setUp(self):
+        self.db = ed_outrider.open_db(":memory:")
+        self.addCleanup(self.db.close)
+        self.j = ed_outrider.Journals(self.db)
+        self.state = ed_outrider.State(self.db, self.j, types_ns(cached=lambda i: (None, None)), 25)
+        self.j.handle({"event": "FSDJump", "timestamp": "2026-01-01T00:00:00Z", "StarSystem": "Here", "SystemAddress": 1,
+                       "StarPos": [0, 0, 0]})
+        test = self
+
+        class Fake:
+            edsm_calls = []
+
+            async def lookup(self, id64):
+                return {"system": {"bodyCount": 12, "bodies": [{"type": "Star"}, {"type": "Planet"}, {"type": "Planet"},
+                                                               {"type": "Barycentre"}]}}
+
+            async def edsm_bodies(self, name):
+                Fake.edsm_calls.append(name)
+                if test.edsm_error:
+                    raise ed_outrider.ClientError("down")
+                return {"known": 5, "count": 12}
+        self.fake, self.edsm_error = Fake(), False
+        self.state.spansh = self.fake
+
+    def classify(self):
+        import asyncio
+        t = {"id64": 99, "name": "There", "star_class": "K"}
+        self.state.target_key = ("There", 99)
+        asyncio.run(self.state.classify_target(t, ("There", 99)))
+        return self.state.target
+
+    def test_counts_and_edsm(self):
+        t = self.classify()
+        self.assertEqual((t["status"], t["known"], t["count"], t["edsm"]), ("partial", 3, 12, {"known": 5, "count": 12}))
+        self.edsm_error = True                       # EDSM down: Spansh's counts still shown, the sound unaffected
+        t = self.classify()
+        self.assertEqual((t["known"], t["edsm"], t["sound"]), (3, None, "upbeat"))
+
+    def test_edsm_bodies_request(self):
+        import asyncio
+        from support import _HwSession
+        sp = ed_outrider.Spansh(self.db)
+        sp.session = _HwSession([(200, {"name": "There", "bodyCount": 9, "bodies": [{"type": "Star"}, {"type": "Planet"}, {"type": "Belt"}]})])
+        self.assertEqual(asyncio.run(sp.edsm_bodies("There")), {"known": 2, "count": 9})
+        self.assertEqual(sp.session.calls[0], (ed_outrider.EDSM_BODIES, {"systemName": "There"}))
+        sp.session = _HwSession([(200, [])])   # EDSM's answer for a system it does not have
+        self.assertEqual(asyncio.run(sp.edsm_bodies("Nowhere")), {"known": 0, "count": None, "missing": True})
