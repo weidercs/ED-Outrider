@@ -2850,7 +2850,8 @@ function renderHere() {
   head.innerHTML = (pinned ? `<button type="button" class="unpin" onclick="unpinSystem()" title="back to the system you are in">✕</button><span class="pintag">viewing</span> ` : "") +
     // the bookmark star (its dialog also sets the next stop) for a viewed system, which may be in no other list
     (pinned ? bmIcon(pinnedSystem, h.name, bmMap()) + " " : "") +
-    `<b>${esc(h.name)}</b>` + (away != null ? ` <span class="unk">· ${away.toFixed(2)} ly away</span>` : "") +
+    `<b>${esc(h.name)}</b>` + (h.new_to_edsm ? ` <span class="edsmnew" title="EDSM had never heard of this system until your upload of ${esc(h.new_to_edsm.slice(0, 10))}">New to EDSM</span>` : "") +
+    (away != null ? ` <span class="unk">· ${away.toFixed(2)} ly away</span>` : "") +
     ` · ${h.bodies.length} bod${h.bodies.length === 1 ? "y" : "ies"} known · ` + (h.phenomena && h.phenomena.length ? phenomenaTag(h.phenomena) + " · " : "") +
     `<span title="what selling now would pay for data you hold from here / the most this system could pay">now <b>${credits(h.value_now || 0)} cr</b> · max <b>${credits(maxOf(h) || 0)} cr</b>${maxBonus() ? "" : ` <span class="unk" title="Max leaves out first-discovery, first-mapped and first-footfall bonuses (alerts & thresholds dialog)">no bonus</span>`}</span>` +
     ` <a class="unk" href="api/export?what=system&id=${encodeURIComponent(h.id64)}" download title="this system's bodies and values as a spreadsheet (CSV)">⬇ CSV</a>` +

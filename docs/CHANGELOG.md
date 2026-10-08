@@ -2,6 +2,10 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · Uploads: "New to EDSM" (branch EDMC-Functionality)
+- When EDSM answers an uploaded jump with "systemCreated" (nobody had sent it that system before), the system's detail
+  shows a quiet "New to EDSM" badge, dated. No spoken alert: the game's own first discoveries already have one.
+
 ## 2026-10-08 · Uploads, part H: EDSM (branch EDMC-Functionality)
 - EDSM's journal upload (`outrider/edsm.py`): your events, minus EDSM's discard list (fetched while EDSM is on, a
   built-in copy until then), each with where you were (system, coordinates, station, ship), to the account of the

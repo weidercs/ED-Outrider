@@ -41,6 +41,9 @@ CREATE TABLE IF NOT EXISTS upload_queue (
     attempts INTEGER NOT NULL DEFAULT 0, next_try REAL NOT NULL DEFAULT 0, last_status TEXT, done_at REAL,
     UNIQUE (service, source));
 CREATE INDEX IF NOT EXISTS upload_queue_state ON upload_queue (service, state, id);
+-- Systems EDSM had never heard of until this Outrider uploaded your jump there (its reply's systemCreated): the system
+-- detail's "New to EDSM" badge. Live-only like the outbox: only a real upload's answer says it.
+CREATE TABLE IF NOT EXISTS edsm_new_systems (system INTEGER PRIMARY KEY, name TEXT, ts TEXT);
 """
 
 

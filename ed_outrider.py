@@ -7820,8 +7820,9 @@ class State:
         leaving = self.leaving_summary(id64)
         if leaving is not None:   # the checklist's "N not on Spansh" (leaving_summary itself runs on every poll)
             leaving["base_known"] = base_known(base, source)
+        new_to_edsm = self.db.execute("SELECT ts FROM edsm_new_systems WHERE system=?", (id64,)).fetchone()
         return {"id64": str(id64), "name": name, "bodies": out, "tree": tree, "partial": partial, "region": region,
-                "phenomena": phenomena,
+                "phenomena": phenomena, "new_to_edsm": new_to_edsm["ts"] if new_to_edsm else None,
                 "leaving": leaving,
                 "firsts": own_firsts(self.db, id64, name),
                 "value_now": sum(b["value_now"] for b in out), "value_max": sum(b["value_max"] for b in out),
@@ -9395,6 +9396,10 @@ class State:
                 raise ConnectionError(f"EDSM answered HTTP {resp.status}")
             reply = await resp.json(content_type=None)
         results = outrider.edsm.answer(batch, reply)
+        new = outrider.edsm.created(batch, reply)
+        if new:   # the system detail's "New to EDSM" badge
+            self.db.executemany("INSERT OR IGNORE INTO edsm_new_systems (system, name, ts) VALUES (?, ?, ?)", new)
+            self.scan_version += 1   # the Here view asks for the system again
         bad = next((status for _, state, status, _ in results if state in ("held", "dropped")), None)
         if bad:
             print(f"EDSM: {bad}", file=sys.stderr)

@@ -217,6 +217,23 @@ class Sender(unittest.TestCase):
         self.assertEqual((url, body["commanderName"], body["apiKey"], [e["event"] for e in body["message"]]),
                          (S.UPLOAD_URL, "Briadin EDSM", KEY, ["FSDJump", "Scan"]))
 
+    def test_new_to_edsm(self):
+        """EDSM's systemCreated on an arrival: recorded, and the system detail says "New to EDSM" (only from a real
+        upload's answer)."""
+        self.state.set_edsm_account("Briadin", "Briadin", KEY)
+        self.state.upload_session = _Http([(200, {"msgnum": 100, "msg": "OK", "events": [
+            {"msgnum": 100, "systemId": 1, "systemCreated": True}, {"msgnum": 100, "systemCreated": True}]})])
+        v = self.state.scan_version
+        with unittest.mock.patch.dict(os.environ, {S.DRY_ENV: ""}):
+            asyncio.run(self.state.edsm_send(self.rows()))
+        self.assertEqual([tuple(r) for r in self.db.execute("SELECT system, name, ts FROM edsm_new_systems")],
+                         [(18207037532889, "Smojooe AR-E b25-8", "2026-10-08T10:05:00Z")])   # the jump, not the scan
+        self.assertEqual(self.state.scan_version, v + 1)                    # the Here view asks again
+        self.state.locate = lambda id64: ("Smojooe AR-E b25-8", -4177.09, -1.0, 3324.53)
+        self.assertEqual(self.state.system_detail(18207037532889)["new_to_edsm"], "2026-10-08T10:05:00Z")
+        self.state.locate = lambda id64: ("Elsewhere", 0.0, 0.0, 0.0)
+        self.assertIsNone(self.state.system_detail(1)["new_to_edsm"])
+
     def test_no_account(self):
         self.state.upload_session = _Http([])
         out = asyncio.run(self.state.edsm_send(self.rows()))

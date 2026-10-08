@@ -4212,6 +4212,24 @@ const settle = async maxMs => {
     allOk = allOk && goodU;
     console.log(goodU ? "OK" : "FAIL", "| uploads settings |", goodU ? "the switches, a hold, test only, EDSM's account without its key" : JSON.stringify(got), errors.slice(before));
   }
+  // uploads H: the Here view's "New to EDSM" badge (EDSM's systemCreated), absent otherwise
+  {
+    const w = dom.window, before = errors.length;
+    const got = w.eval(`(() => {
+      const hd = hereData;
+      if (!hd || hd.error) return "no Here data";
+      const head = () => document.getElementById("hereHead");
+      hereData = Object.assign({}, hd, {new_to_edsm: "2026-10-08T10:05:00Z"}); renderHere();
+      const r = [/New to EDSM/.test(head().textContent), /2026-10-08/.test(head().querySelector(".edsmnew").title)];
+      hereData = Object.assign({}, hd, {new_to_edsm: null}); renderHere();
+      r.push(!head().querySelector(".edsmnew"));
+      hereData = hd; renderHere();
+      return r; })()`);
+    const goodN = JSON.stringify(got) === JSON.stringify([true, true, true]) && errors.length === before;
+    allOk = allOk && goodN;
+    console.log(goodN ? "OK" : "FAIL", "| new to EDSM |", goodN ? "the badge with its date, none without" : JSON.stringify(got), errors.slice(before));
+  }
+
   // review 2026-10-08 #15-#18: answers that arrive out of order. An older, slower request lands after a newer one:
   // its answer (or its failure) must not replace the newer one's
   {
