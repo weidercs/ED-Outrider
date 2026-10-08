@@ -123,6 +123,28 @@ class Batches(unittest.TestCase):
         self.assertEqual([json.loads(r["message"])["event"] for r in U.due(db, "edsm", clock[0])],
                          ["LoadGame", "Scan", "Scan", "FSDJump"])            # all now, in order
 
+    def test_a_long_stay_sends_one_batch(self):
+        """Events join the waiting batch's deadline (the first one's HOLD_S): a long stay in one system sends them
+        together, not each HOLD_S after itself (the author's dry run, 2026-10-08: nine scans went one by one)."""
+        db = ed_outrider.open_db(":memory:")
+        self.addCleanup(db.close)
+        clock = [time.time()]
+        hub = U.UploadHub(db, {"edsm": lambda ev, s: S.build(ev, s)}, enabled=lambda s: True,
+                          clock=lambda: clock[0], holds={"edsm": S.hold})
+        path = os.path.join(tempfile.mkdtemp(), "Journal.2026-10-08T100000.01.log")
+        self.addCleanup(shutil.rmtree, os.path.dirname(path))
+        off, start = 0, clock[0]
+        for i, e in enumerate([{"event": "Fileheader", "gameversion": "4.4.1.1", "build": "r1 "},
+                               {"event": "LoadGame", "Commander": "Briadin"}, JUMP] + [{"event": "Scan", "BodyName": f"A {n}"} for n in range(4)]):
+            if e["event"] == "Scan":
+                clock[0] += 120                                    # a scan every two minutes
+            raw = json.dumps(dict(e, timestamp=iso_ts(clock[0]))).encode()
+            hub.line(path, off, raw, "live")
+            off += len(raw) + 1
+        db.execute("UPDATE upload_queue SET state='sent' WHERE schema IN ('LoadGame', 'FSDJump')")   # went with the jump
+        self.assertEqual(U.due(db, "edsm", start + 120 + S.HOLD_S - 1), [])
+        self.assertEqual(len(U.due(db, "edsm", start + 120 + S.HOLD_S)), 4)   # all four at the first one's deadline
+
     def test_one_commander_and_version_per_request(self):
         rows = [{"id": i, "cmdr": c, "gameversion": v, "gamebuild": "b", "message": "{}"}
                 for i, (c, v) in enumerate([("A", "4.4"), ("A", "4.4"), ("B", "4.4"), ("A", "4.4")])]

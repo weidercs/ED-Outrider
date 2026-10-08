@@ -210,6 +210,13 @@ def enqueue(db, service, schema, source, ts, session, message, next_try=0):
     return cur.rowcount > 0
 
 
+def deadline(db, service):
+    """When what of `service` waits for company goes at the latest: the first waiting message's time, which later
+    ones join (so a long stay sends one batch, not each message on its own clock). None when nothing waits."""
+    return db.execute("SELECT MIN(next_try) FROM upload_queue WHERE service=? AND state='queued' AND attempts=0"
+                      " AND next_try > 0", (service,)).fetchone()[0]
+
+
 def release(db, service):
     """What of `service` waits for company (never tried yet) may go now."""
     db.execute("UPDATE upload_queue SET next_try = 0 WHERE service=? AND state='queued' AND attempts=0 AND next_try > 0",
@@ -338,9 +345,12 @@ class UploadHub:
             wait = self.holds[service](ev) if service in self.holds else 0
             if service in self.holds and not wait:
                 release(self.db, service)
+            go = 0
+            if wait and messages:   # joins the batch already waiting (its deadline), or starts one
+                go = deadline(self.db, service) or self.clock() + wait
             for i, (schema, message) in enumerate(messages):
                 if enqueue(self.db, service, schema, f"{b}:{offset}" + (f"#{i}" if i else ""), ev.get("timestamp"),
-                           session, message, self.clock() + wait if wait else 0):
+                           session, message, go):
                     n += 1
         self.queued += n
         return n

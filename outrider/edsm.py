@@ -8,8 +8,9 @@ and what EDSM's answer means. Pure: the server (ed_outrider.py) owns the queue, 
   missing from the earlier events of the same account, so events go in order.
 - Cargo, ShipLocker and Backpack without their contents get them from Cargo.json / ShipLocker.json / Backpack.json,
   only when the file's timestamp is the event's (NFS can serve an older file: then the event goes as written).
-- Events wait to be sent together (HOLD_S at most); a jump, a docking, a Location or a shut-down sends what waits
-  (RELEASE): about one request per jump.
+- Events wait to be sent together: a jump, a docking, a Location or a shut-down sends what waits (RELEASE), and so
+  does HOLD_S after the first of them (later ones join its deadline): about one request per jump, and one every
+  HOLD_S during a long stay.
 - answer(): EDSM's msgnum codes (www.edsm.net/en/api-journal-v1, saved in project/research-edmc-2026-10-08/).
 
 Research and rules: project/research-edmc-2026-10-08/edsm-inara.md.
