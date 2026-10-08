@@ -2,6 +2,14 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · Version 2026.10.18
+- Since 2026.10.17: the review's 21 fixes (a docked login counts as docked, the password behind a reverse proxy on the
+  Outrider PC, Spansh's services filter, answers arriving out of order...); tagged plants as waypoints for the next
+  sample; no ×5 in populated systems; ✪ new to your codex anywhere; "bio possible: check the FSS"; the bio card while
+  flying low; why each other genus is ruled out; the full-scan bonus in the unsold estimate; the target's known bodies
+  from Spansh and EDSM; star kinds, Canonn Bioforge links and a system's CSV. The first start re-reads the journals
+  (parser 43).
+
 ## 2026-10-08 · Fixes from a review of the plugin-gaps work
 - A Fable review of batches B-F (each finding checked by a second reader): 10 bugs, all fixed with tests.
 - Tagged plants: Brain Trees, Anemones, Sinuous Tubers and the other species without colour variants are now tagged
