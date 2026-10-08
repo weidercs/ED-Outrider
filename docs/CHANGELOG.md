@@ -2,6 +2,24 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · Fixes from a review of the plugin-gaps work
+- A Fable review of batches B-F (each finding checked by a second reader): 10 bugs, all fixed with tests.
+- Tagged plants: Brain Trees, Anemones, Sinuous Tubers and the other species without colour variants are now tagged
+  (found by name in the rules); the codex entry a first Log writes is no longer a waypoint at your own feet; each tag is
+  said once per run (two close together no longer take turns), under the sampling alert's switch rather than "find";
+  the strip names the tag when the earlier samples' positions are unknown too; the map's legend colours match the map
+  and list the tagged plants.
+- "Bio possible: check the FSS" no longer reappears on a body you FSS'd after a later AutoScan of it.
+- The unsold CLI's ESTIMATED and TOTAL include the full-scan bonus, and the pop-up's "before the cut" figure too.
+- Only an organic codex entry links to Canonn's Bioforge (geysers and the like no longer do).
+
+## 2026-10-08 · Small extras: star kinds, Canonn Bioforge, a system's CSV (plugin gaps F)
+- A star's body panel says its kind in words: the luminosity class ("main sequence", "giant", "subdwarf") and, for a
+  white dwarf, what its spectrum shows ("hydrogen-rich", "carbon", "variable").
+- A biology codex entry in the body panel links to Canonn's Bioforge statistics for it ("stats ↗").
+- Here's heading has **⬇ CSV**: the system's bodies and values as a spreadsheet (`/api/export?what=system&id=`).
+- Not done: translations (the author: speech.json is there to change), WasLogged (nothing to check it against).
+
 ## 2026-10-08 · The targeted system's body counts, Spansh and EDSM (plugin gaps E)
 - Targeting a system now shows how much of it is known: Spansh's bodies of its body count ("3/12 known"), on Now's
   target line and the header's, even outside the Nearby sphere; and EDSM's own count beside it ("EDSM 5/12", or "EDSM:

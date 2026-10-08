@@ -582,6 +582,29 @@ class SampleSpacing(unittest.TestCase):
         self.organic("2026-01-01T00:13:00Z", "Analyse")
         self.assertEqual([t["genus"] for t in self.state.bio_tags_here(h)], ["Bacterium"])
 
+    def test_variantless_species_and_the_logs_own_entry(self):
+        """Review of plugin gaps: Brain Trees, Anemones, Tubers... have no number or variant in their codex code, so they
+        were never tagged (found by name in the rules now); and the codex entry a first Log writes (the same second)
+        is where you sample, not a plant to go to, so it goes when the Log comes."""
+        import outrider.bio
+        if not outrider.bio.load_rules():
+            self.skipTest("no bio_rules.json")
+        self.j.handle({"event": "Scan", "timestamp": "2026-01-01T00:05:00Z", "BodyName": "Sys 4", "BodyID": 4,
+                       "StarSystem": "Sys", "SystemAddress": 1, "PlanetClass": "Rocky body", "Landable": True,
+                       "MassEM": 0.1, "ScanType": "Detailed", "WasDiscovered": False, "WasMapped": False})
+        self.at("2026-01-01T00:10:00Z", 0.0, 0.03)
+        self.codex("2026-01-01T00:10:00Z", variant="$Codex_Ent_SeedABCD_01_Name;", name="Roseum Brain Tree")
+        row = self.db.execute("SELECT species, genus, name FROM bio_tags").fetchone()
+        self.assertEqual(tuple(row), ("$Codex_Ent_Seed_Name;", "$Codex_Ent_Brancae_Name;", "Roseum Brain Tree"))
+        h = {"system": 1, "body_id": 4, "lat": 0.0, "lon": 0.0, "radius": 1_000_000, "heading": 0}
+        [t] = self.state.bio_tags_here(h)
+        self.assertEqual((t["genus"], t["dist"], t["usable"]), ("Brain Trees", 524, True))
+        # on foot: a first Log writes its codex entry in the same second, just before the ScanOrganic
+        self.at("2026-01-01T00:20:00Z", 0.0, 0.0)
+        self.codex("2026-01-01T00:20:00Z", lat=0.0, lon=0.0)
+        self.organic("2026-01-01T00:20:00Z", "Log")
+        self.assertEqual([r[0] for r in self.db.execute("SELECT name FROM bio_tags")], ["Roseum Brain Tree"])
+
     def test_tag_needs_a_position_of_that_moment(self):
         self.at("2026-01-02T00:00:00Z", 0.0, 0.0)                        # today's reading...
         self.codex("2026-01-01T00:10:00Z")                               # ...is not where yesterday's tag was made
@@ -2053,3 +2076,37 @@ class FullScanBonus(unittest.TestCase):
         self.assertEqual(ex["estimated_payout"], ex["estimated_value"] + 3000)   # base estimate unchanged, the bonus on top
         for kw in ({"disc_planet": True}, {"all_found": False}, {"count": 4}):   # someone found one first / not all found
             self.assertEqual(outrider.unsold.analyse(self.events(**kw), ARGS)["exploration"]["full_scan_bonus"], 0, kw)
+
+    def test_report_counts_the_bonus(self):
+        """Review: the CLI's ESTIMATED and TOTAL left the bonus out while the payout (and the page) had it."""
+        import contextlib, io
+        res = outrider.unsold.analyse(self.events(), ARGS)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            outrider.unsold.report(res, ARGS)
+        text = out.getvalue()
+        base = res["exploration"]["estimated_value"]
+        self.assertIn("full-scan bonus: 3,000", text.replace(" cr", ""))
+        self.assertIn(f"ESTIMATED     : {outrider.unsold.cr(base + 3000)}", text)
+
+
+class BioforgeLink(unittest.TestCase):
+    """Review: only an organic codex entry links to Canonn's Bioforge (the category reads "Biological and Geological"
+    for geysers too)."""
+
+    def test_only_organic(self):
+        import types
+        db = ed_outrider.open_db(":memory:")
+        self.addCleanup(db.close)
+        j = ed_outrider.Journals(db)
+        state = ed_outrider.State(db, j, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        j.handle({"event": "FSDJump", "timestamp": "2026-01-01T00:00:00Z", "StarSystem": "Sys", "SystemAddress": 1, "StarPos": [0, 0, 0]})
+        j.handle({"event": "Scan", "timestamp": "2026-01-01T00:01:00Z", "BodyName": "Sys 4", "BodyID": 4, "StarSystem": "Sys",
+                  "SystemAddress": 1, "PlanetClass": "Rocky body", "Landable": True, "MassEM": 0.1, "ScanType": "Detailed",
+                  "WasDiscovered": False, "WasMapped": False})
+        for i, (sub, name) in enumerate((("Organic structures", "Tussock Pennata - Teal"), ("Geology and anomalies", "Ice Geysers"))):
+            j.handle({"event": "CodexEntry", "timestamp": f"2026-01-01T00:0{2 + i}:00Z", "EntryID": 100 + i, "Name": "$x;",
+                      "Name_Localised": name, "Category_Localised": "Biological and Geological", "SubCategory_Localised": sub,
+                      "Region_Localised": "Inner Orion Spur", "System": "Sys", "SystemAddress": 1, "BodyID": 4})
+        body = next(b for b in state.system_detail(1)["bodies"] if b["name"] == "4")
+        self.assertEqual({c["name"]: c["entry_id"] for c in body["codex"]}, {"Tussock Pennata - Teal": 100, "Ice Geysers": None})

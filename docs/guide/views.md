@@ -24,7 +24,10 @@ credits per minute ("~2 min · 450k/min"; "skip?" when not worth the trip). Bio 
 valued with the ×5 first-footfall bonus, except in a populated system: Vista Genomics never pays it there.
 "🧬? check in the FSS" marks a landable body you have only from an AutoScan or a nav beacon, whose signals nobody
 counted, where life is possible. The body panel lists why each other genus is not expected ("pressure too
-low"). Flying low over a body in your ship (under 5 km), the on-body strip already shows its bio card.
+low"). Flying low over a body in your ship (under 5 km), the on-body strip already shows its bio card. A star's
+panel says its kind in words ("main sequence", "white dwarf (hydrogen-rich)"), a biology codex entry links to
+Canonn's Bioforge (where it grows, and in what conditions), and **⬇ CSV** in the heading saves the system's bodies
+and values as a spreadsheet.
 <br><br><img src="../images/here.png" alt="The current system">
 </td>
 </tr>

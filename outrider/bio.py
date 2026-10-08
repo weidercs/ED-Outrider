@@ -853,6 +853,23 @@ def predict(body, system=None):
     return out
 
 
+_BY_NAME = {}
+
+
+def species_by_name(name):
+    """The rules' entry for a species by its name, case ignored ("Roseum Brain Tree", "Tussock Pennata"): {id, genus_id,
+    genus, ...}, or None. A codex entry's localised name (variant cut off at " - ") finds its species this way, the
+    variant-less older species (Brain Trees, Anemones, Tubers...) included, whose codex codes carry no number."""
+    R = load_rules()
+    if not R or not name:
+        return None
+    if _BY_NAME.get("_rules") is not R:
+        _BY_NAME.clear()
+        _BY_NAME.update({sp["name"].lower(): sp for sp in R["species"]})
+        _BY_NAME["_rules"] = R
+    return _BY_NAME.get(str(name).strip().lower())
+
+
 # why a rule key fails, in words (ruled_out)
 WHY_WORDS = {"atmosphere": "the atmosphere", "atmosphere_component": "the atmosphere's make-up", "min_gravity": "gravity too low",
              "max_gravity": "gravity too high", "min_temperature": "too cold", "max_temperature": "too hot",

@@ -4135,11 +4135,28 @@ const settle = async maxMs => {
                   tag: {dist: 524, bearing: 90, turn: 90, way: "on your right", lat: 0, lon: 0.03}};
       const keep = data.sampling; data.sampling = sm;
       const strip = samplingHtml().replace(/<[^>]+>/g, "");
+      // review #8: the tag is said when the earlier samples' positions are unknown too
+      data.sampling = Object.assign({}, sm, {to_go: null, nearest: null, points: 0});
+      const stripUnknown = /tagged: 524 m/.test(samplingHtml().replace(/<[^>]+>/g, ""));
+      // review #7 and #10: two tags near each other are each said once for the run, under the sampling switch
+      const realAlert = alertOut, calls = [];
+      alertOut = (kind, title) => { calls.push(kind + ":" + title); return true; };
+      const at = (lat, lon, dist) => { data.sampling = Object.assign({}, sm, {tag: {dist, bearing: 90, turn: 90, way: "on your right", lat, lon}}); onData(); };
+      try { tagAnnounced = null; at(0, 0.001, 50); at(0, 0.002, 45); at(0, 0.001, 50); at(0, 0.002, 40); } finally { alertOut = realAlert; }
       data.sampling = keep;
+      // review #2: the legend's swatch for a species is the colour the map drew it in, tags counted
+      const s2 = Object.assign({}, s, {bio: [{species: "Tussock Pennata", genus: "Tussock", current: true, samples: 1, need: 200,
+                                              points: [{n: 1, lat: 0, lon: 0.001, dist: 17}]}]});
+      const L2 = surfaceLayout(s2, surfaceCfg(), 400), dot = L2.items.find(i => i.kind === "bio");
+      const leg = document.createElement("div"); leg.innerHTML = surfaceLegend(s2, L2, surfaceCfg());
+      const sw = leg.querySelector(".lg-bio .sw");
+      const legendOk = !!sw && sw.getAttribute("style").includes(dot.colour) && !!leg.querySelector(".lg-tag");
       return {n: tags.length, faint: tags.map(t => t.faint), coloured: tags.every(t => !!t.colour),
               right: tags.find(t => !t.faint && t.species === "Tussock Pennata").sx > L.c,
-              strip: /tagged: 524 m, turn 90° right/.test(strip), ahead: tagText({genus: "X", tag: {dist: 40, turn: -4, way: "ahead"}}).includes("ahead")}; })()`);
-    const want = {n: 3, faint: [true, false, false], coloured: true, right: true, strip: true, ahead: true};
+              strip: /tagged: 524 m, turn 90° right/.test(strip), ahead: tagText({genus: "X", tag: {dist: 40, turn: -4, way: "ahead"}}).includes("ahead"),
+              stripUnknown, calls: calls.filter(c => c.includes("Tagged")), legendOk}; })()`);
+    const want = {n: 3, faint: [true, false, false], coloured: true, right: true, strip: true, ahead: true, stripUnknown: true,
+                  calls: ["sampling:Tagged Tussock nearby", "sampling:Tagged Tussock nearby"], legendOk: true};
     const goodT = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodT;
     console.log(goodT ? "OK" : "FAIL", "| bio tags |", goodT ? "tagged plants drawn (faint where a sample would not count), the strip's turn to the nearest" : JSON.stringify(got), errors.slice(before));
@@ -4162,11 +4179,14 @@ const settle = async maxMs => {
       const keep = [data.on_body, data.near_body];
       data.on_body = null; data.near_body = {body: "A 1", full: "S A 1", how: "flying low", alt: 2300, system: "0"};
       renderOnBody(); o.over = document.getElementById("onbody").textContent.startsWith("Over A 1 (flying low, 2.3 km)");
+      o.stars = [starWords("K", "Va"), starWords("M", "III"), starWords("DAV", "VII"), starWords("DQ", ""), starWords("G", "")];
+      o.forge = [bioforgeLink(2310101).includes("bioforge.canonn.tech/?entryid=2310101"), bioforgeLink(null)];
       o.counts = [targetCounts({known: 3, count: 12, edsm: {known: 5, count: 12}}), targetCounts({known: 2, edsm: {missing: true}}), targetCounts({})]
         .map(h => h.replace(/<[^>]+>/g, "").trim());
       [data.on_body, data.near_body] = keep; renderOnBody();
       return o; })()`);
     const want = {tag: "🧬? 2 to check in the FSS🧬? 2", filters: '{"hideDone":true,"minSig":3}', why: true, over: true,
+                  stars: ["main sequence", "giant", "white dwarf (hydrogen-rich), variable", "white dwarf (carbon)", ""], forge: [true, ""],
                   counts: ["3/12 known · EDSM 5/12", "2 known · EDSM: not logged", ""]};
     const goodC = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodC;

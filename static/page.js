@@ -730,9 +730,9 @@ function samplingHtml() {
   if (!sm || !sm.samples || sm.samples >= 3) return "";
   const head = `<b>${esc(sm.genus || "")}</b> <span class="unk">${esc((sm.species || "").split(" ").slice(1).join(" "))}</span> · sample ${sm.samples}/3`;
   // no colony distance for this genus (one outrider.bio does not know): the positions may well be recorded
-  if (sm.need == null && sm.points > 0) return `<div class="spacing unk">${head} · spacing unknown for this genus</div>`;
+  if (sm.need == null && sm.points > 0) return `<div class="spacing unk">${head} · spacing unknown for this genus${tagText(sm)}</div>`;
   if (sm.to_go == null) return `<div class="spacing unk">${head} · ${sm.need ? `need ${sm.need} m from the last sample` : "spacing unknown"}` +
-    ` <span title="the position of your earlier samples was not recorded (they were taken before Outrider was running)">(position unknown)</span></div>`;
+    ` <span title="the position of your earlier samples was not recorded (they were taken before Outrider was running)">(position unknown)</span>${tagText(sm)}</div>`;
   return `<div class="spacing ${sm.clear ? "clear" : ""}">${head} · ` +
     (sm.clear ? `✓ clear to sample <span class="unk">(${sm.nearest} m from the nearest, ${sm.need} m needed)</span>`
               : `<b>${sm.to_go} m</b> to go <span class="unk">(${sm.nearest} of ${sm.need} m)</span>`) + tagText(sm) + `</div>`;
@@ -1043,7 +1043,8 @@ const surfWhere = it => `${surfDist(it.dist)} · ${String(Math.round(it.brg) % 3
 // the legend: species, the six rig slots (as the game's HUD shows them), sites, locations, the ship; nearest first
 function surfaceLegend(s, L, cfg) {
   const by = k => L.items.filter(it => it.kind === k).sort((a, b) => a.dist - b.dist), rows = [];
-  const bio = new Map(), colours = speciesColours(s.bio);
+  // the same colours as the map, which counts the tagged species too (review: the legend's swatch was another species')
+  const bio = new Map(), colours = speciesColours([...(s.bio || []), ...(s.tags || [])]);
   for (const it of by("bio")) if (!bio.has(it.species)) bio.set(it.species, it);
   const species = (s.bio || []).filter(b => b.points && b.points.length).map(b => ({b, it: bio.get(b.species)}))
     .sort((x, y) => (x.it ? x.it.dist : 1e9) - (y.it ? y.it.dist : 1e9));
@@ -1051,6 +1052,12 @@ function surfaceLegend(s, L, cfg) {
     `<div class="lg-row lg-bio${b.current ? " cur" : " faint"}" data-species="${esc(b.species)}"><i class="sw" style="background:${colours.get(b.species)}"></i>` +
     `<b>${esc(b.species)}</b> ${b.samples ?? "?"}/3${b.need ? ` · ${b.need} m` : ""}` +
     (b.clear ? ` · <span class="ok">✓ clear</span>` : it && b.need ? ` · <span class="unk">${Math.round(it.dist)} of ${b.need} m</span>` : "") + `</div>`).join(""));
+  // plants you tagged with the composition scanner, per species: how many, the nearest one a sample would count at
+  const tagged = new Map();
+  for (const it of by("tag")) { const g = tagged.get(it.species) || {n: 0, near: null}; g.n++; if (!it.faint && !g.near) g.near = it; tagged.set(it.species, g); }
+  if (tagged.size) rows.push(`<div class="lg-h">Tagged <span class="unk">(○ a sample would count · faint: inside a colony)</span></div>` +
+    [...tagged].map(([sp, g]) => `<div class="lg-row lg-tag"><i class="sw ring" style="border-color:${colours.get(sp)}"></i><b>${esc(sp)}</b> ${g.n}` +
+      (g.near ? ` · <span class="unk">nearest ${surfWhere(g.near)}</span>` : "") + `</div>`).join(""));
   const rigs = by("rig"), slot = n => rigs.find(r => r.n === n);
   if (rigs.length || s.rhino) rows.push(`<div class="lg-h">Rigs <span class="unk">(○ filling · ● probably full${cfg.spacing ? ` · ring ~${cfg.spacing} m, an estimate` : ""})</span></div>` +
     `<div class="lg-slots">` + [1, 2, 3, 4, 5, 6].map(n => { const r = slot(n);
@@ -1498,7 +1505,7 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["autotarget", "auto-target (after a supercharge when it is on, a test, Target next, 🎯, the co-pilot button's tap): whether the system was targeted, and nothing to target when the button found none", null],
   ["find", "a valuable body just scanned (over your highlight levels)", "find"],
   ["jumponium", "a landable body just scanned has a material your FSD injections are short of (premium or standard at 2 or fewer): said with the FSS debrief, or alone when the FSS never completes", "find"],
-  ["sampling", "leaving a body with exobiology unfinished (untouched genera only if you landed there); a species completed", "alert"],
+  ["sampling", "leaving a body with exobiology unfinished (untouched genera only if you landed there); a species completed; within 100 m of a plant you tagged where the next sample would count", "alert"],
   ["approach", "approaching a landable body at or over your high-gravity level with unsold data over the amber level or rebuy multiple", "alert"],
   ["bodybrief", "approaching a body with biological signals: what they could be (the FSS already said so, so off by default)", null],
   ["sell", "docked where you can sell, and what you banked", "cash"],
@@ -2466,10 +2473,10 @@ function unsoldHtml(u) {
   return `<h3>Unsold data (estimate)</h3>` +
     `<div class="sec"><div class="lbl">🗺 Cartographics · ${from(c)}</div><ul>` +
     `<li><span>${c.bodies.toLocaleString()} bodies in ${c.systems.toLocaleString()} systems</span><b>${cr(c.estimated_payout ?? c.estimated_value)}</b></li>` +
-    (c.payout_note ? `<li><span class="bn">${esc(c.payout_note)}${c.payout_ratio && c.payout_ratio < 0.999 ? ` (${cr(c.estimated_value)} before the cut)` : ""}</span></li>` : "") +
+    (c.payout_note ? `<li><span class="bn">${esc(c.payout_note)}${c.payout_ratio && c.payout_ratio < 0.999 ? ` (${cr(c.estimated_value + (c.full_scan_bonus || 0))} before the cut)` : ""}</span></li>` : "") +
     `<li><span>${c.first_discoveries.toLocaleString()} first discoveries · ${c.mapped.toLocaleString()} mapped</span></li>` +
     (c.full_scan_bonus ? `<li><span class="bn" title="1,000 cr per body of a system you found complete (every body) while all of it was undiscovered: the sale's bonus">` +
-                         `incl. full-scan bonus · ${c.full_scan_systems} system${c.full_scan_systems === 1 ? "" : "s"}</span><b>${cr(c.full_scan_bonus)}</b></li>` : "") +
+                         `incl. full-scan bonus · ${c.full_scan_systems} system${c.full_scan_systems === 1 ? "" : "s"}${c.payout_ratio && c.payout_ratio < 0.999 ? " (before the cut)" : ""}</span><b>${cr(c.full_scan_bonus)}</b></li>` : "") +
     (u.firsts ? `<li><span class="bn">🏁 ${u.firsts.systems} systems (arrival star) · ${u.firsts.stars} stars · ` +
                 `${u.firsts.planets} planets first discovered · ${u.firsts.mapped} first mapped</span></li>` : "") +
     `</ul></div>` +
@@ -2845,6 +2852,7 @@ function renderHere() {
     `<b>${esc(h.name)}</b>` + (away != null ? ` <span class="unk">· ${away.toFixed(2)} ly away</span>` : "") +
     ` · ${h.bodies.length} bod${h.bodies.length === 1 ? "y" : "ies"} known · ` + (h.phenomena && h.phenomena.length ? phenomenaTag(h.phenomena) + " · " : "") +
     `<span title="what selling now would pay for data you hold from here / the most this system could pay">now <b>${credits(h.value_now || 0)} cr</b> · max <b>${credits(maxOf(h) || 0)} cr</b>${maxBonus() ? "" : ` <span class="unk" title="Max leaves out first-discovery, first-mapped and first-footfall bonuses (alerts & thresholds dialog)">no bonus</span>`}</span>` +
+    ` <a class="unk" href="api/export?what=system&id=${encodeURIComponent(h.id64)}" download title="this system's bodies and values as a spreadsheet (CSV)">⬇ CSV</a>` +
     `<span class="modes">${HERE_MODES.filter(([m]) => m !== "split" || hereCtx() === "tab").map(([m, label, title]) =>
       `<button type="button" data-mode="${m}" title="${title}"${(m === "split" ? hereMode().split : hereMode().top === m) ? ' class="on"' : ""}>${label}</button>`).join("")}</span>` +
     (hereRefreshError && h.id64 === shownSystem() ? ` <span class="unk" title="${esc(hereRefreshError)}">· refresh failed</span>` : "");
@@ -3221,6 +3229,7 @@ function renderBodyInto(panel, d, bodyName, closeJs) {
   let physSec = "", orbitSec = "", compSec = "", ringSec = "";
   if (isStar) physSec = sec("star", "Star", kv([
     ["Class", (own.StarType ? `${esc(own.StarType)}${own.Subclass != null ? own.Subclass : ""} ${esc(own.Luminosity || "")}` : `${esc(sp.spectralClass || sp.subType || "")} ${esc(sp.luminosity || "")}`).trim()],
+    ["Kind", esc(starWords(own.StarType || (sp.spectralClass || "").replace(/\d+$/, ""), own.Luminosity || sp.luminosity)) || null],
     ["Mass", has(own.StellarMass) ? `${n(own.StellarMass, 3)} solar` : has(sp.solarMasses) ? `${n(sp.solarMasses, 3)} solar` : null],
     ["Radius", has(own.Radius) ? `${n(own.Radius / 695700000, 3)} solar (${n(own.Radius / 1000, 0)} km)` : has(sp.solarRadius) ? `${n(sp.solarRadius, 3)} solar` : null],
     ["Temperature", has(pick(own.SurfaceTemperature, sp.surfaceTemperature)) ? `${n(pick(own.SurfaceTemperature, sp.surfaceTemperature), 0)} K` : null],
@@ -3281,7 +3290,7 @@ function renderBodyInto(panel, d, bodyName, closeJs) {
       lines.push(`<li><span class="unk">${unk.label}${unk.opt ? `: ${optLabel(unk.n, unk.opt, f)}; the DSS tells which` : ""}</span></li>`);
       lines.push(...unk.list.map(x => `<li><span>${esc(x.genus)} possible: ${esc(x.species.join(" / "))}${codexMark(x)}</span><b>≤${credits((x.value || 0) * f)}</b></li>`));
     }
-    for (const c of row.codex || []) lines.push(`<li><span>📖 ${esc(c.name)}</span><b>${c.voucher ? "voucher " + c.voucher.toLocaleString() + " cr" : c.new ? "new to your codex" : ""}</b></li>`);
+    for (const c of row.codex || []) lines.push(`<li><span>📖 ${esc(c.name)}${bioforgeLink(c.entry_id)}</span><b>${c.voucher ? "voucher " + c.voucher.toLocaleString() + " cr" : c.new ? "new to your codex" : ""}</b></li>`);
     // why the other genera are not expected here: the rule of each that came closest to passing (BioScan's log)
     const ro = row.ruled_out || [];
     const why = ro.length ? `<details class="ruledout"><summary class="unk">Why not the other ${ro.length} genera</summary><ul>` +
@@ -6468,7 +6477,7 @@ function onData() {
     hullLatch = hullBand(data.hull);
     clearAnnounced = data.sampling && data.sampling.clear ? `${data.sampling.species}|${data.sampling.samples}` : null;
     { const sm0 = data.sampling, t0 = sm0 && sm0.tag;   // a tag already near when the page opens: not news
-      tagAnnounced = t0 && t0.dist <= 100 ? `${sm0.species}|${sm0.samples}|${t0.lat}|${t0.lon}` : null; }
+      tagAnnounced = t0 && t0.dist <= 100 ? {species: sm0.species, said: new Set([`${t0.lat}|${t0.lon}`])} : null; }
     return;
   }
   // Just docked: the moment to sell, if what this station buys is worth it. Each Docked event has its own ts,
@@ -6746,11 +6755,16 @@ function onData() {
              still: () => { const s = data && data.sampling; return !!s && `${s.species}|${s.samples}` === smKey; }, say: () => line("sample_clear", {genus: sm.genus}, `Clear to sample ${sm.genus}.`)});
   }
   // a tagged plant of the species you are sampling, where the next sample would count, within 100 m: once per tag
-  const tg = sm && !sm.elsewhere && sm.tag, tgKey = tg && `${sm.species}|${sm.samples}|${tg.lat}|${tg.lon}`;
-  if (tg && tg.dist <= 100 && tgKey !== tagAnnounced) {
-    tagAnnounced = tgKey;
-    alertOut("find", `Tagged ${sm.genus} nearby`, `${tg.dist} m, ${tg.way}`, {tag: "bio_tag_near",
-             say: () => line("bio_tag_near", {genus: sm.genus, distance: tg.dist}, `Tagged ${sm.genus}, ${tg.dist} metres.`)});
+  // for the run (two tags close together must not take turns being "the nearest" and be said again: review #7)
+  const tg = sm && !sm.elsewhere && sm.tag;
+  if (tg && tg.dist <= 100) {
+    if (!tagAnnounced || tagAnnounced.species !== sm.species) tagAnnounced = {species: sm.species, said: new Set()};
+    const k = `${tg.lat}|${tg.lon}`;
+    if (!tagAnnounced.said.has(k)) {
+      tagAnnounced.said.add(k);
+      alertOut("sampling", `Tagged ${sm.genus} nearby`, `${tg.dist} m, ${tg.way}`, {tag: "bio_tag_near",
+               say: () => line("bio_tag_near", {genus: sm.genus, distance: tg.dist}, `Tagged ${sm.genus}, ${tg.dist} metres.`)});
+    }
   }
   // hull: once below half, once below a quarter (re-armed by a repair)
   const band = hullBand(data.hull);
@@ -7272,6 +7286,22 @@ const maxOf = x => maxBonus() || x.value_max_base == null ? x.value_max : x.valu
 // (x.variants) it checked those; otherwise it checked the species, which never over-flags. The title names the new
 // colour and the ones of that species you have logged there (x.codex_have), since two bodies with the same likeliest
 // species can each be new: "new to your codex in Inner Orion Spur: Bacterium Acies - White; you have Lime".
+// A star's class in words (Pioneer's descriptors): the luminosity class ("main sequence", "giant") and, for a white
+// dwarf, what its spectrum shows ("hydrogen-rich"). "" when nothing is known.
+const LUMINOSITY_WORDS = {"0": "hypergiant", "Ia0": "hypergiant", "Ia": "luminous supergiant", "Iab": "supergiant", "Ib": "less luminous supergiant",
+  "I": "supergiant", "II": "bright giant", "III": "giant", "IV": "subgiant", "V": "main sequence", "VI": "subdwarf", "VII": "white dwarf"};
+const WD_WORDS = {A: "hydrogen-rich", B: "helium-rich", O: "ionised helium", Q: "carbon", Z: "metal-rich", C: "no strong lines", X: "unclassified"};
+function starWords(cls, lum) {
+  const c = String(cls || "").toUpperCase(), l = String(lum || "");
+  if (/^D[ABOQZCX]/.test(c)) {   // a white dwarf: DA, DAB, DAV, DQ...
+    const kinds = [...c.slice(1)].map(x => WD_WORDS[x]).filter(Boolean);
+    return `white dwarf${kinds.length ? ` (${kinds.join(", ")})` : ""}${/V$/.test(c) ? ", variable" : ""}`;
+  }
+  return LUMINOSITY_WORDS[l] || LUMINOSITY_WORDS[l.replace(/[ab]+$/, "")] || "";   // "Vab", "IIIb": their class
+}
+// Canonn's Bioforge: what is known of a codex entry across the galaxy (where it grows, the conditions)
+const bioforgeLink = id => Number.isInteger(id) && id > 0
+  ? ` <a href="https://bioforge.canonn.tech/?entryid=${id}" target="_blank" rel="noopener" title="Canonn Bioforge: where this grows and in what conditions">stats ↗</a>` : "";
 const codexMark = (x, region) => {
   if (!x || !(x.codex_new || x.codex_galaxy_new)) return "";
   const have = x.codex_have || [], colour = v => v.split(" - ").pop();

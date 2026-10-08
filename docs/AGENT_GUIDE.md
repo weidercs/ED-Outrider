@@ -89,7 +89,7 @@ rules that keep the journal data, the page and the voice consistent. See also `J
    returns `State.payload()`: position, systems, target, moments (priced by `moments_summary`), fuel,
    surface map, speech info and more. Other views fetch their own endpoints: `/api/system/{id64}`,
    `/api/body`, `/api/history`, `/api/organics`, `/api/log`, `/api/materials`, `/api/map`, `/api/search`,
-   `/api/firsts`, `/api/left`, `/api/find`, `/api/export`, `/api/nearest` (the Nearest finder), `/api/cargo/lookup` (Spansh's markets, read only; POST
+   `/api/firsts`, `/api/left`, `/api/find`, `/api/export` (`what=system&id=`: one system's bodies, `State.export_system`), `/api/nearest` (the Nearest finder), `/api/cargo/lookup` (Spansh's markets, read only; POST
    `/api/cargo/recount` {counts} for your carrier's untracked lines; `/api/materials` carries `cargo`), `/api/highway` (+ `/systems?q=`, `/background`; POST `/plot`,
    `/clear`, `/autotarget` {enabled, delay}, `/autotarget/test`, `/target` {countdown?}: Target next / Retry), `/api/regions` (the Highway map's region grid), `/api/status` and `/api/status.txt`, `/api/version`, `/api/auth/signin`
    and `/signout` (see the app's contract below). The pages: `/`, `/tablet` (the same page, tablet layout), `/signin`;

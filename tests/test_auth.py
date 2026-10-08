@@ -303,3 +303,29 @@ class Exposure(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SystemExport(Base):
+    """Plugin gaps F (Pioneer's export): one system's bodies and values as CSV from Here."""
+
+    def test_export(self):
+        import types
+        self.state.spansh = types.SimpleNamespace(cached=lambda i: (None, None))
+        self.j.handle({"event": "FSDJump", "timestamp": "2026-01-01T00:00:00Z", "StarSystem": "Sol B", "SystemAddress": 5,
+                       "StarPos": [0, 0, 0]})
+        self.j.handle({"event": "Scan", "timestamp": "2026-01-01T00:01:00Z", "BodyName": "Sol B 1", "BodyID": 1, "StarSystem": "Sol B",
+                       "SystemAddress": 5, "PlanetClass": "High metal content body", "MassEM": 1.0, "Landable": True,
+                       "ScanType": "Detailed", "WasDiscovered": False, "WasMapped": False, "DistanceFromArrivalLS": 400.0})
+
+        async def go(c):
+            r = await c.get("/api/export?what=system&id=5")
+            out = [r.status, r.headers.get("Content-Disposition"), (await r.text()).splitlines()]
+            out.append((await c.get("/api/export?what=system&id=x")).status)
+            out.append((await c.get("/api/export?what=system&id=77")).status)
+            return out
+        status, disp, lines, bad, unknown = self.client(go)
+        self.assertEqual(status, 200)
+        self.assertIn('filename="system-Sol_B-', disp)
+        self.assertTrue(lines[0].startswith("body,type,subtype,distance_ls,landable"))
+        self.assertTrue(lines[1].startswith("1,Planet,High metal content world,400.0,True,False,0,0,,True,False,"))
+        self.assertEqual((bad, unknown), (400, 404))

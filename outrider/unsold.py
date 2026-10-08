@@ -858,7 +858,10 @@ def report(result, args):
     print(f"  counting from : {ex['cutoff'] or 'the beginning of your journals'}")
     print(f"  bodies        : {ex['bodies']:,} across {ex['systems']:,} systems")
     print(f"  first found   : {ex['first_discoveries']:,}   mapped: {ex['mapped']:,}")
-    print(f"  ESTIMATED     : {cr(ex['estimated_value'])}")
+    if ex.get("full_scan_bonus"):   # paid on top of the bodies (the sale's Bonus): in the estimate and the total too
+        print(f"  full-scan bonus: {cr(ex['full_scan_bonus'])}   ({ex['full_scan_systems']} system"
+              f"{'' if ex['full_scan_systems'] == 1 else 's'} found complete, all undiscovered)")
+    print(f"  ESTIMATED     : {cr(ex['estimated_value'] + ex.get('full_scan_bonus', 0))}")
     if ex["payout_ratio"] < 0.999:
         print(f"  after crew cut: {cr(ex['estimated_payout'])}   ({ex['payout_note']})")
     else:
@@ -882,7 +885,7 @@ def report(result, args):
               " (species missing from the built-in table; counted as 0)")
 
     print("\n" + "-" * 66)
-    print(f"  TOTAL ESTIMATED  {cr(ex['estimated_value'] + bio['estimated_value'])}")
+    print(f"  TOTAL ESTIMATED  {cr(ex['estimated_value'] + ex.get('full_scan_bonus', 0) + bio['estimated_value'])}")
     print("-" * 66)
 
     if not args.since and not (ex["last_sold"] and bio["last_sold"]):

@@ -213,6 +213,16 @@ class BatchFSpansh(unittest.TestCase):
         self.assertEqual(ed_outrider.unknown_bio_groups(dict(r, bio=2), "K"), [])               # known to have life
         self.assertEqual(ed_outrider.unknown_bio_groups(dict(r, landable=False), "K"), [])
         self.assertEqual(ed_outrider.summarise([r], 1, "K")["bio_unknown"], 1)
+        # review: an FSS (Detailed) of a lifeless body said its signals; a later AutoScan replacing the row keeps that
+        db = ed_outrider.open_db(":memory:")
+        self.addCleanup(db.close)
+        j = ed_outrider.Journals(db)
+        j.handle({"event": "FSDJump", "timestamp": "2026-01-01T00:00:00Z", "StarSystem": "Sys", "SystemAddress": 9, "StarPos": [0, 0, 0]})
+        j.handle(dict(ev, ScanType="Detailed", timestamp="2026-01-01T00:01:00Z"))
+        j.handle(dict(ev, ScanType="AutoScan", timestamp="2026-01-02T00:01:00Z"))
+        import json as _json
+        rec = _json.loads(db.execute("SELECT record FROM own_bodies WHERE system=9").fetchone()[0])
+        self.assertEqual((rec["scan_type"], ed_outrider.unknown_bio_groups(rec, "K")), ("Detailed", []))
 
     def test_why_genera_are_ruled_out(self):
         """Plugin gaps C (BioScan's elimination log): each genus not predicted, with the rule that came closest."""

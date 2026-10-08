@@ -1056,3 +1056,4 @@ body.app #richPane { grid-column: 1; grid-row: 2; }
 #richTable .exonew { color: var(--accent); }
 /* the body panel's "why not the other genera" (plugin gaps C) */
 .ruledout ul { margin: 2px 0 0; } .ruledout li { display: flex; justify-content: space-between; gap: 10px; }
+.sw.ring { background: transparent !important; border: 2px solid; border-radius: 50%; box-sizing: border-box; }   /* a tagged plant's legend swatch */

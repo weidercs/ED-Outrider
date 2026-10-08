@@ -2054,7 +2054,7 @@ def surface_m(lat1, lon1, lat2, lon2, radius):
 
 
 # A biology codex entry's variant name: $Codex_Ent_<Genus>_<NN>_<variant>_Name; (the species is $Codex_Ent_<Genus>_<NN>_Name;)
-BIO_CODEX_RE = re.compile(r"^\$Codex_Ent_([A-Za-z]+)_(\d+)_\w+_Name;$")
+BIO_CODEX_RE = re.compile(r"^\$Codex_Ent_([A-Za-z]+)_(\d+)(?:_\w+)?_Name;$")
 
 
 def surface_bearing(lat1, lon1, lat2, lon2):
@@ -3303,6 +3303,14 @@ class Journals:
         if kind == "Log":   # a new run: forget the old one's points
             self.db.execute("DELETE FROM sample_points WHERE system=? AND body_id=? AND species=? AND ts < ?",
                             (system, body, species, ts))
+            # the codex entry the game writes with a first Log (the same second, just before it) is where you are
+            # sampling, not a plant to go to (review #9): without its sample point it would point at your own feet
+            try:
+                since = iso_ts(ts_seconds(ts) - 5)
+            except ValueError:
+                since = ts
+            self.db.execute("DELETE FROM bio_tags WHERE system=? AND body_id=? AND species=? AND ts BETWEEN ? AND ?",
+                            (system, body, species, since, ts))
         if kind == "Analyse":   # the run is complete: nothing left to space
             self.db.execute("DELETE FROM sample_points WHERE system=? AND body_id=? AND species=? AND ts <= ?",
                             (system, body, species, ts))
@@ -3322,8 +3330,18 @@ class Journals:
         """A biology CodexEntry (the composition scanner, or a first Log) is a waypoint for that species on that body
         (bio_tags): at the event's own position, else at yours from the live Status.json if it is this moment's
         reading over that same body. Nothing is stored without a position."""
+        if ev.get("Category") != "$Codex_Category_Biology;" or ev.get("BodyID") is None or system is None:
+            return
+        name = str(ev.get("Name_Localised") or "").split(" - ")[0].strip() or None
+        # the species and genus by name from the rules (the older variant-less species have no number in their codex
+        # code: review #1), else from the code's own shape
+        sp = outrider.bio.species_by_name(name) if outrider.bio else None
         m = BIO_CODEX_RE.match(ev.get("Name") or "")
-        if not m or ev.get("Category") != "$Codex_Category_Biology;" or ev.get("BodyID") is None or system is None:
+        if sp:
+            species, genus = sp["id"], sp["genus_id"]
+        elif m:
+            species, genus = f"$Codex_Ent_{m.group(1)}_{m.group(2)}_Name;", f"$Codex_Ent_{m.group(1)}_Genus_Name;"
+        else:
             return
         lat, lon = ev.get("Latitude"), ev.get("Longitude")
         if lat is None or lon is None:
@@ -3337,10 +3355,8 @@ class Journals:
             except ValueError:
                 return
             lat, lon = st["lat"], st["lon"]
-        name = str(ev.get("Name_Localised") or "").split(" - ")[0] or None
         self.db.execute("INSERT OR IGNORE INTO bio_tags VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                        (system, ev["BodyID"], f"$Codex_Ent_{m.group(1)}_{m.group(2)}_Name;",
-                         f"$Codex_Ent_{m.group(1)}_Genus_Name;", name, lat, lon, ts))
+                        (system, ev["BodyID"], species, genus, name, lat, lon, ts))
 
     def handle_phenomenon(self, name, ev, ts):
         """Notable stellar phenomena: found by the FSS, reached by dropping out of supercruise at one."""
@@ -3726,8 +3742,17 @@ class Journals:
             if record and ev.get("BodyID") is not None:
                 # A body is news once: the Detailed rescan the game writes after mapping it (SAAScanComplete)
                 # and AutoScans on a return visit replace the row but must not announce it again.
-                known = self.db.execute("SELECT 1 FROM own_bodies WHERE system=? AND body_id=?",
+                known = self.db.execute("SELECT record FROM own_bodies WHERE system=? AND body_id=?",
                                         (system, ev["BodyID"])).fetchone()
+                # an FSS (Detailed) of the body said its signals; a later AutoScan or nav-beacon read replacing the row
+                # must not make them "not counted" again (review: "bio possible" on a body already checked)
+                if known and record.get("scan_type") in NO_SIGNAL_SCANS:
+                    try:
+                        was = json.loads(known["record"]).get("scan_type")
+                    except (TypeError, ValueError):
+                        was = None
+                    if was and was not in NO_SIGNAL_SCANS:
+                        record["scan_type"] = was
                 self.db.execute("INSERT OR REPLACE INTO own_bodies (system, body_id, name, record, ts, raw) "
                                 "VALUES (?, ?, ?, ?, ?, ?)",
                                 (system, ev["BodyID"], ev["BodyName"], json.dumps(record), ts, json.dumps(ev)))
@@ -6070,25 +6095,30 @@ class State:
         """Plants tagged on this body (bio_tags) for species not finished here, nearest first: {species, genus,
         lat, lon, dist, bearing, way, current (the run in progress is this species), usable (outside the colony
         distance of every sample of that run: a sample there would count)}. h: surface_here()."""
-        done = {r["species"] for r in self.db.execute(
-            "SELECT species FROM own_organic WHERE system=? AND body_id=? AND done_ts IS NOT NULL", (h["system"], h["body_id"]))}
-        run = self.db.execute("SELECT system, body_id, species FROM own_organic WHERE done_ts IS NULL ORDER BY ts DESC LIMIT 1").fetchone()
-        cur = run["species"] if run and (run["system"], run["body_id"]) == (h["system"], h["body_id"]) else None
+        # matched to the sample runs by species code or name: a run's code for the older species need not be the rules'
+        same = lambda t, r: t["species"] == r["species"] or (t["name"] or "").lower() == (r["species_name"] or "").lower()
+        done = [dict(r) for r in self.db.execute("SELECT species, species_name FROM own_organic WHERE system=? AND body_id=? "
+                                                 "AND done_ts IS NOT NULL", (h["system"], h["body_id"]))]
+        run = self.db.execute("SELECT system, body_id, species, species_name FROM own_organic WHERE done_ts IS NULL "
+                              "ORDER BY ts DESC LIMIT 1").fetchone()
+        run = dict(run) if run and (run["system"], run["body_id"]) == (h["system"], h["body_id"]) else None
         pts = [dict(r) for r in self.db.execute("SELECT lat, lon FROM sample_points WHERE system=? AND body_id=? AND species=?",
-                                                (h["system"], h["body_id"], cur))] if cur else []
+                                                (h["system"], h["body_id"], run["species"]))] if run else []
         out = []
         for t in self.db.execute("SELECT species, genus, name, lat, lon FROM bio_tags WHERE system=? AND body_id=? ORDER BY ts",
                                  (h["system"], h["body_id"])):
-            if t["species"] in done:
+            if any(same(t, r) for r in done):
                 continue
-            need = outrider.bio.colony_distance(t["genus"], (t["name"] or "").split(" ")[0]) if outrider.bio else None
-            usable = not (t["species"] == cur and need and any(
-                surface_m(p["lat"], p["lon"], t["lat"], t["lon"], h["radius"]) < need for p in pts))
+            sp = outrider.bio.species_by_name(t["name"]) if outrider.bio else None
+            genus = (sp or {}).get("genus") or (t["name"] or "").split(" ")[0] or None
+            need = outrider.bio.colony_distance(t["genus"], genus) if outrider.bio else None
+            cur = bool(run and same(t, run))
+            usable = not (cur and need and any(surface_m(p["lat"], p["lon"], t["lat"], t["lon"], h["radius"]) < need for p in pts))
             bearing = surface_bearing(h["lat"], h["lon"], t["lat"], t["lon"])
-            out.append({"species": t["name"], "genus": (t["name"] or "").split(" ")[0] or None, "lat": t["lat"], "lon": t["lon"],
+            out.append({"species": t["name"], "genus": genus, "lat": t["lat"], "lon": t["lon"],
                         "dist": round(surface_m(h["lat"], h["lon"], t["lat"], t["lon"], h["radius"])),
                         "bearing": round(bearing), "way": which_way(bearing, h.get("heading")),
-                        "current": t["species"] == cur, "usable": usable, "code": t["species"]})
+                        "current": cur, "usable": usable, "code": t["species"]})
         return sorted(out, key=lambda t: t["dist"])
 
     # ---- commander, materials, fuel, carrier, current system ----
@@ -6283,7 +6313,7 @@ class State:
         # waypoint): how far, and which way to turn (heading-relative, degrees right positive)
         h = {"system": run["system"], "body_id": run["body_id"], "lat": st["lat"], "lon": st["lon"],
              "radius": st["planet_radius"], "heading": st.get("heading")}
-        tag = next((t for t in self.bio_tags_here(h) if t["code"] == run["species"] and t["usable"]), None)
+        tag = next((t for t in self.bio_tags_here(h) if t["current"] and t["usable"]), None)
         if tag:
             turn = None if h["heading"] is None else round(((tag["bearing"] - h["heading"] + 540) % 360) - 180)
             out["tag"] = {"dist": tag["dist"], "bearing": tag["bearing"], "turn": turn, "way": tag["way"],
@@ -7608,8 +7638,12 @@ class State:
                                  " ORDER BY tons DESC, name", (id64,)):
             mined.setdefault(r["body_id"], []).append({"name": r["name"], "tons": r["tons"], "last": r["last_ts"]})
         codex = {}
-        for r in self.db.execute("SELECT body_id, name, is_new, voucher FROM codex WHERE system=?", (id64,)):
-            codex.setdefault(r["body_id"], []).append({"name": r["name"], "new": bool(r["is_new"]), "voucher": r["voucher"]})
+        for r in self.db.execute("SELECT body_id, name, is_new, voucher, entry_id, subcategory FROM codex WHERE system=?", (id64,)):
+            codex.setdefault(r["body_id"], []).append({"name": r["name"], "new": bool(r["is_new"]), "voucher": r["voucher"],
+                                                       # an organic entry's id: Canonn Bioforge's statistics for it (the
+                                                       # category is "Biological and Geological" for both: the
+                                                       # subcategory tells a plant from a geyser)
+                                                       "entry_id": r["entry_id"] if "organic" in (r["subcategory"] or "").lower() else None})
         odyssey = True
         star_row = self.db.execute("SELECT star_class FROM jumps WHERE id64=? ORDER BY ts DESC LIMIT 1", (id64,)).fetchone()
         star = star_row["star_class"] if star_row else None
@@ -7807,6 +7841,21 @@ class State:
         "samples": "SELECT count(*) FROM own_organic WHERE done_ts BETWEEN ? AND ?",
         "codex_new": "SELECT count(*) FROM codex WHERE is_new=1 AND ts BETWEEN ? AND ?",
     }
+
+    def export_system(self, id64):
+        """One system's bodies as rows (Pioneer's per-system export): (columns, rows, system name), or (None, None,
+        None) for a system Outrider knows nothing of."""
+        d = self.system_detail(id64)
+        if not d:
+            return None, None, None
+        cols = ["body", "type", "subtype", "distance_ls", "landable", "terraformable", "bio_signals", "geo_signals",
+                "genera", "first_discovered", "mapped", "pays_now", "could_pay"]
+        rows = [{"body": b["name"], "type": b["type"], "subtype": b.get("subtype"), "distance_ls": b.get("dist_ls"),
+                 "landable": b.get("landable"), "terraformable": b.get("terraformable"), "bio_signals": b.get("bio"),
+                 "geo_signals": b.get("geo"), "genera": " / ".join(b.get("genera") or []),
+                 "first_discovered": b.get("first_discovered"), "mapped": b.get("mapped"),
+                 "pays_now": b.get("value_now"), "could_pay": b.get("value_max")} for b in d["bodies"]]
+        return cols, rows, d.get("name")
 
     def range_counts(self, a, b):
         """What you achieved between two timestamps (inclusive): the per-session and all-time numbers."""
@@ -12570,7 +12619,16 @@ def make_app(state, hosts=None):
 
     async def export_view(request):
         what, fmt = request.query.get("what", "firsts"), request.query.get("format", "csv")
-        if what == "unsold":  # a full journal pass: keep it off the event loop
+        if what == "system":   # one system's bodies and values (Pioneer's export), from Here
+            try:
+                id64 = parse_id64(request.query.get("id"))
+            except (ValueError, TypeError):
+                return web.json_response({"error": "id: a system id64"}, status=400)
+            cols, rows, name = state.export_system(id64)
+            if cols is None:
+                return web.json_response({"error": "unknown system"}, status=404)
+            what = "system-" + re.sub(r"[^A-Za-z0-9_-]+", "_", name or str(id64)).strip("_")
+        elif what == "unsold":  # a full journal pass: keep it off the event loop
             cols, rows = await asyncio.get_running_loop().run_in_executor(None, state.export_rows, what)
         else:
             cols, rows = state.export_rows(what)
