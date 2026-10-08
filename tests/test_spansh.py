@@ -197,6 +197,40 @@ class BatchFSpansh(unittest.TestCase):
         own.pop("signals_known")
         self.assertFalse(ed_outrider.stale_bio_body(own, "K"))
 
+    def test_bio_possible_signals_unknown(self):
+        """Plugin gaps C (BioScan's "Bios possible, check FSS for signals"): a landable world you have only from an
+        AutoScan or a nav beacon, with no signal count of yours or Spansh's, where the rules allow life."""
+        ev = {"event": "Scan", "timestamp": "2026-01-01T00:00:00Z", "ScanType": "AutoScan", "BodyName": "Sys A 3", "BodyID": 3,
+              "StarSystem": "Sys", "SystemAddress": 9, "PlanetClass": "Rocky body", "Landable": True,
+              "AtmosphereType": "CarbonDioxide", "Atmosphere": "thin carbon dioxide atmosphere", "SurfacePressure": 2000.0,
+              "SurfaceGravity": 0.12 * 9.80665, "SurfaceTemperature": 180, "Volcanism": "", "MassEM": 0.01,
+              "DistanceFromArrivalLS": 500, "TerraformState": ""}
+        r = ed_outrider.record_from_scan(ev)
+        self.assertTrue(ed_outrider.unknown_bio_groups(r, "K"))
+        self.assertEqual(ed_outrider.unknown_bio_groups(ed_outrider.record_from_scan(dict(ev, ScanType="Detailed")), "K"), [])   # FSS'd: its signals were said
+        self.assertEqual(ed_outrider.unknown_bio_groups(dict(r, signals_seen=True), "K"), [])   # you counted them
+        self.assertEqual(ed_outrider.unknown_bio_groups(dict(r, signals_known=True), "K"), [])  # someone did (Spansh)
+        self.assertEqual(ed_outrider.unknown_bio_groups(dict(r, bio=2), "K"), [])               # known to have life
+        self.assertEqual(ed_outrider.unknown_bio_groups(dict(r, landable=False), "K"), [])
+        self.assertEqual(ed_outrider.summarise([r], 1, "K")["bio_unknown"], 1)
+
+    def test_why_genera_are_ruled_out(self):
+        """Plugin gaps C (BioScan's elimination log): each genus not predicted, with the rule that came closest."""
+        import outrider.bio
+        if not outrider.bio.load_rules():
+            self.skipTest("no bio_rules.json")
+        ev = {"event": "Scan", "timestamp": "2026-01-01T00:00:00Z", "ScanType": "Detailed", "BodyName": "Sys A 3", "BodyID": 3,
+              "StarSystem": "Sys", "SystemAddress": 9, "PlanetClass": "Rocky body", "Landable": True,
+              "AtmosphereType": "CarbonDioxide", "Atmosphere": "thin carbon dioxide atmosphere", "SurfacePressure": 2000.0,
+              "SurfaceGravity": 0.12 * 9.80665, "SurfaceTemperature": 180, "Volcanism": "", "MassEM": 0.01,
+              "DistanceFromArrivalLS": 500, "TerraformState": ""}
+        body = ed_outrider._bio_body(ed_outrider.record_from_scan(ev), "K", None)
+        kept = {x["genus"] for x in outrider.bio.predict(body)}
+        out = {x["genus"]: x["why"] for x in outrider.bio.ruled_out(body)}
+        self.assertTrue(out and not kept & set(out))                     # each genus once: expected, or ruled out
+        self.assertEqual((out["Cactoida"], out["Bark Mounds"]), ("pressure too low", "the volcanism"))
+        self.assertEqual(outrider.bio.ruled_out({"PlanetClass": "Sudarsky class I gas giant"}), [])   # hosts nothing at all
+
     def test_summary_is_a_mark_and_values_are_unchanged(self):
         star = ed_outrider.record_from_dump("Sys", {"name": "Sys A", "type": "Star", "subType": "K (Yellow-Orange) Star",
                                                     "mainStar": True, "solarMasses": 0.8, "bodyId": 1,

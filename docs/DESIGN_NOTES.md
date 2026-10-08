@@ -210,6 +210,11 @@ upstream project's choices, not rules of the game.
 - **History's sessions are split by 2 h without a jump.** A session's window runs from its login (the latest one
   within 2 h before its first jump) to the next session's; a login no jump followed, 2 h or more after anything
   else, opens a session with no jumps (review F31), whose "end" is its last login (nothing later is known).
+- **No x5 in a populated system** (BioScan's rule; plugin gaps C). The author's Vista sales say so: 0 of 8 runs in a
+  populated system paid it, 208 of 208 elsewhere (`project/value-checks/RESULTS-2026-10-08.md`). A system's
+  Population comes from its FSDJump / Location / CarrierJump (`system_population`); `own_firsts.bio_x5` holds the
+  verdict per body, so every x5 reads one flag. Pioneer's other value rules were checked the same way and left
+  out where the sales did not support them (full-map bonus, honk value, terraformable ranges).
 - **A Vista Genomics visit is one x5 check** (sales under 5 minutes apart): the runs aboard before its first sale
   against everything it sold; each sale stores what it adds, so the ledger's sum is the visit's check whatever order
   the entries came in (review F21).

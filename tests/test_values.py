@@ -97,7 +97,7 @@ class FirstsAndRings(unittest.TestCase):
         self.addCleanup(self.db.close)
 
     def first(self, ts, bid, name, disc, mapped, main=0):
-        self.db.execute("INSERT INTO own_firsts VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(system, body_id) DO UPDATE SET "
+        self.db.execute("INSERT INTO own_firsts (system, body_id, name, is_main, was_discovered, was_mapped, was_footfalled, first_ts, undisc_ts) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(system, body_id) DO UPDATE SET "
                         "undisc_ts=coalesce(excluded.undisc_ts, undisc_ts)",
                         (1, bid, name, main, int(disc), int(mapped), None, ts, None if disc else ts))
 
@@ -461,6 +461,19 @@ class BioColours(unittest.TestCase):
         self.assertEqual(ed_outrider.codex_have(dict(g, best="Bacterium Vesicula"), known), [])
         self.assertEqual(ed_outrider.codex_have(dict(g, best=None), known), [])
         self.assertEqual(ed_outrider.codex_have(g, ed_outrider.codex_species(db, None)), [])
+
+    def test_codex_new_anywhere(self):
+        """Plugin gaps C (BioScan's 🌌 against its 📝): a colour logged in another region is still new HERE (✦) but not
+        new anywhere; one in no region at all is new anywhere (✪)."""
+        db = ed_outrider.open_db(":memory:")
+        self.addCleanup(db.close)
+        db.executemany("INSERT INTO codex (ts, entry_id, name, region) VALUES ('t', ?, ?, ?)",
+                       [(2320407, "Bacterium Acies - White", "Norma Arm"), (2320201, "Bacterium Aurasus - Teal", "Inner Orion Spur")])
+        here, anywhere = ed_outrider.codex_species(db, "Inner Orion Spur"), ed_outrider.codex_species_all(db)
+        acies = {"genus": "Bacterium", "best": "Bacterium Acies", "variants": ["Bacterium Acies - White"]}
+        vesicula = {"genus": "Bacterium", "best": "Bacterium Vesicula", "variants": []}
+        self.assertEqual([ed_outrider.codex_new_group(g, here) for g in (acies, vesicula)], [True, True])
+        self.assertEqual([ed_outrider.codex_new_group(g, anywhere) for g in (acies, vesicula)], [False, True])
 
     def test_by_genus_carries_variants(self):
         cands = [{"name": "Bacterium Aurasus", "genus": "Bacterium", "value": 1000000, "variants": ["Bacterium Aurasus - Teal"]},
@@ -1195,6 +1208,17 @@ class BatchEExobio(unittest.TestCase):
         # a rescan after your own landing says footfalled: the first scan decides
         events.insert(4, ev(self.body_scan("2026-01-02T01:00:00Z", 1, True)))
         self.assertEqual(outrider.unsold.analyse(events, ARGS)["exobiology"]["x5_runs"], 1)
+
+    def test_populated_runs_price_x1(self):
+        """Plugin gaps C: a body nobody had set foot on in a populated system is priced x1 (Vista pays no x5 there)."""
+        ev = lambda e: (T(e["timestamp"]), None, e)
+        v, _ = outrider.unsold.species_value(self.STRATUM)
+        events = [ev({"event": "FSDJump", "timestamp": "2026-01-02T00:00:00Z", "StarSystem": "Busy", "SystemAddress": 7,
+                      "StarPos": [0, 0, 0], "Population": 14655365}),
+                  ev(self.body_scan("2026-01-02T00:01:00Z", 1, False, addr=7, system="Busy")),
+                  ev(self.organic("2026-01-03T00:01:00Z", 1, "Analyse", self.STRATUM, "Stratum Tectonicas", addr=7))]
+        bio = outrider.unsold.analyse(events, ARGS)["exobiology"]
+        self.assertEqual((bio["x5_runs"], bio["x1_runs"], bio["estimated_value"]), (0, 1, v))
 
     # ---- P8: the sale check ----
     def sale_journal(self):
@@ -1940,3 +1964,70 @@ class RescanChecklist(unittest.TestCase):
         self.assertEqual(self.values["lost_total"], sum(r["value"] for r in aboard))
         self.assertEqual({t["name"]: t["value"] for t in self.items["todo_map"]},
                          {"A 2": self.worth(12, 2, True) - self.worth(12, 2, False)})
+
+
+class PopulatedNoX5(unittest.TestCase):
+    """Plugin gaps C (BioScan's rule, checked in A on the author's sales: 0 of 8 runs paid x5 in a populated system,
+    208 of 208 elsewhere): Vista Genomics pays the first-footfall x5 only where nobody had set foot AND nobody lives."""
+
+    def setUp(self):
+        import types
+        self.db = ed_outrider.open_db(":memory:")
+        self.addCleanup(self.db.close)
+        self.j = ed_outrider.Journals(self.db)
+        self.state = ed_outrider.State(self.db, self.j, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+
+    def system(self, ts, id64, pop, event="FSDJump"):
+        ev = {"event": event, "timestamp": ts, "StarSystem": f"S{id64}", "SystemAddress": id64, "StarPos": [id64, 0, 0]}
+        if pop is not None:
+            ev["Population"] = pop
+        self.j.handle(ev)
+        self.j.handle({"event": "Scan", "timestamp": ts, "BodyName": f"S{id64} 1", "BodyID": 1, "StarSystem": f"S{id64}",
+                       "SystemAddress": id64, "PlanetClass": "Rocky body", "Landable": True, "MassEM": 0.1,
+                       "ScanType": "Detailed", "WasDiscovered": True, "WasMapped": False, "WasFootfalled": False})
+
+    def test_populated_pays_no_x5(self):
+        self.system("2026-01-01T00:00:00Z", 1, 0)                    # nobody lives here: x5
+        self.system("2026-01-01T01:00:00Z", 2, 14655365)             # 14.7 million: x1, footfall or not
+        self.system("2026-01-01T02:00:00Z", 3, None)                 # no population given: as most of the galaxy, x5
+        self.system("2026-01-01T03:00:00Z", 4, 120, event="Location")
+        x5 = {r[0]: r[1] for r in self.db.execute("SELECT system, bio_x5 FROM own_firsts")}
+        self.assertEqual(x5, {1: 1, 2: 0, 3: 1, 4: 0})
+        self.assertEqual([self.state.body_bio(i, 1)["factor"] for i in (1, 2, 3, 4)], [5, 1, 5, 1])
+        # the flag itself still says nobody had set foot (My firsts counts your first footfall there)
+        self.assertEqual({r[0] for r in self.db.execute("SELECT was_footfalled FROM own_firsts")}, {0})
+        # a re-read rebuilds the populations from the journal
+        self.db.executescript(ed_outrider.RESET_JOURNAL_DATA)
+        self.assertEqual(self.db.execute("SELECT count(*) FROM system_population").fetchone()[0], 0)
+
+
+class NearBody(unittest.TestCase):
+    """Plugin gaps C (BioScan's "near surface" focus): in your ship below 5,000 m over a body, the strip shows its card."""
+
+    def setUp(self):
+        import types
+        self.db = ed_outrider.open_db(":memory:")
+        self.addCleanup(self.db.close)
+        self.j = ed_outrider.Journals(self.db)
+        self.state = ed_outrider.State(self.db, self.j, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        self.j.handle({"event": "FSDJump", "timestamp": "2026-01-01T00:00:00Z", "StarSystem": "Sys", "SystemAddress": 1,
+                       "StarPos": [0, 0, 0]})
+
+    def status(self, flags, alt, flags2=0):
+        self.j.status_json = {"live": True, "ts": "2026-01-01T00:10:00Z", "flags": flags, "flags2": flags2, "body": "Sys 4",
+                              "lat": 1.0, "lon": 2.0, "alt": alt, "planet_radius": 1_000_000}
+
+    def test_flying_low(self):
+        ship = ed_outrider.FLAG_IN_MAIN_SHIP
+        self.status(ship, 2300.4)
+        self.assertEqual(self.state.near_body(), {"body": "4", "full": "Sys 4", "how": "flying low", "alt": 2300, "system": "1"})
+        self.assertIsNone(self.state.on_body())
+        self.status(ship, 6000)                                          # too high
+        self.assertIsNone(self.state.near_body())
+        self.status(ship | ed_outrider.FLAG_ALT_AVG, 2000)               # a rough altitude: high up
+        self.assertIsNone(self.state.near_body())
+        self.status(ship | ed_outrider.FLAG_LANDED, 0)                   # landed: on_body's
+        self.assertIsNone(self.state.near_body())
+        self.assertEqual(self.state.on_body()["how"], "landed")
+        self.status(ed_outrider.FLAG_IN_SRV, 0)                          # the SRV: on_body's
+        self.assertIsNone(self.state.near_body())

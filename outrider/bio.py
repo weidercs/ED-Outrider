@@ -853,6 +853,41 @@ def predict(body, system=None):
     return out
 
 
+# why a rule key fails, in words (ruled_out)
+WHY_WORDS = {"atmosphere": "the atmosphere", "atmosphere_component": "the atmosphere's make-up", "min_gravity": "gravity too low",
+             "max_gravity": "gravity too high", "min_temperature": "too cold", "max_temperature": "too hot",
+             "min_pressure": "pressure too low", "max_pressure": "pressure too high", "volcanism": "the volcanism",
+             "body_type": "the body type", "regions": "not in this region", "star": "the star", "parent_star": "the parent star",
+             "tuber": "no sinuous tubers' zone", "guardian": "no Guardian site nearby", "nebula": "no nebula nearby",
+             "bodies": "the system's other bodies", "distance": "the distance from the star",
+             "max_orbital_period": "the orbital period", "system": "the system", "colour": "no colour rule fits"}
+
+
+def ruled_out(body, system=None):
+    """Why each genus the rules know is NOT among predict()'s for this body: [{genus, why}], why being the failing
+    checks of its species' ruleset that came closest (fewest failures), in words ("too cold, gravity too high").
+    [] when the rules are missing or the body hosts nothing at all (predict's own [] cases). BioScan's elimination
+    log, for trusting (or doubting) a prediction."""
+    R = load_rules()
+    b = _body_facts(body)
+    if not R or not b["cls"]:
+        return []
+    s = _system_facts(system, body)
+    kept = {x["genus"] for x in predict(body, system)}
+    best = {}   # genus -> (number of failures, the failing keys)
+    for sp in R["species"]:
+        if sp["genus"] in kept:
+            continue
+        for ruleset in sp["rulesets"]:
+            fails = [k for k, v in ruleset.items() if _check(k, v, b, s) is False]
+            if not fails and not _colour_ok(sp.get("colors"), b, s):
+                fails = ["colour"]
+            if fails and (sp["genus"] not in best or len(fails) < best[sp["genus"]][0]):
+                best[sp["genus"]] = (len(fails), fails)
+    return [{"genus": g, "why": ", ".join(dict.fromkeys(WHY_WORDS.get(k, k) for k in fails))}
+            for g, (_, fails) in sorted(best.items())]
+
+
 def region_allows(name, region):
     """Whether the rules let the species `name` (case ignored) grow in region number `region`: True when one of
     its rulesets has no region filter or passes it, False when every one excludes the region, None when the

@@ -175,7 +175,7 @@ Ids: a system id64 can exceed 2^53, so the page compares the string `id` fields,
   error on the page) and the next one still runs; `sqlite3.Error` propagates.
 - **Per-browser settings** go in **both** `SETTINGS_KEYS` (top of `page.js`) and `BROWSER_SETTINGS`
   (ed_outrider.py), in the same order; a unit test compares them. Per-device things (view, layouts, which
-  screen speaks, `volume`, `tilesMode`, Settings' `alertSection` and `settingsOpen` (its open sections), `desktopTheme`, `updateSkip` (the release the Update pill was dismissed for), `hwyShow` (the route Plot Route shows with both), `nearest` (the Nearest finder's filters), the tablet's `tabletView`, `tabletTheme`,
+  screen speaks, `volume`, `tilesMode`, Settings' `alertSection` and `settingsOpen` (its open sections), `desktopTheme`, `updateSkip` (the release the Update pill was dismissed for), `hwyShow` (the route Plot Route shows with both), `nearest` (the Nearest finder's filters), `hereBio` (Here's bio column: finished species and few-signal bodies left out), the tablet's `tabletView`, `tabletTheme`,
   `tabletDim`, `tabletEmblem`, `tabletRail` (Show the game controls) and `tabletAudio` (Play alerts here)) go in neither. Object or list values need an entry in `SETTING_SHAPES`.
 - **An open page reloads itself on newer page files:** the payload's `page_stamp` (`page_stamp()`: sizes and
   modification times of `PAGE_FILES`) against the `__PAGE_STAMP__` it was served with; `pageStampTick` reloads once

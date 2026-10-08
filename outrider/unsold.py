@@ -338,6 +338,7 @@ INTERESTING = (
     '"MultiSellExplorationData"', '"SellExplorationData"', '"SellOrganicData"',
     '"Died"', '"Resurrect"', '"LoadGame"', '"Commander"',
     '"Statistics"', '"CrewHire"', '"CrewFire"',
+    '"FSDJump"', '"Location"', '"CarrierJump"',   # a system's Population: no x5 bio bonus where people live
 )
 
 SCAN_KEEP = (
@@ -395,6 +396,8 @@ def _read_file(path):
                 continue
             if name == "Scan":   # most of the volume: keep only what analyse() prices and judges by
                 ev = {k: ev[k] for k in ("event", "timestamp") + SCAN_KEEP if k in ev}
+            elif name in ("FSDJump", "Location", "CarrierJump"):
+                ev = {k: ev[k] for k in ("event", "timestamp", "StarSystem", "SystemAddress", "Population") if k in ev}
             # a hash, not the line itself, de-duplicates across folders: the cache lives as long as the server
             events.append((ts, commander, hash(key), ev))
     return events
@@ -576,7 +579,10 @@ def analyse(events, args):
     mapped = {}                     # (system, bodyid) -> efficient?  (mapping still aboard)
     system_name = {}                # SystemAddress -> name, for events that carry only the address
     organics = []                   # completed (Analyse) samples still aboard: not in a sale, not lost to a death
-    footfalled = {}                 # (system, bodyid) -> WasFootfalled from your first Scan of it that says
+    footfalled = {}                 # (system, bodyid) -> no x5: WasFootfalled from your first Scan of it that says, or
+    #                                 the system is populated (Vista Genomics pays no x5 there: 0 of 8 runs, 208 of 208
+    #                                 elsewhere in the author's sales)
+    populated = {}                  # SystemAddress -> Population > 0, from the newest jump or login there
     saa = []                        # (key, ts, efficient): mappings, judged once every system name is known
     death_in_window = None
 
@@ -587,13 +593,18 @@ def analyse(events, args):
         if ev.get("StarSystem") and ev.get("SystemAddress") is not None:   # any line naming it (a nav beacon's too)
             system_name[ev["SystemAddress"]] = ev["StarSystem"]
 
+        if name in ("FSDJump", "Location", "CarrierJump"):
+            if isinstance(ev.get("Population"), int):
+                populated[ev.get("SystemAddress")] = ev["Population"] > 0
+            continue
         if name == "Scan":
             if ev.get("ScanType") in NAV_BEACON_SCANS:
                 continue
             if "WasFootfalled" in ev:
                 # Vista Genomics pays x5 where nobody had set foot when you scanned the body (the first scan
-                # counts: a rescan after your own landing says footfalled)
-                footfalled.setdefault((ev.get("SystemAddress"), ev.get("BodyID")), bool(ev["WasFootfalled"]))
+                # counts: a rescan after your own landing says footfalled), and never in a populated system
+                footfalled.setdefault((ev.get("SystemAddress"), ev.get("BodyID")),
+                                      bool(ev["WasFootfalled"]) or populated.get(ev.get("SystemAddress"), False))
             if not (ev.get("StarType") or ev.get("PlanetClass")):
                 continue  # belt clusters and rings: no cartographic value, don't count them
             key = (ev.get("SystemAddress"), ev.get("BodyID"))

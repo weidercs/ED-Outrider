@@ -587,8 +587,10 @@ table .sub2 { margin-top: 2px; font-weight: 400; font-size: 12px; }
 .warnc { color: var(--warn); }
 
 .cxnew { color: var(--accent); font-weight: 700; cursor: help; }
+.cxnew.cxgal { color: var(--good); }   /* ✪: new to your codex anywhere */
 /* Now is read at a glance, often on a tablet with no hover: spell the ✦ out there */
 body.nowmode .cxnew::after { content: " new codex"; font-weight: 600; }
+body.nowmode .cxnew.cxgal::after { content: " new anywhere"; }
 
 .boosted { color: #5ce1e6; } .hazard { color: var(--warn); }
 
@@ -1052,3 +1054,5 @@ body.app #richPane { grid-column: 1; grid-row: 2; }
 #hwyForm #tradeCapital { width: 10em; } #hwyForm #tradeStation { width: 14em; }
 #richTable .tradegoods { font-size: 12px; line-height: 1.45; white-space: normal; } #richTable .tradegoods .exodone { color: var(--muted); }
 #richTable .exonew { color: var(--accent); }
+/* the body panel's "why not the other genera" (plugin gaps C) */
+.ruledout ul { margin: 2px 0 0; } .ruledout li { display: flex; justify-content: space-between; gap: 10px; }

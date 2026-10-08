@@ -283,6 +283,7 @@ HIGHWAY_HEAVY_SLACK = 0.5    # t: fuel over the most the next jump allows by mor
 #                              some jumps right at the limit, so a hair over is the model's error, not yours)
 HIGHWAY_HEAVY_EVERY_S = 3.0  # s between two looks at it while the fuel changes in a route system (scooping)
 HIGHWAY_CONSERVATIVE_MAX = 50.0   # ly: the largest conservative margin taken
+NEAR_BODY_ALT = 5000         # m: below this over a body in your ship, the on-body strip shows its bio card
 BIO_TAGS_SHOWN = 40          # the surface map draws at most this many tagged plants (nearest first)
 SELLER_REFRESH_LY = 100      # look for the nearest places to sell again after moving this far
 SELLER_REFRESH_S = 6 * 3600  # ...or this long (carriers move)
@@ -1154,7 +1155,8 @@ WANTED = tuple(f'"event":"{e}"'.encode()
 # 42: a Location that says Docked (a login or respawn docked) counts as a dock: carrier transfers made straight after
 #     were dropped; the SRV's refinery and scoop stay out of the ship's hold; an older Location's relog is judged
 #     against the arrival before it (a legacy folder read late counted every login as a visit).
-PARSER_VERSION = 42
+# 43: a system's population (system_population) and own_firsts.bio_x5: no x5 bio bonus in populated systems.
+PARSER_VERSION = 43
 # Scans read off a nav beacon (as outrider.unsold.NAV_BEACON_SCANS): their Was* flags are not the game's record of the body.
 NAV_BEACON_SCANS = ("NavBeaconDetail", "NavBeacon")
 
@@ -1302,10 +1304,15 @@ CREATE TABLE IF NOT EXISTS own_signals (
     system INTEGER, name TEXT, bio INTEGER, geo INTEGER, ts TEXT, mining INTEGER,
     PRIMARY KEY (system, name));
 -- Discovery flags from your *first* scan of each body (later rescans say "discovered" once you've sold).
+-- bio_x5: whether Vista Genomics pays the x5 first-footfall bonus for its samples: nobody had set foot there when you
+-- scanned it AND its system has no population (1 / 0, NULL unknown). Populated systems never pay it: checked on the
+-- author's sales, 0 of 8 runs there against 208 of 208 elsewhere (plugin gaps A; BioScan's rule).
 CREATE TABLE IF NOT EXISTS own_firsts (
     system INTEGER, body_id INTEGER, name TEXT, is_main INTEGER,
     was_discovered INTEGER, was_mapped INTEGER, was_footfalled INTEGER,
-    first_ts TEXT, undisc_ts TEXT, PRIMARY KEY (system, body_id));
+    first_ts TEXT, undisc_ts TEXT, bio_x5 INTEGER, PRIMARY KEY (system, body_id));
+-- A system's population, from its FSDJump / Location / CarrierJump (the newest kept): whether bio pays x5 there.
+CREATE TABLE IF NOT EXISTS system_population (id64 INTEGER PRIMARY KEY, population INTEGER, ts TEXT);
 -- What the SRV's refinery collected on each body (MiningRefined, 1 t each, while in the SRV on that body).
 -- source: the journal line last counted (file:offset), so a line handled twice is not counted twice.
 CREATE TABLE IF NOT EXISTS own_mined (
@@ -1455,7 +1462,7 @@ DELETE FROM own_firsts; DELETE FROM own_mapped; DELETE FROM own_footfall; DELETE
 DELETE FROM own_genera; DELETE FROM own_organic; DELETE FROM codex; DELETE FROM bio_sales;
 DELETE FROM own_barycentres; DELETE FROM phenomena; DELETE FROM sale_events; DELETE FROM logins;
 DELETE FROM own_mined; DELETE FROM meta WHERE key IN ('srv_state', 'vehicle', 'ship_marker', 'body_here');
-DELETE FROM fleet_loadouts; DELETE FROM cargo_events;
+DELETE FROM fleet_loadouts; DELETE FROM cargo_events; DELETE FROM system_population;
 DELETE FROM meta WHERE key IN ('ship_cargo', 'cargo_dock');
 DELETE FROM meta WHERE key IN ('ship', 'carrier', 'fuel_hist', 'last_scoop', 'commander', 'materials', 'last_session', 'cargo');
 DELETE FROM meta WHERE key LIKE 'legacy:%' OR key IN ('pos', 'prev', 'jump_range', 'state_ts');
@@ -1970,6 +1977,7 @@ def own_data(db, id64, system):
         r = records.get(short_name(system, row["name"]))
         if r:
             r["bio"], r["geo"], r["mining"] = row["bio"], row["geo"], row["mining"] or 0
+            r["signals_seen"] = True   # an FSS or DSS of yours counted its signals
     hotspots = {}
     for row in db.execute("SELECT * FROM own_ring_signals WHERE system=?", (id64,)):
         hotspots[split_ring_name(system, row["name"])] = json.loads(row["hotspots"])
@@ -1988,6 +1996,8 @@ def merge_records(spansh, own, hotspots):
             r = dict(r, bio=base.get("bio", 0), geo=base.get("geo", 0))
         if base and not r.get("mining") and base.get("mining"):
             r = dict(r, mining=base["mining"])   # Spansh has the count from someone else's FSS
+        if base and base.get("signals_known"):
+            r = dict(r, signals_known=True)      # someone's FSS counted its signals (unknown_bio_groups)
         if base:
             spansh_rings = {x["name"]: x for x in base.get("rings") or []}
             r = dict(r, rings=[dict(x, hotspots=x["hotspots"] or
@@ -2869,6 +2879,10 @@ class Journals:
         id64, star_pos = ev.get("SystemAddress"), ev.get("StarPos")
         if id64 is None or not star_pos:
             return
+        if isinstance(ev.get("Population"), int):
+            self.db.execute("INSERT INTO system_population VALUES (?, ?, ?) ON CONFLICT(id64) DO UPDATE SET "
+                            "population = excluded.population, ts = excluded.ts WHERE excluded.ts >= ts",
+                            (id64, ev["Population"], ts))
         current = ts >= (self.pos or {}).get("ts", "")   # not an old arrival read after newer ones
         # A Location in the system you're already in (a relog) is not an arrival: not a visit, not movement. An older
         # line (a legacy folder imported after the live ones) is judged against the arrival before it, not against
@@ -3725,12 +3739,17 @@ class Journals:
                 # a nav-beacon scan's Was* flags are not the game's record of the body (outrider.unsold skips them too):
                 # it must not make a first discovery, a footfall flag or an unsold rescan time
                 if ev.get("ScanType") not in NAV_BEACON_SCANS:
+                    ff = flag("WasFootfalled")
+                    pop = self.db.execute("SELECT population FROM system_population WHERE id64=?", (system,)).fetchone()
+                    x5 = None if ff is None else int(ff == 0 and not (pop and (pop["population"] or 0) > 0))
                     self.db.execute(
-                        """INSERT INTO own_firsts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """INSERT INTO own_firsts (system, body_id, name, is_main, was_discovered, was_mapped,
+                                                   was_footfalled, first_ts, undisc_ts, bio_x5)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                            ON CONFLICT(system, body_id) DO UPDATE SET
                              undisc_ts = coalesce(excluded.undisc_ts, undisc_ts)""",
                         (system, ev["BodyID"], ev["BodyName"], int(record["main"]),
-                         flag("WasDiscovered"), flag("WasMapped"), flag("WasFootfalled"), ts, undisc))
+                         flag("WasDiscovered"), flag("WasMapped"), ff, ts, undisc, x5))
         elif name == "SAAScanComplete":
             if (ev.get("BodyName") or "").endswith(" Ring"):
                 # A ring with no hotspots never gets an SAASignalsFound: this is the only record of the probe.
@@ -3929,6 +3948,13 @@ def codex_species(db, region):
     return names, {n.split(" - ")[0].strip() for n in names}
 
 
+def codex_species_all(db):
+    """Your codex entries in every region, as codex_species gives one region's: a species in none of them is new to
+    your codex anywhere (worth more effort than one new only in this region; BioScan's 🌌 against its 📝)."""
+    names = {(r[0] or "").strip().lower() for r in db.execute("SELECT DISTINCT name FROM codex")}
+    return names, {n.split(" - ")[0].strip() for n in names}
+
+
 def codex_new_group(g, known):
     """Would the likeliest species of a genus group earn a new codex entry? `known` is codex_species().
     Per colour variant when the variant candidates are settled (any one unlogged counts: a new colour of a
@@ -3974,7 +4000,7 @@ def organic_replay(db, until=None):
     cut = "" if until is None else " AND o.done_ts < ?"
     args = () if until is None else (until,)
     events = [(r["done_ts"], 2, r) for r in db.execute(
-        "SELECT o.system, o.body_id, o.species, o.done_ts, f.was_footfalled FROM own_organic o "
+        "SELECT o.system, o.body_id, o.species, o.done_ts, (1 - f.bio_x5) AS was_footfalled FROM own_organic o "
         "LEFT JOIN own_firsts f ON f.system = o.system AND f.body_id = o.body_id "
         f"WHERE o.done_ts IS NOT NULL{cut} ORDER BY o.done_ts", args)]
     cut = "" if until is None else " WHERE ts < ?"
@@ -4041,7 +4067,7 @@ def sale_check(db, ts, bio_data, source=None):
         last = r["ts"]
     start = visit[-1]["ts"] if visit else ts
     pool = list(organic_replay(db, start)[1]) + list(db.execute(
-        "SELECT o.system, o.body_id, o.species, o.done_ts, f.was_footfalled FROM own_organic o "
+        "SELECT o.system, o.body_id, o.species, o.done_ts, (1 - f.bio_x5) AS was_footfalled FROM own_organic o "
         "LEFT JOIN own_firsts f ON f.system = o.system AND f.body_id = o.body_id "
         "WHERE o.done_ts >= ? AND o.done_ts < ?", (start, ts)))
     x5, unknown = collections.Counter(), collections.Counter()
@@ -4543,6 +4569,22 @@ def stale_bio_candidate(r):
     return str(r.get("atmosphere") or "").lower().startswith("thin")
 
 
+NO_SIGNAL_SCANS = ("AutoScan", "NavBeaconDetail", "NavBeacon")   # scans that never count a body's signals
+
+
+def unknown_bio_groups(r, star=None, ctx=None):
+    """The genera the rules allow on a landable planet whose signals nobody has counted: you have it only from an
+    AutoScan or a nav beacon (no FSS of it, which says its signals), and Spansh has none either. [] otherwise.
+    BioScan's "Bios possible, check FSS for signals": a quick honk-and-go leaves such bodies unchecked."""
+    if not outrider.bio or r.get("type") != "Planet" or not r.get("landable") or r.get("bio") or r.get("signals_seen"):
+        return []
+    if r.get("scan_type") not in NO_SIGNAL_SCANS or r.get("signals_known"):
+        return []
+    if not r.get("atmosphere") or str(r.get("atmosphere")).lower() in ("none", "no atmosphere"):
+        return []
+    return outrider.bio.by_genus(outrider.bio.predict(_bio_body(r, star, ctx), ctx))
+
+
 def stale_bio_body(r, star=None, ctx=None):
     """Whether a Spansh body may hold life its pre-Odyssey record could not report (see stale_bio_groups)."""
     return bool(stale_bio_groups(r, star, ctx))
@@ -4604,6 +4646,7 @@ def summarise(records, body_count, star=None, ctx=None, genera=None):
     if n:
         s["bio_potential"], s["bio_bodies_guessed"] = pot, n
     s["stale_bio"] = stale_bio_summary(records, star, ctx)   # old Spansh data: a mark only, never in the values
+    s["bio_unknown"] = sum(1 for r in planets if unknown_bio_groups(r, star, ctx)) or None   # check them in the FSS
     if not full:
         return s  # rings, belts and signals arrive with the Spansh dump
     ringed = [r for r in planets if r.get("rings")]
@@ -5375,6 +5418,7 @@ class State:
             "region": self.region_info(),
             "boost": (self.journals.boost or {}).get("value"),
             "on_body": self.on_body(),
+            "near_body": self.near_body(),
             "sampling": self.sampling_summary(),
             "surface": self.surface_summary(),
             # metres between samples per genus (a shipped table), shown before you land (review S1)
@@ -6239,7 +6283,7 @@ class State:
         body = self.db.execute("SELECT name FROM own_bodies WHERE system=? AND body_id=?", (run["system"], run["body_id"])).fetchone()
         where = self.locate(run["system"])
         sysname = where[0] if where else None
-        f = self.db.execute("SELECT was_footfalled FROM own_firsts WHERE system=? AND body_id=?", (run["system"], run["body_id"])).fetchone()
+        f = self.db.execute("SELECT 1 - bio_x5 AS was_footfalled FROM own_firsts WHERE system=? AND body_id=?", (run["system"], run["body_id"])).fetchone()
         v = outrider.bio.species_value(run["species_name"])
         return {"species": run["species_name"], "genus": run["genus_name"], "samples": run["samples"],
                 "body": short_name(sysname, body["name"]) if body and sysname else body["name"] if body else None,
@@ -6260,6 +6304,22 @@ class State:
         label = (self.journals.vehicle or {}).get("label") if how == "in the SRV" else None
         vehicle = re.sub(r"^SRV ", "", label) if isinstance(label, str) and label.strip() else None
         return {"body": short_name(pos["name"], st["body"]), "full": st["body"], "how": how, "vehicle": vehicle,
+                "system": str(pos["id64"])}
+
+    def near_body(self):
+        """In your ship over a body below NEAR_BODY_ALT m (orbital cruise or flying, not landed): the on-body strip shows
+        that body's bio card already (BioScan's "near surface" focus), to pick where to land. None otherwise, and
+        whenever on_body() applies (landed, SRV, on foot)."""
+        st, pos = self.journals.status_json or {}, self.journals.pos
+        if not st.get("live") or not st.get("body") or not pos or st.get("lat") is None:
+            return None
+        flags, flags2 = st.get("flags") or 0, st.get("flags2") or 0
+        if not flags & FLAG_IN_MAIN_SHIP or flags & (FLAG_LANDED | FLAG_IN_SRV | FLAG_ALT_AVG) or flags2 & 1:
+            return None
+        alt = st.get("alt")
+        if not isinstance(alt, (int, float)) or alt >= NEAR_BODY_ALT:
+            return None
+        return {"body": short_name(pos["name"], st["body"]), "full": st["body"], "how": "flying low", "alt": round(alt),
                 "system": str(pos["id64"])}
 
     def destination(self):
@@ -6458,7 +6518,7 @@ class State:
         left = sorted(genera - done - set(partial))
         _, groups = bio_guess(rec, mr["star"], left, mr["ctx"]) if left else (None, [])
         value = {g["genus"]: g.get("value") for g in groups}
-        f = self.db.execute("SELECT was_footfalled FROM own_firsts WHERE system=? AND body_id=?", (id64, body_id)).fetchone()
+        f = self.db.execute("SELECT 1 - bio_x5 AS was_footfalled FROM own_firsts WHERE system=? AND body_id=?", (id64, body_id)).fetchone()
         return {"body": short, "partial": partial, "untouched": [{"genus": g, "value": value.get(g)} for g in left],
                 "unidentified": 0 if genera else max(0, (rec.get("bio") or 0) - len(done | set(partial))),
                 "factor": 5 if f and f["was_footfalled"] == 0 else 1}
@@ -6486,7 +6546,7 @@ class State:
                 sampled.add(r["genus_name"])
         left = [g for g in genera if g not in done] if genera else None
         sig_left = max(0, sig - len(done)) if sig else 0
-        f = self.db.execute("SELECT was_footfalled FROM own_firsts WHERE system=? AND body_id=?", (id64, bid)).fetchone()
+        f = self.db.execute("SELECT 1 - bio_x5 AS was_footfalled FROM own_firsts WHERE system=? AND body_id=?", (id64, bid)).fetchone()
         out.update(body=rec["name"], gravity=rec.get("gravity"), landable=rec.get("landable"), signals=sig_left, genera=left,
                    factor=5 if f and f["was_footfalled"] == 0 else 1)
         if sig_left or left:
@@ -7429,13 +7489,14 @@ class State:
         bio_signals = {r["name"]: r["bio"] for r in self.db.execute(
             "SELECT name, bio FROM own_signals WHERE system=? AND bio > 0", (id64,))}
         region = outrider.bio.region_name(where[1], where[2], where[3]) if outrider.bio and where[1] is not None else None
-        known_codex = codex_species(self.db, region)
+        known_codex, known_all = codex_species(self.db, region), codex_species_all(self.db)
         codex_new = lambda bid, groups: any(codex_new_group(g, known_codex) for g in with_logged_variants(groups, logged.get(bid, {}))) \
             if region else False
+        codex_galaxy = lambda bid, groups: any(codex_new_group(g, known_all) for g in with_logged_variants(groups, logged.get(bid, {})))
         # the x5 first-footfall bonus per body, as body_bio / approach_facts apply it. A separate factor: potential
         # stays bonus-free, so the bio threshold compares what it always did
         footfalled = {r["body_id"]: r["was_footfalled"] for r in self.db.execute(
-            "SELECT body_id, was_footfalled FROM own_firsts WHERE system=?", (id64,))}
+            "SELECT body_id, 1 - bio_x5 AS was_footfalled FROM own_firsts WHERE system=?", (id64,))}
         # what the suggested order shows beside each bio body, to decide on the landing before the supercruise
         extra = lambda bid, rec: {"factor": 5 if footfalled.get(bid) == 0 else 1,
                                   "gravity": rec.get("gravity"), "atmosphere": rec.get("atmosphere")}
@@ -7459,11 +7520,13 @@ class State:
                     groups = bio_guess(rec, star, sorted(partial), ctx)[1] + groups
                 val = sum((g.get("value") or 0) for g in groups) or None
                 bio_pending.append({"body": name_of(bid), "signals": n_left, "genera": None, "partial": partial, "potential": val,
-                                    "codex_new": codex_new(bid, groups), "dist_ls": rec.get("dist_ls"), **extra(bid, rec)})
+                                    "codex_new": codex_new(bid, groups), "codex_galaxy": codex_galaxy(bid, groups),
+                                    "dist_ls": rec.get("dist_ls"), **extra(bid, rec)})
             elif left or partial:
                 left_val, left_groups = bio_guess(rec, star, sorted(left), ctx) if left else (None, [])
                 bio_pending.append({"body": name_of(bid), "signals": n_sig, "genera": sorted(left),
                                     "partial": partial, "potential": left_val, "codex_new": codex_new(bid, left_groups),
+                                    "codex_galaxy": codex_galaxy(bid, left_groups),
                                     "dist_ls": rec.get("dist_ls"), **extra(bid, rec)})
         unmapped, unmapped_all = [], []
         for bid, rec in bodies.items():
@@ -7511,7 +7574,7 @@ class State:
         own_ids = {short_name(name, r["name"]): r["body_id"] for r in
                    self.db.execute("SELECT body_id, name FROM own_bodies WHERE system=?", (id64,))}
         firsts = {r["body_id"]: dict(r) for r in self.db.execute(
-            """SELECT f.body_id, f.was_discovered, f.was_mapped, f.was_footfalled, f.undisc_ts, f.first_ts,
+            """SELECT f.body_id, f.was_discovered, f.was_mapped, f.was_footfalled, f.bio_x5, f.undisc_ts, f.first_ts,
                       m.ts AS mapped_ts, m.first_ts AS map_first_ts, ff.ts AS foot_ts FROM own_firsts f
                LEFT JOIN own_mapped m ON m.system = f.system AND m.body_id = f.body_id
                LEFT JOIN own_footfall ff ON ff.system = f.system AND ff.body_id = f.body_id
@@ -7539,7 +7602,7 @@ class State:
         star = star_row["star_class"] if star_row else None
         ctx = bio_context(name, records, where[1], where[2], where[3], star, body_count)
         region = outrider.bio.region_name(where[1], where[2], where[3]) if outrider.bio and where[1] is not None else None
-        known_codex = codex_species(self.db, region)
+        known_codex, known_all = codex_species(self.db, region), codex_species_all(self.db)
         judge = pickup_judge(self.db, name)
         # your latest scan of each body: data re-collected after a loss or a sale counts again
         latest = {r["body_id"]: r["ts"] for r in self.db.execute("SELECT body_id, ts FROM own_bodies WHERE system=?", (id64,))}
@@ -7559,7 +7622,7 @@ class State:
             value, value_if_mapped, base_value = cv["value"], cv["value_if_mapped"], cv["base_value"]
             is_mapped, first_map = cv["mapped"], cv["first_mapped"]
             held = organics.get(bid, [])
-            bio_factor = 5 if f and f["was_footfalled"] == 0 else 1   # x5 where nobody had set foot when you scanned
+            bio_factor = 5 if f and f["bio_x5"] == 1 else 1   # x5 where nobody had set foot when you scanned (not populated)
             # on board: samples not yet sold (sold ones are banked, like sold cartographics)
             bio_now = sum((o.get("value") or 0) for o in held if o["state"] == "aboard") * bio_factor
             got = {o["genus"] for o in held if o["done"] and not o["lost"]}   # sold ones are done too
@@ -7580,6 +7643,10 @@ class State:
                 "landable": r.get("landable"), "terraformable": r.get("terraformable"),
                 # a pre-Odyssey Spansh record: "not landable" may be wrong and bio unreported (your scan replaces it)
                 "stale_bio": stale_bio_body(r, star, ctx), "updated": r.get("updated"),
+                # your AutoScan or a nav beacon only, no signal count: life is possible, the FSS would tell
+                "bio_unknown": bool(unknown_bio_groups(r, star, ctx)),
+                # why the other genera are not expected here (the body panel's "why not"), for a body with life
+                "ruled_out": outrider.bio.ruled_out(_bio_body(r, star, ctx), ctx) if outrider.bio and r.get("bio") else [],
                 "notable": NOTABLE_PLANETS.get(r["subtype"]), "scoopable": r.get("scoopable"),
                 "rings": len(r.get("rings") or []), "hotspots": sum(1 for x in r.get("rings") or [] if x.get("hotspots")),
                 "belts": r.get("belts") or [],   # belt types: the schematic marks a body with belts
@@ -7599,6 +7666,8 @@ class State:
                                # the likeliest species (its colour variant, when settled) has no codex entry of
                                # yours in this region yet
                                "codex_new": bool(region and g["genus"] not in got and codex_new_group(g, known_codex)),
+                               # ...and none anywhere: new to your codex outright (a stronger mark)
+                               "codex_galaxy_new": bool(g["genus"] not in got and codex_new_group(g, known_all)),
                                # the colours of that species you have logged in this region, for the ✦'s tooltip
                                # ("new to your codex here: Bacterium Acies - White; you have Lime")
                                "codex_have": codex_have(g, known_codex)}
@@ -8038,7 +8107,7 @@ class State:
         # exobiology: any death takes the samples aboard (organic_replay: the first death after a run was completed,
         # unless a Vista Genomics sale took that run first)
         fates = organic_fates(self.db)
-        for r in self.db.execute("""SELECT o.system, o.body_id, o.species, o.species_name, f.was_footfalled FROM own_organic o
+        for r in self.db.execute("""SELECT o.system, o.body_id, o.species, o.species_name, (1 - f.bio_x5) AS was_footfalled FROM own_organic o
                                     LEFT JOIN own_firsts f ON f.system = o.system AND f.body_id = o.body_id
                                     WHERE o.done_ts IS NOT NULL"""):
             state, death = fates.get((r["system"], r["body_id"], r["species"])) or (None, None)
@@ -8199,7 +8268,7 @@ class State:
         plus your codex entries over the same period."""
         since = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - days * 86400))
         runs = [dict(r) for r in self.db.execute(
-            """SELECT o.*, b.name AS body_name, f.was_footfalled FROM own_organic o
+            """SELECT o.*, b.name AS body_name, (1 - f.bio_x5) AS was_footfalled FROM own_organic o
                LEFT JOIN own_bodies b ON b.system = o.system AND b.body_id = o.body_id
                LEFT JOIN own_firsts f ON f.system = o.system AND f.body_id = o.body_id
                WHERE coalesce(o.done_ts, o.ts) >= ? ORDER BY coalesce(o.done_ts, o.ts) DESC""", (since,))]
@@ -8419,7 +8488,7 @@ class State:
         own_ids = {short_name(name, r["name"]): r["body_id"] for r in
                    self.db.execute("SELECT body_id, name FROM own_bodies WHERE system=?", (id64,))}
         firsts = {r["body_id"]: r for r in self.db.execute(
-            """SELECT f.body_id, f.was_discovered, f.was_mapped, f.was_footfalled, f.first_ts, m.ts AS mapped_ts,
+            """SELECT f.body_id, f.was_discovered, f.was_mapped, f.was_footfalled, f.bio_x5, f.first_ts, m.ts AS mapped_ts,
                       m.first_ts AS map_first_ts FROM own_firsts f LEFT JOIN own_mapped m ON m.system = f.system AND m.body_id = f.body_id
                WHERE f.system = ?""", (id64,))}
         genera = {}  # body_id -> genera your DSS found there (limits the guess to what is really present)
@@ -8446,7 +8515,7 @@ class State:
             map_state = judge(f["mapped_ts"], f["map_first_ts"])[0] if f and f["mapped_ts"] else None
             rem_c += carto_values(r, bid is not None, f, scan_state, map_state)["left"]   # same rules as Here
             if r.get("bio") or r.get("genera"):
-                factor = 5 if f and f["was_footfalled"] == 0 else 1
+                factor = 5 if f and f["bio_x5"] == 1 else 1
                 got = done.get(bid, {}) if bid is not None else {}
                 now_b += sum((aboard.get(bid) or {}).values()) * factor
                 known = (genera.get(bid) if bid is not None else None) or r.get("genera") or None

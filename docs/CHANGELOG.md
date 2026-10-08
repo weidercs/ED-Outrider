@@ -2,6 +2,20 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · Bio marks: populated systems, new anywhere, bio possible, flying low, why not (plugin gaps C)
+- **No ×5 in populated systems:** Vista Genomics never pays the first-footfall bonus where people live (checked on
+  your sales: 0 of 8 runs there, 208 of 208 elsewhere), so bio there is valued ×1 everywhere: Here, Samples, the
+  unsold total, "worth landing". A re-read of the journals at the next start fills in each system's population
+  (parser 43).
+- **✪ new to your codex anywhere**, beside ✦ (new in this region only): worth more effort.
+- **"🧬? check in the FSS"**: a landable body you have only from an AutoScan or a nav beacon, whose signals nobody
+  counted, where the rules allow life.
+- **Flying low over a body** (in your ship, under 5 km) the on-body strip shows its bio card already.
+- **Why not:** the body panel lists each genus the rules rule out there, with the reason ("pressure too low").
+- **Here's bio column** can leave out finished species and bodies with fewer than N signals (Settings → Display,
+  this device).
+- From BioScan's options and checks; `WasLogged` is left out (nothing in your journals to check it against).
+
 ## 2026-10-08 · Tagged plants: where to go for the next sample (plugin gaps B)
 - Point the composition scanner at a plant (from the ship flying low, the SRV or on foot) and Outrider remembers where
   it is, as BioScan's waypoints did: a hollow ring in the species' colour on the surface map, faint where a sample

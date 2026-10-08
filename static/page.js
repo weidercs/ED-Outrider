@@ -176,7 +176,7 @@ function notable(s) {
   return ["ELW", "WW", "AW", "T"].filter(k => n[k]).map(k =>
     `<span class="nb ${k}" title="${names[k]}${n[k] > 1 ? "s" : ""}">${k}${n[k] > 1 ? "×" + n[k] : ""}</span>`).join("") +
     (s.bio_potential ? `<span class="nb bio" title="exobiology: up to this much across ${s.bio_bodies_guessed} bod${s.bio_bodies_guessed === 1 ? "y" : "ies"}, from spawn rules">🧬≤${credits(s.bio_potential)}</span>` : "") +
-    phenomenaTag(s.phenomena) + oldDataTag(s.stale_bio) +
+    phenomenaTag(s.phenomena) + oldDataTag(s.stale_bio) + bioUnknownTag(s.bio_unknown) +
     (s.curiosities ? `<span class="nb cur" title="${(s.curiosity_list || []).map(c => esc(`${c.body}: ${c.tag} (${c.why})`)).join("&#10;")}">🔭${s.curiosities > 1 ? "×" + s.curiosities : ""}</span>` : "");
 }
 // pre-Odyssey Spansh data (stale_bio {bodies, genera_top, up_to, reported}): thin-atmosphere worlds marked not
@@ -186,6 +186,10 @@ function oldDataTitle(o) {
     ((o.genera_top || []).length ? `&#10;The rules allow: ${o.genera_top.map(esc).join(", ")}` : "") +
     (o.up_to ? `&#10;One genus per body at the median: about ${credits(o.up_to)} cr` : "");
 }
+// landable bodies you have only from an AutoScan or a nav beacon, whose signals nobody counted, where the rules allow
+// life (BioScan's "Bios possible, check FSS for signals")
+const BIO_UNKNOWN_TITLE = "landable, signals not counted (your AutoScan or a nav beacon only) and the rules allow life: the FSS would say";
+const bioUnknownTag = n => !n ? "" : `<span class="nb" title="${n} bod${n === 1 ? "y" : "ies"}: ${BIO_UNKNOWN_TITLE}">${dual(`🧬? ${n} to check in the FSS`, `🧬? ${n}`)}</span>`;
 const oldDataTag = o => { if (!o || !o.bodies) return "";
   const full = `old data: ${o.bodies} bod${o.bodies === 1 ? "y" : "ies"}`;
   return `<span class="nb old" title="${oldDataTitle(o)}">${dual(full, `old ${o.bodies}`, {titleHtml: `${full}. ${oldDataTitle(o)}`})}</span>`; };
@@ -522,6 +526,16 @@ document.getElementById("tilesBtn").onclick = () => {
   drawTilesFold(); drawTilesMode();
   if (data) render();   // the header's height changed: app mode and what is sized to the window follow
 };
+// Here's bio column on this device (store hereBio): leave out finished species, and the bio of bodies with fewer than
+// minSig signals (BioScan's display options)
+const hereBio = () => { const c = store.get("hereBio", null) || {};
+  return {hideDone: !!c.hideDone, minSig: Number.isInteger(c.minSig) && c.minSig > 0 ? Math.min(20, c.minSig) : 0}; };
+{
+  const hd = document.getElementById("hereHideDone"), ms = document.getElementById("hereMinSig");
+  const draw = () => { const c = hereBio(); hd.checked = c.hideDone; ms.value = c.minSig; };
+  const save = () => { store.set("hereBio", {hideDone: hd.checked, minSig: Math.max(0, Math.min(20, parseInt(ms.value, 10) || 0))}); draw(); if (data) renderHere(); };
+  hd.onchange = save; ms.onchange = save; draw();
+}
 const tilesModeEl = document.getElementById("tilesMode");
 const drawTilesMode = () => { tilesModeEl.value = tilesMode() || ""; };
 tilesModeEl.onchange = () => { store.set("tilesMode", tilesModeEl.value || null); drawTilesFold(); if (data) render(); };
@@ -590,7 +604,7 @@ function leavingText(l) {
     const parts = Object.entries(b.partial).map(([g, n]) => `${esc(g)} ${n}/3`).concat(unstarted(b).map(esc));
     bits.push(`bio on <b>${esc(b.body)}</b>${b.genera === null ? ` (${noDssText(b, parts)})` : parts.length ? ` (${parts.join(", ")})` : ""}` +
               (b.potential ? ` up to ${credits(pendingWorth(b))}${ffMark(b)}` : b.potential == null && !Object.keys(b.partial || {}).length ? " (value unknown)" : "") +
-              (codexNewCounts() && b.codex_new ? " ✦ new to your codex here" : ""));
+              (codexNewCounts() && b.codex_galaxy ? " ✪ new to your codex anywhere" : codexNewCounts() && b.codex_new ? " ✦ new to your codex here" : ""));
   }
   return `Leaving with unfinished work: ${bits.join(" · ")}`;
 }
@@ -615,7 +629,8 @@ const scText = sec => sec < 90 ? `~${Math.max(10, Math.round(sec / 5) * 5)} s` :
 const colonyM = g => (data && data.colony && g && data.colony[String(g).toLowerCase()]) || null;
 const colonyTxt = g => colonyM(g) ? ` <span class="unk" title="samples of one species must be this far apart">· ${colonyM(g).toLocaleString("en-US")} m</span>` : "";
 // how you are on the body, naming the vehicle the journal says you launched ("in the Rhino", "in the Nomad")
-const howOnBody = ob => ob.how === "in the SRV" && ob.vehicle ? `in the ${ob.vehicle}` : ob.how;
+const howOnBody = ob => ob.how === "in the SRV" && ob.vehicle ? `in the ${ob.vehicle}` : ob.how === "flying low" ? `flying low, ${surfDist(ob.alt)}` : ob.how;
+const onOrOver = ob => ob.how === "flying low" ? "Over" : "On";
 function planItems(l) {
   const w = worthLeavingFor(l);
   if (!w) return [];
@@ -651,7 +666,7 @@ function planText(it, totals = false) {
   const atm = b.atmosphere && b.atmosphere !== "None" ? ` · ${esc(b.atmosphere)}` : "";
   return `bio on <b>${esc(b.body)}</b>` + (b.genera === null ? ` (${noDssText(b, parts)})` : parts.length ? `: ${parts.join(", ")}` : "") +
     (b.potential ? ` up to ${credits(pendingWorth(b))}` + (b.factor === 5 ? ` <span class="ok" title="nobody had set foot here when you scanned it: exobiology pays ×5 (included)">👣×5</span>` : "") : "") +
-    (b.codex_new ? ` <span class="cxnew">✦</span>` : "") + g + atm;
+    (b.codex_galaxy ? ` <span class="cxnew cxgal" title="new to your codex anywhere">✪</span>` : b.codex_new ? ` <span class="cxnew">✦</span>` : "") + g + atm;
 }
 const planCost = it => it.sec == null ? "" : ` <span class="unk" title="supercruise from the arrival star (${Math.round(it.dist).toLocaleString("en-US")} ls), and what it pays per minute of that">· ${scText(it.sec)}${it.perMin ? ` · ${credits(it.perMin)}/min` : ""}</span>` +
   (it.skip ? ` <span class="unk skipq" title="under your ${credits(skipFloor())} cr per minute of supercruise">skip?</span>` : "");
@@ -683,8 +698,10 @@ function checklistHtml(l) {
 }
 // ---- on-body strip: what is left to sample on the body you are standing on (landed, SRV, on foot) ----
 let obKey = null, obData = null;
+// the body you are on, or flying low over in your ship (near_body: its card before you pick where to land)
+const obNow = () => data && (data.on_body || data.near_body);
 async function loadOnBody() {
-  const ob = data && data.on_body;
+  const ob = obNow();
   if (!ob) { if (obData) { obData = null; obKey = null; } renderOnBody(); return; }
   const key = `${ob.system}|${data.scan_version}`;
   if (key === obKey) return renderOnBody();
@@ -730,10 +747,10 @@ function tagText(sm) {
 }
 let clearAnnounced = null, tagAnnounced = null;
 function renderOnBody() {
-  const el = document.getElementById("onbody"), ob = data && data.on_body;
+  const el = document.getElementById("onbody"), ob = obNow();
   if (!ob) { el.innerHTML = ""; return; }
   const b = obData && !obData.error && obData.bodies.find(x => x.name === ob.body);
-  if (!b) { el.innerHTML = samplingHtml() + `On <b>${esc(ob.body)}</b> (${esc(howOnBody(ob))})`; return; }
+  if (!b) { el.innerHTML = samplingHtml() + `${onOrOver(ob)} <b>${esc(ob.body)}</b> (${esc(howOnBody(ob))})`; return; }
   const bits = [], f = bioFactor(b);
   for (const g of bioGenera(b)) {
     const o = b.organics.find(o => o.genus === g), x = (b.bio_guess || []).find(q => q.genus === g);
@@ -745,7 +762,7 @@ function renderOnBody() {
   if (unk) bits.push(`<span class="unk">${unk.label.replace(/ signals?/, m => " bio" + m)}</span>`);
   if (b.geo) bits.push(`<span class="sp geo">🪨 ${b.geo} geo</span>`);
   const x5 = b.value_parts && b.value_parts.bio_factor === 5;
-  el.innerHTML = samplingHtml() + `On <b>${esc(ob.body)}</b> <span class="unk">(${esc(howOnBody(ob))})</span>: ` + (bits.join(" ") || `<span class="unk">no bio or geo signals known</span>`) +
+  el.innerHTML = samplingHtml() + `${onOrOver(ob)} <b>${esc(ob.body)}</b> <span class="unk">(${esc(howOnBody(ob))})</span>: ` + (bits.join(" ") || `<span class="unk">no bio or geo signals known</span>`) +
     (x5 && (b.genera.length || b.bio) ? ` · <span class="ok" title="nobody had set foot here when you scanned it: exobiology pays ×5">first footfall ×5</span>` : "");
 }
 // ---- route strip: the plotted route from here, hop by hop ----
@@ -786,7 +803,7 @@ function renderNow() {
   const risk = nowRiskLine();
   if (risk) lines.push(`<div class="now-line now-risk ${risk.cls}">${risk.html}</div>`);
   // landed: what is left on this body (and the sample spacing); otherwise what is left in the system
-  if (data.on_body) lines.push(`<div class="now-line now-body">${document.getElementById("onbody").innerHTML}</div>`);
+  if (obNow()) lines.push(`<div class="now-line now-body">${document.getElementById("onbody").innerHTML}</div>`);
   else {
     const here = data.systems.find(s => sysId(s) === sysId(p));
     // the all-clear only once Here's data is for this system and the honk has found every body: before that
@@ -2848,10 +2865,12 @@ function renderHere() {
     // the colony distance in the genus's tooltip (S1): the row's text stays as it is
     const ct = g => colonyM(g) ? ` title="${esc(g)}: samples ${colonyM(g)} m apart"` : "";
     const bio = [], f = bioFactor(b), atm = b.type === "Planet" && b.atmosphere && b.atmosphere !== "None" ? b.atmosphere : "";
-    const guessOf = g => (b.bio_guess || []).find(x => x.genus === g);
+    const guessOf = g => (b.bio_guess || []).find(x => x.genus === g), hb = hereBio();
+    if (hb.minSig && b.bio && b.bio < hb.minSig) bio.push(`<span class="unk" title="fewer than ${hb.minSig} signals: left out (Settings, Display)">${b.bio} sig</span>`);
     const guessTxt = x => !x || !x.best ? "" : ` <span class="unk" title="likeliest by value: ${esc(x.species.join(" / "))}">(${esc(x.best.split(" ").slice(1).join(" "))}? ${credits(x.value * f)})</span>` + codexMark(x, h.region);
-    for (const g of bioGenera(b)) {
+    for (const g of hb.minSig && b.bio && b.bio < hb.minSig ? [] : bioGenera(b)) {
       const o = b.organics.find(o => o.genus === g);
+      if (hb.hideDone && o && o.done && !o.lost) continue;
       bio.push(o ? `<span class="sp ${o.lost ? "lost" : o.done ? "done" : "part"}" title="${esc(o.species || "")}${o.variant ? " · " + esc(o.variant) : ""}${o.lost ? " · lost with the ship, sample again" : ""}${colonyM(g) ? ` · samples ${colonyM(g)} m apart` : ""}">${esc(g)} ${o.lost ? "lost ✗" : `${o.samples}/3${o.done ? " ✓" : ""}`}${!o.lost && o.value ? ` <span class="unk">${credits(o.value * f)}</span>` : ""}</span>` +
                    // a run under way prices the species you logged (known from its first sample), like the pop-up and
                    // the panel; the predictor's guess is only for a lost run or one whose species has no price
@@ -2859,7 +2878,7 @@ function renderHere() {
                  : `<span class="sp"${ct(g)}>${esc(g)} 0/3</span>` + guessTxt(guessOf(g)));
     }
     // signals no genus accounts for: before a DSS, and after a sample taken without one (that genus is listed above)
-    const unk = bioUnknown(b);
+    const unk = hb.minSig && b.bio && b.bio < hb.minSig ? null : bioUnknown(b);
     if (unk) {
       const {opt, list: gl} = unk;
       // compact: "2 sig, no DSS" / "+1 sig", and the options' range without the words
@@ -2876,7 +2895,7 @@ function renderHere() {
       <td>${sfText(b.type === "Star" ? "star" : "planet", b.subtype || "")}${b.type === "Star" ? (b.scoopable ? ` <span class="scoop">⛽</span>` : "") : ""}${b.rings ? `<span class="sf2"> ${icon("ring", "i-ring", b.rings, ringsText(b))}</span>` : ""}${b.dist_ls != null ? `<div class="sf2 sub2 unk">${Math.round(b.dist_ls).toLocaleString()} ls</div>` : ""}</td>
       <td class="num c2hide">${b.dist_ls != null ? Math.round(b.dist_ls).toLocaleString() : ""}</td>
       <td class="num${b.gravity >= highGravity() ? " noscoop" : ""}">${b.gravity != null && b.type === "Planet" ? b.gravity.toFixed(2) : ""}${atm ? `<div class="sf2 atm2" title="${esc(atm)}">${esc(shortForm("atmosphere", atm))}</div>` : ""}</td>
-      <td class="hide-sm c2hide">${b.type === "Planet" ? (atm ? sfText("atmosphere", atm) : b.landable ? dual("none · landable", "landable") : "") : ""}${b.stale_bio ? ` <span class="unk old" title="${esc(staleBodyTitle(b))}">${dual("landable? (old data)", "landable?", {title: `landable? (old data): ${staleBodyTitle(b)}`})}</span>` : ""}</td>
+      <td class="hide-sm c2hide">${b.type === "Planet" ? (atm ? sfText("atmosphere", atm) : b.landable ? dual("none · landable", "landable") : "") : ""}${b.stale_bio ? ` <span class="unk old" title="${esc(staleBodyTitle(b))}">${dual("landable? (old data)", "landable?", {title: `landable? (old data): ${staleBodyTitle(b)}`})}</span>` : ""}${b.bio_unknown ? ` <span class="warnc" title="${BIO_UNKNOWN_TITLE}">${dual("bio possible: check the FSS", "🧬?")}</span>` : ""}</td>
       <td class="bio">${bio.join(" ")}${geoTag(b)}${volcanoIcon(b)}${codex}${b.mining || (b.mined || []).length ? `<span class="sf2"> ${mineTag(b)}</span>` : ""}</td>
       <td class="num mine c2hide">${mineTag(b)}</td>
       <td class="c2hide">${b.rings ? dual(esc(ringsText(b)), `${b.rings}${b.rings_mapped ? ` (${b.rings_mapped}🗺${b.hotspots < b.rings_mapped ? `, ${b.hotspots} hot` : ""})` : ""}`) : ""}</td>
@@ -3104,6 +3123,7 @@ function bodyPopHtml(b, region) {
     !isStar && b.atmosphere && b.atmosphere !== "None" && esc(b.atmosphere) + (b.pressure != null ? ` (${b.pressure < 0.01 ? b.pressure.toFixed(4) : b.pressure.toFixed(2)} atm)` : ""),
     !isStar && b.volcanism && esc(b.volcanism.replace(/ volcanism$/, "")),
     !isStar && (b.landable ? "landable" : b.stale_bio ? `<span class="old" title="${esc(staleBodyTitle(b))}">landable? (old data)</span>` : "not landable"), b.terraformable && "terraformable",
+    b.bio_unknown && `<span class="warnc" title="${BIO_UNKNOWN_TITLE}">bio possible: check the FSS</span>`,
     isStar && (b.scoopable ? "scoopable" : "not scoopable"),
   ].filter(Boolean);
   let h = `<h3>${esc(b.name)} <span class="src">${esc(b.subtype || "")}</span></h3><div>${phys.join(" · ")}</div>`;
@@ -3252,7 +3272,11 @@ function renderBodyInto(panel, d, bodyName, closeJs) {
       lines.push(...unk.list.map(x => `<li><span>${esc(x.genus)} possible: ${esc(x.species.join(" / "))}${codexMark(x)}</span><b>≤${credits((x.value || 0) * f)}</b></li>`));
     }
     for (const c of row.codex || []) lines.push(`<li><span>📖 ${esc(c.name)}</span><b>${c.voucher ? "voucher " + c.voucher.toLocaleString() + " cr" : c.new ? "new to your codex" : ""}</b></li>`);
-    bioSec = sec("bio", `🧬 Exobiology${row.bio ? ` · ${row.bio} signal${row.bio === 1 ? "" : "s"}` : ""}${bioRange(row)}`, `<ul>${lines.join("")}</ul>`);
+    // why the other genera are not expected here: the rule of each that came closest to passing (BioScan's log)
+    const ro = row.ruled_out || [];
+    const why = ro.length ? `<details class="ruledout"><summary class="unk">Why not the other ${ro.length} genera</summary><ul>` +
+      ro.map(r => `<li><span>${esc(r.genus)}</span><span class="unk">${esc(r.why)}</span></li>`).join("") + `</ul></details>` : "";
+    bioSec = sec("bio", `🧬 Exobiology${row.bio ? ` · ${row.bio} signal${row.bio === 1 ? "" : "s"}` : ""}${bioRange(row)}`, `<ul>${lines.join("")}</ul>${why}`);
   }
   const curSec = (row.curiosities || []).length ? sec("curiosities", "🔭 Curiosities", row.curiosities.map(c => `<div><b>${esc(c.tag)}</b> · ${esc(c.why)}</div>`).join("")) : "";
   const mineSec = row.mining || (row.mined || []).length ? sec("mining", row.mining ? `⛏ ${mineCount(row.mining)}` : "⛏ Mining",
@@ -7239,11 +7263,13 @@ const maxOf = x => maxBonus() || x.value_max_base == null ? x.value_max : x.valu
 // colour and the ones of that species you have logged there (x.codex_have), since two bodies with the same likeliest
 // species can each be new: "new to your codex in Inner Orion Spur: Bacterium Acies - White; you have Lime".
 const codexMark = (x, region) => {
-  if (!x || !x.codex_new) return "";
+  if (!x || !(x.codex_new || x.codex_galaxy_new)) return "";
   const have = x.codex_have || [], colour = v => v.split(" - ").pop();
   const fresh = (x.variants || []).filter(v => !have.includes(colour(v)));
   const what = fresh.length ? fresh.join(" or ")
     : x.best ? `${x.best} (likeliest species; the colour variant may differ)` : "likeliest species; the colour variant may differ";
+  // ✪: in your codex nowhere at all (BioScan's 🌌), worth more effort than ✦, new in this region only
+  if (x.codex_galaxy_new) return ` <span class="cxnew cxgal" title="new to your codex anywhere: ${esc(what)}">✪</span>`;
   return ` <span class="cxnew" title="new to your codex in ${esc(region || "this region")}: ${esc(what)}${
     fresh.length && have.length ? `; you have ${esc(have.join(", "))}` : ""}">✦</span>`;
 };

@@ -1059,7 +1059,8 @@ const settle = async maxMs => {
     got.mark = w.eval(`[codexMark({codex_new: true, variants: ["Bacterium Aurasus - Teal"]}, "Inner Orion Spur"), codexMark({codex_new: true, variants: []}, "X"), codexMark({codex_new: false, variants: ["A - B"]}),
       codexMark({codex_new: true, best: "Bacterium Acies", variants: ["Bacterium Acies - White"], codex_have: ["Aquamarine", "Lime"]}, "Inner Orion Spur"),
       codexMark({codex_new: true, best: "Fungoida Setisis", variants: ["Fungoida Setisis - Yellow", "Fungoida Setisis - Grey"], codex_have: ["Yellow"]}, "Y"),
-      codexMark({codex_new: true, best: "Bacterium Vesicula", variants: [], codex_have: []}, "Z")]
+      codexMark({codex_new: true, best: "Bacterium Vesicula", variants: [], codex_have: []}, "Z"),
+      codexMark({codex_new: true, codex_galaxy_new: true, best: "Stratum Tectonicas", variants: ["Stratum Tectonicas - Lime"], codex_have: []}, "Z")]
       .map(h => (h.match(/title="([^"]*)"/) || [])[1] || "")`);
     const here = w.eval("data.position && data.position.name");
     if (here) {
@@ -1076,7 +1077,8 @@ const settle = async maxMs => {
                          // another colour of a species you logged here: name it and the colours you have
                          "new to your codex in Inner Orion Spur: Bacterium Acies - White; you have Aquamarine, Lime",
                          "new to your codex in Y: Fungoida Setisis - Grey; you have Yellow",
-                         "new to your codex in Z: Bacterium Vesicula (likeliest species; the colour variant may differ)"],
+                         "new to your codex in Z: Bacterium Vesicula (likeliest species; the colour variant may differ)",
+                         "new to your codex anywhere: Stratum Tectonicas - Lime"],
                   find: ["here", true], long: 400};
     for (const k of Object.keys(want)) if (JSON.stringify(got[k]) !== JSON.stringify(want[k])) bad.push(k);
     const goodS3 = !bad.length && errors.length === before;
@@ -4141,6 +4143,31 @@ const settle = async maxMs => {
     const goodT = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodT;
     console.log(goodT ? "OK" : "FAIL", "| bio tags |", goodT ? "tagged plants drawn (faint where a sample would not count), the strip's turn to the nearest" : JSON.stringify(got), errors.slice(before));
+  }
+  // plugin gaps C: "bio possible" bodies, Here's bio filters (per device), the flying-low card, the ruled-out genera
+  {
+    const w = dom.window, before = errors.length;
+    const got = await w.eval(`(async () => {
+      const o = {};
+      o.tag = bioUnknownTag(2).replace(/<[^>]+>/g, "");
+      const hb0 = localStorage.getItem("hereBio");
+      document.getElementById("hereHideDone").checked = true; document.getElementById("hereMinSig").value = "3";
+      document.getElementById("hereMinSig").dispatchEvent(new Event("change"));
+      o.filters = JSON.stringify(hereBio());
+      if (hb0 === null) localStorage.removeItem("hereBio"); else localStorage.setItem("hereBio", hb0);
+      const panel = document.createElement("div");
+      renderBodyInto(panel, {full_name: "S A 1", own: {}, spansh: null, rings: [], row: {bio: 2, genera: [], organics: [], codex: [],
+        ruled_out: [{genus: "Cactoida", why: "pressure too low"}, {genus: "Osseus", why: "too cold"}]}}, "A 1", "");
+      o.why = /Why not the other 2 genera/.test(panel.textContent) && /pressure too low/.test(panel.textContent);
+      const keep = [data.on_body, data.near_body];
+      data.on_body = null; data.near_body = {body: "A 1", full: "S A 1", how: "flying low", alt: 2300, system: "0"};
+      renderOnBody(); o.over = document.getElementById("onbody").textContent.startsWith("Over A 1 (flying low, 2.3 km)");
+      [data.on_body, data.near_body] = keep; renderOnBody();
+      return o; })()`);
+    const want = {tag: "🧬? 2 to check in the FSS🧬? 2", filters: '{"hideDone":true,"minSig":3}', why: true, over: true};
+    const goodC = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && goodC;
+    console.log(goodC ? "OK" : "FAIL", "| bio marks |", goodC ? "bio possible, Here's filters, flying-low card, the ruled-out genera" : JSON.stringify(got), errors.slice(before));
   }
   // review 2026-10-08 #15-#18: answers that arrive out of order. An older, slower request lands after a newer one:
   // its answer (or its failure) must not replace the newer one's
