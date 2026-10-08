@@ -176,6 +176,7 @@ except ImportError:
     outrider.bio = None
 import outrider.materials  # engineering materials and synthesis recipes (no dependencies)
 import outrider.cargo      # the ship's hold and your carrier's, folded from the journal (no dependencies)
+import outrider.dock       # the nearest place to dock: stations and carriers from Spansh, the DSSA list, your carrier
 import outrider.tts        # spoken alerts; Piper itself is optional (the page falls back to browser speech)
 import outrider.speech     # the words for spoken alerts, per personality (resources/speech.json)
 import outrider.honk       # auto honk: holds Primary Fire on arrival (optional; Linux with evdev, Windows experimental)
@@ -229,6 +230,9 @@ SPANSH_STATION_SEARCH = "https://spansh.co.uk/api/stations/search"
 # Spansh's commodity names (its min_max keys): the Sell / Buy lookup asks by them; cached a week (meta spansh_commodities)
 SPANSH_COMMODITIES = "https://spansh.co.uk/api/stations/field_values/commodities"
 COMMODITIES_MAX_AGE_S = 7 * 86400
+# The Deep Space Support Array's carrier list (EDAstro, read only): asked for when the Nearest finder opens, at most
+# hourly and conditionally; the last copy is kept (meta dssa). verify.sh points it at a closed port.
+DSSA_URL = outrider.dock.DSSA_URL
 # The Neutron Highway's plotters: each answers {job} and the route is fetched from the results URL once done
 SPANSH_ROUTE = "https://spansh.co.uk/api/route"                  # the neutron plotter: from, to, range, efficiency
 SPANSH_GENERIC_ROUTE = "https://spansh.co.uk/api/generic/route"  # the exact plotter: the ship's figures, fuel too
@@ -4669,6 +4673,49 @@ class Spansh:
             raise ClientError("Spansh's answer is not a station list")
         return d
 
+    async def dock_search(self, pos):
+        """Stations and fleet carriers nearest `pos` (two pages of the station search, each nearest first, out to
+        outrider.dock.SEARCH_LY). Carriers are not filtered by service here: Spansh's filter keeps carriers that lack it."""
+        if self.session is None:
+            raise ClientError("no network session")
+        ref = {"x": pos["x"], "y": pos["y"], "z": pos["z"]}
+        types = [t for t in outrider.cargo.STATION_TYPES if "Construction" not in t]
+        out = []
+        for kinds in (types, [outrider.cargo.CARRIER_TYPE]):
+            body = {"filters": {"type": {"value": kinds}, "distance": {"min": "0", "max": str(outrider.dock.SEARCH_LY)}},
+                    "sort": [{"distance": {"direction": "asc"}}], "reference_coords": ref,
+                    "size": outrider.dock.SEARCH_SIZE, "page": 0}
+            async with self.sem_fast:
+                async with self.session.post(SPANSH_STATION_SEARCH, json=body) as r:
+                    r.raise_for_status()
+                    d = await r.json()
+            out += (d.get("results") or []) if isinstance(d, dict) else []
+        return out
+
+    async def permit_ids(self, ids):
+        """Which of these systems need a permit (Spansh's system records say; its station records do not)."""
+        ids = sorted({int(i) for i in ids if isinstance(i, int) or str(i).isdigit()})
+        if not ids or self.session is None:
+            return set()
+        body = {"filters": {"id64": {"value": ids}}, "size": len(ids), "page": 0}
+        async with self.sem_fast:
+            async with self.session.post(SPANSH_SEARCH, json=body) as r:
+                r.raise_for_status()
+                d = await r.json()
+        return {x.get("id64") for x in (d.get("results") or []) if isinstance(x, dict) and x.get("needs_permit")}
+
+    async def get_if_changed(self, url, etag=None, modified=None):
+        """A conditional GET: (304, None, etag, modified) when unchanged, else (200, json, its etag, its date)."""
+        if self.session is None:
+            raise ClientError("no network session")
+        headers = {k: v for k, v in (("If-None-Match", etag), ("If-Modified-Since", modified)) if v}
+        async with self.sem_fast:
+            async with self.session.get(url, headers=headers) as r:
+                if r.status == 304:
+                    return 304, None, etag, modified
+                r.raise_for_status()
+                return 200, await r.json(content_type=None), r.headers.get("ETag"), r.headers.get("Last-Modified")
+
     async def commodity_names(self):
         """Spansh's commodity names, as it spells them (the keys of its min_max)."""
         if self.session is None:
@@ -5402,7 +5449,7 @@ class State:
             self.set_hush("30m" if cmd == "hush" else "off")
             words, action = ("Quiet for 30 minutes." if cmd == "hush" else "Voice back on."), "caption"   # the page says these
         elif cmd:
-            words = await outrider.ask.fixed_answer(cmd, get)
+            words = await outrider.ask.fixed_answer(cmd, get, text=text)
         elif self.assistant.get("enabled"):
             matched = "ai"
             try:
@@ -6659,6 +6706,71 @@ class State:
                 "sort": "near" if q.get("sort") == "near" else "price", "within": within, "age": age,
                 "carriers": q.get("carriers") in ("1", "true"), "pad": pad, "pad_known": bool(ship.get("pad")),
                 "count": d.get("count"), "rows": rows}, 200
+
+    async def dssa_list(self, fetch=True):
+        """The DSSA carrier list as outrider.dock rows, with {checked, modified, error}: asked for again (conditionally)
+        only when `fetch` and the copy is over an hour old; the last copy is kept (meta dssa, live-only)."""
+        d = meta_get(self.db, "dssa") or {}
+        err = None
+        if fetch and time.time() - (d.get("checked") or 0) > outrider.dock.DSSA_MAX_AGE_S:
+            try:
+                status, data, etag, modified = await self.spansh.get_if_changed(DSSA_URL, d.get("etag"), d.get("modified"))
+                d = dict(d, checked=time.time(), error=None)
+                if status == 200 and isinstance(data, list):
+                    d.update(data=data, etag=etag, modified=modified)
+                meta_set(self.db, "dssa", d)
+                self.db.commit()
+            except (ClientError, asyncio.TimeoutError, ValueError) as e:
+                err = f"the DSSA list could not be read ({e})"
+        return outrider.dock.dssa_rows(d.get("data")), {"checked": d.get("checked"), "modified": d.get("modified"),
+                                                        "count": len(d.get("data") or []), "error": err}
+
+    async def nearest_dock(self, q):
+        """GET /api/nearest: the nearest places to dock (outrider/dock.py). q: stations, carriers ("0"/"1"), need
+        (uc,vista,repair,refuel,shipyard,outfitting), age (days), permit ("1": keep permit systems), pad (auto, L, M,
+        any), cached ("1": no new fetch of the DSSA list; the AI's tools and the voice ask that way). Read only but for
+        the DSSA copy kept."""
+        pos = self.journals.pos
+        if not pos or pos.get("x") is None:
+            return {"error": "your position is not known yet"}, 409
+        names = {s.lower(): s for s in outrider.dock.SERVICES}
+        need = [names[n] for n in str(q.get("need") or "").lower().replace(" ", "").split(",") if n in names]
+        try:
+            age = int(q.get("age") or outrider.dock.DEFAULT_AGE_DAYS)
+        except ValueError:
+            return {"error": "age is a whole number of days"}, 400
+        if not 1 <= age <= 3650:
+            return {"error": "age: 1 to 3,650 days"}, 400
+        ship = self.journals.ship or {}
+        pad = q.get("pad") or "auto"
+        pad = outrider.cargo.SHIP_PAD.get((ship.get("type") or "").lower()) if pad == "auto" else pad if pad in ("L", "M") else None
+        errors = []
+        try:
+            spansh = outrider.dock.spansh_rows(await self.spansh.dock_search(pos))
+        except (ClientError, asyncio.TimeoutError, ValueError) as e:
+            spansh = []
+            errors.append(f"Spansh could not be reached ({e})")
+        dssa, dinfo = await self.dssa_list(fetch=q.get("cached") != "1")
+        if dinfo["error"]:
+            errors.append(dinfo["error"])
+        c = self.carrier_summary() or {}
+        own = outrider.dock.own_row(dict(self.journals.carrier or {}, **{k: c.get(k) for k in ("x", "y", "z", "has_uc", "has_vista")},
+                                         decommission=self.carrier_decommission()))
+        rows = outrider.dock.merge(spansh, dssa, own)
+        permits = set()
+        if q.get("permit") != "1":
+            try:
+                permits = await self.spansh.permit_ids([r["id64"] for r in rows if r.get("id64") is not None])
+            except (ClientError, asyncio.TimeoutError, ValueError) as e:
+                errors.append(f"permit systems could not be checked ({e})")
+        laden = self.range_now() or ship.get("max_range")
+        out = outrider.dock.nearest(rows, pos, need=need, stations=q.get("stations") != "0", carriers=q.get("carriers") != "0",
+                                    pad=pad, age_days=age, permit=q.get("permit") == "1", permits=permits, laden=laden)
+        for r in out["rows"]:
+            r.update(id64=str(r["id64"]) if r.get("id64") is not None else None, seen=None)
+        return dict(out, need=need, age=age, pad=pad, pad_known=bool(outrider.cargo.SHIP_PAD.get((ship.get("type") or "").lower())),
+                    ship=ship.get("type"), laden=round(laden, 1) if laden else None, where=pos.get("name"), dssa=dinfo,
+                    errors=errors), 200
 
     def carrier_tritium(self):
         """The Carrier tile's tritium, only while tritium is on a sell order at your carrier (a confirmed line): the
@@ -12100,6 +12212,11 @@ def make_app(state, hosts=None):
         out, status = await state.cargo_lookup(dict(request.query))
         return web.json_response(out, status=status)
 
+    async def nearest_view(request):
+        """GET /api/nearest?stations=&carriers=&need=&age=&permit=&pad=&cached=: the nearest places to dock."""
+        out, status = await state.nearest_dock(dict(request.query))
+        return web.json_response(out, status=status)
+
     async def cargo_recount_view(request):
         """POST /api/cargo/recount {counts: {commodity: tons}}: your counts for your carrier's untracked lines."""
         body = await json_object(request)
@@ -12157,6 +12274,7 @@ def make_app(state, hosts=None):
     app.router.add_get("/api/materials", materials_view)
     app.router.add_post("/api/cargo/recount", cargo_recount_view)
     app.router.add_get("/api/cargo/lookup", cargo_lookup_view)
+    app.router.add_get("/api/nearest", nearest_view)
     app.router.add_post("/api/radius", radius_view)
     app.router.add_get("/api/say", say_view)
     app.router.add_post("/api/say/play", pc_only(say_play_view))

@@ -14,11 +14,16 @@ import re
 import sys
 
 import outrider
+import outrider.dock as dock
 import outrider.tools as tools
 
 ASK_FILE = os.path.join(outrider.RESOURCES_DIR, "ask.json")
 TEXT_MAX = 500
-COMMANDS = ("unhush", "hush", "next_jump", "status_report", "fuel", "unsold", "whats_left", "nearest_unvisited")
+COMMANDS = ("unhush", "hush", "next_jump", "status_report", "fuel", "unsold", "whats_left", "nearest_unvisited", "nearest_dock")
+# "nearest station", "nearest Vista"...: the words of the question narrow the search (a whole phrase is needed in
+# ask.json, never a bare "nearest": the author, 2026-10-08)
+NEAREST_WORDS = {"vista": "Vista", "genomics": "Vista", "cartographics": "UC", "cartographic": "UC", "repair": "Repair",
+                 "repairs": "Repair", "refuel": "Refuel", "fuel": "Refuel", "shipyard": "Shipyard", "outfitting": "Outfitting"}
 WAKE = re.compile(r"^(hey|hi|ok|okay)?\s*vespa\b[\s,]*")
 ASSISTANT = {"enabled": False, "base_url": "", "api_key": "", "model": "", "timeout": 20.0, "max_rounds": 4}
 SYSTEM_PROMPT = ("You are Vespa, the co-pilot voice of ED Outrider, an exploration companion for the game Elite Dangerous. "
@@ -84,7 +89,22 @@ def jumps(n):
     return f"{n} jump{'' if n == 1 else 's'}"
 
 
-async def fixed_answer(command, get, rows=10):
+def nearest_query(text):
+    """What a "nearest ..." question asks for: (services, "station" | "carrier" | None)."""
+    words = norm(text).split()
+    need = []
+    for w in words:
+        s = NEAREST_WORDS.get(w)
+        if s and s not in need:
+            need.append(s)
+    if "uc" in words and "UC" not in need:
+        need.append("UC")
+    kind = "station" if any(w in ("station", "stations", "starport", "outpost") for w in words) else \
+        "carrier" if any(w in ("carrier", "carriers") for w in words) else None
+    return need, kind
+
+
+async def fixed_answer(command, get, rows=10, text=""):
     """The words for a fixed command (hush and unhush are the caller's: they change state, the tools cannot)."""
     if command == "fuel":
         s = await tools.call("current_status", {}, get, rows)
@@ -116,6 +136,14 @@ async def fixed_answer(command, get, rows=10):
             out += f" {jumps(h['jumps_left'])} left"
             out += f", refuel in {h['refuel_in_jumps']}." if h.get("refuel_in_jumps") else "."
         return out
+    if command == "nearest_dock":
+        need, kind = nearest_query(text)
+        d = await tools.call("nearest_dock", {"need": need, "kind": kind or "any"}, get, rows)
+        if d.get("error"):
+            return d["error"]
+        return dock.spoken({"rows": [dict(p, ly=p["distance_ly"], here=not p["distance_ly"], warn=p["warnings"],
+                                          station_type=None if p["kind"] == "carrier" else "station")
+                                     for p in d.get("places") or []]}, need, kind)
     if command == "nearest_unvisited":
         n = await tools.call("nearest_unvisited", {}, get, rows)
         if n.get("error"):
