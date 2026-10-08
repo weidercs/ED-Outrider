@@ -25,6 +25,9 @@ until you plot another or **Clear route**.
 - **Too much fuel.** A long neutron jump may be in range only with the fuel the plotter expected. On arrival, and
   as you scoop, Outrider checks the next jump against the fuel aboard and warns ("⚠ too much fuel for the next
   jump: ≤ 36 t, you have 140 t").
+- **Known** in the list says whether a system is already discovered: ✓ you have been there, ● every body is
+  reported to Spansh, ◐ some are, ○ nobody has reported a body there, so it may be undiscovered (blank: not looked
+  up yet; Spansh is asked about the listed systems one a second while the tab is open).
 - **The list** shows the next 200 jumps with distance, ⚡ neutron, fuel and ⛽ refuel stops (the exact plotter's: the
   neutron plotter has none, scoop as you go); click a name to copy
   it. The map beside it draws the route on the galactic regions with landmarks and your carrier. You can put your

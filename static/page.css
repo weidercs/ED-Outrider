@@ -639,6 +639,7 @@ tr.nextstop td.name::after { content: " ⚑ next stop"; color: var(--info); font
 .hwyaim.icon { margin-left: 6px; padding: 0 4px; font-size: 11px; opacity: .55; }
 tr:hover .hwyaim.icon, .hwyaim.icon:focus-visible, .hwyaim.icon:disabled { opacity: 1; }
 .hwyoff { color: var(--warn); font-weight: 600; } .hwydone { color: var(--good); font-weight: 600; }
+.hwyk-own { color: var(--good); } .hwyk-yes { color: var(--info); } .hwyk-new { color: var(--warn); font-weight: 600; }
 .hwyn { color: var(--info); } .hwyfuel { color: var(--good); } .hwyheavy { color: var(--warn); font-weight: 600; }
 #hwyConsNote { font-size: 12px; }
 #hwyView { margin-top: 12px; }

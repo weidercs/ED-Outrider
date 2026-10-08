@@ -2,6 +2,12 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-07 · Plot Route: a Known column in the route list
+- The Highway's list says whether each system is already discovered: ✓ you have been there (your journal), ● every
+  body reported to Spansh, ◐ some reported, ○ nobody has reported a body (it may be undiscovered); blank until
+  looked up. Spansh is asked in the background for the listed systems only (the next 200), one a second, while the
+  tab is open; a failed lookup pauses it for a minute. Kept in memory: asked again after a restart.
+
 ## 2026-10-07 · Uploads: EDDN, EDSM and Inara (off by default)
 - `[uploads]`: Outrider can do what EDMarketConnector does. `eddn` shares what the game shows everyone (arrivals,
   scans, signals, stations, and a market, outfitting or shipyard once opened) with EDDN; `edsm` and `inara` send your
