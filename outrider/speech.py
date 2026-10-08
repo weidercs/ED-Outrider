@@ -35,6 +35,8 @@ KEYS = {
     "find_body": "a valuable or special planet was scanned: {what} (its class and flags), {body}, {value}",
     "find_bio": "a body with biology worth your threshold: {body}, {value}",
     "sample_clear": "far enough from the last sample to take the next: {genus}",
+    "bio_tag_near": "within 100 m of a plant you tagged with the composition scanner where the next sample of the "
+                    "species you are sampling would count: {genus}, {distance} (metres)",
     "codex": "a new codex entry: {entry} (the entry's name), {what} (voucher or new to the region)",
     "fuel_low": "the game's low fuel warning: {pct}",
     "fuel_star": "arrived under 30% fuel at a star you cannot scoop: {pct}, {star}",
@@ -363,7 +365,7 @@ SAMPLES = {
     "arrival_undiscovered": {"system": "Drojau LL-O b26-3"}, "arrival_discovered": {"system": "Drojau LL-O b26-3"},
     "leaving": {"text": "A 2, a class two gas giant, plus 1.4M to map"},
     "find_body": {"what": "Water world, terraformable, undiscovered", "body": "A 3", "value": "2.3M"},
-    "find_bio": {"body": "B 7", "value": "19.0M"}, "sample_clear": {"genus": "Stratum"},
+    "find_bio": {"body": "B 7", "value": "19.0M"}, "sample_clear": {"genus": "Stratum"}, "bio_tag_near": {"genus": "Tussock", "distance": 80},
     "codex": {"entry": "Stratum Tectonicas", "what": "new to your codex for this region"},
     "fuel_low": {"pct": 18}, "fuel_star": {"pct": 22, "star": "white dwarf"},
     "fuel_target": {"pct": 22, "system": "Drojau LL-O b26-3"},

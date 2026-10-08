@@ -2,6 +2,14 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · Tagged plants: where to go for the next sample (plugin gaps B)
+- Point the composition scanner at a plant (from the ship flying low, the SRV or on foot) and Outrider remembers where
+  it is, as BioScan's waypoints did: a hollow ring in the species' colour on the surface map, faint where a sample
+  would not count. While sampling, the strip names the nearest one that would count and which way to turn
+  ("tagged: 524 m, turn 90° right"), and within 100 m the voice says so (a new line, `bio_tag_near`, in every
+  personality). On foot the game logs the plant's position; from the ship or SRV it is yours at the moment of the
+  scan, so scan close. Tags are kept through a journal re-read; a species finished on the body drops its own.
+
 ## 2026-10-08 · The review's fixes (21 bugs) and the Spansh services filter
 - From a review of the whole code (five areas, each finding checked by a second reader trying to disprove it): 21
   bugs confirmed, all fixed, each with a test that fails without it.

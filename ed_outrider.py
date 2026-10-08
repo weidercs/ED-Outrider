@@ -283,6 +283,7 @@ HIGHWAY_HEAVY_SLACK = 0.5    # t: fuel over the most the next jump allows by mor
 #                              some jumps right at the limit, so a hair over is the model's error, not yours)
 HIGHWAY_HEAVY_EVERY_S = 3.0  # s between two looks at it while the fuel changes in a route system (scooping)
 HIGHWAY_CONSERVATIVE_MAX = 50.0   # ly: the largest conservative margin taken
+BIO_TAGS_SHOWN = 40          # the surface map draws at most this many tagged plants (nearest first)
 SELLER_REFRESH_LY = 100      # look for the nearest places to sell again after moving this far
 SELLER_REFRESH_S = 6 * 3600  # ...or this long (carriers move)
 EDSM_SYSTEM = "https://www.edsm.net/api-v1/system"
@@ -1347,6 +1348,14 @@ CREATE TABLE IF NOT EXISTS own_ring_signals (
 CREATE TABLE IF NOT EXISTS sample_points (
     system INTEGER, body_id INTEGER, species TEXT, genus TEXT, n INTEGER, lat REAL, lon REAL, ts TEXT,
     PRIMARY KEY (system, body_id, species, n));
+-- Plants tagged with the composition scanner (a biology CodexEntry), BioScan's waypoints: where to go for the next
+-- sample. The position is the event's Latitude/Longitude when it has them (on foot), else Status.json's at that
+-- moment (the ship's or SRV's scanner: "scan as close to the plant as you can"). Live only, like sample_points: a
+-- journal re-read keeps them (not in RESET_JOURNAL_DATA), and the ones with the event's own position come back as
+-- the same rows.
+CREATE TABLE IF NOT EXISTS bio_tags (
+    system INTEGER, body_id INTEGER, species TEXT, genus TEXT, name TEXT, lat REAL, lon REAL, ts TEXT,
+    PRIMARY KEY (system, body_id, species, ts));
 -- The surface map's mining records (Batch M1). Live only, like sample_points: the positions come from Status.json
 -- and a rig from a co-pilot press, none of which a journal holds, so a journal re-read keeps them (not in
 -- RESET_JOURNAL_DATA) and the backup zip carries them with the rest of the database.
@@ -2031,6 +2040,10 @@ def surface_m(lat1, lon1, lat2, lon2, radius):
     p1, p2 = math.radians(lat1), math.radians(lat2)
     a = math.sin((p2 - p1) / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(math.radians(lon2 - lon1) / 2) ** 2
     return 2 * radius * math.asin(min(1.0, math.sqrt(a)))
+
+
+# A biology codex entry's variant name: $Codex_Ent_<Genus>_<NN>_<variant>_Name; (the species is $Codex_Ent_<Genus>_<NN>_Name;)
+BIO_CODEX_RE = re.compile(r"^\$Codex_Ent_([A-Za-z]+)_(\d+)_\w+_Name;$")
 
 
 def surface_bearing(lat1, lon1, lat2, lon2):
@@ -3290,6 +3303,30 @@ class Journals:
         self.db.execute("INSERT OR REPLACE INTO sample_points VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                         (system, body, species, genus, n, st["lat"], st["lon"], ts))
 
+    def note_bio_tag(self, ev, system, ts):
+        """A biology CodexEntry (the composition scanner, or a first Log) is a waypoint for that species on that body
+        (bio_tags): at the event's own position, else at yours from the live Status.json if it is this moment's
+        reading over that same body. Nothing is stored without a position."""
+        m = BIO_CODEX_RE.match(ev.get("Name") or "")
+        if not m or ev.get("Category") != "$Codex_Category_Biology;" or ev.get("BodyID") is None or system is None:
+            return
+        lat, lon = ev.get("Latitude"), ev.get("Longitude")
+        if lat is None or lon is None:
+            st = self.status_json or {}
+            row = self.db.execute("SELECT name FROM own_bodies WHERE system=? AND body_id=?", (system, ev["BodyID"])).fetchone()
+            if not st.get("live") or st.get("lat") is None or not row or st.get("body") != row["name"] or not st.get("ts"):
+                return
+            try:
+                if abs(ts_seconds(ts) - ts_seconds(st["ts"])) > 90:
+                    return
+            except ValueError:
+                return
+            lat, lon = st["lat"], st["lon"]
+        name = str(ev.get("Name_Localised") or "").split(" - ")[0] or None
+        self.db.execute("INSERT OR IGNORE INTO bio_tags VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (system, ev["BodyID"], f"$Codex_Ent_{m.group(1)}_{m.group(2)}_Name;",
+                         f"$Codex_Ent_{m.group(1)}_Genus_Name;", name, lat, lon, ts))
+
     def handle_phenomenon(self, name, ev, ts):
         """Notable stellar phenomena: found by the FSS, reached by dropping out of supercruise at one."""
         code = ev.get("SignalName") if name == "FSSSignalDiscovered" else ev.get("Type")
@@ -3655,6 +3692,7 @@ class Journals:
                  system, ev.get("System"), ev.get("BodyID"), int(bool(ev.get("IsNewEntry"))),
                  ev.get("NewTraitsDiscovered") and json.dumps(ev["NewTraitsDiscovered"]),
                  ev.get("VoucherAmount")))
+            self.note_bio_tag(ev, system, ts)
             self.dirty.add(system)
             return
         if name == "ScanBaryCentre":
@@ -5968,7 +6006,33 @@ class State:
                 # for a browser's own show/hide altitude (the page's surface_alt setting): down on the ground (landed,
                 # SRV, on foot: always shows) and an altitude from the average radius (never shows)
                 "down": bool(h["flags"] & (FLAG_IN_SRV | FLAG_LANDED) or h["flags2"] & 1), "alt_avg": bool(h["flags"] & FLAG_ALT_AVG),
-                "sites": self.surface_sites(h["system"], h["body_id"], h), "locations": locs, "bio": self.surface_bio(h)}
+                "sites": self.surface_sites(h["system"], h["body_id"], h), "locations": locs, "bio": self.surface_bio(h),
+                "tags": self.bio_tags_here(h)[:BIO_TAGS_SHOWN]}
+
+    def bio_tags_here(self, h):
+        """Plants tagged on this body (bio_tags) for species not finished here, nearest first: {species, genus,
+        lat, lon, dist, bearing, way, current (the run in progress is this species), usable (outside the colony
+        distance of every sample of that run: a sample there would count)}. h: surface_here()."""
+        done = {r["species"] for r in self.db.execute(
+            "SELECT species FROM own_organic WHERE system=? AND body_id=? AND done_ts IS NOT NULL", (h["system"], h["body_id"]))}
+        run = self.db.execute("SELECT system, body_id, species FROM own_organic WHERE done_ts IS NULL ORDER BY ts DESC LIMIT 1").fetchone()
+        cur = run["species"] if run and (run["system"], run["body_id"]) == (h["system"], h["body_id"]) else None
+        pts = [dict(r) for r in self.db.execute("SELECT lat, lon FROM sample_points WHERE system=? AND body_id=? AND species=?",
+                                                (h["system"], h["body_id"], cur))] if cur else []
+        out = []
+        for t in self.db.execute("SELECT species, genus, name, lat, lon FROM bio_tags WHERE system=? AND body_id=? ORDER BY ts",
+                                 (h["system"], h["body_id"])):
+            if t["species"] in done:
+                continue
+            need = outrider.bio.colony_distance(t["genus"], (t["name"] or "").split(" ")[0]) if outrider.bio else None
+            usable = not (t["species"] == cur and need and any(
+                surface_m(p["lat"], p["lon"], t["lat"], t["lon"], h["radius"]) < need for p in pts))
+            bearing = surface_bearing(h["lat"], h["lon"], t["lat"], t["lon"])
+            out.append({"species": t["name"], "genus": (t["name"] or "").split(" ")[0] or None, "lat": t["lat"], "lon": t["lon"],
+                        "dist": round(surface_m(h["lat"], h["lon"], t["lat"], t["lon"], h["radius"])),
+                        "bearing": round(bearing), "way": which_way(bearing, h.get("heading")),
+                        "current": t["species"] == cur, "usable": usable, "code": t["species"]})
+        return sorted(out, key=lambda t: t["dist"])
 
     # ---- commander, materials, fuel, carrier, current system ----
 
@@ -6154,10 +6218,19 @@ class State:
                                                 (run["system"], run["body_id"], run["species"]))]
         need = outrider.bio.colony_distance(pts[0]["genus"] if pts else None, run["genus_name"])
         out = {"genus": run["genus_name"], "species": run["species_name"], "samples": run["samples"], "need": need,
-               "points": len(pts), "nearest": None, "to_go": None, "clear": None}
+               "points": len(pts), "nearest": None, "to_go": None, "clear": None, "tag": None}
         if pts and need:
             nearest = min(outrider.bio.surface_distance(st["lat"], st["lon"], p["lat"], p["lon"], st["planet_radius"]) for p in pts)
             out.update(nearest=round(nearest), to_go=max(0, round(need - nearest)), clear=nearest >= need)
+        # the nearest plant of this species you tagged with the composition scanner where a sample would count (BioScan's
+        # waypoint): how far, and which way to turn (heading-relative, degrees right positive)
+        h = {"system": run["system"], "body_id": run["body_id"], "lat": st["lat"], "lon": st["lon"],
+             "radius": st["planet_radius"], "heading": st.get("heading")}
+        tag = next((t for t in self.bio_tags_here(h) if t["code"] == run["species"] and t["usable"]), None)
+        if tag:
+            turn = None if h["heading"] is None else round(((tag["bearing"] - h["heading"] + 540) % 360) - 180)
+            out["tag"] = {"dist": tag["dist"], "bearing": tag["bearing"], "turn": turn, "way": tag["way"],
+                          "lat": tag["lat"], "lon": tag["lon"]}
         return out
 
     def run_elsewhere(self, run):

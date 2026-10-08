@@ -4119,6 +4119,29 @@ const settle = async maxMs => {
     allOk = allOk && goodM;
     console.log(goodM ? "OK" : "FAIL", "| server mode |", goodM ? "auto honk, auto-target, play on this PC left out; back on the game PC" : JSON.stringify([off, on]), errors.slice(before));
   }
+  // plugin gaps B: plants tagged with the composition scanner on the surface map (hollow rings in the species' colour,
+  // faint where a sample would not count) and the strip's "tagged: 524 m, turn 90° right"
+  {
+    const w = dom.window, before = errors.length;
+    const got = w.eval(`(() => {
+      const s = {lat: 0, lon: 0, radius: 1e6, heading: 0, bio: [], tags: [
+        {species: "Tussock Pennata", genus: "Tussock", lat: 0, lon: 0.005, dist: 87, current: true, usable: false},
+        {species: "Tussock Pennata", genus: "Tussock", lat: 0, lon: 0.03, dist: 524, current: true, usable: true},
+        {species: "Bacterium Acies", genus: "Bacterium", lat: 0.01, lon: 0, dist: 175, current: false, usable: true}]};
+      const L = surfaceLayout(s, surfaceCfg(), 400), tags = L.items.filter(i => i.kind === "tag");
+      const sm = {genus: "Tussock", species: "Tussock Pennata", samples: 1, need: 200, points: 1, nearest: 30, to_go: 170, clear: false,
+                  tag: {dist: 524, bearing: 90, turn: 90, way: "on your right", lat: 0, lon: 0.03}};
+      const keep = data.sampling; data.sampling = sm;
+      const strip = samplingHtml().replace(/<[^>]+>/g, "");
+      data.sampling = keep;
+      return {n: tags.length, faint: tags.map(t => t.faint), coloured: tags.every(t => !!t.colour),
+              right: tags.find(t => !t.faint && t.species === "Tussock Pennata").sx > L.c,
+              strip: /tagged: 524 m, turn 90° right/.test(strip), ahead: tagText({genus: "X", tag: {dist: 40, turn: -4, way: "ahead"}}).includes("ahead")}; })()`);
+    const want = {n: 3, faint: [true, false, false], coloured: true, right: true, strip: true, ahead: true};
+    const goodT = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && goodT;
+    console.log(goodT ? "OK" : "FAIL", "| bio tags |", goodT ? "tagged plants drawn (faint where a sample would not count), the strip's turn to the nearest" : JSON.stringify(got), errors.slice(before));
+  }
   // review 2026-10-08 #15-#18: answers that arrive out of order. An older, slower request lands after a newer one:
   // its answer (or its failure) must not replace the newer one's
   {

@@ -157,7 +157,7 @@ Ids: a system id64 can exceed 2^53, so the page compares the string `id` fields,
 - **Journal-derived vs live-only tables.** Journal-derived tables (visits, jumps, own_*, sales, codex,
   sale_events...) and meta keys must be cleared in `RESET_JOURNAL_DATA`, or a re-read doubles them.
   Live-only data (positions from Status.json, button presses, Spansh answers, estimates made at the time:
-  `sample_points`, `surface_rigs`, `surface_sites`, `mining_locations`, `arrival_verdicts`, `sale_estimates`,
+  `sample_points`, `bio_tags`, `surface_rigs`, `surface_sites`, `mining_locations`, `arrival_verdicts`, `sale_estimates`,
   `firsts_watch`, `bookmarks`, `highway_route` with its meta `highway`, `riches_route` / `riches_bodies` / `trade_stops` with meta `riches`,
   `carrier_markets` (each Market.json read at your carrier), `carrier_counts` (your Recount), the Spansh cache) cannot be rebuilt and
   must **stay out** of it (backups carry them). `fleet_loadouts` (the latest Loadout per ShipID) and `cargo_events` (your

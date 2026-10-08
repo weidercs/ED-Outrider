@@ -525,6 +525,55 @@ class SampleSpacing(unittest.TestCase):
         self.organic("2026-01-01T00:20:00Z", "Analyse")
         self.assertIsNone(self.state.sampling_summary())                  # run complete
 
+    def codex(self, ts, variant="$Codex_Ent_Tussocks_01_A_Name;", name="Tussock Pennata - Teal", lat=None, lon=None):
+        ev = {"event": "CodexEntry", "timestamp": ts, "EntryID": 2310101, "Name": variant, "Name_Localised": name,
+              "Category": "$Codex_Category_Biology;", "SubCategory": "$Codex_SubCategory_Organic_Structures;",
+              "Region": "$Codex_RegionName_18;", "System": "Sys", "SystemAddress": 1, "BodyID": 4}
+        if lat is not None:
+            ev.update(Latitude=lat, Longitude=lon)
+        self.j.handle(ev)
+
+    def test_tagged_plants(self):
+        """BioScan's waypoints (plugin gaps B): a plant tagged with the composition scanner is where to go for the next
+        sample. On foot the codex entry carries its position; from the ship or SRV it doesn't, so yours at that moment
+        is taken. The nearest one far enough from the run's samples is pointed to, with the turn to face it."""
+        self.j.handle({"event": "Scan", "timestamp": "2026-01-01T00:05:00Z", "BodyName": "Sys 4", "BodyID": 4,
+                       "StarSystem": "Sys", "SystemAddress": 1, "PlanetClass": "Rocky body", "Landable": True,
+                       "MassEM": 0.1, "ScanType": "Detailed", "WasDiscovered": False, "WasMapped": False})
+        self.at("2026-01-01T00:10:00Z", 0.0, 0.0)
+        self.codex("2026-01-01T00:10:00Z", lat=0.0, lon=0.005)            # on foot: 87 m east, its own position
+        self.at("2026-01-01T00:10:30Z", 0.0, 0.030)                      # flying low, 524 m east
+        self.codex("2026-01-01T00:10:30Z")                               # from the ship: tagged where you are
+        self.codex("2026-01-01T00:10:40Z", variant="$Codex_Ent_Bacterial_04_Antimony_Name;", name="Bacterium Acies - Teal")
+        self.codex("2026-01-01T00:10:45Z", variant="$Codex_Ent_L_Seed_Pln01_V1_Bl_Name;", name="Brain tree")   # not a sample species
+        rows = self.db.execute("SELECT species, genus, name, round(lon, 3) FROM bio_tags ORDER BY ts").fetchall()
+        self.assertEqual([tuple(r) for r in rows], [
+            ("$Codex_Ent_Tussocks_01_Name;", "$Codex_Ent_Tussocks_Genus_Name;", "Tussock Pennata", 0.005),
+            ("$Codex_Ent_Tussocks_01_Name;", "$Codex_Ent_Tussocks_Genus_Name;", "Tussock Pennata", 0.03),
+            ("$Codex_Ent_Bacterial_04_Name;", "$Codex_Ent_Bacterial_Genus_Name;", "Bacterium Acies", 0.03)])
+        self.at("2026-01-01T00:11:00Z", 0.0, 0.0)
+        self.j.status_json["heading"] = 0                                # facing north
+        self.organic("2026-01-01T00:11:00Z", "Log")                      # the first sample, at the origin
+        s = self.state.sampling_summary()
+        # the 87 m one is inside the 200 m colony of that sample: the 524 m one is next, east (turn 90 right)
+        self.assertEqual((s["tag"]["dist"], s["tag"]["bearing"], s["tag"]["turn"], s["tag"]["way"]), (524, 90, 90, "on your right"))
+        h = self.state.surface_here() or {"system": 1, "body_id": 4, "lat": 0.0, "lon": 0.0, "radius": 1_000_000, "heading": 0}
+        tags = self.state.bio_tags_here(h)
+        self.assertEqual([(t["genus"], t["dist"], t["current"], t["usable"]) for t in tags],
+                         [("Tussock", 87, True, False), ("Tussock", 524, True, True), ("Bacterium", 524, False, True)])
+        # a journal re-read keeps them (live only: the ship's position could not be rebuilt)
+        self.db.executescript(ed_outrider.RESET_JOURNAL_DATA)
+        self.assertEqual(self.db.execute("SELECT count(*) FROM bio_tags").fetchone()[0], 3)
+        # the species finished here: its tags go
+        self.organic("2026-01-01T00:12:00Z", "Sample")
+        self.organic("2026-01-01T00:13:00Z", "Analyse")
+        self.assertEqual([t["genus"] for t in self.state.bio_tags_here(h)], ["Bacterium"])
+
+    def test_tag_needs_a_position_of_that_moment(self):
+        self.at("2026-01-02T00:00:00Z", 0.0, 0.0)                        # today's reading...
+        self.codex("2026-01-01T00:10:00Z")                               # ...is not where yesterday's tag was made
+        self.assertEqual(self.db.execute("SELECT count(*) FROM bio_tags").fetchone()[0], 0)
+
     def test_no_position_from_an_old_line(self):
         self.at("2026-01-02T00:00:00Z", 0.0, 0.0)                         # today's reading...
         self.organic("2026-01-01T00:10:00Z", "Log")                      # ...does not belong to yesterday's sample

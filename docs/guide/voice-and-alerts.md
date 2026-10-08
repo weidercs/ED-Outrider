@@ -88,7 +88,8 @@ Sound: Allow; Firefox: Autoplay: Allow Audio and Video).
   **The jump line** in the hyperspace tunnel, with whether the star ahead is scoopable, and any hazard.
 - **Greeting and goodbye:** what is at stake after a long break (and any core module under your level), and a
   session recap when you quit.
-- **Exobiology:** leaving a body mid-run warns; the third sample says what it paid and what is left.
+- **Exobiology:** leaving a body mid-run warns; the third sample says what it paid and what is left; within 100 m of
+  a plant you tagged where the next sample would count, it says so ("Tagged Tussock, 80 metres").
 - **Approach:** "2.6 g. 480 million aboard, 3.2 rebuys. Land gently."
 - **Fuel:** low fuel where you can't scoop, and the **top-up warning** before a likely dry stretch.
 - **Jumponium** (off by default): the best landable body with a material your FSD injections are short

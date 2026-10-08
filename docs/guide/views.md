@@ -144,8 +144,14 @@ On a planet, Now shows a map under its lines: on the ground, in the SRV, on foot
 - **Heading-up:** the way you face is the top, you are the arrow in the middle, N on the rim is north. It
   zooms to fit everything within 3 km, never narrower than 500 m, with a scale bar.
 - **What is drawn:** your ship (a landing-pad H), the samples of unfinished bio runs with each species' colony ring (the
-  current run solid), your rigs 1–6 with a faint spacing ring, saved sites (U1… unmarked, S1… rigs picked
-  up) and mining locations (L3). Anything off the map is a chevron on the rim.
+  current run solid), plants you tagged (below), your rigs 1–6 with a faint spacing ring, saved sites (U1…
+  unmarked, S1… rigs picked up) and mining locations (L3). Anything off the map is a chevron on the rim.
+- **Tagged plants** (as BioScan's waypoints): point the composition scanner at a plant, from the ship flying low,
+  the SRV or on foot, and Outrider remembers where it is, as a hollow ring in the species' colour. Faint means a
+  sample there would not count (it is inside the colony of one you took). While sampling, the strip says the
+  nearest one that would count and which way to turn ("tagged: 524 m, turn 90° right"), and the voice says so
+  within 100 m. From the ship or SRV the scanner logs no position, so it is yours at that moment: scan as close
+  to the plant as you can. A species you have finished on the body drops its tags.
 - **The legend** names each tag, nearest first. Six rig slots mirror the game's HUD: mineral (or
   "placed"), tons so far, distance and bearing. A solid rig is **probably full**: 8 minutes since it was
   placed or last collected from.

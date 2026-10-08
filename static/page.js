@@ -718,9 +718,17 @@ function samplingHtml() {
     ` <span title="the position of your earlier samples was not recorded (they were taken before Outrider was running)">(position unknown)</span></div>`;
   return `<div class="spacing ${sm.clear ? "clear" : ""}">${head} · ` +
     (sm.clear ? `✓ clear to sample <span class="unk">(${sm.nearest} m from the nearest, ${sm.need} m needed)</span>`
-              : `<b>${sm.to_go} m</b> to go <span class="unk">(${sm.nearest} of ${sm.need} m)</span>`) + `</div>`;
+              : `<b>${sm.to_go} m</b> to go <span class="unk">(${sm.nearest} of ${sm.need} m)</span>`) + tagText(sm) + `</div>`;
 }
-let clearAnnounced = null;
+// the nearest plant of this species you tagged with the composition scanner where the next sample would count
+function tagText(sm) {
+  const t = sm && sm.tag;
+  if (!t) return "";
+  const turn = t.turn == null ? t.way : Math.abs(t.turn) < 10 ? "ahead" : `turn ${Math.abs(t.turn)}° ${t.turn > 0 ? "right" : "left"}`;
+  return ` · <span title="the nearest ${esc(sm.genus || "")} you tagged with the composition scanner, outside the colony of your samples">` +
+    `tagged: <b>${surfDist(t.dist)}</b>, ${esc(turn)}</span>`;
+}
+let clearAnnounced = null, tagAnnounced = null;
 function renderOnBody() {
   const el = document.getElementById("onbody"), ob = data && data.on_body;
   if (!ob) { el.innerHTML = ""; return; }
@@ -889,7 +897,11 @@ function surfaceLayout(s, cfg, S) {
   for (const x of s.sites || []) { const t = surfTons(x), tag = x.kind === "rig" ? `S${++si}` : `U${++ui}`;
     add({kind: "site", tag, site: x.kind, lost: !!x.lost, mineral: t.mineral, tons: t.tons, location: x.location}, x.lat, x.lon); }
   for (const l of s.locations || []) add({kind: "loc", tag: `L${l.n}`, n: l.n}, l.lat, l.lon);
-  const colours = speciesColours(s.bio);
+  const colours = speciesColours([...(s.bio || []), ...(s.tags || [])]);
+  // plants tagged with the composition scanner (BioScan's waypoints): a hollow ring in the species' colour, faint
+  // where a sample would not count (inside the colony of one taken already)
+  for (const t of s.tags || []) add({kind: "tag", tag: "", species: t.species, colour: colours.get(t.species), faint: !t.usable,
+                                      keep: !!(t.current && t.usable)}, t.lat, t.lon);
   for (const b of s.bio || []) {
     const colour = colours.get(b.species);
     for (const p of b.points || []) add({kind: "bio", tag: "", species: b.species, colour, faint: !b.current, keep: !!b.current,
@@ -944,6 +956,8 @@ function drawSurface(canvas, L, small) {
     if (it.off) continue;
     const x = it.sx, y = it.sy;
     if (it.kind === "bio") { g.fillStyle = it.colour; g.globalAlpha = it.faint ? 0.45 : 1; g.beginPath(); g.arc(x, y, mr * 0.55, 0, 2 * Math.PI); g.fill(); g.globalAlpha = 1; }
+    else if (it.kind === "tag") { g.strokeStyle = it.colour || C.muted; g.lineWidth = 2; g.globalAlpha = it.faint ? 0.35 : 1;
+      g.beginPath(); g.arc(x, y, mr * 0.75, 0, 2 * Math.PI); g.stroke(); g.globalAlpha = 1; }
     else if (it.kind === "rig") {
       const col = it.far ? C.bad : C.accent;
       g.beginPath(); g.arc(x, y, mr + 2, 0, 2 * Math.PI); g.lineWidth = 2; g.strokeStyle = col;
@@ -971,7 +985,7 @@ function drawSurface(canvas, L, small) {
   g.textAlign = "center"; g.textBaseline = "middle";
   // off the map: a chevron on the rim pointing out, with the tag
   for (const it of L.items) if (it.off) {
-    const col = it.kind === "rig" ? (it.far ? C.bad : C.accent) : it.kind === "ship" ? C.info : it.kind === "bio" ? it.colour : it.kind === "loc" ? C.warn : C.muted;
+    const col = it.kind === "rig" ? (it.far ? C.bad : C.accent) : it.kind === "ship" ? C.info : it.kind === "bio" || it.kind === "tag" ? it.colour || C.muted : it.kind === "loc" ? C.warn : C.muted;
     g.save(); g.translate(it.sx, it.sy); g.rotate(it.ang);
     g.fillStyle = col; g.beginPath(); g.moveTo(0, -7); g.lineTo(6, 2); g.lineTo(0, -1); g.lineTo(-6, 2); g.closePath(); g.fill();
     g.restore();
@@ -2007,7 +2021,7 @@ const LINE_SAMPLES = {
   docked_sell: {value: "114.1M", station: "Jaques Station"}, undocked_unsold: {value: "260.4M"},
   sold: {sold: "12.6M cr cartographics and 4.1M cr exobiology", still: ""},
   unsold_warn: {value: "52.0M"}, unsold_urgent: {value: "251.3M"},
-  carrier_departs: {minutes: 4, carrier: "Out Of The Blue"}, autotarget_nothing: {why: "no route is plotted"}, carrier_arrived: {carrier: "Out Of The Blue", system: "Smojooe AR-E b25-8"},
+  carrier_departs: {minutes: 4, carrier: "Out Of The Blue"}, autotarget_nothing: {why: "no route is plotted"}, bio_tag_near: {genus: "Tussock", distance: 80}, carrier_arrived: {carrier: "Out Of The Blue", system: "Smojooe AR-E b25-8"},
   fss_done: {count: 14, text: "B 1, Earth-like world, 3.1M to map, and biology on C 2, up to 19.0M"},
   fss_nothing: {count: 14}, fss_unfinished: {left: "3 bodies"}, jumponium: {body: "B 4", material: "polonium", pct: "1.3 percent"},
   left_body: {body: "A 3", text: "Stratum 2 of 3, and Tussock untouched, up to 4.1M"},
@@ -6419,6 +6433,8 @@ function onData() {
     lastUnderJumps = !!(data.fuel && data.fuel.live && fuelUnderJumps(data.fuel));
     hullLatch = hullBand(data.hull);
     clearAnnounced = data.sampling && data.sampling.clear ? `${data.sampling.species}|${data.sampling.samples}` : null;
+    { const sm0 = data.sampling, t0 = sm0 && sm0.tag;   // a tag already near when the page opens: not news
+      tagAnnounced = t0 && t0.dist <= 100 ? `${sm0.species}|${sm0.samples}|${t0.lat}|${t0.lon}` : null; }
     return;
   }
   // Just docked: the moment to sell, if what this station buys is worth it. Each Docked event has its own ts,
@@ -6694,6 +6710,13 @@ function onData() {
     clearAnnounced = smKey;
     alertOut("find", `Clear to sample ${sm.genus}`, `${sm.nearest} m from the nearest sample (${sm.need} m needed)`, {sound: "upbeat", tag: "sample_clear",
              still: () => { const s = data && data.sampling; return !!s && `${s.species}|${s.samples}` === smKey; }, say: () => line("sample_clear", {genus: sm.genus}, `Clear to sample ${sm.genus}.`)});
+  }
+  // a tagged plant of the species you are sampling, where the next sample would count, within 100 m: once per tag
+  const tg = sm && !sm.elsewhere && sm.tag, tgKey = tg && `${sm.species}|${sm.samples}|${tg.lat}|${tg.lon}`;
+  if (tg && tg.dist <= 100 && tgKey !== tagAnnounced) {
+    tagAnnounced = tgKey;
+    alertOut("find", `Tagged ${sm.genus} nearby`, `${tg.dist} m, ${tg.way}`, {tag: "bio_tag_near",
+             say: () => line("bio_tag_near", {genus: sm.genus, distance: tg.dist}, `Tagged ${sm.genus}, ${tg.dist} metres.`)});
   }
   // hull: once below half, once below a quarter (re-armed by a repair)
   const band = hullBand(data.hull);
