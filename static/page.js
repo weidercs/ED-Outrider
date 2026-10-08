@@ -4610,7 +4610,7 @@ hEl("hwyLine").addEventListener("click", e => {   // the name copies (the page's
 // what the tab shows from api/highway: the route's progress, and for the plot form the current ship, its Loadout and
 // the cargo aboard (a ship swap, a refit or new cargo refetches: review F3)
 const hwyKey = () => { const s = data && data.highway, sh = data && data.ship, fm = data && data.fuel && data.fuel.model;
-  return JSON.stringify([s ? [s.id, s.index, s.at, s.furthest, s.off_route, s.complete] : null,
+  return JSON.stringify([s ? [s.id, s.index, s.at, s.furthest, s.off_route, s.complete, s.known_v] : null,
                          sh ? [sh.ship_id, sh.ts] : null, fm ? fm.cargo : null]); };
 async function loadHwy(force = false) {
   const key = hwyKey();
@@ -4638,12 +4638,25 @@ function hwyPoll() {
   }, HWY_POLL_MS);
 }
 const hwyFuel = v => v == null ? "" : fuelT(v);
+// The route list's Known cell: whether a system is already discovered, as far as you and Spansh know (the row's
+// `known`). "no bodies" is said as what it is: on Spansh's map, no body reported, so possibly undiscovered. Pure.
+const HWY_KNOWN = {
+  "visited": ["✓", "hwyk-own", "you have been here"],
+  "explored": ["●", "hwyk-yes", "already discovered: every body is reported to Spansh"],
+  "partial": ["◐", "hwyk-yes", "already discovered: some of its bodies are reported to Spansh"],
+  "no bodies": ["○", "hwyk-new", "nobody has reported a body here: it may be undiscovered"],
+};
+function hwyKnownHtml(known) {
+  const k = HWY_KNOWN[known];
+  return k ? `<span class="${k[1]}" title="${k[2]}">${k[0]}</span>` : `<span class="unk" title="not looked up yet"></span>`;
+}
 function hwyRowHtml(r, cls, retry = false) {
   return `<tr class="${cls}" data-i="${r.i}"><td class="num">${r.i}</td>` +
     `<td class="name" data-name="${esc(r.system)}" title="click to copy">${nameWords(r.system)}` +
     (/\bat\b/.test(cls) ? "" : hwyAimBtn(r.system, "highway", r.i, true)) +
     (retry ? ` <button type="button" class="mini hwyretry" data-aim="next" title="auto-target failed here: try again, 5 s from now (click back into the game meanwhile)">⟳ Retry</button>` : "") +
     `</td>` +
+    `<td class="hwyc hwyk">${hwyKnownHtml(r.known)}</td>` +
     `<td class="num">${r.i > 0 && r.distance != null ? r.distance.toFixed(1) : ""}</td>` +
     `<td class="hwyc">${r.neutron ? `<span class="hwyn" title="a neutron star: supercharge your FSD there">⚡</span>` : ""}</td>` +
     `<td class="num hwy-n">${r.i > 0 && r.jumps != null ? r.jumps : ""}</td>` +
@@ -4651,7 +4664,7 @@ function hwyRowHtml(r, cls, retry = false) {
     `<td class="hwyc hwy-x">${r.refuel ? `<span class="hwyfuel" title="refuel here before continuing">⛽</span>` : ""}</td>` +
     `<td class="num">${r.remaining != null ? Math.round(r.remaining).toLocaleString() : ""}</td></tr>`;
 }
-const HWY_COLS = 9;
+const HWY_COLS = 10;
 function hwyClipHtml(cb) {
   if (!cb || (data && data.game_pc === false)) return "";   // a server has no desktop clipboard to copy to
   if (!cb.enabled) return `<div class="hwyclip unk">Copying the next system to the clipboard is off ([highway] clipboard in the config).</div>`;

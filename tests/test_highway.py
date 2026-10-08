@@ -320,6 +320,76 @@ class HighwayH1(unittest.TestCase):
         self.assertEqual(self.state.highway_plotting["error"], "Spansh: Could not find system End")
         self.assertEqual(self.state.highway_view()["route"]["count"], 6)
 
+    def test_route_systems_known(self):
+        """The route list's Known column: visited from your journal, the rest from Spansh, asked in the background one
+        at a time for the listed systems only, and only once the server switched it on."""
+        import asyncio
+        self.plot_exact()
+        known = lambda: [x["known"] for x in self.state.highway_view()["route"]["ahead"]]
+        self.assertEqual(self.state.highway_view()["route"]["done"][0]["known"], "visited")   # Start: you are there
+        self.assertEqual(known(), [None] * 5)
+        self.jump(-900, 103, "Scoop C", 100)          # an old visit, read from the journal
+        self.jump(-50, 100, "Start", 0)
+        self.assertEqual(known(), [None, None, "visited", None, None])
+        body = lambda kind: {"type": kind}
+        dumps = {101: {"system": {"bodyCount": 2, "bodies": [body("Star"), body("Planet")]}},
+                 102: {"system": {"bodyCount": 5, "bodies": [body("Star"), body("Belt")]}},
+                 104: {"system": {"bodyCount": None, "bodies": []}}, 105: None}
+        asked = []
+
+        async def lookup(id64, interactive=True):
+            asked.append((id64, interactive))
+            return dumps[id64]
+        self.state.spansh = types_ns(cached=lambda i: (None, None), session=object(), lookup=lookup)
+
+        async def go():
+            self.state.highway_view()
+            off = self.state.route_known_task          # not switched on: nobody is asked
+            self.state.route_known_on = True
+            v0 = self.state.highway_view()["route"]["summary"]["known_v"]
+            task = self.state.route_known_task
+            self.state.highway_view()                  # asked again while it runs: the same task
+            same = self.state.route_known_task is task
+            await task
+            return off, same, v0
+        with unittest.mock.patch.object(ed_outrider, "ROUTE_KNOWN_GAP_S", 0):
+            off, same, v0 = asyncio.run(go())
+        self.assertEqual((off, same), (None, True))
+        self.assertEqual(asked, [(101, False), (102, False), (104, False), (105, False)])   # not the visited one
+        self.assertEqual(known(), ["explored", "partial", "visited", "no bodies", "no bodies"])
+        self.assertGreater(self.state.highway_summary()["known_v"], v0)                    # the page reloads the list
+
+        async def again():
+            self.state.highway_view()
+            return self.state.route_known_task
+        self.assertTrue(asyncio.run(again()).done())   # nothing left to ask
+        self.assertEqual(len(asked), 4)
+
+    def test_route_systems_known_spansh_down(self):
+        """Spansh unreachable: the systems stay unknown, and nothing more is asked for a minute."""
+        import asyncio
+        import contextlib
+        import io
+        self.plot_exact()
+        asked = []
+
+        async def lookup(id64, interactive=True):
+            asked.append(id64)
+            raise OSError("no route to host")
+        self.state.spansh = types_ns(cached=lambda i: (None, None), session=object(), lookup=lookup)
+        self.state.route_known_on = True
+
+        async def go():
+            self.state.highway_view()
+            await self.state.route_known_task
+            self.state.highway_view()
+            await self.state.route_known_task
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            asyncio.run(go())
+        self.assertEqual(asked, [101])
+        self.assertIn("route systems: Spansh lookup failed", err.getvalue())
+        self.assertEqual([x["known"] for x in self.state.highway_view()["route"]["ahead"]], [None] * 5)
+
     def test_exact_plot_sends_id64s(self):
         """Spansh's exact plotter answers "Unable to find route" to system names; it takes id64s (found in game
         2026-10-03, the neutron plotter still takes names). Where you are and systems known here need no request;
