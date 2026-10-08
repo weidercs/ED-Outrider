@@ -37,6 +37,10 @@ twice: EDDN has no way to tell. So:
   otherwise it asks first: "Is this the only Outrider uploading? Other instances can't see this one".
 - **In Docker** the journals are mounted read-only. To give the server its note folder, create it on the share
   (`mkdir -p "$JOURNALS/.outrider"`, as the share's owner) and uncomment the `.outrider` line in `docker-compose.yml`.
+  If the share itself is read-only on the server (an `ro` export or mount), leave that line commented: Docker cannot
+  create the folder there and the container would not start. Outrider then works as a read-only instance: it sees
+  the game PC's note, but the game PC cannot see its own, so if the server uploads, keep the game PC's uploads off
+  yourself (that is what the "only Outrider" question is about).
 - **EDMC on the same PC:** if it runs with its own EDDN or EDSM upload on, Outrider holds that upload and says so.
   Switch EDMC's off (its File → Settings → EDDN / EDSM tabs) before switching Outrider's on. EDMC on another computer
   cannot be seen: switch it off there yourself.

@@ -2,6 +2,15 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · Uploads, part B: EDDN's journal messages (branch EDMC-Functionality)
+- With EDDN switched on, every jump, login, carrier jump, dock, scan and DSS result (journal/1) goes to EDDN as it
+  happens: personal fields out (fuel, fines, your reputation, a position on a planet), every `_Localised` name out,
+  the star's position added only when the event is in the system you are in, horizons/odyssey as LoadGame said,
+  the journal file's own game version. One message per request, gzipped; EDDN's refusals are never retried, and a
+  message type refused three times in an hour is held until Outrider restarts; a network failure waits a minute.
+- The tests check every message against EDDN's own schemas (copied into tests/fixtures/eddn, BSD); `jsonschema`
+  joins the development requirements.
+
 ## 2026-10-08 · Uploads, part A3: one uploader at a time, EDSM accounts, Settings → Uploads (branch EDMC-Functionality)
 - Lease files in the journal folder (`.outrider/uploads-<id>.json`): an uploading Outrider says so there every minute;
   another one refuses to start the same upload, both hold if they started together, a crashed one's note goes stale

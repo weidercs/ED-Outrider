@@ -196,6 +196,7 @@ import outrider.ask        # questions by voice (POST /api/ask): fixed phrases, 
 import outrider.config_edit  # the Settings dialog's Server settings: every config key, edited in place
 import outrider.mcp        # the MCP bridge's [mcp] settings (the bridge itself runs as python3 -m outrider.mcp)
 import outrider.uploads    # EDDN / EDSM uploads (opt-in): the session, the live gate, the outbox
+import outrider.eddn       # EDDN's messages from journal events, and what its answers mean
 from outrider.core import iso_ts, ts_seconds   # journal timestamps
 from outrider.fsd import (   # the frame shift drive's maths: range, fuel per jump, the fuel model, fleet figures
     FSD_RANGE_MODS, GUARDIAN_BOOST, conservative_optimal_mass, conservative_range, fleet_figures, fleet_range, fsd_range,
@@ -5466,7 +5467,9 @@ class State:
         self.upload_cfg = json.loads(json.dumps(outrider.uploads.DEFAULTS))
         self.upload_senders, self.upload_tasks, self.upload_session = {}, {}, None
         self.upload_status = {}   # service -> {error, at, held}: the last round's outcome for the status view
-        self.uploads_hub = outrider.uploads.UploadHub(db, {}, enabled=self.upload_on)
+        self.uploads_hub = outrider.uploads.UploadHub(db, {"eddn": self.eddn_build}, enabled=self.upload_on)
+        self.upload_senders["eddn"] = self.eddn_send
+        self.eddn_hold = outrider.eddn.SchemaHold()
         journals.uploads = self.uploads_hub
         # one uploader at a time (PLAN-edmc-functionality "One uploader at a time"): leases in the journal folders,
         # and EDMC on this PC. Refreshed by watch_leases every LEASE_EVERY_S.
@@ -9289,6 +9292,29 @@ class State:
         out["simulate"] = bool(self.simulate)
         return out
 
+    def eddn_build(self, ev, session):
+        """What a live journal line sends to EDDN (outrider.eddn.build), to its test schemas under [eddn] test."""
+        return outrider.eddn.build(ev, session, outrider.__version__, test=bool(self.upload_cfg["eddn"].get("test")))
+
+    async def eddn_send(self, rows):
+        """Send one queued EDDN message (EDDN takes one per request): gzip, both content headers, a 20 s timeout. The
+        answer settles it (outrider.eddn.outcome); a network failure raises, and the loop waits a minute or more."""
+        import gzip
+        r = rows[0]
+        name = r["schema"]
+        held = self.eddn_hold.is_held(name)
+        if held:
+            return [(r["id"], "dropped", f"not sent: {name} refused repeatedly ({held})", None)]
+        async with self.upload_session.post(outrider.eddn.UPLOAD_URL, data=gzip.compress(r["message"].encode("utf-8")),
+                                            headers={"Content-Encoding": "gzip", "Content-Type": "application/json"}) as resp:
+            text = (await resp.text())[:300]
+            status = resp.status
+        state, retry = outrider.eddn.outcome(status)
+        if state == "dropped":
+            self.eddn_hold.refused(name, time.time(), f"{status} {text}")
+            print(f"EDDN refused a {name} message: {status} {text}", file=sys.stderr)
+        return [(r["id"], state, f"{status} {text}".strip(), retry)]
+
     def edsm_accounts(self):
         """{in-game commander: {name: EDSM commander name, key: API key}} (meta edsm_accounts, live-only: kept through a
         journal re-read, in the backups with the rest of the database). Never served: edsm_accounts_view says only
@@ -9334,7 +9360,8 @@ class State:
         for service, send in self.upload_senders.items():
             if service not in self.upload_tasks:
                 self.upload_tasks[service] = asyncio.get_running_loop().create_task(outrider.uploads.upload_loop(
-                    service, self.db, send, self.upload_on, report=self.upload_report))
+                    service, self.db, send, self.upload_on, report=self.upload_report,
+                    batch=1 if service == "eddn" else 200))   # EDDN takes one message per request
 
     def set_autohonk(self, enabled):
         """Switch auto honk on or off (the page's toggle; remembered over restarts)."""
