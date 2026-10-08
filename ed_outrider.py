@@ -193,6 +193,7 @@ import outrider.rail       # the tablet's control rail: contexts, default sets, 
 import outrider.ask        # questions by voice (POST /api/ask): fixed phrases, then an optional AI layer
 import outrider.config_edit  # the Settings dialog's Server settings: every config key, edited in place
 import outrider.mcp        # the MCP bridge's [mcp] settings (the bridge itself runs as python3 -m outrider.mcp)
+import outrider.uploads    # EDDN / EDSM uploads (opt-in): the session, the live gate, the outbox
 from outrider.core import iso_ts, ts_seconds   # journal timestamps
 from outrider.fsd import (   # the frame shift drive's maths: range, fuel per jump, the fuel model, fleet figures
     FSD_RANGE_MODS, GUARDIAN_BOOST, conservative_optimal_mass, conservative_range, fleet_figures, fleet_range, fsd_range,
@@ -1473,17 +1474,18 @@ DELETE FROM meta WHERE key LIKE 'legacy:%' OR key IN ('pos', 'prev', 'jump_range
 def open_db(path, rescan=False):
     db = sqlite3.connect(path)
     db.row_factory = sqlite3.Row
-    db.executescript(SCHEMA)
+    db.executescript(SCHEMA + outrider.uploads.SCHEMA)
     migrate_sale_events(db)
     migrate_bio_sales(db)
     # Columns added to an existing table since the database was created: add them.
-    for m in re.finditer(r"CREATE TABLE IF NOT EXISTS (\w+) \((.*?)\);", SCHEMA, re.S):
+    for m in re.finditer(r"CREATE TABLE IF NOT EXISTS (\w+) \((.*?)\);", SCHEMA + outrider.uploads.SCHEMA, re.S):
         table, body = m.group(1), m.group(2)
         have = {r["name"] for r in db.execute(f"PRAGMA table_info({table})")}
         for col in re.split(r",\s*(?![^()]*\))", body):
             col = col.strip()
             name = col.split()[0] if col else ""
-            if name and name.upper() not in ("PRIMARY",) and name not in have and not col.upper().startswith("PRIMARY KEY"):
+            if name and name.upper() not in ("PRIMARY", "UNIQUE", "CHECK", "FOREIGN") and name not in have \
+                    and not col.upper().startswith("PRIMARY KEY"):
                 db.execute(f"ALTER TABLE {table} ADD COLUMN {col.split(',')[0]}")
     cols = {r["name"] for r in db.execute("PRAGMA table_info(spansh_systems)")}
     if "x" not in cols:
@@ -2135,6 +2137,8 @@ class Journals:
         self.last_start_jump = None  # ts of the latest hyperspace StartJump (a scoop cut short by a jump is not news)
         self.last_shutdown = None  # ts of the latest Shutdown read (the quit backup)
         self.line_source = ""      # "file:offset" of the journal line being handled (read_file sets it)
+        self.uploads = None        # the uploaders' hub (outrider.uploads.UploadHub), set by the server
+        self.upload_mode = None    # what scan_dir lets the hub do with the lines it reads ("catchup", "live")
         self.regions_said = set()  # galactic regions announced (or left) this game session: see note_region
         self.region_entered = None  # the latest region crossing {id64, ts, region, spoken, count}
         self.jumponium = None      # this system's best jumponium body so far {system, body, material, pct, said}
@@ -2534,11 +2538,13 @@ class Journals:
         return (self.moment_seq, list(self.moments), self.last_heat,
                 set(self.body_touched), set(self.approached), self.brief_key,
                 set(self.regions_said), self.region_entered, self.jumponium, dict(self.sale_run or {}) or None,
-                json.loads(json.dumps(self.burst)))
+                json.loads(json.dumps(self.burst)), self.uploads.snapshot() if self.uploads else None)
 
     def restore(self, cp):
         (self.moment_seq, moments, self.last_heat, touched, approached, self.brief_key,
-         regions, self.region_entered, self.jumponium, self.sale_run, self.burst) = cp
+         regions, self.region_entered, self.jumponium, self.sale_run, self.burst, uploads) = cp
+        if self.uploads and uploads:
+            self.uploads.restore(uploads)
         self.body_touched, self.approached, self.regions_said = set(touched), set(approached), set(regions)
         self.moments = collections.deque(moments, maxlen=self.moments.maxlen)
 
@@ -2615,9 +2621,18 @@ class Journals:
             self.db.commit()
             print(f"imported {n} journal files from {d}")
 
-    def scan_dir(self, d, commit_each=False):
+    def scan_dir(self, d, commit_each=False, upload=None):
         """Read new data from every journal in d. Returns the number of files touched. commit_each: commit after every
-        file (the start-up import: a stop part way keeps the files already read; review R13)."""
+        file (the start-up import: a stop part way keeps the files already read; review R13). upload: what the
+        uploaders' hub may do with these lines: None (a legacy folder: nothing), "catchup" (the start-up scan: the
+        session's state only) or "live" (the running tail: it may queue)."""
+        self.upload_mode = upload
+        try:
+            return self._scan_dir(d, commit_each)
+        finally:
+            self.upload_mode = None
+
+    def _scan_dir(self, d, commit_each):
         touched = 0
         for path in sorted(glob(os.path.join(glob_escape(d), "Journal.*.log"))):
             try:
@@ -2658,6 +2673,13 @@ class Journals:
         while pos < end:
             nl = data.index(b"\n", pos, end)
             line, at, pos = data[pos:nl], start + pos, nl + 1
+            if self.uploads is not None and self.upload_mode and self.uploads.active():
+                try:
+                    self.uploads.line(path, at, line, self.upload_mode)   # before the filter: uploads want every event
+                except sqlite3.Error:
+                    raise                                              # the tick is rolled back and retried
+                except Exception as e:                                 # never let it stop the tailing
+                    print(f"uploads: a line was skipped ({type(e).__name__}: {e})", file=sys.stderr)
             if any(w in line for w in WANTED) or b"Fixed_Event_Life" in line:
                 # where the line is (the file's name, so a twin copy in another folder gives the same key):
                 # tells apart sale pages written in the same second (sale_events)
@@ -10845,7 +10867,7 @@ class State:
         seq_before = self.journals.moment_seq
         try:
             for d in LIVE_DIRS:
-                if self.journals.scan_dir(d):
+                if self.journals.scan_dir(d, upload="live"):
                     self.unsold_dirty = True
                 nr = os.path.join(d, "NavRoute.json")
                 try:
@@ -12997,7 +13019,7 @@ async def run(args, st):
     t = time.time()
     journals.import_legacy()
     for d in LIVE_DIRS:
-        journals.scan_dir(d, commit_each=True)
+        journals.scan_dir(d, commit_each=True, upload="catchup")
         journals.read_navroute(d)
         journals.read_status(d)
     db.commit()

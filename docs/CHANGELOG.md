@@ -2,6 +2,12 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · Uploads, part A1: the session, the live gate, the outbox (branch EDMC-Functionality)
+- The groundwork for EDDN and EDSM uploads (opt-in, off; nothing is sent yet): `outrider/uploads.py` follows each
+  journal line's game session (version and build per file, commander, Horizons/Odyssey, where you are, crew), lets only
+  the running tail's recent lines through (never a start-up catch-up, a re-read, a restore or a legacy folder), and
+  queues messages in a live-only outbox in the same transaction as their line.
+
 ## 2026-10-08 · Version 2026.10.18
 - Since 2026.10.17: the review's 21 fixes (a docked login counts as docked, the password behind a reverse proxy on the
   Outrider PC, Spansh's services filter, answers arriving out of order...); tagged plants as waypoints for the next

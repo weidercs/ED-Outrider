@@ -1,0 +1,313 @@
+"""Uploads (EDDN, EDSM; Inara later): the shared foundation. Opt-in, off by default (PLAN-edmc-functionality part A).
+
+Pure where it can be; the server (ed_outrider.py) owns the database, the sender tasks and the settings.
+
+- Session: what the journal says about the game session a line belongs to: the game version and build of each journal
+  file (its Fileheader), the commander, Horizons / Odyssey (LoadGame only: a key LoadGame leaves out stays out), where
+  you are (SystemAddress, StarSystem, StarPos together, from Location / FSDJump / CarrierJump only), whether you are
+  crew in someone else's ship, the body you are at, the station you are docked at, your ship. EDDN's and EDSM's rules
+  need all of it (research-edmc-2026-10-08/eddn.md, edsm-inara.md).
+- UploadHub: every line of a live journal folder passes through `line()` before the reader's own filter. The startup
+  scan feeds the session only ("catchup"); only the running tail ("live") may queue, and only lines no older than
+  MAX_AGE_S by this machine's clock: a re-read, a rebuild, a restore or a legacy folder never uploads anything. The
+  first line seen from a file primes the session from the top of that file, so a restart mid-file still knows the
+  version, the commander and where you are.
+- The outbox (`upload_queue`, live only): a message is queued in the same transaction as the line that made it, so a
+  tick rolled back drops it too; UNIQUE(service, source) keeps a line handled twice (a retried tick, a twin folder)
+  from being queued twice. Senders take rows after the commit.
+"""
+import copy
+import json
+import os
+import re
+import sqlite3
+import time
+
+from outrider.core import ts_seconds
+
+MAX_AGE_S = 300          # a live line older than this (by this machine's clock) is not uploaded: NFS delay, clock skew
+SKEW_S = 300             # ...and one stamped this far in the future still counts (the game PC's clock ahead)
+SOURCE_RE = re.compile(r"^Journal(Beta|Alpha)?\.")
+
+SCHEMA = """
+-- Outgoing uploads (EDDN, EDSM), live only: queued in the tick that read the line (a rollback drops them), sent after
+-- its commit by the sender tasks. state: queued, sent, dropped (refused for good), held (waiting on the player: a
+-- refused key). Kept a week after sending (the UNIQUE check and the status view), then pruned. Not in
+-- RESET_JOURNAL_DATA: a journal re-read uploads nothing and must not forget what was sent.
+CREATE TABLE IF NOT EXISTS upload_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, service TEXT NOT NULL, schema TEXT, source TEXT NOT NULL, created TEXT,
+    cmdr TEXT, gameversion TEXT, gamebuild TEXT, message TEXT, state TEXT NOT NULL DEFAULT 'queued',
+    attempts INTEGER NOT NULL DEFAULT 0, next_try REAL NOT NULL DEFAULT 0, last_status TEXT, done_at REAL,
+    UNIQUE (service, source));
+CREATE INDEX IF NOT EXISTS upload_queue_state ON upload_queue (service, state, id);
+"""
+
+
+def _seconds(ts):
+    """A journal timestamp as epoch seconds, or None for anything else."""
+    try:
+        return ts_seconds(str(ts))
+    except (TypeError, ValueError):
+        return None
+
+
+def version_tuple(v):
+    """'4.0.0.1904' -> (4, 0, 0, 1904); () when it has no leading number."""
+    out = []
+    for part in str(v or "").strip().split("."):
+        m = re.match(r"\d+", part)
+        if not m:
+            break
+        out.append(int(m.group(0)))
+    return tuple(out)
+
+
+class Session:
+    """The game session a journal line belongs to (see the module doc). feed() every line of the live folders, in
+    order; nothing here reads the clock or the database."""
+
+    def __init__(self):
+        self.versions = {}    # journal file name -> (gameversion, build) from its Fileheader (or LoadGame)
+        self.file = None      # the file of the line being fed
+        self.cmdr = self.fid = None
+        self.horizons = self.odyssey = None   # None: LoadGame did not say (EDDN: leave the key out)
+        self.addr = self.system = self.pos = None
+        self.crew = False     # crew in another commander's ship: nothing of it is uploaded
+        self.body = self.body_id = None       # the body you approached (journal), until LeaveBody / a jump
+        self.status_body = None               # Status.json's BodyName (set by the hub from the live reading)
+        self.market_id = self.station = None
+        self.ship_id = None
+
+    # ---- what the line's session is ----
+    @property
+    def gameversion(self):
+        return (self.versions.get(self.file) or ("", ""))[0]
+
+    @property
+    def gamebuild(self):
+        return (self.versions.get(self.file) or ("", ""))[1]
+
+    @property
+    def beta(self):
+        m = SOURCE_RE.match(self.file or "")
+        return bool(m and m.group(1)) or any(w in self.gameversion.lower() for w in ("alpha", "beta"))
+
+    @property
+    def legacy(self):
+        """The Legacy galaxy (a 3.x client): nobody takes its data (EDSM 208, Inara; EDDN's live schemas skip it)."""
+        v = version_tuple(self.gameversion)
+        return bool(v) and v < (4,)
+
+    def blocked(self):
+        """Why nothing from this session may be uploaded now, or None: 'beta', 'legacy', 'crew', 'version' (no
+        game version known yet), 'commander' (none yet)."""
+        if self.beta:
+            return "beta"
+        if self.legacy:
+            return "legacy"
+        if self.crew:
+            return "crew"
+        if not self.gameversion:
+            return "version"
+        if not self.cmdr:
+            return "commander"
+        return None
+
+    def located(self, addr):
+        """Whether the tracked position is this SystemAddress (EDDN adds StarSystem/StarPos only then)."""
+        return addr is not None and self.addr is not None and addr == self.addr and self.pos is not None
+
+    # ---- following the journal ----
+    def _clear_place(self):
+        self.addr = self.system = self.pos = None
+        self.body = self.body_id = None
+
+    def feed(self, ev, file=None):
+        if file:
+            self.file = file
+        name = ev.get("event")
+        if name == "Fileheader":
+            self.versions[self.file] = (str(ev.get("gameversion") or ""), str(ev.get("build") or ""))
+            self.cmdr = self.fid = None
+            self.horizons = self.odyssey = None
+            self.crew = False
+            self._clear_place()
+        elif name == "Commander":
+            self.cmdr, self.fid = ev.get("Name") or self.cmdr, ev.get("FID") or self.fid
+        elif name == "LoadGame":
+            self.cmdr, self.fid = ev.get("Commander") or self.cmdr, ev.get("FID") or self.fid
+            self.horizons = bool(ev["Horizons"]) if "Horizons" in ev else None
+            self.odyssey = bool(ev["Odyssey"]) if "Odyssey" in ev else None
+            if self.file not in self.versions and ev.get("gameversion"):
+                self.versions[self.file] = (str(ev.get("gameversion") or ""), str(ev.get("build") or ""))
+            self.ship_id = ev.get("ShipID", self.ship_id)
+            self.crew = False
+            self._clear_place()
+            self.market_id = self.station = None
+        elif name in ("Location", "FSDJump", "CarrierJump"):
+            pos = ev.get("StarPos")
+            self.addr = ev.get("SystemAddress")
+            self.system = ev.get("StarSystem")
+            self.pos = list(pos) if isinstance(pos, (list, tuple)) and len(pos) == 3 else None
+            if name == "FSDJump":
+                self.body = self.body_id = None
+                self.market_id = self.station = None
+            else:   # a Location or a carrier's jump: docked or not, at a body or not, as it says
+                docked = ev.get("Docked") and not ev.get("Taxi") and not ev.get("Multicrew")
+                self.market_id, self.station = (ev.get("MarketID"), ev.get("StationName")) if docked else (None, None)
+                if ev.get("BodyType") in ("Planet", "Star") or ev.get("Body"):
+                    self.body, self.body_id = ev.get("Body"), ev.get("BodyID")
+                elif name == "Location":
+                    self.body = self.body_id = None
+        elif name == "ApproachBody":
+            self.body, self.body_id = ev.get("Body"), ev.get("BodyID")
+        elif name == "LeaveBody":
+            self.body = self.body_id = None
+        elif name == "Docked":
+            if not ev.get("Taxi") and not ev.get("Multicrew"):
+                self.market_id, self.station = ev.get("MarketID"), ev.get("StationName")
+        elif name == "Undocked":
+            self.market_id = self.station = None
+        elif name in ("Loadout", "ShipyardSwap", "SetUserShipName"):
+            self.ship_id = ev.get("ShipID", self.ship_id)
+        elif name == "ShipyardBuy":
+            self.ship_id = None
+        elif name == "JoinACrew":
+            self.crew = bool(ev.get("Captain")) and ev.get("Captain") != self.cmdr
+            self._clear_place()
+        elif name == "QuitACrew":
+            self.crew = False
+            self._clear_place()
+
+    def snapshot(self):
+        return copy.deepcopy(self.__dict__)
+
+    def restore(self, snap):
+        self.__dict__.update(copy.deepcopy(snap))
+
+
+def live_line(ts, now, max_age=MAX_AGE_S, skew=SKEW_S):
+    """Whether a line stamped `ts` is recent enough to upload at `now` (both epoch-ish: ts a journal timestamp)."""
+    t = _seconds(ts)
+    return t is not None and -skew <= now - t <= max_age
+
+
+# ---- the outbox ----
+
+def enqueue(db, service, schema, source, ts, session, message):
+    """Queue one message (in the caller's transaction). False when that line was queued for that service already."""
+    cur = db.execute("INSERT OR IGNORE INTO upload_queue (service, schema, source, created, cmdr, gameversion, gamebuild,"
+                     " message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                     (service, schema, source, ts, session.cmdr, session.gameversion, session.gamebuild,
+                      json.dumps(message, separators=(",", ":"))))
+    return cur.rowcount > 0
+
+
+def due(db, service, now, limit=50):
+    """Rows of `service` to send now, oldest first."""
+    return [dict(r) if isinstance(r, sqlite3.Row) else r for r in db.execute(
+        "SELECT * FROM upload_queue WHERE service=? AND state='queued' AND next_try <= ? ORDER BY id LIMIT ?",
+        (service, now, limit))]
+
+
+def settle(db, row_id, state, status, now, retry_in=None):
+    """A send's outcome: sent / dropped (done_at stamped), or queued again after retry_in seconds."""
+    if state == "queued":
+        db.execute("UPDATE upload_queue SET attempts = attempts + 1, next_try = ?, last_status = ? WHERE id = ?",
+                   (now + (retry_in or 60), status, row_id))
+    else:
+        db.execute("UPDATE upload_queue SET state = ?, last_status = ?, done_at = ?, attempts = attempts + 1 WHERE id = ?",
+                   (state, status, now, row_id))
+
+
+def prune(db, now, keep_s=7 * 86400):
+    """Forget sent and dropped rows older than keep_s."""
+    db.execute("DELETE FROM upload_queue WHERE state IN ('sent', 'dropped') AND done_at < ?", (now - keep_s,))
+
+
+def counts(db, service):
+    """{queued, sent_24h, dropped_24h, last_sent, last_status} for the status view."""
+    now = time.time()
+    q = lambda sql, *a: db.execute(sql, (service,) + a).fetchone()[0]
+    last = db.execute("SELECT done_at, last_status FROM upload_queue WHERE service=? AND state='sent' "
+                      "ORDER BY done_at DESC LIMIT 1", (service,)).fetchone()
+    return {"queued": q("SELECT count(*) FROM upload_queue WHERE service=? AND state='queued'"),
+            "sent_24h": q("SELECT count(*) FROM upload_queue WHERE service=? AND state='sent' AND done_at > ?", now - 86400),
+            "dropped_24h": q("SELECT count(*) FROM upload_queue WHERE service=? AND state='dropped' AND done_at > ?",
+                             now - 86400),
+            "last_sent": last[0] if last else None}
+
+
+class UploadHub:
+    """Every live-folder line goes through line(). builders: {service: fn(ev, session) -> [(schema, message)]}: what a
+    line uploads to that service (the EDDN and EDSM parts add theirs). enabled(service) -> bool says which are on now
+    (the settings, the leases, simulate). Lines are queued only in "live" mode, recent, and from a session nothing
+    blocks."""
+
+    def __init__(self, db, builders=None, enabled=None, clock=time.time, max_age=MAX_AGE_S):
+        self.db = db
+        self.builders = dict(builders or {})
+        self.enabled = enabled or (lambda service: False)
+        self.clock, self.max_age = clock, max_age
+        self.session = Session()
+        self.primed = set()          # files whose top this session has read
+        self.queued = 0              # messages queued since start (the status view)
+
+    def active(self):
+        return any(self.enabled(s) for s in self.builders)
+
+    def prime(self, path, upto):
+        """Feed the session the lines of `path` before byte `upto` (state only): a file met part way through."""
+        self.primed.add(os.path.basename(path))
+        try:
+            with open(path, "rb") as f:
+                data = f.read(upto)
+        except OSError:
+            return
+        for raw in data.split(b"\n"):
+            if raw.strip():
+                try:
+                    ev = json.loads(raw)
+                except ValueError:
+                    continue
+                if isinstance(ev, dict):
+                    self.session.feed(ev, os.path.basename(path))
+
+    def line(self, path, offset, raw, mode):
+        """One journal line (bytes) at `offset` of `path`. mode: "catchup" (state only) or "live" (may queue).
+        Returns the number of messages queued. Database errors propagate (the tick is rolled back)."""
+        b = os.path.basename(path)
+        if b not in self.primed:
+            self.prime(path, offset)
+        try:
+            ev = json.loads(raw)
+        except ValueError:
+            return 0
+        if not isinstance(ev, dict):
+            return 0
+        self.session.feed(ev, b)
+        if mode != "live" or not live_line(ev.get("timestamp"), self.clock(), self.max_age) or self.session.blocked():
+            return 0
+        n = 0
+        for service, build in self.builders.items():
+            if not self.enabled(service):
+                continue
+            try:
+                messages = build(ev, self.session) or []
+            except (KeyError, TypeError, ValueError, AttributeError, IndexError) as e:   # an odd line: skip it
+                print(f"{service}: a line could not be prepared ({type(e).__name__}: {e})")
+                continue
+            for i, (schema, message) in enumerate(messages):
+                if enqueue(self.db, service, schema, f"{b}:{offset}" + (f"#{i}" if i else ""), ev.get("timestamp"),
+                           self.session, message):
+                    n += 1
+        self.queued += n
+        return n
+
+    def snapshot(self):
+        return (self.session.snapshot(), set(self.primed), self.queued)
+
+    def restore(self, snap):
+        s, primed, self.queued = snap
+        self.session.restore(s)
+        self.primed = set(primed)
