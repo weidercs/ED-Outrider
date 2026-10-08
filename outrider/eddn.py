@@ -75,12 +75,43 @@ def journal_message(ev, session):
     return m
 
 
+# The FSS family (part C): schemas that take nothing they do not list, so each message is built from that list. event
+# -> (schema, the key naming the system there, the keys it takes besides horizons/odyssey)
+_PLACE = ("timestamp", "event", "StarPos", "SystemAddress")
+FSS = {"FSSDiscoveryScan": ("fssdiscoveryscan", "SystemName", _PLACE + ("SystemName", "BodyCount", "NonBodyCount")),
+       "FSSAllBodiesFound": ("fssallbodiesfound", "SystemName", _PLACE + ("SystemName", "Count")),
+       "FSSBodySignals": ("fssbodysignals", "StarSystem", _PLACE + ("StarSystem", "BodyID", "BodyName", "Signals")),
+       "ScanBaryCentre": ("scanbarycentre", "StarSystem", _PLACE + ("StarSystem", "BodyID", "SemiMajorAxis", "Eccentricity",
+                                                                   "OrbitalInclination", "Periapsis", "OrbitalPeriod",
+                                                                   "AscendingNode", "MeanAnomaly")),
+       "NavBeaconScan": ("navbeaconscan", "StarSystem", _PLACE + ("StarSystem", "NumBodies"))}
+
+
+def fss_message(ev, session):
+    """(schema, message) for an FSS-family event, or None (not one; another system than the session's)."""
+    spec = FSS.get(ev.get("event"))
+    if not spec or not session.located(ev.get("SystemAddress")):
+        return None
+    schema, name_key, keys = spec
+    m = {k: ev[k] for k in keys if k in ev}
+    m[name_key] = ev.get(name_key) or session.system
+    m["StarPos"] = list(session.pos)
+    if "Signals" in m:   # each signal only its Type and Count (no Type_Localised)
+        m["Signals"] = [{"Type": x.get("Type"), "Count": x.get("Count")} for x in m["Signals"] if isinstance(x, dict)]
+    if not m[name_key]:
+        return None
+    return schema, m
+
+
 def build(ev, session, software_version, test=False):
     """The EDDN messages a journal event makes: [(schema name, envelope)]."""
     out = []
     m = journal_message(ev, session)
     if m is not None:
         out.append(("journal", envelope("journal", m, session, software_version, 1, test)))
+    f = fss_message(ev, session)
+    if f is not None:
+        out.append((f[0], envelope(f[0], f[1], session, software_version, 1, test)))
     return out
 
 

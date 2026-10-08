@@ -2,6 +2,11 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · Uploads, part C: EDDN's FSS family (branch EDMC-Functionality)
+- The honk (FSSDiscoveryScan), all bodies found, a body's signals, barycentres and nav beacon scans go to EDDN too,
+  each built from only the keys its schema lists (a field Frontier adds later cannot get it refused), the system's
+  name and position added after the cross-check.
+
 ## 2026-10-08 · Uploads, part B: EDDN's journal messages (branch EDMC-Functionality)
 - With EDDN switched on, every jump, login, carrier jump, dock, scan and DSS result (journal/1) goes to EDDN as it
   happens: personal fields out (fuel, fines, your reputation, a position on a planet), every `_Localised` name out,

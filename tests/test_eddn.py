@@ -136,6 +136,43 @@ class JournalSchema(unittest.TestCase):
         self.assertEqual(E.build({"event": "Music", "timestamp": "2026-10-08T10:00:00Z", "MusicTrack": "x"}, s, "v"), [])
 
 
+@unittest.skipUnless(jsonschema, "jsonschema is not installed (requirements-dev.txt)")
+class FssFamily(unittest.TestCase):
+    """Part C: fssdiscoveryscan, fssallbodiesfound, fssbodysignals, scanbarycentre, navbeaconscan: only what each
+    schema lists, the place from the cross-check."""
+
+    def setUp(self):
+        self.s = session()
+        self.s.feed(FSDJUMP)
+        self.addr = FSDJUMP["SystemAddress"]
+
+    def one(self, ev, schema_file):
+        [(name, env)] = E.build(ev, self.s, "v")
+        valid(env, schema_file)
+        return name, env["message"]
+
+    def test_each(self):
+        t = "2026-10-08T10:06:00Z"
+        name, m = self.one({"timestamp": t, "event": "FSSDiscoveryScan", "Progress": 0.42, "BodyCount": 12, "NonBodyCount": 3,
+                            "SystemName": "Smojooe AR-E b25-8", "SystemAddress": self.addr}, "fssdiscoveryscan-v1.0.json")
+        self.assertEqual((name, "Progress" in m, m["StarPos"]), ("fssdiscoveryscan", False, [-4177.09, -1.0, 3324.53]))
+        self.assertEqual(self.one({"timestamp": t, "event": "FSSAllBodiesFound", "SystemName": "Smojooe AR-E b25-8",
+                                   "SystemAddress": self.addr, "Count": 12}, "fssallbodiesfound-v1.0.json")[0], "fssallbodiesfound")
+        name, m = self.one({"timestamp": t, "event": "FSSBodySignals", "BodyName": "Smojooe AR-E b25-8 A 1", "BodyID": 5,
+                            "SystemAddress": self.addr, "Signals": [{"Type": "$SAA_SignalType_Biological;",
+                                                                    "Type_Localised": "Biological", "Count": 2}]}, "fssbodysignals-v1.0.json")
+        self.assertEqual((m["StarSystem"], m["Signals"]), ("Smojooe AR-E b25-8", [{"Type": "$SAA_SignalType_Biological;", "Count": 2}]))
+        self.one({"timestamp": t, "event": "ScanBaryCentre", "StarSystem": "Smojooe AR-E b25-8", "SystemAddress": self.addr,
+                  "BodyID": 2, "SemiMajorAxis": 1.0e9, "Eccentricity": 0.1, "OrbitalInclination": 1.0, "Periapsis": 10.0,
+                  "OrbitalPeriod": 1.0e5, "AscendingNode": 2.0, "MeanAnomaly": 3.0}, "scanbarycentre-v1.0.json")
+        name, m = self.one({"timestamp": t, "event": "NavBeaconScan", "SystemAddress": self.addr, "NumBodies": 7}, "navbeaconscan-v1.0.json")
+        self.assertEqual((name, m["StarSystem"]), ("navbeaconscan", "Smojooe AR-E b25-8"))
+
+    def test_cross_check(self):
+        ev = {"timestamp": "2026-10-08T10:06:00Z", "event": "FSSAllBodiesFound", "SystemName": "Elsewhere", "SystemAddress": 1, "Count": 3}
+        self.assertEqual(E.build(ev, self.s, "v"), [])
+
+
 class Answers(unittest.TestCase):
 
     def test_outcome(self):
