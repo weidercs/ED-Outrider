@@ -197,6 +197,7 @@ import outrider.config_edit  # the Settings dialog's Server settings: every conf
 import outrider.mcp        # the MCP bridge's [mcp] settings (the bridge itself runs as python3 -m outrider.mcp)
 import outrider.uploads    # EDDN / EDSM uploads (opt-in): the session, the live gate, the outbox
 import outrider.eddn       # EDDN's messages from journal events, and what its answers mean
+import outrider.edsm       # EDSM's journal upload: the events with where you were, and what its answers mean
 from outrider.core import iso_ts, ts_seconds   # journal timestamps
 from outrider.fsd import (   # the frame shift drive's maths: range, fuel per jump, the fuel model, fleet figures
     FSD_RANGE_MODS, GUARDIAN_BOOST, conservative_optimal_mass, conservative_range, fleet_figures, fleet_range, fsd_range,
@@ -5466,12 +5467,17 @@ class State:
         self.upload_cfg = json.loads(json.dumps(outrider.uploads.DEFAULTS))
         self.upload_senders, self.upload_tasks, self.upload_session = {}, {}, None
         self.upload_status = {}   # service -> {error, at, held}: the last round's outcome for the status view
-        self.uploads_hub = outrider.uploads.UploadHub(db, {"eddn": self.eddn_build}, enabled=self.upload_on,
+        self.uploads_hub = outrider.uploads.UploadHub(db, {"eddn": self.eddn_build, "edsm": self.edsm_build},
+                                                      enabled=self.upload_on, holds={"edsm": outrider.edsm.hold},
                                                       save=lambda marks: meta_set(self.db, "upload_marks", marks))
         marks = meta_get(db, "upload_marks")   # how far each service has queued (live-only: a re-read keeps it)
         self.uploads_hub.marks = {k: v for k, v in marks.items() if isinstance(v, list)} if isinstance(marks, dict) else {}
         self.upload_senders["eddn"] = self.eddn_send
+        self.upload_senders["edsm"] = self.edsm_send
         self.eddn_hold = outrider.eddn.SchemaHold()
+        self.edsm_discard = outrider.edsm.DISCARD   # EDSM's list of unwanted events: the built-in copy until fetched
+        self.edsm_discard_task = None
+        self.edsm_dry_path = None                   # OUTRIDER_EDSM_DRYRUN: where the requests are logged (run(): data/)
         journals.uploads = self.uploads_hub
         # one uploader at a time (PLAN-edmc-functionality "One uploader at a time"): leases in the journal folders,
         # and EDMC on this PC. Refreshed by watch_leases every LEASE_EVERY_S.
@@ -9311,7 +9317,8 @@ class State:
         """A sending round's outcome (outrider.uploads.upload_loop): the last error, and a hold (stop until the player
         acts: a refused key) when one of its rows says so."""
         held = next((status for _, state, status, _ in outcome["results"] if state == "held"), None)
-        self.upload_status[service] = {"error": outcome["error"] or held, "at": outcome["at"], "held": held}
+        dropped = next((status for _, state, status, _ in outcome["results"] if state == "dropped"), None)
+        self.upload_status[service] = {"error": outcome["error"] or held or dropped, "at": outcome["at"], "held": held}
         self.bump()
 
     BLOCKED_WORDS = {"beta": "the game's beta: nothing is uploaded from it", "legacy": "the Legacy game (3.8): nobody takes its data",
@@ -9329,6 +9336,7 @@ class State:
                                 held=st.get("held") or (self.upload_conflict(service) if self.upload_wanted(service) else None),
                                 blocked=self.BLOCKED_WORDS.get(blocked) if blocked in ("beta", "legacy", "crew") else None)
         out["eddn"]["test"] = outrider.uploads.eddn_test_mode()
+        out["edsm"]["dry_run"] = outrider.edsm.dry_run()
         out["edsm"]["accounts"] = self.edsm_account_list()
         out["readonly"] = bool(self.lease_writable) and not any(self.lease_writable.values())
         out["simulate"] = bool(self.simulate)
@@ -9363,6 +9371,63 @@ class State:
             self.eddn_hold.refused(name, time.time(), f"{status} {text}")
             print(f"EDDN refused a {name} message: {status} {text}", file=sys.stderr)
         return [(r["id"], state, f"{status} {text}".strip(), retry)]
+
+    def edsm_build(self, ev, session):
+        """What a live journal line sends to EDSM (outrider.edsm.build, minus EDSM's discard list)."""
+        return outrider.edsm.build(ev, session, self.edsm_discard)
+
+    async def edsm_send(self, rows):
+        """Send the leading rows of one commander and one game version (outrider.edsm.same_batch) to EDSM with that
+        commander's account, in one request. A commander with no account: dropped, and the status says so. Under the
+        developer's OUTRIDER_EDSM_DRYRUN the request is logged (the key left out) and nothing is sent."""
+        batch = outrider.edsm.same_batch(rows)
+        cmdr = batch[0]["cmdr"]
+        account = self.edsm_accounts().get(cmdr or "")
+        if not account or not account.get("key"):
+            why = f"not sent: no EDSM account for CMDR {cmdr} (Settings -> Uploads)"
+            return [(r["id"], "dropped", why, None) for r in batch]
+        body = outrider.edsm.request(batch, account, outrider.__version__)
+        if outrider.edsm.dry_run():
+            self.edsm_dry_log(body)
+            return [(r["id"], "dry", "dry run: not sent", None) for r in batch]
+        async with self.upload_session.post(outrider.edsm.UPLOAD_URL, json=body) as resp:
+            if resp.status != 200:
+                raise ConnectionError(f"EDSM answered HTTP {resp.status}")
+            reply = await resp.json(content_type=None)
+        results = outrider.edsm.answer(batch, reply)
+        bad = next((status for _, state, status, _ in results if state in ("held", "dropped")), None)
+        if bad:
+            print(f"EDSM: {bad}", file=sys.stderr)
+        return results
+
+    def edsm_dry_log(self, body):
+        """A dry run's request: one line on the console, the whole request (never the key) appended to edsm_dry_path."""
+        names = collections.Counter(e.get("event") for e in body["message"])
+        print(f"EDSM dry run: {len(body['message'])} event{'' if len(body['message']) == 1 else 's'} for "
+              f"{body['commanderName']} (" + ", ".join(f"{n} x{c}" if c > 1 else n for n, c in names.items()) + "), not sent")
+        if self.edsm_dry_path:
+            try:
+                with open(self.edsm_dry_path, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(dict(body, apiKey="(not logged)"), separators=(",", ":")) + "\n")
+            except OSError as e:
+                print(f"EDSM dry run: cannot write {self.edsm_dry_path}: {e}", file=sys.stderr)
+
+    async def watch_edsm_discard(self):
+        """EDSM's discard list, fetched while EDSM is switched on: at start, then every DISCARD_EVERY_S (ten minutes
+        after a failure; the built-in copy is used meanwhile)."""
+        while True:
+            wait = 60
+            if self.upload_wanted("edsm") and self.upload_session is not None:
+                try:
+                    async with self.upload_session.get(outrider.edsm.DISCARD_URL) as resp:
+                        got = outrider.edsm.discard_list(await resp.json(content_type=None)) if resp.status == 200 else None
+                except Exception as e:   # unreachable, not JSON: the copy we have stays
+                    print(f"EDSM: discard list not fetched ({type(e).__name__}: {e})", file=sys.stderr)
+                    got = None
+                if got:
+                    self.edsm_discard = got
+                wait = outrider.edsm.DISCARD_EVERY_S if got else 600
+            await asyncio.sleep(wait)
 
     def edsm_accounts(self):
         """{in-game commander: {name: EDSM commander name, key: API key}} (meta edsm_accounts, live-only: kept through a
@@ -9427,6 +9492,8 @@ class State:
         parts = [f"{s.upper()} {'on' if self.upload_wanted(s) else 'off'}" for s in outrider.uploads.SERVICES]
         if outrider.uploads.eddn_test_mode():
             parts[0] += f" (TEST: EDDN's test schemas only, {outrider.uploads.TEST_ENV} is set)"
+        if outrider.edsm.dry_run():
+            parts[1] += f" (DRY RUN: built and logged, nothing sent, {outrider.edsm.DRY_ENV} is set)"
         return "uploads: " + ", ".join(parts) + ("" if self.simulate else " (switched in Settings -> Uploads)")
 
     def start_uploads(self):
@@ -9435,11 +9502,13 @@ class State:
         self.catch_up_uploads()
         if self.lease_task is None:
             self.lease_task = asyncio.get_running_loop().create_task(self.watch_leases())
+        if self.edsm_discard_task is None:
+            self.edsm_discard_task = asyncio.get_running_loop().create_task(self.watch_edsm_discard())
         for service, send in self.upload_senders.items():
             if service not in self.upload_tasks:
                 self.upload_tasks[service] = asyncio.get_running_loop().create_task(outrider.uploads.upload_loop(
                     service, self.db, send, self.upload_on, report=self.upload_report,
-                    batch=1 if service == "eddn" else 200))   # EDDN takes one message per request
+                    batch=1 if service == "eddn" else outrider.edsm.BATCH))   # EDDN takes one message per request
 
     def set_autohonk(self, enabled):
         """Switch auto honk on or off (the page's toggle; remembered over restarts)."""
@@ -10911,7 +10980,7 @@ class State:
         plot can run up to TRADE_PLOT_TIMEOUT: review 2026-10-08 #7, it was left running into the closed session)."""
         return [t for t in (self.refresh_task, self.target_task, self.unsold_task, self.seller_task, self.carrier_task,
                             self.searcher.task, self.honk_test_task, self.highway_task, self.riches_task,
-                            self.autotarget_task, self.autotarget_test_task, self.lease_task,
+                            self.autotarget_task, self.autotarget_test_task, self.lease_task, self.edsm_discard_task,
                             *self.upload_tasks.values()) if t]
 
     def autotarget_busy(self):
@@ -13419,6 +13488,7 @@ async def run(args, st):
                                  if st["copilot"]["enabled"] else "off ([copilot] enabled)"))
     state.highway_cfg = dict(st["highway"])
     state.upload_cfg = json.loads(json.dumps(st["uploads"]))   # [eddn]/[edsm] enabled, as Settings -> Uploads wrote them
+    state.edsm_dry_path = os.path.join(outrider.DATA_DIR, "edsm-dryrun.jsonl")   # OUTRIDER_EDSM_DRYRUN's log
     saved = meta_get(db, "autotarget")   # the Highway tab's toggle and delay beat the config file once used
     if isinstance(saved, dict):
         if isinstance(saved.get("enabled"), bool):

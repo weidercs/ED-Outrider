@@ -452,4 +452,4 @@ class SenderAndPipeline(unittest.TestCase):
 
     def test_available_in_the_summary(self):
         self.assertTrue(self.state.uploads_summary()["eddn"]["available"])
-        self.assertFalse(self.state.uploads_summary()["edsm"]["available"])
+        self.assertTrue(self.state.uploads_summary()["edsm"]["available"])   # part H

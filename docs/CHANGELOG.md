@@ -2,6 +2,18 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · Uploads, part H: EDSM (branch EDMC-Functionality)
+- EDSM's journal upload (`outrider/edsm.py`): your events, minus EDSM's discard list (fetched while EDSM is on, a
+  built-in copy until then), each with where you were (system, coordinates, station, ship), to the account of the
+  commander who played them. Events wait for a jump, docking or Location (five minutes at most), then go together: one
+  commander and game version per request, up to 200 events. Cargo, ShipLocker and Backpack carry their file's contents
+  when the file is the one the event wrote.
+- EDSM's answers: a refused name or key holds EDSM until it changes; the Legacy game and bad requests are dropped;
+  single refused events are dropped; anything else is tried again later. A commander with no account sends nothing,
+  and Settings → Uploads says so.
+- EDSM has no test endpoint, so the developer's switch is a dry run: `OUTRIDER_EDSM_DRYRUN=1` builds and logs each
+  request (to `data/edsm-dryrun.jsonl`, never the key) and sends nothing; the console and Settings say so.
+
 ## 2026-10-08 · Uploads: test mode said out loud (branch EDMC-Functionality)
 - The console says at start whether EDDN and EDSM are on, and "TEST: EDDN's test schemas only" when
   `OUTRIDER_EDDN_TEST` is set. Settings → Uploads shows "(test schemas only)" whatever EDDN's state; before, the tag

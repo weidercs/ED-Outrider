@@ -10,9 +10,12 @@ are not among the Server settings.
 - **EDDN**, the Elite Dangerous Data Network: systems, scans, signals, codex entries, markets, sent as they happen.
   Spansh, EDSM, Inara and others read it. EDDN gets your commander name, hashed by EDDN itself; personal details
   (fines, fuel, your position on a planet) are taken out before anything is sent.
-- **EDSM**, the Elite Dangerous Star Map: your flight log and scans, to your own EDSM account, in batches (each jump,
-  docking). It needs your EDSM commander name and API key (edsm.net → Settings → API key), per in-game commander, set
-  in Settings → Uploads. The key stays on this Outrider: the page never shows it again.
+- **EDSM**, the Elite Dangerous Star Map: your flight log, scans, materials, ship and cargo, to your own EDSM account,
+  in batches: each jump or docking sends what waited, and nothing waits more than five minutes. EDSM says which
+  events it does not want, and those are not sent. It needs your EDSM commander name and API key
+  ([edsm.net → Settings → API key](https://www.edsm.net/en/settings/api)), per in-game commander, set in Settings →
+  Uploads. The key stays on this Outrider: the page never shows it again. A commander with no key sends nothing
+  (Settings says so); a key EDSM refuses stops EDSM until you change it.
 
 ## Catching up, and what is never sent
 

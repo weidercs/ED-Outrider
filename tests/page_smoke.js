@@ -4205,8 +4205,10 @@ const settle = async maxMs => {
               box.querySelectorAll("[data-upload]").length, !!box.querySelector('.edsmacc[data-cmdr="Briadin"] .edsmKey[placeholder^="set"]'),
               /unavailable: the Legacy/.test(uploadsHtml({eddn: {available: true, blocked: "the Legacy game (3.8): nobody takes its data"}, edsm: {}})),
               // test mode is said whatever the state: here while EDDN is unavailable
-              /\(test schemas only\)/.test(uploadsHtml({eddn: {available: true, test: true, blocked: "the game version is not known yet"}, edsm: {}}))]; })()`);
-    const goodU = JSON.stringify(got) === JSON.stringify([true, true, true, 2, true, true, true]) && errors.length === before;
+              /\(test schemas only\)/.test(uploadsHtml({eddn: {available: true, test: true, blocked: "the game version is not known yet"}, edsm: {}})),
+              // EDSM's dry run (OUTRIDER_EDSM_DRYRUN) and what it built
+              /EDSM.*\(dry run: nothing sent\).*12 in dry runs/s.test(uploadsHtml({eddn: {}, edsm: {available: true, on: true, dry_run: true, dry_24h: 12}}))]; })()`);
+    const goodU = JSON.stringify(got) === JSON.stringify([true, true, true, 2, true, true, true, true]) && errors.length === before;
     allOk = allOk && goodU;
     console.log(goodU ? "OK" : "FAIL", "| uploads settings |", goodU ? "the switches, a hold, test only, EDSM's account without its key" : JSON.stringify(got), errors.slice(before));
   }

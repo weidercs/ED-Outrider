@@ -32,8 +32,8 @@ SOURCE_RE = re.compile(r"^Journal(Beta|Alpha)?\.")
 
 SCHEMA = """
 -- Outgoing uploads (EDDN, EDSM), live only: queued in the tick that read the line (a rollback drops them), sent after
--- its commit by the sender tasks. state: queued, sent, dropped (refused for good), held (waiting on the player: a
--- refused key). Kept a week after sending (the UNIQUE check and the status view), then pruned. Not in
+-- its commit by the sender tasks. state: queued, sent, dropped (refused for good), dry (a developer's dry run: built,
+-- not sent). next_try: when it may go (EDSM's events wait for a jump or docking, at most a few minutes). Kept a week after sending (the UNIQUE check and the status view), then pruned. Not in
 -- RESET_JOURNAL_DATA: a journal re-read uploads nothing and must not forget what was sent.
 CREATE TABLE IF NOT EXISTS upload_queue (
     id INTEGER PRIMARY KEY AUTOINCREMENT, service TEXT NOT NULL, schema TEXT, source TEXT NOT NULL, created TEXT,
@@ -197,13 +197,20 @@ def live_line(ts, now, max_age=MAX_AGE_S, skew=SKEW_S):
 
 # ---- the outbox ----
 
-def enqueue(db, service, schema, source, ts, session, message):
-    """Queue one message (in the caller's transaction). False when that line was queued for that service already."""
+def enqueue(db, service, schema, source, ts, session, message, next_try=0):
+    """Queue one message (in the caller's transaction), to go from next_try (epoch seconds; 0: now). False when that
+    line was queued for that service already."""
     cur = db.execute("INSERT OR IGNORE INTO upload_queue (service, schema, source, created, cmdr, gameversion, gamebuild,"
-                     " message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                     " message, next_try) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                      (service, schema, source, ts, session.cmdr, session.gameversion, session.gamebuild,
-                      json.dumps(message, separators=(",", ":"))))
+                      json.dumps(message, separators=(",", ":")), next_try))
     return cur.rowcount > 0
+
+
+def release(db, service):
+    """What of `service` waits for company (never tried yet) may go now."""
+    db.execute("UPDATE upload_queue SET next_try = 0 WHERE service=? AND state='queued' AND attempts=0 AND next_try > 0",
+               (service,))
 
 
 def due(db, service, now, limit=50):
@@ -225,11 +232,11 @@ def settle(db, row_id, state, status, now, retry_in=None):
 
 def prune(db, now, keep_s=7 * 86400):
     """Forget sent and dropped rows older than keep_s."""
-    db.execute("DELETE FROM upload_queue WHERE state IN ('sent', 'dropped') AND done_at < ?", (now - keep_s,))
+    db.execute("DELETE FROM upload_queue WHERE state IN ('sent', 'dropped', 'dry') AND done_at < ?", (now - keep_s,))
 
 
 def counts(db, service):
-    """{queued, sent_24h, dropped_24h, last_sent, last_status} for the status view."""
+    """{queued, sent_24h, dropped_24h, dry_24h, last_sent} for the status view."""
     now = time.time()
     q = lambda sql, *a: db.execute(sql, (service,) + a).fetchone()[0]
     last = db.execute("SELECT done_at, last_status FROM upload_queue WHERE service=? AND state='sent' "
@@ -238,6 +245,7 @@ def counts(db, service):
             "sent_24h": q("SELECT count(*) FROM upload_queue WHERE service=? AND state='sent' AND done_at > ?", now - 86400),
             "dropped_24h": q("SELECT count(*) FROM upload_queue WHERE service=? AND state='dropped' AND done_at > ?",
                              now - 86400),
+            "dry_24h": q("SELECT count(*) FROM upload_queue WHERE service=? AND state='dry' AND done_at > ?", now - 86400),
             "last_sent": last[0] if last else None}
 
 
@@ -250,7 +258,8 @@ def position(path_or_name, offset):
 class UploadHub:
     """Every live-folder line goes through line(). builders: {service: fn(ev, session) -> [(schema, message)]}: what a
     line uploads to that service (the EDDN and EDSM parts add theirs). enabled(service) -> bool says which are on now
-    (the settings, the leases, simulate).
+    (the settings, the leases, simulate). holds: {service: fn(ev) -> seconds}: how long that service's messages from
+    this line may wait for others (EDSM's batches); 0 sends what waits, the line's own included.
 
     Each service has a mark (marks[service] = [file name, offset, timestamp]): how far its lines have been queued. A
     line is queued only after its service's mark, at most MAX_AGE_S old, from a session nothing blocks; the mark then
@@ -259,9 +268,10 @@ class UploadHub:
     where the start-up scan got to). A service with no mark yet starts at the line it first sees (switching it on
     sets one: State.set_upload)."""
 
-    def __init__(self, db, builders=None, enabled=None, clock=time.time, max_age=MAX_AGE_S, save=None):
+    def __init__(self, db, builders=None, enabled=None, clock=time.time, max_age=MAX_AGE_S, save=None, holds=None):
         self.db = db
         self.builders = dict(builders or {})
+        self.holds = dict(holds or {})
         self.enabled = enabled or (lambda service: False)
         self.clock, self.max_age = clock, max_age
         self.save = save                 # save(marks): stores the marks (State: meta upload_marks)
@@ -322,9 +332,12 @@ class UploadHub:
             except (KeyError, TypeError, ValueError, AttributeError, IndexError) as e:   # an odd line: skip it
                 print(f"{service}: a line could not be prepared ({type(e).__name__}: {e})")
                 continue
+            wait = self.holds[service](ev) if service in self.holds else 0
+            if service in self.holds and not wait:
+                release(self.db, service)
             for i, (schema, message) in enumerate(messages):
                 if enqueue(self.db, service, schema, f"{b}:{offset}" + (f"#{i}" if i else ""), ev.get("timestamp"),
-                           session, message):
+                           session, message, self.clock() + wait if wait else 0):
                     n += 1
         self.queued += n
         return n

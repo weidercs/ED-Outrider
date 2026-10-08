@@ -9,8 +9,12 @@ upstream project's choices, not rules of the game.
 - **No keyboard shortcuts.** A deliberate upstream choice, declined more than once; clickable things are reachable with
   Tab and act on Enter/Space instead.
 - **No VoiceAttack integration.** Not used upstream; the co-pilot button and the page cover the same ground.
-- **Nothing is uploaded.** No EDDN sender, no accounts; outside calls are read-only lookups (Spansh, EDSM,
-  GitHub for bio rules, Hugging Face for voices, EDAstro for the DSSA carrier list when the Nearest finder opens).
+- **Nothing is uploaded unless the player switches it on.** EDDN and EDSM (Settings → Uploads, off by default) are the
+  only uploads; every other outside call is a read-only lookup (Spansh, EDSM, GitHub for bio rules, Hugging Face for
+  voices, EDAstro for the DSSA carrier list when the Nearest finder opens).
+- **EDSM has no test endpoint**, so its developer switch is a dry run (`OUTRIDER_EDSM_DRYRUN=1`: requests built and
+  logged to `data/edsm-dryrun.jsonl` without the key, nothing sent; the rows end as `dry` and are never sent later).
+  EDDN's is its `/test` schemas (`OUTRIDER_EDDN_TEST=1`). Neither is a setting.
 - **Survey odds are odds, not contents.** The mining tooltip shows what a community survey found at that kind of
   ground; the game never says what a location holds.
 - **No hand-logging of mining location contents.** Considered and left out for now; "Mined previously" records
