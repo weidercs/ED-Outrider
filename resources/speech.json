@@ -11850,6 +11850,88 @@
         "{text} You've fucking got this, {name}.",
         "Let's stash the rest safely, darling, before shit happens. {text}"
       ]
+    },
+    "autotarget_nothing": {
+      "when": "the co-pilot button asked to target the next route system with none to target: {why} (e.g. 'no route is plotted', 'the route is complete')",
+      "business": [
+        "Nothing to target: {why}.",
+        "No route system to target. {why}.",
+        "Target next unavailable: {why}.",
+        "{name}, there is no next system to target: {why}.",
+        "Cannot target. {why}.",
+        "No target set. {why}.",
+        "Unable to comply: {why}.",
+        "Auto-target standing by. {why}.",
+        "Negative, {name}. {why}.",
+        "There is nothing to target. Plot a route first.",
+        "No next system. Plot a route in Outrider and press again.",
+        "Target request declined: {why}.",
+        "Nothing on the route to target, {name}.",
+        "No route system queued. {why}.",
+        "Auto-target has nothing to aim at: {why}."
+      ],
+      "sarcastic": [
+        "Are you on drugs? You don't have a system plotted for me to target.",
+        "Target what, exactly? {why}.",
+        "I'd love to target the next system, {name}. There isn't one. {why}.",
+        "Bold of you to ask me to target nothing. {why}.",
+        "Ah yes, the next system. The one that doesn't exist. {why}.",
+        "I'm good, {name}, but I can't target a route you never plotted.",
+        "Press it again, by all means. It still won't find a route. {why}.",
+        "Nothing to target. Did you forget the part where you plot a route?",
+        "My crystal ball is in the shop. Plot a route and I'll target it.",
+        "Sure, let me just target the void. Oh wait. {why}.",
+        "You want the next system on a route that isn't there. Inspired.",
+        "{why}. But do keep pressing the button, it's adorable.",
+        "I can target anything you like, {name}, as long as it exists.",
+        "Nope. {why}. Try plotting something first, genius.",
+        "Next system? There is no next system. There is only you and that button."
+      ],
+      "sarcastic_profane": [
+        "Are you on drugs? You don't have a fucking system plotted for me to target.",
+        "Target what, you muppet? {why}.",
+        "There's no bloody route, {name}. {why}.",
+        "Christ, plot a route first. {why}.",
+        "I can't target sod all, {name}. {why}.",
+        "What the hell am I meant to aim at? {why}.",
+        "Oh for fuck's sake. {why}.",
+        "No route, no target, no bloody miracles. {why}.",
+        "Pressing harder won't conjure a route, you daft sod.",
+        "Shit, {name}, there's nothing on the route to target. {why}.",
+        "Bugger me, you want a next system that doesn't exist. {why}.",
+        "Plot a damn route and then we'll talk. {why}."
+      ],
+      "sweet": [
+        "Sorry, darling, there's nothing to target: {why}.",
+        "Love, I'd target the next system for you, but {why}.",
+        "Sweetheart, there's no route to follow yet. Plot one and I'll take care of it.",
+        "Oh, {name}, {why}. Plot us a route and I'll do the rest.",
+        "Nothing to target just now, my dear. {why}.",
+        "I looked everywhere, darling, but {why}.",
+        "My brave explorer, there's no next system to aim for. {why}.",
+        "Not yet, love. {why}.",
+        "I'm ready when you are, sweetheart. {why}.",
+        "Darling, there's no system lined up. {why}.",
+        "Bless you for asking, {name}, but {why}.",
+        "There's nothing to aim at yet, love. Plot a route and press again.",
+        "Sweetheart, I can't find a next stop. {why}.",
+        "Oh, love, {why}. Let's plot something lovely first.",
+        "Ready and waiting, darling. {why}."
+      ],
+      "sweet_profane": [
+        "Shit, darling, there's nothing to target: {why}.",
+        "Love, bloody hell, {why}.",
+        "Sweetheart, there's no damn route to follow yet. Plot one and I'll handle it.",
+        "Oh, {name}, fuck, {why}.",
+        "Damn it, my dear, nothing to target. {why}.",
+        "Darling, I'd target the bloody thing if there were one. {why}.",
+        "Bugger, love, {why}.",
+        "Sweetheart, there's sod all to aim at. {why}.",
+        "Hell, darling, no next system yet. {why}.",
+        "Oh shit, {name}, {why}. Plot us something gorgeous first.",
+        "Fuck it, love, there's no route. Plot one and I'm yours.",
+        "Damn, sweetheart, nothing lined up. {why}."
+      ]
     }
   }
 }

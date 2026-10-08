@@ -152,11 +152,11 @@
 #                          # up to 3 seconds each; a sound with no file keeps Outrider's own
 
 [copilot]
-# One HOTAS (or keyboard) button for the voice (Linux; outrider/button.py). Tap: a status report (fuel and jumps, on a
-# Highway route the boost and the next route system, the next stop, what is aboard against your rebuy, the nearest
-# unvisited system, left out while you follow a route; a targeted body first; the sampling
-# while you sample). Double tap: the last line again. Hold: hush the voice until the next jump (danger still
-# speaks); hold again to end it. In the Rhino on a planet any press marks a mining rig placed or picked up instead.
+# One HOTAS (or keyboard) button (Linux; outrider/button.py). Tap, flying the ship: target the next route system in the
+# galaxy map (the survey / trade route's first, else the Highway's; needs auto-target's key bindings). Double tap: a
+# status report (fuel and jumps, on a Highway route the boost and the next route system, the next stop, what is aboard
+# against your rebuy, the nearest unvisited system, left out while you follow a route; a targeted body first; the
+# sampling while you sample). Hold: hush the voice until the next jump (danger still speaks); hold again to end it. In the Rhino on a planet any press marks a mining rig placed or picked up instead.
 # Outrider only reads the button, never grabs it: unbind it in Elite's controls, or it does its game action too.
 # On an X-56, avoid the latching toggles and the mode wheel: they report as buttons held down.
 # Joysticks and throttles are readable through uaccess; a keyboard or mouse needs the input group.

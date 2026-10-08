@@ -2001,7 +2001,7 @@ const LINE_SAMPLES = {
   docked_sell: {value: "114.1M", station: "Jaques Station"}, undocked_unsold: {value: "260.4M"},
   sold: {sold: "12.6M cr cartographics and 4.1M cr exobiology", still: ""},
   unsold_warn: {value: "52.0M"}, unsold_urgent: {value: "251.3M"},
-  carrier_departs: {minutes: 4, carrier: "Out Of The Blue"}, carrier_arrived: {carrier: "Out Of The Blue", system: "Smojooe AR-E b25-8"},
+  carrier_departs: {minutes: 4, carrier: "Out Of The Blue"}, autotarget_nothing: {why: "no route is plotted"}, carrier_arrived: {carrier: "Out Of The Blue", system: "Smojooe AR-E b25-8"},
   fss_done: {count: 14, text: "B 1, Earth-like world, 3.1M to map, and biology on C 2, up to 19.0M"},
   fss_nothing: {count: 14}, fss_unfinished: {left: "3 bodies"}, jumponium: {body: "B 4", material: "polonium", pct: "1.3 percent"},
   left_body: {body: "A 3", text: "Stratum 2 of 3, and Tussock untouched, up to 4.1M"},
@@ -6643,6 +6643,10 @@ function onData() {
         alertOut(m.kind, m.text.replace(/\.$/, ""), "", {tag: m.kind, say: m.text});
       else if (m.kind === "highway" && m.text)   // the Neutron Highway's arrival line, detour, back on it, complete: plain words for now
         alertOut("highway", m.text.replace(/\.$/, ""), "", {tag: "highway", say: m.text});
+      else if (m.kind === "autotarget" && m.what === "nothing")   // the co-pilot button's press with no route system to target
+        alertOut("autotarget", "Nothing to target", m.why || "", {tag: "failed", say: () => line("autotarget_nothing", {why: m.why || ""}, m.text)});
+      else if (m.kind === "autotarget" && m.what === "refused")   // the button's press, a run that could not start
+        alertOut("autotarget", m.text.replace(/\.$/, ""), "", {tag: "failed", say: m.text});
       else if (m.kind === "autotarget" && m.text)   // auto-target's result: "Successfully targeted ..." / "Failed to target ..."
         alertOut("autotarget", m.text, m.ok ? "" : `step ${m.phase ?? "?"}: ${m.why || "?"}`, {tag: m.ok ? "ok" : "failed", say: m.text});
       else if (m.kind === "rig" && m.text)   // the co-pilot's rig marking and a rig's collection: plain words, no personality

@@ -1,10 +1,14 @@
 """The co-pilot button: one HOTAS or keyboard button that talks to Outrider's voice (optional, Linux).
 
-    tap          a status report: fuel and jumps, the next stop, what is aboard, the nearest unvisited system,
+    tap          flying the ship: target the next route system (State.copilot_target: the survey / trade route's
+                 next first, else the Highway's; "nothing to target" said when there is none); elsewhere nothing
+    double tap   a status report: fuel and jumps, the next stop, what is aboard, the nearest unvisited system,
                  led by the body targeted in the nav panel when it is not the next stop
                  (on a body with a sample run under way: the sampling progress instead)
-    double tap   say the last line again
     hold         hush the voice until the next jump (danger lines still speak); another hold ends it early
+
+The gestures keep their old names here ("status" a tap, "again" a double tap, "hush" a hold); State.copilot_gesture
+decides what each does (the author's layout, 2026-10-08).
 
 In the Rhino on a body every gesture marks a mining rig instead and does nothing else: a press places the next
 rig (1-6) behind you, a press by a rig that is out picks it up (the game tells Outrider neither).

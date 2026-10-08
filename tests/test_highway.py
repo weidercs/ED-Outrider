@@ -1793,6 +1793,54 @@ class HighwayAutoTarget(unittest.TestCase):
         self.assertEqual(out["near"][1]["system"], "Neu A")
         self.assertEqual((out["near_last"]["done"], out["near_last"]["index"]), (True, 1))
 
+    def test_copilot_button_targets_next(self):
+        """The co-pilot button's layout (the author, 2026-10-08): in the ship a single press targets the next route
+        system after a short wait: the survey / trade route's next first, else the Highway's; with neither, the
+        "nothing to target" line. A double press is the status report, a hold the hush; elsewhere a single press does
+        nothing."""
+        import asyncio
+        import outrider.riches as riches
+        self.state.honker, self.state.targeter = self.honker, self.targeter
+        self.status["flags"] |= ed_outrider.FLAG_IN_MAIN_SHIP
+        self.j.status_json = self.status
+        self.state.COPILOT_TARGET_DELAY_S = 0.01
+        moments = lambda: [m for m in self.j.moments if m["kind"] == "autotarget"]
+
+        async def press():
+            self.state.copilot_gesture("status")
+            if self.state.autotarget_test_task:
+                await self.state.autotarget_test_task
+        asyncio.run(press())
+        self.assertEqual([(m["what"], m["why"]) for m in moments()], [("nothing", "no route is plotted")])
+        self.assertEqual(self.state.copilot["seq"], 0)   # no status report instead
+        hwy_plot_exact(self)
+        hwy_jump(self, 1, 101, "Neu A", 50)
+        asyncio.run(press())
+        self.assertEqual((self.state.autotarget_last["system"], self.state.autotarget_last["done"]), ("Bridge B", True))
+        # a survey route as well: its next system first
+        self.status["destination"] = None
+        rows = riches.riches_rows([{"name": "Neu A", "id64": 101, "x": 50, "y": 0, "z": 0, "jumps": 0, "bodies": []},
+                                   {"name": "Col 285 Sector AB-C d13-5", "id64": 555, "x": 60, "y": 0, "z": 0, "jumps": 1, "bodies": []}])
+        self.state.riches_store(rows, {"options": {}})
+        asyncio.run(press())
+        self.assertEqual(self.state.autotarget_last["system"], "Col 285 Sector AB-C d13-5")
+        # the survey route done: the Highway's next again
+        rc = ed_outrider.meta_get(self.db, "riches")
+        ed_outrider.meta_set(self.db, "riches", dict(rc, done_ts="2026-10-08T00:00:00Z"))
+        self.status["destination"] = None
+        asyncio.run(press())
+        self.assertEqual(self.state.autotarget_last["system"], "Bridge B")
+        # double: the status report; hold: the hush
+        self.state.copilot_gesture("again")
+        self.assertEqual(self.state.copilot["action"], "status")
+        self.state.copilot_gesture("hush")
+        self.assertIsNotNone(self.state.hush)
+        # on foot: a single press does nothing
+        self.status["flags"], self.status["flags2"] = 0, 1
+        n = len(moments())
+        asyncio.run(press())
+        self.assertEqual(len(moments()), n)
+
     def test_target_next_targets(self):
         T = self.state.autotarget_target
         self.assertEqual(T(manual=True), (None, "no route is plotted"))

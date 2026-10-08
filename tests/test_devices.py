@@ -1430,18 +1430,21 @@ class SurfaceRigs(unittest.TestCase):
         self.assertEqual(self.state.copilot["seq"], 0)       # no status report, say again...
         self.assertIsNone(self.state.hush)                    # ...or hush
         self.assertEqual(self.texts(), ["Rig 1 placed.", "Rig 1 picked up.", "Rig 1 placed."])
-        # outside the Rhino (on foot, in the ship, in a Scarab) the button works as before
+        # outside the Rhino (on foot, in the ship, in a Scarab) the button works as usual: a double press is the status
+        # report, a hold the hush (the single press targets the next route system in the ship: test_highway)
         self.status(70, flags=(1 << 1) | ed_outrider.FLAG_IN_MAIN_SHIP)   # landed, back in the ship a minute on
         self.state.watch_surface(self.base + 70)
         self.assertIsNone(self.j.vehicle)
-        self.state.copilot_gesture("status")
+        self.state.copilot_gesture("again")
         self.state.copilot_gesture("hush")
         self.assertEqual((self.state.copilot["seq"], self.state.copilot["action"]), (2, "hush"))
         self.assertIsNotNone(self.state.hush)
         self.launch(80, "testbuggy")
         self.status(81)
+        self.state.copilot_gesture("status")   # a single press in a Scarab: nothing to target there, nothing done
+        self.assertEqual(self.state.copilot["seq"], 2)
         self.state.copilot_gesture("again")
-        self.assertEqual(self.state.copilot["action"], "again")
+        self.assertEqual(self.state.copilot["action"], "status")
         self.assertEqual(len(self.texts()), 3)
         # the page's own requests (the Now bar) never mark rigs, even in the Rhino
         self.launch(90)

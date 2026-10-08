@@ -85,7 +85,7 @@ sound). Auto honk (outrider/honk.py, optional; Linux, Windows experimental) hold
 keyboard binding on arriving by hyperspace so the Discovery Scanner fires, and says how many bodies
 it found. The voice can be hushed for a while (the page, or POST /api/hush: the state is the server's, so
 every window and device sees it), and a co-pilot button (outrider/button.py, Linux, optional, read-only) asks the
-speaking window for a status report, the last line again, or a hush until the next jump.
+speaking window for a status report or a hush until the next jump, and a tap in the ship targets the next route system.
 
 Other devices: /tablet is the same pages in a touch layout with nine themes (static/tablet.css, static/themes/), a
 control rail of game buttons (outrider/rail.py) and, ticked in its Settings, the voice and sounds on the tablet itself;
@@ -550,7 +550,8 @@ SPEAK_MAPPED = False   # the "mapped" call-out after each planet's DSS mapping (
 SPEECH_SPEED = 1.0   # spoken alerts' pace: 1 is the voice's own, 1.3 is 30% faster (0.5 to 2)
 # the player for the page's "Play speech and sounds on this PC" tick: auto (the first found), one by name, or off
 SERVER_PLAYER = "auto"
-# The co-pilot button (see outrider/button.py): tap a status report, double tap say again, hold hush until the next jump.
+# The co-pilot button (see outrider/button.py): tap (in the ship) target the next route system, double tap a status
+# report, hold hush until the next jump.
 COPILOT = {"enabled": False, "device": "", "button": "", "hold_ms": outrider.button.HOLD_MS, "double_ms": outrider.button.DOUBLE_MS}
 COPILOT_ACTIONS = ("status", "again", "hush", "replay")
 HUSH_MODES = {"10m": 600, "30m": 1800, "jump": None}   # s a timed hush lasts; "jump" lasts until you leave the system
@@ -1016,7 +1017,7 @@ hold = {st["autohonk"]["hold"]:g}    # seconds to hold the trigger (the scanner 
 skip_honked = {"true" if st["autohonk"]["skip_honked"] else "false"}   # leave systems you have already honked alone
 announce = {"true" if st["autohonk"]["announce"] else "false"}   # say "System scan completed, 12 bodies discovered" (or all found) afterwards
 
-[copilot]   # one HOTAS or keyboard button for the voice (Linux, read-only; see outrider/button.py): tap a status report, double tap the last line again, hold hush until the next jump
+[copilot]   # one HOTAS or keyboard button (Linux, read-only; see outrider/button.py): tap (flying the ship) target the next route system, double tap a status report, hold hush until the next jump
 # Unbind the button in Elite's controls. On an X-56 avoid the latching toggles and the mode wheel (they read as held).
 # Joysticks are readable through uaccess; a keyboard or mouse needs the input group.
 enabled = {"true" if st["copilot"]["enabled"] else "false"}   # read the button below
@@ -5502,13 +5503,64 @@ class State:
         self.copilot = {"seq": self.copilot["seq"] + 1, "action": action, "words": words}
         self.bump()
 
+    COPILOT_TARGET_DELAY_S = 0.5   # after a single press is known to be one, before the keys (your hands off the controls)
+
     def copilot_gesture(self, gesture):
-        """A gesture of the co-pilot button. In the Rhino on a body every gesture marks a mining rig and does nothing
-        else (no status report, say again or hush there); anywhere else it is the usual co-pilot request."""
+        """A gesture of the co-pilot button (the author's layout, 2026-10-08): a single press targets the next route
+        system while you fly the ship (anywhere else it does nothing), a double press is the status report, a hold
+        hushes. In the Rhino on a body every gesture marks a mining rig and does nothing else. button.py's names:
+        "status" is the single press, "again" the double, "hush" the hold."""
         if self.in_rhino():
             self.mark_rig(time.time())
             return
-        self.copilot_action(gesture)
+        if gesture == "status":
+            ctx, _ = outrider.rail.context_of(self.journals.status_json, (self.journals.vehicle or {}).get("srv_type"))
+            if ctx == "ship":
+                self.copilot_target()
+            return
+        self.copilot_action("status" if gesture == "again" else gesture)
+
+    def copilot_next(self):
+        """(start_autotarget_run's kind and aim, None) for the co-pilot button's press, or (None, why there is nothing to
+        target). The author's order (2026-10-08): the next system of the survey / trade route (the slot's) first; with
+        none there (no such route, complete, at its end), the Highway's next; with neither, the last reason found."""
+        why = "no route is plotted"
+        rc, rows = self.riches_state()
+        if rc:
+            nx = self.riches_next(rc, rows)
+            if rc.get("done_ts"):
+                why = "the route is complete"
+            elif nx is None:
+                why = "you are at the end of the route"
+            else:
+                tgt, why = self.route_target("survey", nx)
+                if tgt:
+                    return ("next", ("survey", nx)), None
+        if meta_get(self.db, "highway"):
+            tgt, why = self.autotarget_target(manual=True)
+            if tgt:
+                return ("next", None), None
+        return None, why
+
+    def copilot_target(self):
+        """The co-pilot button's single press in the ship: Target next on the route the line shows, after
+        COPILOT_TARGET_DELAY_S. Its result is spoken as Target next's always is; nothing to target, or a run that
+        cannot start, is said too (an "autotarget" moment: what "nothing" has the personality lines)."""
+        ts = iso_ts(time.time())
+        nxt, why = self.copilot_next()
+        if nxt is None:
+            self.journals.moment("autotarget", ts, ok=False, what="nothing", why=why, text=f"Nothing to target: {why}.")
+            self.bump()
+            return
+        kind, aim = nxt
+        try:
+            out, status = self.start_autotarget_run(kind, countdown=self.COPILOT_TARGET_DELAY_S, aim=aim)
+        except RuntimeError:   # no event loop (a test calling it bare): nothing can run
+            out, status = {"error": "auto-target is not running"}, 500
+        if status >= 400:
+            self.journals.moment("autotarget", ts, ok=False, what="refused", why=out.get("error"),
+                                 text=f"Not targeting: {out.get('error') or 'auto-target is not available'}.")
+            self.bump()
 
     # ---- the surface map and Rhino mining rigs (Batch M1) ----
 

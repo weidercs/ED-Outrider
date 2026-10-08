@@ -2,9 +2,18 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · The co-pilot button targets the next route system
+- The co-pilot button's layout (the author's): flying the ship, a **tap** targets the next route system in the galaxy
+  map, half a second after the press: the Road to Riches / Exomastery / trade route's next first, else the Highway's.
+  Success or failure is said as for auto-target; with nothing to target, a new line in each personality ("Are you on
+  drugs? You don't have a system plotted for me to target."). A **double tap** is the status report (it was the tap),
+  a **hold** the hush. "Say the last line again" is no longer on the button. Out of the ship a tap does nothing; in
+  the Rhino every press still marks rigs.
+
 ## 2026-10-08 · Version 2026.10.17
-- Nearest place to dock (stations and carriers, the DSSA's carriers, "nearest station" by voice), and since 2026.10.16:
-  the README split into a front page and a guide (`docs/guide/`).
+- Nearest place to dock (stations and carriers, the DSSA's carriers, "nearest station" by voice), the co-pilot
+  button's new layout (tap: target the next route system), and since 2026.10.16: the README split into a front page
+  and a guide (`docs/guide/`).
 
 ## 2026-10-08 · Nearest place to dock
 - **📍 Nearest…** beside Plot Route's To lists the nearest stations and fleet carriers you can dock at and use: what
