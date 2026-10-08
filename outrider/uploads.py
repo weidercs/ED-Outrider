@@ -311,3 +311,66 @@ class UploadHub:
         s, primed, self.queued = snap
         self.session.restore(s)
         self.primed = set(primed)
+
+
+# ---- settings ----
+
+SERVICES = ("eddn", "edsm")
+DEFAULTS = {"eddn": {"enabled": False, "test": False}, "edsm": {"enabled": False}}
+
+
+def upload_settings(cfg):
+    """[eddn] enabled / test and [edsm] enabled from the config (bools; anything else is the default, off). EDSM's
+    commander names and API keys are not here: they live in the database (State.edsm_accounts), set from the page."""
+    out = {}
+    for service, keys in DEFAULTS.items():
+        sec = cfg.get(service) if isinstance(cfg.get(service), dict) else {}
+        out[service] = {k: sec[k] if isinstance(sec.get(k), bool) else v for k, v in keys.items()}
+    return {"uploads": out}
+
+
+# ---- sending ----
+
+GAP_S = 0.5              # between two sends of one service while the queue drains (EDDN: about 2 a second)
+IDLE_S = 2.0             # how often an empty or switched-off queue is looked at
+BACKOFF_S = (60, 120, 300, 600, 1800)   # after a network failure or a 5xx: at least a minute (EDDN's rule), growing
+
+
+async def upload_loop(service, db, send, on, clock=time.time, sleep=None, report=None, batch=50):
+    """Drain `service`'s outbox while it is on: send(rows) -> [(row id, state, status text, retry_in or None)] for
+    each row it settled (state: sent, dropped, queued (retry after retry_in), held (stop until the player acts)); a raised
+    exception is a network failure: those rows wait BACKOFF_S. report(service, outcome dict) after each round (the
+    status view). Runs until cancelled."""
+    import asyncio
+    sleep = sleep or asyncio.sleep
+    fails = 0
+    while True:
+        if not on(service):
+            await sleep(IDLE_S)
+            continue
+        rows = due(db, service, clock(), batch)
+        if not rows:
+            await sleep(IDLE_S)
+            continue
+        now = clock()
+        try:
+            results = await send(rows)
+            fails = 0
+            error = None
+        except Exception as e:   # unreachable, a timeout, a 5xx raised by the sender: wait, then again
+            wait = BACKOFF_S[min(fails, len(BACKOFF_S) - 1)]
+            fails += 1
+            results = [(r["id"], "queued", f"{type(e).__name__}: {e}"[:300], wait) for r in rows]
+            error = f"{type(e).__name__}: {e}"
+        for row_id, state, status, retry_in in results:
+            if state == "held":
+                db.execute("UPDATE upload_queue SET last_status = ? WHERE id = ?", (status, row_id))
+            else:
+                settle(db, row_id, state, status, now, retry_in)
+        db.commit()
+        if report:
+            report(service, {"error": error, "results": results, "at": now})
+        if any(state == "held" for _, state, _, _ in results):
+            await sleep(IDLE_S * 15)   # waiting on the player (a refused key): look again now and then
+        else:
+            await sleep(GAP_S)

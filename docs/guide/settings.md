@@ -39,6 +39,8 @@ Outrider folder; they default to `data/ed_outrider.sqlite`, `data/backups` and `
 | `[copilot]` | `enabled`, `device`, `button`, `hold_ms`, `double_ms` |
 | `[assistant]` | `enabled`, `base_url`, `api_key`, `model`, `timeout`, `max_rounds`: the voice's optional AI layer |
 | `[mcp]` | `url`, `max_rows`, `password`: for the MCP bridge (see Ask an AI about your game) |
+| `[eddn]` | `enabled`, `test`: send to EDDN as you play (off by default); `test` sends to its test schemas only |
+| `[edsm]` | `enabled`: send your flight log and scans to EDSM (off by default; the name and key are set in Settings) |
 | `[highway]` | `clipboard`, `efficiency`, `conservative`, `conservative_ly`, `background_image`, `background_extent`, `background_opacity`; auto-target: `autotarget`, `autotarget_delay`, `autotarget_entry`, `autotarget_map_wait`, `autotarget_search_wait`, `autotarget_key_delay`, `autotarget_keys`, `autotarget_search`, `autotarget_submit`, `autotarget_plot`, `autotarget_dry_run` |
 
 Command-line flags override the file for a single run:

@@ -939,6 +939,7 @@ def settings_from(cfg, args, env_journals=None, detected=((), ())):
         # [mcp]: read by the MCP bridge (python3 -m outrider.mcp), not the server; here so --write-config writes it
         **outrider.mcp.mcp_settings(cfg),
         "assistant": outrider.ask.assistant_settings(cfg),   # the voice's optional AI layer (off by default)
+        **outrider.uploads.upload_settings(cfg),              # [eddn], [edsm]: uploads, off by default
     }
 
 
@@ -1073,6 +1074,18 @@ max_rounds = {st["assistant"]["max_rounds"]}   # tool rounds before it must answ
 {"url = " + q(st["mcp_url"]) if st["mcp_url"] else "# url = " + q("http://127.0.0.1:8025")}   # the running Outrider for the MCP bridge (python3 -m outrider.mcp); default: this PC at [server] port
 max_rows = {st["mcp_rows"]}   # how many rows a list in a tool's answer holds (the rest are counted)
 password = {q(st["mcp_password"])}   # an Outrider on another computer (a server) asks for its [server] password: the bridge signs in with this ("" on this PC)
+
+[eddn]
+# EDDN, the Elite Dangerous Data Network: what your journals say as you play (systems, scans, signals, markets),
+# sent as it happens for Spansh, EDSM, Inara and others to read. Off unless you switch it on; the page's Settings
+# switch wins over this. Only one Outrider (or EDMC) should send it: see the guide's Uploads page.
+enabled = {"true" if st["uploads"]["eddn"]["enabled"] else "false"}   # send to EDDN as you play (off by default)
+test = {"true" if st["uploads"]["eddn"]["test"] else "false"}   # send to EDDN's test schemas only: nothing reaches the live data (for trying it out)
+
+[edsm]
+# EDSM, the Elite Dangerous Star Map: your flight log and scans, sent to your EDSM account in batches (each jump,
+# docking). Your EDSM commander name and API key are set in the page's Settings, per in-game commander.
+enabled = {"true" if st["uploads"]["edsm"]["enabled"] else "false"}   # send your flight log and scans to EDSM (off by default)
 """
 
 POSITION_EVENTS = ("FSDJump", "CarrierJump", "Location")
@@ -5445,6 +5458,13 @@ class State:
         self.riches_plotting = None
         self.riches_task = None
         self.dock_cache = {}   # the Nearest finder's last Spansh search and permit check (DOCK_CACHE_S)
+        # uploads (EDDN, EDSM: opt-in, off by default; outrider/uploads.py). upload_cfg is the config's; the page's
+        # switch (meta uploads_on) wins over it. senders: {service: async fn(rows)} (the services add theirs).
+        self.upload_cfg = json.loads(json.dumps(outrider.uploads.DEFAULTS))
+        self.upload_senders, self.upload_tasks, self.upload_session = {}, {}, None
+        self.upload_status = {}   # service -> {error, at, held}: the last round's outcome for the status view
+        self.uploads_hub = outrider.uploads.UploadHub(db, {}, enabled=self.upload_on)
+        journals.uploads = self.uploads_hub
         self._rc_copied = (meta_get(db, "riches") or {}).get("arrival_ts")
 
     def bump(self):
@@ -5479,6 +5499,7 @@ class State:
             "boost": (self.journals.boost or {}).get("value"),
             "on_body": self.on_body(),
             "near_body": self.near_body(),
+            "uploads": self.uploads_summary(),
             "sampling": self.sampling_summary(),
             "surface": self.surface_summary(),
             # metres between samples per genus (a shipped table), shown before you land (review S1)
@@ -9148,6 +9169,59 @@ class State:
             self.db.commit()
         self.bump()
 
+    # ---- uploads (EDDN, EDSM) ----
+
+    def upload_on(self, service):
+        """Whether `service` uploads now: the page's switch (else the config), never in --simulate, never while it
+        waits on the player (a key EDSM refused)."""
+        if self.simulate or service not in self.upload_cfg:
+            return False
+        if (self.upload_status.get(service) or {}).get("held"):
+            return False
+        ov = (meta_get(self.db, "uploads_on") or {}).get(service)
+        return bool(ov) if isinstance(ov, bool) else bool(self.upload_cfg[service].get("enabled"))
+
+    def set_upload(self, service, on):
+        """The page's switch for one service (remembered over restarts). Switching it on again clears a hold."""
+        ov = dict(meta_get(self.db, "uploads_on") or {})
+        ov[service] = bool(on)
+        meta_set(self.db, "uploads_on", ov)
+        self.upload_status.pop(service, None)
+        self.db.commit()
+        self.bump()
+
+    def upload_report(self, service, outcome):
+        """A sending round's outcome (outrider.uploads.upload_loop): the last error, and a hold (stop until the player
+        acts: a refused key) when one of its rows says so."""
+        held = next((status for _, state, status, _ in outcome["results"] if state == "held"), None)
+        self.upload_status[service] = {"error": outcome["error"] or held, "at": outcome["at"], "held": held}
+        self.bump()
+
+    BLOCKED_WORDS = {"beta": "the game's beta: nothing is uploaded from it", "legacy": "the Legacy game (3.8): nobody takes its data",
+                     "crew": "crew in another commander's ship", "version": "the game version is not known yet",
+                     "commander": "no commander yet"}
+
+    def uploads_summary(self):
+        """The page's Uploads section: per service on, why it cannot send now (blocked), its queue, the last error."""
+        blocked = self.uploads_hub.session.blocked()
+        out = {}
+        for service in outrider.uploads.SERVICES:
+            st = self.upload_status.get(service) or {}
+            out[service] = dict(outrider.uploads.counts(self.db, service), on=self.upload_on(service),
+                                configured=bool(self.upload_cfg.get(service, {}).get("enabled")),
+                                available=service in self.upload_senders, error=st.get("error"), held=st.get("held"),
+                                blocked=self.BLOCKED_WORDS.get(blocked) if blocked in ("beta", "legacy", "crew") else None)
+        out["eddn"]["test"] = bool(self.upload_cfg["eddn"].get("test"))
+        out["simulate"] = bool(self.simulate)
+        return out
+
+    def start_uploads(self):
+        """The sending loops (one per service with a sender), started in run()."""
+        for service, send in self.upload_senders.items():
+            if service not in self.upload_tasks:
+                self.upload_tasks[service] = asyncio.get_running_loop().create_task(outrider.uploads.upload_loop(
+                    service, self.db, send, self.upload_on, report=self.upload_report))
+
     def set_autohonk(self, enabled):
         """Switch auto honk on or off (the page's toggle; remembered over restarts)."""
         self.autohonk["enabled"] = bool(enabled)
@@ -10618,7 +10692,7 @@ class State:
         plot can run up to TRADE_PLOT_TIMEOUT: review 2026-10-08 #7, it was left running into the closed session)."""
         return [t for t in (self.refresh_task, self.target_task, self.unsold_task, self.seller_task, self.carrier_task,
                             self.searcher.task, self.honk_test_task, self.highway_task, self.riches_task,
-                            self.autotarget_task, self.autotarget_test_task) if t]
+                            self.autotarget_task, self.autotarget_test_task, *self.upload_tasks.values()) if t]
 
     def autotarget_busy(self):
         """A galaxy-map sequence is pending or running: the automatic one (after a supercharge) or one the page or the
@@ -12536,6 +12610,14 @@ def make_app(state, hosts=None):
         state.forget_honk_groups()   # the current ship's learned fire groups
         return web.json_response(state.autohonk_info())
 
+    async def uploads_view(request):
+        """POST /api/uploads {service: "eddn" | "edsm", on: bool}: the page's switch for one uploader."""
+        body = await json_object(request)
+        if body is None or body.get("service") not in outrider.uploads.SERVICES or not isinstance(body.get("on"), bool):
+            return web.json_response({"error": "expected {service: \"eddn\" or \"edsm\", on: true or false}"}, status=400)
+        state.set_upload(body["service"], body["on"])
+        return web.json_response(state.uploads_summary())
+
     async def autohonk_view(request):
         try:
             body = await request.json()
@@ -12722,6 +12804,7 @@ def make_app(state, hosts=None):
     app.router.add_get("/api/voices/catalogue", voice_catalogue_view)
     app.router.add_post("/api/speaker/audio", speaker_audio_view)
     app.router.add_post("/api/autohonk", pc_only(autohonk_view))
+    app.router.add_post("/api/uploads", uploads_view)
     app.router.add_post("/api/autohonk/test", pc_only(autohonk_test_view))
     app.router.add_post("/api/autohonk/forget", pc_only(autohonk_forget_view))
     app.router.add_get("/api/firsts", firsts_view)
@@ -13098,6 +13181,7 @@ async def run(args, st):
     print("co-pilot button: " + (f"{st['copilot']['button'] or '?'} on {st['copilot']['device'] or '?'}"
                                  if st["copilot"]["enabled"] else "off ([copilot] enabled)"))
     state.highway_cfg = dict(st["highway"])
+    state.upload_cfg = json.loads(json.dumps(st["uploads"]))   # [eddn], [edsm]: off unless switched on
     saved = meta_get(db, "autotarget")   # the Highway tab's toggle and delay beat the config file once used
     if isinstance(saved, dict):
         if isinstance(saved.get("enabled"), bool):
@@ -13130,6 +13214,10 @@ async def run(args, st):
     state.firsts_watch_on = st["watch_firsts"]
     firsts_task = asyncio.create_task(state.watch_firsts()) if st["watch_firsts"] else None
     update_task = asyncio.create_task(state.watch_updates()) if st["update_check"] else None
+    # uploads: their own session (never queued behind Spansh), named and versioned as EDDN asks of a sender
+    state.upload_session = ClientSession(timeout=ClientTimeout(total=20),
+                                         headers={"User-Agent": f"ED-Outrider/{outrider.__version__}"})
+    state.start_uploads()
     print("update check: " + ("on (GitHub's latest release, once a day)" if st["update_check"] else "off ([server] update_check)"))
     print("firsts watch: " + ("on (your unsold firsts on Spansh: one request every 10-30 s, each system once a day)"
                               if st["watch_firsts"] else "off ([spansh] watch_firsts)"))
@@ -13142,6 +13230,7 @@ async def run(args, st):
     except OSError as e:   # taken in the moment since port_free() said it was free
         print(f"cannot listen on {args.host}:{args.port}: {e.strerror or e}", file=sys.stderr)
         await spansh.close()
+        await state.upload_session.close()
         raise SystemExit(1)
     # a wildcard address is not a place a browser can go (and not a name the Host check answers): loopback is
     shown = "127.0.0.1" if args.host in WILDCARD_HOSTS else _host_name(args.host)
@@ -13181,6 +13270,7 @@ async def run(args, st):
             await state.player.close()   # a line playing here ends now, and its request with it
         await runner.cleanup()
         await spansh.close()
+        await state.upload_session.close()
         db.commit()
         db.close()
         print("stopped cleanly")

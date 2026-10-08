@@ -230,3 +230,15 @@
 # model = ""                # one that can call tools (try it with real questions)
 # timeout = 20              # seconds for the whole answer (2 to 120)
 # max_rounds = 4            # tool rounds before it must answer (1 to 8)
+
+[eddn]
+# EDDN, the Elite Dangerous Data Network: what your journals say as you play (systems, scans, signals, markets), sent
+# as it happens for Spansh, EDSM, Inara and others to read. Off unless you switch it on (the page's Settings switch
+# wins over this). Only one Outrider (or EDMC) should send it: see docs/guide/uploads.md.
+# enabled = false
+# test = false              # send to EDDN's test schemas only: nothing reaches the live data (for trying it out)
+
+[edsm]
+# EDSM, the Elite Dangerous Star Map: your flight log and scans, to your EDSM account in batches (each jump, docking).
+# Your EDSM commander name and API key are set in the page's Settings, per in-game commander.
+# enabled = false

@@ -2,6 +2,14 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · Uploads, part A2: switches, the sending loop, the status (branch EDMC-Functionality)
+- `[eddn] enabled / test` and `[edsm] enabled` (off by default), and `POST /api/uploads {service, on}` for the page's
+  switch, which wins over the config and is remembered; never in `--simulate`. The payload's `uploads` says, per
+  service, whether it is on, what is queued, sent and dropped in the last day, the last error, and why nothing can be
+  sent now (the beta, the Legacy game, crew in someone else's ship).
+- One sending loop per service on its own HTTP session (`ED-Outrider/<version>`): oldest first, about two a second;
+  after a network failure or a 5xx it waits a minute, longer each time. Still no service sends anything: EDDN is next.
+
 ## 2026-10-08 · Uploads, part A1: the session, the live gate, the outbox (branch EDMC-Functionality)
 - The groundwork for EDDN and EDSM uploads (opt-in, off; nothing is sent yet): `outrider/uploads.py` follows each
   journal line's game session (version and build per file, commander, Horizons/Odyssey, where you are, crew), lets only

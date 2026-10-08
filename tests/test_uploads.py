@@ -174,3 +174,99 @@ class HubThroughTheReader(unittest.TestCase):
         self.hub.session.feed({"timestamp": now_ts(5), "event": "FSDJump", "StarSystem": "B", "SystemAddress": 11, "StarPos": [1, 2, 3]})
         self.j.restore(cp)                                       # the tick's lines will be handled again
         self.assertEqual(self.hub.session.system, "Sol")
+
+
+class Settings(unittest.TestCase):
+
+    def test_config(self):
+        self.assertEqual(U.upload_settings({})["uploads"], {"eddn": {"enabled": False, "test": False}, "edsm": {"enabled": False}})
+        got = U.upload_settings({"eddn": {"enabled": True, "test": "yes"}, "edsm": {"enabled": True}})["uploads"]
+        self.assertEqual(got, {"eddn": {"enabled": True, "test": False}, "edsm": {"enabled": True}})   # a non-bool is the default
+
+
+class StateSwitches(unittest.TestCase):
+    """The config's [eddn]/[edsm] enabled, the page's switch over it, never in --simulate, held on a refused key."""
+
+    def setUp(self):
+        import types
+        self.db = ed_outrider.open_db(":memory:")
+        self.addCleanup(self.db.close)
+        self.j = ed_outrider.Journals(self.db)
+        self.state = ed_outrider.State(self.db, self.j, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+
+    def test_switches(self):
+        st = self.state
+        self.assertIs(self.j.uploads, st.uploads_hub)
+        self.assertEqual((st.upload_on("eddn"), st.upload_on("edsm"), st.upload_on("inara")), (False, False, False))
+        st.upload_cfg["eddn"]["enabled"] = True
+        self.assertTrue(st.upload_on("eddn"))
+        st.set_upload("eddn", False)                            # the page's switch wins over the config
+        self.assertFalse(st.upload_on("eddn"))
+        st.set_upload("edsm", True)
+        self.assertTrue(st.upload_on("edsm"))
+        st.upload_report("edsm", {"error": None, "at": 1, "results": [(1, "held", "203 Commander name/API Key not found", None)]})
+        self.assertFalse(st.upload_on("edsm"))                   # waiting on the player
+        self.assertEqual(st.uploads_summary()["edsm"]["held"], "203 Commander name/API Key not found")
+        st.set_upload("edsm", True)                              # switching it on again clears the hold
+        self.assertTrue(st.upload_on("edsm"))
+        st.simulate = True
+        self.assertFalse(st.upload_on("edsm"))
+
+    def test_endpoint(self):
+        import asyncio
+        from aiohttp.test_utils import TestClient, TestServer
+
+        async def go():
+            async with TestClient(TestServer(ed_outrider.make_app(self.state))) as c:
+                out = [(await c.post("/api/uploads", json={"service": "eddn", "on": True})).status]
+                for bad in ({"service": "inara", "on": True}, {"service": "eddn", "on": "yes"}, ["eddn"]):
+                    out.append((await c.post("/api/uploads", json=bad)).status)
+                return out
+        self.assertEqual(asyncio.run(go()), [200, 400, 400, 400])
+        self.assertTrue(self.state.upload_on("eddn"))
+
+
+class Loop(unittest.TestCase):
+    """upload_loop: each row settled as the sender says; a network failure waits (at least a minute, growing)."""
+
+    def test_rounds(self):
+        import asyncio
+        db = ed_outrider.open_db(":memory:")
+        self.addCleanup(db.close)
+        s = U.Session()
+        s.feed(header(now_ts(9)), "J.log")
+        s.feed(loadgame(now_ts(8)))
+        for i in range(3):
+            U.enqueue(db, "eddn", "x/1", f"J.log:{i}", now_ts(5), s, {"i": i})
+        db.commit()
+        clock = [1000.0]
+        calls, reports = [], []
+
+        when = []
+
+        async def send(rows):
+            when.append(clock[0])
+            calls.append([json.loads(r["message"])["i"] for r in rows])
+            if len(calls) == 1:
+                raise ConnectionError("unreachable")
+            return [(rows[0]["id"], "sent", "200 OK", None), (rows[1]["id"], "dropped", "400 FAIL", None),
+                    (rows[2]["id"], "queued", "503", 60)][:len(rows)]
+
+        async def sleep(secs):
+            clock[0] += max(secs, 1)
+            if clock[0] > 1000 + 400:
+                raise asyncio.CancelledError
+
+        async def go():
+            try:
+                await U.upload_loop("eddn", db, send, lambda s: True, clock=lambda: clock[0], sleep=sleep,
+                                    report=lambda s, o: reports.append(o["error"]))
+            except asyncio.CancelledError:
+                pass
+        asyncio.run(go())
+        self.assertEqual(calls[0], [0, 1, 2])                    # the first round: unreachable
+        self.assertEqual(calls[1], [0, 1, 2])                    # again, a minute later (not at once)
+        self.assertGreaterEqual(when[1] - when[0], 60)
+        self.assertEqual(reports[0], "ConnectionError: unreachable")
+        states = {json.loads(r["message"])["i"]: r["state"] for r in db.execute("SELECT * FROM upload_queue")}
+        self.assertEqual(states, {0: "sent", 1: "dropped", 2: "queued"})
