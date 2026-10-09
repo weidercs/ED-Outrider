@@ -582,8 +582,9 @@ function worthLeavingFor(l) {
     || (codexNewCounts() && b.codex_new));   // a species new to your codex here is worth stopping for (vouchers)
   // mapping only counts when it would add at least the green-row level (bonus-free, like the highlight),
   // or the body is special: a first-discovered / first-map ELW, water world, ammonia world or terraformable.
+  // A body someone else mapped (your scan says) never counts: one line said so when it was scanned (mapped_before).
   // Unscanned bodies and a missing honk stay on Here's to-do line; they never sound the alert on their own.
-  const maps = (l.unmapped || []).filter(u => u.special || (u.increment != null && u.increment >= hlLevel("body")));
+  const maps = (l.unmapped || []).filter(u => !u.mapped_before && (u.special || (u.increment != null && u.increment >= hlLevel("body"))));
   return {...l, bio_pending: bio, maps, clean: !maps.length && !bio.length};
 }
 // what a bio_pending body could pay with its first-footfall factor (the server's potential is bonus-free, so the
@@ -1504,7 +1505,7 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["trade", "a trade route (plotted in Plot Route): on arriving at a stop, what to sell and buy there; once that is done, the hop's profit and the next stop; and route complete", null],
   ["highway", "the Neutron Highway (a route plotted in Plot Route): the next stop on arriving at a route system (with the boost and refuel stops), off route, back on the highway, and highway complete", null],
   ["autotarget", "auto-target (after a supercharge when it is on, a test, Target next, 🎯, the co-pilot button's tap): whether the system was targeted, and nothing to target when the button found none", null],
-  ["find", "a valuable body just scanned (over your highlight levels)", "find"],
+  ["find", "a valuable body just scanned (over your highlight levels); one someone else mapped is not named, but said once per system (\"already mapped, still worth mapping\")", "find"],
   ["jumponium", "a landable body just scanned has a material your FSD injections are short of (premium or standard at 2 or fewer): said with the FSS debrief, or alone when the FSS never completes", "find"],
   ["sampling", "leaving a body with exobiology unfinished (untouched genera only if you landed there); a species completed; within 100 m of a plant you tagged where the next sample would count", "alert"],
   ["approach", "approaching a landable body at or over your high-gravity level with unsold data over the amber level or rebuy multiple", "alert"],
@@ -2052,7 +2053,7 @@ const LINE_SAMPLES = {
   speech_on: {}, game_start: {}, game_exit: {}, heat: {},
   arrival_undiscovered: {system: "Drojau LL-O b26-3"}, arrival_discovered: {system: "Drojau LL-O b26-3"},
   leaving: {text: "A 2, a class two gas giant, plus 1.4M to map"},
-  find_body: {what: "Water world, terraformable, undiscovered", body: "A 3", value: "2.3M"},
+  find_body: {what: "Water world, terraformable, undiscovered", body: "A 3", value: "2.3M"}, mapped_before: {},
   find_bio: {body: "B 7", value: "19.0M"}, sample_clear: {genus: "Stratum"},
   codex: {entry: "Stratum Tectonicas", what: "new to your codex for this region"},
   fuel_low: {pct: 18}, fuel_star: {pct: 22, star: "white dwarf"}, fuel_target: {pct: 22, system: "Drojau LL-O b26-3"},
@@ -2226,6 +2227,7 @@ function arrivalBriefText(m) {
 // zone; nothing notable, terraformable or over your body level left to map; no bio at or over your exobiology
 // level. Fuel plays no part: its alerts are their own, and jump the queue.
 const routineQuiet = () => !!store.get("routineQuiet", false);
+const mappedBeforeSaid = new Set();   // systems whose "already mapped" line was said (once per system, this page)
 // the region crossing's {count}: species logged elsewhere that the rules let grow here and your codex lacks here
 const regionCountText = n => n ? `${n} species you have logged elsewhere could be new to your codex here.` : "";
 // a region crossing waiting for the arrival briefing to say it ({sys, at, m}); said alone if none has in 30 s
@@ -6581,7 +6583,14 @@ function onData() {
     try {
       if (m.kind === "scan") {
         const special = (m.notable || m.terraformable) && m.first_discovered;
-        if (special || (m.base_value != null && m.base_value >= hlLevel("body"))) {
+        if (m.mapped_before && m.base_value != null && m.base_value >= hlLevel("body")) {
+          // someone else mapped it: not pointed out; once per system, a line that the system still pays (the author)
+          if (!mappedBeforeSaid.has(m.system)) {
+            mappedBeforeSaid.add(m.system);
+            alertOut("find", "Already mapped", "valuable bodies here are still worth mapping",
+                     {say: () => line("mapped_before", {}, "Already mapped, but there are still valuable bodies to map if you want to jump on the train.")});
+          }
+        } else if (special || (m.base_value != null && m.base_value >= hlLevel("body"))) {
           const what = [m.subtype, m.terraformable && "terraformable", m.first_discovered && "undiscovered"].filter(Boolean).join(", ");
           alertOut("find", `${m.body}: ${what}`, m.base_value ? `${credits(m.base_value)} cr scanned and mapped` : "", {say: () => line("find_body", {what, body: m.body, value: m.base_value ? credits(m.base_value) : ""}, `${what}, ${m.body}.`)});
           toast(`✦ ${m.body}: ${what}`);

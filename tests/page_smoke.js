@@ -60,8 +60,12 @@ const settle = async maxMs => {
     const before = errors.length;
     btn.click();
     await settle(2500);
+    // a view whose answer is slow (Overview first, right after the load, on a busy machine) gets up to 10 s more:
+    // a fixed wait failed it now and then, filled a moment later
+    const isFilled = () => { const e = d.querySelector(sel); return !!e && e.textContent.trim().length > 0 && !/^loading/.test(e.textContent.trim()); };
+    for (let waited = 0; !isFilled() && waited < 10000; waited += 100) await sleep(100);
     const el = d.querySelector(sel);
-    const filled = el && el.textContent.trim().length > 0 && !/^loading/.test(el.textContent.trim());
+    const filled = isFilled();
     const good = filled && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "|", v.padEnd(8), "|", (el ? el.textContent.trim().replace(/\s+/g, " ").slice(0, 90) : "missing " + sel), errors.slice(before));
@@ -320,6 +324,31 @@ const settle = async maxMs => {
                said.every(x => x[1] === "autotarget") && errors.length === before &&
                words === "Successfully targeted neutron jump target Hwy Stop 38|Failed to target neutron jump target Hwy Stop 38";
     console.log(ok ? "OK" : "FAIL", "| auto-target results spoken |", words, JSON.stringify(res), errors.slice(before));
+  }
+  // a body someone else mapped (the author, 2026-10-09): no find alert for it; one "already mapped" line per system
+  // instead; never in the leaving list
+  {
+    const w = dom.window, before = errors.length, said = [];
+    const realPlay = w.play, realSpeak = w.speak;
+    w.speak = (t, o) => said.push((o || {}).kind || ""); w.play = () => {};
+    const res = JSON.parse(w.eval(`(() => {
+      const saved = data.moments, flags = [speechOn, isSpeaker, alertSpeak.find, lastMomentSeq];
+      speechOn = true; isSpeaker = true; alertSpeak.find = true; mappedBeforeSaid.clear();
+      const s0 = lastMomentSeq, mk = (i, m) => Object.assign({seq: s0 + i, ts: new Date().toISOString(), kind: "scan",
+        subtype: "Sudarsky class II gas giant", base_value: 9e9, terraformable: false, first_discovered: false}, m);
+      data.moments = [mk(1, {system: "71", body: "5", mapped_before: true}), mk(2, {system: "71", body: "6", mapped_before: true}),
+                      mk(3, {system: "72", body: "1", mapped_before: false})];
+      onData();
+      const said = mappedBeforeSaid.has("71");
+      const maps = worthLeavingFor({bio_pending: [], unmapped: [{body: "5", mapped_before: true, special: true, increment: 9e9},
+                                                               {body: "4", mapped_before: false, increment: 9e9}]}).maps.map(u => u.body);
+      data.moments = saved; [speechOn, isSpeaker, alertSpeak.find] = flags; lastMomentSeq = flags[3]; speechItems = [];
+      return JSON.stringify({said, maps}); })()`));
+    await sleep(2500);   // the alerts' sounds and spoken lines that follow them land here, not in the next check
+    w.eval("speechItems = []");
+    w.speak = realSpeak; w.play = realPlay;
+    const ok = said.length === 2 && res.said && JSON.stringify(res.maps) === '["4"]' && errors.length === before;
+    console.log(ok ? "OK" : "FAIL", "| mapped by someone else |", said.length, JSON.stringify(res), errors.slice(before));
   }
   // one speaker: a window that is not the speaker still shows the alert but plays and says nothing; the
   // ▶ voice button still speaks; a danger line comes only from business and never swears

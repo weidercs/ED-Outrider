@@ -10,7 +10,9 @@ notification and be spoken (🗣), chosen per alert in **⚙ Settings → Alerts
 - a new discovery targeted, or arriving somewhere nobody has been
 - leaving with mapping or bio over your levels undone, or a first-discovered Earth-like, water, ammonia or
   terraformable world unmapped
-- a valuable body the moment the FSS resolves it, and a new codex entry
+- a valuable body the moment the FSS resolves it, and a new codex entry. A body someone else has already mapped is
+  never pointed out (nor warned about when you leave): the first one in a system gets one line instead, "Already
+  mapped, but there are still valuable bodies to map if you want to jump on the train"
 - low fuel where you cannot scoop, and a top-up worth taking before a dry stretch
 - docking where the station buys your data, and what you banked when you sold
 - a sale that left data aboard (Universal Cartographics sells 50 systems a page; at Vista Genomics, the species

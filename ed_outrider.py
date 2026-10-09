@@ -6579,6 +6579,7 @@ class State:
                 m.update(system=str(m["system"]), system_name=sysname, body=short_name(sysname, rec["name"]),
                          subtype=rec.get("subtype"), terraformable=bool(rec.get("terraformable")),
                          landable=bool(rec.get("landable")), first_discovered=rec.get("was_discovered") is False,
+                         mapped_before=rec.get("was_mapped") is True,   # someone else mapped it (your scan says)
                          notable=NOTABLE_PLANETS.get(rec.get("subtype")))
                 if rec.get("ed") and outrider.unsold:
                     m["base_value"] = outrider.unsold.body_value(dict(rec["ed"], first_discovered=False, first_mapped=False),
@@ -6803,8 +6804,8 @@ class State:
                 val = sum((g.get("value") or 0) for g in groups)
                 if val and (not bio or val > bio["value"]):
                     bio = {"body": r["name"], "value": val}
-            if r["name"] in mapped:
-                continue
+            if r["name"] in mapped or r.get("was_mapped") is True:
+                continue   # mapped by you, or (your scan says) by someone else: not pointed out (the author, 2026-10-09)
             value = outrider.unsold.body_value(dict(r["ed"], first_discovered=False, first_mapped=False), True, False, True) \
                 if r.get("ed") and outrider.unsold else r.get("value")
             worth.append({"body": r["name"], "subtype": r.get("subtype"), "terraformable": bool(r.get("terraformable")),
@@ -7768,7 +7769,9 @@ class State:
                 total_bonus = outrider.unsold.body_value(mine, True, False, True)
             unmapped_all.append({"body": name_of(bid), "subtype": rec["subtype"], "terraformable": bool(rec.get("terraformable")),
                                  "increment": inc, "value_mapped": total, "value_mapped_bonus": total_bonus,
-                                 "special": special, "dist_ls": rec.get("dist_ls")})   # the suggested order (by increment)
+                                 "special": special, "dist_ls": rec.get("dist_ls"),
+                                 # someone else mapped it (your scan says): no alert points it out (the author, 2026-10-09)
+                                 "mapped_before": rec.get("was_mapped") is True})   # the suggested order (by increment)
         unmapped_all.sort(key=lambda u: -(u["increment"] or 0))
         return {"body_count": count, "scanned": len(bodies), "unscanned": unscanned,
                 "honked": bool(sysrow), "all_found": bool(sysrow and sysrow["all_found"]),

@@ -1857,6 +1857,79 @@
         "Sweetheart, fucking hell, the scanner nearly blushed. {what} at {body}."
       ]
     },
+    "mapped_before": {
+      "when": "a valuable planet was scanned that someone else had already mapped: said once per system instead of the scan's alert (nobody else's mapped bodies are pointed out, or warned about when you leave)",
+      "business": [
+        "Already mapped, but there are still valuable bodies to map if you want to jump on the train.",
+        "Mapped before. Still worth mapping if you want the credits.",
+        "{name}, this one has been mapped already. Valuable bodies remain if you want them.",
+        "Previously mapped system. Mapping still pays, if you choose to.",
+        "Someone mapped here first. The bodies are still worth your probes.",
+        "Mapped by another commander. Optional: there is still value in mapping.",
+        "No first map here, {name}. The value is still there if you want it.",
+        "Already charted. Mapping remains profitable if you have the time.",
+        "Prior survey on record. Valuable bodies are still yours to map.",
+        "Mapped already. Your call, {name}: the credits are still on the table.",
+        "Another explorer mapped these. Still worth a few probes if you are staying.",
+        "Mapping first went to someone else. The payout still stands."
+      ],
+      "sarcastic": [
+        "Already mapped. But hey, there's still money here if you want to jump on the train.",
+        "Somebody beat you to it. The bodies still pay, if second place appeals.",
+        "Mapped already. You can still map them. Nobody will clap, but they'll pay.",
+        "Oh look, footprints. Someone mapped this lot first. Still worth a probe or two.",
+        "Second to the party, {name}. The buffet's still open though.",
+        "Already mapped by someone with better timing. Valuable bodies are still here.",
+        "No first map for you. But the credits don't know that.",
+        "Someone else got the glory. You can still get the money.",
+        "Mapped before you got here. Shocking. Still worth mapping, mind.",
+        "Already charted, {name}. Hop on the bandwagon if you like credits.",
+        "Late again. The valuable bodies are still mappable, if you're not too proud.",
+        "Somebody's flag is already on these. The payout's still yours to grab."
+      ],
+      "sarcastic_profane": [
+        "Already fucking mapped. Still money here if you want to jump on the train.",
+        "Some bastard mapped this first. The bodies still pay, ape.",
+        "Mapped already, meat sack. Still worth a damn probe if you're greedy.",
+        "Shit, someone beat you here. The credits are still on the table though.",
+        "Second place again, {name}. Bloody typical. Still worth mapping.",
+        "Already charted by some smug prick. You can still cash in.",
+        "No first map, primate. The money doesn't give a shit.",
+        "Somebody else got the glory. Take the damn credits anyway.",
+        "Mapped before you showed up. Of course. Still worth a few probes.",
+        "Late to the fucking party. The buffet's still open.",
+        "Someone's arse got here first. The valuable bodies still pay out.",
+        "Already mapped, ape. Map them anyway if you like money."
+      ],
+      "sweet": [
+        "Already mapped, love, but there are still valuable bodies to map if you want to jump on the train.",
+        "Someone mapped these first, darling. They're still worth it if you'd like.",
+        "Not a first map, sweetheart, but the credits are still waiting for you.",
+        "Another explorer was here before us, love. Still lovely money to be had.",
+        "Mapped already, darling. Only if you feel like it, there's still value here.",
+        "Someone got here first, sweetheart. You could still map them, if you want.",
+        "Already charted, love. The bodies would still pay you nicely.",
+        "No first map this time, {name}. Still worth a few probes, if you like.",
+        "Mapped before, darling. Your choice, the credits are still there.",
+        "Someone beat us to it, love. Never mind, there's still value here.",
+        "Already mapped, sweetheart. Hop on the train if you fancy it.",
+        "Another commander mapped these, love. Still worth your time, if you want."
+      ],
+      "sweet_profane": [
+        "Already bloody mapped, love, but there's still money if you want to jump on the train.",
+        "Damn, someone mapped these first, darling. Still worth it if you want.",
+        "Shit, not a first map, sweetheart. The credits are still waiting though.",
+        "Some lucky bastard was here before us, love. Still good money here.",
+        "Mapped already, darling. Bloody shame, but there's still value.",
+        "Hell, someone got here first, sweetheart. You can still map them.",
+        "Already charted, love. Damn good money all the same.",
+        "No first map, {name}. Bugger. Still worth a few probes if you like.",
+        "Mapped before, darling. Sod it, the credits are still there.",
+        "Someone beat us to it, love. Bloody typical. Still value here though.",
+        "Already mapped, sweetheart. Hop on the damn train if you fancy it.",
+        "Another commander mapped these, love. Still worth your bloody time."
+      ]
+    },
     "find_bio": {
       "when": "a body with biology worth your threshold: {body}, {value}",
       "business": [

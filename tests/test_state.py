@@ -305,6 +305,23 @@ class Batch1Server(unittest.TestCase):
         u5 = next(x for x in self.state.leaving_summary(1)["unmapped"] if x["body"] == "5")
         self.assertEqual(u5["value_mapped_bonus"], u5["value_mapped"])
 
+    def test_mapped_by_someone_else_is_flagged(self):
+        """The author (2026-10-09): a body someone else mapped (WasMapped) is never pointed out. The leaving list and the
+        scan's moment flag it (the page leaves it out, and says once per system that mapping still pays); the arrival
+        briefing never picks it."""
+        for bid, name, mapped in ((4, "Sys 4", False), (5, "Sys 5", True)):
+            ev = scan(f"2026-01-01T00:0{bid}:00Z", "Sys", 1, bid, name, disc=True)[2]
+            ev.update(PlanetClass="Sudarsky class II gas giant", MassEM=300, WasMapped=mapped)
+            self.j.handle(ev)
+        self.j.moment("scan", "2026-01-01T00:05:00Z", system=1, body_id=5)
+        self.db.commit()
+        flags = {u["body"]: u["mapped_before"] for u in self.state.leaving_summary(1)["unmapped"]}
+        self.assertEqual(flags, {"4": False, "5": True})
+        scanm = [x for x in self.state.moments_summary() if x["kind"] == "scan" and x["body"] == "5"][-1]
+        self.assertTrue(scanm["mapped_before"])
+        worth = [w["body"] for w in (self.state.arrival_facts(1) or {}).get("worth") or []]
+        self.assertEqual(worth, ["4"])                          # the one nobody mapped; not 5
+
 
 class Batch2Server(unittest.TestCase):
     """Batch 2: jet-cone boost, stellar phenomena, the on-body strip and the in-game destination."""

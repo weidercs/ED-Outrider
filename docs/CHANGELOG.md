@@ -2,6 +2,16 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Bodies someone else mapped are not pointed out; gear and scoop N/A in supercruise
+- A body your scan says someone else has already mapped (WasMapped) no longer sounds the find alert, is not named in
+  the arrival briefing or the FSS debrief, and does not make the leaving alert warn (the author's ask). The first one
+  over your levels in a system says one new line instead, in every personality: "Already mapped, but there are still
+  valuable bodies to map if you want to jump on the train" (speech key mapped_before). Spansh's records do not say
+  who mapped what, so a body you have not scanned yet is still mentioned.
+- The tablet's rail: Landing gear and Cargo scoop are N/A in supercruise too, as Hardpoints are.
+- The page smoke test's per-view check waits up to 10 s more for a slow view (Overview right after the load failed
+  now and then, filled a moment later).
+
 ## 2026-10-09 · Hardpoints N/A in supercruise on the tablet's rail
 - The tablet's Hardpoints button lit "On" after every jump: the game sets Status.json's hardpoints flag in
   supercruise (read in game, with Analysis mode on), where hardpoints cannot be deployed. In supercruise the button

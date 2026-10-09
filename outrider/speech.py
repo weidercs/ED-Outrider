@@ -33,6 +33,8 @@ KEYS = {
     "arrival_discovered": "a system announced as new turned out to be known: {system}",
     "leaving": "jumping away with work left behind: {text} (what is left)",
     "find_body": "a valuable or special planet was scanned: {what} (its class and flags), {body}, {value}",
+    "mapped_before": "a valuable planet was scanned that someone else had already mapped (said once per system, "
+                     "instead of the scan's alert)",
     "find_bio": "a body with biology worth your threshold: {body}, {value}",
     "sample_clear": "far enough from the last sample to take the next: {genus}",
     "bio_tag_near": "within 100 m of a plant you tagged with the composition scanner where the next sample of the "
@@ -382,7 +384,7 @@ def ban_line(speech_path, alert, template, ban=True):
 SAMPLES = {
     "arrival_undiscovered": {"system": "Drojau LL-O b26-3"}, "arrival_discovered": {"system": "Drojau LL-O b26-3"},
     "leaving": {"text": "A 2, a class two gas giant, plus 1.4M to map"},
-    "find_body": {"what": "Water world, terraformable, undiscovered", "body": "A 3", "value": "2.3M"},
+    "find_body": {"what": "Water world, terraformable, undiscovered", "body": "A 3", "value": "2.3M"}, "mapped_before": {},
     "find_bio": {"body": "B 7", "value": "19.0M"}, "sample_clear": {"genus": "Stratum"}, "bio_tag_near": {"genus": "Tussock", "distance": 80},
     "codex": {"entry": "Stratum Tectonicas", "what": "new to your codex for this region"},
     "fuel_low": {"pct": 18}, "fuel_star": {"pct": 22, "star": "white dwarf"},

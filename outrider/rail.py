@@ -133,17 +133,19 @@ def context_of(status, vehicle_type=None):
 
 
 # why a button is "na" (not available now) when state_of says so
-NA_WHY = {"hard": "in supercruise"}
+NA_WHY = {"hard": "in supercruise", "gear": "in supercruise", "scoop": "in supercruise"}
+# controls that cannot be used in supercruise (the author's choice, 2026-10-09): N/A there, whatever their flag says
+SUPERCRUISE_NA = (("flag", F_HARDPOINTS), ("flag", F_GEAR), ("flag", F_SCOOP))
 
 
 def state_of(button, status):
     """A button's state from Status.json: "on", "off", "high" (the SRV's headlights on high beam), "na" (not available
-    now: hardpoints in supercruise, NA_WHY), or None when the game reports nothing for it."""
+    now: hardpoints, landing gear and cargo scoop in supercruise, NA_WHY), or None when the game reports nothing for it."""
     spec, st = button.get("state"), status or {}
     f = st.get("flags") or 0
-    if spec == ("flag", F_HARDPOINTS) and bit(F_SUPERCRUISE, f):
-        # hardpoints cannot be out in supercruise, yet the game sets their flag there (read in game 2026-10-09, with
-        # Analysis mode on): "deployed" after every jump
+    if spec in SUPERCRUISE_NA and bit(F_SUPERCRUISE, f):
+        # none of them works in supercruise; the game even sets the hardpoints flag there (read in game 2026-10-09,
+        # with Analysis mode on): "deployed" after every jump
         return "na"
     if spec == "headlights":
         return ("high" if bit(F_HIGH_BEAM, f) else "on") if bit(F_LIGHTS, f) else "off"

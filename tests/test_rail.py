@@ -100,6 +100,10 @@ class Pure(unittest.TestCase):
         self.assertEqual([st("ship", "hard", flags=F(4, 6, 27)), st("ship", "hard", flags=F(4)), st("ship", "hard", flags=F(6)),
                           st("ship", "hard", flags=0)], ["na", "na", "on", "off"])
         self.assertEqual(rail.NA_WHY["hard"], "in supercruise")
+        # landing gear and cargo scoop too (the author's choice); the SRV's scoop is never in supercruise
+        self.assertEqual([st("ship", "gear", flags=F(4, 2)), st("ship", "scoop", flags=F(4, 9)), st("ship", "gear", flags=F(2)),
+                          st("ship", "scoop", flags=F(9)), st("srv", "scoop", flags=F(9))], ["na", "na", "on", "on", "on"])
+        self.assertEqual((rail.NA_WHY["gear"], rail.NA_WHY["scoop"]), ("in supercruise", "in supercruise"))
 
     def test_check_set(self):
         ok, why = rail.check_set("ship", [{"id": "fa", "label": "  F.A.   toggle  "}, {"id": "dock"}])
