@@ -229,6 +229,10 @@ upstream project's choices, not rules of the game.
   Nothing is claimed before the others' leases are read. An Outrider from before the rule (no `wanted` in its lease)
   holds whenever another lease names the service, so it is always given way to. Before this, both held for good and
   each followed as if the other sent (Codex F1, 2026-10-09).
+- **The journal archive has no lock between instances** (Codex F8, 2026-10-09). Two Outriders sharing a backup folder
+  each copy through a .part file of their own and look at the archive again just before replacing it, so a lagging
+  mirror's shorter copy does not replace a fuller one. A narrow window remains; a lock would not close it on an NFS
+  share (where a shared folder is likely, and locks are unreliable), and the next backup copies the fuller journal again.
 - **A trade route counts tonnes, and undocking moves on** (Codex F4, the author's choice, 2026-10-09). A commodity is
   done once its planned tonnes are traded; strict counting alone would leave a stop open for good when the station
   had less than Spansh said, so undocking from a stop with anything traded there finishes it, and the voice says what

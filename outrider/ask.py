@@ -271,8 +271,11 @@ async def ai_answer(text, cfg, get, session, rows=10):
     import aiohttp
 
     async def round_trip():
-        for _ in range(cfg["max_rounds"] + 1):
+        for n in range(cfg["max_rounds"] + 1):
+            last = n == cfg["max_rounds"]   # the rounds of tools are used up: this request is for the answer
             body = {"model": cfg["model"], "messages": messages, "tools": openai_tools()}
+            if last:
+                body["tool_choice"] = "none"
             try:
                 async with session.post(url, json=body, headers=headers) as r:
                     if r.status in (401, 403):
@@ -300,6 +303,8 @@ async def ai_answer(text, cfg, get, session, rows=10):
                 if not words:
                     raise AIError("ai_error", "the AI gave no answer")
                 return words
+            if last:   # asked for more tools anyway (a provider that ignores tool_choice): none run (Codex F7)
+                break
             messages.append({"role": "assistant", "content": content, "tool_calls": calls})
             for c in calls:
                 fn = c.get("function") or {}

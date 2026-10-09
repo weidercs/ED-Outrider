@@ -1365,6 +1365,43 @@ class BatchAIntegrity(unittest.TestCase):
         self.assertEqual(ed_outrider.rotate_backups(d, 1, "/q/x.sqlite", current=os.path.join(d, "outrider-x-20250101-000000Z.zip")), 1)
         self.assertEqual(os.listdir(d), ["outrider-x-20250101-000000Z.zip"])
 
+    def test_archive_shared_with_another_instance(self):
+        """Codex F8: two instances archive the same journal into one folder, one from a lagging mirror. The shorter copy
+        never replaces the longer one another instance put there meanwhile, and one's failure never removes the
+        other's staging file."""
+        import shutil
+        live, dest = os.path.join(self.tmp, "live"), os.path.join(self.tmp, "arch")
+        name = "Journal.2026-01-01T000000.01.log"
+        self.write(live, name, [{"event": "Fileheader"}, {"event": "LoadGame"}])           # the lagging mirror's
+        os.makedirs(dest, exist_ok=True)
+        with open(os.path.join(live, name), "rb") as f:
+            whole = f.read()
+        with open(os.path.join(dest, name), "wb") as f:
+            f.write(whole.split(b"\n")[0] + b"\n")                                       # archived earlier: its first line
+        longer = whole + b'{"event":"Location"}\r\n' * 20                              # the fuller source's
+        real = shutil.copy2
+
+        def copy2(src, dst):   # the other instance finishes its fuller copy while this one copies
+            real(src, dst)
+            with open(os.path.join(dest, name), "wb") as f:
+                f.write(longer)
+        with unittest.mock.patch.object(shutil, "copy2", copy2):
+            copied, _, failed = ed_outrider.archive_journals([live], dest)
+        self.assertEqual((copied, failed), (0, []))
+        with open(os.path.join(dest, name), "rb") as f:
+            self.assertEqual(f.read(), longer)
+        self.assertEqual(os.listdir(dest), [name])                                        # no staging file left
+        # the other instance's staging file (the old shared name) is not this one's to remove on a failure
+        os.remove(os.path.join(dest, name))
+        theirs = os.path.join(dest, name + ".part")
+        open(theirs, "w").close()
+
+        def fails(src, dst):
+            raise OSError(28, "No space left on device")
+        with unittest.mock.patch.object(shutil, "copy2", fails):
+            ed_outrider.archive_journals([live], dest)
+        self.assertTrue(os.path.exists(theirs))
+
     def test_archive_failure_is_reported_and_rotation_still_runs(self):   # G2.2
         import shutil
         live, dest = os.path.join(self.tmp, "live"), os.path.join(self.tmp, "arch")

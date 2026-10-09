@@ -5277,8 +5277,10 @@ def archive_journals(dirs, dest):
     past it (journals are only ever appended to, so this brings the journal being written up to date too, and
     a closed one is copied once). An archived file is never replaced by a smaller one or by one that starts
     differently: another instance sharing the folder must not overwrite a journal with a different one.
-    Plain files, never deleted: restoring is pointing --legacy at `dest`. A copy goes through a .part file,
-    so an interrupted one never looks like a journal. One file that cannot be copied (unreadable, a full disk)
+    Plain files, never deleted: restoring is pointing --legacy at `dest`. A copy goes through a .part file of its
+    own (another instance's copy of the same journal has its own), so an interrupted one never looks like a journal,
+    and the archive is looked at again just before the copy replaces it: another instance that archived as much or
+    more meanwhile keeps its copy (Codex F8: a lagging mirror's shorter copy replaced a fuller one). One file that cannot be copied (unreadable, a full disk)
     is skipped and reported, not the rest. Returns (files copied, the date of the newest journal in the
     archive or None, [(file name, why) for each one that failed])."""
     import shutil
@@ -5297,13 +5299,21 @@ def archive_journals(dirs, dest):
                 have = None   # not archived yet
             if have is not None and (size <= have or not _same_journal(src, out)):
                 continue
+            part = f"{out}.{os.getpid()}-{secrets.token_hex(3)}.part"
             try:
-                shutil.copy2(src, out + ".part")
-                os.replace(out + ".part", out)
+                shutil.copy2(src, part)
+                try:
+                    now = os.path.getsize(out)
+                except OSError:
+                    now = None
+                if now is not None and now >= os.path.getsize(part):
+                    os.remove(part)   # archived meanwhile, as far or further
+                    continue
+                os.replace(part, out)
             except OSError as e:
                 failed.append((os.path.basename(src), e.strerror or str(e)))
                 try:
-                    os.remove(out + ".part")
+                    os.remove(part)
                 except OSError:
                     pass
                 continue

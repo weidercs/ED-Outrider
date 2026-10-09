@@ -366,7 +366,9 @@ def update_rules(path=None, log=print, versions=None):
     grid = tables(REGIONMAP, "regions", "regionmap")
     kept = None   # (genus id, species id) -> colours from the current file, when ExploData did not arrive
     try:
-        genus_data = _literals(_get(EXPLODATA)).get("data") or {}
+        # its table as code (data = build_colours()) fails like a failed fetch: the colours already there are kept and
+        # its version is not recorded, so the next start tries again (Codex, 2026-10-09)
+        genus_data = tables(EXPLODATA, "data").get("data") or {}
         log("bio rules: colour variants")
     except Exception as e:  # noqa: BLE001 -- without them species are simply not ruled out by colour
         genus_data = {}

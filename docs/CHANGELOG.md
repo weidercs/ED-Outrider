@@ -2,6 +2,16 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Codex review fixes: the AI's rounds, the journal archive, the colour tables
+- The AI could run one more round of tools than `[assistant] max_rounds` allowed (Codex F7): the request after the
+  last round asks for the answer only (`tool_choice: "none"`), and a tool asked for then is not run.
+- Two Outriders archiving the same journal into a shared backup folder could leave the shorter copy (a lagging
+  mirror's) over the fuller one, and shared one staging file (Codex F8): each copy has its own .part file, and the
+  archive is looked at again just before the replace. No lock between instances (DESIGN_NOTES).
+- ExploData's colour table written as code upstream (not a plain literal) was taken as "no colours" and its version
+  recorded, so it was never fetched again: it now fails like a failed fetch, keeping the colours already there and
+  retrying at the next start.
+
 ## 2026-10-09 · Codex review fixes: the map
 - The map kept what it had for a system while it was closed: leave a system and come back (or scan in it) with the
   map in another tab, and it showed the old trace and markers (Codex F5). Opening the map asks again. Its cache key

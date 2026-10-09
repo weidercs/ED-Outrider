@@ -835,6 +835,19 @@ class RulesDownload(unittest.TestCase):
         with open(self.path) as fh:
             self.assertEqual(fh.read(), before)
 
+    def test_colours_no_longer_literal_are_retried(self):
+        """ExploData's colour table written as code (data = build_colours()): not taken as "no colours" with its version
+        recorded (never fetched again), but as a failed fetch, retried at the next start (Codex, 2026-10-09)."""
+        good = self.fake_get()
+
+        def get(url):
+            return "data = build_colours()" if "genus.py" in url else good(url)
+        with unittest.mock.patch.object(outrider.bio, "_get", get):
+            outrider.bio.update_rules(self.path, log=self.log.append, versions=dict(self.V))
+        with open(self.path) as fh:
+            self.assertEqual(json.load(fh)["versions"]["explodata"], "")
+        self.assertTrue(any("could not fetch colour variants" in m for m in self.log))
+
     def test_a_failed_part_is_saved_without_a_version(self):   # F38
         with unittest.mock.patch.object(outrider.bio, "_get", self.fake_get(fail=("contents/", "genus.py"))):
             outrider.bio.update_rules(self.path, log=self.log.append, versions=dict(self.V))
