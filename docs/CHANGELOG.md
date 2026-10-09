@@ -2,6 +2,14 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Version 2026.10.19
+- The first release since 2026.10.16 (2026.10.17 and 2026.10.18 were withdrawn to be tested first). New since 10.16:
+  opt-in uploads to EDDN and EDSM (Settings -> Uploads; off by default); the nearest place to dock (Plot Route's
+  📍 Nearest..., with the DSSA carriers); the plugin gaps (tagged plants, no ×5 in populated systems, ✪ new to your
+  codex anywhere, the full-scan bonus, star kinds, Canonn Bioforge links...); and two whole-codebase bug sweeps, every
+  finding fixed with a test. The first start re-reads the journals (parser 44). Docker: the container always listens
+  on 8025 (set PORT in .env), and the health check waits for the first import.
+
 ## 2026-10-09 · The thresholds followed across windows
 - The unsold and highlight thresholds changed (or reset by an import) in another window are followed by this one, as
   the alert ticks now are; it kept its own copy and could write it back over the change.

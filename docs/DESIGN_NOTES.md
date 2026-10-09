@@ -281,7 +281,8 @@ upstream project's choices, not rules of the game.
 - **The link pill's "stale" is the long poll's limit, not quiet** (review S41): the server answers within 25 s even
   with nothing new, so "stale" starts at 30 s without an answer; the desktop's "linked · N s" counts up to that in
   quiet play. The tablet's pill says just "linked" (the ticking seconds distracted the author; 2026-10-04) and shows
-  the age only once stale.
+  the age only once stale. A long poll with no answer by `POLL_TIMEOUT_MS` (40 s) is aborted: a hung link (the PC
+  suspended) becomes "no link" and "Lost contact" instead of "stale" for good.
 - **The README is a front page; the guide is `docs/guide/`** (the author, 2026-10-07: the single README had grown to
   1,000 lines). Plain Markdown in the repository, not a wiki or a docs site: versioned with the code, changed in the
   same commit as a feature, no build step. Implementation detail lives in code comments and these notes.
@@ -293,7 +294,10 @@ upstream project's choices, not rules of the game.
   time order (`outrider/cargo.py` `carrier_fold`, rules in its docstring): your transfers and trades there, a sell
   order's amount as a floor (the game sells only what is held), a buy order's filled part worked out at the next
   market, Recount for what nothing shows. Checked on the author's carrier: its whole history (back to 2025) folds
-  to 16,076 t against the 16,085 t it reports, the 9 t gap being the two lines no order ever showed.
+  to 16,076 t against the 16,085 t it reports, the 9 t gap being the two lines no order ever showed. A buy order's
+  fill is not added to the carrier's reported total when a CarrierStats came since the market read before it: the
+  game writes one just before Market.json, and it already holds the fill (counted twice it made a false gap; Fable
+  sweep 2026-10-09, correcting the same night's first fix).
 - **Why not Frontier's companion API** (the author, 2026-10-07): it would list the carrier's cargo whole, but it
   means signing in to Frontier (as EDMC and Inara do). Outrider never does: it reads the player's own journal files
   and makes only read-only queries to public services (Spansh, EDSM, GitHub, Hugging Face, EDAstro), so the player's Frontier
