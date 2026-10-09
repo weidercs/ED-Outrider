@@ -21,7 +21,13 @@ it drawn from its scan data (an impression: class colours, bands, clouds, atmosp
 community survey's mineral odds for that ground (odds, not contents) and what your SRV mined there before.
 The to-do line ticks itself off as you honk, map and sample, in a suggested order with supercruise time and
 credits per minute ("~2 min · 450k/min"; "skip?" when not worth the trip). Bio nobody has set foot on is
-valued with the ×5 first-footfall bonus.
+valued with the ×5 first-footfall bonus, except in a populated system: Vista Genomics never pays it there.
+"🧬? check in the FSS" marks a landable body you have only from an AutoScan or a nav beacon, whose signals nobody
+counted, where life is possible. The body panel lists why each other genus is not expected ("pressure too
+low"). Flying low over a body in your ship (under 5 km), the on-body strip already shows its bio card. A star's
+panel says its kind in words ("main sequence", "white dwarf (hydrogen-rich)"), a biology codex entry links to
+Canonn's Bioforge (where it grows, and in what conditions), and **⬇ CSV** in the heading saves the system's bodies
+and values as a spreadsheet.
 <br><br><img src="../images/here.png" alt="The current system">
 </td>
 </tr>
@@ -105,7 +111,9 @@ follows your system's light mode. Each browser keeps its own choice, and the tab
 </p>
 
 **Now** is the cockpit view for a second monitor or a tablet, in big text: the system, the target, fuel,
-what to do next, the body you have targeted, and the nearest unvisited system.
+what to do next, the body you have targeted, and the nearest unvisited system. The target says how much of it is
+known ("3/12 known", Spansh's bodies of its count) and what EDSM has ("EDSM 5/12", or "not logged"): two databases
+with different reporters.
 
 - An **at-risk line** shows what is aboard against your rebuy ("🗺 380M · 🧬 412M aboard · 3.2× rebuy").
 - **This session** since your login: "2 h 14 · 74 jumps · 612 ly · 6 new systems · 11 mapped · 4 samples ·
@@ -118,8 +126,9 @@ what to do next, the body you have targeted, and the nearest unvisited system.
 - On a planet, the **surface map** appears under the lines (see below).
 
 The **header** shows the galactic region, ranks, fuel, hull, any core module under your level (`module_warn`,
-80%; as of the last Loadout or repair, since the journal logs nothing in between), your carrier's jump countdown,
-the nearest places to sell, and the last backup.
+80%; as of the last Loadout or repair, since the journal logs nothing in between), your carrier's jump countdown
+(and its tritium while it is on a sell order: see [Cargo and trading](cargo-and-trading.md)), the nearest places to
+sell, and the last backup.
 
 The **fuel tile** counts jumps as the ship gets lighter ("≈6 jumps at max range (484 ly), 3,500 at your pace"),
 for any drive, engineered or not, from your own Loadout and jumps. Nearby shows laden range and the targeted
@@ -143,8 +152,14 @@ On a planet, Now shows a map under its lines: on the ground, in the SRV, on foot
 - **Heading-up:** the way you face is the top, you are the arrow in the middle, N on the rim is north. It
   zooms to fit everything within 3 km, never narrower than 500 m, with a scale bar.
 - **What is drawn:** your ship (a landing-pad H), the samples of unfinished bio runs with each species' colony ring (the
-  current run solid), your rigs 1–6 with a faint spacing ring, saved sites (U1… unmarked, S1… rigs picked
-  up) and mining locations (L3). Anything off the map is a chevron on the rim.
+  current run solid), plants you tagged (below), your rigs 1–6 with a faint spacing ring, saved sites (U1…
+  unmarked, S1… rigs picked up) and mining locations (L3). Anything off the map is a chevron on the rim.
+- **Tagged plants** (as BioScan's waypoints): point the composition scanner at a plant, from the ship flying low,
+  the SRV or on foot, and Outrider remembers where it is, as a hollow ring in the species' colour. Faint means a
+  sample there would not count (it is inside the colony of one you took). While sampling, the strip says the
+  nearest one that would count and which way to turn ("tagged: 524 m, turn 90° right"), and the voice says so
+  within 100 m. From the ship or SRV the scanner logs no position, so it is yours at that moment: scan as close
+  to the plant as you can. A species you have finished on the body drops its tags.
 - **The legend** names each tag, nearest first. Six rig slots mirror the game's HUD: mineral (or
   "placed"), tons so far, distance and bearing. A solid rig is **probably full**: 8 minutes since it was
   placed or last collected from.

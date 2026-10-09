@@ -180,6 +180,16 @@ class Tablet(unittest.TestCase):
         untyped = [b for f in forms for b in re.findall(r"<button[^>]*>", f) if "type=" not in b]
         self.assertEqual(untyped, [])
 
+    def test_ids_unique(self):
+        """Every id in the page is used once: the Nearest finder's table was given the Nearby tab's id (nearTable), so
+        the finder's styles (13px text, cell padding) reached the Nearby tab and a finder row's tap on the tablet
+        opened the Nearby tab's detail sheet."""
+        with open(os.path.join(ed_outrider.STATIC_DIR, "page.html"), encoding="utf-8") as f:
+            html = f.read()
+        ids = re.findall(r'\bid="([^"]+)"', html)
+        self.assertGreater(len(ids), 100)
+        self.assertEqual(sorted({i for i in ids if ids.count(i) > 1}), [])
+
     def reset_stamps(self):
         for name in ("_stamps", "_page_stamp", "_code_stamp"):   # the stamps' cache, forgotten (a test's clock is far ahead)
             if isinstance(getattr(ed_outrider, name, None), dict):

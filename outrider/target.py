@@ -204,15 +204,26 @@ class Targeter:
         self.copy = copy   # copy(text) -> bool: the desktop clipboard, for the paste entry
         self.log = log
         self.cancel = threading.Event()   # set to stop any run (shutdown): checked between keys and while waiting
-        self.run_cancel = None   # the current run's own token (switched off, the route cleared): set by its owner
+        self._run_local = threading.local()   # each run's own token, per worker thread (run_cancel)
         # time, injectable so tests can run on a fake clock that moves only when something waits (the defaults are
         # the real ones): clock() for deadlines, wait(secs) an interruptible pause (True once cancelled), sleep(secs)
         # an uninterruptible one (the gaps between the keys of one combination, a hold that must complete)
         self.clock, self.wait, self.sleep = time.monotonic, self._wait, time.sleep
 
+    @property
+    def run_cancel(self):
+        """The running sequence's own token (auto-target switched off, the route cleared: set by its owner), kept per
+        thread: two runs never share or overwrite one (review 2026-10-08 #1)."""
+        return getattr(self._run_local, "cancel", None)
+
+    @run_cancel.setter
+    def run_cancel(self, token):
+        self._run_local.cancel = token
+
     def cancelled(self):
         """Shutdown, or the current run's own token."""
-        return self.cancel.is_set() or (self.run_cancel is not None and self.run_cancel.is_set())
+        token = self.run_cancel
+        return self.cancel.is_set() or (token is not None and token.is_set())
 
     def _wait(self, secs):
         """Pause `secs`, returning early (True) once cancelled by either token."""

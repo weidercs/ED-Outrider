@@ -1,10 +1,14 @@
 """The co-pilot button: one HOTAS or keyboard button that talks to Outrider's voice (optional, Linux).
 
-    tap          a status report: fuel and jumps, the next stop, what is aboard, the nearest unvisited system,
+    tap          flying the ship: target the next route system (State.copilot_target: the survey / trade route's
+                 next first, else the Highway's; "nothing to target" said when there is none); elsewhere nothing
+    double tap   a status report: fuel and jumps, the next stop, what is aboard, the nearest unvisited system,
                  led by the body targeted in the nav panel when it is not the next stop
                  (on a body with a sample run under way: the sampling progress instead)
-    double tap   say the last line again
     hold         hush the voice until the next jump (danger lines still speak); another hold ends it early
+
+The gestures keep their old names here ("status" a tap, "again" a double tap, "hush" a hold); State.copilot_gesture
+decides what each does (the author's layout, 2026-10-08).
 
 In the Rhino on a body every gesture marks a mining rig instead and does nothing else: a press places the next
 rig (1-6) behind you, a press by a rig that is out picks it up (the game tells Outrider neither).
@@ -28,7 +32,7 @@ import time
 
 from .honk import _import_evdev
 
-HOLD_MS, DOUBLE_MS = 600, 350
+HOLD_MS, DOUBLE_MS = 600, 400   # a slow double press must not read as two taps: a tap in the ship targets
 RETRY = 5.0   # s between tries to (re)open the device: unplugged, suspended, not there yet
 
 
@@ -143,8 +147,11 @@ class ButtonWatch:
     A device that goes away (unplugged, suspend) is closed and looked for again every RETRY s; `status` says
     what it is doing, for the alerts dialog. Never grabs the device and never writes to it."""
 
-    def __init__(self, device, button, on_gesture, hold_ms=HOLD_MS, double_ms=DOUBLE_MS, evdev=None):
+    def __init__(self, device, button, on_gesture, hold_ms=HOLD_MS, double_ms=DOUBLE_MS, evdev=None, on_press=None):
         self.device, self.button, self.on_gesture = device, button, on_gesture
+        # on_press(): every press as it happens, before any gesture is decided (a press during a tap's targeting
+        # countdown cancels it: State.copilot_press)
+        self.on_press = on_press
         self.hold_ms, self.double_ms = hold_ms, double_ms
         self.evdev = evdev   # tests hand in a stand-in; None imports the real one
         self.status = "starting"
@@ -226,7 +233,18 @@ class ButtonWatch:
             async for e in dev.async_read_loop():
                 if e.type != ev.ecodes.EV_KEY or e.code != code:
                     continue
-                for x in g.feed(stamp(e), e.value):
+                t = stamp(e)
+                # a lone tap whose wait ran out before this event (the settle timer not yet fired) is handed over
+                # first: then on_press sees the countdown that tap started and can cancel it, instead of the tap
+                # starting after the press was reported (review 2026-10-08 #19)
+                for x in g.due(t):
+                    self._hand(x)
+                if e.value == 1 and self.on_press:
+                    try:
+                        self.on_press()
+                    except Exception as err:   # never let it stop the button
+                        print(f"co-pilot button: a press failed: {err!r}", file=sys.stderr)
+                for x in g.feed(t, e.value):
                     self._hand(x)
                 if timer:
                     timer.cancel()

@@ -524,7 +524,7 @@ REGION_CELL = 4096 / 83   # ly per grid cell (_cached_region's 83 cells per 4096
 
 
 def region_layer():
-    """The region map for the Highway tab's galaxy map, or None without rules: klightspeed's grid as it is shipped
+    """The region map for the Plot Route tab's galaxy map, or None without rules: klightspeed's grid as it is shipped
     (`rows`: one list per row of [run length, region number] pairs, row 0 at the smallest Z, each run going +X from
     the origin; 0 is outside the map), the names, and a label point per region (`labels`: n, name, x, z, cells).
     A row's cells are `cell` ly square from `origin` [x, z], so a position's cell is the one region_number() reads.
@@ -851,6 +851,58 @@ def predict(body, system=None):
                 break
     out.sort(key=lambda x: -(x["value"] or 0))
     return out
+
+
+_BY_NAME = {}
+
+
+def species_by_name(name):
+    """The rules' entry for a species by its name, case ignored ("Roseum Brain Tree", "Tussock Pennata"): {id, genus_id,
+    genus, ...}, or None. A codex entry's localised name (variant cut off at " - ") finds its species this way, the
+    variant-less older species (Brain Trees, Anemones, Tubers...) included, whose codex codes carry no number."""
+    R = load_rules()
+    if not R or not name:
+        return None
+    if _BY_NAME.get("_rules") is not R:
+        _BY_NAME.clear()
+        _BY_NAME.update({sp["name"].lower(): sp for sp in R["species"]})
+        _BY_NAME["_rules"] = R
+    return _BY_NAME.get(str(name).strip().lower())
+
+
+# why a rule key fails, in words (ruled_out)
+WHY_WORDS = {"atmosphere": "the atmosphere", "atmosphere_component": "the atmosphere's make-up", "min_gravity": "gravity too low",
+             "max_gravity": "gravity too high", "min_temperature": "too cold", "max_temperature": "too hot",
+             "min_pressure": "pressure too low", "max_pressure": "pressure too high", "volcanism": "the volcanism",
+             "body_type": "the body type", "regions": "not in this region", "star": "the star", "parent_star": "the parent star",
+             "tuber": "no sinuous tubers' zone", "guardian": "no Guardian site nearby", "nebula": "no nebula nearby",
+             "bodies": "the system's other bodies", "distance": "the distance from the star",
+             "max_orbital_period": "the orbital period", "system": "the system", "colour": "no colour rule fits"}
+
+
+def ruled_out(body, system=None):
+    """Why each genus the rules know is NOT among predict()'s for this body: [{genus, why}], why being the failing
+    checks of its species' ruleset that came closest (fewest failures), in words ("too cold, gravity too high").
+    [] when the rules are missing or the body hosts nothing at all (predict's own [] cases). BioScan's elimination
+    log, for trusting (or doubting) a prediction."""
+    R = load_rules()
+    b = _body_facts(body)
+    if not R or not b["cls"]:
+        return []
+    s = _system_facts(system, body)
+    kept = {x["genus"] for x in predict(body, system)}
+    best = {}   # genus -> (number of failures, the failing keys)
+    for sp in R["species"]:
+        if sp["genus"] in kept:
+            continue
+        for ruleset in sp["rulesets"]:
+            fails = [k for k, v in ruleset.items() if _check(k, v, b, s) is False]
+            if not fails and not _colour_ok(sp.get("colors"), b, s):
+                fails = ["colour"]
+            if fails and (sp["genus"] not in best or len(fails) < best[sp["genus"]][0]):
+                best[sp["genus"]] = (len(fails), fails)
+    return [{"genus": g, "why": ", ".join(dict.fromkeys(WHY_WORDS.get(k, k) for k in fails))}
+            for g, (_, fails) in sorted(best.items())]
 
 
 def region_allows(name, region):

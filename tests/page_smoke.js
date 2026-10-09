@@ -1059,7 +1059,8 @@ const settle = async maxMs => {
     got.mark = w.eval(`[codexMark({codex_new: true, variants: ["Bacterium Aurasus - Teal"]}, "Inner Orion Spur"), codexMark({codex_new: true, variants: []}, "X"), codexMark({codex_new: false, variants: ["A - B"]}),
       codexMark({codex_new: true, best: "Bacterium Acies", variants: ["Bacterium Acies - White"], codex_have: ["Aquamarine", "Lime"]}, "Inner Orion Spur"),
       codexMark({codex_new: true, best: "Fungoida Setisis", variants: ["Fungoida Setisis - Yellow", "Fungoida Setisis - Grey"], codex_have: ["Yellow"]}, "Y"),
-      codexMark({codex_new: true, best: "Bacterium Vesicula", variants: [], codex_have: []}, "Z")]
+      codexMark({codex_new: true, best: "Bacterium Vesicula", variants: [], codex_have: []}, "Z"),
+      codexMark({codex_new: true, codex_galaxy_new: true, best: "Stratum Tectonicas", variants: ["Stratum Tectonicas - Lime"], codex_have: []}, "Z")]
       .map(h => (h.match(/title="([^"]*)"/) || [])[1] || "")`);
     const here = w.eval("data.position && data.position.name");
     if (here) {
@@ -1076,7 +1077,8 @@ const settle = async maxMs => {
                          // another colour of a species you logged here: name it and the colours you have
                          "new to your codex in Inner Orion Spur: Bacterium Acies - White; you have Aquamarine, Lime",
                          "new to your codex in Y: Fungoida Setisis - Grey; you have Yellow",
-                         "new to your codex in Z: Bacterium Vesicula (likeliest species; the colour variant may differ)"],
+                         "new to your codex in Z: Bacterium Vesicula (likeliest species; the colour variant may differ)",
+                         "new to your codex anywhere: Stratum Tectonicas - Lime"],
                   find: ["here", true], long: 400};
     for (const k of Object.keys(want)) if (JSON.stringify(got[k]) !== JSON.stringify(want[k])) bad.push(k);
     const goodS3 = !bad.length && errors.length === before;
@@ -1386,6 +1388,54 @@ const settle = async maxMs => {
     const goodLK = !bad.length && errors.length === before;
     allOk = allOk && goodLK;
     console.log(goodLK ? "OK" : "FAIL", "| cargo lookup |", goodLK ? "Sell asks for the line, the answer and an opened row, Closest and carriers ask again" :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+  }
+  // Nearest place to dock: the finder beside To asks api/nearest (stubbed: the scratch server has no Spansh), shows the
+  // rows with the DSSA badge and the docking warnings, asks again when a filter changes (remembered per device), and
+  // Plot here fills To and posts the plot
+  {
+    const w = dom.window, d = w.document, before = errors.length;
+    w.eval(`window.__nAsked = []; window.__nReal = apiJson;
+      apiJson = async (u, o) => {
+        const s = String(u);
+        if (s.startsWith("api/highway/plot")) { __nAsked.push(s + " " + (o && o.body)); return {ok: true, plotting: {state: "running", from: "Here", to: "X", started: new Date().toISOString()}}; }
+        if (!s.startsWith("api/nearest")) return __nReal(u, o);
+        __nAsked.push(s);
+        return {where: "Smojooe AR-E b25-8", pad: "L", ship: "explorer_nx", laden: 76.2, age: 30, need: ["UC"], more: 0,
+                hidden: {old: 6, pad: 0, permit: 0, service: 4}, errors: [], dssa: {count: 101, checked: Date.now() / 1000 - 600},
+                rows: [
+          {kind: "carrier", name: "OUT OF THE BLUE", callsign: "G0X-85Z", system: "Smojooe AR-E b25-8", ly: 0, here: true, own: true, ls: 0,
+           services: ["UC", "Vista"], pads: "L M", warn: [], source: "journal", age_s: null},
+          {kind: "carrier", name: "", callsign: "JBK-48M", system: "Smojooe CX-A c27-15", ly: 723.6, jumps: 10, ls: 0, services: ["UC", "Vista", "Repair"],
+           pads: "L M", warn: ["docking not reported"], source: "Spansh", age_s: 1800000},
+          {kind: "carrier", name: "[IGAU] Paradox Destiny", callsign: "K3K-L1N", system: "Prai Hypoo TX-B d4", ly: 6826.5, jumps: 90, ls: null,
+           services: ["UC", "Vista"], pads: "L M", warn: [], source: "DSSA", dssa: true, until: "September 1, 2032", age_s: 250000}]};
+      };`);
+    d.getElementById("hwyNearest").click(); await sleep(60);
+    const got = {};
+    const dlg = d.getElementById("nearDlg");
+    got.open = dlg.open;
+    got.rows = [...d.querySelectorAll("#nearRows tr")].map(t => t.textContent.replace(/\s+/g, " ").trim());
+    got.badge = !!d.querySelector("#nearRows .dssabadge");
+    got.foot = d.getElementById("nearFoot").textContent;
+    const uc = dlg.querySelector('[data-nneed="UC"]'); uc.checked = true; uc.dispatchEvent(new w.Event("change", {bubbles: true})); await sleep(60);
+    got.stored = w.localStorage.getItem("nearest");
+    d.querySelector('#nearRows [data-nplot="Smojooe CX-A c27-15"]').click(); await sleep(80);
+    got.to = d.getElementById("hwyTo").value;
+    got.closed = !dlg.open;
+    got.asked = w.eval("__nAsked.slice()");
+    w.eval("apiJson = __nReal; localStorage.removeItem('nearest')");
+    d.getElementById("hwyTo").value = "";
+    const bad = [];
+    if (!got.open || got.rows.length !== 3 || !/yours/.test(got.rows[0]) || !/aboard/.test(got.rows[0])) bad.push("rows");
+    if (!/⚠ docking not reported/.test(got.rows[1]) || !/≈ 10 jumps/.test(got.rows[1]) || !got.badge || !/stationed until September 1, 2032/.test(got.rows[2])) bad.push("row details");
+    if (!/Hidden: 6 reported more than 30 days ago/.test(got.foot) || !/101 carriers/.test(got.foot)) bad.push("foot");
+    const q = got.asked.filter(u => u.startsWith("api/nearest")).map(u => new URLSearchParams(u.split("?")[1]));
+    if (q.length !== 2 || q[1].get("need") !== "UC" || !/"need":\["UC"\]/.test(got.stored || "")) bad.push("filter");
+    if (got.to !== "Smojooe CX-A c27-15" || !got.closed || !got.asked.some(u => u.startsWith("api/highway/plot") && /Smojooe CX-A c27-15/.test(u))) bad.push("plot");
+    const goodNR = !bad.length && errors.length === before;
+    allOk = allOk && goodNR;
+    console.log(goodNR ? "OK" : "FAIL", "| nearest dock |", goodNR ? "the finder's rows, the DSSA badge and warnings, a filter asks again (kept), Plot here plots" :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
   }
   // G2.2, F48, F64: a bad server copy (a list that is not a list, a null object, a number for 'saved') does not stop
@@ -4081,6 +4131,138 @@ const settle = async maxMs => {
     const goodM = JSON.stringify([off, on]) === JSON.stringify([[true, false, false, false, false], [false, true, true, true, true]]) && errors.length === before;
     allOk = allOk && goodM;
     console.log(goodM ? "OK" : "FAIL", "| server mode |", goodM ? "auto honk, auto-target, play on this PC left out; back on the game PC" : JSON.stringify([off, on]), errors.slice(before));
+  }
+  // plugin gaps B: plants tagged with the composition scanner on the surface map (hollow rings in the species' colour,
+  // faint where a sample would not count) and the strip's "tagged: 524 m, turn 90° right"
+  {
+    const w = dom.window, before = errors.length;
+    const got = w.eval(`(() => {
+      const s = {lat: 0, lon: 0, radius: 1e6, heading: 0, bio: [], tags: [
+        {species: "Tussock Pennata", genus: "Tussock", lat: 0, lon: 0.005, dist: 87, current: true, usable: false},
+        {species: "Tussock Pennata", genus: "Tussock", lat: 0, lon: 0.03, dist: 524, current: true, usable: true},
+        {species: "Bacterium Acies", genus: "Bacterium", lat: 0.01, lon: 0, dist: 175, current: false, usable: true}]};
+      const L = surfaceLayout(s, surfaceCfg(), 400), tags = L.items.filter(i => i.kind === "tag");
+      const sm = {genus: "Tussock", species: "Tussock Pennata", samples: 1, need: 200, points: 1, nearest: 30, to_go: 170, clear: false,
+                  tag: {dist: 524, bearing: 90, turn: 90, way: "on your right", lat: 0, lon: 0.03}};
+      const keep = data.sampling; data.sampling = sm;
+      const strip = samplingHtml().replace(/<[^>]+>/g, "");
+      // review #8: the tag is said when the earlier samples' positions are unknown too
+      data.sampling = Object.assign({}, sm, {to_go: null, nearest: null, points: 0});
+      const stripUnknown = /tagged: 524 m/.test(samplingHtml().replace(/<[^>]+>/g, ""));
+      // review #7 and #10: two tags near each other are each said once for the run, under the sampling switch
+      const realAlert = alertOut, calls = [];
+      alertOut = (kind, title) => { calls.push(kind + ":" + title); return true; };
+      const at = (lat, lon, dist) => { data.sampling = Object.assign({}, sm, {tag: {dist, bearing: 90, turn: 90, way: "on your right", lat, lon}}); onData(); };
+      try { tagAnnounced = null; at(0, 0.001, 50); at(0, 0.002, 45); at(0, 0.001, 50); at(0, 0.002, 40); } finally { alertOut = realAlert; }
+      data.sampling = keep;
+      // review #2: the legend's swatch for a species is the colour the map drew it in, tags counted
+      const s2 = Object.assign({}, s, {bio: [{species: "Tussock Pennata", genus: "Tussock", current: true, samples: 1, need: 200,
+                                              points: [{n: 1, lat: 0, lon: 0.001, dist: 17}]}]});
+      const L2 = surfaceLayout(s2, surfaceCfg(), 400), dot = L2.items.find(i => i.kind === "bio");
+      const leg = document.createElement("div"); leg.innerHTML = surfaceLegend(s2, L2, surfaceCfg());
+      const sw = leg.querySelector(".lg-bio .sw");
+      const legendOk = !!sw && sw.getAttribute("style").includes(dot.colour) && !!leg.querySelector(".lg-tag");
+      return {n: tags.length, faint: tags.map(t => t.faint), coloured: tags.every(t => !!t.colour),
+              right: tags.find(t => !t.faint && t.species === "Tussock Pennata").sx > L.c,
+              strip: /tagged: 524 m, turn 90° right/.test(strip), ahead: tagText({genus: "X", tag: {dist: 40, turn: -4, way: "ahead"}}).includes("ahead"),
+              stripUnknown, calls: calls.filter(c => c.includes("Tagged")), legendOk}; })()`);
+    const want = {n: 3, faint: [true, false, false], coloured: true, right: true, strip: true, ahead: true, stripUnknown: true,
+                  calls: ["sampling:Tagged Tussock nearby", "sampling:Tagged Tussock nearby"], legendOk: true};
+    const goodT = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && goodT;
+    console.log(goodT ? "OK" : "FAIL", "| bio tags |", goodT ? "tagged plants drawn (faint where a sample would not count), the strip's turn to the nearest" : JSON.stringify(got), errors.slice(before));
+  }
+  // plugin gaps C: "bio possible" bodies, Here's bio filters (per device), the flying-low card, the ruled-out genera
+  {
+    const w = dom.window, before = errors.length;
+    const got = await w.eval(`(async () => {
+      const o = {};
+      o.tag = bioUnknownTag(2).replace(/<[^>]+>/g, "");
+      const hb0 = localStorage.getItem("hereBio");
+      document.getElementById("hereHideDone").checked = true; document.getElementById("hereMinSig").value = "3";
+      document.getElementById("hereMinSig").dispatchEvent(new Event("change"));
+      o.filters = JSON.stringify(hereBio());
+      if (hb0 === null) localStorage.removeItem("hereBio"); else localStorage.setItem("hereBio", hb0);
+      const panel = document.createElement("div");
+      renderBodyInto(panel, {full_name: "S A 1", own: {}, spansh: null, rings: [], row: {bio: 2, genera: [], organics: [], codex: [],
+        ruled_out: [{genus: "Cactoida", why: "pressure too low"}, {genus: "Osseus", why: "too cold"}]}}, "A 1", "");
+      o.why = /Why not the other 2 genera/.test(panel.textContent) && /pressure too low/.test(panel.textContent);
+      const keep = [data.on_body, data.near_body];
+      data.on_body = null; data.near_body = {body: "A 1", full: "S A 1", how: "flying low", alt: 2300, system: "0"};
+      renderOnBody(); o.over = document.getElementById("onbody").textContent.startsWith("Over A 1 (flying low, 2.3 km)");
+      o.stars = [starWords("K", "Va"), starWords("M", "III"), starWords("DAV", "VII"), starWords("DQ", ""), starWords("G", "")];
+      o.forge = [bioforgeLink(2310101).includes("bioforge.canonn.tech/?entryid=2310101"), bioforgeLink(null)];
+      o.counts = [targetCounts({known: 3, count: 12, edsm: {known: 5, count: 12}}), targetCounts({known: 2, edsm: {missing: true}}), targetCounts({})]
+        .map(h => h.replace(/<[^>]+>/g, "").trim());
+      [data.on_body, data.near_body] = keep; renderOnBody();
+      return o; })()`);
+    const want = {tag: "🧬? 2 to check in the FSS🧬? 2", filters: '{"hideDone":true,"minSig":3}', why: true, over: true,
+                  stars: ["main sequence", "giant", "white dwarf (hydrogen-rich), variable", "white dwarf (carbon)", ""], forge: [true, ""],
+                  counts: ["3/12 known · EDSM 5/12", "2 known · EDSM: not logged", ""]};
+    const goodC = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && goodC;
+    console.log(goodC ? "OK" : "FAIL", "| bio marks |", goodC ? "bio possible, Here's filters, flying-low card, the ruled-out genera" : JSON.stringify(got), errors.slice(before));
+  }
+  // review 2026-10-08 #15-#18: answers that arrive out of order. An older, slower request lands after a newer one:
+  // its answer (or its failure) must not replace the newer one's
+  {
+    const w = dom.window, before = errors.length, realF = w.fetch, got = {};
+    const here = w.eval("posId()");
+    const sys = here ? await (await realF("api/system/" + here)).json() : null;
+    const firsts = await (await realF("api/firsts")).json();
+    const later = (body, ms, fail) => new Promise((res, rej) => setTimeout(() => fail ? rej(new TypeError(fail))
+      : res(new Response(JSON.stringify(body), {headers: {"Content-Type": "application/json"}})), ms));
+    let nSys = 0, nFirsts = 0;
+    w.fetch = (u, o) => {
+      const s = String(u);
+      if (here && s === "api/system/" + here && w.__ooo === "onbody") return nSys++ === 0 ? later(Object.assign({}, sys, {marker: "old"}), 200) : later(Object.assign({}, sys, {marker: "new"}), 10);
+      if (s === "api/system/88") return later({error: "late"}, 400);
+      if (/^api\/find\?name=slow/.test(s)) return later({error: "slow lookup"}, 200);
+      if (/^api\/find\?name=fast/.test(s)) return later({error: "fast lookup"}, 10);
+      if (s.startsWith("api/firsts") && w.__ooo === "firsts") return nFirsts++ === 0 ? later(null, 200, "old failure") : later(firsts, 10);
+      return realF(u, o);
+    };
+    // #15: two on-body fetches, the first slower
+    if (here) {
+      w.__ooo = "onbody";
+      got.onbody = await w.eval(`(async () => {
+        const ob = data.on_body, od = obData, ok = obKey, sv = data.scan_version;
+        data.on_body = {system: posId(), body: "X 1", how: "landed"}; obKey = null;
+        const p1 = loadOnBody(); data.scan_version = sv + 1; const p2 = loadOnBody();
+        await Promise.all([p1, p2]);
+        const m = obData && obData.marker;
+        data.on_body = ob; obData = od; obKey = ok; data.scan_version = sv; renderOnBody();
+        return m; })()`);
+    } else got.onbody = "new";
+    w.__ooo = null;
+    // #16: pinning another system shows "loading…", not the old system's bodies under the new heading
+    got.pin = w.eval(`(() => { const had = !!hereData; pinSystem("88");
+      const r = [had, hereData === null, /loading/.test(document.getElementById("hereHead").textContent)];
+      unpinSystem(); return r; })()`);
+    // #17: two lookups, the first slower: the second's answer stays
+    w.document.getElementById("findName").value = "slow";
+    w.document.getElementById("findForm").dispatchEvent(new w.Event("submit", {cancelable: true}));
+    w.document.getElementById("findName").value = "fast";
+    w.document.getElementById("findForm").dispatchEvent(new w.Event("submit", {cancelable: true}));
+    await sleep(350);
+    got.find = w.document.getElementById("findStatus").textContent;
+    // #18: a slow failure of an older firsts request after a newer good answer
+    w.__ooo = "firsts";
+    got.firsts = await w.eval(`(async () => {
+      const sv = data.scan_version; firstsKey = null;
+      const p1 = loadFirsts(); data.scan_version = sv + 1; const p2 = loadFirsts();
+      await Promise.all([p1, p2]);
+      const ok = !!firstsData && !firstsData.error;
+      data.scan_version = sv; firstsKey = null; return ok; })()`);
+    w.__ooo = null;
+    await sleep(450);   // the pinned system's late answer lands after the unpin: dropped
+    w.fetch = realF;
+    w.eval("loadFirsts(); render()");
+    await sleep(300);
+    const want = {onbody: "new", pin: [true, true, true], find: "fast lookup", firsts: true};
+    const goodO = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && goodO;
+    console.log(goodO ? "OK" : "FAIL", "| answers out of order |", goodO ? "on-body strip, a pin's loading, Find, a failed older firsts: the newest answer kept" : JSON.stringify(got), errors.slice(before));
   }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",

@@ -88,7 +88,8 @@ Sound: Allow; Firefox: Autoplay: Allow Audio and Video).
   **The jump line** in the hyperspace tunnel, with whether the star ahead is scoopable, and any hazard.
 - **Greeting and goodbye:** what is at stake after a long break (and any core module under your level), and a
   session recap when you quit.
-- **Exobiology:** leaving a body mid-run warns; the third sample says what it paid and what is left.
+- **Exobiology:** leaving a body mid-run warns; the third sample says what it paid and what is left; within 100 m of
+  a plant you tagged where the next sample would count, it says so ("Tagged Tussock, 80 metres").
 - **Approach:** "2.6 g. 480 million aboard, 3.2 rebuys. Land gently."
 - **Fuel:** low fuel where you can't scoop, and the **top-up warning** before a likely dry stretch.
 - **Jumponium** (off by default): the best landable body with a material your FSD injections are short
@@ -152,7 +153,8 @@ Hugging Face: double-click one to download it for Outrider too.
 The Android app asks Outrider a question out loud, after its wake word or a tap on Ask. The answer is said in your
 Piper voice by the window that speaks (a PC browser, or the tablet with Play alerts here) and shown as a caption on
 every open page. Outrider knows these without any AI: **status report, fuel, unsold, next jump, what's left here,
-nearest unvisited, hush** and **unhush**. Their phrases are in `resources/ask.json`; edit them freely.
+nearest unvisited, nearest station** (or carrier, Vista, cartographics, repair: see
+[Nearest place to dock](plot-route.md#-nearest-place-to-dock)), **hush** and **unhush**. Their phrases are in `resources/ask.json`; edit them freely.
 
 Anything else goes to an optional AI layer, off by default (`[assistant] enabled = false`, also in ⚙ Settings →
 Server). It sends nothing anywhere until you set it up: an OpenAI-compatible endpoint (`base_url`: Ollama on your PC,
@@ -166,9 +168,9 @@ your model with real questions: tool calling varies, and a slow model runs into 
 An AI client you already use (Claude Code, the Claude desktop app, or any other MCP client) can ask Outrider questions
 in plain language: "what's worth landing on here?", "how much am I carrying unsold?", "what's left within 50 ly?",
 "how far to the next refuel on the highway?". Your client starts `python3 -m outrider.mcp` when it needs it (nothing
-to run or switch on in Outrider), which reads your running Outrider and answers through ten read-only tools: current
-status, this system, nearby systems, the nearest unvisited system, one body, unsold data, work left behind, the
-Highway route, travel history and materials. It can only read: it never presses keys, plots, bookmarks or hushes
+to run or switch on in Outrider), which reads your running Outrider and answers through eleven read-only tools: current
+status, this system, nearby systems, the nearest unvisited system, the nearest place to dock, one body, unsold data,
+work left behind, the Highway route, travel history and materials. It can only read: it never presses keys, plots, bookmarks or hushes
 anything. Nothing extra to install.
 
 - **Claude Code**, from the Outrider folder: `claude mcp add --transport stdio outrider -- python3 -m outrider.mcp`
