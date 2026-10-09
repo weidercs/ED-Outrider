@@ -18,6 +18,7 @@ Changing Outrider yourself, or with a coding agent? Start with [`docs/AGENT_GUID
 | `outrider/unsold.py` | The unsold-data estimate; also works on its own (`python3 -m outrider.unsold --help`) |
 | `outrider/log.py` | One-line summaries of journal events for the Log view |
 | `outrider/materials.py` | Material names, grades and caps, synthesis recipes, and the running inventory |
+| `outrider/dock.py` | The nearest place to dock: Spansh's stations and carriers, the DSSA list, your carrier, merged and filtered |
 | `outrider/cargo.py` | Cargo: the ship's hold and your carrier's (folded from the journal), the carrier's tritium, the Sell / Buy lookup and trade routes |
 | `outrider/tts.py` | Spoken alerts with Piper (optional), and playing lines and sounds on the PC |
 | `resources/speech.json` | The spoken lines, yours to edit (bans go in `data/speech_banned.json`) |

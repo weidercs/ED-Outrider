@@ -8,6 +8,7 @@
     "fuel": ["fuel", "tank", "how far can i go", "jumps left"],
     "unsold": ["unsold", "carrying", "on board", "aboard", "data worth", "how much data", "how much am i carrying"],
     "whats_left": ["what's left", "whats left", "what is left", "left here", "left to do", "to do here", "anything else here", "worth staying", "worth landing", "this system"],
-    "nearest_unvisited": ["nearest unvisited", "unvisited", "new system", "where next", "nearest unexplored", "never been"]
+    "nearest_unvisited": ["nearest unvisited", "unvisited", "new system", "where next", "nearest unexplored", "never been"],
+    "nearest_dock": ["nearest station", "nearest stations", "nearest carrier", "nearest fleet carrier", "nearest vista", "nearest vista genomics", "nearest genomics", "nearest cartographics", "nearest universal cartographics", "nearest uc", "nearest repair", "nearest refuel", "nearest shipyard", "nearest place to dock", "where can i dock", "where can i sell", "closest station", "closest carrier"]
   }
 }

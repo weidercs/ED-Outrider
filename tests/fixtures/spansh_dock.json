@@ -1,0 +1,913 @@
+{
+"note": "Spansh's station search near the author's position (Smojooe AR-E b25-8, -4177.09 / -1.00 / 3324.53) on 2026-10-08: the 6 nearest stations and 18 nearest fleet carriers, trimmed to the fields Outrider reads.",
+"position": {
+"x": -4177.09,
+"y": -1.0,
+"z": 3324.53
+},
+"results": [
+{
+"name": "May Terminal",
+"carrier_name": null,
+"type": "Coriolis Starport",
+"system_name": "Bleae Thaa BJ-T d3-28",
+"system_id64": 971996432931,
+"system_x": -2683.03125,
+"system_y": 177.71875,
+"system_z": 1843.34375,
+"distance": 2111.41295042969,
+"distance_to_arrival": 558.035087,
+"carrier_docking_access": null,
+"has_large_pad": true,
+"large_pads": 9,
+"medium_pads": 18,
+"small_pads": 17,
+"updated_at": "2026-10-04T23:43:53Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Universal Cartographics"
+},
+{
+"name": "Outfitting"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+},
+{
+"name": "Shipyard"
+},
+{
+"name": "Vista Genomics"
+}
+]
+},
+{
+"name": "Day Prospect",
+"carrier_name": null,
+"type": "Coriolis Starport",
+"system_name": "Bleae Thaa BJ-T d3-28",
+"system_id64": 971996432931,
+"system_x": -2683.03125,
+"system_y": 177.71875,
+"system_z": 1843.34375,
+"distance": 2111.41295042969,
+"distance_to_arrival": 218487.939731,
+"carrier_docking_access": null,
+"has_large_pad": true,
+"large_pads": 7,
+"medium_pads": 12,
+"small_pads": 9,
+"updated_at": "2026-10-08T04:53:32Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Universal Cartographics"
+},
+{
+"name": "Outfitting"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+},
+{
+"name": "Shipyard"
+},
+{
+"name": "Vista Genomics"
+}
+]
+},
+{
+"name": "Thome Point",
+"carrier_name": null,
+"type": "Coriolis Starport",
+"system_name": "Bleae Thaa BJ-T d3-28",
+"system_id64": 971996432931,
+"system_x": -2683.03125,
+"system_y": 177.71875,
+"system_z": 1843.34375,
+"distance": 2111.41295042969,
+"distance_to_arrival": 800.40962,
+"carrier_docking_access": null,
+"has_large_pad": true,
+"large_pads": 7,
+"medium_pads": 15,
+"small_pads": 13,
+"updated_at": "2026-10-06T05:40:25Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Universal Cartographics"
+},
+{
+"name": "Outfitting"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+},
+{
+"name": "Shipyard"
+},
+{
+"name": "Vista Genomics"
+}
+]
+},
+{
+"name": "Skov Drilling Exploration",
+"carrier_name": null,
+"type": "Settlement",
+"system_name": "Crescent Sector GW-W c1-8",
+"system_id64": 2274755777482,
+"system_x": -4842.1875,
+"system_y": 210.8125,
+"system_z": 1252.21875,
+"distance": 2186.70828793853,
+"distance_to_arrival": 474.902312,
+"carrier_docking_access": null,
+"has_large_pad": false,
+"large_pads": 0,
+"medium_pads": 0,
+"small_pads": 1,
+"updated_at": "2025-12-13T08:25:48Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+}
+]
+},
+{
+"name": "Kobyliansky's Find",
+"carrier_name": null,
+"type": "Settlement",
+"system_name": "Crescent Sector GW-W c1-8",
+"system_id64": 2274755777482,
+"system_x": -4842.1875,
+"system_y": 210.8125,
+"system_z": 1252.21875,
+"distance": 2186.70828793853,
+"distance_to_arrival": 474.356744,
+"carrier_docking_access": null,
+"has_large_pad": false,
+"large_pads": 0,
+"medium_pads": 0,
+"small_pads": 1,
+"updated_at": "2026-06-18T05:12:06Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+}
+]
+},
+{
+"name": "Chakraborty Nutrition Complex",
+"carrier_name": null,
+"type": "Settlement",
+"system_name": "Crescent Sector GW-W c1-8",
+"system_id64": 2274755777482,
+"system_x": -4842.1875,
+"system_y": 210.8125,
+"system_z": 1252.21875,
+"distance": 2186.70828793853,
+"distance_to_arrival": 475.603906,
+"carrier_docking_access": null,
+"has_large_pad": true,
+"large_pads": 1,
+"medium_pads": 0,
+"small_pads": 1,
+"updated_at": "2025-11-02T22:16:14Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+}
+]
+},
+{
+"name": "G0X-85Z",
+"carrier_name": null,
+"type": "Drake-Class Carrier",
+"system_name": "Smojooe AR-E b25-8",
+"system_id64": 18207037532889,
+"system_x": -4177.09375,
+"system_y": -1.0,
+"system_z": 3324.53125,
+"distance": 0.00395284707500915,
+"distance_to_arrival": 0.0,
+"carrier_docking_access": "Squadron Friends",
+"has_large_pad": true,
+"large_pads": 8,
+"medium_pads": 4,
+"small_pads": 4,
+"updated_at": "2026-10-03T22:46:29Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Universal Cartographics"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+},
+{
+"name": "Vista Genomics"
+}
+]
+},
+{
+"name": "X5Z-TKW",
+"carrier_name": null,
+"type": "Drake-Class Carrier",
+"system_name": "Drojo FA-Q c8-16",
+"system_id64": 4475724993866,
+"system_x": -3696.03125,
+"system_y": -34.96875,
+"system_z": 3170.3125,
+"distance": 506.314560559318,
+"distance_to_arrival": 0.0,
+"carrier_docking_access": "All",
+"has_large_pad": true,
+"large_pads": 8,
+"medium_pads": 4,
+"small_pads": 4,
+"updated_at": "2025-10-05T11:36:32Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Universal Cartographics"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+},
+{
+"name": "Shipyard"
+},
+{
+"name": "Vista Genomics"
+}
+]
+},
+{
+"name": "KBT-B8Z",
+"carrier_name": null,
+"type": "Drake-Class Carrier",
+"system_name": "Smojooe QI-T d3-37",
+"system_id64": 1280781093539,
+"system_x": -4844.625,
+"system_y": 144.96875,
+"system_z": 3126.375,
+"distance": 711.459947029039,
+"distance_to_arrival": 234.885757,
+"carrier_docking_access": "All",
+"has_large_pad": true,
+"large_pads": 8,
+"medium_pads": 4,
+"small_pads": 4,
+"updated_at": "2026-09-26T23:15:07Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Universal Cartographics"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+},
+{
+"name": "Vista Genomics"
+}
+]
+},
+{
+"name": "Q5B-2PZ",
+"carrier_name": "The Last Hearth",
+"type": "Drake-Class Carrier",
+"system_name": "Chraufao ET-X c28-1",
+"system_id64": 351012984058,
+"system_x": -4623.59375,
+"system_y": 88.71875,
+"system_z": 2774.5,
+"distance": 714.106472289409,
+"distance_to_arrival": 3655.676304,
+"carrier_docking_access": "Squadron Friends",
+"has_large_pad": true,
+"large_pads": 8,
+"medium_pads": 4,
+"small_pads": 4,
+"updated_at": "2026-07-07T08:22:19Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Outfitting"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+},
+{
+"name": "Shipyard"
+}
+]
+},
+{
+"name": "JBK-48M",
+"carrier_name": null,
+"type": "Drake-Class Carrier",
+"system_name": "Smojooe CX-A c27-15",
+"system_id64": 4199437833706,
+"system_x": -4516.53125,
+"system_y": 8.21875,
+"system_z": 3963.46875,
+"distance": 723.566219363983,
+"distance_to_arrival": 0.0,
+"carrier_docking_access": null,
+"has_large_pad": true,
+"large_pads": 8,
+"medium_pads": 4,
+"small_pads": 4,
+"updated_at": "2026-09-17T21:35:41Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Universal Cartographics"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+},
+{
+"name": "Vista Genomics"
+}
+]
+},
+{
+"name": "W2F-61W",
+"carrier_name": null,
+"type": "Drake-Class Carrier",
+"system_name": "Smojooe VA-Z b1",
+"system_id64": 2807164054025,
+"system_x": -4679.03125,
+"system_y": 55.5,
+"system_z": 2795.59375,
+"distance": 731.375980611631,
+"distance_to_arrival": 0.0,
+"carrier_docking_access": "All",
+"has_large_pad": true,
+"large_pads": 8,
+"medium_pads": 4,
+"small_pads": 4,
+"updated_at": "2025-04-05T04:42:52Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Universal Cartographics"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+},
+{
+"name": "Shipyard"
+},
+{
+"name": "Vista Genomics"
+}
+]
+},
+{
+"name": "K0M-80J",
+"carrier_name": "GASCONHA",
+"type": "Drake-Class Carrier",
+"system_name": "CSI+09-19291",
+"system_id64": 19003742,
+"system_x": -3573.03125,
+"system_y": -401.0,
+"system_z": 3474.59375,
+"distance": 739.868976586818,
+"distance_to_arrival": 0.0,
+"carrier_docking_access": null,
+"has_large_pad": true,
+"large_pads": 8,
+"medium_pads": 4,
+"small_pads": 4,
+"updated_at": "2026-09-28T10:29:31Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Universal Cartographics"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+},
+{
+"name": "Vista Genomics"
+}
+]
+},
+{
+"name": "JBQ-26B",
+"carrier_name": null,
+"type": "Drake-Class Carrier",
+"system_name": "Drojau EC-B d1-30",
+"system_id64": 1040262875787,
+"system_x": -4815.34375,
+"system_y": -61.96875,
+"system_z": 2867.78125,
+"distance": 787.213095986206,
+"distance_to_arrival": 0.0,
+"carrier_docking_access": "Friends",
+"has_large_pad": true,
+"large_pads": 8,
+"medium_pads": 4,
+"small_pads": 4,
+"updated_at": "2026-08-02T11:12:36Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Market"
+}
+]
+},
+{
+"name": "K6Y-3XN",
+"carrier_name": null,
+"type": "Drake-Class Carrier",
+"system_name": "Traikea MG-Y b1-1",
+"system_id64": 2813338397713,
+"system_x": -4215.75,
+"system_y": 166.1875,
+"system_z": 4100.28125,
+"distance": 794.503780754259,
+"distance_to_arrival": 0.0,
+"carrier_docking_access": "All",
+"has_large_pad": true,
+"large_pads": 8,
+"medium_pads": 4,
+"small_pads": 4,
+"updated_at": "2026-09-29T04:09:43Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Universal Cartographics"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+},
+{
+"name": "Vista Genomics"
+}
+]
+},
+{
+"name": "XHY-B7Z",
+"carrier_name": "SCHABERNACK",
+"type": "Drake-Class Carrier",
+"system_name": "Drojo MC-M c23-6",
+"system_id64": 1727146956234,
+"system_x": -3563.9375,
+"system_y": -414.96875,
+"system_z": 3800.34375,
+"distance": 879.616302101021,
+"distance_to_arrival": 0.0,
+"carrier_docking_access": "All",
+"has_large_pad": true,
+"large_pads": 8,
+"medium_pads": 4,
+"small_pads": 4,
+"updated_at": "2026-07-11T11:43:56Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Universal Cartographics"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+},
+{
+"name": "Vista Genomics"
+}
+]
+},
+{
+"name": "G1Y-N3N",
+"carrier_name": null,
+"type": "Drake-Class Carrier",
+"system_name": "Thailoea GB-C c1-4",
+"system_id64": 1175780464138,
+"system_x": -4511.96875,
+"system_y": -495.4375,
+"system_z": 4103.875,
+"distance": 981.830355831807,
+"distance_to_arrival": 0.0,
+"carrier_docking_access": null,
+"has_large_pad": true,
+"large_pads": 8,
+"medium_pads": 4,
+"small_pads": 4,
+"updated_at": "2026-06-08T19:55:04Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Universal Cartographics"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+},
+{
+"name": "Vista Genomics"
+}
+]
+},
+{
+"name": "QBG-19H",
+"carrier_name": null,
+"type": "Drake-Class Carrier",
+"system_name": "Chraufao BV-F d11-17",
+"system_id64": 593770924643,
+"system_x": -3931.15625,
+"system_y": 407.15625,
+"system_z": 2457.78125,
+"distance": 989.104812155763,
+"distance_to_arrival": 0.0,
+"carrier_docking_access": null,
+"has_large_pad": true,
+"large_pads": 8,
+"medium_pads": 4,
+"small_pads": 4,
+"updated_at": "2026-04-03T05:49:03Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Universal Cartographics"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+},
+{
+"name": "Vista Genomics"
+}
+]
+},
+{
+"name": "W0F-BQQ",
+"carrier_name": "INSPERATION",
+"type": "Drake-Class Carrier",
+"system_name": "Smojooe QU-O d6-15",
+"system_id64": 524799806139,
+"system_x": -5154.4375,
+"system_y": 518.46875,
+"system_z": 3365.84375,
+"distance": 1107.59322132355,
+"distance_to_arrival": 0.0,
+"carrier_docking_access": "All",
+"has_large_pad": true,
+"large_pads": 8,
+"medium_pads": 4,
+"small_pads": 4,
+"updated_at": "2026-09-29T02:30:04Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+}
+]
+},
+{
+"name": "WNK-NVZ",
+"carrier_name": "PTOLEMAIOS",
+"type": "Drake-Class Carrier",
+"system_name": "Aucoths BM-K d9-9",
+"system_id64": 318792190547,
+"system_x": -4447.0,
+"system_y": -422.3125,
+"system_z": 2321.34375,
+"distance": 1121.04339030446,
+"distance_to_arrival": 307545.736842,
+"carrier_docking_access": null,
+"has_large_pad": true,
+"large_pads": 8,
+"medium_pads": 4,
+"small_pads": 4,
+"updated_at": "2026-10-06T14:59:15Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Universal Cartographics"
+},
+{
+"name": "Outfitting"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+},
+{
+"name": "Shipyard"
+},
+{
+"name": "Vista Genomics"
+}
+]
+},
+{
+"name": "GHZ-7XY",
+"carrier_name": null,
+"type": "Drake-Class Carrier",
+"system_name": "Smojoo IM-U d3-13",
+"system_id64": 456483015331,
+"system_x": -3254.09375,
+"system_y": 619.46875,
+"system_z": 3113.28125,
+"distance": 1132.04663402935,
+"distance_to_arrival": 0.0,
+"carrier_docking_access": null,
+"has_large_pad": true,
+"large_pads": 8,
+"medium_pads": 4,
+"small_pads": 4,
+"updated_at": "2024-11-10T12:03:21Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Universal Cartographics"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+},
+{
+"name": "Vista Genomics"
+}
+]
+},
+{
+"name": "Q2M-4TM",
+"carrier_name": null,
+"type": "Drake-Class Carrier",
+"system_name": "Traikea QX-L c7-19",
+"system_id64": 5298546808386,
+"system_x": -4746.78125,
+"system_y": -3.3125,
+"system_z": 4410.8125,
+"distance": 1226.60634997095,
+"distance_to_arrival": 0.0,
+"carrier_docking_access": "All",
+"has_large_pad": true,
+"large_pads": 8,
+"medium_pads": 4,
+"small_pads": 4,
+"updated_at": "2026-10-08T11:31:46Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Universal Cartographics"
+},
+{
+"name": "Outfitting"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+},
+{
+"name": "Shipyard"
+},
+{
+"name": "Vista Genomics"
+}
+]
+},
+{
+"name": "YHV-52Z",
+"carrier_name": "CHROMERIA",
+"type": "Drake-Class Carrier",
+"system_name": "Aucofs DV-Z b31-0",
+"system_id64": 618876446993,
+"system_x": -3880.34375,
+"system_y": -481.625,
+"system_z": 2176.625,
+"distance": 1279.35320241873,
+"distance_to_arrival": 0.0,
+"carrier_docking_access": "Friends",
+"has_large_pad": true,
+"large_pads": 8,
+"medium_pads": 4,
+"small_pads": 4,
+"updated_at": "2025-05-29T17:11:54Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Vista Genomics"
+}
+]
+},
+{
+"name": "K4T-95L",
+"carrier_name": null,
+"type": "Drake-Class Carrier",
+"system_name": "Blau Thua WU-C c27-6",
+"system_id64": 1724329039082,
+"system_x": -5234.5,
+"system_y": 390.6875,
+"system_z": 2667.8125,
+"distance": 1304.91872565402,
+"distance_to_arrival": 2098.857387,
+"carrier_docking_access": "None",
+"has_large_pad": true,
+"large_pads": 8,
+"medium_pads": 4,
+"small_pads": 4,
+"updated_at": "2025-12-31T10:45:05Z",
+"services": [
+{
+"name": "Dock"
+},
+{
+"name": "Market"
+},
+{
+"name": "Universal Cartographics"
+},
+{
+"name": "Refuel"
+},
+{
+"name": "Repair"
+},
+{
+"name": "Vista Genomics"
+}
+]
+}
+]
+}

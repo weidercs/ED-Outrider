@@ -149,7 +149,7 @@ class Clipboard:
             if self._env.get(var) and self._which(name):
                 self.tool, self.argv = name, list(argv)
                 break
-        self.last = None   # {text, ok, ts, error}: the latest copy, for the Highway tab
+        self.last = None   # {text, ok, ts, error}: the latest copy, for the Plot Route tab
 
     def info(self):
         why = None if self.tool else "neither wl-copy (Wayland) nor xclip (X11) was found for this desktop session"

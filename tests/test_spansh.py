@@ -197,6 +197,50 @@ class BatchFSpansh(unittest.TestCase):
         own.pop("signals_known")
         self.assertFalse(ed_outrider.stale_bio_body(own, "K"))
 
+    def test_bio_possible_signals_unknown(self):
+        """Plugin gaps C (BioScan's "Bios possible, check FSS for signals"): a landable world you have only from an
+        AutoScan or a nav beacon, with no signal count of yours or Spansh's, where the rules allow life."""
+        ev = {"event": "Scan", "timestamp": "2026-01-01T00:00:00Z", "ScanType": "AutoScan", "BodyName": "Sys A 3", "BodyID": 3,
+              "StarSystem": "Sys", "SystemAddress": 9, "PlanetClass": "Rocky body", "Landable": True,
+              "AtmosphereType": "CarbonDioxide", "Atmosphere": "thin carbon dioxide atmosphere", "SurfacePressure": 2000.0,
+              "SurfaceGravity": 0.12 * 9.80665, "SurfaceTemperature": 180, "Volcanism": "", "MassEM": 0.01,
+              "DistanceFromArrivalLS": 500, "TerraformState": ""}
+        r = ed_outrider.record_from_scan(ev)
+        self.assertTrue(ed_outrider.unknown_bio_groups(r, "K"))
+        self.assertEqual(ed_outrider.unknown_bio_groups(ed_outrider.record_from_scan(dict(ev, ScanType="Detailed")), "K"), [])   # FSS'd: its signals were said
+        self.assertEqual(ed_outrider.unknown_bio_groups(dict(r, signals_seen=True), "K"), [])   # you counted them
+        self.assertEqual(ed_outrider.unknown_bio_groups(dict(r, signals_known=True), "K"), [])  # someone did (Spansh)
+        self.assertEqual(ed_outrider.unknown_bio_groups(dict(r, bio=2), "K"), [])               # known to have life
+        self.assertEqual(ed_outrider.unknown_bio_groups(dict(r, landable=False), "K"), [])
+        self.assertEqual(ed_outrider.summarise([r], 1, "K")["bio_unknown"], 1)
+        # review: an FSS (Detailed) of a lifeless body said its signals; a later AutoScan replacing the row keeps that
+        db = ed_outrider.open_db(":memory:")
+        self.addCleanup(db.close)
+        j = ed_outrider.Journals(db)
+        j.handle({"event": "FSDJump", "timestamp": "2026-01-01T00:00:00Z", "StarSystem": "Sys", "SystemAddress": 9, "StarPos": [0, 0, 0]})
+        j.handle(dict(ev, ScanType="Detailed", timestamp="2026-01-01T00:01:00Z"))
+        j.handle(dict(ev, ScanType="AutoScan", timestamp="2026-01-02T00:01:00Z"))
+        import json as _json
+        rec = _json.loads(db.execute("SELECT record FROM own_bodies WHERE system=9").fetchone()[0])
+        self.assertEqual((rec["scan_type"], ed_outrider.unknown_bio_groups(rec, "K")), ("Detailed", []))
+
+    def test_why_genera_are_ruled_out(self):
+        """Plugin gaps C (BioScan's elimination log): each genus not predicted, with the rule that came closest."""
+        import outrider.bio
+        if not outrider.bio.load_rules():
+            self.skipTest("no bio_rules.json")
+        ev = {"event": "Scan", "timestamp": "2026-01-01T00:00:00Z", "ScanType": "Detailed", "BodyName": "Sys A 3", "BodyID": 3,
+              "StarSystem": "Sys", "SystemAddress": 9, "PlanetClass": "Rocky body", "Landable": True,
+              "AtmosphereType": "CarbonDioxide", "Atmosphere": "thin carbon dioxide atmosphere", "SurfacePressure": 2000.0,
+              "SurfaceGravity": 0.12 * 9.80665, "SurfaceTemperature": 180, "Volcanism": "", "MassEM": 0.01,
+              "DistanceFromArrivalLS": 500, "TerraformState": ""}
+        body = ed_outrider._bio_body(ed_outrider.record_from_scan(ev), "K", None)
+        kept = {x["genus"] for x in outrider.bio.predict(body)}
+        out = {x["genus"]: x["why"] for x in outrider.bio.ruled_out(body)}
+        self.assertTrue(out and not kept & set(out))                     # each genus once: expected, or ruled out
+        self.assertEqual((out["Cactoida"], out["Bark Mounds"]), ("pressure too low", "the volcanism"))
+        self.assertEqual(outrider.bio.ruled_out({"PlanetClass": "Sudarsky class I gas giant"}), [])   # hosts nothing at all
+
     def test_summary_is_a_mark_and_values_are_unchanged(self):
         star = ed_outrider.record_from_dump("Sys", {"name": "Sys A", "type": "Star", "subType": "K (Yellow-Orange) Star",
                                                     "mainStar": True, "solarMasses": 0.8, "bodyId": 1,
@@ -711,3 +755,55 @@ class ReviewBatchE(unittest.TestCase):
         self.assertEqual(self.db.execute("SELECT count(*) FROM own_bodies").fetchone()[0], 2)   # the bodies still show
         self.j.handle(scan("2026-01-01T00:02:00Z", "Old", 3, 2, "Old A NavBeaconDetail")[2])     # your own scan counts
         self.assertEqual(self.db.execute("SELECT count(*) FROM own_firsts").fetchone()[0], 1)
+
+
+class TargetCounts(unittest.TestCase):
+    """Plugin gaps E (SystemStatusOverlay): the targeted system's known bodies of its count, and EDSM's beside Spansh."""
+
+    def setUp(self):
+        self.db = ed_outrider.open_db(":memory:")
+        self.addCleanup(self.db.close)
+        self.j = ed_outrider.Journals(self.db)
+        self.state = ed_outrider.State(self.db, self.j, types_ns(cached=lambda i: (None, None)), 25)
+        self.j.handle({"event": "FSDJump", "timestamp": "2026-01-01T00:00:00Z", "StarSystem": "Here", "SystemAddress": 1,
+                       "StarPos": [0, 0, 0]})
+        test = self
+
+        class Fake:
+            edsm_calls = []
+
+            async def lookup(self, id64):
+                return {"system": {"bodyCount": 12, "bodies": [{"type": "Star"}, {"type": "Planet"}, {"type": "Planet"},
+                                                               {"type": "Barycentre"}]}}
+
+            async def edsm_bodies(self, name):
+                Fake.edsm_calls.append(name)
+                if test.edsm_error:
+                    raise ed_outrider.ClientError("down")
+                return {"known": 5, "count": 12}
+        self.fake, self.edsm_error = Fake(), False
+        self.state.spansh = self.fake
+
+    def classify(self):
+        import asyncio
+        t = {"id64": 99, "name": "There", "star_class": "K"}
+        self.state.target_key = ("There", 99)
+        asyncio.run(self.state.classify_target(t, ("There", 99)))
+        return self.state.target
+
+    def test_counts_and_edsm(self):
+        t = self.classify()
+        self.assertEqual((t["status"], t["known"], t["count"], t["edsm"]), ("partial", 3, 12, {"known": 5, "count": 12}))
+        self.edsm_error = True                       # EDSM down: Spansh's counts still shown, the sound unaffected
+        t = self.classify()
+        self.assertEqual((t["known"], t["edsm"], t["sound"]), (3, None, "upbeat"))
+
+    def test_edsm_bodies_request(self):
+        import asyncio
+        from support import _HwSession
+        sp = ed_outrider.Spansh(self.db)
+        sp.session = _HwSession([(200, {"name": "There", "bodyCount": 9, "bodies": [{"type": "Star"}, {"type": "Planet"}, {"type": "Belt"}]})])
+        self.assertEqual(asyncio.run(sp.edsm_bodies("There")), {"known": 2, "count": 9})
+        self.assertEqual(sp.session.calls[0], (ed_outrider.EDSM_BODIES, {"systemName": "There"}))
+        sp.session = _HwSession([(200, [])])   # EDSM's answer for a system it does not have
+        self.assertEqual(asyncio.run(sp.edsm_bodies("Nowhere")), {"known": 0, "count": None, "missing": True})

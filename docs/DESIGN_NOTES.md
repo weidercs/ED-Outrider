@@ -10,7 +10,7 @@ upstream project's choices, not rules of the game.
   Tab and act on Enter/Space instead.
 - **No VoiceAttack integration.** Not used upstream; the co-pilot button and the page cover the same ground.
 - **Nothing is uploaded.** No EDDN sender, no accounts; outside calls are read-only lookups (Spansh, EDSM,
-  GitHub for bio rules, Hugging Face for voices).
+  GitHub for bio rules, Hugging Face for voices, EDAstro for the DSSA carrier list when the Nearest finder opens).
 - **Survey odds are odds, not contents.** The mining tooltip shows what a community survey found at that kind of
   ground; the game never says what a location holds.
 - **No hand-logging of mining location contents.** Considered and left out for now; "Mined previously" records
@@ -29,10 +29,19 @@ upstream project's choices, not rules of the game.
 - **One window speaks** with the page open in several, so nothing is said twice.
 - **Auto honk is off until ticked,** because its key presses go to whichever window has focus.
 - **The co-pilot button only reads the device,** never grabs it; unbinding it in the game is the player's job.
+- **The co-pilot button's layout** (the author, 2026-10-08): flying the ship, a tap targets the next route system
+  (the survey / trade route's first, then the Highway's; "nothing to target" said in the personality when there is
+  none), a double tap is the status report, a hold the hush; out of the ship a tap does nothing; the Rhino keeps rig
+  marking. "Say again" left the button (the page keeps it). A tap is only known once `double_ms` (400 ms, was 350)
+  passes, then 0.5 s more before any key; a press in that half second cancels the run and counts as the slow double
+  tap it was (the status report), so a slow double tap never opens the galaxy map.
 - **Listens on 127.0.0.1 by default; a password is optional.** Opening it to the network is an explicit setting; the
   Host and cross-site guards stop other web sites, not people on your network. `[server] password` stops those: a
   device that is not this PC needs a session (the `outrider_session` cookie, or `Authorization: Bearer` for the
-  Android app's own calls). Loopback never does, so the desktop page, curl, OBS and a local MCP bridge work as before.
+  Android app's own calls). Loopback never does, so the desktop page, curl, OBS and a local MCP bridge work as before;
+  but a loopback request carrying a forwarding header is a reverse proxy on this PC serving another device, so it
+  needs a session too (`outrider.auth.from_this_pc`; wrong passwords count against the client the proxy names). No
+  setting: nothing on the PC itself sends those headers (review 2026-10-08 #3: the password was bypassed).
   A token is `<id>.<HMAC>` under a key made from the password and a per-install secret (DB meta `session_secret`),
   so sessions survive a restart with nothing kept in memory, all end when the password changes, and signing out
   revokes one id (meta `revoked_sessions`, the last 500). Plain http: the password crosses the network in clear,
@@ -147,7 +156,8 @@ upstream project's choices, not rules of the game.
   Target next and Retry (review Q4) are one action, POST /api/highway/target: a run the page asks for, like "test
   now" but against the route (the next system; off the route the closest one, as the line's "nearest"; before the
   start, the start), with or without the toggle; {countdown} 0-10 s, 5 by default for the desktop page (the click
-  took the keyboard focus), 0 for the tablet. Not on the X56 co-pilot button (the author's decision). Clearing or
+  took the keyboard focus), 0 for the tablet. On the co-pilot button since 2026-10-08 (the author's later call: see the
+  button's layout below). Clearing or
   replacing the route stops it like the automatic run; switching the toggle off does not (it is not the toggle's
   run). Retry shows only while the failed run's row (autotarget_last's route and index) is still the one Target next
   would aim at.
@@ -200,6 +210,16 @@ upstream project's choices, not rules of the game.
 - **History's sessions are split by 2 h without a jump.** A session's window runs from its login (the latest one
   within 2 h before its first jump) to the next session's; a login no jump followed, 2 h or more after anything
   else, opens a session with no jumps (review F31), whose "end" is its last login (nothing later is known).
+- **The full-scan bonus is in the payout estimate** (plugin gaps D): 1,000 cr per body of a system you found complete
+  (FSSAllBodiesFound's Count) while every star and planet was undiscovered. The sale pays it as `Bonus`, apart from
+  `BaseValue`, which the calibration still compares against, so it is added only to `estimated_payout` and shown on
+  its own line. Pioneer's form (non-bodies counted, the main star's discovery only) fits the sales worse. No belt
+  counter: the honk's Count leaves belt clusters out and the game never says how many a system has.
+- **No x5 in a populated system** (BioScan's rule; plugin gaps C). The author's Vista sales say so: 0 of 8 runs in a
+  populated system paid it, 208 of 208 elsewhere (`project/value-checks/RESULTS-2026-10-08.md`). A system's
+  Population comes from its FSDJump / Location / CarrierJump (`system_population`); `own_firsts.bio_x5` holds the
+  verdict per body, so every x5 reads one flag. Pioneer's other value rules were checked the same way and left
+  out where the sales did not support them (full-map bonus, honk value, terraformable ranges).
 - **A Vista Genomics visit is one x5 check** (sales under 5 minutes apart): the runs aboard before its first sale
   against everything it sold; each sale stores what it adds, so the ledger's sum is the visit's check whatever order
   the entries came in (review F21).
@@ -250,7 +270,7 @@ upstream project's choices, not rules of the game.
   to 16,076 t against the 16,085 t it reports, the 9 t gap being the two lines no order ever showed.
 - **Why not Frontier's companion API** (the author, 2026-10-07): it would list the carrier's cargo whole, but it
   means signing in to Frontier (as EDMC and Inara do). Outrider never does: it reads the player's own journal files
-  and makes only read-only queries to public services (Spansh, EDSM, GitHub, Hugging Face), so the player's Frontier
+  and makes only read-only queries to public services (Spansh, EDSM, GitHub, Hugging Face, EDAstro), so the player's Frontier
   account is never involved. The sell-order method is the price of that, and the README says so.
 - **Old carrier history is trusted only while it adds up.** Unjournaled trades (other players buying from an old
   sell order) leave old lines wrong: the author's 2025 colonisation hauling left 34,000 t tracked that was long gone.
@@ -274,6 +294,13 @@ upstream project's choices, not rules of the game.
   in the game, so there is no "sold". A carrier bought since (`CarrierBuy`, or the first `CarrierStats` of another
   id) starts its state afresh: before PARSER_VERSION 41 a new id inherited the old one's place and booked jump. No
   carrier in the journals at all: no tile.
+- **Nearest place to dock is a finder, not a route type** (the author, 2026-10-08): finding the place is a search and
+  getting there is just a destination, so "Plot here" fills To and the Highway's plotters, following, 🎯 and auto-target
+  do the rest. Docking other than "All" is a warning, never a reason to hide (friends, squadron, or not reported:
+  Outrider cannot see the owner's lists, and Spansh has no setting for some carriers). The DSSA list (EDAstro) is
+  fetched only when the finder opens, at most hourly and conditionally, its last copy kept; the voice and the AI's tool
+  never fetch it (`cached=1`). DSSA carriers carry a badge (the author's ask). Reports older than 30 days are hidden by
+  default, with the count said: carriers move, and Spansh keeps reports years old.
 - **Trade routes share the slot with the survey routes** (the author: "one slot is fine"): Road to Riches,
   Exomastery or a trade route, a new plot of any replacing it. Its stops are the stations (a hop's straight line,
   not its jumps: 🎯 targets the system and the game plots the way), progress is your MarketSell / MarketBuy at the
@@ -332,7 +359,10 @@ confirmed while playing. Treat reports about them as likely real.
   in the author's journals (the carrier was bought before them).
 - Status.json Flags2 on-foot-in-station bits (3, 13, 14) counting as docked.
 - Auto honk end to end since it reads the binding from the controls preset; the fire-group and combat-mode waits.
-- The co-pilot button on a real device (`python3 -m outrider.button --listen`), including rig marking in a live Rhino.
+- The co-pilot button on a real device (`python3 -m outrider.button --listen`), including rig marking in a live Rhino,
+  and its tap targeting the next route system in a live game (the slow double tap's cancel included).
+- The Nearest finder's Plot here and the "nearest station" voice answer from the app in a live session (checked against
+  live Spansh and DSSA data on a scratch server only).
 - Rig leash warnings, rigs lost on SRVDestroyed, death or relog, the rigs-still-out warning's timing, and
   `Destination.Body` for a mining location (assumed to be the planet).
 - The rig restock recipe (3 Iron, 2 Nickel, 1 Mechanical Equipment), taken from a community guide.

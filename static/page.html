@@ -298,7 +298,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         <div class="srow">
           <span class="seg" role="radiogroup" aria-label="plotter"><label title="every jump with its fuel, from your ship's own figures (Spansh's galaxy plotter)"><input type="radio" name="hwyPlotter" value="exact" checked>Exact</label><label title="neutron stars as boosts, waypoints only (Spansh's neutron plotter): any ship, from its range"><input type="radio" name="hwyPlotter" value="neutron">Neutron</label><label title="a chain of systems whose planets are worth scanning (and mapping), from where you are (Spansh's Road to Riches): stop, scan, move on"><input type="radio" name="hwyPlotter" value="riches">Road to Riches</label><label title="a chain of systems with valuable life already reported on their bodies (Spansh's Expressway to Exomastery): land, sample, move on. Known life: first footfall is unlikely"><input type="radio" name="hwyPlotter" value="exo">Exomastery</label><label title="station to station: what to buy at each and where to sell it (Spansh's trade planner), from the station you start at"><input type="radio" name="hwyPlotter" value="trade">Trade</label></span>
           <label>From <input type="text" id="hwyFrom" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100" placeholder="where you are" list="hwyFromNames"></label>
-          <label class="hwyto">To <input type="text" id="hwyTo" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100" placeholder="destination system" list="hwyNames"></label>
+          <label class="hwyto">To <input type="text" id="hwyTo" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100" placeholder="destination system" list="hwyNames"><button type="button" id="hwyNearest" class="mini nearbtn" title="the nearest station or fleet carrier you can dock at and use: pick one to plot there">📍 Nearest…</button></label>
           <datalist id="hwyNames"></datalist><datalist id="hwyFromNames"></datalist>
         </div>
         <div class="srow trade-opt" hidden>
@@ -699,6 +699,10 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
           <option value="">as ▴/▾ sets them (shared)</option><option value="auto">one line on a small window</option>
           <option value="six">always the six tiles</option><option value="line">always one line</option></select>
         <span class="hint">"small" is under 800 px high or 1200 px wide; ▴/▾ beside the tiles still folds or unfolds them, and makes that this device's choice</span></label>
+      <label class="mod"><input type="checkbox" id="hereHideDone"> Here: leave out species you have finished
+        <span class="hint">the bio column lists only what is still to do (a sample lost with the ship stays)</span></label>
+      <label class="mod">Here: leave out the bio of bodies with fewer than <input type="number" id="hereMinSig" min="0" max="20" step="1" style="width: 4em"> signals
+        <span class="hint">0 shows them all; such a body says only its count, muted</span></label>
     </details>
     <details class="setsec" data-sec-key="sharing" data-chip="Sharing"><summary>Sharing these settings <span class="sum-note">export, import, defaults for new browsers</span></summary>
       <div class="opts inline">
@@ -724,6 +728,22 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       <div id="speechBans" class="hint"></div>
       <div id="speechLog"></div></details>
     </div>
+  </form>
+</dialog>
+<dialog id="nearDlg" class="neardlg" aria-labelledby="nearTitle">
+  <form method="dialog">
+    <h3 id="nearTitle">Nearest place to dock <span id="nearWhere" class="unk"></span></h3>
+    <div class="nearbar">
+      <span class="grp"><span class="lbl">Show</span><label><input type="checkbox" data-nf="stations"> stations</label><label><input type="checkbox" data-nf="carriers"> fleet carriers</label></span>
+      <span class="grp"><span class="lbl">Must have</span><span id="nearNeeds"></span></span>
+      <span class="grp"><span class="lbl">Pad</span><span id="nearPad"></span></span>
+      <span class="grp"><span class="lbl">Data under</span><input type="number" min="1" max="3650" step="1" data-nf="age"> days</span>
+      <span class="grp"><label title="systems that need a permit (left out unless ticked)"><input type="checkbox" data-nf="permit"> permit systems</label></span>
+    </div>
+    <div class="nearscroll"><table id="dockTable"><thead><tr><th>Place</th><th class="num">Distance</th><th class="num">From star</th><th>Has</th>
+      <th class="num">Pads</th><th>Docking</th><th class="src">Data</th><th></th></tr></thead><tbody id="nearRows"></tbody></table></div>
+    <div id="nearFoot" class="hint"></div>
+    <div class="btns"><span class="grow"></span><button type="button" data-close>Close</button></div>
   </form>
 </dialog>
 <dialog id="recountDlg" class="recountdlg" aria-labelledby="recountTitle">

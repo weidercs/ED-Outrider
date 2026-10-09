@@ -164,6 +164,52 @@ class Auth(Base):
             return (await c.get("/api/nearby")).status, r.status, await r.json(), (v["password"], v["signed_in"])
         self.assertEqual(self.client(go2), (200, 200, {"ok": True, "token": ""}, (False, True)))
 
+    def test_a_proxy_on_this_pc_is_not_this_pc(self):
+        """Review 2026-10-08 #3: a reverse proxy on the Outrider PC connects from 127.0.0.1 for every phone it serves.
+        A loopback request carrying a forwarding header is another device's: it needs a session, and wrong passwords
+        count against the client the proxy names, not against the proxy (which would lock everyone out)."""
+        async def go(c):
+            out = []
+            for h in ({"X-Forwarded-For": "192.168.1.50"}, {"Forwarded": "for=192.168.1.50;proto=https"},
+                      {"X-Real-IP": "192.168.1.50"}, {}):
+                r = await c.get("/api/nearby", headers=h)
+                v = await (await c.get("/api/version", headers=h)).json()
+                out.append((r.status, v["signed_in"]))
+            return out
+        self.assertEqual(self.client(go), [(401, False), (401, False), (401, False), (200, True)])
+        A = outrider.auth
+        self.assertEqual(A.client_key("127.0.0.1", {"X-Forwarded-For": "10.0.0.9, 192.168.1.50"}), "192.168.1.50")
+        self.assertEqual(A.client_key("127.0.0.1", {"X-Real-IP": "192.168.1.51"}), "192.168.1.51")
+        self.assertEqual(A.client_key("192.168.1.7", {"X-Forwarded-For": "1.2.3.4"}), "192.168.1.7")   # not trusted
+
+    def test_odd_tokens_are_refused_as_json(self):
+        """Review 2026-10-08 #11: a token whose signature held non-ASCII characters crashed the guard (hmac compares
+        ASCII only) with a plain-text 500 instead of the app's JSON 401."""
+        self.lan()
+
+        async def go(c):
+            out = []
+            for token in ("abc." + "é" * 32, "abc." + "z" * 32, "a b." + "0" * 32):
+                r = await c.get("/api/nearby", headers={"Authorization": "Bearer " + token})
+                out.append((r.status, r.content_type, (await r.json()).get("code")))
+            r = await c.get("/api/nearby", cookies={"outrider_session": "abc." + "é" * 32})
+            out.append((r.status, r.content_type))
+            return out
+        got = self.client(go)
+        self.assertEqual(got[:3], [(401, "application/json", "signin_required")] * 3)
+        self.assertEqual(got[3], (401, "application/json"))
+
+    def test_infinite_ids_are_bad_requests(self):
+        """Review 2026-10-08 #12: {"id": 1e999} (float inf in JSON) made int() raise OverflowError: a 500."""
+        async def go(c):
+            out = []
+            for path in ("/api/bookmark", "/api/nextstop"):
+                for raw in ('{"id": 1e999}', '{"id": 1.5}', '{"id": true}'):
+                    r = await c.post(path, data=raw, headers={"Content-Type": "application/json"})
+                    out.append(r.status)
+            return out
+        self.assertEqual(self.client(go), [400] * 6)
+
     def test_config_and_helpers(self):
         import argparse
         import contextlib
@@ -257,3 +303,29 @@ class Exposure(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SystemExport(Base):
+    """Plugin gaps F (Pioneer's export): one system's bodies and values as CSV from Here."""
+
+    def test_export(self):
+        import types
+        self.state.spansh = types.SimpleNamespace(cached=lambda i: (None, None))
+        self.j.handle({"event": "FSDJump", "timestamp": "2026-01-01T00:00:00Z", "StarSystem": "Sol B", "SystemAddress": 5,
+                       "StarPos": [0, 0, 0]})
+        self.j.handle({"event": "Scan", "timestamp": "2026-01-01T00:01:00Z", "BodyName": "Sol B 1", "BodyID": 1, "StarSystem": "Sol B",
+                       "SystemAddress": 5, "PlanetClass": "High metal content body", "MassEM": 1.0, "Landable": True,
+                       "ScanType": "Detailed", "WasDiscovered": False, "WasMapped": False, "DistanceFromArrivalLS": 400.0})
+
+        async def go(c):
+            r = await c.get("/api/export?what=system&id=5")
+            out = [r.status, r.headers.get("Content-Disposition"), (await r.text()).splitlines()]
+            out.append((await c.get("/api/export?what=system&id=x")).status)
+            out.append((await c.get("/api/export?what=system&id=77")).status)
+            return out
+        status, disp, lines, bad, unknown = self.client(go)
+        self.assertEqual(status, 200)
+        self.assertIn('filename="system-Sol_B-', disp)
+        self.assertTrue(lines[0].startswith("body,type,subtype,distance_ls,landable"))
+        self.assertTrue(lines[1].startswith("1,Planet,High metal content world,400.0,True,False,0,0,,True,False,"))
+        self.assertEqual((bad, unknown), (400, 404))

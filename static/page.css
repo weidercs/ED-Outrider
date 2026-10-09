@@ -587,8 +587,10 @@ table .sub2 { margin-top: 2px; font-weight: 400; font-size: 12px; }
 .warnc { color: var(--warn); }
 
 .cxnew { color: var(--accent); font-weight: 700; cursor: help; }
+.cxnew.cxgal { color: var(--good); }   /* ✪: new to your codex anywhere */
 /* Now is read at a glance, often on a tablet with no hover: spell the ✦ out there */
 body.nowmode .cxnew::after { content: " new codex"; font-weight: 600; }
+body.nowmode .cxnew.cxgal::after { content: " new anywhere"; }
 
 .boosted { color: #5ce1e6; } .hazard { color: var(--warn); }
 
@@ -760,6 +762,23 @@ body.nowmode header, body.nowmode main { display: none; }
 .lookTable tr.lookdetail td { background: color-mix(in srgb, var(--accent) 6%, transparent); padding: 6px 12px 10px 28px; white-space: normal; }
 .lookdetail .dline { margin: 3px 0; } .lookdetail .dk { display: inline-block; width: 170px; color: var(--muted); font-size: 12px; }
 .lookacts { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+/* Nearest place to dock: the finder beside Plot Route's To */
+.nearbtn { margin-left: 4px; }
+#nearDlg { width: min(1400px, calc(100vw - 32px)); max-width: none; } #nearDlg h3 span { color: var(--muted); font-weight: 400; font-size: 13px; }
+.nearbar { display: flex; gap: 8px 16px; flex-wrap: wrap; align-items: center; margin: 6px 0 8px; font-size: 13px; }
+.nearbar .grp { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .nearbar label { display: inline; color: var(--text); font-size: 13px; margin: 0; }
+.nearbar .lbl { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.nearbar input[type=number] { width: 4.5em; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; text-align: right; }
+.nearscroll { max-height: min(62vh, 640px); overflow: auto; }
+#dockTable { width: 100%; font-size: 13px; border-collapse: collapse; } #dockTable td { padding: 5px 6px; vertical-align: top; border-bottom: 1px solid var(--line); }
+#dockTable th { position: sticky; top: 0; background: var(--panel); } #dockTable td.num { white-space: nowrap; } #dockTable .small { font-size: 11px; }
+#dockTable .has { white-space: normal; max-width: 200px; } #dockTable .src { text-align: right; white-space: nowrap; }
+#dockTable .dk { white-space: normal; max-width: 190px; }
+#dockTable .tagx { display: inline-block; font-size: 11px; padding: 0 5px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); opacity: .4; margin: 1px 0; }
+#dockTable .tagx.on { opacity: 1; color: var(--text); border-color: color-mix(in srgb, var(--good) 60%, var(--line)); }
+.dssa { font-weight: 700; color: var(--info); }
+.dssabadge { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 9px; font-size: 11px; font-weight: 700; color: var(--info);
+  border: 1px solid var(--info); background: color-mix(in srgb, var(--info) 14%, transparent); vertical-align: 1px; }
 #recountDlg { width: min(560px, 94vw); } #recountRows { width: 100%; font-size: 13px; } #recountRows td { padding: 3px 6px; }
 #recountRows input.qn { width: 7em; text-align: right; } #recountRows input.rcname { width: 14em; text-align: left; }
 #matTables > div { flex: 1 1 440px; min-width: 0; }
@@ -1036,3 +1055,6 @@ body.app #richPane { grid-column: 1; grid-row: 2; }
 #hwyForm #tradeCapital { width: 10em; } #hwyForm #tradeStation { width: 14em; }
 #richTable .tradegoods { font-size: 12px; line-height: 1.45; white-space: normal; } #richTable .tradegoods .exodone { color: var(--muted); }
 #richTable .exonew { color: var(--accent); }
+/* the body panel's "why not the other genera" (plugin gaps C) */
+.ruledout ul { margin: 2px 0 0; } .ruledout li { display: flex; justify-content: space-between; gap: 10px; }
+.sw.ring { background: transparent !important; border: 2px solid; border-radius: 50%; box-sizing: border-box; }   /* a tagged plant's legend swatch */
