@@ -1182,7 +1182,7 @@ WANTED = tuple(f'"event":"{e}"'.encode()
 #     were dropped; the SRV's refinery and scoop stay out of the ship's hold; an older Location's relog is judged
 #     against the arrival before it (a legacy folder read late counted every login as a visit).
 # 43: a system's population (system_population) and own_firsts.bio_x5: no x5 bio bonus in populated systems.
-PARSER_VERSION = 43
+PARSER_VERSION = 44
 # Scans read off a nav beacon (as outrider.unsold.NAV_BEACON_SCANS): their Was* flags are not the game's record of the body.
 NAV_BEACON_SCANS = ("NavBeaconDetail", "NavBeacon")
 
@@ -2658,7 +2658,8 @@ class Journals:
 
     def _scan_dir(self, d, commit_each):
         touched = 0
-        for path in sorted(glob(os.path.join(glob_escape(d), "Journal.*.log"))):
+        # in time order: the old names (Journal.YYMMDDhhmmss.NN.log, before 2023) sort after every new one as text
+        for path in sorted(glob(os.path.join(glob_escape(d), "Journal.*.log")), key=outrider.uploads.name_key):
             try:
                 size = os.path.getsize(path)
             except OSError:
@@ -2753,6 +2754,8 @@ class Journals:
             if name in SRV_EVENTS:
                 return
         if name == "Loadout":
+            if not_a_ship(ev.get("Ship")):
+                return   # an Apex shuttle's: not your ship (it wiped the fuel model and replaced ship, range, hull)
             self.note_modules(ev, ts)
             self.note_fleet(ev, ts)
             if ev.get("HullHealth") is not None and ts >= (self.hull or {}).get("ts", ""):
@@ -3650,8 +3653,11 @@ class Journals:
                 self.docked = None
                 meta_set(self.db, "docked", None)
             return
-        if name in ("Docked", "Undocked") and not self.fresh("docked", ts, (self.docked or {}).get("ts")):
-            return   # an older dock or undock read after newer ones (a legacy folder imported late)
+        # an older dock or undock read after newer ones (a legacy folder imported late, or a re-read: meta docked is
+        # kept through it) does not change the docked state; an older Docked at your carrier still tells its services
+        docked_fresh = name not in ("Docked", "Undocked") or self.fresh("docked", ts, (self.docked or {}).get("ts"))
+        if name == "Undocked" and not docked_fresh:
+            return
         if name == "Undocked":
             # the page's undock alert keys on this, not on Status.json (which reads 'not docked' on foot)
             d = self.docked or {}
@@ -3692,10 +3698,11 @@ class Journals:
             carrier_seen(c, ev.get("StarSystem"), ev.get("SystemAddress"), ts)
         elif name == "Docked":
             services = ev.get("StationServices") or []
-            self.docked = {"station": ev.get("StationName"), "type": ev.get("StationType"),
-                           "market_id": ev.get("MarketID"), "system": ev.get("StarSystem"), "ts": ts,
-                           "has_uc": "exploration" in services, "has_vista": "vistagenomics" in services}
-            meta_set(self.db, "docked", self.docked)
+            if docked_fresh:
+                self.docked = {"station": ev.get("StationName"), "type": ev.get("StationType"),
+                               "market_id": ev.get("MarketID"), "system": ev.get("StarSystem"), "ts": ts,
+                               "has_uc": "exploration" in services, "has_vista": "vistagenomics" in services}
+                meta_set(self.db, "docked", self.docked)
             if ev.get("StationType") != "FleetCarrier" or ev.get("MarketID") != c.get("id") or stale():
                 return
             carrier_seen(c, ev.get("StarSystem"), ev.get("SystemAddress"), ts)
@@ -7693,6 +7700,11 @@ class State:
             return None
         name = where[0]
         source, base = self.bases.get(id64, (None, None))
+        if source in ("own", "route", "edsm"):
+            # a stand-in (past Spansh's sphere, or Spansh unreachable): Spansh's bodies once fetched on demand win
+            _, fetched = self.spansh.cached(id64)
+            if fetched and fetched.get("records"):
+                source, base = None, fetched
         if base is None:
             source, (_, base) = None, self.spansh.cached(id64)
         own, own_hotspots, own_count = own_data(self.db, id64, name)
@@ -7847,8 +7859,8 @@ class State:
     async def ensure_records(self, id64):
         """Make sure a system's bodies are known before showing it: a search result or pinned system with
         no cached Spansh dump gets one fetched (and cached) now. Failures leave things as they were."""
-        if id64 in self.bases:
-            return      # in the sphere: the refresh fetches it (system_detail says "partial" until then)
+        if (self.bases.get(id64) or (None,))[0] == "spansh":
+            return      # a Spansh entry of the sphere: the refresh fetches it (system_detail says "partial" until then)
         _, base = self.spansh.cached(id64)
         if base:   # any cached answer (a dump, a 404, a search that listed no bodies): not asked again for a day
             age = self.spansh.fetched_age(id64)
@@ -8047,9 +8059,9 @@ class State:
             return v
         source, base = self.bases.get(id64) or (None, None)
         if base is None or source == "route":
-            base = cached_base(self.db, id64)[1]
-        if not base:
-            return None
+            source, base = "cache", cached_base(self.db, id64)[1]
+        if not base or source in ("edsm", "own") or base.get("edsm"):
+            return None   # a stand-in (Spansh unreachable, or past its sphere): not what Spansh knew
         known = sum(1 for r in base.get("records") or [] if r.get("type") in ("Star", "Planet"))
         return "complete" if known and base.get("body_count") and known >= base["body_count"] else "partial"
 
@@ -8794,7 +8806,8 @@ class State:
                 count = system.get("bodyCount")
                 status = ("no bodies" if not known
                           else "explored" if count and known >= count else "partial")
-        self.target_verdicts[id64] = status
+        # Spansh unreachable and EDSM answered: no verdict on what Spansh knew (it was "partial" for good)
+        self.target_verdicts[id64] = "spansh unreachable" if source == "edsm" and dump is False else status
         while len(self.target_verdicts) > 50:
             self.target_verdicts.pop(next(iter(self.target_verdicts)))
         if key != self.target_key:
@@ -13490,7 +13503,9 @@ async def run(args, st):
     # kept (each journal file is committed as it is read) instead of being killed with it all rolled back (review R13);
     # once serving, the event loop's handler below takes over and stops through the usual cleanup
     def stop_during_start(signum, frame):
-        db.commit()
+        # the files read whole are committed already (commit_each); the one part way through is dropped, not kept
+        # without its offset (the next start would read it again and double what it counts)
+        db.rollback()
         print("stopped during start-up (the journals not read yet are read at the next start)")
         raise SystemExit(0)
     try:

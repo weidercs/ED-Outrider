@@ -2,6 +2,15 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Sweep fixes: the journal reader (PARSER_VERSION 44: the journals are read again at the next start)
+- Journals named the old way (before 2023) are read in time order, before the newer ones; read after them, your own
+  first discoveries could keep a later scan. The next start reads every journal again to put this right.
+- A journal re-read no longer loses your carrier's services (UC, Vista): the Nearest finder left your own carrier out.
+- An Apex shuttle's Loadout is not your ship: it replaced your ship, jump range and hull, and wiped the fuel model.
+- Stopping Outrider during its first big import no longer doubles part of a journal at the next start.
+- When Spansh was unreachable (EDSM stood in), an arrival is no longer marked "Spansh lacks bodies" for good; a system
+  past Spansh's sphere gets Spansh's bodies when you open it.
+
 ## 2026-10-09 · Sweep fixes: the config file and Server settings
 - A decimal setting whose value is whole (speech speed 1, auto honk delay 2, radius 25...) takes a decimal again in
   Server settings: it was offered and checked as a whole number. Numbers are written by their type ("1.0") and saved

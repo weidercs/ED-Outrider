@@ -2577,8 +2577,8 @@ class JournalsRegistry(unittest.TestCase):
         "highway": "live-only: the Highway route (DESIGN_NOTES), cannot be rebuilt from journals",
         "riches": "live-only: the Road to Riches route (Spansh's plot), cannot be rebuilt from journals",
         "next_stop": "live-only: the player's chosen next stop (stamp_next_stop keeps it through the re-read)",
-        "docked": "rebuilt by the re-read (Docked/Undocked replayed in order, Undocked guarded by fresh()); kept so "
-                  "the docked state is not blank while it runs",
+        "docked": "kept so the docked state is not blank while the re-read runs: older Docked/Undocked lines leave it "
+                  "(fresh()), but an older Docked at your carrier still sets the carrier's services",
         "last_event_ts": "only ever raised (written when a line is newer), so replayed older lines leave it right",
         "last_play_ts": "rebuilt by the re-read (it ends on the newest playing event); kept meanwhile",
         "commodity_names": "a cache of the journal's commodity display names: a re-read only learns them again",
