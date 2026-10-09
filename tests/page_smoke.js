@@ -86,13 +86,20 @@ const settle = async maxMs => {
     for (let waited = 0; !/your samples|could not|no such/i.test(d.getElementById("clSide").textContent) && waited < 5000; waited += 100) await sleep(100);
     const side = d.querySelector("#clSide h4"), name = tr.getAttribute("title").split(" · ")[0];
     const shown = !d.getElementById("bioView").classList.contains("check") ? "runs" : "check";
+    // Geology: the codex's Geology and Anomalies entries, geology's boxes first, its own heading and legend
+    radio("geo").checked = true; radio("geo").dispatchEvent(new dom.window.Event("change", {bubbles: true}));
+    for (let waited = 0; !/entries reported/.test(d.getElementById("clStatus").textContent) && waited < 10000; waited += 100) await sleep(100);
+    const geoFirst = (d.querySelector("#clGrid .clbox h4 span") || {}).textContent;
+    const geoHint = dom.window.getComputedStyle(d.querySelector("#clPane .geohint")).display !== "none" &&
+                    dom.window.getComputedStyle(d.querySelector("#clPane .biohint")).display === "none";
+    const geo = geoFirst === "Fumarole" && geoHint && /complete/.test(d.getElementById("clStatus").textContent);
     radio("runs").checked = true; radio("runs").dispatchEvent(new dom.window.Event("change", {bubbles: true}));
     await sleep(300);
     const back = !d.getElementById("bioView").classList.contains("check") && dom.window.getComputedStyle(d.getElementById("bioPane")).display !== "none";
     const good = boxes >= 20 && /possible species found/.test(status) && options === 44 && side && side.textContent === name &&
-                 shown === "check" && back && errors.length === before;
+                 shown === "check" && geo && back && errors.length === before;
     allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| exobiology checklist |", `${boxes} genus boxes, ${options} region choices, panel ${side && side.textContent}, back to runs ${back}`,
+    console.log(good ? "OK" : "FAIL", "| exobiology checklist |", `${boxes} genus boxes, ${options} region choices, panel ${side && side.textContent}, geology ${geo} (${geoFirst}), back to runs ${back}`,
                 status.slice(0, 80), errors.slice(before));
   }
   // the schematic toggle inside Here (Now mode hides the view buttons: ✕ back first)

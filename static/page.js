@@ -2546,7 +2546,7 @@ function render() {
   document.getElementById("logView").hidden = view !== "log";
   if (view === "log") { if (L.key === null) loadLog(); else tailLog(); }
   document.getElementById("bioView").hidden = view !== "bio";
-  if (view === "bio") { if (bioMode === "check") loadChecklist(); else loadBio(); }
+  if (view === "bio") { if (bioMode !== "runs") loadChecklist(); else loadBio(); }
   if (view === "here" || nearPinned || (view === "overview" && !ovState.collapsed) || view === "now") {   // Now reads Here's data
     loadHere();
     // tab and pane keep different modes; and the in-game target moves without a scan (review F4): redraw, no refetch
@@ -4218,27 +4218,36 @@ function renderBio() {
 // colours, what gives each, and a galaxy map of where it can grow with your samples as dots ----
 const CL = {data: null, key: null, loading: false, open: null, species: null, map: null};
 const CL_WORD = {sold: "sold", aboard: "aboard", lost: "lost", logged: "logged"};
-let bioMode = store.get("bioMode", "runs") === "check" ? "check" : "runs";
+// Samples' three views: runs, the exobiology checklist ("check"), the geology one ("geo": the codex's Geology and Anomalies)
+const BIO_MODES = ["runs", "check", "geo"];
+let bioMode = BIO_MODES.includes(store.get("bioMode", "runs")) ? store.get("bioMode", "runs") : "runs";
+const clKind = () => bioMode === "geo" ? "geo" : "bio";
 const clRegionEl = document.getElementById("clRegion");
 function setBioMode(m) {
-  bioMode = m === "check" ? "check" : "runs";
+  const was = clKind();
+  bioMode = BIO_MODES.includes(m) ? m : "runs";
   store.set("bioMode", bioMode);
-  document.getElementById("bioView").classList.toggle("check", bioMode === "check");
+  const bv = document.getElementById("bioView");
+  bv.classList.toggle("check", bioMode !== "runs");
+  bv.classList.toggle("geo", bioMode === "geo");
   document.querySelectorAll("[name=bioMode]").forEach(x => { x.checked = x.value === bioMode; });
-  if (view === "bio") { if (bioMode === "check") loadChecklist(); else loadBio(); }
+  if (clKind() !== was) { CL.data = null; CL.key = null; CL.open = null; CL.species = null; }   // the other list
+  if (view === "bio") { if (bioMode !== "runs") loadChecklist(true); else loadBio(); }
 }
 document.querySelectorAll("[name=bioMode]").forEach(x => x.addEventListener("change", () => setBioMode(x.value)));
 clRegionEl.addEventListener("change", () => { store.set("clRegion", clRegionEl.value); loadChecklist(true); });
 // asked again when the region, your scans or (for "where you are") the system change
 async function loadChecklist(force = false) {
   const want = clRegionEl.value || store.get("clRegion", "here") || "here";
-  const key = `${want}|${data && data.scan_version}|${want === "here" ? posId() : ""}`;
+  const kind = clKind();
+  const key = `${kind}|${want}|${data && data.scan_version}|${want === "here" ? posId() : ""}`;
   if (CL.loading || (!force && key === CL.key)) return;
   CL.key = key; CL.loading = true;
   if (!CL.data) document.getElementById("clStatus").textContent = "loading…";
   let d;
-  try { d = await apiJson(`api/checklist?region=${encodeURIComponent(want)}`); } catch (err) { d = {error: err.message}; }
+  try { d = await apiJson(`api/checklist?kind=${kind}&region=${encodeURIComponent(want)}`); } catch (err) { d = {error: err.message}; }
   CL.loading = false;
+  if (kind !== clKind()) { CL.key = null; loadChecklist(true); return; }   // switched list meanwhile: ask for the other
   if (d.error) CL.key = null;   // asked again at the next render
   CL.data = d;
   renderChecklist();
@@ -4270,8 +4279,14 @@ function renderChecklist() {
   clFillRegions(d);
   const s = d.summary;
   const where = d.region_name || (d.region == null && clRegionEl.value === "all" ? "All regions" : "Where you are (not in a known region): all regions");
+  const geo = d.kind === "geo";
+  if (geo) {
+    st.innerHTML = `${esc(where)}: <b>${s.logged}</b> of ${s.possible} entries reported ${d.region == null ? "anywhere" : "here"} logged · ` +
+      `<b>${clPct(s.completion)}</b> complete` + (s.elsewhere ? ` · <span class="clelse">${s.elsewhere} more logged in other regions</span>` : "") +
+      ` · <span class="unk">reported sites: Canonn</span>`;
+  }
   const pctWhat = d.region == null ? "for every species" : "for the species in this region";
-  st.innerHTML = `${esc(where)}: <b>${s.found}</b> of ${s.possible} possible species found · <b>${clPct(s.completion)}</b> complete ${pctWhat}` +
+  if (!geo) st.innerHTML = `${esc(where)}: <b>${s.found}</b> of ${s.possible} possible species found · <b>${clPct(s.completion)}</b> complete ${pctWhat}` +
     ` · <span class="cl-sold">${s.sold} sold</span>` +
     ` · <span class="cl-aboard">${s.aboard} aboard</span>` + (s.lost ? ` · <span class="cl-lost">${s.lost} lost</span>` : "") +
     (s.logged ? ` · <span class="cl-logged">${s.logged} logged</span>` : "") + ` · colours ${s.colours_found} of ${s.colours}` +
@@ -4280,13 +4295,15 @@ function renderChecklist() {
     const found = g.species.filter(r => r.state).length, poss = g.species.filter(r => r.possible).length;
     return `<div class="clbox"><h4><span>${esc(g.genus)}</span><span class="unk">${found} / ${poss}</span></h4><table>` + g.species.map(r => {
       const cls = r.state ? `cl-${r.state}` : r.possible ? "" : "cl-no";
-      const tip = `${r.name}${r.value ? ` · ${credits(r.value)} cr` : ""}` +
+      const tip = geo ? `${r.name} · ${r.sites ? `${r.sites.toLocaleString()} reported sites ${d.region == null ? "in all" : "in this region"}`
+          : "not reported in this region yet"}${r.elsewhere ? " · logged in another region" : ""}`
+        : `${r.name}${r.value ? ` · ${credits(r.value)} cr` : ""}` +
         (r.possible === "parts" ? " · only in parts of this region" : !r.possible ? " · not here: the rules say it cannot grow in this region" : "") +
         (r.elsewhere ? ` · found in another region: ${CL_WORD[r.elsewhere]}` : "");
       return `<tr class="${cls}${CL.open === r.id ? " on" : ""}" data-cl="${esc(r.id)}" title="${esc(tip)}"><td>${esc(r.short)}` +
         `${r.possible === "parts" ? ' <span class="clparts">◐</span>' : ""}</td><td>${r.state ? CL_WORD[r.state]
           : r.elsewhere ? `<span class="clelse" title="${esc(`found in another region: ${CL_WORD[r.elsewhere]}`)}">elsewhere</span>` : ""}</td>` +
-        `<td class="num">${r.variants.found} / ${r.variants.total}</td></tr>`;
+        `<td class="num">${geo ? (r.sites ? r.sites.toLocaleString() : "—") : `${r.variants.found} / ${r.variants.total}`}</td></tr>`;
     }).join("") + "</table></div>";
   }).join("");
   if (grid.innerHTML !== html) grid.innerHTML = html;
@@ -4303,7 +4320,7 @@ async function clLoadSpecies(id) {
   CL.species = null; CL.map = null;
   clDrawSide();
   let d;
-  try { d = await apiJson(`api/checklist?species=${encodeURIComponent(id)}`); } catch (err) { d = {error: err.message}; }
+  try { d = await apiJson(`api/checklist?kind=${clKind()}&species=${encodeURIComponent(id)}`); } catch (err) { d = {error: err.message}; }
   if (CL.open !== id) return;   // another species clicked meanwhile
   CL.species = d;
   clDrawSide();
@@ -4311,8 +4328,21 @@ async function clLoadSpecies(id) {
 function clDrawSide() {
   const side = document.getElementById("clSide"), r = clRow(CL.open);
   let html;
-  if (!r) html = `<p class="unk">Click a species for its colours and where it grows.</p>`;
-  else {
+  if (!r) html = `<p class="unk">${clKind() === "geo" ? "Click an entry for where it has been reported and where you logged it."
+    : "Click a species for its colours and where it grows."}</p>`;
+  else if (clKind() === "geo") {
+    const sp = CL.species && CL.species.id === r.id ? CL.species : null;
+    const mine = sp && !sp.error ? [...new Set(sp.runs.map(x => x.system))] : [];
+    html = `<h4>${esc(r.name)}</h4><div class="unk">${esc([sp && sp.group, sp && sp.kind].filter(Boolean).join(" · "))}</div>` +
+      `<p>${r.sites ? `Reported at <b>${r.sites.toLocaleString()}</b> site${r.sites === 1 ? "" : "s"} ${CL.data.region == null ? "in all" : "in this region"}`
+        : "Not reported in this region yet"}${sp && sp.sites_total ? `, ${sp.sites_total.toLocaleString()} in the galaxy` : ""}.` +
+      ` ${r.state ? `<span class="cl-logged">Logged here</span>` : r.elsewhere ? `<span class="clelse">Logged in another region</span>` : "Not in your codex here."}</p>` +
+      (mine.length ? `<div class="unk">Where you logged it: ${mine.map(esc).join(", ")}</div>` : "") +
+      `<div class="clmapbox"><canvas id="clMap" width="880" height="880" aria-label="${esc(`the galaxy: where ${r.name} has been reported`)}"></canvas>` +
+      `<div id="clMapTip" class="cltip" hidden></div></div>` +
+      `<div class="unk clmaplegend">${sp && sp.error ? esc(sp.error) : !sp ? "loading the map…"
+        : `highlighted: the regions it has been reported in (Canonn) · dots: where you logged it (${sp.runs.length})`}</div>`;
+  } else {
     const sp = CL.species && CL.species.id === r.id ? CL.species : null;
     const where = r.possible === "yes" ? "can grow in this region" : r.possible === "parts"
       ? "only in parts of this region (near Guardian sites, in tuber zones, by nebulae)" : "the rules say it cannot grow in this region";
@@ -4340,7 +4370,8 @@ document.getElementById("clSide").addEventListener("mousemove", e => {
   const allow = v && CL.species && !CL.species.error && CL.species.regions ? CL.species.regions[String(v)] : undefined;
   const reg = allow && CL.data && (CL.data.regions || []).find(x => x.id === v);
   if (!reg) { tip.hidden = true; return; }   // a faint region (it cannot grow there), outside the map, or not loaded yet
-  const grows = allow === "parts" ? "only in parts" : "can grow here";
+  const sites = clKind() === "geo" && CL.species.sites ? CL.species.sites[String(v)] : null;
+  const grows = sites ? `${sites.toLocaleString()} reported site${sites === 1 ? "" : "s"}` : allow === "parts" ? "only in parts" : "can grow here";
   const words = [reg.name, grows, reg.completion != null ? `${clPct(reg.completion)} complete` : ""].filter(Boolean).join(" · ");
   if (tip.textContent !== words) tip.textContent = words;
   tip.hidden = false;

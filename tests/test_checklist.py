@@ -111,6 +111,38 @@ class Checklist(unittest.TestCase):
                          [33.33, 33.33, 62.5])
         self.assertIsNone(cl.completion([], region_ok, [], [], 3)[1])   # nothing can grow: no figure
 
+    def test_geology(self):
+        """The geology checklist: an entry is logged in a region or not; "possible" is reported there (Canonn's sites)."""
+        E = [{"id": 1, "name": "Water Ice Geyser", "kind": "Geology", "group": "Geyser", "regions": {"1": 50, "2": 3}},
+             {"id": 2, "name": "Caeruleum Lagrange Cloud", "kind": "Cloud", "group": "Lagrange Cloud", "regions": {"2": 7}},
+             {"id": 3, "name": "K01-Type Anomaly", "kind": "Anomaly", "group": "K-Type Anomaly", "regions": {"3": 1}}]
+        self.assertEqual([cl.geo_short(e) for e in E], ["Water Ice", "Caeruleum", "K01"])
+        codex = [{"entry_id": 1, "region": 2}, {"entry_id": 2, "region": 2}]
+        t = rows(cl.geo_table(E, 1, codex, 3))
+        self.assertEqual((t["Water Ice Geyser"]["sites"], t["Water Ice Geyser"]["state"], t["Water Ice Geyser"]["elsewhere"]),
+                         (50, None, "logged"))
+        self.assertIsNone(t["Caeruleum Lagrange Cloud"]["possible"])               # not reported in region 1
+        t2 = cl.geo_table(E, 2, codex, 3)
+        self.assertEqual([g["genus"] for g in t2["genera"]], ["Geyser", "Lagrange Cloud", "K-Type Anomaly"])   # geology first
+        self.assertEqual((t2["summary"]["logged"], t2["summary"]["possible"], t2["summary"]["completion"]), (2, 2, 100.0))
+        done = cl.geo_completion(E, codex, 3)
+        self.assertEqual((done[1], done[2], done[3], done["all"]), (0.0, 100.0, 0.0, 66.67))
+
+    def test_geo_codex_resource(self):
+        """resources/geo_codex.json (scripts/build_geo_codex.py, from Canonn): the codex's Geology and Anomalies entries,
+        each with its reported sites per region (1-42)."""
+        import json
+        with open(ed_outrider.GEO_CODEX_FILE, encoding="utf-8") as f:
+            doc = json.load(f)
+        E = doc["entries"]
+        self.assertGreaterEqual(len(E), 80)
+        self.assertEqual({e["kind"] for e in E}, {"Geology", "Cloud", "Anomaly"})
+        self.assertEqual(len({e["id"] for e in E}), len(E))
+        for e in E:
+            self.assertTrue(e["name"] and e["group"])
+            self.assertTrue(all(1 <= int(r) <= 42 and n > 0 for r, n in e["regions"].items()), e["name"])
+        self.assertIn("Canonn", doc["source"])
+
     def test_short_names(self):
         self.assertEqual(cl.short_name({"name": "Aleoida Arcus", "genus": "Aleoida"}), "Arcus")
         self.assertEqual(cl.short_name({"name": "Luteolum Anemone", "genus": "Anemone"}), "Luteolum")
@@ -173,6 +205,19 @@ class ChecklistServer(unittest.TestCase):
         self.assertEqual(sorted((r["system"], r["state"]) for r in sp["runs"]), [("Near Colonia", "aboard"), ("Near Sol", "lost")])
         self.assertTrue(sp["regions"] and set(sp["regions"].values()) <= {"yes", "parts"})
         self.assertEqual(self.state.checklist_species("$Nope;")[1], 404)
+        # the geology checklist (the shipped resources/geo_codex.json), from your codex entries by entry id
+        self.db.execute("INSERT INTO codex (ts, entry_id, name, region, system) VALUES ('2026-01-01T00:06:00Z', 1400258,"
+                        " 'Water Ice Geyser', 'Inner Orion Spur', 1)")
+        self.db.commit()
+        geo, status = self.state.checklist(kind="geo")
+        self.assertEqual((status, geo["kind"], geo["region"]), (200, "geo", 18))
+        self.assertEqual(row(geo, "Water Ice Geyser")["state"], "logged")
+        self.assertGreater(row(geo, "Water Ice Geyser")["sites"], 0)
+        self.assertGreater(geo["summary"]["completion"], 0)
+        one, status = self.state.checklist_geo("1400258")
+        self.assertEqual((status, one["name"], [r["system"] for r in one["runs"]]), (200, "Water Ice Geyser", ["Near Sol"]))
+        self.assertEqual(self.state.checklist_geo("1")[1], 404)
+        self.assertEqual(self.state.checklist(kind="x")[1], 400)
 
     def test_endpoint(self):
         import asyncio

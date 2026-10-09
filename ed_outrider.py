@@ -290,6 +290,7 @@ HIGHWAY_HEAVY_SLACK = 0.5    # t: fuel over the most the next jump allows by mor
 #                              some jumps right at the limit, so a hair over is the model's error, not yours)
 HIGHWAY_HEAVY_EVERY_S = 3.0  # s between two looks at it while the fuel changes in a route system (scooping)
 HIGHWAY_CONSERVATIVE_MAX = 50.0   # ly: the largest conservative margin taken
+GEO_CODEX_FILE = os.path.join(outrider.RESOURCES_DIR, "geo_codex.json")   # the geology checklist's entries (scripts/build_geo_codex.py)
 HIGHWAY_STAND_IN_LY = 150.0   # ly: how far around an end Spansh does not know yet its stand-in is looked for
 NEAR_BODY_ALT = 5000         # m: below this over a body in your ship, the on-body strip shows its bio card
 LEASE_EVERY_S = 60           # s: this instance's upload lease rewritten, the others' read, EDMC's switches checked
@@ -8513,13 +8514,26 @@ class State:
                         names[r["id"]] = r["name"]
         return names
 
-    def checklist(self, region="here"):
-        """GET /api/checklist?region=here|all|<1-42>: the exobiology checklist (outrider.checklist.table) for a galactic
-        region, where you are by default, with the regions to choose from. Every run you have made (its fate as Samples
-        has it: sold, aboard, lost, in progress) and every codex entry, placed by region. (answer, HTTP status)."""
+    def geo_codex(self):
+        """The geology checklist's entries (resources/geo_codex.json), read once; [] when the file is missing."""
+        if getattr(self, "_geo_codex", None) is None:
+            try:
+                with open(GEO_CODEX_FILE, encoding="utf-8") as f:
+                    self._geo_codex = json.load(f).get("entries") or []
+            except (OSError, ValueError, AttributeError):
+                self._geo_codex = []
+        return self._geo_codex
+
+    def checklist(self, region="here", kind="bio"):
+        """GET /api/checklist?kind=bio|geo&region=here|all|<1-42>: a checklist for a galactic region, where you are by
+        default, with the regions to choose from and each one's completion. bio: the exobiology one
+        (outrider.checklist.table) from every run you have made (its fate as Samples has it) and every codex entry;
+        geo: the codex's Geology and Anomalies entries (geo_table) from your codex. (answer, HTTP status)."""
         R = outrider.bio.load_rules() if outrider.bio else None
         if not R or not R.get("region_names"):
             return {"error": "the exobiology rules are not loaded"}, 503
+        if kind not in ("bio", "geo"):
+            return {"error": "kind is bio or geo"}, 400
         names = R["region_names"]
         count = len(names) - 1
         pos = self.journals.pos or {}
@@ -8536,6 +8550,18 @@ class State:
             if not 1 <= region <= count:
                 return {"error": f"region is 1 to {count}"}, 400
         placed = {}
+        number = {n.lower(): i for i, n in enumerate(names) if n}   # the codex says its region by name
+        if kind == "geo":
+            entries = self.geo_codex()
+            if not entries:
+                return {"error": "the geology list is missing (resources/geo_codex.json)"}, 503
+            ids = {e["id"] for e in entries}
+            codex = [{"entry_id": c["entry_id"], "region": number.get((c["region"] or "").lower())}
+                     for c in self.db.execute("SELECT entry_id, region FROM codex") if c["entry_id"] in ids]
+            out = outrider.checklist.geo_table(entries, region, codex, count)
+            done = outrider.checklist.geo_completion(entries, codex, count)
+            return dict(out, kind="geo", regions=[{"id": i, "name": n, "completion": done.get(i)} for i, n in enumerate(names) if n],
+                        completion_all=done["all"], here=here, region=region, region_name=names[region] if region else None), 200
 
         def region_of(system):
             if system not in placed:
@@ -8549,13 +8575,28 @@ class State:
             state = fate[0] if fate else (organic_state(self.db, r["done_ts"]) if r["done_ts"] else None) or "in progress"
             runs.append({"species_id": r["species"], "species": r["species_name"], "variant": r["variant_name"],
                          "region": region_of(r["system"]), "state": state})
-        number = {n.lower(): i for i, n in enumerate(names) if n}   # the codex says its region by name
         codex = [{"name": c["name"], "region": number.get((c["region"] or "").lower())}
                  for c in self.db.execute("SELECT name, region FROM codex")]
         out = outrider.checklist.table(R["species"], region, outrider.bio.ruleset_region_ok, runs, codex, count)
         done = outrider.checklist.completion(R["species"], outrider.bio.ruleset_region_ok, runs, codex, count)
-        return dict(out, regions=[{"id": i, "name": n, "completion": done.get(i)} for i, n in enumerate(names) if n],
+        return dict(out, kind="bio", regions=[{"id": i, "name": n, "completion": done.get(i)} for i, n in enumerate(names) if n],
                     completion_all=done["all"], here=here, region=region, region_name=names[region] if region else None), 200
+
+    def checklist_geo(self, entry_id):
+        """GET /api/checklist?kind=geo&species=<entry id>: one geology entry for the panel: the regions it has been
+        reported in ("yes"), the sites per region, and where you logged it ({x, z, state, system})."""
+        e = next((x for x in self.geo_codex() if str(x["id"]) == str(entry_id)), None)
+        if e is None:
+            return {"error": "no such entry"}, 404
+        runs = []
+        for c in self.db.execute("SELECT system FROM codex WHERE entry_id = ?", (e["id"],)):
+            loc = self.locate(c["system"]) if c["system"] else None
+            if loc and loc[1] is not None:
+                runs.append({"x": loc[1], "z": loc[3], "state": "logged", "system": loc[0]})
+        regions = e.get("regions") or {}
+        return {"id": str(e["id"]), "name": e["name"], "kind": e.get("kind"), "group": e.get("group"),
+                "regions": {r: "yes" for r, n in regions.items() if n}, "sites": regions, "sites_total": sum(regions.values()),
+                "runs": runs}, 200
 
     def checklist_species(self, species_id):
         """GET /api/checklist?species=<id>: one species for the checklist's panel: the regions it can grow in ("yes",
@@ -12789,10 +12830,11 @@ def make_app(state, hosts=None):
         return web.json_response(state.history(days))
 
     async def checklist_view(request):
+        kind = request.query.get("kind", "bio")
         if "species" in request.query:
-            out, status = state.checklist_species(request.query["species"])
+            out, status = (state.checklist_geo if kind == "geo" else state.checklist_species)(request.query["species"])
             return web.json_response(out, status=status)
-        out, status = state.checklist(request.query.get("region", "here"))
+        out, status = state.checklist(request.query.get("region", "here"), kind)
         return web.json_response(out, status=status)
 
     async def organics_view(request):

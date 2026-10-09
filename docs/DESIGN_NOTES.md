@@ -238,6 +238,11 @@ upstream project's choices, not rules of the game.
   Checklist), not a tab of its own (the author: no 14th tab). **Completion** (the author's measure): the average,
   over the species possible in the region, of each one's share of its colours found there in any state, so partial
   progress counts (half of every species is 50%); a species with no colour table scores 0 or 1.
+- **The geology checklist's "possible" is "reported"** (resources/geo_codex.json, scripts/build_geo_codex.py). Geology
+  has no region rules (it follows a body's volcanism), so a region's entries are those players have reported there,
+  counted from Canonn's per-entry site dumps; one not reported is greyed but never called impossible. The file is
+  built offline and shipped (the dumps are tens of MB; it is 31 KB); run the script again to refresh the counts. Your
+  codex entries match by entry id.
 - **A plot's end Spansh does not know yet is stood in for** (2026-10-09). Both ends are looked up in Spansh's search
   before every plot (a system known here, even where you are, is not necessarily one Spansh knows). One it does not
   know, but Outrider can place, is replaced by a Spansh system near it: of those within the ship's range, the one

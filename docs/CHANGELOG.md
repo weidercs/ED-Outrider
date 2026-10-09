@@ -2,6 +2,15 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Samples → Geology: a checklist of the codex's Geology and Anomalies entries
+- A third Samples view, **Geology**: the 88 entries your codex files under Geology and Anomalies (fumaroles, gas
+  vents, geysers, lava spouts, Lagrange clouds and storm clouds, the lettered anomalies), by region: logged in your
+  codex there or not (or elsewhere), and how many sites players have reported there, greyed where none have.
+  Completion per region is the share of its reported entries you have logged; the region list shows it. Click one
+  for its sites in the galaxy, where you logged it, and a map of the regions it has been reported in.
+- The data: resources/geo_codex.json, built by scripts/build_geo_codex.py from Canonn's codex reference and its
+  per-entry site dumps (each site's region counted). Run it again to refresh the counts.
+
 ## 2026-10-09 · Exobiology checklist on the tablet: two scrolling parts
 - On the tablet (and in the app) the checklist fills the page, and the species boxes and a species' details with its
   map each scroll on their own (stacked on a narrow tablet, about half each); the page itself no longer scrolls.

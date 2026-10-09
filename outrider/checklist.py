@@ -220,3 +220,72 @@ def short_name(species):
     if genus and name.lower().endswith(" " + genus.lower()):
         return name[: -len(genus) - 1]
     return name
+
+
+# ---- the geology checklist: the codex's Geology and Anomalies entries (resources/geo_codex.json, from Canonn) ----
+# Nothing to sell and no colours: an entry is logged in your codex for a region, or not. "Possible" is "reported":
+# someone has logged it in that region (Canonn's sites); one not reported there is not ruled out, only not seen yet.
+
+def geo_short(entry):
+    """An entry's name inside its group's box: "Sulphur Dioxide" (Fumarole), "Caeruleum" (Lagrange Cloud), "K01"
+    (K-Type Anomaly)."""
+    name, group = entry["name"], entry.get("group") or ""
+    if name.endswith("-Type Anomaly"):
+        return name[: -len("-Type Anomaly")]
+    for tail in (" Lagrange " + group, " " + group):
+        if group and name.endswith(tail) and len(name) > len(tail):
+            return name[: -len(tail)]
+    return name
+
+
+def geo_table(entries, region, codex, region_count):
+    """The geology checklist for region number `region` (None: All regions), in the shape table() gives: boxes by group
+    (Fumarole, Geyser, ... Lagrange Cloud, K-Type Anomaly), rows {id, name, short, kind, possible ("yes" when reported
+    there), sites (reported there), state ("logged" or None), elsewhere, runs (your entries there), variants (one)}.
+    codex: your entries [{entry_id, region}]. Completion: logged / reported, over the reported entries."""
+    regions = range(1, region_count + 1) if region is None else (region,)
+    mine, anywhere = {}, set()
+    for c in codex:
+        eid = c.get("entry_id")
+        anywhere.add(eid)
+        if region is None or c.get("region") == region:
+            mine[eid] = mine.get(eid, 0) + 1
+    groups, totals = {}, {"possible": 0, "found": 0, "logged": 0, "sold": 0, "aboard": 0, "lost": 0, "elsewhere": 0,
+                          "colours": 0, "colours_found": 0}
+    for e in entries:
+        sites = sum((e.get("regions") or {}).get(str(r), 0) for r in regions)
+        state = "logged" if e["id"] in mine else None
+        row = {"id": str(e["id"]), "name": e["name"], "short": geo_short(e), "kind": e.get("kind"), "value": None,
+               "possible": "yes" if sites else None, "sites": sites, "state": state,
+               "elsewhere": "logged" if region is not None and not state and e["id"] in anywhere else None,
+               "runs": mine.get(e["id"], 0),
+               "variants": {"total": 1, "found": 1 if state else 0, "list": [{"colour": None, "where": None, "state": state}]}}
+        groups.setdefault(e.get("group") or e.get("kind") or "?", []).append(row)
+        if sites:
+            totals["possible"] += 1
+            totals["colours"] += 1
+            totals["elsewhere"] += 1 if row["elsewhere"] else 0
+        if state:
+            totals["found"] += 1
+            totals["logged"] += 1
+            totals["colours_found"] += 1 if sites else 0
+    totals["completion"] = round(100 * totals["colours_found"] / totals["possible"], 2) if totals["possible"] else None
+    kind_order = {"Geology": 0, "Cloud": 1, "Anomaly": 2}
+    out = [{"genus": g, "kind": rows[0]["kind"], "species": sorted(rows, key=lambda x: x["short"])}
+           for g, rows in sorted(groups.items(), key=lambda kv: (kind_order.get(kv[1][0]["kind"], 9), kv[0]))]
+    return {"genera": out, "summary": totals}
+
+
+def geo_completion(entries, codex, region_count):
+    """{region number: % of the entries reported there that you have logged there, "all": over every region}."""
+    logged = {}
+    for c in codex:
+        logged.setdefault(c.get("region"), set()).add(c.get("entry_id"))
+    anywhere = set().union(*logged.values()) if logged else set()
+    out = {}
+    for r in range(1, region_count + 1):
+        known = [e["id"] for e in entries if (e.get("regions") or {}).get(str(r))]
+        out[r] = round(100 * sum(1 for i in known if i in logged.get(r, ())) / len(known), 2) if known else None
+    known = [e["id"] for e in entries if e.get("regions")]
+    out["all"] = round(100 * sum(1 for i in known if i in anywhere) / len(known), 2) if known else None
+    return out

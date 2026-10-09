@@ -168,6 +168,13 @@ all too, with the species and a species' details scrolling separately.
   <img src="../images/checklist.png" alt="The exobiology checklist: genus boxes with each species' state and colours found, and a species' colours and galaxy map beside them" width="900">
 </p>
 
+**Samples → Geology** is the same for the codex's **Geology and Anomalies** entries: fumaroles, gas vents, geysers and
+lava spouts, then Lagrange clouds and the lettered anomalies. Each is logged in your codex for the region, or not;
+beside it, how many sites players have reported in that region (from [Canonn](https://canonn.science)), greyed where
+none have been reported yet (which is not to say there are none). Completion is the share of the entries reported in
+the region that you have logged. Click one for its sites in the galaxy, where you logged it, and the map of the regions
+it has been reported in.
+
 Journals from before a 2023 game update don't name a sample's colour, so those samples count the species but not a
 colour.
 
