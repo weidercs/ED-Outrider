@@ -147,7 +147,8 @@ are (the default), any other, or **All regions**. Each species shows your best t
 
 - <b>sold</b> (green), <b>aboard</b> (amber: sampled, not sold yet), <b>lost</b> (red: sampled, lost with the ship),
   <b>logged</b> (blue: in your codex, no finished run);
-- **not here**, greyed: the rules say it cannot grow in this region. That is the rules' prediction, not proof that
+- *elsewhere*: none here, but you have found it in another region (the line above the boxes counts them);
+- greyed: not here, the rules say it cannot grow in this region. That is the rules' prediction, not proof that
   nobody has found it there;
 - ◐: only in parts of the region (near Guardian sites, in tuber zones, by nebulae);
 - the colours you have found out of those it comes in (**3 / 12**). Anemones, brain trees and the like are their own

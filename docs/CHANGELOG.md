@@ -2,6 +2,12 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Exobiology checklist: the layout, and "elsewhere"
+- The genus boxes flow down columns (no holes beside a long box), the species panel is wider with a larger map, and
+  a long name ends in … within its box ("not here" ran over the next box: greyed already says it, the tooltip in
+  words). A species you have none of in the region but found in another says *elsewhere* (its best there in the
+  tooltip), and the summary counts them: a region you never sampled in read all 0 / n with nothing to say you had them.
+
 ## 2026-10-09 · Exobiology checklist, part C: the page (and the tablet)
 - Samples gets a **Runs | Checklist** switch (kept per device). The checklist: a region picker (where you are, All
   regions, or any of the 42), a summary line, one box per genus with each species' state (sold, aboard, lost,

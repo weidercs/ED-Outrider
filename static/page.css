@@ -1062,20 +1062,26 @@ body.app #richPane { grid-column: 1; grid-row: 2; }
 /* the exobiology checklist (Samples -> Checklist) */
 #bioView.check .runonly, #bioView:not(.check) .checkonly { display: none; }
 .clwrap { display: flex; gap: 14px; align-items: flex-start; }
-.clgrid { flex: 1 1 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; align-items: start; }
-.clbox { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+/* the boxes flow down columns, newspaper style: a short box leaves no hole beside a long one */
+.clgrid { flex: 1 1 auto; min-width: 0; column-width: 230px; column-gap: 10px; }
+.clbox { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; break-inside: avoid; display: inline-block;
+  width: 100%; box-sizing: border-box; margin: 0 0 10px; }
 .clbox h4 { margin: 0 0 4px; font-size: 14px; display: flex; justify-content: space-between; gap: 8px; }
 .clbox table, .clvars { width: 100%; border-collapse: collapse; font-size: 13px; }
 .clbox td, .clvars td, .clvars th { padding: 1px 4px; text-align: left; }
-.clbox td.num { text-align: right; white-space: nowrap; }
+.clbox table { table-layout: fixed; }
+.clbox td:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }   /* a long name ends in …, never under its neighbour */
+.clbox td:nth-child(2) { width: 62px; white-space: nowrap; font-size: 12px; }
+.clbox td.num { width: 46px; text-align: right; white-space: nowrap; }
+.clelse { color: var(--muted); font-style: italic; }
 .clbox tr { cursor: pointer; }
 .clbox tr:hover, .clbox tr.on { background: rgba(127, 127, 127, .16); }
 .cl-sold { color: var(--good); } .cl-aboard { color: var(--warn); } .cl-lost { color: var(--bad); } .cl-logged { color: var(--info); }
 .cl-no { color: var(--muted); opacity: .55; }
 .clparts { opacity: .8; }
-.clside { flex: 0 0 300px; position: sticky; top: 8px; }
+.clside { flex: 0 0 440px; position: sticky; top: 8px; }
 .clside h4 { margin: 0 0 4px; }
-.clside canvas { width: 100%; max-width: 300px; aspect-ratio: 1; display: block; margin-top: 8px; border: 1px solid var(--line); border-radius: 6px; }
+.clside canvas { width: 100%; max-width: 440px; aspect-ratio: 1; display: block; margin-top: 8px; border: 1px solid var(--line); border-radius: 6px; }
 .clmaplegend { font-size: 12px; margin-top: 4px; }
 @media (max-width: 900px) { .clwrap { flex-direction: column; align-items: stretch; } .clgrid { width: 100%; }
   .clside { position: static; flex-basis: auto; width: 100%; } }

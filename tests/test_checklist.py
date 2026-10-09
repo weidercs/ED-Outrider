@@ -78,6 +78,8 @@ class Checklist(unittest.TestCase):
         self.assertEqual((t["Bacterium Nebulus"]["state"], t["Bacterium Nebulus"]["variants"]["found"]), ("logged", 1))
         self.assertIsNone(t["Stratum Araneamus"]["possible"])                       # region 3 only
         self.assertIsNone(t["Roseum Sinuous Tubers"]["state"])                      # logged in region 3, not here
+        self.assertEqual(t["Roseum Sinuous Tubers"]["elsewhere"], "logged")        # ...but found elsewhere
+        self.assertIsNone(t["Aleoida Arcus"]["elsewhere"])                          # found here: no "elsewhere"
         self.assertEqual(t["Roseum Sinuous Tubers"]["short"], "Roseum")
         t3 = rows(cl.table(SPECIES, 3, region_ok, runs, codex, 3))
         self.assertEqual(t3["Stratum Araneamus"]["state"], "logged")               # a run under way

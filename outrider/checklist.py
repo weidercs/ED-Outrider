@@ -89,16 +89,19 @@ def table(species_list, region, region_ok, runs, codex, region_count):
     codex         your codex entries: [{name ("Bacterium Aurasus - Teal" or "Luteolum Anemone"), region (number)}]
     region_count  the number of regions (their numbers run 1..region_count)
 
-    -> {"genera": [{genus, species: [row]}], "summary": {...}}; a row: {name, short, value, possible, state, runs,
-    variants: {total, found, list: [{colour, where, state}]}}."""
+    -> {"genera": [{genus, species: [row]}], "summary": {...}}; a row: {id, name, short, value, possible, state,
+    elsewhere (your best in other regions, when none here), runs, variants: {total, found, list: [{colour, where, state}]}}."""
     regions = range(1, region_count + 1) if region is None else (region,)
     here = lambda r: region is None or r == region   # noqa: E731
 
     species_list, names = merge_species(species_list)
-    got, got_colour, n_runs = {}, {}, {}
+    got, got_colour, n_runs, anywhere = {}, {}, {}, {}
 
     def note(key, colour, r, state):
-        if key is None or not here(r):
+        if key is None:
+            return
+        anywhere[key] = best(anywhere.get(key), state)   # for "found elsewhere" beside a region's row
+        if not here(r):
             return
         got[key] = best(got.get(key), state)
         if colour:
@@ -120,7 +123,7 @@ def table(species_list, region, region_ok, runs, codex, region_count):
         note(names.get(name.lower()), colour_of(full, name), entry.get("region"), "logged")
 
     genera, totals = {}, {"possible": 0, "found": 0, "sold": 0, "aboard": 0, "lost": 0, "logged": 0,
-                          "colours": 0, "colours_found": 0}
+                          "colours": 0, "colours_found": 0, "elsewhere": 0}
     for sp in species_list:
         key = sp.get("id") or sp["name"]
         poss = None
@@ -139,8 +142,10 @@ def table(species_list, region, region_ok, runs, codex, region_count):
             vlist = [{"colour": None, "where": None, "state": state}]
         found = sum(1 for v in vlist if v["state"])
         row = {"id": key, "name": sp["name"], "short": short_name(sp), "value": sp.get("value"), "possible": poss, "state": state,
+               "elsewhere": anywhere.get(key) if region is not None and not state else None,
                "runs": n_runs.get(key, 0), "variants": {"total": len(vlist), "found": found, "list": vlist}}
         genera.setdefault(sp.get("genus") or "?", []).append(row)
+        totals["elsewhere"] += 1 if row["elsewhere"] and poss else 0
         if poss or state:
             totals["possible"] += 1 if poss else 0
             totals["colours"] += len(vlist) if poss else 0

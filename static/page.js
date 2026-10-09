@@ -4265,15 +4265,18 @@ function renderChecklist() {
   const where = d.region_name || (d.region == null && clRegionEl.value === "all" ? "All regions" : "Where you are (not in a known region): all regions");
   st.innerHTML = `${esc(where)}: <b>${s.found}</b> of ${s.possible} possible species found · <span class="cl-sold">${s.sold} sold</span>` +
     ` · <span class="cl-aboard">${s.aboard} aboard</span>` + (s.lost ? ` · <span class="cl-lost">${s.lost} lost</span>` : "") +
-    (s.logged ? ` · <span class="cl-logged">${s.logged} logged</span>` : "") + ` · colours ${s.colours_found} of ${s.colours}`;
+    (s.logged ? ` · <span class="cl-logged">${s.logged} logged</span>` : "") + ` · colours ${s.colours_found} of ${s.colours}` +
+    (s.elsewhere ? ` · <span class="clelse">${s.elsewhere} more found in other regions</span>` : "");
   const html = d.genera.map(g => {
     const found = g.species.filter(r => r.state).length, poss = g.species.filter(r => r.possible).length;
     return `<div class="clbox"><h4><span>${esc(g.genus)}</span><span class="unk">${found} / ${poss}</span></h4><table>` + g.species.map(r => {
       const cls = r.state ? `cl-${r.state}` : r.possible ? "" : "cl-no";
       const tip = `${r.name}${r.value ? ` · ${credits(r.value)} cr` : ""}` +
-        (r.possible === "parts" ? " · only in parts of this region" : !r.possible ? " · the rules say it cannot grow here" : "");
+        (r.possible === "parts" ? " · only in parts of this region" : !r.possible ? " · not here: the rules say it cannot grow in this region" : "") +
+        (r.elsewhere ? ` · found in another region: ${CL_WORD[r.elsewhere]}` : "");
       return `<tr class="${cls}${CL.open === r.id ? " on" : ""}" data-cl="${esc(r.id)}" title="${esc(tip)}"><td>${esc(r.short)}` +
-        `${r.possible === "parts" ? ' <span class="clparts">◐</span>' : ""}</td><td>${r.state ? CL_WORD[r.state] : r.possible ? "" : "not here"}</td>` +
+        `${r.possible === "parts" ? ' <span class="clparts">◐</span>' : ""}</td><td>${r.state ? CL_WORD[r.state]
+          : r.elsewhere ? `<span class="clelse" title="${esc(`found in another region: ${CL_WORD[r.elsewhere]}`)}">elsewhere</span>` : ""}</td>` +
         `<td class="num">${r.variants.found} / ${r.variants.total}</td></tr>`;
     }).join("") + "</table></div>";
   }).join("");
@@ -4309,7 +4312,7 @@ function clDrawSide() {
     html = `<h4>${esc(r.name)}</h4><div class="unk">${r.value ? `${credits(r.value)} cr` : ""}` +
       `${CL.data.region != null ? ` · ${esc(where)}` : ""}${r.runs ? ` · ${r.runs} run${r.runs === 1 ? "" : "s"}` : ""}</div>` +
       `<table class="clvars"><thead><tr><th>Colour</th><th>Grows with</th><th></th></tr></thead><tbody>${vs}</tbody></table>` +
-      `<canvas id="clMap" width="480" height="480" aria-label="${esc(`the galaxy: where ${r.name} can grow`)}"></canvas>` +
+      `<canvas id="clMap" width="880" height="880" aria-label="${esc(`the galaxy: where ${r.name} can grow`)}"></canvas>` +
       `<div class="unk clmaplegend">${sp && sp.error ? esc(sp.error) : !sp ? "loading the map…"
         : `highlighted: where it can grow (paler: only in parts) · dots: your samples (${sp.runs.length})`}</div>`;
   }
