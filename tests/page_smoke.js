@@ -4217,33 +4217,15 @@ const settle = async maxMs => {
     const w = dom.window, before = errors.length;
     const got = w.eval(`(() => {
       const t = h => { const d = document.createElement("div"); d.innerHTML = h; return [...d.children].map(c => c.textContent).join(" | "); };
-      return [t(uploadLineHtml({eddn: {on: true, sent_24h: 1234, queued: 2, dropped_24h: 1, test: true}, edsm: {on: true, sent_24h: 59, dry_run: true, dry_24h: 18, new_24h: 2, new_total: 40}})),
+      return [t(uploadLineHtml({eddn: {on: true, sent_24h: 1234, queued: 2, dropped_24h: 1, test: true}, edsm: {on: true, sent_24h: 59, dry_run: true, dry_24h: 18}})),
               uploadLineHtml({eddn: {on: false}, edsm: {on: false}}), uploadLineHtml(null),
               t(uploadLineHtml({eddn: {on: false, sent_24h: 3}, edsm: {on: true, held: "203 EDSM refused the commander name or API key"}}))]; })()`);
-    const want = ["EDDN (test) 1,234 sent · 2 waiting · 1 refused | EDSM (dry run) 59 sent · 18 dry run · 2 new to EDSM", "", "",
+    const want = ["EDDN (test) 1,234 sent · 2 waiting · 1 refused | EDSM (dry run) 59 sent · 18 dry run", "", "",
                   "EDDN 3 sent off | EDSM 0 sent held"];   // a line (div) per service
     const goodL = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodL;
     console.log(goodL ? "OK" : "FAIL", "| uploads in the Data tile |", goodL ? "per service, test/dry-run marks, nothing when unused" : JSON.stringify(got), errors.slice(before));
   }
-  // uploads H: the Here view's "New to EDSM" badge (EDSM's systemCreated), absent otherwise
-  {
-    const w = dom.window, before = errors.length;
-    const got = w.eval(`(() => {
-      const hd = hereData;
-      if (!hd || hd.error) return "no Here data";
-      const head = () => document.getElementById("hereHead");
-      hereData = Object.assign({}, hd, {new_to_edsm: "2026-10-08T10:05:00Z"}); renderHere();
-      const r = [/New to EDSM/.test(head().textContent), /2026-10-08/.test(head().querySelector(".edsmnew").title)];
-      hereData = Object.assign({}, hd, {new_to_edsm: null}); renderHere();
-      r.push(!head().querySelector(".edsmnew"));
-      hereData = hd; renderHere();
-      return r; })()`);
-    const goodN = JSON.stringify(got) === JSON.stringify([true, true, true]) && errors.length === before;
-    allOk = allOk && goodN;
-    console.log(goodN ? "OK" : "FAIL", "| new to EDSM |", goodN ? "the badge with its date, none without" : JSON.stringify(got), errors.slice(before));
-  }
-
   // review 2026-10-08 #15-#18: answers that arrive out of order. An older, slower request lands after a newer one:
   // its answer (or its failure) must not replace the newer one's
   {

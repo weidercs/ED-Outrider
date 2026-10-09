@@ -778,9 +778,6 @@ body.nowmode header, body.nowmode main { display: none; }
 .dssa { font-weight: 700; color: var(--info); }
 .dssabadge { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 9px; font-size: 11px; font-weight: 700; color: var(--info);
   border: 1px solid var(--info); background: color-mix(in srgb, var(--info) 14%, transparent); vertical-align: 1px; }
-/* the Here view's "New to EDSM": EDSM had never heard of the system until your upload (quiet: not an alert) */
-.edsmnew { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 9px; font-size: 11px; font-weight: 600; color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent); vertical-align: 1px; white-space: nowrap; }
 #recountDlg { width: min(560px, 94vw); } #recountRows { width: 100%; font-size: 13px; } #recountRows td { padding: 3px 6px; }
 #recountRows input.qn { width: 7em; text-align: right; } #recountRows input.rcname { width: 14em; text-align: left; }
 #matTables > div { flex: 1 1 440px; min-width: 0; }

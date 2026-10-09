@@ -17,8 +17,7 @@ are not among the Server settings.
   Uploads. The key stays on this Outrider: the page never shows it again. A commander with no key sends nothing
   (Settings says so); a key EDSM refuses stops sending to EDSM until you change it or switch EDSM off and on; what you play meanwhile
   waits and goes then. Settings shows the
-  stored key's first and last four characters, to compare with your key on edsm.net. When your jump is the first EDSM has heard
-  of a system, the system's detail shows **New to EDSM** (this is EDSM's record, not the game's first discovery).
+  stored key's first and last four characters, to compare with your key on edsm.net.
 
 ## Catching up, and what is never sent
 
@@ -61,6 +60,6 @@ twice: EDDN has no way to tell. So:
 
 ## Status
 
-The header's Data tile shows, live, what each upload in use sent, has waiting and had refused in the last day, and
-for EDSM how many systems were new to it. Settings → Uploads shows, per service: on or off, what is waiting, what was sent and refused in the last day, and why
+The header's Data tile shows, live, what each upload in use sent, has waiting and had refused in the last day.
+Settings → Uploads shows, per service: on or off, what is waiting, what was sent and refused in the last day, and why
 nothing can be sent now (held by another uploader, a key EDSM refused, the beta or Legacy game).

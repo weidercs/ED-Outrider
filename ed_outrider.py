@@ -7820,9 +7820,8 @@ class State:
         leaving = self.leaving_summary(id64)
         if leaving is not None:   # the checklist's "N not on Spansh" (leaving_summary itself runs on every poll)
             leaving["base_known"] = base_known(base, source)
-        new_to_edsm = self.db.execute("SELECT ts FROM edsm_new_systems WHERE system=?", (id64,)).fetchone()
         return {"id64": str(id64), "name": name, "bodies": out, "tree": tree, "partial": partial, "region": region,
-                "phenomena": phenomena, "new_to_edsm": new_to_edsm["ts"] if new_to_edsm else None,
+                "phenomena": phenomena,
                 "leaving": leaving,
                 "firsts": own_firsts(self.db, id64, name),
                 "value_now": sum(b["value_now"] for b in out), "value_max": sum(b["value_max"] for b in out),
@@ -9345,10 +9344,6 @@ class State:
                                 blocked=self.BLOCKED_WORDS.get(blocked) if blocked in ("beta", "legacy", "crew") else None)
         out["eddn"]["test"] = outrider.uploads.eddn_test_mode()
         out["edsm"]["dry_run"] = outrider.edsm.dry_run()
-        # systems new to EDSM by your uploads (EDSM's systemCreated): the last day's and all of them
-        day_ago = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - 86400))
-        out["edsm"]["new_24h"], out["edsm"]["new_total"] = self.db.execute(
-            "SELECT count(CASE WHEN ts >= ? THEN 1 END), count(*) FROM edsm_new_systems", (day_ago,)).fetchone()
         out["edsm"]["accounts"] = self.edsm_account_list()
         out["readonly"] = bool(self.lease_writable) and not any(self.lease_writable.values())
         out["simulate"] = bool(self.simulate)
@@ -9407,10 +9402,6 @@ class State:
                 raise ConnectionError(f"EDSM answered HTTP {resp.status}")
             reply = await resp.json(content_type=None)
         results = outrider.edsm.answer(batch, reply)
-        new = outrider.edsm.created(batch, reply)
-        if new:   # the system detail's "New to EDSM" badge
-            self.db.executemany("INSERT OR IGNORE INTO edsm_new_systems (system, name, ts) VALUES (?, ?, ?)", new)
-            self.scan_version += 1   # the Here view asks for the system again
         bad = next((status for _, state, status, _ in results if state in ("held", "dropped")), None)
         if bad:
             print(f"EDSM: {bad}", file=sys.stderr)

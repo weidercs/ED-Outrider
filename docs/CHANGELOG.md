@@ -2,6 +2,11 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Uploads: "New to EDSM" removed (branch EDMC-Functionality)
+- The badge and the Data tile's "new to EDSM" count are gone, with the table behind them (dropped from databases that
+  had it). EDDN's copy of a jump, sent at once, usually reaches EDSM before Outrider's own EDSM batch, so EDSM's
+  "systemCreated" seldom names your upload (seen on the author's first real uploads).
+
 ## 2026-10-08 · Uploads: a held upload still queues (branch EDMC-Functionality)
 - While EDSM is held by a refused key, what you play is still queued, and goes once the key is fixed. Before, nothing
   was queued while held, and the held stretch was skipped when the hold cleared (the author lost twelve events this

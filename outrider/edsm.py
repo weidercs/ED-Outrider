@@ -149,26 +149,6 @@ FATAL = {201: "EDSM has no commander by that name", 202: "the EDSM API key is mi
          205: "EDSM has blocked this software", 207: "EDSM needs the game version (Outrider's bug)"}
 
 
-ARRIVALS = ("FSDJump", "CarrierJump", "Location")
-
-
-def created(rows, reply):
-    """[(SystemAddress, StarSystem, timestamp)] of the arrivals in these rows that EDSM's reply says were new to it
-    (an event's systemCreated: nobody had uploaded that system to EDSM before)."""
-    events = reply.get("events") if isinstance(reply, dict) and isinstance(reply.get("events"), list) else []
-    out = []
-    for r, e in zip(rows, events):
-        if not (isinstance(e, dict) and e.get("systemCreated")):
-            continue
-        try:
-            ev = json.loads(r["message"])
-        except (TypeError, ValueError):
-            continue
-        if ev.get("event") in ARRIVALS and isinstance(ev.get("SystemAddress"), int):
-            out.append((ev["SystemAddress"], ev.get("StarSystem"), ev.get("timestamp")))
-    return out
-
-
 def answer(rows, reply):
     """EDSM's reply (decoded JSON) for these rows -> [(row id, state, status text, retry_in)] (upload_loop's results).
     100 is per event; 201-205 and 207 hold everything (waiting on the player, or on a fix); 206 (our bad JSON) and
