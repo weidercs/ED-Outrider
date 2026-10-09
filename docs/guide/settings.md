@@ -68,9 +68,11 @@ Command-line flags override the file for a single run:
   conditions, as maintained by the [BioScan](https://github.com/Silarn/EDMC-BioScan) project, including
   its check on which star types a species appears around. Until every body is found, nothing is ruled out
   on what isn't known yet. The genus is usually right, the species sometimes not, so values show as
-  "up to". The ✦ "new to your codex" mark checks the colour variant when it can be told. Each start checks
-  GitHub for newer rules.
-- **Values are estimates** using the community tools' formula, bonuses included. An NPC crew member's cut
+  "up to". The ✦ "new to your codex" mark checks the colour variant when it can be told; ✪ is a species in your
+  codex nowhere at all, worth more effort. Each start checks GitHub for newer rules. Settings → Display can
+  leave out of Here's bio column the species you have finished and the bodies with few signals (this device).
+- **Values are estimates** using the community tools' formula, bonuses included (the full-scan bonus too: 1,000 cr
+  per body of a system you found complete while all of it was undiscovered). An NPC crew member's cut
   comes off automatically, based on what your past sales paid.
 - **Losing your ship loses your data.** Discoveries and samples that went down show as *lost* until you scan
   them again. Scanning a body you've already sold adds nothing; only mapping it still pays.

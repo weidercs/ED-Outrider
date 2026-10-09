@@ -1468,6 +1468,17 @@ class BatchAIntegrity(unittest.TestCase):
         self.assertFalse(asyncio.run(go(0.3, 0.05)))
         self.assertEqual(done, [0.05, 0.3])
 
+    def test_shutdown_cancels_every_background_task(self):
+        """Review 2026-10-08 #7: a survey or trade plot (riches_task, up to 10 minutes) was not among the tasks
+        cancelled at shutdown, so it ran on into the closed Spansh session and database."""
+        import types
+        names = ("refresh_task", "target_task", "unsold_task", "seller_task", "carrier_task", "honk_test_task",
+                 "highway_task", "riches_task", "autotarget_task", "autotarget_test_task")
+        for n in names:
+            setattr(self.state, n, n)
+        self.state.searcher = types.SimpleNamespace(task="searcher")
+        self.assertEqual(set(self.state.background_tasks()), set(names) | {"searcher"})
+
     def test_closing_right_after_the_game_still_backs_up(self):   # F32
         import asyncio, contextlib, io
         started = []
@@ -2050,6 +2061,21 @@ class FableServer(unittest.TestCase):
     def sell(self, ts, systems):
         self.j.handle({"event": "MultiSellExplorationData", "timestamp": ts, "TotalEarnings": 1000, "BaseValue": 1000,
                        "Bonus": 0, "Discovered": [{"SystemName": s, "NumBodies": 1} for s in systems]})
+
+    def test_old_relog_read_late_is_still_a_relog(self):
+        """Review 2026-10-08 #9: a legacy folder imported after the live journals: its login Location in the system
+        that session quit in was judged against today's position, so it counted a visit and broke the flown path."""
+        loc = lambda ts, i: self.j.handle({"event": "Location", "timestamp": ts, "StarSystem": f"S{i}", "SystemAddress": i,
+                                           "StarPos": [float(i), 0, 0]})
+        self.jump("2026-03-01T00:00:00Z", 50, 10)                         # today: live data first
+        self.jump("2025-06-01T10:00:00Z", 7, 20)                          # then the old folder: a jump to 7
+        loc("2025-06-02T09:00:00Z", 7)                                    # the next day's login there: a relog
+        loc("2025-06-03T09:00:00Z", 8)                                    # a login elsewhere: an arrival
+        visits = lambda i: self.db.execute("SELECT count FROM visits WHERE id64=?", (i,)).fetchone()[0]
+        kinds = [r[0] for r in self.db.execute("SELECT kind FROM jumps WHERE id64 IN (7, 8) ORDER BY ts")]
+        self.assertEqual((visits(7), visits(8)), (1, 1))
+        self.assertEqual(kinds, ["FSDJump", "Location"])
+        self.assertEqual(self.j.pos["id64"], 50)                          # today's position untouched
 
     # ---- F5: the first jump of a session starts where you logged in ----
     def test_first_jump_counts_its_light_years(self):   # F5

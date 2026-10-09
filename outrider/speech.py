@@ -35,6 +35,8 @@ KEYS = {
     "find_body": "a valuable or special planet was scanned: {what} (its class and flags), {body}, {value}",
     "find_bio": "a body with biology worth your threshold: {body}, {value}",
     "sample_clear": "far enough from the last sample to take the next: {genus}",
+    "bio_tag_near": "within 100 m of a plant you tagged with the composition scanner where the next sample of the "
+                    "species you are sampling would count: {genus}, {distance} (metres)",
     "codex": "a new codex entry: {entry} (the entry's name), {what} (voucher or new to the region)",
     "fuel_low": "the game's low fuel warning: {pct}",
     "fuel_star": "arrived under 30% fuel at a star you cannot scoop: {pct}, {star}",
@@ -51,6 +53,8 @@ KEYS = {
     "unsold_urgent": "unsold data reached the red level: {value}",
     "carrier_departs": "your carrier leaves in under five minutes without you: {minutes}, {carrier}",
     "carrier_arrived": "your carrier arrived: {carrier}, {system}",
+    "autotarget_nothing": "the co-pilot button asked to target the next route system with none to target: {why} (e.g. "
+                          "'no route is plotted', 'the route is complete')",
     "fss_done": "you finished the FSS, every body is found, and some are worth your time: {count} (how many bodies), "
                 "{text} (what is worth doing, e.g. 'B 1, Earth-like world, 3.1M to map, and biology on C 2, up to 19M')",
     "fss_nothing": "you finished the FSS, every body is found, and nothing is worth staying for: {count} (how many bodies)",
@@ -361,7 +365,7 @@ SAMPLES = {
     "arrival_undiscovered": {"system": "Drojau LL-O b26-3"}, "arrival_discovered": {"system": "Drojau LL-O b26-3"},
     "leaving": {"text": "A 2, a class two gas giant, plus 1.4M to map"},
     "find_body": {"what": "Water world, terraformable, undiscovered", "body": "A 3", "value": "2.3M"},
-    "find_bio": {"body": "B 7", "value": "19.0M"}, "sample_clear": {"genus": "Stratum"},
+    "find_bio": {"body": "B 7", "value": "19.0M"}, "sample_clear": {"genus": "Stratum"}, "bio_tag_near": {"genus": "Tussock", "distance": 80},
     "codex": {"entry": "Stratum Tectonicas", "what": "new to your codex for this region"},
     "fuel_low": {"pct": 18}, "fuel_star": {"pct": 22, "star": "white dwarf"},
     "fuel_target": {"pct": 22, "system": "Drojau LL-O b26-3"},
@@ -370,6 +374,7 @@ SAMPLES = {
     "sold": {"sold": "12.6M cr cartographics and 4.1M cr exobiology", "still": ""},
     "unsold_warn": {"value": "52.0M"}, "unsold_urgent": {"value": "251.3M"},
     "carrier_departs": {"minutes": 4, "carrier": "Out Of The Blue"},
+    "autotarget_nothing": {"why": "no route is plotted"},
     "carrier_arrived": {"carrier": "Out Of The Blue", "system": "Smojooe AR-E b25-8"},
     "fss_done": {"count": 14, "text": "B 1, Earth-like world, 3.1M to map, and biology on C 2, up to 19.0M"},
     "fss_nothing": {"count": 14}, "fss_unfinished": {"left": "3 bodies"},

@@ -1,0 +1,197 @@
+{
+"note": "Six carriers of the DSSA list as EDAstro publishes it (https://edastro.com/json/DSSA-carriers.json, 2026-10-08), unchanged: the two nearest the author, one last seen away from its system (V8Z-06T, at Procyon), one listing UC as 'UC'.",
+"carriers": [
+{
+"status": "Carrier Operational",
+"coords": {
+"y": "2833.06",
+"x": "2123.66",
+"z": "29718.6"
+},
+"designatedSystem": "Oorb Broae DF-A e6",
+"id": "1",
+"lastSeenDate": "2026-09-18 16:50:19",
+"owner": "Qohen Leth",
+"serial": "01.01.001",
+"callsign": "TFF-34Z",
+"services": [
+"Repair",
+"Armoury",
+"Outfitting",
+"UC"
+],
+"sector": "Oorb Broae",
+"launchdate": "2020-06-09",
+"region": "Galactic Centre",
+"name": "DSSA Sleeper Service",
+"until": "December 31, 2030",
+"lastSeenSystem": "Oorb Broae DF-A e6",
+"currentReportedSystem": "Oorb Broae DF-A e6"
+},
+{
+"status": "Carrier Operational",
+"coords": {
+"y": "-460.562",
+"x": "-9214.88",
+"z": "7908.22"
+},
+"designatedSystem": "Prai Hypoo TX-B d4",
+"id": "16",
+"lastSeenDate": "2026-10-05 18:57:56",
+"owner": "Orvidius/ZenBones",
+"serial": "17.01.001",
+"callsign": "K3K-L1N",
+"services": [
+"Repair",
+"Armoury",
+"Universal",
+"Cartographics",
+"Refuel",
+"Redemption",
+"Office",
+"Shipyard",
+"Outfitting",
+"Vista",
+"Genomics",
+"Bar"
+],
+"sector": "Prai Hypoo",
+"launchdate": "2020-06-09",
+"region": "Temple",
+"name": "[IGAU] Paradox Destiny",
+"until": "September 1, 2032",
+"lastSeenSystem": "Prai Hypoo TX-B d4",
+"currentReportedSystem": "Prai Hypoo TX-B d4"
+},
+{
+"status": "Carrier Operational",
+"coords": {
+"y": "-54.5625",
+"x": "6233.66",
+"z": "-113.688"
+},
+"designatedSystem": "Synuefuae CM-J d10-42",
+"id": "84",
+"lastSeenDate": "2026-10-06 18:58:36",
+"owner": "CMDR Artemis Corporation",
+"serial": "35.02.001",
+"callsign": "K1B-75W",
+"services": [
+"Refuel",
+"Repair",
+"Armoury",
+"Shipyard",
+"UC"
+],
+"sector": "Synuefuae",
+"launchdate": "2020-06-10",
+"region": "Outer Orion Spur",
+"name": "DSSA Artemis Rest",
+"until": "January 1, 2027",
+"lastSeenSystem": "Synuefuae CM-J d10-42",
+"currentReportedSystem": "Saisiyat"
+},
+{
+"status": "Carrier Operational",
+"coords": {
+"y": "-80.1562",
+"x": "519.625",
+"z": "8671.5"
+},
+"designatedSystem": "PROOE HYPUE FH-U E3-2",
+"id": "105",
+"lastSeenDate": "2026-09-29 21:12:47",
+"owner": "Karaya",
+"serial": "10.03.001",
+"callsign": "KBH-T2Z",
+"services": [
+"Repair",
+"Armoury",
+"Universal",
+"Cartographics",
+"Refuel",
+"Shipyard",
+"Outfitting",
+"Vista",
+"Genomics",
+"Bar",
+"Pioneer",
+"Services"
+],
+"sector": "PROOE HYPUE",
+"launchdate": "2020-06-12",
+"region": "Norma Expanse",
+"name": "RR-DSSA Rocksteady",
+"until": "July 15, 2025",
+"lastSeenSystem": "Prooe Hypue FH-U e3-2",
+"currentReportedSystem": "PROOE HYPUE FH-U E3-2"
+},
+{
+"status": "Carrier Operational",
+"coords": {
+"y": "180.25",
+"x": "-13581.3",
+"z": "4820.47"
+},
+"designatedSystem": "Blie Eup CM-T c17-0",
+"id": "162",
+"lastSeenDate": "2026-10-08 09:50:09",
+"owner": "Terrence Rubbell",
+"serial": "33.01.002",
+"callsign": "X9K-BQZ",
+"services": [
+"Repair",
+"Armoury",
+"Universal",
+"Cartographics",
+"Refuel",
+"Redemption",
+"Office",
+"Shipyard",
+"Outfitting",
+"Vista",
+"Genomics",
+"Bar"
+],
+"sector": "Blie Eup",
+"launchdate": "2022-10-23",
+"region": "Elysian Shore",
+"name": "DSSA - Exp Haven",
+"until": "February 28, 2027",
+"lastSeenSystem": "Blie Eup CM-T c17-0",
+"currentReportedSystem": "Blie Eup CM-T c17-0"
+},
+{
+"status": "Carrier Operational",
+"coords": {
+"y": "58.375",
+"x": "26970.5",
+"z": "41352.8"
+},
+"designatedSystem": "Preou Auscs PI-T C3-8",
+"id": "183",
+"lastSeenDate": "2026-10-08 14:20:51",
+"owner": "ParsecPilgrim",
+"serial": "22.01.002",
+"callsign": "V8Z-06T",
+"services": [
+"Repair",
+"Armoury",
+"Universal",
+"Cartographics",
+"Refuel",
+"Vista",
+"Genomics",
+"Pioneer",
+"Services"
+],
+"sector": "Preou Auscs",
+"launchdate": "2025-08-15",
+"region": "Mare Somnia",
+"name": "Crack of Dawn",
+"until": "September 1, 2027",
+"lastSeenSystem": "Procyon",
+"currentReportedSystem": "Preou Auscs PI-T C3-8"
+}
+]
+}

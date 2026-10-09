@@ -1807,6 +1807,72 @@ class HighwayAutoTarget(unittest.TestCase):
         self.assertEqual(out["near"][1]["system"], "Neu A")
         self.assertEqual((out["near_last"]["done"], out["near_last"]["index"]), (True, 1))
 
+    def test_copilot_button_targets_next(self):
+        """The co-pilot button's layout (the author, 2026-10-08): in the ship a single press targets the next route
+        system after a short wait: the survey / trade route's next first, else the Highway's; with neither, the
+        "nothing to target" line. A double press is the status report, a hold the hush; elsewhere a single press does
+        nothing."""
+        import asyncio
+        import outrider.riches as riches
+        self.state.honker, self.state.targeter = self.honker, self.targeter
+        self.status["flags"] |= ed_outrider.FLAG_IN_MAIN_SHIP
+        self.j.status_json = self.status
+        self.state.COPILOT_TARGET_DELAY_S = 0.01
+        moments = lambda: [m for m in self.j.moments if m["kind"] == "autotarget"]
+
+        async def press():
+            self.state.copilot_gesture("status")
+            if self.state.autotarget_test_task:
+                await self.state.autotarget_test_task
+        asyncio.run(press())
+        self.assertEqual([(m["what"], m["why"]) for m in moments()], [("nothing", "no route is plotted")])
+        self.assertEqual(self.state.copilot["seq"], 0)   # no status report instead
+        hwy_plot_exact(self)
+        hwy_jump(self, 1, 101, "Neu A", 50)
+        asyncio.run(press())
+        self.assertEqual((self.state.autotarget_last["system"], self.state.autotarget_last["done"]), ("Bridge B", True))
+        # a survey route as well: its next system first
+        self.status["destination"] = None
+        rows = riches.riches_rows([{"name": "Neu A", "id64": 101, "x": 50, "y": 0, "z": 0, "jumps": 0, "bodies": []},
+                                   {"name": "Col 285 Sector AB-C d13-5", "id64": 555, "x": 60, "y": 0, "z": 0, "jumps": 1, "bodies": []}])
+        self.state.riches_store(rows, {"options": {}})
+        asyncio.run(press())
+        self.assertEqual(self.state.autotarget_last["system"], "Col 285 Sector AB-C d13-5")
+        # the survey route done: the Highway's next again
+        rc = ed_outrider.meta_get(self.db, "riches")
+        ed_outrider.meta_set(self.db, "riches", dict(rc, done_ts="2026-10-08T00:00:00Z"))
+        self.status["destination"] = None
+        asyncio.run(press())
+        self.assertEqual(self.state.autotarget_last["system"], "Bridge B")
+        # a press while a tap's targeting counts down (a double press slower than double_ms) cancels it before any key,
+        # and that press's own tap is the status report it was meant to be, not a second target
+        self.state.COPILOT_TARGET_DELAY_S = 0.3
+        self.status["destination"] = None
+        writes, seq = len(self.game.writes), self.state.copilot["seq"]
+
+        async def slow_double():
+            self.state.copilot_gesture("status")
+            await asyncio.sleep(0.05)
+            self.state.copilot_press()
+            self.state.copilot_gesture("status")
+            await self.state.autotarget_test_task
+        asyncio.run(slow_double())
+        self.assertEqual(len(self.game.writes), writes)   # nothing pressed
+        self.assertEqual((self.state.copilot["seq"], self.state.copilot["action"]), (seq + 1, "status"))
+        self.assertEqual(self.state.autotarget_test["state"], "failed")
+        self.state.copilot_press()   # nothing counting down: a press changes nothing
+        self.assertFalse(self.state._copilot_cancelled)
+        # double: the status report; hold: the hush
+        self.state.copilot_gesture("again")
+        self.assertEqual(self.state.copilot["action"], "status")
+        self.state.copilot_gesture("hush")
+        self.assertIsNotNone(self.state.hush)
+        # on foot: a single press does nothing
+        self.status["flags"], self.status["flags2"] = 0, 1
+        n = len(moments())
+        asyncio.run(press())
+        self.assertEqual(len(moments()), n)
+
     def test_target_next_targets(self):
         T = self.state.autotarget_target
         self.assertEqual(T(manual=True), (None, "no route is plotted"))
@@ -1880,6 +1946,40 @@ class HighwayAutoTarget(unittest.TestCase):
         asyncio.run(stop())
         self.assertEqual(len(self.game.writes), writes)
         self.assertEqual((self.state.autotarget_test["state"], self.state.autotarget_test["why"]), ("failed", "stopped"))
+
+    def test_supercharge_during_a_manual_run_starts_no_second(self):
+        """Review 2026-10-08 #1: a supercharge while Target next (or 🎯, or the co-pilot's tap) is counting down or
+        pressing keys started the automatic run as well, two galaxy-map sequences one behind the other, the second
+        overwriting the first's cancel token. One sequence at a time, whichever kind came first."""
+        import asyncio
+        self.wire()
+        self.state.autotarget_test_countdown = 0.15
+
+        async def go():
+            body, status = self.state.start_autotarget_run("next")
+            self.assertEqual(status, 200, body)
+            self.j.handle({"event": "JetConeBoost", "timestamp": self.ts(2), "BoostValue": 4})
+            second = self.state.maybe_autotarget()
+            await self.state.autotarget_test_task
+            return second
+        self.assertFalse(asyncio.run(go()))
+        self.assertIsNone(self.state.autotarget_task)
+        self.assertEqual(self.moments(), [(True, "Successfully targeted neutron jump target Bridge B")])
+
+    def test_run_tokens_are_per_run(self):
+        """Each run's own cancel token belongs to its thread: one run starting never hides another's."""
+        import threading
+        mine, other = threading.Event(), threading.Event()
+        self.targeter.run_cancel = mine
+        seen = []
+        t = threading.Thread(target=lambda: (setattr(self.targeter, "run_cancel", other), seen.append(self.targeter.run_cancel)))
+        t.start()
+        t.join()
+        self.assertIs(seen[0], other)
+        self.assertIs(self.targeter.run_cancel, mine)   # this thread's run still sees its own token
+        mine.set()
+        self.assertTrue(self.targeter.cancelled())
+        self.targeter.run_cancel = None
 
     def test_target_next_stops_with_the_route(self):   # the Batch 4 lifecycle: a cleared route stops it too
         import asyncio

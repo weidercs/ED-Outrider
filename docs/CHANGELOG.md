@@ -2,6 +2,128 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · Version 2026.10.18
+- Since 2026.10.17: the review's 21 fixes (a docked login counts as docked, the password behind a reverse proxy on the
+  Outrider PC, Spansh's services filter, answers arriving out of order...); tagged plants as waypoints for the next
+  sample; no ×5 in populated systems; ✪ new to your codex anywhere; "bio possible: check the FSS"; the bio card while
+  flying low; why each other genus is ruled out; the full-scan bonus in the unsold estimate; the target's known bodies
+  from Spansh and EDSM; star kinds, Canonn Bioforge links and a system's CSV. The first start re-reads the journals
+  (parser 43).
+
+## 2026-10-08 · Fixes from a review of the plugin-gaps work
+- A Fable review of batches B-F (each finding checked by a second reader): 10 bugs, all fixed with tests.
+- Tagged plants: Brain Trees, Anemones, Sinuous Tubers and the other species without colour variants are now tagged
+  (found by name in the rules); the codex entry a first Log writes is no longer a waypoint at your own feet; each tag is
+  said once per run (two close together no longer take turns), under the sampling alert's switch rather than "find";
+  the strip names the tag when the earlier samples' positions are unknown too; the map's legend colours match the map
+  and list the tagged plants.
+- "Bio possible: check the FSS" no longer reappears on a body you FSS'd after a later AutoScan of it.
+- The unsold CLI's ESTIMATED and TOTAL include the full-scan bonus, and the pop-up's "before the cut" figure too.
+- Only an organic codex entry links to Canonn's Bioforge (geysers and the like no longer do).
+
+## 2026-10-08 · Small extras: star kinds, Canonn Bioforge, a system's CSV (plugin gaps F)
+- A star's body panel says its kind in words: the luminosity class ("main sequence", "giant", "subdwarf") and, for a
+  white dwarf, what its spectrum shows ("hydrogen-rich", "carbon", "variable").
+- A biology codex entry in the body panel links to Canonn's Bioforge statistics for it ("stats ↗").
+- Here's heading has **⬇ CSV**: the system's bodies and values as a spreadsheet (`/api/export?what=system&id=`).
+- Not done: translations (the author: speech.json is there to change), WasLogged (nothing to check it against).
+
+## 2026-10-08 · The targeted system's body counts, Spansh and EDSM (plugin gaps E)
+- Targeting a system now shows how much of it is known: Spansh's bodies of its body count ("3/12 known"), on Now's
+  target line and the header's, even outside the Nearby sphere; and EDSM's own count beside it ("EDSM 5/12", or "EDSM:
+  not logged"), as SystemStatusOverlay showed. EDSM is asked once per target, after the target's sound, so the sound is
+  never late.
+
+## 2026-10-08 · The full-scan bonus in the unsold estimate (plugin gaps D)
+- The unsold total now counts the bonus Universal Cartographics pays on top of the base value: 1,000 cr per body of
+  a system you found complete (every body) while every star and planet in it was undiscovered. It shows on its own
+  line in the Unsold pop-up. Checked on your sales first (`project/value-checks`): the paid bonus is 0.86-1.11 of this
+  in 13 of 15 sales. Pioneer's other value rules stay out because your sales do not bear them out (the full-map bonus,
+  honk-only bodies, terraformable ranges); your own carrier pays in full, as before.
+
+## 2026-10-08 · Bio marks: populated systems, new anywhere, bio possible, flying low, why not (plugin gaps C)
+- **No ×5 in populated systems:** Vista Genomics never pays the first-footfall bonus where people live (checked on
+  your sales: 0 of 8 runs there, 208 of 208 elsewhere), so bio there is valued ×1 everywhere: Here, Samples, the
+  unsold total, "worth landing". A re-read of the journals at the next start fills in each system's population
+  (parser 43).
+- **✪ new to your codex anywhere**, beside ✦ (new in this region only): worth more effort.
+- **"🧬? check in the FSS"**: a landable body you have only from an AutoScan or a nav beacon, whose signals nobody
+  counted, where the rules allow life.
+- **Flying low over a body** (in your ship, under 5 km) the on-body strip shows its bio card already.
+- **Why not:** the body panel lists each genus the rules rule out there, with the reason ("pressure too low").
+- **Here's bio column** can leave out finished species and bodies with fewer than N signals (Settings → Display,
+  this device).
+- From BioScan's options and checks; `WasLogged` is left out (nothing in your journals to check it against).
+
+## 2026-10-08 · Tagged plants: where to go for the next sample (plugin gaps B)
+- Point the composition scanner at a plant (from the ship flying low, the SRV or on foot) and Outrider remembers where
+  it is, as BioScan's waypoints did: a hollow ring in the species' colour on the surface map, faint where a sample
+  would not count. While sampling, the strip names the nearest one that would count and which way to turn
+  ("tagged: 524 m, turn 90° right"), and within 100 m the voice says so (a new line, `bio_tag_near`, in every
+  personality). On foot the game logs the plant's position; from the ship or SRV it is yours at the moment of the
+  scan, so scan close. Tags are kept through a journal re-read; a species finished on the body drops its own.
+
+## 2026-10-08 · The review's fixes (21 bugs) and the Spansh services filter
+- From a review of the whole code (five areas, each finding checked by a second reader trying to disprove it): 21
+  bugs confirmed, all fixed, each with a test that fails without it.
+- **Auto-target and the co-pilot button:** a supercharge while Target next, 🎯 or the button's tap was counting down
+  or pressing keys no longer starts a second galaxy-map run (each run keeps its own stop token). A second press that
+  comes just after the double-tap window but before the tap was settled now cancels that tap's targeting, as meant.
+  A survey or trade plot still running is stopped at shutdown.
+- **Journal data (a re-read of the journals at the first start, parser 42):** a session that starts docked (a
+  login, a respawn) counts as docked, so a carrier transfer straight after it is no longer lost. The Rhino's
+  refinery and scoop stay out of the ship's hold. A legacy folder imported late no longer counts each old login as a
+  visit (or breaks the flown path). A market read keeps a carrier line's recent moves.
+- **The password and the API:** behind a reverse proxy on the Outrider PC (Caddy, nginx) the password applied to
+  nobody: a forwarded request now counts as another device's, and wrong passwords count against that device. An odd
+  session token is a JSON 401, not a crash; an id of 1e999 (or 1.5) is a 400. A DSSA answer of the wrong shape is a
+  failed check, said in the finder and asked again, not a fresh copy.
+- **Nearest and trade routes:** "nearest Vista" (and the rest) by voice no longer skips the places in your own
+  system. Spansh's services filter was being sent in a shape Spansh ignores, so the finder saw only the 50 nearest
+  stations and **the Unsold tile's nearest Universal Cartographics / Vista Genomics sellers could be stations without
+  them**: both now ask in the shape Spansh honours, and the sellers are checked. The finder reuses its search for two
+  minutes while you change its other filters. A row with a missing coordinate no longer breaks the answer; a DSSA
+  carrier newer reported at home loses the "last seen at" warning. A trade route with two stops in one system moves
+  on to the second with your trades there.
+- **The page:** answers arriving out of order no longer overwrite newer ones (the on-body strip, Find, My firsts,
+  Materials, Biology, History), and pinning another system shows "loading…" rather than the last system's bodies.
+
+## 2026-10-08 · The Nearby tab's table no longer takes the Nearest finder's styles
+- The finder's table had the Nearby tab's id (`nearTable`), so since 2026.10.17 its styles (13px text, its cell
+  padding and lines) also reached the Nearby tab's table, and on the tablet a tap on a finder row opened the Nearby
+  tab's detail sheet. The finder's table is `dockTable` now, and a test keeps every id in the page used once.
+
+## 2026-10-08 · Docs brought up to date
+- The README's Automation row, the guide's header-tile and button wording, the program's own description
+  (`--help`: Plot Route with its route types and the Nearest finder, Cargo in Materials, the Carrier tile's
+  tritium), "Plot Route" where config help and comments still said "the Highway tab", the alerts dialog's auto-target
+  description, AGENT_GUIDE (the button's gestures and State methods, the tools' cached nearest read, the voice's
+  question text), DESIGN_NOTES (the button's layout replaces the old "not on the button" decision; what is not yet
+  tried in a live game).
+## 2026-10-08 · The co-pilot button targets the next route system
+- The co-pilot button's layout (the author's): flying the ship, a **tap** targets the next route system in the galaxy
+  map, half a second after the press: the Road to Riches / Exomastery / trade route's next first, else the Highway's.
+  Success or failure is said as for auto-target; with nothing to target, a new line in each personality ("Are you on
+  drugs? You don't have a system plotted for me to target."). A **double tap** is the status report (it was the tap),
+  a **hold** the hush. "Say the last line again" is no longer on the button. Out of the ship a tap does nothing; in
+  the Rhino every press still marks rigs. A press during the half-second wait cancels the targeting before any key
+  and counts as the double tap it was meant to be (the status report); the double-tap window's default is now 400 ms
+  (`[copilot] double_ms`, was 350), so a slow double tap reads as one. A `double_ms` already in your config stays.
+
+## 2026-10-08 · Version 2026.10.17
+- Nearest place to dock (stations and carriers, the DSSA's carriers, "nearest station" by voice), the co-pilot
+  button's new layout (tap: target the next route system), and since 2026.10.16: the README split into a front page
+  and a guide (`docs/guide/`).
+
+## 2026-10-08 · Nearest place to dock
+- **📍 Nearest…** beside Plot Route's To lists the nearest stations and fleet carriers you can dock at and use: what
+  each has (UC, Vista, repair, refuel, shipyard), its pads, distance (and from the star), docking (yours, open to all,
+  or a ⚠ for friends, squadron or not reported) and how old its report is. Filters for stations / carriers, services,
+  data under N days (30), permit systems, remembered per device; **Plot here** fills To and plots. Sources: Spansh,
+  the Deep Space Support Array's carriers (EDAstro, fetched when the finder opens, at most hourly; marked 🛰 DSSA) and
+  your own carrier. By voice: "nearest station", "nearest carrier", "nearest Vista", "nearest repair"...; for AI
+  clients a read-only `nearest_dock` tool.
+
 ## 2026-10-07 · Refuel at every fuel star: a tick in Plot Route
 - The exact plotter's options have **refuel at every fuel star** (off by default, remembered per browser): ticked,
   Spansh plans a top-up at every scoopable star (`refuel_every_scoopable`); left empty, only where the tank needs it,
