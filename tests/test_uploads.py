@@ -594,3 +594,201 @@ class MarksAndCatchUp(unittest.TestCase):
         self.write(self.jump(8 * 86400, "TooOld"), self.jump(60, "Fresh"))
         self.j.offsets[self.path] = os.path.getsize(self.path)
         self.assertEqual(self.state.uploads_hub.catch_up("eddn", [self.dir], dict(self.j.offsets)), 1)   # over a week: skipped
+
+
+class CoreFixes(MarksAndCatchUp):
+    """The bug check of 2026-10-09 (the upload core and the server's side of it)."""
+
+    def test_old_format_journal_names_sort_by_time(self):
+        """A 2021 journal named the old way (Journal.YYMMDDhhmmss.NN.log) sorts before a 2026 one: the mark never sticks
+        in it (as text it sorted after every new name, and nothing was queued again)."""
+        old = os.path.join(self.dir, "Journal.211015123456.01.log")
+        with open(old, "w", encoding="utf-8") as f:
+            f.write(json.dumps(header("2021-10-15T12:34:56Z")) + "\n")
+        self.assertLess(U.name_key("Journal.211015123456.01.log"), U.name_key("Journal.2026-10-08T100000.01.log"))
+        self.write(header(now_ts(600)), loadgame(now_ts(599)))
+        self.j.scan_dir(self.dir, commit_each=True, upload="catchup")
+        self.state.set_upload("eddn", True)
+        self.assertEqual(self.state.uploads_hub.marks["eddn"][0], os.path.basename(self.path))
+        self.write(self.jump(10, "Live"))
+        self.j.scan_dir(self.dir, upload="live")
+        self.assertEqual(len(self.queued()), 1)
+        self.assertEqual([os.path.basename(p) for p in U.glob_journals(self.dir)],
+                         ["Journal.211015123456.01.log", "Journal.2026-10-08T100000.01.log"])
+
+    def test_another_uploader_keeps_the_mark_moving(self):
+        """While EDMC (or another Outrider) has the service, its lines are theirs: the mark moves with them, and a
+        restart neither catches them up nor, with the other uploader still there, catches up at all."""
+        self.write(header(now_ts(900)), loadgame(now_ts(899)))
+        self.j.scan_dir(self.dir, commit_each=True, upload="catchup")
+        self.state.set_upload("eddn", True)
+        self.state.edmc = {"running": True, "eddn": True, "edsm": False, "inara": False}
+        self.write(self.jump(300, "EdmcSent1"), self.jump(200, "EdmcSent2"))
+        self.j.scan_dir(self.dir, upload="live")
+        self.db.commit()
+        self.assertEqual(self.queued(), [])
+        mark = self.state.uploads_hub.marks["eddn"]
+        self.assertGreater(mark[1], 0)
+        self.assertEqual(mark[2], self.jump(200)["timestamp"])       # moved with EDMC's lines
+        self.write(self.jump(100, "WhileDown"))                       # Outrider stops; EDMC goes on
+        import types
+        j2 = ed_outrider.Journals(self.db)
+        j2.scan_dir(self.dir, commit_each=True, upload="catchup")
+        st2 = ed_outrider.State(self.db, j2, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        st2.game_pc, st2.config_path, st2.upload_cfg = False, self.state.config_path, {"eddn": {"enabled": True}, "edsm": {"enabled": False}}
+        st2.uploads_hub.builders = self.state.uploads_hub.builders
+        st2.edmc = self.state.edmc                                    # EDMC still sends EDDN
+        self.assertEqual(st2.catch_up_uploads(), 0)
+        self.assertEqual(st2.uploads_hub.marks["eddn"][0], os.path.basename(self.path))
+        self.assertEqual(st2.uploads_hub.marks["eddn"][1], st2.journal_end()[1])   # moved to the end
+
+    def test_switched_back_on_mid_file_knows_where_you_are(self):
+        """With every upload off the hub stops following; switched on again mid-file it reads the file from its top,
+        so a jump made while off is not forgotten (it built messages with the old system)."""
+        self.state.uploads_hub.builders = {"eddn": lambda ev, s: [("where", {"system": s.system})] if ev["event"] == "Scan" else []}
+        self.write(header(now_ts(900)), loadgame(now_ts(899)), self.jump(800, "First"))
+        self.j.scan_dir(self.dir, commit_each=True, upload="catchup")
+        self.state.set_upload("eddn", True)
+        self.write({"timestamp": now_ts(700), "event": "Music"})
+        self.j.scan_dir(self.dir, upload="live")                      # the hub has primed this file
+        self.state.set_upload("eddn", False)
+        self.write(self.jump(500, "WhileOff"))
+        self.j.scan_dir(self.dir, upload="live")
+        self.state.set_upload("eddn", True)
+        self.write({"timestamp": now_ts(10), "event": "Scan", "BodyName": "X 1"})
+        self.j.scan_dir(self.dir, upload="live")
+        self.db.commit()
+        self.assertEqual(self.queued(), [{"system": "WhileOff"}])
+
+    def test_lease_marks_only_what_is_uploaded(self):
+        self.write(header(now_ts(900)), loadgame(now_ts(899)))
+        self.j.scan_dir(self.dir, commit_each=True, upload="catchup")
+        self.state.set_upload("eddn", True)
+        self.state.uploads_hub.marks["edsm"] = ["Journal.2026-01-01T000000.01.log", 5, None]   # switched off long ago
+        self.state.refresh_leases()
+        path = U.lease_path(self.dir, self.state.leases.instance)
+        with open(path, encoding="utf-8") as f:
+            self.assertEqual(set(json.load(f)["marks"]), {"eddn"})
+        self.state.drop_leases()
+        with open(path, encoding="utf-8") as f:
+            self.assertEqual(set(json.load(f)["marks"]), {"eddn"})
+
+    def test_a_crashed_instances_old_lease_is_stale_at_once(self):
+        U.write_lease(self.dir, "crashed1", {"host": "old", "services": ["eddn"]})
+        path = U.lease_path(self.dir, "crashed1")
+        old = time.time() - 3 * U.LEASE_STALE_S
+        os.utime(path, (old, old))
+        self.assertEqual(U.Leases("me").others([self.dir]), {})
+        U.write_lease(self.dir, "fresh1", {"host": "new", "services": ["eddn"]})
+        self.assertIn("fresh1", U.Leases("me").others([self.dir]))      # one written just now still counts
+
+    def test_instance_id_belongs_to_this_database(self):
+        self.state.refresh_leases()
+        iid = self.state.leases.instance
+        ed_outrider.meta_set(self.db, "instance_where", "another-pc:/elsewhere.sqlite")   # as a copied database says
+        self.state.leases = None
+        self.state.refresh_leases()
+        self.assertNotEqual(self.state.leases.instance, iid)
+        iid2 = self.state.leases.instance
+        self.state.leases = None
+        self.state.refresh_leases()
+        self.assertEqual(self.state.leases.instance, iid2)               # kept while it is the same file and computer
+
+    def test_watch_prunes_the_outbox(self):
+        import asyncio
+        s = U.Session()
+        s.feed(header(now_ts(9)), "J.log")
+        s.feed(loadgame(now_ts(8)))
+        U.enqueue(self.db, "eddn", "x/1", "J:1", now_ts(5), s, {})
+        self.db.execute("UPDATE upload_queue SET state='sent', done_at=?", (time.time() - 8 * 86400,))
+        self.db.commit()
+
+        async def once():
+            with unittest.mock.patch("asyncio.sleep", side_effect=asyncio.CancelledError):
+                try:
+                    await self.state.watch_leases()
+                except asyncio.CancelledError:
+                    pass
+        asyncio.run(once())
+        self.assertEqual(self.db.execute("SELECT count(*) FROM upload_queue").fetchone()[0], 0)
+
+    def test_restored_database_forgets_its_marks(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        path = os.path.join(d, "restored.sqlite")
+        db = ed_outrider.open_db(path)
+        s = U.Session()
+        s.feed(header(now_ts(9)), "J.log")
+        s.feed(loadgame(now_ts(8)))
+        U.enqueue(db, "eddn", "x/1", "J:1", now_ts(5), s, {})
+        U.enqueue(db, "eddn", "x/1", "J:2", now_ts(5), s, {})
+        db.execute("UPDATE upload_queue SET state='sent' WHERE source='J:2'")
+        ed_outrider.meta_set(db, "upload_marks", {"eddn": ["J.log", 1, None]})
+        db.commit()
+        db.close()
+        ed_outrider.forget_upload_position(path)
+        db = ed_outrider.open_db(path)
+        self.addCleanup(db.close)
+        self.assertIsNone(ed_outrider.meta_get(db, "upload_marks"))
+        self.assertEqual([r[0] for r in db.execute("SELECT state FROM upload_queue")], ["sent"])
+
+
+class LoopFixes(unittest.TestCase):
+    """upload_loop after the bug check of 2026-10-09: a retry answer pauses the whole queue; a database error does not
+    end the sender."""
+
+    def setUp(self):
+        self.db = ed_outrider.open_db(":memory:")
+        self.addCleanup(self.db.close)
+        s = U.Session()
+        s.feed(header(now_ts(9)), "J.log")
+        s.feed(loadgame(now_ts(8)))
+        for i in range(3):
+            U.enqueue(self.db, "eddn", "x/1", f"J.log:{i}", now_ts(5), s, {"i": i})
+        self.db.commit()
+
+    def run_loop(self, send, rounds=4):
+        import asyncio
+        clock, slept = [1000.0], []
+
+        async def sleep(secs):
+            slept.append(secs)
+            clock[0] += max(secs, 0.5)
+            if len(slept) >= rounds:
+                raise asyncio.CancelledError
+
+        async def go():
+            try:
+                await U.upload_loop("eddn", self.db, send, lambda s: True, clock=lambda: clock[0], sleep=sleep, batch=1)
+            except asyncio.CancelledError:
+                pass
+        asyncio.run(go())
+        return slept
+
+    def test_a_retry_answer_pauses_the_queue(self):
+        calls = []
+
+        async def send(rows):
+            calls.append(rows[0]["id"])
+            return [(rows[0]["id"], "queued", "503 busy", 60)]
+        slept = self.run_loop(send, rounds=1)
+        self.assertEqual(len(calls), 1)
+        self.assertGreaterEqual(slept[0], 60)              # the whole queue waits, not the next row half a second later
+
+    def test_a_database_error_does_not_end_the_sender(self):
+        import sqlite3
+        real = U.due
+        boom = [True]
+
+        def flaky(*a, **k):
+            if boom.pop() if boom else False:
+                raise sqlite3.OperationalError("database is locked")
+            return real(*a, **k)
+        sent = []
+
+        async def send(rows):
+            sent.append(rows[0]["id"])
+            return [(rows[0]["id"], "sent", "200 OK", None)]
+        with unittest.mock.patch.object(U, "due", flaky), unittest.mock.patch("builtins.print"):
+            self.run_loop(send, rounds=3)
+        self.assertTrue(sent)                              # went on after the error

@@ -44,6 +44,8 @@ twice: EDDN has no way to tell. So:
   if both started at once, both hold and say so until you switch one off. A note left by a crash goes stale after
   five minutes. When an Outrider stops, its note stays with how far it got: switch the upload on in another one and it
   starts there, with nothing missed and nothing sent twice.
+- While EDMC or another Outrider sends a service, this one follows along without sending, and catches none of that
+  up later. A restored backup starts from where your journals are now.
 - Catching up cannot know who else uploaded while it was down: if EDMC (or a read-only Outrider, which leaves no note)
   sent that time, it is sent again. Keep one uploader.
 - An Outrider that cannot write in the journal folder (a read-only share) can still read the others' notes. If

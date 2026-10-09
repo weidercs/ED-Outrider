@@ -12,6 +12,8 @@ services:
     build: .
     image: ed-outrider:local
     container_name: ed-outrider
+    # the name another Outrider sees in this one's upload note ("Already uploading from ...") instead of a container ID
+    hostname: ${OUTRIDER_HOST:-outrider-docker}
     restart: unless-stopped
     stop_grace_period: 6m          # a backup running at shutdown gets to finish (longer than ed_outrider.py's BACKUP_SHUTDOWN_WAIT, 5 min)
     user: "${UID:-1000}:${GID:-1000}"   # the files in docker/ stay yours

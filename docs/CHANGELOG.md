@@ -2,6 +2,21 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Uploads: bug check, the upload core (branch EDMC-Functionality)
+- Journal files named the old way (before 2023) no longer stop uploads: positions compare by time, not by name.
+- While EDMC or another Outrider sends a service, Outrider's position moves with the journal, and a restart does not
+  catch up what they sent; with the other uploader still there it catches up nothing.
+- With every upload off, the next switch-on reads the current journal from its top, so a jump made meanwhile is
+  known (it sent the old system).
+- The note in the journal folder lists only the services this Outrider uploads (an old position of a service switched
+  off made another Outrider send that history). A note left by a crash long ago no longer blocks uploads for five
+  minutes after a start. The note's identity belongs to this computer and database file: a copied database gets its
+  own. In Docker the note names "outrider-docker" (OUTRIDER_HOST in .env), not a container ID.
+- A service that says "later" (a server error, unreachable) pauses its whole queue, not just that message; a database
+  error no longer ends a sender for good. Sent and refused messages are pruned after a week (nothing pruned them).
+- A restored backup starts uploading from where the journals are now: what was sent since the backup, and the
+  backup's own unsent messages, are not sent again.
+
 ## 2026-10-09 · Uploads: long sessions, late files, quiet signals (branch EDMC-Functionality)
 - A long session that the game continues in a new journal file (part 2, no login after it) keeps uploading. Before,
   Outrider took the new file for a new session and every upload stopped until the next login.

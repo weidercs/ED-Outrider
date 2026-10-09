@@ -2695,6 +2695,8 @@ class Journals:
                     raise                                              # the tick is rolled back and retried
                 except Exception as e:                                 # never let it stop the tailing
                     print(f"uploads: a line was skipped ({type(e).__name__}: {e})", file=sys.stderr)
+            elif self.uploads is not None and self.upload_mode:
+                self.uploads.forget()   # not following now: switched on again, it reads the file from its top
             if any(w in line for w in WANTED) or b"Fixed_Event_Life" in line:
                 # where the line is (the file's name, so a twin copy in another folder gives the same key):
                 # tells apart sale pages written in the same second (sale_events)
@@ -5470,7 +5472,7 @@ class State:
         self.uploads_hub = outrider.uploads.UploadHub(db, {"eddn": self.eddn_build, "edsm": self.edsm_build},
                                                       enabled=self.upload_queueing, holds={"edsm": outrider.edsm.hold},
                                                       max_ages={"eddn": outrider.eddn.CATCHUP_MAX_S},
-                                                      idlers={"eddn": self.eddn_idle},
+                                                      idlers={"eddn": self.eddn_idle}, follow=self.upload_wanted,
                                                       save=lambda marks: meta_set(self.db, "upload_marks", marks))
         marks = meta_get(db, "upload_marks")   # how far each service has queued (live-only: a re-read keeps it)
         self.uploads_hub.marks = {k: v for k, v in marks.items() if isinstance(v, list)} if isinstance(marks, dict) else {}
@@ -9251,16 +9253,23 @@ class State:
         read the others' (and EDMC's switches on the game PC). Cheap: a few small files."""
         if self.leases is None:
             iid = meta_get(self.db, "instance_id")
-            if not isinstance(iid, str) or not re.fullmatch(r"[A-Za-z0-9_-]{6,40}", iid):
+            # the id belongs to this computer and this database file: a database copied or restored elsewhere gets
+            # its own (two Outriders sharing one id would not see each other's leases)
+            where = f"{socket.gethostname()}:{self.db_file()}"
+            if not isinstance(iid, str) or not re.fullmatch(r"[A-Za-z0-9_-]{6,40}", iid) or meta_get(self.db, "instance_where") != where:
                 iid = secrets.token_hex(6)
                 meta_set(self.db, "instance_id", iid)
+                meta_set(self.db, "instance_where", where)
                 self.db.commit()
             self.leases = outrider.uploads.Leases(iid)
             self._lease_beat = 0
         self._lease_beat += 1
         wanted = [s for s in outrider.uploads.SERVICES if self.upload_wanted(s)]
+        self._lease_wanted = wanted
+        # only the marks of what this instance uploads: a switched-off service's mark is old, and another instance
+        # switched on would start there and send that history
         info = {"host": socket.gethostname(), "services": wanted, "beat": self._lease_beat, "version": outrider.__version__,
-                "marks": self.uploads_hub.marks}
+                "marks": {s: m for s, m in self.uploads_hub.marks.items() if s in wanted}}
         self.lease_writable = {d: outrider.uploads.write_lease(d, self.leases.instance, info) for d in LIVE_DIRS}
         self.lease_others = self.leases.others(LIVE_DIRS)
         self.edmc = outrider.uploads.edmc_uploads() if self.game_pc else None
@@ -9269,18 +9278,33 @@ class State:
         """At shutdown: this instance's leases claim nothing any more (another may take over at once), but keep its
         marks as a handover note: an instance switched on later starts where this one stopped."""
         if self.leases:
+            wanted = getattr(self, "_lease_wanted", [])   # what it was uploading when it stopped
             info = {"host": socket.gethostname(), "services": [], "stopped": True, "version": outrider.__version__,
-                    "marks": self.uploads_hub.marks}
+                    "marks": {s: m for s, m in self.uploads_hub.marks.items() if s in wanted}}
             for d in LIVE_DIRS:
                 outrider.uploads.write_lease(d, self.leases.instance, info)
 
     async def watch_leases(self):
+        """The leases every LEASE_EVERY_S, and once an hour the outbox's old rows (sent or dropped a week ago) pruned."""
+        pruned = 0.0
         while True:
             try:
                 self.refresh_leases()
+                if time.time() - pruned > 3600:
+                    outrider.uploads.prune(self.db, time.time())
+                    self.db.commit()
+                    pruned = time.time()
             except Exception as e:   # never stop watching
                 print(f"uploads: lease check failed ({type(e).__name__}: {e})", file=sys.stderr)
             await asyncio.sleep(LEASE_EVERY_S)
+
+    def db_file(self):
+        """The database's file (its real path), or "" for an in-memory one."""
+        try:
+            f = self.db.execute("PRAGMA database_list").fetchone()[2]
+        except (sqlite3.Error, TypeError, IndexError):
+            return ""
+        return os.path.realpath(f) if f else ""
 
     def journal_end(self):
         """Where the reader has got to in the live journals, as a mark: (file name, the byte before the next line)
@@ -9288,7 +9312,8 @@ class State:
         live = {os.path.normpath(d) for d in LIVE_DIRS}
         ends = [outrider.uploads.position(p, o) for p, o in self.journals.offsets.items()
                 if os.path.normpath(os.path.dirname(p)) in live]
-        return (max(ends)[0], max(ends)[1] - 1) if ends else None
+        last = max(ends, key=outrider.uploads.pos_key) if ends else None   # by time: old-format names too
+        return (last[0], last[1] - 1) if last else None
 
     def upload_start_mark(self, service):
         """Where a service switched on starts: another instance's handover mark when one is visible (it stopped
@@ -9490,6 +9515,15 @@ class State:
         n = 0
         for service in self.uploads_hub.builders:
             if not self.upload_wanted(service):
+                continue
+            if self.upload_conflict(service):
+                # another uploader has it (EDMC, another Outrider): what was played meanwhile is theirs to send. The
+                # mark moves to where they are (their lease's mark) or to the end of what was read
+                theirs = outrider.uploads.lease_marks(LIVE_DIRS, self.leases.instance if self.leases else "").get(service)
+                ends = [m for m in (theirs and (theirs[0], theirs[1]), self.journal_end()) if m]
+                if ends:
+                    end = max(ends, key=outrider.uploads.pos_key)
+                    self.uploads_hub.set_mark(service, end, theirs[2] if theirs and len(theirs) > 2 and tuple(end) == (theirs[0], theirs[1]) else None)
                 continue
             if service not in self.uploads_hub.marks:
                 pos, ts = self.upload_start_mark(service)
@@ -13277,6 +13311,21 @@ def list_backups(folder, db_path):
     return out
 
 
+def forget_upload_position(path):
+    """A restored database's uploads start from where the journals are now, not from the backup's marks: what was
+    sent since the backup is not sent again, nor the backup's own unsent rows (EDDN's are stale by now)."""
+    con = sqlite3.connect(path)
+    try:
+        con.execute("DELETE FROM meta WHERE key = 'upload_marks'")
+        if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='upload_queue'").fetchone():
+            con.execute("DELETE FROM upload_queue WHERE state = 'queued'")
+        con.commit()
+    except sqlite3.Error:   # an older backup without these tables: nothing to forget
+        pass
+    finally:
+        con.close()
+
+
 def restore_backup(zip_path, db_path, host, port, now=None):
     """--restore: put the database (and browser_defaults.json, when the zip holds it) from a backup zip back in
     place. Refuses while host:port is bound (a running Outrider holds the database open); checks the zip
@@ -13312,6 +13361,7 @@ def restore_backup(zip_path, db_path, host, port, now=None):
             problem = check_database(tmp)
             if problem:
                 raise RuntimeError(f"the database in {zip_path} failed its check: {problem}")
+            forget_upload_position(tmp)
             doc = None
             if BROWSER_DEFAULTS_FILE in names:
                 doc = z.read(BROWSER_DEFAULTS_FILE)

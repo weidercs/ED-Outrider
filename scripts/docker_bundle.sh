@@ -57,6 +57,8 @@ GID=1000
 PORT=8025
 # your time zone, e.g. Europe/London (the History's days)
 TZ=UTC
+# the name other Outriders see when this one uploads (EDDN, EDSM): "Already uploading from ..."
+# OUTRIDER_HOST=outrider-docker
 EOF
 
 cat > "$OUT/INSTALL.txt" <<EOF

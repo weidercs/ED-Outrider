@@ -29,6 +29,25 @@ MAX_AGE_S = 7 * 86400    # a line older than this (by this machine's clock) is n
 #                          author's cap: a forgotten instance must not send months of play; listeners may refuse old data)
 SKEW_S = 300             # ...and one stamped this far in the future still counts (the game PC's clock ahead)
 SOURCE_RE = re.compile(r"^Journal(Beta|Alpha)?\.")
+_OLD_NAME = re.compile(r"^(Journal(?:Beta|Alpha)?)\.(\d\d)(\d\d)(\d\d)(\d{6})\.(\d+)\.log$")
+
+
+def name_key(name):
+    """A journal file name in time order: the old form (Journal.YYMMDDhhmmss.NN.log, before 2023) as the new one
+    (Journal.YYYY-MM-DDThhmmss.NN.log), so a 2021 file never sorts after a 2026 one. Marks keep the real name; every
+    comparison of positions goes through this (pos_key). (A game started in the repeated hour after a clock change
+    can still sort out of order: the names are local time.)"""
+    base = os.path.basename(str(name))
+    m = _OLD_NAME.match(base)
+    if m:
+        kind, yy, mo, dd, hms, part = m.groups()
+        return f"{kind}.20{yy}-{mo}-{dd}T{hms}.{int(part):02d}.log"
+    return base
+
+
+def pos_key(pos):
+    """A position (file name, offset) in time order."""
+    return (name_key(pos[0]), pos[1])
 
 SCHEMA = """
 -- Outgoing uploads (EDDN, EDSM), live only: queued in the tick that read the line (a rollback drops them), sent after
@@ -215,8 +234,8 @@ def continued_from(path):
     if not isinstance(first, dict) or not continued(first):
         return None
     files = glob_journals(os.path.dirname(path))
-    name = os.path.basename(path)
-    before = [p for p in files if os.path.basename(p) < name]
+    name = name_key(path)
+    before = [p for p in files if name_key(p) < name]
     return before[-1] if before else None
 
 
@@ -307,12 +326,15 @@ class UploadHub:
     sets one: State.set_upload)."""
 
     def __init__(self, db, builders=None, enabled=None, clock=time.time, max_age=MAX_AGE_S, save=None, holds=None,
-                 max_ages=None, idlers=None):
+                 max_ages=None, idlers=None, follow=None):
         self.db = db
         self.builders = dict(builders or {})
         self.holds = dict(holds or {})
         self.idlers = dict(idlers or {})   # {service: fn(session) -> [(schema, message, source line)]}: idle()
         self.enabled = enabled or (lambda service: False)
+        # follow(service): wanted though not queueing now (another uploader has it): its mark moves with the lines,
+        # so nothing that uploader sent is caught up later
+        self.follow = follow or (lambda service: False)
         self.clock, self.max_age = clock, max_age
         self.max_ages = dict(max_ages or {})   # {service: seconds}: a service's own limit, under max_age (EDDN's hour)
         self.save = save                 # save(marks): stores the marks (State: meta upload_marks)
@@ -322,7 +344,17 @@ class UploadHub:
         self.marks, self.marks_dirty = {}, False
 
     def active(self):
-        return any(self.enabled(s) for s in self.builders)
+        """Whether any service wants the lines (queueing, or following another uploader's)."""
+        return any(self.enabled(s) or self.follow(s) for s in self.builders)
+
+    def forget(self):
+        """No service wants the lines (the reader stops passing them): what the session knew goes stale from here,
+        so it is dropped, and the next line wanted primes its file from the top again (status_body is the live
+        Status.json's, kept)."""
+        if self.primed:
+            body = self.session.status_body
+            self.session, self.primed = Session(), set()
+            self.session.status_body = body
 
     def prime(self, path, upto, session=None, depth=0):
         """Feed a session the lines of `path` before byte `upto` (state only): a file met part way through. A
@@ -352,7 +384,7 @@ class UploadHub:
 
     def after_mark(self, service, pos):
         m = self.marks.get(service)
-        return m is None or (m[0], m[1]) < pos
+        return m is None or pos_key((m[0], m[1])) < pos_key(pos)
 
     def set_mark(self, service, pos, ts=None):
         self.marks[service] = [pos[0], pos[1], ts]
@@ -411,7 +443,12 @@ class UploadHub:
         self.session.feed(ev, b)
         if mode != "live":
             return 0
-        return self._queue(ev, b, offset, self.session, [s for s in self.builders if self.enabled(s)])
+        on = [s for s in self.builders if self.enabled(s)]
+        pos = position(b, offset)
+        for s in self.builders:
+            if s not in on and self.follow(s) and self.after_mark(s, pos):
+                self.set_mark(s, pos, ev.get("timestamp"))
+        return self._queue(ev, b, offset, self.session, on)
 
     def catch_up(self, service, dirs, upto):
         """Queue what `service` missed: the live folders' lines after its mark, up to where the reader has got to
@@ -419,23 +456,23 @@ class UploadHub:
         move the mark. A line already queued is not queued again (the outbox's UNIQUE). Returns the number queued."""
         if service not in self.builders or service not in self.marks:
             return 0
-        start = self.marks[service][0]
+        start = name_key(self.marks[service][0])
         files = {}
         for d in dirs:
             for p in glob_journals(d):
                 b = os.path.basename(p)
-                if b >= start and (b not in files or upto.get(p, 0) > upto.get(files[b], 0)):
+                if name_key(b) >= start and (b not in files or upto.get(p, 0) > upto.get(files[b], 0)):
                     files[b] = p
         n = 0
         session = Session()
-        first = files[min(files)] if files else None
+        first = files[min(files, key=name_key)] if files else None
         prev = continued_from(first) if first else None
         if prev:   # the first file goes on from an earlier one: who and where you are come from there
             try:
                 self.prime(prev, os.path.getsize(prev), session)
             except OSError:
                 pass
-        for b in sorted(files):
+        for b in sorted(files, key=name_key):
             p = files[b]
             end = upto.get(p)
             if end is None:
@@ -500,8 +537,9 @@ class UploadHub:
 
 
 def glob_journals(d):
+    """A folder's journals, oldest first (name_key)."""
     import glob
-    return sorted(glob.glob(os.path.join(glob.escape(d), "Journal.*.log")))
+    return sorted(glob.glob(os.path.join(glob.escape(d), "Journal.*.log")), key=name_key)
 
 
 # ---- settings ----
@@ -545,35 +583,55 @@ async def upload_loop(service, db, send, on, clock=time.time, sleep=None, report
     sleep = sleep or asyncio.sleep
     fails = 0
     while True:
-        if not on(service):
+        try:
+            if not on(service):
+                await sleep(IDLE_S)
+                continue
+            rows = due(db, service, clock(), batch)
+        except sqlite3.Error as e:   # the database busy or broken for a moment: the sender stays alive
+            print(f"{service}: outbox not read ({e})")
             await sleep(IDLE_S)
             continue
-        rows = due(db, service, clock(), batch)
         if not rows:
             await sleep(IDLE_S)
             continue
         now = clock()
+        wait = 0
         try:
             results = await send(rows)
-            fails = 0
             error = None
+            retry = [r for _, st, _, r in results if st == "queued"]
+            if retry:   # the service said later (a 5xx, a rate limit): the whole queue waits, not just these rows
+                wait = max(max(x or 0 for x in retry), BACKOFF_S[min(fails, len(BACKOFF_S) - 1)])
+                fails += 1
+                error = next(status for _, st, status, _ in results if st == "queued")
+            else:
+                fails = 0
         except Exception as e:   # unreachable, a timeout, a 5xx raised by the sender: wait, then again
             wait = BACKOFF_S[min(fails, len(BACKOFF_S) - 1)]
             fails += 1
             results = [(r["id"], "queued", f"{type(e).__name__}: {e}"[:300], wait) for r in rows]
             error = f"{type(e).__name__}: {e}"
-        for row_id, state, status, retry_in in results:
-            if state == "held":
-                db.execute("UPDATE upload_queue SET last_status = ? WHERE id = ?", (status, row_id))
-            else:
-                settle(db, row_id, state, status, now, retry_in)
-        db.commit()
+        try:
+            for row_id, state, status, retry_in in results:
+                if state == "held":
+                    db.execute("UPDATE upload_queue SET last_status = ? WHERE id = ?", (status, row_id))
+                else:
+                    settle(db, row_id, state, status, now, max(retry_in or 0, wait) if state == "queued" else retry_in)
+            db.commit()
+        except sqlite3.Error as e:   # not recorded: those rows go again (the services drop duplicates)
+            try:
+                db.rollback()
+            except sqlite3.Error:
+                pass
+            error = f"outbox not updated ({e})"
+            wait = max(wait, IDLE_S)
         if report:
             report(service, {"error": error, "results": results, "at": now})
         if any(state == "held" for _, state, _, _ in results):
             await sleep(IDLE_S * 15)   # waiting on the player (a refused key): look again now and then
         else:
-            await sleep(GAP_S)
+            await sleep(wait or GAP_S)
 
 
 # ---- one uploader at a time: lease files in the journal folder (the author's idea, 2026-10-08) ----
@@ -634,7 +692,15 @@ class Leases:
                 except (OSError, ValueError):
                     continue
                 prev = self.seen.get(path)
-                if not prev or prev[0] != content:
+                if not prev:
+                    # first sight: one left by a crash long ago is stale now, not LEASE_STALE_S from now. Its mtime
+                    # comes from another clock (the file server's), hence the margin
+                    try:
+                        old = now - os.path.getmtime(path) > 2 * LEASE_STALE_S
+                    except OSError:
+                        old = False
+                    self.seen[path] = prev = (content, now - LEASE_STALE_S - 1 if old else now)
+                elif prev[0] != content:
                     self.seen[path] = prev = (content, now)
                 if now - prev[1] <= LEASE_STALE_S and isinstance(info, dict):
                     out[m.group(1)] = {"host": str(info.get("host") or "another Outrider"),
@@ -663,7 +729,7 @@ def lease_marks(journal_dirs, instance):
                 continue
             for service, mark in ((info or {}).get("marks") or {}).items() if isinstance(info, dict) else ():
                 if service in SERVICES and isinstance(mark, list) and len(mark) >= 2 and isinstance(mark[1], int):
-                    if service not in out or (mark[0], mark[1]) > (out[service][0], out[service][1]):
+                    if service not in out or pos_key(mark) > pos_key(out[service]):
                         out[service] = list(mark[:3])
     return out
 
