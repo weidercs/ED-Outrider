@@ -9305,7 +9305,7 @@ class State:
             return ("confirm_needed", "Is this the only Outrider uploading? Other instances can't see this one")
         return None
 
-    def refresh_leases(self):
+    def refresh_leases(self, edmc=...):
         """Write this instance's lease (the services it means to send) in every live journal folder it can write, and
         read the others' (and EDMC's switches on the game PC). Cheap: a few small files."""
         if self.leases is None:
@@ -9341,7 +9341,9 @@ class State:
                 "marks": {s: m for s, m in self.uploads_hub.marks.items() if s in wanted}}
         self.lease_writable = {d: outrider.uploads.write_lease(d, self.leases.instance, info) for d in LIVE_DIRS}
         self.lease_others = self.leases.others(LIVE_DIRS)
-        self.edmc = outrider.uploads.edmc_uploads() if self.game_pc else None
+        # EDMC on this PC: given by watch_leases (found on a worker thread: on Windows `tasklist` takes a second or two,
+        # and it stalled the loop every minute), else looked up here (a switch from the page, the start)
+        self.edmc = edmc if edmc is not ... else (outrider.uploads.edmc_uploads() if self.game_pc else None)
 
     def drop_leases(self):
         """At shutdown: this instance's leases claim nothing any more (another may take over at once), but keep its
@@ -9358,7 +9360,9 @@ class State:
         pruned = 0.0
         while True:
             try:
-                self.refresh_leases()
+                edmc = await asyncio.get_running_loop().run_in_executor(None, outrider.uploads.edmc_uploads) \
+                    if self.game_pc else None
+                self.refresh_leases(edmc)
                 if time.time() - pruned > 3600:
                     outrider.uploads.prune(self.db, time.time())
                     self.db.commit()

@@ -837,3 +837,48 @@ class LoopFixes(unittest.TestCase):
         with unittest.mock.patch.object(U, "due", flaky), unittest.mock.patch("builtins.print"):
             self.run_loop(send, rounds=3)
         self.assertTrue(sent)                              # went on after the error
+
+
+class FableUploads(MarksAndCatchUp):
+    """The Fable sweep of 2026-10-09: the uploads."""
+
+    def sig(self, ago, name, addr):
+        return {"timestamp": now_ts(ago), "event": "FSSSignalDiscovered", "SystemAddress": addr, "SignalName": name}
+
+    def eddn_rows(self):
+        return [r["schema"] for r in self.db.execute("SELECT schema FROM upload_queue WHERE service='eddn' ORDER BY id")]
+
+    def test_signals_ending_a_catch_up_are_sent(self):
+        """A jump and its signals were the last lines while Outrider was down: the catch-up sends the signals too (they
+        waited for a next line that never came inside it)."""
+        self.state.uploads_hub.builders = {"eddn": self.state.eddn_build}
+        self.write(header(now_ts(900)), loadgame(now_ts(899)))
+        self.j.scan_dir(self.dir, commit_each=True, upload="catchup")
+        self.state.set_upload("eddn", True)
+        here = self.jump(300, "Here")
+        self.write(here, self.sig(299, "OUT OF THE BLUE G0X-85Z", here["SystemAddress"]))
+        self.j.scan_dir(self.dir, commit_each=True, upload="catchup")
+        self.state.catch_up_uploads()
+        self.assertIn("fsssignaldiscovered", self.eddn_rows())
+
+    def test_signals_before_their_jump_go_with_the_live_jump(self):
+        """Odyssey writes a jump's signals before its FSDJump: left at the end of a catch-up, they go over to the live
+        session, and the FSDJump read live sends them."""
+        self.state.uploads_hub.builders = {"eddn": self.state.eddn_build}
+        self.write(header(now_ts(900)), loadgame(now_ts(899)), self.jump(800, "Before"))
+        self.j.scan_dir(self.dir, commit_each=True, upload="catchup")
+        self.state.set_upload("eddn", True)
+        there = self.jump(10, "There")
+        self.write(self.sig(11, "A station", there["SystemAddress"]))
+        self.j.scan_dir(self.dir, commit_each=True, upload="catchup")
+        self.state.catch_up_uploads()
+        self.assertNotIn("fsssignaldiscovered", self.eddn_rows())
+        self.write(there)
+        self.j.scan_dir(self.dir, upload="live")
+        self.assertIn("fsssignaldiscovered", self.eddn_rows())
+
+    def test_edmc_is_looked_for_off_the_event_loop(self):
+        import inspect
+        src = inspect.getsource(ed_outrider.State.watch_leases)
+        self.assertIn("run_in_executor(None, outrider.uploads.edmc_uploads)", src)
+

@@ -501,7 +501,31 @@ class UploadHub:
                     continue
                 session.feed(ev, b)
                 n += self._queue(ev, b, here, session, [service])
+        n += self._catch_up_tail(service, session)
         self.flush()
+        return n
+
+    def _catch_up_tail(self, service, session):
+        """What waited at the end of a catch-up: no further line comes inside it, so the service's idle step runs as
+        if the quiet spell had passed (a batch of signals ending the journal was dropped with the catch-up's session:
+        the Fable sweep, 2026-10-09). A batch not yet located (Odyssey writes a jump's signals before its FSDJump)
+        goes over to the live session, whose next line (that FSDJump) sends it. Returns the number queued."""
+        n = 0
+        if service in self.idlers and not session.blocked():
+            session.now = self.clock() + 60   # past any quiet spell, short of every give-up
+            try:
+                messages = self.idlers[service](session) or []
+            except (KeyError, TypeError, ValueError, AttributeError, IndexError):
+                messages = []
+            for schema, message, origin in messages:
+                ts = (message.get("message") or message).get("timestamp") if isinstance(message, dict) else None
+                if origin and enqueue(self.db, service, schema, f"{origin}#{schema}", ts, session, message):
+                    n += 1
+        left = session.pending.get("signals")
+        if left and self.session.file == session.file and "signals" not in self.session.pending:
+            self.session.pending["signals"] = list(left)
+            self.session.pending["signals_since"] = dict(session.pending.get("signals_since") or {}, at=self.clock())
+        self.queued += n
         return n
 
     def idle(self):

@@ -2,6 +2,12 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Fable sweep fixes: the uploads
+- Signals (fleet carriers, stations) that were the last lines while Outrider was down are now sent by the catch-up:
+  they waited for a next line that never came, and were dropped. Ones written just before their jump (Odyssey) go
+  with that jump once it is read.
+- On a Windows game PC, looking for EDMC no longer stalls Outrider for a second or two every minute.
+
 ## 2026-10-09 · Fable sweep fixes: cargo, biology, voice, auto-target, auto honk
 - Carrier cargo: a buy order others filled was counted twice in the carrier's total (a false "+300 t" gap): the
   CarrierStats the game writes just before Market.json already holds it. Last night's fix assumed otherwise; now the
