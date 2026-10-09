@@ -207,5 +207,44 @@ class ServerAndDevices(unittest.TestCase):
         self.assertIn("task", st.background_tasks())
 
 
+class VoiceTools(unittest.TestCase):
+    """Batch E: the voice's and the AI bridge's tools, the fixed questions."""
+
+    def test_tool_arguments(self):
+        import outrider.tools as T
+        self.assertEqual(T._int({"days": float("inf")}, "days", 30, 1, 3650), 30)   # 1e999 parses as inf
+        got = []
+
+        async def get(path, q=None):
+            got.append(q)
+            return {"rows": [], "errors": ["Spansh could not be reached (timeout)"]}
+        out = asyncio.run(T.call("nearest_dock", {"need": "Vista"}, get, 10))
+        self.assertEqual(got[0]["need"], "Vista")                  # not "V,i,s,t,a"
+        self.assertEqual(out["errors"], ["Spansh could not be reached (timeout)"])
+
+    def test_spansh_unreachable_is_said(self):
+        import outrider.ask as A
+
+        async def get(path, q=None):
+            return {"rows": [], "errors": ["Spansh could not be reached (timeout)"]}
+        said = asyncio.run(A.fixed_answer("nearest_dock", get, 10, "nearest station"))
+        self.assertTrue(said.startswith("Spansh could not be reached"), said)
+
+    def test_nearest_with_fuel_is_a_place_not_the_gauge(self):
+        import outrider.ask as A
+        ph = A.load_phrases()
+        self.assertEqual(A.match("nearest station with fuel", ph), "nearest_dock")
+        self.assertEqual(A.match("nearest vista to sell what im carrying", ph), "nearest_dock")
+        self.assertEqual(A.match("how much fuel", ph), "fuel")
+        self.assertEqual(A.match("what's left here", ph), "whats_left")
+        self.assertEqual(A.nearest_query("nearest station with fuel")[0], ["Refuel"])
+
+    def test_mcp_speaks_utf8(self):
+        import outrider.mcp as M
+        src = inspect.getsource(M.main)
+        self.assertIn('stream.reconfigure(encoding="utf-8"', src)
+        self.assertLess(src.index("reconfigure"), src.index("serve(sys.stdin"))
+
+
 if __name__ == "__main__":
     unittest.main()

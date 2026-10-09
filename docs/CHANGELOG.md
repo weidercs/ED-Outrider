@@ -2,6 +2,14 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Sweep fixes: the voice's questions and the AI tools
+- "What's left here?" (and the AI tool behind it) no longer fails in a system with a planet worth mapping: exactly
+  the systems where the answer matters. The test's fake data had a different shape from the real one.
+- "Nearest station with fuel" (or with Vista, repairs...) finds a station instead of reading the fuel gauge.
+- When Spansh cannot be reached, "nearest station" says so instead of naming a far carrier as the nearest place.
+- The AI tools take a single service given as text, and an infinite number, without losing the filter or failing;
+  the MCP bridge talks UTF-8 on Windows too (a carrier name with other characters ended it).
+
 ## 2026-10-09 · Sweep fixes: backups, start-up checks, auto honk and auto-target
 - Stopping Outrider lets go of Primary Fire at once: an auto honk under way held it for up to 20 s more, and one
   waiting for the keyboard could still press after the stop.

@@ -19,7 +19,9 @@ import outrider.tools as tools
 
 ASK_FILE = os.path.join(outrider.RESOURCES_DIR, "ask.json")
 TEXT_MAX = 500
-COMMANDS = ("unhush", "hush", "next_jump", "status_report", "fuel", "unsold", "whats_left", "nearest_unvisited", "nearest_dock")
+# in the order questions are matched: nearest_dock before fuel, unsold, next_jump and whats_left, whose single words
+# ("fuel") are in its questions too ("nearest station with fuel" asked for the fuel gauge: the sweep of 2026-10-09)
+COMMANDS = ("unhush", "hush", "nearest_dock", "next_jump", "status_report", "fuel", "unsold", "whats_left", "nearest_unvisited")
 # "nearest station", "nearest Vista"...: the words of the question narrow the search (a whole phrase is needed in
 # ask.json, never a bare "nearest": the author, 2026-10-08)
 NEAREST_WORDS = {"vista": "Vista", "genomics": "Vista", "cartographics": "UC", "cartographic": "UC", "repair": "Repair",
@@ -141,9 +143,12 @@ async def fixed_answer(command, get, rows=10, text=""):
         d = await tools.call("nearest_dock", {"need": need, "kind": kind or "any"}, get, rows)
         if d.get("error"):
             return d["error"]
-        return dock.spoken({"rows": [dict(p, ly=p["distance_ly"], here=not p["distance_ly"], warn=p["warnings"],
+        said = dock.spoken({"rows": [dict(p, ly=p["distance_ly"], here=not p["distance_ly"], warn=p["warnings"],
                                           station_type=p.get("station_type"), own=bool(p.get("yours")))
                                      for p in d.get("places") or []]}, need, kind)
+        if any("spansh" in str(e).lower() for e in d.get("errors") or []):
+            return "Spansh could not be reached, so stations are missing. " + said
+        return said
     if command == "nearest_unvisited":
         n = await tools.call("nearest_unvisited", {}, get, rows)
         if n.get("error"):
