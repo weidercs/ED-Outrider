@@ -2,6 +2,15 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Plotting from a system Spansh doesn't know yet
+- Plot Route could not plot from a system Spansh has not heard of (a fresh discovery): the exact plotter said so and
+  stopped, the neutron one failed. Now both ends are looked up in Spansh's search first, and one it does not know
+  (but Outrider can place: where you are, a visit, a bookmark) is stood in for by a Spansh system near it, on the
+  way: within the ship's range, nearest the other end. The route is plotted from (or to) the stand-in and the real
+  end is put back as its first (or last) jump, its fuel not figured. The plot status says what was done, and warns
+  when that jump is longer than the ship's range. For where you are, the stand-in comes from the neighbourhood
+  Spansh already sent; elsewhere one search around it.
+
 ## 2026-10-09 · Version 2026.10.19.1
 - A bug-fix release on 2026.10.19: body names said letter by letter by Piper ("ay one", not "uh one"); the Codex
   review's fixes (one sender when two Outriders are switched on for an upload, trade routes counting tonnes with

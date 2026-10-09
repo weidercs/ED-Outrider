@@ -20,6 +20,12 @@ until you plot another or **Clear route**.
   ship's laden range; type another to override it.
 - **Conservative range** (off by default): jumps a margin (5 ly) shorter than the ship's range, leaving room for a
   fuller tank.
+- **A system Spansh doesn't know yet.** Spansh can only plot between systems it has heard of, and a system you
+  have just discovered may not be one of them. Outrider then plots from (or to) a system Spansh knows close by, on
+  the way, and puts yours back as the route's first (or last) jump: "Spansh doesn't know Drojau SL-D a53-5 yet: the
+  route starts with a 12.4 ly jump to Smojooe XY-Z a1-2". That jump's fuel isn't figured, and if it is longer than
+  your range the message says so. A destination works the same way when Outrider knows where it is (a system you
+  have visited or bookmarked).
 - **Too much fuel.** A long neutron jump may be in range only with the fuel the plotter expected. On arrival, and
   as you scoop, Outrider checks the next jump against the fuel aboard and warns ("⚠ too much fuel for the next
   jump: ≤ 36 t, you have 140 t").

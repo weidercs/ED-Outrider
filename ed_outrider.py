@@ -205,7 +205,7 @@ from outrider.fsd import (   # the frame shift drive's maths: range, fuel per ju
 )
 from outrider.highway import (   # the Neutron Highway's route helpers and the desktop clipboard
     HIGHWAY_BG_TYPES, Clipboard, HighwayError, highway_bg_file, highway_match, highway_refuel_in, highway_rows,
-    highway_text,
+    highway_text, splice_route, stand_in,
 )
 from outrider.cargo import trade_counts, trade_done_text, trade_left, trade_rows, trade_text   # the slot's third type: trade routes
 from outrider.riches import (   # Road to Riches / Exomastery: Spansh's survey routes (systems with valuable bodies / life)
@@ -288,6 +288,7 @@ HIGHWAY_HEAVY_SLACK = 0.5    # t: fuel over the most the next jump allows by mor
 #                              some jumps right at the limit, so a hair over is the model's error, not yours)
 HIGHWAY_HEAVY_EVERY_S = 3.0  # s between two looks at it while the fuel changes in a route system (scooping)
 HIGHWAY_CONSERVATIVE_MAX = 50.0   # ly: the largest conservative margin taken
+HIGHWAY_STAND_IN_LY = 150.0   # ly: how far around an end Spansh does not know yet its stand-in is looked for
 NEAR_BODY_ALT = 5000         # m: below this over a body in your ship, the on-body strip shows its bio card
 LEASE_EVERY_S = 60           # s: this instance's upload lease rewritten, the others' read, EDMC's switches checked
 BIO_TAGS_SHOWN = 40          # the surface map draws at most this many tagged plants (nearest first)
@@ -4828,8 +4829,9 @@ def cached_base(db, id64):
 
 
 def highway_not_yet(name):
-    """The plot error for a start system Spansh has not heard of yet (a system new to the galaxy's maps)."""
-    return f"Spansh has not received {name} yet (a new system takes a minute or two to reach it): try again in a minute"
+    """The plot error for a start neither Spansh nor Outrider can place (a system Spansh does not know yet is stood in
+    for when Outrider knows where it is: State.highway_ends)."""
+    return f"Spansh doesn't know {name} yet, and Outrider doesn't know where it is: check the name, or plot from where you are"
 
 
 class Spansh:
@@ -5044,6 +5046,11 @@ class Spansh:
     async def system_id64(self, name):
         """A system's id64 from Spansh's search by name (the exact name, any case), or None when Spansh has none:
         the exact plotter takes id64s, not names (found 2026-10-03)."""
+        rec = await self.system_record(name)
+        return rec["id64"] if rec else None
+
+    async def system_record(self, name):
+        """{name, id64, x, y, z} of a system Spansh knows by this exact name (any case), or None."""
         if self.session is None:
             raise HighwayError("Spansh cannot be reached (no network session)")
         async with self.sem_fast:
@@ -5053,7 +5060,7 @@ class Spansh:
         for x in (d.get("results") or []) if isinstance(d, dict) else []:
             if isinstance(x, dict) and str(x.get("name") or "").lower() == name.lower() \
                     and isinstance(x.get("id64"), int) and not isinstance(x.get("id64"), bool):
-                return x["id64"]
+                return {"name": x["name"], "id64": x["id64"], "x": x.get("x"), "y": x.get("y"), "z": x.get("z")}
         return None
 
     def cached(self, id64):
@@ -10301,7 +10308,7 @@ class State:
             nx = self.highway_next(hw, rows)
             start = nx if nx is not None else len(rows)
             route = dict({k: hw.get(k) for k in ("id", "plotter", "ship", "options", "created_ts", "at", "furthest",
-                                                  "off_route", "arrival_ts", "done_ts")},
+                                                  "off_route", "arrival_ts", "done_ts", "stand_in")},
                          **{"from": rows[0]["system"], "to": rows[-1]["system"], "count": len(rows),
                             "total_ly": rows[0]["remaining"], "summary": self.highway_summary(),
                             "done": [self.highway_row_out(i, rows[i]) for i in range(max(0, start - HIGHWAY_DONE), start)],
@@ -10399,6 +10406,7 @@ class State:
                            "supercharged": flag("supercharged")}
                 if short:
                     options.update(conservative_ly=margin, range_full=round(short[1], 2), range=round(short[2], 2))
+                reach = short[2] if short else fleet_range(fig, cargo)
                 url = SPANSH_GENERIC_ROUTE
             else:
                 rng = number("range", 1, 1000, float, fleet_range(fig, cargo) if ship else None)
@@ -10412,6 +10420,7 @@ class State:
                 if margin:   # never cut the drive's own part by more than half; a ship's booster ly stay (a typed
                     rng = conservative_range(rng, margin, (fig.get("booster_ly") or 0) if ship else 0)   # range, no ship: 0)
                 params = {"from": frm, "to": to, "range": round(rng, 2), "efficiency": eff, "supercharge_multiplier": mult}
+                reach = rng
                 options = {"range": round(rng, 2), "efficiency": eff, "supercharge_multiplier": mult, "cargo": cargo}
                 if margin:
                     options.update(conservative_ly=margin, range_full=round(full, 2))
@@ -10422,58 +10431,91 @@ class State:
                 "ship": ship and {"ship_id": ship["ship_id"], "name": ship["name"], "type": ship["ship_type"], "ts": ship["ts"]}}
         self.highway_plotting = {"state": "running", "plotter": plotter, "from": frm, "to": to,
                                  "started": iso_ts(time.time()), "error": None}
-        self.highway_task = asyncio.get_running_loop().create_task(self._highway_plot(url, params, plotter, meta))
+        self.highway_task = asyncio.get_running_loop().create_task(self._highway_plot(url, params, plotter, meta, reach))
         self.bump()
         return {"ok": True, "plotting": self.highway_plotting}, 202
 
-    async def highway_id64(self, name, spansh_only=False):
-        """A system's id64 for Spansh's exact plotter: where you are, a system known here (find_local), else Spansh's
-        own search; None when nobody knows it. spansh_only: Spansh's search alone (does Spansh know it yet?)."""
-        if not spansh_only:
-            pos = self.journals.pos or {}
-            if pos.get("id64") and (pos.get("name") or "").lower() == name.lower():
-                return int(pos["id64"])
-            hit = self.find_local(name)
-            if hit:
-                return int(hit[0])
+    def highway_local(self, name):
+        """{system, id64, x, y, z} of a system known here by name (where you are, a visit, a bookmark...), or None."""
+        pos = self.journals.pos or {}
+        if (pos.get("name") or "").lower() == name.lower() and None not in (pos.get("x"), pos.get("y"), pos.get("z")):
+            return {"system": pos["name"], "id64": pos.get("id64"), "x": pos["x"], "y": pos["y"], "z": pos["z"]}
+        hit = self.find_local(name)
+        if not hit:
+            return None
+        return {"system": hit[1], "id64": int(hit[0]) if hit[0] is not None else None, "x": hit[2], "y": hit[3], "z": hit[4]}
+
+    async def highway_stand_in(self, real, toward, reach):
+        """Spansh's {name, id64, x, y, z} to plot with in place of `real`, a system it does not know yet: from what it
+        sent about where you are (the neighbourhood), else asked around `real`; HighwayError when it knows none near."""
+        pos = self.journals.pos or {}
+        cands = []
+        if real.get("id64") is not None and real["id64"] == pos.get("id64"):
+            cands = [dict(b, id64=i) for i, (src, b) in list(self.bases.items()) if src == "spansh" and i != real["id64"]]
+        pick = stand_in(real, toward, cands, reach)
+        if pick is None or (reach and math.dist((real["x"], real["y"], real["z"]), (pick["x"], pick["y"], pick["z"])) > reach):
+            try:
+                found = await self.spansh.sphere(real, max(reach or 0, HIGHWAY_STAND_IN_LY), max_pages=1)
+            except (ClientError, asyncio.TimeoutError, ValueError) as e:
+                raise HighwayError(f"Spansh cannot be reached ({type(e).__name__}): try again later") from e
+            cands += [{"name": s.get("name"), "id64": s.get("id64"), "x": s.get("x"), "y": s.get("y"), "z": s.get("z")}
+                      for s in found if isinstance(s, dict) and s.get("id64") != real.get("id64")]
+            pick = stand_in(real, toward, cands, reach)
+        if pick is None:
+            raise HighwayError(f"Spansh knows no system within {max(reach or 0, HIGHWAY_STAND_IN_LY):g} ly of "
+                               f"{real['system']} to plot with")
+        return {"name": pick["name"], "id64": int(pick["id64"]), "x": pick["x"], "y": pick["y"], "z": pick["z"]}
+
+    async def highway_ends(self, frm, to, reach):
+        """The plot's two ends as Spansh knows them, ({name, id64, x, y, z} to plot from, ... to, the real start or None,
+        the real end or None, a note in words or None). A system Spansh does not know yet (a fresh discovery), known
+        here, is stood in for by a system near it that Spansh knows: the route is plotted from (or to) that one and the
+        real end is put back as a jump of its own."""
         try:
-            return await self.spansh.system_id64(name)
+            src, dst = await self.spansh.system_record(frm), await self.spansh.system_record(to)
         except (ClientError, asyncio.TimeoutError, ValueError) as e:
             raise HighwayError(f"Spansh cannot be reached ({type(e).__name__}): try again later") from e
-
-    async def _highway_exact_ids(self, params):
-        """The exact plotter's source and destination as id64s (Spansh's exact plotter answers "Unable to find route"
-        to names, found in game 2026-10-03; the neutron plotter still takes names)."""
-        frm, to = params["source"], params["destination"]
-        src, dst = await self.highway_id64(frm), await self.highway_id64(to)
+        start = end = None
+        notes = []
+        far = lambda d: f" (longer than this ship's {reach:.1f} ly range: check it in the galaxy map)" if reach and d > reach else ""
         if src is None:
-            raise HighwayError(highway_not_yet(frm))
+            start = self.highway_local(frm)
+            if start is None:
+                raise HighwayError(highway_not_yet(frm))
+            src = await self.highway_stand_in(start, dst or self.highway_local(to), reach)
+            d = math.dist((start["x"], start["y"], start["z"]), (src["x"], src["y"], src["z"]))
+            notes.append(f"Spansh doesn't know {start['system']} yet: the route starts with a {d:.1f} ly jump to "
+                         f"{src['name']}, the nearest system it knows on the way{far(d)}.")
         if dst is None:
-            raise HighwayError(f"Spansh knows no system called {to}")
-        return dict(params, source=src, destination=dst)
+            end = self.highway_local(to)
+            if end is None:
+                raise HighwayError(f"Spansh knows no system called {to}")
+            dst = await self.highway_stand_in(end, src, reach)
+            d = math.dist((end["x"], end["y"], end["z"]), (dst["x"], dst["y"], dst["z"]))
+            notes.append(f"Spansh doesn't know {end['system']} yet: the route ends with a {d:.1f} ly jump from "
+                         f"{dst['name']}{far(d)}.")
+        return src, dst, start, end, " ".join(notes) or None
 
-    async def _highway_plot(self, url, params, plotter, meta):
+    async def _highway_plot(self, url, params, plotter, meta, reach=None):
         p = self.highway_plotting
         try:
-            if plotter == "exact":
-                start = params["source"]
-                params = await self._highway_exact_ids(params)
-                try:
-                    result = await self.spansh.plot(url, params)
-                except HighwayError as e:
-                    # the start known here but not to Spansh yet (its data comes from EDDN, a minute or two late)
-                    try:
-                        known = await self.highway_id64(start, spansh_only=True)
-                    except HighwayError:
-                        raise e from None   # Spansh's own answer says more than "cannot be reached" now
-                    if known is None:
-                        raise HighwayError(highway_not_yet(start)) from None
-                    raise
+            ends = ("source", "destination") if plotter == "exact" else ("from", "to")
+            src, dst, start, end, note = await self.highway_ends(params[ends[0]], params[ends[1]], reach)
+            if (start or end) and src["id64"] == dst["id64"]:
+                # both ends stand in for the same system: no Spansh route, just the jumps to and from it
+                rows = [dict(system=src["name"], id64=src["id64"], x=src["x"], y=src["y"], z=src["z"], distance=None,
+                             fuel_used=None, fuel_left=None, neutron=0, refuel=0, jumps=0, remaining=0.0)]
             else:
-                result = await self.spansh.plot(url, params)
-            rows = highway_rows(plotter, result)
+                # the exact plotter takes id64s (it answers "Unable to find route" to names, found in game 2026-10-03);
+                # the neutron plotter names
+                params = dict(params, **({"source": src["id64"], "destination": dst["id64"]} if plotter == "exact"
+                                         else {"from": src["name"], "to": dst["name"]}))
+                rows = highway_rows(plotter, await self.spansh.plot(url, params))
+            rows = splice_route(rows, plotter, reach, start, end)
+            if note:
+                meta = dict(meta, stand_in=note)
             self.highway_store(rows, meta)
-            p.update(state="done")
+            p.update(state="done", note=note)
             self.highway_copy_next(force=True)   # you are usually at its start: the first hop is ready to paste
         except HighwayError as e:
             p.update(state="failed", error=str(e))

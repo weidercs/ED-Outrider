@@ -17,7 +17,17 @@ import outrider.bio  # noqa: E402
 import ed_outrider  # noqa: E402
 import outrider.honk  # noqa: E402
 import outrider.fsd  # noqa: E402
+import outrider.highway  # noqa: E402
 
+
+
+
+def spansh_knows(**ids):
+    """A stand-in for Spansh.system_record: the systems Spansh knows (name lower-cased -> id64), on the x axis as in
+    HWY_EXACT (Start at 0, End at 200)."""
+    at = {100: 0.0, 105: 200.0, 201: 150.0, 202: 300.0}
+    return unittest.mock.AsyncMock(side_effect=lambda n: {"name": n, "id64": ids[n.lower()], "x": at.get(ids[n.lower()], 0.0),
+                                                          "y": 0.0, "z": 0.0} if n.lower() in ids else None)
 
 class HighwayH1(unittest.TestCase):
     """Neutron Highway, batch H1 (server): fleet loadouts, Spansh plot jobs (mocked), the route, progress and detours,
@@ -215,7 +225,7 @@ class HighwayH1(unittest.TestCase):
         sp.session = _HwSession([(200, {"job": "e1", "status": "queued"}),
                                  (200, {"job": "e1", "status": "ok", "result": self.EXACT})])
         sp.system_names = unittest.mock.AsyncMock(return_value=["Sol", "Solati"])
-        sp.system_id64 = unittest.mock.AsyncMock(side_effect=lambda n: {"start": 100, "end": 105}.get(n.lower()))
+        sp.system_record = spansh_knows(start=100, end=105, **{"far end": 202})
         self.state.spansh = sp
         cb = types_ns(enabled=True, tool="wl-copy", copied=[])
         cb.copy = lambda text: cb.copied.append(text) or True
@@ -292,7 +302,7 @@ class HighwayH1(unittest.TestCase):
         self.j.handle(self.loadout("2026-01-02T00:00:00Z", fsd="int_hyperdrive_overcharge_size8_class5_overchargebooster_mkii"))
         sp = ed_outrider.Spansh(self.db)
         sp.session = _HwSession([(200, {"job": "e", "status": "ok", "result": self.EXACT})])
-        sp.system_id64 = unittest.mock.AsyncMock(side_effect=lambda n: {"start": 100, "end": 105}.get(n.lower()))
+        sp.system_record = spansh_knows(start=100, end=105)
         self.state.spansh = sp
 
         async def go():
@@ -321,16 +331,15 @@ class HighwayH1(unittest.TestCase):
 
     def test_exact_plot_sends_id64s(self):
         """Spansh's exact plotter answers "Unable to find route" to system names; it takes id64s (found in game
-        2026-10-03, the neutron plotter still takes names). Where you are and systems known here need no request;
-        others come from Spansh's search, the exact name in any case. A start Spansh has not received yet says so."""
+        2026-10-03, the neutron plotter still takes names). Both ends are looked up in Spansh's search (the exact name,
+        any case): a system known here is not necessarily one Spansh knows."""
         import asyncio
         self.j.handle(self.loadout("2026-01-02T00:00:00Z", fsd="int_hyperdrive_overcharge_size8_class5_overchargebooster_mkii"))
         self.jump(-100, 100, "Start", 0)
-        self.jump(-50, 7001, "Visited Once", 10)
-        self.jump(-40, 100, "Start", 0)
         sp = ed_outrider.Spansh(self.db)
         self.state.spansh = sp
         search = ed_outrider.SPANSH_SYSTEM_SEARCH
+        here = (200, {"count": 1, "results": [{"id64": 100, "name": "Start", "x": 0, "y": 0, "z": 0}]})
         found = (200, {"count": 2, "results": [{"id64": 1, "name": "Thailoea AA-A h0 X", "x": 0, "y": 0, "z": 0},
                                                {"id64": 18207037532889, "name": "Thailoea AA-A H0", "x": 0, "y": 0, "z": 0}]})
         none = (200, {"count": 0, "results": []})
@@ -345,31 +354,24 @@ class HighwayH1(unittest.TestCase):
             asyncio.run(go())
             p = self.state.highway_plotting
             return p["state"], p["error"], sp.session.calls
-        # here (the journal's SystemAddress) to a system Spansh's search knows: one search, then the plot by id64
-        state, err, calls = plot({"to": "thailoea aa-a h0"}, [found, ok])
+        # here to a system Spansh's search knows: both looked up, then the plot by id64
+        state, err, calls = plot({"to": "thailoea aa-a h0"}, [here, found, ok])
         self.assertEqual((state, err), ("done", None))
-        self.assertEqual(calls[0], (search, {"q": "thailoea aa-a h0"}))
-        self.assertEqual((calls[1][0], calls[1][1]["source"], calls[1][1]["destination"]),
+        self.assertEqual(calls[:2], [(search, {"q": "Start"}), (search, {"q": "thailoea aa-a h0"})])
+        self.assertEqual((calls[2][0], calls[2][1]["source"], calls[2][1]["destination"]),
                          (ed_outrider.SPANSH_GENERIC_ROUTE, 100, 18207037532889))
-        # a visited system typed in any case: no search at all
-        state, err, calls = plot({"from": "visited once", "to": "start"}, [ok])
-        self.assertEqual([c[0] for c in calls], [ed_outrider.SPANSH_GENERIC_ROUTE])
-        self.assertEqual((calls[0][1]["source"], calls[0][1]["destination"]), (7001, 100))
-        # nobody knows the destination; a typed start nobody knows is one Spansh has not received yet
-        self.assertEqual(plot({"to": "Nowhere"}, [none])[:2], ("failed", "Spansh knows no system called Nowhere"))
-        state, err, calls = plot({"from": "Brand New", "to": "Start"}, [none])
-        self.assertEqual((state, err, len(calls)), ("failed", ed_outrider.highway_not_yet("Brand New"), 1))
-        # the start known here (you are in it) but not to Spansh: the plot fails, Spansh's search says why
-        state, err, _ = plot({"to": "Visited Once"}, [(400, {"error": "Unable to find route"}), none])
-        self.assertEqual((state, err), ("failed", ed_outrider.highway_not_yet("Start")))
-        # ...and when Spansh knows the start, its own answer stands
-        state, err, _ = plot({"to": "Visited Once"}, [(400, {"error": "Unable to find route"}),
-                                                      (200, {"results": [{"id64": 100, "name": "Start"}]})])
+        # nobody knows the destination; a typed start nobody knows (Spansh or here) says so
+        self.assertEqual(plot({"to": "Nowhere"}, [here, none])[:2], ("failed", "Spansh knows no system called Nowhere"))
+        state, err, calls = plot({"from": "Brand New", "to": "Start"}, [none, here])
+        self.assertEqual((state, err), ("failed", ed_outrider.highway_not_yet("Brand New")))
+        # Spansh's own answer to the plot stands
+        state, err, _ = plot({"to": "Start"}, [here, here, (400, {"error": "Unable to find route"})])
         self.assertEqual(err, "Spansh: Unable to find route")
         # the neutron plotter keeps sending names
-        state, err, calls = plot({"plotter": "neutron", "to": "Far End", "range": 50}, [(200, {"job": "n", "status": "ok",
-                                                                                                "result": self.NEUTRON})])
-        self.assertEqual((calls[0][1]["from"], calls[0][1]["to"], len(calls)), ("Start", "Far End", 1))
+        far = (200, {"results": [{"id64": 202, "name": "Far End", "x": 300, "y": 0, "z": 0}]})
+        state, err, calls = plot({"plotter": "neutron", "to": "Far End", "range": 50},
+                                 [here, far, (200, {"job": "n", "status": "ok", "result": self.NEUTRON})])
+        self.assertEqual((calls[2][1]["from"], calls[2][1]["to"], len(calls)), ("Start", "Far End", 3))
         # offline (Spansh never started): a clear error before any request
         with self.assertRaisesRegex(ed_outrider.HighwayError, "cannot be reached"):
             asyncio.run(ed_outrider.Spansh(self.db).system_id64("Nowhere"))
@@ -757,12 +759,67 @@ class HighwayH1(unittest.TestCase):
             self.state.tick({})
         self.assertEqual(self.heavy_moments(), ["Too much fuel for the next jump. It needs about 36 tons aboard; you have 160."])
 
+    def test_plot_from_a_system_spansh_does_not_know(self):
+        """A fresh discovery Spansh does not know yet (where you are): the route is plotted from the Spansh system near
+        it that is nearest the destination, out of what Spansh already sent about the neighbourhood, and starts with
+        the jump there. The page says so."""
+        import asyncio
+        self.j.handle(self.loadout("2026-01-02T00:00:00Z", fsd="int_hyperdrive_overcharge_size8_class5_overchargebooster_mkii"))
+        self.jump(-100, 900, "Fresh", -20)
+        self.state.bases = {100: ("spansh", {"name": "Start", "x": 0.0, "y": 0.0, "z": 0.0}),
+                            555: ("spansh", {"name": "Behind", "x": -35.0, "y": 0.0, "z": 0.0}),   # nearer, the wrong way
+                            556: ("edsm", {"name": "Edsm Only", "x": -21.0, "y": 0.0, "z": 0.0})}  # not Spansh's
+        sp = ed_outrider.Spansh(self.db)
+        sp.system_record = spansh_knows(start=100, end=105)
+        sp.session = _HwSession([(200, {"job": "e", "status": "ok", "result": self.EXACT})])
+        self.state.spansh = sp
+
+        async def go():
+            self.state.highway_start_plot({"to": "End"})
+            await self.state.highway_task
+        asyncio.run(go())
+        p = self.state.highway_plotting
+        self.assertEqual(p["state"], "done", p["error"])
+        self.assertEqual(sp.session.calls[0][1]["source"], 100)                     # plotted from Start
+        route = self.state.highway_view()["route"]
+        self.assertEqual((route["from"], route["to"], route["count"], route["at"]), ("Fresh", "End", 7, 0))
+        self.assertIn("Spansh doesn't know Fresh yet: the route starts with a 20.0 ly jump to Start", route["stand_in"])
+        self.assertEqual(p["note"], route["stand_in"])
+        rows = self.state.highway_state()[1]
+        self.assertEqual([(r["system"], r["distance"], r["jumps"], r["fuel_used"]) for r in rows[:3]],
+                         [("Fresh", None, 0, None), ("Start", 20.0, 1, None), ("Neu A", 50, 1, 5.1)])
+        self.assertEqual(rows[0]["remaining"], 220)
+
+        # a destination Spansh does not know (visited before): plotted to the Spansh system nearest it, then the jump
+        self.jump(-90, 950, "Deep", 230)
+        self.jump(-80, 100, "Start", 0)
+        sp.session = _HwSession([(200, {"count": 1, "results": [{"name": "End", "id64": 105, "x": 200, "y": 0, "z": 0}]}),
+                                 (200, {"job": "e", "status": "ok", "result": self.EXACT})])
+
+        async def go2():
+            self.state.highway_start_plot({"to": "Deep"})
+            await self.state.highway_task
+        asyncio.run(go2())
+        p = self.state.highway_plotting
+        self.assertEqual(p["state"], "done", p["error"])
+        self.assertEqual(sp.session.calls[0][:2], ("POST", ed_outrider.SPANSH_SEARCH))   # what Spansh knows around Deep
+        rows = self.state.highway_state()[1]
+        self.assertEqual([(r["system"], r["distance"]) for r in rows[-2:]], [("End", 50), ("Deep", 30.0)])
+        self.assertEqual(rows[0]["remaining"], 230)
+        self.assertIn("the route ends with a 30.0 ly jump from End", p["note"])
+
+    def test_splice_route_neutron_legs(self):
+        rows = ed_outrider.highway_rows("neutron", self.NEUTRON)
+        out = outrider.highway.splice_route(rows, "neutron", 50, start={"system": "S", "id64": 1, "x": -120, "y": 0, "z": 0})
+        self.assertEqual([(r["system"], r["jumps"], r["distance"]) for r in out[:2]], [("S", 0, None), ("Start", 3, 120.0)])
+        self.assertIsNone(outrider.highway.stand_in({"x": 0, "y": 0, "z": 0}, None, [], 50))
+
     def test_conservative_plot_params(self):
         import asyncio
         self.j.handle(self.caspian_loadout("2026-01-02T00:00:00Z"))
         self.j.handle({"event": "Cargo", "timestamp": "2026-01-02T00:00:01Z", "Vessel": "Ship", "Count": 0})
         sp = ed_outrider.Spansh(self.db)
-        sp.system_id64 = unittest.mock.AsyncMock(side_effect=lambda n: {"start": 100, "end": 105}.get(n.lower()))
+        sp.system_record = spansh_knows(start=100, end=105)
         self.state.spansh = sp
 
         def plot(body, result=None):

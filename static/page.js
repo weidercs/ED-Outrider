@@ -5179,7 +5179,7 @@ function renderHwy() {
   // a new route (or none): the form folds away while one is followed, and opens when there is none
   const rid = rich ? `rich|${rr.id}` : r ? r.id : null;
   if (rid !== H.routeId) {
-    if (H.routeId !== undefined && rid && H.watch && !rich) { const nj = (r.summary || {}).jumps_total ?? r.count - 1; setHwyStatus(`Plotted: ${nj.toLocaleString()} ${jumpsWord(nj)} to ${r.to}.`, "ok"); }
+    if (H.routeId !== undefined && rid && H.watch && !rich) { const nj = (r.summary || {}).jumps_total ?? r.count - 1; setHwyStatus(`Plotted: ${nj.toLocaleString()} ${jumpsWord(nj)} to ${r.to}.${r.stand_in ? " " + r.stand_in : ""}`, r.stand_in ? "warnc" : "ok"); }
     H.watch = false;
     hEl("hwyPlot").open = !rid; H.routeId = rid; HM.auto = true;
   }

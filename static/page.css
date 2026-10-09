@@ -684,6 +684,7 @@ tr:hover .hwyaim.icon, .hwyaim.icon:focus-visible, .hwyaim.icon:disabled { opaci
 #hwyForm button.go { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 #hwyForm button.mini { padding: 0 6px; font-size: 11px; color: var(--info); }
 #hwyStatus { color: var(--muted); } #hwyStatus.err { color: var(--bad); } #hwyStatus.ok { color: var(--good); }
+#hwyStatus.warnc { color: var(--warn); }
 #hwyStatus.busy::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 8px;
   border: 2px solid var(--accent); border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
 #hwyMapWrap { position: relative; height: min(60vh, 520px); min-height: 260px; border: 1px solid var(--line); border-radius: 8px;

@@ -229,6 +229,11 @@ upstream project's choices, not rules of the game.
   Nothing is claimed before the others' leases are read. An Outrider from before the rule (no `wanted` in its lease)
   holds whenever another lease names the service, so it is always given way to. Before this, both held for good and
   each followed as if the other sent (Codex F1, 2026-10-09).
+- **A plot's end Spansh does not know yet is stood in for** (2026-10-09). Both ends are looked up in Spansh's search
+  before every plot (a system known here, even where you are, is not necessarily one Spansh knows). One it does not
+  know, but Outrider can place, is replaced by a Spansh system near it: of those within the ship's range, the one
+  nearest the route's other end, else the nearest; for where you are, from the neighbourhood Spansh already sent. The
+  real end goes back as a leg of its own, its fuel left unknown rather than guessed, and the page says what was done.
 - **The journal archive has no lock between instances** (Codex F8, 2026-10-09). Two Outriders sharing a backup folder
   each copy through a .part file of their own and look at the archive again just before replacing it, so a lagging
   mirror's shorter copy does not replace a fuller one. A narrow window remains; a lock would not close it on an NFS
