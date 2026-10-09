@@ -8366,7 +8366,7 @@ async function tabSignOut() {
 // rail, on the long poll): a press shows SENT until it changes, "not confirmed" if it does not within confirm_s, then
 // the real state again. Unbound: disabled, "bind a key". No vibration motor on the author's tablet: the look is the
 // feedback (OutriderApp.haptic where a device has one).
-const RAIL_STATE_WORDS = {on: "On", off: "Off", high: "High"};
+const RAIL_STATE_WORDS = {on: "On", off: "Off", high: "High", na: "N/A"};   // na: not available now (hardpoints in supercruise)
 function tabRailMode(b, r, now = Date.now()) {
   const p = TB.railPending[b.id];
   if (disconnected) return "nolink";
@@ -8375,7 +8375,7 @@ function tabRailMode(b, r, now = Date.now()) {
     if (p.until && now < p.until) return "pending";
     if (p.notUntil && now < p.notUntil) return "notconf";
   }
-  return !b.reported || b.state == null ? "unknown" : b.state === "off" ? "off" : "on";
+  return !b.reported || b.state == null ? "unknown" : b.state === "na" ? "na" : b.state === "off" ? "off" : "on";
 }
 function tabRailTick(now = Date.now()) {   // confirmed, or past its time: SENT ends
   const r = data && data.rail;
@@ -8401,10 +8401,10 @@ function tabDrawRail() {
   document.getElementById("tabRailSub").textContent = sub;
   if (!r || !r.context) { if (list.innerHTML) list.innerHTML = ""; return; }
   const html = (r.buttons || []).map(b => {
-    const mode = tabRailMode(b, r), dis = mode === "bind" || mode === "nolink" || mode === "pending" || !r.can_press;
+    const mode = tabRailMode(b, r), dis = mode === "bind" || mode === "nolink" || mode === "pending" || mode === "na" || !r.can_press;
     const state = {pending: "Sent", notconf: "Not confirmed", unknown: "Not reported", bind: b.reported && b.state ? RAIL_STATE_WORDS[b.state] : "—",
                    nolink: "No link"}[mode] || RAIL_STATE_WORDS[b.state] || "";
-    const sub = mode === "bind" ? (b.now_on ? `On ${b.now_on} only: add a keyboard key` : `Bind a key: ${b.action_label}`) : mode === "pending" ? "waiting for the game" : mode === "nolink" ? "Outrider not reachable" : "";
+    const sub = mode === "na" ? (b.na || "not available now") : mode === "bind" ? (b.now_on ? `On ${b.now_on} only: add a keyboard key` : `Bind a key: ${b.action_label}`) : mode === "pending" ? "waiting for the game" : mode === "nolink" ? "Outrider not reachable" : "";
     return `<button type="button" class="tb-rb ${mode}${b.amber ? " amber" : ""}${b.states === 3 && b.state === "high" ? " high" : ""}" data-rail="${esc(b.id)}"` +
       `${dis ? " disabled" : ""} aria-label="${esc(`${b.label}, ${state}${sub ? ", " + sub : ""}`)}" title="${esc(b.keys || b.why || "")}">` +
       `<span class="tb-rbl"><b>${b.short && b.short !== b.label ? `<span class="rb-full">${esc(b.label)}</span><span class="rb-short">${esc(b.short)}</span>` : esc(b.label)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</span><span class="tb-rbs"><i></i>${esc(state)}</span></button>`;

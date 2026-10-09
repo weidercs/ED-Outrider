@@ -11109,6 +11109,7 @@ class State:
                                        # where an unbound one is now (a HOTAS button), for the tablet's short line
                                        "now_on": (re.search(r"now only (.+?) on ", text or "") or [None, None])[1] if not keys else None,
                                        "state": outrider.rail.state_of(b, st), "reported": b["state"] is not None,
+                                       "na": outrider.rail.NA_WHY.get(b["id"]) if outrider.rail.state_of(b, st) == "na" else None,
                                        "states": 3 if b["state"] == "headlights" else 2, "amber": b["amber"]})
             out["why_not"] = self.rail_why_not()
             out["can_press"] = out["why_not"] is None

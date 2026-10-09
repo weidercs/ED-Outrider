@@ -46,7 +46,8 @@ for this: see [Other devices on your network](install.md#-other-devices-on-your-
   (ship, SRV, Nomad, fighter, on foot), each pressing that control's keyboard binding on the PC once. The defaults are
   landing gear, cargo scoop, night vision, ship lights, flight assist, silent running, hardpoints and analysis mode;
   the SRV, the Nomad and fighters, and on foot have their own. A button shows the game's state (Status.json), SENT
-  until the game confirms a press, and "not confirmed" if it doesn't. A control with no keyboard binding says "bind a
+  until the game confirms a press, and "not confirmed" if it doesn't. Hardpoints show N/A in supercruise, where they
+  can't be deployed (the game reports them deployed there after a jump). A control with no keyboard binding says "bind a
   key" (give it a second, keyboard binding in Elite's controls). Edit chooses, renames and orders each set (stored on
   the PC). The rail presses keys only while the game runs, through auto honk's keyboard (Linux; Windows experimental), and never
   while auto honk or auto-target is pressing; one tap per button, never a sequence.

@@ -96,6 +96,10 @@ class Pure(unittest.TestCase):
         self.assertEqual([st("foot", "bio", selected_weapon="$humanoid_sampletool_name;"), st("foot", "bio", selected_weapon="$humanoid_fists_name;"),
                           st("foot", "bio")], ["on", "off", None])
         self.assertEqual([st("srv", "recall", flags=F(2)), st("foot", "nv", flags=F(28))], [None, None])   # not reported
+        # the game sets the hardpoints flag in supercruise (after a jump, Analysis mode on): not available there
+        self.assertEqual([st("ship", "hard", flags=F(4, 6, 27)), st("ship", "hard", flags=F(4)), st("ship", "hard", flags=F(6)),
+                          st("ship", "hard", flags=0)], ["na", "na", "on", "off"])
+        self.assertEqual(rail.NA_WHY["hard"], "in supercruise")
 
     def test_check_set(self):
         ok, why = rail.check_set("ship", [{"id": "fa", "label": "  F.A.   toggle  "}, {"id": "dock"}])

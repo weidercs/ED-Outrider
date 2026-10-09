@@ -3827,6 +3827,12 @@ const settle = async maxMs => {
       o.push(tw.eval(`TB.railPending = {}; disconnected = "12:00"; tabDrawRail(); const t = document.querySelector('#tabRail [data-rail="gear"]').className;
                       disconnected = null; data.rail = {context: null, why: "docked", buttons: []}; tabDrawRail();
                       [t, document.getElementById("tabRailSub").textContent, document.querySelectorAll("#tabRail .tb-rb").length].join("|")`));
+      // hardpoints in supercruise: not available (greyed, disabled, says why), never "On"
+      o.push(tw.eval(`data.rail = {context: "ship", label: "Ship controls", why: null, can_press: true, why_not: null, confirm_s: 4, max: 8,
+                      buttons: [{id: "hard", label: "Hardpoints", action: "A", action_label: "A", bound: true, keys: "K", state: "na",
+                                 na: "in supercruise", reported: true, states: 2, amber: false}]};
+                      tabDrawRail(); const h = document.querySelector('#tabRail [data-rail="hard"]');
+                      [h.className, h.disabled, (h.querySelector("small") || {}).textContent, h.querySelector(".tb-rbs").textContent].join("|")`));
       tw.fetch = real;
       return o;
     })();
@@ -3993,7 +3999,7 @@ const settle = async maxMs => {
       schemArt: [true, true, 2, true, false, true, true, false],
       ask: [true, "Fuel at 41 percent.", 0, "Nearest unvisited: Smojooe ZC-D c12-2, 10.8 light years.", false, 1, true],
       rail: [3, "tb-rb off", true, true, "Ship controls", "tb-rb pending", '[{"context":"ship","id":"gear"}]', "tb-rb on", "tb-rb notconf",
-             "tb-rb nolink|no rail: docked|0"],
+             "tb-rb nolink|no rail: docked|0", "tb-rb na|true|in supercruise|N/A"],
       serverRail: ["none", true],
       reload: [true, true, false, false, 0, false, 0, true, true, 1], hint: [true, false], searchSheet: "123456", popKeeps: true, link: ["linked", "stale · 48 s ago", "no link · retrying"], pill: [true, "tb-link linked"],
       banner: [true, true, true, 0], sheet: [true, true, true, true, true, true, true], sheetHere: [false, "here"],

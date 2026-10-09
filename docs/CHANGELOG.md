@@ -2,6 +2,11 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Hardpoints N/A in supercruise on the tablet's rail
+- The tablet's Hardpoints button lit "On" after every jump: the game sets Status.json's hardpoints flag in
+  supercruise (read in game, with Analysis mode on), where hardpoints cannot be deployed. In supercruise the button
+  is now N/A (greyed, not pressable, "in supercruise"), and follows the flag again in normal space.
+
 ## 2026-10-09 · Road to Riches and Exomastery from a system Spansh doesn't know yet
 - The survey routes stand in for an end Spansh does not know yet as Plot Route's Highway does: plotted from (or to) a
   Spansh system near it, on the way, with the real system put back as the first (or last) stop, nothing to survey
