@@ -351,6 +351,9 @@ def _carrier_market(st, items, ts):
         want = _n((buys.get(i) or {}).get("Demand"))
         if order["amount"] > want:   # other players sold you the difference (your own sales took theirs off already)
             _move(st, i, order["amount"] - want, "others", ts)
+            # ...on top of the last CarrierStats' total too: else the tracked total outgrows it and the stale-line
+            # rule drops real old lines (the sweep of 2026-10-09)
+            st["after_stats"] += order["amount"] - want
         if want:
             order["amount"] = want
         else:

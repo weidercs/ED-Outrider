@@ -18,7 +18,7 @@ LABEL_MAX = 24
 F_DOCKED, F_GEAR, F_SHIELDS, F_FA_OFF, F_HARDPOINTS, F_LIGHTS, F_SCOOP, F_SILENT = 0, 2, 3, 5, 6, 8, 9, 10
 F_HANDBRAKE, F_TURRET, F_DRIVE_ASSIST, F_IN_MAIN_SHIP, F_IN_FIGHTER, F_IN_SRV = 12, 13, 15, 24, 25, 26
 F_ANALYSIS, F_NIGHT_VISION, F_HIGH_BEAM = 27, 28, 31
-F2_ON_FOOT, F2_IN_STATION, F2_IN_HANGAR, F2_SOCIAL = 0, 1, 2, 3
+F2_ON_FOOT, F2_IN_STATION, F2_IN_HANGAR, F2_SOCIAL = 0, 3, 13, 14   # Status.json Flags2 (1, 2: InTaxi, InMulticrew)
 SAMPLE_TOOL = "$humanoid_sampletool_name;"   # Status.json SelectedWeapon with the Genetic Sampler in hand (read in game)
 
 CONTEXTS = ("ship", "srv", "nomad", "fighter", "foot")

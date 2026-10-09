@@ -246,5 +246,49 @@ class VoiceTools(unittest.TestCase):
         self.assertLess(src.index("reconfigure"), src.index("serve(sys.stdin"))
 
 
+class DataModules(unittest.TestCase):
+    """Batch F: the data modules."""
+
+    def test_a_dssa_carrier_seen_elsewhere_drops_the_old_systems_id(self):
+        import outrider.dock as D
+        spansh = [{"kind": "carrier", "callsign": "ABC-123", "name": "C", "system": "Old", "id64": 11, "ls": 5000.0,
+                   "x": 0, "y": 0, "z": 0, "seen": 100, "services": set(), "access": "All"}]
+        dssa = [{"kind": "carrier", "callsign": "ABC-123", "name": "C", "system": "New", "x": 1, "y": 1, "z": 1, "seen": 200,
+                 "services": set(), "until": None, "away": None, "dssa": True}]
+        [row] = D.merge(spansh, dssa)
+        self.assertEqual((row["system"], row["id64"], row["ls"]), ("New", None, None))
+
+    def test_low_temperature_diamonds_one_name(self):
+        odds = ed_outrider.load_mining_odds()
+        names = {n for g in odds.values() for n, _ in g["materials"]}
+        self.assertNotIn("Low Temp Diamonds", names)
+        self.assertIn("Low Temperature Diamonds", names)
+
+    def test_bio_rules_update_that_does_not_parse_is_not_written(self):
+        import outrider.bio as B
+        failed = []
+        got = B._literals("X = 1\ncatalog = {'a': THIN}\n", failed)
+        self.assertEqual((got, failed), ({"X": 1}, ["catalog"]))
+        src = inspect.getsource(B.update_rules)
+        self.assertIn('if "catalog" in failed:', src)               # that file fails the update: the old copy stays
+
+    def test_a_species_missing_from_the_price_list_gets_the_rules_figure(self):
+        import outrider.bio as B
+        if not B.load_rules():
+            self.skipTest("no bio rules file")
+        self.assertTrue(B.species_value("Radicoida Unicus"))
+
+    def test_calibrate_skips_an_old_sale(self):
+        import outrider.unsold as U
+        src = inspect.getsource(U.calibrate)
+        self.assertIn("not isinstance(d, dict)", src)
+
+    def test_since_still_counts_later_sales_and_deaths(self):
+        import outrider.unsold as U
+        src = inspect.getsource(U)
+        self.assertNotIn("SELL_ORGANIC and not args.since", src)
+        self.assertNotIn("not args.since and not args.ignore_deaths", src)
+
+
 if __name__ == "__main__":
     unittest.main()

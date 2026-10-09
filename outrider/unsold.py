@@ -656,7 +656,7 @@ def analyse(events, args):
                 continue
             organics.append(ev)
 
-        elif name in SELL_ORGANIC and not args.since:
+        elif name in SELL_ORGANIC:
             # Vista Genomics lets you sell some species and keep the rest: each BioData entry takes one run of its
             # species out (a paid bonus takes an x5 run first, no bonus an x1 run), and the runs it does not name
             # stay aboard. An entry with no run on record (sampled before your journals start) takes nothing.
@@ -669,7 +669,7 @@ def analyse(events, args):
                     organics.remove(runs[0])
 
         elif name in RESET_EVENTS:
-            if not args.since and not args.ignore_deaths:
+            if not args.ignore_deaths:
                 organics = []   # exobiology data dies with you, whether or not the ship survives
             earliest_cut = min([c for c in (explo_cut, bio_cut) if c], default=None)
             if earliest_cut and ts > earliest_cut:
@@ -964,6 +964,8 @@ def calibrate(events, args):
     for i in range(1, len(batches)):
         prev_ts, end_ts = batches[i - 1][-1][0], batches[i][-1][0]
         num_bodies, base = {}, 0
+        if any(not isinstance(d, dict) for _ts, ev in batches[i] for d in ev.get("Discovered") or []):
+            continue   # a pre-3.3 SellExplorationData (body names, no per-system counts): nothing to account against
         for _ts, ev in batches[i]:
             for d in ev.get("Discovered", []):
                 num_bodies[d["SystemName"]] = d["NumBodies"]

@@ -52,7 +52,11 @@ class Pure(unittest.TestCase):
                  ({"live": True, "flags": F(26)}, "lander01", ("nomad", None)),
                  ({"live": True, "flags": F(25)}, None, ("fighter", None)),
                  ({"live": True, "flags": 0, "flags2": F(0)}, None, ("foot", None)),
-                 ({"live": True, "flags": 0, "flags2": F(0, 1)}, None, (None, "on foot in a station")),
+                 # Status.json Flags2: OnFootInStation 3, InHangar 13, SocialSpace 14 (a planetary port has 13 or 14
+                 # with OnFootOnPlanet 4, not 3: the sweep of 2026-10-09); 1 is InTaxi
+                 ({"live": True, "flags": 0, "flags2": F(0, 3)}, None, (None, "on foot in a station")),
+                 ({"live": True, "flags": 0, "flags2": F(0, 4, 14)}, None, (None, "on foot in a station")),
+                 ({"live": True, "flags": 0, "flags2": F(0, 4, 13)}, None, (None, "on foot in a station")),
                  ({"live": True, "flags": 0}, None, (None, "not in a ship, SRV, fighter or on foot"))]
         for st, veh, want in cases:
             self.assertEqual(rail.context_of(st, veh), want, (st, veh))

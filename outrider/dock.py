@@ -153,12 +153,15 @@ def merge(spansh, dssa, own=None):
             out.append(d)
             continue
         fresher = d if (d["seen"] or 0) >= (s["seen"] or 0) else s
+        moved = fresher is d and d["system"] and d["system"] != s["system"]
         # "last seen at" only when the DSSA sighting is the fresher report: a newer Spansh one placing it home
         # contradicts it (review 2026-10-08 #21)
         s.update(dssa=True, until=d["until"], name=s["name"] or d["name"], away=d["away"] if fresher is d else None,
                  services=s["services"] | d["services"], access=s["access"] or "All", source="DSSA + Spansh",
                  seen=max(d["seen"] or 0, s["seen"] or 0) or None,
                  **{k: fresher[k] for k in ("system", "x", "y", "z")})
+        if moved:   # Spansh's id64 and arrival distance were the old system's: unknown here (no permit check on it)
+            s.update(id64=None, ls=None)
     if own:
         out = [r for r in out if not (r["kind"] == "carrier" and r["callsign"] == own["callsign"])] + [own]
     return out

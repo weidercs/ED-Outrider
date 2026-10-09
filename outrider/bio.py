@@ -209,8 +209,9 @@ def _get(url):
         return resp.read().decode("utf-8")
 
 
-def _literals(source):
-    """Every top-level `name = <literal>` in a Python source file, without importing it."""
+def _literals(source, failed=None):
+    """Every top-level `name = <literal>` in a Python source file, without importing it. The names assigned something
+    that is not a pure literal go into `failed` (a list), when given."""
     out = {}
     for node in ast.parse(source).body:
         if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
@@ -222,7 +223,8 @@ def _literals(source):
         try:
             out[name] = ast.literal_eval(value)
         except ValueError:
-            pass
+            if failed is not None:
+                failed.append(name)
     return out
 
 
@@ -342,7 +344,10 @@ def update_rules(path=None, log=print, versions=None):
         versions["bioscan"] = ""   # a ruleset added upstream since would be missing
     catalog = {}
     for name in files:
-        catalog.update(_literals(_get(f"{BIOSCAN}bio_data/rulesets/{name}.py")).get("catalog") or {})
+        failed = []
+        catalog.update(_literals(_get(f"{BIOSCAN}bio_data/rulesets/{name}.py"), failed).get("catalog") or {})
+        if "catalog" in failed:   # upstream changed its form: the update fails, the old file stays (and is retried)
+            raise ValueError(f"bio rules: {name}.py's catalog is no longer a plain literal")
         log(f"bio rules: {name}")
     catalog.update(_literals(_get(BIOSCAN + "bio_data/species.py")).get("_mound_amphora") or {})
     regions = _literals(_get(BIOSCAN + "bio_data/regions.py"))
@@ -949,6 +954,9 @@ def species_value(name):
         vname = one(vname)
         if vname == name or vname.endswith(" " + name):
             best = max(best, value)
+    if not best:   # not in the price list (Radicoida Unicus): the rules' figure, as the predictions use
+        best = max((sp.get("value") or 0 for sp in (load_rules() or {}).get("species") or []
+                    if one(sp.get("name") or "") == name), default=0)
     return best or None
 
 

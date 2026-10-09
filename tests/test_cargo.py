@@ -149,6 +149,18 @@ class CarrierFold(unittest.TestCase):
         before = cargo.carrier_fold(CARRIER, events)
         self.assertEqual(before["lines"]["gold"]["count"], 50)   # the order's count: newer news than the transfer
 
+    def test_buy_order_filled_by_others_keeps_old_lines(self):
+        """Others selling you through a buy order raise the carrier's total too: an old untouched line is not taken for
+        stale and dropped (the sweep of 2026-10-09)."""
+        events = [("2025-01-01T10:00:00Z", ev("2025-01-01T10:00:00Z", "CargoTransfer", _at=CARRIER,
+                                              Transfers=[{"Type": "gold", "Count": 500, "Direction": "tocarrier"}])),
+                  ("2026-10-01T10:00:00Z", stats("2026-10-01T10:00:00Z", 500)),
+                  ("2026-10-01T10:05:00Z", ev("2026-10-01T10:05:00Z", "CarrierTradeOrder", CarrierID=CARRIER,
+                                              Commodity="silver", PurchaseOrder=300, Price=1))]
+        st = cargo.carrier_fold(CARRIER, events, [("2026-10-02T10:00:00Z", [item("silver", demand=0, sell=1)])])
+        self.assertIn("gold", st["lines"])
+        self.assertEqual(cargo.carrier_reported(st), 800)
+
     def test_reported_follows_your_moves(self):
         """The carrier's own total moves with your transfers after its CarrierStats (no false gap until the next)."""
         events = [("2026-10-01T10:00:00Z", stats("2026-10-01T10:00:00Z", 100)),

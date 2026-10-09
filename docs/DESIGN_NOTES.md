@@ -238,6 +238,9 @@ upstream project's choices, not rules of the game.
   `BaseValue`, which the calibration still compares against, so it is added only to `estimated_payout` and shown on
   its own line. Pioneer's form (non-bodies counted, the main star's discovery only) fits the sales worse. No belt
   counter: the honk's Count leaves belt clusters out and the game never says how many a system has.
+- **A species missing from the price list is valued at the bio rules' figure** (BioScan's), as the predictions
+  already are: Radicoida Unicus (119,037 cr there) is the one known case. Its Vista Genomics price is unconfirmed: no
+  sale of it in the author's journals (checked 2026-10-09). Add it to `ORGANIC_VALUES` once a SellOrganicData shows it.
 - **No x5 in a populated system** (BioScan's rule; plugin gaps C). The author's Vista sales say so: 0 of 8 runs in a
   populated system paid it, 208 of 208 elsewhere (`project/value-checks/RESULTS-2026-10-08.md`). A system's
   Population comes from its FSDJump / Location / CarrierJump (`system_population`); `own_firsts.bio_x5` holds the

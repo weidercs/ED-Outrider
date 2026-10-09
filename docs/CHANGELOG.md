@@ -2,6 +2,18 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Sweep fixes: cargo, the control rail, Nearest, mining, biology
+- Carrier cargo: what other players sell you through a buy order counts in the carrier's total too; it made real old
+  lines look stale, and they were dropped.
+- The control rail reads the right Status.json bits for on foot in a station: in a planetary port's concourse or
+  hangar it showed the on-foot buttons (flashlight, shields).
+- Nearest: a DSSA carrier the list places in another system than Spansh's no longer carries the old system's id
+  (wrong permit check) and arrival distance.
+- Mining Search: "Low Temp Diamonds" (the survey's name) and "Low Temperature Diamonds" (the journal's) are one mineral.
+- Biology: a rules update that does not parse is not written over the working copy (and is tried again); Radicoida
+  Unicus is valued at the rules' figure (it counted 0). The unsold command-line report: --since now takes later sales
+  and deaths off the biology too, and --calibrate no longer crashes on a pre-3.3 sale.
+
 ## 2026-10-09 · Sweep fixes: the voice's questions and the AI tools
 - "What's left here?" (and the AI tool behind it) no longer fails in a system with a planet worth mapping: exactly
   the systems where the answer matters. The test's fake data had a different shape from the real one.

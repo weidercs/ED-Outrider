@@ -1231,6 +1231,7 @@ def load_mining_odds(path=MINING_ODDS_FILE):
     except (OSError, ValueError):
         return {}
     out = {}
+    game_names = {"Low Temp Diamonds": "Low Temperature Diamonds"}   # the survey's spelling -> the journal's
     for m in d.get("materials") or []:
         for o in m.get("observations") or []:
             g, pct = o.get("ground"), o.get("observed_percentage")
@@ -1238,7 +1239,7 @@ def load_mining_odds(path=MINING_ODDS_FILE):
                 continue
             e = out.setdefault(g, {"surveyed": 0, "materials": []})
             e["surveyed"] = max(e["surveyed"], o.get("locations_surveyed") or 0)
-            e["materials"].append((m["name"], pct))
+            e["materials"].append((game_names.get(m["name"], m["name"]), pct))
     for e in out.values():
         e["materials"].sort(key=lambda x: (-x[1], x[0]))
     return out
