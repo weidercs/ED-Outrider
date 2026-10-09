@@ -79,6 +79,23 @@ def riches_rows(result):
     return rows
 
 
+def splice_survey(rows, reach, start=None, end=None):
+    """A survey route plotted between stand-ins (systems Spansh knows, for ends it does not know yet) with the real ends
+    put back: `start` before the first system and `end` after the last ({system, id64, x, y, z}), nothing to survey in
+    either, each `reach`'s jumps from its stand-in."""
+    rows = [dict(r) for r in rows]
+
+    def jumps(a, b):
+        d = math.dist((a["x"], a["y"], a["z"]), (b["x"], b["y"], b["z"]))
+        return max(1, math.ceil(d / reach)) if reach else 1
+    if end:
+        rows.append(dict(end, jumps=jumps(rows[-1], end), bodies=[]))
+    if start:
+        rows[0] = dict(rows[0], jumps=jumps(start, rows[0]))
+        rows.insert(0, dict(start, jumps=0, bodies=[]))
+    return rows
+
+
 def _species(landmarks):
     """A body's `landmarks` (Exomastery) as [{genus, species, value, count}], best first; lenient (a broken entry
     is skipped)."""

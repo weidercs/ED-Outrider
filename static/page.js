@@ -5212,8 +5212,8 @@ async function loadRich(force = false) {
     R.watch = false;
     const rt = R.data.route;
     setHwyStatus(p.state === "done" && rt ? (rt.kind === "trade" ? `Plotted: a trade route of ${rt.count - 1} hop${rt.count === 2 ? "" : "s"}.`
-      : `Plotted: ${rt.kind === "exo" ? "an Exomastery route" : "a Road to Riches"} of ${rt.count} systems.`)
-      : `Could not plot the route: ${p.error || "?"}.`, p.state === "done" ? "ok" : "err");
+      : `Plotted: ${rt.kind === "exo" ? "an Exomastery route" : "a Road to Riches"} of ${rt.count} systems.`) + (p.note ? " " + p.note : "")
+      : `Could not plot the route: ${p.error || "?"}.`, p.state !== "done" ? "err" : p.note ? "warnc" : "ok");
   }
   renderHwy();
 }

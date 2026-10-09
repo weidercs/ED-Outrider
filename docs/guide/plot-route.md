@@ -25,7 +25,8 @@ until you plot another or **Clear route**.
   the way, and puts yours back as the route's first (or last) jump: "Spansh doesn't know Drojau SL-D a53-5 yet: the
   route starts with a 12.4 ly jump to Smojooe XY-Z a1-2". That jump's fuel isn't figured, and if it is longer than
   your range the message says so. A destination works the same way when Outrider knows where it is (a system you
-  have visited or bookmarked).
+  have visited or bookmarked). Road to Riches and Exomastery do the same; a trade route can't, since it starts from a
+  station's market as Spansh has it.
 - **Too much fuel.** A long neutron jump may be in range only with the fuel the plotter expected. On arrival, and
   as you scoop, Outrider checks the next jump against the fuel aboard and warns ("⚠ too much fuel for the next
   jump: ≤ 36 t, you have 140 t").

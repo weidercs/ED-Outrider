@@ -234,6 +234,8 @@ upstream project's choices, not rules of the game.
   know, but Outrider can place, is replaced by a Spansh system near it: of those within the ship's range, the one
   nearest the route's other end, else the nearest; for where you are, from the neighbourhood Spansh already sent. The
   real end goes back as a leg of its own, its fuel left unknown rather than guessed, and the page says what was done.
+  Road to Riches and Exomastery too (`riches.splice_survey`: the real ends survey nothing); never a trade route, which
+  starts from a station's market as Spansh has it (no stand-in replaces that).
 - **The journal archive has no lock between instances** (Codex F8, 2026-10-09). Two Outriders sharing a backup folder
   each copy through a .part file of their own and look at the archive again just before replacing it, so a lagging
   mirror's shorter copy does not replace a fuller one. A narrow window remains; a lock would not close it on an NFS

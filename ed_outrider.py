@@ -209,7 +209,8 @@ from outrider.highway import (   # the Neutron Highway's route helpers and the d
 )
 from outrider.cargo import trade_counts, trade_done_text, trade_left, trade_rows, trade_text   # the slot's third type: trade routes
 from outrider.riches import (   # Road to Riches / Exomastery: Spansh's survey routes (systems with valuable bodies / life)
-    RichesError, body_value, exo_left, exo_text, exo_todo, norm_name, riches_match, riches_rows, riches_text, todo,
+    RichesError, body_value, exo_left, exo_text, exo_todo, norm_name, riches_match, riches_rows, riches_text, splice_survey,
+    todo,
 )
 try:  # one-line summaries of every journal event, for the Log view
     import outrider.log
@@ -10470,9 +10471,10 @@ class State:
         """The plot's two ends as Spansh knows them, ({name, id64, x, y, z} to plot from, ... to, the real start or None,
         the real end or None, a note in words or None). A system Spansh does not know yet (a fresh discovery), known
         here, is stood in for by a system near it that Spansh knows: the route is plotted from (or to) that one and the
-        real end is put back as a jump of its own."""
+        real end is put back as a jump of its own. No `to` (a survey route's is optional): no destination, (..., None)."""
         try:
-            src, dst = await self.spansh.system_record(frm), await self.spansh.system_record(to)
+            src = await self.spansh.system_record(frm)
+            dst = await self.spansh.system_record(to) if to else None
         except (ClientError, asyncio.TimeoutError, ValueError) as e:
             raise HighwayError(f"Spansh cannot be reached ({type(e).__name__}): try again later") from e
         start = end = None
@@ -10482,11 +10484,11 @@ class State:
             start = self.highway_local(frm)
             if start is None:
                 raise HighwayError(highway_not_yet(frm))
-            src = await self.highway_stand_in(start, dst or self.highway_local(to), reach)
+            src = await self.highway_stand_in(start, dst or (self.highway_local(to) if to else None), reach)
             d = math.dist((start["x"], start["y"], start["z"]), (src["x"], src["y"], src["z"]))
             notes.append(f"Spansh doesn't know {start['system']} yet: the route starts with a {d:.1f} ly jump to "
                          f"{src['name']}, the nearest system it knows on the way{far(d)}.")
-        if dst is None:
+        if dst is None and to:
             end = self.highway_local(to)
             if end is None:
                 raise HighwayError(f"Spansh knows no system called {to}")
@@ -10806,13 +10808,19 @@ class State:
         p = self.riches_plotting
         kind = meta.get("kind")
         try:
+            start = end = note = None
+            if kind != "trade":
+                # an end Spansh does not know yet is stood in for, as the Highway's are (State.highway_ends). Not a
+                # trade route: it starts at a station's market as Spansh has it, which no stand-in replaces
+                src, dst, start, end, note = await self.highway_ends(params["from"], params.get("to"), params["range"])
+                params = dict(params, **{"from": src["name"]}, **({"to": dst["name"]} if dst else {}))
             result = await self.spansh.plot(SPANSH_TRADE if kind == "trade" else SPANSH_EXO if kind == "exo" else SPANSH_RICHES,
                                             params, method=RICHES_METHOD, timeout=TRADE_PLOT_TIMEOUT if kind == "trade" else None)
-            rows = trade_rows(result) if kind == "trade" else riches_rows(result)
+            rows = trade_rows(result) if kind == "trade" else splice_survey(riches_rows(result), params["range"], start, end)
             if kind == "trade" and not rows:
                 raise RichesError("Spansh found no trade route from there with these limits")
-            self.riches_store(rows, meta)
-            p.update(state="done")
+            self.riches_store(rows, dict(meta, stand_in=note) if note else meta)
+            p.update(state="done", note=note)
             self.riches_copy_next(force=True)   # you are usually at its start: the first hop is ready to paste
         except (HighwayError, RichesError) as e:
             p.update(state="failed", error=str(e))

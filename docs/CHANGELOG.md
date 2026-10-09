@@ -2,6 +2,11 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Road to Riches and Exomastery from a system Spansh doesn't know yet
+- The survey routes stand in for an end Spansh does not know yet as Plot Route's Highway does: plotted from (or to) a
+  Spansh system near it, on the way, with the real system put back as the first (or last) stop, nothing to survey
+  there. The plot status says so. Not a trade route: it starts from a station's market as Spansh has it.
+
 ## 2026-10-09 · Plotting from a system Spansh doesn't know yet
 - Plot Route could not plot from a system Spansh has not heard of (a fresh discovery): the exact plotter said so and
   stopped, the neutron one failed. Now both ends are looked up in Spansh's search first, and one it does not know
