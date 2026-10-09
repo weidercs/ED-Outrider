@@ -9468,12 +9468,16 @@ class State:
         return {"ok": True, "accounts": self.edsm_account_list()}, 200
 
     def edsm_account_list(self):
-        """For the page: [{commander, name, set}] (never the key), the commander in the journals first if missing."""
+        """For the page: [{commander, name, set, hint}], the commander in the journals first if missing. Never the key:
+        hint is its first and last four characters and its length, enough to compare with EDSM's settings page (the
+        page may be open to the whole network without a password)."""
         accounts = self.edsm_accounts()
-        out = [{"commander": c, "name": a.get("name") or c, "set": bool(a.get("key"))} for c, a in sorted(accounts.items())]
+        hint = lambda k: f"{k[:4]}…{k[-4:]} ({len(k)} characters)" if k and len(k) >= 16 else None
+        out = [{"commander": c, "name": a.get("name") or c, "set": bool(a.get("key")), "hint": hint(a.get("key"))}
+               for c, a in sorted(accounts.items())]
         cur = (self.journals.commander or {}).get("name")
         if cur and cur not in accounts:
-            out.insert(0, {"commander": cur, "name": cur, "set": False})
+            out.insert(0, {"commander": cur, "name": cur, "set": False, "hint": None})
         return out
 
     def catch_up_uploads(self):

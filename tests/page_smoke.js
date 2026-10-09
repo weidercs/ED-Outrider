@@ -4198,11 +4198,11 @@ const settle = async maxMs => {
     const got = w.eval(`(() => {
       const u = {eddn: {on: true, available: true, test: true, queued: 2, sent_24h: 40, dropped_24h: 1, held: null, blocked: null},
                  edsm: {on: false, available: true, held: "also uploading from erangel", blocked: null, queued: 0, sent_24h: 0, dropped_24h: 0,
-                        accounts: [{commander: "Briadin", name: "Briadin", set: true}]}, simulate: false, readonly: false};
+                        accounts: [{commander: "Briadin", name: "Briadin", set: true, hint: "0123…4567 (40 characters)"}]}, simulate: false, readonly: false};
       const box = document.createElement("div"); box.innerHTML = uploadsHtml(u);
       const t = box.textContent;
       return [/EDDN/.test(t) && /\(test schemas only\)/.test(t), /2 waiting · 40 sent today · 1 refused/.test(t), /held: also uploading from erangel/.test(t),
-              box.querySelectorAll("[data-upload]").length, !!box.querySelector('.edsmacc[data-cmdr="Briadin"] .edsmKey[placeholder^="set"]'),
+              box.querySelectorAll("[data-upload]").length, !!box.querySelector('.edsmacc[data-cmdr="Briadin"] .edsmKey[placeholder^="set"]') && /stored key: 0123…4567 \\(40 characters\\)/.test(t),
               /unavailable: the Legacy/.test(uploadsHtml({eddn: {available: true, blocked: "the Legacy game (3.8): nobody takes its data"}, edsm: {}})),
               // test mode is said whatever the state: here while EDDN is unavailable
               /\(test schemas only\)/.test(uploadsHtml({eddn: {available: true, test: true, blocked: "the game version is not known yet"}, edsm: {}})),

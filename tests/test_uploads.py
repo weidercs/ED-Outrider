@@ -413,13 +413,16 @@ class EdsmAccounts(unittest.TestCase):
 
     def test_accounts(self):
         key = "0123456789abcdef0123456789abcdef01234567"
-        self.assertEqual(self.state.edsm_account_list(), [{"commander": "Briadin", "name": "Briadin", "set": False}])
+        self.assertEqual(self.state.edsm_account_list(), [{"commander": "Briadin", "name": "Briadin", "set": False, "hint": None}])
         self.assertEqual(self.state.set_edsm_account("Briadin", "", "nope")[1], 400)                 # not a key
         out, status = self.state.set_edsm_account("Briadin", "Briadin EDSM", key)
-        self.assertEqual((status, out["accounts"]), (200, [{"commander": "Briadin", "name": "Briadin EDSM", "set": True}]))
+        # the key's ends and length, to compare with edsm.net (the author's 203s, 2026-10-08), never the key itself
+        self.assertEqual((status, out["accounts"]), (200, [{"commander": "Briadin", "name": "Briadin EDSM", "set": True,
+                                                            "hint": "0123…4567 (40 characters)"}]))
         self.assertEqual(self.state.set_edsm_account("Briadin", "Renamed", "")[1], 200)             # an empty key keeps it
         self.assertEqual(self.state.edsm_accounts()["Briadin"], {"name": "Renamed", "key": key})
         self.assertNotIn(key, json.dumps(self.state.uploads_summary()))                          # never served
+        self.assertNotIn(key[4:-4], json.dumps(self.state.uploads_summary()))                    # not even its middle
         self.assertNotIn(key, json.dumps(self.state.payload(), default=str))
         self.state.set_edsm_account("Briadin", remove=True)
         self.assertEqual(self.state.edsm_accounts(), {})

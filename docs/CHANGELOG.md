@@ -2,6 +2,10 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · Uploads: the stored EDSM key's ends (branch EDMC-Functionality)
+- Settings → Uploads shows the stored EDSM key's first and last four characters and its length, to compare with
+  edsm.net when EDSM refuses it. Never the whole key: the page may be open to the network without a password.
+
 ## 2026-10-08 · Uploads in the Data tile (branch EDMC-Functionality)
 - The header's Data tile has a line per upload in use (each its own line), live: sent, waiting and refused in the last day, test and dry
   run marked, held or off said; EDSM's adds how many systems were new to EDSM (the all-time total on hover).

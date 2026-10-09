@@ -7343,7 +7343,9 @@ function uploadsHtml(u) {
   const acc = ((u.edsm || {}).accounts || []).map(a =>
     `<div class="edsmacc" data-cmdr="${esc(a.commander)}"><b>${esc(a.commander)}</b> → EDSM <input type="text" class="edsmName" value="${esc(a.name)}" maxlength="64" size="14" title="your commander name on EDSM">` +
     ` key <input type="password" class="edsmKey" autocomplete="new-password" placeholder="${a.set ? "set (type to change)" : "API key"}" size="22">` +
-    ` <button type="button" class="try edsmSave">Save</button>${a.set ? ` <a href="#" class="edsmRemove">remove</a>` : ""}</div>`).join("");
+    ` <button type="button" class="try edsmSave">Save</button>${a.set ? ` <a href="#" class="edsmRemove">remove</a>` : ""}` +
+    // never the key itself: its ends, to compare with edsm.net → Settings → API key
+    (a.hint ? `<div class="hint">stored key: <code title="its first and last four characters: compare them with your key on edsm.net">${esc(a.hint)}</code></div>` : "") + `</div>`).join("");
   return row("eddn") + row("edsm") +
     `<div class="hint">EDSM accounts, per in-game commander (your key is at <a href="https://www.edsm.net/en/settings/api" target="_blank" rel="noopener">edsm.net → Settings → API key</a>; it stays on this Outrider):</div>` +
     (acc || `<div class="unk">no commander seen yet</div>`) + `<div class="hint" id="uploadsMsg"></div>` +
