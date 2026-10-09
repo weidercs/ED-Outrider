@@ -121,5 +121,91 @@ class SpanshStandIns(unittest.TestCase):
         self.assertEqual(calls, [8])                               # a Spansh entry: the refresh fetches it
 
 
+class ServerAndDevices(unittest.TestCase):
+    """Batch D: backups, the start-up checks, shutdown."""
+
+    def test_a_damaged_zip_is_a_message_not_a_traceback(self):
+        import zipfile
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        path = os.path.join(d, "b.zip")
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("ed_outrider.sqlite", os.urandom(20000) + b"x" * 200000)
+        with zipfile.ZipFile(path) as z:
+            info = z.infolist()[0]
+            start = info.header_offset + 30 + len(info.filename.encode()) + len(info.extra)
+        with open(path, "r+b") as f:                           # damage the deflate stream itself
+            f.seek(start)                                       # 0xff: a reserved block type, zlib.error
+            f.write(b"\xff" * 64)
+        problem = ed_outrider.check_zip(path)
+        self.assertIsInstance(problem, str)
+
+    def test_windows_bind_check_uses_exclusive_use(self):
+        """On Windows the start-up check binds with exclusive use, never SO_REUSEADDR (which let it share the port of
+        a running Outrider, so a second copy started the import against the live database)."""
+        import socket
+        opts = []
+
+        class Sock:
+            def __init__(self, *a):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def setsockopt(self, level, opt, val):
+                opts.append(opt)
+
+            def bind(self, addr):
+                pass
+        with unittest.mock.patch.object(ed_outrider.os, "name", "nt"), unittest.mock.patch.object(socket, "socket", Sock), \
+                unittest.mock.patch.object(socket, "SO_EXCLUSIVEADDRUSE", 0x7FFF, create=True):
+            self.assertIsNone(ed_outrider.listen_problem("127.0.0.1", 8025))
+        self.assertEqual(opts, [0x7FFF])
+
+    def test_restore_on_an_address_not_this_machines(self):
+        """--restore with a [server] host that is no longer this machine's address does not say "stop ED Outrider
+        first" (nothing can be running there): it goes on to check the zip."""
+        with unittest.mock.patch.object(ed_outrider, "listen_problem",
+                                        lambda h, p: f"cannot listen on {h}:{p}: Cannot assign requested address"):
+            with self.assertRaises(RuntimeError) as e:
+                ed_outrider.restore_backup("/nonexistent/backup.zip", "/nonexistent/db.sqlite", "10.9.9.9", 8025)
+        self.assertNotIn("stop ED Outrider first", str(e.exception))
+        with unittest.mock.patch.object(ed_outrider, "listen_problem", lambda h, p: "port 8025 is already in use: ..."):
+            with self.assertRaises(RuntimeError) as e:
+                ed_outrider.restore_backup("/nonexistent/backup.zip", "/nonexistent/db.sqlite", "127.0.0.1", 8025)
+        self.assertIn("stop ED Outrider first", str(e.exception))
+
+    def test_shutdown_lets_go_of_primary_fire(self):
+        """Stopping Outrider: an auto honk holding Primary Fire lets go now, a press waiting for the keyboard is
+        refused, and the honk task is one of the State's tasks (cancelled before the database closes)."""
+        import outrider.honk as honk
+        h = honk.Honker("KEY_RIGHTCTRL+KEY_K", hold=0.01)
+        closed = []
+        h.ui = types.SimpleNamespace(close=lambda: closed.append(1))
+        h.owners = {"honk", "target"}
+        h.lock.acquire()                                      # a hold under way
+        h.shutdown()
+        self.assertTrue(h.stop.is_set())
+        self.assertEqual(h.owners, set())
+        h.lock.release()
+        h2 = honk.Honker("KEY_RIGHTCTRL+KEY_K", hold=0.01)
+        h2.ui = types.SimpleNamespace(close=lambda: closed.append(2))
+        h2.shutdown()                                         # idle: closed at once, and stays refusing
+        self.assertEqual((closed, h2.ui, h2.stop.is_set(), h2.ready), ([2], None, True, False))
+        src = inspect.getsource(ed_outrider.run)
+        self.assertIn("state._honk_cancel.set()", src)
+        self.assertIn("state.honker.shutdown()", src)
+        db, j = journals()
+        self.addCleanup(db.close)
+        st = state(db, j)
+        st.searcher = types.SimpleNamespace(task=None)       # made at start-up in the real server
+        st.honk_run_task = "task"
+        self.assertIn("task", st.background_tasks())
+
+
 if __name__ == "__main__":
     unittest.main()

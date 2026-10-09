@@ -2,6 +2,18 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Sweep fixes: backups, start-up checks, auto honk and auto-target
+- Stopping Outrider lets go of Primary Fire at once: an auto honk under way held it for up to 20 s more, and one
+  waiting for the keyboard could still press after the stop.
+- Auto-target stopped while the galaxy map was closing (danger, the route changed...) no longer presses the map key
+  again, which reopened the map.
+- --restore of a zip whose compressed data is damaged says it failed its check instead of crashing; with a
+  [server] host that is not this machine's any more it no longer says "stop ED Outrider first".
+- The start-up clean-up of interrupted backups removes only this database's files: another instance (--db) sharing
+  the backups folder could have its backup in progress.
+- Windows: a second copy started while one runs stops at once (the port check never saw the running one, so the
+  second copy began importing into the same database).
+
 ## 2026-10-09 · Sweep fixes: the journal reader (PARSER_VERSION 44: the journals are read again at the next start)
 - Journals named the old way (before 2023) are read in time order, before the newer ones; read after them, your own
   first discoveries could keep a later scan. The next start reads every journal again to put this right.

@@ -351,7 +351,7 @@ class Targeter:
             result.update(phase=0, label="wait for the keyboard", why="the virtual keyboard stayed busy (auto honk)")
             return
         here = origin if origin is not None else system()
-        expect, opened, cur = {GUI_COCKPIT}, False, None
+        expect, opened, cur, close_pressed = {GUI_COCKPIT}, False, None, False
         try:
             if h.ui is None or h.stop.is_set():
                 raise Abort(None, "the virtual keyboard is not open")
@@ -373,7 +373,7 @@ class Targeter:
                     if st.get("opens"):
                         expect, opened = {GUI_COCKPIT, GUI_GALAXY_MAP}, True
                     elif st.get("closes"):
-                        expect = {GUI_GALAXY_MAP, GUI_COCKPIT}
+                        expect, close_pressed = {GUI_GALAXY_MAP, GUI_COCKPIT}, True
                     self._tap(st["names"], st.get("secs", TAP_S), st)
                 elif d == "type" and untypeable(name):
                     if not (self.copy and st.get("paste_names")):
@@ -407,8 +407,12 @@ class Targeter:
             result.update(phase=st["phase"] if st else 0, label=st["label"] if st else "start", why=e.why,
                           code=e.code, **e.extra)
             say(f"stopped at step {result['phase']} ({result['label']}): {e.why}")
-            # close the map only if this run opened it and it is still open (pressing it otherwise would open it)
-            if opened and (status() or {}).get("gui_focus") == GUI_GALAXY_MAP and h.ui is not None and not h.stop.is_set():
+            # close the map only if this run opened it and it is still open (pressing it otherwise would open it). Once
+            # its close key went down the map is closing (Status.json lags): pressed again it would open, unless the
+            # close demonstrably failed (the wait for the cockpit timed out with the map still open)
+            close_failed = e.why == "the galaxy map did not close"
+            if opened and (not close_pressed or close_failed) and (status() or {}).get("gui_focus") == GUI_GALAXY_MAP \
+                    and h.ui is not None and not h.stop.is_set():
                 close = next((s for s in steps if s.get("closes")), None)
                 try:
                     if close and close.get("names"):

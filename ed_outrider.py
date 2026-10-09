@@ -5278,10 +5278,11 @@ def backup_zips(folder, db_path):
 def check_zip(path):
     """None when every member of the zip reads back with its CRC, else what is wrong with it."""
     import zipfile
+    import zlib
     try:
         with zipfile.ZipFile(path) as z:
             bad = z.testzip()
-    except (zipfile.BadZipFile, OSError) as e:
+    except (zipfile.BadZipFile, OSError, zlib.error, EOFError) as e:   # zlib/EOF: a member's compressed data damaged
         return str(e) or type(e).__name__
     return f"{bad} is damaged" if bad is not None else None
 
@@ -5425,6 +5426,7 @@ class State:
         self.scoop = ScoopWatch()  # fuel scooping: "tank full" / "scooping stopped at 64 percent"
         self._honk_running = None  # the arrival an auto honk is working on (the briefing waits for it)
         self._honk_cancel = None   # threading.Event: the running auto honk's own token (set by switching it off)
+        self.honk_run_task = None  # the running auto honk (cancelled at shutdown with the State's other tasks)
         self._honk_done = None     # (arrival, time.time()) the last auto honk task ended
         self._fss_focus = None     # Status.json GuiFocus at the last tick (9 = the FSS)
         self._in_tunnel, self._tunnel_for = False, None   # in the hyperspace tunnel at the last tick; the charge it was for
@@ -9673,7 +9675,7 @@ class State:
                 "SELECT 1 FROM own_systems WHERE id64=?", (a["id64"],)).fetchone():
             return
         self._honk_running = a   # the arrival briefing waits for its result
-        asyncio.get_running_loop().create_task(self.honk_task(a))
+        self.honk_run_task = asyncio.get_running_loop().create_task(self.honk_task(a))
 
     async def honk_task(self, a):
         self._honk_running = a
@@ -11077,7 +11079,7 @@ class State:
         """The State's own background tasks, all cancelled at shutdown before the database closes (a survey or trade
         plot can run up to TRADE_PLOT_TIMEOUT: review 2026-10-08 #7, it was left running into the closed session)."""
         return [t for t in (self.refresh_task, self.target_task, self.unsold_task, self.seller_task, self.carrier_task,
-                            self.searcher.task, self.honk_test_task, self.highway_task, self.riches_task,
+                            self.searcher.task, self.honk_test_task, self.honk_run_task, self.highway_task, self.riches_task,
                             self.autotarget_task, self.autotarget_test_task, self.lease_task, self.edsm_discard_task,
                             *self.upload_tasks.values()) if t]
 
@@ -13315,7 +13317,13 @@ def listen_problem(host, port):
                 '"0.0.0.0" every address it has)')
     try:
         with socket.socket(socket.AF_INET6 if ":" in host else socket.AF_INET) as sock:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            # on Windows SO_REUSEADDR lets a bind share a port another socket listens on (the check never found a
+            # running Outrider there); exclusive use is what tells. Elsewhere it only skips TIME_WAIT, as the server does
+            if os.name == "nt":
+                if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                    sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            else:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind((host, port))
         return None
     except socket.gaierror as e:
@@ -13373,7 +13381,8 @@ def restore_backup(zip_path, db_path, host, port, now=None):
     RuntimeError with the reason when it will not restore."""
     import shutil
     import zipfile
-    if not port_free(host, port):
+    problem = listen_problem(host, port)
+    if problem and "already in use" in problem:   # only a port in use means a running Outrider may hold the database
         raise RuntimeError(f"port {port} is in use: stop ED Outrider first (a running one holds the database open)")
     bad = check_zip(zip_path)
     if bad:
@@ -13512,7 +13521,7 @@ async def run(args, st):
         signal.signal(signal.SIGTERM, stop_during_start)
     except ValueError:   # not the main thread (a test): no handler
         pass
-    sweep_backup_leftovers(BACKUP_DIR)
+    sweep_backup_leftovers(BACKUP_DIR, db.execute("PRAGMA database_list").fetchone()[2] or DB_PATH)
     t = time.time()
     journals.import_legacy()
     for d in LIVE_DIRS:
@@ -13674,6 +13683,10 @@ async def run(args, st):
     finally:
         if state.targeter:
             state.targeter.cancel.set()   # a sequence pressing keys lets go and stops now
+        if state._honk_cancel is not None:
+            state._honk_cancel.set()      # an auto honk holding Primary Fire lets go now (it held on for up to 20 s)
+        if state.honker:
+            state.honker.shutdown()       # ...and a press still waiting for the keyboard is refused
         tasks = [t for t in (watcher, rules_task, button_task, firsts_task, update_task,   # the quit backup: finish_backup
                              *state.background_tasks()) if t]
         for t in tasks:
@@ -13697,16 +13710,20 @@ BACKUP_SHUTDOWN_WAIT = 300   # s a backup running at shutdown (the quit backup) 
 # (docker-compose.yml's stop_grace_period must be longer than this, or Docker kills the backup part way: review R14)
 
 
-def sweep_backup_leftovers(folder):
+def sweep_backup_leftovers(folder, db_path=None):
     """At start (no backup runs yet): remove what a backup killed part way left behind (a .zip.part and its .db-*.sqlite
-    copy), which rotation never touches (review R14). Returns the names removed."""
+    copy), which rotation never touches (review R14). Only this database's (db_path): a backups folder shared with an
+    instance run with another --db may hold its backup in progress right now (the sweep of 2026-10-09). Returns the
+    names removed."""
     removed = []
     try:
         names = os.listdir(folder)
     except OSError:
         return removed
+    stem = re.escape(os.path.splitext(os.path.basename(db_path or DB_PATH))[0])
+    mine = re.compile(rf"^(outrider-{stem}-\d{{8}}-\d{{6}}Z\.zip\.part|\.db-outrider-{stem}-\d{{8}}-\d{{6}}Z.*\.sqlite)$")
     for name in names:
-        if name.endswith(".zip.part") or (name.startswith(".db-") and name.endswith(".sqlite")):
+        if mine.match(name):
             try:
                 os.remove(os.path.join(folder, name))
                 removed.append(name)

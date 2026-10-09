@@ -397,13 +397,19 @@ class StartUp(unittest.TestCase):
 
     def test_backup_leftovers_swept(self):
         with tempfile.TemporaryDirectory() as d:
-            for name in ("ed_outrider-2026-10-01.zip", "ed_outrider-2026-10-04.zip.part", ".db-ed_outrider-2026-10-04.sqlite",
-                         "notes.txt"):
+            # the names backup_name and the backup's temporary copy really have; another database's (an instance with
+            # --db other.sqlite sharing the folder) may be a backup in progress: left alone (the sweep of 2026-10-09)
+            for name in ("outrider-ed_outrider-20261001-120000Z.zip", "outrider-ed_outrider-20261004-120000Z.zip.part",
+                         ".db-outrider-ed_outrider-20261004-120000Z.sqlite", "outrider-other-20261004-120000Z.zip.part",
+                         ".db-outrider-other-20261004-120000Z.sqlite", "notes.txt"):
                 open(os.path.join(d, name), "w").close()
             with contextlib.redirect_stdout(io.StringIO()):
-                removed = ed_outrider.sweep_backup_leftovers(d)
-            self.assertEqual(sorted(removed), [".db-ed_outrider-2026-10-04.sqlite", "ed_outrider-2026-10-04.zip.part"])
-            self.assertEqual(sorted(os.listdir(d)), ["ed_outrider-2026-10-01.zip", "notes.txt"])
+                removed = ed_outrider.sweep_backup_leftovers(d, "/somewhere/ed_outrider.sqlite")
+            self.assertEqual(sorted(removed), [".db-outrider-ed_outrider-20261004-120000Z.sqlite",
+                                               "outrider-ed_outrider-20261004-120000Z.zip.part"])
+            self.assertEqual(sorted(os.listdir(d)), [".db-outrider-other-20261004-120000Z.sqlite", "notes.txt",
+                                                     "outrider-ed_outrider-20261001-120000Z.zip",
+                                                     "outrider-other-20261004-120000Z.zip.part"])
         self.assertEqual(ed_outrider.sweep_backup_leftovers("/nonexistent/backups"), [])
 
 

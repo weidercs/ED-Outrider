@@ -1292,6 +1292,23 @@ class HighwayAutoTarget(unittest.TestCase):
         self.assertIn("closed the galaxy map it had opened", r["log"][-1])
         self.assertTrue(self.released())
 
+    def test_abort_while_the_map_closes_does_not_reopen_it(self):
+        """Danger comes while the map is closing (its close key went down, Status.json still says galaxy map): the run
+        stops without pressing the map key again, which would reopen it (the sweep of 2026-10-09)."""
+        self.fake_time()
+        self.game.ignore_close = True                    # the close lags: GuiFocus stays 6 for now
+        real_key = self.game.key
+
+        def key(name):
+            real_key(name)
+            if name == "KEY_T" and [n for n, v in self.game.writes if v].count("KEY_T") == 2:   # the close key
+                self.status["flags"] |= self.T.FLAG_IN_DANGER
+        self.game.key = key
+        r = self.run_target()
+        self.assertEqual((r["ok"], r["phase"], r["why"]), (False, 6, "danger"))
+        self.assertEqual([n for n, v in self.game.writes if v].count("KEY_T"), 2)   # open, close: not a third
+        self.assertTrue(self.released())
+
     def test_map_never_closes_times_out(self):
         self.fake_time()
         self.game.ignore_close = True
