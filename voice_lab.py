@@ -184,7 +184,7 @@ class Voices:
         cfg = SynthesisConfig(speaker_id=speaker, length_scale=1.0 / speed if speed else None)
         buf = io.BytesIO()
         with self.lock, wave.open(buf, "wb") as wf:
-            voice.synthesize_wav(text, wf, syn_config=cfg)
+            voice.synthesize_wav(outrider.tts.body_letters(text, outrider.tts.voice_espeak(voice)), wf, syn_config=cfg)
         return buf.getvalue()
 
 

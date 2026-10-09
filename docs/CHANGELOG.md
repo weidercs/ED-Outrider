@@ -2,6 +2,15 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Body names said letter by letter
+- Piper said "A 1" as "uh one" (espeak reads a lone A as the article) and ran "ABC 3" into one slurred word ("uh beh
+  ceh three"). A body's letters now go to Piper as its raw phonemes, each its own stressed word: "ay one", "ay, bee,
+  see, three". Stars, planets' moons, rings and belts ("B 3 A Ring", "A A Belt Cluster 3"), and a one-star system's
+  "2 a,". System, station and carrier names are left as they are (a catalogue number has more digits or a dash, and
+  star letters run in alphabetical order: "HIP 12345", "LHS 21" stay). English voices only; American ones say Z
+  "zee". Punctuation right after a letter goes inside its phonemes (Piper dropped that comma, and the pause with it).
+  The voice lab says them the same way.
+
 ## 2026-10-09 · Docs: What's new, the version notes for players
 - A new guide page, docs/guide/whats-new.md: what each release since 2026.10.11 brings, in the player's words (new
   features, settings, anything to know before updating), with screenshots of Settings → Uploads and the Data tile.

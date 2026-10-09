@@ -58,6 +58,10 @@ Docker server too).
 Without Piper installed, the browser's own voice speaks. With Piper, the browser's voice is never used: a line Piper
 can't say is not said (what you asked for is still shown as a caption).
 
+**Body names are said letter by letter.** With an English Piper voice, "A 1" is "ay one" (not "uh one") and "ABC 3 a"
+is "ay, bee, see, three, ay", each letter clearly. Only a body's letters are spelled out: system, station and carrier
+names are read as they are written.
+
 **"Click Here To Allow Audio".** A browser plays no sound on a page until you click on it, and Outrider reloads the
 page itself after an update. When the window that speaks is held back like this, a red **🔇 Click Here To Allow
 Audio** pill appears on the menu bar (and 🔇 in the tab's title), the tablet's caption line says the PC's page needs a

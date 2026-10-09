@@ -488,6 +488,53 @@ class Batch6Voice(unittest.TestCase):
             said("y", "en_US-c-low")
             self.assertEqual(loads.count("en_US-c-low.onnx"), 1)             # loaded once
 
+    def test_body_letters_for_piper(self):   # a body's letters as letters ("ay one", not "uh one"); names as they are
+        import outrider.tts
+        b = lambda t, v="en-gb-x-rp": outrider.tts.body_letters(t, v)
+        for text, want in (
+                ("A 1", "[[ˈeɪ]] 1"),
+                ("ABC 3 a, a gas giant", "[[ˈeɪ bˈiː sˈiː]] 3 [[ˈeɪ,]] a gas giant"),   # the comma inside: kept as a pause
+                ("A 2 a has 3 signals", "[[ˈeɪ]] 2 [[ˈeɪ]] has 3 signals"),
+                ("biology on 2 a, up to 19 million", "biology on 2 [[ˈeɪ,]] up to 19 million"),   # a one-star system
+                ("Landed on A 1 c. Three signals.", "Landed on [[ˈeɪ]] 1 [[sˈiː.]] Three signals."),
+                ("B 3 A Ring", "[[bˈiː]] 3 [[ˈeɪ]] Ring"), ("3 A Ring", "3 [[ˈeɪ]] Ring"),
+                ("A A Belt Cluster 3", "[[ˈeɪ ˈeɪ]] Belt Cluster 3"), ("A Belt Cluster 3", "[[ˈeɪ]] Belt Cluster 3"),
+                ("Smojooe A R E, b 25 8 A 1", "Smojooe A R E, b 25 8 [[ˈeɪ]] 1"),   # the system's own letters are its name
+                ("Z 1", "[[zˈɛd]] 1")):
+            self.assertEqual(b(text), want, text)
+        for name in ("Jaques Station", "HIP 12345", "LHS 21", "UC 3", "G 139-21", "a class two gas giant", "found 3 a day",
+                     "A 2.5 percent", "A 1,000 credits", "Out Of The Blue"):
+            self.assertEqual(b(name), name)
+        self.assertEqual(b("Z 1", "en-us"), "[[zˈiː]] 1")
+        self.assertEqual(b("A 1", "de"), "A 1")     # another language's voice: its own reading
+        self.assertEqual(b("A 1", None), "A 1")     # a voice that does not say its language
+
+    def test_say_sends_body_letters_to_piper(self):
+        import tempfile, types
+        import outrider.tts
+        sent = []
+
+        def synth(text, wf, syn_config=None):
+            sent.append(text)
+            wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(8000); wf.writeframes(b"\0\0")
+        with tempfile.TemporaryDirectory() as d:
+            sp = outrider.tts.Speaker("en_GB-main-low", None, voices_dir=d)
+            sp._voice = types.SimpleNamespace(synthesize_wav=synth, config=types.SimpleNamespace(espeak_voice="en-gb-x-rp"))
+            self.assertTrue(sp.say("Leaving A 2 a, a gas giant"))
+        self.assertEqual(sent, ["Leaving [[ˈeɪ]] 2 [[ˈeɪ,]] a gas giant"])
+
+    def test_letter_sounds_are_espeaks_own(self):   # the sounds espeak gives each letter read on its own
+        try:
+            from piper.phonemize_espeak import EspeakPhonemizer
+        except ImportError:
+            self.skipTest("no Piper")
+        import outrider.tts
+        p = EspeakPhonemizer()
+        for voice, sounds in (("en-gb-x-rp", outrider.tts.LETTER_SOUNDS), ("en-us", outrider.tts.LETTER_SOUNDS_US)):
+            for letter, sound in sounds.items():
+                said = "".join("".join(s) for s in p.phonemize(voice, letter + ".")).strip(" .")
+                self.assertEqual(said, sound, (voice, letter))
+
     def test_say_voice_only_if_installed(self):   # P10(b): /api/say?voice= never names a voice to download
         import asyncio
         from aiohttp.test_utils import TestClient, TestServer
