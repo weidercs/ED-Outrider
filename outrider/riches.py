@@ -63,7 +63,7 @@ def riches_rows(result):
                 "subtype": b.get("subtype") if isinstance(b.get("subtype"), str) else None,
                 "ls": _num(b.get("distance_to_arrival")),
                 "scan": _num(b.get("estimated_scan_value"), int), "map": _num(b.get("estimated_mapping_value"), int),
-                "terraformable": 1 if b.get("is_terraformable") or b.get("terraforming_state") == "Candidate for terraforming"
+                "terraformable": 1 if b.get("is_terraformable") or b.get("terraforming_state") in ("Candidate for terraforming", "Terraformable")
                 else 0,
                 # the game's BodyID, as body_id is everywhere else: a body id64's top 9 bits
                 "body_id": bid >> 55 if bid is not None and 0 <= bid < 2 ** 64 else None,

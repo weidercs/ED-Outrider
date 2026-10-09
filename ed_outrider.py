@@ -1692,8 +1692,11 @@ def journal_planet(cls):
 # Spansh's names back to the journal's, for pricing Spansh bodies with the same formula as your scans.
 SPANSH_STARS = {v: k for k, v in JOURNAL_STARS.items()}
 SPANSH_PLANETS = {v: k for k, v in JOURNAL_PLANETS.items()}
-SPANSH_TERRAFORM = {"Candidate for terraforming": "Terraformable", "Terraforming": "Terraforming",
-                    "Terraformed": "Terraformed"}
+# Spansh's terraformingState as the journal's TerraformState. Its dumps now say "Terraformable" (the older spelling was
+# "Candidate for terraforming"): unknown here, it priced every Spansh-only terraformable body as a plain one (a
+# terraformable high metal content world at 59k, 2026-10-09)
+SPANSH_TERRAFORM = {"Candidate for terraforming": "Terraformable", "Terraformable": "Terraformable",
+                    "Terraforming": "Terraforming", "Terraformed": "Terraformed"}
 
 
 def ed_from_dump(b):
@@ -4817,7 +4820,7 @@ def summarise(records, body_count, star=None, ctx=None, genera=None):
 FIND_NAME_MAX = 100   # /api/find: the longest system name taken (real ones are far shorter)
 
 # Bump when the cached record layout changes so cached systems get re-fetched.
-CACHE_VERSION = 16   # 14: pressure_raw; 15: updated, signals_known (stale_bio_body); 16: mining
+CACHE_VERSION = 17   # 14: pressure_raw; 15: updated, signals_known (stale_bio_body); 16: mining; 17: "Terraformable" priced
 
 
 def cached_base(db, id64):

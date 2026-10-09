@@ -2,6 +2,13 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Spansh's "Terraformable" priced as terraformable (CACHE_VERSION 17)
+- Spansh's system dumps now spell a terraformable body's state "Terraformable" (it was "Candidate for terraforming").
+  Outrider did not know the new spelling, so every terraformable body known only from Spansh was priced as a plain
+  one: the arrival briefing named a terraformable high metal content world (rightly) at 59k instead of 674k. Both
+  spellings are known now, and the Road to Riches rows read it too. CACHE_VERSION 17: systems looked up before are
+  fetched again as they come up.
+
 ## 2026-10-09 · Bodies someone else mapped are not pointed out; gear and scoop N/A in supercruise
 - A body your scan says someone else has already mapped (WasMapped) no longer sounds the find alert, is not named in
   the arrival briefing or the FSS debrief, and does not make the leaving alert warn (the author's ask). The first one
