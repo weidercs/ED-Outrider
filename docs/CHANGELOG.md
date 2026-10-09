@@ -2,6 +2,9 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Docs: the agent guide on scripts/install.sh
+- It is local to the author's checkout and git-ignored: never in the published repository.
+
 ## 2026-10-09 · Sweep fixes: the page
 - Speech: a line the browser cannot play until a click is held only when the red pill asks for that click; with
   "Play on this PC" (after its call failed) or speech off it stalled the whole queue, danger lines included.
