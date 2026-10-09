@@ -8553,8 +8553,9 @@ class State:
         codex = [{"name": c["name"], "region": number.get((c["region"] or "").lower())}
                  for c in self.db.execute("SELECT name, region FROM codex")]
         out = outrider.checklist.table(R["species"], region, outrider.bio.ruleset_region_ok, runs, codex, count)
-        return dict(out, regions=[{"id": i, "name": n} for i, n in enumerate(names) if n], here=here, region=region,
-                    region_name=names[region] if region else None), 200
+        done = outrider.checklist.completion(R["species"], outrider.bio.ruleset_region_ok, runs, codex, count)
+        return dict(out, regions=[{"id": i, "name": n, "completion": done.get(i)} for i, n in enumerate(names) if n],
+                    completion_all=done["all"], here=here, region=region, region_name=names[region] if region else None), 200
 
     def checklist_species(self, species_id):
         """GET /api/checklist?species=<id>: one species for the checklist's panel: the regions it can grow in ("yes",

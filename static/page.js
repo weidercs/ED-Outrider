@@ -4243,15 +4243,22 @@ async function loadChecklist(force = false) {
   CL.data = d;
   renderChecklist();
 }
+// a completion figure as the page shows it: "41.20%" (the share of each possible species' colours found, averaged)
+const clPct = v => v == null ? "" : `${v.toFixed(2)}%`;
+// the region choices, each with its completion; their words are set again on every answer (the numbers move as you play)
 function clFillRegions(d) {
-  const here = d.here ? (d.regions || []).find(r => r.id === d.here) : null;
-  const hereText = `Where you are${here ? ` (${here.name})` : ""}`;
-  if (clRegionEl.options.length) { if (clRegionEl.options[0].textContent !== hereText) clRegionEl.options[0].textContent = hereText; return; }
-  const regions = [...(d.regions || [])].sort((a, b) => a.name.localeCompare(b.name));
-  clRegionEl.innerHTML = `<option value="here">${esc(hereText)}</option><option value="all">All regions</option>` +
-    regions.map(r => `<option value="${r.id}">${esc(r.name)}</option>`).join("");
-  const saved = String(store.get("clRegion", "here"));
-  clRegionEl.value = [...clRegionEl.options].some(o => o.value === saved) ? saved : "here";
+  const byId = Object.fromEntries((d.regions || []).map(r => [String(r.id), r]));
+  const here = d.here ? byId[String(d.here)] : null;
+  const text = {here: `Where you are${here ? ` (${here.name}) — ${clPct(here.completion)}` : ""}`,
+                all: `All regions — ${clPct(d.completion_all)}`};
+  for (const r of d.regions || []) text[String(r.id)] = `${r.name}${r.completion == null ? "" : ` — ${clPct(r.completion)}`}`;
+  if (!clRegionEl.options.length) {
+    const regions = [...(d.regions || [])].sort((a, b) => a.name.localeCompare(b.name));
+    clRegionEl.innerHTML = ["here", "all", ...regions.map(r => String(r.id))].map(v => `<option value="${v}"></option>`).join("");
+    const saved = String(store.get("clRegion", "here"));
+    clRegionEl.value = [...clRegionEl.options].some(o => o.value === saved) ? saved : "here";
+  }
+  for (const o of clRegionEl.options) if (text[o.value] != null && o.textContent !== text[o.value]) o.textContent = text[o.value];
 }
 function clRow(id) {
   for (const g of (CL.data && CL.data.genera) || []) for (const r of g.species) if (r.id === id) return r;
@@ -4263,7 +4270,9 @@ function renderChecklist() {
   clFillRegions(d);
   const s = d.summary;
   const where = d.region_name || (d.region == null && clRegionEl.value === "all" ? "All regions" : "Where you are (not in a known region): all regions");
-  st.innerHTML = `${esc(where)}: <b>${s.found}</b> of ${s.possible} possible species found · <span class="cl-sold">${s.sold} sold</span>` +
+  const pctWhat = d.region == null ? "for every species" : "for the species in this region";
+  st.innerHTML = `${esc(where)}: <b>${s.found}</b> of ${s.possible} possible species found · <b>${clPct(s.completion)}</b> complete ${pctWhat}` +
+    ` · <span class="cl-sold">${s.sold} sold</span>` +
     ` · <span class="cl-aboard">${s.aboard} aboard</span>` + (s.lost ? ` · <span class="cl-lost">${s.lost} lost</span>` : "") +
     (s.logged ? ` · <span class="cl-logged">${s.logged} logged</span>` : "") + ` · colours ${s.colours_found} of ${s.colours}` +
     (s.elsewhere ? ` · <span class="clelse">${s.elsewhere} more found in other regions</span>` : "");
@@ -4312,13 +4321,34 @@ function clDrawSide() {
     html = `<h4>${esc(r.name)}</h4><div class="unk">${r.value ? `${credits(r.value)} cr` : ""}` +
       `${CL.data.region != null ? ` · ${esc(where)}` : ""}${r.runs ? ` · ${r.runs} run${r.runs === 1 ? "" : "s"}` : ""}</div>` +
       `<table class="clvars"><thead><tr><th>Colour</th><th>Grows with</th><th></th></tr></thead><tbody>${vs}</tbody></table>` +
-      `<canvas id="clMap" width="880" height="880" aria-label="${esc(`the galaxy: where ${r.name} can grow`)}"></canvas>` +
+      `<div class="clmapbox"><canvas id="clMap" width="880" height="880" aria-label="${esc(`the galaxy: where ${r.name} can grow`)}"></canvas>` +
+      `<div id="clMapTip" class="cltip" hidden></div></div>` +
       `<div class="unk clmaplegend">${sp && sp.error ? esc(sp.error) : !sp ? "loading the map…"
         : `highlighted: where it can grow (paler: only in parts) · dots: your samples (${sp.runs.length})`}</div>`;
   }
   if (side.dataset.html !== html) { side.innerHTML = html; side.dataset.html = html; CL.map = null; }
   clDrawMap();
 }
+// hovering the map names the region under the pointer, with whether the species can grow there and your completion
+document.getElementById("clSide").addEventListener("mousemove", e => {
+  const cv = e.target.closest && e.target.closest("#clMap"), tip = document.getElementById("clMapTip");
+  if (!tip) return;
+  if (!cv || !RG.data || !RG.cells) { tip.hidden = true; return; }
+  const box = cv.getBoundingClientRect(), n = RG.data.size;
+  const c = Math.floor((e.clientX - box.left) / box.width * n), r = n - 1 - Math.floor((e.clientY - box.top) / box.height * n);
+  const v = c >= 0 && r >= 0 && c < n && r < n ? RG.cells[r * n + c] : 0;
+  const reg = v && CL.data && (CL.data.regions || []).find(x => x.id === v);
+  if (!reg) { tip.hidden = true; return; }
+  const allow = CL.species && !CL.species.error && CL.species.regions ? CL.species.regions[String(v)] : undefined;
+  const grows = allow === "yes" ? "can grow here" : allow === "parts" ? "only in parts" : allow === undefined ? "" : "not here";
+  const words = [reg.name, grows, reg.completion != null ? `${clPct(reg.completion)} complete` : ""].filter(Boolean).join(" · ");
+  if (tip.textContent !== words) tip.textContent = words;
+  tip.hidden = false;
+  const host = cv.parentElement.getBoundingClientRect();
+  tip.style.left = `${Math.min(e.clientX - host.left + 12, host.width - tip.offsetWidth)}px`;
+  tip.style.top = `${e.clientY - host.top + 14}px`;
+});
+document.getElementById("clSide").addEventListener("mouseleave", () => { const t = document.getElementById("clMapTip"); if (t) t.hidden = true; });
 // a colour of the theme as [r, g, b] (a canvas reads any CSS colour back as #rrggbb or rgba())
 function cssRgb(c) {
   const x = document.createElement("canvas").getContext && document.createElement("canvas").getContext("2d");
@@ -4350,7 +4380,7 @@ function clDrawMap() {
     for (let c = 0; c < n; c++) {
       const v = RG.cells[r * n + c];
       if (!v) continue;
-      const a = allow[v], k = a ? tints[v] : dim, o = (out + c) * 4;
+      const a = allow[String(v)], k = a ? tints[v] : dim, o = (out + c) * 4;
       px[o] = k[0]; px[o + 1] = k[1]; px[o + 2] = k[2]; px[o + 3] = a === "yes" ? 235 : a === "parts" ? 120 : 45;
     }
   }

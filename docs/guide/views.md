@@ -155,9 +155,14 @@ are (the default), any other, or **All regions**. Each species shows your best t
   one colour.
 
 Click a species for its colours, each with what gives it ("Teal: M stars", or a material on the body for some
-bacteria), and a map of the galaxy with the regions it can grow in lit and your samples as dots. The line above the
-boxes counts it up: "Inner Orion Spur: 45 of 101 possible species found · 43 sold · …". The tablet's Samples page
-has it too.
+bacteria), and a map of the galaxy with the regions it can grow in lit and your samples as dots; hover the map for
+each region's name. The line above the boxes counts it up: "Inner Orion Spur: 45 of 101 possible species found ·
+11.70% complete for the species in this region · 43 sold · …".
+
+**Completion** counts what you have done, not only what is finished: each species that can grow in the region scores
+the share of its colours you have found there (sold, aboard, lost or logged), averaged over those species, so half of
+every species is 50% with none complete. The region list shows each region's figure. The tablet's Samples page has it
+all too.
 
 <p align="center">
   <img src="../images/checklist.png" alt="The exobiology checklist: genus boxes with each species' state and colours found, and a species' colours and galaxy map beside them" width="900">

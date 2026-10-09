@@ -1083,5 +1083,8 @@ body.app #richPane { grid-column: 1; grid-row: 2; }
 .clside h4 { margin: 0 0 4px; }
 .clside canvas { width: 100%; max-width: 440px; aspect-ratio: 1; display: block; margin-top: 8px; border: 1px solid var(--line); border-radius: 6px; }
 .clmaplegend { font-size: 12px; margin-top: 4px; }
+.clmapbox { position: relative; }
+.cltip { position: absolute; pointer-events: none; z-index: 5; padding: 3px 7px; border-radius: 4px; font-size: 12px; white-space: nowrap;
+  background: var(--bg); color: var(--text); border: 1px solid var(--line); box-shadow: 0 2px 6px rgba(0, 0, 0, .35); }
 @media (max-width: 900px) { .clwrap { flex-direction: column; align-items: stretch; } .clgrid { width: 100%; }
   .clside { position: static; flex-basis: auto; width: 100%; } }

@@ -95,6 +95,22 @@ class Checklist(unittest.TestCase):
     def test_the_server_has_it(self):
         self.assertIs(ed_outrider.outrider.checklist, cl)
 
+    def test_completion(self):
+        """Each possible species scores the share of its colours found there (any state), averaged over the region's
+        possible species: half of every species is 50% with none finished (the author's measure, 2026-10-09)."""
+        runs = [{"species_id": "$A1;", "species": "Aleoida Arcus", "variant": "Aleoida Arcus - Teal", "region": 1, "state": "sold"},
+                {"species_id": "$A1;", "species": "Aleoida Arcus", "variant": "Aleoida Arcus - Emerald", "region": 2, "state": "lost"},
+                {"species_id": "$S4;", "species": "Stratum Araneamus", "variant": "Stratum Araneamus", "region": 3, "state": "aboard"}]
+        codex = [{"name": "Bacterium Nebulus - Gold", "region": 1}, {"name": "Roseum Sinuous Tubers", "region": 3}]
+        done = cl.completion(SPECIES, region_ok, runs, codex, 3)
+        # region 1: Arcus 1/2, Nebulus 1/2, tubers 0 -> 33.33; region 3: Nebulus 0, tubers 1, Araneamus 0 (no colour) -> 33.33
+        # all: Arcus 2/2, Nebulus 1/2, tubers 1, Araneamus 0 -> 62.5
+        self.assertEqual((done[1], done[3], done["all"]), (33.33, 33.33, 62.5))
+        # the table's summary says the same for its region
+        self.assertEqual([cl.table(SPECIES, r, region_ok, runs, codex, 3)["summary"]["completion"] for r in (1, 3, None)],
+                         [33.33, 33.33, 62.5])
+        self.assertIsNone(cl.completion([], region_ok, [], [], 3)[1])   # nothing can grow: no figure
+
     def test_short_names(self):
         self.assertEqual(cl.short_name({"name": "Aleoida Arcus", "genus": "Aleoida"}), "Arcus")
         self.assertEqual(cl.short_name({"name": "Luteolum Anemone", "genus": "Anemone"}), "Luteolum")
@@ -146,6 +162,8 @@ class ChecklistServer(unittest.TestCase):
         self.assertEqual((out["region"], row(out, "Stratum Tectonicas")["state"], row(out, "Stratum Tectonicas")["runs"]),
                          (None, "aboard", 2))
         self.assertEqual(len(out["regions"]), 42)
+        self.assertTrue(all(isinstance(r["completion"], float) for r in out["regions"]))
+        self.assertGreater(out["completion_all"], 0)
         for bad in ("99", "0", "x"):
             self.assertEqual(self.state.checklist(bad)[1], 400, bad)
         # the panel: where it can grow, where you sampled it

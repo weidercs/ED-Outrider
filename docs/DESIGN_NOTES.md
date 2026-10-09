@@ -235,7 +235,9 @@ upstream project's choices, not rules of the game.
   never ruled out. "Parts" when every ruleset that allows the region also ties it to a place within it. Colours
   come from ExploData's tables; a species with none is its own one variant. Runs match by the game's species id, so a
   misspelled duplicate in the rules (Stratum Aranaemus) cannot split a species. It lives in Samples (Runs |
-  Checklist), not a tab of its own (the author: no 14th tab).
+  Checklist), not a tab of its own (the author: no 14th tab). **Completion** (the author's measure): the average,
+  over the species possible in the region, of each one's share of its colours found there in any state, so partial
+  progress counts (half of every species is 50%); a species with no colour table scores 0 or 1.
 - **A plot's end Spansh does not know yet is stood in for** (2026-10-09). Both ends are looked up in Spansh's search
   before every plot (a system known here, even where you are, is not necessarily one Spansh knows). One it does not
   know, but Outrider can place, is replaced by a Spansh system near it: of those within the ship's range, the one

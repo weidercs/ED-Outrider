@@ -79,6 +79,56 @@ def merge_species(species_list):
     return list(by_id.values()), names
 
 
+def _records(species_list, names, runs, codex):
+    """(species key, colour or None, region, state, is a run) for each of your runs and codex entries the rules know;
+    a run under way counts as logged."""
+    ids = {s.get("id") for s in species_list}
+    for run in runs:
+        name = run.get("species") or ""
+        key = run.get("species_id") if run.get("species_id") in ids else names.get(name.lower())
+        state = {"in progress": "logged"}.get(run.get("state"), run.get("state"))
+        if state in RANK and key is not None:
+            yield key, colour_of(run.get("variant"), name), run.get("region"), state, True
+    for entry in codex:
+        full = (entry.get("name") or "").strip()
+        name = full.rsplit(" - ", 1)[0] if " - " in full else full
+        key = names.get(name.lower())
+        if key is not None:
+            yield key, colour_of(full, name), entry.get("region"), "logged", False
+
+
+def _share(found, total):
+    """A species' completion: the share of its colours found (a species with no colour table: found or not)."""
+    return found / total if total else 0.0
+
+
+def completion(species_list, region_ok, runs, codex, region_count):
+    """{region number: % complete (0-100, 2 places) or None (nothing can grow there), "all": % over every region}.
+    A region's completion is the average, over the species that can grow there, of the share of each one's colours you
+    have found there (any state: sold, aboard, lost or logged), so half of every species is 50% with none finished."""
+    species_list, names = merge_species(species_list)
+    col_found, sp_found = {}, {}   # region (None: anywhere) -> {(key, colour)} / {key}
+    for key, colour, r, _, _ in _records(species_list, names, runs, codex):
+        for where_ in {r, None}:
+            sp_found.setdefault(where_, set()).add(key)
+            if colour:
+                col_found.setdefault(where_, set()).add((key, colour))
+    cols = {(s.get("id") or s["name"]): [c.lower() for c, _ in colours(s)] for s in species_list}
+
+    def share(key, r):
+        cs = cols[key]
+        if not cs:
+            return 1.0 if key in sp_found.get(r, ()) else 0.0
+        return _share(sum((key, c) in col_found.get(r, ()) for c in cs), len(cs))
+    out, anywhere = {}, set()
+    for r in range(1, region_count + 1):
+        keys = [s.get("id") or s["name"] for s in species_list if possibility(s, r, region_ok)]
+        anywhere.update(keys)
+        out[r] = round(100 * sum(share(k, r) for k in keys) / len(keys), 2) if keys else None
+    out["all"] = round(100 * sum(share(k, None) for k in anywhere) / len(anywhere), 2) if anywhere else None
+    return out
+
+
 def table(species_list, region, region_ok, runs, codex, region_count):
     """The checklist for region number `region` (None: All regions).
 
@@ -107,23 +157,14 @@ def table(species_list, region, region_ok, runs, codex, region_count):
         if colour:
             got_colour[(key, colour)] = best(got_colour.get((key, colour)), state)
 
-    ids = {s.get("id") for s in species_list}
-    for run in runs:
-        name = run.get("species") or ""
-        key = run.get("species_id") if run.get("species_id") in ids else names.get(name.lower())
-        state = {"in progress": "logged"}.get(run.get("state"), run.get("state"))
-        if state not in RANK or key is None:
-            continue
-        note(key, colour_of(run.get("variant"), name), run.get("region"), state)
-        if here(run.get("region")):
+    for key, colour, r, state, is_run in _records(species_list, names, runs, codex):
+        note(key, colour, r, state)
+        if is_run and here(r):
             n_runs[key] = n_runs.get(key, 0) + 1
-    for entry in codex:
-        full = (entry.get("name") or "").strip()
-        name = full.rsplit(" - ", 1)[0] if " - " in full else full
-        note(names.get(name.lower()), colour_of(full, name), entry.get("region"), "logged")
 
     genera, totals = {}, {"possible": 0, "found": 0, "sold": 0, "aboard": 0, "lost": 0, "logged": 0,
                           "colours": 0, "colours_found": 0, "elsewhere": 0}
+    done = 0.0   # the sum of each possible species' share of its colours found (completion's numerator)
     for sp in species_list:
         key = sp.get("id") or sp["name"]
         poss = None
@@ -146,6 +187,8 @@ def table(species_list, region, region_ok, runs, codex, region_count):
                "runs": n_runs.get(key, 0), "variants": {"total": len(vlist), "found": found, "list": vlist}}
         genera.setdefault(sp.get("genus") or "?", []).append(row)
         totals["elsewhere"] += 1 if row["elsewhere"] and poss else 0
+        if poss:
+            done += _share(found, len(vlist))
         if poss or state:
             totals["possible"] += 1 if poss else 0
             totals["colours"] += len(vlist) if poss else 0
@@ -153,6 +196,7 @@ def table(species_list, region, region_ok, runs, codex, region_count):
             if state:
                 totals["found"] += 1
                 totals[state] += 1
+    totals["completion"] = round(100 * done / totals["possible"], 2) if totals["possible"] else None
     out = [{"genus": g, "species": sorted(rows, key=lambda x: x["short"])} for g, rows in sorted(genera.items())]
     return {"genera": out, "summary": totals}
 
