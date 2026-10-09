@@ -2,6 +2,11 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-08 · Uploads: a held upload still queues (branch EDMC-Functionality)
+- While EDSM is held by a refused key, what you play is still queued, and goes once the key is fixed. Before, nothing
+  was queued while held, and the held stretch was skipped when the hold cleared (the author lost twelve events this
+  way). Another uploader (EDMC, a second Outrider) still stops the queueing: that one sends them.
+
 ## 2026-10-08 · Uploads: the stored EDSM key's ends (branch EDMC-Functionality)
 - Settings → Uploads shows the stored EDSM key's first and last four characters and its length, to compare with
   edsm.net when EDSM refuses it. Never the whole key: the page may be open to the network without a password.

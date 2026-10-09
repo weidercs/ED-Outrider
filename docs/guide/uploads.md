@@ -15,7 +15,8 @@ are not among the Server settings.
   events it does not want, and those are not sent. It needs your EDSM commander name and API key
   ([edsm.net → Settings → API key](https://www.edsm.net/en/settings/api)), per in-game commander, set in Settings →
   Uploads. The key stays on this Outrider: the page never shows it again. A commander with no key sends nothing
-  (Settings says so); a key EDSM refuses stops EDSM until you change it or switch EDSM off and on. Settings shows the
+  (Settings says so); a key EDSM refuses stops sending to EDSM until you change it or switch EDSM off and on; what you play meanwhile
+  waits and goes then. Settings shows the
   stored key's first and last four characters, to compare with your key on edsm.net. When your jump is the first EDSM has heard
   of a system, the system's detail shows **New to EDSM** (this is EDSM's record, not the game's first discovery).
 

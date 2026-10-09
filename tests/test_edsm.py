@@ -333,5 +333,44 @@ class Sender(unittest.TestCase):
         self.assertIs(self.state.edsm_discard, S.DISCARD)
 
 
+class HeldStillQueues(unittest.TestCase):
+    """A refused key holds EDSM's sending, not its queueing: what is played meanwhile goes once the key is fixed (the
+    author's 203s, 2026-10-08: twelve events played while held were skipped when the hold cleared)."""
+
+    def test_held_then_fixed(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        p = unittest.mock.patch.object(ed_outrider, "LIVE_DIRS", [d])
+        p.start()
+        self.addCleanup(p.stop)
+        db = ed_outrider.open_db(":memory:")
+        self.addCleanup(db.close)
+        j = ed_outrider.Journals(db)
+        st = ed_outrider.State(db, j, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        st.config_path = os.path.join(d, "cfg.toml")
+        path = os.path.join(d, "Journal.2026-10-08T100000.01.log")
+        now = lambda ago: iso_ts(time.time() - ago)
+
+        def write(*events):
+            with open(path, "a", encoding="utf-8") as f:
+                for e in events:
+                    f.write(json.dumps(e) + "\n")
+        write({"timestamp": now(600), "event": "Fileheader", "gameversion": "4.4.1.1", "build": "r1 "},
+              {"timestamp": now(599), "event": "LoadGame", "Commander": "Briadin"})
+        j.scan_dir(d, commit_each=True, upload="catchup")
+        st.set_upload("edsm", True)
+        st.set_edsm_account("Briadin", "Briadin", KEY)
+        st.upload_report("edsm", {"error": None, "at": 1, "results": [(1, "held", "203 EDSM refused the commander name or API key", None)]})
+        self.assertFalse(st.upload_on("edsm"))                           # not sending...
+        write(dict(JUMP, timestamp=now(300)), {"timestamp": now(200), "event": "Scan", "BodyName": "A 1"})
+        j.scan_dir(d, upload="live")
+        db.commit()
+        self.assertEqual([r["schema"] for r in db.execute("SELECT schema FROM upload_queue WHERE service='edsm'")],
+                         ["FSDJump", "Scan"])                             # ...but still queueing
+        st.set_edsm_account("Briadin", "Briadin", KEY)                    # a new key: sending again
+        self.assertTrue(st.upload_on("edsm"))
+        self.assertEqual(len(U.due(db, "edsm", time.time() + S.HOLD_S)), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

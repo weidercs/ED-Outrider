@@ -5468,7 +5468,7 @@ class State:
         self.upload_senders, self.upload_tasks, self.upload_session = {}, {}, None
         self.upload_status = {}   # service -> {error, at, held}: the last round's outcome for the status view
         self.uploads_hub = outrider.uploads.UploadHub(db, {"eddn": self.eddn_build, "edsm": self.edsm_build},
-                                                      enabled=self.upload_on, holds={"edsm": outrider.edsm.hold},
+                                                      enabled=self.upload_queueing, holds={"edsm": outrider.edsm.hold},
                                                       save=lambda marks: meta_set(self.db, "upload_marks", marks))
         marks = meta_get(db, "upload_marks")   # how far each service has queued (live-only: a re-read keeps it)
         self.uploads_hub.marks = {k: v for k, v in marks.items() if isinstance(v, list)} if isinstance(marks, dict) else {}
@@ -9213,6 +9213,13 @@ class State:
         if e.get("running") and e.get(service):
             return f"EDMC on this PC sends to {service.upper()} too: switch its {service.upper()} off (or this one)"
         return None
+
+    def upload_queueing(self, service):
+        """Whether `service` queues what the journal says (the hub): wanted, never in --simulate, not while another
+        uploader has it (that one sends it). A hold (a key EDSM refused) stops only the sending: what is played meanwhile
+        waits in the outbox and goes once the key is fixed (the author's EDSM 203s, 2026-10-08: the held stretch was
+        skipped)."""
+        return self.upload_wanted(service) and self.upload_conflict(service) is None
 
     def upload_on(self, service):
         """Whether `service` uploads now: wanted (the page's switch, else the config), never in --simulate, not while
