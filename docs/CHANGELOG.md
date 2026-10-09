@@ -2,6 +2,12 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Docs: uploads brought up to date
+- README: uploads are opt-in now (it said "never"). The Uploads guide rewritten for everything since: station data
+  once per visit, hour-old EDDN messages dropped, a crash's note ignored after an hour, Docker's note name, the
+  message line. Install points the Docker section at it; the agent guide's and design notes' uploads entries match
+  the code. (The commit before this one ignores a local tool's folder, eddn_listener/, in .gitignore.)
+
 ## 2026-10-09 · Uploads: review of the bug-check fixes (branch EDMC-Functionality)
 - The upload note's identity: a database from before keeps its id; a new id (a moved or restored database on this
   computer) removes its own old note, which was otherwise read as another Outrider's and could start an upload from its

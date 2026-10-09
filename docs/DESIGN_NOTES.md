@@ -215,8 +215,24 @@ upstream project's choices, not rules of the game.
   within 2 h before its first jump) to the next session's; a login no jump followed, 2 h or more after anything
   else, opens a session with no jumps (review F31), whose "end" is its last login (nothing later is known).
 - **Uploads catch up from a mark, at most a week back for EDSM and an hour for EDDN** (the author's choices over
-  "live lines only"; EDDN's listeners take what arrives as current, EDSM is the player's own log: `eddn.CATCHUP_MAX_S`,
-  the hub's `max_ages`). Each service's mark is the last journal line it handled (file name and byte offset), stored in meta `upload_marks` (live-only: a re-read sends nothing again) and in the instance's lease file, which stays at shutdown as a handover note: switching on starts at another instance's mark, else at the reader's position (never your history). EDDN's guidance prefers delayed good data. Files the game overwrites (Market.json, NavRoute.json...) are caught up only while the file is still the one the event wrote (its time and MarketID): the last one after a short gap, older ones never; duplicates are possible only if another uploader covered the gap.
+  "live lines only"; EDDN's readers take what arrives as current, so an EDDN message over an hour old is dropped even
+  at send, while EDSM is the player's own log: `eddn.CATCHUP_MAX_S`, the hub's `max_ages`). Each service's mark is the
+  last journal line it handled (file name and byte offset, compared by `uploads.pos_key`), stored in meta
+  `upload_marks` (live-only: a re-read sends nothing again) and in the instance's lease file, which stays at shutdown as
+  a handover note: switching on starts at another instance's mark, else at the reader's position (never your history).
+  Files the game overwrites (Market.json, NavRoute.json...) are caught up only while the file is still the one the
+  event wrote (its time and MarketID): the last one after a short gap, older ones never. A restored database forgets
+  its marks and unsent rows. Duplicates are possible only if another uploader covered a gap while Outrider was down.
+- **While another uploader has a service, Outrider follows without sending** (the hub's `follow`): its mark moves with
+  the journal and nothing of that stretch is caught up later; EDDN's waits are dropped (`eddn.quiet`). A *held*
+  service (a key EDSM refused) is different: it keeps queueing and sends once the key is fixed, since nobody else sent
+  that stretch (the author lost twelve events before this).
+- **The upload switches live only in Settings → Uploads**, written to `[eddn]`/`[edsm] enabled` (hidden from the Server
+  settings). Developer switches are environment variables, never settings: `OUTRIDER_EDDN_TEST`, `OUTRIDER_EDSM_DRYRUN`.
+- **EDDN station data goes once per visit**, not once per change: the sites date a station's data by what arrives, so
+  each docking sends it again; only the same screen reopened in one docking is skipped (`VISIT_ENDS`).
+- **No "New to EDSM" mark**: EDSM's `systemCreated` usually names EDDN's copy of a jump (sent at once, read by EDSM)
+  rather than the player's EDSM batch, so it would almost never show (tried and removed, 2026-10-09).
 - **The full-scan bonus is in the payout estimate** (plugin gaps D): 1,000 cr per body of a system you found complete
   (FSSAllBodiesFound's Count) while every star and planet was undiscovered. The sale pays it as `Bonus`, apart from
   `BaseValue`, which the calibration still compares against, so it is added only to `estimated_payout` and shown on

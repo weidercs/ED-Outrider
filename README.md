@@ -10,7 +10,7 @@
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776ab?logo=python&logoColor=white">
   <img alt="Runs locally" src="https://img.shields.io/badge/runs-on%20your%20PC-2ea44f">
   <img alt="No account" src="https://img.shields.io/badge/account-none%20needed-6aa8ff">
-  <img alt="Uploads" src="https://img.shields.io/badge/uploads-never-ff8c1a">
+  <img alt="Uploads" src="https://img.shields.io/badge/uploads-opt--in-ff8c1a">
 </p>
 
 ---
@@ -22,7 +22,8 @@ about to jump away from something you'll regret leaving.**
 
 It runs on your own machine. It asks [Spansh](https://spansh.co.uk) (and
 [EDSM](https://www.edsm.net) as a backup) what the community already knows about the systems
-around you, then layers your own scans on top — nothing is ever uploaded. A tablet can sit beside you as a cockpit
+around you, then layers your own scans on top. Nothing is uploaded unless you switch on sharing with
+[EDDN and EDSM](docs/guide/uploads.md), as EDMC does. A tablet can sit beside you as a cockpit
 display ([ED Outrider for Android](https://github.com/weslocke/ED-Outrider-Android), or any browser), and Outrider can
 also run 24/7 on a home server in Docker.
 
