@@ -8513,6 +8513,49 @@ class State:
                         names[r["id"]] = r["name"]
         return names
 
+    def checklist(self, region="here"):
+        """GET /api/checklist?region=here|all|<1-42>: the exobiology checklist (outrider.checklist.table) for a galactic
+        region, where you are by default, with the regions to choose from. Every run you have made (its fate as Samples
+        has it: sold, aboard, lost, in progress) and every codex entry, placed by region. (answer, HTTP status)."""
+        R = outrider.bio.load_rules() if outrider.bio else None
+        if not R or not R.get("region_names"):
+            return {"error": "the exobiology rules are not loaded"}, 503
+        names = R["region_names"]
+        count = len(names) - 1
+        pos = self.journals.pos or {}
+        here = outrider.bio.region_number(pos.get("x"), pos.get("y"), pos.get("z")) if pos.get("x") is not None else None
+        if region in (None, "", "here"):
+            region = here
+        elif region == "all":
+            region = None
+        else:
+            try:
+                region = int(region)
+            except (TypeError, ValueError):
+                return {"error": "region is here, all or a region number"}, 400
+            if not 1 <= region <= count:
+                return {"error": f"region is 1 to {count}"}, 400
+        placed = {}
+
+        def region_of(system):
+            if system not in placed:
+                loc = self.locate(system)
+                placed[system] = outrider.bio.region_number(loc[1], loc[2], loc[3]) if loc and loc[1] is not None else None
+            return placed[system]
+        fates = organic_fates(self.db)
+        runs = []
+        for r in self.db.execute("SELECT system, body_id, species, species_name, variant_name, done_ts FROM own_organic"):
+            fate = fates.get((r["system"], r["body_id"], r["species"])) if r["done_ts"] else None
+            state = fate[0] if fate else (organic_state(self.db, r["done_ts"]) if r["done_ts"] else None) or "in progress"
+            runs.append({"species_id": r["species"], "species": r["species_name"], "variant": r["variant_name"],
+                         "region": region_of(r["system"]), "state": state})
+        number = {n.lower(): i for i, n in enumerate(names) if n}   # the codex says its region by name
+        codex = [{"name": c["name"], "region": number.get((c["region"] or "").lower())}
+                 for c in self.db.execute("SELECT name, region FROM codex")]
+        out = outrider.checklist.table(R["species"], region, outrider.bio.ruleset_region_ok, runs, codex, count)
+        return dict(out, regions=[{"id": i, "name": n} for i, n in enumerate(names) if n], here=here, region=region,
+                    region_name=names[region] if region else None), 200
+
     def organics(self, days):
         """Every exobiology sample run (newest first) with what it is worth and whether it was banked,
         plus your codex entries over the same period."""
@@ -12722,6 +12765,10 @@ def make_app(state, hosts=None):
             days = 30
         return web.json_response(state.history(days))
 
+    async def checklist_view(request):
+        out, status = state.checklist(request.query.get("region", "here"))
+        return web.json_response(out, status=status)
+
     async def organics_view(request):
         try:
             days = max(1, min(int(request.query.get("days", 30)), 3650))
@@ -13320,6 +13367,7 @@ def make_app(state, hosts=None):
     app.router.add_get("/api/system/{id64}", system_view)
     app.router.add_get("/api/history", history_view)
     app.router.add_get("/api/organics", organics_view)
+    app.router.add_get("/api/checklist", checklist_view)
     app.router.add_get("/api/log", log_view)
     app.router.add_get("/api/materials", materials_view)
     app.router.add_post("/api/cargo/recount", cargo_recount_view)

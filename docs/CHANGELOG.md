@@ -2,6 +2,11 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Exobiology checklist, part B: GET /api/checklist
+- `State.checklist(region)` and GET `/api/checklist?region=here|all|<1-42>`: the checklist for where you are (or a
+  region, or all), from every run (its fate as Samples has it) and every codex entry, placed by region; with the
+  regions to choose from. A few milliseconds on a real database. Not on the page yet.
+
 ## 2026-10-09 · Exobiology checklist, part A: the table (outrider/checklist.py)
 - The checklist's pure core: for a region (or all), every species the rules know, by genus: whether it can grow
   there ("parts" when only near Guardian sites, in tuber zones, by nebulae or in one system; a species with no rules

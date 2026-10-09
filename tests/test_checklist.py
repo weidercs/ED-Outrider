@@ -99,5 +99,66 @@ class Checklist(unittest.TestCase):
         self.assertEqual(cl.short_name({"name": "Bark Mound", "genus": "Bark Mound"}), "Bark Mound")
 
 
+
+class ChecklistServer(unittest.TestCase):
+    """State.checklist and GET /api/checklist: your runs (their fates as Samples has them) and codex entries, placed by
+    region; where you are by default."""
+
+    def setUp(self):
+        import types
+        self.db = ed_outrider.open_db(":memory:")
+        self.addCleanup(self.db.close)
+        self.j = ed_outrider.Journals(self.db)
+        self.state = ed_outrider.State(self.db, self.j, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        if not outrider.bio.load_rules():
+            self.skipTest("no bio rules")
+
+    def jump(self, ts, id64, name, pos):
+        self.j.handle({"event": "FSDJump", "timestamp": ts, "StarSystem": name, "SystemAddress": id64, "StarPos": pos})
+
+    def organic(self, system, variant, done):
+        self.db.execute("INSERT INTO own_organic (system, body_id, species, genus_name, species_name, variant_name, samples,"
+                        " done_ts, ts) VALUES (?, 1, '$Codex_Ent_Stratum_07_Name;', 'Stratum', 'Stratum Tectonicas', ?, 3, ?, ?)",
+                        (system, variant, done, done))
+
+    def test_checklist(self):
+        self.jump("2026-01-01T00:00:00Z", 1, "Near Sol", [0, 0, 0])                         # Inner Orion Spur (18)
+        self.organic(1, "Stratum Tectonicas - Lime", "2026-01-01T00:10:00Z")
+        self.j.handle({"event": "Died", "timestamp": "2026-01-01T00:20:00Z"})                # lost with the ship
+        self.jump("2026-01-02T00:00:00Z", 2, "Near Colonia", [-9530.5, -910.28, 19808.1])    # Inner Scutum-Centaurus (9)
+        self.organic(2, "Stratum Tectonicas - Emerald", "2026-01-02T00:10:00Z")                  # aboard
+        self.db.execute("INSERT INTO codex (ts, entry_id, name, region) VALUES ('2026-01-01T00:05:00Z', 2310101,"
+                        " 'Bacterium Aurasus - Teal', 'Inner Orion Spur')")
+        self.jump("2026-01-03T00:00:00Z", 1, "Near Sol", [0, 0, 0])
+        self.db.commit()
+        row = lambda out, name: next(r for g in out["genera"] for r in g["species"] if r["name"] == name)   # noqa: E731
+        out, status = self.state.checklist()
+        self.assertEqual((status, out["region"], out["here"], out["region_name"]), (200, 18, 18, "Inner Orion Spur"))
+        t = row(out, "Stratum Tectonicas")
+        self.assertEqual((t["state"], t["runs"]), ("lost", 1))
+        self.assertEqual({v["colour"]: v["state"] for v in t["variants"]["list"]}["Lime"], "lost")
+        self.assertEqual(row(out, "Bacterium Aurasus")["state"], "logged")
+        out, _ = self.state.checklist("9")
+        self.assertEqual((row(out, "Stratum Tectonicas")["state"], row(out, "Bacterium Aurasus")["state"]), ("aboard", None))
+        out, _ = self.state.checklist("all")
+        self.assertEqual((out["region"], row(out, "Stratum Tectonicas")["state"], row(out, "Stratum Tectonicas")["runs"]),
+                         (None, "aboard", 2))
+        self.assertEqual(len(out["regions"]), 42)
+        for bad in ("99", "0", "x"):
+            self.assertEqual(self.state.checklist(bad)[1], 400, bad)
+
+    def test_endpoint(self):
+        import asyncio
+        from aiohttp.test_utils import TestClient, TestServer
+
+        async def go():
+            async with TestClient(TestServer(ed_outrider.make_app(self.state))) as c:
+                r = await c.get("/api/checklist?region=all")
+                return r.status, (await r.json())["summary"]["possible"]
+        status, possible = asyncio.run(go())
+        self.assertEqual(status, 200)
+        self.assertGreater(possible, 100)
+
+
 if __name__ == "__main__":
     unittest.main()
