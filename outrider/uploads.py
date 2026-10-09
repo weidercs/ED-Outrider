@@ -278,12 +278,14 @@ class UploadHub:
     where the start-up scan got to). A service with no mark yet starts at the line it first sees (switching it on
     sets one: State.set_upload)."""
 
-    def __init__(self, db, builders=None, enabled=None, clock=time.time, max_age=MAX_AGE_S, save=None, holds=None):
+    def __init__(self, db, builders=None, enabled=None, clock=time.time, max_age=MAX_AGE_S, save=None, holds=None,
+                 max_ages=None):
         self.db = db
         self.builders = dict(builders or {})
         self.holds = dict(holds or {})
         self.enabled = enabled or (lambda service: False)
         self.clock, self.max_age = clock, max_age
+        self.max_ages = dict(max_ages or {})   # {service: seconds}: a service's own limit, under max_age (EDDN's hour)
         self.save = save                 # save(marks): stores the marks (State: meta upload_marks)
         self.session = Session()
         self.primed = set()              # files whose top this session has read
@@ -330,12 +332,13 @@ class UploadHub:
         """Build and queue `ev` for each of `services` (whose mark it is after), moving their marks."""
         n = 0
         pos = position(b, offset)
-        recent = live_line(ev.get("timestamp"), self.clock(), self.max_age)
+        now = self.clock()
         for service in services:
             if not self.after_mark(service, pos):
                 continue
             self.set_mark(service, pos, ev.get("timestamp"))
-            if not recent or session.blocked():
+            if not live_line(ev.get("timestamp"), now, min(self.max_age, self.max_ages.get(service, self.max_age))) \
+                    or session.blocked():
                 continue
             try:
                 messages = self.builders[service](ev, session) or []

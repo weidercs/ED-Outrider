@@ -22,13 +22,14 @@ are not among the Server settings.
 ## Catching up, and what is never sent
 
 Each upload remembers how far through your journals it has got. If Outrider was not running while you played (or
-the server was down), the next start sends what you played meanwhile, up to a week back; anything older is skipped.
+the server was down), the next start sends what you played meanwhile: to EDSM up to a week back, to EDDN only the
+last hour (EDDN's readers take what arrives as current); anything older is skipped.
 A journal re-read or a restore sends nothing twice, and switching an upload on starts from that moment: your history
 is never uploaded. What cannot be caught up: markets, outfitting, shipyards and plotted routes come from files the
 game rewrites each time, so for those Outrider sends only what it saw while running; a late codex entry has no body
 name (that comes from the live Status.json).
 
-- Anything older than a week, or from a legacy folder (journals imported once).
+- Anything older than a week (an hour for EDDN), or from a legacy folder (journals imported once).
 - Anything from the game's beta, or from the Legacy game (3.8): Settings says so ("unavailable: the Legacy game").
 - Anything while you are crew in another commander's ship.
 - Anything under `--simulate`.

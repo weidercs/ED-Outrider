@@ -201,6 +201,8 @@ def settlement_message(ev, session):
 STATION_FILES = {"Market": ("commodity", "Market.json"), "Outfitting": ("outfitting", "Outfitting.json"),
                  "Shipyard": ("shipyard", "Shipyard.json"), "FCMaterials": ("fcmaterials_journal", "FCMaterials.json")}
 STATION_SCHEMAS = ("commodity", "outfitting", "shipyard", "fcmaterials_journal")
+CATCHUP_MAX_S = 3600       # a line older than this never goes to EDDN, even caught up after a gap: its listeners take
+#                            what arrives as current (the author's choice, 2026-10-09; EDSM keeps uploads.MAX_AGE_S)
 STATION_MAX_AGE_S = 3600   # station data still unsent after this long is stale: dropped, not sent late
 COMMODITY_NAME = re.compile(r"^\$(.+)_name;$", re.I)
 MODULE_PREFIX = re.compile(r"^Hpt_|^Int_|Armour_", re.I)

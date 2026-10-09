@@ -492,6 +492,22 @@ class MarksAndCatchUp(unittest.TestCase):
         self.assertEqual(st2.catch_up_uploads(), 0)              # once
         self.assertEqual(len(self.queued()), 3)
 
+    def test_eddn_catches_up_an_hour_edsm_a_week(self):
+        """After a gap, EDDN gets only the last hour's lines (eddn.CATCHUP_MAX_S); EDSM gets up to a week."""
+        self.write(header(now_ts(3 * 3600)), loadgame(now_ts(3 * 3600 - 1)))
+        self.j.scan_dir(self.dir, commit_each=True, upload="catchup")
+        edsm = lambda ev, session: [(ev["event"], {"event": ev["event"]})] if ev["event"] == "FSDJump" else []
+        self.state.uploads_hub.builders["edsm"] = edsm
+        self.state.set_upload("eddn", True)
+        self.state.set_upload("edsm", True)
+        self.write(self.jump(2 * 3600, "TwoHoursAgo"), self.jump(600, "TenMinutesAgo"))
+        self.j.scan_dir(self.dir, commit_each=True, upload="catchup")    # read at a start: caught up below
+        self.state.catch_up_uploads()
+        got = [(r["service"], json.loads(r["message"])["event"], r["created"]) for r in
+               self.db.execute("SELECT service, message, created FROM upload_queue ORDER BY id")]
+        self.assertEqual(len([g for g in got if g[0] == "eddn"]), 1)       # only the ten-minute-old jump
+        self.assertEqual(len([g for g in got if g[0] == "edsm"]), 2)       # both
+
     def test_a_reread_sends_nothing_again(self):
         self.write(header(now_ts(600)), loadgame(now_ts(599)))
         self.j.scan_dir(self.dir, commit_each=True, upload="catchup")

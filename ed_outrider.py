@@ -5469,6 +5469,7 @@ class State:
         self.upload_status = {}   # service -> {error, at, held}: the last round's outcome for the status view
         self.uploads_hub = outrider.uploads.UploadHub(db, {"eddn": self.eddn_build, "edsm": self.edsm_build},
                                                       enabled=self.upload_queueing, holds={"edsm": outrider.edsm.hold},
+                                                      max_ages={"eddn": outrider.eddn.CATCHUP_MAX_S},
                                                       save=lambda marks: meta_set(self.db, "upload_marks", marks))
         marks = meta_get(db, "upload_marks")   # how far each service has queued (live-only: a re-read keeps it)
         self.uploads_hub.marks = {k: v for k, v in marks.items() if isinstance(v, list)} if isinstance(marks, dict) else {}

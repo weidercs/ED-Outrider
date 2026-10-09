@@ -2,6 +2,10 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Uploads: EDDN catches up an hour at most (branch EDMC-Functionality)
+- After a gap (Outrider not running while you played), EDDN gets only the last hour's lines; EDSM still gets up to a
+  week. EDDN's readers take what arrives as current, so day-old scans sent late could mislead them.
+
 ## 2026-10-09 · Uploads: "New to EDSM" removed (branch EDMC-Functionality)
 - The badge and the Data tile's "new to EDSM" count are gone, with the table behind them (dropped from databases that
   had it). EDDN's copy of a jump, sent at once, usually reaches EDSM before Outrider's own EDSM batch, so EDSM's
