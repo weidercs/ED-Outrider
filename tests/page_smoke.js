@@ -32,6 +32,9 @@ const settle = async maxMs => {
   const html = await (await fetch(base)).text(); const errors = [];
   const dom = new JSDOM(html, {url: base, runScripts: "dangerously", resources: "usable", pretendToBeVisual: true,
     beforeParse(w) {
+      // the page's fetch is Node's, which takes only Node's AbortSignal (the long poll's timeout): in a browser the two
+      // are the same object
+      w.AbortController = AbortController;
       w.fetch = (u, o) => {
         const poll = /api\/nearby\?since=/.test(String(u));
         if (!poll) { inflight++; lastNet = Date.now(); }
@@ -1445,7 +1448,7 @@ const settle = async maxMs => {
       'window.SERVER_DEFAULTS = {"version": 1, "settings": {"log": {"days": "7", "cats": 1, "known": true}, "bioSort": null}, "saved": 1727700000};</script>');
     const errs2 = [];
     const dom2 = new JSDOM(html2, {url: base, runScripts: "dangerously", resources: "usable", pretendToBeVisual: true,
-      beforeParse(w) { w.fetch = (u, o) => fetch(new URL(u, base), o); w.addEventListener("error", e => errs2.push(e.message)); w.localStorage.clear(); w.scrollBy = () => {}; }});
+      beforeParse(w) { w.AbortController = AbortController; w.fetch = (u, o) => fetch(new URL(u, base), o); w.addEventListener("error", e => errs2.push(e.message)); w.localStorage.clear(); w.scrollBy = () => {}; }});
     const d2 = dom2.window.document;
     // the header's count is "…" until the first payload is drawn
     const known2 = () => ((d2.getElementById("subKnown") || {}).textContent || "").trim();
@@ -1720,7 +1723,7 @@ const settle = async maxMs => {
     // a window opened at ?mode=now: no ✕ back, a tap or a double tap leaves it on Now, and the URL keeps ?mode=now
     const html2 = await (await fetch(base + "?mode=now")).text(), errs2 = [];
     const dom2 = new JSDOM(html2, {url: base + "?mode=now", runScripts: "dangerously", resources: "usable", pretendToBeVisual: true,
-      beforeParse(w2) { w2.fetch = (u, o) => fetch(new URL(u, base), o); w2.addEventListener("error", e => errs2.push(e.message)); w2.localStorage.clear(); w2.scrollBy = () => {}; }});
+      beforeParse(w2) { w2.AbortController = AbortController; w2.fetch = (u, o) => fetch(new URL(u, base), o); w2.addEventListener("error", e => errs2.push(e.message)); w2.localStorage.clear(); w2.scrollBy = () => {}; }});
     const d2 = dom2.window.document;
     for (let i = 0; i < 40 && !(d2.getElementById("nowBody") && d2.getElementById("nowBody").textContent.trim()); i++) await sleep(250);
     d2.getElementById("nowBack").click();
@@ -3703,6 +3706,7 @@ const settle = async maxMs => {
     const thtml = await (await fetch(base + "tablet")).text();
     const tdom = new JSDOM(thtml, {url: base + "tablet", runScripts: "dangerously", resources: "usable", pretendToBeVisual: true,
       beforeParse(w) {
+        w.AbortController = AbortController;   // the long poll's timeout: Node's fetch takes Node's AbortSignal only
         w.fetch = (u, o) => {
           const poll = /api\/nearby\?since=/.test(String(u));
           if (!poll) { inflight++; lastNet = Date.now(); }
@@ -4277,6 +4281,52 @@ const settle = async maxMs => {
     const goodSW = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodSW;
     console.log(goodSW ? "OK" : "FAIL", "| the sweep's page fixes |", goodSW ? "holds, banners, Here, body, cargo, lookup, carrier, ticks, chips, names, voice" : JSON.stringify(got), errors.slice(before));
+  }
+  // the Fable sweep of 2026-10-09 (the page): co-pilot lines only where a voice is, the long poll's timeout, a superseded
+  // auto-target run, the 🔔 and a reset followed across windows, a declined confirm, Save redrawn with the focus kept
+  {
+    const w = dom.window, before = errors.length;
+    const got = await w.eval(`(async () => {
+      const r = {}, src = f => String(f);
+      r.copilot = src(takeCopilot).includes("fresh && speechOn && speakerHere()");
+      r.timeout = typeof POLL_TIMEOUT_MS === "number" && src(poll).includes("signal: ac.signal");
+      const hr = hwyRun, d0 = data.autotarget;
+      hwyRun = {seq: 5, kind: "next", done: false, msg: "", n: 3, at: Date.now()};
+      data.autotarget = Object.assign({}, d0 || {}, {test: {seq: 6, state: "running"}});
+      hwyRunTrack(); r.superseded = hwyRun.done && /another device/.test(hwyRun.msg);
+      hwyRun = hr; data.autotarget = d0;
+      const was = alertCfg.enabled;
+      store.set("alerts", Object.assign({}, alertCfg, {enabled: !was}));
+      window.dispatchEvent(Object.assign(new Event("storage"), {key: "alerts"}));
+      r.bell = document.getElementById("alertsBtn").classList.contains("on") === !was;
+      store.set("alerts", Object.assign({}, alertCfg, {enabled: was})); window.dispatchEvent(Object.assign(new Event("storage"), {key: "alerts"}));
+      const spk = alertSpeak.scoopstop;                        // off by default
+      store.set("alertSpeak", Object.assign({}, alertSpeak, {scoopstop: true}));
+      window.dispatchEvent(Object.assign(new Event("storage"), {key: "alertSpeak"}));
+      localStorage.removeItem("alertSpeak");                    // another window's import reset it
+      window.dispatchEvent(Object.assign(new Event("storage"), {key: "alertSpeak"}));
+      r.reset = alertSpeak.scoopstop === false;
+      if (spk) { alertSpeak.scoopstop = spk; store.set("alertSpeak", alertSpeak); }
+      const aj = window.apiJson, cf = window.confirm;
+      window.apiJson = async () => ({code: "confirm_needed", error: "Is this the only Outrider uploading? Other instances can't see this one"});
+      window.confirm = () => false;
+      await setUpload("eddn", true);
+      r.declined = document.getElementById("uploadsMsg").textContent === "";
+      // Save with the focus left in the key field (Safari, and jsdom, do not move it on a click): redrawn all the same
+      const keepU = data.uploads;
+      data.uploads = {eddn: {available: true}, edsm: {available: true, accounts: [{commander: "Briadin", name: "Briadin", set: false}]}};
+      uploadsDrawn = ""; renderUploads();
+      const key = document.querySelector(".edsmacc .edsmKey"); key.value = "0123456789abcdef0123456789abcdef01234567"; key.focus();
+      window.apiJson = async () => ({ok: true, accounts: [{commander: "Briadin", name: "Briadin", set: true, hint: "0123…4567 (40 characters)"}]});
+      document.querySelector(".edsmacc .edsmSave").click();
+      await new Promise(res => setTimeout(res, 50));
+      r.saved = document.getElementById("uploadsMsg").textContent === "saved" && /stored key/.test(document.getElementById("uploadsBox").textContent);
+      window.apiJson = aj; window.confirm = cf; data.uploads = keepU; uploadsNote = ""; uploadsDrawn = ""; renderUploads();
+      return r; })()`);
+    const want = {copilot: true, timeout: true, superseded: true, bell: true, reset: true, declined: true, saved: true};
+    const goodF = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && goodF;
+    console.log(goodF ? "OK" : "FAIL", "| the Fable sweep's page fixes |", goodF ? "co-pilot, poll timeout, superseded run, bell, reset, declined confirm" : JSON.stringify(got), errors.slice(before));
   }
   // the bug check of 2026-10-09 (the Uploads section): its message survives the redraw, a failed request redraws the
   // server's state, the box is ticked by what was switched, typed EDSM fields survive a redraw of the counts

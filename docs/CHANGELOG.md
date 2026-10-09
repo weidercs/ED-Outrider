@@ -2,6 +2,18 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Fable sweep fixes: the page
+- A voice answer or a co-pilot status report is no longer spoken by a window with spoken alerts off: Outrider told
+  the Android app nobody would say it, so the app said it too and it was heard twice.
+- A hung connection (the PC suspended, a network path gone silent) now turns into "no link" and "Lost contact" after
+  40 s; the page stayed "stale" for good.
+- A 🎯 / Target next started on this page ends when another device's run replaced it or Outrider restarted (it showed
+  "targeting…" for good).
+- Settings changed in another window: the 🔔 button follows the notification switch, and a setting an import reset
+  there is reset here too (it was kept, and later written back over the import).
+- Uploads: declining "Is this the only Outrider uploading?" no longer leaves the question as the status line; Save
+  and remove redraw the section in Safari too (it kept the focus in the field, and nothing was redrawn).
+
 ## 2026-10-09 · Fable sweep fixes: the uploads
 - Signals (fleet carriers, stations) that were the last lines while Outrider was down are now sent by the catch-up:
   they waited for a next line that never came, and were dropped. Ones written just before their jump (Odyssey) go

@@ -1518,17 +1518,20 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["rigleash", "a Rhino mining rig too far from you (over the rig warning distance, again at 4.5 km; the game destroys it at 5 km)", "danger"],
   ["rigsout", "docking the Rhino with rigs still marked out on the body, and which are probably full (Outrider's own record: a rig picked up without a tap still counts until you mark it on the surface map)", null]];
 const UNSPOKEN = new Set(["discovery"]);   // a target's verdict: the arrival is what gets spoken
-const alertCfg = Object.assign({enabled: false}, Object.fromEntries(ALERTS.map(([k]) => [k, true])),
+// the defaults, as functions: another window's import that resets a setting rebuilds from them (ALERT_STORES)
+const alertCfgBase = () => Object.assign({enabled: false}, Object.fromEntries(ALERTS.map(([k]) => [k, true])),
   // a notification on every jump (or scoop, or FSS) would be noise: these are spoken by default, not notified
   {jump: false, honk: false, brief: false, fss: false, mapped: false, scoop: false, scoopstop: false, supercharge: false, highway: false, autotarget: false,
-   sampling: false, approach: false, bodybrief: false, jumponium: false, rigs: false, rigsout: false},
-  store.get("alerts", {}));
+   sampling: false, approach: false, bodybrief: false, jumponium: false, rigs: false, rigsout: false});
+const alertCfg = Object.assign(alertCfgBase(), store.get("alerts", {}));
 // off until you tick them (the whole row): the jumponium call-out
 const OFF_KINDS = {jumponium: false};
-const alertSound = Object.assign(Object.fromEntries(ALERTS.map(([k]) => [k, true])), OFF_KINDS, store.get("alertSound", {}));
+const alertSoundBase = () => Object.assign(Object.fromEntries(ALERTS.map(([k]) => [k, true])), OFF_KINDS);
+const alertSound = Object.assign(alertSoundBase(), store.get("alertSound", {}));
 // not spoken until you tick them: they repeat what the game (or another alert) already told you
 const QUIET_KINDS = {scoopstop: false, supercharge: false, bodybrief: false, ...OFF_KINDS};
-const alertSpeak = Object.assign(Object.fromEntries(ALERTS.map(([k]) => [k, true])), QUIET_KINDS, store.get("alertSpeak", {}));
+const alertSpeakBase = () => Object.assign(Object.fromEntries(ALERTS.map(([k]) => [k, true])), QUIET_KINDS);
+const alertSpeak = Object.assign(alertSpeakBase(), store.get("alertSpeak", {}));
 // The tablet is silent (the PC speaks) unless "Play alerts here" is ticked in its Settings (the author, 2026-10-04: a
 // Docker server often has no browser open at all): then it speaks and plays the alert sounds itself, whatever any PC
 // window does (both may then speak: turn one off). Per tablet.
@@ -5099,7 +5102,13 @@ function drawHwyAuto() {
 // the outcome of this page's run comes back in the payload (every render: the line's button follows it too)
 function hwyRunTrack() {
   const r = hwyRun, t = data && data.autotarget && data.autotarget.test;
-  if (!r || r.done || !t || t.seq !== r.seq || !["done", "failed"].includes(t.state)) return;
+  if (!r || r.done) return;
+  const w0 = r.kind === "test" ? "test" : "target next";
+  // superseded: a newer run (another device's), or no run at all long after this one's countdown (Outrider restarted)
+  if ((t && typeof r.seq === "number" && t.seq > r.seq) || (!t && r.at && Date.now() - r.at > ((r.n || 0) + 120) * 1000)) {
+    r.done = true; r.msg = `${w0}: no result (Outrider restarted, or another device started a run)`; return;
+  }
+  if (!t || t.seq !== r.seq || !["done", "failed"].includes(t.state)) return;
   r.done = true;
   const w = r.kind === "test" ? "test" : "target next";
   r.msg = t.state === "done" ? `${w} done: ${t.why === "already the target" ? `${t.system} was already the target` : `targeted ${t.system}`}`
@@ -5116,7 +5125,8 @@ async function hwyAutoStart(kind, aim = null) {
   try { r = await fetch(url, opts); j = await r.json(); }
   catch { show("could not reach Outrider"); return; }
   if (!r.ok) { show(`cannot ${w}: ${j.error || "?"}`); return; }
-  const mine = hwyRun = {seq: j.seq, kind, key: aim ? `${aim.route}:${aim.index}` : "next", system: j.system, n: j.in, dry: j.dry_run, done: false, msg: ""};
+  const mine = hwyRun = {seq: j.seq, kind, key: aim ? `${aim.route}:${aim.index}` : "next", system: j.system, n: j.in, dry: j.dry_run, done: false, msg: "",
+                         at: Date.now()};
   const tick = () => {
     if (mine.done || mine !== hwyRun) return;
     mine.msg = mine.n > 0 ? `click into the game: targeting ${j.system} in ${mine.n} s${j.dry_run ? " (dry run)" : ""}` : `targeting ${j.system}…`;
@@ -6445,7 +6455,9 @@ function takeCopilot(cp, first) {
   if (!cp || typeof cp.seq !== "number") return;
   const fresh = !first && cp.seq > lastCopilotSeq;
   lastCopilotSeq = cp.seq;
-  if (fresh && speakerHere()) copilotDo(cp);
+  // spoken only where the poll told Outrider a voice is (speechOn && speakerHere): with 🗣 off the server answered
+  // spoken: false, so the app said it too and it was heard twice (the Fable sweep, 2026-10-09)
+  if (fresh && speechOn && speakerHere()) copilotDo(cp);
   else if (fresh && cp.action === "status") addCaption(statusReportText());   // Now's captions show what was asked for
   else if (fresh && (cp.action === "say" || cp.action === "caption") && cp.words) addCaption(cp.words);   // a voice answer (api/ask)
 }
@@ -7101,12 +7113,16 @@ document.getElementById("speakerClaim").onclick = () => claimSpeaker(true);
 // another window changed the setting (localStorage is shared by the browser's windows)
 // alert ticks (notify, sound, speak) changed in another window of this browser: taken up here too, or the window that
 // speaks went on with its own copy and later wrote it back over the change (the sweep of 2026-10-09)
-const ALERT_STORES = {alerts: [alertCfg, "alert"], alertSound: [alertSound, "asound"], alertSpeak: [alertSpeak, "aspeak"]};
+const ALERT_STORES = {alerts: [alertCfg, "alert", alertCfgBase], alertSound: [alertSound, "asound", alertSoundBase],
+                      alertSpeak: [alertSpeak, "aspeak", alertSpeakBase]};
 window.addEventListener("storage", e => {
   const a = ALERT_STORES[e.key];
   if (a) {
-    Object.assign(a[0], store.get(e.key, {}));
+    // rebuilt from the defaults, not merged: an import there that reset the setting (removed it) resets it here too
+    for (const k of Object.keys(a[0])) delete a[0][k];
+    Object.assign(a[0], a[2](), store.get(e.key, {}));
     alertDialog.querySelectorAll(`[data-${a[1]}]`).forEach(cb => { cb.checked = !!a[0][cb.dataset[a[1]]]; });
+    if (e.key === "alerts") drawAlertsBtn();   // F2-4: the 🔔 button follows the notification switch too
   }
 });
 window.addEventListener("storage", e => { if (e.key === "speakMode") drawSpeaker();
@@ -7407,7 +7423,11 @@ async function setUpload(service, on, confirmed) {
   try {
     const j = await apiJson("api/uploads", {method: "POST", headers: {"Content-Type": "application/json"},
                                            body: JSON.stringify({service, on, confirm: !!confirmed})});
-    if (j.code === "confirm_needed" && confirm(j.error)) return setUpload(service, on, true);
+    if (j.code === "confirm_needed") {
+      if (confirm(j.error)) return setUpload(service, on, true);
+      uploadsNote = "";   // declined: nothing switched, and the question is not a status to show
+      return;
+    }
     uploadsNote = j.error || j.note || "";   // note: switched, but the config file could not keep it
     if (!j.error) { delete j.note; data.uploads = j; }
   } catch (err) {
@@ -7438,6 +7458,7 @@ document.getElementById("uploadsBox").addEventListener("click", async e => {
   } catch (err) {
     uploadsNote = `could not reach Outrider: ${err.message}`;
   } finally {
+    row.querySelectorAll("input").forEach(i => i.blur());   // Safari leaves the focus in the field: no redraw then
     uploadsDrawn = ""; renderUploads();
   }
 });
@@ -7898,18 +7919,24 @@ function signInAgain() {
   if (app && typeof app.signInRequired === "function") { app.signInRequired(); return; }
   location.href = "signin?next=" + encodeURIComponent(location.pathname + location.search);
 }
+// the server answers a long poll within 25 s: one with no answer by this time is a hung link (the PC suspended, a path
+// that died without a reset), and becomes "no link" and, later, "Lost contact" (it stayed "stale" for good)
+const POLL_TIMEOUT_MS = 40000;
 async function poll(once = false) {
   let ok = false, fresh = false;
   heard(false);   // a request sent long after the last answer: timers were frozen, or the server was unreachable
+  const ac = typeof AbortController === "function" ? new AbortController() : null,
+        timer = ac && setTimeout(() => ac.abort(), POLL_TIMEOUT_MS);
   try {
     // a window that speaks says so, so Outrider knows a voice answer will be said on the PC (S24)
-    const r = await fetch(`api/nearby?since=${runId}:${version}${speechOn && speakerHere() ? "&speaker=1" : ""}`);
+    const r = await fetch(`api/nearby?since=${runId}:${version}${speechOn && speakerHere() ? "&speaker=1" : ""}`,
+                          ac ? {signal: ac.signal} : undefined);
     if (r.status === 401) return signInAgain();   // the session ended ([server] password changed, signed out)
     if (r.status === 200 || r.status === 204) heard(true);   // an answer long after it was asked: the page slept meanwhile
     if (r.status === 200) { data = await r.json(); version = data.version; fresh = true; }
     else if (r.status === 204 && woke) version = -1;   // no news, but come back with the whole payload to re-baseline on
     ok = r.status === 200 || r.status === 204;
-  } catch {}
+  } catch {} finally { if (timer) clearTimeout(timer); }
   if (fresh) pageError = null;
   let drawn = guarded("drawing", () => setConnected(ok));
   if (fresh) { const alerted = guarded("alerts", onData), rendered = guarded("drawing", render); drawn = drawn && alerted && rendered; }
