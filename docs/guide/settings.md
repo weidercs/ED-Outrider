@@ -9,7 +9,7 @@
 <br>
 
 **⚙ Settings** (top right) holds everything, in folding sections: Alerts, Voice, What is said, Sounds, Values, Risk
-& warnings, Surface map, Auto honk, Display, Sharing, **Server** and Spoken lines. Most are this browser's
+& warnings, Surface map, Auto honk, Uploads, Display, Sharing, **Server** and Spoken lines. Most are this browser's
 own (Sharing exports them or makes them the defaults for new browsers). **Server** is the config file
 itself, every key of it: the network and the client password, the journal folders, paths, backups, Spansh, the
 Highway, the voice's AI layer and more. Saving there writes `ed_outrider.toml` (only the keys you changed; its

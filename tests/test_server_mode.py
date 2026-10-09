@@ -149,7 +149,7 @@ class Packaging(unittest.TestCase):
         self.assertTrue(os.access(path, os.X_OK))
         self.assertEqual(subprocess.run(["bash", "-n", path], capture_output=True).returncode, 0)
         script = self.read("launch_outrider.sh")
-        for part in ("sha256sum requirements.txt", ".requirements.sha256", "import aiohttp", "pip install --quiet -r requirements.txt",
+        for part in ("hashlib.sha256(open(\"requirements.txt\"", ".requirements.sha256", "import aiohttp", "pip install --quiet -r requirements.txt",
                      'exec python ed_outrider.py "$@"', "sys.version_info < (3, 11)",
                      "command -v wl-copy", "command -v xclip"):   # the clipboard tools pip cannot install: a hint
             self.assertIn(part, script)
@@ -249,6 +249,66 @@ class PackagingFixes(unittest.TestCase):
         self.assertIn('"%VPY%" -m pip --version >nul 2>&1 && goto pipok', script)
         self.assertIn('if exist "%VENV%" rmdir /s /q "%VENV%"', script)
         self.assertIn(":venvfail", script)
+
+
+class FableScriptFixes(unittest.TestCase):
+    """The Fable sweep of 2026-10-09 (scripts, Docker, the guide)."""
+    ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def read(self, name):
+        with open(os.path.join(self.ROOT, name), encoding="utf-8") as f:
+            return f.read()
+
+    def run_launcher(self, d, path_dirs, env_extra=None):
+        import subprocess
+        env = dict(os.environ, PATH=":".join(path_dirs), **(env_extra or {}))
+        import shutil
+        return subprocess.run([shutil.which("bash"), os.path.join(d, "launch_outrider.sh")], cwd=d, capture_output=True, text=True,
+                              env=env, timeout=60)
+
+    def test_no_sha256sum_needed(self):
+        """macOS has no sha256sum: the launcher hashes requirements.txt with Python, to the same hex as before."""
+        import hashlib
+        import shutil
+        import tempfile
+        self.assertNotIn("sha256sum requirements.txt", self.read("launch_outrider.sh"))   # not run (a comment may name it)
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        shutil.copy(os.path.join(self.ROOT, "launch_outrider.sh"), d)
+        with open(os.path.join(d, "requirements.txt"), "w") as f:
+            f.write("aiohttp\n")
+        os.makedirs(os.path.join(d, ".venv", "bin"))
+        stamp = hashlib.sha256(b"aiohttp\n").hexdigest()
+        with open(os.path.join(d, ".venv", ".requirements.sha256"), "w") as f:
+            f.write(stamp + "\n")
+        fake = os.path.join(d, ".venv", "bin", "python")   # pip and aiohttp present: nothing to install, then Outrider
+        with open(fake, "w") as f:
+            f.write('#!/bin/sh\nif [ "$1" = "-c" ]; then exec %s "$@"; fi\necho STARTED\n' % shutil.which("python3"))
+        os.chmod(fake, 0o755)
+        bins = tempfile.mkdtemp()                          # a PATH with no sha256sum on it
+        self.addCleanup(shutil.rmtree, bins)
+        for tool in ("cat", "cut", "uname", "dirname", "rm", "echo"):
+            p = shutil.which(tool)
+            if p:
+                os.symlink(p, os.path.join(bins, tool))
+        with open(os.path.join(d, ".venv", "bin", "activate"), "w") as f:
+            f.write("PATH=\"%s:$PATH\"\n" % os.path.join(d, ".venv", "bin"))
+        r = self.run_launcher(d, [bins])
+        self.assertNotIn("sha256sum", r.stderr)
+        self.assertIn("STARTED", r.stdout, r.stderr)        # the stamp matched: no reinstall, Outrider started
+
+    def test_a_gone_python_remakes_the_environment(self):
+        """A .venv whose Python link dangles (the system Python upgraded) is made again, not met with the
+        python3-venv advice."""
+        src = self.read("launch_outrider.sh")
+        self.assertIn('elif [ -e "$VENV/pyvenv.cfg" ] && [ ! -x "$VENV/bin/python" ]; then', src)
+
+    def test_health_check_waits_for_the_first_import(self):
+        self.assertIn("--start-period=30m", self.read("Dockerfile"))
+
+    def test_guide_matches(self):
+        self.assertIn("Auto honk, Uploads, Display", self.read("docs/guide/settings.md"))
+        self.assertIn("up to fifty lines per alert", self.read("docs/guide/voice-and-alerts.md"))
 
 
 class NfsCaching(unittest.TestCase):

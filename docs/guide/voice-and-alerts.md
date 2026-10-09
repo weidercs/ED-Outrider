@@ -67,7 +67,8 @@ Sound: Allow; Firefox: Autoplay: Allow Audio and Video).
 
 **Choosing how it sounds**
 
-- **Personalities.** Down to business, sarcastic and sweet, fifty lines per alert each; tick any mix.
+- **Personalities.** Down to business, sarcastic and sweet, up to fifty lines per alert each (fifty for most); tick
+  any mix.
   **With profanity** adds swearing versions. **One personality per system** holds one character a system.
 - **Danger alerts always down to business** (on by default): danger is said plainly, never sworn.
 - **Your names.** Commander names are often unpronounceable, so the voice calls you by the names in

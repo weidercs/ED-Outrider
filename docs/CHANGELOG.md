@@ -2,6 +2,15 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Fable sweep fixes: scripts, Docker, the guide
+- launch_outrider.sh works on macOS: it hashed requirements.txt with sha256sum, which macOS does not have (it stopped
+  before anything else). Existing installs keep their stamp. The clipboard-tool hint is no longer shown on macOS.
+- An environment whose Python is gone (a system Python upgrade) is made again instead of failing once with advice to
+  install python3-venv.
+- Docker's health check waits up to 30 minutes for the first start, which reads every journal before the server
+  answers (it turned "unhealthy" during a long first import).
+- The guide: Settings lists its Uploads section; personalities have up to fifty lines per alert (two have fifteen).
+
 ## 2026-10-09 · Docs: the agent guide on scripts/install.sh
 - It is local to the author's checkout and git-ignored: never in the published repository.
 
