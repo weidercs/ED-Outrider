@@ -3551,8 +3551,15 @@ class Journals:
             return False
         sc, ts = self.ship_cargo, c.get("timestamp") if isinstance(c, dict) else None
         if not isinstance(ts, str) or c.get("Vessel", "Ship") != "Ship" or not isinstance(c.get("Inventory"), list) \
-                or ts < (sc.get("ts") or "") or ts <= (sc.get("snap_ts") or ""):
+                or ts < (sc.get("ts") or "") or ts < (sc.get("snap_ts") or ""):
             return False
+        if ts == sc.get("snap_ts"):
+            # the game rewrites the file for every change within the second: one with the snapshot's time is new when
+            # it holds something else (a second canister collected in that second was lost)
+            now = {outrider.cargo.cid(it.get("Name")): it.get("Count") for it in c["Inventory"] if isinstance(it, dict)}
+            held = {i: line["count"] for i, line in (sc.get("lines") or {}).items() if line.get("count")}
+            if now == held:
+                return False
         self.learn_names(c["Inventory"])
         outrider.cargo.ship_snapshot(sc, c["Inventory"], c.get("Count"), ts)
         meta_set(self.db, "ship_cargo", sc)
@@ -13582,7 +13589,10 @@ async def run(args, st):
     state.speech_path, state.config_path = st["speech_file"], args.config
     loop = asyncio.get_running_loop()
     voice = meta_get(db, "voice_choice")   # picked in the alerts dialog: beats the config file once used
-    if not (isinstance(voice, str) and outrider.tts.VOICE_NAME.fullmatch(voice)):
+    # a Piper name, or any voice installed in piper-voices/ (a self-made one: the dialog lets you pick it, and it was
+    # forgotten at every restart)
+    if not (isinstance(voice, str) and (outrider.tts.VOICE_NAME.fullmatch(voice)
+                                        or voice in outrider.tts.installed_voices(outrider.tts.VOICES_DIR))):
         voice = VOICE
     # the voice picked in the dialog is remembered once it loads, on the loop thread (not Piper's)
     state.speaker = outrider.tts.Speaker(voice, VOICE_FALLBACK, on_change=lambda: loop.call_soon_threadsafe(state.bump),

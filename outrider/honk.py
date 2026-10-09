@@ -415,7 +415,7 @@ class Honker:
         with self.lock:
             ui = self.ui   # a press queued behind another finds the device closed by then
             if ui is None or self.stop.is_set():
-                if ui is not None:
+                if ui is not None and not self.owners:
                     self._close_now()
                 raise ValueError("the virtual keyboard is not open")
             why = (("switched off" if cancel is not None and cancel.is_set() else None) or (check() if check else None))
@@ -436,7 +436,7 @@ class Honker:
                     ui.write(e.EV_KEY, c, 0)
                     ui.syn()
                 stopped = self.stop.is_set()
-                if stopped:
+                if stopped and not self.owners:   # reopened during the hold (auto-target switched on): kept
                     self._close_now()
         if stopped or (cancel is not None and cancel.is_set()):
             return None

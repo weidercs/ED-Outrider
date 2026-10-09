@@ -818,6 +818,23 @@ class RulesDownload(unittest.TestCase):
             raise AssertionError(f"unexpected fetch {url}")
         return get
 
+    def test_a_table_no_longer_literal_fails_the_update(self):
+        """Upstream writing a region, nebula or grid table as code (region_map = build_map()): the update fails and the
+        old file stays, rather than empty tables ruling out Anemone, Brain Trees, Tubers... everywhere (the Fable sweep,
+        2026-10-09)."""
+        with unittest.mock.patch.object(outrider.bio, "_get", self.fake_get()):
+            outrider.bio.update_rules(self.path, log=self.log.append, versions=dict(self.V))
+        with open(self.path) as fh:
+            before = fh.read()
+        good = self.fake_get()
+
+        def get(url):
+            return "region_map = build_map()" if "regions.py" in url else good(url)
+        with unittest.mock.patch.object(outrider.bio, "_get", get), self.assertRaises(ValueError):
+            outrider.bio.update_rules(self.path, log=self.log.append, versions=dict(self.V, bioscan="b2"))
+        with open(self.path) as fh:
+            self.assertEqual(fh.read(), before)
+
     def test_a_failed_part_is_saved_without_a_version(self):   # F38
         with unittest.mock.patch.object(outrider.bio, "_get", self.fake_get(fail=("contents/", "genus.py"))):
             outrider.bio.update_rules(self.path, log=self.log.append, versions=dict(self.V))

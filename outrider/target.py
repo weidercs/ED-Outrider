@@ -411,8 +411,9 @@ class Targeter:
             # its close key went down the map is closing (Status.json lags): pressed again it would open, unless the
             # close demonstrably failed (the wait for the cockpit timed out with the map still open)
             close_failed = e.why == "the galaxy map did not close"
+            # (the device is still open under our lock even when switching off set `stop`: the finally closes it after)
             if opened and (not close_pressed or close_failed) and (status() or {}).get("gui_focus") == GUI_GALAXY_MAP \
-                    and h.ui is not None and not h.stop.is_set():
+                    and h.ui is not None:
                 close = next((s for s in steps if s.get("closes")), None)
                 try:
                     if close and close.get("names"):

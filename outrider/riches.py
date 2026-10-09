@@ -128,7 +128,7 @@ def money(n):
     """A credit amount as said aloud: 1.2 million, 800 thousand."""
     if n is None:
         return None
-    if n >= 1_000_000:
+    if n >= 999_500:   # rounds to a million: "1 million", never "1000 thousand"
         v = round(n / 1_000_000, 1)
         return f"{v:g} million"
     if n >= 1000:

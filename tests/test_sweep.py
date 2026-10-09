@@ -389,5 +389,71 @@ class FableServer(unittest.TestCase):
         self.assertEqual(st.honker.status, "off")
 
 
+class FableModules(unittest.TestCase):
+    """The Fable sweep of 2026-10-09: the modules."""
+
+    def test_unsold_since_accepts_a_date_and_tells_a_bad_one(self):
+        import contextlib
+        import io
+        import outrider.unsold as U
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        with open(os.path.join(d, "Journal.2026-10-01T100000.01.log"), "w") as f:
+            f.write(json.dumps({"timestamp": "2026-10-01T10:00:00Z", "event": "Fileheader"}) + "\n")
+        with contextlib.redirect_stdout(io.StringIO()):
+            U.main(["--dir", d, "--since", "2026-09-01"])            # a bare date: from its start
+        with contextlib.redirect_stderr(io.StringIO()) as err, self.assertRaises(SystemExit):
+            U.main(["--dir", d, "--since", "yesterday"])
+        self.assertIn("--since must look like", err.getvalue())
+
+    def test_ask_json_that_is_not_an_object_falls_back(self):
+        import contextlib
+        import io
+        import outrider.ask as A
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        p = os.path.join(d, "ask.json")
+        with open(p, "w") as f:
+            f.write('["status report"]')
+        with contextlib.redirect_stderr(io.StringIO()):
+            got = A.load_phrases(p)
+        self.assertEqual(got["status_report"], ["status report"])
+
+    def test_a_remembered_installed_voice_is_kept(self):
+        src = inspect.getsource(ed_outrider.run)
+        self.assertIn("voice in outrider.tts.installed_voices(outrider.tts.VOICES_DIR)", src)
+
+    def test_hold_changes_in_the_snapshots_second(self):
+        import outrider.cargo as C
+        st = {"lines": {"gold": {"count": 1, "priced": 0, "avg": None, "lots": 0, "stolen": 0, "mission": 0}}}
+        C._ship_add(st, "silver", 4, price=100, count=False)          # bought within the snapshot's second
+        self.assertNotIn("silver", st["lines"])                        # no 0 t line
+        db, j = journals()
+        self.addCleanup(db.close)
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        j.ship_cargo = {"lines": {"gold": {"count": 1}}, "snap_ts": "2026-10-09T10:00:00Z", "ts": "2026-10-09T10:00:00Z"}
+
+        def write(n):
+            with open(os.path.join(d, "Cargo.json"), "w") as f:
+                json.dump({"timestamp": "2026-10-09T10:00:00Z", "event": "Cargo", "Vessel": "Ship", "Count": n,
+                           "Inventory": [{"Name": "gold", "Count": n, "Stolen": 0}]}, f)
+        write(1)
+        self.assertFalse(j.read_cargo_file(d))                         # the same file again: nothing new
+        write(2)
+        self.assertTrue(j.read_cargo_file(d))                          # rewritten within the second: taken
+        self.assertEqual(j.ship_cargo["lines"]["gold"]["count"], 2)
+
+    def test_money_rounds_into_millions(self):
+        import outrider.riches as R
+        self.assertEqual((R.money(999_999), R.money(999_499), R.money(1_250_000)), ("1 million", "999 thousand", "1.2 million"))
+
+    def test_honk_press_keeps_a_reopened_keyboard(self):
+        import outrider.honk as H
+        src = inspect.getsource(H.Honker.press)
+        self.assertIn("if stopped and not self.owners:", src)
+        self.assertIn("if ui is not None and not self.owners:", src)
+
+
 if __name__ == "__main__":
     unittest.main()

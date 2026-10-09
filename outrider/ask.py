@@ -39,7 +39,8 @@ def load_phrases(path=ASK_FILE):
     command names themselves (reported on stderr)."""
     try:
         with open(path, encoding="utf-8") as f:
-            cmds = json.load(f).get("commands")
+            doc = json.load(f)
+        cmds = doc.get("commands") if isinstance(doc, dict) else None   # a list or a string: broken too, not a crash
         if not isinstance(cmds, dict):
             raise ValueError("no \"commands\" object")
         out = {}

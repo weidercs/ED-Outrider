@@ -350,11 +350,20 @@ def update_rules(path=None, log=print, versions=None):
             raise ValueError(f"bio rules: {name}.py's catalog is no longer a plain literal")
         log(f"bio rules: {name}")
     catalog.update(_literals(_get(BIOSCAN + "bio_data/species.py")).get("_mound_amphora") or {})
-    regions = _literals(_get(BIOSCAN + "bio_data/regions.py"))
-    stars = _literals(_get(BIOSCAN + "nebula_data/reference_stars.py"))
-    sectors = _literals(_get(BIOSCAN + "nebula_data/sectors.py")).get("data") or []
+    # every table checked like the catalog: one upstream no longer writes as a plain literal fails the update (the old
+    # file stays and is retried), never an empty table written over a working one (the Fable sweep, 2026-10-09)
+    def tables(url, *names):
+        failed = []
+        got = _literals(_get(url), failed)
+        bad = [n for n in names if n in failed]
+        if bad:
+            raise ValueError(f"bio rules: {url.rsplit('/', 1)[-1]}'s {', '.join(bad)} no longer a plain literal")
+        return got
+    regions = tables(BIOSCAN + "bio_data/regions.py", "region_map", "guardian_nebulae", "tuber_zones")
+    stars = tables(BIOSCAN + "nebula_data/reference_stars.py", "coordinates", "named_coordinates", "planetary_coordinates")
+    sectors = tables(BIOSCAN + "nebula_data/sectors.py", "data").get("data") or []
     log("bio rules: nebulae and regions")
-    grid = _literals(_get(REGIONMAP))
+    grid = tables(REGIONMAP, "regions", "regionmap")
     kept = None   # (genus id, species id) -> colours from the current file, when ExploData did not arrive
     try:
         genus_data = _literals(_get(EXPLODATA)).get("data") or {}

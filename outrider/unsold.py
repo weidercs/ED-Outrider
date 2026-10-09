@@ -1109,6 +1109,13 @@ def main(argv=None):
                    help="Show the N most valuable bodies and species (0 to hide). Default 10.")
     p.add_argument("--json", action="store_true", help="Emit the full result as JSON instead.")
     args = p.parse_args(argv)
+    if args.since:
+        if "T" not in args.since:
+            args.since += "T00:00:00Z"   # a bare date: from its start
+        try:
+            parse_ts(args.since)
+        except ValueError:
+            p.error("--since must look like 2026-09-01 or 2026-09-01T00:00:00Z")
 
     dirs = args.dir or DEFAULT_DIRS
     events = read_events(dirs)

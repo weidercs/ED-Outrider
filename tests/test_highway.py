@@ -1603,6 +1603,23 @@ class HighwayAutoTarget(unittest.TestCase):
         self.assertEqual((self.state.autotarget_last["done"], self.state.autotarget_last["why"]), (False, "stopped"))
         self.assertEqual(self.moments(), [])                     # stopped on purpose: nothing said
 
+    def test_switch_off_with_auto_honk_off_closes_the_map(self):
+        """Auto honk off (auto-target the keyboard's only owner): switching auto-target off mid-run still closes the map
+        the run opened, then the device (the Fable sweep, 2026-10-09: it left the game in the galaxy map)."""
+        import asyncio
+        self.wire()
+        self.honker.owners = {"target"}
+
+        async def go():
+            loop = asyncio.get_running_loop()
+            self.game.on_type = lambda g: len(g.text) == 3 and loop.call_soon_threadsafe(self.state.set_autotarget, False)
+            await self._boost_and_wait(2)
+        asyncio.run(go())
+        self.assertEqual(self.status["gui_focus"], 0)                # the map closed again
+        self.assertTrue(self.released())
+        self.assertIsNone(self.honker.ui)                          # and the keyboard, nobody wants it now
+        self.assertEqual((self.state.autotarget_last["done"], self.state.autotarget_last["why"]), (False, "stopped"))
+
     def test_switch_off_while_waiting_for_auto_honk(self):
         import asyncio
         self.wire()

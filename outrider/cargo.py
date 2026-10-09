@@ -101,6 +101,8 @@ def new_ship():
 def _ship_add(st, i, n, price=None, stolen=0, count=True):
     if not i or n <= 0:
         return
+    if not count and i not in st["lines"]:
+        return   # already in a snapshot that does not list it: nothing to price (it made a 0 t line)
     line = st["lines"].setdefault(i, {"count": 0, "priced": 0, "avg": None, "lots": 0, "stolen": 0, "mission": 0})
     if count:
         line["count"] += n
@@ -351,9 +353,13 @@ def _carrier_market(st, items, ts):
         want = _n((buys.get(i) or {}).get("Demand"))
         if order["amount"] > want:   # other players sold you the difference (your own sales took theirs off already)
             _move(st, i, order["amount"] - want, "others", ts)
-            # ...on top of the last CarrierStats' total too: else the tracked total outgrows it and the stale-line
-            # rule drops real old lines (the sweep of 2026-10-09)
-            st["after_stats"] += order["amount"] - want
+            # ...and on top of the last CarrierStats' total only when that is older than the market read before this
+            # one: it cannot hold this fill then. Opening the market writes a CarrierStats just before Market.json
+            # (JOURNAL_REFERENCE), and that one does hold it: added again it made a false gap (the Fable sweep,
+            # 2026-10-09, correcting the night's first fix, which assumed the stats were always older)
+            stats_ts = (st.get("stats") or {}).get("ts")
+            if stats_ts and st.get("market_ts") and stats_ts < st["market_ts"]:
+                st["after_stats"] += order["amount"] - want
         if want:
             order["amount"] = want
         else:

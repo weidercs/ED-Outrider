@@ -149,17 +149,27 @@ class CarrierFold(unittest.TestCase):
         before = cargo.carrier_fold(CARRIER, events)
         self.assertEqual(before["lines"]["gold"]["count"], 50)   # the order's count: newer news than the transfer
 
-    def test_buy_order_filled_by_others_keeps_old_lines(self):
-        """Others selling you through a buy order raise the carrier's total too: an old untouched line is not taken for
-        stale and dropped (the sweep of 2026-10-09)."""
-        events = [("2025-01-01T10:00:00Z", ev("2025-01-01T10:00:00Z", "CargoTransfer", _at=CARRIER,
-                                              Transfers=[{"Type": "gold", "Count": 500, "Direction": "tocarrier"}])),
-                  ("2026-10-01T10:00:00Z", stats("2026-10-01T10:00:00Z", 500)),
-                  ("2026-10-01T10:05:00Z", ev("2026-10-01T10:05:00Z", "CarrierTradeOrder", CarrierID=CARRIER,
-                                              Commodity="silver", PurchaseOrder=300, Price=1))]
-        st = cargo.carrier_fold(CARRIER, events, [("2026-10-02T10:00:00Z", [item("silver", demand=0, sell=1)])])
+    def test_buy_order_fill_counted_once(self):
+        """Others filling your buy order: the line grows by what they sold. The CarrierStats the game writes just before
+        Market.json already holds the fill, so the reported total is not raised again (the Fable sweep, 2026-10-09: it
+        was, a false +300 t gap); a market read with no newer CarrierStats than the read before it does raise it, so an
+        old untouched line is not taken for stale and dropped."""
+        old_gold = ("2025-01-01T10:00:00Z", ev("2025-01-01T10:00:00Z", "CargoTransfer", _at=CARRIER,
+                                                Transfers=[{"Type": "gold", "Count": 500, "Direction": "tocarrier"}]))
+        order = ("2026-10-01T10:05:00Z", ev("2026-10-01T10:05:00Z", "CarrierTradeOrder", CarrierID=CARRIER,
+                                            Commodity="silver", PurchaseOrder=300, Price=1))
+        # the game's order: CarrierStats (the fill in it) just before the Market.json that shows the order filled
+        st = cargo.carrier_fold(CARRIER, [old_gold, ("2026-10-01T10:00:00Z", stats("2026-10-01T10:00:00Z", 500)), order,
+                                          ("2026-10-02T10:00:00Z", stats("2026-10-02T10:00:00Z", 800))],
+                                [("2026-10-02T10:00:01Z", [item("silver", demand=0, sell=1)])])
         self.assertIn("gold", st["lines"])
-        self.assertEqual(cargo.carrier_reported(st), 800)
+        self.assertEqual((cargo.carrier_total(st), cargo.carrier_reported(st)), (800, 800))   # in step: no gap
+        # a market read with no CarrierStats since the read before it: that one could not hold the fill
+        st = cargo.carrier_fold(CARRIER, [old_gold, ("2026-10-01T10:00:00Z", stats("2026-10-01T10:00:00Z", 500)), order],
+                                [("2026-10-01T10:06:00Z", [item("silver", demand=300, sell=1)]),
+                                 ("2026-10-02T10:00:00Z", [item("silver", demand=0, sell=1)])])
+        self.assertIn("gold", st["lines"])
+        self.assertEqual((cargo.carrier_total(st), cargo.carrier_reported(st)), (800, 800))
 
     def test_reported_follows_your_moves(self):
         """The carrier's own total moves with your transfers after its CarrierStats (no false gap until the next)."""

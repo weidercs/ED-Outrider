@@ -2,6 +2,20 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Fable sweep fixes: cargo, biology, voice, auto-target, auto honk
+- Carrier cargo: a buy order others filled was counted twice in the carrier's total (a false "+300 t" gap): the
+  CarrierStats the game writes just before Market.json already holds it. Last night's fix assumed otherwise; now the
+  fill is added only when the last CarrierStats is older than the market read before it.
+- Ship's hold: a second canister collected (or a purchase made) in the same second as the hold's snapshot is no
+  longer lost, and no 0 t line is shown.
+- Biology: a rules update in which a region, nebula or grid table is no longer plain data fails and keeps the
+  working file; it wrote empty tables, and Anemone, Brain Trees, Tubers and others were never predicted again.
+- Voice: a self-made voice picked in Settings is kept after a restart; an ask.json that is not an object falls back
+  to the command names instead of stopping Outrider; "1 million" instead of "1000 thousand" for 999,500 to 999,999.
+- Auto-target switched off mid-run with auto honk off closes the galaxy map it opened (it left the game in the map);
+  auto honk switched off and auto-target on within one hold keeps the keyboard.
+- The unsold command line takes --since 2026-09-01 (a bare date), and says what a bad one should look like.
+
 ## 2026-10-09 · Fable sweep fixes: the server
 - A relog or game-mode switch while docked no longer repeats "Docked at <station>, N cr to sell" (and its spoken line).
 - A backup copy restarted at every step (a busy evening, a slow backup disk) now falls back to one step as meant; it
