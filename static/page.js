@@ -7526,6 +7526,15 @@ for (const [id, el] of Object.entries(hlEls)) {
   };
 }
 showHl();
+// the unsold and highlight thresholds changed (or reset by an import) in another window: followed here, rebuilt from
+// the defaults, or this window kept its own copy and wrote it back over the change later
+window.addEventListener("storage", e => {
+  const t = {unsoldCfg: [unsoldCfg, {warn: null, urgent: null}], highlightCfg: [hlCfg, {body: null, bio: null}]}[e.key];
+  if (!t) return;
+  for (const k of Object.keys(t[0])) delete t[0][k];
+  Object.assign(t[0], t[1], store.get(e.key, {}));
+  fillThresholds(); showHl(); renderHere(); render();
+});
 const fuelJumpsEl = document.getElementById("fuelJumps");
 const showFuelJumps = () => { fuelJumpsEl.value = fuelJumpsCfg() ?? ""; fuelJumpsEl.placeholder = "off"; };
 fuelJumpsEl.onchange = () => {

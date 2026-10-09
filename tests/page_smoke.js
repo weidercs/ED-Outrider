@@ -4322,8 +4322,13 @@ const settle = async maxMs => {
       await new Promise(res => setTimeout(res, 50));
       r.saved = document.getElementById("uploadsMsg").textContent === "saved" && /stored key/.test(document.getElementById("uploadsBox").textContent);
       window.apiJson = aj; window.confirm = cf; data.uploads = keepU; uploadsNote = ""; uploadsDrawn = ""; renderUploads();
+      // the thresholds followed across windows too (the night's sweep left them out)
+      const hb = hlCfg.body;
+      store.set("highlightCfg", {body: 1234567, bio: null}); window.dispatchEvent(Object.assign(new Event("storage"), {key: "highlightCfg"}));
+      r.thresholds = hlCfg.body === 1234567 && document.getElementById("hlBody").value === "1234567";
+      store.set("highlightCfg", {body: hb, bio: null}); window.dispatchEvent(Object.assign(new Event("storage"), {key: "highlightCfg"}));
       return r; })()`);
-    const want = {copilot: true, timeout: true, superseded: true, bell: true, reset: true, declined: true, saved: true};
+    const want = {copilot: true, timeout: true, superseded: true, bell: true, reset: true, declined: true, saved: true, thresholds: true};
     const goodF = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodF;
     console.log(goodF ? "OK" : "FAIL", "| the Fable sweep's page fixes |", goodF ? "co-pilot, poll timeout, superseded run, bell, reset, declined confirm" : JSON.stringify(got), errors.slice(before));

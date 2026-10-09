@@ -2,6 +2,10 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · The thresholds followed across windows
+- The unsold and highlight thresholds changed (or reset by an import) in another window are followed by this one, as
+  the alert ticks now are; it kept its own copy and could write it back over the change.
+
 ## 2026-10-09 · Fable sweep fixes: the page
 - A voice answer or a co-pilot status report is no longer spoken by a window with spoken alerts off: Outrider told
   the Android app nobody would say it, so the app said it too and it was heard twice.
