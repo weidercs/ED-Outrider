@@ -4225,7 +4225,40 @@ const settle = async maxMs => {
     const goodL = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodL;
     console.log(goodL ? "OK" : "FAIL", "| uploads in the Data tile |", goodL ? "per service, test/dry-run marks, nothing when unused" : JSON.stringify(got), errors.slice(before));
+  }  // the bug check of 2026-10-09 (the Uploads section): its message survives the redraw, a failed request redraws the
+  // server's state, the box is ticked by what was switched, typed EDSM fields survive a redraw of the counts
+  {
+    const w = dom.window, before = errors.length, realFetch = w.fetch;
+    const answers = [];
+    w.fetch = (u, o) => /^api\/uploads/.test(String(u)) ? (answers.length ? answers.shift() : Promise.reject(new TypeError("Failed to fetch")))
+      : realFetch(u, o);
+    const json = (body, status = 200) => Promise.resolve(new Response(JSON.stringify(body), {status, headers: {"Content-Type": "application/json"}}));
+    answers.push(json({error: "EDMC on this PC is sending to EDDN: switch its EDDN off first", code: "edmc"}, 409));
+    const got = await w.eval(`(async () => {
+      const keep = data.uploads, msg = () => document.getElementById("uploadsMsg").textContent;
+      const base = {eddn: {available: true, on: false, wanted: false}, edsm: {available: true, on: false, wanted: false,
+                    accounts: [{commander: "Briadin", name: "Briadin", set: true, hint: "0123…4567 (40 characters)"}]}};
+      data.uploads = JSON.parse(JSON.stringify(base)); uploadsDrawn = ""; renderUploads();
+      const r = [];
+      await setUpload("eddn", true);                                   // answered: refused
+      r.push(msg());
+      await setUpload("eddn", true);                                   // no answer at all
+      r.push(/^could not reach Outrider/.test(msg()), document.querySelector('[data-upload="eddn"]').checked);
+      r.push(/checked/.test(uploadsHtml({eddn: {available: true, on: false, held: "x", blocked: "the Legacy game", wanted: true}, edsm: {}})));
+      document.querySelector(".edsmacc .edsmName").value = "Typed";    // typing, then a redraw of the counts
+      document.querySelector(".edsmacc .edsmKey").value = "abc";
+      document.activeElement && document.activeElement.blur && document.activeElement.blur();
+      data.uploads = JSON.parse(JSON.stringify(base)); data.uploads.eddn.sent_24h = 5; renderUploads();
+      r.push(document.querySelector(".edsmacc .edsmName").value, document.querySelector(".edsmacc .edsmKey").value);
+      data.uploads = keep; uploadsNote = ""; uploadsDrawn = ""; renderUploads();
+      return r; })()`);
+    w.fetch = realFetch;
+    const want = ["EDMC on this PC is sending to EDDN: switch its EDDN off first", true, false, true, "Typed", "abc"];
+    const goodQ = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && goodQ;
+    console.log(goodQ ? "OK" : "FAIL", "| uploads section messages and state |", goodQ ? "message kept, failure redrawn, ticked by the switch, typing kept" : JSON.stringify(got), errors.slice(before));
   }
+
   // review 2026-10-08 #15-#18: answers that arrive out of order. An older, slower request lands after a newer one:
   // its answer (or its failure) must not replace the newer one's
   {

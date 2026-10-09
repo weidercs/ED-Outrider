@@ -9366,6 +9366,7 @@ class State:
         for service in outrider.uploads.SERVICES:
             st = self.upload_status.get(service) or {}
             out[service] = dict(outrider.uploads.counts(self.db, service), on=self.upload_on(service),
+                                wanted=self.upload_wanted(service),   # the page's box: what the player switched
                                 available=service in self.upload_senders, error=st.get("error"),
                                 held=st.get("held") or (self.upload_conflict(service) if self.upload_wanted(service) else None),
                                 blocked=self.BLOCKED_WORDS.get(blocked) if blocked in ("beta", "legacy", "crew") else None)

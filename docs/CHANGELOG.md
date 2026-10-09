@@ -2,6 +2,14 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Uploads: bug check, the page (branch EDMC-Functionality)
+- Settings → Uploads keeps its message line: refusals ("EDMC on this PC is sending..."), EDSM's "saved", and the
+  config-file note were wiped by the redraw right after they were written, so they never showed.
+- A switch or Save that cannot reach Outrider says so, and the boxes show the server's state again (a failed request
+  left the box flipped).
+- An upload's box is ticked by what you switched, even while it is held or unavailable.
+- An EDSM name or key being typed survives the redraw of the counts.
+
 ## 2026-10-09 · Uploads: bug check, EDDN (branch EDMC-Functionality)
 - Station data goes once per visit: each docking sends the market, outfitting and shipyard again, changed or not (EDDN's
   readers date a station's data by it); only the same screen opened again in one docking is not sent twice. Before, an

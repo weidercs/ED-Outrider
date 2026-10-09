@@ -7305,6 +7305,9 @@ function starWords(cls, lum) {
 const UPLOAD_NAMES = {eddn: ["EDDN", "the data network Spansh, EDSM, Inara and others read: systems, scans, signals, markets, as they happen"],
                       edsm: ["EDSM", "your flight log and scans, to your EDSM account (in batches: each jump, docking)"]};
 let uploadsDrawn = "";
+// the Uploads section's last message (a refusal, a saved key, "could not reach Outrider"): part of what is drawn, so the
+// redraw right after an answer keeps it (the bug check of 2026-10-09: it was wiped as soon as it was written)
+let uploadsNote = "";
 // the Data tile's line: per upload that is on (or sent anything in the last day), what it sent, what waits and what
 // was refused, live with each payload; nothing when no upload is in use
 function uploadLineHtml(u) {
@@ -7334,7 +7337,9 @@ function uploadsHtml(u) {
     const test = s === "eddn" && x.test ? ` <span class="warnc" title="OUTRIDER_EDDN_TEST is set: EDDN's test schemas only, nothing reaches the live data">(test schemas only)</span>`
       : s === "edsm" && x.dry_run ? ` <span class="warnc" title="OUTRIDER_EDSM_DRYRUN is set: each request is built and logged (data/edsm-dryrun.jsonl), nothing is sent">(dry run: nothing sent)</span>` : "";
     const nums = [x.queued ? `${x.queued} waiting` : "", x.sent_24h ? `${x.sent_24h} sent today` : "", x.dropped_24h ? `${x.dropped_24h} refused` : "", x.dry_24h ? `${x.dry_24h} in dry runs` : ""].filter(Boolean).join(" · ");
-    return `<label class="mod"><input type="checkbox" data-upload="${s}"${x.on || (x.held && !x.blocked) ? " checked" : ""}${x.available && !u.simulate ? "" : " disabled"}> ` +
+    // ticked by what the player switched (wanted), whatever holds or blocks it now
+    const ticked = x.wanted ?? (x.on || !!x.held);
+    return `<label class="mod"><input type="checkbox" data-upload="${s}"${ticked ? " checked" : ""}${x.available && !u.simulate ? "" : " disabled"}> ` +
       `<b>${name}</b> <span class="hint">${esc(what)}</span></label><div class="hint">${state}${test}${nums ? " · " + esc(nums) : ""}` +
       `${x.error && !x.held ? ` · <span class="bad" title="${esc(x.error)}">last error</span>` : ""}</div>`;
   };
@@ -7346,7 +7351,7 @@ function uploadsHtml(u) {
     (a.hint ? `<div class="hint">stored key: <code title="its first and last four characters: compare them with your key on edsm.net">${esc(a.hint)}</code></div>` : "") + `</div>`).join("");
   return row("eddn") + row("edsm") +
     `<div class="hint">EDSM accounts, per in-game commander (your key is at <a href="https://www.edsm.net/en/settings/api" target="_blank" rel="noopener">edsm.net → Settings → API key</a>; it stays on this Outrider):</div>` +
-    (acc || `<div class="unk">no commander seen yet</div>`) + `<div class="hint" id="uploadsMsg"></div>` +
+    (acc || `<div class="unk">no commander seen yet</div>`) + `<div class="hint" id="uploadsMsg">${esc(uploadsNote)}</div>` +
     (u.simulate ? `<div class="unk">--simulate: nothing is uploaded</div>` : "");
 }
 function renderUploads() {
@@ -7355,16 +7360,30 @@ function renderUploads() {
   // a field being typed in is not redrawn under the player's fingers
   if (box.contains(document.activeElement) && document.activeElement.tagName === "INPUT" && document.activeElement.type !== "checkbox") return;
   const html = uploadsHtml(data.uploads);
-  if (html !== uploadsDrawn) { box.innerHTML = html; uploadsDrawn = html; }
+  if (html === uploadsDrawn) return;
+  // what was typed in an EDSM account row and not saved yet stays (a redraw of the counts must not wipe it)
+  const typed = [...box.querySelectorAll(".edsmacc")].map(row => [row.dataset.cmdr, row.querySelector(".edsmName").value,
+                                                                   row.querySelector(".edsmKey").value, row.querySelector(".edsmName").defaultValue]);
+  box.innerHTML = html; uploadsDrawn = html;
+  for (const [cmdr, name, key, was] of typed) {
+    const row = [...box.querySelectorAll(".edsmacc")].find(r => r.dataset.cmdr === cmdr);
+    if (!row) continue;
+    if (name !== was) row.querySelector(".edsmName").value = name;
+    if (key) row.querySelector(".edsmKey").value = key;
+  }
 }
 async function setUpload(service, on, confirmed) {
-  const msg = document.getElementById("uploadsMsg");
-  const j = await apiJson("api/uploads", {method: "POST", headers: {"Content-Type": "application/json"},
-                                         body: JSON.stringify({service, on, confirm: !!confirmed})});
-  if (j.code === "confirm_needed" && confirm(j.error)) return setUpload(service, on, true);
-  if (msg) msg.textContent = j.error || j.note || "";   // note: switched, but the config file could not keep it
-  if (!j.error) { delete j.note; data.uploads = j; }
-  uploadsDrawn = ""; renderUploads();
+  try {
+    const j = await apiJson("api/uploads", {method: "POST", headers: {"Content-Type": "application/json"},
+                                           body: JSON.stringify({service, on, confirm: !!confirmed})});
+    if (j.code === "confirm_needed" && confirm(j.error)) return setUpload(service, on, true);
+    uploadsNote = j.error || j.note || "";   // note: switched, but the config file could not keep it
+    if (!j.error) { delete j.note; data.uploads = j; }
+  } catch (err) {
+    uploadsNote = `could not reach Outrider: ${err.message}`;
+  } finally {
+    uploadsDrawn = ""; renderUploads();   // the box shows the server's state again, whatever happened
+  }
 }
 document.getElementById("uploadsBox").addEventListener("change", e => {
   const box = e.target.closest("[data-upload]");
@@ -7377,11 +7396,19 @@ document.getElementById("uploadsBox").addEventListener("click", async e => {
   e.preventDefault();
   const body = remove ? {commander: row.dataset.cmdr, remove: true}
     : {commander: row.dataset.cmdr, name: row.querySelector(".edsmName").value, api_key: row.querySelector(".edsmKey").value};
-  const j = await apiJson("api/uploads/edsm", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
-  const msg = document.getElementById("uploadsMsg");
-  if (msg) msg.textContent = j.error || (remove ? "removed" : "saved");
-  if (!j.error && data.uploads && data.uploads.edsm) data.uploads.edsm.accounts = j.accounts;
-  uploadsDrawn = ""; renderUploads();
+  try {
+    const j = await apiJson("api/uploads/edsm", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+    uploadsNote = j.error || (remove ? "removed" : "saved");
+    if (!j.error) {
+      if (data.uploads && data.uploads.edsm) data.uploads.edsm.accounts = j.accounts;
+      row.querySelector(".edsmKey").value = "";   // saved: nothing typed is kept over the redraw
+      row.querySelector(".edsmName").defaultValue = row.querySelector(".edsmName").value;
+    }
+  } catch (err) {
+    uploadsNote = `could not reach Outrider: ${err.message}`;
+  } finally {
+    uploadsDrawn = ""; renderUploads();
+  }
 });
 // Canonn's Bioforge: what is known of a codex entry across the galaxy (where it grows, the conditions)
 const bioforgeLink = id => Number.isInteger(id) && id > 0
