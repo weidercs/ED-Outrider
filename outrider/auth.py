@@ -43,7 +43,10 @@ def token_id(token):
     if not isinstance(token, str) or token.count(".") != 1:
         return None
     sid, sig = token.split(".")
-    return sid if sid and len(sig) == TOKEN_SIG_HEX else None
+    # only the shape make_token makes: a url-safe id and a hex signature (anything else, non-ASCII above all, would
+    # make hmac.compare_digest raise: review 2026-10-08 #11)
+    ok = re.fullmatch(r"[A-Za-z0-9_-]+", sid) and re.fullmatch(rf"[0-9a-f]{{{TOKEN_SIG_HEX}}}", sig)
+    return sid if ok else None
 
 
 def check_token(secret, password, token, revoked=()):
@@ -67,6 +70,28 @@ def is_loopback(remote):
         return False
     mapped = getattr(ip, "ipv4_mapped", None)
     return ip.is_loopback or bool(mapped and mapped.is_loopback)
+
+
+FORWARD_HEADERS = ("X-Forwarded-For", "Forwarded", "X-Real-IP")
+
+
+def from_this_pc(remote, headers):
+    """Whether a request comes from this machine itself: a loopback peer that no proxy forwarded. A reverse proxy on
+    this PC (Caddy, nginx: docs/guide/install.md) connects from loopback for every device it serves, and says so in a
+    forwarding header; such a request is another device's (review 2026-10-08 #3: the password was bypassed)."""
+    return is_loopback(remote) and not any(headers.get(h) for h in FORWARD_HEADERS)
+
+
+def client_key(remote, headers):
+    """Who to count wrong passwords against: the peer, or, behind a reverse proxy on this PC, the client it names (the
+    last hop it added). Headers from any other peer are not trusted: anyone can send them."""
+    if is_loopback(remote):
+        fwd = (headers.get("X-Forwarded-For") or "").split(",")[-1].strip() or (headers.get("X-Real-IP") or "").strip()
+        if fwd:
+            return fwd
+        if headers.get("Forwarded"):
+            return "forwarded"
+    return str(remote)
 
 
 def request_token(headers, cookies):

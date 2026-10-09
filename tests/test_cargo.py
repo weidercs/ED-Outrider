@@ -93,6 +93,16 @@ class CarrierFold(unittest.TestCase):
         self.assertEqual(st["lines"]["silver"]["count"], 10)
         self.assertNotIn("silver", st["orders"])
 
+    def test_market_keeps_a_confirmed_line_moves(self):
+        """Review 2026-10-08 #10: a market read confirmed the count but emptied the line's moves (the hover text)."""
+        t0, t1 = "2026-10-01T10:00:00Z", "2026-10-01T10:05:00Z"
+        events = [(t0, ev(t0, "CarrierTradeOrder", CarrierID=CARRIER, Commodity="gold", SaleOrder=10, Price=9000)),
+                  (t1, ev(t1, "CargoTransfer", _at=CARRIER, Transfers=[{"Type": "gold", "Count": 4, "Direction": "tocarrier"}]))]
+        st = cargo.carrier_fold(CARRIER, events, [("2026-10-01T11:00:00Z", [item("gold", stock=14, buy=9000)])])
+        line = st["lines"]["gold"]
+        self.assertEqual((line["count"], line["state"]), (14, "confirmed"))
+        self.assertEqual([m[1] for m in line["moves"]], [4])
+
     def test_entered_line_moves(self):
         """A count you entered keeps its mark through your journaled moves, which say what changed it."""
         events = [("2026-10-08T09:00:00Z", ev("2026-10-08T09:00:00Z", "CargoTransfer", _at=CARRIER,
@@ -297,6 +307,39 @@ class CargoState(unittest.TestCase):
         s2 = ed_outrider.State(self.db, j2, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
         self.assertEqual(s2.cargo_summary()["carrier"]["lines"], before)
 
+    def test_login_docked_counts_as_a_dock(self):
+        """Review 2026-10-08 #2: a session that starts docked (a login, a respawn) writes a Location with Docked, not a
+        Docked event. A transfer to the carrier straight after it was dropped for want of a market, for good."""
+        self.j.line_source = "Journal.test.log:1"
+        self.j.handle(ev("2026-10-08T09:00:00Z", "Undocked", StationName="Somewhere", MarketID=5))
+        self.j.line_source = "Journal.test.log:2"
+        self.j.handle(ev("2026-10-08T10:00:00Z", "Location", Docked=True, StationName="OUT OF THE BLUE",
+                         StationType="FleetCarrier", MarketID=CARRIER, StarSystem="Smojooe AR-E b25-8",
+                         SystemAddress=1, StarPos=[1.0, 2.0, 3.0], StationServices=["exploration", "vistagenomics"]))
+        self.j.line_source = "Journal.test.log:3"
+        self.j.handle(ev("2026-10-08T10:01:00Z", "CargoTransfer",
+                         Transfers=[{"Type": "tritium", "Count": 100, "Direction": "tocarrier"}]))
+        rows = self.db.execute("SELECT event, market FROM cargo_events").fetchall()
+        self.assertEqual([tuple(r) for r in rows], [("CargoTransfer", CARRIER)])
+        self.assertEqual((self.j.docked["market_id"], self.j.docked["has_vista"]), (CARRIER, True))
+        # a ride in someone else's ship is no dock of yours
+        self.j.handle(ev("2026-10-08T11:00:00Z", "Location", Docked=True, Multicrew=True, StationName="Elsewhere",
+                         StationType="Coriolis", MarketID=77, StarSystem="X", SystemAddress=2, StarPos=[0, 0, 0]))
+        self.assertEqual(self.j.cargo_dock, CARRIER)
+
+    def test_srv_mining_stays_out_of_the_ship(self):
+        """Review 2026-10-08 #8: the Rhino's refinery (MiningRefined) and scoop (CollectCargo) are the SRV's hold."""
+        self.j.handle(ev("2026-10-08T09:00:00Z", "MarketBuy", MarketID=1, Type="gold", Count=10, BuyPrice=9000))
+        self.j.handle(ev("2026-10-08T09:10:00Z", "LaunchSRV", SRVType="mev_rhino", SRVType_Localised="Rhino",
+                         PlayerControlled=True, ID=1))
+        for n in range(3):
+            self.j.handle(ev(f"2026-10-08T09:1{n + 1}:00Z", "MiningRefined", Type="$lowtemperaturediamond_name;"))
+        self.j.handle(ev("2026-10-08T09:15:00Z", "CollectCargo", Type="gold", Stolen=False))
+        self.assertEqual({k: v["count"] for k, v in self.j.ship_cargo["lines"].items()}, {"gold": 10})
+        self.j.handle(ev("2026-10-08T09:20:00Z", "DockSRV", SRVType="mev_rhino", ID=1))
+        self.j.handle(ev("2026-10-08T09:30:00Z", "CollectCargo", Type="gold", Stolen=False))   # the ship's scoop again
+        self.assertEqual(self.j.ship_cargo["lines"]["gold"]["count"], 11)
+
     def test_tile_tritium(self):
         """The tile's tritium only while tritium is on a sell order (confirmed); else the tile is as before."""
         fx, _, _ = real()
@@ -490,6 +533,28 @@ class TradeRoute(unittest.TestCase):
         self.assertEqual(self.moments()[-1], ("complete", "Trade route complete: about 14,691,200 credits in all."))
         self.assertTrue(self.state.survey_summary()["complete"])
         self.assertEqual(len([m for m in self.moments() if m[0] == "done"]), 3)   # stops 0, 1 and 2, once each
+
+    def test_two_stops_in_one_system(self):
+        """Review 2026-10-08 #5: the route moved on only with a jump, so a hop to another station in the same system
+        stalled at the first stop for good. A trade at the next stop's station (same system) moves it there."""
+        r = [dict(x) for x in self.rows]
+        r[2].update(system=r[1]["system"], id64=r[1]["id64"])   # Shimizu Hub moved into Titus City's system
+        self.jump(-100, r[0]["id64"], r[0]["system"], 0)
+        self.state.riches_store(r, {"options": {}, "kind": "trade"})
+        self.market(-90, "MarketBuy", r[0], "Biowaste")
+        self.jump(-80, r[1]["id64"], r[1]["system"], 27)
+        self.market(-70, "MarketSell", r[1], "Biowaste")
+        self.market(-60, "MarketBuy", r[1], "Silver")
+        self.assertEqual(self.state.survey_summary()["at"], 1)
+        self.market(-50, "MarketSell", r[2], r[2]["sell"][0]["name"])   # the next stop, no jump between
+        s = self.state.survey_summary()
+        self.assertEqual(s["at"], 2)
+        if r[2]["buy"]:
+            self.market(-49, "MarketBuy", r[2], r[2]["buy"][0]["name"])
+        self.assertEqual(self.moments()[-1][0], "done")
+        self.assertIn("Hop 2 done", self.moments()[-1][1])
+        self.market(-40, "MarketSell", r[0], "Biowaste")   # a stop in another system: never jumps the route back
+        self.assertEqual(self.state.survey_summary()["at"], 2)
 
     def test_plot(self):
         self.jump(-100, self.rows[0]["id64"], "Sol", 0)

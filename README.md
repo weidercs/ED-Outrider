@@ -45,6 +45,7 @@ also run 24/7 on a home server in Docker.
 | 🛣 **Neutron Highway** | Plot a neutron route with Spansh for any ship you have flown; Outrider follows it as you fly and says the next stop. |
 | 💰 **Road to Riches, Exomastery** | Plot a [Spansh Road to Riches](https://spansh.co.uk/riches) or [Expressway to Exomastery](https://spansh.co.uk/exobiology) route in the Plot Route tab; Outrider follows it as you fly, shows what is left to scan and map in each system from your journal, and says it on arrival. |
 | 📦 **Cargo and your carrier** | Your hold with what you paid, and your fleet carrier's cargo and tritium tracked from your journal, with no Frontier sign-in. |
+| 📍 **Nearest place to dock** | The nearest stations and fleet carriers you can land at and use (UC, Vista, repair...), from Spansh and the Deep Space Support Array's carriers, with how old each report is; one click plots there, or ask "nearest Vista" out loud. |
 | 💱 **Trading, kept small** | Where to sell or buy what you carry, from Spansh's markets, and Spansh's trade planner as a route Outrider follows and talks you through. |
 | 📜 **Your logbook** | Every journal event in a searchable log, every exobiology sample and what became of it, and a schematic of the system. |
 | 📈 **The long view** | Each trip from sale to sale with what it actually paid, what each ship loss cost, your best finds, ranks and career statistics. |
@@ -52,7 +53,7 @@ also run 24/7 on a home server in Docker.
 | ⛏️ **Rhino mining** | A heading-up surface map on Now with your rigs, sample points and ship, and every collection kept per body. |
 | 📱 **A tablet in the cockpit** | Every page in a touch layout with nine themes, alerts as banners, game buttons on a control rail, and the voice on the tablet if you like. |
 | 🎙️ **Ask out loud** | "Hey Vespa, status report": answered in the voice from what Outrider knows, with an optional AI for anything else. |
-| 🎯 **Automation (game PC; Linux, Windows experimental)** | Auto honk fires the Discovery Scanner on arrival, auto-target targets the next Highway system, and one HOTAS button asks for a status report. |
+| 🎯 **Automation (game PC; Linux, Windows experimental)** | Auto honk fires the Discovery Scanner on arrival, auto-target targets the next route system after a supercharge, and one HOTAS button (Linux) targets the next route system with a tap, gives a status report with a double tap and hushes with a hold. |
 
 ## 🚀 Getting started
 
@@ -77,7 +78,7 @@ Everything about installing, the optional parts, Docker, other devices and backu
 |---|---|
 | <a id="-running-as-a-server-docker"></a><a id="-other-devices-on-your-network"></a><a id="-backups"></a>**[Install and run](docs/guide/install.md)** | Getting started in full (Linux, Windows, the optional parts), running as a server in Docker, other devices on your network, backups |
 | <a id="-the-views"></a><a id="-the-surface-map"></a>**[The views](docs/guide/views.md)** | Every tab (Nearby, Here, Map, History, Samples, Log, Materials, Search, My firsts, Now), the header tiles, the desktop themes, the surface map |
-| <a id="-the-neutron-highway"></a>**[Plot Route](docs/guide/plot-route.md)** | The Neutron Highway (exact and neutron plotters), Road to Riches, Exomastery and trade routes, following a route, 🎯 and auto-target |
+| <a id="-the-neutron-highway"></a>**[Plot Route](docs/guide/plot-route.md)** | The Neutron Highway (exact and neutron plotters), Road to Riches, Exomastery and trade routes, following a route, 🎯 and auto-target, the nearest place to dock |
 | <a id="-cargo-and-your-carrier"></a><a id="-trading"></a>**[Cargo and trading](docs/guide/cargo-and-trading.md)** | Your hold and your fleet carrier's (tracked, no Frontier sign-in), the carrier's tritium, Sell / Buy from Spansh's markets, trade routes |
 | <a id="-alerts"></a><a id="-the-voice"></a><a id="-ask-outrider-by-voice"></a><a id="-ask-an-ai-about-your-game"></a>**[Voice and alerts](docs/guide/voice-and-alerts.md)** | What Outrider tells you and when, the voice and its personalities, editing and banning lines, asking by voice, asking an AI |
 | <a id="-auto-honk"></a><a id="-the-co-pilot-button"></a>**[Automation](docs/guide/automation.md)** | Auto honk and the co-pilot button (on the game PC) |

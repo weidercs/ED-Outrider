@@ -97,6 +97,9 @@ MAP_MULT_ALREADY_KNOWN = 3.3333333
 TERRAFORM_STATES = {"terraformable", "terraforming", "terraformed"}
 
 
+FULL_SCAN_BONUS = 1000   # cr per body of a fully found, wholly undiscovered system (paid as the sale's Bonus)
+
+
 def star_base_value(star_type: str, stellar_mass: float) -> float:
     st = (star_type or "").upper()
     if st in WHITE_DWARF_TYPES:
@@ -338,6 +341,8 @@ INTERESTING = (
     '"MultiSellExplorationData"', '"SellExplorationData"', '"SellOrganicData"',
     '"Died"', '"Resurrect"', '"LoadGame"', '"Commander"',
     '"Statistics"', '"CrewHire"', '"CrewFire"',
+    '"FSDJump"', '"Location"', '"CarrierJump"',   # a system's Population: no x5 bio bonus where people live
+    '"FSSAllBodiesFound"',                         # every body found: the full-scan bonus
 )
 
 SCAN_KEEP = (
@@ -395,6 +400,10 @@ def _read_file(path):
                 continue
             if name == "Scan":   # most of the volume: keep only what analyse() prices and judges by
                 ev = {k: ev[k] for k in ("event", "timestamp") + SCAN_KEEP if k in ev}
+            elif name in ("FSDJump", "Location", "CarrierJump"):
+                ev = {k: ev[k] for k in ("event", "timestamp", "StarSystem", "SystemAddress", "Population") if k in ev}
+            elif name == "FSSAllBodiesFound":
+                ev = {k: ev[k] for k in ("event", "timestamp", "SystemName", "SystemAddress", "Count") if k in ev}
             # a hash, not the line itself, de-duplicates across folders: the cache lives as long as the server
             events.append((ts, commander, hash(key), ev))
     return events
@@ -576,7 +585,11 @@ def analyse(events, args):
     mapped = {}                     # (system, bodyid) -> efficient?  (mapping still aboard)
     system_name = {}                # SystemAddress -> name, for events that carry only the address
     organics = []                   # completed (Analyse) samples still aboard: not in a sale, not lost to a death
-    footfalled = {}                 # (system, bodyid) -> WasFootfalled from your first Scan of it that says
+    footfalled = {}                 # (system, bodyid) -> no x5: WasFootfalled from your first Scan of it that says, or
+    #                                 the system is populated (Vista Genomics pays no x5 there: 0 of 8 runs, 208 of 208
+    #                                 elsewhere in the author's sales)
+    populated = {}                  # SystemAddress -> Population > 0, from the newest jump or login there
+    all_found = {}                  # system name -> FSSAllBodiesFound's Count (the bodies, belt clusters not included)
     saa = []                        # (key, ts, efficient): mappings, judged once every system name is known
     death_in_window = None
 
@@ -587,13 +600,22 @@ def analyse(events, args):
         if ev.get("StarSystem") and ev.get("SystemAddress") is not None:   # any line naming it (a nav beacon's too)
             system_name[ev["SystemAddress"]] = ev["StarSystem"]
 
+        if name == "FSSAllBodiesFound":
+            if ev.get("SystemName") and isinstance(ev.get("Count"), int):
+                all_found[ev["SystemName"]] = ev["Count"]
+            continue
+        if name in ("FSDJump", "Location", "CarrierJump"):
+            if isinstance(ev.get("Population"), int):
+                populated[ev.get("SystemAddress")] = ev["Population"] > 0
+            continue
         if name == "Scan":
             if ev.get("ScanType") in NAV_BEACON_SCANS:
                 continue
             if "WasFootfalled" in ev:
                 # Vista Genomics pays x5 where nobody had set foot when you scanned the body (the first scan
-                # counts: a rescan after your own landing says footfalled)
-                footfalled.setdefault((ev.get("SystemAddress"), ev.get("BodyID")), bool(ev["WasFootfalled"]))
+                # counts: a rescan after your own landing says footfalled), and never in a populated system
+                footfalled.setdefault((ev.get("SystemAddress"), ev.get("BodyID")),
+                                      bool(ev["WasFootfalled"]) or populated.get(ev.get("SystemAddress"), False))
             if not (ev.get("StarType") or ev.get("PlanetClass")):
                 continue  # belt clusters and rings: no cartographic value, don't count them
             key = (ev.get("SystemAddress"), ev.get("BodyID"))
@@ -747,6 +769,21 @@ def analyse(events, args):
     bio_rows_out = sorted(bio_by_species.values(), key=lambda r: r["value"], reverse=True)
     bio_estimate = int(bio_estimate)
 
+    # The full-scan bonus (the sale's Bonus, apart from BaseValue): 1,000 cr per body of a system where you found
+    # every body (FSSAllBodiesFound's Count) and every star and planet was undiscovered. Pioneer counts non-bodies
+    # and the main star's discovery only; the author's sales fit this narrower form (13 of 15 within 0.86-1.11,
+    # typically 7% over: project/value-checks/RESULTS-2026-10-08.md).
+    full_scan, full_scan_systems = 0, 0
+    by_system = {}
+    for r in explo_rows:
+        if not r.get("map_only"):
+            by_system.setdefault(r["system"], []).append(r)
+    for sysname, rows in by_system.items():
+        count = all_found.get(sysname)
+        if count and len(rows) >= count and all(r["first_discovered"] for r in rows):
+            full_scan += FULL_SCAN_BONUS * count
+            full_scan_systems += 1
+
     return {
         "commanders_seen": sorted(commanders),
         "commander_filter": args.commander,
@@ -764,7 +801,9 @@ def analyse(events, args):
             "payout_ratio": payout_ratio,
             "payout_note": payout_note,
             "npc_crew": crew,
-            "estimated_payout": int(sum(r["value"] for r in explo_rows) * payout_ratio),
+            "full_scan_bonus": full_scan,
+            "full_scan_systems": full_scan_systems,
+            "estimated_payout": int((sum(r["value"] for r in explo_rows) + full_scan) * payout_ratio),
             "rows": explo_rows,
         },
         "exobiology": {
@@ -819,7 +858,10 @@ def report(result, args):
     print(f"  counting from : {ex['cutoff'] or 'the beginning of your journals'}")
     print(f"  bodies        : {ex['bodies']:,} across {ex['systems']:,} systems")
     print(f"  first found   : {ex['first_discoveries']:,}   mapped: {ex['mapped']:,}")
-    print(f"  ESTIMATED     : {cr(ex['estimated_value'])}")
+    if ex.get("full_scan_bonus"):   # paid on top of the bodies (the sale's Bonus): in the estimate and the total too
+        print(f"  full-scan bonus: {cr(ex['full_scan_bonus'])}   ({ex['full_scan_systems']} system"
+              f"{'' if ex['full_scan_systems'] == 1 else 's'} found complete, all undiscovered)")
+    print(f"  ESTIMATED     : {cr(ex['estimated_value'] + ex.get('full_scan_bonus', 0))}")
     if ex["payout_ratio"] < 0.999:
         print(f"  after crew cut: {cr(ex['estimated_payout'])}   ({ex['payout_note']})")
     else:
@@ -843,7 +885,7 @@ def report(result, args):
               " (species missing from the built-in table; counted as 0)")
 
     print("\n" + "-" * 66)
-    print(f"  TOTAL ESTIMATED  {cr(ex['estimated_value'] + bio['estimated_value'])}")
+    print(f"  TOTAL ESTIMATED  {cr(ex['estimated_value'] + ex.get('full_scan_bonus', 0) + bio['estimated_value'])}")
     print("-" * 66)
 
     if not args.since and not (ex["last_sold"] and bio["last_sold"]):

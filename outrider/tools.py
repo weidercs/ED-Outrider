@@ -15,7 +15,7 @@ import urllib.parse
 
 # the GET routes a tool may read (path prefixes); /api/find is left out on purpose: it can store an EDSM hit
 READ_ROUTES = ("/api/status", "/api/nearby", "/api/system/", "/api/body", "/api/firsts", "/api/left", "/api/highway",
-               "/api/history", "/api/materials")
+               "/api/history", "/api/materials", "/api/nearest")   # /api/nearest only ever with cached=1 (no DSSA fetch)
 DEFAULT_ROWS = 25
 NOT_RUNNING = "Outrider isn't running (start it, then ask again)"
 
@@ -157,6 +157,30 @@ async def nearest_unvisited(get, args, rows):
     if not xs or (cut is not None and xs[0].get("distance", 0) > cut):
         return {"nearest": None, "note": f"no known unvisited system within {cut if cut is not None else p.get('radius')} ly"}
     return {"nearest": _sys_brief(xs[0]), "next_ones": [_sys_brief(x) for x in xs[1:min(len(xs), 1 + max(0, min(rows, 5) - 1))]]}
+
+
+@tool("nearest_dock", "The nearest stations and fleet carriers the commander can dock at (pad size, docking access, "
+      "recent reports), from Spansh, the Deep Space Support Array's list and their own carrier; optionally only those "
+      "with given services.",
+      {"need": {"type": "array", "items": {"type": "string", "enum": ["UC", "Vista", "Repair", "Refuel", "Shipyard", "Outfitting"]},
+                "description": "services every place must have (UC: Universal Cartographics, Vista: Vista Genomics)"},
+       "kind": {"type": "string", "enum": ["any", "station", "carrier"], "description": "stations, carriers or both (default)"},
+       "age_days": {"type": "integer", "description": "leave out reports older than this (default 30)"}})
+async def nearest_dock(get, args, rows):
+    need = [n for n in args.get("need") or [] if isinstance(n, str)]
+    kind = args.get("kind") if args.get("kind") in ("station", "carrier") else "any"
+    q = {"need": ",".join(need), "age": str(_int(args, "age_days", 30, 1, 3650)), "cached": "1",
+         "stations": "0" if kind == "carrier" else "1", "carriers": "0" if kind == "station" else "1"}
+    d = await get("/api/nearest", q)
+    if d.get("error"):
+        return {"error": d["error"]}
+    def brief(r):
+        return {"name": r.get("name") or r.get("callsign"), "callsign": r.get("callsign") or None, "kind": r.get("kind"),
+                "station_type": r.get("station_type"),
+                "system": r.get("system"), "distance_ly": r.get("ly"), "from_star_ls": rnd(r.get("ls"), 0),
+                "services": r.get("services"), "pads": r.get("pads"), "dssa": bool(r.get("dssa")), "yours": bool(r.get("own")),
+                "warnings": r.get("warn") or [], "report_age_days": rnd((r.get("age_s") or 0) / 86400) if r.get("age_s") is not None else None}
+    return {"hidden": d.get("hidden"), "pad": d.get("pad"), **capped(map(brief, d.get("rows") or []), min(rows, 10), "places")}
 
 
 @tool("body_detail", "One body in the current system (or another system by its id64): its values, signals, biology "

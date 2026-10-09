@@ -176,7 +176,7 @@ function notable(s) {
   return ["ELW", "WW", "AW", "T"].filter(k => n[k]).map(k =>
     `<span class="nb ${k}" title="${names[k]}${n[k] > 1 ? "s" : ""}">${k}${n[k] > 1 ? "×" + n[k] : ""}</span>`).join("") +
     (s.bio_potential ? `<span class="nb bio" title="exobiology: up to this much across ${s.bio_bodies_guessed} bod${s.bio_bodies_guessed === 1 ? "y" : "ies"}, from spawn rules">🧬≤${credits(s.bio_potential)}</span>` : "") +
-    phenomenaTag(s.phenomena) + oldDataTag(s.stale_bio) +
+    phenomenaTag(s.phenomena) + oldDataTag(s.stale_bio) + bioUnknownTag(s.bio_unknown) +
     (s.curiosities ? `<span class="nb cur" title="${(s.curiosity_list || []).map(c => esc(`${c.body}: ${c.tag} (${c.why})`)).join("&#10;")}">🔭${s.curiosities > 1 ? "×" + s.curiosities : ""}</span>` : "");
 }
 // pre-Odyssey Spansh data (stale_bio {bodies, genera_top, up_to, reported}): thin-atmosphere worlds marked not
@@ -186,6 +186,10 @@ function oldDataTitle(o) {
     ((o.genera_top || []).length ? `&#10;The rules allow: ${o.genera_top.map(esc).join(", ")}` : "") +
     (o.up_to ? `&#10;One genus per body at the median: about ${credits(o.up_to)} cr` : "");
 }
+// landable bodies you have only from an AutoScan or a nav beacon, whose signals nobody counted, where the rules allow
+// life (BioScan's "Bios possible, check FSS for signals")
+const BIO_UNKNOWN_TITLE = "landable, signals not counted (your AutoScan or a nav beacon only) and the rules allow life: the FSS would say";
+const bioUnknownTag = n => !n ? "" : `<span class="nb" title="${n} bod${n === 1 ? "y" : "ies"}: ${BIO_UNKNOWN_TITLE}">${dual(`🧬? ${n} to check in the FSS`, `🧬? ${n}`)}</span>`;
 const oldDataTag = o => { if (!o || !o.bodies) return "";
   const full = `old data: ${o.bodies} bod${o.bodies === 1 ? "y" : "ies"}`;
   return `<span class="nb old" title="${oldDataTitle(o)}">${dual(full, `old ${o.bodies}`, {titleHtml: `${full}. ${oldDataTitle(o)}`})}</span>`; };
@@ -522,6 +526,16 @@ document.getElementById("tilesBtn").onclick = () => {
   drawTilesFold(); drawTilesMode();
   if (data) render();   // the header's height changed: app mode and what is sized to the window follow
 };
+// Here's bio column on this device (store hereBio): leave out finished species, and the bio of bodies with fewer than
+// minSig signals (BioScan's display options)
+const hereBio = () => { const c = store.get("hereBio", null) || {};
+  return {hideDone: !!c.hideDone, minSig: Number.isInteger(c.minSig) && c.minSig > 0 ? Math.min(20, c.minSig) : 0}; };
+{
+  const hd = document.getElementById("hereHideDone"), ms = document.getElementById("hereMinSig");
+  const draw = () => { const c = hereBio(); hd.checked = c.hideDone; ms.value = c.minSig; };
+  const save = () => { store.set("hereBio", {hideDone: hd.checked, minSig: Math.max(0, Math.min(20, parseInt(ms.value, 10) || 0))}); draw(); if (data) renderHere(); };
+  hd.onchange = save; ms.onchange = save; draw();
+}
 const tilesModeEl = document.getElementById("tilesMode");
 const drawTilesMode = () => { tilesModeEl.value = tilesMode() || ""; };
 tilesModeEl.onchange = () => { store.set("tilesMode", tilesModeEl.value || null); drawTilesFold(); if (data) render(); };
@@ -590,7 +604,7 @@ function leavingText(l) {
     const parts = Object.entries(b.partial).map(([g, n]) => `${esc(g)} ${n}/3`).concat(unstarted(b).map(esc));
     bits.push(`bio on <b>${esc(b.body)}</b>${b.genera === null ? ` (${noDssText(b, parts)})` : parts.length ? ` (${parts.join(", ")})` : ""}` +
               (b.potential ? ` up to ${credits(pendingWorth(b))}${ffMark(b)}` : b.potential == null && !Object.keys(b.partial || {}).length ? " (value unknown)" : "") +
-              (codexNewCounts() && b.codex_new ? " ✦ new to your codex here" : ""));
+              (codexNewCounts() && b.codex_galaxy ? " ✪ new to your codex anywhere" : codexNewCounts() && b.codex_new ? " ✦ new to your codex here" : ""));
   }
   return `Leaving with unfinished work: ${bits.join(" · ")}`;
 }
@@ -615,7 +629,8 @@ const scText = sec => sec < 90 ? `~${Math.max(10, Math.round(sec / 5) * 5)} s` :
 const colonyM = g => (data && data.colony && g && data.colony[String(g).toLowerCase()]) || null;
 const colonyTxt = g => colonyM(g) ? ` <span class="unk" title="samples of one species must be this far apart">· ${colonyM(g).toLocaleString("en-US")} m</span>` : "";
 // how you are on the body, naming the vehicle the journal says you launched ("in the Rhino", "in the Nomad")
-const howOnBody = ob => ob.how === "in the SRV" && ob.vehicle ? `in the ${ob.vehicle}` : ob.how;
+const howOnBody = ob => ob.how === "in the SRV" && ob.vehicle ? `in the ${ob.vehicle}` : ob.how === "flying low" ? `flying low, ${surfDist(ob.alt)}` : ob.how;
+const onOrOver = ob => ob.how === "flying low" ? "Over" : "On";
 function planItems(l) {
   const w = worthLeavingFor(l);
   if (!w) return [];
@@ -651,7 +666,7 @@ function planText(it, totals = false) {
   const atm = b.atmosphere && b.atmosphere !== "None" ? ` · ${esc(b.atmosphere)}` : "";
   return `bio on <b>${esc(b.body)}</b>` + (b.genera === null ? ` (${noDssText(b, parts)})` : parts.length ? `: ${parts.join(", ")}` : "") +
     (b.potential ? ` up to ${credits(pendingWorth(b))}` + (b.factor === 5 ? ` <span class="ok" title="nobody had set foot here when you scanned it: exobiology pays ×5 (included)">👣×5</span>` : "") : "") +
-    (b.codex_new ? ` <span class="cxnew">✦</span>` : "") + g + atm;
+    (b.codex_galaxy ? ` <span class="cxnew cxgal" title="new to your codex anywhere">✪</span>` : b.codex_new ? ` <span class="cxnew">✦</span>` : "") + g + atm;
 }
 const planCost = it => it.sec == null ? "" : ` <span class="unk" title="supercruise from the arrival star (${Math.round(it.dist).toLocaleString("en-US")} ls), and what it pays per minute of that">· ${scText(it.sec)}${it.perMin ? ` · ${credits(it.perMin)}/min` : ""}</span>` +
   (it.skip ? ` <span class="unk skipq" title="under your ${credits(skipFloor())} cr per minute of supercruise">skip?</span>` : "");
@@ -683,14 +698,22 @@ function checklistHtml(l) {
 }
 // ---- on-body strip: what is left to sample on the body you are standing on (landed, SRV, on foot) ----
 let obKey = null, obData = null;
+// the body you are on, or flying low over in your ship (near_body: its card before you pick where to land)
+const obNow = () => data && (data.on_body || data.near_body);
 async function loadOnBody() {
-  const ob = data && data.on_body;
+  const ob = obNow();
   if (!ob) { if (obData) { obData = null; obKey = null; } renderOnBody(); return; }
   const key = `${ob.system}|${data.scan_version}`;
   if (key === obKey) return renderOnBody();
   obKey = key;
-  // a thrown fetch (the server restarting, a dropped connection) is an error like a JSON one: asked again next time
-  try { obData = await apiJson(`api/system/${ob.system}`); } catch (err) { obData = {error: err.message}; }
+  // a thrown fetch (the server restarting, a dropped connection) is an error like a JSON one: asked again next time.
+  // Each scan or sample bumps scan_version, so several can be in flight: only the newest one's answer is kept, an
+  // older one landing later must not put older counts back (review 2026-10-08 #15)
+  const g = newRequest("onbody");
+  let got;
+  try { got = await apiJson(`api/system/${ob.system}`); } catch (err) { got = {error: err.message}; }
+  if (!isNewest("onbody", g)) return;
+  obData = got;
   if (obData && obData.error) obKey = null;
   renderOnBody();
 }
@@ -707,19 +730,35 @@ function samplingHtml() {
   if (!sm || !sm.samples || sm.samples >= 3) return "";
   const head = `<b>${esc(sm.genus || "")}</b> <span class="unk">${esc((sm.species || "").split(" ").slice(1).join(" "))}</span> · sample ${sm.samples}/3`;
   // no colony distance for this genus (one outrider.bio does not know): the positions may well be recorded
-  if (sm.need == null && sm.points > 0) return `<div class="spacing unk">${head} · spacing unknown for this genus</div>`;
+  if (sm.need == null && sm.points > 0) return `<div class="spacing unk">${head} · spacing unknown for this genus${tagText(sm)}</div>`;
   if (sm.to_go == null) return `<div class="spacing unk">${head} · ${sm.need ? `need ${sm.need} m from the last sample` : "spacing unknown"}` +
-    ` <span title="the position of your earlier samples was not recorded (they were taken before Outrider was running)">(position unknown)</span></div>`;
+    ` <span title="the position of your earlier samples was not recorded (they were taken before Outrider was running)">(position unknown)</span>${tagText(sm)}</div>`;
   return `<div class="spacing ${sm.clear ? "clear" : ""}">${head} · ` +
     (sm.clear ? `✓ clear to sample <span class="unk">(${sm.nearest} m from the nearest, ${sm.need} m needed)</span>`
-              : `<b>${sm.to_go} m</b> to go <span class="unk">(${sm.nearest} of ${sm.need} m)</span>`) + `</div>`;
+              : `<b>${sm.to_go} m</b> to go <span class="unk">(${sm.nearest} of ${sm.need} m)</span>`) + tagText(sm) + `</div>`;
 }
-let clearAnnounced = null;
+// the nearest plant of this species you tagged with the composition scanner where the next sample would count
+function tagText(sm) {
+  const t = sm && sm.tag;
+  if (!t) return "";
+  const turn = t.turn == null ? t.way : Math.abs(t.turn) < 10 ? "ahead" : `turn ${Math.abs(t.turn)}° ${t.turn > 0 ? "right" : "left"}`;
+  return ` · <span title="the nearest ${esc(sm.genus || "")} you tagged with the composition scanner, outside the colony of your samples">` +
+    `tagged: <b>${surfDist(t.dist)}</b>, ${esc(turn)}</span>`;
+}
+let clearAnnounced = null, tagAnnounced = null;
+// how much of a targeted system is known: Spansh's bodies of its body count, and EDSM's beside it (SystemStatusOverlay)
+function targetCounts(t) {
+  if (!t) return "";
+  const sp = t.count ? `${t.known || 0}/${t.count} known` : t.known ? `${t.known} known` : "";
+  const e = t.edsm, ed = !e ? "" : e.missing ? "EDSM: not logged" : `EDSM ${e.known}${e.count ? "/" + e.count : ""}`;
+  const parts = [sp, ed].filter(Boolean);
+  return parts.length ? ` <span class="unk" title="bodies Spansh knows of the system's count (and EDSM's own reports)">${esc(parts.join(" · "))}</span>` : "";
+}
 function renderOnBody() {
-  const el = document.getElementById("onbody"), ob = data && data.on_body;
+  const el = document.getElementById("onbody"), ob = obNow();
   if (!ob) { el.innerHTML = ""; return; }
   const b = obData && !obData.error && obData.bodies.find(x => x.name === ob.body);
-  if (!b) { el.innerHTML = samplingHtml() + `On <b>${esc(ob.body)}</b> (${esc(howOnBody(ob))})`; return; }
+  if (!b) { el.innerHTML = samplingHtml() + `${onOrOver(ob)} <b>${esc(ob.body)}</b> (${esc(howOnBody(ob))})`; return; }
   const bits = [], f = bioFactor(b);
   for (const g of bioGenera(b)) {
     const o = b.organics.find(o => o.genus === g), x = (b.bio_guess || []).find(q => q.genus === g);
@@ -731,7 +770,7 @@ function renderOnBody() {
   if (unk) bits.push(`<span class="unk">${unk.label.replace(/ signals?/, m => " bio" + m)}</span>`);
   if (b.geo) bits.push(`<span class="sp geo">🪨 ${b.geo} geo</span>`);
   const x5 = b.value_parts && b.value_parts.bio_factor === 5;
-  el.innerHTML = samplingHtml() + `On <b>${esc(ob.body)}</b> <span class="unk">(${esc(howOnBody(ob))})</span>: ` + (bits.join(" ") || `<span class="unk">no bio or geo signals known</span>`) +
+  el.innerHTML = samplingHtml() + `${onOrOver(ob)} <b>${esc(ob.body)}</b> <span class="unk">(${esc(howOnBody(ob))})</span>: ` + (bits.join(" ") || `<span class="unk">no bio or geo signals known</span>`) +
     (x5 && (b.genera.length || b.bio) ? ` · <span class="ok" title="nobody had set foot here when you scanned it: exobiology pays ×5">first footfall ×5</span>` : "");
 }
 // ---- route strip: the plotted route from here, hop by hop ----
@@ -760,7 +799,7 @@ function renderNow() {
     const label = {"unreported": "never reported — new discovery!", "no bodies": "no scan data", "partial": "partly scanned",
       "explored": "fully scanned", "visited": "you've been here"}[t.status] || t.status;
     const hz = hazardNote(t.star_class);
-    lines.push(`<div class="now-line">➜ <b>${esc(t.name)}</b> <span class="t-${t.status.replace(" ", "")}">${esc(label)}</span>` +
+    lines.push(`<div class="now-line">➜ <b>${esc(t.name)}</b> <span class="t-${t.status.replace(" ", "")}">${esc(label)}</span>${targetCounts(t)}` +
       (t.star_class ? ` <span class="${/^[OBAFGKM](_|$)/.test(t.star_class) ? "ok" : "noscoop"}">${esc(t.star_class)}${/^[OBAFGKM](_|$)/.test(t.star_class) ? " ⛽" : " ✕"}</span>` : "") +
       (hz ? ` <span class="hazard">⚠ ${esc(hz)}</span>` : "") + `</div>`);
   }
@@ -772,7 +811,7 @@ function renderNow() {
   const risk = nowRiskLine();
   if (risk) lines.push(`<div class="now-line now-risk ${risk.cls}">${risk.html}</div>`);
   // landed: what is left on this body (and the sample spacing); otherwise what is left in the system
-  if (data.on_body) lines.push(`<div class="now-line now-body">${document.getElementById("onbody").innerHTML}</div>`);
+  if (obNow()) lines.push(`<div class="now-line now-body">${document.getElementById("onbody").innerHTML}</div>`);
   else {
     const here = data.systems.find(s => sysId(s) === sysId(p));
     // the all-clear only once Here's data is for this system and the honk has found every body: before that
@@ -883,7 +922,11 @@ function surfaceLayout(s, cfg, S) {
   for (const x of s.sites || []) { const t = surfTons(x), tag = x.kind === "rig" ? `S${++si}` : `U${++ui}`;
     add({kind: "site", tag, site: x.kind, lost: !!x.lost, mineral: t.mineral, tons: t.tons, location: x.location}, x.lat, x.lon); }
   for (const l of s.locations || []) add({kind: "loc", tag: `L${l.n}`, n: l.n}, l.lat, l.lon);
-  const colours = speciesColours(s.bio);
+  const colours = speciesColours([...(s.bio || []), ...(s.tags || [])]);
+  // plants tagged with the composition scanner (BioScan's waypoints): a hollow ring in the species' colour, faint
+  // where a sample would not count (inside the colony of one taken already)
+  for (const t of s.tags || []) add({kind: "tag", tag: "", species: t.species, colour: colours.get(t.species), faint: !t.usable,
+                                      keep: !!(t.current && t.usable)}, t.lat, t.lon);
   for (const b of s.bio || []) {
     const colour = colours.get(b.species);
     for (const p of b.points || []) add({kind: "bio", tag: "", species: b.species, colour, faint: !b.current, keep: !!b.current,
@@ -938,6 +981,8 @@ function drawSurface(canvas, L, small) {
     if (it.off) continue;
     const x = it.sx, y = it.sy;
     if (it.kind === "bio") { g.fillStyle = it.colour; g.globalAlpha = it.faint ? 0.45 : 1; g.beginPath(); g.arc(x, y, mr * 0.55, 0, 2 * Math.PI); g.fill(); g.globalAlpha = 1; }
+    else if (it.kind === "tag") { g.strokeStyle = it.colour || C.muted; g.lineWidth = 2; g.globalAlpha = it.faint ? 0.35 : 1;
+      g.beginPath(); g.arc(x, y, mr * 0.75, 0, 2 * Math.PI); g.stroke(); g.globalAlpha = 1; }
     else if (it.kind === "rig") {
       const col = it.far ? C.bad : C.accent;
       g.beginPath(); g.arc(x, y, mr + 2, 0, 2 * Math.PI); g.lineWidth = 2; g.strokeStyle = col;
@@ -965,7 +1010,7 @@ function drawSurface(canvas, L, small) {
   g.textAlign = "center"; g.textBaseline = "middle";
   // off the map: a chevron on the rim pointing out, with the tag
   for (const it of L.items) if (it.off) {
-    const col = it.kind === "rig" ? (it.far ? C.bad : C.accent) : it.kind === "ship" ? C.info : it.kind === "bio" ? it.colour : it.kind === "loc" ? C.warn : C.muted;
+    const col = it.kind === "rig" ? (it.far ? C.bad : C.accent) : it.kind === "ship" ? C.info : it.kind === "bio" || it.kind === "tag" ? it.colour || C.muted : it.kind === "loc" ? C.warn : C.muted;
     g.save(); g.translate(it.sx, it.sy); g.rotate(it.ang);
     g.fillStyle = col; g.beginPath(); g.moveTo(0, -7); g.lineTo(6, 2); g.lineTo(0, -1); g.lineTo(-6, 2); g.closePath(); g.fill();
     g.restore();
@@ -998,7 +1043,8 @@ const surfWhere = it => `${surfDist(it.dist)} · ${String(Math.round(it.brg) % 3
 // the legend: species, the six rig slots (as the game's HUD shows them), sites, locations, the ship; nearest first
 function surfaceLegend(s, L, cfg) {
   const by = k => L.items.filter(it => it.kind === k).sort((a, b) => a.dist - b.dist), rows = [];
-  const bio = new Map(), colours = speciesColours(s.bio);
+  // the same colours as the map, which counts the tagged species too (review: the legend's swatch was another species')
+  const bio = new Map(), colours = speciesColours([...(s.bio || []), ...(s.tags || [])]);
   for (const it of by("bio")) if (!bio.has(it.species)) bio.set(it.species, it);
   const species = (s.bio || []).filter(b => b.points && b.points.length).map(b => ({b, it: bio.get(b.species)}))
     .sort((x, y) => (x.it ? x.it.dist : 1e9) - (y.it ? y.it.dist : 1e9));
@@ -1006,6 +1052,12 @@ function surfaceLegend(s, L, cfg) {
     `<div class="lg-row lg-bio${b.current ? " cur" : " faint"}" data-species="${esc(b.species)}"><i class="sw" style="background:${colours.get(b.species)}"></i>` +
     `<b>${esc(b.species)}</b> ${b.samples ?? "?"}/3${b.need ? ` · ${b.need} m` : ""}` +
     (b.clear ? ` · <span class="ok">✓ clear</span>` : it && b.need ? ` · <span class="unk">${Math.round(it.dist)} of ${b.need} m</span>` : "") + `</div>`).join(""));
+  // plants you tagged with the composition scanner, per species: how many, the nearest one a sample would count at
+  const tagged = new Map();
+  for (const it of by("tag")) { const g = tagged.get(it.species) || {n: 0, near: null}; g.n++; if (!it.faint && !g.near) g.near = it; tagged.set(it.species, g); }
+  if (tagged.size) rows.push(`<div class="lg-h">Tagged <span class="unk">(○ a sample would count · faint: inside a colony)</span></div>` +
+    [...tagged].map(([sp, g]) => `<div class="lg-row lg-tag"><i class="sw ring" style="border-color:${colours.get(sp)}"></i><b>${esc(sp)}</b> ${g.n}` +
+      (g.near ? ` · <span class="unk">nearest ${surfWhere(g.near)}</span>` : "") + `</div>`).join(""));
   const rigs = by("rig"), slot = n => rigs.find(r => r.n === n);
   if (rigs.length || s.rhino) rows.push(`<div class="lg-h">Rigs <span class="unk">(○ filling · ● probably full${cfg.spacing ? ` · ring ~${cfg.spacing} m, an estimate` : ""})</span></div>` +
     `<div class="lg-slots">` + [1, 2, 3, 4, 5, 6].map(n => { const r = slot(n);
@@ -1450,10 +1502,10 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["riches", "Road to Riches (a route plotted in Plot Route): on arriving at a route system, the bodies still worth scanning or mapping there and the next stop, and route complete", null],
   ["trade", "a trade route (plotted in Plot Route): on arriving at a stop, what to sell and buy there; once that is done, the hop's profit and the next stop; and route complete", null],
   ["highway", "the Neutron Highway (a route plotted in Plot Route): the next stop on arriving at a route system (with the boost and refuel stops), off route, back on the highway, and highway complete", null],
-  ["autotarget", "the Neutron Highway's auto-target (when it is on, or a test): whether the next route system was targeted", null],
+  ["autotarget", "auto-target (after a supercharge when it is on, a test, Target next, 🎯, the co-pilot button's tap): whether the system was targeted, and nothing to target when the button found none", null],
   ["find", "a valuable body just scanned (over your highlight levels)", "find"],
   ["jumponium", "a landable body just scanned has a material your FSD injections are short of (premium or standard at 2 or fewer): said with the FSS debrief, or alone when the FSS never completes", "find"],
-  ["sampling", "leaving a body with exobiology unfinished (untouched genera only if you landed there); a species completed", "alert"],
+  ["sampling", "leaving a body with exobiology unfinished (untouched genera only if you landed there); a species completed; within 100 m of a plant you tagged where the next sample would count", "alert"],
   ["approach", "approaching a landable body at or over your high-gravity level with unsold data over the amber level or rebuy multiple", "alert"],
   ["bodybrief", "approaching a body with biological signals: what they could be (the FSS already said so, so off by default)", null],
   ["sell", "docked where you can sell, and what you banked", "cash"],
@@ -2001,7 +2053,7 @@ const LINE_SAMPLES = {
   docked_sell: {value: "114.1M", station: "Jaques Station"}, undocked_unsold: {value: "260.4M"},
   sold: {sold: "12.6M cr cartographics and 4.1M cr exobiology", still: ""},
   unsold_warn: {value: "52.0M"}, unsold_urgent: {value: "251.3M"},
-  carrier_departs: {minutes: 4, carrier: "Out Of The Blue"}, carrier_arrived: {carrier: "Out Of The Blue", system: "Smojooe AR-E b25-8"},
+  carrier_departs: {minutes: 4, carrier: "Out Of The Blue"}, autotarget_nothing: {why: "no route is plotted"}, bio_tag_near: {genus: "Tussock", distance: 80}, carrier_arrived: {carrier: "Out Of The Blue", system: "Smojooe AR-E b25-8"},
   fss_done: {count: 14, text: "B 1, Earth-like world, 3.1M to map, and biology on C 2, up to 19.0M"},
   fss_nothing: {count: 14}, fss_unfinished: {left: "3 bodies"}, jumponium: {body: "B 4", material: "polonium", pct: "1.3 percent"},
   left_body: {body: "A 3", text: "Stratum 2 of 3, and Tussock untouched, up to 4.1M"},
@@ -2421,8 +2473,10 @@ function unsoldHtml(u) {
   return `<h3>Unsold data (estimate)</h3>` +
     `<div class="sec"><div class="lbl">🗺 Cartographics · ${from(c)}</div><ul>` +
     `<li><span>${c.bodies.toLocaleString()} bodies in ${c.systems.toLocaleString()} systems</span><b>${cr(c.estimated_payout ?? c.estimated_value)}</b></li>` +
-    (c.payout_note ? `<li><span class="bn">${esc(c.payout_note)}${c.payout_ratio && c.payout_ratio < 0.999 ? ` (${cr(c.estimated_value)} before the cut)` : ""}</span></li>` : "") +
+    (c.payout_note ? `<li><span class="bn">${esc(c.payout_note)}${c.payout_ratio && c.payout_ratio < 0.999 ? ` (${cr(c.estimated_value + (c.full_scan_bonus || 0))} before the cut)` : ""}</span></li>` : "") +
     `<li><span>${c.first_discoveries.toLocaleString()} first discoveries · ${c.mapped.toLocaleString()} mapped</span></li>` +
+    (c.full_scan_bonus ? `<li><span class="bn" title="1,000 cr per body of a system you found complete (every body) while all of it was undiscovered: the sale's bonus">` +
+                         `incl. full-scan bonus · ${c.full_scan_systems} system${c.full_scan_systems === 1 ? "" : "s"}${c.payout_ratio && c.payout_ratio < 0.999 ? " (before the cut)" : ""}</span><b>${cr(c.full_scan_bonus)}</b></li>` : "") +
     (u.firsts ? `<li><span class="bn">🏁 ${u.firsts.systems} systems (arrival star) · ${u.firsts.stars} stars · ` +
                 `${u.firsts.planets} planets first discovered · ${u.firsts.mapped} first mapped</span></li>` : "") +
     `</ul></div>` +
@@ -2562,7 +2616,7 @@ function render() {
       : hop.fuel != null
       ? ` · <span title="fuel this jump burns, and the max-range jumps the tank holds after it">${fuelT(hop.fuel)} t · leaves ${hop.left} max jump${hop.left === 1 ? "" : "s"}</span>` : "";
     tEl.innerHTML = `Target: <b>${esc(t.name)}</b>${hop ? ` · ${hop.ly.toFixed(1)} ly` : row ? ` · ${row.distance.toFixed(2)} ly` : ""}${cost}${sc}` +
-      ` · <span class="t-${t.status.replace(" ", "")}">${label}${src}</span>` + (hz ? ` · <span class="hazard">⚠ ${hz}</span>` : "");
+      ` · <span class="t-${t.status.replace(" ", "")}">${label}${src}</span>${targetCounts(t)}` + (hz ? ` · <span class="hazard">⚠ ${hz}</span>` : "");
   }
   renderLeaving(t && t.leaving);
   renderRoute();
@@ -2685,13 +2739,19 @@ let hereKey = null, hereData = null;
 // another system into it until the ✕ is clicked.
 let pinnedSystem = null;
 const shownSystem = () => pinnedSystem || posId();
+// Here switched to another system by hand (a pin, an unpin, a body opened elsewhere): the last system's answer is not
+// drawn under the new heading while the new one loads (review 2026-10-08 #16); "loading…" until it lands
+function forgetOtherHere() {
+  if (hereData && String(hereData.id64) !== String(shownSystem())) { hereData = null; hereKey = null; hereRefreshError = null; }
+}
 function pinSystem(id) {
   // the system you are in is not "pinned": Here shows it anyway, with its to-do line
   pinnedSystem = posId() === String(id) ? null : String(id);
+  forgetOtherHere();
   if (view === "overview" && ovState.collapsed) { ovState.collapsed = false; saveOv(); }   // else the pin shows nothing
   if (selectedBody) closeBody(); hidePop(); render(); renderHere(); paneTop("hereMain");
 }
-function unpinSystem() { pinnedSystem = null; if (selectedBody) closeBody(); render(); renderHere(); paneTop("hereMain"); }
+function unpinSystem() { pinnedSystem = null; forgetOtherHere(); if (selectedBody) closeBody(); render(); renderHere(); paneTop("hereMain"); }
 let hereRefreshError = null;
 async function loadHere() {
   const id = shownSystem(); if (!id) return;
@@ -2792,6 +2852,7 @@ function renderHere() {
     `<b>${esc(h.name)}</b>` + (away != null ? ` <span class="unk">· ${away.toFixed(2)} ly away</span>` : "") +
     ` · ${h.bodies.length} bod${h.bodies.length === 1 ? "y" : "ies"} known · ` + (h.phenomena && h.phenomena.length ? phenomenaTag(h.phenomena) + " · " : "") +
     `<span title="what selling now would pay for data you hold from here / the most this system could pay">now <b>${credits(h.value_now || 0)} cr</b> · max <b>${credits(maxOf(h) || 0)} cr</b>${maxBonus() ? "" : ` <span class="unk" title="Max leaves out first-discovery, first-mapped and first-footfall bonuses (alerts & thresholds dialog)">no bonus</span>`}</span>` +
+    ` <a class="unk" href="api/export?what=system&id=${encodeURIComponent(h.id64)}" download title="this system's bodies and values as a spreadsheet (CSV)">⬇ CSV</a>` +
     `<span class="modes">${HERE_MODES.filter(([m]) => m !== "split" || hereCtx() === "tab").map(([m, label, title]) =>
       `<button type="button" data-mode="${m}" title="${title}"${(m === "split" ? hereMode().split : hereMode().top === m) ? ' class="on"' : ""}>${label}</button>`).join("")}</span>` +
     (hereRefreshError && h.id64 === shownSystem() ? ` <span class="unk" title="${esc(hereRefreshError)}">· refresh failed</span>` : "");
@@ -2822,10 +2883,12 @@ function renderHere() {
     // the colony distance in the genus's tooltip (S1): the row's text stays as it is
     const ct = g => colonyM(g) ? ` title="${esc(g)}: samples ${colonyM(g)} m apart"` : "";
     const bio = [], f = bioFactor(b), atm = b.type === "Planet" && b.atmosphere && b.atmosphere !== "None" ? b.atmosphere : "";
-    const guessOf = g => (b.bio_guess || []).find(x => x.genus === g);
+    const guessOf = g => (b.bio_guess || []).find(x => x.genus === g), hb = hereBio();
+    if (hb.minSig && b.bio && b.bio < hb.minSig) bio.push(`<span class="unk" title="fewer than ${hb.minSig} signals: left out (Settings, Display)">${b.bio} sig</span>`);
     const guessTxt = x => !x || !x.best ? "" : ` <span class="unk" title="likeliest by value: ${esc(x.species.join(" / "))}">(${esc(x.best.split(" ").slice(1).join(" "))}? ${credits(x.value * f)})</span>` + codexMark(x, h.region);
-    for (const g of bioGenera(b)) {
+    for (const g of hb.minSig && b.bio && b.bio < hb.minSig ? [] : bioGenera(b)) {
       const o = b.organics.find(o => o.genus === g);
+      if (hb.hideDone && o && o.done && !o.lost) continue;
       bio.push(o ? `<span class="sp ${o.lost ? "lost" : o.done ? "done" : "part"}" title="${esc(o.species || "")}${o.variant ? " · " + esc(o.variant) : ""}${o.lost ? " · lost with the ship, sample again" : ""}${colonyM(g) ? ` · samples ${colonyM(g)} m apart` : ""}">${esc(g)} ${o.lost ? "lost ✗" : `${o.samples}/3${o.done ? " ✓" : ""}`}${!o.lost && o.value ? ` <span class="unk">${credits(o.value * f)}</span>` : ""}</span>` +
                    // a run under way prices the species you logged (known from its first sample), like the pop-up and
                    // the panel; the predictor's guess is only for a lost run or one whose species has no price
@@ -2833,7 +2896,7 @@ function renderHere() {
                  : `<span class="sp"${ct(g)}>${esc(g)} 0/3</span>` + guessTxt(guessOf(g)));
     }
     // signals no genus accounts for: before a DSS, and after a sample taken without one (that genus is listed above)
-    const unk = bioUnknown(b);
+    const unk = hb.minSig && b.bio && b.bio < hb.minSig ? null : bioUnknown(b);
     if (unk) {
       const {opt, list: gl} = unk;
       // compact: "2 sig, no DSS" / "+1 sig", and the options' range without the words
@@ -2850,7 +2913,7 @@ function renderHere() {
       <td>${sfText(b.type === "Star" ? "star" : "planet", b.subtype || "")}${b.type === "Star" ? (b.scoopable ? ` <span class="scoop">⛽</span>` : "") : ""}${b.rings ? `<span class="sf2"> ${icon("ring", "i-ring", b.rings, ringsText(b))}</span>` : ""}${b.dist_ls != null ? `<div class="sf2 sub2 unk">${Math.round(b.dist_ls).toLocaleString()} ls</div>` : ""}</td>
       <td class="num c2hide">${b.dist_ls != null ? Math.round(b.dist_ls).toLocaleString() : ""}</td>
       <td class="num${b.gravity >= highGravity() ? " noscoop" : ""}">${b.gravity != null && b.type === "Planet" ? b.gravity.toFixed(2) : ""}${atm ? `<div class="sf2 atm2" title="${esc(atm)}">${esc(shortForm("atmosphere", atm))}</div>` : ""}</td>
-      <td class="hide-sm c2hide">${b.type === "Planet" ? (atm ? sfText("atmosphere", atm) : b.landable ? dual("none · landable", "landable") : "") : ""}${b.stale_bio ? ` <span class="unk old" title="${esc(staleBodyTitle(b))}">${dual("landable? (old data)", "landable?", {title: `landable? (old data): ${staleBodyTitle(b)}`})}</span>` : ""}</td>
+      <td class="hide-sm c2hide">${b.type === "Planet" ? (atm ? sfText("atmosphere", atm) : b.landable ? dual("none · landable", "landable") : "") : ""}${b.stale_bio ? ` <span class="unk old" title="${esc(staleBodyTitle(b))}">${dual("landable? (old data)", "landable?", {title: `landable? (old data): ${staleBodyTitle(b)}`})}</span>` : ""}${b.bio_unknown ? ` <span class="warnc" title="${BIO_UNKNOWN_TITLE}">${dual("bio possible: check the FSS", "🧬?")}</span>` : ""}</td>
       <td class="bio">${bio.join(" ")}${geoTag(b)}${volcanoIcon(b)}${codex}${b.mining || (b.mined || []).length ? `<span class="sf2"> ${mineTag(b)}</span>` : ""}</td>
       <td class="num mine c2hide">${mineTag(b)}</td>
       <td class="c2hide">${b.rings ? dual(esc(ringsText(b)), `${b.rings}${b.rings_mapped ? ` (${b.rings_mapped}🗺${b.hotspots < b.rings_mapped ? `, ${b.hotspots} hot` : ""})` : ""}`) : ""}</td>
@@ -3078,6 +3141,7 @@ function bodyPopHtml(b, region) {
     !isStar && b.atmosphere && b.atmosphere !== "None" && esc(b.atmosphere) + (b.pressure != null ? ` (${b.pressure < 0.01 ? b.pressure.toFixed(4) : b.pressure.toFixed(2)} atm)` : ""),
     !isStar && b.volcanism && esc(b.volcanism.replace(/ volcanism$/, "")),
     !isStar && (b.landable ? "landable" : b.stale_bio ? `<span class="old" title="${esc(staleBodyTitle(b))}">landable? (old data)</span>` : "not landable"), b.terraformable && "terraformable",
+    b.bio_unknown && `<span class="warnc" title="${BIO_UNKNOWN_TITLE}">bio possible: check the FSS</span>`,
     isStar && (b.scoopable ? "scoopable" : "not scoopable"),
   ].filter(Boolean);
   let h = `<h3>${esc(b.name)} <span class="src">${esc(b.subtype || "")}</span></h3><div>${phys.join(" · ")}</div>`;
@@ -3165,6 +3229,7 @@ function renderBodyInto(panel, d, bodyName, closeJs) {
   let physSec = "", orbitSec = "", compSec = "", ringSec = "";
   if (isStar) physSec = sec("star", "Star", kv([
     ["Class", (own.StarType ? `${esc(own.StarType)}${own.Subclass != null ? own.Subclass : ""} ${esc(own.Luminosity || "")}` : `${esc(sp.spectralClass || sp.subType || "")} ${esc(sp.luminosity || "")}`).trim()],
+    ["Kind", esc(starWords(own.StarType || (sp.spectralClass || "").replace(/\d+$/, ""), own.Luminosity || sp.luminosity)) || null],
     ["Mass", has(own.StellarMass) ? `${n(own.StellarMass, 3)} solar` : has(sp.solarMasses) ? `${n(sp.solarMasses, 3)} solar` : null],
     ["Radius", has(own.Radius) ? `${n(own.Radius / 695700000, 3)} solar (${n(own.Radius / 1000, 0)} km)` : has(sp.solarRadius) ? `${n(sp.solarRadius, 3)} solar` : null],
     ["Temperature", has(pick(own.SurfaceTemperature, sp.surfaceTemperature)) ? `${n(pick(own.SurfaceTemperature, sp.surfaceTemperature), 0)} K` : null],
@@ -3225,8 +3290,12 @@ function renderBodyInto(panel, d, bodyName, closeJs) {
       lines.push(`<li><span class="unk">${unk.label}${unk.opt ? `: ${optLabel(unk.n, unk.opt, f)}; the DSS tells which` : ""}</span></li>`);
       lines.push(...unk.list.map(x => `<li><span>${esc(x.genus)} possible: ${esc(x.species.join(" / "))}${codexMark(x)}</span><b>≤${credits((x.value || 0) * f)}</b></li>`));
     }
-    for (const c of row.codex || []) lines.push(`<li><span>📖 ${esc(c.name)}</span><b>${c.voucher ? "voucher " + c.voucher.toLocaleString() + " cr" : c.new ? "new to your codex" : ""}</b></li>`);
-    bioSec = sec("bio", `🧬 Exobiology${row.bio ? ` · ${row.bio} signal${row.bio === 1 ? "" : "s"}` : ""}${bioRange(row)}`, `<ul>${lines.join("")}</ul>`);
+    for (const c of row.codex || []) lines.push(`<li><span>📖 ${esc(c.name)}${bioforgeLink(c.entry_id)}</span><b>${c.voucher ? "voucher " + c.voucher.toLocaleString() + " cr" : c.new ? "new to your codex" : ""}</b></li>`);
+    // why the other genera are not expected here: the rule of each that came closest to passing (BioScan's log)
+    const ro = row.ruled_out || [];
+    const why = ro.length ? `<details class="ruledout"><summary class="unk">Why not the other ${ro.length} genera</summary><ul>` +
+      ro.map(r => `<li><span>${esc(r.genus)}</span><span class="unk">${esc(r.why)}</span></li>`).join("") + `</ul></details>` : "";
+    bioSec = sec("bio", `🧬 Exobiology${row.bio ? ` · ${row.bio} signal${row.bio === 1 ? "" : "s"}` : ""}${bioRange(row)}`, `<ul>${lines.join("")}</ul>${why}`);
   }
   const curSec = (row.curiosities || []).length ? sec("curiosities", "🔭 Curiosities", row.curiosities.map(c => `<div><b>${esc(c.tag)}</b> · ${esc(c.why)}</div>`).join("")) : "";
   const mineSec = row.mining || (row.mined || []).length ? sec("mining", row.mining ? `⛏ ${mineCount(row.mining)}` : "⛏ Mining",
@@ -3376,7 +3445,9 @@ async function loadFirsts() {
   if (key === firstsKey) return;
   firstsKey = key;
   document.getElementById("fStatus").textContent = "loading…";
-  try { const f = await apiJson("api/firsts"); if (key === firstsKey) firstsData = f; else return; } catch (err) { firstsData = {error: err.message}; }
+  // an answer or a failure for a key that is no longer the newest is dropped: a slow failure must not replace a newer
+  // good answer (review 2026-10-08 #18; the same in loadMat, loadBio and loadHistory)
+  try { const f = await apiJson("api/firsts"); if (key === firstsKey) firstsData = f; else return; } catch (err) { if (key !== firstsKey) return; firstsData = {error: err.message}; }
   if (firstsData && firstsData.error) firstsKey = null;   // retried at the next render
   renderFirsts();
 }
@@ -3532,7 +3603,7 @@ async function loadMat() {
   if (key === matKey) return;
   matKey = key;
   document.getElementById("matStatus").textContent = "loading…";
-  try { const m = await apiJson("api/materials"); if (key === matKey) matData = m; else return; } catch (err) { matData = {error: err.message}; }
+  try { const m = await apiJson("api/materials"); if (key === matKey) matData = m; else return; } catch (err) { if (key !== matKey) return; matData = {error: err.message}; }
   if (matData && matData.error) matKey = null;   // retried at the next render
   renderMat();
 }
@@ -3583,6 +3654,86 @@ function renderMat() {
       }).join("")).join("") + `</div>`;
   }).join("") || `<div class="unk">No materials match.</div>`;
 }
+
+// ---- Nearest place to dock (GET api/nearest, outrider/dock.py): a finder beside Plot Route's To. Stations and
+// fleet carriers you can land at and use, from Spansh, the DSSA list and your own carrier; "Plot here" fills To and
+// plots with the plotter chosen. The filters are this device's (store "nearest", not a shared setting). ----
+const NEAR_NEEDS = [["UC", "Universal Cartographics"], ["Vista", "Vista Genomics"], ["Repair", "repair"], ["Refuel", "refuel"], ["Shipyard", "shipyard"]];
+const NR = Object.assign({stations: true, carriers: true, need: [], age: 30, permit: false},
+                         (v => v && typeof v === "object" && !Array.isArray(v) ? v : {})(store.get("nearest", {})), {answer: null, busy: false});
+const saveNearest = () => store.set("nearest", {stations: NR.stations, carriers: NR.carriers, need: NR.need, age: NR.age, permit: NR.permit});
+const nearAgo = s => s == null ? "" : s < 3600 ? `${Math.max(1, Math.round(s / 60))} min ago` : s < 172800 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} d ago`;
+function openNearest() {
+  const d = document.getElementById("nearDlg");
+  document.getElementById("nearNeeds").innerHTML = NEAR_NEEDS.map(([k, t]) =>
+    `<label><input type="checkbox" data-nneed="${k}"${NR.need.includes(k) ? " checked" : ""}> ${t}</label>`).join("");
+  d.querySelector('[data-nf="stations"]').checked = NR.stations; d.querySelector('[data-nf="carriers"]').checked = NR.carriers;
+  d.querySelector('[data-nf="age"]').value = NR.age; d.querySelector('[data-nf="permit"]').checked = NR.permit;
+  tabShow(d);
+  loadNearest();
+}
+async function loadNearest() {
+  NR.busy = true; renderNearest();
+  const g = newRequest("near");
+  const params = new URLSearchParams({stations: NR.stations ? "1" : "0", carriers: NR.carriers ? "1" : "0", need: NR.need.join(","),
+                                      age: NR.age, permit: NR.permit ? "1" : "0", pad: "auto"});
+  let r;
+  try { r = await apiJson(`api/nearest?${params}`); } catch (err) { r = {error: err.message}; }
+  if (!isNewest("near", g)) return;
+  NR.busy = false; NR.answer = r;
+  renderNearest();
+}
+function nearRowHtml(r) {
+  const who = r.kind === "carrier" ? `<b>${esc(r.name || r.callsign)}</b>${r.name ? ` <span class="unk">${esc(r.callsign)}</span>` : ""}` : `<b>${esc(r.name)}</b>`;
+  const badge = r.dssa ? ` <span class="dssabadge" title="Deep Space Support Array carrier: stationed for explorers, open to all${r.until ? `, until ${esc(r.until)}` : ""}">🛰 DSSA</span>` : "";
+  const kind = r.kind === "carrier" ? `Fleet carrier${r.own ? " · yours" : r.dssa && r.until ? ` · stationed until ${esc(r.until)}` : ""}` : esc(r.station_type || "Station");
+  const has = NEAR_NEEDS.map(([k]) => `<span class="tagx${(r.services || []).includes(k) ? " on" : ""}">${k}</span>`).join(" ");
+  const dock = r.own ? `<span class="good">yours</span>` : r.warn && r.warn.length ? `<span class="warnc">⚠ ${esc(r.warn.join(", "))}</span>` : "open to all";
+  const src = r.own ? "your journal" : r.dssa ? `<span class="dssa">DSSA</span><br>docked there ${nearAgo(r.age_s)}` : `${esc(r.source)}<br>reported ${nearAgo(r.age_s)}`;
+  return `<tr><td>${who}${badge}<div class="unk">${kind} · ${esc(r.system || "")}</div></td>` +
+    `<td class="num">${r.here ? "here" : `${Math.round(r.ly).toLocaleString()} ly`}${r.jumps ? `<div class="unk">≈ ${r.jumps} jump${r.jumps === 1 ? "" : "s"}</div>` : ""}</td>` +
+    `<td class="num${r.far ? " warnc" : ""}">${r.ls == null ? `<span class="unk">?</span>` : `${r.ls.toLocaleString()} ls`}${r.far ? `<div class="small">⚠ far from the star</div>` : ""}</td>` +
+    `<td class="has">${has}</td><td class="num">${esc(r.pads || "")}</td><td class="dk">${dock}</td><td class="src unk">${src}</td>` +
+    `<td class="num">${r.here ? `<span class="unk">${r.own ? "aboard" : "here"}</span>` : `<button type="button" class="mini go" data-nplot="${esc(r.system || "")}">Plot here</button>`}</td></tr>`;
+}
+function renderNearest() {
+  const a = NR.answer, rows = document.getElementById("nearRows"), foot = document.getElementById("nearFoot");
+  document.getElementById("nearWhere").textContent = a && a.where ? `· from ${a.where}` : "";
+  document.getElementById("nearPad").textContent = !a || a.error ? "" : a.pad === "L" ? `large (your ${shipName(a.ship || "")})` :
+    a.pad === "M" ? `medium (your ${shipName(a.ship || "")})` : "any (your ship's size is not known)";
+  if (NR.busy && !a) { rows.innerHTML = `<tr><td colspan="8" class="unk">asking Spansh…</td></tr>`; foot.textContent = ""; return; }
+  if (!a || a.error) { rows.innerHTML = `<tr><td colspan="8" class="noscoop">${esc(a ? a.error : "")}</td></tr>`; foot.textContent = ""; return; }
+  rows.innerHTML = a.rows.length ? a.rows.map(nearRowHtml).join("") :
+    `<tr><td colspan="8" class="unk">Nothing matches: raise Data under, or tick fewer services.</td></tr>`;
+  const h = a.hidden || {}, hid = [];
+  if (h.old) hid.push(`${h.old} reported more than ${a.age} days ago (carriers move; raise Data under to see them)`);
+  if (h.pad) hid.push(`${h.pad} without a pad for your ship`);
+  if (h.permit) hid.push(`${h.permit} in permit systems`);
+  if (h.service) hid.push(`${h.service} without ${a.need.join(" and ")}`);
+  const d = a.dssa || {}, checked = d.checked ? nearAgo(Date.now() / 1000 - d.checked) : null;
+  foot.innerHTML = (NR.busy ? "asking again… " : "") + (hid.length ? `Hidden: ${esc(hid.join("; "))}. ` : "") +
+    `Distances are straight lines${a.laden ? `; jumps at your laden range (${a.laden} ly)` : ""}.` +
+    (a.more ? ` ${a.more} more further away.` : "") + `<br>Sources: Spansh (stations and carriers, as players last reported them) · ` +
+    `the DSSA carrier list from EDAstro${d.count ? ` (${d.count} carriers${checked ? `, checked ${checked}` : ""})` : ""} · your own carrier from your journal.` +
+    ((a.errors || []).length ? `<br><span class="warnc">${esc(a.errors.join("; "))}</span>` : "") +
+    ` <b>Plot here</b> puts the system in To and plots it with the plotter chosen.`;
+}
+document.getElementById("hwyNearest").onclick = openNearest;
+document.getElementById("nearDlg").addEventListener("change", e => {
+  const t = e.target, f = t.dataset && t.dataset.nf;
+  if (t.dataset && t.dataset.nneed) NR.need = [...document.querySelectorAll("#nearNeeds [data-nneed]")].filter(x => x.checked).map(x => x.dataset.nneed);
+  else if (f === "age") { const v = parseInt(t.value, 10); if (!(v >= 1 && v <= 3650)) return; NR.age = v; }
+  else if (f) NR[f] = t.checked;
+  else return;
+  saveNearest(); loadNearest();
+});
+document.getElementById("nearRows").addEventListener("click", e => {
+  const b = e.target.closest("[data-nplot]"); if (!b) return;
+  hEl("hwyTo").value = b.dataset.nplot;
+  if (!["exact", "neutron", "riches", "exo"].includes(hwyPlotter())) { const x = hForm.querySelector('[name=hwyPlotter][value="exact"]'); x.checked = true; x.dispatchEvent(new Event("change", {bubbles: true})); }
+  tabClose(document.getElementById("nearDlg"));
+  hForm.dispatchEvent(new Event("submit", {cancelable: true, bubbles: true}));
+});
 
 // ---- Cargo (the Materials tab): the ship's hold (exact) and your carrier's (tracked: outrider/cargo.py) ----
 const CARGO_MARK = {
@@ -3912,6 +4063,7 @@ function openBodyIn(id, name) {
   id = String(id);
   view = "here"; saveView();
   pinnedSystem = posId() === id ? null : id;
+  forgetOtherHere();
   hidePop();
   selectedBody = name; selectedSystem = id; bodyData = null;
   const panel = document.getElementById("bodyPanel");
@@ -3973,8 +4125,10 @@ document.getElementById("findForm").addEventListener("submit", async e => {
   const name = document.getElementById("findName").value.trim(), st = document.getElementById("findStatus");
   if (!name) return;
   st.textContent = `looking up ${name}…`;
+  const g = newRequest("find");   // a slower earlier lookup (EDSM) must not land after a newer one (review #17)
   let d;
   try { d = await apiJson(`api/find?name=${encodeURIComponent(name)}`); } catch (err) { d = {error: err.message}; }
+  if (!isNewest("find", g)) return;
   if (d.error) { st.textContent = d.error; return; }
   foundSys[d.id] = d;
   const v = d.visited;
@@ -3988,7 +4142,7 @@ async function loadBio() {
   if (key === bioKey) return;
   bioKey = key;
   document.getElementById("bStatus").textContent = "loading…";
-  try { const b = await apiJson(`api/organics?days=${bDays.value}`); if (key === bioKey) bioData = b; else return; } catch (err) { bioData = {error: err.message}; }
+  try { const b = await apiJson(`api/organics?days=${bDays.value}`); if (key === bioKey) bioData = b; else return; } catch (err) { if (key !== bioKey) return; bioData = {error: err.message}; }
   if (bioData && bioData.error) bioKey = null;   // retried at the next render
   renderBio();
 }
@@ -4052,7 +4206,7 @@ async function loadHistory() {
   if (key === histKey) return;
   histKey = key;
   document.getElementById("hStatus").textContent = "loading…";
-  try { const h = await apiJson(`api/history?days=${hDays.value}`); if (key === histKey) histData = h; else return; } catch (err) { histData = {error: err.message}; }
+  try { const h = await apiJson(`api/history?days=${hDays.value}`); if (key === histKey) histData = h; else return; } catch (err) { if (key !== histKey) return; histData = {error: err.message}; }
   if (histData && histData.error) histKey = null;   // retried at the next render
   renderHistory();
 }
@@ -6322,6 +6476,8 @@ function onData() {
     lastUnderJumps = !!(data.fuel && data.fuel.live && fuelUnderJumps(data.fuel));
     hullLatch = hullBand(data.hull);
     clearAnnounced = data.sampling && data.sampling.clear ? `${data.sampling.species}|${data.sampling.samples}` : null;
+    { const sm0 = data.sampling, t0 = sm0 && sm0.tag;   // a tag already near when the page opens: not news
+      tagAnnounced = t0 && t0.dist <= 100 ? {species: sm0.species, said: new Set([`${t0.lat}|${t0.lon}`])} : null; }
     return;
   }
   // Just docked: the moment to sell, if what this station buys is worth it. Each Docked event has its own ts,
@@ -6563,6 +6719,10 @@ function onData() {
         alertOut(m.kind, m.text.replace(/\.$/, ""), "", {tag: m.kind, say: m.text});
       else if (m.kind === "highway" && m.text)   // the Neutron Highway's arrival line, detour, back on it, complete: plain words for now
         alertOut("highway", m.text.replace(/\.$/, ""), "", {tag: "highway", say: m.text});
+      else if (m.kind === "autotarget" && m.what === "nothing")   // the co-pilot button's press with no route system to target
+        alertOut("autotarget", "Nothing to target", m.why || "", {tag: "failed", say: () => line("autotarget_nothing", {why: m.why || ""}, m.text)});
+      else if (m.kind === "autotarget" && m.what === "refused")   // the button's press, a run that could not start
+        alertOut("autotarget", m.text.replace(/\.$/, ""), "", {tag: "failed", say: m.text});
       else if (m.kind === "autotarget" && m.text)   // auto-target's result: "Successfully targeted ..." / "Failed to target ..."
         alertOut("autotarget", m.text, m.ok ? "" : `step ${m.phase ?? "?"}: ${m.why || "?"}`, {tag: m.ok ? "ok" : "failed", say: m.text});
       else if (m.kind === "rig" && m.text)   // the co-pilot's rig marking and a rig's collection: plain words, no personality
@@ -6593,6 +6753,18 @@ function onData() {
     clearAnnounced = smKey;
     alertOut("find", `Clear to sample ${sm.genus}`, `${sm.nearest} m from the nearest sample (${sm.need} m needed)`, {sound: "upbeat", tag: "sample_clear",
              still: () => { const s = data && data.sampling; return !!s && `${s.species}|${s.samples}` === smKey; }, say: () => line("sample_clear", {genus: sm.genus}, `Clear to sample ${sm.genus}.`)});
+  }
+  // a tagged plant of the species you are sampling, where the next sample would count, within 100 m: once per tag
+  // for the run (two tags close together must not take turns being "the nearest" and be said again: review #7)
+  const tg = sm && !sm.elsewhere && sm.tag;
+  if (tg && tg.dist <= 100) {
+    if (!tagAnnounced || tagAnnounced.species !== sm.species) tagAnnounced = {species: sm.species, said: new Set()};
+    const k = `${tg.lat}|${tg.lon}`;
+    if (!tagAnnounced.said.has(k)) {
+      tagAnnounced.said.add(k);
+      alertOut("sampling", `Tagged ${sm.genus} nearby`, `${tg.dist} m, ${tg.way}`, {tag: "bio_tag_near",
+               say: () => line("bio_tag_near", {genus: sm.genus, distance: tg.dist}, `Tagged ${sm.genus}, ${tg.dist} metres.`)});
+    }
   }
   // hull: once below half, once below a quarter (re-armed by a repair)
   const band = hullBand(data.hull);
@@ -7114,12 +7286,30 @@ const maxOf = x => maxBonus() || x.value_max_base == null ? x.value_max : x.valu
 // (x.variants) it checked those; otherwise it checked the species, which never over-flags. The title names the new
 // colour and the ones of that species you have logged there (x.codex_have), since two bodies with the same likeliest
 // species can each be new: "new to your codex in Inner Orion Spur: Bacterium Acies - White; you have Lime".
+// A star's class in words (Pioneer's descriptors): the luminosity class ("main sequence", "giant") and, for a white
+// dwarf, what its spectrum shows ("hydrogen-rich"). "" when nothing is known.
+const LUMINOSITY_WORDS = {"0": "hypergiant", "Ia0": "hypergiant", "Ia": "luminous supergiant", "Iab": "supergiant", "Ib": "less luminous supergiant",
+  "I": "supergiant", "II": "bright giant", "III": "giant", "IV": "subgiant", "V": "main sequence", "VI": "subdwarf", "VII": "white dwarf"};
+const WD_WORDS = {A: "hydrogen-rich", B: "helium-rich", O: "ionised helium", Q: "carbon", Z: "metal-rich", C: "no strong lines", X: "unclassified"};
+function starWords(cls, lum) {
+  const c = String(cls || "").toUpperCase(), l = String(lum || "");
+  if (/^D[ABOQZCX]/.test(c)) {   // a white dwarf: DA, DAB, DAV, DQ...
+    const kinds = [...c.slice(1)].map(x => WD_WORDS[x]).filter(Boolean);
+    return `white dwarf${kinds.length ? ` (${kinds.join(", ")})` : ""}${/V$/.test(c) ? ", variable" : ""}`;
+  }
+  return LUMINOSITY_WORDS[l] || LUMINOSITY_WORDS[l.replace(/[ab]+$/, "")] || "";   // "Vab", "IIIb": their class
+}
+// Canonn's Bioforge: what is known of a codex entry across the galaxy (where it grows, the conditions)
+const bioforgeLink = id => Number.isInteger(id) && id > 0
+  ? ` <a href="https://bioforge.canonn.tech/?entryid=${id}" target="_blank" rel="noopener" title="Canonn Bioforge: where this grows and in what conditions">stats ↗</a>` : "";
 const codexMark = (x, region) => {
-  if (!x || !x.codex_new) return "";
+  if (!x || !(x.codex_new || x.codex_galaxy_new)) return "";
   const have = x.codex_have || [], colour = v => v.split(" - ").pop();
   const fresh = (x.variants || []).filter(v => !have.includes(colour(v)));
   const what = fresh.length ? fresh.join(" or ")
     : x.best ? `${x.best} (likeliest species; the colour variant may differ)` : "likeliest species; the colour variant may differ";
+  // ✪: in your codex nowhere at all (BioScan's 🌌), worth more effort than ✦, new in this region only
+  if (x.codex_galaxy_new) return ` <span class="cxnew cxgal" title="new to your codex anywhere: ${esc(what)}">✪</span>`;
   return ` <span class="cxnew" title="new to your codex in ${esc(region || "this region")}: ${esc(what)}${
     fresh.length && have.length ? `; you have ${esc(have.join(", "))}` : ""}">✦</span>`;
 };
