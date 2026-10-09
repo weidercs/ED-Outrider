@@ -82,7 +82,9 @@ class Session:
         self.market_id = self.station = None
         self.ship_id = None
         self.dir = None                       # the journal folder of the line (NavRoute.json, Market.json... live there)
-        self.pending = {}                     # what waits on a companion file: {"navroute": (event, tries)}
+        self.pending = {}                     # what waits on a companion file or the next line (EDDN's waits)
+        self.source = None                    # the line being handled ("file:offset"; the hub sets it), and
+        self.now = None                       # ...the server's clock then (EDDN's waits give up by it)
 
     # ---- what the line's session is ----
     @property
@@ -134,6 +136,8 @@ class Session:
         name = ev.get("event")
         if name == "Fileheader":
             self.versions[self.file] = (str(ev.get("gameversion") or ""), str(ev.get("build") or ""))
+            if continued(ev):   # part 2 or later of a long session: no LoadGame follows, the session goes on
+                return
             self.cmdr = self.fid = None
             self.horizons = self.odyssey = None
             self.crew = False
@@ -190,6 +194,30 @@ class Session:
 
     def restore(self, snap):
         self.__dict__.update(copy.deepcopy(snap))
+
+
+def continued(ev):
+    """Whether a Fileheader starts a continuation file (part 2 or later): the game moved a long session on to a new
+    file after a Continued line, with no LoadGame after it."""
+    try:
+        return ev.get("event") == "Fileheader" and int(ev.get("part") or 1) > 1
+    except (TypeError, ValueError):
+        return False
+
+
+def continued_from(path):
+    """The journal a continuation file (continued) goes on from: the one before it in its folder, or None."""
+    try:
+        with open(path, "rb") as f:
+            first = json.loads(f.readline() or b"{}")
+    except (OSError, ValueError):
+        return None
+    if not isinstance(first, dict) or not continued(first):
+        return None
+    files = glob_journals(os.path.dirname(path))
+    name = os.path.basename(path)
+    before = [p for p in files if os.path.basename(p) < name]
+    return before[-1] if before else None
 
 
 def live_line(ts, now, max_age=MAX_AGE_S, skew=SKEW_S):
@@ -279,10 +307,11 @@ class UploadHub:
     sets one: State.set_upload)."""
 
     def __init__(self, db, builders=None, enabled=None, clock=time.time, max_age=MAX_AGE_S, save=None, holds=None,
-                 max_ages=None):
+                 max_ages=None, idlers=None):
         self.db = db
         self.builders = dict(builders or {})
         self.holds = dict(holds or {})
+        self.idlers = dict(idlers or {})   # {service: fn(session) -> [(schema, message, source line)]}: idle()
         self.enabled = enabled or (lambda service: False)
         self.clock, self.max_age = clock, max_age
         self.max_ages = dict(max_ages or {})   # {service: seconds}: a service's own limit, under max_age (EDDN's hour)
@@ -295,11 +324,18 @@ class UploadHub:
     def active(self):
         return any(self.enabled(s) for s in self.builders)
 
-    def prime(self, path, upto, session=None):
-        """Feed a session the lines of `path` before byte `upto` (state only): a file met part way through."""
+    def prime(self, path, upto, session=None, depth=0):
+        """Feed a session the lines of `path` before byte `upto` (state only): a file met part way through. A
+        continuation file is primed from the file it goes on from first (who and where you are were said there)."""
         session = session or self.session
         if session is self.session:
             self.primed.add(os.path.basename(path))
+        prev = continued_from(path) if depth < 20 else None
+        if prev:
+            try:
+                self.prime(prev, os.path.getsize(prev), session, depth + 1)
+            except OSError:
+                pass
         try:
             with open(path, "rb") as f:
                 data = f.read(upto)
@@ -333,6 +369,7 @@ class UploadHub:
         n = 0
         pos = position(b, offset)
         now = self.clock()
+        session.source, session.now = f"{b}:{offset}", now
         for service in services:
             if not self.after_mark(service, pos):
                 continue
@@ -391,6 +428,13 @@ class UploadHub:
                     files[b] = p
         n = 0
         session = Session()
+        first = files[min(files)] if files else None
+        prev = continued_from(first) if first else None
+        if prev:   # the first file goes on from an earlier one: who and where you are come from there
+            try:
+                self.prime(prev, os.path.getsize(prev), session)
+            except OSError:
+                pass
         for b in sorted(files):
             p = files[b]
             end = upto.get(p)
@@ -416,6 +460,28 @@ class UploadHub:
                 session.feed(ev, b)
                 n += self._queue(ev, b, here, session, [service])
         self.flush()
+        return n
+
+    def idle(self):
+        """The server's tick with no new line: what the services can send now anyway (EDDN: a companion file written
+        late, signals after a quiet spell), each under the line it comes from. Returns the number queued."""
+        s = self.session
+        if not self.idlers or s.blocked():
+            return 0
+        s.now, n = self.clock(), 0
+        for service, fn in self.idlers.items():
+            if not self.enabled(service):
+                continue
+            try:
+                messages = fn(s) or []
+            except (KeyError, TypeError, ValueError, AttributeError, IndexError) as e:
+                print(f"{service}: waiting data could not be prepared ({type(e).__name__}: {e})")
+                continue
+            for schema, message, origin in messages:
+                ts = (message.get("message") or message).get("timestamp") if isinstance(message, dict) else None
+                if origin and enqueue(self.db, service, schema, f"{origin}#{schema}", ts, s, message):
+                    n += 1
+        self.queued += n
         return n
 
     def status(self, st):

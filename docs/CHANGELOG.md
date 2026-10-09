@@ -2,6 +2,14 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Uploads: long sessions, late files, quiet signals (branch EDMC-Functionality)
+- A long session that the game continues in a new journal file (part 2, no login after it) keeps uploading. Before,
+  Outrider took the new file for a new session and every upload stopped until the next login.
+- A market bracket the game writes as "" (not normally sold there, for sale now) goes to EDDN as "", not 0.
+- A market, outfitting, shipyard, bartender or route file written after its journal line now goes on Outrider's next
+  tick even when no further line comes (given up after 10 seconds); a batch of signals goes 3 seconds after its last
+  one when you are in that system (a jump's batch still waits for the jump line).
+
 ## 2026-10-09 · Uploads: EDDN catches up an hour at most (branch EDMC-Functionality)
 - After a gap (Outrider not running while you played), EDDN gets only the last hour's lines; EDSM still gets up to a
   week. EDDN's readers take what arrives as current, so day-old scans sent late could mislead them.

@@ -278,6 +278,30 @@ class Signals(unittest.TestCase):
         self.assertEqual(E.build({"timestamp": "2026-10-08T10:07:00Z", "event": "Music"}, s, "v"), [])
 
 
+    def test_quiet_batch_goes_on_the_tick(self):
+        """A batch with no line after it goes SIGNAL_QUIET_S after its last signal (2026-10-09), under
+        the first signal's line; one for a system you are not in yet (Odyssey: just before the jump) waits."""
+        s = session()
+        s.feed(FSDJUMP)
+        addr = FSDJUMP["SystemAddress"]
+        s.source, s.now = "J.log:500", 1000.0
+        self.assertEqual(E.build(self.sig("A station", addr), s, "v"), [])
+        s.source, s.now = "J.log:600", 1001.0
+        E.build(self.sig("Another", addr), s, "v")
+        s.now = 1003.5
+        self.assertEqual(E.idle(s, "v"), [])                         # 2.5 s after the last one: still waiting
+        s.now = 1004.0
+        [(name, env, origin)] = E.idle(s, "v")
+        self.assertEqual((name, origin, [x["SignalName"] for x in env["message"]["signals"]]),
+                         ("fsssignaldiscovered", "J.log:500", ["A station", "Another"]))
+        self.assertNotIn("signals", s.pending)
+        s.now = 2000.0
+        E.build(self.sig("Next system's", 4242), s, "v")              # before the jump that takes you there
+        s.now = 2010.0
+        self.assertEqual(E.idle(s, "v"), [])                          # not in that system: it waits for the jump line
+        self.assertIn("signals", s.pending)
+
+
 @unittest.skipUnless(jsonschema, "jsonschema is not installed (requirements-dev.txt)")
 class StationData(unittest.TestCase):
     """Part F: commodity/3, outfitting/2, shipyard/2, fcmaterials_journal/1 from the journal folder's files (only the
@@ -312,6 +336,35 @@ class StationData(unittest.TestCase):
                          ("commodity", "https://eddn.edcd.io/schemas/commodity/3", "Orbis", ["gold"]))
         self.assertEqual(set(m["commodities"][0]) & {"Producer", "Rare", "id", "Category"}, set())
         self.assertEqual(E.build(self.ev("Market"), self.s, "v"), [])          # unchanged: not again
+
+    def test_late_file_goes_on_the_tick(self):
+        """A file written after its event's line, with no line after it, goes on the server's tick (idle), under the
+        event's line; a wait gives up FILE_WAIT_S later (2026-10-09)."""
+        self.s.source, self.s.now = "J.log:900", 5000.0
+        self.file("Market.json", {"timestamp": "2026-10-08T09:00:00Z", "event": "Market", "Items": []})   # yesterday's
+        self.assertEqual(E.build(self.ev("Market", StationType="Orbis"), self.s, "v"), [])
+        self.s.now = 5001.0
+        self.assertEqual(E.idle(self.s, "v"), [])                     # still the old file
+        self.file("Market.json", {"event": "Market", "StationType": "Orbis", "Items": []})   # the game writes it now
+        self.s.now = 5002.0
+        [(name, env, origin)] = E.idle(self.s, "v")
+        valid(env, "commodity-v3.0.json")
+        self.assertEqual((name, origin, env["message"]["marketId"]), ("commodity", "J.log:900", 128))
+        self.assertEqual(E.idle(self.s, "v"), [])                     # once
+        self.s.now = 6000.0
+        E.build(self.ev("Shipyard"), self.s, "v")                     # never written
+        self.s.now = 6000.0 + E.FILE_WAIT_S + 1
+        self.assertEqual(E.idle(self.s, "v"), [])
+        self.assertNotIn("shipyard", self.s.pending)                  # given up
+
+    def test_empty_bracket_kept(self):
+        """A bracket the game writes as "" ("not normally sold here") goes as "", not 0 (EDDN's schema)."""
+        self.file("Market.json", {"event": "Market", "Items": [
+            {"id": 1, "Name": "$gold_name;", "Category": "$MARKET_category_metals;", "BuyPrice": 9000, "SellPrice": 8800,
+             "MeanPrice": 9100, "StockBracket": "", "DemandBracket": 0, "Stock": 5, "Demand": 0}]})
+        [(name, env)] = E.build(self.ev("Market"), self.s, "v")
+        valid(env, "commodity-v3.0.json")
+        self.assertEqual((env["message"]["commodities"][0]["stockBracket"], env["message"]["commodities"][0]["demandBracket"]), ("", 0))
 
     def test_wrong_file_waits(self):
         self.file("Market.json", {"event": "Market", "MarketID": 999, "Items": []})   # the last station's file

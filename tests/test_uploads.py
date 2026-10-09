@@ -178,6 +178,56 @@ class HubThroughTheReader(unittest.TestCase):
         self.assertEqual(self.hub.session.system, "Sol")
 
 
+class Continuation(unittest.TestCase):
+    """A long session goes on in a part-2 file (Fileheader "part": 2, no LoadGame after it): the session, the commander
+    and the place carry on (2026-10-09: every upload stopped there until the next login)."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir)
+        self.p1 = os.path.join(self.dir, "Journal.2026-10-08T100000.01.log")
+        self.p2 = os.path.join(self.dir, "Journal.2026-10-08T180000.02.log")
+        with open(self.p1, "w", encoding="utf-8") as f:
+            for e in (header(now_ts(900)), loadgame(now_ts(899)),
+                      {"timestamp": now_ts(800), "event": "FSDJump", "StarSystem": "B", "SystemAddress": 11, "StarPos": [1, 2, 3]},
+                      {"timestamp": now_ts(700), "event": "Continued", "Part": 2}):
+                f.write(json.dumps(e) + "\n")
+        self.lines2 = [dict(header(now_ts(699)), part=2), {"timestamp": now_ts(600), "event": "Scan", "BodyName": "B 1"}]
+        with open(self.p2, "w", encoding="utf-8") as f:
+            for e in self.lines2:
+                f.write(json.dumps(e) + "\n")
+
+    def test_session_goes_on(self):
+        s = U.Session()
+        for p in (self.p1, self.p2):
+            with open(p, encoding="utf-8") as f:
+                for line in f:
+                    s.feed(json.loads(line), os.path.basename(p))
+        self.assertEqual((s.blocked(), s.cmdr, s.addr), (None, "Briadin", 11))
+        self.assertTrue(U.continued(self.lines2[0]))
+        self.assertFalse(U.continued(header(now_ts(1))))
+        self.assertEqual(U.continued_from(self.p2), self.p1)
+        self.assertIsNone(U.continued_from(self.p1))
+
+    def test_started_in_a_part_2(self):
+        """Outrider started part way through a part-2 file: it learns who and where from the file before it."""
+        db = ed_outrider.open_db(":memory:")
+        self.addCleanup(db.close)
+        hub = U.UploadHub(db, {"echo": lambda ev, s: [("echo/1", {"event": ev["event"]})] if ev["event"] == "Scan" else []},
+                          enabled=lambda s: True)
+        off = len((json.dumps(self.lines2[0]) + "\n").encode())
+        self.assertEqual(hub.line(self.p2, off, json.dumps(self.lines2[1]).encode(), "live"), 1)
+        self.assertEqual((hub.session.cmdr, hub.session.addr), ("Briadin", 11))
+
+    def test_catch_up_from_a_part_2(self):
+        db = ed_outrider.open_db(":memory:")
+        self.addCleanup(db.close)
+        hub = U.UploadHub(db, {"echo": lambda ev, s: [("echo/1", {"event": ev["event"]})] if ev["event"] == "Scan" else []},
+                          enabled=lambda s: True)
+        hub.marks["echo"] = [os.path.basename(self.p2), 0, None]          # stopped at the top of the part-2 file
+        self.assertEqual(hub.catch_up("echo", [self.dir], {self.p1: os.path.getsize(self.p1), self.p2: os.path.getsize(self.p2)}), 1)
+
+
 class Settings(unittest.TestCase):
 
     def test_config(self):

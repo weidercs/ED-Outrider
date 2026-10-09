@@ -5470,6 +5470,7 @@ class State:
         self.uploads_hub = outrider.uploads.UploadHub(db, {"eddn": self.eddn_build, "edsm": self.edsm_build},
                                                       enabled=self.upload_queueing, holds={"edsm": outrider.edsm.hold},
                                                       max_ages={"eddn": outrider.eddn.CATCHUP_MAX_S},
+                                                      idlers={"eddn": self.eddn_idle},
                                                       save=lambda marks: meta_set(self.db, "upload_marks", marks))
         marks = meta_get(db, "upload_marks")   # how far each service has queued (live-only: a re-read keeps it)
         self.uploads_hub.marks = {k: v for k, v in marks.items() if isinstance(v, list)} if isinstance(marks, dict) else {}
@@ -9355,6 +9356,10 @@ class State:
         OUTRIDER_EDDN_TEST is set."""
         return outrider.eddn.build(ev, session, outrider.__version__, test=outrider.uploads.eddn_test_mode())
 
+    def eddn_idle(self, session):
+        """What EDDN can send on the tick with no new line (outrider.eddn.idle): late companion files, quiet signals."""
+        return outrider.eddn.idle(session, outrider.__version__, test=outrider.uploads.eddn_test_mode())
+
     async def eddn_send(self, rows):
         """Send one queued EDDN message (EDDN takes one per request): gzip, both content headers, a 20 s timeout. The
         answer settles it (outrider.eddn.outcome); a network failure raises, and the loop waits a minute or more."""
@@ -11286,6 +11291,7 @@ class State:
                         self.bump()
             if self.journals.settle_carrier(time.time()):
                 self.bump()
+            self.uploads_hub.idle()   # EDDN: a companion file written after its line, signals after a quiet spell
             self.rail_device()
             self.db.commit()
             committed = True

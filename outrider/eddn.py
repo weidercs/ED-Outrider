@@ -106,6 +106,8 @@ def fss_message(ev, session):
 
 NAVROUTE_WINDOW_S = 5     # NavRoute.json must be the one this NavRoute event wrote (EDMC's check)
 NAVROUTE_TRIES = 11       # ...asked again on the lines after it while it is not (written late, NFS)
+FILE_WAIT_S = 10          # ...and on the server's tick (idle()) when no line comes: given up after this long
+SIGNAL_QUIET_S = 3        # a batch of FSSSignalDiscovered lines goes this long after its last line with none after it
 
 
 def _seconds(ts):
@@ -116,32 +118,53 @@ def _seconds(ts):
         return None
 
 
-def navroute_message(ev, session):
-    """navroute/1: the route NavRoute.json holds, once the file is the one this NavRoute event wrote (within
-    NAVROUTE_WINDOW_S of it). A NavRoute event starts the wait; every later line tries the file again, up to
-    NAVROUTE_TRIES. None while waiting, and for a cleared route (NavRouteClear, no Route)."""
-    import json
+def _wait_start(session, key, ts, market_id=None):
+    """A wait for the companion file an event wrote (NavRoute.json, Market.json...): the event's time, the MarketID the
+    file must have (None: any), the lines tried, the line that started it (session.source: the idle() message's
+    source) and when (session.now, the server's clock)."""
+    session.pending[key] = {"ts": ts, "market": market_id, "tries": 0, "origin": session.source, "since": session.now}
+
+
+def _wait_check(session, key, filename, line=True):
+    """The file a wait is for, once it is that one: its time within NAVROUTE_WINDOW_S of the event's and the same
+    MarketID (EDMC checks neither; NFS can serve an older file). None while waiting; the wait ends after
+    NAVROUTE_TRIES later lines (line=True: a journal line asks) or FILE_WAIT_S by the server's clock."""
     import os
-    if ev.get("event") == "NavRoute":
-        session.pending["navroute"] = [ev.get("timestamp"), 0]
-    elif ev.get("event") == "NavRouteClear":
-        session.pending.pop("navroute", None)
-        return None
-    wait = session.pending.get("navroute")
+    wait = session.pending.get(key)
     if not wait or not session.dir:
         return None
-    wait[1] += 1
+    if line:
+        wait["tries"] += 1
     try:
-        with open(os.path.join(session.dir, "NavRoute.json"), encoding="utf-8") as f:
+        with open(os.path.join(session.dir, filename), encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, ValueError):
         data = None
-    a, b = _seconds((data or {}).get("timestamp")), _seconds(wait[0])
-    if a is None or b is None or abs(a - b) > NAVROUTE_WINDOW_S:
-        if wait[1] >= NAVROUTE_TRIES:
-            session.pending.pop("navroute", None)
+    a, b = _seconds((data or {}).get("timestamp")) if isinstance(data, dict) else None, _seconds(wait["ts"])
+    if a is None or b is None or abs(a - b) > NAVROUTE_WINDOW_S or (wait["market"] is not None
+                                                                       and data.get("MarketID") != wait["market"]):
+        late = wait["since"] is not None and session.now is not None and session.now - wait["since"] > FILE_WAIT_S
+        if wait["tries"] >= NAVROUTE_TRIES or late:
+            session.pending.pop(key, None)
         return None
-    session.pending.pop("navroute", None)
+    session.pending.pop(key, None)
+    return data
+
+
+def navroute_message(ev, session):
+    """navroute/1: the route NavRoute.json holds, once the file is the one this NavRoute event wrote (_wait_check). A
+    NavRoute event starts the wait; later lines and the server's tick (idle) try the file again. None while waiting,
+    and for a cleared route (NavRouteClear, no Route)."""
+    if ev.get("event") == "NavRoute":
+        _wait_start(session, "navroute", ev.get("timestamp"))
+    elif ev.get("event") == "NavRouteClear":
+        session.pending.pop("navroute", None)
+        return None
+    data = _wait_check(session, "navroute", "NavRoute.json")
+    return _navroute_from(data) if data else None
+
+
+def _navroute_from(data):
     route = [{"StarSystem": h.get("StarSystem"), "SystemAddress": h.get("SystemAddress"), "StarPos": h.get("StarPos"),
               "StarClass": h.get("StarClass")} for h in (data.get("Route") or []) if isinstance(h, dict)]
     route = [h for h in route if h["StarSystem"] and isinstance(h["SystemAddress"], int)
@@ -210,29 +233,11 @@ MODULE_OK = re.compile(r"(^Hpt_|^hpt_|^Int_|^int_|_Armour_|_armour_)")
 
 
 def _station_file(ev, session, schema, filename):
-    """The file a Market / Outfitting / Shipyard / FCMaterials event wrote, once it is that one: its time within
-    NAVROUTE_WINDOW_S of the event and the same MarketID (EDMC checks neither; NFS can serve the previous station's).
-    The event starts the wait; later lines try again, up to NAVROUTE_TRIES. None while waiting."""
-    import json
-    import os
+    """The file a Market / Outfitting / Shipyard / FCMaterials event wrote, once it is that one (_wait_check). The event
+    starts the wait; later lines and the server's tick (idle) try again. None while waiting."""
     if ev.get("event") in STATION_FILES and STATION_FILES[ev["event"]][0] == schema:
-        session.pending[schema] = [ev.get("timestamp"), ev.get("MarketID"), 0]
-    wait = session.pending.get(schema)
-    if not wait or not session.dir:
-        return None
-    wait[2] += 1
-    try:
-        with open(os.path.join(session.dir, filename), encoding="utf-8") as f:
-            data = json.load(f)
-    except (OSError, ValueError):
-        data = None
-    a, b = _seconds((data or {}).get("timestamp")), _seconds(wait[0])
-    if a is None or b is None or abs(a - b) > NAVROUTE_WINDOW_S or (wait[1] is not None and data.get("MarketID") != wait[1]):
-        if wait[2] >= NAVROUTE_TRIES:
-            session.pending.pop(schema, None)
-        return None
-    session.pending.pop(schema, None)
-    return data
+        _wait_start(session, schema, ev.get("timestamp"), ev.get("MarketID"))
+    return _wait_check(session, schema, filename)
 
 
 def _changed(session, schema, market_id, key):
@@ -253,56 +258,66 @@ def station_messages(ev, session):
         if schema not in session.pending and ev.get("event") != event:
             continue
         data = _station_file(ev, session, schema, filename)
-        if not data:
-            continue
-        mid, ts = data.get("MarketID"), data.get("timestamp")
-        base = {"systemName": data.get("StarSystem") or session.system, "stationName": data.get("StationName"),
-                "marketId": mid, "timestamp": ts}
-        if schema == "commodity":
-            items = []
-            for it in data.get("Items") or []:
-                m = COMMODITY_NAME.match(str(it.get("Name") or ""))
-                if not m or "nonmarketable" in str(it.get("Category") or "").lower() or it.get("Legality"):
-                    continue
-                try:
-                    items.append({"name": m.group(1), "meanPrice": int(it["MeanPrice"]), "buyPrice": int(it["BuyPrice"]),
-                                  "stock": int(it["Stock"]), "stockBracket": int(it.get("StockBracket") or 0),
-                                  "sellPrice": int(it["SellPrice"]), "demand": int(it["Demand"]),
-                                  "demandBracket": int(it.get("DemandBracket") or 0)})
-                except (KeyError, TypeError, ValueError):
-                    continue
-            msg = dict(base, commodities=items)
-            if data.get("StationType"):
-                msg["stationType"] = data["StationType"]
-            if data.get("CarrierDockingAccess"):
-                msg["carrierDockingAccess"] = data["CarrierDockingAccess"]
-            key = sorted(json.dumps(i, sort_keys=True) for i in items)
-        elif schema == "outfitting":
-            mods = sorted({MODULE_PREFIX.sub(lambda x: x.group(0).capitalize(), str(it.get("Name") or ""))
-                           for it in data.get("Items") or [] if isinstance(it, dict)}
-                          - {"Int_PlanetApproachSuite", "Int_planetapproachsuite"})
-            mods = [x for x in mods if MODULE_OK.search(x) and x.lower() != "int_planetapproachsuite"]
-            if not mods:
-                continue
-            msg, key = dict(base, modules=mods), mods
-        elif schema == "shipyard":
-            ships = sorted({str(x.get("ShipType")) for x in data.get("PriceList") or [] if isinstance(x, dict) and x.get("ShipType")})
-            if not ships:
-                continue
-            msg, key = dict(base, ships=ships), ships
-            if isinstance(data.get("AllowCobraMkIV"), bool):
-                msg["allowCobraMkIV"] = data["AllowCobraMkIV"]
-        else:   # fcmaterials_journal
-            items = [{k: it[k] for k in ("id", "Name", "Price", "Stock", "Demand") if k in it}
-                     for it in data.get("Items") or [] if isinstance(it, dict)]
-            msg = {"timestamp": ts, "event": "FCMaterials", "MarketID": mid, "CarrierName": data.get("CarrierName"),
-                   "CarrierID": data.get("CarrierID"), "Items": items}
-            key = items
-        if not msg.get("stationName", msg.get("CarrierName")) or mid is None:
-            continue
-        if _changed(session, schema, mid, json.dumps(key, sort_keys=True)):
-            out.append((schema, msg))
+        m = _station_message(schema, data, session) if data else None
+        if m:
+            out.append((schema, m))
     return out
+
+
+def _bracket(v):
+    """A market's stock / demand bracket: 0 to 3, or "" as the game writes it ("not normally sold here, but for sale
+    now": EDDN's schema takes it as it is)."""
+    return "" if v == "" else int(v or 0)
+
+
+def _station_message(schema, data, session):
+    """The message for one station file's contents, or None (nothing to say, or unchanged since the last one)."""
+    mid, ts = data.get("MarketID"), data.get("timestamp")
+    base = {"systemName": data.get("StarSystem") or session.system, "stationName": data.get("StationName"),
+            "marketId": mid, "timestamp": ts}
+    if schema == "commodity":
+        items = []
+        for it in data.get("Items") or []:
+            m = COMMODITY_NAME.match(str(it.get("Name") or ""))
+            if not m or "nonmarketable" in str(it.get("Category") or "").lower() or it.get("Legality"):
+                continue
+            try:
+                items.append({"name": m.group(1), "meanPrice": int(it["MeanPrice"]), "buyPrice": int(it["BuyPrice"]),
+                              "stock": int(it["Stock"]), "stockBracket": _bracket(it.get("StockBracket")),
+                              "sellPrice": int(it["SellPrice"]), "demand": int(it["Demand"]),
+                              "demandBracket": _bracket(it.get("DemandBracket"))})
+            except (KeyError, TypeError, ValueError):
+                continue
+        msg = dict(base, commodities=items)
+        if data.get("StationType"):
+            msg["stationType"] = data["StationType"]
+        if data.get("CarrierDockingAccess"):
+            msg["carrierDockingAccess"] = data["CarrierDockingAccess"]
+        key = sorted(json.dumps(i, sort_keys=True) for i in items)
+    elif schema == "outfitting":
+        mods = sorted({MODULE_PREFIX.sub(lambda x: x.group(0).capitalize(), str(it.get("Name") or ""))
+                       for it in data.get("Items") or [] if isinstance(it, dict)}
+                      - {"Int_PlanetApproachSuite", "Int_planetapproachsuite"})
+        mods = [x for x in mods if MODULE_OK.search(x) and x.lower() != "int_planetapproachsuite"]
+        if not mods:
+            return None
+        msg, key = dict(base, modules=mods), mods
+    elif schema == "shipyard":
+        ships = sorted({str(x.get("ShipType")) for x in data.get("PriceList") or [] if isinstance(x, dict) and x.get("ShipType")})
+        if not ships:
+            return None
+        msg, key = dict(base, ships=ships), ships
+        if isinstance(data.get("AllowCobraMkIV"), bool):
+            msg["allowCobraMkIV"] = data["AllowCobraMkIV"]
+    else:   # fcmaterials_journal
+        items = [{k: it[k] for k in ("id", "Name", "Price", "Stock", "Demand") if k in it}
+                 for it in data.get("Items") or [] if isinstance(it, dict)]
+        msg = {"timestamp": ts, "event": "FCMaterials", "MarketID": mid, "CarrierName": data.get("CarrierName"),
+               "CarrierID": data.get("CarrierID"), "Items": items}
+        key = items
+    if not msg.get("stationName", msg.get("CarrierName")) or mid is None:
+        return None
+    return msg if _changed(session, schema, mid, json.dumps(key, sort_keys=True)) else None
 
 
 DOCKING = {"DockingGranted": ("dockinggranted", ("timestamp", "event", "MarketID", "StationName", "StationType", "LandingPad")),
@@ -324,11 +339,21 @@ def signals_message(ev, session):
     """fsssignaldiscovered/1: a run of FSSSignalDiscovered lines is gathered and sent as one message when the next
     other line comes (Odyssey writes them before the jump that takes you there, Horizons after it: either way the
     session is in that system by then). Signals of another system are dropped, the whole batch when its first is;
-    mission targets never go (EDDN refuses them). This is how Spansh learns where fleet carriers are."""
+    mission targets never go (EDDN refuses them). This is how Spansh learns where fleet carriers are. A batch with no
+    line after it goes on the server's tick after SIGNAL_QUIET_S (idle)."""
     if ev.get("event") == "FSSSignalDiscovered":
+        if "signals" not in session.pending:
+            session.pending["signals_since"] = {"origin": session.source, "at": session.now}
         session.pending.setdefault("signals", []).append(ev)
+        if session.now is not None:
+            session.pending["signals_since"]["at"] = session.now   # quiet counts from the last one
         return None
     batch = session.pending.pop("signals", None)
+    session.pending.pop("signals_since", None)
+    return _signals_from(batch, session)
+
+
+def _signals_from(batch, session):
     if not batch or not session.located(batch[0].get("SystemAddress")):
         return None
     signals = [{k: x[k] for k in SIGNAL_KEYS if k in x} for x in batch
@@ -363,6 +388,37 @@ def build(ev, session, software_version, test=False):
     versions = {"commodity": 3, "outfitting": 2, "shipyard": 2}
     for schema, m in station_messages(ev, session):
         out.append((schema, envelope(schema, m, session, software_version, versions.get(schema, 1), test)))
+    return out
+
+
+def idle(session, software_version, test=False):
+    """What can go without a new journal line, on the server's tick: [(schema, envelope, the line it comes from)]. A
+    companion file that arrived after its event's line (the game or NFS wrote it late, and nothing came after), and a
+    batch of signals SIGNAL_QUIET_S after its last line, if you are in that system by then (Odyssey writes a jump's
+    signals just before its FSDJump: a batch for the system you are jumping to waits for that line instead)."""
+    out = []
+    files = dict(STATION_FILES.values(), navroute="NavRoute.json")
+    versions = {"commodity": 3, "outfitting": 2, "shipyard": 2}
+    for key, filename in files.items():
+        wait = session.pending.get(key)
+        if not wait or not wait.get("origin"):
+            continue
+        origin = wait["origin"]
+        data = _wait_check(session, key, filename, line=False)
+        if not data:
+            continue
+        m = _navroute_from(data) if key == "navroute" else _station_message(key, data, session)
+        if m:
+            out.append((key, envelope(key, m, session, software_version, versions.get(key, 1), test), origin))
+    since = session.pending.get("signals_since") or {}
+    if session.pending.get("signals") and since.get("origin") and since.get("at") is not None and session.now is not None \
+            and session.now - since["at"] >= SIGNAL_QUIET_S \
+            and session.located(session.pending["signals"][0].get("SystemAddress")):
+        m = _signals_from(session.pending.pop("signals"), session)
+        session.pending.pop("signals_since", None)
+        if m:
+            out.append(("fsssignaldiscovered", envelope("fsssignaldiscovered", m, session, software_version, 1, test),
+                        since["origin"]))
     return out
 
 
