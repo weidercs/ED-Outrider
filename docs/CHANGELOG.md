@@ -2,6 +2,11 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Docs: What's new, the version notes for players
+- A new guide page, docs/guide/whats-new.md: what each release since 2026.10.11 brings, in the player's words (new
+  features, settings, anything to know before updating), with screenshots of Settings → Uploads and the Data tile.
+  First in every guide page's nav and in the README's index. The agent guide's release steps now include it.
+
 ## 2026-10-09 · Version 2026.10.19
 - The first release since 2026.10.16 (2026.10.17 and 2026.10.18 were withdrawn to be tested first). New since 10.16:
   opt-in uploads to EDDN and EDSM (Settings -> Uploads; off by default); the nearest place to dock (Plot Route's

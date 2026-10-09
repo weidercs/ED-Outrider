@@ -77,6 +77,7 @@ Everything about installing, the optional parts, Docker, other devices and backu
 
 | Page | What's in it |
 |---|---|
+| **[What's new](docs/guide/whats-new.md)** | What each release brings: new things to try, settings worth a look, anything to know before updating |
 | <a id="-running-as-a-server-docker"></a><a id="-other-devices-on-your-network"></a><a id="-backups"></a>**[Install and run](docs/guide/install.md)** | Getting started in full (Linux, Windows, the optional parts), running as a server in Docker, other devices on your network, backups |
 | <a id="-the-views"></a><a id="-the-surface-map"></a>**[The views](docs/guide/views.md)** | Every tab (Nearby, Here, Map, History, Samples, Log, Materials, Search, My firsts, Now), the header tiles, the desktop themes, the surface map |
 | <a id="-the-neutron-highway"></a>**[Plot Route](docs/guide/plot-route.md)** | The Neutron Highway (exact and neutron plotters), Road to Riches, Exomastery and trade routes, following a route, 🎯 and auto-target, the nearest place to dock |

@@ -252,6 +252,10 @@ Ids: a system id64 can exceed 2^53, so the page compares the string `id` fields,
   commit with `dist/docker-compose.yml`, `dist/env.example` and the bundle attached (the install guide fetches the first two
   from `releases/latest/download/`, so every release must carry them), its notes leading with the registry. The
   guide's Docker section (`docs/guide/install.md`) and the bundle's INSTALL.txt (written by the script) must agree on the install and update steps.
+  Each release also gets a section at the top of `docs/guide/whats-new.md` (before the version bump's commit): the
+  player's view of what changed since the last release, not the changelog. New features, settings, and anything to do
+  or know before updating (a journal re-read, a Docker change), short and plain, with a screenshot where one helps.
+  A withdrawn release has no section; its changes go into the next one's.
 - **Stopping.** SIGTERM (docker stop, systemd) sets `run()`'s stop event: the same cleanup as Ctrl-C (tasks
   cancelled, commit, the quit backup, "stopped cleanly", exit 0). `verify.sh` stops its scratch server that way and
   fails if it does not stop cleanly.

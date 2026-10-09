@@ -1,0 +1,191 @@
+[ED Outrider](../../README.md) · **What's new** · [Install and run](install.md) · [The views](views.md) · [Plot Route](plot-route.md) · [Cargo and trading](cargo-and-trading.md) · [Voice and alerts](voice-and-alerts.md) · [Automation](automation.md) · [On a tablet](tablet.md) · [Uploads](uploads.md) · [Settings and good to know](settings.md) · [For the curious](for-developers.md)
+
+# What's new
+
+What each release brings you, newest first: new things to try, settings worth a look, and anything that changes how
+Outrider behaves. When a new release is out, a small **⬆ Update** pill appears in Outrider's header with how to get it.
+
+> [!TIP]
+> Updating from an older version? Read every section between yours and the newest: each one only lists what
+> changed since the release before it.
+
+---
+
+## 2026.10.19 · 9 October 2026
+
+**Share what you find, and find somewhere to dock.**
+
+> [!IMPORTANT]
+> - The first start after updating **reads your journals again** (a minute or two for years of them). Nothing is lost.
+> - **Docker:** Outrider now always listens on port 8025 inside the container. To use another port, set `PORT` in
+>   your `.env` file, not in Settings.
+
+### 📡 Share with EDDN and EDSM (optional, off until you switch it on)
+
+You no longer need EDMC just to upload. In **⚙ Settings → Uploads**:
+
+- **EDDN** sends what you discover (systems, scans, signals, codex entries, markets) to the network that Spansh,
+  EDSM and Inara read, as it happens. Personal details are removed first.
+- **EDSM** sends your flight log, scans and materials to your own EDSM account, in batches at each jump or docking.
+  Enter your EDSM commander name and API key there (from edsm.net → Settings → API key).
+
+<p align="center">
+  <img src="../images/uploads.png" alt="Settings, Uploads: EDDN and EDSM switched on, what each sent today, and an EDSM account with its stored key's first and last characters" width="760">
+</p>
+
+The header's **Data** tile then shows what each sent today, and anything waiting:
+
+<p align="center">
+  <img src="../images/datatile.png" alt="The Data tile with a line for EDDN (269 sent) and one for EDSM (18 sent, 3 waiting)" width="300">
+</p>
+
+> [!WARNING]
+> **Use only one uploader.** If EDMC also uploads, or Outrider runs on both your PC and a server, everything is sent
+> twice. Turn EDMC's EDDN and EDSM off first. Outrider notices EDMC on the same PC and another Outrider sharing your
+> journal folder, but not EDMC on another computer. The [Uploads](uploads.md) page has the details.
+
+If Outrider wasn't running while you played, it catches up when it starts (EDSM up to a week back, EDDN the last
+hour). Nothing is ever sent from the beta, the Legacy game, or while you crew in someone else's ship.
+
+### 📍 The nearest place to dock
+
+**Plot Route → 📍 Nearest…** lists the closest stations and fleet carriers that have what you need: Universal
+Cartographics, Vista Genomics, repair, refuel, a shipyard. It checks your pad size and how recent each report is, and
+**Plot here** plots the route. Deep Space Support Array carriers are marked **🛰 DSSA**. You can also ask by voice:
+*"nearest vista"*, *"nearest station with fuel"*.
+
+<p align="center">
+  <img src="../images/nearest.png" alt="Nearest place to dock: stations and carriers with UC and Vista, nearest first, with their docking access and how old each report is" width="820">
+</p>
+
+### 🧬 For explorers
+
+- **Tagged plants** become waypoints for your next sample.
+- **✪** marks a species new to your codex anywhere in the galaxy (✦ is new in this region only).
+- **"Bio possible: check the FSS"** when a body could have life nobody has reported.
+- Flying low over a body shows a **bio card** with what is likely there; each genus that's ruled out says why.
+- The unsold estimate counts the **full-scan bonus**, and leaves out the ×5 first-footfall bonus in populated systems,
+  which never pay it.
+- Star kinds, **Canonn Bioforge** links for species, and a system's bodies as a spreadsheet (**⬇ CSV** on Here).
+
+### 🛠 Fixed, among many
+
+- Stopping Outrider lets go of Primary Fire straight away (auto honk could hold it for up to 20 seconds).
+- Auto-target closes the galaxy map it opened when it's stopped part way.
+- An Apex shuttle ride no longer replaces your ship's details or its fuel figures.
+- Decimal values (speech speed 1.3, say) can be saved in Server settings again.
+- A password written without quotes in the config file no longer leaves the server without one.
+- `launch_outrider.sh` now works on macOS.
+
+---
+
+## 2026.10.16 · 7 October 2026
+
+**Cargo, your fleet carrier, and trading.**
+
+> [!NOTE]
+> The first start reads your journals again to pick up your cargo and carrier history.
+
+### 📦 Cargo and your carrier (the Materials tab)
+
+- Your ship's hold, with what you paid for each line.
+- Your **fleet carrier's cargo**: confirmed by a sell order (✓), followed from your journal (◷) or entered by you
+  (✎, **Recount…**), checked against the carrier's own total. To have a commodity counted exactly, put a sell order on
+  it at a price nobody will pay. This works without signing in to Frontier, which Outrider never does.
+- The **Carrier** tile shows your tritium and how many jumps it's worth.
+
+### 💱 Trading, kept small
+
+- **Sell / Buy** on any cargo line: where to sell all of it (or buy that much), best price or closest, with your
+  profit over what you paid. Then **Plot route here**.
+- **Trade routes** in Plot Route: station-to-station hops from where you're docked. Outrider tells you what to trade
+  at each stop and ticks the goods off as you go.
+
+<p align="center">
+  <img src="../images/cargo.png" alt="The Materials tab: your hold and your carrier's cargo, with a Sell lookup open" width="820">
+</p>
+
+### 🧭 Plot Route
+
+- **Expressway to Exomastery**: systems with valuable life already reported, each species ticked off as you sample
+  it, spoken on arrival.
+- A line under the header tiles shows your route's next stop, with a **🎯** to target it in the galaxy map (on the
+  game PC).
+
+---
+
+## 2026.10.15 · 6 October 2026
+
+**Road to Riches.**
+
+- **Road to Riches** (contributed by [thshurka](https://github.com/thshurka)): a chain of systems whose planets are
+  worth scanning and mapping. Outrider follows it as you fly, shows what's left to do in each system, says the best
+  body on arrival, and copies the next system for the galaxy map.
+- The **Highway tab is now Plot Route**, with three plotters: Exact, Neutron and Road to Riches.
+- Road to Riches is never auto-targeted: it's a route for stopping, not hurrying past.
+
+<p align="center">
+  <img src="../images/highway.png" alt="Plot Route: a route to Colonia, its systems and the galaxy map" width="820">
+</p>
+
+---
+
+## 2026.10.14 · 5 October 2026
+
+**Know when there's an update, and a second tablet.**
+
+- An **⬆ Update** pill appears in the header when a newer release is out, with what's new and how to update. **Skip
+  this version** hides it until the next one. To turn the check off: `[server] update_check = false`.
+- **A second tablet:** turn off **Show the game controls** in a tablet's Settings, and its pages take the whole width.
+  One tablet can carry the controls, another just the information.
+- Smaller tablets get a compact layout that fits all eight control buttons.
+- **Linux:** the Highway's clipboard copy needs `wl-copy` (Wayland) or `xclip` (X11). The launcher tells you if
+  neither is installed.
+
+---
+
+## 2026.10.13 · 5 October 2026
+
+**Windows.**
+
+- **`launch_outrider.bat`** sets Outrider up and starts it on Windows. Double-click it.
+- Auto honk, auto-target and the tablet's control rail now work on Windows too. They are **experimental** until
+  someone has tried them in game, so reports are welcome.
+- A Windows path written in double quotes in the config file (`"C:\Users\..."`) can't be read. Outrider now says so
+  and how to write it: `C:/Users/...`, or in single quotes.
+
+---
+
+## 2026.10.12 · 5 October 2026
+
+**Themes for the browser page.**
+
+**⚙ Settings → Display → Theme on this browser** brings the tablet's nine themes to the desktop page: LCARS, Elite,
+four from Babylon 5, the Sith and the Rebel Alliance, and Dark. Or keep **Default - Outrider**. Each browser chooses
+its own.
+
+<p align="center">
+  <img src="../images/themes.png" alt="The desktop page in four of the themes" width="820">
+</p>
+
+---
+
+## 2026.10.11 · 4 October 2026
+
+**The tablet speaks, and many more voices.**
+
+- **Play alerts here:** the tablet can speak and play the alert sounds itself, with its own choice of alerts.
+- The voice is **Cori** by default, and **⚙ Settings → Voice → More voices** downloads others. If the browser holds
+  sound back, a **Click Here To Allow Audio** pill tells you.
+- Here's schematic draws each scanned body from its scan.
+- Two more tablet themes (Babylon 5's Minbari and Centauri) and emblems for several themes.
+- **Settings → Server** edits the whole config file from the page. Outrider can run as a **Docker server**, you can
+  **ask it questions by voice**, and an AI assistant can be added if you want one.
+
+<p align="center">
+  <img src="../images/tablet.png" alt="The tablet in its LCARS theme, with the ship controls down the right" width="820">
+</p>
+
+---
+
+Every change, small ones included, is in the [changelog](../CHANGELOG.md).
