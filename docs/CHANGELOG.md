@@ -2,6 +2,15 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Fable sweep fixes: the server
+- A relog or game-mode switch while docked no longer repeats "Docked at <station>, N cr to sell" (and its spoken line).
+- A backup copy restarted at every step (a busy evening, a slow backup disk) now falls back to one step as meant; it
+  missed restarts that came right after restarts and could go on for thousands of steps.
+- A Spansh outage no longer makes the page ask for a system's bodies every 4 s for as long as it lasts.
+- Server settings no longer take another part's warning, printed at that moment, for a problem with the config (a
+  valid save could be refused).
+- Auto honk switched off during a Test says "off" at once.
+
 ## 2026-10-09 · Fable sweep fixes: scripts, Docker, the guide
 - launch_outrider.sh works on macOS: it hashed requirements.txt with sha256sum, which macOS does not have (it stopped
   before anything else). Existing installs keep their stamp. The clipboard-tool hint is no longer shown on macOS.

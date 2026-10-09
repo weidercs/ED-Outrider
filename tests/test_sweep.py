@@ -299,5 +299,95 @@ class PageFromTheServer(unittest.TestCase):
         self.assertIn('self.moment("region", ts, system=str(id64)', src)
 
 
+class FableServer(unittest.TestCase):
+    """The Fable sweep of 2026-10-09: the server."""
+
+    def setUp(self):
+        self.db, self.j = journals()
+        self.addCleanup(self.db.close)
+
+    def test_backup_restarts_right_after_restarts_count(self):
+        """A copy restarted at every step (a writer faster than the backup) reports the same `remaining` each time: those
+        count as restarts, so the one-step fallback comes (it waited thousands of steps)."""
+        import sqlite3
+        calls = []
+
+        class Src:
+            def backup(self, dst, pages=None, sleep=None, progress=None):
+                calls.append(pages)
+                if pages is None:
+                    return                                          # the fallback: one step
+                for _ in range(50):
+                    progress(sqlite3.SQLITE_OK, 641, 900)           # restarted again: no progress
+        ed_outrider.copy_database(Src(), None, restarts=5)
+        self.assertEqual(calls, [256, None])
+
+        class Busy:
+            def backup(self, dst, pages=None, sleep=None, progress=None):
+                calls.append(pages)
+                progress(sqlite3.SQLITE_OK, 900, 900)
+                for _ in range(20):
+                    progress(sqlite3.SQLITE_BUSY, 900, 900)         # busy waits are not restarts
+                progress(sqlite3.SQLITE_DONE, 0, 900)
+        calls.clear()
+        ed_outrider.copy_database(Busy(), None, restarts=5)
+        self.assertEqual(calls, [256])
+
+    def test_another_threads_warning_is_not_a_config_problem(self):
+        import contextlib
+        import io
+        st = state(self.db, self.j)
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        st.config_path = os.path.join(d, "ed_outrider.toml")
+        real = ed_outrider.settings_from
+
+        def noisy(*a, **k):
+            import sys
+            print("warning: cannot read /x/Journal.log", file=sys.stderr)   # as the unsold pass might, meanwhile
+            return real(*a, **k)
+        with unittest.mock.patch.object(ed_outrider, "settings_from", noisy), contextlib.redirect_stderr(io.StringIO()) as err:
+            out, status = st.config_save({"defaults": {"speech_speed": 1.2}})
+            info = st.config_info()
+        self.assertEqual(status, 200, out)
+        self.assertEqual(info["problems"], [])
+        self.assertIn("warning: cannot read", err.getvalue())          # still reaches the real log
+
+    def test_a_relog_at_the_same_station_is_the_same_docking(self):
+        dock = {"timestamp": "2026-10-09T10:05:00Z", "event": "Docked", "StationName": "Abraham Lincoln", "StationType": "Orbis",
+                "MarketID": 99, "StarSystem": "Sol", "SystemAddress": 10477373803, "StationServices": ["dock"]}
+        self.j.handle(dock)
+        self.j.handle({"timestamp": "2026-10-09T11:00:00Z", "event": "LoadGame", "Commander": "Briadin"})
+        loc = {"timestamp": "2026-10-09T11:00:10Z", "event": "Location", "Docked": True, "StationName": "Abraham Lincoln",
+               "StationType": "Orbis", "MarketID": 99, "StarSystem": "Sol", "SystemAddress": 10477373803,
+               "StarPos": [0, 0, 0], "StationServices": ["dock"]}
+        self.j.handle(loc)
+        self.assertEqual(self.j.docked["ts"], "2026-10-09T10:05:00Z")    # not announced again
+        self.j.handle(dict(loc, timestamp="2026-10-09T12:00:00Z", MarketID=100, StationName="Daedalus"))
+        self.assertEqual(self.j.docked["ts"], "2026-10-09T12:00:00Z")    # another station: a new docking
+
+    def test_failed_body_fetches_end_partial(self):
+        st = state(self.db, self.j)
+        st.locate = lambda id64: ("Z", 1.0, 2.0, 3.0)
+
+        async def full_records(*a, **k):
+            raise TimeoutError("Spansh")
+        st.spansh = types.SimpleNamespace(cached=lambda i: (None, None), fetched_age=lambda i: None, full_records=full_records)
+        import contextlib
+        import io
+        with contextlib.redirect_stderr(io.StringIO()):
+            for _ in range(ed_outrider.DUMP_MAX_TRIES):
+                asyncio.run(st.ensure_records(77))
+        self.assertGreaterEqual(st.dump_tries.get(77, 0), ed_outrider.DUMP_MAX_TRIES)
+
+    def test_honk_off_during_a_test_says_off(self):
+        st = state(self.db, self.j)
+        st.honker = types.SimpleNamespace(status="ready: holds Primary Fire for 6 s", close=lambda *a: None, open=lambda: True,
+                                          ready=True, available=True)
+        st.honk_test_task = types.SimpleNamespace(done=lambda: False)
+        st.set_autohonk(False)
+        self.assertEqual(st.honker.status, "off")
+
+
 if __name__ == "__main__":
     unittest.main()

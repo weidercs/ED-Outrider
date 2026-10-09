@@ -3700,8 +3700,13 @@ class Journals:
         elif name == "Docked":
             services = ev.get("StationServices") or []
             if docked_fresh:
+                # a login (Location, Docked) at the station you were docked at: the same docking, its time kept, so the
+                # page does not announce it again at every relog or mode switch
+                same = ev.get("event") == "Location" and self.docked is not None and ev.get("MarketID") is not None \
+                    and self.docked.get("market_id") == ev.get("MarketID")
                 self.docked = {"station": ev.get("StationName"), "type": ev.get("StationType"),
-                               "market_id": ev.get("MarketID"), "system": ev.get("StarSystem"), "ts": ts,
+                               "market_id": ev.get("MarketID"), "system": ev.get("StarSystem"),
+                               "ts": self.docked["ts"] if same else ts,
                                "has_uc": "exploration" in services, "has_vista": "vistagenomics" in services}
                 meta_set(self.db, "docked", self.docked)
             if ev.get("StationType") != "FleetCarrier" or ev.get("MarketID") != c.get("id") or stale():
@@ -5193,8 +5198,10 @@ def copy_database(src, dst, pages=256, pause=0.005, restarts=5):
     one step after all, so a busy writer cannot keep the backup from ever finishing."""
     last = [None, 0]
 
-    def progress(_status, remaining, _total):
-        if last[0] is not None and remaining > last[0]:
+    def progress(status, remaining, _total):
+        # a successful step always lowers `remaining`: one that did not (higher, or the same right after another
+        # restart) was a restart; a busy step (SQLITE_BUSY / LOCKED) leaves it the same and is not counted
+        if last[0] is not None and remaining >= last[0] and status in (sqlite3.SQLITE_OK, sqlite3.SQLITE_DONE):
             last[1] += 1
             if last[1] >= restarts:
                 raise _BackupRestarted
@@ -5622,7 +5629,18 @@ class State:
             if path is not None:
                 cfg = load_config(path) if os.path.exists(path) else {}
             st = settings_from(cfg, args, None, ([], []))
-        return st, [x for x in err.getvalue().splitlines() if x.strip()]
+        # only the config layer's own lines: redirect_stderr swaps sys.stderr for the whole process, so another
+        # thread's warning (the unsold pass, a backup) printed meanwhile must not count as a config problem
+        mine, ours = [], False
+        for x in err.getvalue().splitlines():
+            if x.startswith(("config", "[server]")) or (ours and x[:1].isspace()):   # an indented line goes on the last
+                mine.append(x)
+                ours = True
+            else:
+                ours = False
+                if x.strip():
+                    print(x, file=sys.stderr)   # someone else's line: on to the real log
+        return st, mine
 
     def config_info(self):
         """Every config key the server knows, with its value (as the file has it, or the default), its kind and help;
@@ -7879,7 +7897,10 @@ class State:
                                                         "records": (base or {}).get("records") or []},
                                            interactive=True)
         except Exception as e:
-            print(f"body lookup for {name} failed: {type(e).__name__}: {e}", file=sys.stderr)
+            # counted: after DUMP_MAX_TRIES the system is no longer "partial", and the page stops asking every 4 s
+            self.dump_tries[id64] = self.dump_tries.get(id64, 0) + 1
+            if self.dump_tries[id64] in (1, DUMP_MAX_TRIES):
+                print(f"body lookup for {name} failed: {type(e).__name__}: {e}", file=sys.stderr)
 
     async def body_detail(self, id64, body_name):
         """Everything known about one body: your raw Scan, Spansh's record, and the merged row."""
@@ -9624,6 +9645,8 @@ class State:
             elif not (self.honk_test_task and not self.honk_test_task.done()):   # a pending test closes it itself
                 self.honker.close()
                 self.honker.status = "off"
+            else:
+                self.honker.status = "off"   # the test keeps the device until it ends; the status is off now
         self.bump()
 
     def start_honk_test(self):
