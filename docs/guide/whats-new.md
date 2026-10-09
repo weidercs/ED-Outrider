@@ -11,6 +11,36 @@ Outrider behaves. When a new release is out, a small **⬆ Update** pill appears
 
 ---
 
+## 2026.10.19.1 · 9 October 2026
+
+**Fixes, and body names said clearly.**
+
+### 🗣 Body names, letter by letter
+
+With a Piper voice, a body's name is now said one letter at a time: "A 1" is *"ay one"* (it was *"uh one"*), and
+"ABC 3 a" is *"ay, bee, see, three, ay"*, each letter clear. System, station and carrier names are read as before.
+
+### 💱 Trade routes count what you trade
+
+A commodity is ticked off once you have traded **all** of it: Plot Route shows **60 of 100 t** until then (one tonne
+used to tick off the lot). If a station has less than planned, just undock: Outrider moves on to the next stop and
+says what fell short, instead of the planned profit.
+
+### 📡 Two Outriders, one upload
+
+If the Outrider on your PC and one on a server are both switched on for EDDN or EDSM, one now sends and the other
+says it is giving way (before, both stopped and nothing was sent until you switched one off).
+
+### 🛠 Also fixed
+
+- A Guardian FSD booster switched off no longer counts towards your jump range and fuel figures.
+- The map shows your latest jumps and scans when you open it again.
+- A slow, failed map request no longer replaces a newer map with "map failed".
+- A market or route opened just as Outrider started still reaches EDDN when its file arrives late.
+- The AI assistant stops looking things up at its round limit, and answers.
+
+---
+
 ## 2026.10.19 · 9 October 2026
 
 **Share what you find, and find somewhere to dock.**

@@ -51,7 +51,7 @@ twice: EDDN has no way to tell. So:
   minute). Another Outrider that sees a fresh note will not start the same upload ("Already uploading from
   erangel"). If two are switched on for the same upload anyway (both started with it on), the one already sending
   keeps it and the other gives way and says so; started together, they agree on one. An Outrider older than
-  2026.10.20 is always given way to.
+  2026.10.19.1 is always given way to.
   - A note left by a crash goes stale after five minutes; one untouched for an hour is ignored at once.
   - When an Outrider stops, its note stays with how far it got: switch the upload on in another one and it starts
     there, with nothing missed and nothing sent twice.

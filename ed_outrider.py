@@ -9383,7 +9383,7 @@ class State:
         self._lease_wanted = wanted
 
         def write():
-            # services: what this instance sends (an Outrider before 2026.10.20 holds whenever another lease names one);
+            # services: what this instance sends (an Outrider before 2026.10.19.1 holds whenever another lease names one);
             # wanted: what it is switched on for. Only the marks of what it wants: a switched-off service's mark is old,
             # and another instance switched on would start there and send that history
             # nothing claimed before the others are read: one already sending keeps its service

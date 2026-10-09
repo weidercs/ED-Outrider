@@ -2,6 +2,13 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Version 2026.10.19.1
+- A bug-fix release on 2026.10.19: body names said letter by letter by Piper ("ay one", not "uh one"); the Codex
+  review's fixes (one sender when two Outriders are switched on for an upload, trade routes counting tonnes with
+  undocking as moving on, a powered-off Guardian booster not counted, the map asking again when reopened, a late
+  companion file after a catch-up, the AI's round limit, the journal archive shared between instances, ExploData's
+  colours retried). No journal re-read: nothing stored changed shape. The What's new page is in the guide.
+
 ## 2026-10-09 · Codex review fixes: the AI's rounds, the journal archive, the colour tables
 - The AI could run one more round of tools than `[assistant] max_rounds` allowed (Codex F7): the request after the
   last round asks for the answer only (`tool_choice: "none"`), and a tool asked for then is not run.
