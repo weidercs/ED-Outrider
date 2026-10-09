@@ -290,5 +290,14 @@ class DataModules(unittest.TestCase):
         self.assertNotIn("not args.since and not args.ignore_deaths", src)
 
 
+class PageFromTheServer(unittest.TestCase):
+    """Batch G: what the page gets from the server."""
+
+    def test_region_moment_system_is_text(self):
+        """An id64 past 2^53 is rounded by JSON: the region moment sends it as text, like the other moments."""
+        src = inspect.getsource(ed_outrider.Journals.note_region)
+        self.assertIn('self.moment("region", ts, system=str(id64)', src)
+
+
 if __name__ == "__main__":
     unittest.main()

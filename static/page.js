@@ -1647,7 +1647,7 @@ function uncool(it) {
 const SOUND_LEAD = {fanfare: 1700, chime: 1000};
 function alertOut(kind, title, body, {sound, say, delay = 0, tag = null, still = null, quiet = false} = {}) {
   lastAlert = {kind, title, body, at: Date.now()};
-  if (TABLET) tabBanner(kind, title, body);   // the tablet shows it; the PC says it (and the tablet too with Play alerts here)
+  if (TABLET) tabBanner(kind, title, body, tag);   // the tablet shows it; the PC says it (and the tablet too with Play alerts here)
   const entry = logSpeech({kind, tag, words: title});
   const snd = sound === undefined ? (ALERTS.find(a => a[0] === kind) || [])[2] : sound;
   const loud = speakerHere(), hush = hushed() && speechPrio(kind, tag) > 1;   // hushed: danger (and a rig press's answer) still speaks
@@ -1857,7 +1857,10 @@ async function sayNow(item) {
     let ctx = tts && tts.engine === "piper" ? await runningAudio() : null;
     if (!ctx && tts && tts.engine === "piper" && actx && actx.state !== "running" && !cur.stopped) {
       // the browser holds audio back until a click: the line waits for it (the red pill asks), then plays in Piper
-      // if it is still worth saying; never the browser's voice instead
+      // if it is still worth saying; never the browser's voice instead. Only when the pill shows and a click lets
+      // it go: with Play on this PC (its call failed) or speech off, nothing asks for that click, and the whole queue
+      // stalled behind the line, danger lines included (the sweep of 2026-10-09)
+      if (serverPlay() || !audioBlocked()) { item.unsaid = "the browser has not allowed audio yet (click the page)"; return; }
       item.heldForClick = true; drawAudioPill();
       await audioUnlocked(cur);
       cur.halt = null;
@@ -2838,8 +2841,14 @@ function bodyValueTitle(b) {
 const ringsText = b => `${b.rings}${b.rings_mapped ? ` (${b.rings_mapped} mapped${b.hotspots < b.rings_mapped ? `, ${b.hotspots} with hotspots` : ""})` : ""}`;
 function renderHere() {
   const h = hereData, head = document.getElementById("hereHead"), lv = document.getElementById("hereLeaving");
-  if (!h) { head.textContent = "loading…"; return; }
+  if (!h) {   // another system on its way: nothing of the last one stays on screen, or clickable (the sweep of 2026-10-09)
+    head.textContent = "loading…"; lv.innerHTML = "";
+    document.getElementById("hereRows").innerHTML = "";
+    const sch = document.getElementById("hereSchematic"); if (sch) sch.innerHTML = "";
+    return;
+  }
   if (h.error) {
+    const sch = document.getElementById("hereSchematic"); if (sch) sch.innerHTML = "";
     head.textContent = h.error; lv.innerHTML = "";
     document.getElementById("hereRows").innerHTML = `<tr><td colspan="11" class="unk">${esc(h.error)}</td></tr>`;
     if (selectedBody) closeBody();
@@ -3180,13 +3189,17 @@ function bodyPopHtml(b, region) {
 // ---- body detail panel ----
 let selectedBody = null, selectedSystem = null, bodyData = null;
 async function reloadBody() {
-  const name = selectedBody, sys = selectedSystem;
+  const name = selectedBody, sys = selectedSystem, g = newRequest("body");
   let fresh;
   try { fresh = await apiJson(`api/body?system=${sys}&name=${encodeURIComponent(name)}`); } catch (err) { fresh = {error: err.message}; }
+  if (!isNewest("body", g)) return;   // an older request answering late (it waited on Spansh) is not the panel's
   if (selectedBody !== name || selectedSystem !== sys) return;
   bodyData = fresh; renderBody();
 }
 async function openBody(name) {
+  // the Here rows of another system are cleared while the shown one loads (renderHere); a click that still comes
+  // from them (hereData of another system) opens nothing
+  if (hereData && !hereData.error && String(hereData.id64) !== String(shownSystem())) return;
   const id = hereData && !hereData.error ? hereData.id64 : shownSystem(); if (!id) return;
   selectedBody = name; selectedSystem = String(id); bodyData = null; hidePop();
   const panel = document.getElementById("bodyPanel");
@@ -3781,7 +3794,12 @@ function renderCargo(cg) {
   }
   h += `<div class="csub">Buy something else</div><div class="cfind"><input type="text" id="cargoFindName" placeholder="commodity" maxlength="80" spellcheck="false">` +
     `<input type="number" id="cargoFindTons" placeholder="tons" min="1" max="100000" step="1"><button type="button" class="mini" id="cargoFind">Find</button></div>`;
+  // what is typed in "Buy something else" survives the redraw (every Materials filter key redrew it empty)
+  const typed = ["cargoFindName", "cargoFindTons"].map(id => document.getElementById(id)),
+        vals = typed.map(x => x ? x.value : ""), focused = typed.findIndex(x => x && x === document.activeElement);
   el.innerHTML = h;
+  ["cargoFindName", "cargoFindTons"].forEach((id, i) => { const x = document.getElementById(id); if (x && vals[i]) x.value = vals[i]; });
+  if (focused >= 0) document.getElementById(["cargoFindName", "cargoFindTons"][focused]).focus();
   markLookRow();
 }
 const LOOK_BTNS = `<button type="button" class="mini" data-look="sell" title="where to sell it: Spansh's stations that take all of it">Sell</button>` +
@@ -3856,7 +3874,9 @@ document.getElementById("cargoList").addEventListener("keydown", e => {
 // LK: what is asked (commodity, label, mode, tons, from: ship | carrier | here, key: the line it came from) and how
 // (sort, within, age, carriers); answer: the server's; open: the station row opened
 const LK = {q: null, sort: "price", within: 500, age: 14, carriers: false, answer: null, open: null, busy: false};
-function startLook(q) { LK.q = q; LK.open = null; loadLook(); }
+// a carrier with no name yet (bought, no CarrierStats since): its callsign, else "your carrier" (it said "null")
+const carrierName = c => (c && (c.name || c.callsign)) || "your carrier";
+function startLook(q) { LK.q = q; LK.open = null; LK.answer = null; loadLook(); }   // not the last lookup's heading
 async function loadLook() {
   const q = LK.q, el = document.getElementById("cargoLook");
   if (!q) { el.hidden = true; return; }
@@ -4524,8 +4544,8 @@ function drawMap() {
       g.fillStyle = C.gold; g.font = "14px system-ui"; g.fillText("🚢", q.sx - 7, q.sy + 5);
       carrierAt = String(cr.id64);
       if (!d.points.some(pt => pt.id === carrierAt))   // otherwise the system's own dot carries the popup
-        M.proj.push({sx: q.sx, sy: q.sy, pt: {name: cr.system, id: cr.id64, x: cr.x, y: cr.y, z: cr.z, carrier: cr.name}});
-      if (mSettings.labels) labels.push([q, `${cr.name} (carrier)`]);
+        M.proj.push({sx: q.sx, sy: q.sy, pt: {name: cr.system, id: cr.id64, x: cr.x, y: cr.y, z: cr.z, carrier: carrierName(cr)}});
+      if (mSettings.labels) labels.push([q, `${carrierName(cr)} (carrier)`]);
     }
   }
   // Stalks down to the plane.
@@ -4554,7 +4574,7 @@ function drawMap() {
       g.beginPath(); g.arc(q.sx, q.sy, r + 4, 0, 2 * Math.PI); g.stroke(); g.setLineDash([]);
     }
     if (bms[id]) { g.fillStyle = C.gold; g.font = "12px system-ui"; g.fillText("★", q.sx + r + 1, q.sy - r); }
-    M.proj.push({sx: q.sx, sy: q.sy, pt: boostOf[id] || id === carrierAt ? {...pt, boost: boostOf[id], carrier: id === carrierAt ? cr.name : undefined} : pt});
+    M.proj.push({sx: q.sx, sy: q.sy, pt: boostOf[id] || id === carrierAt ? {...pt, boost: boostOf[id], carrier: id === carrierAt ? carrierName(cr) : undefined} : pt});
     if (mSettings.labels && (id === hereId || id === prevId || id === targetId || bms[id]))
       labels.push([q, pt.name + (id === prevId ? " (previous)" : id === targetId ? " (target)" : "")]);
   }
@@ -6626,7 +6646,7 @@ function onData() {
       else if (m.kind === "arrival_brief") {   // after the honk (or 12 s after arriving without one): one sentence
         let text = arrivalBriefText(m);
         // the arrival alert has just said this system is undiscovered: the briefing starts at the bodies, not twice
-        if (undiscSaid && undiscSaid === m.system_name && text.startsWith("Undiscovered. ")) text = text.slice(14);
+        if (undiscSaid && undiscSaid === m.system_name) text = text.replace(/(^|\. )Undiscovered\. /, "$1");   // after "Entering ..." too
         briefFacts = {sys: m.system, m};
         if (pendingRegion && pendingRegion.sys === String(m.system) && m.region && text) pendingRegion = null;   // said in it
         // "Routine systems: sound only": the soft routine sound in place of the words (only where they would be said)
@@ -6873,7 +6893,8 @@ const ALERT_SHORT = {arrival: "Arrival", game: "Game start and quit", jump: "FSD
   leaving: "Leaving", fuel: "Fuel", scoop: "Tank full", scoopstop: "Scooping stopped", supercharge: "Supercharge", find: "Find",
   jumponium: "Jumponium", sampling: "Sampling", approach: "High-g approach", bodybrief: "Body brief", sell: "Selling", saleleft: "Sale left data",
   unsold: "Unsold", hull: "Hull and danger", carrier: "Carrier", codex: "Codex", loss: "Ship lost", rigs: "Rigs", rigleash: "Rig leash",
-  rigsout: "Rigs out", mapped: "Mapped", signals: "Signals", highway: "Neutron Highway", autotarget: "Auto-target", manual: "Asked for"};
+  rigsout: "Rigs out", mapped: "Mapped", signals: "Signals", highway: "Neutron Highway", autotarget: "Auto-target", manual: "Asked for",
+  exo: "Exomastery route", riches: "Road to Riches", trade: "Trade route"};
 const speechMuted = new Set();   // kinds turned off from the tally this session (each shows an undo)
 // "This session: Arrival brief 42 🔇 · FSD charge 40 (3 dropped) 🔇 · …": every kind that was said or queued (not the
 // silent ones: a kind already off would only inflate), noisiest first. 🔇 turns that alert's speech off (its 🗣 tick
@@ -7078,6 +7099,16 @@ document.getElementById("speakMode").onchange = e => { store.set("speakMode", e.
 document.getElementById("serverPlay").onchange = e => { store.set("speakOnServer", e.target.checked); drawServerPlay(); drawSoundBtn(); };
 document.getElementById("speakerClaim").onclick = () => claimSpeaker(true);
 // another window changed the setting (localStorage is shared by the browser's windows)
+// alert ticks (notify, sound, speak) changed in another window of this browser: taken up here too, or the window that
+// speaks went on with its own copy and later wrote it back over the change (the sweep of 2026-10-09)
+const ALERT_STORES = {alerts: [alertCfg, "alert"], alertSound: [alertSound, "asound"], alertSpeak: [alertSpeak, "aspeak"]};
+window.addEventListener("storage", e => {
+  const a = ALERT_STORES[e.key];
+  if (a) {
+    Object.assign(a[0], store.get(e.key, {}));
+    alertDialog.querySelectorAll(`[data-${a[1]}]`).forEach(cb => { cb.checked = !!a[0][cb.dataset[a[1]]]; });
+  }
+});
 window.addEventListener("storage", e => { if (e.key === "speakMode") drawSpeaker();
   // 🗣 in another window of this browser (a ?mode=now window's bar): the window speaking follows it
   if (e.key === "speech" && !TABLET) { speechOn = store.get("speech", false); drawSpeechBtn(); if (!speechOn) hushSpeech(true); if (view === "now") drawNowBar(); } if (e.key === "speakOnServer") { drawServerPlay(); drawSoundBtn(); } });
@@ -7651,6 +7682,9 @@ alertChips.innerHTML = alertSections.map((s, i) => `<button type="button" data-s
 function showAlertSection(i, remember = true) {
   const s = alertSections[i]; if (!s) return;
   if (s.tagName === "DETAILS") s.open = true;
+  // clear of the sticky header (its chip row wraps, so its height is measured, not fixed): the heading stays in view
+  const head = alertDialog.querySelector(".sethead");
+  alertDialog.style.scrollPaddingTop = head ? `${head.offsetHeight}px` : "";
   s.scrollIntoView({block: "start"});
   alertChips.querySelectorAll("button").forEach(b => b.classList.toggle("on", Number(b.dataset.sec) === i));
   if (remember) store.set("alertSection", i);
@@ -7824,7 +7858,7 @@ async function sayLost() {
 }
 function sayConnection(text) {
   toast(text);
-  if (speechOn && isSpeaker) speak(text, {kind: "connection"});
+  if (speechOn && speakerHere()) speak(text, {kind: "connection"});   // where "Lost contact" was said (a tablet too)
 }
 function setConnected(ok) {
   setTimeout(drawLinkPill, 0);
@@ -8021,6 +8055,7 @@ function tabSetup() {
   document.getElementById("tabEmblem").onchange = e => { store.set("tabletEmblem", e.target.checked); tabEmblem(e.target.checked); };
   document.getElementById("tabRailOn").onchange = e => { store.set("tabletRail", e.target.checked); tabRailShown(e.target.checked); };
   document.getElementById("tabAudio").onchange = e => tabSetAudio(e.target.checked);
+  tabVoiceLabel();
   document.getElementById("tabAlertsBtn").onclick = tabOpenAlerts;
   document.getElementById("tabAlertList").addEventListener("change", tabAlertToggle);
   document.getElementById("tabAlertsCopy").onclick = tabCopyPcAlerts;
@@ -8143,8 +8178,10 @@ function tabDrawCaption() {
 }
 // an alert: a banner over the page for a while (danger longer, and red), tap to dismiss
 const TAB_BANNER_MS = 8000, TAB_BANNER_DANGER_MS = 15000;
-function tabBanner(kind, title, body) {
-  const el = document.getElementById("tabBanner"), danger = DANGER.has(kind);
+function tabBanner(kind, title, body, tag = null) {
+  // DANGER holds speech tags (fuel_low, ship_lost, rig_leash, carrier_departs...): checked with the alert's tag, not
+  // only its kind (a low-fuel or ship-lost banner was a plain one, gone after 8 s)
+  const el = document.getElementById("tabBanner"), danger = DANGER.has(kind) || (tag && DANGER.has(tag)) || ["loss", "rigleash"].includes(kind);
   el.innerHTML = `<b>${esc(title)}</b>${body ? ` <span>${esc(body)}</span>` : ""}`;
   el.className = "tb-banner" + (danger ? " danger" : "");
   el.hidden = false;
@@ -8199,9 +8236,17 @@ function tabAppScreen(fn) {
   try { if (app && typeof app[fn] === "function") app[fn](); } catch {}
 }
 // Play alerts here: this tablet speaks and plays the sounds itself (see tabletSpeaks)
+// the footer says where the voice is: on the PC, or here with Play alerts here (it said "never on this tablet" always)
+function tabVoiceLabel() {
+  const el = document.querySelector("#tabFoot .tb-voice"); if (!el) return;
+  const here = tabletSpeaks();
+  el.textContent = here ? "Voice here" : "Voice on PC";
+  el.title = here ? "spoken alerts and sounds play on this tablet" : "spoken alerts and sounds play on the PC, never on this tablet";
+}
 function tabSetAudio(on) {
   store.set("tabletAudio", !!on);
   speechOn = tabletSpeaks();
+  tabVoiceLabel();
   if (speechOn) { audio(); prepareLostLine(); } else hushSpeech(true);
   document.getElementById("tabAlertsRow").hidden = !speechOn;
   drawAudioPill();
@@ -8210,6 +8255,7 @@ function tabSetAudio(on) {
 // Settings table (alertSpeak / alertSound, in this tablet's own storage; until changed here they come from the PC's
 // saved defaults, then Outrider's), as big toggles with a short name per alert
 const TAB_ALERT_NAMES = {discovery: "Targeting a system", arrival: "Arriving somewhere new", game: "Game start and quit",
+  exo: "Exomastery route", riches: "Road to Riches route", trade: "Trade route",
   jump: "FSD charging", honk: "Auto honk", brief: "Arrival briefing", fss: "FSS finished", mapped: "Planet mapped",
   leaving: "Leaving work behind", fuel: "Fuel", scoop: "Tank full", scoopstop: "Scooping stopped early",
   supercharge: "Supercharged", highway: "Highway next stop", autotarget: "Auto-target", find: "Valuable body",

@@ -3032,7 +3032,7 @@ class Journals:
             return
         count = region_codex_count(self.db, new, outrider.bio.region_number(x, y, z))
         self.region_entered = {"id64": id64, "ts": ts, "region": new, "spoken": region_spoken(new), "count": count}
-        self.moment("region", ts, system=id64, region=new, spoken=region_spoken(new), count=count)
+        self.moment("region", ts, system=str(id64), region=new, spoken=region_spoken(new), count=count)   # str: JSON rounds ids past 2^53
 
     def note_jumponium(self, system, ev, ts):
         """A new landable body carrying a material your FSD injections are short of (outrider.materials.jumponium_short),

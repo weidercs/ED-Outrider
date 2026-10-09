@@ -2,6 +2,20 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Sweep fixes: the page
+- Speech: a line the browser cannot play until a click is held only when the red pill asks for that click; with
+  "Play on this PC" (after its call failed) or speech off it stalled the whole queue, danger lines included.
+- "Back in contact" is said where "Lost contact" was (a tablet with Play alerts here never heard it).
+- The tablet shows low fuel, a lost ship, a rig too far and the carrier leaving as danger banners.
+- "Undiscovered" is said once when the briefing opens with a region crossing; the region line is no longer lost in
+  systems with very large ids.
+- Here shows nothing of the last system while another loads (its rows stayed, and clickable); the body panel takes
+  only the newest answer; Cargo's "Buy something else" keeps what you typed; a new Sell/Buy lookup does not show the
+  last one's commodity and price; an unnamed carrier is "your carrier" on the map, not "null".
+- Settings: alert ticks changed in another window are followed by the window that speaks (it overwrote them); a
+  section chip shows its heading, not under the sticky header; the route alerts have names on the tablet and in the
+  tally; the tablet's footer says "Voice here" with Play alerts here.
+
 ## 2026-10-09 · Sweep fixes: cargo, the control rail, Nearest, mining, biology
 - Carrier cargo: what other players sell you through a buy order counts in the carrier's total too; it made real old
   lines look stale, and they were dropped.

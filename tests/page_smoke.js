@@ -2713,7 +2713,9 @@ const settle = async maxMs => {
       const fake = (el, rect, extra = {}) => { el.getBoundingClientRect = () => rect;
         for (const [k, v] of Object.entries({scrollTop: 0, ...extra})) Object.defineProperty(el, k, {value: v, writable: true, configurable: true}); };
       view = "here"; render();
-      const hm = document.getElementById("hereMain"), row = document.querySelector("#hereRows tr");
+      // a row of its own: Here shows no rows while its system loads (the rows of the last one were left there before)
+      const hm = document.getElementById("hereMain"),
+            row = document.querySelector("#hereRows tr") || document.getElementById("hereRows").appendChild(document.createElement("tr"));
       fake(hm, {top: 400, bottom: 700}, {clientHeight: 300, scrollTop: 100});
       fake(row, {top: 900, bottom: 930});
       revealIn(row); o.jump = hm.scrollTop;
@@ -2766,6 +2768,9 @@ const settle = async maxMs => {
   // short form's title, and fitTable toggling compact / compact2 by fit with stubbed sizes (jsdom has no layout)
   {
     const w = dom.window, before = errors.length;
+    // Here's rows from the system shown, loaded now: a check before may have left Here between systems (it shows no
+    // rows then; the last system's rows used to stay)
+    await w.eval(`(async () => { pinnedSystem = null; hereKey = null; await loadHere(); })()`);
     const got = JSON.parse(w.eval(`(() => {
       const o = {};
       o.pure = [compactLevel([500], 600, 0), compactLevel([700, 550], 600, 0), compactLevel([700, 650, 620], 600, 0),
@@ -4225,7 +4230,55 @@ const settle = async maxMs => {
     const goodL = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodL;
     console.log(goodL ? "OK" : "FAIL", "| uploads in the Data tile |", goodL ? "per service, test/dry-run marks, nothing when unused" : JSON.stringify(got), errors.slice(before));
-  }  // the bug check of 2026-10-09 (the Uploads section): its message survives the redraw, a failed request redraws the
+  }  // the full sweep of 2026-10-09 (the page): a line held only where a click can release it, "Back in contact" where
+  // "Lost contact" was said, the tablet banner's danger by tag, one "Undiscovered", Here empty while another system
+  // loads, the newest body answer only, typed cargo fields kept, a fresh lookup heading, an unnamed carrier, alert ticks
+  // across windows, the chip jump clear of the sticky header, the route alerts' names, the tablet's voice label
+  {
+    const w = dom.window, before = errors.length;
+    const got = w.eval(`(() => {
+      const r = {}, src = f => String(f);
+      r.hold = src(sayNow).includes("if (serverPlay() || !audioBlocked())");
+      r.back = src(sayConnection).includes("speakerHere()");
+      tabBanner("fuel", "Fuel low", "", "fuel_low");
+      r.banner = document.getElementById("tabBanner").classList.contains("danger");
+      tabBannerHide();
+      r.undisc = "Entering the Norma Arm. Undiscovered. 14 bodies.".replace(/(^|\\. )Undiscovered\\. /, "$1");
+      const hd = hereData;
+      document.getElementById("hereRows").innerHTML = "<tr><td>old</td></tr>";
+      hereData = null; renderHere();
+      r.hereEmpty = document.getElementById("hereRows").children.length === 0;
+      hereData = hd; renderHere();
+      r.body = src(reloadBody).includes('newRequest("body")') && src(reloadBody).includes('isNewest("body", g)');
+      const cg = cargoData;
+      renderCargo({ship: {lines: []}, carrier: null});
+      document.getElementById("cargoFindName").value = "Gold"; document.getElementById("cargoFindTons").value = "40";
+      renderCargo({ship: {lines: []}, carrier: null});
+      r.cargo = [document.getElementById("cargoFindName").value, document.getElementById("cargoFindTons").value];
+      renderCargo(cg);
+      const keep = {...LK}, ll = window.loadLook; window.loadLook = () => {};
+      LK.answer = {commodity: "Tritium", avg: 45000}; startLook({kind: "buy", label: "Gold"});
+      r.look = LK.answer; Object.assign(LK, keep); window.loadLook = ll;
+      r.carrier = [carrierName({name: null, callsign: "G0X-85Z"}), carrierName({}), carrierName({name: "OUT OF THE BLUE"})];
+      const was = alertSpeak.jump;
+      store.set("alertSpeak", {...alertSpeak, jump: !was});
+      window.dispatchEvent(Object.assign(new Event("storage"), {key: "alertSpeak"}));
+      r.ticks = alertSpeak.jump === !was;
+      store.set("alertSpeak", {...alertSpeak, jump: was}); window.dispatchEvent(Object.assign(new Event("storage"), {key: "alertSpeak"}));
+      r.chip = src(showAlertSection).includes("scrollPaddingTop");
+      r.names = ["exo", "riches", "trade"].every(k => ALERT_SHORT[k] && TAB_ALERT_NAMES[k]);
+      tabVoiceLabel();
+      r.voice = document.querySelector("#tabFoot .tb-voice").textContent;
+      r.voiceSet = src(tabSetAudio).includes("tabVoiceLabel()");
+      return r; })()`);
+    const want = {hold: true, back: true, banner: true, undisc: "Entering the Norma Arm. 14 bodies.", hereEmpty: true, body: true,
+                  cargo: ["Gold", "40"], look: null, carrier: ["G0X-85Z", "your carrier", "OUT OF THE BLUE"], ticks: true, chip: true,
+                  names: true, voice: "Voice on PC", voiceSet: true};
+    const goodSW = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && goodSW;
+    console.log(goodSW ? "OK" : "FAIL", "| the sweep's page fixes |", goodSW ? "holds, banners, Here, body, cargo, lookup, carrier, ticks, chips, names, voice" : JSON.stringify(got), errors.slice(before));
+  }
+  // the bug check of 2026-10-09 (the Uploads section): its message survives the redraw, a failed request redraws the
   // server's state, the box is ticked by what was switched, typed EDSM fields survive a redraw of the counts
   {
     const w = dom.window, before = errors.length, realFetch = w.fetch;
