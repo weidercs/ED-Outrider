@@ -162,7 +162,7 @@ for its name and your completion there. The line above the boxes counts it up: "
 **Completion** counts what you have done, not only what is finished: each species that can grow in the region scores
 the share of its colours you have found there (sold, aboard, lost or logged), averaged over those species, so half of
 every species is 50% with none complete. The region list shows each region's figure. The tablet's Samples page has it
-all too.
+all too, with the species and a species' details scrolling separately.
 
 <p align="center">
   <img src="../images/checklist.png" alt="The exobiology checklist: genus boxes with each species' state and colours found, and a species' colours and galaxy map beside them" width="900">

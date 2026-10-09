@@ -2,6 +2,10 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Exobiology checklist on the tablet: two scrolling parts
+- On the tablet (and in the app) the checklist fills the page, and the species boxes and a species' details with its
+  map each scroll on their own (stacked on a narrow tablet, about half each); the page itself no longer scrolls.
+
 ## 2026-10-09 · Exobiology checklist: the map names only the regions it grows in
 - The species panel's map shows a region's name on hover only over a lit region (one the species can grow in, or in
   parts of); the faint ones say nothing.
