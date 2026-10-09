@@ -511,21 +511,38 @@ class UploadHub:
         the Fable sweep, 2026-10-09). A batch not yet located (Odyssey writes a jump's signals before its FSDJump)
         goes over to the live session, whose next line (that FSDJump) sends it. Returns the number queued."""
         n = 0
+        # a companion file's wait (Market.json, NavRoute.json...) is not aged with the signals: its file may still be
+        # on its way (a journal share), and an aged wait was given up (Codex F2, 2026-10-09)
+        files = {k: w for k, w in session.pending.items() if k not in ("signals", "signals_since")}
         if service in self.idlers and not session.blocked():
-            session.now = self.clock() + 60   # past any quiet spell, short of every give-up
-            try:
-                messages = self.idlers[service](session) or []
-            except (KeyError, TypeError, ValueError, AttributeError, IndexError):
-                messages = []
-            for schema, message, origin in messages:
-                ts = (message.get("message") or message).get("timestamp") if isinstance(message, dict) else None
-                if origin and enqueue(self.db, service, schema, f"{origin}#{schema}", ts, session, message):
-                    n += 1
+            for k in files:
+                session.pending.pop(k)
+            for now, waiting in ((self.clock() + 60, {}), (self.clock(), files)):   # signals past any quiet spell, short
+                session.now = now                                                 # of every give-up; then the files
+                session.pending.update(waiting)
+                n += self._idle_queue(service, session)
         left = session.pending.get("signals")
         if left and self.session.file == session.file and "signals" not in self.session.pending:
             self.session.pending["signals"] = list(left)
             self.session.pending["signals_since"] = dict(session.pending.get("signals_since") or {}, at=self.clock())
+        for k in files:   # still waiting: the live session's tick sends it when the file comes, inside its wait
+            w = session.pending.get(k)
+            if isinstance(w, dict) and w.get("origin") and self.session.file == session.file and k not in self.session.pending:
+                self.session.pending[k] = dict(w, since=self.clock())
         self.queued += n
+        return n
+
+    def _idle_queue(self, service, session):
+        """The service's idle step on `session`, its messages queued. Returns the number queued."""
+        try:
+            messages = self.idlers[service](session) or []
+        except (KeyError, TypeError, ValueError, AttributeError, IndexError):
+            messages = []
+        n = 0
+        for schema, message, origin in messages:
+            ts = (message.get("message") or message).get("timestamp") if isinstance(message, dict) else None
+            if origin and enqueue(self.db, service, schema, f"{origin}#{schema}", ts, session, message):
+                n += 1
         return n
 
     def idle(self):
@@ -703,7 +720,9 @@ class Leases:
         self.seen = {}   # path -> (content, when we saw it change)
 
     def others(self, journal_dirs):
-        """{instance id: {host, services}} of the live leases in these folders (not ours)."""
+        """{instance id: {host, services, wanted, legacy}} of the live leases in these folders (not ours). services:
+        what it sends; wanted: what it is switched on for (sending, or giving way to another); legacy: a lease from
+        before `wanted` (2026.10.19), whose services are everything it wants, sending or not."""
         now, out = self.clock(), {}
         for d in journal_dirs:
             folder = os.path.join(d, LEASE_DIR)
@@ -734,9 +753,34 @@ class Leases:
                 elif prev[0] != content:
                     self.seen[path] = prev = (content, now)
                 if now - prev[1] <= LEASE_STALE_S and isinstance(info, dict):
-                    out[m.group(1)] = {"host": str(info.get("host") or "another Outrider"),
-                                       "services": [s for s in info.get("services") or [] if s in SERVICES]}
+                    sends = [s for s in info.get("services") or [] if s in SERVICES]
+                    legacy = not isinstance(info.get("wanted"), list)
+                    out[m.group(1)] = {"host": str(info.get("host") or "another Outrider"), "services": sends,
+                                       "wanted": sends if legacy else [s for s in info["wanted"] if s in SERVICES],
+                                       "legacy": legacy}
         return out
+
+
+def lease_owners(instance, wanted, sending, others):
+    """{service: None (this instance sends it) or the host it gives way to} for each service in `wanted`, so exactly
+    one of the Outriders switched on for a service sends it. One already sending keeps it; when none is, or two are
+    (both started before seeing the other), the lowest instance id has it: a rule every instance works out the same
+    way, with no clocks compared. A legacy lease (an Outrider from before this rule, which holds whenever another
+    lease names the service) is always given way to: it then sends. `sending`: what this instance sends now."""
+    out = {}
+    for s in wanted:
+        rivals = {iid: o for iid, o in others.items() if s in o["wanted"]}
+        legacy = next((o for o in rivals.values() if o["legacy"]), None)
+        senders = {iid: o for iid, o in rivals.items() if s in o["services"]}
+        if legacy:
+            out[s] = legacy["host"]
+        elif senders:
+            first = min(senders)
+            out[s] = None if s in sending and instance < first else senders[first]["host"]
+        else:   # nobody else sends it: this one keeps it if it does, else the lowest id of those deciding
+            first = min(rivals, default=None)
+            out[s] = None if s in sending or first is None or instance < first else rivals[first]["host"]
+    return out
 
 
 def lease_marks(journal_dirs, instance):

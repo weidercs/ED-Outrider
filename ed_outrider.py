@@ -5520,6 +5520,8 @@ class State:
         # one uploader at a time (PLAN-edmc-functionality "One uploader at a time"): leases in the journal folders,
         # and EDMC on this PC. Refreshed by watch_leases every LEASE_EVERY_S.
         self.lease_others, self.lease_writable, self.edmc = {}, {}, None
+        # service -> the host this instance gives way to (uploads.lease_owners); None until the others' leases are read
+        self.lease_hold = None
         self.leases, self.lease_task = None, None
         self._rc_copied = (meta_get(db, "riches") or {}).get("arrival_ts")
 
@@ -9266,9 +9268,9 @@ class State:
     def upload_conflict(self, service):
         """Why `service` must not send from here now although wanted: another Outrider's live lease claims it, or
         EDMC on this PC is running with its own upload of it on. None when nothing stands in the way."""
-        other = next((o for o in self.lease_others.values() if service in o["services"]), None)
+        other = (self.lease_hold or {}).get(service)
         if other:
-            return f"also uploading from {other['host']}"
+            return f"also uploading from {other}"
         e = self.edmc or {}
         if e.get("running") and e.get(service):
             return f"EDMC on this PC sends to {service.upper()} too: switch its {service.upper()} off (or this one)"
@@ -9335,12 +9337,25 @@ class State:
         self._lease_beat += 1
         wanted = [s for s in outrider.uploads.SERVICES if self.upload_wanted(s)]
         self._lease_wanted = wanted
-        # only the marks of what this instance uploads: a switched-off service's mark is old, and another instance
-        # switched on would start there and send that history
-        info = {"host": socket.gethostname(), "services": wanted, "beat": self._lease_beat, "version": outrider.__version__,
-                "marks": {s: m for s, m in self.uploads_hub.marks.items() if s in wanted}}
-        self.lease_writable = {d: outrider.uploads.write_lease(d, self.leases.instance, info) for d in LIVE_DIRS}
+
+        def write():
+            # services: what this instance sends (an Outrider before 2026.10.20 holds whenever another lease names one);
+            # wanted: what it is switched on for. Only the marks of what it wants: a switched-off service's mark is old,
+            # and another instance switched on would start there and send that history
+            # nothing claimed before the others are read: one already sending keeps its service
+            sending = [] if self.lease_hold is None else [s for s in wanted if s not in self.lease_hold]
+            info = {"host": socket.gethostname(), "services": sending, "wanted": wanted, "beat": self._lease_beat,
+                    "version": outrider.__version__, "marks": {s: m for s, m in self.uploads_hub.marks.items() if s in wanted}}
+            self.lease_writable = {d: outrider.uploads.write_lease(d, self.leases.instance, info) for d in LIVE_DIRS}
+            return sending
+        sending = write()
         self.lease_others = self.leases.others(LIVE_DIRS)
+        # who sends each service: two Outriders switched on for it at once both held for good before (Codex F1, 2026-10-09),
+        # each following the journal as if the other sent it, so that stretch was never sent
+        owners = outrider.uploads.lease_owners(self.leases.instance, wanted, sending, self.lease_others)
+        self.lease_hold = {s: host for s, host in owners.items() if host}
+        if [s for s in wanted if s not in self.lease_hold] != sending:
+            write()   # the others see the change now, not a minute later
         # EDMC on this PC: given by watch_leases (found on a worker thread: on Windows `tasklist` takes a second or two,
         # and it stalled the loop every minute), else looked up here (a switch from the page, the start)
         self.edmc = edmc if edmc is not ... else (outrider.uploads.edmc_uploads() if self.game_pc else None)

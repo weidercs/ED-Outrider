@@ -2,6 +2,16 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Codex review fixes: the uploads
+- Two Outriders switched on for the same upload (both started with it on: the game PC and a server sharing the
+  journals) both held for good, and each followed the journal as if the other sent, so nothing was sent and that
+  stretch was never caught up (Codex F1). Now exactly one sends: the one already sending keeps it, and started
+  together the lowest instance id has it. A lease now says what it sends (`services`) and what it is switched on for
+  (`wanted`); an Outrider from before (no `wanted`) is always given way to, so it sends.
+- A catch-up whose last line was a NavRoute, a docking's market or the like, with its file still on its way (a journal
+  share), gave the wait up at once: the catch-up's clock was moved on a minute to flush signals. The file's wait is now
+  checked at the real time and handed to the live session, which sends it when the file comes (Codex F2).
+
 ## 2026-10-09 · Body names said letter by letter
 - Piper said "A 1" as "uh one" (espeak reads a lone A as the article) and ran "ABC 3" into one slurred word ("uh beh
   ceh three"). A body's letters now go to Piper as its raw phonemes, each its own stressed word: "ay one", "ay, bee,

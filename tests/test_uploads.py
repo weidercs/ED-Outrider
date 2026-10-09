@@ -3,6 +3,7 @@ gate through the journal reader, priming a file met part way through, and the ou
 
 Run all: python3 -m unittest discover tests (or scripts/verify.sh).
 """
+import glob
 import json
 import os
 import shutil
@@ -412,6 +413,59 @@ class OneUploaderAtATime(unittest.TestCase):
             note = json.load(f)
         self.assertEqual((note["services"], note["stopped"]), ([], True))
         self.assertIn("marks", note)
+
+    def peer(self, iid):
+        """Another State on its own database, sharing this journal folder, with the instance id `iid`."""
+        import types
+        db = ed_outrider.open_db(":memory:")
+        self.addCleanup(db.close)
+        ed_outrider.meta_set(db, "instance_id", iid)
+        st = ed_outrider.State(db, ed_outrider.Journals(db), types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        st.game_pc = False
+        st.upload_cfg = {"eddn": {"enabled": True}}   # switched on in its config (persisted, copied...)
+        return st
+
+    def test_two_switched_on_one_sends(self):   # Codex F1: both held for good, and that stretch was never sent
+        for order in ("aaaaaa1", "zzzzzz1"), ("zzzzzz1", "aaaaaa1"):
+            for f in glob.glob(os.path.join(self.dir, ".outrider", "*")):
+                os.remove(f)
+            first, second = self.peer(order[0]), self.peer(order[1])
+            for _ in range(4):
+                first.refresh_leases()
+                second.refresh_leases()
+                # the one already sending keeps it, whichever id is lower; the other gives way and says why
+                self.assertEqual([first.upload_on("eddn"), second.upload_on("eddn")], [True, False], order)
+                self.assertTrue(second.upload_conflict("eddn").startswith("also uploading from"))
+            first.drop_leases()                                  # it stops: the other takes over
+            second.refresh_leases()
+            self.assertTrue(second.upload_on("eddn"))
+
+    def test_started_together_lowest_id_sends(self):
+        st = self.peer("mmmmmm1")
+        U.write_lease(self.dir, "aaaaaa1", {"host": "pc", "services": [], "wanted": ["eddn"]})   # deciding too
+        st.refresh_leases()
+        self.assertFalse(st.upload_on("eddn"))                  # the lower id has it
+        U.write_lease(self.dir, "aaaaaa1", {"host": "pc", "services": [], "wanted": []})
+        U.write_lease(self.dir, "zzzzzz1", {"host": "srv", "services": [], "wanted": ["eddn"]})
+        st.refresh_leases()
+        self.assertTrue(st.upload_on("eddn"))                   # now this one is the lowest
+        with open(os.path.join(self.dir, ".outrider", "uploads-mmmmmm1.json"), encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["services"], ["eddn"])   # written at once, not a minute later
+        # both sending (each started before seeing the other): the higher id gives way
+        U.write_lease(self.dir, "aaaaaa1", {"host": "pc", "services": ["eddn"], "wanted": ["eddn"]})
+        st.refresh_leases()
+        self.assertFalse(st.upload_on("eddn"))
+        self.assertEqual(st.upload_conflict("eddn"), "also uploading from pc")
+
+    def test_an_older_outrider_is_given_way_to(self):   # 2026.10.19 holds whenever another lease names the service
+        st = self.peer("aaaaaa1")
+        st.refresh_leases()
+        self.assertTrue(st.upload_on("eddn"))
+        self.other(["eddn"], iid="zzzzzz1")                     # no "wanted": an older version's lease
+        st.refresh_leases()
+        self.assertFalse(st.upload_on("eddn"))                  # gives way, whatever the ids...
+        with open(os.path.join(self.dir, ".outrider", "uploads-aaaaaa1.json"), encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["services"], [])     # ...and stops naming it, so the older one sends
 
     def test_stale_lease_by_our_own_clock(self):
         clock = [1000.0]
@@ -876,6 +930,28 @@ class FableUploads(MarksAndCatchUp):
         self.write(there)
         self.j.scan_dir(self.dir, upload="live")
         self.assertIn("fsssignaldiscovered", self.eddn_rows())
+
+    def test_a_companion_file_after_a_catch_up_is_sent(self):
+        """Codex F2: the catch-up's last line is a NavRoute whose file has not arrived yet (a journal share): the wait
+        goes over to the live session, which sends it once the file comes. The catch-up's clock, moved on for the
+        signals, gave the wait up before."""
+        self.state.uploads_hub.builders = {"eddn": self.state.eddn_build}
+        self.write(header(now_ts(900)), loadgame(now_ts(899)))
+        self.j.scan_dir(self.dir, commit_each=True, upload="catchup")
+        self.state.set_upload("eddn", True)
+        here = self.jump(30, "Here")
+        route = {"timestamp": now_ts(2), "event": "NavRoute"}
+        self.write(here, route)
+        self.j.scan_dir(self.dir, commit_each=True, upload="catchup")
+        self.state.catch_up_uploads()
+        self.assertNotIn("navroute", self.eddn_rows())
+        with open(os.path.join(self.dir, "NavRoute.json"), "w", encoding="utf-8") as f:   # it arrives
+            json.dump({"timestamp": route["timestamp"], "event": "NavRoute", "Route": [
+                {"StarSystem": "Here", "SystemAddress": here["SystemAddress"], "StarPos": [1, 2, 3], "StarClass": "K"},
+                {"StarSystem": "Next", "SystemAddress": 22, "StarPos": [5, 2, 3], "StarClass": "M"}]}, f)
+        self.state.uploads_hub.idle()
+        self.state.uploads_hub.idle()
+        self.assertEqual(self.eddn_rows().count("navroute"), 1)
 
     def test_edmc_is_looked_for_off_the_event_loop(self):
         import inspect

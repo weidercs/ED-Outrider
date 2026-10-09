@@ -49,7 +49,9 @@ twice: EDDN has no way to tell. So:
 
 - **A note in the journal folder.** Each uploading Outrider leaves one (`.outrider/uploads-<id>.json`, rewritten every
   minute). Another Outrider that sees a fresh note will not start the same upload ("Already uploading from
-  erangel"); if both started at once, both hold and say so until you switch one off.
+  erangel"). If two are switched on for the same upload anyway (both started with it on), the one already sending
+  keeps it and the other gives way and says so; started together, they agree on one. An Outrider older than
+  2026.10.20 is always given way to.
   - A note left by a crash goes stale after five minutes; one untouched for an hour is ignored at once.
   - When an Outrider stops, its note stays with how far it got: switch the upload on in another one and it starts
     there, with nothing missed and nothing sent twice.

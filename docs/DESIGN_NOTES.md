@@ -223,6 +223,12 @@ upstream project's choices, not rules of the game.
   Files the game overwrites (Market.json, NavRoute.json...) are caught up only while the file is still the one the
   event wrote (its time and MarketID): the last one after a short gap, older ones never. A restored database forgets
   its marks and unsent rows. Duplicates are possible only if another uploader covered a gap while Outrider was down.
+- **Several Outriders switched on for one service: one sends** (`uploads.lease_owners`). The one already sending keeps
+  it; with none sending (started together) or two (each started before seeing the other), the lowest instance id has
+  it. No clocks are compared (two machines'), and every instance works it out the same way from the same leases.
+  Nothing is claimed before the others' leases are read. An Outrider from before the rule (no `wanted` in its lease)
+  holds whenever another lease names the service, so it is always given way to. Before this, both held for good and
+  each followed as if the other sent (Codex F1, 2026-10-09).
 - **While another uploader has a service, Outrider follows without sending** (the hub's `follow`): its mark moves with
   the journal and nothing of that stretch is caught up later; EDDN's waits are dropped (`eddn.quiet`). A *held*
   service (a key EDSM refused) is different: it keeps queueing and sends once the key is fixed, since nobody else sent
