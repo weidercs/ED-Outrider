@@ -2,6 +2,15 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Codex review fixes: the booster and trade routes
+- A Guardian FSD booster switched off still added its light years to the range, the fuel figures and a route's hops
+  (Codex F3): it counts only while powered, as the fleet's fitting already had it.
+- A trade route ticked a commodity off at the first sale or purchase of it, whatever the amount: one tonne of a
+  planned 400 said the hop's profit and could end the route (Codex F4). Now the tonnes add up (each journal line once,
+  so a re-read counts nothing twice), the page shows "60 of 100 t" until it is all traded, and undocking with only
+  part traded moves on, said with what fell short ("sold 100 of 400 tonnes of Biowaste") instead of the profit. A
+  route in progress keeps what it had ticked.
+
 ## 2026-10-09 · Codex review fixes: the uploads
 - Two Outriders switched on for the same upload (both started with it on: the game PC and a server sharing the
   journals) both held for good, and each followed the journal as if the other sent, so nothing was sent and that

@@ -207,7 +207,7 @@ from outrider.highway import (   # the Neutron Highway's route helpers and the d
     HIGHWAY_BG_TYPES, Clipboard, HighwayError, highway_bg_file, highway_match, highway_refuel_in, highway_rows,
     highway_text,
 )
-from outrider.cargo import trade_done_text, trade_left, trade_rows, trade_text   # the slot's third type: trade routes
+from outrider.cargo import trade_counts, trade_done_text, trade_left, trade_rows, trade_text   # the slot's third type: trade routes
 from outrider.riches import (   # Road to Riches / Exomastery: Spansh's survey routes (systems with valuable bodies / life)
     RichesError, body_value, exo_left, exo_text, exo_todo, norm_name, riches_match, riches_rows, riches_text, todo,
 )
@@ -2384,7 +2384,8 @@ class Journals:
                 pass   # finished: the route stays visible, quietly, until cleared
             elif not left and i == len(rows) - 1:
                 rc.update(done_ts=ts, said_done=i)
-                say = ("complete", trade_done_text(rows, i) if kind == "trade" else text(rows, i, left), 0)
+                say = ("complete", trade_done_text(rows, i, (rc.get("trade") or {}).get(str(i))) if kind == "trade"
+                       else text(rows, i, left), 0)
             else:
                 if not left:
                     rc["said_done"] = i   # nothing to do here: no "all done" to say later
@@ -2426,11 +2427,41 @@ class Journals:
         hit = next((wanted[n] for n in names if n in wanted), None)
         if not hit:
             return
-        done = rc.setdefault("trade", {}).setdefault(str(i), {"sold": [], "bought": []})
-        key = "sold" if sold else "bought"
-        if hit in done[key]:
+        done = rc.setdefault("trade", {}).setdefault(str(i), {})
+        # the tonnes, not just the name: one tonne of a hundred ticked the commodity off and could end the route
+        # (Codex F4). Each journal line counts once: a re-read meets the same lines again
+        line = self.line_source or f"{ts}|{ev.get('event')}|{ev.get('Type')}|{ev.get('Count')}"
+        if line in done.setdefault("lines", []):
             return
-        done[key].append(hit)
+        done["lines"].append(line)
+        for k in ("sold", "bought"):
+            done[k] = outrider.cargo.trade_counts(rows[i], done, k)
+        key = "sold" if sold else "bought"
+        done[key][hit] = done[key].get(hit, 0) + max(0, int(ev.get("Count") or 0))
+        self.trade_stop_done(rc, rows, i, ts)
+
+    def trade_left_stop(self, ev, ts):
+        """Undocked from the trade route's stop you are at with part of its trades made: you moved on (the station had
+        less than Spansh said, or you chose to), so the stop is done, said with what fell short."""
+        rc = meta_get(self.db, "riches")
+        if not rc or rc.get("kind") != "trade" or rc.get("at") is None or rc.get("done_ts"):
+            return
+        if ts < (rc.get("since_ts") or rc.get("created_ts") or ""):
+            return
+        rows = self.riches_route(rc)
+        i = rc["at"]
+        done = (rc.get("trade") or {}).get(str(i))
+        if i >= len(rows) or ev.get("MarketID") != rows[i].get("market_id") or not done or done.get("left"):
+            return
+        if not any(outrider.cargo.trade_counts(rows[i], done, k) for k in ("sold", "bought")):
+            return   # nothing traded here: not a stop you finished
+        done["left"] = True
+        self.trade_stop_done(rc, rows, i, ts)
+
+    def trade_stop_done(self, rc, rows, i, ts):
+        """Stop i's record changed: stored, and once nothing is left there the hop's profit (or what fell short) and the
+        next stop are said, or the route's end (once)."""
+        done = (rc.get("trade") or {}).get(str(i))
         if trade_left(rows[i], done) or rc.get("said_done") == i:
             meta_set(self.db, "riches", rc)
             return
@@ -2441,7 +2472,7 @@ class Journals:
         meta_set(self.db, "riches", rc)
         if live_event(ts):
             self.moment("trade", ts, what="complete" if last else "done", system=rows[i]["system"], index=i,
-                        next=None if last else rows[i + 1]["system"], left=0, text=trade_done_text(rows, i))
+                        next=None if last else rows[i + 1]["system"], left=0, text=trade_done_text(rows, i, done))
 
     def riches_progress(self, id64, ts):
         """After a Scan or a mapping in the system you are at on a Road to Riches route: when that was the last body
@@ -2780,9 +2811,10 @@ class Journals:
                 mod_mass = {m["Slot"]: x["Value"] for m in mods if m.get("Slot")
                             for x in (m.get("Engineering") or {}).get("Modifiers") or []
                             if x.get("Label") == "Mass" and isinstance(x.get("Value"), (int, float))}
-                # a Guardian FSD booster adds a flat number of light years to every jump
+                # a Guardian FSD booster adds a flat number of light years to every jump, while it is powered (one
+                # switched off in the right-hand panel adds nothing: Codex F3, as fsd.py's fitting already had it)
                 booster = next((re.search(r"size(\d)", m.get("Item", "").lower()) for m in mods
-                                if "guardianfsdbooster" in m.get("Item", "").lower()), None)
+                                if "guardianfsdbooster" in m.get("Item", "").lower() and m.get("On") is not False), None)
                 fit_key = [fsd, ev.get("UnladenMass") or 0, ev["MaxJumpRange"], bool(booster)]
                 if self.ship and self.ship.get("ship_id") not in (None, ev.get("ShipID")):
                     # a different ship burns differently; its jumps count from the swap (None would count every
@@ -3502,6 +3534,8 @@ class Journals:
         in cargo_events, folded when asked: State.cargo_summary). Docked and Undocked only keep the market you are at."""
         self.learn_names([ev] + (ev.get("Inventory") if name == "Cargo" and isinstance(ev.get("Inventory"), list) else []))
         if name in ("Docked", "Undocked"):
+            if name == "Undocked" and not ev.get("Taxi") and not ev.get("Multicrew"):
+                self.trade_left_stop(ev, ts)   # a trade stop left with part of its trades made
             at = ev.get("MarketID") if name == "Docked" and not ev.get("Taxi") and not ev.get("Multicrew") else None
             if at != self.cargo_dock:
                 self.cargo_dock = at
@@ -10529,13 +10563,16 @@ class State:
         if rc.get("kind") == "trade":   # a stop: its station, what to sell and buy there, with what your journal shows done
             done = (rc.get("trade") or {}).get(str(i)) or {}
             left = trade_left(r, done)
+            still = {"sell": {c["name"] for k, c in left if k == "sell"}, "buy": {c["name"] for k, c in left if k == "buy"}}
             return {"i": i, "system": r["system"], "id": str(r["id64"]) if r["id64"] is not None else None,
                     "x": r["x"], "y": r["y"], "z": r["z"], "jumps": None, "station": r.get("station"), "ls": r.get("ls"),
                     "distance": r.get("distance"), "profit": r.get("profit") or 0, "cumulative": r.get("cumulative") or 0,
                     "age_s": round(time.time() - r["updated"]) if r.get("updated") else None, "left": len(left),
                     "value": r.get("profit") or 0, "value_left": 0, "bodies": [],
-                    "sell": [dict(c, done=c["name"] in (done.get("sold") or [])) for c in r.get("sell") or []],
-                    "buy": [dict(c, done=c["name"] in (done.get("bought") or [])) for c in r.get("buy") or []]}
+                    # done: its planned tonnes traded (a stop you moved on from leaves the rest undone); traded: so far
+                    **{kind: [dict(c, traded=got.get(c["name"], 0), done=c["name"] not in still[kind] and (
+                        not done.get("left") or got.get(c["name"], 0) >= (c.get("amount") or 1))) for c in r.get(kind) or []]
+                       for kind, got in (("sell", trade_counts(r, done, "sold")), ("buy", trade_counts(r, done, "bought")))}}
         if rc.get("kind") == "exo":
             region = (outrider.bio.region_name(r["x"], r["y"], r["z"])
                       if outrider.bio and None not in (r["x"], r["y"], r["z"]) else None)

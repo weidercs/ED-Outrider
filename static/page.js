@@ -5294,8 +5294,10 @@ function tradeHeadHtml(d) {
     `hops up to ${o.max_hop_distance ?? "?"} ly · stations within ${(o.max_system_distance ?? 0).toLocaleString()} ls · data under ${o.max_price_age_days ?? "?"} d` +
     `${rt.created_ts ? ` · plotted ${esc(when(rt.created_ts))}` : ""}</div>`;
 }
+// part traded so far shows "60 of 100 t" (a commodity is ticked once its planned tonnes are traded)
 function tradeGoods(c, verb) {
-  return `<span class="${c.done ? "exodone" : ""}">${c.done ? "✓ " : ""}${verb} ${c.amount.toLocaleString()} t ${esc(c.name)}` +
+  const part = !c.done && c.traded ? `${c.traded.toLocaleString()} of ` : "";
+  return `<span class="${c.done ? "exodone" : ""}">${c.done ? "✓ " : ""}${verb} ${part}${c.amount.toLocaleString()} t ${esc(c.name)}` +
     `${c.price ? ` <span class="unk">at ${c.price.toLocaleString()} cr/t${verb === "Sell" && c.demand ? ` · demand ${c.demand.toLocaleString()}` : ""}` +
       `${verb === "Buy" && c.supply ? ` · supply ${c.supply.toLocaleString()}` : ""}</span>` : ""}</span>`;
 }

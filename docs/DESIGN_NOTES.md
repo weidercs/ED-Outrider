@@ -229,6 +229,10 @@ upstream project's choices, not rules of the game.
   Nothing is claimed before the others' leases are read. An Outrider from before the rule (no `wanted` in its lease)
   holds whenever another lease names the service, so it is always given way to. Before this, both held for good and
   each followed as if the other sent (Codex F1, 2026-10-09).
+- **A trade route counts tonnes, and undocking moves on** (Codex F4, the author's choice, 2026-10-09). A commodity is
+  done once its planned tonnes are traded; strict counting alone would leave a stop open for good when the station
+  had less than Spansh said, so undocking from a stop with anything traded there finishes it, and the voice says what
+  fell short instead of the plan's profit. Undocking with nothing traded does not.
 - **While another uploader has a service, Outrider follows without sending** (the hub's `follow`): its mark moves with
   the journal and nothing of that stretch is caught up later; EDDN's waits are dropped (`eddn.quiet`). A *held*
   service (a key EDSM refused) is different: it keeps queueing and sends once the key is fixed, since nobody else sent
