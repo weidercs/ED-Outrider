@@ -2,6 +2,14 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Uploads: bug check, EDDN (branch EDMC-Functionality)
+- Station data goes once per visit: each docking sends the market, outfitting and shipyard again, changed or not (EDDN's
+  readers date a station's data by it); only the same screen opened again in one docking is not sent twice. Before, an
+  unchanged market was not sent again while Outrider ran.
+- Any EDDN message an hour late (an outage, switched off and on) is dropped, not sent as current; a batch of signals
+  left over from before EDDN was switched off is dropped.
+- "Outdated schema" (426) stops that kind of message at once instead of after three refusals.
+
 ## 2026-10-09 · Uploads: bug check, the upload core (branch EDMC-Functionality)
 - Journal files named the old way (before 2023) no longer stop uploads: positions compare by time, not by name.
 - While EDMC or another Outrider sends a service, Outrider's position moves with the journal, and a restart does not

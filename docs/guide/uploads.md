@@ -25,8 +25,9 @@ Each upload remembers how far through your journals it has got. If Outrider was 
 the server was down), the next start sends what you played meanwhile: to EDSM up to a week back, to EDDN only the
 last hour (EDDN's readers take what arrives as current); anything older is skipped.
 A journal re-read or a restore sends nothing twice, and switching an upload on starts from that moment: your history
-is never uploaded. What cannot be caught up: markets, outfitting, shipyards and plotted routes come from files the
-game rewrites each time, so for those Outrider sends only what it saw while running; a late codex entry has no body
+is never uploaded. What mostly cannot be caught up: markets, outfitting, shipyards and plotted routes come from files the
+game rewrites each time, so Outrider sends one only while the file is still the one that visit wrote (the last one,
+after a short gap); a late codex entry has no body
 name (that comes from the live Status.json).
 
 - Anything older than a week (an hour for EDDN), or from a legacy folder (journals imported once).

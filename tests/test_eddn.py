@@ -12,6 +12,7 @@ import tempfile
 import time
 import types
 import unittest
+import unittest.mock
 
 from support import ed_outrider  # also puts the repository root on sys.path
 import outrider.eddn as E  # noqa: E402
@@ -278,6 +279,15 @@ class Signals(unittest.TestCase):
         self.assertEqual(E.build({"timestamp": "2026-10-08T10:07:00Z", "event": "Music"}, s, "v"), [])
 
 
+    def test_old_batch_dropped(self):
+        """A batch left over from before EDDN was switched off (its next line much later) is not sent."""
+        s = session()
+        s.feed(FSDJUMP)
+        E.build(self.sig("Old", FSDJUMP["SystemAddress"], timestamp="2026-10-08T10:05:00Z"), s, "v")
+        later = {"timestamp": "2026-10-08T12:05:00Z", "event": "Music"}
+        self.assertEqual(E.build(later, s, "v"), [])
+        self.assertNotIn("signals", s.pending)
+
     def test_quiet_batch_goes_on_the_tick(self):
         """A batch with no line after it goes SIGNAL_QUIET_S after its last signal (2026-10-09), under
         the first signal's line; one for a system you are not in yet (Odyssey: just before the jump) waits."""
@@ -336,6 +346,17 @@ class StationData(unittest.TestCase):
                          ("commodity", "https://eddn.edcd.io/schemas/commodity/3", "Orbis", ["gold"]))
         self.assertEqual(set(m["commodities"][0]) & {"Producer", "Rare", "id", "Category"}, set())
         self.assertEqual(E.build(self.ev("Market"), self.s, "v"), [])          # unchanged: not again
+
+    def test_sent_once_per_visit(self):
+        """The same unchanged market opened twice in one docking goes once; a new docking sends it again (EDDN's readers
+        date a station's data by it)."""
+        self.file("Market.json", {"event": "Market", "Items": []})
+        self.assertEqual(len(E.build(self.ev("Market"), self.s, "v")), 1)
+        self.assertEqual(E.build(self.ev("Market"), self.s, "v"), [])           # the screen again, same docking
+        for name in ("Undocked", "Docked"):
+            self.s.feed(self.ev(name))
+            E.build(self.ev(name), self.s, "v")
+        self.assertEqual(len(E.build(self.ev("Market"), self.s, "v")), 1)      # back again: sent
 
     def test_late_file_goes_on_the_tick(self):
         """A file written after its event's line, with no line after it, goes on the server's tick (idle), under the
@@ -485,7 +506,7 @@ class SenderAndPipeline(unittest.TestCase):
     def test_refusals_hold_the_schema(self):
         s = session()
         for i in range(4):
-            U.enqueue(self.db, "eddn", "journal", f"J:{i}", "2026-10-08T10:00:00Z", s, {"$schemaRef": "x", "message": {}})
+            U.enqueue(self.db, "eddn", "journal", f"J:{i}", iso_ts(time.time() - 5), s, {"$schemaRef": "x", "message": {}})
         rows = self.rows()
         self.state.upload_session = _Session([(400, "FAIL: Schema Validation: [...]")] * 3)
         got = [asyncio.run(self.state.eddn_send([r]))[0][1] for r in rows[:3]]
@@ -495,6 +516,26 @@ class SenderAndPipeline(unittest.TestCase):
         self.state.upload_session = _Session([ConnectionError("unreachable")])
         with self.assertRaises(ConnectionError):                 # the loop backs off
             asyncio.run(self.state.eddn_send([dict(rows[0], schema="fsssignaldiscovered")]))
+
+    def test_outdated_schema_holds_at_once(self):
+        """426: EDDN no longer takes that schema version; the next message of it is not even sent."""
+        s = session()
+        for i in range(2):
+            U.enqueue(self.db, "eddn", "journal", f"J:{i}", iso_ts(time.time() - 5), s, {"$schemaRef": "x", "message": {}})
+        rows = self.rows()
+        self.state.upload_session = _Session([(426, "FAIL: Outdated Schema")])
+        with unittest.mock.patch("sys.stderr"):
+            self.assertEqual(asyncio.run(self.state.eddn_send([rows[0]]))[0][1], "dropped")
+        self.assertEqual(asyncio.run(self.state.eddn_send([rows[1]]))[0][1], "dropped")
+        self.assertEqual(len(self.state.upload_session.posts), 1)
+
+    def test_hour_old_rows_are_not_sent(self):
+        """Any EDDN message an hour late (an outage, switched off and on) is dropped, not sent as current."""
+        s = session()
+        U.enqueue(self.db, "eddn", "journal", "J:1", iso_ts(time.time() - 2 * 3600), s, {"$schemaRef": "x", "message": {}})
+        [row] = self.rows()
+        self.state.upload_session = _Session([])
+        self.assertEqual(asyncio.run(self.state.eddn_send([row]))[:1], [(row["id"], "dropped", "not sent: over an hour old", None)])
 
     def test_stale_station_data_is_not_sent(self):
         s = session()

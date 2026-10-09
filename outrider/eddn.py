@@ -108,6 +108,7 @@ NAVROUTE_WINDOW_S = 5     # NavRoute.json must be the one this NavRoute event wr
 NAVROUTE_TRIES = 11       # ...asked again on the lines after it while it is not (written late, NFS)
 FILE_WAIT_S = 10          # ...and on the server's tick (idle()) when no line comes: given up after this long
 SIGNAL_QUIET_S = 3        # a batch of FSSSignalDiscovered lines goes this long after its last line with none after it
+SIGNAL_MAX_S = 300        # ...and is dropped when the line that would send it is this much later (EDDN was off meanwhile)
 
 
 def _seconds(ts):
@@ -226,7 +227,6 @@ STATION_FILES = {"Market": ("commodity", "Market.json"), "Outfitting": ("outfitt
 STATION_SCHEMAS = ("commodity", "outfitting", "shipyard", "fcmaterials_journal")
 CATCHUP_MAX_S = 3600       # a line older than this never goes to EDDN, even caught up after a gap: its listeners take
 #                            what arrives as current (the author's choice, 2026-10-09; EDSM keeps uploads.MAX_AGE_S)
-STATION_MAX_AGE_S = 3600   # station data still unsent after this long is stale: dropped, not sent late
 COMMODITY_NAME = re.compile(r"^\$(.+)_name;$", re.I)
 MODULE_PREFIX = re.compile(r"^Hpt_|^Int_|Armour_", re.I)
 MODULE_OK = re.compile(r"(^Hpt_|^hpt_|^Int_|^int_|_Armour_|_armour_)")
@@ -240,8 +240,13 @@ def _station_file(ev, session, schema, filename):
     return _wait_check(session, schema, filename)
 
 
+VISIT_ENDS = ("Docked", "Undocked", "Location", "CarrierJump", "LoadGame")
+
+
 def _changed(session, schema, market_id, key):
-    """Station data is sent only when it changed since the last message for that market (EDMC's dedup)."""
+    """Station data is sent once per visit: the same screen opened again in one docking, unchanged, is not sent twice
+    (EDMC's dedup); every new docking sends it again, changed or not, since EDDN's readers date a station's data by
+    it (the bug check of 2026-10-09: an unchanged market was never sent again while Outrider ran)."""
     sent = session.pending.setdefault("sent", {})
     k = f"{schema}:{market_id}"
     if sent.get(k) == key:
@@ -254,6 +259,8 @@ def station_messages(ev, session):
     """[(schema, message)] for station data whose file is ready on this line (commodity/3, outfitting/2, shipyard/2,
     fcmaterials_journal/1), each only when it changed."""
     out = []
+    if ev.get("event") in VISIT_ENDS:   # a new visit: its station data goes again, unchanged or not
+        session.pending.pop("sent", None)
     for event, (schema, filename) in STATION_FILES.items():
         if schema not in session.pending and ev.get("event") != event:
             continue
@@ -350,6 +357,10 @@ def signals_message(ev, session):
         return None
     batch = session.pending.pop("signals", None)
     session.pending.pop("signals_since", None)
+    if batch:
+        a, b = _seconds(batch[-1].get("timestamp")), _seconds(ev.get("timestamp"))
+        if a is None or b is None or b - a > SIGNAL_MAX_S:   # left over from before EDDN was switched off or held
+            return None
     return _signals_from(batch, session)
 
 
@@ -449,10 +460,12 @@ class SchemaHold:
     def __init__(self, limit=3, window=3600):
         self.limit, self.window, self.refusals, self.held = limit, window, {}, {}
 
-    def refused(self, schema, now, why):
+    def refused(self, schema, now, why, status=None):
+        """A refusal of `schema`. 426 (EDDN no longer takes that schema version) holds it at once: every message of
+        it would be refused the same way."""
         times = [t for t in self.refusals.get(schema, []) if now - t < self.window] + [now]
         self.refusals[schema] = times
-        if len(times) >= self.limit:
+        if len(times) >= self.limit or status == 426:
             self.held[schema] = why
 
     def is_held(self, schema):
