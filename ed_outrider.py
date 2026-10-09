@@ -8556,6 +8556,28 @@ class State:
         return dict(out, regions=[{"id": i, "name": n} for i, n in enumerate(names) if n], here=here, region=region,
                     region_name=names[region] if region else None), 200
 
+    def checklist_species(self, species_id):
+        """GET /api/checklist?species=<id>: one species for the checklist's panel: the regions it can grow in ("yes",
+        "parts") and where you have sampled it ({x, z, state} per run). (answer, HTTP status)."""
+        R = outrider.bio.load_rules() if outrider.bio else None
+        if not R:
+            return {"error": "the exobiology rules are not loaded"}, 503
+        merged, _ = outrider.checklist.merge_species(R["species"])
+        sp = next((s for s in merged if (s.get("id") or s["name"]) == species_id), None)
+        if sp is None:
+            return {"error": "no such species"}, 404
+        fates, runs = organic_fates(self.db), []
+        for r in self.db.execute("SELECT system, body_id, species, done_ts FROM own_organic WHERE species = ? OR species_name = ?",
+                                 (sp.get("id"), sp["name"])):
+            loc = self.locate(r["system"])
+            if not loc or loc[1] is None:
+                continue
+            fate = fates.get((r["system"], r["body_id"], r["species"])) if r["done_ts"] else None
+            state = fate[0] if fate else (organic_state(self.db, r["done_ts"]) if r["done_ts"] else None) or "in progress"
+            runs.append({"x": loc[1], "z": loc[3], "state": state, "system": loc[0]})
+        regions = outrider.checklist.where(sp, outrider.bio.ruleset_region_ok, len(R["region_names"]) - 1)
+        return {"id": species_id, "name": sp["name"], "regions": {str(k): v for k, v in regions.items()}, "runs": runs}, 200
+
     def organics(self, days):
         """Every exobiology sample run (newest first) with what it is worth and whether it was banked,
         plus your codex entries over the same period."""
@@ -12766,6 +12788,9 @@ def make_app(state, hosts=None):
         return web.json_response(state.history(days))
 
     async def checklist_view(request):
+        if "species" in request.query:
+            out, status = state.checklist_species(request.query["species"])
+            return web.json_response(out, status=status)
         out, status = state.checklist(request.query.get("region", "here"))
         return web.json_response(out, status=status)
 

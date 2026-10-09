@@ -48,7 +48,7 @@ what each death cost, and your 25 most valuable finds.
 </tr>
 <tr>
 <td width="50%" valign="top">
-<b>Samples</b> — every exobiology sample run: species, variant, body, value, and whether it is
+<b>Samples</b> — <b>Runs</b>: every exobiology sample run: species, variant, body, value, and whether it is
 <i>aboard</i>, <i>sold</i> or <i>lost</i>. Filter, sort, export; codex entries underneath. Unsold runs are
 priced one by one ("x5 on 42 of 47 runs").
 <br><br><img src="../images/samples.png" alt="Samples">
@@ -139,6 +139,31 @@ vehicle's own fuel.
 Under the Where tile, the **discovery streak** is a dot per arrival for your last 20 (gold: first discovery,
 amber: bodies nobody had reported, blue: known, grey: revisited), and the **unreported horizon**: "nearest
 known unvisited: Xyz 4.8 ly". Any unvisited star closer than that on the galaxy map is one nobody has reported.
+
+## 🧬 The exobiology checklist
+
+**Samples → Checklist** shows every species the rules know, one box per genus, for a galactic region: where you
+are (the default), any other, or **All regions**. Each species shows your best there, in colour:
+
+- <b>sold</b> (green), <b>aboard</b> (amber: sampled, not sold yet), <b>lost</b> (red: sampled, lost with the ship),
+  <b>logged</b> (blue: in your codex, no finished run);
+- **not here**, greyed: the rules say it cannot grow in this region. That is the rules' prediction, not proof that
+  nobody has found it there;
+- ◐: only in parts of the region (near Guardian sites, in tuber zones, by nebulae);
+- the colours you have found out of those it comes in (**3 / 12**). Anemones, brain trees and the like are their own
+  one colour.
+
+Click a species for its colours, each with what gives it ("Teal: M stars", or a material on the body for some
+bacteria), and a map of the galaxy with the regions it can grow in lit and your samples as dots. The line above the
+boxes counts it up: "Inner Orion Spur: 45 of 101 possible species found · 43 sold · …". The tablet's Samples page
+has it too.
+
+<p align="center">
+  <img src="../images/checklist.png" alt="The exobiology checklist: genus boxes with each species' state and colours found, and a species' colours and galaxy map beside them" width="900">
+</p>
+
+Journals from before a 2023 game update don't name a sample's colour, so those samples count the species but not a
+colour.
 
 ## 🗺️ The surface map
 

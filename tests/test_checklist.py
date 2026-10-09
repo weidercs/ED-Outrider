@@ -73,7 +73,7 @@ class Checklist(unittest.TestCase):
         a = t["Aleoida Arcus"]
         self.assertEqual((a["state"], a["runs"], a["possible"]), ("sold", 2, "yes"))   # sold beats lost; region 2's not here
         self.assertEqual([(v["colour"], v["where"], v["state"]) for v in a["variants"]["list"]],
-                         [("Teal", "F, G", "sold"), ("Emerald", "M", None)])
+                         [("Teal", "F, G stars", "sold"), ("Emerald", "M stars", None)])
         self.assertEqual((a["variants"]["found"], a["variants"]["total"]), (1, 2))
         self.assertEqual((t["Bacterium Nebulus"]["state"], t["Bacterium Nebulus"]["variants"]["found"]), ("logged", 1))
         self.assertIsNone(t["Stratum Araneamus"]["possible"])                       # region 3 only
@@ -146,6 +146,13 @@ class ChecklistServer(unittest.TestCase):
         self.assertEqual(len(out["regions"]), 42)
         for bad in ("99", "0", "x"):
             self.assertEqual(self.state.checklist(bad)[1], 400, bad)
+        # the panel: where it can grow, where you sampled it
+        sid = row(out, "Stratum Tectonicas")["id"]
+        sp, status = self.state.checklist_species(sid)
+        self.assertEqual((status, sp["name"]), (200, "Stratum Tectonicas"))
+        self.assertEqual(sorted((r["system"], r["state"]) for r in sp["runs"]), [("Near Colonia", "aboard"), ("Near Sol", "lost")])
+        self.assertTrue(sp["regions"] and set(sp["regions"].values()) <= {"yes", "parts"})
+        self.assertEqual(self.state.checklist_species("$Nope;")[1], 404)
 
     def test_endpoint(self):
         import asyncio

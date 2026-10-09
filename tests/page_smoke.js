@@ -70,6 +70,31 @@ const settle = async maxMs => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "|", v.padEnd(8), "|", (el ? el.textContent.trim().replace(/\s+/g, " ").slice(0, 90) : "missing " + sel), errors.slice(before));
   }
+  // the exobiology checklist: Samples -> Checklist shows genus boxes from api/checklist, a click opens the species'
+  // panel (its colours; the map needs a canvas, which jsdom has not), and Runs comes back
+  {
+    if (!d.getElementById("nowView").hidden) { d.getElementById("nowBack").click(); await sleep(500); }
+    const before = errors.length;
+    d.querySelector('[data-view="bio"]').click(); await settle(800);
+    const radio = v => d.querySelector(`[name=bioMode][value="${v}"]`);
+    radio("check").checked = true; radio("check").dispatchEvent(new dom.window.Event("change", {bubbles: true}));
+    for (let waited = 0; !d.querySelector("#clGrid .clbox") && waited < 10000; waited += 100) await sleep(100);
+    const boxes = d.querySelectorAll("#clGrid .clbox").length, status = d.getElementById("clStatus").textContent;
+    const options = d.getElementById("clRegion").options.length;
+    const tr = d.querySelector("#clGrid [data-cl]");
+    tr.click();
+    for (let waited = 0; !/your samples|could not|no such/i.test(d.getElementById("clSide").textContent) && waited < 5000; waited += 100) await sleep(100);
+    const side = d.querySelector("#clSide h4"), name = tr.getAttribute("title").split(" · ")[0];
+    const shown = !d.getElementById("bioView").classList.contains("check") ? "runs" : "check";
+    radio("runs").checked = true; radio("runs").dispatchEvent(new dom.window.Event("change", {bubbles: true}));
+    await sleep(300);
+    const back = !d.getElementById("bioView").classList.contains("check") && dom.window.getComputedStyle(d.getElementById("bioPane")).display !== "none";
+    const good = boxes >= 20 && /possible species found/.test(status) && options === 44 && side && side.textContent === name &&
+                 shown === "check" && back && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| exobiology checklist |", `${boxes} genus boxes, ${options} region choices, panel ${side && side.textContent}, back to runs ${back}`,
+                status.slice(0, 80), errors.slice(before));
+  }
   // the schematic toggle inside Here (Now mode hides the view buttons: ✕ back first)
   if (!d.getElementById("nowView").hidden) { d.getElementById("nowBack").click(); await sleep(500); }
   d.querySelector('[data-view="here"]').click(); await settle(1500);
@@ -1200,7 +1225,8 @@ const settle = async maxMs => {
     d.getElementById("hwyClear").click(); await sleep(50);
     got.clearFirst = [calls.length, d.getElementById("hwyClear").textContent];
     d.getElementById("hwyClear").click(); await sleep(500);
-    got.cleared = calls.map(c => c[0] + " " + c[1]).join();
+    // the clear, then the route asked for again (a poll landing meanwhile asks once more: the same request, counted once)
+    got.cleared = [...new Set(calls.map(c => c[0] + " " + c[1]))].join();
     got.nav = w.eval("!VIEW_PANE.rich && !TABLET_VIEWS.includes('rich') && SPEECH_SYS_BOUND.has('riches') && ALERTS.some(a => a[0] === 'riches')");
     w.fetch = realFetch;
     pick("exact");

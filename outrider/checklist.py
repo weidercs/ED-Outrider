@@ -132,11 +132,13 @@ def table(species_list, region, region_ok, runs, codex, region_count):
         cols = colours(sp)
         state = got.get(key)
         if cols:
-            vlist = [{"colour": c, "where": ", ".join(w), "state": got_colour.get((key, c.lower()))} for c, w in cols]
+            stars = bool((sp.get("colors") or {}).get("star"))   # by the star's class, else by a material on the body
+            vlist = [{"colour": c, "where": ", ".join(w) + (" stars" if stars else ""), "state": got_colour.get((key, c.lower()))}
+                     for c, w in cols]
         else:   # its own one variant: found when the species is
             vlist = [{"colour": None, "where": None, "state": state}]
         found = sum(1 for v in vlist if v["state"])
-        row = {"name": sp["name"], "short": short_name(sp), "value": sp.get("value"), "possible": poss, "state": state,
+        row = {"id": key, "name": sp["name"], "short": short_name(sp), "value": sp.get("value"), "possible": poss, "state": state,
                "runs": n_runs.get(key, 0), "variants": {"total": len(vlist), "found": found, "list": vlist}}
         genera.setdefault(sp.get("genus") or "?", []).append(row)
         if poss or state:
@@ -148,6 +150,16 @@ def table(species_list, region, region_ok, runs, codex, region_count):
                 totals[state] += 1
     out = [{"genus": g, "species": sorted(rows, key=lambda x: x["short"])} for g, rows in sorted(genera.items())]
     return {"genera": out, "summary": totals}
+
+
+def where(species, region_ok, region_count):
+    """{region number: "yes" | "parts"} for the regions a species can grow in (the species panel's map)."""
+    out = {}
+    for r in range(1, region_count + 1):
+        p = possibility(species, r, region_ok)
+        if p:
+            out[r] = p
+    return out
 
 
 def short_name(species):

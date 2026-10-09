@@ -2546,7 +2546,7 @@ function render() {
   document.getElementById("logView").hidden = view !== "log";
   if (view === "log") { if (L.key === null) loadLog(); else tailLog(); }
   document.getElementById("bioView").hidden = view !== "bio";
-  if (view === "bio") loadBio();
+  if (view === "bio") { if (bioMode === "check") loadChecklist(); else loadBio(); }
   if (view === "here" || nearPinned || (view === "overview" && !ovState.collapsed) || view === "now") {   // Now reads Here's data
     loadHere();
     // tab and pane keep different modes; and the in-game target moves without a scan (review F4): redraw, no refetch
@@ -4213,6 +4213,159 @@ function renderBio() {
       <td>${sysCell(c.system)}</td><td>${c.voucher ? dual(`💰 ${c.voucher.toLocaleString()} cr`, `💰 ${credits(c.voucher)}`) : c.new ? dual("✦ new", "✦") : ""}</td></tr>`).join("") ||
     `<tr><td colspan="6" class="unk">No codex entries in this period.</td></tr>`;
 }
+// ---- the exobiology checklist (Samples -> Checklist; GET api/checklist, outrider/checklist.py): every species the
+// rules know, by galactic region, with your best there and its colours found / possible; a species' panel with its
+// colours, what gives each, and a galaxy map of where it can grow with your samples as dots ----
+const CL = {data: null, key: null, loading: false, open: null, species: null, map: null};
+const CL_WORD = {sold: "sold", aboard: "aboard", lost: "lost", logged: "logged"};
+let bioMode = store.get("bioMode", "runs") === "check" ? "check" : "runs";
+const clRegionEl = document.getElementById("clRegion");
+function setBioMode(m) {
+  bioMode = m === "check" ? "check" : "runs";
+  store.set("bioMode", bioMode);
+  document.getElementById("bioView").classList.toggle("check", bioMode === "check");
+  document.querySelectorAll("[name=bioMode]").forEach(x => { x.checked = x.value === bioMode; });
+  if (view === "bio") { if (bioMode === "check") loadChecklist(); else loadBio(); }
+}
+document.querySelectorAll("[name=bioMode]").forEach(x => x.addEventListener("change", () => setBioMode(x.value)));
+clRegionEl.addEventListener("change", () => { store.set("clRegion", clRegionEl.value); loadChecklist(true); });
+// asked again when the region, your scans or (for "where you are") the system change
+async function loadChecklist(force = false) {
+  const want = clRegionEl.value || store.get("clRegion", "here") || "here";
+  const key = `${want}|${data && data.scan_version}|${want === "here" ? posId() : ""}`;
+  if (CL.loading || (!force && key === CL.key)) return;
+  CL.key = key; CL.loading = true;
+  if (!CL.data) document.getElementById("clStatus").textContent = "loading…";
+  let d;
+  try { d = await apiJson(`api/checklist?region=${encodeURIComponent(want)}`); } catch (err) { d = {error: err.message}; }
+  CL.loading = false;
+  if (d.error) CL.key = null;   // asked again at the next render
+  CL.data = d;
+  renderChecklist();
+}
+function clFillRegions(d) {
+  const here = d.here ? (d.regions || []).find(r => r.id === d.here) : null;
+  const hereText = `Where you are${here ? ` (${here.name})` : ""}`;
+  if (clRegionEl.options.length) { if (clRegionEl.options[0].textContent !== hereText) clRegionEl.options[0].textContent = hereText; return; }
+  const regions = [...(d.regions || [])].sort((a, b) => a.name.localeCompare(b.name));
+  clRegionEl.innerHTML = `<option value="here">${esc(hereText)}</option><option value="all">All regions</option>` +
+    regions.map(r => `<option value="${r.id}">${esc(r.name)}</option>`).join("");
+  const saved = String(store.get("clRegion", "here"));
+  clRegionEl.value = [...clRegionEl.options].some(o => o.value === saved) ? saved : "here";
+}
+function clRow(id) {
+  for (const g of (CL.data && CL.data.genera) || []) for (const r of g.species) if (r.id === id) return r;
+  return null;
+}
+function renderChecklist() {
+  const d = CL.data, st = document.getElementById("clStatus"), grid = document.getElementById("clGrid");
+  if (!d || d.error) { st.textContent = d ? `Could not load the checklist: ${d.error}.` : ""; return; }
+  clFillRegions(d);
+  const s = d.summary;
+  const where = d.region_name || (d.region == null && clRegionEl.value === "all" ? "All regions" : "Where you are (not in a known region): all regions");
+  st.innerHTML = `${esc(where)}: <b>${s.found}</b> of ${s.possible} possible species found · <span class="cl-sold">${s.sold} sold</span>` +
+    ` · <span class="cl-aboard">${s.aboard} aboard</span>` + (s.lost ? ` · <span class="cl-lost">${s.lost} lost</span>` : "") +
+    (s.logged ? ` · <span class="cl-logged">${s.logged} logged</span>` : "") + ` · colours ${s.colours_found} of ${s.colours}`;
+  const html = d.genera.map(g => {
+    const found = g.species.filter(r => r.state).length, poss = g.species.filter(r => r.possible).length;
+    return `<div class="clbox"><h4><span>${esc(g.genus)}</span><span class="unk">${found} / ${poss}</span></h4><table>` + g.species.map(r => {
+      const cls = r.state ? `cl-${r.state}` : r.possible ? "" : "cl-no";
+      const tip = `${r.name}${r.value ? ` · ${credits(r.value)} cr` : ""}` +
+        (r.possible === "parts" ? " · only in parts of this region" : !r.possible ? " · the rules say it cannot grow here" : "");
+      return `<tr class="${cls}${CL.open === r.id ? " on" : ""}" data-cl="${esc(r.id)}" title="${esc(tip)}"><td>${esc(r.short)}` +
+        `${r.possible === "parts" ? ' <span class="clparts">◐</span>' : ""}</td><td>${r.state ? CL_WORD[r.state] : r.possible ? "" : "not here"}</td>` +
+        `<td class="num">${r.variants.found} / ${r.variants.total}</td></tr>`;
+    }).join("") + "</table></div>";
+  }).join("");
+  if (grid.innerHTML !== html) grid.innerHTML = html;
+  clDrawSide();
+}
+document.getElementById("clGrid").addEventListener("click", e => {
+  const tr = e.target.closest("[data-cl]");
+  if (!tr) return;
+  CL.open = tr.dataset.cl;
+  renderChecklist();
+  clLoadSpecies(CL.open);
+});
+async function clLoadSpecies(id) {
+  CL.species = null; CL.map = null;
+  clDrawSide();
+  let d;
+  try { d = await apiJson(`api/checklist?species=${encodeURIComponent(id)}`); } catch (err) { d = {error: err.message}; }
+  if (CL.open !== id) return;   // another species clicked meanwhile
+  CL.species = d;
+  clDrawSide();
+}
+function clDrawSide() {
+  const side = document.getElementById("clSide"), r = clRow(CL.open);
+  let html;
+  if (!r) html = `<p class="unk">Click a species for its colours and where it grows.</p>`;
+  else {
+    const sp = CL.species && CL.species.id === r.id ? CL.species : null;
+    const where = r.possible === "yes" ? "can grow in this region" : r.possible === "parts"
+      ? "only in parts of this region (near Guardian sites, in tuber zones, by nebulae)" : "the rules say it cannot grow in this region";
+    const vs = r.variants.list.map(v => `<tr class="${v.state ? `cl-${v.state}` : ""}"><td>${v.colour ? esc(v.colour) : "its one variant"}</td>` +
+      `<td class="unk">${esc(v.where || "")}</td><td>${v.state ? CL_WORD[v.state] : ""}</td></tr>`).join("");
+    html = `<h4>${esc(r.name)}</h4><div class="unk">${r.value ? `${credits(r.value)} cr` : ""}` +
+      `${CL.data.region != null ? ` · ${esc(where)}` : ""}${r.runs ? ` · ${r.runs} run${r.runs === 1 ? "" : "s"}` : ""}</div>` +
+      `<table class="clvars"><thead><tr><th>Colour</th><th>Grows with</th><th></th></tr></thead><tbody>${vs}</tbody></table>` +
+      `<canvas id="clMap" width="480" height="480" aria-label="${esc(`the galaxy: where ${r.name} can grow`)}"></canvas>` +
+      `<div class="unk clmaplegend">${sp && sp.error ? esc(sp.error) : !sp ? "loading the map…"
+        : `highlighted: where it can grow (paler: only in parts) · dots: your samples (${sp.runs.length})`}</div>`;
+  }
+  if (side.dataset.html !== html) { side.innerHTML = html; side.dataset.html = html; CL.map = null; }
+  clDrawMap();
+}
+// a colour of the theme as [r, g, b] (a canvas reads any CSS colour back as #rrggbb or rgba())
+function cssRgb(c) {
+  const x = document.createElement("canvas").getContext && document.createElement("canvas").getContext("2d");
+  if (!x) return [128, 128, 128];
+  x.fillStyle = c;
+  const s = x.fillStyle, m = /^#(..)(..)(..)$/.exec(s);
+  return m ? m.slice(1).map(h => parseInt(h, 16)) : (s.match(/\d+/g) || [128, 128, 128]).slice(0, 3).map(Number);
+}
+// the region map (api/regions, as Plot Route's): the regions it can grow in in their own tints (paler where only in parts),
+// the rest faint grey, so a species that grows almost everywhere still shows the regions; north (bigger Z) up
+function clDrawMap() {
+  const cv = document.getElementById("clMap"), sp = CL.species;
+  const g = cv && cv.getContext && cv.getContext("2d");
+  if (!g) return;
+  if (!RG.data || !RG.cells) { loadRegions(); return; }   // drawn again when the map arrives
+  const d = RG.data, n = d.size, allow = (sp && !sp.error && sp.regions) || {};
+  const cs = getComputedStyle(document.documentElement), col = v => cs.getPropertyValue(v).trim();
+  const bg = col("--bg"), light = /^#[0-9a-f]{6}$/i.test(bg) && parseInt(bg.slice(1, 3), 16) > 128;
+  const key = `${CL.open}|${sp ? "1" : "0"}|${bg}|${col("--line")}`;
+  if (CL.map && CL.map.key === key && CL.map.cv === cv) return;
+  const off = document.createElement("canvas");
+  off.width = off.height = n;
+  const og = off.getContext("2d");
+  if (!og) return;
+  const img = og.createImageData(n, n), px = img.data, dim = cssRgb(col("--line")), tints = [];
+  for (let i = 1; i < 256; i++) tints[i] = hwyTint(i, light);
+  for (let r = 0; r < n; r++) {
+    const out = (n - 1 - r) * n;
+    for (let c = 0; c < n; c++) {
+      const v = RG.cells[r * n + c];
+      if (!v) continue;
+      const a = allow[v], k = a ? tints[v] : dim, o = (out + c) * 4;
+      px[o] = k[0]; px[o + 1] = k[1]; px[o + 2] = k[2]; px[o + 3] = a === "yes" ? 235 : a === "parts" ? 120 : 45;
+    }
+  }
+  og.putImageData(img, 0, 0);
+  const W = cv.width;
+  g.clearRect(0, 0, W, W);
+  g.imageSmoothingEnabled = false;
+  g.drawImage(off, 0, 0, W, W);
+  const dot = {sold: col("--good"), aboard: col("--warn"), lost: col("--bad")};
+  for (const run of (sp && !sp.error && sp.runs) || []) {
+    const x = (run.x - d.origin[0]) / d.cell / n * W, y = (1 - (run.z - d.origin[1]) / d.cell / n) * W;
+    g.beginPath(); g.arc(x, y, 4, 0, Math.PI * 2);
+    g.fillStyle = dot[run.state] || col("--info"); g.fill();
+    g.strokeStyle = col("--bg") || "#000"; g.lineWidth = 1; g.stroke();
+  }
+  CL.map = {key, cv};
+}
+setBioMode(bioMode);
 document.querySelectorAll("th[data-bsort]").forEach(h => h.onclick = () => {
   bioSort = {key: h.dataset.bsort, dir: bioSort.key === h.dataset.bsort ? -bioSort.dir : (["ts", "value", "samples"].includes(h.dataset.bsort) ? -1 : 1)};
   store.set("bioSort", bioSort); renderBio();
@@ -5455,6 +5608,7 @@ async function loadRegions() {
   RG.failedAt = 0;
   hwyRegionsSet(d);
   drawHwyMap();
+  clDrawMap();   // the checklist's map, if a species is open
 }
 // the runs as one byte per cell (row r is the r-th band of Z from the origin, column c the c-th of X), the borders as
 // segments in cell units [c0, r0, c1, r1] (vertical ones merged down the rows, horizontal ones along them), and the labels

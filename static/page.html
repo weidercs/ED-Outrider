@@ -212,16 +212,26 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
 </section>
 <section id="bioView" hidden>
   <div class="srow">
-    <label>Last <select id="bDays"><option value="7">7 days</option><option value="30" selected>30 days</option>
+    <span class="seg" role="radiogroup" aria-label="Samples view"><label title="every sample run, aboard, sold or lost"><input type="radio" name="bioMode" value="runs" checked>Runs</label><label title="every species the rules know, by galactic region, with what you have done there"><input type="radio" name="bioMode" value="check">Checklist</label></span>
+    <label class="checkonly">Region <select id="clRegion"></select></label>
+    <label class="runonly">Last <select id="bDays"><option value="7">7 days</option><option value="30" selected>30 days</option>
       <option value="90">90 days</option><option value="365">year</option><option value="3650">everything</option></select></label>
-    <label>Show <select id="bState"><option value="">all</option><option value="aboard">aboard</option>
+    <label class="runonly">Show <select id="bState"><option value="">all</option><option value="aboard">aboard</option>
       <option value="sold">sold</option><option value="lost">lost</option><option value="in progress">in progress</option></select></label>
-    <input type="search" id="bFilter" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="filter genus, species, variant, system" class="filter">
+    <input type="search" id="bFilter" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="filter genus, species, variant, system" class="filter runonly">
     <span class="grow"></span>
-    <span class="exports">Export: <a href="api/export?what=organics&format=csv" download>CSV</a> · <a href="api/export?what=organics&format=json" download>JSON</a></span>
+    <span class="exports runonly">Export: <a href="api/export?what=organics&format=csv" download>CSV</a> · <a href="api/export?what=organics&format=json" download>JSON</a></span>
   </div>
-  <div id="bStatus" class="status"></div>
-  <div class="pane" id="bioPane">
+  <div id="bStatus" class="status runonly"></div>
+  <div id="clStatus" class="status checkonly"></div>
+  <div class="pane checkonly" id="clPane">
+    <div class="clwrap"><div id="clGrid" class="clgrid"></div><aside id="clSide" class="clside"><p class="unk">Click a species for its colours and where it grows.</p></aside></div>
+    <div class="hint">Your best in the region: <span class="cl-sold">sold</span>, <span class="cl-aboard">aboard</span>
+      (sampled, not sold yet), <span class="cl-lost">lost</span> (sampled, lost with the ship), <span class="cl-logged">logged</span>
+      (in your codex, no finished run). <span class="cl-no">Greyed</span>: the rules say it cannot grow here (a prediction).
+      ◐: only in parts of the region (near Guardian sites, in tuber zones, by nebulae). Colours are counted found / possible.</div>
+  </div>
+  <div class="pane runonly" id="bioPane">
   <table id="bioTable">
     <thead><tr><th data-bsort="ts">When</th><th data-bsort="system">System</th><th data-bsort="body">Body</th><th data-bsort="genus">Genus</th>
       <th class="c2hide" data-bsort="species">Species</th><th class="hide-sm c2hide" data-bsort="variant">Variant</th><th class="num c2hide" data-bsort="samples">Samples</th>

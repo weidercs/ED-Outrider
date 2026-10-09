@@ -229,6 +229,13 @@ upstream project's choices, not rules of the game.
   Nothing is claimed before the others' leases are read. An Outrider from before the rule (no `wanted` in its lease)
   holds whenever another lease names the service, so it is always given way to. Before this, both held for good and
   each followed as if the other sent (Codex F1, 2026-10-09).
+- **The exobiology checklist's states, best first: sold, aboard, lost, logged** (outrider/checklist.py). Lost is a
+  state of its own, in red (the author's choice): you found it there, and sampling it again pays. "Not here" is the
+  rules' prediction and is worded as one; a species with no rules at all (BioScan does not model it) is possible,
+  never ruled out. "Parts" when every ruleset that allows the region also ties it to a place within it. Colours
+  come from ExploData's tables; a species with none is its own one variant. Runs match by the game's species id, so a
+  misspelled duplicate in the rules (Stratum Aranaemus) cannot split a species. It lives in Samples (Runs |
+  Checklist), not a tab of its own (the author: no 14th tab).
 - **A plot's end Spansh does not know yet is stood in for** (2026-10-09). Both ends are looked up in Spansh's search
   before every plot (a system known here, even where you are, is not necessarily one Spansh knows). One it does not
   know, but Outrider can place, is replaced by a Spansh system near it: of those within the ship's range, the one

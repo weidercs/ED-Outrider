@@ -2,6 +2,15 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Exobiology checklist, part C: the page (and the tablet)
+- Samples gets a **Runs | Checklist** switch (kept per device). The checklist: a region picker (where you are, All
+  regions, or any of the 42), a summary line, one box per genus with each species' state (sold, aboard, lost,
+  logged; greyed "not here"; ◐ in parts) and colours found / possible; click a species for its colours, what gives
+  each, and a galaxy map with the regions it can grow in lit (in their tints) and your samples as dots
+  (GET /api/checklist?species=). The tablet's Samples page has it as is. Guide: views.md, with a screenshot.
+- The page smoke test: the checklist end to end against the scratch server; the riches clear check counts a repeat
+  of the same request once (a poll landing in between added one now and then).
+
 ## 2026-10-09 · Exobiology checklist, part B: GET /api/checklist
 - `State.checklist(region)` and GET `/api/checklist?region=here|all|<1-42>`: the checklist for where you are (or a
   region, or all), from every run (its fate as Samples has it) and every codex entry, placed by region; with the
