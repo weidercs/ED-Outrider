@@ -194,6 +194,63 @@ class Packaging(unittest.TestCase):
         self.assertTrue(os.access(os.path.join(self.ROOT, "scripts", "docker_bundle.sh"), os.X_OK))
 
 
+class PackagingFixes(unittest.TestCase):
+    """The full sweep of 2026-10-09 (packaging and scripts)."""
+    ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def read(self, name):
+        with open(os.path.join(self.ROOT, name), encoding="utf-8") as f:
+            return f.read()
+
+    def test_local_tools_stay_out_of_the_image(self):
+        """eddn_listener/ (a large capture database and its own .venv) and the other git-ignored local tools are kept
+        out of the Docker build context, so they never reach a published image."""
+        ignored = self.read(".dockerignore").split()
+        for path in ("eddn_listener", "**/.venv", "run.sh", "scripts/install.sh"):
+            self.assertIn(path, ignored)
+
+    def test_docker_pins_host_and_port(self):
+        """In Docker the listening address belongs to the container: a host or port changed in Settings cannot make
+        the server unreachable (the flags win over the config)."""
+        entry = self.read("docker/entrypoint.sh")
+        self.assertIn('exec python ed_outrider.py --config "$CONFIG" --host 0.0.0.0 --port 8025 "$@"', entry)
+
+    def test_half_made_environment_is_made_again(self):
+        """A venv that failed part way (python but no pip, as before python3-venv is installed) is removed and made
+        again, and a failed creation leaves nothing behind: before, every later run failed on it."""
+        import shutil
+        import subprocess
+        import tempfile
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        shutil.copy(os.path.join(self.ROOT, "launch_outrider.sh"), d)
+        with open(os.path.join(d, "requirements.txt"), "w") as f:
+            f.write("aiohttp\n")
+        fake_venv_python = "#!/bin/sh\nexit 1\n"                     # no pip, no aiohttp: half made
+        os.makedirs(os.path.join(d, ".venv", "bin"))
+        with open(os.path.join(d, ".venv", "bin", "python"), "w") as f:
+            f.write(fake_venv_python)
+        os.chmod(os.path.join(d, ".venv", "bin", "python"), 0o755)
+        fakepy = os.path.join(d, "fakepython")
+        with open(fakepy, "w") as f:   # the version check passes; venv makes a python without pip, then fails
+            f.write('#!/bin/sh\nif [ "$1" = "-m" ] && [ "$2" = "venv" ]; then mkdir -p "$3/bin"; '
+                    'printf "#!/bin/sh\\nexit 1\\n" > "$3/bin/python"; chmod +x "$3/bin/python"; exit 1; fi\nexit 0\n')
+        os.chmod(fakepy, 0o755)
+        r = subprocess.run(["bash", os.path.join(d, "launch_outrider.sh")], cwd=d, capture_output=True, text=True,
+                           env=dict(os.environ, PYTHON=fakepy), timeout=60)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("incomplete (no pip): making it again", r.stdout)
+        self.assertIn("sudo apt install python3-venv", r.stderr)
+        self.assertFalse(os.path.exists(os.path.join(d, ".venv")))   # nothing half-made left for the next run
+
+    def test_windows_launcher_remakes_a_half_made_environment(self):
+        with open(os.path.join(self.ROOT, "launch_outrider.bat"), "rb") as f:
+            script = f.read().decode("ascii")
+        self.assertIn('"%VPY%" -m pip --version >nul 2>&1 && goto pipok', script)
+        self.assertIn('if exist "%VENV%" rmdir /s /q "%VENV%"', script)
+        self.assertIn(":venvfail", script)
+
+
 class NfsCaching(unittest.TestCase):
     """The journals over NFS (a Docker server): Linux caches a file's size for up to 60 s by default, so the journal
     seems not to grow and a minute of alerts comes at once (the author's server, 2026-10-04). Start-up warns unless

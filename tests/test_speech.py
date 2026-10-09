@@ -1395,3 +1395,56 @@ class AudioBlocked(unittest.TestCase):
         self.state.speaker_audio_blocked = True
         self.state.speaker_seen = time.monotonic() - self.state.SPEAKER_SEEN_S - 1   # the window went away
         self.assertFalse(self.state.payload()["speaker_audio_blocked"])
+
+
+class SweepVoiceFixes(unittest.TestCase):
+    """The full sweep of 2026-10-09 (the voice lab and Piper)."""
+
+    def test_one_rule_for_the_lines_file(self):
+        """An old speech_file = "speech.json" resolves to resources/ for the voice lab as for the server (the lab showed
+        no lines)."""
+        import tempfile, shutil
+        root, res = tempfile.mkdtemp(), tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, root)
+        self.addCleanup(shutil.rmtree, res)
+        with open(os.path.join(res, "speech.json"), "w") as f:
+            f.write("{}")
+        said = []
+        got = outrider.speech.resolve_speech_file("speech.json", root, "DEFAULT", res, warn=said.append)
+        self.assertEqual(got, os.path.join(res, "speech.json"))
+        self.assertTrue(said)
+        self.assertEqual(outrider.speech.resolve_speech_file("", root, "DEFAULT", res), "DEFAULT")
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(here, "voice_lab.py"), encoding="utf-8") as f:
+            lab = f.read()
+        self.assertIn("outrider.speech.resolve_speech_file(name, outrider.ROOT, SPEECH_FILE)", lab)
+        self.assertNotIn("install.sh", lab)                     # not in the published repository
+
+    def test_piper_in_a_windows_venv(self):
+        import tempfile, shutil, sys
+        import outrider.tts as T
+        root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, root)
+        os.makedirs(os.path.join(root, ".venv"))
+        ver = f"{sys.version_info.major}.{sys.version_info.minor}"
+        with open(os.path.join(root, ".venv", "pyvenv.cfg"), "w") as f:
+            f.write(f"home = C:\\Python\nversion = {ver}.4\n")
+        self.assertIn(os.path.join(root, ".venv", "Lib", "site-packages"), T._venv_site_packages(root, nt=True))
+        self.assertNotIn(os.path.join(root, ".venv", "Lib", "site-packages"), T._venv_site_packages(root, nt=False))
+        with open(os.path.join(root, ".venv", "pyvenv.cfg"), "w") as f:
+            f.write("version = 2.7.18\n")                       # another Python's packages: not taken
+        self.assertEqual(len(T._venv_site_packages(root, nt=True)), 1)
+
+    def test_abandoned_downloads_are_swept(self):
+        import tempfile, shutil, time
+        import outrider.tts as T
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        old, fresh, voice = (os.path.join(d, n) for n in ("v.onnx.ab12.part", "v.onnx.cd34.part", "v.onnx"))
+        for p in (old, fresh, voice):
+            open(p, "w").close()
+        t = time.time() - 2 * T.PART_STALE_S
+        os.utime(old, (t, t))
+        os.utime(voice, (t, t))
+        self.assertEqual(T.sweep_parts(d), 1)
+        self.assertEqual(sorted(os.listdir(d)), ["v.onnx", "v.onnx.cd34.part"])   # a download under way is left alone

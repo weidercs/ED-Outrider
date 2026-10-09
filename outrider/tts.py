@@ -162,6 +162,29 @@ def voice_paths(name):
     return [base + ".onnx.json", base + ".onnx"]
 
 
+PART_STALE_S = 3600   # a .part untouched this long belongs to no download any more
+
+
+def sweep_parts(voices_dir, now=None):
+    """Remove .part files left by downloads that never finished (the voice lab closed mid-way: its download thread
+    is abandoned at exit, so its own clean-up never runs). Only ones untouched for PART_STALE_S: another program
+    (Outrider and the voice lab) may be downloading right now. Returns how many went."""
+    now, n = time.time() if now is None else now, 0
+    try:
+        names = os.listdir(voices_dir)
+    except OSError:
+        return 0
+    for name in names:
+        path = os.path.join(voices_dir, name)
+        try:
+            if name.endswith(".part") and now - os.path.getmtime(path) > PART_STALE_S:
+                os.remove(path)
+                n += 1
+        except OSError:
+            pass
+    return n
+
+
 def download_voice_files(files, voices_dir, progress=None, timeout=60):
     """Download [(repository path, {"size_bytes", "md5_digest"} or {})] into voices_dir. Each file goes to a
     .part first, and they are moved into place only once every one has arrived complete (length and, when
@@ -170,6 +193,7 @@ def download_voice_files(files, voices_dir, progress=None, timeout=60):
     progress(done, total) after each chunk (total is 0 when the sizes are not known)."""
     total, done, parts = sum((m or {}).get("size_bytes") or 0 for _, m in files), 0, []
     os.makedirs(voices_dir, exist_ok=True)
+    sweep_parts(voices_dir)
     try:
         for path, meta in sorted(files, key=lambda x: x[0].endswith(".onnx")):   # the small config first
             dest = os.path.join(voices_dir, os.path.basename(path))
@@ -211,15 +235,33 @@ def _import_piper():
         return PiperVoice
     except ImportError:
         pass
-    venv = os.path.join(ROOT, ".venv", "lib", f"python{sys.version_info.major}.{sys.version_info.minor}", "site-packages")
-    if os.path.isdir(venv) and venv not in sys.path:
-        sys.path.append(venv)
-        try:
-            from piper import PiperVoice
-            return PiperVoice
-        except ImportError:
-            sys.path.remove(venv)
+    for venv in _venv_site_packages():
+        if os.path.isdir(venv) and venv not in sys.path:
+            sys.path.append(venv)
+            try:
+                from piper import PiperVoice
+                return PiperVoice
+            except ImportError:
+                sys.path.remove(venv)
     return None
+
+
+def _venv_site_packages(root=None, nt=None):
+    """The repository .venv's site-packages for this Python: lib/pythonX.Y/site-packages (Linux, macOS), and on
+    Windows Lib/site-packages when the .venv was made by this same Python version (its pyvenv.cfg says)."""
+    root, nt = root or ROOT, (os.name == "nt") if nt is None else nt
+    ver = f"{sys.version_info.major}.{sys.version_info.minor}"
+    out = [os.path.join(root, ".venv", "lib", f"python{ver}", "site-packages")]
+    if nt:
+        try:
+            with open(os.path.join(root, ".venv", "pyvenv.cfg"), encoding="utf-8") as f:
+                same = any(line.split("=", 1)[0].strip() == "version" and line.split("=", 1)[1].strip().startswith(ver + ".")
+                           for line in f if "=" in line)
+        except OSError:
+            same = False
+        if same:
+            out.append(os.path.join(root, ".venv", "Lib", "site-packages"))
+    return out
 
 
 class Speaker:

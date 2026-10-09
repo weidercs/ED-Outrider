@@ -20,6 +20,12 @@ needs_install() {
 }
 
 if needs_install; then
+    # a half-made environment (venv failed part way: python but no pip, e.g. before python3-venv was installed) is
+    # made again rather than failing on every run
+    if [ -x "$VENV/bin/python" ] && ! "$VENV/bin/python" -m pip --version >/dev/null 2>&1; then
+        echo "$VENV is incomplete (no pip): making it again"
+        rm -rf "$VENV"
+    fi
     if [ ! -x "$VENV/bin/python" ]; then
         PY="${PYTHON:-python3}"
         if ! command -v "$PY" >/dev/null 2>&1; then
@@ -31,7 +37,8 @@ if needs_install; then
             exit 1
         fi
         echo "Setting up ED Outrider: creating $VENV (the first time takes a minute or two: about 100 MB with Piper)"
-        if ! "$PY" -m venv "$VENV"; then
+        if ! "$PY" -m venv "$VENV" || ! "$VENV/bin/python" -m pip --version >/dev/null 2>&1; then
+            rm -rf "$VENV"   # nothing half-made left behind: the next run starts clean
             echo "Could not create $VENV. On Debian or Ubuntu: sudo apt install python3-venv" >&2
             exit 1
         fi

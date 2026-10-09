@@ -16,7 +16,7 @@ A small window, separate from Outrider (it does not need the server running):
   and the lab never say it again.
 - Your own text: type anything and hear it; Save WAV keeps the audio.
 
-Needs Piper (pip install piper-tts, or scripts/install.sh); tkinter comes with Python on Windows and macOS, and is
+Needs Piper (pip install piper-tts, or run launch_outrider.sh / .bat once and start the lab with .venv's python); tkinter comes with Python on Windows and macOS, and is
 the python3-tk package on some Linux distributions. Audio plays through pw-play, paplay, aplay or ffplay on
 Linux, afplay on macOS and winsound on Windows.
 """
@@ -86,7 +86,7 @@ def configured_speech_file():
     does (~ expanded, relative to the repository folder), else the shipped resources/speech.json."""
     sv = _config().get("server")
     name = sv.get("speech_file") if isinstance(sv, dict) else None
-    return os.path.join(outrider.ROOT, os.path.expanduser(str(name))) if name else SPEECH_FILE
+    return outrider.speech.resolve_speech_file(name, outrider.ROOT, SPEECH_FILE)
 
 
 class Player:
@@ -381,7 +381,7 @@ class Lab:
         self.status = ttk.Label(outer, text="", anchor="w")
         self.status.grid(row=4, column=0, sticky="ew", **pad)
         if not self.voices.PiperVoice:
-            self.set_status("Piper is not installed, so nothing can be spoken: pip install piper-tts (or run install.sh). Lines can still be browsed.", error=True)
+            self.set_status("Piper is not installed, so nothing can be spoken: pip install piper-tts, or run launch_outrider.sh (.bat on Windows) once and start the lab with .venv's python. Lines can still be browsed.", error=True)
         elif not self.player.cmd:
             self.set_status("No audio player found (pw-play, paplay, aplay or ffplay): Save WAV still works.", error=True)
 

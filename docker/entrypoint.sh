@@ -20,4 +20,6 @@ if [ ! -f "$CONFIG" ]; then
   python ed_outrider.py --config "$CONFIG" --write-config --host 0.0.0.0 --port 8025 --journals /journals >/dev/null
   echo "first run: wrote $CONFIG (host 0.0.0.0, journals /journals); set [server] password in it or in Settings"
 fi
-exec python ed_outrider.py --config "$CONFIG" "$@"
+# host and port belong to the container (compose maps PORT to 8025, the health check asks 8025): pinned here, so a
+# [server] host or port changed in Settings cannot make the server unreachable. Change PORT in .env instead.
+exec python ed_outrider.py --config "$CONFIG" --host 0.0.0.0 --port 8025 "$@"

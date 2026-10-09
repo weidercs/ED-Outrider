@@ -2,6 +2,17 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Sweep fixes: packaging and scripts
+- Docker builds leave out the local tools git ignores (eddn_listener/ with its capture database, any .venv, run.sh,
+  scripts/install.sh): they would have gone into the published image.
+- launch_outrider.sh and .bat: an environment left half made by a failed first setup (no pip, as before
+  python3-venv is installed) is made again, and a failed setup leaves nothing behind; before, every later run failed.
+- Docker: the container always listens on 0.0.0.0:8025, so a host or port changed in Settings can no longer make the
+  server unreachable (set PORT in .env instead).
+- Voice lab: it reads the same lines file as the server for an old `speech_file = "speech.json"`; it finds Piper in
+  a Windows .venv; a voice download abandoned by closing it no longer leaves its .part file behind for good (swept
+  an hour later); its advice names the launchers instead of a script the repository does not contain.
+
 ## 2026-10-09 · Docs: uploads brought up to date
 - README: uploads are opt-in now (it said "never"). The Uploads guide rewritten for everything since: station data
   once per visit, hour-old EDDN messages dropped, a crash's note ignored after an hour, Docker's note name, the

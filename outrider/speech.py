@@ -101,6 +101,24 @@ PLACEHOLDER = re.compile(r"\{(\w+)\}")
 VOICE_NAME = re.compile(r"^[a-z]{2,3}_[A-Z]{2}-[A-Za-z0-9_]+-(x_low|low|medium|high)$")
 
 
+def resolve_speech_file(name, root, default, resources=RESOURCES_DIR, warn=None):
+    """[server] speech_file, resolved: relative to `root`, ~ expanded; `default` when unset. A relative name missing
+    there but present in resources/ (a config written before the layout move, speech_file = "speech.json") is taken
+    from resources/, and warn(text) says so (review F22). The server and the voice lab both resolve it here, so they
+    always speak from the same file."""
+    if not name:
+        return default
+    raw = os.path.expanduser(str(name))
+    path = os.path.join(root, raw)
+    moved = os.path.join(resources, raw)
+    if not os.path.isabs(raw) and not os.path.exists(path) and os.path.exists(moved):
+        if warn:
+            warn(f"[server] speech_file = {name!r}: not found in {root}; using {moved} (it moved to resources/). "
+                 f"Change the config to say so.")
+        return moved
+    return path
+
+
 def style_voice(styles, style):
     """(voice, speed) a personality asks for in "styles" ({"label", "voice", "speed"}), (None, None) for a plain
     label. A personality's voice wins over the one picked in the dialog; its speed multiplies yours."""

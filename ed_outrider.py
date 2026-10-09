@@ -13250,17 +13250,8 @@ def speech_file_path(name, root=None, resources=None):
     """[server] speech_file, resolved: relative to the repository folder, ~ expanded; the shipped file when unset.
     A relative name missing there but present in resources/ (a config written before the layout move, with
     speech_file = "speech.json") is taken from resources/, with a warning (review F22)."""
-    root, resources = root or SCRIPT_DIR, resources or outrider.RESOURCES_DIR
-    if not name:
-        return SPEECH_FILE
-    raw = os.path.expanduser(str(name))
-    path = os.path.join(root, raw)
-    moved = os.path.join(resources, raw)
-    if not os.path.isabs(raw) and not os.path.exists(path) and os.path.exists(moved):
-        print(f"[server] speech_file = {name!r}: not found in {root}; using {moved} (it moved to resources/). "
-              f"Change the config to say so.", file=sys.stderr)
-        return moved
-    return path
+    return outrider.speech.resolve_speech_file(name, root or SCRIPT_DIR, SPEECH_FILE, resources or outrider.RESOURCES_DIR,
+                                               warn=lambda text: print(text, file=sys.stderr))
 
 
 def migrate_old_layout(db_path, root=None, data=None, log=print):
