@@ -2567,7 +2567,8 @@ function render() {
   document.getElementById("nowView").hidden = view !== "now";
   if (view === "now") renderNow(); else renderSurface();   // Now's map, or the on-body strip's copy
   nowWake();
-  if (view === "map") { loadMap(); drawMap(); }
+  // opening the map asks again (Codex F5: the system's own history and scans changed while it was closed, A -> B -> A)
+  if (view === "map") { if (!M.open) M.key = null; M.open = true; loadMap(); drawMap(); } else M.open = false;
   if (view === "hwy") { loadHwy(); loadRich(); }
   refreshPop();
   const jr = effRange();
@@ -4368,7 +4369,7 @@ mEl("mReset").onclick = () => { M.yaw = -0.5; M.pitch = 0.45; M.zoom = 1; M.panX
 
 async function loadMap() {
   const p = data && data.position; if (!p) return;
-  const key = `${p.id64}|${mSettings.radius}|${mSettings.path}|${mSettings.boost ? 1 : 0}`;
+  const key = `${posId()}|${mSettings.radius}|${mSettings.path}|${mSettings.boost ? 1 : 0}`;   // the exact id, not a rounded number
   if (key === M.key) return;
   M.key = key; M.loading = true;
   mEl("mStatus").textContent = "loading…";
@@ -4385,7 +4386,10 @@ async function loadMap() {
       (d.boost && d.boost.error ? ` · <span class="err">${esc(d.boost.error)}</span>` : "") +
       (d.boost && !d.boost.error ? ` · <span class="boost">${d.boost.points.length} boost star${d.boost.points.length === 1 ? "" : "s"}` +
         (nearestN ? `, nearest neutron <span class="copy" data-name="${esc(nearestN.name)}" title="click to copy">${esc(nearestN.name)}</span> ${nearestN.distance} ly` : "") + `</span>` : "");
-  } catch (err) { mEl("mStatus").textContent = "map failed: " + err.message; M.key = null; }
+  } catch (err) {
+    if (M.key !== key) return;   // an older request's failure: the newer one's state stays (Codex F6)
+    mEl("mStatus").textContent = "map failed: " + err.message; M.key = null;
+  }
   M.loading = false; drawMap();
 }
 

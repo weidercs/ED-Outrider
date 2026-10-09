@@ -2,6 +2,13 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Codex review fixes: the map
+- The map kept what it had for a system while it was closed: leave a system and come back (or scan in it) with the
+  map in another tab, and it showed the old trace and markers (Codex F5). Opening the map asks again. Its cache key
+  is the system's exact id (`posId()`), not a number JavaScript rounds past 2^53.
+- An older map request failing after a newer one had answered said "map failed" over the newer one's map and dropped
+  its key, so a third request's answer could be thrown away (Codex F6): an older failure is ignored now.
+
 ## 2026-10-09 · Codex review fixes: the booster and trade routes
 - A Guardian FSD booster switched off still added its light years to the range, the fuel figures and a route's hops
   (Codex F3): it counts only while powered, as the fleet's fitting already had it.

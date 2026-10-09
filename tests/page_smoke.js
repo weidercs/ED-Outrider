@@ -4383,6 +4383,9 @@ const settle = async maxMs => {
       if (s === "api/system/88") return later({error: "late"}, 400);
       if (/^api\/find\?name=slow/.test(s)) return later({error: "slow lookup"}, 200);
       if (/^api\/find\?name=fast/.test(s)) return later({error: "fast lookup"}, 10);
+      if (s.startsWith("api/map?") && w.__ooo === "map")
+        return /radius=100&/.test(s) ? later(null, 200, "old failure") : later({points: [], radius: 200, marker: "new"}, 10);
+      if (s.startsWith("api/map?") && w.__ooo === "reopen") { w.__mapN++; return later({points: [], radius: 50}, 5); }
       if (s.startsWith("api/firsts") && w.__ooo === "firsts") return nFirsts++ === 0 ? later(null, 200, "old failure") : later(firsts, 10);
       return realF(u, o);
     };
@@ -4419,14 +4422,31 @@ const settle = async maxMs => {
       const ok = !!firstsData && !firstsData.error;
       data.scan_version = sv; firstsKey = null; return ok; })()`);
     w.__ooo = null;
+    if (here) {
+      // #19 (Codex F6): an older map request failing after a newer one answered: the newer one's key and data stay
+      w.__ooo = "map";
+      got.map = await w.eval(`(async () => {
+        const r0 = mSettings.radius; M.key = null;
+        mSettings.radius = "100"; const p1 = loadMap(); mSettings.radius = "200"; const p2 = loadMap();
+        await Promise.all([p1, p2]);
+        const r = [!!M.key && M.key.includes("|200|"), /map failed/.test(mEl("mStatus").textContent), M.data && M.data.marker];
+        mSettings.radius = r0; M.key = null; return r; })()`);
+      // #20 (Codex F5): leaving the map and coming back asks again (the system's history changed meanwhile: A -> B -> A)
+      w.__ooo = "reopen"; w.__mapN = 0;
+      got.mapReopen = await w.eval(`(async () => {
+        const v0 = view; view = "map"; render(); await new Promise(r => setTimeout(r, 40));
+        const n1 = __mapN; view = "near"; render(); view = "map"; render(); await new Promise(r => setTimeout(r, 40));
+        const n = [n1, __mapN]; view = v0; render(); M.key = null; return n; })()`);
+    } else { got.map = [true, false, "new"]; got.mapReopen = [1, 2]; }
+    w.__ooo = null;
     await sleep(450);   // the pinned system's late answer lands after the unpin: dropped
     w.fetch = realF;
     w.eval("loadFirsts(); render()");
     await sleep(300);
-    const want = {onbody: "new", pin: [true, true, true], find: "fast lookup", firsts: true};
+    const want = {onbody: "new", pin: [true, true, true], find: "fast lookup", firsts: true, map: [true, false, "new"], mapReopen: [1, 2]};
     const goodO = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodO;
-    console.log(goodO ? "OK" : "FAIL", "| answers out of order |", goodO ? "on-body strip, a pin's loading, Find, a failed older firsts: the newest answer kept" : JSON.stringify(got), errors.slice(before));
+    console.log(goodO ? "OK" : "FAIL", "| answers out of order |", goodO ? "on-body strip, a pin's loading, Find, a failed older firsts, the map: the newest answer kept; the map asks again when reopened" : JSON.stringify(got), errors.slice(before));
   }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",
