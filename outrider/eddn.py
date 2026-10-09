@@ -108,7 +108,7 @@ NAVROUTE_WINDOW_S = 5     # NavRoute.json must be the one this NavRoute event wr
 NAVROUTE_TRIES = 11       # ...asked again on the lines after it while it is not (written late, NFS)
 FILE_WAIT_S = 10          # ...and on the server's tick (idle()) when no line comes: given up after this long
 SIGNAL_QUIET_S = 3        # a batch of FSSSignalDiscovered lines goes this long after its last line with none after it
-SIGNAL_MAX_S = 300        # ...and is dropped when the line that would send it is this much later (EDDN was off meanwhile)
+SIGNAL_MAX_S = 300        # ...and dropped on the tick when it waited this long (EDDN stopped building meanwhile)
 
 
 def _seconds(ts):
@@ -357,10 +357,6 @@ def signals_message(ev, session):
         return None
     batch = session.pending.pop("signals", None)
     session.pending.pop("signals_since", None)
-    if batch:
-        a, b = _seconds(batch[-1].get("timestamp")), _seconds(ev.get("timestamp"))
-        if a is None or b is None or b - a > SIGNAL_MAX_S:   # left over from before EDDN was switched off or held
-            return None
     return _signals_from(batch, session)
 
 
@@ -414,6 +410,9 @@ def idle(session, software_version, test=False):
         wait = session.pending.get(key)
         if not wait or not wait.get("origin"):
             continue
+        if wait["since"] is not None and session.now is not None and session.now - wait["since"] > FILE_WAIT_S:
+            session.pending.pop(key, None)   # waited too long (EDDN stopped building meanwhile): not sent late
+            continue
         origin = wait["origin"]
         data = _wait_check(session, key, filename, line=False)
         if not data:
@@ -422,6 +421,10 @@ def idle(session, software_version, test=False):
         if m:
             out.append((key, envelope(key, m, session, software_version, versions.get(key, 1), test), origin))
     since = session.pending.get("signals_since") or {}
+    if session.pending.get("signals") and since.get("at") is not None and session.now is not None \
+            and session.now - since["at"] > SIGNAL_MAX_S:   # left over from before EDDN stopped building: not sent
+        session.pending.pop("signals", None)
+        session.pending.pop("signals_since", None)
     if session.pending.get("signals") and since.get("origin") and since.get("at") is not None and session.now is not None \
             and session.now - since["at"] >= SIGNAL_QUIET_S \
             and session.located(session.pending["signals"][0].get("SystemAddress")):
@@ -431,6 +434,15 @@ def idle(session, software_version, test=False):
             out.append(("fsssignaldiscovered", envelope("fsssignaldiscovered", m, session, software_version, 1, test),
                         since["origin"]))
     return out
+
+
+def quiet(ev, session):
+    """A live line EDDN does not build (another uploader sends EDDN now): what EDDN waited on is theirs to send, and a
+    docking here is a visit EDDN did not see. Dropped, so none of it goes late once EDDN builds again."""
+    for key in ("signals", "signals_since", "navroute", *STATION_SCHEMAS):
+        session.pending.pop(key, None)
+    if ev.get("event") in VISIT_ENDS:
+        session.pending.pop("sent", None)
 
 
 # ---- EDDN's answers (docs/Developers.md "Server responses") ----

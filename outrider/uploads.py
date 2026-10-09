@@ -326,7 +326,7 @@ class UploadHub:
     sets one: State.set_upload)."""
 
     def __init__(self, db, builders=None, enabled=None, clock=time.time, max_age=MAX_AGE_S, save=None, holds=None,
-                 max_ages=None, idlers=None, follow=None):
+                 max_ages=None, idlers=None, follow=None, quiet=None):
         self.db = db
         self.builders = dict(builders or {})
         self.holds = dict(holds or {})
@@ -335,6 +335,9 @@ class UploadHub:
         # follow(service): wanted though not queueing now (another uploader has it): its mark moves with the lines,
         # so nothing that uploader sent is caught up later
         self.follow = follow or (lambda service: False)
+        # quiet(ev, session): a live line a service does not build (another uploader has it): what it was waiting on
+        # in the session is dropped, so nothing from that stretch goes once it builds again (EDDN's waits)
+        self.quiet = dict(quiet or {})
         self.clock, self.max_age = clock, max_age
         self.max_ages = dict(max_ages or {})   # {service: seconds}: a service's own limit, under max_age (EDDN's hour)
         self.save = save                 # save(marks): stores the marks (State: meta upload_marks)
@@ -446,6 +449,8 @@ class UploadHub:
         on = [s for s in self.builders if self.enabled(s)]
         pos = position(b, offset)
         for s in self.builders:
+            if s not in on and s in self.quiet:
+                self.quiet[s](ev, self.session)
             if s not in on and self.follow(s) and self.after_mark(s, pos):
                 self.set_mark(s, pos, ev.get("timestamp"))
         return self._queue(ev, b, offset, self.session, on)
@@ -638,6 +643,8 @@ async def upload_loop(service, db, send, on, clock=time.time, sleep=None, report
 
 LEASE_DIR = ".outrider"   # a subfolder of the journal folder: Elite and other tools read only its top level
 LEASE_STALE_S = 300       # another instance's lease counts while its content changed this recently (by OUR clock)
+LEASE_ABANDONED_S = 3600  # ...and one first seen untouched this long (its mtime: the file server's clock, hence the hour)
+#                           is stale at once: a crash's leftover from long ago does not block uploads after a start
 
 
 def lease_path(journal_dir, instance):
@@ -696,7 +703,7 @@ class Leases:
                     # first sight: one left by a crash long ago is stale now, not LEASE_STALE_S from now. Its mtime
                     # comes from another clock (the file server's), hence the margin
                     try:
-                        old = now - os.path.getmtime(path) > 2 * LEASE_STALE_S
+                        old = now - os.path.getmtime(path) > LEASE_ABANDONED_S
                     except OSError:
                         old = False
                     self.seen[path] = prev = (content, now - LEASE_STALE_S - 1 if old else now)

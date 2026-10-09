@@ -616,6 +616,31 @@ class CoreFixes(MarksAndCatchUp):
         self.assertEqual([os.path.basename(p) for p in U.glob_journals(self.dir)],
                          ["Journal.211015123456.01.log", "Journal.2026-10-08T100000.01.log"])
 
+    def test_handover_mark_in_an_old_format_file(self):
+        """Another instance's handover mark in an old-format file compares by time with the reader's end."""
+        self.write(header(now_ts(900)), loadgame(now_ts(899)))
+        self.j.scan_dir(self.dir, commit_each=True, upload="catchup")
+        U.write_lease(self.dir, "other1", {"host": "x", "services": [], "stopped": True,
+                                           "marks": {"eddn": ["Journal.261009120000.01.log", 10, None]}})
+        self.state.refresh_leases()
+        self.assertEqual(self.state.upload_start_mark("eddn")[0][0], os.path.basename(self.path))   # 2026-10-09 is past the end: ours
+        U.write_lease(self.dir, "other1", {"host": "x", "services": [], "stopped": True,
+                                           "marks": {"eddn": ["Journal.261008090000.01.log", 10, None]}})
+        self.assertEqual(self.state.upload_start_mark("eddn")[0], ("Journal.261008090000.01.log", 10))   # before the end: theirs
+
+    def test_eddn_waits_dropped_while_another_uploader_has_it(self):
+        self.write(header(now_ts(900)), loadgame(now_ts(899)), self.jump(800, "Here"))
+        self.j.scan_dir(self.dir, commit_each=True, upload="catchup")
+        self.state.uploads_hub.builders = {"eddn": self.state.eddn_build}
+        self.state.set_upload("eddn", True)
+        self.write({"timestamp": now_ts(700), "event": "FSSSignalDiscovered", "SystemAddress": hash("Here") % 1000, "SignalName": "X"})
+        self.j.scan_dir(self.dir, upload="live")
+        self.assertIn("signals", self.state.uploads_hub.session.pending)
+        self.state.edmc = {"running": True, "eddn": True, "edsm": False, "inara": False}
+        self.write({"timestamp": now_ts(600), "event": "Music"})
+        self.j.scan_dir(self.dir, upload="live")
+        self.assertNotIn("signals", self.state.uploads_hub.session.pending)
+
     def test_another_uploader_keeps_the_mark_moving(self):
         """While EDMC (or another Outrider) has the service, its lines are theirs: the mark moves with them, and a
         restart neither catches them up nor, with the other uploader still there, catches up at all."""
@@ -672,18 +697,30 @@ class CoreFixes(MarksAndCatchUp):
         self.state.drop_leases()
         with open(path, encoding="utf-8") as f:
             self.assertEqual(set(json.load(f)["marks"]), {"eddn"})
+        self.state.uploads_hub.builders["edsm"] = self.state.uploads_hub.builders["eddn"]
+        self.state.set_upload("edsm", True)                              # switched on in the last minute
+        self.state.uploads_hub.marks["edsm"] = ["Journal.2026-10-08T100000.01.log", 5, None]
+        self.state.drop_leases()                                         # no refresh between: still in the note
+        with open(path, encoding="utf-8") as f:
+            self.assertEqual(set(json.load(f)["marks"]), {"eddn", "edsm"})
 
     def test_a_crashed_instances_old_lease_is_stale_at_once(self):
         U.write_lease(self.dir, "crashed1", {"host": "old", "services": ["eddn"]})
         path = U.lease_path(self.dir, "crashed1")
-        old = time.time() - 3 * U.LEASE_STALE_S
+        old = time.time() - 2 * U.LEASE_ABANDONED_S
         os.utime(path, (old, old))
         self.assertEqual(U.Leases("me").others([self.dir]), {})
         U.write_lease(self.dir, "fresh1", {"host": "new", "services": ["eddn"]})
         self.assertIn("fresh1", U.Leases("me").others([self.dir]))      # one written just now still counts
+        U.write_lease(self.dir, "skewed1", {"host": "behind", "services": ["eddn"]})
+        skew = time.time() - 20 * 60                                     # a file server's clock 20 minutes behind
+        os.utime(U.lease_path(self.dir, "skewed1"), (skew, skew))
+        self.assertIn("skewed1", U.Leases("me").others([self.dir]))     # still counts
 
     def test_instance_id_belongs_to_this_database(self):
+        ed_outrider.meta_set(self.db, "instance_id", "olderdb1")        # a database from before: keeps its id
         self.state.refresh_leases()
+        self.assertEqual(self.state.leases.instance, "olderdb1")
         iid = self.state.leases.instance
         ed_outrider.meta_set(self.db, "instance_where", "another-pc:/elsewhere.sqlite")   # as a copied database says
         self.state.leases = None
@@ -693,6 +730,14 @@ class CoreFixes(MarksAndCatchUp):
         self.state.leases = None
         self.state.refresh_leases()
         self.assertEqual(self.state.leases.instance, iid2)               # kept while it is the same file and computer
+        # moved on this computer (a restore, a new path): its own old note goes, not read as another Outrider's
+        import socket
+        U.write_lease(self.dir, iid2, {"host": "me", "services": [], "stopped": True, "marks": {"eddn": ["J.log", 1, None]}})
+        ed_outrider.meta_set(self.db, "instance_where", f"{socket.gethostname()}|/old/path.sqlite|1")
+        self.state.leases = None
+        self.state.refresh_leases()
+        self.assertFalse(os.path.exists(U.lease_path(self.dir, iid2)))
+        self.assertEqual(U.lease_marks([self.dir], self.state.leases.instance), {})
 
     def test_watch_prunes_the_outbox(self):
         import asyncio

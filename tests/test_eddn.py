@@ -279,14 +279,25 @@ class Signals(unittest.TestCase):
         self.assertEqual(E.build({"timestamp": "2026-10-08T10:07:00Z", "event": "Music"}, s, "v"), [])
 
 
-    def test_old_batch_dropped(self):
-        """A batch left over from before EDDN was switched off (its next line much later) is not sent."""
+    def test_left_over_batches_are_not_sent_late(self):
+        """What EDDN waited on while another uploader took over is dropped (quiet); one that waited on the tick past
+        SIGNAL_MAX_S is dropped; a batch whose next line comes much later in a catch-up still goes (no tick there)."""
         s = session()
         s.feed(FSDJUMP)
-        E.build(self.sig("Old", FSDJUMP["SystemAddress"], timestamp="2026-10-08T10:05:00Z"), s, "v")
-        later = {"timestamp": "2026-10-08T12:05:00Z", "event": "Music"}
-        self.assertEqual(E.build(later, s, "v"), [])
+        addr = FSDJUMP["SystemAddress"]
+        E.build(self.sig("Old", addr), s, "v")
+        E.quiet({"timestamp": "2026-10-08T10:06:00Z", "event": "Music"}, s)
         self.assertNotIn("signals", s.pending)
+        s.source, s.now = "J:1", 100.0
+        E.build(self.sig("Stuck", addr), s, "v")
+        s.now = 100.0 + E.SIGNAL_MAX_S + 1                            # EDDN stopped building, then came back
+        s.feed(dict(FSDJUMP, SystemAddress=1, StarSystem="Away"))     # (not located there now: idle would wait)
+        self.assertEqual(E.idle(s, "v"), [])
+        self.assertNotIn("signals", s.pending)
+        s.feed(FSDJUMP)
+        E.build(self.sig("Catch-up", addr, timestamp="2026-10-08T10:05:00Z"), s, "v")
+        out = E.build({"timestamp": "2026-10-08T12:05:00Z", "event": "Music"}, s, "v")
+        self.assertEqual([n for n, _ in out], ["fsssignaldiscovered"])
 
     def test_quiet_batch_goes_on_the_tick(self):
         """A batch with no line after it goes SIGNAL_QUIET_S after its last signal (2026-10-09), under

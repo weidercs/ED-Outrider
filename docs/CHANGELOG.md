@@ -2,6 +2,18 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Uploads: review of the bug-check fixes (branch EDMC-Functionality)
+- The upload note's identity: a database from before keeps its id; a new id (a moved or restored database on this
+  computer) removes its own old note, which was otherwise read as another Outrider's and could start an upload from its
+  old position. A copy of the database (Docker included, where every container has the same name and path) is told
+  apart by the file itself.
+- A crash's note is stale at once only when untouched for an hour (a file server's clock can be minutes behind); the
+  note written at shutdown includes a service switched on in its last minute; a handover position in an old-format
+  journal compares by time.
+- While another uploader sends EDDN, what EDDN was waiting on (signals, a market, a route) is dropped, and a docking
+  then counts as a new visit; one waiting past its time on the tick is dropped. A batch of signals in a catch-up is no
+  longer dropped for coming minutes before its next line.
+
 ## 2026-10-09 · Uploads: bug check, the page (branch EDMC-Functionality)
 - Settings → Uploads keeps its message line: refusals ("EDMC on this PC is sending..."), EDSM's "saved", and the
   config-file note were wiped by the redraw right after they were written, so they never showed.

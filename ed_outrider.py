@@ -5473,6 +5473,7 @@ class State:
                                                       enabled=self.upload_queueing, holds={"edsm": outrider.edsm.hold},
                                                       max_ages={"eddn": outrider.eddn.CATCHUP_MAX_S},
                                                       idlers={"eddn": self.eddn_idle}, follow=self.upload_wanted,
+                                                      quiet={"eddn": outrider.eddn.quiet},
                                                       save=lambda marks: meta_set(self.db, "upload_marks", marks))
         marks = meta_get(db, "upload_marks")   # how far each service has queued (live-only: a re-read keeps it)
         self.uploads_hub.marks = {k: v for k, v in marks.items() if isinstance(v, list)} if isinstance(marks, dict) else {}
@@ -9253,14 +9254,26 @@ class State:
         read the others' (and EDMC's switches on the game PC). Cheap: a few small files."""
         if self.leases is None:
             iid = meta_get(self.db, "instance_id")
-            # the id belongs to this computer and this database file: a database copied or restored elsewhere gets
-            # its own (two Outriders sharing one id would not see each other's leases)
-            where = f"{socket.gethostname()}:{self.db_file()}"
-            if not isinstance(iid, str) or not re.fullmatch(r"[A-Za-z0-9_-]{6,40}", iid) or meta_get(self.db, "instance_where") != where:
-                iid = secrets.token_hex(6)
+            # the id belongs to this computer and this database file (its path and inode: a copy has another inode,
+            # even in Docker where every container has the same name and path); a database copied or restored gets
+            # its own, since two Outriders sharing one id would not see each other's leases
+            host = socket.gethostname()
+            where = f"{host}|{self.db_file()}|{self.db_inode()}"
+            was = meta_get(self.db, "instance_where")
+            valid = isinstance(iid, str) and re.fullmatch(r"[A-Za-z0-9_-]{6,40}", iid)
+            if valid and was is None:   # a database from before the id was tied to its file: it keeps its id
+                meta_set(self.db, "instance_where", where)
+                self.db.commit()
+            elif not valid or was != where:
+                old, iid = iid if valid else None, secrets.token_hex(6)
                 meta_set(self.db, "instance_id", iid)
                 meta_set(self.db, "instance_where", where)
                 self.db.commit()
+                # the old id's notes on this computer were this Outrider's (a moved or restored database): gone, so
+                # they are not read as another instance's. On another computer that id may still be running: kept
+                if old and isinstance(was, str) and re.split(r"[|:]", was)[0] == host:
+                    for d in LIVE_DIRS:
+                        outrider.uploads.write_lease(d, old, None)
             self.leases = outrider.uploads.Leases(iid)
             self._lease_beat = 0
         self._lease_beat += 1
@@ -9278,7 +9291,7 @@ class State:
         """At shutdown: this instance's leases claim nothing any more (another may take over at once), but keep its
         marks as a handover note: an instance switched on later starts where this one stopped."""
         if self.leases:
-            wanted = getattr(self, "_lease_wanted", [])   # what it was uploading when it stopped
+            wanted = [s for s in outrider.uploads.SERVICES if self.upload_wanted(s)]   # what it uploads as it stops
             info = {"host": socket.gethostname(), "services": [], "stopped": True, "version": outrider.__version__,
                     "marks": {s: m for s, m in self.uploads_hub.marks.items() if s in wanted}}
             for d in LIVE_DIRS:
@@ -9306,6 +9319,13 @@ class State:
             return ""
         return os.path.realpath(f) if f else ""
 
+    def db_inode(self):
+        """The database file's inode (0 for an in-memory one): a copy of the file has another."""
+        try:
+            return os.stat(self.db_file()).st_ino if self.db_file() else 0
+        except OSError:
+            return 0
+
     def journal_end(self):
         """Where the reader has got to in the live journals, as a mark: (file name, the byte before the next line)
         (a mark is the last line handled; the next line starts at the offset the reader has reached)."""
@@ -9320,7 +9340,7 @@ class State:
         there: no gap, nothing twice), else where the reader is now (switching on never uploads your history)."""
         theirs = outrider.uploads.lease_marks(LIVE_DIRS, self.leases.instance if self.leases else "").get(service)
         end = self.journal_end()
-        if theirs and (end is None or (theirs[0], theirs[1]) <= end):
+        if theirs and (end is None or outrider.uploads.pos_key(theirs) <= outrider.uploads.pos_key(end)):
             return (theirs[0], theirs[1]), theirs[2] if len(theirs) > 2 else None
         return end, None
 
