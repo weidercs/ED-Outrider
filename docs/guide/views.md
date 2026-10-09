@@ -155,8 +155,8 @@ are (the default), any other, or **All regions**. Each species shows your best t
   one colour.
 
 Click a species for its colours, each with what gives it ("Teal: M stars", or a material on the body for some
-bacteria), and a map of the galaxy with the regions it can grow in lit and your samples as dots; hover the map for
-each region's name. The line above the boxes counts it up: "Inner Orion Spur: 45 of 101 possible species found ·
+bacteria), and a map of the galaxy with the regions it can grow in lit and your samples as dots; hover a lit region
+for its name and your completion there. The line above the boxes counts it up: "Inner Orion Spur: 45 of 101 possible species found ·
 11.70% complete for the species in this region · 43 sold · …".
 
 **Completion** counts what you have done, not only what is finished: each species that can grow in the region scores

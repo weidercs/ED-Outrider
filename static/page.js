@@ -4329,7 +4329,7 @@ function clDrawSide() {
   if (side.dataset.html !== html) { side.innerHTML = html; side.dataset.html = html; CL.map = null; }
   clDrawMap();
 }
-// hovering the map names the region under the pointer, with whether the species can grow there and your completion
+// hovering a lit region of the map (one the species can grow in) names it, with your completion there; elsewhere nothing
 document.getElementById("clSide").addEventListener("mousemove", e => {
   const cv = e.target.closest && e.target.closest("#clMap"), tip = document.getElementById("clMapTip");
   if (!tip) return;
@@ -4337,10 +4337,10 @@ document.getElementById("clSide").addEventListener("mousemove", e => {
   const box = cv.getBoundingClientRect(), n = RG.data.size;
   const c = Math.floor((e.clientX - box.left) / box.width * n), r = n - 1 - Math.floor((e.clientY - box.top) / box.height * n);
   const v = c >= 0 && r >= 0 && c < n && r < n ? RG.cells[r * n + c] : 0;
-  const reg = v && CL.data && (CL.data.regions || []).find(x => x.id === v);
-  if (!reg) { tip.hidden = true; return; }
-  const allow = CL.species && !CL.species.error && CL.species.regions ? CL.species.regions[String(v)] : undefined;
-  const grows = allow === "yes" ? "can grow here" : allow === "parts" ? "only in parts" : allow === undefined ? "" : "not here";
+  const allow = v && CL.species && !CL.species.error && CL.species.regions ? CL.species.regions[String(v)] : undefined;
+  const reg = allow && CL.data && (CL.data.regions || []).find(x => x.id === v);
+  if (!reg) { tip.hidden = true; return; }   // a faint region (it cannot grow there), outside the map, or not loaded yet
+  const grows = allow === "parts" ? "only in parts" : "can grow here";
   const words = [reg.name, grows, reg.completion != null ? `${clPct(reg.completion)} complete` : ""].filter(Boolean).join(" · ");
   if (tip.textContent !== words) tip.textContent = words;
   tip.hidden = false;

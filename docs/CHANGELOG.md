@@ -2,6 +2,10 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Exobiology checklist: the map names only the regions it grows in
+- The species panel's map shows a region's name on hover only over a lit region (one the species can grow in, or in
+  parts of); the faint ones say nothing.
+
 ## 2026-10-09 · Exobiology checklist: completion by region, region names on the map
 - Each region in the list shows its completion ("Dryman's Point — 4.36%"), and the line above the boxes says it for
   the region shown ("… · 11.70% complete for the species in this region"): the average, over the species that can
