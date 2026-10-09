@@ -2,6 +2,13 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Exobiology checklist, part A: the table (outrider/checklist.py)
+- The checklist's pure core: for a region (or all), every species the rules know, by genus: whether it can grow
+  there ("parts" when only near Guardian sites, in tuber zones, by nebulae or in one system; a species with no rules
+  is possible, not ruled out), your best state there (sold > aboard > lost > logged), and its colour variants with
+  what gives each. The rules' duplicate under a misspelled name (Stratum Aranaemus) is merged by game id, and runs
+  match by species id. `outrider.bio.ruleset_region_ok` is shared with `region_allows`. Not on the page yet.
+
 ## 2026-10-09 · Spansh's "Terraformable" priced as terraformable (CACHE_VERSION 17)
 - Spansh's system dumps now spell a terraformable body's state "Terraformable" (it was "Candidate for terraforming").
   Outrider did not know the new spelling, so every terraformable body known only from Spansh was priced as a plain

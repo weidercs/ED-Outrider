@@ -931,8 +931,13 @@ def region_allows(name, region):
     sp = next((s for s in R["species"] if s["name"].lower() == name.lower()), None)
     if sp is None:
         return None
-    s = {"region": region}
-    return any("regions" not in r or _check("regions", r["regions"], None, s) is not False for r in sp["rulesets"])
+    return any(ruleset_region_ok(r, region) for r in sp["rulesets"])
+
+
+def ruleset_region_ok(ruleset, region):
+    """Whether one ruleset lets its species grow in region number `region` (no region filter: anywhere). The rules
+    must be loaded (load_rules)."""
+    return "regions" not in ruleset or _check("regions", ruleset["regions"], None, {"region": region}) is not False
 
 
 # --------------------------------------------------------------------------
