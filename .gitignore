@@ -23,6 +23,8 @@ resources/bio_rules.json.tmp
 
 # private planning notes, never committed
 project/
+# the EDDN listener (a developer's tool: watches EDDN's relay for what Outrider sends), its environment and its data
+eddn_listener/
 
 # Python virtual environment
 .venv/
