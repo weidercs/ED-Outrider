@@ -6,6 +6,7 @@ without a second list to keep in step. A change edits the file itself, key by ke
 this version does not know stay as they were; a key the file lacks goes at the end of its section.
 """
 import json
+import math
 import re
 
 try:
@@ -98,14 +99,20 @@ def entries(text, choices=None):
     return out
 
 
+def number(v):
+    """A TOML number for v by its type: an int as written, a float exactly (repr: the shortest form that reads back as
+    the same value) and always as a float ("2.0", never "2"), so a decimal setting reads back as a decimal."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return str(v)
+    return str(v) if isinstance(v, int) else repr(float(v))
+
+
 def literal(v):
     """A TOML literal for a value from the page."""
     if isinstance(v, bool):
         return "true" if v else "false"
-    if isinstance(v, int):
-        return str(v)
-    if isinstance(v, float):
-        return f"{v:g}" if v == v and abs(v) < 1e15 and "e" not in f"{v:g}" else repr(v)
+    if isinstance(v, (int, float)):
+        return number(v)
     if isinstance(v, str):
         return basic_string(v)
     if isinstance(v, list):
@@ -203,9 +210,12 @@ def coerce(kind, value, choices=()):
     if kind == "numbers":
         items = re.split(r"[\s,]+", value.strip()) if isinstance(value, str) else value
         try:
-            return [int(float(x)) if float(x) == int(float(x)) else float(x) for x in items if str(x).strip()]
+            nums = [float(x) for x in items if str(x).strip()]
         except (TypeError, ValueError):
             raise ValueError("must be numbers, separated by commas") from None
+        if not all(math.isfinite(x) for x in nums):   # inf, 1e999: int() of it raised OverflowError (a 500)
+            raise ValueError("must be numbers, separated by commas")
+        return [int(x) if x == int(x) else x for x in nums]
     if kind == "table":
         if isinstance(value, str):
             try:

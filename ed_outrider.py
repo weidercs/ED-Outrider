@@ -621,7 +621,7 @@ def load_config(path):
     try:
         with open(path, "rb") as f:
             raw = f.read()
-        return tomllib.loads(raw.decode("utf-8"))
+        return tomllib.loads(raw.decode("utf-8-sig"))   # -sig: Notepad's and PowerShell's "UTF-8 with BOM" too
     except FileNotFoundError:
         return {}
     except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as e:   # UnicodeDecodeError: not saved as UTF-8
@@ -826,9 +826,15 @@ def settings_from(cfg, args, env_journals=None, detected=((), ())):
         print(f"config: [server] game_pc = {game_pc!r} must be auto, true or false; using auto", file=sys.stderr)
         game_pc = "auto"
     password = sv.get("password", "")
-    if not isinstance(password, str):
-        print("config: [server] password must be a string in quotes; ignored (no password)", file=sys.stderr)
-        password = ""
+    if isinstance(password, (int, float)) and not isinstance(password, bool):
+        print(f"config: [server] password = {password!r} should be in quotes; taken as {str(password)!r}", file=sys.stderr)
+        password = str(password)
+    elif not isinstance(password, str):
+        # never "no password": the server could be open to the network. An unknown one instead: devices on the
+        # network cannot sign in until the file is fixed (this PC needs none)
+        print("config: [server] password must be text in quotes; until it is, nobody can sign in from another device",
+              file=sys.stderr)
+        password = secrets.token_hex(24)
     if args.journals:
         live = list(args.journals)
     elif env_journals:
@@ -964,6 +970,9 @@ def config_text(st):
     p = lambda v: q(str(v).replace("\\", "/"))                # a path: Windows' backslashes written as slashes
     lst = lambda vs: "[" + ", ".join(q(v) for v in vs) + "]"
     plst = lambda vs: "[" + ", ".join(p(v) for v in vs) + "]"
+    # a number by its type: a decimal setting stays a TOML float even when whole ("1.0", not "1"), so the Server
+    # settings editor offers it as a decimal (a whole value read back as an int refused 1.3: the sweep of 2026-10-09)
+    n = outrider.config_edit.number
     return f"""# ED Outrider configuration. Every key is optional; command-line flags and the ED_JOURNALS
 # environment variable override this file, and journal folders are auto-detected when absent.
 
@@ -978,11 +987,11 @@ allowed_hosts = {lst(st["allowed_hosts"])}   # extra names the page may be opene
 password = {q(st["password"])}   # devices on your network sign in with it ("" = none); this PC itself never needs it
 game_pc = {q(st["game_pc"] if st["game_pc"] == "auto" else ("true" if st["game_pc"] else "false"))}   # is this the PC the game runs on? "auto" (off inside a container, e.g. Docker), "true" or "false". Off: no auto honk, auto-target, tablet rail, co-pilot button, clipboard or playing on this PC
 update_check = {"true" if st["update_check"] else "false"}   # once a day, ask GitHub whether a newer Outrider release is out, and say so on the page (only the request: nothing about you is sent)
-radius = {st["radius"]:g}      # ly: the sphere of nearby systems the page lists
-radius_choices = [{", ".join(f"{x:g}" for x in st["radius_choices"])}]   # ly: what the page's radius dropdown offers
+radius = {n(st["radius"])}      # ly: the sphere of nearby systems the page lists
+radius_choices = [{", ".join(n(x) for x in st["radius_choices"])}]   # ly: what the page's radius dropdown offers
 backup_dir = {p(st["backup_dir"])}   # backups: dated database zips, and every live journal copied once into its journals/
 backup_keep = {st["backup_keep"]}   # dated database zips kept (the journal archive is never pruned)
-backup_every_days = {st["backup_every_days"]:g}   # automatic backup at start when the last is older than this, and when the game quits (0 = off)
+backup_every_days = {n(st["backup_every_days"])}   # automatic backup at start when the last is older than this, and when the game quits (0 = off)
 speech_file = {p(_root_relative(st["speech_file"]))}   # the spoken alerts' lines, per personality
 db = {p(_root_relative(st["db"]))}   # the database: everything Outrider knows (relative paths start at the Outrider folder)
 
@@ -994,13 +1003,13 @@ sounds = {"true" if st["sounds"] else "false"}   # the alert sounds on (the page
 body_highlight_level = {st["body_highlight"]}     # Here: a body's row turns green if scan + map pays this, no bonuses
 biology_highlight_value = {st["bio_highlight"]}  # Here: a body's bio turns violet if it could pay this, no x5 bonus
 body_max_value_include_bonus = {"true" if st["max_include_bonus"] else "false"}  # Here: Max counts first-discovery/mapped/footfall bonuses
-high_gravity = {st["high_gravity"]:g}   # g: the approach briefing warns about landing here or higher with a lot of data aboard
+high_gravity = {n(st["high_gravity"])}   # g: the approach briefing warns about landing here or higher with a lot of data aboard
 module_warn = {st["module_warn"]}   # %: show core module health (FSD, power plant, thrusters, life support, sensors, fuel scoop, AFMU) when one is under this
-surface_alt = {st["surface_alt"]:g}   # m: the surface map on Now shows below this altitude (hides 100 m higher)
-rig_spacing = {st["rig_spacing"]:g}   # m: the ring round a Rhino mining rig (an estimate: rigs closer than this may not deploy; 0 = no ring)
-surface_map_min = {st["surface_map_min"]:g}   # m: the surface map never shows less than this across
+surface_alt = {n(st["surface_alt"])}   # m: the surface map on Now shows below this altitude (hides 100 m higher)
+rig_spacing = {n(st["rig_spacing"])}   # m: the ring round a Rhino mining rig (an estimate: rigs closer than this may not deploy; 0 = no ring)
+surface_map_min = {n(st["surface_map_min"])}   # m: the surface map never shows less than this across
 surface_map_strip = {"true" if st["surface_map_strip"] else "false"}   # also a small copy of the map in the on-body strip
-rig_warn = {st["rig_warn"]:g}   # m: say so when a mining rig is this far from the Rhino (again at 4,500; the game destroys it at 5,000)
+rig_warn = {n(st["rig_warn"])}   # m: say so when a mining rig is this far from the Rhino (again at 4,500; the game destroys it at 5,000)
 voice = {q(st["voice"])}          # spoken alerts: Piper voice (downloaded into data/piper-voices/ on first use; one picked on the page wins)
 voice_fallback = {q(st["voice_fallback"])}  # used while the voice above is missing
 speech_styles = [{", ".join(q(x) for x in st["speech_styles"])}]   # spoken alerts' personalities: any of the styles in the speech file
@@ -1011,12 +1020,12 @@ speak_bio_signals = {"true" if st["speak_bio_signals"] else "false"}   # say bio
 speak_geo_signals = {"true" if st["speak_geo_signals"] else "false"}   # and geological ones
 speak_mapped = {"true" if st["speak_mapped"] else "false"}   # after mapping a planet: what it pays, whether the efficiency bonus landed, what is next
 codex_interesting = {"true" if st["codex_interesting"] else "false"}   # a codex find (✦) makes a body worth stopping for: on Now's next stops and in the leaving warnings
-speech_speed = {st["speech_speed"]:g}   # spoken alerts' pace: 1 is the voice's own, 1.3 is 30% faster (0.5 to 2)
+speech_speed = {n(st["speech_speed"])}   # spoken alerts' pace: 1 is the voice's own, 1.3 is 30% faster (0.5 to 2)
 speech_names = {q(st["speech_names"])}   # what the voice calls you, comma separated: one is picked at random each time
 
 [spansh]
 concurrency = {st["concurrency"]}          # body-detail fetches in flight after an arrival
-map_max_radius = {st["map_max_radius"]:g}    # ly: the largest 3D map the page may ask for
+map_max_radius = {n(st["map_max_radius"])}    # ly: the largest 3D map the page may ask for
 map_max_pages = {st["map_max_pages"]}        # pages of 500 systems fetched for the map
 watch_firsts = {"true" if st["watch_firsts"] else "false"}   # check your unsold first discoveries on Spansh in the background (one request every 10-30 s; each system daily for a month, then weekly; at most 150 a day) for someone else's scans
 
@@ -1029,8 +1038,8 @@ server_player = {q(st["server_player"])}   # auto (the first of pw-play, paplay,
 # and Primary Fire needs a keyboard binding (key = "auto" reads it, modifiers too, from your controls preset).
 enabled = {"true" if st["autohonk"]["enabled"] else "false"}   # the page's Settings can switch it on and off too
 key = {q(st["autohonk"]["key"])}   # "auto": Primary Fire's keyboard binding from your controls preset; or e.g. KEY_KP0, KEY_LEFTALT+KEY_K
-delay = {st["autohonk"]["delay"]:g}   # seconds after arriving before the press (the jump tunnel ignores input)
-hold = {st["autohonk"]["hold"]:g}    # seconds to hold the trigger (the scanner fires once charged)
+delay = {n(st["autohonk"]["delay"])}   # seconds after arriving before the press (the jump tunnel ignores input)
+hold = {n(st["autohonk"]["hold"])}    # seconds to hold the trigger (the scanner fires once charged)
 skip_honked = {"true" if st["autohonk"]["skip_honked"] else "false"}   # leave systems you have already honked alone
 announce = {"true" if st["autohonk"]["announce"] else "false"}   # say "System scan completed, 12 bodies discovered" (or all found) afterwards
 
@@ -1050,11 +1059,11 @@ clipboard = {"true" if st["highway"]["clipboard"] else "false"}   # on arriving 
 # prints the steps with your keys). The keys go to whichever window has focus. It is key-press automation of the same
 # kind as auto honk: check Frontier's rules for yourself.
 autotarget = {"true" if st["highway"]["autotarget"] else "false"}   # auto-target the next route system after a supercharge (the Plot Route tab switches it too)
-autotarget_delay = {st["highway"]["autotarget_delay"]:g}   # seconds after the supercharge (0 to 60)
+autotarget_delay = {n(st["highway"]["autotarget_delay"])}   # seconds after the supercharge (0 to 60)
 autotarget_entry = {q(st["highway"]["autotarget_entry"])}   # "type" the name on the virtual keyboard (US layout), or "paste" it (wl-copy/xclip, then Ctrl+V)
-autotarget_map_wait = {st["highway"]["autotarget_map_wait"]:g}   # seconds to wait for the galaxy map to open (and close) before giving up
-autotarget_search_wait = {st["highway"]["autotarget_search_wait"]:g}   # seconds after submitting the search for the map to fly to the system
-autotarget_key_delay = {st["highway"]["autotarget_key_delay"]:g}   # seconds between typed characters
+autotarget_map_wait = {n(st["highway"]["autotarget_map_wait"])}   # seconds to wait for the galaxy map to open (and close) before giving up
+autotarget_search_wait = {n(st["highway"]["autotarget_search_wait"])}   # seconds after submitting the search for the map to fly to the system
+autotarget_key_delay = {n(st["highway"]["autotarget_key_delay"])}   # seconds between typed characters
 autotarget_keys = {{{", ".join(f"{k} = {q(v)}" for k, v in st["highway"]["autotarget_keys"].items())}}}   # override a step's keys, e.g. {{ GalaxyMapOpen = "KEY_LEFTALT+KEY_RIGHTALT+KEY_T", Enter = "KEY_KPENTER" }}; otherwise read from your controls preset
 autotarget_search = {lst(st["highway"]["autotarget_search"])}   # from the opened galaxy map into its search field (a camera turn first: the map reopens on its last panel)
 autotarget_submit = {lst(st["highway"]["autotarget_submit"])}   # select the search's suggestion once the name is in (it lists it after a moment)
@@ -1062,17 +1071,17 @@ autotarget_plot = {lst(st["highway"]["autotarget_plot"])}   # the "plot route" s
 autotarget_dry_run = {"true" if st["highway"]["autotarget_dry_run"] else "false"}   # only log the steps it would take (nothing is pressed)
 efficiency = {st["highway"]["efficiency"]}   # the neutron plotter's efficiency (%): lower takes longer neutron detours
 conservative = {"true" if st["highway"]["conservative"] else "false"}   # the plot form starts with "Conservative range" ticked: plot jumps a margin shorter than the ship's range
-conservative_ly = {st["highway"]["conservative_ly"]:g}   # that margin (ly, 0.5 to 50): about this many ly shorter jumps, times the supercharge on a neutron jump
+conservative_ly = {n(st["highway"]["conservative_ly"])}   # that margin (ly, 0.5 to 50): about this many ly shorter jumps, times the supercharge on a neutron jump
 background_image = {p(_root_relative(st["highway"]["background_image"])) if st["highway"]["background_image"] else '""'}   # a top-down galaxy image you downloaded (PNG, JPEG, WebP or GIF) under the map; Outrider ships none
-background_extent = [{", ".join(f"{x:g}" for x in st["highway"]["background_extent"])}]   # ly: the image's edges, [xmin, xmax, zmin, zmax] (the usual galaxy images: -45000, 45000, -20000, 70000)
-background_opacity = {st["highway"]["background_opacity"]:g}   # 0.05 to 1
+background_extent = [{", ".join(n(x) for x in st["highway"]["background_extent"])}]   # ly: the image's edges, [xmin, xmax, zmin, zmax] (the usual galaxy images: -45000, 45000, -20000, 70000)
+background_opacity = {n(st["highway"]["background_opacity"])}   # 0.05 to 1
 
 [assistant]
 enabled = {"true" if st["assistant"]["enabled"] else "false"}   # the voice's AI layer for questions the fixed phrases do not match (resources/ask.json); nothing is sent anywhere while false
 base_url = {q(st["assistant"]["base_url"])}   # an OpenAI-compatible endpoint, e.g. "http://localhost:11434/v1" (Ollama), "https://api.openai.com/v1"
 api_key = {q(st["assistant"]["api_key"])}   # stays on this PC ("" for a local model)
 model = {q(st["assistant"]["model"])}   # one that can call tools
-timeout = {st["assistant"]["timeout"]:g}   # seconds for the whole answer
+timeout = {n(st["assistant"]["timeout"])}   # seconds for the whole answer
 max_rounds = {st["assistant"]["max_rounds"]}   # tool rounds before it must answer
 
 [mcp]
@@ -5594,11 +5603,14 @@ class State:
         return self.config_path or CONFIG_PATH
 
     @staticmethod
-    def _config_settings(cfg):
+    def _config_settings(cfg, path=None):
         """settings_from on a parsed config alone (no flags, no environment, no auto-detected folders): what the file
-        says, and the problems settings_from reports on stderr (as a list)."""
+        says, and the problems settings_from reports on stderr (as a list). With `path`, the file is read here, inside
+        the same capture, so a file that does not parse says so (it showed defaults and no problem: the sweep)."""
         args = argparse.Namespace(journals=None, legacy=None, host=None, port=None, radius=None, db=None)
         with contextlib.redirect_stderr(io.StringIO()) as err:
+            if path is not None:
+                cfg = load_config(path) if os.path.exists(path) else {}
             st = settings_from(cfg, args, None, ([], []))
         return st, [x for x in err.getvalue().splitlines() if x.strip()]
 
@@ -5606,7 +5618,7 @@ class State:
         """Every config key the server knows, with its value (as the file has it, or the default), its kind and help;
         the password and the AI key only as set or not. Applied at the next start."""
         path = self.config_file()
-        st, problems = self._config_settings(load_config(path) if os.path.exists(path) else {})
+        st, problems = self._config_settings(None, path)
         # [eddn]/[edsm] are switched in Settings -> Uploads only (one place): not listed among the Server settings
         secs = [s for s in outrider.config_edit.entries(config_text(st), config_choices())
                 if s["section"] not in outrider.config_edit.HIDDEN_SECTIONS]
@@ -5627,12 +5639,12 @@ class State:
             sec = min(set(changes) & outrider.config_edit.HIDDEN_SECTIONS)
             return {"error": f"[{sec}] is switched in Settings -> Uploads"}, 400
         path = self.config_file()
-        cfg_now = load_config(path) if os.path.exists(path) else {}
-        st, before = self._config_settings(cfg_now)
+        st, before = self._config_settings(None, path)
+        existed = os.path.exists(path)
         kinds = {(s["section"], k["key"]): (k["kind"], k.get("choices", ()))
                  for s in outrider.config_edit.entries(config_text(st), config_choices()) for k in s["keys"]}
         try:
-            with open(path, encoding="utf-8") as f:
+            with open(path, encoding="utf-8-sig") as f:   # a BOM is dropped (and not written back)
                 text = f.read()
         except FileNotFoundError:
             text = config_text(st)
@@ -5673,7 +5685,7 @@ class State:
             os.replace(tmp, real)
         except OSError as e:
             return {"error": f"cannot write {path}: {e}"}, 500
-        return {"ok": True, "path": path, "changed": n, "backup": real + ".bak" if cfg_now or os.path.exists(real + ".bak") else None,
+        return {"ok": True, "path": path, "changed": n, "backup": real + ".bak" if existed or os.path.exists(real + ".bak") else None,
                 "restart": True}, 200
 
     SPEAKER_SEEN_S = 60   # a window that speaks asks for the payload at least every 25 s (the long poll)

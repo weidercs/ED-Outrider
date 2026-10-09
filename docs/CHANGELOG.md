@@ -2,6 +2,17 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Sweep fixes: the config file and Server settings
+- A decimal setting whose value is whole (speech speed 1, auto honk delay 2, radius 25...) takes a decimal again in
+  Server settings: it was offered and checked as a whole number. Numbers are written by their type ("1.0") and saved
+  exactly (a saved -45123.75 came back as -45123.8).
+- "inf" or 1e999 in a list of numbers is refused, not a server error.
+- `password = 1234` without quotes is taken as "1234"; a password that is not text at all now means nobody signs in
+  from another device until it is fixed. Before, both were dropped and the server ran with no password.
+- A config saved as "UTF-8 with BOM" (Notepad, PowerShell) is read, and saved back without the BOM; before, every
+  setting was at its default and Server settings could not save.
+- A config file that does not parse says so in Server settings (it showed the defaults and no problem).
+
 ## 2026-10-09 · Sweep fixes: packaging and scripts
 - Docker builds leave out the local tools git ignores (eddn_listener/ with its capture database, any .venv, run.sh,
   scripts/install.sh): they would have gone into the published image.
