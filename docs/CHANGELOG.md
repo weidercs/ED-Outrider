@@ -3,7 +3,7 @@
 Newest first, one entry per commit.
 
 ## 2026-10-08 · Uploads in the Data tile (branch EDMC-Functionality)
-- The header's Data tile has a line per upload in use, live: sent, waiting and refused in the last day, test and dry
+- The header's Data tile has a line per upload in use (each its own line), live: sent, waiting and refused in the last day, test and dry
   run marked, held or off said; EDSM's adds how many systems were new to EDSM (the all-time total on hover).
 
 ## 2026-10-08 · Uploads: EDSM's batches wait together (branch EDMC-Functionality)

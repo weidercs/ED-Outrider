@@ -7320,9 +7320,9 @@ function uploadLineHtml(u) {
     if (s === "edsm" && x.new_total) bits.push(`<span title="systems EDSM had never heard of until your upload: ${x.new_total.toLocaleString("en-US")} in all">${(x.new_24h || 0).toLocaleString("en-US")} new to EDSM</span>`);
     const mode = s === "eddn" && x.test ? " (test)" : s === "edsm" && x.dry_run ? " (dry run)" : "";
     const state = x.held ? ` <span class="bad" title="${esc(x.held)}">held</span>` : !x.on ? ` <span class="unk">off</span>` : "";
-    return `<b>${name}</b>${mode} ${bits.join(" · ")}${state}`;
+    return `<div title="uploads in the last 24 hours (Settings → Uploads has the detail)"><b>${name}</b>${mode} ${bits.join(" · ")}${state}</div>`;
   }).filter(Boolean);
-  return parts.length ? `<span title="uploads in the last 24 hours (Settings → Uploads has the detail)">${parts.join(" &nbsp; ")}</span>` : "";
+  return parts.join("");   // a line per service: the numbers can get long
 }
 function uploadsHtml(u) {
   if (!u) return `<div class="unk">not known yet</div>`;
