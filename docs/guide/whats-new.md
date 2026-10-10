@@ -11,6 +11,60 @@ Outrider behaves. When a new release is out, a small **⬆ Update** pill appears
 
 ---
 
+## 2026.10.20 · 10 October 2026
+
+**Checklists for your codex, an auto-target that waits for the game, and a legend for Here's icons.**
+
+### 🧬 Bio/Geo: what you have found, region by region
+
+The **Samples** tab is now **Bio/Geo**, with three parts: **My Samples** (your runs, as before), and two new
+checklists.
+
+- **Exo-Biology** shows every species, one box per genus, for a galactic region (where you are, any other, or all of
+  them): sold, aboard, lost or only logged, and how many of its colours you have. Click a species to drop its colours
+  down; beside the boxes are its picture (Canonn's, credited to the commander who took it) and a galaxy map of where it
+  can grow and where you sampled it. The region picker shows how complete each region is for you.
+- **Geology** does the same for the codex's geology and anomalies (fumaroles, geysers, Lagrange clouds, the lettered
+  anomalies), with how many sites other commanders have reported in the region.
+- Both work on the tablet, the list and the details scrolling on their own.
+
+<p align="center">
+  <img src="../images/checklist.png" alt="The Exo-Biology checklist: genus boxes with each species' state and colours found, and a species' colours, picture and galaxy map beside them" width="900">
+</p>
+
+### 🎯 Auto-target waits for the game's "danger"
+
+The game marks you "in danger" for 15 to 26 seconds after every jump, and after entering supercruise, with nothing
+around. **Target next** pressed then used to refuse again and again. Now it says *"Not targeting due to danger. I will
+keep trying until you are out of danger, for up to 50 seconds"* and targets as soon as it clears. Being interdicted
+still stops it.
+
+- Charging your FSD as soon as the route is plotted no longer reports "targeting failed".
+- A second press of the co-pilot button cancels a Target next that is still waiting.
+
+### 🛣 Plot Route
+
+- **No neutron boosts** (the exact plotter): a route of regular jumps only.
+- **A system Spansh doesn't know yet** (one you just discovered) can be a route's start or end: Outrider plots from
+  the nearest system Spansh knows and puts yours back in as the first or last stop. Road to Riches and Exomastery too.
+
+### 🔣 Here
+
+- A **legend** under the list says what each icon means, for the icons in that system only.
+- The codex marks now name the colour that would be new: **✪ Cobalt**, **✦ Grey**. A Bacterium's colour comes from a
+  rare element in each body's own materials, so bodies in one system can each give a different entry.
+- Bodies someone else has already mapped are no longer pointed out for mapping; one line per system says so instead.
+
+### 🛠 Also fixed
+
+- Terraformable bodies in Spansh's data are priced as terraformable (some were priced as plain bodies). Outrider
+  fetches each system's Spansh data again as you go: nothing to do.
+- On the tablet's rail, hardpoints, landing gear and cargo scoop show N/A in supercruise.
+- Two Outriders sharing an upload: when the sending one stops, the other carries on from exactly where it stopped.
+- Bark Mounds count on the checklist; the checklist's counts and region picker; the checklist works with the keyboard.
+
+---
+
 ## 2026.10.19.1 · 9 October 2026
 
 **Fixes, and body names said clearly.**

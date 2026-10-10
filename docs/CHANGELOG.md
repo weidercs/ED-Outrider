@@ -2,6 +2,14 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-10 · Version 2026.10.20
+- Bio/Geo (was Samples): the Exo-Biology and Geology checklists with Canonn's pictures linked; auto-target waiting out
+  the game's own danger flag after a jump or supercruise entry (and an early FSD charge no longer a failure); exact
+  plots without neutron boosts; plotting from or to a system Spansh doesn't know yet; Here's icon legend and the
+  codex marks naming the new colour; bodies already mapped by others not pointed out; the rail's N/A in supercruise;
+  Spansh's "Terraformable" priced (CACHE_VERSION 17: Spansh data fetched again as you go); the Fable bug check's
+  fixes. No journal re-read. What's new has its section; four screenshots retaken for the legend.
+
 ## 2026-10-10 · Docs: the latest changes in the notes, screenshots with the Here legend
 - DESIGN_NOTES: the danger wait and the early FSD charge; the Here legend (only the icons shown) and the colour after
   the codex marks. AGENT_GUIDE: target.py's danger wait, and a recipe for a new Here icon (its HERE_LEGEND entry).
