@@ -7022,6 +7022,8 @@ function onData() {
         alertOut("highway", m.text.replace(/\.$/, ""), "", {tag: "highway", say: m.text});
       else if (m.kind === "autotarget" && m.what === "nothing")   // the co-pilot button's press with no route system to target
         alertOut("autotarget", "Nothing to target", m.why || "", {tag: "failed", say: () => line("autotarget_nothing", {why: m.why || ""}, m.text)});
+      else if (m.kind === "autotarget" && m.what === "waiting")   // Target next waiting out the game's in-danger flag (a jump, supercruise)
+        alertOut("autotarget", "Not targeting due to danger", `trying again when it clears, for up to ${m.secs ?? "?"} s`, {say: m.text});
       else if (m.kind === "autotarget" && m.what === "refused")   // the button's press, a run that could not start
         alertOut("autotarget", m.text.replace(/\.$/, ""), "", {tag: "failed", say: m.text});
       else if (m.kind === "autotarget" && m.text)   // auto-target's result: "Successfully targeted ..." / "Failed to target ..."

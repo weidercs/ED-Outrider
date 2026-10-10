@@ -342,19 +342,20 @@ const settle = async maxMs => {
                    tick: !!document.querySelector('[data-aspeak="autotarget"]'), short: ALERT_SHORT.autotarget,
                    bound: SPEECH_SYS_BOUND.has("autotarget")};
       data.moments = [mk(1, {ok: true, system: "Hwy Stop 38", text: "Successfully targeted neutron jump target Hwy Stop 38"}),
-                      mk(2, {ok: false, system: "Hwy Stop 38", phase: 1, why: "the galaxy map did not open", text: "Failed to target neutron jump target Hwy Stop 38"})];
+                      mk(2, {ok: false, system: "Hwy Stop 38", phase: 1, why: "the galaxy map did not open", text: "Failed to target neutron jump target Hwy Stop 38"}),
+                      mk(3, {ok: false, what: "waiting", system: "Hwy Stop 38", secs: 42, text: "Not targeting due to danger. I will keep trying until you are out of danger, for up to 42 seconds."})];
       onData();
       alertSpeak.autotarget = false;   // switched off like any other spoken notification: shown, not said
-      data.moments = [mk(3, {ok: true, system: "Hwy Stop 39", text: "Successfully targeted neutron jump target Hwy Stop 39"})];
+      data.moments = [mk(4, {ok: true, system: "Hwy Stop 39", text: "Successfully targeted neutron jump target Hwy Stop 39"})];
       onData();
-      out.seq = lastMomentSeq === s0 + 3;
+      out.seq = lastMomentSeq === s0 + 4;
       data.moments = saved; [speechOn, isSpeaker, alertSpeak.autotarget] = flags; lastMomentSeq = flags[3];
       return JSON.stringify(out); })()`));
     w.speak = realSpeak; w.play = realPlay;
     const words = said.map(x => x[0]).join("|");
     const ok = res.row && res.notify === false && res.speak === true && res.tick && res.short === "Auto-target" && res.bound && res.seq &&
                said.every(x => x[1] === "autotarget") && errors.length === before &&
-               words === "Successfully targeted neutron jump target Hwy Stop 38|Failed to target neutron jump target Hwy Stop 38";
+               words === "Successfully targeted neutron jump target Hwy Stop 38|Failed to target neutron jump target Hwy Stop 38|Not targeting due to danger. I will keep trying until you are out of danger, for up to 42 seconds.";
     console.log(ok ? "OK" : "FAIL", "| auto-target results spoken |", words, JSON.stringify(res), errors.slice(before));
   }
   // a body someone else mapped (the author, 2026-10-09): no find alert for it; one "already mapped" line per system

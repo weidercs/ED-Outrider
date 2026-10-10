@@ -2,6 +2,14 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-10 · Target next: the danger wait after supercruise entry too, and it says it is waiting
+- The game sets the in-danger flag on entering supercruise as well (lifting off a planet: logged in game, 16 s), and
+  Target next pressed then still refused "you are in danger" (the wait counted only hyperspace arrivals). The window
+  now starts at the latest arrival or SupercruiseEntry here; after a restart the saved position's arrival time
+  stands in for the arrival, which is not read again (the Fable review of 2026-10-10, #5).
+- While it waits it says so once: "Not targeting due to danger. I will keep trying until you are out of danger, for
+  up to N seconds" (N: what is left of the minute), then the usual result line.
+
 ## 2026-10-10 · Target next waits out the arrival's danger flag
 - The game sets Status.json's in-danger flag on every jump, from the FSD charge until some 16-26 s after arriving
   (logged in game: any star, nothing near), so Target next pressed in those seconds refused "you are in danger"

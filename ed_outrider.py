@@ -2164,6 +2164,7 @@ class Journals:
         # look, priced by State), heat, interdicted, undocked (the undock warning). seq only grows; the page remembers the last it saw.
         self.moments = collections.deque(maxlen=16)
         self.jump_arrival = None   # the latest hyperspace arrival {id64, name, ts} (auto honk)
+        self.supercruise_entry = None   # the latest SupercruiseEntry {id64, ts} (auto-target's danger wait)
         self.last_honk = None      # the latest discovery scan {id64, ts, bodies, progress}
         self.last_all_found = None # the latest FSSAllBodiesFound {id64, ts}
         self.moment_seq = 0
@@ -2794,6 +2795,8 @@ class Journals:
             self.handle_cargo(name, ev, ts)
             if name in CARGO_ONLY:
                 return
+        if name == "SupercruiseEntry" and ts > (self.supercruise_entry or {}).get("ts", ""):
+            self.supercruise_entry = {"id64": ev.get("SystemAddress"), "ts": ts}
         if name in SRV_TRACKED:
             self.track_srv(name, ev, ts)
             if name in SRV_EVENTS:
@@ -11395,22 +11398,23 @@ class State:
                             *self.upload_tasks.values()) if t]
 
     def arrival_danger_until(self, now=None):
-        """The game sets Status.json's in-danger flag on every jump, from the FSD charge until some 16-26 s after the
-        arrival (logged in game 2026-10-09, any star, nothing near): no threat, but auto-target's guard refuses it. When
-        that is all it can be (in danger, not interdicted, no jump charging, an arrival here under
-        AUTOTARGET_DANGER_WAIT s ago): the time a run may wait until for it to clear; else None."""
+        """The game sets Status.json's in-danger flag on every use of the FSD, from the charge until some 15-26 s after
+        a hyperspace arrival or entering supercruise (lifting off a planet...; logged in game 2026-10-09, any star,
+        nothing near): no threat, but auto-target's guard refuses it. When that is all it can be (in danger, not
+        interdicted, no jump charging, one of those here under AUTOTARGET_DANGER_WAIT s ago): the time a run may wait
+        until for it to clear; else None. After a restart the arrival is only in pos (whose ts is the arrival's)."""
         st = self.journals.status_json or {}
         flags, T = st.get("flags") or 0, outrider.target
         if not flags & T.FLAG_IN_DANGER or flags & (T.FLAG_INTERDICTED | T.FLAG_FSD_CHARGING | T.FLAG_FSD_JUMP):
             return None
-        a = self.journals.jump_arrival
-        if not a or a.get("id64") != (self.journals.pos or {}).get("id64"):
-            return None
+        pos = self.journals.pos or {}
+        uses = [u["ts"] for u in (self.journals.jump_arrival or pos, self.journals.supercruise_entry)
+                if u and u.get("id64") is not None and u.get("id64") == pos.get("id64") and isinstance(u.get("ts"), str)]
         try:
-            until = ts_seconds(a["ts"]) + AUTOTARGET_DANGER_WAIT
-        except (KeyError, TypeError, ValueError):
+            until = ts_seconds(max(uses)) + AUTOTARGET_DANGER_WAIT if uses else None
+        except (TypeError, ValueError):
             return None
-        return until if (time.time() if now is None else now) < until else None
+        return until if until and (time.time() if now is None else now) < until else None
 
     def autotarget_busy(self):
         """A galaxy-map sequence is pending or running: the automatic one (after a supercharge) or one the page or the
@@ -11494,7 +11498,15 @@ class State:
             self.bump()
         if self._autotarget_stale(tgt, test, cancel):
             return   # switched off or the route changed meanwhile: nothing to say
-        # pressed in the first seconds after a jump: the game's in-danger flag is still on (arrival_danger_until)
+        # pressed in the first seconds after a jump or entering supercruise: the game's in-danger flag is still on
+        # (arrival_danger_until). Said once, then waited out
+        until = self.arrival_danger_until()
+        if until and (self.journals.pos or {}).get("id64") == tgt["here"]:
+            secs = max(1, round(until - time.time()))
+            self.journals.moment("autotarget", iso_ts(time.time()), ok=False, what="waiting", system=tgt["name"], secs=secs,
+                                 text="Not targeting due to danger. I will keep trying until you are out of danger, "
+                                      f"for up to {secs} seconds.")
+            self.bump()
         while self.arrival_danger_until() and (self.journals.pos or {}).get("id64") == tgt["here"]:
             if self._autotarget_stale(tgt, test, cancel):
                 return

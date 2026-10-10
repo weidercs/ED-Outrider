@@ -1969,6 +1969,31 @@ class HighwayAutoTarget(unittest.TestCase):
         self.assertEqual((out["last"]["done"], out["last"]["system"]), (True, "Bridge B"))
         self.assertEqual(out["interdicted"], ({"error": "you are in danger"}, 400))
         self.assertEqual(out["old"], ({"error": "you are in danger"}, 400))
+        # it said it was waiting, once, with how long it may wait (the 60 s from the arrival, 5 s ago)
+        said = [m for m in self.j.moments if m["kind"] == "autotarget" and m.get("what") == "waiting"]
+        self.assertEqual(len(said), 1)
+        self.assertIn(said[0]["secs"], (54, 55))
+        self.assertEqual(said[0]["text"], "Not targeting due to danger. I will keep trying until you are out of danger, "
+                                          f"for up to {said[0]['secs']} seconds.")
+
+    def test_danger_wait_after_supercruise_entry_and_a_restart(self):
+        """The flag comes on for entering supercruise too (lifting off a planet 15 min after the arrival, logged in game
+        2026-10-09): that starts the window as an arrival does. And after a restart (the arrival not read again: no
+        jump_arrival) the restored position's arrival time stands in (review 2026-10-10 #5)."""
+        self.j.status_json = self.status
+        self.now = time.time()
+        hwy_jump(self, -900, 101, "Neu A", 50)   # arrived 15 minutes ago
+        self.status["flags"] |= self.T.FLAG_IN_DANGER
+        self.assertIsNone(self.state.arrival_danger_until())   # a real danger, as far as it knows
+        self.j.handle({"event": "SupercruiseEntry", "timestamp": self.ts(-3), "StarSystem": "Neu A", "SystemAddress": 101})
+        self.assertAlmostEqual(self.state.arrival_danger_until(), self.now - 3 + ed_outrider.AUTOTARGET_DANGER_WAIT, delta=1)
+        # an entry in another system (before a jump) counts for nothing here
+        self.j.supercruise_entry = {"id64": 999, "ts": self.ts(-3)}
+        self.assertIsNone(self.state.arrival_danger_until())
+        # restarted 5 s after an arrival: jump_arrival is gone, pos (from meta) has the arrival's ts
+        self.j.supercruise_entry, self.j.jump_arrival = None, None
+        self.j.pos = dict(self.j.pos, ts=self.ts(-5))
+        self.assertIsNotNone(self.state.arrival_danger_until())
 
     def test_copilot_button_targets_next(self):
         """The co-pilot button's layout (the author, 2026-10-08): in the ship a single press targets the next route

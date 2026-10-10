@@ -2614,6 +2614,7 @@ class JournalsRegistry(unittest.TestCase):
     SAFE_ON_RETRY = {
         "arrival_scan": "the latest arrival-star Scan: overwritten, so the retry sets the same value",
         "jump_arrival": "the latest hyperspace arrival: overwritten",
+        "supercruise_entry": "the latest SupercruiseEntry (auto-target's danger wait): overwritten, newest wins",
         "last_all_found": "the latest FSSAllBodiesFound: overwritten",
         "last_honk": "the latest discovery scan: overwritten",
         "last_shutdown": "the latest Shutdown read: overwritten",
