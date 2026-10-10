@@ -2,6 +2,11 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-10 · The new codex colour is written after ✪ / ✦
+- Which colour would be new to your codex ("Bacterium Acies - Cobalt") was only in the mark's tooltip, and that never
+  shows: a body's summary pops up over the row first, and the tablet has no hover. The mark now reads "✪ Cobalt"
+  (or "✦ Grey") in Here's rows, the body summary and the body panel; Now already names the colour beside its guess.
+
 ## 2026-10-10 · Here: a legend for the icons in the list
 - A footer under Here's list (the tab, the Overview's pane, Nearby with a system pinned, the tablet) says what each
   icon means: 🔭, ELW/WW/AW, T, ⛽, rings, belts, 🏁, 🗺 (first, or dim: not first), 👣, —, 🧬, 🧬?, n/3, ✓, ✗, ?, ≤,

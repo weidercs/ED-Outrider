@@ -766,7 +766,7 @@ function renderOnBody() {
     const o = b.organics.find(o => o.genus === g), x = (b.bio_guess || []).find(q => q.genus === g);
     bits.push(o ? `<span class="sp ${o.lost ? "lost" : o.done ? "done" : "part"}">${esc(g)} ${o.lost ? "lost ✗" : `${o.samples}/3${o.done ? " ✓" : ""}`}` +
                   `${o.species ? ` <span class="unk">${esc(o.species.split(" ").slice(1).join(" "))}</span>` : ""}</span>`
-               : `<span class="sp">${esc(g)} 0/3${x && x.best ? ` <span class="unk">likely ${esc(x.best.split(" ").slice(1).join(" "))} ${credits((x.value || 0) * f)}</span>${variantTxt(x)}` : ""}${codexMark(x, obData.region)}</span>`);
+               : `<span class="sp">${esc(g)} 0/3${x && x.best ? ` <span class="unk">likely ${esc(x.best.split(" ").slice(1).join(" "))} ${credits((x.value || 0) * f)}</span>${variantTxt(x)}` : ""}${codexMark(x, obData.region, {colour: !(x && x.best)})}</span>`);
   }
   const unk = bioUnknown(b);
   if (unk) bits.push(`<span class="unk">${unk.label.replace(/ signals?/, m => " bio" + m)}</span>`);
@@ -7789,16 +7789,19 @@ document.getElementById("uploadsBox").addEventListener("click", async e => {
 // Canonn's Bioforge: what is known of a codex entry across the galaxy (where it grows, the conditions)
 const bioforgeLink = id => Number.isInteger(id) && id > 0
   ? ` <a href="https://bioforge.canonn.tech/?entryid=${id}" target="_blank" rel="noopener" title="Canonn Bioforge: where this grows and in what conditions">stats ↗</a>` : "";
-const codexMark = (x, region) => {
+// The new colour is written after the mark ("✪ Cobalt"): its title never shows where a body's summary pops up over
+// the row (the author, 2026-10-10), nor on the tablet. colour: false where the colour is on the line already (Now).
+const codexMark = (x, region, {colour: showColour = true} = {}) => {
   if (!x || !(x.codex_new || x.codex_galaxy_new)) return "";
   const have = x.codex_have || [], colour = v => v.split(" - ").pop();
   const fresh = (x.variants || []).filter(v => !have.includes(colour(v)));
   const what = fresh.length ? fresh.join(" or ")
     : x.best ? `${x.best} (likeliest species; the colour variant may differ)` : "likeliest species; the colour variant may differ";
+  const named = showColour && fresh.length ? ` <span class="cxcol">${esc(fresh.map(colour).join(" or "))}</span>` : "";
   // ✪: in your codex nowhere at all (BioScan's 🌌), worth more effort than ✦, new in this region only
-  if (x.codex_galaxy_new) return ` <span class="cxnew cxgal" title="new to your codex anywhere: ${esc(what)}">✪</span>`;
+  if (x.codex_galaxy_new) return ` <span class="cxnew cxgal" title="new to your codex anywhere: ${esc(what)}">✪${named}</span>`;
   return ` <span class="cxnew" title="new to your codex in ${esc(region || "this region")}: ${esc(what)}${
-    fresh.length && have.length ? `; you have ${esc(have.join(", "))}` : ""}">✦</span>`;
+    fresh.length && have.length ? `; you have ${esc(have.join(", "))}` : ""}">✦${named}</span>`;
 };
 // The colour the likeliest species should show, muted after the guess ("Teal", "Lime or Green"); "" when unsure.
 const variantTxt = x => x && (x.variants || []).length

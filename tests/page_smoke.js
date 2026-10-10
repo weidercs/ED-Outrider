@@ -1136,6 +1136,11 @@ const settle = async maxMs => {
       codexMark({codex_new: true, best: "Bacterium Vesicula", variants: [], codex_have: []}, "Z"),
       codexMark({codex_new: true, codex_galaxy_new: true, best: "Stratum Tectonicas", variants: ["Stratum Tectonicas - Lime"], codex_have: []}, "Z")]
       .map(h => (h.match(/title="([^"]*)"/) || [])[1] || "")`);
+    // the new colour is written after the mark (its title never shows under a body's summary pop-up): "✪ Cobalt"
+    got.named = w.eval(`[codexMark({codex_new: true, codex_galaxy_new: true, best: "Bacterium Acies", variants: ["Bacterium Acies - Cobalt"], codex_have: ["Cyan"]}, "R"),
+      codexMark({codex_new: true, best: "Fungoida Setisis", variants: ["Fungoida Setisis - Yellow", "Fungoida Setisis - Grey"], codex_have: ["Yellow"]}, "Y"),
+      codexMark({codex_new: true, variants: []}, "X"), codexMark({codex_new: true, variants: ["Bacterium Aurasus - Teal"]}, "X", {colour: false})]
+      .map(h => { const d = document.createElement("div"); d.innerHTML = h; return d.textContent.trim(); })`);
     const here = w.eval("data.position && data.position.name");
     if (here) {
       w.document.querySelector('[data-view="search"]').click(); await sleep(300);
@@ -1145,7 +1150,7 @@ const settle = async maxMs => {
       got.find = [w.eval("view"), /visited/.test(w.document.getElementById("findStatus").textContent)];
     } else got.find = ["here", true];   // no position yet on this server: nothing to look up locally
     got.long = (await fetch(base + "api/find?name=" + "x".repeat(101))).status;
-    const want = {variant: ["Teal", "Yellow or Grey", "", ""],
+    const want = {variant: ["Teal", "Yellow or Grey", "", ""], named: ["✪ Cobalt", "✦ Grey", "✦", "✦"],
                   mark: ["new to your codex in Inner Orion Spur: Bacterium Aurasus - Teal",
                          "new to your codex in X: likeliest species; the colour variant may differ", "",
                          // another colour of a species you logged here: name it and the colours you have
