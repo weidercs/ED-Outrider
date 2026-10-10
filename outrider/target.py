@@ -404,6 +404,12 @@ class Targeter:
             result.update(ok=True)
         except Abort as e:
             st = e.step or cur
+            # the FSD charged (or the jump went) once the route was plotted and the map was closing: you set off before
+            # step 7 looked. Not a failure when the target is set (or you arrived there): the jump confirms it
+            if close_pressed and e.code in ("jump", "moved") and (system() == id64 or targeted(status(), id64, route_end)):
+                say(f"{st['phase']} {st['label']}: {e.why}, the target was set: done")
+                result.update(ok=True)
+                return
             result.update(phase=st["phase"] if st else 0, label=st["label"] if st else "start", why=e.why,
                           code=e.code, **e.extra)
             say(f"stopped at step {result['phase']} ({result['label']}): {e.why}")
@@ -433,10 +439,10 @@ class Targeter:
         if not s.get("live"):
             raise Abort(st, "the game is no longer live")
         if system() != here:
-            raise Abort(st, "the system changed")
+            raise Abort(st, "the system changed", code="moved")
         flags = s.get("flags") or 0
         if flags & (FLAG_FSD_CHARGING | FLAG_FSD_JUMP):
-            raise Abort(st, "an FSD jump started")
+            raise Abort(st, "an FSD jump started", code="jump")
         if flags & (FLAG_IN_DANGER | FLAG_INTERDICTED):
             raise Abort(st, "danger")
         focus = s.get("gui_focus") or 0

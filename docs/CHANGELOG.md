@@ -2,6 +2,12 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-10 · Auto-target: charging the FSD early is no failure
+- Starting the FSD charge (or the jump) after auto-target had plotted the route, while it was closing the map and
+  before its last check, stopped the run with "an FSD jump started" and said targeting failed, though the target was
+  set. Once the map's close key went down, a jump charging, or the system changing, now ends the run as a success
+  when the target is the next system (or you arrived there); without a target it is still a failure.
+
 ## 2026-10-10 · Screenshots retaken for the Bio/Geo menu
 - Every guide image that shows the top menu, taken again (the scratch server, a copy of the database, the journals
   read only): overview, nearby, here, schematic, map, highway (a route to Colonia), history, samples (My Samples),

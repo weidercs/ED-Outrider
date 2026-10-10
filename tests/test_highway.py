@@ -1381,6 +1381,34 @@ class HighwayAutoTarget(unittest.TestCase):
         r = self.run_target()
         self.assertEqual((r["ok"], r["phase"], r["why"]), (False, 3, "an FSD jump started"))
 
+    def test_jump_charging_after_the_plot_is_no_failure(self):
+        """The FSD charges as the map closes, before steps 6 and 7 looked: the target is set, so the run succeeded (it said
+        "failed" before)."""
+        self.fake_time()
+        self.game.on_close = lambda g: self.status.update(flags=self.status["flags"] | 1 << 17)
+        r = self.run_target()
+        self.assertTrue(r["ok"], r)
+        self.assertIn("an FSD jump started, the target was set: done", r["log"][-1])
+        self.assertTrue(self.released())
+        # the jump went and you arrived at the target (its Destination gone with it): done too
+        self.status.update(flags=1 << 4, destination=None)
+        self.here = 101
+        self.game.on_close = lambda g: (setattr(self, "here", 102), self.status.update(destination=None))
+        r = self.run_target()
+        self.assertTrue(r["ok"], r)
+
+    def test_jump_charging_after_the_plot_without_a_target_still_fails(self):
+        self.fake_time()
+        self.game.no_plot = True
+        self.game.on_close = lambda g: self.status.update(flags=self.status["flags"] | 1 << 17)
+        r = self.run_target()
+        self.assertEqual((r["ok"], r["phase"], r["why"]), (False, 6, "an FSD jump started"))
+        # and a jump somewhere else is still "the system changed"
+        self.status.update(flags=1 << 4, destination=None)
+        self.game.on_close = lambda g: setattr(self, "here", 999)
+        r = self.run_target()
+        self.assertEqual((r["ok"], r["phase"], r["why"]), (False, 6, "the system changed"))
+
     def test_destination_verify(self):
         self.fake_time()
         self.game.no_plot = True   # the plot keys did nothing: no target

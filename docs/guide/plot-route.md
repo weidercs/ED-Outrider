@@ -78,7 +78,8 @@ targeted neutron jump target Hwy Stop 38" (or "Failed to…") under its own aler
   a different system it says so by name ("Targeted the wrong system: …. Check before you jump."). A waypoint the
   game reaches by a plotted route of several jumps counts as targeted.
 - It never runs docked, landed, in a vehicle or on foot, in danger, with the FSD charging or a panel open. It stops
-  if anything unexpected happens, closing the map only if it opened it.
+  if anything unexpected happens, closing the map only if it opened it. Once the route is plotted you can start
+  the FSD charge without waiting for its last check: the target is set, so that counts as targeted.
 - **The keys go to whichever window has focus**: stay in the game until it is done.
 - The log gets one line per run ("highway auto-target: targeted Hwy Stop 38"); every step is printed only when it
   fails.
