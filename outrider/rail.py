@@ -16,9 +16,10 @@ LABEL_MAX = 24
 
 # Status.json Flags / Flags2 bits the rail reads (each confirmed in game by the author, 2026-10-03, unless noted)
 F_DOCKED, F_GEAR, F_SHIELDS, F_FA_OFF, F_HARDPOINTS, F_LIGHTS, F_SCOOP, F_SILENT = 0, 2, 3, 5, 6, 8, 9, 10
+F_SUPERCRUISE = 4
 F_HANDBRAKE, F_TURRET, F_DRIVE_ASSIST, F_IN_MAIN_SHIP, F_IN_FIGHTER, F_IN_SRV = 12, 13, 15, 24, 25, 26
 F_ANALYSIS, F_NIGHT_VISION, F_HIGH_BEAM = 27, 28, 31
-F2_ON_FOOT, F2_IN_STATION, F2_IN_HANGAR, F2_SOCIAL = 0, 1, 2, 3
+F2_ON_FOOT, F2_IN_STATION, F2_IN_HANGAR, F2_SOCIAL = 0, 3, 13, 14   # Status.json Flags2 (1, 2: InTaxi, InMulticrew)
 SAMPLE_TOOL = "$humanoid_sampletool_name;"   # Status.json SelectedWeapon with the Genetic Sampler in hand (read in game)
 
 CONTEXTS = ("ship", "srv", "nomad", "fighter", "foot")
@@ -131,11 +132,21 @@ def context_of(status, vehicle_type=None):
     return None, "not in a ship, SRV, fighter or on foot"
 
 
+# why a button is "na" (not available now) when state_of says so
+NA_WHY = {"hard": "in supercruise", "gear": "in supercruise", "scoop": "in supercruise"}
+# controls that cannot be used in supercruise (the author's choice, 2026-10-09): N/A there, whatever their flag says
+SUPERCRUISE_NA = (("flag", F_HARDPOINTS), ("flag", F_GEAR), ("flag", F_SCOOP))
+
+
 def state_of(button, status):
-    """A button's state from Status.json: "on", "off", "high" (the SRV's headlights on high beam), or None when the
-    game reports nothing for it."""
+    """A button's state from Status.json: "on", "off", "high" (the SRV's headlights on high beam), "na" (not available
+    now: hardpoints, landing gear and cargo scoop in supercruise, NA_WHY), or None when the game reports nothing for it."""
     spec, st = button.get("state"), status or {}
     f = st.get("flags") or 0
+    if spec in SUPERCRUISE_NA and bit(F_SUPERCRUISE, f):
+        # none of them works in supercruise; the game even sets the hardpoints flag there (read in game 2026-10-09,
+        # with Analysis mode on): "deployed" after every jump
+        return "na"
     if spec == "headlights":
         return ("high" if bit(F_HIGH_BEAM, f) else "on") if bit(F_LIGHTS, f) else "off"
     if spec == "sample_tool":

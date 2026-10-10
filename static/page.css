@@ -394,7 +394,7 @@ main.nearPinned > #hereView #hereTable td.bio { max-width: 180px; }
 #rows tr.pinned td { background: color-mix(in srgb, var(--accent) 10%, transparent); }
 #rows tr.pinned td.bodies { cursor: pointer; }
 
-/* ---- Samples (exobiology log) ---- */
+/* ---- Bio/Geo: My Samples (the exobiology log) ---- */
 #bioView { margin-top: 12px; } #bioView .exports a { color: var(--info); }
 input.filter { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
   padding: 3px 8px; font: inherit; min-width: 16em; }
@@ -588,6 +588,7 @@ table .sub2 { margin-top: 2px; font-weight: 400; font-size: 12px; }
 
 .cxnew { color: var(--accent); font-weight: 700; cursor: help; }
 .cxnew.cxgal { color: var(--good); }   /* ✪: new to your codex anywhere */
+.cxnew .cxcol { font-weight: 600; }   /* the new colour after the mark: ✪ Cobalt */
 /* Now is read at a glance, often on a tablet with no hover: spell the ✦ out there */
 body.nowmode .cxnew::after { content: " new codex"; font-weight: 600; }
 body.nowmode .cxnew.cxgal::after { content: " new anywhere"; }
@@ -684,6 +685,7 @@ tr:hover .hwyaim.icon, .hwyaim.icon:focus-visible, .hwyaim.icon:disabled { opaci
 #hwyForm button.go { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 #hwyForm button.mini { padding: 0 6px; font-size: 11px; color: var(--info); }
 #hwyStatus { color: var(--muted); } #hwyStatus.err { color: var(--bad); } #hwyStatus.ok { color: var(--good); }
+#hwyStatus.warnc { color: var(--warn); }
 #hwyStatus.busy::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 8px;
   border: 2px solid var(--accent); border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
 #hwyMapWrap { position: relative; height: min(60vh, 520px); min-height: 260px; border: 1px solid var(--line); border-radius: 8px;
@@ -1057,3 +1059,51 @@ body.app #richPane { grid-column: 1; grid-row: 2; }
 /* the body panel's "why not the other genera" (plugin gaps C) */
 .ruledout ul { margin: 2px 0 0; } .ruledout li { display: flex; justify-content: space-between; gap: 10px; }
 .sw.ring { background: transparent !important; border: 2px solid; border-radius: 50%; box-sizing: border-box; }   /* a tagged plant's legend swatch */
+
+/* the exobiology checklist (Bio/Geo -> Exo-Biology; Geology shares it) */
+#bioView.check .runonly, #bioView:not(.check) .checkonly { display: none; }
+#bioView.geo .biohint, #bioView:not(.geo) .geohint { display: none; }
+.clwrap { display: flex; gap: 14px; align-items: flex-start; }
+/* the boxes flow down columns, newspaper style: a short box leaves no hole beside a long one */
+.clgrid { flex: 1 1 auto; min-width: 0; column-width: 230px; column-gap: 10px; }
+.clbox { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; break-inside: avoid; display: inline-block;
+  width: 100%; box-sizing: border-box; margin: 0 0 10px; }
+.clbox h4 { margin: 0 0 4px; font-size: 14px; display: flex; justify-content: space-between; gap: 8px; }
+.clbox table, .clvars { width: 100%; border-collapse: collapse; font-size: 13px; }
+.clbox td, .clvars td, .clvars th { padding: 1px 4px; text-align: left; }
+.clbox table { table-layout: fixed; }
+.clbox td:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }   /* a long name ends in …, never under its neighbour */
+.clbox td:nth-child(2) { width: 62px; white-space: nowrap; font-size: 12px; }
+.clbox td.num { width: 46px; text-align: right; white-space: nowrap; }
+.clelse { color: var(--muted); font-style: italic; }
+.clbox tr { cursor: pointer; }
+.clbox tr:hover, .clbox tr.on { background: rgba(127, 127, 127, .16); }
+.cl-sold { color: var(--good); } .cl-aboard { color: var(--warn); } .cl-lost { color: var(--bad); } .cl-logged { color: var(--info); }
+.cl-no { color: var(--muted); opacity: .55; }
+.clparts { opacity: .8; }
+.clside { flex: 0 0 440px; position: sticky; top: 8px; }
+.clside h4 { margin: 0 0 4px; }
+.clside canvas { width: 100%; max-width: 440px; aspect-ratio: 1; display: block; margin-top: 8px; border: 1px solid var(--line); border-radius: 6px; }
+.clmaplegend { font-size: 12px; margin-top: 4px; }
+.climg { margin: 8px 0; }
+.climg img { display: block; width: 100%; max-height: 260px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); }
+.climg figcaption { font-size: 12px; color: var(--muted); margin-top: 3px; }
+/* a species' colours dropped down under its row: colour, what gives it, your state */
+.clbox tr.clvar td { padding: 0 4px 0 14px; font-size: 12px; }
+.clbox .cvrow { display: flex; gap: 6px; min-width: 0; }
+.clbox tr.clvar .cvc { flex: 0 0 34%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clbox tr.clvar .cvw { flex: 1 1 auto; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clbox tr.clvar .cvs { flex: 0 0 auto; }
+.clbox tr.clvar { cursor: default; } .clbox tr.clvar.climgrow { cursor: pointer; }
+.clbox tr.clvar.on { background: rgba(127, 127, 127, .24); }
+.clmapbox { position: relative; }
+.cltip { position: absolute; pointer-events: none; z-index: 5; padding: 3px 7px; border-radius: 4px; font-size: 12px; white-space: nowrap;
+  background: var(--bg); color: var(--text); border: 1px solid var(--line); box-shadow: 0 2px 6px rgba(0, 0, 0, .35); }
+@media (max-width: 900px) { .clwrap { flex-direction: column; align-items: stretch; } .clgrid { width: 100%; }
+  .clside { position: static; flex-basis: auto; width: 100%; } }
+/* Here's icon legend: under the list, kept in view (sticky to the bottom of the scrolling pane, or of the window) */
+#hereLegend { position: sticky; bottom: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 2px 14px; margin-top: 6px; padding: 4px 2px;
+  background: var(--bg); border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+#hereLegend[hidden] { display: none; }
+#hereLegend .lg { white-space: nowrap; } #hereLegend .lgi { color: var(--text); }
+body.app #hereMain.halves > #hereLegend { flex: 0 0 auto; position: static; margin: 0; padding: 4px 8px; }

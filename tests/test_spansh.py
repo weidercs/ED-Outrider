@@ -34,6 +34,20 @@ class DumpPricing(unittest.TestCase):
         scanned = ed_outrider.carto_values(r, True, f, "unsold", None)
         self.assertEqual(scanned["now"] + scanned["left"], expect)
 
+    def test_terraformable_as_spansh_spells_it_now(self):
+        """Spansh's dumps say "Terraformable" (no longer "Candidate for terraforming"): priced as terraformable (a
+        terraformable high metal content world was priced as a plain one, 59k, 2026-10-09)."""
+        body = {"name": "Sys 2", "type": "Planet", "subType": "High metal content world", "earthMasses": 0.20102, "bodyId": 9}
+        for state in ("Terraformable", "Candidate for terraforming"):
+            r = ed_outrider.record_from_dump("Sys", dict(body, terraformingState=state))
+            self.assertEqual((r["terraformable"], r["ed"]["TerraformState"]), (True, "Terraformable"), state)
+        plain = ed_outrider.carto_values(ed_outrider.record_from_dump("Sys", dict(body, terraformingState="Not terraformable")),
+                                         False, None, None, None)["left"]
+        tf = ed_outrider.carto_values(ed_outrider.record_from_dump("Sys", dict(body, terraformingState="Terraformable")),
+                                      False, None, None, None)["left"]
+        self.assertLess(plain, 100000)
+        self.assertGreater(tf, 5 * plain)
+
     def test_star_and_unpriceable(self):
         star = ed_outrider.record_from_dump("Sys", {"name": "Sys", "type": "Star", "subType": "Neutron Star", "solarMasses": 1.4})
         self.assertEqual(star["ed"]["StarType"], "N")
@@ -177,7 +191,7 @@ class BatchFSpansh(unittest.TestCase):
     # ---- P16 ----
 
     def test_record_keeps_update_time_and_signals_block(self):
-        self.assertEqual(ed_outrider.CACHE_VERSION, 16)   # 16: mining (Batch M4)
+        self.assertEqual(ed_outrider.CACHE_VERSION, 17)   # 16: mining (Batch M4); 17: "Terraformable" priced
         r = self.rec()
         self.assertEqual((r["updated"], r["signals_known"]), ("2019-06-01 10:00:00+00", False))
         self.assertTrue(self.rec(signals={"signals": {}, "updateTime": "2019-06-01"})["signals_known"])

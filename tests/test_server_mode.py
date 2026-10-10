@@ -149,7 +149,7 @@ class Packaging(unittest.TestCase):
         self.assertTrue(os.access(path, os.X_OK))
         self.assertEqual(subprocess.run(["bash", "-n", path], capture_output=True).returncode, 0)
         script = self.read("launch_outrider.sh")
-        for part in ("sha256sum requirements.txt", ".requirements.sha256", "import aiohttp", "pip install --quiet -r requirements.txt",
+        for part in ("hashlib.sha256(open(\"requirements.txt\"", ".requirements.sha256", "import aiohttp", "pip install --quiet -r requirements.txt",
                      'exec python ed_outrider.py "$@"', "sys.version_info < (3, 11)",
                      "command -v wl-copy", "command -v xclip"):   # the clipboard tools pip cannot install: a hint
             self.assertIn(part, script)
@@ -192,6 +192,123 @@ class Packaging(unittest.TestCase):
         self.assertIn("late and all at once", env)
         self.assertNotIn("so Status.json's updates come through", script)   # the old, wrong reason
         self.assertTrue(os.access(os.path.join(self.ROOT, "scripts", "docker_bundle.sh"), os.X_OK))
+
+
+class PackagingFixes(unittest.TestCase):
+    """The full sweep of 2026-10-09 (packaging and scripts)."""
+    ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def read(self, name):
+        with open(os.path.join(self.ROOT, name), encoding="utf-8") as f:
+            return f.read()
+
+    def test_local_tools_stay_out_of_the_image(self):
+        """eddn_listener/ (a large capture database and its own .venv) and the other git-ignored local tools are kept
+        out of the Docker build context, so they never reach a published image."""
+        ignored = self.read(".dockerignore").split()
+        for path in ("eddn_listener", "**/.venv", "run.sh", "scripts/install.sh"):
+            self.assertIn(path, ignored)
+
+    def test_docker_pins_host_and_port(self):
+        """In Docker the listening address belongs to the container: a host or port changed in Settings cannot make
+        the server unreachable (the flags win over the config)."""
+        entry = self.read("docker/entrypoint.sh")
+        self.assertIn('exec python ed_outrider.py --config "$CONFIG" --host 0.0.0.0 --port 8025 "$@"', entry)
+
+    def test_half_made_environment_is_made_again(self):
+        """A venv that failed part way (python but no pip, as before python3-venv is installed) is removed and made
+        again, and a failed creation leaves nothing behind: before, every later run failed on it."""
+        import shutil
+        import subprocess
+        import tempfile
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        shutil.copy(os.path.join(self.ROOT, "launch_outrider.sh"), d)
+        with open(os.path.join(d, "requirements.txt"), "w") as f:
+            f.write("aiohttp\n")
+        fake_venv_python = "#!/bin/sh\nexit 1\n"                     # no pip, no aiohttp: half made
+        os.makedirs(os.path.join(d, ".venv", "bin"))
+        with open(os.path.join(d, ".venv", "bin", "python"), "w") as f:
+            f.write(fake_venv_python)
+        os.chmod(os.path.join(d, ".venv", "bin", "python"), 0o755)
+        fakepy = os.path.join(d, "fakepython")
+        with open(fakepy, "w") as f:   # the version check passes; venv makes a python without pip, then fails
+            f.write('#!/bin/sh\nif [ "$1" = "-m" ] && [ "$2" = "venv" ]; then mkdir -p "$3/bin"; '
+                    'printf "#!/bin/sh\\nexit 1\\n" > "$3/bin/python"; chmod +x "$3/bin/python"; exit 1; fi\nexit 0\n')
+        os.chmod(fakepy, 0o755)
+        r = subprocess.run(["bash", os.path.join(d, "launch_outrider.sh")], cwd=d, capture_output=True, text=True,
+                           env=dict(os.environ, PYTHON=fakepy), timeout=60)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("incomplete (no pip): making it again", r.stdout)
+        self.assertIn("sudo apt install python3-venv", r.stderr)
+        self.assertFalse(os.path.exists(os.path.join(d, ".venv")))   # nothing half-made left for the next run
+
+    def test_windows_launcher_remakes_a_half_made_environment(self):
+        with open(os.path.join(self.ROOT, "launch_outrider.bat"), "rb") as f:
+            script = f.read().decode("ascii")
+        self.assertIn('"%VPY%" -m pip --version >nul 2>&1 && goto pipok', script)
+        self.assertIn('if exist "%VENV%" rmdir /s /q "%VENV%"', script)
+        self.assertIn(":venvfail", script)
+
+
+class FableScriptFixes(unittest.TestCase):
+    """The Fable sweep of 2026-10-09 (scripts, Docker, the guide)."""
+    ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def read(self, name):
+        with open(os.path.join(self.ROOT, name), encoding="utf-8") as f:
+            return f.read()
+
+    def run_launcher(self, d, path_dirs, env_extra=None):
+        import subprocess
+        env = dict(os.environ, PATH=":".join(path_dirs), **(env_extra or {}))
+        import shutil
+        return subprocess.run([shutil.which("bash"), os.path.join(d, "launch_outrider.sh")], cwd=d, capture_output=True, text=True,
+                              env=env, timeout=60)
+
+    def test_no_sha256sum_needed(self):
+        """macOS has no sha256sum: the launcher hashes requirements.txt with Python, to the same hex as before."""
+        import hashlib
+        import shutil
+        import tempfile
+        self.assertNotIn("sha256sum requirements.txt", self.read("launch_outrider.sh"))   # not run (a comment may name it)
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        shutil.copy(os.path.join(self.ROOT, "launch_outrider.sh"), d)
+        with open(os.path.join(d, "requirements.txt"), "w") as f:
+            f.write("aiohttp\n")
+        os.makedirs(os.path.join(d, ".venv", "bin"))
+        stamp = hashlib.sha256(b"aiohttp\n").hexdigest()
+        with open(os.path.join(d, ".venv", ".requirements.sha256"), "w") as f:
+            f.write(stamp + "\n")
+        fake = os.path.join(d, ".venv", "bin", "python")   # pip and aiohttp present: nothing to install, then Outrider
+        with open(fake, "w") as f:
+            f.write('#!/bin/sh\nif [ "$1" = "-c" ]; then exec %s "$@"; fi\necho STARTED\n' % shutil.which("python3"))
+        os.chmod(fake, 0o755)
+        bins = tempfile.mkdtemp()                          # a PATH with no sha256sum on it
+        self.addCleanup(shutil.rmtree, bins)
+        for tool in ("cat", "cut", "uname", "dirname", "rm", "echo"):
+            p = shutil.which(tool)
+            if p:
+                os.symlink(p, os.path.join(bins, tool))
+        with open(os.path.join(d, ".venv", "bin", "activate"), "w") as f:
+            f.write("PATH=\"%s:$PATH\"\n" % os.path.join(d, ".venv", "bin"))
+        r = self.run_launcher(d, [bins])
+        self.assertNotIn("sha256sum", r.stderr)
+        self.assertIn("STARTED", r.stdout, r.stderr)        # the stamp matched: no reinstall, Outrider started
+
+    def test_a_gone_python_remakes_the_environment(self):
+        """A .venv whose Python link dangles (the system Python upgraded) is made again, not met with the
+        python3-venv advice."""
+        src = self.read("launch_outrider.sh")
+        self.assertIn('elif [ -e "$VENV/pyvenv.cfg" ] && [ ! -x "$VENV/bin/python" ]; then', src)
+
+    def test_health_check_waits_for_the_first_import(self):
+        self.assertIn("--start-period=30m", self.read("Dockerfile"))
+
+    def test_guide_matches(self):
+        self.assertIn("Auto honk, Uploads, Display", self.read("docs/guide/settings.md"))
+        self.assertIn("up to fifty lines per alert", self.read("docs/guide/voice-and-alerts.md"))
 
 
 class NfsCaching(unittest.TestCase):
@@ -340,13 +457,19 @@ class StartUp(unittest.TestCase):
 
     def test_backup_leftovers_swept(self):
         with tempfile.TemporaryDirectory() as d:
-            for name in ("ed_outrider-2026-10-01.zip", "ed_outrider-2026-10-04.zip.part", ".db-ed_outrider-2026-10-04.sqlite",
-                         "notes.txt"):
+            # the names backup_name and the backup's temporary copy really have; another database's (an instance with
+            # --db other.sqlite sharing the folder) may be a backup in progress: left alone (the sweep of 2026-10-09)
+            for name in ("outrider-ed_outrider-20261001-120000Z.zip", "outrider-ed_outrider-20261004-120000Z.zip.part",
+                         ".db-outrider-ed_outrider-20261004-120000Z.sqlite", "outrider-other-20261004-120000Z.zip.part",
+                         ".db-outrider-other-20261004-120000Z.sqlite", "notes.txt"):
                 open(os.path.join(d, name), "w").close()
             with contextlib.redirect_stdout(io.StringIO()):
-                removed = ed_outrider.sweep_backup_leftovers(d)
-            self.assertEqual(sorted(removed), [".db-ed_outrider-2026-10-04.sqlite", "ed_outrider-2026-10-04.zip.part"])
-            self.assertEqual(sorted(os.listdir(d)), ["ed_outrider-2026-10-01.zip", "notes.txt"])
+                removed = ed_outrider.sweep_backup_leftovers(d, "/somewhere/ed_outrider.sqlite")
+            self.assertEqual(sorted(removed), [".db-outrider-ed_outrider-20261004-120000Z.sqlite",
+                                               "outrider-ed_outrider-20261004-120000Z.zip.part"])
+            self.assertEqual(sorted(os.listdir(d)), [".db-outrider-other-20261004-120000Z.sqlite", "notes.txt",
+                                                     "outrider-ed_outrider-20261001-120000Z.zip",
+                                                     "outrider-other-20261004-120000Z.zip.part"])
         self.assertEqual(ed_outrider.sweep_backup_leftovers("/nonexistent/backups"), [])
 
 

@@ -96,6 +96,68 @@ def clip_text(text, limit=SAY_MAX):
     return head[:space] if space >= limit // 2 else text[:limit]
 
 
+# How espeak (Piper's reader) says each letter on its own, as Piper's raw phonemes. A body's letters are sent this
+# way: read as text, espeak takes "A 1" for the article ("uh one") and runs "ABC 3" into one lightly stressed word
+# that the voice slurs ("uh beh ceh"). British and American differ only in O, R and Z.
+LETTER_SOUNDS = dict(zip("ABCDEFGHIJKLMNOPQRSTUVWXYZ", (
+    "ˈeɪ", "bˈiː", "sˈiː", "dˈiː", "ˈiː", "ˈɛf", "dʒˈiː", "ˈeɪtʃ", "ˈaɪ", "dʒˈeɪ", "kˈeɪ", "ˈɛl", "ˈɛm", "ˈɛn",
+    "ˈəʊ", "pˈiː", "kjˈuː", "ˈɑː", "ˈɛs", "tˈiː", "jˈuː", "vˈiː", "dˈʌbəljˌuː", "ˈɛks", "wˈaɪ", "zˈɛd")))
+LETTER_SOUNDS_US = {**LETTER_SOUNDS, "O": "ˈoʊ", "R": "ˈɑːɹ", "Z": "zˈiː"}
+# A body's short name in a spoken line: its star letters ("A", "ABC") and planet number, then moons ("A 2 a b")
+# and a ring ("B 3 A Ring"); a belt ("A Belt Cluster 3", "A A Belt"); or, in a one-star system, a planet's number
+# with moons or a ring ("2 a," "3 A Ring"), its moons only at the end of a clause (so "3 a day" stays English).
+# Names are left alone: a catalogue number has more digits ("HIP 12345") or a dash ("G 139-21"), and star
+# letters run in alphabetical order ("LHS 21" and "UC 3" are not a body's).
+# Punctuation right after a name's last letter goes inside its phonemes: Piper drops a comma that starts the text
+# after a [[block]] and runs on into the next word ("2 a, up to" said "two ay-up to").
+_BODY_NAME = re.compile(r"""
+    (?<![\w'’.-])
+    (?: (?P<stars>[A-Z]{1,3})\ (?P<num>\d{1,2})(?![.,]\d)
+        (?P<moons>(?:\ [a-z](?![\w'’-]))*)
+        (?P<ring>\ [A-Z](?=\ (?:Ring|Belt)\b))?
+      | (?P<belt>[A-Z]{1,3}(?:\ [A-Z])?)(?=\ Belt\b)
+      | (?P<lone>\d{1,2})
+        (?=(?:\ [a-z])+(?:$|[,.;:!?)])|\ [A-Z]\ Ring\b)
+        (?P<lmoons>(?:\ [a-z])*)
+        (?P<lring>\ [A-Z](?=\ Ring\b))? )
+    (?![\w'’-])
+    (?P<punct>[,.;:!?](?=\s|$))?""", re.VERBOSE)
+
+
+def body_letters(text, espeak_voice):
+    """`text` for Piper with each body name's letters as raw phonemes ([[ˈeɪ bˈiː]]: one stressed word per
+    letter), its numbers left as words. Only for an English voice: `espeak_voice` is the voice's espeak language
+    (its config's "espeak" voice), and anything else (or None: not known) gets the text unchanged."""
+    if not str(espeak_voice or "").startswith("en"):
+        return text
+    sounds = LETTER_SOUNDS_US if espeak_voice.startswith("en-us") else LETTER_SOUNDS
+
+    def say(letters):
+        return "[[" + " ".join(sounds[c.upper()] for c in letters if c.strip()) + "]]"
+
+    def one(m):
+        if m["belt"]:
+            stars = m["belt"].split(" ")[0]
+            return m[0] if list(stars) != sorted(set(stars)) else say(m["belt"])   # followed by " Belt": no punct
+        if m["lone"]:
+            out = m["lone"]
+            moons = m["lmoons"] + (m["lring"] or "")
+        else:
+            if list(m["stars"]) != sorted(set(m["stars"])):
+                return m[0]
+            out = f"{say(m['stars'])} {m['num']}"
+            moons = m["moons"] + (m["ring"] or "")
+        out = f"{out} {say(moons)}" if moons.strip() else out
+        punct = m["punct"] or ""
+        return out[:-2] + punct + "]]" if punct and out.endswith("]]") else out + punct
+    return _BODY_NAME.sub(one, text)
+
+
+def voice_espeak(voice):
+    """A loaded PiperVoice's espeak language ("en-gb-x-rp"), or None when it does not say (a stand-in)."""
+    return getattr(getattr(voice, "config", None), "espeak_voice", None)
+
+
 def installed_voices(voices_dir):
     """Voices in voices_dir that have both files (the model and its .onnx.json config): Piper needs both."""
     return sorted(os.path.basename(p)[:-5] for p in glob.glob(os.path.join(glob.escape(voices_dir), "*.onnx"))
@@ -162,6 +224,29 @@ def voice_paths(name):
     return [base + ".onnx.json", base + ".onnx"]
 
 
+PART_STALE_S = 3600   # a .part untouched this long belongs to no download any more
+
+
+def sweep_parts(voices_dir, now=None):
+    """Remove .part files left by downloads that never finished (the voice lab closed mid-way: its download thread
+    is abandoned at exit, so its own clean-up never runs). Only ones untouched for PART_STALE_S: another program
+    (Outrider and the voice lab) may be downloading right now. Returns how many went."""
+    now, n = time.time() if now is None else now, 0
+    try:
+        names = os.listdir(voices_dir)
+    except OSError:
+        return 0
+    for name in names:
+        path = os.path.join(voices_dir, name)
+        try:
+            if name.endswith(".part") and now - os.path.getmtime(path) > PART_STALE_S:
+                os.remove(path)
+                n += 1
+        except OSError:
+            pass
+    return n
+
+
 def download_voice_files(files, voices_dir, progress=None, timeout=60):
     """Download [(repository path, {"size_bytes", "md5_digest"} or {})] into voices_dir. Each file goes to a
     .part first, and they are moved into place only once every one has arrived complete (length and, when
@@ -170,6 +255,7 @@ def download_voice_files(files, voices_dir, progress=None, timeout=60):
     progress(done, total) after each chunk (total is 0 when the sizes are not known)."""
     total, done, parts = sum((m or {}).get("size_bytes") or 0 for _, m in files), 0, []
     os.makedirs(voices_dir, exist_ok=True)
+    sweep_parts(voices_dir)
     try:
         for path, meta in sorted(files, key=lambda x: x[0].endswith(".onnx")):   # the small config first
             dest = os.path.join(voices_dir, os.path.basename(path))
@@ -211,15 +297,33 @@ def _import_piper():
         return PiperVoice
     except ImportError:
         pass
-    venv = os.path.join(ROOT, ".venv", "lib", f"python{sys.version_info.major}.{sys.version_info.minor}", "site-packages")
-    if os.path.isdir(venv) and venv not in sys.path:
-        sys.path.append(venv)
-        try:
-            from piper import PiperVoice
-            return PiperVoice
-        except ImportError:
-            sys.path.remove(venv)
+    for venv in _venv_site_packages():
+        if os.path.isdir(venv) and venv not in sys.path:
+            sys.path.append(venv)
+            try:
+                from piper import PiperVoice
+                return PiperVoice
+            except ImportError:
+                sys.path.remove(venv)
     return None
+
+
+def _venv_site_packages(root=None, nt=None):
+    """The repository .venv's site-packages for this Python: lib/pythonX.Y/site-packages (Linux, macOS), and on
+    Windows Lib/site-packages when the .venv was made by this same Python version (its pyvenv.cfg says)."""
+    root, nt = root or ROOT, (os.name == "nt") if nt is None else nt
+    ver = f"{sys.version_info.major}.{sys.version_info.minor}"
+    out = [os.path.join(root, ".venv", "lib", f"python{ver}", "site-packages")]
+    if nt:
+        try:
+            with open(os.path.join(root, ".venv", "pyvenv.cfg"), encoding="utf-8") as f:
+                same = any(line.split("=", 1)[0].strip() == "version" and line.split("=", 1)[1].strip().startswith(ver + ".")
+                           for line in f if "=" in line)
+        except OSError:
+            same = False
+        if same:
+            out.append(os.path.join(root, ".venv", "Lib", "site-packages"))
+    return out
 
 
 class Speaker:
@@ -418,7 +522,7 @@ class Speaker:
         cfg = self.SynthesisConfig(length_scale=1.0 / speed) if speed != 1.0 else None
         try:
             with wave.open(buf, "wb") as wf:
-                voice.synthesize_wav(text, wf, syn_config=cfg)
+                voice.synthesize_wav(body_letters(text, voice_espeak(voice)), wf, syn_config=cfg)
         except wave.Error:
             return None
         return buf.getvalue() or None

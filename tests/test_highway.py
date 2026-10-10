@@ -17,7 +17,17 @@ import outrider.bio  # noqa: E402
 import ed_outrider  # noqa: E402
 import outrider.honk  # noqa: E402
 import outrider.fsd  # noqa: E402
+import outrider.highway  # noqa: E402
 
+
+
+
+def spansh_knows(**ids):
+    """A stand-in for Spansh.system_record: the systems Spansh knows (name lower-cased -> id64), on the x axis as in
+    HWY_EXACT (Start at 0, End at 200)."""
+    at = {100: 0.0, 105: 200.0, 201: 150.0, 202: 300.0}
+    return unittest.mock.AsyncMock(side_effect=lambda n: {"name": n, "id64": ids[n.lower()], "x": at.get(ids[n.lower()], 0.0),
+                                                          "y": 0.0, "z": 0.0} if n.lower() in ids else None)
 
 class HighwayH1(unittest.TestCase):
     """Neutron Highway, batch H1 (server): fleet loadouts, Spansh plot jobs (mocked), the route, progress and detours,
@@ -215,7 +225,7 @@ class HighwayH1(unittest.TestCase):
         sp.session = _HwSession([(200, {"job": "e1", "status": "queued"}),
                                  (200, {"job": "e1", "status": "ok", "result": self.EXACT})])
         sp.system_names = unittest.mock.AsyncMock(return_value=["Sol", "Solati"])
-        sp.system_id64 = unittest.mock.AsyncMock(side_effect=lambda n: {"start": 100, "end": 105}.get(n.lower()))
+        sp.system_record = spansh_knows(start=100, end=105, **{"far end": 202})
         self.state.spansh = sp
         cb = types_ns(enabled=True, tool="wl-copy", copied=[])
         cb.copy = lambda text: cb.copied.append(text) or True
@@ -274,7 +284,7 @@ class HighwayH1(unittest.TestCase):
         self.assertEqual([(x["i"], x["system"], x["neutron"], x["fuel_left"]) for x in r["done"]], [(0, "Start", True, 32.0)])
         self.assertEqual(r["neutrons"], [0, 1, 4])
         self.assertEqual(r["options"], {"cargo": 3, "injections": True, "exclude_secondary": False, "supercharged": False,
-                                        "refuel_every_scoopable": False})
+                                        "no_neutrons": False, "refuel_every_scoopable": False})
         self.assertEqual(cb.copied, ["Neu A", "Waypoint"])   # each new plot from where you are: its first hop is copied
         p = out["payload"]
         self.assertEqual((p["next"]["name"], p["next"]["neutron"], p["next"]["distance"], p["index"], p["total"],
@@ -293,7 +303,7 @@ class HighwayH1(unittest.TestCase):
         self.j.handle(self.loadout("2026-01-02T00:00:00Z", fsd="int_hyperdrive_overcharge_size8_class5_overchargebooster_mkii"))
         sp = ed_outrider.Spansh(self.db)
         sp.session = _HwSession([(200, {"job": "e", "status": "ok", "result": self.EXACT})])
-        sp.system_id64 = unittest.mock.AsyncMock(side_effect=lambda n: {"start": 100, "end": 105}.get(n.lower()))
+        sp.system_record = spansh_knows(start=100, end=105)
         self.state.spansh = sp
 
         async def go():
@@ -333,18 +343,36 @@ class HighwayH1(unittest.TestCase):
         self.assertEqual(self.state.highway_plotting["error"], "Spansh: Could not find system End")
         self.assertEqual(self.state.highway_view()["route"]["count"], 6)
 
+    def test_exact_plot_without_neutrons(self):
+        """no_neutrons: Spansh's exact plotter is told not to use the neutron supercharge (regular jumps only), and the
+        route remembers it was asked for."""
+        import asyncio
+        self.j.handle(self.loadout("2026-01-02T00:00:00Z", fsd="int_hyperdrive_overcharge_size8_class5_overchargebooster_mkii"))
+        sp = ed_outrider.Spansh(self.db)
+        sp.session = _HwSession([(200, {"job": "e", "status": "ok", "result": self.EXACT})])
+        sp.system_record = spansh_knows(start=100, end=105)
+        self.state.spansh = sp
+
+        async def go():
+            out, status = self.state.highway_start_plot({"from": "Start", "to": "End", "no_neutrons": True})
+            await self.state.highway_task
+            return status
+        self.assertEqual(asyncio.run(go()), 202)
+        params = sp.session.calls[0][1]
+        self.assertEqual((params["use_supercharge"], params["is_supercharged"]), (0, 0))
+        self.assertIs(self.state.highway_view()["route"]["options"]["no_neutrons"], True)
+
     def test_exact_plot_sends_id64s(self):
         """Spansh's exact plotter answers "Unable to find route" to system names; it takes id64s (found in game
-        2026-10-03, the neutron plotter still takes names). Where you are and systems known here need no request;
-        others come from Spansh's search, the exact name in any case. A start Spansh has not received yet says so."""
+        2026-10-03, the neutron plotter still takes names). Both ends are looked up in Spansh's search (the exact name,
+        any case): a system known here is not necessarily one Spansh knows."""
         import asyncio
         self.j.handle(self.loadout("2026-01-02T00:00:00Z", fsd="int_hyperdrive_overcharge_size8_class5_overchargebooster_mkii"))
         self.jump(-100, 100, "Start", 0)
-        self.jump(-50, 7001, "Visited Once", 10)
-        self.jump(-40, 100, "Start", 0)
         sp = ed_outrider.Spansh(self.db)
         self.state.spansh = sp
         search = ed_outrider.SPANSH_SYSTEM_SEARCH
+        here = (200, {"count": 1, "results": [{"id64": 100, "name": "Start", "x": 0, "y": 0, "z": 0}]})
         found = (200, {"count": 2, "results": [{"id64": 1, "name": "Thailoea AA-A h0 X", "x": 0, "y": 0, "z": 0},
                                                {"id64": 18207037532889, "name": "Thailoea AA-A H0", "x": 0, "y": 0, "z": 0}]})
         none = (200, {"count": 0, "results": []})
@@ -359,31 +387,24 @@ class HighwayH1(unittest.TestCase):
             asyncio.run(go())
             p = self.state.highway_plotting
             return p["state"], p["error"], sp.session.calls
-        # here (the journal's SystemAddress) to a system Spansh's search knows: one search, then the plot by id64
-        state, err, calls = plot({"to": "thailoea aa-a h0"}, [found, ok])
+        # here to a system Spansh's search knows: both looked up, then the plot by id64
+        state, err, calls = plot({"to": "thailoea aa-a h0"}, [here, found, ok])
         self.assertEqual((state, err), ("done", None))
-        self.assertEqual(calls[0], (search, {"q": "thailoea aa-a h0"}))
-        self.assertEqual((calls[1][0], calls[1][1]["source"], calls[1][1]["destination"]),
+        self.assertEqual(calls[:2], [(search, {"q": "Start"}), (search, {"q": "thailoea aa-a h0"})])
+        self.assertEqual((calls[2][0], calls[2][1]["source"], calls[2][1]["destination"]),
                          (ed_outrider.SPANSH_GENERIC_ROUTE, 100, 18207037532889))
-        # a visited system typed in any case: no search at all
-        state, err, calls = plot({"from": "visited once", "to": "start"}, [ok])
-        self.assertEqual([c[0] for c in calls], [ed_outrider.SPANSH_GENERIC_ROUTE])
-        self.assertEqual((calls[0][1]["source"], calls[0][1]["destination"]), (7001, 100))
-        # nobody knows the destination; a typed start nobody knows is one Spansh has not received yet
-        self.assertEqual(plot({"to": "Nowhere"}, [none])[:2], ("failed", "Spansh knows no system called Nowhere"))
-        state, err, calls = plot({"from": "Brand New", "to": "Start"}, [none])
-        self.assertEqual((state, err, len(calls)), ("failed", ed_outrider.highway_not_yet("Brand New"), 1))
-        # the start known here (you are in it) but not to Spansh: the plot fails, Spansh's search says why
-        state, err, _ = plot({"to": "Visited Once"}, [(400, {"error": "Unable to find route"}), none])
-        self.assertEqual((state, err), ("failed", ed_outrider.highway_not_yet("Start")))
-        # ...and when Spansh knows the start, its own answer stands
-        state, err, _ = plot({"to": "Visited Once"}, [(400, {"error": "Unable to find route"}),
-                                                      (200, {"results": [{"id64": 100, "name": "Start"}]})])
+        # nobody knows the destination; a typed start nobody knows (Spansh or here) says so
+        self.assertEqual(plot({"to": "Nowhere"}, [here, none])[:2], ("failed", "Spansh knows no system called Nowhere"))
+        state, err, calls = plot({"from": "Brand New", "to": "Start"}, [none, here])
+        self.assertEqual((state, err), ("failed", ed_outrider.highway_not_yet("Brand New")))
+        # Spansh's own answer to the plot stands
+        state, err, _ = plot({"to": "Start"}, [here, here, (400, {"error": "Unable to find route"})])
         self.assertEqual(err, "Spansh: Unable to find route")
         # the neutron plotter keeps sending names
-        state, err, calls = plot({"plotter": "neutron", "to": "Far End", "range": 50}, [(200, {"job": "n", "status": "ok",
-                                                                                                "result": self.NEUTRON})])
-        self.assertEqual((calls[0][1]["from"], calls[0][1]["to"], len(calls)), ("Start", "Far End", 1))
+        far = (200, {"results": [{"id64": 202, "name": "Far End", "x": 300, "y": 0, "z": 0}]})
+        state, err, calls = plot({"plotter": "neutron", "to": "Far End", "range": 50},
+                                 [here, far, (200, {"job": "n", "status": "ok", "result": self.NEUTRON})])
+        self.assertEqual((calls[2][1]["from"], calls[2][1]["to"], len(calls)), ("Start", "Far End", 3))
         # offline (Spansh never started): a clear error before any request
         with self.assertRaisesRegex(ed_outrider.HighwayError, "cannot be reached"):
             asyncio.run(ed_outrider.Spansh(self.db).system_id64("Nowhere"))
@@ -771,12 +792,67 @@ class HighwayH1(unittest.TestCase):
             self.state.tick({})
         self.assertEqual(self.heavy_moments(), ["Too much fuel for the next jump. It needs about 36 tons aboard; you have 160."])
 
+    def test_plot_from_a_system_spansh_does_not_know(self):
+        """A fresh discovery Spansh does not know yet (where you are): the route is plotted from the Spansh system near
+        it that is nearest the destination, out of what Spansh already sent about the neighbourhood, and starts with
+        the jump there. The page says so."""
+        import asyncio
+        self.j.handle(self.loadout("2026-01-02T00:00:00Z", fsd="int_hyperdrive_overcharge_size8_class5_overchargebooster_mkii"))
+        self.jump(-100, 900, "Fresh", -20)
+        self.state.bases = {100: ("spansh", {"name": "Start", "x": 0.0, "y": 0.0, "z": 0.0}),
+                            555: ("spansh", {"name": "Behind", "x": -35.0, "y": 0.0, "z": 0.0}),   # nearer, the wrong way
+                            556: ("edsm", {"name": "Edsm Only", "x": -21.0, "y": 0.0, "z": 0.0})}  # not Spansh's
+        sp = ed_outrider.Spansh(self.db)
+        sp.system_record = spansh_knows(start=100, end=105)
+        sp.session = _HwSession([(200, {"job": "e", "status": "ok", "result": self.EXACT})])
+        self.state.spansh = sp
+
+        async def go():
+            self.state.highway_start_plot({"to": "End"})
+            await self.state.highway_task
+        asyncio.run(go())
+        p = self.state.highway_plotting
+        self.assertEqual(p["state"], "done", p["error"])
+        self.assertEqual(sp.session.calls[0][1]["source"], 100)                     # plotted from Start
+        route = self.state.highway_view()["route"]
+        self.assertEqual((route["from"], route["to"], route["count"], route["at"]), ("Fresh", "End", 7, 0))
+        self.assertIn("Spansh doesn't know Fresh yet: the route starts with a 20.0 ly jump to Start", route["stand_in"])
+        self.assertEqual(p["note"], route["stand_in"])
+        rows = self.state.highway_state()[1]
+        self.assertEqual([(r["system"], r["distance"], r["jumps"], r["fuel_used"]) for r in rows[:3]],
+                         [("Fresh", None, 0, None), ("Start", 20.0, 1, None), ("Neu A", 50, 1, 5.1)])
+        self.assertEqual(rows[0]["remaining"], 220)
+
+        # a destination Spansh does not know (visited before): plotted to the Spansh system nearest it, then the jump
+        self.jump(-90, 950, "Deep", 230)
+        self.jump(-80, 100, "Start", 0)
+        sp.session = _HwSession([(200, {"count": 1, "results": [{"name": "End", "id64": 105, "x": 200, "y": 0, "z": 0}]}),
+                                 (200, {"job": "e", "status": "ok", "result": self.EXACT})])
+
+        async def go2():
+            self.state.highway_start_plot({"to": "Deep"})
+            await self.state.highway_task
+        asyncio.run(go2())
+        p = self.state.highway_plotting
+        self.assertEqual(p["state"], "done", p["error"])
+        self.assertEqual(sp.session.calls[0][:2], ("POST", ed_outrider.SPANSH_SEARCH))   # what Spansh knows around Deep
+        rows = self.state.highway_state()[1]
+        self.assertEqual([(r["system"], r["distance"]) for r in rows[-2:]], [("End", 50), ("Deep", 30.0)])
+        self.assertEqual(rows[0]["remaining"], 230)
+        self.assertIn("the route ends with a 30.0 ly jump from End", p["note"])
+
+    def test_splice_route_neutron_legs(self):
+        rows = ed_outrider.highway_rows("neutron", self.NEUTRON)
+        out = outrider.highway.splice_route(rows, "neutron", 50, start={"system": "S", "id64": 1, "x": -120, "y": 0, "z": 0})
+        self.assertEqual([(r["system"], r["jumps"], r["distance"]) for r in out[:2]], [("S", 0, None), ("Start", 3, 120.0)])
+        self.assertIsNone(outrider.highway.stand_in({"x": 0, "y": 0, "z": 0}, None, [], 50))
+
     def test_conservative_plot_params(self):
         import asyncio
         self.j.handle(self.caspian_loadout("2026-01-02T00:00:00Z"))
         self.j.handle({"event": "Cargo", "timestamp": "2026-01-02T00:00:01Z", "Vessel": "Ship", "Count": 0})
         sp = ed_outrider.Spansh(self.db)
-        sp.system_id64 = unittest.mock.AsyncMock(side_effect=lambda n: {"start": 100, "end": 105}.get(n.lower()))
+        sp.system_record = spansh_knows(start=100, end=105)
         self.state.spansh = sp
 
         def plot(body, result=None):
@@ -1306,6 +1382,23 @@ class HighwayAutoTarget(unittest.TestCase):
         self.assertIn("closed the galaxy map it had opened", r["log"][-1])
         self.assertTrue(self.released())
 
+    def test_abort_while_the_map_closes_does_not_reopen_it(self):
+        """Danger comes while the map is closing (its close key went down, Status.json still says galaxy map): the run
+        stops without pressing the map key again, which would reopen it (the sweep of 2026-10-09)."""
+        self.fake_time()
+        self.game.ignore_close = True                    # the close lags: GuiFocus stays 6 for now
+        real_key = self.game.key
+
+        def key(name):
+            real_key(name)
+            if name == "KEY_T" and [n for n, v in self.game.writes if v].count("KEY_T") == 2:   # the close key
+                self.status["flags"] |= self.T.FLAG_IN_DANGER
+        self.game.key = key
+        r = self.run_target()
+        self.assertEqual((r["ok"], r["phase"], r["why"]), (False, 6, "danger"))
+        self.assertEqual([n for n, v in self.game.writes if v].count("KEY_T"), 2)   # open, close: not a third
+        self.assertTrue(self.released())
+
     def test_map_never_closes_times_out(self):
         self.fake_time()
         self.game.ignore_close = True
@@ -1320,6 +1413,34 @@ class HighwayAutoTarget(unittest.TestCase):
         self.game.on_type = charge
         r = self.run_target()
         self.assertEqual((r["ok"], r["phase"], r["why"]), (False, 3, "an FSD jump started"))
+
+    def test_jump_charging_after_the_plot_is_no_failure(self):
+        """The FSD charges as the map closes, before steps 6 and 7 looked: the target is set, so the run succeeded (it said
+        "failed" before)."""
+        self.fake_time()
+        self.game.on_close = lambda g: self.status.update(flags=self.status["flags"] | 1 << 17)
+        r = self.run_target()
+        self.assertTrue(r["ok"], r)
+        self.assertIn("an FSD jump started, the target was set: done", r["log"][-1])
+        self.assertTrue(self.released())
+        # the jump went and you arrived at the target (its Destination gone with it): done too
+        self.status.update(flags=1 << 4, destination=None)
+        self.here = 101
+        self.game.on_close = lambda g: (setattr(self, "here", 102), self.status.update(destination=None))
+        r = self.run_target()
+        self.assertTrue(r["ok"], r)
+
+    def test_jump_charging_after_the_plot_without_a_target_still_fails(self):
+        self.fake_time()
+        self.game.no_plot = True
+        self.game.on_close = lambda g: self.status.update(flags=self.status["flags"] | 1 << 17)
+        r = self.run_target()
+        self.assertEqual((r["ok"], r["phase"], r["why"]), (False, 6, "an FSD jump started"))
+        # and a jump somewhere else is still "the system changed"
+        self.status.update(flags=1 << 4, destination=None)
+        self.game.on_close = lambda g: setattr(self, "here", 999)
+        r = self.run_target()
+        self.assertEqual((r["ok"], r["phase"], r["why"]), (False, 6, "the system changed"))
 
     def test_destination_verify(self):
         self.fake_time()
@@ -1600,6 +1721,23 @@ class HighwayAutoTarget(unittest.TestCase):
         self.assertEqual((self.state.autotarget_last["done"], self.state.autotarget_last["why"]), (False, "stopped"))
         self.assertEqual(self.moments(), [])                     # stopped on purpose: nothing said
 
+    def test_switch_off_with_auto_honk_off_closes_the_map(self):
+        """Auto honk off (auto-target the keyboard's only owner): switching auto-target off mid-run still closes the map
+        the run opened, then the device (the Fable sweep, 2026-10-09: it left the game in the galaxy map)."""
+        import asyncio
+        self.wire()
+        self.honker.owners = {"target"}
+
+        async def go():
+            loop = asyncio.get_running_loop()
+            self.game.on_type = lambda g: len(g.text) == 3 and loop.call_soon_threadsafe(self.state.set_autotarget, False)
+            await self._boost_and_wait(2)
+        asyncio.run(go())
+        self.assertEqual(self.status["gui_focus"], 0)                # the map closed again
+        self.assertTrue(self.released())
+        self.assertIsNone(self.honker.ui)                          # and the keyboard, nobody wants it now
+        self.assertEqual((self.state.autotarget_last["done"], self.state.autotarget_last["why"]), (False, "stopped"))
+
     def test_switch_off_while_waiting_for_auto_honk(self):
         import asyncio
         self.wire()
@@ -1807,6 +1945,69 @@ class HighwayAutoTarget(unittest.TestCase):
         self.assertEqual(out["near"][1]["system"], "Neu A")
         self.assertEqual((out["near_last"]["done"], out["near_last"]["index"]), (True, 1))
 
+    def test_target_next_waits_out_the_arrivals_danger_flag(self):
+        """The game sets in-danger on every jump until some 16-26 s after the arrival (logged in game 2026-10-09):
+        Target next pressed then waits for it to clear and runs, where it refused "you are in danger". Interdicted,
+        or still in danger AUTOTARGET_DANGER_WAIT s after the arrival, it still refuses."""
+        import asyncio
+        self.state.honker, self.state.targeter = self.honker, self.targeter
+        self.j.status_json = self.status
+        T = self.T
+        hwy_plot_exact(self)
+        self.now = time.time()
+        hwy_jump(self, -5, 101, "Neu A", 50)   # arrived 5 s ago
+        self.here = 101
+        self.status["flags"] |= T.FLAG_IN_DANGER
+
+        async def go():
+            out = {}
+            body, status = self.state.start_autotarget_run("next", countdown=0)
+            out["started"] = (status, body.get("system"), body.get("error"))
+            await asyncio.sleep(0.3)
+            out["waiting"] = (self.state.autotarget_running, [n for n, v in self.game.writes if v])
+            self.status["flags"] &= ~T.FLAG_IN_DANGER   # the flag clears: the run goes
+            await self.state.autotarget_test_task
+            out["last"] = dict(self.state.autotarget_last)
+            # interdicted: no waiting
+            self.status.update(flags=self.status["flags"] | T.FLAG_IN_DANGER | T.FLAG_INTERDICTED, destination=None)
+            out["interdicted"] = self.state.start_autotarget_run("next", countdown=0)
+            # an arrival over AUTOTARGET_DANGER_WAIT s ago: in danger is a real one, refused
+            self.status["flags"] &= ~T.FLAG_INTERDICTED
+            self.j.jump_arrival = dict(self.j.jump_arrival, ts=ed_outrider.iso_ts(time.time() - ed_outrider.AUTOTARGET_DANGER_WAIT - 5))
+            out["old"] = self.state.start_autotarget_run("next", countdown=0)
+            return out
+        out = asyncio.run(go())
+        self.assertEqual(out["started"], (200, "Bridge B", None))
+        self.assertEqual(out["waiting"], (None, []))   # nothing pressed while the flag was on
+        self.assertEqual((out["last"]["done"], out["last"]["system"]), (True, "Bridge B"))
+        self.assertEqual(out["interdicted"], ({"error": "you are in danger"}, 400))
+        self.assertEqual(out["old"], ({"error": "you are in danger"}, 400))
+        # it said it was waiting, once, with how long it may wait (the 60 s from the arrival, 5 s ago)
+        said = [m for m in self.j.moments if m["kind"] == "autotarget" and m.get("what") == "waiting"]
+        self.assertEqual(len(said), 1)
+        self.assertIn(said[0]["secs"], (54, 55))
+        self.assertEqual(said[0]["text"], "Not targeting due to danger. I will keep trying until you are out of danger, "
+                                          f"for up to {said[0]['secs']} seconds.")
+
+    def test_danger_wait_after_supercruise_entry_and_a_restart(self):
+        """The flag comes on for entering supercruise too (lifting off a planet 15 min after the arrival, logged in game
+        2026-10-09): that starts the window as an arrival does. And after a restart (the arrival not read again: no
+        jump_arrival) the restored position's arrival time stands in (review 2026-10-10 #5)."""
+        self.j.status_json = self.status
+        self.now = time.time()
+        hwy_jump(self, -900, 101, "Neu A", 50)   # arrived 15 minutes ago
+        self.status["flags"] |= self.T.FLAG_IN_DANGER
+        self.assertIsNone(self.state.arrival_danger_until())   # a real danger, as far as it knows
+        self.j.handle({"event": "SupercruiseEntry", "timestamp": self.ts(-3), "StarSystem": "Neu A", "SystemAddress": 101})
+        self.assertAlmostEqual(self.state.arrival_danger_until(), self.now - 3 + ed_outrider.AUTOTARGET_DANGER_WAIT, delta=1)
+        # an entry in another system (before a jump) counts for nothing here
+        self.j.supercruise_entry = {"id64": 999, "ts": self.ts(-3)}
+        self.assertIsNone(self.state.arrival_danger_until())
+        # restarted 5 s after an arrival: jump_arrival is gone, pos (from meta) has the arrival's ts
+        self.j.supercruise_entry, self.j.jump_arrival = None, None
+        self.j.pos = dict(self.j.pos, ts=self.ts(-5))
+        self.assertIsNotNone(self.state.arrival_danger_until())
+
     def test_copilot_button_targets_next(self):
         """The co-pilot button's layout (the author, 2026-10-08): in the ship a single press targets the next route
         system after a short wait: the survey / trade route's next first, else the Highway's; with neither, the
@@ -1862,6 +2063,28 @@ class HighwayAutoTarget(unittest.TestCase):
         self.assertEqual(self.state.autotarget_test["state"], "failed")
         self.state.copilot_press()   # nothing counting down: a press changes nothing
         self.assertFalse(self.state._copilot_cancelled)
+        # the same while the run waits out the arrival's danger flag, keys not pressed yet (the Fable review of
+        # 2026-10-10, #4): it said "auto-target is already running" and then pressed the keys anyway
+        self.state.COPILOT_TARGET_DELAY_S = 0.01
+        self.status["destination"] = None
+        self.status["flags"] |= self.T.FLAG_IN_DANGER
+        self.j.jump_arrival = {"id64": self.j.pos["id64"], "ts": ed_outrider.iso_ts(time.time() - 3)}
+        writes, seq, n = len(self.game.writes), self.state.copilot["seq"], len(moments())
+
+        async def press_in_the_wait():
+            self.state.copilot_gesture("status")
+            await asyncio.sleep(0.2)                     # past the countdown: waiting for the flag, no key yet
+            waiting = self.state.autotarget_test["state"]
+            self.state.copilot_press()
+            self.state.copilot_gesture("status")
+            await self.state.autotarget_test_task
+            return waiting
+        self.assertEqual(asyncio.run(press_in_the_wait()), "running")
+        self.assertEqual(len(self.game.writes), writes)   # nothing pressed
+        self.assertEqual((self.state.copilot["seq"], self.state.copilot["action"]), (seq + 1, "status"))
+        self.assertEqual(self.state.autotarget_test["state"], "failed")
+        self.assertFalse([m for m in moments()[n:] if (m.get("text") or "").startswith("Not targeting: auto-target is already running")])
+        self.status["flags"] &= ~self.T.FLAG_IN_DANGER
         # double: the status report; hold: the hush
         self.state.copilot_gesture("again")
         self.assertEqual(self.state.copilot["action"], "status")

@@ -1,4 +1,4 @@
-[ED Outrider](../../README.md) · [Install and run](install.md) · [The views](views.md) · [Plot Route](plot-route.md) · [Cargo and trading](cargo-and-trading.md) · [Voice and alerts](voice-and-alerts.md) · [Automation](automation.md) · [On a tablet](tablet.md) · **Settings and good to know** · [For the curious](for-developers.md)
+[ED Outrider](../../README.md) · [What's new](whats-new.md) · [Install and run](install.md) · [The views](views.md) · [Plot Route](plot-route.md) · [Cargo and trading](cargo-and-trading.md) · [Voice and alerts](voice-and-alerts.md) · [Automation](automation.md) · [On a tablet](tablet.md) · [Uploads](uploads.md) · **Settings and good to know** · [For the curious](for-developers.md)
 
 # Settings and good to know
 
@@ -9,7 +9,7 @@
 <br>
 
 **⚙ Settings** (top right) holds everything, in folding sections: Alerts, Voice, What is said, Sounds, Values, Risk
-& warnings, Surface map, Auto honk, Display, Sharing, **Server** and Spoken lines. Most are this browser's
+& warnings, Surface map, Auto honk, Uploads, Display, Sharing, **Server** and Spoken lines. Most are this browser's
 own (Sharing exports them or makes them the defaults for new browsers). **Server** is the config file
 itself, every key of it: the network and the client password, the journal folders, paths, backups, Spansh, the
 Highway, the voice's AI layer and more. Saving there writes `ed_outrider.toml` (only the keys you changed; its
@@ -39,6 +39,7 @@ Outrider folder; they default to `data/ed_outrider.sqlite`, `data/backups` and `
 | `[copilot]` | `enabled`, `device`, `button`, `hold_ms`, `double_ms` |
 | `[assistant]` | `enabled`, `base_url`, `api_key`, `model`, `timeout`, `max_rounds`: the voice's optional AI layer |
 | `[mcp]` | `url`, `max_rows`, `password`: for the MCP bridge (see Ask an AI about your game) |
+| `[eddn]`, `[edsm]` | `enabled`: written by the switches in Settings → Uploads (the only place to change them; off by default) |
 | `[highway]` | `clipboard`, `efficiency`, `conservative`, `conservative_ly`, `background_image`, `background_extent`, `background_opacity`; auto-target: `autotarget`, `autotarget_delay`, `autotarget_entry`, `autotarget_map_wait`, `autotarget_search_wait`, `autotarget_key_delay`, `autotarget_keys`, `autotarget_search`, `autotarget_submit`, `autotarget_plot`, `autotarget_dry_run` |
 
 Command-line flags override the file for a single run:
@@ -68,8 +69,9 @@ Command-line flags override the file for a single run:
   conditions, as maintained by the [BioScan](https://github.com/Silarn/EDMC-BioScan) project, including
   its check on which star types a species appears around. Until every body is found, nothing is ruled out
   on what isn't known yet. The genus is usually right, the species sometimes not, so values show as
-  "up to". The ✦ "new to your codex" mark checks the colour variant when it can be told; ✪ is a species in your
-  codex nowhere at all, worth more effort. Each start checks GitHub for newer rules. Settings → Display can
+  "up to". The ✦ "new to your codex" mark checks the colour variant when it can be told, and names it ("✦ Grey");
+  ✪ is a species or colour in your codex nowhere at all ("✪ Cobalt"), worth more effort. A Bacterium's colour
+  comes from a rare element in each body's own materials, so bodies in one system can differ. Each start checks GitHub for newer rules. Settings → Display can
   leave out of Here's bio column the species you have finished and the bodies with few signals (this device).
 - **Values are estimates** using the community tools' formula, bonuses included (the full-scan bonus too: 1,000 cr
   per body of a system you found complete while all of it was undiscovered). An NPC crew member's cut

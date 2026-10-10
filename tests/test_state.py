@@ -305,6 +305,23 @@ class Batch1Server(unittest.TestCase):
         u5 = next(x for x in self.state.leaving_summary(1)["unmapped"] if x["body"] == "5")
         self.assertEqual(u5["value_mapped_bonus"], u5["value_mapped"])
 
+    def test_mapped_by_someone_else_is_flagged(self):
+        """The author (2026-10-09): a body someone else mapped (WasMapped) is never pointed out. The leaving list and the
+        scan's moment flag it (the page leaves it out, and says once per system that mapping still pays); the arrival
+        briefing never picks it."""
+        for bid, name, mapped in ((4, "Sys 4", False), (5, "Sys 5", True)):
+            ev = scan(f"2026-01-01T00:0{bid}:00Z", "Sys", 1, bid, name, disc=True)[2]
+            ev.update(PlanetClass="Sudarsky class II gas giant", MassEM=300, WasMapped=mapped)
+            self.j.handle(ev)
+        self.j.moment("scan", "2026-01-01T00:05:00Z", system=1, body_id=5)
+        self.db.commit()
+        flags = {u["body"]: u["mapped_before"] for u in self.state.leaving_summary(1)["unmapped"]}
+        self.assertEqual(flags, {"4": False, "5": True})
+        scanm = [x for x in self.state.moments_summary() if x["kind"] == "scan" and x["body"] == "5"][-1]
+        self.assertTrue(scanm["mapped_before"])
+        worth = [w["body"] for w in (self.state.arrival_facts(1) or {}).get("worth") or []]
+        self.assertEqual(worth, ["4"])                          # the one nobody mapped; not 5
+
 
 class Batch2Server(unittest.TestCase):
     """Batch 2: jet-cone boost, stellar phenomena, the on-body strip and the in-game destination."""
@@ -1364,6 +1381,43 @@ class BatchAIntegrity(unittest.TestCase):
         # the zip just written sorts first (a clock set back): it is kept all the same
         self.assertEqual(ed_outrider.rotate_backups(d, 1, "/q/x.sqlite", current=os.path.join(d, "outrider-x-20250101-000000Z.zip")), 1)
         self.assertEqual(os.listdir(d), ["outrider-x-20250101-000000Z.zip"])
+
+    def test_archive_shared_with_another_instance(self):
+        """Codex F8: two instances archive the same journal into one folder, one from a lagging mirror. The shorter copy
+        never replaces the longer one another instance put there meanwhile, and one's failure never removes the
+        other's staging file."""
+        import shutil
+        live, dest = os.path.join(self.tmp, "live"), os.path.join(self.tmp, "arch")
+        name = "Journal.2026-01-01T000000.01.log"
+        self.write(live, name, [{"event": "Fileheader"}, {"event": "LoadGame"}])           # the lagging mirror's
+        os.makedirs(dest, exist_ok=True)
+        with open(os.path.join(live, name), "rb") as f:
+            whole = f.read()
+        with open(os.path.join(dest, name), "wb") as f:
+            f.write(whole.split(b"\n")[0] + b"\n")                                       # archived earlier: its first line
+        longer = whole + b'{"event":"Location"}\r\n' * 20                              # the fuller source's
+        real = shutil.copy2
+
+        def copy2(src, dst):   # the other instance finishes its fuller copy while this one copies
+            real(src, dst)
+            with open(os.path.join(dest, name), "wb") as f:
+                f.write(longer)
+        with unittest.mock.patch.object(shutil, "copy2", copy2):
+            copied, _, failed = ed_outrider.archive_journals([live], dest)
+        self.assertEqual((copied, failed), (0, []))
+        with open(os.path.join(dest, name), "rb") as f:
+            self.assertEqual(f.read(), longer)
+        self.assertEqual(os.listdir(dest), [name])                                        # no staging file left
+        # the other instance's staging file (the old shared name) is not this one's to remove on a failure
+        os.remove(os.path.join(dest, name))
+        theirs = os.path.join(dest, name + ".part")
+        open(theirs, "w").close()
+
+        def fails(src, dst):
+            raise OSError(28, "No space left on device")
+        with unittest.mock.patch.object(shutil, "copy2", fails):
+            ed_outrider.archive_journals([live], dest)
+        self.assertTrue(os.path.exists(theirs))
 
     def test_archive_failure_is_reported_and_rotation_still_runs(self):   # G2.2
         import shutil
@@ -2560,6 +2614,7 @@ class JournalsRegistry(unittest.TestCase):
     SAFE_ON_RETRY = {
         "arrival_scan": "the latest arrival-star Scan: overwritten, so the retry sets the same value",
         "jump_arrival": "the latest hyperspace arrival: overwritten",
+        "supercruise_entry": "the latest SupercruiseEntry (auto-target's danger wait): overwritten, newest wins",
         "last_all_found": "the latest FSSAllBodiesFound: overwritten",
         "last_honk": "the latest discovery scan: overwritten",
         "last_shutdown": "the latest Shutdown read: overwritten",
@@ -2577,8 +2632,8 @@ class JournalsRegistry(unittest.TestCase):
         "highway": "live-only: the Highway route (DESIGN_NOTES), cannot be rebuilt from journals",
         "riches": "live-only: the Road to Riches route (Spansh's plot), cannot be rebuilt from journals",
         "next_stop": "live-only: the player's chosen next stop (stamp_next_stop keeps it through the re-read)",
-        "docked": "rebuilt by the re-read (Docked/Undocked replayed in order, Undocked guarded by fresh()); kept so "
-                  "the docked state is not blank while it runs",
+        "docked": "kept so the docked state is not blank while the re-read runs: older Docked/Undocked lines leave it "
+                  "(fresh()), but an older Docked at your carrier still sets the carrier's services",
         "last_event_ts": "only ever raised (written when a line is newer), so replayed older lines leave it right",
         "last_play_ts": "rebuilt by the re-read (it ends on the newest playing event); kept meanwhile",
         "commodity_names": "a cache of the journal's commodity display names: a re-read only learns them again",

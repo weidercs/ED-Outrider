@@ -76,7 +76,7 @@ def _int(args, key, default, lo, hi):
     v = args.get(key, default)
     try:
         v = int(v)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):   # OverflowError: 1e999 parses as inf
         v = default
     return max(lo, min(hi, v))
 
@@ -116,8 +116,9 @@ async def this_system(get, args, rows):
     todo = {"honked": l.get("honked"), "bodies_known": l.get("scanned"), "body_count": l.get("body_count"),
             "bodies_to_find": l.get("unscanned"),
             "bio_to_sample": [x.get("body") for x in l.get("bio_pending") or []],
+            # the detailed list (unmapped_valuable is short labels like "A 2 (ELW T)": .get on them crashed the tool)
             "worth_mapping": [{"body": x.get("body"), "type": x.get("subtype"), "adds": x.get("increment")}
-                              for x in l.get("unmapped_valuable") or []]}
+                              for x in l.get("unmapped") or [] if isinstance(x, dict) and x.get("special")]}
     return {"system": d.get("name"), "region": (d.get("region") or {}).get("name") if isinstance(d.get("region"), dict) else d.get("region"),
             "value_now": d.get("value_now"), "value_max": d.get("value_max"), "to_do": todo,
             **capped((_body_brief(b) for b in bodies), rows, "bodies")}
@@ -167,7 +168,10 @@ async def nearest_unvisited(get, args, rows):
        "kind": {"type": "string", "enum": ["any", "station", "carrier"], "description": "stations, carriers or both (default)"},
        "age_days": {"type": "integer", "description": "leave out reports older than this (default 30)"}})
 async def nearest_dock(get, args, rows):
-    need = [n for n in args.get("need") or [] if isinstance(n, str)]
+    need = args.get("need") or []
+    if isinstance(need, str):   # one service sent as a string (models often do): not its letters
+        need = [need]
+    need = [n for n in need if isinstance(n, str)]
     kind = args.get("kind") if args.get("kind") in ("station", "carrier") else "any"
     q = {"need": ",".join(need), "age": str(_int(args, "age_days", 30, 1, 3650)), "cached": "1",
          "stations": "0" if kind == "carrier" else "1", "carriers": "0" if kind == "station" else "1"}
@@ -180,7 +184,10 @@ async def nearest_dock(get, args, rows):
                 "system": r.get("system"), "distance_ly": r.get("ly"), "from_star_ls": rnd(r.get("ls"), 0),
                 "services": r.get("services"), "pads": r.get("pads"), "dssa": bool(r.get("dssa")), "yours": bool(r.get("own")),
                 "warnings": r.get("warn") or [], "report_age_days": rnd((r.get("age_s") or 0) / 86400) if r.get("age_s") is not None else None}
-    return {"hidden": d.get("hidden"), "pad": d.get("pad"), **capped(map(brief, d.get("rows") or []), min(rows, 10), "places")}
+    # errors: Spansh could not be reached, say (the places are then only the DSSA list and your carrier): passed on,
+    # so the answer can say so rather than call a far carrier the nearest place
+    return {"hidden": d.get("hidden"), "pad": d.get("pad"), "errors": d.get("errors") or None,
+            **capped(map(brief, d.get("rows") or []), min(rows, 10), "places")}
 
 
 @tool("body_detail", "One body in the current system (or another system by its id64): its values, signals, biology "

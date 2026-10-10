@@ -10,7 +10,7 @@
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776ab?logo=python&logoColor=white">
   <img alt="Runs locally" src="https://img.shields.io/badge/runs-on%20your%20PC-2ea44f">
   <img alt="No account" src="https://img.shields.io/badge/account-none%20needed-6aa8ff">
-  <img alt="Uploads" src="https://img.shields.io/badge/uploads-never-ff8c1a">
+  <img alt="Uploads" src="https://img.shields.io/badge/uploads-opt--in-ff8c1a">
 </p>
 
 ---
@@ -22,7 +22,8 @@ about to jump away from something you'll regret leaving.**
 
 It runs on your own machine. It asks [Spansh](https://spansh.co.uk) (and
 [EDSM](https://www.edsm.net) as a backup) what the community already knows about the systems
-around you, then layers your own scans on top — nothing is ever uploaded. A tablet can sit beside you as a cockpit
+around you, then layers your own scans on top. Nothing is uploaded unless you switch on sharing with
+[EDDN and EDSM](docs/guide/uploads.md), as EDMC does. A tablet can sit beside you as a cockpit
 display ([ED Outrider for Android](https://github.com/weslocke/ED-Outrider-Android), or any browser), and Outrider can
 also run 24/7 on a home server in Docker.
 
@@ -76,13 +77,15 @@ Everything about installing, the optional parts, Docker, other devices and backu
 
 | Page | What's in it |
 |---|---|
+| **[What's new](docs/guide/whats-new.md)** | What each release brings: new things to try, settings worth a look, anything to know before updating |
 | <a id="-running-as-a-server-docker"></a><a id="-other-devices-on-your-network"></a><a id="-backups"></a>**[Install and run](docs/guide/install.md)** | Getting started in full (Linux, Windows, the optional parts), running as a server in Docker, other devices on your network, backups |
-| <a id="-the-views"></a><a id="-the-surface-map"></a>**[The views](docs/guide/views.md)** | Every tab (Nearby, Here, Map, History, Samples, Log, Materials, Search, My firsts, Now), the header tiles, the desktop themes, the surface map |
+| <a id="-the-views"></a><a id="-the-surface-map"></a>**[The views](docs/guide/views.md)** | Every tab (Nearby, Here, Map, History, Bio/Geo with the Exo-Biology and Geology checklists, Log, Materials, Search, My firsts, Now), the header tiles, the desktop themes, the surface map |
 | <a id="-the-neutron-highway"></a>**[Plot Route](docs/guide/plot-route.md)** | The Neutron Highway (exact and neutron plotters), Road to Riches, Exomastery and trade routes, following a route, 🎯 and auto-target, the nearest place to dock |
 | <a id="-cargo-and-your-carrier"></a><a id="-trading"></a>**[Cargo and trading](docs/guide/cargo-and-trading.md)** | Your hold and your fleet carrier's (tracked, no Frontier sign-in), the carrier's tritium, Sell / Buy from Spansh's markets, trade routes |
 | <a id="-alerts"></a><a id="-the-voice"></a><a id="-ask-outrider-by-voice"></a><a id="-ask-an-ai-about-your-game"></a>**[Voice and alerts](docs/guide/voice-and-alerts.md)** | What Outrider tells you and when, the voice and its personalities, editing and banning lines, asking by voice, asking an AI |
 | <a id="-auto-honk"></a><a id="-the-co-pilot-button"></a>**[Automation](docs/guide/automation.md)** | Auto honk and the co-pilot button (on the game PC) |
 | <a id="-on-a-tablet"></a>**[On a tablet](docs/guide/tablet.md)** | The touch layout at /tablet, its nine themes, the control rail, the Android app |
+| **[Uploads](docs/guide/uploads.md)** | EDDN and EDSM (opt-in, off by default): what is sent and never sent, one uploader at a time, EDSM's key |
 | <a id="-settings"></a><a id="-good-to-know"></a>**[Settings and good to know](docs/guide/settings.md)** | Every setting and config key, and the things worth knowing (what "not on the page" means, estimates, updates) |
 | <a id="-for-the-curious"></a>**[For the curious](docs/guide/for-developers.md)** | What's in the box, the code's layout, the status API for overlays; contributors start with the agent guide |
 
@@ -100,6 +103,9 @@ distances and colour variants are from <a href="https://github.com/Silarn/EDMC-E
 Planetary mining odds are CMDR Grumlop's survey from the
 <a href="https://edfieldmanual.com/index.php?title=Module:Data/SurfaceMiningProspecting">Elite Dangerous Field Manual</a>
 (<a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>), shipped unchanged in <code>resources/mining_odds.json</code>.<br>
+The geology checklist's reported sites are counted from <a href="https://canonn.science">Canonn</a>'s codex records
+(<code>resources/geo_codex.json</code>); the checklists' pictures are Canonn's screenshots, linked (never copied) and
+credited to the commander who took each (<code>resources/codex_images.json</code> holds only the links).<br>
 The tablet themes' emblems (in <code>static/emblems/</code>, each under the terms in its <code>CREDITS.txt</code>, not the GPL):
 the Explorer Elite badge is used under Frontier's media usage rules; the Babylon 5 emblems (© Warner Bros.) are public-domain
 redrawings from the Babylon 5 Wiki; the Sith emblem is Gameposo's, vectorised by Marnanel (Wikimedia Commons,

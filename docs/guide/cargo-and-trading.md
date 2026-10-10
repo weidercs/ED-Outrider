@@ -1,4 +1,4 @@
-[ED Outrider](../../README.md) · [Install and run](install.md) · [The views](views.md) · [Plot Route](plot-route.md) · **Cargo and trading** · [Voice and alerts](voice-and-alerts.md) · [Automation](automation.md) · [On a tablet](tablet.md) · [Settings and good to know](settings.md) · [For the curious](for-developers.md)
+[ED Outrider](../../README.md) · [What's new](whats-new.md) · [Install and run](install.md) · [The views](views.md) · [Plot Route](plot-route.md) · **Cargo and trading** · [Voice and alerts](voice-and-alerts.md) · [Automation](automation.md) · [On a tablet](tablet.md) · [Uploads](uploads.md) · [Settings and good to know](settings.md) · [For the curious](for-developers.md)
 
 # Cargo and trading
 
@@ -53,8 +53,10 @@ players last reported, so the newer the data, the safer the trip.
 </p>
 
 - **Following it:** each stop lists what to sell and buy there, the hop's profit and the total so far. On arrival
-  the voice says where to dock and what to trade; your sales and purchases there tick the goods off (your journal),
-  then it says the hop's profit and the next stop (its own alert, Trade route). 💱 in the line under the tiles, with
+  the voice says where to dock and what to trade; your sales and purchases there count towards each commodity's
+  tonnes (your journal: "60 of 100 t" until it is all traded), then it says the hop's profit and the next stop (its
+  own alert, Trade route). Undocking with only part traded (the station had less than Spansh said) moves on: the
+  voice says what fell short instead of the profit. 💱 in the line under the tiles, with
   🎯 on the next system.
 
 ---
