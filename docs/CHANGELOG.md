@@ -2,6 +2,11 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Exobiology checklist: colours drop down under the species
+- Clicking a species drops its colours down under its row in the box (each with what gives it and your state; a
+  colour with a picture shows it when clicked), and clicking it again folds them up. The column beside the boxes
+  keeps only the species' line, its picture and the map.
+
 ## 2026-10-09 · Checklists' pictures: the link list refreshed daily
 - The server asks Canonn's codex reference for its picture links once a day (two minutes after a start when its copy
   is missing or a day old; an hour later after a failure) and keeps them in data/codex_images.json, used when sound

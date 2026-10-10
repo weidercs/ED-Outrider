@@ -4277,6 +4277,14 @@ function clFillRegions(d) {
   }
   for (const o of clRegionEl.options) if (text[o.value] != null && o.textContent !== text[o.value]) o.textContent = text[o.value];
 }
+// the picture a species shows: the colour clicked, else one you have found, else the first with one (Canonn has most)
+function clPick(r) {
+  const sp = CL.species && CL.species.id === r.id && !CL.species.error ? CL.species : null, imgs = (sp && sp.images) || {};
+  const key = v => (v.colour || "").toLowerCase();
+  const pick = [CL.colour, ...r.variants.list.filter(v => v.state).map(key), ...r.variants.list.map(key), ...Object.keys(imgs)]
+    .find(c => c != null && imgs[c]);
+  return {imgs, pick, shown: pick != null ? r.variants.list.find(v => key(v) === pick) : null};
+}
 function clRow(id) {
   for (const g of (CL.data && CL.data.genera) || []) for (const r of g.species) if (r.id === id) return r;
   return null;
@@ -4311,15 +4319,32 @@ function renderChecklist() {
       return `<tr class="${cls}${CL.open === r.id ? " on" : ""}" data-cl="${esc(r.id)}" title="${esc(tip)}"><td>${esc(r.short)}` +
         `${r.possible === "parts" ? ' <span class="clparts">◐</span>' : ""}</td><td>${r.state ? CL_WORD[r.state]
           : r.elsewhere ? `<span class="clelse" title="${esc(`found in another region: ${CL_WORD[r.elsewhere]}`)}">elsewhere</span>` : ""}</td>` +
-        `<td class="num">${geo ? (r.sites ? r.sites.toLocaleString() : "—") : `${r.variants.found} / ${r.variants.total}`}</td></tr>`;
+        `<td class="num">${geo ? (r.sites ? r.sites.toLocaleString() : "—") : `${r.variants.found} / ${r.variants.total}`}</td></tr>` +
+        (!geo && CL.open === r.id ? clVariantRows(r) : "");
     }).join("") + "</table></div>";
   }).join("");
   if (grid.innerHTML !== html) grid.innerHTML = html;
   clDrawSide();
 }
+// a species' colours, dropped down under its row: each with what gives it and your state; one with a picture shows it
+function clVariantRows(r) {
+  const {imgs, pick} = clPick(r);
+  return r.variants.list.map(v => {
+    const k = (v.colour || "").toLowerCase(), img = v.colour && imgs[k];
+    return `<tr class="clvar${v.state ? ` cl-${v.state}` : ""}${img ? " climgrow" : ""}${img && k === pick ? " on" : ""}" data-colour="${esc(k)}"` +
+      `${img ? ' title="show its picture"' : ""}><td colspan="3"><div class="cvrow"><span class="cvc">${v.colour ? esc(v.colour) : "its one variant"}</span>` +
+      `<span class="cvw">${esc(v.where || "")}</span><span class="cvs">${v.state ? CL_WORD[v.state] : ""}</span></div></td></tr>`;
+  }).join("");
+}
 document.getElementById("clGrid").addEventListener("click", e => {
+  const vr = e.target.closest("tr.clvar");
+  if (vr) {   // a colour: its picture
+    if (vr.classList.contains("climgrow")) { CL.colour = vr.dataset.colour; renderChecklist(); }
+    return;
+  }
   const tr = e.target.closest("[data-cl]");
   if (!tr) return;
+  if (CL.open === tr.dataset.cl) { CL.open = null; CL.species = null; renderChecklist(); return; }   // folded up again
   CL.open = tr.dataset.cl; CL.colour = null;
   renderChecklist();
   clLoadSpecies(CL.open);
@@ -4331,13 +4356,13 @@ async function clLoadSpecies(id) {
   try { d = await apiJson(`api/checklist?kind=${clKind()}&species=${encodeURIComponent(id)}`); } catch (err) { d = {error: err.message}; }
   if (CL.open !== id) return;   // another species clicked meanwhile
   CL.species = d;
-  clDrawSide();
+  renderChecklist();   // the dropped-down colours learn which have a picture
 }
 function clDrawSide() {
   const side = document.getElementById("clSide"), r = clRow(CL.open);
   let html;
   if (!r) html = `<p class="unk">${clKind() === "geo" ? "Click an entry for where it has been reported and where you logged it."
-    : "Click a species for its colours and where it grows."}</p>`;
+    : "Click a species for its colours (under it in its box), its picture and where it grows."}</p>`;
   else if (clKind() === "geo") {
     const sp = CL.species && CL.species.id === r.id ? CL.species : null;
     const mine = sp && !sp.error ? [...new Set(sp.runs.map(x => x.system))] : [];
@@ -4355,19 +4380,10 @@ function clDrawSide() {
     const sp = CL.species && CL.species.id === r.id ? CL.species : null;
     const where = r.possible === "yes" ? "can grow in this region" : r.possible === "parts"
       ? "only in parts of this region (near Guardian sites, in tuber zones, by nebulae)" : "the rules say it cannot grow in this region";
-    // the picture: the colour clicked, else one you have found, else the first with one (Canonn has most, not all)
-    const imgs = (sp && !sp.error && sp.images) || {};
-    const pick = [CL.colour, ...r.variants.list.filter(v => v.state).map(v => (v.colour || "").toLowerCase()),
-                  ...r.variants.list.map(v => (v.colour || "").toLowerCase()), ...Object.keys(imgs)].find(c => c != null && imgs[c]);
-    const shown = pick != null ? r.variants.list.find(v => (v.colour || "").toLowerCase() === pick) : null;
-    const vs = r.variants.list.map(v => `<tr class="${v.state ? `cl-${v.state}` : ""}${imgs[(v.colour || "").toLowerCase()] && v.colour ? " climgrow" : ""}` +
-      `${v.colour && (v.colour || "").toLowerCase() === pick ? " on" : ""}" data-colour="${esc((v.colour || "").toLowerCase())}"` +
-      `${imgs[(v.colour || "").toLowerCase()] && v.colour ? ' title="show its picture"' : ""}><td>${v.colour ? esc(v.colour) : "its one variant"}</td>` +
-      `<td class="unk">${esc(v.where || "")}</td><td>${v.state ? CL_WORD[v.state] : ""}</td></tr>`).join("");
+    const {imgs, pick, shown} = clPick(r);   // its colours are dropped down under its row in the box
     html = `<h4>${esc(r.name)}</h4><div class="unk">${r.value ? `${credits(r.value)} cr` : ""}` +
       `${CL.data.region != null ? ` · ${esc(where)}` : ""}${r.runs ? ` · ${r.runs} run${r.runs === 1 ? "" : "s"}` : ""}</div>` +
       (pick != null ? clFigure(imgs[pick], `${r.name}${shown && shown.colour ? ` - ${shown.colour}` : ""}`, shown && shown.colour) : "") +
-      `<table class="clvars"><thead><tr><th>Colour</th><th>Grows with</th><th></th></tr></thead><tbody>${vs}</tbody></table>` +
       `<div class="clmapbox"><canvas id="clMap" width="880" height="880" aria-label="${esc(`the galaxy: where ${r.name} can grow`)}"></canvas>` +
       `<div id="clMapTip" class="cltip" hidden></div></div>` +
       `<div class="unk clmaplegend">${sp && sp.error ? esc(sp.error) : !sp ? "loading the map…"
@@ -4376,13 +4392,6 @@ function clDrawSide() {
   if (side.dataset.html !== html) { side.innerHTML = html; side.dataset.html = html; CL.map = null; }
   clDrawMap();
 }
-// a colour's row shows its picture
-document.getElementById("clSide").addEventListener("click", e => {
-  const row = e.target.closest("tr.climgrow");
-  if (!row) return;
-  CL.colour = row.dataset.colour;
-  clDrawSide();
-});
 // hovering a lit region of the map (one the species can grow in) names it, with your completion there; elsewhere nothing
 document.getElementById("clSide").addEventListener("mousemove", e => {
   const cv = e.target.closest && e.target.closest("#clMap"), tip = document.getElementById("clMapTip");
