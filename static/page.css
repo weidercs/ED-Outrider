@@ -1100,3 +1100,9 @@ body.app #richPane { grid-column: 1; grid-row: 2; }
   background: var(--bg); color: var(--text); border: 1px solid var(--line); box-shadow: 0 2px 6px rgba(0, 0, 0, .35); }
 @media (max-width: 900px) { .clwrap { flex-direction: column; align-items: stretch; } .clgrid { width: 100%; }
   .clside { position: static; flex-basis: auto; width: 100%; } }
+/* Here's icon legend: under the list, kept in view (sticky to the bottom of the scrolling pane, or of the window) */
+#hereLegend { position: sticky; bottom: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 2px 14px; margin-top: 6px; padding: 4px 2px;
+  background: var(--bg); border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+#hereLegend[hidden] { display: none; }
+#hereLegend .lg { white-space: nowrap; } #hereLegend .lgi { color: var(--text); }
+body.app #hereMain.halves > #hereLegend { flex: 0 0 auto; position: static; margin: 0; padding: 4px 8px; }

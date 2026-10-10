@@ -2851,12 +2851,14 @@ function renderHere() {
     head.textContent = "loading…"; lv.innerHTML = "";
     document.getElementById("hereRows").innerHTML = "";
     const sch = document.getElementById("hereSchematic"); if (sch) sch.innerHTML = "";
+    drawHereLegend();
     return;
   }
   if (h.error) {
     const sch = document.getElementById("hereSchematic"); if (sch) sch.innerHTML = "";
     head.textContent = h.error; lv.innerHTML = "";
     document.getElementById("hereRows").innerHTML = `<tr><td colspan="11" class="unk">${esc(h.error)}</td></tr>`;
+    drawHereLegend();
     if (selectedBody) closeBody();
     return;
   }
@@ -2953,6 +2955,7 @@ function renderHere() {
   document.getElementById("hereRows").innerHTML = (hm.top === "text" ? treeRowsHtml(h, rowHtml) : byMax.map(b => rowHtml(b)).join(""))
     || `<tr><td colspan="11" class="unk">No bodies known here.</td></tr>`;
   refocus("hereRows", fk);
+  drawHereLegend();
   // the body targeted in-game: a line saying what it is worth going to, and its row brought into view
   if (destBody) {
     const b = destBody;
@@ -2965,6 +2968,58 @@ function renderHere() {
   } else lastDestKey = null;
 }
 let lastDestKey = null;
+// Here's footer (the author, 2026-10-10): what the icons mean, for the icons the list or the schematic shows now and
+// only those (none shown: no footer). It sits under the scrolling list, so it stays in view. Each entry: [test, the
+// icon as shown, what it means]; a test gets q(selector) over the parts shown, s(glyph) for the schematic's badges
+// (their plain text: a dim 🗺 there is a span) and has(selector, text) for a shown element with that text
+const HERE_LEGEND = [
+  [(q, s) => q(".cur"), "🔭", "something unusual (hover it)"],
+  [q => q(".nb.ELW"), `<span class="nb ELW">ELW</span>`, "Earth-like world"],
+  [q => q(".nb.WW"), `<span class="nb WW">WW</span>`, "water world"],
+  [q => q(".nb.AW"), `<span class="nb AW">AW</span>`, "ammonia world"],
+  [q => q(".nb.T"), `<span class="nb T">T</span>`, "terraformable"],
+  [q => q(".scoop"), "⛽", "scoopable star"],
+  [q => q(".ic.ring, .ringmark"), icon("ring", "i-ring", "", "rings"), "rings"],
+  [q => q(".belt"), "⋯", "asteroid belts"],
+  [(q, s) => q('.fl[title="first discovered"]') || s("🏁"), "🏁", "first discovered by you"],
+  [(q, s) => q('.fl[title="first mapped"]') || s("🗺"), "🗺", "first mapped by you"],
+  [q => q('.fl.unk[title^="mapped"], #hereSchematic .badges > span.unk'), `<span class="unk">🗺</span>`, "mapped (not first)"],
+  [(q, s) => q('.fl[title="first footfall"]') || s("👣"), "👣", "first footfall"],
+  [q => q('span.unk[title^="known to Spansh"]'), "—", "not scanned by you (Spansh knows it)"],
+  [(q, s) => s("🧬"), "🧬", "biological signals"],
+  [q => q(".warnc"), "🧬?", "bio possible: check the FSS"],
+  [q => q(".sp.part"), "1/3", "samples of a species taken (3 analyses it)"],
+  [q => q(".sp.done"), "✓", "species analysed"],
+  [q => q(".sp.lost"), "✗", "samples lost with the ship: sample again"],
+  [q => q('span.unk[title^="likeliest by value"]'), "?", "the likeliest species, not yet known"],
+  [(q, s, has) => has("td.bio .sp", "≤"), "≤", "the most the likely species could pay"],
+  [q => q(".cxgal"), `<span class="cxnew cxgal">✪</span>`, "new to your codex anywhere"],
+  [(q, s, has) => q(".cxnew:not(.cxgal)") || has('.sp[title^="codex:"]', "✦"),
+   `<span class="cxnew">✦</span>`, "new to your codex in this region"],
+  [q => q('.sp[title^="codex:"]'), "📖", "a codex entry you logged here"],
+  [(q, s, has) => has('.sp[title^="codex:"]', "💰"), "💰", "the codex paid for it"],
+  [(q, s) => q(".sp.geo") || s("🪨"), "🪨", "geological signals"],
+  [q => q(".volc, #hereSchematic .badges span[title]:not(.nb):not(.scoop):not(.unk)"), "🌋", "volcanism (brighter: landable, geological sites possible)"],
+  [(q, s) => q(".minec") || s("⛏"), "⛏", "planetary mining locations (hover for the likely minerals)"],
+];
+function drawHereLegend() {
+  const el = document.getElementById("hereLegend");
+  if (!el) return;
+  const roots = [], box = document.getElementById("hereTableBox"), sch = document.getElementById("hereSchematic");
+  if (hereData && !hereData.error) {
+    if (box && !box.hidden) roots.push(document.getElementById("hereRows"));
+    if (sch && !sch.hidden) roots.push(sch);
+  }
+  const q = sel => roots.some(r => r.querySelector(sel) || r.matches(sel));
+  const badges = sch && !sch.hidden ? [...sch.querySelectorAll(".badges")] : [];
+  // a glyph in a badge's own text (not inside a span: the dim map, the volcano's title)
+  const s = g => badges.some(b => [...b.childNodes].some(n => n.nodeType === 3 && n.textContent.includes(g)));
+  const has = (sel, text) => roots.some(r => [...r.querySelectorAll(sel)].some(e => e.textContent.includes(text)));
+  const html = roots.length ? HERE_LEGEND.filter(([t]) => t(q, s, has))
+    .map(([, icon, what]) => `<span class="lg"><span class="lgi badges">${icon}</span> ${what}</span>`).join("") : "";
+  el.hidden = !html;
+  if (el.innerHTML !== html) el.innerHTML = html;
+}
 // what the body targeted in-game is (plain text bits): Here's heading-to line and Now's
 function destBits(b) {
   const f = bioFactor(b), bio = b.bio_options ? [`${b.bio_options.genera.map(x => x.genus).join(" or ")}, ${credits(b.bio_options.low * f)} to ${credits(b.bio_options.high * f)}`]

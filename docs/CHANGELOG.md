@@ -2,6 +2,12 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-10 · Here: a legend for the icons in the list
+- A footer under Here's list (the tab, the Overview's pane, Nearby with a system pinned, the tablet) says what each
+  icon means: 🔭, ELW/WW/AW, T, ⛽, rings, belts, 🏁, 🗺 (first, or dim: not first), 👣, —, 🧬, 🧬?, n/3, ✓, ✗, ?, ≤,
+  ✪, ✦, 📖, 💰, 🪨, 🌋, ⛏. Only the icons the list or schematic shows now are listed, and with none there is no
+  footer. It stays in view: sticky to the bottom of the scrolling pane (or the window), below both halves in split.
+
 ## 2026-10-10 · Target next: the danger wait after supercruise entry too, and it says it is waiting
 - The game sets the in-danger flag on entering supercruise as well (lifting off a planet: logged in game, 16 s), and
   Target next pressed then still refused "you are in danger" (the wait counted only hyperspace arrivals). The window
