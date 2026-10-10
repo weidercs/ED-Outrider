@@ -275,6 +275,7 @@ HIGHWAY = {"clipboard": True, "autotarget": False, "autotarget_delay": 5.0, "eff
            "autotarget_dry_run": False}
 AUTOTARGET_TEST_COUNTDOWN = 5   # s: the Plot Route tab's "test now": time to click into the game before the sequence
 AUTOTARGET_HONK_WAIT = 60       # s an auto-target waits for an auto honk on the same arrival to finish (honk first)
+AUTOTARGET_DANGER_WAIT = 60     # s after an arrival a run waits for the game's own in-danger flag to clear (see arrival_danger_until)
 # The Highway map's optional background image ([highway] background_image): only the configured file is served
 # (GET /api/highway/background), and only one of these image types, checked by its first bytes too (no SVG: it can
 # carry script). The extent [xmin, xmax, zmin, zmax] in ly says where its edges are in the galaxy's plane; the
@@ -11393,6 +11394,24 @@ class State:
                             self.autotarget_task, self.autotarget_test_task, self.lease_task, self.edsm_discard_task,
                             *self.upload_tasks.values()) if t]
 
+    def arrival_danger_until(self, now=None):
+        """The game sets Status.json's in-danger flag on every jump, from the FSD charge until some 16-26 s after the
+        arrival (logged in game 2026-10-09, any star, nothing near): no threat, but auto-target's guard refuses it. When
+        that is all it can be (in danger, not interdicted, no jump charging, an arrival here under
+        AUTOTARGET_DANGER_WAIT s ago): the time a run may wait until for it to clear; else None."""
+        st = self.journals.status_json or {}
+        flags, T = st.get("flags") or 0, outrider.target
+        if not flags & T.FLAG_IN_DANGER or flags & (T.FLAG_INTERDICTED | T.FLAG_FSD_CHARGING | T.FLAG_FSD_JUMP):
+            return None
+        a = self.journals.jump_arrival
+        if not a or a.get("id64") != (self.journals.pos or {}).get("id64"):
+            return None
+        try:
+            until = ts_seconds(a["ts"]) + AUTOTARGET_DANGER_WAIT
+        except (KeyError, TypeError, ValueError):
+            return None
+        return until if (time.time() if now is None else now) < until else None
+
     def autotarget_busy(self):
         """A galaxy-map sequence is pending or running: the automatic one (after a supercharge) or one the page or the
         co-pilot button asked for. Only one may run at a time (review 2026-10-08 #1: a supercharge during Target next
@@ -11422,7 +11441,10 @@ class State:
         _steps, missing = t.plan()
         if missing:
             return {"error": "no keyboard binding for " + ", ".join(f"{n} ({w})" for n, w in missing)}, 400
-        g = outrider.target.guard(self.journals.status_json, tgt["id64"], lambda: self.journals.navroute_end)
+        st, end = self.journals.status_json, lambda: self.journals.navroute_end
+        g = outrider.target.guard(st, tgt["id64"], end)
+        if g and g[0] == "danger" and self.arrival_danger_until():   # the arrival's own flag: the run waits it out,
+            g = outrider.target.guard(dict(st, flags=st["flags"] & ~outrider.target.FLAG_IN_DANGER), tgt["id64"], end)
         if g and g[0] != "already":   # already the target: the run says so (and costs no key)
             return {"error": g[1]}, 400
         dry = bool(self.highway_cfg.get("autotarget_dry_run"))
@@ -11472,6 +11494,11 @@ class State:
             self.bump()
         if self._autotarget_stale(tgt, test, cancel):
             return   # switched off or the route changed meanwhile: nothing to say
+        # pressed in the first seconds after a jump: the game's in-danger flag is still on (arrival_danger_until)
+        while self.arrival_danger_until() and (self.journals.pos or {}).get("id64") == tgt["here"]:
+            if self._autotarget_stale(tgt, test, cancel):
+                return
+            await asyncio.sleep(0.25)
         if (self.journals.pos or {}).get("id64") != tgt["here"]:   # jumped (or left) meanwhile: nothing to target
             return self._autotarget_done(tgt, {"ok": False, "phase": 0, "label": "wait", "why": "you had jumped"}, test, say=False)
         end = time.time() + AUTOTARGET_HONK_WAIT

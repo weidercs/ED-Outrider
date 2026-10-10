@@ -1932,6 +1932,44 @@ class HighwayAutoTarget(unittest.TestCase):
         self.assertEqual(out["near"][1]["system"], "Neu A")
         self.assertEqual((out["near_last"]["done"], out["near_last"]["index"]), (True, 1))
 
+    def test_target_next_waits_out_the_arrivals_danger_flag(self):
+        """The game sets in-danger on every jump until some 16-26 s after the arrival (logged in game 2026-10-09):
+        Target next pressed then waits for it to clear and runs, where it refused "you are in danger". Interdicted,
+        or still in danger AUTOTARGET_DANGER_WAIT s after the arrival, it still refuses."""
+        import asyncio
+        self.state.honker, self.state.targeter = self.honker, self.targeter
+        self.j.status_json = self.status
+        T = self.T
+        hwy_plot_exact(self)
+        self.now = time.time()
+        hwy_jump(self, -5, 101, "Neu A", 50)   # arrived 5 s ago
+        self.here = 101
+        self.status["flags"] |= T.FLAG_IN_DANGER
+
+        async def go():
+            out = {}
+            body, status = self.state.start_autotarget_run("next", countdown=0)
+            out["started"] = (status, body.get("system"), body.get("error"))
+            await asyncio.sleep(0.3)
+            out["waiting"] = (self.state.autotarget_running, [n for n, v in self.game.writes if v])
+            self.status["flags"] &= ~T.FLAG_IN_DANGER   # the flag clears: the run goes
+            await self.state.autotarget_test_task
+            out["last"] = dict(self.state.autotarget_last)
+            # interdicted: no waiting
+            self.status.update(flags=self.status["flags"] | T.FLAG_IN_DANGER | T.FLAG_INTERDICTED, destination=None)
+            out["interdicted"] = self.state.start_autotarget_run("next", countdown=0)
+            # an arrival over AUTOTARGET_DANGER_WAIT s ago: in danger is a real one, refused
+            self.status["flags"] &= ~T.FLAG_INTERDICTED
+            self.j.jump_arrival = dict(self.j.jump_arrival, ts=ed_outrider.iso_ts(time.time() - ed_outrider.AUTOTARGET_DANGER_WAIT - 5))
+            out["old"] = self.state.start_autotarget_run("next", countdown=0)
+            return out
+        out = asyncio.run(go())
+        self.assertEqual(out["started"], (200, "Bridge B", None))
+        self.assertEqual(out["waiting"], (None, []))   # nothing pressed while the flag was on
+        self.assertEqual((out["last"]["done"], out["last"]["system"]), (True, "Bridge B"))
+        self.assertEqual(out["interdicted"], ({"error": "you are in danger"}, 400))
+        self.assertEqual(out["old"], ({"error": "you are in danger"}, 400))
+
     def test_copilot_button_targets_next(self):
         """The co-pilot button's layout (the author, 2026-10-08): in the ship a single press targets the next route
         system after a short wait: the survey / trade route's next first, else the Highway's; with neither, the

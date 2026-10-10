@@ -78,7 +78,9 @@ targeted neutron jump target Hwy Stop 38" (or "Failed to…") under its own aler
 - Switching it off, clearing the route or plotting a new one stops a run at once, even mid-way. If the game targets
   a different system it says so by name ("Targeted the wrong system: …. Check before you jump."). A waypoint the
   game reaches by a plotted route of several jumps counts as targeted.
-- It never runs docked, landed, in a vehicle or on foot, in danger, with the FSD charging or a panel open. It stops
+- It never runs docked, landed, in a vehicle or on foot, in danger, with the FSD charging or a panel open. The game
+  flags you "in danger" for every jump until some 16-26 s after you arrive: pressed in those seconds, it waits for
+  that to clear and then runs (up to a minute after the arrival; being interdicted is never waited out). It stops
   if anything unexpected happens, closing the map only if it opened it. Once the route is plotted you can start
   the FSD charge without waiting for its last check: the target is set, so that counts as targeted.
 - **The keys go to whichever window has focus**: stay in the game until it is done.

@@ -2,6 +2,13 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-10 · Target next waits out the arrival's danger flag
+- The game sets Status.json's in-danger flag on every jump, from the FSD charge until some 16-26 s after arriving
+  (logged in game: any star, nothing near), so Target next pressed in those seconds refused "you are in danger"
+  until it cleared. When that is all it can be (not interdicted, no jump charging, an arrival under
+  `AUTOTARGET_DANGER_WAIT` = 60 s ago), the run now waits for the flag to clear and then goes; pressing nothing
+  meanwhile. Interdicted, or still in danger a minute after the arrival, it refuses as before.
+
 ## 2026-10-10 · Plot a route: exact plots without neutron boosts
 - The exact plotter has a **no neutron boosts** tick: Spansh plans regular jumps only (its `use_supercharge` off),
   for a route that never flies past a neutron star. Remembered like the other ticks; the route's line says
