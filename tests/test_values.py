@@ -848,6 +848,19 @@ class RulesDownload(unittest.TestCase):
             self.assertEqual(json.load(fh)["versions"]["explodata"], "")
         self.assertTrue(any("could not fetch colour variants" in m for m in self.log))
 
+    def test_colours_table_gone_is_retried(self):
+        """ExploData's genus.py with no `data` table at all (renamed or moved upstream): a failed fetch too, not "no
+        colours" with its version recorded (the Fable review of 2026-10-10, #9)."""
+        good = self.fake_get()
+
+        def get(url):
+            return "genus_data = {}" if "genus.py" in url else good(url)
+        with unittest.mock.patch.object(outrider.bio, "_get", get):
+            outrider.bio.update_rules(self.path, log=self.log.append, versions=dict(self.V))
+        with open(self.path) as fh:
+            self.assertEqual(json.load(fh)["versions"]["explodata"], "")
+        self.assertTrue(any("could not fetch colour variants" in m and "no data table" in m for m in self.log))
+
     def test_a_failed_part_is_saved_without_a_version(self):   # F38
         with unittest.mock.patch.object(outrider.bio, "_get", self.fake_get(fail=("contents/", "genus.py"))):
             outrider.bio.update_rules(self.path, log=self.log.append, versions=dict(self.V))

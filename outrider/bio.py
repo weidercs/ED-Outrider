@@ -368,7 +368,12 @@ def update_rules(path=None, log=print, versions=None):
     try:
         # its table as code (data = build_colours()) fails like a failed fetch: the colours already there are kept and
         # its version is not recorded, so the next start tries again (Codex, 2026-10-09)
-        genus_data = tables(EXPLODATA, "data").get("data") or {}
+        got = tables(EXPLODATA, "data")
+        # and with no table called data at all (renamed or moved upstream): not "no colours" either (the Fable review
+        # of 2026-10-10, #9)
+        if "data" not in got:
+            raise ValueError("bio rules: genus.py has no data table any more")
+        genus_data = got["data"] or {}
         log("bio rules: colour variants")
     except Exception as e:  # noqa: BLE001 -- without them species are simply not ruled out by colour
         genus_data = {}

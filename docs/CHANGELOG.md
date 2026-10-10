@@ -2,6 +2,18 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-10 · Fable review fixes: uploads, the co-pilot button, ExploData
+- An Outrider giving way to another for an upload took over when the other stopped (or its lease went stale)
+  without looking at where it stopped: what was played between that stop and its next lease refresh (up to a
+  minute) was sent by nobody. Taking over now goes back to the other's handover note (or a crashed one's last marks)
+  and catches up from there (#1).
+- The co-pilot button's second press cancels a Target next that is still waiting with no key pressed (the arrival's
+  danger flag, an auto honk), as it did during the countdown; before, it said "auto-target is already running" and
+  the keys went down anyway (#4).
+- ExploData's genus.py with no `data` table at all (renamed or moved upstream) is a failed fetch, retried at the next
+  start, not "no colour variants" recorded as up to date (#9).
+- (#5, the danger wait after a restart, is in "Target next: the danger wait after supercruise entry too".)
+
 ## 2026-10-10 · The new codex colour is written after ✪ / ✦
 - Which colour would be new to your codex ("Bacterium Acies - Cobalt") was only in the mark's tooltip, and that never
   shows: a body's summary pops up over the row first, and the tablet has no hover. The mark now reads "✪ Cobalt"

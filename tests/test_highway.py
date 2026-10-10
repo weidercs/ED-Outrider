@@ -2050,6 +2050,28 @@ class HighwayAutoTarget(unittest.TestCase):
         self.assertEqual(self.state.autotarget_test["state"], "failed")
         self.state.copilot_press()   # nothing counting down: a press changes nothing
         self.assertFalse(self.state._copilot_cancelled)
+        # the same while the run waits out the arrival's danger flag, keys not pressed yet (the Fable review of
+        # 2026-10-10, #4): it said "auto-target is already running" and then pressed the keys anyway
+        self.state.COPILOT_TARGET_DELAY_S = 0.01
+        self.status["destination"] = None
+        self.status["flags"] |= self.T.FLAG_IN_DANGER
+        self.j.jump_arrival = {"id64": self.j.pos["id64"], "ts": ed_outrider.iso_ts(time.time() - 3)}
+        writes, seq, n = len(self.game.writes), self.state.copilot["seq"], len(moments())
+
+        async def press_in_the_wait():
+            self.state.copilot_gesture("status")
+            await asyncio.sleep(0.2)                     # past the countdown: waiting for the flag, no key yet
+            waiting = self.state.autotarget_test["state"]
+            self.state.copilot_press()
+            self.state.copilot_gesture("status")
+            await self.state.autotarget_test_task
+            return waiting
+        self.assertEqual(asyncio.run(press_in_the_wait()), "running")
+        self.assertEqual(len(self.game.writes), writes)   # nothing pressed
+        self.assertEqual((self.state.copilot["seq"], self.state.copilot["action"]), (seq + 1, "status"))
+        self.assertEqual(self.state.autotarget_test["state"], "failed")
+        self.assertFalse([m for m in moments()[n:] if (m.get("text") or "").startswith("Not targeting: auto-target is already running")])
+        self.status["flags"] &= ~self.T.FLAG_IN_DANGER
         # double: the status report; hold: the hush
         self.state.copilot_gesture("again")
         self.assertEqual(self.state.copilot["action"], "status")

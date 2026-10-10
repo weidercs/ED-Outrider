@@ -54,7 +54,9 @@ twice: EDDN has no way to tell. So:
   2026.10.19.1 is always given way to.
   - A note left by a crash goes stale after five minutes; one untouched for an hour is ignored at once.
   - When an Outrider stops, its note stays with how far it got: switch the upload on in another one and it starts
-    there, with nothing missed and nothing sent twice.
+    there, with nothing missed and nothing sent twice. An Outrider that was giving way takes over from there too
+    (it notices within a minute, then sends what was played since the stop). After a crash it takes over from
+    the crashed one's last note, once that has gone stale.
 - **While another uploader has it.** While EDMC or another Outrider sends a service, this one follows the journal
   without sending, and catches none of that up later.
 - **Catching up cannot know everything.** If EDMC, or a read-only Outrider (which leaves no note), sent while this

@@ -640,6 +640,30 @@ class MarksAndCatchUp(unittest.TestCase):
         self.assertEqual([m["event"] for m in self.queued()], ["FSDJump"])
         self.assertEqual(len(self.queued()), 1)
 
+    def test_take_over_sends_what_was_played_since_the_other_stopped(self):
+        """The Fable review of 2026-10-10 #1: while another Outrider sends, this one follows the journal (its mark moves,
+        nothing is queued). When the other stops, the lines played between its stop and this one's next lease refresh
+        (up to a minute) were sent by nobody; taking over now catches up from the other's handover mark."""
+        self.write(header(now_ts(900)), loadgame(now_ts(899)))
+        at_a = os.path.getsize(self.path)                          # a mark is the start of the last line handled: A
+        self.write(self.jump(800, "A"))
+        self.j.scan_dir(self.dir, commit_each=True, upload="catchup")
+        self.state.set_upload("eddn", True)
+        mark = [os.path.basename(self.path), at_a, now_ts(800)]
+        U.write_lease(self.dir, "aaaaaa0", {"host": "erangel", "services": ["eddn"], "wanted": ["eddn"], "beat": 1,
+                                            "marks": {"eddn": mark}})
+        self.state.refresh_leases()
+        self.assertFalse(self.state.upload_on("eddn"))            # the other sends: this one follows
+        self.write(self.jump(30, "Bsys"))                          # played after the other stopped, before the refresh
+        U.write_lease(self.dir, "aaaaaa0", {"host": "erangel", "services": [], "stopped": True, "marks": {"eddn": mark}})
+        self.j.scan_dir(self.dir, upload="live")
+        self.assertEqual(self.queued(), [])                        # followed: the mark moved past it, nothing queued
+        self.state.refresh_leases()                                # the other's note: it stopped
+        self.assertTrue(self.state.upload_on("eddn"))
+        self.assertEqual([m["event"] for m in self.queued()], ["FSDJump"])   # Bsys, not lost
+        self.state.refresh_leases()                                # nothing queued twice
+        self.assertEqual(len(self.queued()), 1)
+
     def test_cap(self):
         self.write(header(now_ts(9 * 86400)), loadgame(now_ts(9 * 86400 - 1)))
         self.j.scan_dir(self.dir, commit_each=True, upload="catchup")

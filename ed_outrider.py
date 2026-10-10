@@ -5888,10 +5888,13 @@ class State:
 
     def copilot_press(self):
         """Every press of the co-pilot button as it happens (before its gesture is known): one during a tap's targeting
-        countdown cancels that run before any key is pressed (silently: the run sees its token), and its own gesture is
-        then read as the double press it was meant to be (copilot_gesture)."""
+        countdown, or while the run still waits with no key pressed (the arrival's danger flag, an auto honk: state
+        "running" before the Targeter has it; the Fable review of 2026-10-10, #4), cancels that run before any key is
+        pressed (silently: the run sees its token), and its own gesture is then read as the double press it was meant
+        to be (copilot_gesture)."""
         run, cancel = self._copilot_run
-        if run is not None and run.get("state") == "counting" and cancel is not None and not cancel.is_set():
+        if run is not None and run.get("state") in ("counting", "running") and self.autotarget_running is None \
+                and cancel is not None and not cancel.is_set():
             cancel.set()
             self._copilot_cancelled = True
             self.bump()
@@ -9571,7 +9574,26 @@ class State:
         # who sends each service: two Outriders switched on for it at once both held for good before (Codex F1, 2026-10-09),
         # each following the journal as if the other sent it, so that stretch was never sent
         owners = outrider.uploads.lease_owners(self.leases.instance, wanted, sending, self.lease_others)
-        self.lease_hold = {s: host for s, host in owners.items() if host}
+        held_before, self.lease_hold = self.lease_hold, {s: host for s, host in owners.items() if host}
+        # a service another instance was sending and this one takes over now (it stopped, or its lease went stale):
+        # meanwhile this one followed the journal, moving its mark past every line as the other's. Back to where the
+        # other stopped (its handover note, or a crashed one's last marks) and caught up from there, so the stretch
+        # between its stop and this refresh is sent (the Fable review of 2026-10-10, #1; the outbox's UNIQUE keeps a
+        # line both queued from going twice). Not at the first read (start-up is catch_up_uploads') nor for a service
+        # switched off (it leaves the hold because it is not wanted)
+        took = [s for s in wanted if held_before and s in held_before and s not in self.lease_hold]
+        if took:
+            theirs_all = outrider.uploads.lease_marks(LIVE_DIRS, self.leases.instance)
+            for s in took:
+                theirs, mine = theirs_all.get(s), self.uploads_hub.marks.get(s)
+                if theirs and (mine is None or outrider.uploads.pos_key(theirs) < outrider.uploads.pos_key(mine)):
+                    self.uploads_hub.set_mark(s, (theirs[0], theirs[1]), theirs[2] if len(theirs) > 2 else None)
+                    self.uploads_hub.flush()
+                    n = self.uploads_hub.catch_up(s, LIVE_DIRS, dict(self.journals.offsets))
+                    if n:
+                        print(f"uploads: {s}: took over from another Outrider, {n} message{'s' if n != 1 else ''} "
+                              "from after it stopped queued")
+            self.db.commit()
         if [s for s in wanted if s not in self.lease_hold] != sending:
             write()   # the others see the change now, not a minute later
         # EDMC on this PC: given by watch_leases (found on a worker thread: on Windows `tasklist` takes a second or two,
