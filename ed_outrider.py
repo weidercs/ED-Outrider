@@ -19,7 +19,8 @@ years (EDSM as a fallback when Spansh is down) and serves http://127.0.0.1:8025/
              curiosities (ringed landables, close orbits, planet pairs...), your firsts, planetary mining
              locations (⛏, with the EDFM survey's odds per ground and what your SRV mined there); as a
              list, a tree in orbital order, or a schematic of stars, planets, moons and barycentres
-  Samples    every exobiology sample run (aboard / sold / lost, with value) and codex entry
+  Bio/Geo    My Samples (every exobiology sample run, aboard / sold / lost, with value, and codex entry), the
+             Exo-Biology checklist and the Geology one, by galactic region
   Bookmarks  systems you starred, with a note each
   Search     local database or Spansh: star classes (scoopable shortcut), planet types, ring types,
              ring hotspot minerals, unfinished exobiology, planetary mining locations (local only, optionally
@@ -8345,7 +8346,7 @@ class State:
     def ship_losses(self):
         """What each death cost: the cartographic data that died with the ship (bodies scanned since the previous
         ship loss, not sold before it, and not scanned again since; valued with the bonuses), plus the
-        exobiology aboard (completed sample runs not sold before the death, valued as the Samples tab does,
+        exobiology aboard (completed sample runs not sold before the death, valued as Bio/Geo's My Samples does,
         with the x5 first footfall). Every ship loss is listed; a death that kept the ship (on foot) only when
         it cost exobiology. ship: whether the ship was lost."""
         ship_deaths = [r[0] for r in self.db.execute(f"SELECT ts FROM deaths WHERE {SHIP_LOSS_SQL} ORDER BY ts")]
@@ -8565,7 +8566,7 @@ class State:
     def checklist(self, region="here", kind="bio"):
         """GET /api/checklist?kind=bio|geo&region=here|all|<1-42>: a checklist for a galactic region, where you are by
         default, with the regions to choose from and each one's completion. bio: the exobiology one
-        (outrider.checklist.table) from every run you have made (its fate as Samples has it) and every codex entry;
+        (outrider.checklist.table) from every run you have made (its fate as My Samples has it) and every codex entry;
         geo: the codex's Geology and Anomalies entries (geo_table) from your codex. (answer, HTTP status)."""
         R = outrider.bio.load_rules() if outrider.bio else None
         if not R or not R.get("region_names"):
@@ -10088,7 +10089,7 @@ class State:
             pos = self.journals.pos
             if pos and pos["id64"] in self.bases:
                 dirty.add(pos["id64"])
-        if changed or dirty or bio_sold:   # a sale changes the Samples view even far from any row
+        if changed or dirty or bio_sold:   # a sale changes My Samples even far from any row
             self.scan_version += 1
             self.bump()
         last_jump = self.db.execute("SELECT max(ts) FROM jumps").fetchone()[0]

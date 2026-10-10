@@ -4137,7 +4137,7 @@ document.getElementById("logRows").addEventListener("click", e => {
   renderLog();
 });
 
-// ---- Samples: every exobiology run and codex entry ----
+// ---- Bio/Geo -> My Samples: every exobiology run and codex entry ----
 let bioKey = null, bioData = null;
 const bDays = document.getElementById("bDays"), bState = document.getElementById("bState"), bFilter = document.getElementById("bFilter");
 bDays.value = store.get("bDays", "30"); bState.value = store.get("bState", "");
@@ -4213,7 +4213,7 @@ function renderBio() {
       <td>${sysCell(c.system)}</td><td>${c.voucher ? dual(`💰 ${c.voucher.toLocaleString()} cr`, `💰 ${credits(c.voucher)}`) : c.new ? dual("✦ new", "✦") : ""}</td></tr>`).join("") ||
     `<tr><td colspan="6" class="unk">No codex entries in this period.</td></tr>`;
 }
-// ---- the exobiology checklist (Samples -> Checklist; GET api/checklist, outrider/checklist.py): every species the
+// ---- the exobiology checklist (Bio/Geo -> Exo-Biology; GET api/checklist, outrider/checklist.py): every species the
 // rules know, by galactic region, with your best there and its colours found / possible; a species' panel with its
 // colours, what gives each, and a galaxy map of where it can grow with your samples as dots ----
 const CL = {data: null, key: null, loading: false, open: null, species: null, map: null, colour: null};
@@ -4226,7 +4226,7 @@ function clFigure(img, alt, colour) {
     `<a href="https://canonn.science/codex/" target="_blank" rel="noopener noreferrer">Canonn</a></figcaption></figure>`;
 }
 const CL_WORD = {sold: "sold", aboard: "aboard", lost: "lost", logged: "logged"};
-// Samples' three views: runs, the exobiology checklist ("check"), the geology one ("geo": the codex's Geology and Anomalies)
+// Bio/Geo's three views: My Samples ("runs"), the Exo-Biology checklist ("check"), Geology ("geo": the codex's Geology and Anomalies)
 const BIO_MODES = ["runs", "check", "geo"];
 let bioMode = BIO_MODES.includes(store.get("bioMode", "runs")) ? store.get("bioMode", "runs") : "runs";
 const clKind = () => bioMode === "geo" ? "geo" : "bio";

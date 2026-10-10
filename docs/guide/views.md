@@ -48,10 +48,11 @@ what each death cost, and your 25 most valuable finds.
 </tr>
 <tr>
 <td width="50%" valign="top">
-<b>Samples</b> — <b>Runs</b>: every exobiology sample run: species, variant, body, value, and whether it is
+<b>Bio/Geo</b> — <b>My Samples</b>: every exobiology sample run: species, variant, body, value, and whether it is
 <i>aboard</i>, <i>sold</i> or <i>lost</i>. Filter, sort, export; codex entries underneath. Unsold runs are
-priced one by one ("x5 on 42 of 47 runs").
-<br><br><img src="../images/samples.png" alt="Samples">
+priced one by one ("x5 on 42 of 47 runs"). Beside it, the <a href="#-the-exobiology-checklist">Exo-Biology and Geology
+checklists</a>.
+<br><br><img src="../images/samples.png" alt="Bio/Geo: My Samples">
 </td>
 <td width="50%" valign="top">
 <b>Log</b> — every journal event, newest first, one readable line each. Filter by category and time,
@@ -142,7 +143,7 @@ known unvisited: Xyz 4.8 ly". Any unvisited star closer than that on the galaxy 
 
 ## 🧬 The exobiology checklist
 
-**Samples → Checklist** shows every species the rules know, one box per genus, for a galactic region: where you
+**Bio/Geo → Exo-Biology** shows every species the rules know, one box per genus, for a galactic region: where you
 are (the default), any other, or **All regions**. Each species shows your best there, in colour:
 
 - <b>sold</b> (green), <b>aboard</b> (amber: sampled, not sold yet), <b>lost</b> (red: sampled, lost with the ship),
@@ -162,14 +163,14 @@ for its name and your completion there. The line above the boxes counts it up: "
 
 **Completion** counts what you have done, not only what is finished: each species that can grow in the region scores
 the share of its colours you have found there (sold, aboard, lost or logged), averaged over those species, so half of
-every species is 50% with none complete. The region list shows each region's figure. The tablet's Samples page has it
+every species is 50% with none complete. The region list shows each region's figure. The tablet's Bio/Geo page has it
 all too, with the species and a species' details scrolling separately.
 
 <p align="center">
   <img src="../images/checklist.png" alt="The exobiology checklist: genus boxes with each species' state and colours found, and a species' colours and galaxy map beside them" width="900">
 </p>
 
-**Samples → Geology** is the same for the codex's **Geology and Anomalies** entries: fumaroles, gas vents, geysers and
+**Bio/Geo → Geology** is the same for the codex's **Geology and Anomalies** entries: fumaroles, gas vents, geysers and
 lava spouts, then Lagrange clouds and the lettered anomalies. Each is logged in your codex for the region, or not;
 beside it, how many sites players have reported in that region (from [Canonn](https://canonn.science)), greyed where
 none have been reported yet (which is not to say there are none). Completion is the share of the entries reported in

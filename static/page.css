@@ -394,7 +394,7 @@ main.nearPinned > #hereView #hereTable td.bio { max-width: 180px; }
 #rows tr.pinned td { background: color-mix(in srgb, var(--accent) 10%, transparent); }
 #rows tr.pinned td.bodies { cursor: pointer; }
 
-/* ---- Samples (exobiology log) ---- */
+/* ---- Bio/Geo: My Samples (the exobiology log) ---- */
 #bioView { margin-top: 12px; } #bioView .exports a { color: var(--info); }
 input.filter { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
   padding: 3px 8px; font: inherit; min-width: 16em; }
@@ -1059,7 +1059,7 @@ body.app #richPane { grid-column: 1; grid-row: 2; }
 .ruledout ul { margin: 2px 0 0; } .ruledout li { display: flex; justify-content: space-between; gap: 10px; }
 .sw.ring { background: transparent !important; border: 2px solid; border-radius: 50%; box-sizing: border-box; }   /* a tagged plant's legend swatch */
 
-/* the exobiology checklist (Samples -> Checklist) */
+/* the exobiology checklist (Bio/Geo -> Exo-Biology; Geology shares it) */
 #bioView.check .runonly, #bioView:not(.check) .checkonly { display: none; }
 #bioView.geo .biohint, #bioView:not(.geo) .geohint { display: none; }
 .clwrap { display: flex; gap: 14px; align-items: flex-start; }

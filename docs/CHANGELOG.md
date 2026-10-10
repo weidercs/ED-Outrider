@@ -2,6 +2,12 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · The Samples tab is now Bio/Geo
+- The top menu's (and the tablet's) **Samples** is **Bio/Geo**, and its switch reads **My Samples** (was Runs),
+  **Exo-Biology** (was Checklist) and **Geology**: the tab holds the geology checklist too now. Only the words changed
+  (the view is still `bio`, your choices and links keep working). The guide, the README and the notes follow; the
+  screenshots are taken again with the new menu.
+
 ## 2026-10-09 · Exobiology checklist: colours drop down under the species
 - Clicking a species drops its colours down under its row in the box (each with what gives it and your state; a
   colour with a picture shows it when clicked), and clicking it again folds them up. The column beside the boxes

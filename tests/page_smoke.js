@@ -70,7 +70,7 @@ const settle = async maxMs => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "|", v.padEnd(8), "|", (el ? el.textContent.trim().replace(/\s+/g, " ").slice(0, 90) : "missing " + sel), errors.slice(before));
   }
-  // the exobiology checklist: Samples -> Checklist shows genus boxes from api/checklist, a click opens the species'
+  // the exobiology checklist: Bio/Geo -> Exo-Biology shows genus boxes from api/checklist, a click opens the species'
   // panel (its colours; the map needs a canvas, which jsdom has not), and Runs comes back
   {
     if (!d.getElementById("nowView").hidden) { d.getElementById("nowBack").click(); await sleep(500); }

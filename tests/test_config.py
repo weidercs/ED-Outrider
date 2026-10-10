@@ -952,7 +952,7 @@ class Batch7Data(unittest.TestCase):
         self.assertEqual([(l["ts"][11:13], l["ship"], l["bio_runs"], l["bio_value"], l["bodies"]) for l in losses],
                          [("04", False, 1, value, 0), ("06", True, 1, value, 1)])
         self.assertGreater(losses[1]["value"], 0)                    # the carto side is unchanged
-        # the Samples tab calls the same runs lost, for the same money
+        # Bio/Geo's My Samples calls the same runs lost, for the same money
         self.assertEqual(self.state.organics(36500)["totals"]["lost"], 2 * value)
         cols, rows = self.state.export_rows("trips")
         self.assertIn("lost_bio", cols)
