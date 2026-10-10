@@ -2,6 +2,12 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-10 · Screenshots retaken for the Bio/Geo menu
+- Every guide image that shows the top menu, taken again (the scratch server, a copy of the database, the journals
+  read only): overview, nearby, here, schematic, map, highway (a route to Colonia), history, samples (My Samples),
+  log, materials, firsts, search, cargo (the Sell lookup), trade, nearest, checklist (a sold species' colours
+  dropped down), the four themes and the tablet (Explore with Bio/Geo, the surface map).
+
 ## 2026-10-09 · The Samples tab is now Bio/Geo
 - The top menu's (and the tablet's) **Samples** is **Bio/Geo**, and its switch reads **My Samples** (was Runs),
   **Exo-Biology** (was Checklist) and **Geology**: the tab holds the geology checklist too now. Only the words changed
