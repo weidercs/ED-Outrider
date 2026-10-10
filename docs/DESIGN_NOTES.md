@@ -243,6 +243,11 @@ upstream project's choices, not rules of the game.
   counted from Canonn's per-entry site dumps; one not reported is greyed but never called impossible. The file is
   built offline and shipped (the dumps are tens of MB; it is 31 KB); run the script again to refresh the counts. Your
   codex entries match by entry id.
+- **The checklists' pictures are linked, never copied** (the author's choice, 2026-10-09). Every image is a screenshot
+  of Frontier's game, so none is public domain or GPL; Frontier's media rules allow non-commercial fan use with
+  attribution, but bundled images would sit outside the GPL and each is a commander's own. So Outrider ships only the
+  links and credits (resources/codex_images.json, scripts/build_codex_images.py, from Canonn's codex reference) and the
+  page loads a picture from Canonn when an entry is opened, captioned with the commander and Canonn.
 - **A plot's end Spansh does not know yet is stood in for** (2026-10-09). Both ends are looked up in Spansh's search
   before every plot (a system known here, even where you are, is not necessarily one Spansh knows). One it does not
   know, but Outrider can place, is replaced by a Spansh system near it: of those within the ship's range, the one

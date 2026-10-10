@@ -290,7 +290,9 @@ HIGHWAY_HEAVY_SLACK = 0.5    # t: fuel over the most the next jump allows by mor
 #                              some jumps right at the limit, so a hair over is the model's error, not yours)
 HIGHWAY_HEAVY_EVERY_S = 3.0  # s between two looks at it while the fuel changes in a route system (scooping)
 HIGHWAY_CONSERVATIVE_MAX = 50.0   # ly: the largest conservative margin taken
-GEO_CODEX_FILE = os.path.join(outrider.RESOURCES_DIR, "geo_codex.json")   # the geology checklist's entries (scripts/build_geo_codex.py)
+GEO_CODEX_FILE = os.path.join(outrider.RESOURCES_DIR, "geo_codex.json")
+# a screenshot link (Canonn's storage) and its commander per codex entry, by English name (scripts/build_codex_images.py)
+CODEX_IMAGES_FILE = os.path.join(outrider.RESOURCES_DIR, "codex_images.json")   # the geology checklist's entries (scripts/build_geo_codex.py)
 HIGHWAY_STAND_IN_LY = 150.0   # ly: how far around an end Spansh does not know yet its stand-in is looked for
 NEAR_BODY_ALT = 5000         # m: below this over a body in your ship, the on-body strip shows its bio card
 LEASE_EVERY_S = 60           # s: this instance's upload lease rewritten, the others' read, EDMC's switches checked
@@ -8524,6 +8526,16 @@ class State:
                 self._geo_codex = []
         return self._geo_codex
 
+    def codex_images(self):
+        """{entry's English name lower-cased: [image url, commander]} (resources/codex_images.json), read once."""
+        if getattr(self, "_codex_images", None) is None:
+            try:
+                with open(CODEX_IMAGES_FILE, encoding="utf-8") as f:
+                    self._codex_images = json.load(f).get("images") or {}
+            except (OSError, ValueError, AttributeError):
+                self._codex_images = {}
+        return self._codex_images
+
     def checklist(self, region="here", kind="bio"):
         """GET /api/checklist?kind=bio|geo&region=here|all|<1-42>: a checklist for a galactic region, where you are by
         default, with the regions to choose from and each one's completion. bio: the exobiology one
@@ -8594,7 +8606,9 @@ class State:
             if loc and loc[1] is not None:
                 runs.append({"x": loc[1], "z": loc[3], "state": "logged", "system": loc[0]})
         regions = e.get("regions") or {}
+        img = self.codex_images().get(e["name"].lower())
         return {"id": str(e["id"]), "name": e["name"], "kind": e.get("kind"), "group": e.get("group"),
+                "image": {"url": img[0], "cmdr": img[1]} if img else None,
                 "regions": {r: "yes" for r, n in regions.items() if n}, "sites": regions, "sites_total": sum(regions.values()),
                 "runs": runs}, 200
 
@@ -8618,7 +8632,14 @@ class State:
             state = fate[0] if fate else (organic_state(self.db, r["done_ts"]) if r["done_ts"] else None) or "in progress"
             runs.append({"x": loc[1], "z": loc[3], "state": state, "system": loc[0]})
         regions = outrider.checklist.where(sp, outrider.bio.ruleset_region_ok, len(R["region_names"]) - 1)
-        return {"id": species_id, "name": sp["name"], "regions": {str(k): v for k, v in regions.items()}, "runs": runs}, 200
+        # its pictures (Canonn's, linked): one per colour ("" for a species with no colour table), by the codex's names
+        imgs, have = {}, self.codex_images()
+        for colour, _ in outrider.checklist.colours(sp) or [("", None)]:
+            hit = have.get(f"{sp['name']} - {colour}".lower() if colour else sp["name"].lower())
+            if hit:
+                imgs[colour.lower()] = {"url": hit[0], "cmdr": hit[1]}
+        return {"id": species_id, "name": sp["name"], "regions": {str(k): v for k, v in regions.items()}, "runs": runs,
+                "images": imgs}, 200
 
     def organics(self, days):
         """Every exobiology sample run (newest first) with what it is worth and whether it was banked,

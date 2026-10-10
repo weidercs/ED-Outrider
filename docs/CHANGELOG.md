@@ -2,6 +2,13 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Checklists: pictures from Canonn, linked
+- A species' and a geology entry's panels show a picture: Canonn's screenshot, loaded from Canonn when the entry is
+  opened (never copied), captioned with the commander who took it and Canonn, linked to full size. A species shows a
+  colour you have found (else the first with a picture); clicking a colour's row shows that colour's.
+- resources/codex_images.json holds only the links and credits (877 entries: 768 of 847 colours, 82 of 88 geology
+  and anomalies), built by scripts/build_codex_images.py from Canonn's codex reference. README credits.
+
 ## 2026-10-09 · Samples → Geology: a checklist of the codex's Geology and Anomalies entries
 - A third Samples view, **Geology**: the 88 entries your codex files under Geology and Anomalies (fumaroles, gas
   vents, geysers, lava spouts, Lagrange clouds and storm clouds, the lettered anomalies), by region: logged in your

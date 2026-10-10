@@ -154,7 +154,7 @@ are (the default), any other, or **All regions**. Each species shows your best t
 - the colours you have found out of those it comes in (**3 / 12**). Anemones, brain trees and the like are their own
   one colour.
 
-Click a species for its colours, each with what gives it ("Teal: M stars", or a material on the body for some
+Click a species for its picture, its colours, each with what gives it ("Teal: M stars", or a material on the body for some
 bacteria), and a map of the galaxy with the regions it can grow in lit and your samples as dots; hover a lit region
 for its name and your completion there. The line above the boxes counts it up: "Inner Orion Spur: 45 of 101 possible species found ·
 11.70% complete for the species in this region · 43 sold · …".
@@ -172,8 +172,12 @@ all too, with the species and a species' details scrolling separately.
 lava spouts, then Lagrange clouds and the lettered anomalies. Each is logged in your codex for the region, or not;
 beside it, how many sites players have reported in that region (from [Canonn](https://canonn.science)), greyed where
 none have been reported yet (which is not to say there are none). Completion is the share of the entries reported in
-the region that you have logged. Click one for its sites in the galaxy, where you logged it, and the map of the regions
-it has been reported in.
+the region that you have logged. Click one for its picture, its sites in the galaxy, where you logged it, and the map
+of the regions it has been reported in.
+
+The pictures are [Canonn](https://canonn.science)'s screenshots, each credited to the commander who took it: Outrider
+links to them (they load from Canonn when you open an entry; click one for full size) and keeps no copy. Click a
+colour in a species' list for that colour's picture. A few entries have none yet.
 
 Journals from before a 2023 game update don't name a sample's colour, so those samples count the species but not a
 colour.

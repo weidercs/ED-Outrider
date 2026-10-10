@@ -103,6 +103,9 @@ distances and colour variants are from <a href="https://github.com/Silarn/EDMC-E
 Planetary mining odds are CMDR Grumlop's survey from the
 <a href="https://edfieldmanual.com/index.php?title=Module:Data/SurfaceMiningProspecting">Elite Dangerous Field Manual</a>
 (<a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>), shipped unchanged in <code>resources/mining_odds.json</code>.<br>
+The geology checklist's reported sites are counted from <a href="https://canonn.science">Canonn</a>'s codex records
+(<code>resources/geo_codex.json</code>); the checklists' pictures are Canonn's screenshots, linked (never copied) and
+credited to the commander who took each (<code>resources/codex_images.json</code> holds only the links).<br>
 The tablet themes' emblems (in <code>static/emblems/</code>, each under the terms in its <code>CREDITS.txt</code>, not the GPL):
 the Explorer Elite badge is used under Frontier's media usage rules; the Babylon 5 emblems (© Warner Bros.) are public-domain
 redrawings from the Babylon 5 Wiki; the Sith emblem is Gameposo's, vectorised by Marnanel (Wikimedia Commons,

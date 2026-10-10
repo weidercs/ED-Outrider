@@ -4216,7 +4216,15 @@ function renderBio() {
 // ---- the exobiology checklist (Samples -> Checklist; GET api/checklist, outrider/checklist.py): every species the
 // rules know, by galactic region, with your best there and its colours found / possible; a species' panel with its
 // colours, what gives each, and a galaxy map of where it can grow with your samples as dots ----
-const CL = {data: null, key: null, loading: false, open: null, species: null, map: null};
+const CL = {data: null, key: null, loading: false, open: null, species: null, map: null, colour: null};
+// an entry's picture: Canonn's screenshot (linked, never copied), credited to the commander who took it
+function clFigure(img, alt, colour) {
+  if (!img || !img.url) return "";
+  return `<figure class="climg"><a href="${esc(img.url)}" target="_blank" rel="noopener noreferrer" title="open it full size">` +
+    `<img src="${esc(img.url)}" alt="${esc(alt)}" loading="lazy" referrerpolicy="no-referrer"></a>` +
+    `<figcaption>${colour ? `${esc(colour)} · ` : ""}Image: ${img.cmdr ? `CMDR ${esc(img.cmdr)}, ` : ""}via ` +
+    `<a href="https://canonn.science/codex/" target="_blank" rel="noopener noreferrer">Canonn</a></figcaption></figure>`;
+}
 const CL_WORD = {sold: "sold", aboard: "aboard", lost: "lost", logged: "logged"};
 // Samples' three views: runs, the exobiology checklist ("check"), the geology one ("geo": the codex's Geology and Anomalies)
 const BIO_MODES = ["runs", "check", "geo"];
@@ -4312,7 +4320,7 @@ function renderChecklist() {
 document.getElementById("clGrid").addEventListener("click", e => {
   const tr = e.target.closest("[data-cl]");
   if (!tr) return;
-  CL.open = tr.dataset.cl;
+  CL.open = tr.dataset.cl; CL.colour = null;
   renderChecklist();
   clLoadSpecies(CL.open);
 });
@@ -4337,6 +4345,7 @@ function clDrawSide() {
       `<p>${r.sites ? `Reported at <b>${r.sites.toLocaleString()}</b> site${r.sites === 1 ? "" : "s"} ${CL.data.region == null ? "in all" : "in this region"}`
         : "Not reported in this region yet"}${sp && sp.sites_total ? `, ${sp.sites_total.toLocaleString()} in the galaxy` : ""}.` +
       ` ${r.state ? `<span class="cl-logged">Logged here</span>` : r.elsewhere ? `<span class="clelse">Logged in another region</span>` : "Not in your codex here."}</p>` +
+      (sp && !sp.error ? clFigure(sp.image, r.name) : "") +
       (mine.length ? `<div class="unk">Where you logged it: ${mine.map(esc).join(", ")}</div>` : "") +
       `<div class="clmapbox"><canvas id="clMap" width="880" height="880" aria-label="${esc(`the galaxy: where ${r.name} has been reported`)}"></canvas>` +
       `<div id="clMapTip" class="cltip" hidden></div></div>` +
@@ -4346,10 +4355,18 @@ function clDrawSide() {
     const sp = CL.species && CL.species.id === r.id ? CL.species : null;
     const where = r.possible === "yes" ? "can grow in this region" : r.possible === "parts"
       ? "only in parts of this region (near Guardian sites, in tuber zones, by nebulae)" : "the rules say it cannot grow in this region";
-    const vs = r.variants.list.map(v => `<tr class="${v.state ? `cl-${v.state}` : ""}"><td>${v.colour ? esc(v.colour) : "its one variant"}</td>` +
+    // the picture: the colour clicked, else one you have found, else the first with one (Canonn has most, not all)
+    const imgs = (sp && !sp.error && sp.images) || {};
+    const pick = [CL.colour, ...r.variants.list.filter(v => v.state).map(v => (v.colour || "").toLowerCase()),
+                  ...r.variants.list.map(v => (v.colour || "").toLowerCase()), ...Object.keys(imgs)].find(c => c != null && imgs[c]);
+    const shown = pick != null ? r.variants.list.find(v => (v.colour || "").toLowerCase() === pick) : null;
+    const vs = r.variants.list.map(v => `<tr class="${v.state ? `cl-${v.state}` : ""}${imgs[(v.colour || "").toLowerCase()] && v.colour ? " climgrow" : ""}` +
+      `${v.colour && (v.colour || "").toLowerCase() === pick ? " on" : ""}" data-colour="${esc((v.colour || "").toLowerCase())}"` +
+      `${imgs[(v.colour || "").toLowerCase()] && v.colour ? ' title="show its picture"' : ""}><td>${v.colour ? esc(v.colour) : "its one variant"}</td>` +
       `<td class="unk">${esc(v.where || "")}</td><td>${v.state ? CL_WORD[v.state] : ""}</td></tr>`).join("");
     html = `<h4>${esc(r.name)}</h4><div class="unk">${r.value ? `${credits(r.value)} cr` : ""}` +
       `${CL.data.region != null ? ` · ${esc(where)}` : ""}${r.runs ? ` · ${r.runs} run${r.runs === 1 ? "" : "s"}` : ""}</div>` +
+      (pick != null ? clFigure(imgs[pick], `${r.name}${shown && shown.colour ? ` - ${shown.colour}` : ""}`, shown && shown.colour) : "") +
       `<table class="clvars"><thead><tr><th>Colour</th><th>Grows with</th><th></th></tr></thead><tbody>${vs}</tbody></table>` +
       `<div class="clmapbox"><canvas id="clMap" width="880" height="880" aria-label="${esc(`the galaxy: where ${r.name} can grow`)}"></canvas>` +
       `<div id="clMapTip" class="cltip" hidden></div></div>` +
@@ -4359,6 +4376,13 @@ function clDrawSide() {
   if (side.dataset.html !== html) { side.innerHTML = html; side.dataset.html = html; CL.map = null; }
   clDrawMap();
 }
+// a colour's row shows its picture
+document.getElementById("clSide").addEventListener("click", e => {
+  const row = e.target.closest("tr.climgrow");
+  if (!row) return;
+  CL.colour = row.dataset.colour;
+  clDrawSide();
+});
 // hovering a lit region of the map (one the species can grow in) names it, with your completion there; elsewhere nothing
 document.getElementById("clSide").addEventListener("mousemove", e => {
   const cv = e.target.closest && e.target.closest("#clMap"), tip = document.getElementById("clMapTip");

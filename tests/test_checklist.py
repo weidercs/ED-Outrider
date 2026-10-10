@@ -205,6 +205,10 @@ class ChecklistServer(unittest.TestCase):
         self.assertEqual(sorted((r["system"], r["state"]) for r in sp["runs"]), [("Near Colonia", "aboard"), ("Near Sol", "lost")])
         self.assertTrue(sp["regions"] and set(sp["regions"].values()) <= {"yes", "parts"})
         self.assertEqual(self.state.checklist_species("$Nope;")[1], 404)
+        # its pictures, linked from Canonn by the codex's names (resources/codex_images.json): one per colour
+        self.assertTrue(sp["images"] and all(i["url"].startswith("https://") for i in sp["images"].values()))
+        self.assertLessEqual(set(sp["images"]), {c.lower() for c, _ in outrider.checklist.colours(
+            next(s for s in outrider.bio.load_rules()["species"] if s["name"] == "Stratum Tectonicas"))})
         # the geology checklist (the shipped resources/geo_codex.json), from your codex entries by entry id
         self.db.execute("INSERT INTO codex (ts, entry_id, name, region, system) VALUES ('2026-01-01T00:06:00Z', 1400258,"
                         " 'Water Ice Geyser', 'Inner Orion Spur', 1)")
@@ -216,6 +220,7 @@ class ChecklistServer(unittest.TestCase):
         self.assertGreater(geo["summary"]["completion"], 0)
         one, status = self.state.checklist_geo("1400258")
         self.assertEqual((status, one["name"], [r["system"] for r in one["runs"]]), (200, "Water Ice Geyser", ["Near Sol"]))
+        self.assertTrue(one["image"]["url"].startswith("https://"))
         self.assertEqual(self.state.checklist_geo("1")[1], 404)
         self.assertEqual(self.state.checklist(kind="x")[1], 400)
 
