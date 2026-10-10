@@ -177,7 +177,8 @@ of the regions it has been reported in.
 
 The pictures are [Canonn](https://canonn.science)'s screenshots, each credited to the commander who took it: Outrider
 links to them (they load from Canonn when you open an entry; click one for full size) and keeps no copy. Click a
-colour in a species' list for that colour's picture. A few entries have none yet.
+colour in a species' list for that colour's picture. A few entries have none yet; Outrider asks Canonn for its latest
+list once a day, so new pictures appear as they are added.
 
 Journals from before a 2023 game update don't name a sample's colour, so those samples count the species but not a
 colour.

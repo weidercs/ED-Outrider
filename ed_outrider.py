@@ -199,6 +199,7 @@ import outrider.uploads    # EDDN / EDSM uploads (opt-in): the session, the live
 import outrider.eddn       # EDDN's messages from journal events, and what its answers mean
 import outrider.edsm       # EDSM's journal upload: the events with where you were, and what its answers mean
 import outrider.checklist  # the exobiology checklist: every species by region, with your state (pure)
+import outrider.codex_images  # the checklists' pictures: Canonn's links and credits, refreshed once a day
 from outrider.core import iso_ts, ts_seconds   # journal timestamps
 from outrider.fsd import (   # the frame shift drive's maths: range, fuel per jump, the fuel model, fleet figures
     FSD_RANGE_MODS, GUARDIAN_BOOST, conservative_optimal_mass, conservative_range, fleet_figures, fleet_range, fsd_range,
@@ -291,8 +292,9 @@ HIGHWAY_HEAVY_SLACK = 0.5    # t: fuel over the most the next jump allows by mor
 HIGHWAY_HEAVY_EVERY_S = 3.0  # s between two looks at it while the fuel changes in a route system (scooping)
 HIGHWAY_CONSERVATIVE_MAX = 50.0   # ly: the largest conservative margin taken
 GEO_CODEX_FILE = os.path.join(outrider.RESOURCES_DIR, "geo_codex.json")
-# a screenshot link (Canonn's storage) and its commander per codex entry, by English name (scripts/build_codex_images.py)
-CODEX_IMAGES_FILE = os.path.join(outrider.RESOURCES_DIR, "codex_images.json")   # the geology checklist's entries (scripts/build_geo_codex.py)
+CODEX_IMAGES_START = 120     # s after the server starts before the picture list is first refreshed
+CODEX_IMAGES_EVERY = 86400   # s between refreshes of the picture list (Canonn's codex reference, about 650 KB)
+CODEX_IMAGES_RETRY = 3600    # s to wait after a failed refresh   # the geology checklist's entries (scripts/build_geo_codex.py)
 HIGHWAY_STAND_IN_LY = 150.0   # ly: how far around an end Spansh does not know yet its stand-in is looked for
 NEAR_BODY_ALT = 5000         # m: below this over a body in your ship, the on-body strip shows its bio card
 LEASE_EVERY_S = 60           # s: this instance's upload lease rewritten, the others' read, EDMC's switches checked
@@ -8527,14 +8529,38 @@ class State:
         return self._geo_codex
 
     def codex_images(self):
-        """{entry's English name lower-cased: [image url, commander]} (resources/codex_images.json), read once."""
+        """{entry's English name lower-cased: [image url, commander]}: the list fetched today (data/codex_images.json)
+        when it is sound, else the shipped one (outrider.codex_images.load). Read once, and again after a refresh."""
         if getattr(self, "_codex_images", None) is None:
-            try:
-                with open(CODEX_IMAGES_FILE, encoding="utf-8") as f:
-                    self._codex_images = json.load(f).get("images") or {}
-            except (OSError, ValueError, AttributeError):
-                self._codex_images = {}
+            self._codex_images = outrider.codex_images.load()
         return self._codex_images
+
+    async def refresh_codex_images(self):
+        """Fetch Canonn's codex reference and keep its picture links in data/ (outrider.codex_images). True when the
+        list was replaced; raises when Canonn cannot be reached or its answer is not a sound list."""
+        async with self.spansh.session.get(outrider.codex_images.REF, timeout=ClientTimeout(total=120)) as r:
+            r.raise_for_status()
+            images = outrider.codex_images.parse(await r.json(content_type=None))
+        await asyncio.get_running_loop().run_in_executor(None, outrider.codex_images.save, outrider.codex_images.CACHE, images)
+        self._codex_images = None   # read again at the next panel
+        return True
+
+    async def watch_codex_images(self):
+        """The checklists' picture list, refreshed from Canonn once a day (a few minutes after the start when today's
+        copy is missing or a day old). Only the request is made: nothing about the player is sent."""
+        await asyncio.sleep(CODEX_IMAGES_START)
+        while True:
+            age = outrider.codex_images.cache_age()
+            if age is not None and age < CODEX_IMAGES_EVERY:
+                await asyncio.sleep(CODEX_IMAGES_EVERY - age)
+            try:
+                await self.refresh_codex_images()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # noqa: BLE001 -- offline, Canonn down, a changed answer: the list kept, tried again later
+                print(f"codex pictures: could not refresh the list from Canonn ({type(e).__name__}); trying again in an hour",
+                      file=sys.stderr)
+                await asyncio.sleep(CODEX_IMAGES_RETRY)
 
     def checklist(self, region="here", kind="bio"):
         """GET /api/checklist?kind=bio|geo&region=here|all|<1-42>: a checklist for a galactic region, where you are by
@@ -13933,6 +13959,7 @@ async def run(args, st):
     state.firsts_watch_on = st["watch_firsts"]
     firsts_task = asyncio.create_task(state.watch_firsts()) if st["watch_firsts"] else None
     update_task = asyncio.create_task(state.watch_updates()) if st["update_check"] else None
+    images_task = asyncio.create_task(state.watch_codex_images())   # the checklists' picture links, once a day
     # uploads: their own session (never queued behind Spansh), named and versioned as EDDN asks of a sender
     state.upload_session = ClientSession(timeout=ClientTimeout(total=20),
                                          headers={"User-Agent": f"ED-Outrider/{outrider.__version__}"})
@@ -13982,7 +14009,7 @@ async def run(args, st):
             state._honk_cancel.set()      # an auto honk holding Primary Fire lets go now (it held on for up to 20 s)
         if state.honker:
             state.honker.shutdown()       # ...and a press still waiting for the keyboard is refused
-        tasks = [t for t in (watcher, rules_task, button_task, firsts_task, update_task,   # the quit backup: finish_backup
+        tasks = [t for t in (watcher, rules_task, button_task, firsts_task, update_task, images_task,   # the quit backup: finish_backup
                              *state.background_tasks()) if t]
         for t in tasks:
             t.cancel()

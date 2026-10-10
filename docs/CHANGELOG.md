@@ -2,6 +2,13 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-09 · Checklists' pictures: the link list refreshed daily
+- The server asks Canonn's codex reference for its picture links once a day (two minutes after a start when its copy
+  is missing or a day old; an hour later after a failure) and keeps them in data/codex_images.json, used when sound
+  (at least 500 entries) and else the shipped resources/codex_images.json. New pictures appear without a release.
+  outrider/codex_images.py holds the parsing both it and scripts/build_codex_images.py use; the tests point its
+  cache into a scratch folder.
+
 ## 2026-10-09 · Checklists: pictures from Canonn, linked
 - A species' and a geology entry's panels show a picture: Canonn's screenshot, loaded from Canonn when the entry is
   opened (never copied), captioned with the commander who took it and Canonn, linked to full size. A species shows a

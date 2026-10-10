@@ -224,6 +224,37 @@ class ChecklistServer(unittest.TestCase):
         self.assertEqual(self.state.checklist_geo("1")[1], 404)
         self.assertEqual(self.state.checklist(kind="x")[1], 400)
 
+    def test_picture_list_refreshed_from_canonn(self):
+        """The checklists' picture links: fetched from Canonn's codex reference into data/ (here a scratch file), used
+        over the shipped list; an answer of a changed shape (too few entries) changes nothing; a damaged copy falls back
+        to the shipped list."""
+        import asyncio
+        import outrider.codex_images as ci
+        from support import _HwSession
+        ref = {str(i): {"hud_category": "Biology", "english_name": f"Test Species {i} - Teal",
+                        "image_url": f"https://example.org/{i}.jpg", "image_cmdr": "Tester"} for i in range(ci.MIN_ENTRIES)}
+        ref["x"] = {"hud_category": "Stars", "english_name": "A star", "image_url": "https://example.org/s.jpg"}   # not ours
+        sp = ed_outrider.Spansh(self.db)
+        sp.session = _HwSession([(200, ref)])
+        self.state.spansh = sp
+        shipped = self.state.codex_images()
+        self.assertIn("water ice geyser", shipped)                     # the shipped list to begin with
+        self.assertTrue(asyncio.run(self.state.refresh_codex_images()))
+        self.assertEqual(sp.session.calls[0][0], ci.REF)
+        now = self.state.codex_images()
+        self.assertEqual((len(now), now["test species 7 - teal"]), (ci.MIN_ENTRIES, ["https://example.org/7.jpg", "Tester"]))
+        self.assertLess(ci.cache_age(), 60)
+        sp.session = _HwSession([(200, {"1": ref["1"]})])            # a changed shape: refused, the list kept
+        with self.assertRaises(ValueError):
+            asyncio.run(self.state.refresh_codex_images())
+        self.assertEqual(len(self.state.codex_images()), ci.MIN_ENTRIES)
+        with open(ci.CACHE, "w") as f:
+            f.write("{not json")
+        self.assertEqual(ci.load(), shipped)                            # a damaged copy: the shipped list
+        import os
+        os.remove(ci.CACHE)
+        self.assertIsNone(ci.cache_age())
+
     def test_endpoint(self):
         import asyncio
         from aiohttp.test_utils import TestClient, TestServer

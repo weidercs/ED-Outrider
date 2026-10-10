@@ -247,7 +247,9 @@ upstream project's choices, not rules of the game.
   of Frontier's game, so none is public domain or GPL; Frontier's media rules allow non-commercial fan use with
   attribution, but bundled images would sit outside the GPL and each is a commander's own. So Outrider ships only the
   links and credits (resources/codex_images.json, scripts/build_codex_images.py, from Canonn's codex reference) and the
-  page loads a picture from Canonn when an entry is opened, captioned with the commander and Canonn.
+  page loads a picture from Canonn when an entry is opened, captioned with the commander and Canonn. The running
+  server refreshes the link list from Canonn once a day into data/codex_images.json (about 650 KB asked for, nothing
+  sent), used when sound (at least 500 entries) and else the shipped copy, so new pictures appear without a release.
 - **A plot's end Spansh does not know yet is stood in for** (2026-10-09). Both ends are looked up in Spansh's search
   before every plot (a system known here, even where you are, is not necessarily one Spansh knows). One it does not
   know, but Outrider can place, is replaced by a Spansh system near it: of those within the ship's range, the one
