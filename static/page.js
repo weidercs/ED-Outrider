@@ -4351,19 +4351,25 @@ function renderChecklist() {
   const s = d.summary;
   const where = d.region_name || (d.region == null && clRegionEl.value === "all" ? "All regions" : "Where you are (not in a known region): all regions");
   const geo = d.kind === "geo";
+  // "N of M": N counts only what M counts (logged and reported here; found where it can grow), what else you have is
+  // said apart: it read "3 of 2 entries" with an entry nobody had reported here (the Fable review of 2026-10-10, #3)
+  const rowsAll = d.genera.flatMap(g => g.species);
+  const inM = rowsAll.filter(r => r.state && r.possible).length, extra = rowsAll.filter(r => r.state && !r.possible).length;
   if (geo) {
-    st.innerHTML = `${esc(where)}: <b>${s.logged}</b> of ${s.possible} entries reported ${d.region == null ? "anywhere" : "here"} logged · ` +
-      `<b>${clPct(s.completion)}</b> complete` + (s.elsewhere ? ` · <span class="clelse">${s.elsewhere} more logged in other regions</span>` : "") +
+    st.innerHTML = `${esc(where)}: <b>${inM}</b> of ${s.possible} entries reported ${d.region == null ? "anywhere" : "here"} logged · ` +
+      `<b>${clPct(s.completion)}</b> complete` + (extra ? ` · ${extra} logged that nobody has reported ${d.region == null ? "yet" : "here yet"}` : "") +
+      (s.elsewhere ? ` · <span class="clelse">${s.elsewhere} more logged in other regions</span>` : "") +
       ` · <span class="unk">reported sites: Canonn</span>`;
   }
   const pctWhat = d.region == null ? "for every species" : "for the species in this region";
-  if (!geo) st.innerHTML = `${esc(where)}: <b>${s.found}</b> of ${s.possible} possible species found · <b>${clPct(s.completion)}</b> complete ${pctWhat}` +
+  if (!geo) st.innerHTML = `${esc(where)}: <b>${inM}</b> of ${s.possible} possible species found · <b>${clPct(s.completion)}</b> complete ${pctWhat}` +
+    (extra ? ` · ${extra} found where the rules say ${extra === 1 ? "it cannot" : "they cannot"} grow` : "") +
     ` · <span class="cl-sold">${s.sold} sold</span>` +
     ` · <span class="cl-aboard">${s.aboard} aboard</span>` + (s.lost ? ` · <span class="cl-lost">${s.lost} lost</span>` : "") +
     (s.logged ? ` · <span class="cl-logged">${s.logged} logged</span>` : "") + ` · colours ${s.colours_found} of ${s.colours}` +
     (s.elsewhere ? ` · <span class="clelse">${s.elsewhere} more found in other regions</span>` : "");
   const html = d.genera.map(g => {
-    const found = g.species.filter(r => r.state).length, poss = g.species.filter(r => r.possible).length;
+    const found = g.species.filter(r => r.state && r.possible).length, poss = g.species.filter(r => r.possible).length;
     return `<div class="clbox"><h4><span>${esc(g.genus)}</span><span class="unk">${found} / ${poss}</span></h4><table>` + g.species.map(r => {
       const cls = r.state ? `cl-${r.state}` : r.possible ? "" : "cl-no";
       const tip = geo ? `${r.name} · ${r.sites ? `${r.sites.toLocaleString()} reported sites ${d.region == null ? "in all" : "in this region"}`

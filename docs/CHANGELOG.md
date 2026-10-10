@@ -2,6 +2,14 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-10 · Fable review fixes: the checklists
+- Bark Mounds: the game and Canonn name it in the plural, the rules "Bark Mound", so a codex entry for it never
+  counted on the Exo-Biology checklist (not found, left out of the region's percentage) and its panel had no picture.
+  The rules' plural genus name is matched too (#2).
+- The status line's "N of M" counts only what M counts: Geology read "3 of 2 entries reported here logged" with an
+  entry nobody had reported in the region; now "2 of 2 ... · 1 logged that nobody has reported here yet". The same
+  for species found where the rules say they cannot grow, and for each box's "found / possible" (#3).
+
 ## 2026-10-10 · Fable review fixes: uploads, the co-pilot button, ExploData
 - An Outrider giving way to another for an upload took over when the other stopped (or its lease went stale)
   without looking at where it stopped: what was played between that stop and its next lease refresh (up to a

@@ -61,6 +61,21 @@ class Checklist(unittest.TestCase):
         self.assertEqual(len(names), len(set(names)))
         self.assertEqual(t["summary"]["possible"], len(names))   # every species can grow somewhere
 
+    def test_bark_mounds(self):
+        """The game (and Canonn) say "Bark Mounds", the rules "Bark Mound" (their genus has the plural): a codex entry
+        under the game's name counts (the Fable review of 2026-10-10, #2)."""
+        sp = [{"id": "$Codex_Ent_Cone_Name;", "genus": "Bark Mounds", "name": "Bark Mound", "value": 1471900,
+               "rulesets": [{}], "colors": None}]
+        t = rows(cl.table(sp, 1, region_ok, [], [{"name": "Bark Mounds", "region": 1}], 3))
+        self.assertEqual(t["Bark Mound"]["state"], "logged")
+        # in the real rules it is the only species named so; no genus name is taken for a species of another name
+        R = outrider.bio.load_rules()
+        if not R:
+            self.skipTest("no bio rules")
+        merged, names = cl.merge_species(R["species"])
+        self.assertEqual(names["bark mounds"], "$Codex_Ent_Cone_Name;")
+        self.assertNotIn("bacterium", names)
+
     def test_states_by_region(self):
         runs = [{"species_id": "$A1;", "species": "Aleoida Arcus", "variant": "Aleoida Arcus - Teal", "region": 1, "state": "lost"},
                 {"species_id": "$A1;", "species": "Aleoida Arcus", "variant": "Aleoida Arcus - Teal", "region": 1, "state": "sold"},
@@ -205,6 +220,10 @@ class ChecklistServer(unittest.TestCase):
         self.assertEqual(sorted((r["system"], r["state"]) for r in sp["runs"]), [("Near Colonia", "aboard"), ("Near Sol", "lost")])
         self.assertTrue(sp["regions"] and set(sp["regions"].values()) <= {"yes", "parts"})
         self.assertEqual(self.state.checklist_species("$Nope;")[1], 404)
+        # Bark Mound's picture: Canonn keys it "bark mounds", as the game names it (the Fable review of 2026-10-10, #2)
+        bark, status = self.state.checklist_species("$Codex_Ent_Cone_Name;")
+        self.assertEqual(status, 200)
+        self.assertTrue(bark["images"] and all(i["url"].startswith("https://") for i in bark["images"].values()))
         # its pictures, linked from Canonn by the codex's names (resources/codex_images.json): one per colour
         self.assertTrue(sp["images"] and all(i["url"].startswith("https://") for i in sp["images"].values()))
         self.assertLessEqual(set(sp["images"]), {c.lower() for c, _ in outrider.checklist.colours(

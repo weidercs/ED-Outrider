@@ -93,13 +93,26 @@ const settle = async maxMs => {
     const geoHint = dom.window.getComputedStyle(d.querySelector("#clPane .geohint")).display !== "none" &&
                     dom.window.getComputedStyle(d.querySelector("#clPane .biohint")).display === "none";
     const geo = geoFirst === "Fumarole" && geoHint && /complete/.test(d.getElementById("clStatus").textContent);
+    // "N of M" counts only what M counts: an entry logged where nobody has reported one is said apart, not "3 of 2"
+    // (the Fable review of 2026-10-10, #3)
+    const counts = JSON.parse(dom.window.eval(`(() => { const saved = CL.data;
+      CL.data = Object.assign({}, saved, {kind: "geo", region: 1, region_name: "Galactic Centre",
+        summary: {possible: 2, logged: 3, colours_found: 2, completion: 100, elsewhere: 0},
+        genera: [{genus: "Fumarole", species: [{id: 1, name: "A Fumarole", short: "A", state: "logged", possible: "yes", sites: 5},
+          {id: 2, name: "B Fumarole", short: "B", state: "logged", possible: "yes", sites: 2},
+          {id: 3, name: "C Fumarole", short: "C", state: "logged", possible: null, sites: 0}]}]});
+      renderChecklist();
+      const out = [document.getElementById("clStatus").textContent, document.querySelector("#clGrid .clbox h4 .unk").textContent];
+      CL.data = saved; renderChecklist(); return JSON.stringify(out); })()`));
+    const countsOk = /^Galactic Centre: 2 of 2 entries reported here logged · 100\.00% complete · 1 logged that nobody has reported here yet/.test(counts[0])
+      && counts[1] === "2 / 2";
     radio("runs").checked = true; radio("runs").dispatchEvent(new dom.window.Event("change", {bubbles: true}));
     await sleep(300);
     const back = !d.getElementById("bioView").classList.contains("check") && dom.window.getComputedStyle(d.getElementById("bioPane")).display !== "none";
     const good = boxes >= 20 && /possible species found/.test(status) && options === 44 && side && side.textContent === name &&
-                 shown === "check" && geo && back && errors.length === before;
+                 shown === "check" && geo && countsOk && back && errors.length === before;
     allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| exobiology checklist |", `${boxes} genus boxes, ${options} region choices, panel ${side && side.textContent}, geology ${geo} (${geoFirst}), back to runs ${back}`,
+    console.log(good ? "OK" : "FAIL", "| exobiology checklist |", `${boxes} genus boxes, ${options} region choices, panel ${side && side.textContent}, geology ${geo} (${geoFirst}), counts ${countsOk || JSON.stringify(counts)}, back to runs ${back}`,
                 status.slice(0, 80), errors.slice(before));
   }
   // the schematic toggle inside Here (Now mode hides the view buttons: ✕ back first)

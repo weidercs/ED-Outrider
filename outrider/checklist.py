@@ -73,6 +73,11 @@ def merge_species(species_list):
     for sp in species_list:
         sid = sp.get("id") or sp["name"]
         names[sp["name"].lower()] = sid
+        # the game's (and Canonn's) name when it is the rules' in the plural: the codex logs "Bark Mounds", the rules
+        # say "Bark Mound" (their genus has the plural; the Fable review of 2026-10-10, #2)
+        genus, name = (sp.get("genus") or "").lower(), sp["name"].lower()
+        if genus and genus != name and genus.rstrip("s") == name:
+            names.setdefault(genus, sid)
         have = by_id.get(sid)
         if have is None or (not have.get("rulesets") and sp.get("rulesets")):
             by_id[sid] = sp

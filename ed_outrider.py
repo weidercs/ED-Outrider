@@ -8670,6 +8670,8 @@ class State:
         imgs, have = {}, self.codex_images()
         for colour, _ in outrider.checklist.colours(sp) or [("", None)]:
             hit = have.get(f"{sp['name']} - {colour}".lower() if colour else sp["name"].lower())
+            if not hit and not colour and sp.get("genus"):   # Canonn keys Bark Mound as the game does: "bark mounds"
+                hit = have.get(sp["genus"].lower())
             if hit:
                 imgs[colour.lower()] = {"url": hit[0], "cmdr": hit[1]}
         return {"id": species_id, "name": sp["name"], "regions": {str(k): v for k, v in regions.items()}, "runs": runs,
