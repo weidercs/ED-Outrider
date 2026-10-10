@@ -353,6 +353,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
           <label title="FSD injections (jumponium) where they shorten the route"><input type="checkbox" id="hwyInject"> use injections</label>
           <label title="do not route through the secondary stars of a system"><input type="checkbox" id="hwyNoSec"> exclude secondary stars</label>
           <label title="your FSD is supercharged now (the first jump gets the boost)"><input type="checkbox" id="hwySuper"> already supercharged</label>
+          <label title="plot with regular jumps only: no neutron star boosts on the way"><input type="checkbox" id="hwyNoNeu"> no neutron boosts</label>
         </div>
         <div class="srow hwy-ropt" hidden>
           <label title="how far from the route a system may be to be included (ly)">Radius <input type="number" id="richRadius" min="1" max="1000" step="any" inputmode="decimal"> ly</label>

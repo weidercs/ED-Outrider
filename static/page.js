@@ -4956,7 +4956,7 @@ const H = {data: null, key: null, loading: false, poll: null, error: null, statu
 // conservative / conservative_ly: null until changed here ([highway] conservative and conservative_ly then)
 // Road to Riches, the tab's other route type: its api/riches answer, polling and form (see "Road to Riches" below)
 const R = {data: null, key: null, loading: false, poll: null, error: null, watch: false, filled: false, nextShown: null};
-const hwyCfg = Object.assign({plotter: "exact", injections: false, exclude_secondary: false, supercharged: false, efficiency: null,
+const hwyCfg = Object.assign({plotter: "exact", injections: false, exclude_secondary: false, supercharged: false, no_neutrons: false, efficiency: null,
                               conservative: null, conservative_ly: null}, store.get("highway", {}));
 const saveHwyCfg = () => store.set("highway", hwyCfg);
 // a fleet ship's laden jump range with `cargo` t aboard and the main tank full: the server's fleet_range (the
@@ -5102,7 +5102,7 @@ function hwyHeadHtml(hd) {
   const how = (r.plotter === "neutron"
     ? `neutron plotter · ${o.range != null ? `${o.range} ly range · ` : ""}×${o.supercharge_multiplier || 4} · ${o.efficiency ?? "?"}% efficiency` +
       ` · no refuel stops: scoop as you go`
-    : `exact plotter${o.injections ? " · injections" : ""}${o.exclude_secondary ? " · no secondary stars" : ""}`) +
+    : `exact plotter${o.injections ? " · injections" : ""}${o.exclude_secondary ? " · no secondary stars" : ""}${o.no_neutrons ? " · no neutron boosts" : ""}`) +
     (o.conservative_ly ? ` · conservative −${o.conservative_ly} ly` : "");
   const ship = sh ? ` · ${esc(shipLabel(sh.name, sh.type))}${sh.type && shipName(sh.type) !== shipLabel(sh.name, sh.type) ? ` (${esc(shipName(sh.type))})` : ""}` +
     (sh.ts ? ` <span title="the ship's figures come from this Loadout">as of ${esc(day(sh.ts))}</span>` : "") : "";
@@ -5223,8 +5223,9 @@ function fillHwyForm(hd) {
 {
   const p = hForm.querySelector(`[name=hwyPlotter][value="${["neutron", "riches", "exo", "trade"].includes(hwyCfg.plotter) ? hwyCfg.plotter : "exact"}"]`); if (p) p.checked = true;
   hEl("hwyInject").checked = !!hwyCfg.injections; hEl("hwyNoSec").checked = !!hwyCfg.exclude_secondary; hEl("hwySuper").checked = !!hwyCfg.supercharged;
+  hEl("hwyNoNeu").checked = !!hwyCfg.no_neutrons;
   hForm.querySelectorAll("[name=hwyPlotter]").forEach(r => r.onchange = () => { hwyCfg.plotter = hwyPlotter(); saveHwyCfg(); hwyFormShow(); });
-  for (const [id, k] of [["hwyInject", "injections"], ["hwyNoSec", "exclude_secondary"], ["hwySuper", "supercharged"]])
+  for (const [id, k] of [["hwyInject", "injections"], ["hwyNoSec", "exclude_secondary"], ["hwySuper", "supercharged"], ["hwyNoNeu", "no_neutrons"]])
     hEl(id).onchange = () => { hwyCfg[k] = hEl(id).checked; saveHwyCfg(); };
   hEl("hwyEff").onchange = () => { const v = Math.round(Number(hEl("hwyEff").value));
     hwyCfg.efficiency = hEl("hwyEff").value === "" || !(v >= 1 && v <= 100) ? null : v; saveHwyCfg(); };
@@ -5262,7 +5263,7 @@ function hwyBody() {
   if (hEl("hwyShip").value !== "") b.ship_id = Number(hEl("hwyShip").value);
   if (num("hwyCargo") != null) b.cargo = num("hwyCargo");
   if (p === "exact") Object.assign(b, {injections: hEl("hwyInject").checked, exclude_secondary: hEl("hwyNoSec").checked,
-                                       supercharged: hEl("hwySuper").checked});
+                                       supercharged: hEl("hwySuper").checked, no_neutrons: hEl("hwyNoNeu").checked});
   else {
     if (num("hwyRange") != null) b.range = num("hwyRange");
     if (num("hwyEff") != null) b.efficiency = num("hwyEff");

@@ -3082,7 +3082,7 @@ const settle = async maxMs => {
     if (JSON.stringify(got.plotBody) !== JSON.stringify({plotter: "neutron", to: "Colonia", ship_id: 3, cargo: 0, range: 48.5, efficiency: 60, supercharge_multiplier: 6, conservative: false})) bad.push("plotBody");
     if (!/^Plotting Hwy Stop 37 → Colonia with Spansh \(neutron plotter\)…/.test(got.running)) bad.push("running");
     if (!(got.polls >= 3 && /^Plotted: 399 jumps to Hwy End/.test(got.afterPlot[0]) && got.afterPlot[1] && got.afterPlot[2] === 200)) bad.push("afterPlot");
-    if (JSON.stringify(got.exactBody) !== JSON.stringify({plotter: "exact", to: "Colonia", ship_id: 7, cargo: 4, injections: true, exclude_secondary: false, supercharged: false, conservative: false})) bad.push("exactBody");
+    if (JSON.stringify(got.exactBody) !== JSON.stringify({plotter: "exact", to: "Colonia", ship_id: 7, cargo: 4, injections: true, exclude_secondary: false, supercharged: false, no_neutrons: false, conservative: false})) bad.push("exactBody");
     if (!(got.err[0] === "Could not plot the route: a route is being plotted already." && got.err[1] === "err")) bad.push("err");
     if (!(got.saved && got.saved.plotter === "exact" && got.saved.injections === true)) bad.push("saved");
     if (!(JSON.stringify(p.v) === "[50,25,2]" && JSON.stringify(p.a) === "[10,110]" && JSON.stringify(p.b) === "[210,10]" && p.one && p.none === null
@@ -3617,7 +3617,7 @@ const settle = async maxMs => {
     const want = {strip: "🛣 Next: Hwy Stop 38 🎯 target · 4.2 ly · 38 of 399 · refuel in 3 jumps · ⚠ too much fuel for the next jump: ≤ 36 t, you have 140 t",
       off: [false, "5", true, ""], noteX4: "≈ 4 ly shorter jumps, about 16 ly on a ×4 neutron jump",
       noteX6: "≈ 4 ly shorter jumps, about 24 ly on a ×6 neutron jump",
-      body: {plotter: "exact", to: "Colonia", ship_id: 3, cargo: 0, injections: true, exclude_secondary: false, supercharged: false,
+      body: {plotter: "exact", to: "Colonia", ship_id: 3, cargo: 0, injections: true, exclude_secondary: false, supercharged: false, no_neutrons: false,
              conservative: true, conservative_ly: 4},
       defaults: [true, "7", "≈ 7 ly shorter jumps, about 42 ly on a ×6 neutron jump"], plain: [false, "5", true]};
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));

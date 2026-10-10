@@ -283,7 +283,8 @@ class HighwayH1(unittest.TestCase):
         self.assertEqual([x["system"] for x in r["ahead"]], ["Neu A", "Bridge B", "Scoop C", "Neu D", "End"])
         self.assertEqual([(x["i"], x["system"], x["neutron"], x["fuel_left"]) for x in r["done"]], [(0, "Start", True, 32.0)])
         self.assertEqual(r["neutrons"], [0, 1, 4])
-        self.assertEqual(r["options"], {"cargo": 3, "injections": True, "exclude_secondary": False, "supercharged": False})
+        self.assertEqual(r["options"], {"cargo": 3, "injections": True, "exclude_secondary": False, "supercharged": False,
+                                        "no_neutrons": False})
         self.assertEqual(cb.copied, ["Neu A", "Waypoint"])   # each new plot from where you are: its first hop is copied
         p = out["payload"]
         self.assertEqual((p["next"]["name"], p["next"]["neutron"], p["next"]["distance"], p["index"], p["total"],
@@ -328,6 +329,25 @@ class HighwayH1(unittest.TestCase):
         self.assertEqual(self.state.highway_plotting["state"], "failed")
         self.assertEqual(self.state.highway_plotting["error"], "Spansh: Could not find system End")
         self.assertEqual(self.state.highway_view()["route"]["count"], 6)
+
+    def test_exact_plot_without_neutrons(self):
+        """no_neutrons: Spansh's exact plotter is told not to use the neutron supercharge (regular jumps only), and the
+        route remembers it was asked for."""
+        import asyncio
+        self.j.handle(self.loadout("2026-01-02T00:00:00Z", fsd="int_hyperdrive_overcharge_size8_class5_overchargebooster_mkii"))
+        sp = ed_outrider.Spansh(self.db)
+        sp.session = _HwSession([(200, {"job": "e", "status": "ok", "result": self.EXACT})])
+        sp.system_record = spansh_knows(start=100, end=105)
+        self.state.spansh = sp
+
+        async def go():
+            out, status = self.state.highway_start_plot({"from": "Start", "to": "End", "no_neutrons": True})
+            await self.state.highway_task
+            return status
+        self.assertEqual(asyncio.run(go()), 202)
+        params = sp.session.calls[0][1]
+        self.assertEqual((params["use_supercharge"], params["is_supercharged"]), (0, 0))
+        self.assertIs(self.state.highway_view()["route"]["options"]["no_neutrons"], True)
 
     def test_exact_plot_sends_id64s(self):
         """Spansh's exact plotter answers "Unable to find route" to system names; it takes id64s (found in game

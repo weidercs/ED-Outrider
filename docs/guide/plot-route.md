@@ -13,7 +13,8 @@ until you plot another or **Clear route**.
 </p>
 
 - **Two plotters.** **Exact** (the default) plans every jump with its fuel and refuel stops from your ship's own
-  figures (drive, masses, tanks, Guardian booster, engineering) and your cargo. **Neutron** plans waypoints only,
+  figures (drive, masses, tanks, Guardian booster, engineering) and your cargo; tick **no neutron boosts** for a
+  route of regular jumps only (no neutron stars to fly past). **Neutron** plans waypoints only,
   from a range, the supercharge (×4, or ×6 with the SCO Mk II) and an efficiency: for a ship you haven't flown, or
   a quick plot.
 - **Ship.** Any ship you have flown, as of its latest Loadout. The neutron plotter's **Range** starts at that

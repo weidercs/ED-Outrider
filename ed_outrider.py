@@ -10508,7 +10508,7 @@ class State:
     def highway_start_plot(self, body):
         """POST /api/highway/plot: check the request, start the Spansh job in the background, (answer, HTTP status).
         {plotter: exact | neutron, from (default: where you are), to, ship_id (default: the current ship), cargo,
-        injections, exclude_secondary, supercharged (exact); range, efficiency, supercharge_multiplier (neutron);
+        injections, exclude_secondary, supercharged, no_neutrons (exact: regular jumps only, no neutron boost); range, efficiency, supercharge_multiplier (neutron);
         conservative, conservative_ly (both: jumps that many ly shorter than the ship's range)}."""
         if self.highway_task and not self.highway_task.done():
             return {"error": "a route is being plotted already"}, 409
@@ -10559,14 +10559,14 @@ class State:
                 # shorter at every step of Spansh's fuel simulation; the booster's ly are left as they are
                 short = conservative_optimal_mass(fig, cargo, margin) if margin else None
                 params = {"source": frm, "destination": to, "is_supercharged": int(flag("supercharged")),
-                          "use_supercharge": 1, "use_injections": int(flag("injections")),
+                          "use_supercharge": int(not flag("no_neutrons")), "use_injections": int(flag("injections")),
                           "exclude_secondary": int(flag("exclude_secondary")), "fuel_power": fig["fuel_power"],
                           "fuel_multiplier": fig["fuel_multiplier"], "optimal_mass": short[0] if short else fig["optimal_mass"],
                           "supercharge_multiplier": fig["supercharge"], "base_mass": round(fig["unladen"] + reserve, 3),
                           "tank_size": fig["fuel_main"], "internal_tank_size": reserve,
                           "max_fuel_per_jump": fig["max_fuel"], "range_boost": fig.get("booster_ly") or 0, "cargo": cargo}
                 options = {"cargo": cargo, "injections": flag("injections"), "exclude_secondary": flag("exclude_secondary"),
-                           "supercharged": flag("supercharged")}
+                           "supercharged": flag("supercharged"), "no_neutrons": flag("no_neutrons")}
                 if short:
                     options.update(conservative_ly=margin, range_full=round(short[1], 2), range=round(short[2], 2))
                 reach = short[2] if short else fleet_range(fig, cargo)

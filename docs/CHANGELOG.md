@@ -2,6 +2,11 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-10 · Plot a route: exact plots without neutron boosts
+- The exact plotter has a **no neutron boosts** tick: Spansh plans regular jumps only (its `use_supercharge` off),
+  for a route that never flies past a neutron star. Remembered like the other ticks; the route's line says
+  "no neutron boosts" when it was asked for.
+
 ## 2026-10-10 · Auto-target: charging the FSD early is no failure
 - Starting the FSD charge (or the jump) after auto-target had plotted the route, while it was closing the map and
   before its last check, stopped the run with "an FSD jump started" and said targeting failed, though the target was
