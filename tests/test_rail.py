@@ -52,7 +52,11 @@ class Pure(unittest.TestCase):
                  ({"live": True, "flags": F(26)}, "lander01", ("nomad", None)),
                  ({"live": True, "flags": F(25)}, None, ("fighter", None)),
                  ({"live": True, "flags": 0, "flags2": F(0)}, None, ("foot", None)),
-                 ({"live": True, "flags": 0, "flags2": F(0, 1)}, None, (None, "on foot in a station")),
+                 # Status.json Flags2: OnFootInStation 3, InHangar 13, SocialSpace 14 (a planetary port has 13 or 14
+                 # with OnFootOnPlanet 4, not 3: the sweep of 2026-10-09); 1 is InTaxi
+                 ({"live": True, "flags": 0, "flags2": F(0, 3)}, None, (None, "on foot in a station")),
+                 ({"live": True, "flags": 0, "flags2": F(0, 4, 14)}, None, (None, "on foot in a station")),
+                 ({"live": True, "flags": 0, "flags2": F(0, 4, 13)}, None, (None, "on foot in a station")),
                  ({"live": True, "flags": 0}, None, (None, "not in a ship, SRV, fighter or on foot"))]
         for st, veh, want in cases:
             self.assertEqual(rail.context_of(st, veh), want, (st, veh))
@@ -92,6 +96,14 @@ class Pure(unittest.TestCase):
         self.assertEqual([st("foot", "bio", selected_weapon="$humanoid_sampletool_name;"), st("foot", "bio", selected_weapon="$humanoid_fists_name;"),
                           st("foot", "bio")], ["on", "off", None])
         self.assertEqual([st("srv", "recall", flags=F(2)), st("foot", "nv", flags=F(28))], [None, None])   # not reported
+        # the game sets the hardpoints flag in supercruise (after a jump, Analysis mode on): not available there
+        self.assertEqual([st("ship", "hard", flags=F(4, 6, 27)), st("ship", "hard", flags=F(4)), st("ship", "hard", flags=F(6)),
+                          st("ship", "hard", flags=0)], ["na", "na", "on", "off"])
+        self.assertEqual(rail.NA_WHY["hard"], "in supercruise")
+        # landing gear and cargo scoop too (the author's choice); the SRV's scoop is never in supercruise
+        self.assertEqual([st("ship", "gear", flags=F(4, 2)), st("ship", "scoop", flags=F(4, 9)), st("ship", "gear", flags=F(2)),
+                          st("ship", "scoop", flags=F(9)), st("srv", "scoop", flags=F(9))], ["na", "na", "on", "on", "on"])
+        self.assertEqual((rail.NA_WHY["gear"], rail.NA_WHY["scoop"]), ("in supercruise", "in supercruise"))
 
     def test_check_set(self):
         ok, why = rail.check_set("ship", [{"id": "fa", "label": "  F.A.   toggle  "}, {"id": "dock"}])

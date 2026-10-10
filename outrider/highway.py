@@ -65,6 +65,46 @@ def highway_rows(plotter, result):
     return rows
 
 
+def _ly(a, b):
+    return math.dist((a["x"], a["y"], a["z"]), (b["x"], b["y"], b["z"]))
+
+
+def stand_in(around, toward, candidates, reach):
+    """The system to plot from (or to) in place of one Spansh does not know yet (`around`: its x, y, z): of
+    `candidates` (dicts with name, id64, x, y, z: systems Spansh knows), the one within `reach` ly of it that is nearest
+    `toward` (the route's other end: no jump wasted going the wrong way), else simply the nearest. None when there are
+    no candidates."""
+    known = [c for c in candidates if None not in (c.get("x"), c.get("y"), c.get("z")) and c.get("name")]
+    if not known:
+        return None
+    near = [c for c in known if reach and _ly(around, c) <= reach]
+    if near and toward and None not in (toward.get("x"), toward.get("y"), toward.get("z")):
+        return min(near, key=lambda c: _ly(toward, c))
+    return min(known, key=lambda c: _ly(around, c))
+
+
+def splice_route(rows, plotter, reach, start=None, end=None):
+    """A route plotted between stand-ins with the real ends put back: `start` before the first row and `end` after the
+    last (dicts with system, id64, x, y, z), each a leg of its own from (or to) its stand-in. The legs' fuel is not
+    known (Spansh's figures begin at the stand-in), and the neutron plotter's jump count for one is what `reach` needs."""
+    rows = [dict(r) for r in rows]
+
+    def jumps(d):
+        return 1 if plotter == "exact" or not reach else max(1, math.ceil(d / reach))
+    if end:
+        d = _ly(rows[-1], end)
+        for r in rows:
+            r["remaining"] = (r["remaining"] or 0) + d if r["remaining"] is not None else None
+        rows.append(dict(end, distance=round(d, 2), fuel_used=None, fuel_left=None, neutron=0, refuel=0, jumps=jumps(d),
+                         remaining=0.0))
+    if start:
+        d = _ly(start, rows[0])
+        rows[0].update(distance=round(d, 2), fuel_used=None, fuel_left=None, jumps=jumps(d))
+        rows.insert(0, dict(start, distance=None, fuel_used=None, fuel_left=None, neutron=0, refuel=0, jumps=0,
+                            remaining=round((rows[0]["remaining"] or 0) + d, 2) if rows[0]["remaining"] is not None else None))
+    return rows
+
+
 NUMBER_WORDS = ("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten")
 
 

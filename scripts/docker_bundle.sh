@@ -57,6 +57,8 @@ GID=1000
 PORT=8025
 # your time zone, e.g. Europe/London (the History's days)
 TZ=UTC
+# the name other Outriders see when this one uploads (EDDN, EDSM): "Already uploading from ..."
+# OUTRIDER_HOST=outrider-docker
 EOF
 
 cat > "$OUT/INSTALL.txt" <<EOF
@@ -84,6 +86,10 @@ rail, the co-pilot button, the clipboard and sound played on the PC. Everything 
 5. Open http://<this computer>:\${PORT:-8025}/ then Settings > Server settings: set a password (every device signs
    in here, your own browser too) and add this computer's name to allowed hosts if you open it by name. Then:
      docker compose restart
+
+Uploads (EDDN, EDSM, off unless switched on): to let another Outrider see that this one uploads, give it a writable
+folder in the journal share: mkdir -p "\$JOURNALS/.outrider" (on the share, as its owner), then uncomment the
+.outrider line in docker-compose.yml. The guide's Uploads page explains.
 
 Your database, backups and voices stay in docker/data/, the config in docker/config/. If the container says it
 cannot write them: sudo chown -R \$(id -u):\$(id -g) docker/   then docker compose restart

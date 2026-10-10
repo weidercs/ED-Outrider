@@ -460,6 +460,7 @@ function renderStrip() {
   fl.innerHTML = val(`<span class="dot ${dot}"></span>${text}`);
   sl.innerHTML = problems.length ? problems.join(" · ") : /^asking|^fetching/.test(data.status || "") ? esc(data.status) : "Spansh ok";
   document.getElementById("backupLine").innerHTML = backupHtml(data.backup || {});
+  document.getElementById("uploadLine").innerHTML = uploadLineHtml(data.uploads);
   // docked somewhere that buys data with a worthwhile amount aboard: say so plainly
   const dk = data.docked, sellHere = sellableHere(dk, data.unsold), se = document.getElementById("sell");
   if (lossCard && Date.now() < lossCard.until) {
@@ -581,8 +582,9 @@ function worthLeavingFor(l) {
     || (codexNewCounts() && b.codex_new));   // a species new to your codex here is worth stopping for (vouchers)
   // mapping only counts when it would add at least the green-row level (bonus-free, like the highlight),
   // or the body is special: a first-discovered / first-map ELW, water world, ammonia world or terraformable.
+  // A body someone else mapped (your scan says) never counts: one line said so when it was scanned (mapped_before).
   // Unscanned bodies and a missing honk stay on Here's to-do line; they never sound the alert on their own.
-  const maps = (l.unmapped || []).filter(u => u.special || (u.increment != null && u.increment >= hlLevel("body")));
+  const maps = (l.unmapped || []).filter(u => !u.mapped_before && (u.special || (u.increment != null && u.increment >= hlLevel("body"))));
   return {...l, bio_pending: bio, maps, clean: !maps.length && !bio.length};
 }
 // what a bio_pending body could pay with its first-footfall factor (the server's potential is bonus-free, so the
@@ -764,7 +766,7 @@ function renderOnBody() {
     const o = b.organics.find(o => o.genus === g), x = (b.bio_guess || []).find(q => q.genus === g);
     bits.push(o ? `<span class="sp ${o.lost ? "lost" : o.done ? "done" : "part"}">${esc(g)} ${o.lost ? "lost ✗" : `${o.samples}/3${o.done ? " ✓" : ""}`}` +
                   `${o.species ? ` <span class="unk">${esc(o.species.split(" ").slice(1).join(" "))}</span>` : ""}</span>`
-               : `<span class="sp">${esc(g)} 0/3${x && x.best ? ` <span class="unk">likely ${esc(x.best.split(" ").slice(1).join(" "))} ${credits((x.value || 0) * f)}</span>${variantTxt(x)}` : ""}${codexMark(x, obData.region)}</span>`);
+               : `<span class="sp">${esc(g)} 0/3${x && x.best ? ` <span class="unk">likely ${esc(x.best.split(" ").slice(1).join(" "))} ${credits((x.value || 0) * f)}</span>${variantTxt(x)}` : ""}${codexMark(x, obData.region, {colour: !(x && x.best)})}</span>`);
   }
   const unk = bioUnknown(b);
   if (unk) bits.push(`<span class="unk">${unk.label.replace(/ signals?/, m => " bio" + m)}</span>`);
@@ -1503,7 +1505,7 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["trade", "a trade route (plotted in Plot Route): on arriving at a stop, what to sell and buy there; once that is done, the hop's profit and the next stop; and route complete", null],
   ["highway", "the Neutron Highway (a route plotted in Plot Route): the next stop on arriving at a route system (with the boost and refuel stops), off route, back on the highway, and highway complete", null],
   ["autotarget", "auto-target (after a supercharge when it is on, a test, Target next, 🎯, the co-pilot button's tap): whether the system was targeted, and nothing to target when the button found none", null],
-  ["find", "a valuable body just scanned (over your highlight levels)", "find"],
+  ["find", "a valuable body just scanned (over your highlight levels); one someone else mapped is not named, but said once per system (\"already mapped, still worth mapping\")", "find"],
   ["jumponium", "a landable body just scanned has a material your FSD injections are short of (premium or standard at 2 or fewer): said with the FSS debrief, or alone when the FSS never completes", "find"],
   ["sampling", "leaving a body with exobiology unfinished (untouched genera only if you landed there); a species completed; within 100 m of a plant you tagged where the next sample would count", "alert"],
   ["approach", "approaching a landable body at or over your high-gravity level with unsold data over the amber level or rebuy multiple", "alert"],
@@ -1517,17 +1519,20 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["rigleash", "a Rhino mining rig too far from you (over the rig warning distance, again at 4.5 km; the game destroys it at 5 km)", "danger"],
   ["rigsout", "docking the Rhino with rigs still marked out on the body, and which are probably full (Outrider's own record: a rig picked up without a tap still counts until you mark it on the surface map)", null]];
 const UNSPOKEN = new Set(["discovery"]);   // a target's verdict: the arrival is what gets spoken
-const alertCfg = Object.assign({enabled: false}, Object.fromEntries(ALERTS.map(([k]) => [k, true])),
+// the defaults, as functions: another window's import that resets a setting rebuilds from them (ALERT_STORES)
+const alertCfgBase = () => Object.assign({enabled: false}, Object.fromEntries(ALERTS.map(([k]) => [k, true])),
   // a notification on every jump (or scoop, or FSS) would be noise: these are spoken by default, not notified
   {jump: false, honk: false, brief: false, fss: false, mapped: false, scoop: false, scoopstop: false, supercharge: false, highway: false, autotarget: false,
-   sampling: false, approach: false, bodybrief: false, jumponium: false, rigs: false, rigsout: false},
-  store.get("alerts", {}));
+   sampling: false, approach: false, bodybrief: false, jumponium: false, rigs: false, rigsout: false});
+const alertCfg = Object.assign(alertCfgBase(), store.get("alerts", {}));
 // off until you tick them (the whole row): the jumponium call-out
 const OFF_KINDS = {jumponium: false};
-const alertSound = Object.assign(Object.fromEntries(ALERTS.map(([k]) => [k, true])), OFF_KINDS, store.get("alertSound", {}));
+const alertSoundBase = () => Object.assign(Object.fromEntries(ALERTS.map(([k]) => [k, true])), OFF_KINDS);
+const alertSound = Object.assign(alertSoundBase(), store.get("alertSound", {}));
 // not spoken until you tick them: they repeat what the game (or another alert) already told you
 const QUIET_KINDS = {scoopstop: false, supercharge: false, bodybrief: false, ...OFF_KINDS};
-const alertSpeak = Object.assign(Object.fromEntries(ALERTS.map(([k]) => [k, true])), QUIET_KINDS, store.get("alertSpeak", {}));
+const alertSpeakBase = () => Object.assign(Object.fromEntries(ALERTS.map(([k]) => [k, true])), QUIET_KINDS);
+const alertSpeak = Object.assign(alertSpeakBase(), store.get("alertSpeak", {}));
 // The tablet is silent (the PC speaks) unless "Play alerts here" is ticked in its Settings (the author, 2026-10-04: a
 // Docker server often has no browser open at all): then it speaks and plays the alert sounds itself, whatever any PC
 // window does (both may then speak: turn one off). Per tablet.
@@ -1646,7 +1651,7 @@ function uncool(it) {
 const SOUND_LEAD = {fanfare: 1700, chime: 1000};
 function alertOut(kind, title, body, {sound, say, delay = 0, tag = null, still = null, quiet = false} = {}) {
   lastAlert = {kind, title, body, at: Date.now()};
-  if (TABLET) tabBanner(kind, title, body);   // the tablet shows it; the PC says it (and the tablet too with Play alerts here)
+  if (TABLET) tabBanner(kind, title, body, tag);   // the tablet shows it; the PC says it (and the tablet too with Play alerts here)
   const entry = logSpeech({kind, tag, words: title});
   const snd = sound === undefined ? (ALERTS.find(a => a[0] === kind) || [])[2] : sound;
   const loud = speakerHere(), hush = hushed() && speechPrio(kind, tag) > 1;   // hushed: danger (and a rig press's answer) still speaks
@@ -1856,7 +1861,10 @@ async function sayNow(item) {
     let ctx = tts && tts.engine === "piper" ? await runningAudio() : null;
     if (!ctx && tts && tts.engine === "piper" && actx && actx.state !== "running" && !cur.stopped) {
       // the browser holds audio back until a click: the line waits for it (the red pill asks), then plays in Piper
-      // if it is still worth saying; never the browser's voice instead
+      // if it is still worth saying; never the browser's voice instead. Only when the pill shows and a click lets
+      // it go: with Play on this PC (its call failed) or speech off, nothing asks for that click, and the whole queue
+      // stalled behind the line, danger lines included (the sweep of 2026-10-09)
+      if (serverPlay() || !audioBlocked()) { item.unsaid = "the browser has not allowed audio yet (click the page)"; return; }
       item.heldForClick = true; drawAudioPill();
       await audioUnlocked(cur);
       cur.halt = null;
@@ -2045,7 +2053,7 @@ const LINE_SAMPLES = {
   speech_on: {}, game_start: {}, game_exit: {}, heat: {},
   arrival_undiscovered: {system: "Drojau LL-O b26-3"}, arrival_discovered: {system: "Drojau LL-O b26-3"},
   leaving: {text: "A 2, a class two gas giant, plus 1.4M to map"},
-  find_body: {what: "Water world, terraformable, undiscovered", body: "A 3", value: "2.3M"},
+  find_body: {what: "Water world, terraformable, undiscovered", body: "A 3", value: "2.3M"}, mapped_before: {},
   find_bio: {body: "B 7", value: "19.0M"}, sample_clear: {genus: "Stratum"},
   codex: {entry: "Stratum Tectonicas", what: "new to your codex for this region"},
   fuel_low: {pct: 18}, fuel_star: {pct: 22, star: "white dwarf"}, fuel_target: {pct: 22, system: "Drojau LL-O b26-3"},
@@ -2219,6 +2227,7 @@ function arrivalBriefText(m) {
 // zone; nothing notable, terraformable or over your body level left to map; no bio at or over your exobiology
 // level. Fuel plays no part: its alerts are their own, and jump the queue.
 const routineQuiet = () => !!store.get("routineQuiet", false);
+const mappedBeforeSaid = new Set();   // systems whose "already mapped" line was said (once per system, this page)
 // the region crossing's {count}: species logged elsewhere that the rules let grow here and your codex lacks here
 const regionCountText = n => n ? `${n} species you have logged elsewhere could be new to your codex here.` : "";
 // a region crossing waiting for the arrival briefing to say it ({sys, at, m}); said alone if none has in 30 s
@@ -2498,6 +2507,7 @@ function unsoldHtml(u) {
 }
 
 function render() {
+  renderUploads();
   if (!data) return;
   if (TABLET) tabAutoView();   // the surface map's switch to Now and back, before the views are shown
   const bms = bmMap();
@@ -2536,7 +2546,7 @@ function render() {
   document.getElementById("logView").hidden = view !== "log";
   if (view === "log") { if (L.key === null) loadLog(); else tailLog(); }
   document.getElementById("bioView").hidden = view !== "bio";
-  if (view === "bio") loadBio();
+  if (view === "bio") { if (bioMode !== "runs") loadChecklist(); else loadBio(); }
   if (view === "here" || nearPinned || (view === "overview" && !ovState.collapsed) || view === "now") {   // Now reads Here's data
     loadHere();
     // tab and pane keep different modes; and the in-game target moves without a scan (review F4): redraw, no refetch
@@ -2559,7 +2569,8 @@ function render() {
   document.getElementById("nowView").hidden = view !== "now";
   if (view === "now") renderNow(); else renderSurface();   // Now's map, or the on-body strip's copy
   nowWake();
-  if (view === "map") { loadMap(); drawMap(); }
+  // opening the map asks again (Codex F5: the system's own history and scans changed while it was closed, A -> B -> A)
+  if (view === "map") { if (!M.open) M.key = null; M.open = true; loadMap(); drawMap(); } else M.open = false;
   if (view === "hwy") { loadHwy(); loadRich(); }
   refreshPop();
   const jr = effRange();
@@ -2836,10 +2847,18 @@ function bodyValueTitle(b) {
 const ringsText = b => `${b.rings}${b.rings_mapped ? ` (${b.rings_mapped} mapped${b.hotspots < b.rings_mapped ? `, ${b.hotspots} with hotspots` : ""})` : ""}`;
 function renderHere() {
   const h = hereData, head = document.getElementById("hereHead"), lv = document.getElementById("hereLeaving");
-  if (!h) { head.textContent = "loading…"; return; }
+  if (!h) {   // another system on its way: nothing of the last one stays on screen, or clickable (the sweep of 2026-10-09)
+    head.textContent = "loading…"; lv.innerHTML = "";
+    document.getElementById("hereRows").innerHTML = "";
+    const sch = document.getElementById("hereSchematic"); if (sch) sch.innerHTML = "";
+    drawHereLegend();
+    return;
+  }
   if (h.error) {
+    const sch = document.getElementById("hereSchematic"); if (sch) sch.innerHTML = "";
     head.textContent = h.error; lv.innerHTML = "";
     document.getElementById("hereRows").innerHTML = `<tr><td colspan="11" class="unk">${esc(h.error)}</td></tr>`;
+    drawHereLegend();
     if (selectedBody) closeBody();
     return;
   }
@@ -2936,6 +2955,7 @@ function renderHere() {
   document.getElementById("hereRows").innerHTML = (hm.top === "text" ? treeRowsHtml(h, rowHtml) : byMax.map(b => rowHtml(b)).join(""))
     || `<tr><td colspan="11" class="unk">No bodies known here.</td></tr>`;
   refocus("hereRows", fk);
+  drawHereLegend();
   // the body targeted in-game: a line saying what it is worth going to, and its row brought into view
   if (destBody) {
     const b = destBody;
@@ -2948,6 +2968,58 @@ function renderHere() {
   } else lastDestKey = null;
 }
 let lastDestKey = null;
+// Here's footer (the author, 2026-10-10): what the icons mean, for the icons the list or the schematic shows now and
+// only those (none shown: no footer). It sits under the scrolling list, so it stays in view. Each entry: [test, the
+// icon as shown, what it means]; a test gets q(selector) over the parts shown, s(glyph) for the schematic's badges
+// (their plain text: a dim 🗺 there is a span) and has(selector, text) for a shown element with that text
+const HERE_LEGEND = [
+  [(q, s) => q(".cur"), "🔭", "something unusual (hover it)"],
+  [q => q(".nb.ELW"), `<span class="nb ELW">ELW</span>`, "Earth-like world"],
+  [q => q(".nb.WW"), `<span class="nb WW">WW</span>`, "water world"],
+  [q => q(".nb.AW"), `<span class="nb AW">AW</span>`, "ammonia world"],
+  [q => q(".nb.T"), `<span class="nb T">T</span>`, "terraformable"],
+  [q => q(".scoop"), "⛽", "scoopable star"],
+  [q => q(".ic.ring, .ringmark"), icon("ring", "i-ring", "", "rings"), "rings"],
+  [q => q(".belt"), "⋯", "asteroid belts"],
+  [(q, s) => q('.fl[title="first discovered"]') || s("🏁"), "🏁", "first discovered by you"],
+  [(q, s) => q('.fl[title="first mapped"]') || s("🗺"), "🗺", "first mapped by you"],
+  [q => q('.fl.unk[title^="mapped"], #hereSchematic .badges > span.unk'), `<span class="unk">🗺</span>`, "mapped (not first)"],
+  [(q, s) => q('.fl[title="first footfall"]') || s("👣"), "👣", "first footfall"],
+  [q => q('span.unk[title^="known to Spansh"]'), "—", "not scanned by you (Spansh knows it)"],
+  [(q, s) => s("🧬"), "🧬", "biological signals"],
+  [q => q(".warnc"), "🧬?", "bio possible: check the FSS"],
+  [q => q(".sp.part"), "1/3", "samples of a species taken (3 analyses it)"],
+  [q => q(".sp.done"), "✓", "species analysed"],
+  [q => q(".sp.lost"), "✗", "samples lost with the ship: sample again"],
+  [q => q('span.unk[title^="likeliest by value"]'), "?", "the likeliest species, not yet known"],
+  [(q, s, has) => has("td.bio .sp", "≤"), "≤", "the most the likely species could pay"],
+  [q => q(".cxgal"), `<span class="cxnew cxgal">✪</span>`, "new to your codex anywhere"],
+  [(q, s, has) => q(".cxnew:not(.cxgal)") || has('.sp[title^="codex:"]', "✦"),
+   `<span class="cxnew">✦</span>`, "new to your codex in this region"],
+  [q => q('.sp[title^="codex:"]'), "📖", "a codex entry you logged here"],
+  [(q, s, has) => has('.sp[title^="codex:"]', "💰"), "💰", "the codex paid for it"],
+  [(q, s) => q(".sp.geo") || s("🪨"), "🪨", "geological signals"],
+  [q => q(".volc, #hereSchematic .badges span[title]:not(.nb):not(.scoop):not(.unk)"), "🌋", "volcanism (brighter: landable, geological sites possible)"],
+  [(q, s) => q(".minec") || s("⛏"), "⛏", "planetary mining locations (hover for the likely minerals)"],
+];
+function drawHereLegend() {
+  const el = document.getElementById("hereLegend");
+  if (!el) return;
+  const roots = [], box = document.getElementById("hereTableBox"), sch = document.getElementById("hereSchematic");
+  if (hereData && !hereData.error) {
+    if (box && !box.hidden) roots.push(document.getElementById("hereRows"));
+    if (sch && !sch.hidden) roots.push(sch);
+  }
+  const q = sel => roots.some(r => r.querySelector(sel) || r.matches(sel));
+  const badges = sch && !sch.hidden ? [...sch.querySelectorAll(".badges")] : [];
+  // a glyph in a badge's own text (not inside a span: the dim map, the volcano's title)
+  const s = g => badges.some(b => [...b.childNodes].some(n => n.nodeType === 3 && n.textContent.includes(g)));
+  const has = (sel, text) => roots.some(r => [...r.querySelectorAll(sel)].some(e => e.textContent.includes(text)));
+  const html = roots.length ? HERE_LEGEND.filter(([t]) => t(q, s, has))
+    .map(([, icon, what]) => `<span class="lg"><span class="lgi badges">${icon}</span> ${what}</span>`).join("") : "";
+  el.hidden = !html;
+  if (el.innerHTML !== html) el.innerHTML = html;
+}
 // what the body targeted in-game is (plain text bits): Here's heading-to line and Now's
 function destBits(b) {
   const f = bioFactor(b), bio = b.bio_options ? [`${b.bio_options.genera.map(x => x.genus).join(" or ")}, ${credits(b.bio_options.low * f)} to ${credits(b.bio_options.high * f)}`]
@@ -3178,13 +3250,17 @@ function bodyPopHtml(b, region) {
 // ---- body detail panel ----
 let selectedBody = null, selectedSystem = null, bodyData = null;
 async function reloadBody() {
-  const name = selectedBody, sys = selectedSystem;
+  const name = selectedBody, sys = selectedSystem, g = newRequest("body");
   let fresh;
   try { fresh = await apiJson(`api/body?system=${sys}&name=${encodeURIComponent(name)}`); } catch (err) { fresh = {error: err.message}; }
+  if (!isNewest("body", g)) return;   // an older request answering late (it waited on Spansh) is not the panel's
   if (selectedBody !== name || selectedSystem !== sys) return;
   bodyData = fresh; renderBody();
 }
 async function openBody(name) {
+  // the Here rows of another system are cleared while the shown one loads (renderHere); a click that still comes
+  // from them (hereData of another system) opens nothing
+  if (hereData && !hereData.error && String(hereData.id64) !== String(shownSystem())) return;
   const id = hereData && !hereData.error ? hereData.id64 : shownSystem(); if (!id) return;
   selectedBody = name; selectedSystem = String(id); bodyData = null; hidePop();
   const panel = document.getElementById("bodyPanel");
@@ -3779,7 +3855,12 @@ function renderCargo(cg) {
   }
   h += `<div class="csub">Buy something else</div><div class="cfind"><input type="text" id="cargoFindName" placeholder="commodity" maxlength="80" spellcheck="false">` +
     `<input type="number" id="cargoFindTons" placeholder="tons" min="1" max="100000" step="1"><button type="button" class="mini" id="cargoFind">Find</button></div>`;
+  // what is typed in "Buy something else" survives the redraw (every Materials filter key redrew it empty)
+  const typed = ["cargoFindName", "cargoFindTons"].map(id => document.getElementById(id)),
+        vals = typed.map(x => x ? x.value : ""), focused = typed.findIndex(x => x && x === document.activeElement);
   el.innerHTML = h;
+  ["cargoFindName", "cargoFindTons"].forEach((id, i) => { const x = document.getElementById(id); if (x && vals[i]) x.value = vals[i]; });
+  if (focused >= 0) document.getElementById(["cargoFindName", "cargoFindTons"][focused]).focus();
   markLookRow();
 }
 const LOOK_BTNS = `<button type="button" class="mini" data-look="sell" title="where to sell it: Spansh's stations that take all of it">Sell</button>` +
@@ -3854,7 +3935,9 @@ document.getElementById("cargoList").addEventListener("keydown", e => {
 // LK: what is asked (commodity, label, mode, tons, from: ship | carrier | here, key: the line it came from) and how
 // (sort, within, age, carriers); answer: the server's; open: the station row opened
 const LK = {q: null, sort: "price", within: 500, age: 14, carriers: false, answer: null, open: null, busy: false};
-function startLook(q) { LK.q = q; LK.open = null; loadLook(); }
+// a carrier with no name yet (bought, no CarrierStats since): its callsign, else "your carrier" (it said "null")
+const carrierName = c => (c && (c.name || c.callsign)) || "your carrier";
+function startLook(q) { LK.q = q; LK.open = null; LK.answer = null; loadLook(); }   // not the last lookup's heading
 async function loadLook() {
   const q = LK.q, el = document.getElementById("cargoLook");
   if (!q) { el.hidden = true; return; }
@@ -4109,7 +4192,7 @@ document.getElementById("logRows").addEventListener("click", e => {
   renderLog();
 });
 
-// ---- Samples: every exobiology run and codex entry ----
+// ---- Bio/Geo -> My Samples: every exobiology run and codex entry ----
 let bioKey = null, bioData = null;
 const bDays = document.getElementById("bDays"), bState = document.getElementById("bState"), bFilter = document.getElementById("bFilter");
 bDays.value = store.get("bDays", "30"); bState.value = store.get("bState", "");
@@ -4185,6 +4268,265 @@ function renderBio() {
       <td>${sysCell(c.system)}</td><td>${c.voucher ? dual(`💰 ${c.voucher.toLocaleString()} cr`, `💰 ${credits(c.voucher)}`) : c.new ? dual("✦ new", "✦") : ""}</td></tr>`).join("") ||
     `<tr><td colspan="6" class="unk">No codex entries in this period.</td></tr>`;
 }
+// ---- the exobiology checklist (Bio/Geo -> Exo-Biology; GET api/checklist, outrider/checklist.py): every species the
+// rules know, by galactic region, with your best there and its colours found / possible; a species' panel with its
+// colours, what gives each, and a galaxy map of where it can grow with your samples as dots ----
+const CL = {data: null, key: null, open: null, species: null, map: null, colour: null};
+// an entry's picture: Canonn's screenshot (linked, never copied), credited to the commander who took it
+function clFigure(img, alt, colour) {
+  if (!img || !img.url) return "";
+  return `<figure class="climg"><a href="${esc(img.url)}" target="_blank" rel="noopener noreferrer" title="open it full size">` +
+    `<img src="${esc(img.url)}" alt="${esc(alt)}" loading="lazy" referrerpolicy="no-referrer"></a>` +
+    `<figcaption>${colour ? `${esc(colour)} · ` : ""}Image: ${img.cmdr ? `CMDR ${esc(img.cmdr)}, ` : ""}via ` +
+    `<a href="https://canonn.science/codex/" target="_blank" rel="noopener noreferrer">Canonn</a></figcaption></figure>`;
+}
+const CL_WORD = {sold: "sold", aboard: "aboard", lost: "lost", logged: "logged"};
+// Bio/Geo's three views: My Samples ("runs"), the Exo-Biology checklist ("check"), Geology ("geo": the codex's Geology and Anomalies)
+const BIO_MODES = ["runs", "check", "geo"];
+let bioMode = BIO_MODES.includes(store.get("bioMode", "runs")) ? store.get("bioMode", "runs") : "runs";
+const clKind = () => bioMode === "geo" ? "geo" : "bio";
+const clRegionEl = document.getElementById("clRegion");
+function setBioMode(m) {
+  const was = clKind();
+  bioMode = BIO_MODES.includes(m) ? m : "runs";
+  store.set("bioMode", bioMode);
+  const bv = document.getElementById("bioView");
+  bv.classList.toggle("check", bioMode !== "runs");
+  bv.classList.toggle("geo", bioMode === "geo");
+  document.querySelectorAll("[name=bioMode]").forEach(x => { x.checked = x.value === bioMode; });
+  if (clKind() !== was) { CL.data = null; CL.key = null; CL.open = null; CL.species = null; }   // the other list
+  if (view === "bio") { if (bioMode !== "runs") loadChecklist(true); else loadBio(); }
+}
+document.querySelectorAll("[name=bioMode]").forEach(x => x.addEventListener("change", () => setBioMode(x.value)));
+clRegionEl.addEventListener("change", () => { store.set("clRegion", clRegionEl.value); loadChecklist(true); });
+// asked again when the region, your scans or (for "where you are") the system change
+async function loadChecklist(force = false) {
+  const want = clRegionEl.value || store.get("clRegion", "here") || "here";
+  const kind = clKind();
+  const key = `${kind}|${want}|${data && data.scan_version}|${want === "here" ? posId() : ""}`;
+  if (!force && key === CL.key) return;
+  // every change (region, list, a scan) asks, and only the newest answer is drawn: a region picked while an answer
+  // was on its way was dropped (the Fable review of 2026-10-10, #6); a list switched meanwhile asks anew (setBioMode)
+  CL.key = key;
+  const g = newRequest("checklist");
+  if (!CL.data) document.getElementById("clStatus").textContent = "loading…";
+  let d;
+  try { d = await apiJson(`api/checklist?kind=${kind}&region=${encodeURIComponent(want)}`); } catch (err) { d = {error: err.message}; }
+  if (!isNewest("checklist", g)) return;
+  if (d.error) CL.key = null;   // asked again at the next render
+  CL.data = d;
+  renderChecklist();
+}
+// a completion figure as the page shows it: "41.20%" (the share of each possible species' colours found, averaged)
+const clPct = v => v == null ? "" : `${v.toFixed(2)}%`;
+// the region choices, each with its completion; their words are set again on every answer (the numbers move as you play)
+function clFillRegions(d) {
+  const byId = Object.fromEntries((d.regions || []).map(r => [String(r.id), r]));
+  const here = d.here ? byId[String(d.here)] : null;
+  const text = {here: `Where you are${here ? ` (${here.name}) — ${clPct(here.completion)}` : ""}`,
+                all: `All regions — ${clPct(d.completion_all)}`};
+  for (const r of d.regions || []) text[String(r.id)] = `${r.name}${r.completion == null ? "" : ` — ${clPct(r.completion)}`}`;
+  if (!clRegionEl.options.length) {
+    const regions = [...(d.regions || [])].sort((a, b) => a.name.localeCompare(b.name));
+    clRegionEl.innerHTML = ["here", "all", ...regions.map(r => String(r.id))].map(v => `<option value="${v}"></option>`).join("");
+    const saved = String(store.get("clRegion", "here"));
+    clRegionEl.value = [...clRegionEl.options].some(o => o.value === saved) ? saved : "here";
+  }
+  for (const o of clRegionEl.options) if (text[o.value] != null && o.textContent !== text[o.value]) o.textContent = text[o.value];
+}
+// the picture a species shows: the colour clicked, else one you have found, else the first with one (Canonn has most)
+function clPick(r) {
+  const sp = CL.species && CL.species.id === r.id && !CL.species.error ? CL.species : null, imgs = (sp && sp.images) || {};
+  const key = v => (v.colour || "").toLowerCase();
+  const pick = [CL.colour, ...r.variants.list.filter(v => v.state).map(key), ...r.variants.list.map(key), ...Object.keys(imgs)]
+    .find(c => c != null && imgs[c]);
+  return {imgs, pick, shown: pick != null ? r.variants.list.find(v => key(v) === pick) : null};
+}
+function clRow(id) {
+  for (const g of (CL.data && CL.data.genera) || []) for (const r of g.species) if (r.id === id) return r;
+  return null;
+}
+function renderChecklist() {
+  const d = CL.data, st = document.getElementById("clStatus"), grid = document.getElementById("clGrid");
+  if (!d || d.error) { st.textContent = d ? `Could not load the checklist: ${d.error}.` : ""; return; }
+  clFillRegions(d);
+  const s = d.summary;
+  const where = d.region_name || (d.region == null && clRegionEl.value === "all" ? "All regions" : "Where you are (not in a known region): all regions");
+  const geo = d.kind === "geo";
+  // "N of M": N counts only what M counts (logged and reported here; found where it can grow), what else you have is
+  // said apart: it read "3 of 2 entries" with an entry nobody had reported here (the Fable review of 2026-10-10, #3)
+  const rowsAll = d.genera.flatMap(g => g.species);
+  const inM = rowsAll.filter(r => r.state && r.possible).length, extra = rowsAll.filter(r => r.state && !r.possible).length;
+  if (geo) {
+    st.innerHTML = `${esc(where)}: <b>${inM}</b> of ${s.possible} entries reported ${d.region == null ? "anywhere" : "here"} logged · ` +
+      `<b>${clPct(s.completion)}</b> complete` + (extra ? ` · ${extra} logged that nobody has reported ${d.region == null ? "yet" : "here yet"}` : "") +
+      (s.elsewhere ? ` · <span class="clelse">${s.elsewhere} more logged in other regions</span>` : "") +
+      ` · <span class="unk">reported sites: Canonn</span>`;
+  }
+  const pctWhat = d.region == null ? "for every species" : "for the species in this region";
+  if (!geo) st.innerHTML = `${esc(where)}: <b>${inM}</b> of ${s.possible} possible species found · <b>${clPct(s.completion)}</b> complete ${pctWhat}` +
+    (extra ? ` · ${extra} found where the rules say ${extra === 1 ? "it cannot" : "they cannot"} grow` : "") +
+    ` · <span class="cl-sold">${s.sold} sold</span>` +
+    ` · <span class="cl-aboard">${s.aboard} aboard</span>` + (s.lost ? ` · <span class="cl-lost">${s.lost} lost</span>` : "") +
+    (s.logged ? ` · <span class="cl-logged">${s.logged} logged</span>` : "") + ` · colours ${s.colours_found} of ${s.colours}` +
+    (s.elsewhere ? ` · <span class="clelse">${s.elsewhere} more found in other regions</span>` : "");
+  const html = d.genera.map(g => {
+    const found = g.species.filter(r => r.state && r.possible).length, poss = g.species.filter(r => r.possible).length;
+    return `<div class="clbox"><h4><span>${esc(g.genus)}</span><span class="unk">${found} / ${poss}</span></h4><table>` + g.species.map(r => {
+      const cls = r.state ? `cl-${r.state}` : r.possible ? "" : "cl-no";
+      const tip = geo ? `${r.name} · ${r.sites ? `${r.sites.toLocaleString()} reported sites ${d.region == null ? "in all" : "in this region"}`
+          : "not reported in this region yet"}${r.elsewhere ? " · logged in another region" : ""}`
+        : `${r.name}${r.value ? ` · ${credits(r.value)} cr` : ""}` +
+        (r.possible === "parts" ? " · only in parts of this region" : !r.possible ? " · not here: the rules say it cannot grow in this region" : "") +
+        (r.elsewhere ? ` · found in another region: ${CL_WORD[r.elsewhere]}` : "");
+      return `<tr class="${cls}${CL.open === r.id ? " on" : ""}" data-cl="${esc(r.id)}" title="${esc(tip)}"><td>${esc(r.short)}` +
+        `${r.possible === "parts" ? ' <span class="clparts">◐</span>' : ""}</td><td>${r.state ? CL_WORD[r.state]
+          : r.elsewhere ? `<span class="clelse" title="${esc(`found in another region: ${CL_WORD[r.elsewhere]}`)}">elsewhere</span>` : ""}</td>` +
+        `<td class="num">${geo ? (r.sites ? r.sites.toLocaleString() : "—") : `${r.variants.found} / ${r.variants.total}`}</td></tr>` +
+        (!geo && CL.open === r.id ? clVariantRows(r) : "");
+    }).join("") + "</table></div>";
+  }).join("");
+  // the row with keyboard focus keeps it through the redraw (a toggle always redraws: the Fable review of 2026-10-10, #8)
+  if (grid.innerHTML !== html) { const fk = focusKey("clGrid"); grid.innerHTML = html; refocus("clGrid", fk); }
+  clDrawSide();
+}
+// a species' colours, dropped down under its row: each with what gives it and your state; one with a picture shows it
+function clVariantRows(r) {
+  const {imgs, pick} = clPick(r);
+  return r.variants.list.map(v => {
+    const k = (v.colour || "").toLowerCase(), img = v.colour && imgs[k];
+    return `<tr class="clvar${v.state ? ` cl-${v.state}` : ""}${img ? " climgrow" : ""}${img && k === pick ? " on" : ""}" data-colour="${esc(k)}"` +
+      `${img ? ' title="show its picture"' : ""}><td colspan="3"><div class="cvrow"><span class="cvc">${v.colour ? esc(v.colour) : "its one variant"}</span>` +
+      `<span class="cvw">${esc(v.where || "")}</span><span class="cvs">${v.state ? CL_WORD[v.state] : ""}</span></div></td></tr>`;
+  }).join("");
+}
+document.getElementById("clGrid").addEventListener("click", e => {
+  const vr = e.target.closest("tr.clvar");
+  if (vr) {   // a colour: its picture
+    if (vr.classList.contains("climgrow")) { CL.colour = vr.dataset.colour; renderChecklist(); }
+    return;
+  }
+  const tr = e.target.closest("[data-cl]");
+  if (!tr) return;
+  if (CL.open === tr.dataset.cl) { CL.open = null; CL.species = null; renderChecklist(); return; }   // folded up again
+  CL.open = tr.dataset.cl; CL.colour = null;
+  renderChecklist();
+  clLoadSpecies(CL.open);
+});
+async function clLoadSpecies(id) {
+  CL.species = null; CL.map = null;
+  clDrawSide();
+  let d;
+  try { d = await apiJson(`api/checklist?kind=${clKind()}&species=${encodeURIComponent(id)}`); } catch (err) { d = {error: err.message}; }
+  if (CL.open !== id) return;   // another species clicked meanwhile
+  CL.species = d;
+  renderChecklist();   // the dropped-down colours learn which have a picture
+}
+function clDrawSide() {
+  const side = document.getElementById("clSide"), r = clRow(CL.open);
+  let html;
+  if (!r) html = `<p class="unk">${clKind() === "geo" ? "Click an entry for where it has been reported and where you logged it."
+    : "Click a species for its colours (under it in its box), its picture and where it grows."}</p>`;
+  else if (clKind() === "geo") {
+    const sp = CL.species && CL.species.id === r.id ? CL.species : null;
+    const mine = sp && !sp.error ? [...new Set(sp.runs.map(x => x.system))] : [];
+    html = `<h4>${esc(r.name)}</h4><div class="unk">${esc([sp && sp.group, sp && sp.kind].filter(Boolean).join(" · "))}</div>` +
+      `<p>${r.sites ? `Reported at <b>${r.sites.toLocaleString()}</b> site${r.sites === 1 ? "" : "s"} ${CL.data.region == null ? "in all" : "in this region"}`
+        : "Not reported in this region yet"}${sp && sp.sites_total ? `, ${sp.sites_total.toLocaleString()} in the galaxy` : ""}.` +
+      ` ${r.state ? `<span class="cl-logged">Logged here</span>` : r.elsewhere ? `<span class="clelse">Logged in another region</span>` : "Not in your codex here."}</p>` +
+      (sp && !sp.error ? clFigure(sp.image, r.name) : "") +
+      (mine.length ? `<div class="unk">Where you logged it: ${mine.map(esc).join(", ")}</div>` : "") +
+      `<div class="clmapbox"><canvas id="clMap" width="880" height="880" aria-label="${esc(`the galaxy: where ${r.name} has been reported`)}"></canvas>` +
+      `<div id="clMapTip" class="cltip" hidden></div></div>` +
+      `<div class="unk clmaplegend">${sp && sp.error ? esc(sp.error) : !sp ? "loading the map…"
+        : `highlighted: the regions it has been reported in (Canonn) · dots: where you logged it (${sp.runs.length})`}</div>`;
+  } else {
+    const sp = CL.species && CL.species.id === r.id ? CL.species : null;
+    const where = r.possible === "yes" ? "can grow in this region" : r.possible === "parts"
+      ? "only in parts of this region (near Guardian sites, in tuber zones, by nebulae)" : "the rules say it cannot grow in this region";
+    const {imgs, pick, shown} = clPick(r);   // its colours are dropped down under its row in the box
+    html = `<h4>${esc(r.name)}</h4><div class="unk">${r.value ? `${credits(r.value)} cr` : ""}` +
+      `${CL.data.region != null ? ` · ${esc(where)}` : ""}${r.runs ? ` · ${r.runs} run${r.runs === 1 ? "" : "s"}` : ""}</div>` +
+      (pick != null ? clFigure(imgs[pick], `${r.name}${shown && shown.colour ? ` - ${shown.colour}` : ""}`, shown && shown.colour) : "") +
+      `<div class="clmapbox"><canvas id="clMap" width="880" height="880" aria-label="${esc(`the galaxy: where ${r.name} can grow`)}"></canvas>` +
+      `<div id="clMapTip" class="cltip" hidden></div></div>` +
+      `<div class="unk clmaplegend">${sp && sp.error ? esc(sp.error) : !sp ? "loading the map…"
+        : `highlighted: where it can grow (paler: only in parts) · dots: your samples (${sp.runs.length})`}</div>`;
+  }
+  if (side.dataset.html !== html) { side.innerHTML = html; side.dataset.html = html; CL.map = null; }
+  clDrawMap();
+}
+// hovering a lit region of the map (one the species can grow in) names it, with your completion there; elsewhere nothing
+document.getElementById("clSide").addEventListener("mousemove", e => {
+  const cv = e.target.closest && e.target.closest("#clMap"), tip = document.getElementById("clMapTip");
+  if (!tip) return;
+  if (!cv || !RG.data || !RG.cells) { tip.hidden = true; return; }
+  const box = cv.getBoundingClientRect(), n = RG.data.size;
+  const c = Math.floor((e.clientX - box.left) / box.width * n), r = n - 1 - Math.floor((e.clientY - box.top) / box.height * n);
+  const v = c >= 0 && r >= 0 && c < n && r < n ? RG.cells[r * n + c] : 0;
+  const allow = v && CL.species && !CL.species.error && CL.species.regions ? CL.species.regions[String(v)] : undefined;
+  const reg = allow && CL.data && (CL.data.regions || []).find(x => x.id === v);
+  if (!reg) { tip.hidden = true; return; }   // a faint region (it cannot grow there), outside the map, or not loaded yet
+  const sites = clKind() === "geo" && CL.species.sites ? CL.species.sites[String(v)] : null;
+  const grows = sites ? `${sites.toLocaleString()} reported site${sites === 1 ? "" : "s"}` : allow === "parts" ? "only in parts" : "can grow here";
+  const words = [reg.name, grows, reg.completion != null ? `${clPct(reg.completion)} complete` : ""].filter(Boolean).join(" · ");
+  if (tip.textContent !== words) tip.textContent = words;
+  tip.hidden = false;
+  const host = cv.parentElement.getBoundingClientRect();
+  tip.style.left = `${Math.min(e.clientX - host.left + 12, host.width - tip.offsetWidth)}px`;
+  tip.style.top = `${e.clientY - host.top + 14}px`;
+});
+document.getElementById("clSide").addEventListener("mouseleave", () => { const t = document.getElementById("clMapTip"); if (t) t.hidden = true; });
+// a colour of the theme as [r, g, b] (a canvas reads any CSS colour back as #rrggbb or rgba())
+function cssRgb(c) {
+  const x = document.createElement("canvas").getContext && document.createElement("canvas").getContext("2d");
+  if (!x) return [128, 128, 128];
+  x.fillStyle = c;
+  const s = x.fillStyle, m = /^#(..)(..)(..)$/.exec(s);
+  return m ? m.slice(1).map(h => parseInt(h, 16)) : (s.match(/\d+/g) || [128, 128, 128]).slice(0, 3).map(Number);
+}
+// the region map (api/regions, as Plot Route's): the regions it can grow in in their own tints (paler where only in parts),
+// the rest faint grey, so a species that grows almost everywhere still shows the regions; north (bigger Z) up
+function clDrawMap() {
+  const cv = document.getElementById("clMap"), sp = CL.species;
+  const g = cv && cv.getContext && cv.getContext("2d");
+  if (!g) return;
+  if (!RG.data || !RG.cells) { loadRegions(); return; }   // drawn again when the map arrives
+  const d = RG.data, n = d.size, allow = (sp && !sp.error && sp.regions) || {};
+  const cs = getComputedStyle(document.documentElement), col = v => cs.getPropertyValue(v).trim();
+  const bg = col("--bg"), light = /^#[0-9a-f]{6}$/i.test(bg) && parseInt(bg.slice(1, 3), 16) > 128;
+  const key = `${CL.open}|${sp ? "1" : "0"}|${bg}|${col("--line")}`;
+  if (CL.map && CL.map.key === key && CL.map.cv === cv) return;
+  const off = document.createElement("canvas");
+  off.width = off.height = n;
+  const og = off.getContext("2d");
+  if (!og) return;
+  const img = og.createImageData(n, n), px = img.data, dim = cssRgb(col("--line")), tints = [];
+  for (let i = 1; i < 256; i++) tints[i] = hwyTint(i, light);
+  for (let r = 0; r < n; r++) {
+    const out = (n - 1 - r) * n;
+    for (let c = 0; c < n; c++) {
+      const v = RG.cells[r * n + c];
+      if (!v) continue;
+      const a = allow[String(v)], k = a ? tints[v] : dim, o = (out + c) * 4;
+      px[o] = k[0]; px[o + 1] = k[1]; px[o + 2] = k[2]; px[o + 3] = a === "yes" ? 235 : a === "parts" ? 120 : 45;
+    }
+  }
+  og.putImageData(img, 0, 0);
+  const W = cv.width;
+  g.clearRect(0, 0, W, W);
+  g.imageSmoothingEnabled = false;
+  g.drawImage(off, 0, 0, W, W);
+  const dot = {sold: col("--good"), aboard: col("--warn"), lost: col("--bad")};
+  for (const run of (sp && !sp.error && sp.runs) || []) {
+    const x = (run.x - d.origin[0]) / d.cell / n * W, y = (1 - (run.z - d.origin[1]) / d.cell / n) * W;
+    g.beginPath(); g.arc(x, y, 4, 0, Math.PI * 2);
+    g.fillStyle = dot[run.state] || col("--info"); g.fill();
+    g.strokeStyle = col("--bg") || "#000"; g.lineWidth = 1; g.stroke();
+  }
+  CL.map = {key, cv};
+}
+setBioMode(bioMode);
 document.querySelectorAll("th[data-bsort]").forEach(h => h.onclick = () => {
   bioSort = {key: h.dataset.bsort, dir: bioSort.key === h.dataset.bsort ? -bioSort.dir : (["ts", "value", "samples"].includes(h.dataset.bsort) ? -1 : 1)};
   store.set("bioSort", bioSort); renderBio();
@@ -4343,13 +4685,16 @@ mEl("mReset").onclick = () => { M.yaw = -0.5; M.pitch = 0.45; M.zoom = 1; M.panX
 
 async function loadMap() {
   const p = data && data.position; if (!p) return;
-  const key = `${p.id64}|${mSettings.radius}|${mSettings.path}|${mSettings.boost ? 1 : 0}`;
+  const key = `${posId()}|${mSettings.radius}|${mSettings.path}|${mSettings.boost ? 1 : 0}`;   // the exact id, not a rounded number
   if (key === M.key) return;
   M.key = key; M.loading = true;
+  // a request of its own: the map reopened while one was on its way asks again with the same key, and the older one's
+  // failure must not speak for the newer (the Fable review of 2026-10-10, #7)
+  const g = newRequest("map");
   mEl("mStatus").textContent = "loading…";
   try {
     const d = await apiJson(`api/map?radius=${mSettings.radius}&path=${mSettings.path}&boost=${mSettings.boost ? 1 : 0}`);
-    if (M.key !== key) return;  // settings changed while we waited
+    if (M.key !== key || !isNewest("map", g)) return;  // settings changed, or a newer request went out, while we waited
     if (d.error) throw new Error(d.error);
     M.data = d;
     // a failed Spansh lookup (sphere or boost stars) is not cached by the server: ask again in a while
@@ -4360,7 +4705,10 @@ async function loadMap() {
       (d.boost && d.boost.error ? ` · <span class="err">${esc(d.boost.error)}</span>` : "") +
       (d.boost && !d.boost.error ? ` · <span class="boost">${d.boost.points.length} boost star${d.boost.points.length === 1 ? "" : "s"}` +
         (nearestN ? `, nearest neutron <span class="copy" data-name="${esc(nearestN.name)}" title="click to copy">${esc(nearestN.name)}</span> ${nearestN.distance} ly` : "") + `</span>` : "");
-  } catch (err) { mEl("mStatus").textContent = "map failed: " + err.message; M.key = null; }
+  } catch (err) {
+    if (M.key !== key || !isNewest("map", g)) return;   // an older request's failure: the newer one's state stays (Codex F6)
+    mEl("mStatus").textContent = "map failed: " + err.message; M.key = null;
+  }
   M.loading = false; drawMap();
 }
 
@@ -4522,8 +4870,8 @@ function drawMap() {
       g.fillStyle = C.gold; g.font = "14px system-ui"; g.fillText("🚢", q.sx - 7, q.sy + 5);
       carrierAt = String(cr.id64);
       if (!d.points.some(pt => pt.id === carrierAt))   // otherwise the system's own dot carries the popup
-        M.proj.push({sx: q.sx, sy: q.sy, pt: {name: cr.system, id: cr.id64, x: cr.x, y: cr.y, z: cr.z, carrier: cr.name}});
-      if (mSettings.labels) labels.push([q, `${cr.name} (carrier)`]);
+        M.proj.push({sx: q.sx, sy: q.sy, pt: {name: cr.system, id: cr.id64, x: cr.x, y: cr.y, z: cr.z, carrier: carrierName(cr)}});
+      if (mSettings.labels) labels.push([q, `${carrierName(cr)} (carrier)`]);
     }
   }
   // Stalks down to the plane.
@@ -4552,7 +4900,7 @@ function drawMap() {
       g.beginPath(); g.arc(q.sx, q.sy, r + 4, 0, 2 * Math.PI); g.stroke(); g.setLineDash([]);
     }
     if (bms[id]) { g.fillStyle = C.gold; g.font = "12px system-ui"; g.fillText("★", q.sx + r + 1, q.sy - r); }
-    M.proj.push({sx: q.sx, sy: q.sy, pt: boostOf[id] || id === carrierAt ? {...pt, boost: boostOf[id], carrier: id === carrierAt ? cr.name : undefined} : pt});
+    M.proj.push({sx: q.sx, sy: q.sy, pt: boostOf[id] || id === carrierAt ? {...pt, boost: boostOf[id], carrier: id === carrierAt ? carrierName(cr) : undefined} : pt});
     if (mSettings.labels && (id === hereId || id === prevId || id === targetId || bms[id]))
       labels.push([q, pt.name + (id === prevId ? " (previous)" : id === targetId ? " (target)" : "")]);
   }
@@ -4675,7 +5023,7 @@ const H = {data: null, key: null, loading: false, poll: null, error: null, statu
 // conservative / conservative_ly: null until changed here ([highway] conservative and conservative_ly then)
 // Road to Riches, the tab's other route type: its api/riches answer, polling and form (see "Road to Riches" below)
 const R = {data: null, key: null, loading: false, poll: null, error: null, watch: false, filled: false, nextShown: null};
-const hwyCfg = Object.assign({plotter: "exact", injections: false, exclude_secondary: false, supercharged: false, efficiency: null,
+const hwyCfg = Object.assign({plotter: "exact", injections: false, exclude_secondary: false, supercharged: false, no_neutrons: false, efficiency: null,
                               conservative: null, conservative_ly: null}, store.get("highway", {}));
 const saveHwyCfg = () => store.set("highway", hwyCfg);
 // a fleet ship's laden jump range with `cargo` t aboard and the main tank full: the server's fleet_range (the
@@ -4821,7 +5169,7 @@ function hwyHeadHtml(hd) {
   const how = (r.plotter === "neutron"
     ? `neutron plotter · ${o.range != null ? `${o.range} ly range · ` : ""}×${o.supercharge_multiplier || 4} · ${o.efficiency ?? "?"}% efficiency` +
       ` · no refuel stops: scoop as you go`
-    : `exact plotter${o.injections ? " · injections" : ""}${o.exclude_secondary ? " · no secondary stars" : ""}`) +
+    : `exact plotter${o.injections ? " · injections" : ""}${o.exclude_secondary ? " · no secondary stars" : ""}${o.no_neutrons ? " · no neutron boosts" : ""}`) +
     (o.conservative_ly ? ` · conservative −${o.conservative_ly} ly` : "");
   const ship = sh ? ` · ${esc(shipLabel(sh.name, sh.type))}${sh.type && shipName(sh.type) !== shipLabel(sh.name, sh.type) ? ` (${esc(shipName(sh.type))})` : ""}` +
     (sh.ts ? ` <span title="the ship's figures come from this Loadout">as of ${esc(day(sh.ts))}</span>` : "") : "";
@@ -4942,8 +5290,9 @@ function fillHwyForm(hd) {
 {
   const p = hForm.querySelector(`[name=hwyPlotter][value="${["neutron", "riches", "exo", "trade"].includes(hwyCfg.plotter) ? hwyCfg.plotter : "exact"}"]`); if (p) p.checked = true;
   hEl("hwyInject").checked = !!hwyCfg.injections; hEl("hwyNoSec").checked = !!hwyCfg.exclude_secondary; hEl("hwySuper").checked = !!hwyCfg.supercharged;
+  hEl("hwyNoNeu").checked = !!hwyCfg.no_neutrons;
   hForm.querySelectorAll("[name=hwyPlotter]").forEach(r => r.onchange = () => { hwyCfg.plotter = hwyPlotter(); saveHwyCfg(); hwyFormShow(); });
-  for (const [id, k] of [["hwyInject", "injections"], ["hwyNoSec", "exclude_secondary"], ["hwySuper", "supercharged"]])
+  for (const [id, k] of [["hwyInject", "injections"], ["hwyNoSec", "exclude_secondary"], ["hwySuper", "supercharged"], ["hwyNoNeu", "no_neutrons"]])
     hEl(id).onchange = () => { hwyCfg[k] = hEl(id).checked; saveHwyCfg(); };
   hEl("hwyEff").onchange = () => { const v = Math.round(Number(hEl("hwyEff").value));
     hwyCfg.efficiency = hEl("hwyEff").value === "" || !(v >= 1 && v <= 100) ? null : v; saveHwyCfg(); };
@@ -4981,7 +5330,7 @@ function hwyBody() {
   if (hEl("hwyShip").value !== "") b.ship_id = Number(hEl("hwyShip").value);
   if (num("hwyCargo") != null) b.cargo = num("hwyCargo");
   if (p === "exact") Object.assign(b, {injections: hEl("hwyInject").checked, exclude_secondary: hEl("hwyNoSec").checked,
-                                       supercharged: hEl("hwySuper").checked});
+                                       supercharged: hEl("hwySuper").checked, no_neutrons: hEl("hwyNoNeu").checked});
   else {
     if (num("hwyRange") != null) b.range = num("hwyRange");
     if (num("hwyEff") != null) b.efficiency = num("hwyEff");
@@ -5077,7 +5426,13 @@ function drawHwyAuto() {
 // the outcome of this page's run comes back in the payload (every render: the line's button follows it too)
 function hwyRunTrack() {
   const r = hwyRun, t = data && data.autotarget && data.autotarget.test;
-  if (!r || r.done || !t || t.seq !== r.seq || !["done", "failed"].includes(t.state)) return;
+  if (!r || r.done) return;
+  const w0 = r.kind === "test" ? "test" : "target next";
+  // superseded: a newer run (another device's), or no run at all long after this one's countdown (Outrider restarted)
+  if ((t && typeof r.seq === "number" && t.seq > r.seq) || (!t && r.at && Date.now() - r.at > ((r.n || 0) + 120) * 1000)) {
+    r.done = true; r.msg = `${w0}: no result (Outrider restarted, or another device started a run)`; return;
+  }
+  if (!t || t.seq !== r.seq || !["done", "failed"].includes(t.state)) return;
   r.done = true;
   const w = r.kind === "test" ? "test" : "target next";
   r.msg = t.state === "done" ? `${w} done: ${t.why === "already the target" ? `${t.system} was already the target` : `targeted ${t.system}`}`
@@ -5094,7 +5449,8 @@ async function hwyAutoStart(kind, aim = null) {
   try { r = await fetch(url, opts); j = await r.json(); }
   catch { show("could not reach Outrider"); return; }
   if (!r.ok) { show(`cannot ${w}: ${j.error || "?"}`); return; }
-  const mine = hwyRun = {seq: j.seq, kind, key: aim ? `${aim.route}:${aim.index}` : "next", system: j.system, n: j.in, dry: j.dry_run, done: false, msg: ""};
+  const mine = hwyRun = {seq: j.seq, kind, key: aim ? `${aim.route}:${aim.index}` : "next", system: j.system, n: j.in, dry: j.dry_run, done: false, msg: "",
+                         at: Date.now()};
   const tick = () => {
     if (mine.done || mine !== hwyRun) return;
     mine.msg = mine.n > 0 ? `click into the game: targeting ${j.system} in ${mine.n} s${j.dry_run ? " (dry run)" : ""}` : `targeting ${j.system}…`;
@@ -5143,7 +5499,7 @@ function renderHwy() {
   // a new route (or none): the form folds away while one is followed, and opens when there is none
   const rid = rich ? `rich|${rr.id}` : r ? r.id : null;
   if (rid !== H.routeId) {
-    if (H.routeId !== undefined && rid && H.watch && !rich) { const nj = (r.summary || {}).jumps_total ?? r.count - 1; setHwyStatus(`Plotted: ${nj.toLocaleString()} ${jumpsWord(nj)} to ${r.to}.`, "ok"); }
+    if (H.routeId !== undefined && rid && H.watch && !rich) { const nj = (r.summary || {}).jumps_total ?? r.count - 1; setHwyStatus(`Plotted: ${nj.toLocaleString()} ${jumpsWord(nj)} to ${r.to}.${r.stand_in ? " " + r.stand_in : ""}`, r.stand_in ? "warnc" : "ok"); }
     H.watch = false;
     hEl("hwyPlot").open = !rid; H.routeId = rid; HM.auto = true;
   }
@@ -5176,8 +5532,8 @@ async function loadRich(force = false) {
     R.watch = false;
     const rt = R.data.route;
     setHwyStatus(p.state === "done" && rt ? (rt.kind === "trade" ? `Plotted: a trade route of ${rt.count - 1} hop${rt.count === 2 ? "" : "s"}.`
-      : `Plotted: ${rt.kind === "exo" ? "an Exomastery route" : "a Road to Riches"} of ${rt.count} systems.`)
-      : `Could not plot the route: ${p.error || "?"}.`, p.state === "done" ? "ok" : "err");
+      : `Plotted: ${rt.kind === "exo" ? "an Exomastery route" : "a Road to Riches"} of ${rt.count} systems.`) + (p.note ? " " + p.note : "")
+      : `Could not plot the route: ${p.error || "?"}.`, p.state !== "done" ? "err" : p.note ? "warnc" : "ok");
   }
   renderHwy();
 }
@@ -5262,8 +5618,10 @@ function tradeHeadHtml(d) {
     `hops up to ${o.max_hop_distance ?? "?"} ly · stations within ${(o.max_system_distance ?? 0).toLocaleString()} ls · data under ${o.max_price_age_days ?? "?"} d` +
     `${rt.created_ts ? ` · plotted ${esc(when(rt.created_ts))}` : ""}</div>`;
 }
+// part traded so far shows "60 of 100 t" (a commodity is ticked once its planned tonnes are traded)
 function tradeGoods(c, verb) {
-  return `<span class="${c.done ? "exodone" : ""}">${c.done ? "✓ " : ""}${verb} ${c.amount.toLocaleString()} t ${esc(c.name)}` +
+  const part = !c.done && c.traded ? `${c.traded.toLocaleString()} of ` : "";
+  return `<span class="${c.done ? "exodone" : ""}">${c.done ? "✓ " : ""}${verb} ${part}${c.amount.toLocaleString()} t ${esc(c.name)}` +
     `${c.price ? ` <span class="unk">at ${c.price.toLocaleString()} cr/t${verb === "Sell" && c.demand ? ` · demand ${c.demand.toLocaleString()}` : ""}` +
       `${verb === "Buy" && c.supply ? ` · supply ${c.supply.toLocaleString()}` : ""}</span>` : ""}</span>`;
 }
@@ -5415,6 +5773,7 @@ async function loadRegions() {
   RG.failedAt = 0;
   hwyRegionsSet(d);
   drawHwyMap();
+  clDrawMap();   // the checklist's map, if a species is open
 }
 // the runs as one byte per cell (row r is the r-th band of Z from the origin, column c the c-th of X), the borders as
 // segments in cell units [c0, r0, c1, r1] (vertical ones merged down the rows, horizontal ones along them), and the labels
@@ -6423,7 +6782,9 @@ function takeCopilot(cp, first) {
   if (!cp || typeof cp.seq !== "number") return;
   const fresh = !first && cp.seq > lastCopilotSeq;
   lastCopilotSeq = cp.seq;
-  if (fresh && speakerHere()) copilotDo(cp);
+  // spoken only where the poll told Outrider a voice is (speechOn && speakerHere): with 🗣 off the server answered
+  // spoken: false, so the app said it too and it was heard twice (the Fable sweep, 2026-10-09)
+  if (fresh && speechOn && speakerHere()) copilotDo(cp);
   else if (fresh && cp.action === "status") addCaption(statusReportText());   // Now's captions show what was asked for
   else if (fresh && (cp.action === "say" || cp.action === "caption") && cp.words) addCaption(cp.words);   // a voice answer (api/ask)
 }
@@ -6541,7 +6902,14 @@ function onData() {
     try {
       if (m.kind === "scan") {
         const special = (m.notable || m.terraformable) && m.first_discovered;
-        if (special || (m.base_value != null && m.base_value >= hlLevel("body"))) {
+        if (m.mapped_before && m.base_value != null && m.base_value >= hlLevel("body")) {
+          // someone else mapped it: not pointed out; once per system, a line that the system still pays (the author)
+          if (!mappedBeforeSaid.has(m.system)) {
+            mappedBeforeSaid.add(m.system);
+            alertOut("find", "Already mapped", "valuable bodies here are still worth mapping",
+                     {say: () => line("mapped_before", {}, "Already mapped, but there are still valuable bodies to map if you want to jump on the train.")});
+          }
+        } else if (special || (m.base_value != null && m.base_value >= hlLevel("body"))) {
           const what = [m.subtype, m.terraformable && "terraformable", m.first_discovered && "undiscovered"].filter(Boolean).join(", ");
           alertOut("find", `${m.body}: ${what}`, m.base_value ? `${credits(m.base_value)} cr scanned and mapped` : "", {say: () => line("find_body", {what, body: m.body, value: m.base_value ? credits(m.base_value) : ""}, `${what}, ${m.body}.`)});
           toast(`✦ ${m.body}: ${what}`);
@@ -6624,7 +6992,7 @@ function onData() {
       else if (m.kind === "arrival_brief") {   // after the honk (or 12 s after arriving without one): one sentence
         let text = arrivalBriefText(m);
         // the arrival alert has just said this system is undiscovered: the briefing starts at the bodies, not twice
-        if (undiscSaid && undiscSaid === m.system_name && text.startsWith("Undiscovered. ")) text = text.slice(14);
+        if (undiscSaid && undiscSaid === m.system_name) text = text.replace(/(^|\. )Undiscovered\. /, "$1");   // after "Entering ..." too
         briefFacts = {sys: m.system, m};
         if (pendingRegion && pendingRegion.sys === String(m.system) && m.region && text) pendingRegion = null;   // said in it
         // "Routine systems: sound only": the soft routine sound in place of the words (only where they would be said)
@@ -6721,6 +7089,8 @@ function onData() {
         alertOut("highway", m.text.replace(/\.$/, ""), "", {tag: "highway", say: m.text});
       else if (m.kind === "autotarget" && m.what === "nothing")   // the co-pilot button's press with no route system to target
         alertOut("autotarget", "Nothing to target", m.why || "", {tag: "failed", say: () => line("autotarget_nothing", {why: m.why || ""}, m.text)});
+      else if (m.kind === "autotarget" && m.what === "waiting")   // Target next waiting out the game's in-danger flag (a jump, supercruise)
+        alertOut("autotarget", "Not targeting due to danger", `trying again when it clears, for up to ${m.secs ?? "?"} s`, {say: m.text});
       else if (m.kind === "autotarget" && m.what === "refused")   // the button's press, a run that could not start
         alertOut("autotarget", m.text.replace(/\.$/, ""), "", {tag: "failed", say: m.text});
       else if (m.kind === "autotarget" && m.text)   // auto-target's result: "Successfully targeted ..." / "Failed to target ..."
@@ -6871,7 +7241,8 @@ const ALERT_SHORT = {arrival: "Arrival", game: "Game start and quit", jump: "FSD
   leaving: "Leaving", fuel: "Fuel", scoop: "Tank full", scoopstop: "Scooping stopped", supercharge: "Supercharge", find: "Find",
   jumponium: "Jumponium", sampling: "Sampling", approach: "High-g approach", bodybrief: "Body brief", sell: "Selling", saleleft: "Sale left data",
   unsold: "Unsold", hull: "Hull and danger", carrier: "Carrier", codex: "Codex", loss: "Ship lost", rigs: "Rigs", rigleash: "Rig leash",
-  rigsout: "Rigs out", mapped: "Mapped", signals: "Signals", highway: "Neutron Highway", autotarget: "Auto-target", manual: "Asked for"};
+  rigsout: "Rigs out", mapped: "Mapped", signals: "Signals", highway: "Neutron Highway", autotarget: "Auto-target", manual: "Asked for",
+  exo: "Exomastery route", riches: "Road to Riches", trade: "Trade route"};
 const speechMuted = new Set();   // kinds turned off from the tally this session (each shows an undo)
 // "This session: Arrival brief 42 🔇 · FSD charge 40 (3 dropped) 🔇 · …": every kind that was said or queued (not the
 // silent ones: a kind already off would only inflate), noisiest first. 🔇 turns that alert's speech off (its 🗣 tick
@@ -7076,6 +7447,20 @@ document.getElementById("speakMode").onchange = e => { store.set("speakMode", e.
 document.getElementById("serverPlay").onchange = e => { store.set("speakOnServer", e.target.checked); drawServerPlay(); drawSoundBtn(); };
 document.getElementById("speakerClaim").onclick = () => claimSpeaker(true);
 // another window changed the setting (localStorage is shared by the browser's windows)
+// alert ticks (notify, sound, speak) changed in another window of this browser: taken up here too, or the window that
+// speaks went on with its own copy and later wrote it back over the change (the sweep of 2026-10-09)
+const ALERT_STORES = {alerts: [alertCfg, "alert", alertCfgBase], alertSound: [alertSound, "asound", alertSoundBase],
+                      alertSpeak: [alertSpeak, "aspeak", alertSpeakBase]};
+window.addEventListener("storage", e => {
+  const a = ALERT_STORES[e.key];
+  if (a) {
+    // rebuilt from the defaults, not merged: an import there that reset the setting (removed it) resets it here too
+    for (const k of Object.keys(a[0])) delete a[0][k];
+    Object.assign(a[0], a[2](), store.get(e.key, {}));
+    alertDialog.querySelectorAll(`[data-${a[1]}]`).forEach(cb => { cb.checked = !!a[0][cb.dataset[a[1]]]; });
+    if (e.key === "alerts") drawAlertsBtn();   // F2-4: the 🔔 button follows the notification switch too
+  }
+});
 window.addEventListener("storage", e => { if (e.key === "speakMode") drawSpeaker();
   // 🗣 in another window of this browser (a ?mode=now window's bar): the window speaking follows it
   if (e.key === "speech" && !TABLET) { speechOn = store.get("speech", false); drawSpeechBtn(); if (!speechOn) hushSpeech(true); if (view === "now") drawNowBar(); } if (e.key === "speakOnServer") { drawServerPlay(); drawSoundBtn(); } });
@@ -7299,19 +7684,136 @@ function starWords(cls, lum) {
   }
   return LUMINOSITY_WORDS[l] || LUMINOSITY_WORDS[l.replace(/[ab]+$/, "")] || "";   // "Vab", "IIIb": their class
 }
+// ---- Settings → Uploads (EDDN, EDSM): the switches, what each has sent, why it is held, EDSM's accounts ----
+const UPLOAD_NAMES = {eddn: ["EDDN", "the data network Spansh, EDSM, Inara and others read: systems, scans, signals, markets, as they happen"],
+                      edsm: ["EDSM", "your flight log and scans, to your EDSM account (in batches: each jump, docking)"]};
+let uploadsDrawn = "";
+// the Uploads section's last message (a refusal, a saved key, "could not reach Outrider"): part of what is drawn, so the
+// redraw right after an answer keeps it (the bug check of 2026-10-09: it was wiped as soon as it was written)
+let uploadsNote = "";
+// the Data tile's line: per upload that is on (or sent anything in the last day), what it sent, what waits and what
+// was refused, live with each payload; nothing when no upload is in use
+function uploadLineHtml(u) {
+  if (!u) return "";
+  const parts = ["eddn", "edsm"].map(s => {
+    const x = u[s] || {}, [name] = UPLOAD_NAMES[s];
+    if (!x.on && !x.sent_24h && !x.queued && !x.dry_24h) return "";
+    const bits = [`${(x.sent_24h || 0).toLocaleString("en-US")} sent`];
+    if (x.queued) bits.push(`${x.queued.toLocaleString("en-US")} waiting`);
+    if (x.dropped_24h) bits.push(`<span class="warnc">${x.dropped_24h.toLocaleString("en-US")} refused</span>`);
+    if (x.dry_24h) bits.push(`${x.dry_24h.toLocaleString("en-US")} dry run`);
+    const mode = s === "eddn" && x.test ? " (test)" : s === "edsm" && x.dry_run ? " (dry run)" : "";
+    const state = x.held ? ` <span class="bad" title="${esc(x.held)}">held</span>` : !x.on ? ` <span class="unk">off</span>` : "";
+    return `<div title="uploads in the last 24 hours (Settings → Uploads has the detail)"><b>${name}</b>${mode} ${bits.join(" · ")}${state}</div>`;
+  }).filter(Boolean);
+  return parts.join("");   // a line per service: the numbers can get long
+}
+function uploadsHtml(u) {
+  if (!u) return `<div class="unk">not known yet</div>`;
+  const row = s => {
+    const x = u[s] || {}, [name, what] = UPLOAD_NAMES[s];
+    const state = !x.available ? `<span class="unk">coming in a later version</span>`
+      : x.blocked ? `<span class="warnc">unavailable: ${esc(x.blocked)}</span>`
+      : x.held ? `<span class="bad">held: ${esc(x.held)}</span>`
+      : x.on ? `<span class="ok">on</span>` : `<span class="unk">off</span>`;
+    // OUTRIDER_EDDN_TEST: said whatever the state, so a developer's run is never mistaken for a live one
+    const test = s === "eddn" && x.test ? ` <span class="warnc" title="OUTRIDER_EDDN_TEST is set: EDDN's test schemas only, nothing reaches the live data">(test schemas only)</span>`
+      : s === "edsm" && x.dry_run ? ` <span class="warnc" title="OUTRIDER_EDSM_DRYRUN is set: each request is built and logged (data/edsm-dryrun.jsonl), nothing is sent">(dry run: nothing sent)</span>` : "";
+    const nums = [x.queued ? `${x.queued} waiting` : "", x.sent_24h ? `${x.sent_24h} sent today` : "", x.dropped_24h ? `${x.dropped_24h} refused` : "", x.dry_24h ? `${x.dry_24h} in dry runs` : ""].filter(Boolean).join(" · ");
+    // ticked by what the player switched (wanted), whatever holds or blocks it now
+    const ticked = x.wanted ?? (x.on || !!x.held);
+    return `<label class="mod"><input type="checkbox" data-upload="${s}"${ticked ? " checked" : ""}${x.available && !u.simulate ? "" : " disabled"}> ` +
+      `<b>${name}</b> <span class="hint">${esc(what)}</span></label><div class="hint">${state}${test}${nums ? " · " + esc(nums) : ""}` +
+      `${x.error && !x.held ? ` · <span class="bad" title="${esc(x.error)}">last error</span>` : ""}</div>`;
+  };
+  const acc = ((u.edsm || {}).accounts || []).map(a =>
+    `<div class="edsmacc" data-cmdr="${esc(a.commander)}"><b>${esc(a.commander)}</b> → EDSM <input type="text" class="edsmName" value="${esc(a.name)}" maxlength="64" size="14" title="your commander name on EDSM">` +
+    ` key <input type="password" class="edsmKey" autocomplete="new-password" placeholder="${a.set ? "set (type to change)" : "API key"}" size="22">` +
+    ` <button type="button" class="try edsmSave">Save</button>${a.set ? ` <a href="#" class="edsmRemove">remove</a>` : ""}` +
+    // never the key itself: its ends, to compare with edsm.net → Settings → API key
+    (a.hint ? `<div class="hint">stored key: <code title="its first and last four characters: compare them with your key on edsm.net">${esc(a.hint)}</code></div>` : "") + `</div>`).join("");
+  return row("eddn") + row("edsm") +
+    `<div class="hint">EDSM accounts, per in-game commander (your key is at <a href="https://www.edsm.net/en/settings/api" target="_blank" rel="noopener">edsm.net → Settings → API key</a>; it stays on this Outrider):</div>` +
+    (acc || `<div class="unk">no commander seen yet</div>`) + `<div class="hint" id="uploadsMsg">${esc(uploadsNote)}</div>` +
+    (u.simulate ? `<div class="unk">--simulate: nothing is uploaded</div>` : "");
+}
+function renderUploads() {
+  const box = document.getElementById("uploadsBox");
+  if (!box || !data) return;
+  // a field being typed in is not redrawn under the player's fingers
+  if (box.contains(document.activeElement) && document.activeElement.tagName === "INPUT" && document.activeElement.type !== "checkbox") return;
+  const html = uploadsHtml(data.uploads);
+  if (html === uploadsDrawn) return;
+  // what was typed in an EDSM account row and not saved yet stays (a redraw of the counts must not wipe it)
+  const typed = [...box.querySelectorAll(".edsmacc")].map(row => [row.dataset.cmdr, row.querySelector(".edsmName").value,
+                                                                   row.querySelector(".edsmKey").value, row.querySelector(".edsmName").defaultValue]);
+  box.innerHTML = html; uploadsDrawn = html;
+  for (const [cmdr, name, key, was] of typed) {
+    const row = [...box.querySelectorAll(".edsmacc")].find(r => r.dataset.cmdr === cmdr);
+    if (!row) continue;
+    if (name !== was) row.querySelector(".edsmName").value = name;
+    if (key) row.querySelector(".edsmKey").value = key;
+  }
+}
+async function setUpload(service, on, confirmed) {
+  try {
+    const j = await apiJson("api/uploads", {method: "POST", headers: {"Content-Type": "application/json"},
+                                           body: JSON.stringify({service, on, confirm: !!confirmed})});
+    if (j.code === "confirm_needed") {
+      if (confirm(j.error)) return setUpload(service, on, true);
+      uploadsNote = "";   // declined: nothing switched, and the question is not a status to show
+      return;
+    }
+    uploadsNote = j.error || j.note || "";   // note: switched, but the config file could not keep it
+    if (!j.error) { delete j.note; data.uploads = j; }
+  } catch (err) {
+    uploadsNote = `could not reach Outrider: ${err.message}`;
+  } finally {
+    uploadsDrawn = ""; renderUploads();   // the box shows the server's state again, whatever happened
+  }
+}
+document.getElementById("uploadsBox").addEventListener("change", e => {
+  const box = e.target.closest("[data-upload]");
+  if (box) setUpload(box.dataset.upload, box.checked);
+});
+document.getElementById("uploadsBox").addEventListener("click", async e => {
+  const row = e.target.closest(".edsmacc"); if (!row) return;
+  const save = e.target.closest(".edsmSave"), remove = e.target.closest(".edsmRemove");
+  if (!save && !remove) return;
+  e.preventDefault();
+  const body = remove ? {commander: row.dataset.cmdr, remove: true}
+    : {commander: row.dataset.cmdr, name: row.querySelector(".edsmName").value, api_key: row.querySelector(".edsmKey").value};
+  try {
+    const j = await apiJson("api/uploads/edsm", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+    uploadsNote = j.error || (remove ? "removed" : "saved");
+    if (!j.error) {
+      if (data.uploads && data.uploads.edsm) data.uploads.edsm.accounts = j.accounts;
+      row.querySelector(".edsmKey").value = "";   // saved: nothing typed is kept over the redraw
+      row.querySelector(".edsmName").defaultValue = row.querySelector(".edsmName").value;
+    }
+  } catch (err) {
+    uploadsNote = `could not reach Outrider: ${err.message}`;
+  } finally {
+    row.querySelectorAll("input").forEach(i => i.blur());   // Safari leaves the focus in the field: no redraw then
+    uploadsDrawn = ""; renderUploads();
+  }
+});
 // Canonn's Bioforge: what is known of a codex entry across the galaxy (where it grows, the conditions)
 const bioforgeLink = id => Number.isInteger(id) && id > 0
   ? ` <a href="https://bioforge.canonn.tech/?entryid=${id}" target="_blank" rel="noopener" title="Canonn Bioforge: where this grows and in what conditions">stats ↗</a>` : "";
-const codexMark = (x, region) => {
+// The new colour is written after the mark ("✪ Cobalt"): its title never shows where a body's summary pops up over
+// the row (the author, 2026-10-10), nor on the tablet. colour: false where the colour is on the line already (Now).
+const codexMark = (x, region, {colour: showColour = true} = {}) => {
   if (!x || !(x.codex_new || x.codex_galaxy_new)) return "";
   const have = x.codex_have || [], colour = v => v.split(" - ").pop();
   const fresh = (x.variants || []).filter(v => !have.includes(colour(v)));
   const what = fresh.length ? fresh.join(" or ")
     : x.best ? `${x.best} (likeliest species; the colour variant may differ)` : "likeliest species; the colour variant may differ";
+  const named = showColour && fresh.length ? ` <span class="cxcol">${esc(fresh.map(colour).join(" or "))}</span>` : "";
   // ✪: in your codex nowhere at all (BioScan's 🌌), worth more effort than ✦, new in this region only
-  if (x.codex_galaxy_new) return ` <span class="cxnew cxgal" title="new to your codex anywhere: ${esc(what)}">✪</span>`;
+  if (x.codex_galaxy_new) return ` <span class="cxnew cxgal" title="new to your codex anywhere: ${esc(what)}">✪${named}</span>`;
   return ` <span class="cxnew" title="new to your codex in ${esc(region || "this region")}: ${esc(what)}${
-    fresh.length && have.length ? `; you have ${esc(have.join(", "))}` : ""}">✦</span>`;
+    fresh.length && have.length ? `; you have ${esc(have.join(", "))}` : ""}">✦${named}</span>`;
 };
 // The colour the likeliest species should show, muted after the guess ("Teal", "Lime or Green"); "" when unsure.
 const variantTxt = x => x && (x.variants || []).length
@@ -7363,6 +7865,15 @@ for (const [id, el] of Object.entries(hlEls)) {
   };
 }
 showHl();
+// the unsold and highlight thresholds changed (or reset by an import) in another window: followed here, rebuilt from
+// the defaults, or this window kept its own copy and wrote it back over the change later
+window.addEventListener("storage", e => {
+  const t = {unsoldCfg: [unsoldCfg, {warn: null, urgent: null}], highlightCfg: [hlCfg, {body: null, bio: null}]}[e.key];
+  if (!t) return;
+  for (const k of Object.keys(t[0])) delete t[0][k];
+  Object.assign(t[0], t[1], store.get(e.key, {}));
+  fillThresholds(); showHl(); renderHere(); render();
+});
 const fuelJumpsEl = document.getElementById("fuelJumps");
 const showFuelJumps = () => { fuelJumpsEl.value = fuelJumpsCfg() ?? ""; fuelJumpsEl.placeholder = "off"; };
 fuelJumpsEl.onchange = () => {
@@ -7540,6 +8051,9 @@ alertChips.innerHTML = alertSections.map((s, i) => `<button type="button" data-s
 function showAlertSection(i, remember = true) {
   const s = alertSections[i]; if (!s) return;
   if (s.tagName === "DETAILS") s.open = true;
+  // clear of the sticky header (its chip row wraps, so its height is measured, not fixed): the heading stays in view
+  const head = alertDialog.querySelector(".sethead");
+  alertDialog.style.scrollPaddingTop = head ? `${head.offsetHeight}px` : "";
   s.scrollIntoView({block: "start"});
   alertChips.querySelectorAll("button").forEach(b => b.classList.toggle("on", Number(b.dataset.sec) === i));
   if (remember) store.set("alertSection", i);
@@ -7713,7 +8227,7 @@ async function sayLost() {
 }
 function sayConnection(text) {
   toast(text);
-  if (speechOn && isSpeaker) speak(text, {kind: "connection"});
+  if (speechOn && speakerHere()) speak(text, {kind: "connection"});   // where "Lost contact" was said (a tablet too)
 }
 function setConnected(ok) {
   setTimeout(drawLinkPill, 0);
@@ -7753,18 +8267,24 @@ function signInAgain() {
   if (app && typeof app.signInRequired === "function") { app.signInRequired(); return; }
   location.href = "signin?next=" + encodeURIComponent(location.pathname + location.search);
 }
+// the server answers a long poll within 25 s: one with no answer by this time is a hung link (the PC suspended, a path
+// that died without a reset), and becomes "no link" and, later, "Lost contact" (it stayed "stale" for good)
+const POLL_TIMEOUT_MS = 40000;
 async function poll(once = false) {
   let ok = false, fresh = false;
   heard(false);   // a request sent long after the last answer: timers were frozen, or the server was unreachable
+  const ac = typeof AbortController === "function" ? new AbortController() : null,
+        timer = ac && setTimeout(() => ac.abort(), POLL_TIMEOUT_MS);
   try {
     // a window that speaks says so, so Outrider knows a voice answer will be said on the PC (S24)
-    const r = await fetch(`api/nearby?since=${runId}:${version}${speechOn && speakerHere() ? "&speaker=1" : ""}`);
+    const r = await fetch(`api/nearby?since=${runId}:${version}${speechOn && speakerHere() ? "&speaker=1" : ""}`,
+                          ac ? {signal: ac.signal} : undefined);
     if (r.status === 401) return signInAgain();   // the session ended ([server] password changed, signed out)
     if (r.status === 200 || r.status === 204) heard(true);   // an answer long after it was asked: the page slept meanwhile
     if (r.status === 200) { data = await r.json(); version = data.version; fresh = true; }
     else if (r.status === 204 && woke) version = -1;   // no news, but come back with the whole payload to re-baseline on
     ok = r.status === 200 || r.status === 204;
-  } catch {}
+  } catch {} finally { if (timer) clearTimeout(timer); }
   if (fresh) pageError = null;
   let drawn = guarded("drawing", () => setConnected(ok));
   if (fresh) { const alerted = guarded("alerts", onData), rendered = guarded("drawing", render); drawn = drawn && alerted && rendered; }
@@ -7805,7 +8325,7 @@ setInterval(() => pageStampTick(), 5000);
 // Clickable things that are not real buttons (sort headers, ☆, ⌖/🔍 links, Bodies pin cells, copyable
 // names, bodies in search results) get focus and act on Enter/Space like a click. Not shortcuts: Tab to it.
 const KEYABLE = 'th[data-sort], [data-bm], .goto, td.bodies[data-pop], td.name[data-name], .copy[data-name], [data-sbodypop], #hereRows tr[data-body], .sbody[data-body], ' +
-  '[data-reset], #nsClear, span.name[data-name]';
+  '[data-reset], #nsClear, span.name[data-name], #clGrid tr[data-cl], #clGrid tr.clvar.climgrow';
 let keyablePending = false;
 function markKeyable() {
   keyablePending = false;
@@ -7910,6 +8430,7 @@ function tabSetup() {
   document.getElementById("tabEmblem").onchange = e => { store.set("tabletEmblem", e.target.checked); tabEmblem(e.target.checked); };
   document.getElementById("tabRailOn").onchange = e => { store.set("tabletRail", e.target.checked); tabRailShown(e.target.checked); };
   document.getElementById("tabAudio").onchange = e => tabSetAudio(e.target.checked);
+  tabVoiceLabel();
   document.getElementById("tabAlertsBtn").onclick = tabOpenAlerts;
   document.getElementById("tabAlertList").addEventListener("change", tabAlertToggle);
   document.getElementById("tabAlertsCopy").onclick = tabCopyPcAlerts;
@@ -8032,8 +8553,10 @@ function tabDrawCaption() {
 }
 // an alert: a banner over the page for a while (danger longer, and red), tap to dismiss
 const TAB_BANNER_MS = 8000, TAB_BANNER_DANGER_MS = 15000;
-function tabBanner(kind, title, body) {
-  const el = document.getElementById("tabBanner"), danger = DANGER.has(kind);
+function tabBanner(kind, title, body, tag = null) {
+  // DANGER holds speech tags (fuel_low, ship_lost, rig_leash, carrier_departs...): checked with the alert's tag, not
+  // only its kind (a low-fuel or ship-lost banner was a plain one, gone after 8 s)
+  const el = document.getElementById("tabBanner"), danger = DANGER.has(kind) || (tag && DANGER.has(tag)) || ["loss", "rigleash"].includes(kind);
   el.innerHTML = `<b>${esc(title)}</b>${body ? ` <span>${esc(body)}</span>` : ""}`;
   el.className = "tb-banner" + (danger ? " danger" : "");
   el.hidden = false;
@@ -8088,9 +8611,17 @@ function tabAppScreen(fn) {
   try { if (app && typeof app[fn] === "function") app[fn](); } catch {}
 }
 // Play alerts here: this tablet speaks and plays the sounds itself (see tabletSpeaks)
+// the footer says where the voice is: on the PC, or here with Play alerts here (it said "never on this tablet" always)
+function tabVoiceLabel() {
+  const el = document.querySelector("#tabFoot .tb-voice"); if (!el) return;
+  const here = tabletSpeaks();
+  el.textContent = here ? "Voice here" : "Voice on PC";
+  el.title = here ? "spoken alerts and sounds play on this tablet" : "spoken alerts and sounds play on the PC, never on this tablet";
+}
 function tabSetAudio(on) {
   store.set("tabletAudio", !!on);
   speechOn = tabletSpeaks();
+  tabVoiceLabel();
   if (speechOn) { audio(); prepareLostLine(); } else hushSpeech(true);
   document.getElementById("tabAlertsRow").hidden = !speechOn;
   drawAudioPill();
@@ -8099,6 +8630,7 @@ function tabSetAudio(on) {
 // Settings table (alertSpeak / alertSound, in this tablet's own storage; until changed here they come from the PC's
 // saved defaults, then Outrider's), as big toggles with a short name per alert
 const TAB_ALERT_NAMES = {discovery: "Targeting a system", arrival: "Arriving somewhere new", game: "Game start and quit",
+  exo: "Exomastery route", riches: "Road to Riches route", trade: "Trade route",
   jump: "FSD charging", honk: "Auto honk", brief: "Arrival briefing", fss: "FSS finished", mapped: "Planet mapped",
   leaving: "Leaving work behind", fuel: "Fuel", scoop: "Tank full", scoopstop: "Scooping stopped early",
   supercharge: "Supercharged", highway: "Highway next stop", autotarget: "Auto-target", find: "Valuable body",
@@ -8167,7 +8699,7 @@ async function tabSignOut() {
 // rail, on the long poll): a press shows SENT until it changes, "not confirmed" if it does not within confirm_s, then
 // the real state again. Unbound: disabled, "bind a key". No vibration motor on the author's tablet: the look is the
 // feedback (OutriderApp.haptic where a device has one).
-const RAIL_STATE_WORDS = {on: "On", off: "Off", high: "High"};
+const RAIL_STATE_WORDS = {on: "On", off: "Off", high: "High", na: "N/A"};   // na: not available now (hardpoints in supercruise)
 function tabRailMode(b, r, now = Date.now()) {
   const p = TB.railPending[b.id];
   if (disconnected) return "nolink";
@@ -8176,7 +8708,7 @@ function tabRailMode(b, r, now = Date.now()) {
     if (p.until && now < p.until) return "pending";
     if (p.notUntil && now < p.notUntil) return "notconf";
   }
-  return !b.reported || b.state == null ? "unknown" : b.state === "off" ? "off" : "on";
+  return !b.reported || b.state == null ? "unknown" : b.state === "na" ? "na" : b.state === "off" ? "off" : "on";
 }
 function tabRailTick(now = Date.now()) {   // confirmed, or past its time: SENT ends
   const r = data && data.rail;
@@ -8202,10 +8734,10 @@ function tabDrawRail() {
   document.getElementById("tabRailSub").textContent = sub;
   if (!r || !r.context) { if (list.innerHTML) list.innerHTML = ""; return; }
   const html = (r.buttons || []).map(b => {
-    const mode = tabRailMode(b, r), dis = mode === "bind" || mode === "nolink" || mode === "pending" || !r.can_press;
+    const mode = tabRailMode(b, r), dis = mode === "bind" || mode === "nolink" || mode === "pending" || mode === "na" || !r.can_press;
     const state = {pending: "Sent", notconf: "Not confirmed", unknown: "Not reported", bind: b.reported && b.state ? RAIL_STATE_WORDS[b.state] : "—",
                    nolink: "No link"}[mode] || RAIL_STATE_WORDS[b.state] || "";
-    const sub = mode === "bind" ? (b.now_on ? `On ${b.now_on} only: add a keyboard key` : `Bind a key: ${b.action_label}`) : mode === "pending" ? "waiting for the game" : mode === "nolink" ? "Outrider not reachable" : "";
+    const sub = mode === "na" ? (b.na || "not available now") : mode === "bind" ? (b.now_on ? `On ${b.now_on} only: add a keyboard key` : `Bind a key: ${b.action_label}`) : mode === "pending" ? "waiting for the game" : mode === "nolink" ? "Outrider not reachable" : "";
     return `<button type="button" class="tb-rb ${mode}${b.amber ? " amber" : ""}${b.states === 3 && b.state === "high" ? " high" : ""}" data-rail="${esc(b.id)}"` +
       `${dis ? " disabled" : ""} aria-label="${esc(`${b.label}, ${state}${sub ? ", " + sub : ""}`)}" title="${esc(b.keys || b.why || "")}">` +
       `<span class="tb-rbl"><b>${b.short && b.short !== b.label ? `<span class="rb-full">${esc(b.label)}</span><span class="rb-short">${esc(b.short)}</span>` : esc(b.label)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</span><span class="tb-rbs"><i></i>${esc(state)}</span></button>`;

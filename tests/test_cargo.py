@@ -149,6 +149,28 @@ class CarrierFold(unittest.TestCase):
         before = cargo.carrier_fold(CARRIER, events)
         self.assertEqual(before["lines"]["gold"]["count"], 50)   # the order's count: newer news than the transfer
 
+    def test_buy_order_fill_counted_once(self):
+        """Others filling your buy order: the line grows by what they sold. The CarrierStats the game writes just before
+        Market.json already holds the fill, so the reported total is not raised again (the Fable sweep, 2026-10-09: it
+        was, a false +300 t gap); a market read with no newer CarrierStats than the read before it does raise it, so an
+        old untouched line is not taken for stale and dropped."""
+        old_gold = ("2025-01-01T10:00:00Z", ev("2025-01-01T10:00:00Z", "CargoTransfer", _at=CARRIER,
+                                                Transfers=[{"Type": "gold", "Count": 500, "Direction": "tocarrier"}]))
+        order = ("2026-10-01T10:05:00Z", ev("2026-10-01T10:05:00Z", "CarrierTradeOrder", CarrierID=CARRIER,
+                                            Commodity="silver", PurchaseOrder=300, Price=1))
+        # the game's order: CarrierStats (the fill in it) just before the Market.json that shows the order filled
+        st = cargo.carrier_fold(CARRIER, [old_gold, ("2026-10-01T10:00:00Z", stats("2026-10-01T10:00:00Z", 500)), order,
+                                          ("2026-10-02T10:00:00Z", stats("2026-10-02T10:00:00Z", 800))],
+                                [("2026-10-02T10:00:01Z", [item("silver", demand=0, sell=1)])])
+        self.assertIn("gold", st["lines"])
+        self.assertEqual((cargo.carrier_total(st), cargo.carrier_reported(st)), (800, 800))   # in step: no gap
+        # a market read with no CarrierStats since the read before it: that one could not hold the fill
+        st = cargo.carrier_fold(CARRIER, [old_gold, ("2026-10-01T10:00:00Z", stats("2026-10-01T10:00:00Z", 500)), order],
+                                [("2026-10-01T10:06:00Z", [item("silver", demand=300, sell=1)]),
+                                 ("2026-10-02T10:00:00Z", [item("silver", demand=0, sell=1)])])
+        self.assertIn("gold", st["lines"])
+        self.assertEqual((cargo.carrier_total(st), cargo.carrier_reported(st)), (800, 800))
+
     def test_reported_follows_your_moves(self):
         """The carrier's own total moves with your transfers after its CarrierStats (no false gap until the next)."""
         events = [("2026-10-01T10:00:00Z", stats("2026-10-01T10:00:00Z", 100)),
@@ -533,6 +555,50 @@ class TradeRoute(unittest.TestCase):
         self.assertEqual(self.moments()[-1], ("complete", "Trade route complete: about 14,691,200 credits in all."))
         self.assertTrue(self.state.survey_summary()["complete"])
         self.assertEqual(len([m for m in self.moments() if m[0] == "done"]), 3)   # stops 0, 1 and 2, once each
+
+    def trade(self, s, name, stop, commodity, count, line=None):
+        self.j.line_source = line or f"Journal.test.log:{s}"
+        self.j.handle({"event": name, "timestamp": self.ts(s), "MarketID": stop["market_id"],
+                       "Type": cargo.norm(commodity), "Type_Localised": commodity, "Count": count,
+                       "BuyPrice" if name == "MarketBuy" else "SellPrice": 100})
+
+    def test_partial_trades(self):
+        """Codex F4: one tonne of a planned 400 ticked the commodity off, said the hop's profit and could end the route.
+        The tonnes add up now, each journal line once; undocking with part traded is moving on, said with the shortfall."""
+        r = self.rows
+        self.jump(-100, r[0]["id64"], r[0]["system"], 0)
+        self.state.riches_store(r, {"options": {}, "kind": "trade"})
+        self.trade(-95, "MarketBuy", r[0], "Biowaste", 1)
+        self.trade(-95, "MarketBuy", r[0], "Biowaste", 1)                 # the same line again (a re-read): once
+        self.trade(-94, "MarketBuy", r[0], "Biowaste", 199)
+        self.assertEqual(self.moments(), [])                              # 200 of 400: not done
+        view = self.state.riches_view()["route"]["systems"][0]["buy"][0]
+        self.assertEqual((view["traded"], view["done"]), (200, False))
+        self.trade(-93, "MarketBuy", r[0], "Biowaste", 200)
+        self.assertEqual(self.moments()[-1][0], "done")                   # 400: done
+        self.jump(-80, r[1]["id64"], r[1]["system"], 27)
+        self.assertIn("sell 400 tonnes of Biowaste", self.moments()[-1][1])
+        self.trade(-70, "MarketSell", r[1], "Biowaste", 100)
+        self.assertEqual(self.state.survey_summary()["left_here"], 2)
+        self.j.handle({"event": "Undocked", "timestamp": self.ts(-65), "MarketID": r[1]["market_id"], "StationName": "x"})
+        self.assertEqual(self.moments()[-1], ("done", "Hop 1 done, sold 100 of 400 tonnes of Biowaste; bought none of "
+                                                      "400 tonnes of Silver. Next stop: Shimizu Hub in Chara, 28 light years."))
+        view = self.state.riches_view()["route"]["systems"][1]
+        self.assertEqual((view["left"], view["sell"][0]["done"], view["sell"][0]["traded"], view["buy"][0]["done"]),
+                         (0, False, 100, False))
+        n = len(self.moments())
+        self.j.handle({"event": "Undocked", "timestamp": self.ts(-64), "MarketID": r[1]["market_id"], "StationName": "x"})
+        self.assertEqual(len(self.moments()), n)                          # said once
+        self.assertFalse(self.state.survey_summary().get("complete"))
+        last = r[-1]
+        self.jump(-30, last["id64"], last["system"], 90)
+        self.j.handle({"event": "Undocked", "timestamp": self.ts(-29), "MarketID": last["market_id"]})   # nothing traded:
+        self.assertNotEqual(self.moments()[-1][0], "complete")                                            # not moving on
+        self.trade(-25, "MarketSell", last, last["sell"][0]["name"], 10)
+        self.j.handle({"event": "Undocked", "timestamp": self.ts(-20), "MarketID": last["market_id"]})
+        self.assertEqual(self.moments()[-1][0], "complete")
+        self.assertIn(f"sold 10 of {last['sell'][0]['amount']:,} tonnes", self.moments()[-1][1])
+        self.assertTrue(self.state.survey_summary()["complete"])
 
     def test_two_stops_in_one_system(self):
         """Review 2026-10-08 #5: the route moved on only with a jump, so a hop to another station in the same system

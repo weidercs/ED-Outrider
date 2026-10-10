@@ -184,8 +184,16 @@ class Endpoint(unittest.TestCase):
         status, body, _ = self.ai_run([("sleep", 1.0)], text="sing", timeout=0.2)
         self.assertEqual((status, body["code"]), (504, "ai_timeout"))
         loop = {"choices": [{"message": {"tool_calls": [{"id": "x", "function": {"name": "current_status", "arguments": "{}"}}]}}]}
-        status, body, seen = self.ai_run([loop], text="sing", max_rounds=2)
+        ran, real = [], ask.tools.call
+
+        async def counted(*a, **k):
+            ran.append(a[0])
+            return await real(*a, **k)
+        with unittest.mock.patch.object(ask.tools, "call", counted):
+            status, body, seen = self.ai_run([loop], text="sing", max_rounds=2)
         self.assertEqual((status, body["code"], len(seen)), (502, "ai_error", 3))
+        # two rounds of tools, then a request for the answer only; a tool asked for then is not run (Codex F7)
+        self.assertEqual((len(ran), "tool_choice" in seen[1][0], seen[2][0].get("tool_choice")), (2, False, "none"))
         self.assertEqual(self.ai_run([{"choices": [{"message": {"content": ""}}]}], text="sing")[1]["code"], "ai_error")
         # enabled but not set up: says so (503), and a fixed phrase never goes to the AI at all
         self.state.assistant = dict(ask.ASSISTANT, enabled=True)

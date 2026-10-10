@@ -1,4 +1,4 @@
-[ED Outrider](../../README.md) · [Install and run](install.md) · **The views** · [Plot Route](plot-route.md) · [Cargo and trading](cargo-and-trading.md) · [Voice and alerts](voice-and-alerts.md) · [Automation](automation.md) · [On a tablet](tablet.md) · [Settings and good to know](settings.md) · [For the curious](for-developers.md)
+[ED Outrider](../../README.md) · [What's new](whats-new.md) · [Install and run](install.md) · **The views** · [Plot Route](plot-route.md) · [Cargo and trading](cargo-and-trading.md) · [Voice and alerts](voice-and-alerts.md) · [Automation](automation.md) · [On a tablet](tablet.md) · [Uploads](uploads.md) · [Settings and good to know](settings.md) · [For the curious](for-developers.md)
 
 # The views
 
@@ -22,6 +22,8 @@ community survey's mineral odds for that ground (odds, not contents) and what yo
 The to-do line ticks itself off as you honk, map and sample, in a suggested order with supercruise time and
 credits per minute ("~2 min · 450k/min"; "skip?" when not worth the trip). Bio nobody has set foot on is
 valued with the ×5 first-footfall bonus, except in a populated system: Vista Genomics never pays it there.
+A footer under the list says what each icon means, for the icons that system's list shows (none, no footer); it
+stays in view while the list scrolls.
 "🧬? check in the FSS" marks a landable body you have only from an AutoScan or a nav beacon, whose signals nobody
 counted, where life is possible. The body panel lists why each other genus is not expected ("pressure too
 low"). Flying low over a body in your ship (under 5 km), the on-body strip already shows its bio card. A star's
@@ -48,10 +50,11 @@ what each death cost, and your 25 most valuable finds.
 </tr>
 <tr>
 <td width="50%" valign="top">
-<b>Samples</b> — every exobiology sample run: species, variant, body, value, and whether it is
+<b>Bio/Geo</b> — <b>My Samples</b>: every exobiology sample run: species, variant, body, value, and whether it is
 <i>aboard</i>, <i>sold</i> or <i>lost</i>. Filter, sort, export; codex entries underneath. Unsold runs are
-priced one by one ("x5 on 42 of 47 runs").
-<br><br><img src="../images/samples.png" alt="Samples">
+priced one by one ("x5 on 42 of 47 runs"). Beside it, the <a href="#-the-exobiology-checklist">Exo-Biology and Geology
+checklists</a>.
+<br><br><img src="../images/samples.png" alt="Bio/Geo: My Samples">
 </td>
 <td width="50%" valign="top">
 <b>Log</b> — every journal event, newest first, one readable line each. Filter by category and time,
@@ -139,6 +142,50 @@ vehicle's own fuel.
 Under the Where tile, the **discovery streak** is a dot per arrival for your last 20 (gold: first discovery,
 amber: bodies nobody had reported, blue: known, grey: revisited), and the **unreported horizon**: "nearest
 known unvisited: Xyz 4.8 ly". Any unvisited star closer than that on the galaxy map is one nobody has reported.
+
+## 🧬 The exobiology checklist
+
+**Bio/Geo → Exo-Biology** shows every species the rules know, one box per genus, for a galactic region: where you
+are (the default), any other, or **All regions**. Each species shows your best there, in colour:
+
+- <b>sold</b> (green), <b>aboard</b> (amber: sampled, not sold yet), <b>lost</b> (red: sampled, lost with the ship),
+  <b>logged</b> (blue: in your codex, no finished run);
+- *elsewhere*: none here, but you have found it in another region (the line above the boxes counts them);
+- greyed: not here, the rules say it cannot grow in this region. That is the rules' prediction, not proof that
+  nobody has found it there;
+- ◐: only in parts of the region (near Guardian sites, in tuber zones, by nebulae);
+- the colours you have found out of those it comes in (**3 / 12**). Anemones, brain trees and the like are their own
+  one colour.
+
+Click a species to drop its colours down under it, each with what gives it ("Teal: M stars", or a material on the
+body for some bacteria) and your state; click it again to fold them up. The column beside the boxes shows its
+picture and a map of the galaxy with the regions it can grow in lit and your samples as dots; hover a lit region
+for its name and your completion there. The line above the boxes counts it up: "Inner Orion Spur: 45 of 101 possible species found ·
+11.70% complete for the species in this region · 43 sold · …".
+
+**Completion** counts what you have done, not only what is finished: each species that can grow in the region scores
+the share of its colours you have found there (sold, aboard, lost or logged), averaged over those species, so half of
+every species is 50% with none complete. The region list shows each region's figure. The tablet's Bio/Geo page has it
+all too, with the species and a species' details scrolling separately.
+
+<p align="center">
+  <img src="../images/checklist.png" alt="The exobiology checklist: genus boxes with each species' state and colours found, and a species' colours and galaxy map beside them" width="900">
+</p>
+
+**Bio/Geo → Geology** is the same for the codex's **Geology and Anomalies** entries: fumaroles, gas vents, geysers and
+lava spouts, then Lagrange clouds and the lettered anomalies. Each is logged in your codex for the region, or not;
+beside it, how many sites players have reported in that region (from [Canonn](https://canonn.science)), greyed where
+none have been reported yet (which is not to say there are none). Completion is the share of the entries reported in
+the region that you have logged. Click one for its picture, its sites in the galaxy, where you logged it, and the map
+of the regions it has been reported in.
+
+The pictures are [Canonn](https://canonn.science)'s screenshots, each credited to the commander who took it: Outrider
+links to them (they load from Canonn when you open an entry; click one for full size) and keeps no copy. Click a
+colour under a species for that colour's picture. A few entries have none yet; Outrider asks Canonn for its latest
+list once a day, so new pictures appear as they are added.
+
+Journals from before a 2023 game update don't name a sample's colour, so those samples count the species but not a
+colour.
 
 ## 🗺️ The surface map
 

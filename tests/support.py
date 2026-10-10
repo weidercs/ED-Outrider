@@ -12,6 +12,21 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import ed_outrider  # noqa: E402
 
+# Never the player's own journal folders: the server auto-detects them at import, and anything that writes into a live
+# folder (the uploads' lease files) would write into the real one. A test that needs folders sets its own.
+ed_outrider.LIVE_DIRS[:] = []
+ed_outrider.LEGACY_DIRS[:] = []
+# ...nor the player's config file: the Uploads switch writes [eddn]/[edsm] enabled into it
+import tempfile  # noqa: E402
+ed_outrider.CONFIG_PATH = os.path.join(tempfile.mkdtemp(prefix="outrider-test-config-"), "ed_outrider.toml")
+# ...nor EDMC's config on this PC (the uploads' check reads it): a test that wants it passes its own home folder
+import outrider.uploads  # noqa: E402
+_edmc_uploads = outrider.uploads.edmc_uploads
+outrider.uploads.edmc_uploads = lambda home=None, **kw: _edmc_uploads(home=home, **kw) if home else None
+# ...nor the player's fetched picture list (data/codex_images.json): the shipped one, or a test's own
+import outrider.codex_images  # noqa: E402
+outrider.codex_images.CACHE = os.path.join(tempfile.mkdtemp(prefix="outrider-test-images-"), "codex_images.json")
+
 
 def user_docs():
     """The user documentation as one text: README.md and every page of docs/guide/ (the README is a front page since
@@ -234,7 +249,7 @@ class _HwSession:
     def __init__(self, script):
         self.script, self.calls = list(script), []
 
-    def get(self, url, params=None):
+    def get(self, url, params=None, **kw):   # kw: a timeout and the like, as aiohttp's get takes them
         self.calls.append((url, dict(params or {})))
         item = self.script.pop(0) if len(self.script) > 1 else self.script[0]
         if isinstance(item, Exception):

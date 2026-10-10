@@ -32,6 +32,9 @@ const settle = async maxMs => {
   const html = await (await fetch(base)).text(); const errors = [];
   const dom = new JSDOM(html, {url: base, runScripts: "dangerously", resources: "usable", pretendToBeVisual: true,
     beforeParse(w) {
+      // the page's fetch is Node's, which takes only Node's AbortSignal (the long poll's timeout): in a browser the two
+      // are the same object
+      w.AbortController = AbortController;
       w.fetch = (u, o) => {
         const poll = /api\/nearby\?since=/.test(String(u));
         if (!poll) { inflight++; lastNet = Date.now(); }
@@ -57,11 +60,112 @@ const settle = async maxMs => {
     const before = errors.length;
     btn.click();
     await settle(2500);
+    // a view whose answer is slow (Overview first, right after the load, on a busy machine) gets up to 10 s more:
+    // a fixed wait failed it now and then, filled a moment later
+    const isFilled = () => { const e = d.querySelector(sel); return !!e && e.textContent.trim().length > 0 && !/^loading/.test(e.textContent.trim()); };
+    for (let waited = 0; !isFilled() && waited < 10000; waited += 100) await sleep(100);
     const el = d.querySelector(sel);
-    const filled = el && el.textContent.trim().length > 0 && !/^loading/.test(el.textContent.trim());
+    const filled = isFilled();
     const good = filled && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "|", v.padEnd(8), "|", (el ? el.textContent.trim().replace(/\s+/g, " ").slice(0, 90) : "missing " + sel), errors.slice(before));
+  }
+  // the exobiology checklist: Bio/Geo -> Exo-Biology shows genus boxes from api/checklist, a click opens the species'
+  // panel (its colours; the map needs a canvas, which jsdom has not), and Runs comes back
+  {
+    if (!d.getElementById("nowView").hidden) { d.getElementById("nowBack").click(); await sleep(500); }
+    const before = errors.length;
+    d.querySelector('[data-view="bio"]').click(); await settle(800);
+    const radio = v => d.querySelector(`[name=bioMode][value="${v}"]`);
+    radio("check").checked = true; radio("check").dispatchEvent(new dom.window.Event("change", {bubbles: true}));
+    for (let waited = 0; !d.querySelector("#clGrid .clbox") && waited < 10000; waited += 100) await sleep(100);
+    const boxes = d.querySelectorAll("#clGrid .clbox").length, status = d.getElementById("clStatus").textContent;
+    const options = d.getElementById("clRegion").options.length;
+    const tr = d.querySelector("#clGrid [data-cl]");
+    tr.click();
+    for (let waited = 0; !/your samples|could not|no such/i.test(d.getElementById("clSide").textContent) && waited < 5000; waited += 100) await sleep(100);
+    const side = d.querySelector("#clSide h4"), name = tr.getAttribute("title").split(" · ")[0];
+    const shown = !d.getElementById("bioView").classList.contains("check") ? "runs" : "check";
+    // Geology: the codex's Geology and Anomalies entries, geology's boxes first, its own heading and legend
+    radio("geo").checked = true; radio("geo").dispatchEvent(new dom.window.Event("change", {bubbles: true}));
+    for (let waited = 0; !/entries reported/.test(d.getElementById("clStatus").textContent) && waited < 10000; waited += 100) await sleep(100);
+    const geoFirst = (d.querySelector("#clGrid .clbox h4 span") || {}).textContent;
+    const geoHint = dom.window.getComputedStyle(d.querySelector("#clPane .geohint")).display !== "none" &&
+                    dom.window.getComputedStyle(d.querySelector("#clPane .biohint")).display === "none";
+    const geo = geoFirst === "Fumarole" && geoHint && /complete/.test(d.getElementById("clStatus").textContent);
+    // "N of M" counts only what M counts: an entry logged where nobody has reported one is said apart, not "3 of 2"
+    // (the Fable review of 2026-10-10, #3)
+    const counts = JSON.parse(dom.window.eval(`(() => { const saved = CL.data;
+      CL.data = Object.assign({}, saved, {kind: "geo", region: 1, region_name: "Galactic Centre",
+        summary: {possible: 2, logged: 3, colours_found: 2, completion: 100, elsewhere: 0},
+        genera: [{genus: "Fumarole", species: [{id: 1, name: "A Fumarole", short: "A", state: "logged", possible: "yes", sites: 5},
+          {id: 2, name: "B Fumarole", short: "B", state: "logged", possible: "yes", sites: 2},
+          {id: 3, name: "C Fumarole", short: "C", state: "logged", possible: null, sites: 0}]}]});
+      renderChecklist();
+      const out = [document.getElementById("clStatus").textContent, document.querySelector("#clGrid .clbox h4 .unk").textContent];
+      CL.data = saved; renderChecklist(); return JSON.stringify(out); })()`));
+    const countsOk = /^Galactic Centre: 2 of 2 entries reported here logged · 100\.00% complete · 1 logged that nobody has reported here yet/.test(counts[0])
+      && counts[1] === "2 / 2";
+    // keyboard (#8 of the Fable review, 2026-10-10): a species row is reachable with Tab, Enter opens it, and the row
+    // keeps focus through the redraw
+    radio("check").checked = true; radio("check").dispatchEvent(new dom.window.Event("change", {bubbles: true}));
+    for (let waited = 0; !/possible species found/.test(d.getElementById("clStatus").textContent) && waited < 10000; waited += 100) await sleep(100);
+    dom.window.eval("markKeyable()");
+    const kr = d.querySelectorAll("#clGrid tr[data-cl]")[1], kid = kr && kr.getAttribute("data-cl");
+    let keyOk = false;
+    if (kr) {
+      kr.focus(); kr.dispatchEvent(new dom.window.KeyboardEvent("keydown", {key: "Enter", bubbles: true}));
+      await sleep(200);
+      const a = d.activeElement;
+      keyOk = kr.tabIndex === 0 && kr.getAttribute("role") === "button" && dom.window.eval("CL.open") === kid &&
+              a && a.tagName === "TR" && a.getAttribute("data-cl") === kid;
+    }
+    // a region picked while an answer is on its way is asked for, and only the newest answer is drawn (#6)
+    const race = JSON.parse(await dom.window.eval(`(async () => {
+      const real = apiJson, pend = [], saved = CL.data;
+      apiJson = url => url.includes("api/checklist") ? new Promise(r => pend.push([url, r])) : real(url);
+      try {
+        loadChecklist(true);
+        const opt = [...clRegionEl.options].find(o => /^\\d+$/.test(o.value) && o.value !== clRegionEl.value);
+        clRegionEl.value = opt.value; clRegionEl.dispatchEvent(new Event("change"));
+        const urls = pend.map(p => p[0]);
+        pend[1] && pend[1][1](Object.assign({}, saved, {region_name: "Newest"}));
+        pend[0][1](Object.assign({}, saved, {region_name: "Older"}));
+        await new Promise(r => setTimeout(r, 50));
+        return JSON.stringify([urls.length, urls[1] && urls[1].includes("region=" + opt.value), document.getElementById("clStatus").textContent.split(":")[0]]);
+      } finally { apiJson = real; clRegionEl.value = "here"; store.set("clRegion", "here"); CL.key = null; }
+    })()`));
+    const raceOk = race[0] === 2 && race[1] === true && race[2] === "Newest";
+    radio("runs").checked = true; radio("runs").dispatchEvent(new dom.window.Event("change", {bubbles: true}));
+    await sleep(300);
+    const back = !d.getElementById("bioView").classList.contains("check") && dom.window.getComputedStyle(d.getElementById("bioPane")).display !== "none";
+    const good = boxes >= 20 && /possible species found/.test(status) && options === 44 && side && side.textContent === name &&
+                 shown === "check" && geo && countsOk && keyOk && raceOk && back && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| exobiology checklist |", `${boxes} genus boxes, ${options} region choices, panel ${side && side.textContent}, geology ${geo} (${geoFirst}), counts ${countsOk || JSON.stringify(counts)}, keyboard ${keyOk}, region race ${raceOk || JSON.stringify(race)}, back to runs ${back}`,
+                status.slice(0, 80), errors.slice(before));
+  }
+  // the map reopened while its request was on its way asks again with the same key: the older request's failure
+  // must not throw the newer answer away (#7 of the Fable review, 2026-10-10)
+  {
+    const before = errors.length;
+    const res = JSON.parse(await dom.window.eval(`(async () => {
+      const real = apiJson, pend = [], savedPos = data.position, savedData = M.data;
+      if (!data.position) data.position = {name: "Test", id64: 1, x: 0, y: 0, z: 0};
+      apiJson = url => url.includes("api/map") ? new Promise((ok, no) => pend.push([ok, no])) : real(url);
+      try {
+        M.key = null; loadMap();                 // opened
+        M.key = null; loadMap();                 // closed and opened again: the same key, asked again
+        pend[0][1](new Error("network"));         // the older one fails...
+        await new Promise(r => setTimeout(r, 20));
+        pend[1][0]({points: [], radius: 7});      // ...then the newer one answers
+        await new Promise(r => setTimeout(r, 50));
+        return JSON.stringify([pend.length, document.getElementById("mStatus").textContent, M.data && M.data.radius]);
+      } finally { apiJson = real; data.position = savedPos; M.key = null; M.data = savedData; }
+    })()`));
+    const ok = res[0] === 2 && /^0 systems within 7 ly/.test(res[1]) && res[2] === 7 && errors.length === before;
+    allOk = allOk && ok;
+    console.log(ok ? "OK" : "FAIL", "| map: an older request's failure keeps the newer answer |", JSON.stringify(res), errors.slice(before));
   }
   // the schematic toggle inside Here (Now mode hides the view buttons: ✕ back first)
   if (!d.getElementById("nowView").hidden) { d.getElementById("nowBack").click(); await sleep(500); }
@@ -303,20 +407,46 @@ const settle = async maxMs => {
                    tick: !!document.querySelector('[data-aspeak="autotarget"]'), short: ALERT_SHORT.autotarget,
                    bound: SPEECH_SYS_BOUND.has("autotarget")};
       data.moments = [mk(1, {ok: true, system: "Hwy Stop 38", text: "Successfully targeted neutron jump target Hwy Stop 38"}),
-                      mk(2, {ok: false, system: "Hwy Stop 38", phase: 1, why: "the galaxy map did not open", text: "Failed to target neutron jump target Hwy Stop 38"})];
+                      mk(2, {ok: false, system: "Hwy Stop 38", phase: 1, why: "the galaxy map did not open", text: "Failed to target neutron jump target Hwy Stop 38"}),
+                      mk(3, {ok: false, what: "waiting", system: "Hwy Stop 38", secs: 42, text: "Not targeting due to danger. I will keep trying until you are out of danger, for up to 42 seconds."})];
       onData();
       alertSpeak.autotarget = false;   // switched off like any other spoken notification: shown, not said
-      data.moments = [mk(3, {ok: true, system: "Hwy Stop 39", text: "Successfully targeted neutron jump target Hwy Stop 39"})];
+      data.moments = [mk(4, {ok: true, system: "Hwy Stop 39", text: "Successfully targeted neutron jump target Hwy Stop 39"})];
       onData();
-      out.seq = lastMomentSeq === s0 + 3;
+      out.seq = lastMomentSeq === s0 + 4;
       data.moments = saved; [speechOn, isSpeaker, alertSpeak.autotarget] = flags; lastMomentSeq = flags[3];
       return JSON.stringify(out); })()`));
     w.speak = realSpeak; w.play = realPlay;
     const words = said.map(x => x[0]).join("|");
     const ok = res.row && res.notify === false && res.speak === true && res.tick && res.short === "Auto-target" && res.bound && res.seq &&
                said.every(x => x[1] === "autotarget") && errors.length === before &&
-               words === "Successfully targeted neutron jump target Hwy Stop 38|Failed to target neutron jump target Hwy Stop 38";
+               words === "Successfully targeted neutron jump target Hwy Stop 38|Failed to target neutron jump target Hwy Stop 38|Not targeting due to danger. I will keep trying until you are out of danger, for up to 42 seconds.";
     console.log(ok ? "OK" : "FAIL", "| auto-target results spoken |", words, JSON.stringify(res), errors.slice(before));
+  }
+  // a body someone else mapped (the author, 2026-10-09): no find alert for it; one "already mapped" line per system
+  // instead; never in the leaving list
+  {
+    const w = dom.window, before = errors.length, said = [];
+    const realPlay = w.play, realSpeak = w.speak;
+    w.speak = (t, o) => said.push((o || {}).kind || ""); w.play = () => {};
+    const res = JSON.parse(w.eval(`(() => {
+      const saved = data.moments, flags = [speechOn, isSpeaker, alertSpeak.find, lastMomentSeq];
+      speechOn = true; isSpeaker = true; alertSpeak.find = true; mappedBeforeSaid.clear();
+      const s0 = lastMomentSeq, mk = (i, m) => Object.assign({seq: s0 + i, ts: new Date().toISOString(), kind: "scan",
+        subtype: "Sudarsky class II gas giant", base_value: 9e9, terraformable: false, first_discovered: false}, m);
+      data.moments = [mk(1, {system: "71", body: "5", mapped_before: true}), mk(2, {system: "71", body: "6", mapped_before: true}),
+                      mk(3, {system: "72", body: "1", mapped_before: false})];
+      onData();
+      const said = mappedBeforeSaid.has("71");
+      const maps = worthLeavingFor({bio_pending: [], unmapped: [{body: "5", mapped_before: true, special: true, increment: 9e9},
+                                                               {body: "4", mapped_before: false, increment: 9e9}]}).maps.map(u => u.body);
+      data.moments = saved; [speechOn, isSpeaker, alertSpeak.find] = flags; lastMomentSeq = flags[3]; speechItems = [];
+      return JSON.stringify({said, maps}); })()`));
+    await sleep(2500);   // the alerts' sounds and spoken lines that follow them land here, not in the next check
+    w.eval("speechItems = []");
+    w.speak = realSpeak; w.play = realPlay;
+    const ok = said.length === 2 && res.said && JSON.stringify(res.maps) === '["4"]' && errors.length === before;
+    console.log(ok ? "OK" : "FAIL", "| mapped by someone else |", said.length, JSON.stringify(res), errors.slice(before));
   }
   // one speaker: a window that is not the speaker still shows the alert but plays and says nothing; the
   // ▶ voice button still speaks; a danger line comes only from business and never swears
@@ -804,9 +934,18 @@ const settle = async maxMs => {
           && cx.querySelector(".sf").textContent === "" && /✦/.test(cx.textContent);
         o.here = !!row && row.textContent.includes("1.4M") && !row.textContent.includes("Tectonicas?") && !row.textContent.includes("19.0M")
           && row.querySelectorAll("td")[3].classList.contains("noscoop");
+        // the icon legend under the list (the author, 2026-10-10): only the icons this list shows; none, no footer
+        const plain = {first_discovered: false, first_mapped: false, mapped: false, first_footfall: false, scanned: true, rings: 0,
+          terraformable: false, notable: null, volcanism: null, mining: 0, mined: [], belts: [], stale_bio: false, bio_unknown: false};
+        hereData = Object.assign({}, hd, {bodies: [Object.assign({}, fake, plain)], tree: null}); renderHere();
+        const lg = document.getElementById("hereLegend"), icons = () => [...lg.querySelectorAll(".lgi")].map(e => e.textContent);
+        const used = icons().join(" "), shown = !lg.hidden;
+        hereData = Object.assign({}, hd, {bodies: [Object.assign({}, fake, plain, {bio: 0, genera: [], organics: [], bio_guess: [], codex: []})], tree: null});
+        renderHere();
+        o.legend = shown && used === "1/3 ✦ 📖" && lg.hidden && icons().length === 0 ? true : [shown, used, lg.hidden, icons()];
         if (hg === null) localStorage.removeItem("highG"); else localStorage.setItem("highG", hg);
         hereData = hd; hereKey = hk; renderHere();
-      } else { o.hereWrap = "no Here data"; o.here = "no Here data"; }
+      } else { o.hereWrap = "no Here data"; o.here = "no Here data"; o.legend = "no Here data"; }
       // F39: injections at cap: nothing is "limiting"; 3 left: the short material is
       const md = matData;
       const mat = craftable => ({rows: [{id: "polonium", name: "Polonium", count: craftable, cap: 150}], snapshot_ts: "2026-01-01T00:00:00Z", ts: "2026-01-01T00:00:00Z",
@@ -886,7 +1025,7 @@ const settle = async maxMs => {
     w.setTimeout = realST; w.fetch = realFetch;
     w.eval("search = null; searchWant = 0; searchRefused = false; render()");
     w.speak = realSpeak; w.play = realPlay;
-    const want = {unwarned: null, kept: true, outage: true, spacing: true, spacing2: true, region: true, simFresh: true, hereWrap: true, here: true, mat: true,
+    const want = {unwarned: null, kept: true, outage: true, spacing: true, spacing2: true, region: true, simFresh: true, hereWrap: true, here: true, legend: true, mat: true,
                   streak: 2, nulls: ["{}", "ts"], impNull: "bioSort", saved: true, dock: "2026-01-01T01:00:00Z", hlRender: true, more: true};
     const want2 = {onbody: true, here: true, logError: null};
     const goodH = JSON.stringify(out) === JSON.stringify(want) && JSON.stringify(out2) === JSON.stringify(want2)
@@ -1062,6 +1201,11 @@ const settle = async maxMs => {
       codexMark({codex_new: true, best: "Bacterium Vesicula", variants: [], codex_have: []}, "Z"),
       codexMark({codex_new: true, codex_galaxy_new: true, best: "Stratum Tectonicas", variants: ["Stratum Tectonicas - Lime"], codex_have: []}, "Z")]
       .map(h => (h.match(/title="([^"]*)"/) || [])[1] || "")`);
+    // the new colour is written after the mark (its title never shows under a body's summary pop-up): "✪ Cobalt"
+    got.named = w.eval(`[codexMark({codex_new: true, codex_galaxy_new: true, best: "Bacterium Acies", variants: ["Bacterium Acies - Cobalt"], codex_have: ["Cyan"]}, "R"),
+      codexMark({codex_new: true, best: "Fungoida Setisis", variants: ["Fungoida Setisis - Yellow", "Fungoida Setisis - Grey"], codex_have: ["Yellow"]}, "Y"),
+      codexMark({codex_new: true, variants: []}, "X"), codexMark({codex_new: true, variants: ["Bacterium Aurasus - Teal"]}, "X", {colour: false})]
+      .map(h => { const d = document.createElement("div"); d.innerHTML = h; return d.textContent.trim(); })`);
     const here = w.eval("data.position && data.position.name");
     if (here) {
       w.document.querySelector('[data-view="search"]').click(); await sleep(300);
@@ -1071,7 +1215,7 @@ const settle = async maxMs => {
       got.find = [w.eval("view"), /visited/.test(w.document.getElementById("findStatus").textContent)];
     } else got.find = ["here", true];   // no position yet on this server: nothing to look up locally
     got.long = (await fetch(base + "api/find?name=" + "x".repeat(101))).status;
-    const want = {variant: ["Teal", "Yellow or Grey", "", ""],
+    const want = {variant: ["Teal", "Yellow or Grey", "", ""], named: ["✪ Cobalt", "✦ Grey", "✦", "✦"],
                   mark: ["new to your codex in Inner Orion Spur: Bacterium Aurasus - Teal",
                          "new to your codex in X: likeliest species; the colour variant may differ", "",
                          // another colour of a species you logged here: name it and the colours you have
@@ -1168,7 +1312,8 @@ const settle = async maxMs => {
     d.getElementById("hwyClear").click(); await sleep(50);
     got.clearFirst = [calls.length, d.getElementById("hwyClear").textContent];
     d.getElementById("hwyClear").click(); await sleep(500);
-    got.cleared = calls.map(c => c[0] + " " + c[1]).join();
+    // the clear, then the route asked for again (a poll landing meanwhile asks once more: the same request, counted once)
+    got.cleared = [...new Set(calls.map(c => c[0] + " " + c[1]))].join();
     got.nav = w.eval("!VIEW_PANE.rich && !TABLET_VIEWS.includes('rich') && SPEECH_SYS_BOUND.has('riches') && ALERTS.some(a => a[0] === 'riches')");
     w.fetch = realFetch;
     pick("exact");
@@ -1445,7 +1590,7 @@ const settle = async maxMs => {
       'window.SERVER_DEFAULTS = {"version": 1, "settings": {"log": {"days": "7", "cats": 1, "known": true}, "bioSort": null}, "saved": 1727700000};</script>');
     const errs2 = [];
     const dom2 = new JSDOM(html2, {url: base, runScripts: "dangerously", resources: "usable", pretendToBeVisual: true,
-      beforeParse(w) { w.fetch = (u, o) => fetch(new URL(u, base), o); w.addEventListener("error", e => errs2.push(e.message)); w.localStorage.clear(); w.scrollBy = () => {}; }});
+      beforeParse(w) { w.AbortController = AbortController; w.fetch = (u, o) => fetch(new URL(u, base), o); w.addEventListener("error", e => errs2.push(e.message)); w.localStorage.clear(); w.scrollBy = () => {}; }});
     const d2 = dom2.window.document;
     // the header's count is "…" until the first payload is drawn
     const known2 = () => ((d2.getElementById("subKnown") || {}).textContent || "").trim();
@@ -1720,7 +1865,7 @@ const settle = async maxMs => {
     // a window opened at ?mode=now: no ✕ back, a tap or a double tap leaves it on Now, and the URL keeps ?mode=now
     const html2 = await (await fetch(base + "?mode=now")).text(), errs2 = [];
     const dom2 = new JSDOM(html2, {url: base + "?mode=now", runScripts: "dangerously", resources: "usable", pretendToBeVisual: true,
-      beforeParse(w2) { w2.fetch = (u, o) => fetch(new URL(u, base), o); w2.addEventListener("error", e => errs2.push(e.message)); w2.localStorage.clear(); w2.scrollBy = () => {}; }});
+      beforeParse(w2) { w2.AbortController = AbortController; w2.fetch = (u, o) => fetch(new URL(u, base), o); w2.addEventListener("error", e => errs2.push(e.message)); w2.localStorage.clear(); w2.scrollBy = () => {}; }});
     const d2 = dom2.window.document;
     for (let i = 0; i < 40 && !(d2.getElementById("nowBody") && d2.getElementById("nowBody").textContent.trim()); i++) await sleep(250);
     d2.getElementById("nowBack").click();
@@ -2713,7 +2858,9 @@ const settle = async maxMs => {
       const fake = (el, rect, extra = {}) => { el.getBoundingClientRect = () => rect;
         for (const [k, v] of Object.entries({scrollTop: 0, ...extra})) Object.defineProperty(el, k, {value: v, writable: true, configurable: true}); };
       view = "here"; render();
-      const hm = document.getElementById("hereMain"), row = document.querySelector("#hereRows tr");
+      // a row of its own: Here shows no rows while its system loads (the rows of the last one were left there before)
+      const hm = document.getElementById("hereMain"),
+            row = document.querySelector("#hereRows tr") || document.getElementById("hereRows").appendChild(document.createElement("tr"));
       fake(hm, {top: 400, bottom: 700}, {clientHeight: 300, scrollTop: 100});
       fake(row, {top: 900, bottom: 930});
       revealIn(row); o.jump = hm.scrollTop;
@@ -2766,6 +2913,9 @@ const settle = async maxMs => {
   // short form's title, and fitTable toggling compact / compact2 by fit with stubbed sizes (jsdom has no layout)
   {
     const w = dom.window, before = errors.length;
+    // Here's rows from the system shown, loaded now: a check before may have left Here between systems (it shows no
+    // rows then; the last system's rows used to stay)
+    await w.eval(`(async () => { pinnedSystem = null; hereKey = null; await loadHere(); })()`);
     const got = JSON.parse(w.eval(`(() => {
       const o = {};
       o.pure = [compactLevel([500], 600, 0), compactLevel([700, 550], 600, 0), compactLevel([700, 650, 620], 600, 0),
@@ -3012,7 +3162,7 @@ const settle = async maxMs => {
     if (JSON.stringify(got.plotBody) !== JSON.stringify({plotter: "neutron", to: "Colonia", ship_id: 3, cargo: 0, range: 48.5, efficiency: 60, supercharge_multiplier: 6, conservative: false})) bad.push("plotBody");
     if (!/^Plotting Hwy Stop 37 → Colonia with Spansh \(neutron plotter\)…/.test(got.running)) bad.push("running");
     if (!(got.polls >= 3 && /^Plotted: 399 jumps to Hwy End/.test(got.afterPlot[0]) && got.afterPlot[1] && got.afterPlot[2] === 200)) bad.push("afterPlot");
-    if (JSON.stringify(got.exactBody) !== JSON.stringify({plotter: "exact", to: "Colonia", ship_id: 7, cargo: 4, injections: true, exclude_secondary: false, supercharged: false, conservative: false})) bad.push("exactBody");
+    if (JSON.stringify(got.exactBody) !== JSON.stringify({plotter: "exact", to: "Colonia", ship_id: 7, cargo: 4, injections: true, exclude_secondary: false, supercharged: false, no_neutrons: false, conservative: false})) bad.push("exactBody");
     if (!(got.err[0] === "Could not plot the route: a route is being plotted already." && got.err[1] === "err")) bad.push("err");
     if (!(got.saved && got.saved.plotter === "exact" && got.saved.injections === true)) bad.push("saved");
     if (!(JSON.stringify(p.v) === "[50,25,2]" && JSON.stringify(p.a) === "[10,110]" && JSON.stringify(p.b) === "[210,10]" && p.one && p.none === null
@@ -3413,7 +3563,7 @@ const settle = async maxMs => {
     const want = {colony: [500, null, " · 1,000 m"], sortTh: ["dist", "grav", "now", "max"], sortCycle: ["dist", "-dist rev", "max"],
       nearCycle: ["value", "-value", "distance"], treeSort: "max", halves: [true, true, true], halvesOff: false, matRow: true, link: ["linked · 2 s", "linked"],
       stale: ["stale · 48 s", "stale"], none: ["no link · retrying since 14:02", "none"], pill: true,
-      chips: ["Alerts", "Voice", "What is said", "Sounds", "Values", "Risk & warnings", "Surface map", "Auto honk", "Display", "Sharing", "Server", "Spoken lines"],
+      chips: ["Alerts", "Voice", "What is said", "Sounds", "Values", "Risk & warnings", "Surface map", "Auto honk", "Uploads", "Display", "Sharing", "Server", "Spoken lines"],
       autoSmall: true, autoBig: false, line: true, cut: true};
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
     const goodB12 = !bad.length && errors.length === before;
@@ -3547,7 +3697,7 @@ const settle = async maxMs => {
     const want = {strip: "🛣 Next: Hwy Stop 38 🎯 target · 4.2 ly · 38 of 399 · refuel in 3 jumps · ⚠ too much fuel for the next jump: ≤ 36 t, you have 140 t",
       off: [false, "5", true, ""], noteX4: "≈ 4 ly shorter jumps, about 16 ly on a ×4 neutron jump",
       noteX6: "≈ 4 ly shorter jumps, about 24 ly on a ×6 neutron jump",
-      body: {plotter: "exact", to: "Colonia", ship_id: 3, cargo: 0, injections: true, exclude_secondary: false, supercharged: false,
+      body: {plotter: "exact", to: "Colonia", ship_id: 3, cargo: 0, injections: true, exclude_secondary: false, supercharged: false, no_neutrons: false,
              conservative: true, conservative_ly: 4},
       defaults: [true, "7", "≈ 7 ly shorter jumps, about 42 ly on a ×6 neutron jump"], plain: [false, "5", true]};
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
@@ -3698,6 +3848,7 @@ const settle = async maxMs => {
     const thtml = await (await fetch(base + "tablet")).text();
     const tdom = new JSDOM(thtml, {url: base + "tablet", runScripts: "dangerously", resources: "usable", pretendToBeVisual: true,
       beforeParse(w) {
+        w.AbortController = AbortController;   // the long poll's timeout: Node's fetch takes Node's AbortSignal only
         w.fetch = (u, o) => {
           const poll = /api\/nearby\?since=/.test(String(u));
           if (!poll) { inflight++; lastNet = Date.now(); }
@@ -3818,6 +3969,12 @@ const settle = async maxMs => {
       o.push(tw.eval(`TB.railPending = {}; disconnected = "12:00"; tabDrawRail(); const t = document.querySelector('#tabRail [data-rail="gear"]').className;
                       disconnected = null; data.rail = {context: null, why: "docked", buttons: []}; tabDrawRail();
                       [t, document.getElementById("tabRailSub").textContent, document.querySelectorAll("#tabRail .tb-rb").length].join("|")`));
+      // hardpoints in supercruise: not available (greyed, disabled, says why), never "On"
+      o.push(tw.eval(`data.rail = {context: "ship", label: "Ship controls", why: null, can_press: true, why_not: null, confirm_s: 4, max: 8,
+                      buttons: [{id: "hard", label: "Hardpoints", action: "A", action_label: "A", bound: true, keys: "K", state: "na",
+                                 na: "in supercruise", reported: true, states: 2, amber: false}]};
+                      tabDrawRail(); const h = document.querySelector('#tabRail [data-rail="hard"]');
+                      [h.className, h.disabled, (h.querySelector("small") || {}).textContent, h.querySelector(".tb-rbs").textContent].join("|")`));
       tw.fetch = real;
       return o;
     })();
@@ -3984,7 +4141,7 @@ const settle = async maxMs => {
       schemArt: [true, true, 2, true, false, true, true, false],
       ask: [true, "Fuel at 41 percent.", 0, "Nearest unvisited: Smojooe ZC-D c12-2, 10.8 light years.", false, 1, true],
       rail: [3, "tb-rb off", true, true, "Ship controls", "tb-rb pending", '[{"context":"ship","id":"gear"}]', "tb-rb on", "tb-rb notconf",
-             "tb-rb nolink|no rail: docked|0"],
+             "tb-rb nolink|no rail: docked|0", "tb-rb na|true|in supercruise|N/A"],
       serverRail: ["none", true],
       reload: [true, true, false, false, 0, false, 0, true, true, 1], hint: [true, false], searchSheet: "123456", popKeeps: true, link: ["linked", "stale · 48 s ago", "no link · retrying"], pill: [true, "tb-link linked"],
       banner: [true, true, true, 0], sheet: [true, true, true, true, true, true, true], sheetHere: [false, "here"],
@@ -4031,7 +4188,7 @@ const settle = async maxMs => {
     await sleep(100);
     got.push(w.eval(`JSON.stringify(Object.values(JSON.parse(localStorage.getItem("settingsOpen"))).some(Boolean))`));
     w.eval(`document.getElementById("alertDialog").close ? document.getElementById("alertDialog").close() : document.getElementById("alertDialog").removeAttribute("open")`);
-    const want = ["Settings", true, 12, ["alerts"], true, '[true,true,true,"","auto true false","1"]', JSON.stringify({server: {port: "9999"}, autohonk: {enabled: true}}), "false"];
+    const want = ["Settings", true, 13, ["alerts"], true, '[true,true,true,"","auto true false","1"]', JSON.stringify({server: {port: "9999"}, autohonk: {enabled: true}}), "false"];
     const goodS = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodS;
     console.log(goodS ? "OK" : "FAIL", "| settings |", goodS ? "12 folding sections, remembered; server settings from the config file (choices as a list); only changes sent" : JSON.stringify(got), errors.slice(before));
@@ -4192,6 +4349,172 @@ const settle = async maxMs => {
     allOk = allOk && goodC;
     console.log(goodC ? "OK" : "FAIL", "| bio marks |", goodC ? "bio possible, Here's filters, flying-low card, the ruled-out genera" : JSON.stringify(got), errors.slice(before));
   }
+  // uploads A3: Settings → Uploads from the payload: the switches, a hold, a test-only EDDN, EDSM's accounts (no key)
+  {
+    const w = dom.window, before = errors.length;
+    const got = w.eval(`(() => {
+      const u = {eddn: {on: true, available: true, test: true, queued: 2, sent_24h: 40, dropped_24h: 1, held: null, blocked: null},
+                 edsm: {on: false, available: true, held: "also uploading from erangel", blocked: null, queued: 0, sent_24h: 0, dropped_24h: 0,
+                        accounts: [{commander: "Briadin", name: "Briadin", set: true, hint: "0123…4567 (40 characters)"}]}, simulate: false, readonly: false};
+      const box = document.createElement("div"); box.innerHTML = uploadsHtml(u);
+      const t = box.textContent;
+      return [/EDDN/.test(t) && /\(test schemas only\)/.test(t), /2 waiting · 40 sent today · 1 refused/.test(t), /held: also uploading from erangel/.test(t),
+              box.querySelectorAll("[data-upload]").length, !!box.querySelector('.edsmacc[data-cmdr="Briadin"] .edsmKey[placeholder^="set"]') && /stored key: 0123…4567 \\(40 characters\\)/.test(t),
+              /unavailable: the Legacy/.test(uploadsHtml({eddn: {available: true, blocked: "the Legacy game (3.8): nobody takes its data"}, edsm: {}})),
+              // test mode is said whatever the state: here while EDDN is unavailable
+              /\(test schemas only\)/.test(uploadsHtml({eddn: {available: true, test: true, blocked: "the game version is not known yet"}, edsm: {}})),
+              // EDSM's dry run (OUTRIDER_EDSM_DRYRUN) and what it built
+              /EDSM.*\(dry run: nothing sent\).*12 in dry runs/s.test(uploadsHtml({eddn: {}, edsm: {available: true, on: true, dry_run: true, dry_24h: 12}}))]; })()`);
+    const goodU = JSON.stringify(got) === JSON.stringify([true, true, true, 2, true, true, true, true]) && errors.length === before;
+    allOk = allOk && goodU;
+    console.log(goodU ? "OK" : "FAIL", "| uploads settings |", goodU ? "the switches, a hold, test only, EDSM's account without its key" : JSON.stringify(got), errors.slice(before));
+  }
+  // the Data tile's upload line: per service in use, sent / waiting / refused, test and dry-run marks; empty when none
+  {
+    const w = dom.window, before = errors.length;
+    const got = w.eval(`(() => {
+      const t = h => { const d = document.createElement("div"); d.innerHTML = h; return [...d.children].map(c => c.textContent).join(" | "); };
+      return [t(uploadLineHtml({eddn: {on: true, sent_24h: 1234, queued: 2, dropped_24h: 1, test: true}, edsm: {on: true, sent_24h: 59, dry_run: true, dry_24h: 18}})),
+              uploadLineHtml({eddn: {on: false}, edsm: {on: false}}), uploadLineHtml(null),
+              t(uploadLineHtml({eddn: {on: false, sent_24h: 3}, edsm: {on: true, held: "203 EDSM refused the commander name or API key"}}))]; })()`);
+    const want = ["EDDN (test) 1,234 sent · 2 waiting · 1 refused | EDSM (dry run) 59 sent · 18 dry run", "", "",
+                  "EDDN 3 sent off | EDSM 0 sent held"];   // a line (div) per service
+    const goodL = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && goodL;
+    console.log(goodL ? "OK" : "FAIL", "| uploads in the Data tile |", goodL ? "per service, test/dry-run marks, nothing when unused" : JSON.stringify(got), errors.slice(before));
+  }  // the full sweep of 2026-10-09 (the page): a line held only where a click can release it, "Back in contact" where
+  // "Lost contact" was said, the tablet banner's danger by tag, one "Undiscovered", Here empty while another system
+  // loads, the newest body answer only, typed cargo fields kept, a fresh lookup heading, an unnamed carrier, alert ticks
+  // across windows, the chip jump clear of the sticky header, the route alerts' names, the tablet's voice label
+  {
+    const w = dom.window, before = errors.length;
+    const got = w.eval(`(() => {
+      const r = {}, src = f => String(f);
+      r.hold = src(sayNow).includes("if (serverPlay() || !audioBlocked())");
+      r.back = src(sayConnection).includes("speakerHere()");
+      tabBanner("fuel", "Fuel low", "", "fuel_low");
+      r.banner = document.getElementById("tabBanner").classList.contains("danger");
+      tabBannerHide();
+      r.undisc = "Entering the Norma Arm. Undiscovered. 14 bodies.".replace(/(^|\\. )Undiscovered\\. /, "$1");
+      const hd = hereData;
+      document.getElementById("hereRows").innerHTML = "<tr><td>old</td></tr>";
+      hereData = null; renderHere();
+      r.hereEmpty = document.getElementById("hereRows").children.length === 0;
+      hereData = hd; renderHere();
+      r.body = src(reloadBody).includes('newRequest("body")') && src(reloadBody).includes('isNewest("body", g)');
+      const cg = cargoData;
+      renderCargo({ship: {lines: []}, carrier: null});
+      document.getElementById("cargoFindName").value = "Gold"; document.getElementById("cargoFindTons").value = "40";
+      renderCargo({ship: {lines: []}, carrier: null});
+      r.cargo = [document.getElementById("cargoFindName").value, document.getElementById("cargoFindTons").value];
+      renderCargo(cg);
+      const keep = {...LK}, ll = window.loadLook; window.loadLook = () => {};
+      LK.answer = {commodity: "Tritium", avg: 45000}; startLook({kind: "buy", label: "Gold"});
+      r.look = LK.answer; Object.assign(LK, keep); window.loadLook = ll;
+      r.carrier = [carrierName({name: null, callsign: "G0X-85Z"}), carrierName({}), carrierName({name: "OUT OF THE BLUE"})];
+      const was = alertSpeak.jump;
+      store.set("alertSpeak", {...alertSpeak, jump: !was});
+      window.dispatchEvent(Object.assign(new Event("storage"), {key: "alertSpeak"}));
+      r.ticks = alertSpeak.jump === !was;
+      store.set("alertSpeak", {...alertSpeak, jump: was}); window.dispatchEvent(Object.assign(new Event("storage"), {key: "alertSpeak"}));
+      r.chip = src(showAlertSection).includes("scrollPaddingTop");
+      r.names = ["exo", "riches", "trade"].every(k => ALERT_SHORT[k] && TAB_ALERT_NAMES[k]);
+      tabVoiceLabel();
+      r.voice = document.querySelector("#tabFoot .tb-voice").textContent;
+      r.voiceSet = src(tabSetAudio).includes("tabVoiceLabel()");
+      return r; })()`);
+    const want = {hold: true, back: true, banner: true, undisc: "Entering the Norma Arm. 14 bodies.", hereEmpty: true, body: true,
+                  cargo: ["Gold", "40"], look: null, carrier: ["G0X-85Z", "your carrier", "OUT OF THE BLUE"], ticks: true, chip: true,
+                  names: true, voice: "Voice on PC", voiceSet: true};
+    const goodSW = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && goodSW;
+    console.log(goodSW ? "OK" : "FAIL", "| the sweep's page fixes |", goodSW ? "holds, banners, Here, body, cargo, lookup, carrier, ticks, chips, names, voice" : JSON.stringify(got), errors.slice(before));
+  }
+  // the Fable sweep of 2026-10-09 (the page): co-pilot lines only where a voice is, the long poll's timeout, a superseded
+  // auto-target run, the 🔔 and a reset followed across windows, a declined confirm, Save redrawn with the focus kept
+  {
+    const w = dom.window, before = errors.length;
+    const got = await w.eval(`(async () => {
+      const r = {}, src = f => String(f);
+      r.copilot = src(takeCopilot).includes("fresh && speechOn && speakerHere()");
+      r.timeout = typeof POLL_TIMEOUT_MS === "number" && src(poll).includes("signal: ac.signal");
+      const hr = hwyRun, d0 = data.autotarget;
+      hwyRun = {seq: 5, kind: "next", done: false, msg: "", n: 3, at: Date.now()};
+      data.autotarget = Object.assign({}, d0 || {}, {test: {seq: 6, state: "running"}});
+      hwyRunTrack(); r.superseded = hwyRun.done && /another device/.test(hwyRun.msg);
+      hwyRun = hr; data.autotarget = d0;
+      const was = alertCfg.enabled;
+      store.set("alerts", Object.assign({}, alertCfg, {enabled: !was}));
+      window.dispatchEvent(Object.assign(new Event("storage"), {key: "alerts"}));
+      r.bell = document.getElementById("alertsBtn").classList.contains("on") === !was;
+      store.set("alerts", Object.assign({}, alertCfg, {enabled: was})); window.dispatchEvent(Object.assign(new Event("storage"), {key: "alerts"}));
+      const spk = alertSpeak.scoopstop;                        // off by default
+      store.set("alertSpeak", Object.assign({}, alertSpeak, {scoopstop: true}));
+      window.dispatchEvent(Object.assign(new Event("storage"), {key: "alertSpeak"}));
+      localStorage.removeItem("alertSpeak");                    // another window's import reset it
+      window.dispatchEvent(Object.assign(new Event("storage"), {key: "alertSpeak"}));
+      r.reset = alertSpeak.scoopstop === false;
+      if (spk) { alertSpeak.scoopstop = spk; store.set("alertSpeak", alertSpeak); }
+      const aj = window.apiJson, cf = window.confirm;
+      window.apiJson = async () => ({code: "confirm_needed", error: "Is this the only Outrider uploading? Other instances can't see this one"});
+      window.confirm = () => false;
+      await setUpload("eddn", true);
+      r.declined = document.getElementById("uploadsMsg").textContent === "";
+      // Save with the focus left in the key field (Safari, and jsdom, do not move it on a click): redrawn all the same
+      const keepU = data.uploads;
+      data.uploads = {eddn: {available: true}, edsm: {available: true, accounts: [{commander: "Briadin", name: "Briadin", set: false}]}};
+      uploadsDrawn = ""; renderUploads();
+      const key = document.querySelector(".edsmacc .edsmKey"); key.value = "0123456789abcdef0123456789abcdef01234567"; key.focus();
+      window.apiJson = async () => ({ok: true, accounts: [{commander: "Briadin", name: "Briadin", set: true, hint: "0123…4567 (40 characters)"}]});
+      document.querySelector(".edsmacc .edsmSave").click();
+      await new Promise(res => setTimeout(res, 50));
+      r.saved = document.getElementById("uploadsMsg").textContent === "saved" && /stored key/.test(document.getElementById("uploadsBox").textContent);
+      window.apiJson = aj; window.confirm = cf; data.uploads = keepU; uploadsNote = ""; uploadsDrawn = ""; renderUploads();
+      // the thresholds followed across windows too (the night's sweep left them out)
+      const hb = hlCfg.body;
+      store.set("highlightCfg", {body: 1234567, bio: null}); window.dispatchEvent(Object.assign(new Event("storage"), {key: "highlightCfg"}));
+      r.thresholds = hlCfg.body === 1234567 && document.getElementById("hlBody").value === "1234567";
+      store.set("highlightCfg", {body: hb, bio: null}); window.dispatchEvent(Object.assign(new Event("storage"), {key: "highlightCfg"}));
+      return r; })()`);
+    const want = {copilot: true, timeout: true, superseded: true, bell: true, reset: true, declined: true, saved: true, thresholds: true};
+    const goodF = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && goodF;
+    console.log(goodF ? "OK" : "FAIL", "| the Fable sweep's page fixes |", goodF ? "co-pilot, poll timeout, superseded run, bell, reset, declined confirm" : JSON.stringify(got), errors.slice(before));
+  }
+  // the bug check of 2026-10-09 (the Uploads section): its message survives the redraw, a failed request redraws the
+  // server's state, the box is ticked by what was switched, typed EDSM fields survive a redraw of the counts
+  {
+    const w = dom.window, before = errors.length, realFetch = w.fetch;
+    const answers = [];
+    w.fetch = (u, o) => /^api\/uploads/.test(String(u)) ? (answers.length ? answers.shift() : Promise.reject(new TypeError("Failed to fetch")))
+      : realFetch(u, o);
+    const json = (body, status = 200) => Promise.resolve(new Response(JSON.stringify(body), {status, headers: {"Content-Type": "application/json"}}));
+    answers.push(json({error: "EDMC on this PC is sending to EDDN: switch its EDDN off first", code: "edmc"}, 409));
+    const got = await w.eval(`(async () => {
+      const keep = data.uploads, msg = () => document.getElementById("uploadsMsg").textContent;
+      const base = {eddn: {available: true, on: false, wanted: false}, edsm: {available: true, on: false, wanted: false,
+                    accounts: [{commander: "Briadin", name: "Briadin", set: true, hint: "0123…4567 (40 characters)"}]}};
+      data.uploads = JSON.parse(JSON.stringify(base)); uploadsDrawn = ""; renderUploads();
+      const r = [];
+      await setUpload("eddn", true);                                   // answered: refused
+      r.push(msg());
+      await setUpload("eddn", true);                                   // no answer at all
+      r.push(/^could not reach Outrider/.test(msg()), document.querySelector('[data-upload="eddn"]').checked);
+      r.push(/checked/.test(uploadsHtml({eddn: {available: true, on: false, held: "x", blocked: "the Legacy game", wanted: true}, edsm: {}})));
+      document.querySelector(".edsmacc .edsmName").value = "Typed";    // typing, then a redraw of the counts
+      document.querySelector(".edsmacc .edsmKey").value = "abc";
+      document.activeElement && document.activeElement.blur && document.activeElement.blur();
+      data.uploads = JSON.parse(JSON.stringify(base)); data.uploads.eddn.sent_24h = 5; renderUploads();
+      r.push(document.querySelector(".edsmacc .edsmName").value, document.querySelector(".edsmacc .edsmKey").value);
+      data.uploads = keep; uploadsNote = ""; uploadsDrawn = ""; renderUploads();
+      return r; })()`);
+    w.fetch = realFetch;
+    const want = ["EDMC on this PC is sending to EDDN: switch its EDDN off first", true, false, true, "Typed", "abc"];
+    const goodQ = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && goodQ;
+    console.log(goodQ ? "OK" : "FAIL", "| uploads section messages and state |", goodQ ? "message kept, failure redrawn, ticked by the switch, typing kept" : JSON.stringify(got), errors.slice(before));
+  }
+
   // review 2026-10-08 #15-#18: answers that arrive out of order. An older, slower request lands after a newer one:
   // its answer (or its failure) must not replace the newer one's
   {
@@ -4208,6 +4531,9 @@ const settle = async maxMs => {
       if (s === "api/system/88") return later({error: "late"}, 400);
       if (/^api\/find\?name=slow/.test(s)) return later({error: "slow lookup"}, 200);
       if (/^api\/find\?name=fast/.test(s)) return later({error: "fast lookup"}, 10);
+      if (s.startsWith("api/map?") && w.__ooo === "map")
+        return /radius=100&/.test(s) ? later(null, 200, "old failure") : later({points: [], radius: 200, marker: "new"}, 10);
+      if (s.startsWith("api/map?") && w.__ooo === "reopen") { w.__mapN++; return later({points: [], radius: 50}, 5); }
       if (s.startsWith("api/firsts") && w.__ooo === "firsts") return nFirsts++ === 0 ? later(null, 200, "old failure") : later(firsts, 10);
       return realF(u, o);
     };
@@ -4244,14 +4570,31 @@ const settle = async maxMs => {
       const ok = !!firstsData && !firstsData.error;
       data.scan_version = sv; firstsKey = null; return ok; })()`);
     w.__ooo = null;
+    if (here) {
+      // #19 (Codex F6): an older map request failing after a newer one answered: the newer one's key and data stay
+      w.__ooo = "map";
+      got.map = await w.eval(`(async () => {
+        const r0 = mSettings.radius; M.key = null;
+        mSettings.radius = "100"; const p1 = loadMap(); mSettings.radius = "200"; const p2 = loadMap();
+        await Promise.all([p1, p2]);
+        const r = [!!M.key && M.key.includes("|200|"), /map failed/.test(mEl("mStatus").textContent), M.data && M.data.marker];
+        mSettings.radius = r0; M.key = null; return r; })()`);
+      // #20 (Codex F5): leaving the map and coming back asks again (the system's history changed meanwhile: A -> B -> A)
+      w.__ooo = "reopen"; w.__mapN = 0;
+      got.mapReopen = await w.eval(`(async () => {
+        const v0 = view; view = "map"; render(); await new Promise(r => setTimeout(r, 40));
+        const n1 = __mapN; view = "near"; render(); view = "map"; render(); await new Promise(r => setTimeout(r, 40));
+        const n = [n1, __mapN]; view = v0; render(); M.key = null; return n; })()`);
+    } else { got.map = [true, false, "new"]; got.mapReopen = [1, 2]; }
+    w.__ooo = null;
     await sleep(450);   // the pinned system's late answer lands after the unpin: dropped
     w.fetch = realF;
     w.eval("loadFirsts(); render()");
     await sleep(300);
-    const want = {onbody: "new", pin: [true, true, true], find: "fast lookup", firsts: true};
+    const want = {onbody: "new", pin: [true, true, true], find: "fast lookup", firsts: true, map: [true, false, "new"], mapReopen: [1, 2]};
     const goodO = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodO;
-    console.log(goodO ? "OK" : "FAIL", "| answers out of order |", goodO ? "on-body strip, a pin's loading, Find, a failed older firsts: the newest answer kept" : JSON.stringify(got), errors.slice(before));
+    console.log(goodO ? "OK" : "FAIL", "| answers out of order |", goodO ? "on-body strip, a pin's loading, Find, a failed older firsts, the map: the newest answer kept; the map asks again when reopened" : JSON.stringify(got), errors.slice(before));
   }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",
