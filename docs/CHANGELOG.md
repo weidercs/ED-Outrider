@@ -2,6 +2,15 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-10 · Fable review fixes: the page
+- The checklist asks for every change (region, list, a scan) and draws only the newest answer: a region picked
+  while an answer was on its way was dropped, the picker showing one region and the list another (#6).
+- The map reopened while its request was on its way: the older request's failure no longer throws away the newer
+  answer ("map failed" over a map that had arrived) (#7).
+- The checklist's species rows and picture colour rows are reachable with Tab and open with Enter or Space, and the
+  row keeps focus when the list redraws (#8). The map's region tooltip on a tablet tap is left for later (the region
+  picker has the same figures).
+
 ## 2026-10-10 · Fable review fixes: the checklists
 - Bark Mounds: the game and Canonn name it in the plural, the rules "Bark Mound", so a codex entry for it never
   counted on the Exo-Biology checklist (not found, left out of the region's percentage) and its panel had no picture.

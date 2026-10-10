@@ -106,14 +106,66 @@ const settle = async maxMs => {
       CL.data = saved; renderChecklist(); return JSON.stringify(out); })()`));
     const countsOk = /^Galactic Centre: 2 of 2 entries reported here logged · 100\.00% complete · 1 logged that nobody has reported here yet/.test(counts[0])
       && counts[1] === "2 / 2";
+    // keyboard (#8 of the Fable review, 2026-10-10): a species row is reachable with Tab, Enter opens it, and the row
+    // keeps focus through the redraw
+    radio("check").checked = true; radio("check").dispatchEvent(new dom.window.Event("change", {bubbles: true}));
+    for (let waited = 0; !/possible species found/.test(d.getElementById("clStatus").textContent) && waited < 10000; waited += 100) await sleep(100);
+    dom.window.eval("markKeyable()");
+    const kr = d.querySelectorAll("#clGrid tr[data-cl]")[1], kid = kr && kr.getAttribute("data-cl");
+    let keyOk = false;
+    if (kr) {
+      kr.focus(); kr.dispatchEvent(new dom.window.KeyboardEvent("keydown", {key: "Enter", bubbles: true}));
+      await sleep(200);
+      const a = d.activeElement;
+      keyOk = kr.tabIndex === 0 && kr.getAttribute("role") === "button" && dom.window.eval("CL.open") === kid &&
+              a && a.tagName === "TR" && a.getAttribute("data-cl") === kid;
+    }
+    // a region picked while an answer is on its way is asked for, and only the newest answer is drawn (#6)
+    const race = JSON.parse(await dom.window.eval(`(async () => {
+      const real = apiJson, pend = [], saved = CL.data;
+      apiJson = url => url.includes("api/checklist") ? new Promise(r => pend.push([url, r])) : real(url);
+      try {
+        loadChecklist(true);
+        const opt = [...clRegionEl.options].find(o => /^\\d+$/.test(o.value) && o.value !== clRegionEl.value);
+        clRegionEl.value = opt.value; clRegionEl.dispatchEvent(new Event("change"));
+        const urls = pend.map(p => p[0]);
+        pend[1] && pend[1][1](Object.assign({}, saved, {region_name: "Newest"}));
+        pend[0][1](Object.assign({}, saved, {region_name: "Older"}));
+        await new Promise(r => setTimeout(r, 50));
+        return JSON.stringify([urls.length, urls[1] && urls[1].includes("region=" + opt.value), document.getElementById("clStatus").textContent.split(":")[0]]);
+      } finally { apiJson = real; clRegionEl.value = "here"; store.set("clRegion", "here"); CL.key = null; }
+    })()`));
+    const raceOk = race[0] === 2 && race[1] === true && race[2] === "Newest";
     radio("runs").checked = true; radio("runs").dispatchEvent(new dom.window.Event("change", {bubbles: true}));
     await sleep(300);
     const back = !d.getElementById("bioView").classList.contains("check") && dom.window.getComputedStyle(d.getElementById("bioPane")).display !== "none";
     const good = boxes >= 20 && /possible species found/.test(status) && options === 44 && side && side.textContent === name &&
-                 shown === "check" && geo && countsOk && back && errors.length === before;
+                 shown === "check" && geo && countsOk && keyOk && raceOk && back && errors.length === before;
     allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| exobiology checklist |", `${boxes} genus boxes, ${options} region choices, panel ${side && side.textContent}, geology ${geo} (${geoFirst}), counts ${countsOk || JSON.stringify(counts)}, back to runs ${back}`,
+    console.log(good ? "OK" : "FAIL", "| exobiology checklist |", `${boxes} genus boxes, ${options} region choices, panel ${side && side.textContent}, geology ${geo} (${geoFirst}), counts ${countsOk || JSON.stringify(counts)}, keyboard ${keyOk}, region race ${raceOk || JSON.stringify(race)}, back to runs ${back}`,
                 status.slice(0, 80), errors.slice(before));
+  }
+  // the map reopened while its request was on its way asks again with the same key: the older request's failure
+  // must not throw the newer answer away (#7 of the Fable review, 2026-10-10)
+  {
+    const before = errors.length;
+    const res = JSON.parse(await dom.window.eval(`(async () => {
+      const real = apiJson, pend = [], savedPos = data.position, savedData = M.data;
+      if (!data.position) data.position = {name: "Test", id64: 1, x: 0, y: 0, z: 0};
+      apiJson = url => url.includes("api/map") ? new Promise((ok, no) => pend.push([ok, no])) : real(url);
+      try {
+        M.key = null; loadMap();                 // opened
+        M.key = null; loadMap();                 // closed and opened again: the same key, asked again
+        pend[0][1](new Error("network"));         // the older one fails...
+        await new Promise(r => setTimeout(r, 20));
+        pend[1][0]({points: [], radius: 7});      // ...then the newer one answers
+        await new Promise(r => setTimeout(r, 50));
+        return JSON.stringify([pend.length, document.getElementById("mStatus").textContent, M.data && M.data.radius]);
+      } finally { apiJson = real; data.position = savedPos; M.key = null; M.data = savedData; }
+    })()`));
+    const ok = res[0] === 2 && /^0 systems within 7 ly/.test(res[1]) && res[2] === 7 && errors.length === before;
+    allOk = allOk && ok;
+    console.log(ok ? "OK" : "FAIL", "| map: an older request's failure keeps the newer answer |", JSON.stringify(res), errors.slice(before));
   }
   // the schematic toggle inside Here (Now mode hides the view buttons: ✕ back first)
   if (!d.getElementById("nowView").hidden) { d.getElementById("nowBack").click(); await sleep(500); }

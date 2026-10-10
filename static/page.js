@@ -4271,7 +4271,7 @@ function renderBio() {
 // ---- the exobiology checklist (Bio/Geo -> Exo-Biology; GET api/checklist, outrider/checklist.py): every species the
 // rules know, by galactic region, with your best there and its colours found / possible; a species' panel with its
 // colours, what gives each, and a galaxy map of where it can grow with your samples as dots ----
-const CL = {data: null, key: null, loading: false, open: null, species: null, map: null, colour: null};
+const CL = {data: null, key: null, open: null, species: null, map: null, colour: null};
 // an entry's picture: Canonn's screenshot (linked, never copied), credited to the commander who took it
 function clFigure(img, alt, colour) {
   if (!img || !img.url) return "";
@@ -4304,13 +4304,15 @@ async function loadChecklist(force = false) {
   const want = clRegionEl.value || store.get("clRegion", "here") || "here";
   const kind = clKind();
   const key = `${kind}|${want}|${data && data.scan_version}|${want === "here" ? posId() : ""}`;
-  if (CL.loading || (!force && key === CL.key)) return;
-  CL.key = key; CL.loading = true;
+  if (!force && key === CL.key) return;
+  // every change (region, list, a scan) asks, and only the newest answer is drawn: a region picked while an answer
+  // was on its way was dropped (the Fable review of 2026-10-10, #6); a list switched meanwhile asks anew (setBioMode)
+  CL.key = key;
+  const g = newRequest("checklist");
   if (!CL.data) document.getElementById("clStatus").textContent = "loading…";
   let d;
   try { d = await apiJson(`api/checklist?kind=${kind}&region=${encodeURIComponent(want)}`); } catch (err) { d = {error: err.message}; }
-  CL.loading = false;
-  if (kind !== clKind()) { CL.key = null; loadChecklist(true); return; }   // switched list meanwhile: ask for the other
+  if (!isNewest("checklist", g)) return;
   if (d.error) CL.key = null;   // asked again at the next render
   CL.data = d;
   renderChecklist();
@@ -4384,7 +4386,8 @@ function renderChecklist() {
         (!geo && CL.open === r.id ? clVariantRows(r) : "");
     }).join("") + "</table></div>";
   }).join("");
-  if (grid.innerHTML !== html) grid.innerHTML = html;
+  // the row with keyboard focus keeps it through the redraw (a toggle always redraws: the Fable review of 2026-10-10, #8)
+  if (grid.innerHTML !== html) { const fk = focusKey("clGrid"); grid.innerHTML = html; refocus("clGrid", fk); }
   clDrawSide();
 }
 // a species' colours, dropped down under its row: each with what gives it and your state; one with a picture shows it
@@ -4685,10 +4688,13 @@ async function loadMap() {
   const key = `${posId()}|${mSettings.radius}|${mSettings.path}|${mSettings.boost ? 1 : 0}`;   // the exact id, not a rounded number
   if (key === M.key) return;
   M.key = key; M.loading = true;
+  // a request of its own: the map reopened while one was on its way asks again with the same key, and the older one's
+  // failure must not speak for the newer (the Fable review of 2026-10-10, #7)
+  const g = newRequest("map");
   mEl("mStatus").textContent = "loading…";
   try {
     const d = await apiJson(`api/map?radius=${mSettings.radius}&path=${mSettings.path}&boost=${mSettings.boost ? 1 : 0}`);
-    if (M.key !== key) return;  // settings changed while we waited
+    if (M.key !== key || !isNewest("map", g)) return;  // settings changed, or a newer request went out, while we waited
     if (d.error) throw new Error(d.error);
     M.data = d;
     // a failed Spansh lookup (sphere or boost stars) is not cached by the server: ask again in a while
@@ -4700,7 +4706,7 @@ async function loadMap() {
       (d.boost && !d.boost.error ? ` · <span class="boost">${d.boost.points.length} boost star${d.boost.points.length === 1 ? "" : "s"}` +
         (nearestN ? `, nearest neutron <span class="copy" data-name="${esc(nearestN.name)}" title="click to copy">${esc(nearestN.name)}</span> ${nearestN.distance} ly` : "") + `</span>` : "");
   } catch (err) {
-    if (M.key !== key) return;   // an older request's failure: the newer one's state stays (Codex F6)
+    if (M.key !== key || !isNewest("map", g)) return;   // an older request's failure: the newer one's state stays (Codex F6)
     mEl("mStatus").textContent = "map failed: " + err.message; M.key = null;
   }
   M.loading = false; drawMap();
@@ -8319,7 +8325,7 @@ setInterval(() => pageStampTick(), 5000);
 // Clickable things that are not real buttons (sort headers, ☆, ⌖/🔍 links, Bodies pin cells, copyable
 // names, bodies in search results) get focus and act on Enter/Space like a click. Not shortcuts: Tab to it.
 const KEYABLE = 'th[data-sort], [data-bm], .goto, td.bodies[data-pop], td.name[data-name], .copy[data-name], [data-sbodypop], #hereRows tr[data-body], .sbody[data-body], ' +
-  '[data-reset], #nsClear, span.name[data-name]';
+  '[data-reset], #nsClear, span.name[data-name], #clGrid tr[data-cl], #clGrid tr.clvar.climgrow';
 let keyablePending = false;
 function markKeyable() {
   keyablePending = false;
