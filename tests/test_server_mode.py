@@ -12,7 +12,7 @@ import tomllib
 import unittest
 import unittest.mock
 
-from support import ed_outrider, types_ns
+from support import can_symlink, ed_outrider, types_ns
 import outrider  # noqa: E402
 
 ARGS = argparse.Namespace(journals=None, legacy=None, host=None, port=None, radius=None, db=None)
@@ -270,6 +270,7 @@ class FableScriptFixes(unittest.TestCase):
         return subprocess.run([shutil.which("bash"), os.path.join(d, "launch_outrider.sh")], cwd=d, capture_output=True, text=True,
                               env=env, timeout=60)
 
+    @unittest.skipUnless(can_symlink(), "this account may not make symbolic links")
     def test_no_sha256sum_needed(self):
         """macOS has no sha256sum: the launcher hashes requirements.txt with Python, to the same hex as before."""
         import hashlib
