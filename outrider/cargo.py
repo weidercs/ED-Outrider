@@ -101,6 +101,8 @@ def new_ship():
 def _ship_add(st, i, n, price=None, stolen=0, count=True):
     if not i or n <= 0:
         return
+    if not count and i not in st["lines"]:
+        return   # already in a snapshot that does not list it: nothing to price (it made a 0 t line)
     line = st["lines"].setdefault(i, {"count": 0, "priced": 0, "avg": None, "lots": 0, "stolen": 0, "mission": 0})
     if count:
         line["count"] += n
@@ -351,6 +353,13 @@ def _carrier_market(st, items, ts):
         want = _n((buys.get(i) or {}).get("Demand"))
         if order["amount"] > want:   # other players sold you the difference (your own sales took theirs off already)
             _move(st, i, order["amount"] - want, "others", ts)
+            # ...and on top of the last CarrierStats' total only when that is older than the market read before this
+            # one: it cannot hold this fill then. Opening the market writes a CarrierStats just before Market.json
+            # (JOURNAL_REFERENCE), and that one does hold it: added again it made a false gap (the Fable sweep,
+            # 2026-10-09, correcting the night's first fix, which assumed the stats were always older)
+            stats_ts = (st.get("stats") or {}).get("ts")
+            if stats_ts and st.get("market_ts") and stats_ts < st["market_ts"]:
+                st["after_stats"] += order["amount"] - want
         if want:
             order["amount"] = want
         else:
@@ -562,12 +571,44 @@ def trade_rows(result):
     return stops if len(stops) > 1 and all(s["system"] and s["station"] for s in stops) else []
 
 
+def trade_counts(stop, done, key):
+    """{name: tonnes} your journal shows traded at a stop (key "sold" or "bought"). A record from before amounts were
+    counted is a list of names, each traded in full then."""
+    got = (done or {}).get(key) or {}
+    if isinstance(got, list):
+        plan = {c["name"]: c.get("amount") or 0 for c in stop.get("sell" if key == "sold" else "buy") or []}
+        return {n: plan.get(n, 0) for n in got}
+    return dict(got)
+
+
 def trade_left(stop, done):
     """What is still to do at a stop: ("sell", c) for what the hop before brought, then ("buy", c) for the hop after,
-    leaving out what your journal shows done there (done: {"sold": [names], "bought": [names]})."""
+    each with the tonnes still to trade as its amount (and the plan's as `planned`). A commodity is done once its
+    planned tonnes are traded (Codex F4: one tonne ticked off a hundred); a stop left with part traded is done
+    (done["left"]: you moved on, the station had less than Spansh said). done: {"sold": {name: tonnes}, "bought": ...}."""
     done = done or {}
-    return [("sell", c) for c in stop.get("sell") or [] if c["name"] not in (done.get("sold") or [])] + \
-           [("buy", c) for c in stop.get("buy") or [] if c["name"] not in (done.get("bought") or [])]
+    if done.get("left"):
+        return []
+    out = []
+    for kind, key in (("sell", "sold"), ("buy", "bought")):
+        got = trade_counts(stop, done, key)
+        for c in stop.get(kind) or []:
+            plan, n = c.get("amount") or 0, got.get(c["name"], 0)
+            if not n or n < plan:
+                out.append((kind, dict(c, amount=plan - n if n else plan, planned=plan)))
+    return out
+
+
+def trade_short(stop, done):
+    """What a stop finished with less than planned: "sold 60 of 100 tonnes of Gold", each one."""
+    out = []
+    for kind, key, verb in (("sell", "sold", "sold"), ("buy", "bought", "bought")):
+        got = trade_counts(stop, done, key)
+        for c in stop.get(kind) or []:
+            plan, n = c.get("amount") or 0, got.get(c["name"], 0)
+            if n < plan:
+                out.append(f"{verb} {f'{n:,}' if n else 'none'} of {plan:,} tonnes of {c['name']}")
+    return out
 
 
 def _goods(cs):
@@ -589,11 +630,15 @@ def trade_text(rows, i, left):
     return f"Dock at {r['station']}: {', then '.join(parts)}."
 
 
-def trade_done_text(rows, i):
-    """Said once the trades at stop i are done: the hop's profit and the next stop, or the route's end."""
+def trade_done_text(rows, i, done=None):
+    """Said once the trades at stop i are done: the hop's profit and the next stop, or the route's end. A stop left
+    with part traded says what fell short instead of the plan's profit."""
     r = rows[i]
+    short = trade_short(r, done) if done else []
+    said = "; ".join(short)
     if i == len(rows) - 1:
-        return f"Trade route complete: about {r['cumulative']:,} credits in all."
+        return f"Trade route complete, {said}." if short else f"Trade route complete: about {r['cumulative']:,} credits in all."
     nxt = rows[i + 1]
-    head = f"Hop {i} done, about {r['profit']:,} credits. " if i else ""
+    head = (f"Hop {i} done, {said}. " if i else f"Moving on, {said}. ") if short else \
+        f"Hop {i} done, about {r['profit']:,} credits. " if i else ""
     return head + f"Next stop: {nxt['station']} in {nxt['system']}" + (f", {nxt['distance']:.0f} light years." if nxt.get("distance") else ".")

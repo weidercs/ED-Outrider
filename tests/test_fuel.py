@@ -104,6 +104,10 @@ class BatchDFuel(unittest.TestCase):
         # the same ship logged again with float jitter keeps its samples; a new drive starts them afresh
         self.j.handle(dict(lo, timestamp="2026-01-01T01:00:00Z", UnladenMass=323.149994, MaxJumpRange=83.487465))
         self.assertEqual(len(self.j.fuel_hist), 4)
+        self.j.handle(dict(lo, timestamp="2026-01-01T01:30:00Z", Modules=[mods[0], dict(mods[1], On=False)]))
+        self.assertEqual(self.j.ship["booster_ly"], 0)                  # switched off: no boost (Codex F3)
+        self.j.handle(dict(lo, timestamp="2026-01-01T01:40:00Z", Modules=[mods[0], dict(mods[1], On=True)]))
+        self.assertEqual(self.j.ship["booster_ly"], 10.5)
         mods2 = [dict(mods[0], Item="int_hyperdrive_size5_class5"), mods[1]]
         self.j.handle(dict(lo, timestamp="2026-01-01T02:00:00Z", Modules=mods2, MaxJumpRange=70.1))
         self.assertEqual(self.j.fuel_hist, [])

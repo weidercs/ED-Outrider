@@ -209,8 +209,9 @@ def _get(url):
         return resp.read().decode("utf-8")
 
 
-def _literals(source):
-    """Every top-level `name = <literal>` in a Python source file, without importing it."""
+def _literals(source, failed=None):
+    """Every top-level `name = <literal>` in a Python source file, without importing it. The names assigned something
+    that is not a pure literal go into `failed` (a list), when given."""
     out = {}
     for node in ast.parse(source).body:
         if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
@@ -222,7 +223,8 @@ def _literals(source):
         try:
             out[name] = ast.literal_eval(value)
         except ValueError:
-            pass
+            if failed is not None:
+                failed.append(name)
     return out
 
 
@@ -342,17 +344,36 @@ def update_rules(path=None, log=print, versions=None):
         versions["bioscan"] = ""   # a ruleset added upstream since would be missing
     catalog = {}
     for name in files:
-        catalog.update(_literals(_get(f"{BIOSCAN}bio_data/rulesets/{name}.py")).get("catalog") or {})
+        failed = []
+        catalog.update(_literals(_get(f"{BIOSCAN}bio_data/rulesets/{name}.py"), failed).get("catalog") or {})
+        if "catalog" in failed:   # upstream changed its form: the update fails, the old file stays (and is retried)
+            raise ValueError(f"bio rules: {name}.py's catalog is no longer a plain literal")
         log(f"bio rules: {name}")
     catalog.update(_literals(_get(BIOSCAN + "bio_data/species.py")).get("_mound_amphora") or {})
-    regions = _literals(_get(BIOSCAN + "bio_data/regions.py"))
-    stars = _literals(_get(BIOSCAN + "nebula_data/reference_stars.py"))
-    sectors = _literals(_get(BIOSCAN + "nebula_data/sectors.py")).get("data") or []
+    # every table checked like the catalog: one upstream no longer writes as a plain literal fails the update (the old
+    # file stays and is retried), never an empty table written over a working one (the Fable sweep, 2026-10-09)
+    def tables(url, *names):
+        failed = []
+        got = _literals(_get(url), failed)
+        bad = [n for n in names if n in failed]
+        if bad:
+            raise ValueError(f"bio rules: {url.rsplit('/', 1)[-1]}'s {', '.join(bad)} no longer a plain literal")
+        return got
+    regions = tables(BIOSCAN + "bio_data/regions.py", "region_map", "guardian_nebulae", "tuber_zones")
+    stars = tables(BIOSCAN + "nebula_data/reference_stars.py", "coordinates", "named_coordinates", "planetary_coordinates")
+    sectors = tables(BIOSCAN + "nebula_data/sectors.py", "data").get("data") or []
     log("bio rules: nebulae and regions")
-    grid = _literals(_get(REGIONMAP))
+    grid = tables(REGIONMAP, "regions", "regionmap")
     kept = None   # (genus id, species id) -> colours from the current file, when ExploData did not arrive
     try:
-        genus_data = _literals(_get(EXPLODATA)).get("data") or {}
+        # its table as code (data = build_colours()) fails like a failed fetch: the colours already there are kept and
+        # its version is not recorded, so the next start tries again (Codex, 2026-10-09)
+        got = tables(EXPLODATA, "data")
+        # and with no table called data at all (renamed or moved upstream): not "no colours" either (the Fable review
+        # of 2026-10-10, #9)
+        if "data" not in got:
+            raise ValueError("bio rules: genus.py has no data table any more")
+        genus_data = got["data"] or {}
         log("bio rules: colour variants")
     except Exception as e:  # noqa: BLE001 -- without them species are simply not ruled out by colour
         genus_data = {}
@@ -915,8 +936,13 @@ def region_allows(name, region):
     sp = next((s for s in R["species"] if s["name"].lower() == name.lower()), None)
     if sp is None:
         return None
-    s = {"region": region}
-    return any("regions" not in r or _check("regions", r["regions"], None, s) is not False for r in sp["rulesets"])
+    return any(ruleset_region_ok(r, region) for r in sp["rulesets"])
+
+
+def ruleset_region_ok(ruleset, region):
+    """Whether one ruleset lets its species grow in region number `region` (no region filter: anywhere). The rules
+    must be loaded (load_rules)."""
+    return "regions" not in ruleset or _check("regions", ruleset["regions"], None, {"region": region}) is not False
 
 
 # --------------------------------------------------------------------------
@@ -949,6 +975,9 @@ def species_value(name):
         vname = one(vname)
         if vname == name or vname.endswith(" " + name):
             best = max(best, value)
+    if not best:   # not in the price list (Radicoida Unicus): the rules' figure, as the predictions use
+        best = max((sp.get("value") or 0 for sp in (load_rules() or {}).get("species") or []
+                    if one(sp.get("name") or "") == name), default=0)
     return best or None
 
 

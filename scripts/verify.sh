@@ -125,6 +125,9 @@ for k in ("SPANSH_SEARCH", "SPANSH_BODY_SEARCH", "SPANSH_STATION_SEARCH", "EDSM_
 ed_outrider.SPANSH_DUMP = OFF + "/{id64}"
 ed_outrider.SPANSH_RESULTS = OFF + "/{job}"
 ed_outrider.RELEASES_LATEST = OFF   # the update check never asks GitHub from here
+import outrider.eddn
+outrider.eddn.UPLOAD_URL = OFF        # nor EDDN (uploads are off there anyway)
+outrider.edsm.UPLOAD_URL = outrider.edsm.DISCARD_URL = OFF   # nor EDSM's journal upload
 ed_outrider.DSSA_URL = OFF          # nor EDAstro for the DSSA list
 ed_outrider.Clipboard.TOOLS = ()   # the desktop clipboard is never touched by the smoke test
 if outrider.bio:

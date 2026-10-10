@@ -32,7 +32,11 @@ FIX = {
                                 {"id": "5", "name": "Route Only", "distance": 1.0, "visited": False, "source": "route"}]},
     f"/api/system/{SYS}": {"name": "Start", "region": "Inner Orion Spur", "value_now": 5, "value_max": 50,
                            "leaving": {"honked": True, "scanned": 3, "body_count": 4, "unscanned": 1, "bio_pending": [{"body": "A 1"}],
-                                       "unmapped_valuable": [{"body": "A 2", "subtype": "High metal content world", "increment": 500000}]},
+                                       # the real shapes (leaving_summary): short labels, and the detailed list
+                                       "unmapped_valuable": ["A 2 (HMC T)"],
+                                       "unmapped": [{"body": "A 2", "subtype": "High metal content world", "increment": 500000,
+                                                     "special": True},
+                                                    {"body": "A 3", "subtype": "Icy body", "increment": 900, "special": False}]},
                            "bodies": [{"name": "A", "type": "Star", "subtype": "K (Yellow-Orange) Star", "value_max": 10},
                                       {"name": "A 1", "type": "Planet", "subtype": "Rocky body", "value_max": 30, "bio": 2, "landable": True,
                                        "gravity": 0.123, "organics": [{"species": "Bacterium Volu", "samples": 2, "done": False, "state": "aboard"}]},

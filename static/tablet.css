@@ -94,7 +94,7 @@ a.tb-btn { display: inline-flex; align-items: center; text-decoration: none; }  
 .tb-rb.high { background: var(--tb-rb-high-bg, var(--tb-rb-on-bg)); border-color: var(--tb-rb-high-bg, var(--tb-rb-on-bg)); }
 .tb-rb.pending { background: var(--tb-rb-pend-bg); border: 2px dashed var(--tb-rb-pend-fg); color: var(--tb-rb-pend-fg); cursor: progress; }
 .tb-rb.notconf { background: var(--tb-rb-pend-bg); border: 2px dashed var(--tb-danger); color: var(--tb-danger); }
-.tb-rb.unknown { background: var(--bg); border-color: var(--tb-rb-unk-border); color: var(--tb-rb-unk-fg); }
+.tb-rb.unknown, .tb-rb.na { background: var(--bg); border-color: var(--tb-rb-unk-border); color: var(--tb-rb-unk-fg); }
 .tb-rb.bind, .tb-rb.nolink { background: var(--bg); border: 2px dashed var(--tb-rb-dim); color: var(--tb-rb-dim-fg); cursor: not-allowed; }
 .tb-rb.amber { outline: 2px solid var(--tb-rb-amber); outline-offset: 3px; margin: 3px 0; }
 .tb-rb:disabled { cursor: not-allowed; }
@@ -275,3 +275,15 @@ body.tablet.tb-norail #tabRail { display: none !important; }
 .tb-tog { min-height: var(--tb-touch); min-width: 128px; display: inline-flex; align-items: center; gap: 8px; padding: 0 14px;
   border: 1px solid var(--line); border-radius: 999px; font-size: 17px; cursor: pointer; }
 .tb-tog input { width: 26px; height: 26px; }
+/* the exobiology checklist: the view fills the page, and the species boxes and a species' details (with its map) each
+   scroll on their own (the author, 2026-10-09); stacked on a narrow tablet, each takes about half */
+body.tablet main > #bioView.check:not([hidden]) { display: flex; flex-direction: column; height: var(--tb-view-h); overflow: hidden; }
+body.tablet #bioView.check #clPane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; margin: 0; overflow: hidden; }
+body.tablet #bioView.check #clPane > .hint { flex: 0 0 auto; }
+body.tablet #bioView.check .clwrap { flex: 1 1 auto; min-height: 0; align-items: stretch; }
+body.tablet #bioView.check .clgrid, body.tablet #bioView.check .clside { min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch; position: static; }
+@media (max-width: 900px) {
+  body.tablet #bioView.check .clgrid { flex: 1 1 55%; }
+  body.tablet #bioView.check .clside { flex: 1 1 45%; }
+}

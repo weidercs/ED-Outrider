@@ -42,11 +42,21 @@ goto fail
 
 :makevenv
 echo Setting up ED Outrider: creating %VENV% (the first time takes a minute or two: about 100 MB with Piper)
-%PY% -m venv "%VENV%" && goto install
+%PY% -m venv "%VENV%" || goto venvfail
+"%VPY%" -m pip --version >nul 2>&1 && goto install
+:venvfail
+rem nothing half-made left behind: the next run starts clean
+if exist "%VENV%" rmdir /s /q "%VENV%"
 echo Could not create %VENV% with %PY%.
 goto fail
 
 :install
+rem a half-made environment (python but no pip) is made again rather than failing on every run
+"%VPY%" -m pip --version >nul 2>&1 && goto pipok
+echo %VENV% is incomplete (no pip): making it again
+rmdir /s /q "%VENV%"
+goto create
+:pipok
 echo Installing ED Outrider's requirements into %VENV%
 "%VPY%" -m pip install --quiet --upgrade pip
 "%VPY%" -m pip install --quiet -r requirements.txt && goto stamp
