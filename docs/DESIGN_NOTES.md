@@ -176,6 +176,17 @@ upstream project's choices, not rules of the game.
   TAP_S. Auto honk's miss is not held against the fire group when your own jump started during the hold or the
   wait for the scan.
   The toggle and delay are the server's (meta `autotarget`, beating the config once used), not per browser.
+  The game's own "in danger" (Status.json bit 22) is on for every FSD use, from the charge until 15-26 s after a
+  hyperspace arrival or a SupercruiseEntry (logged in game 2026-10-09). A run that meets it in that window waits for
+  it to clear (`State.arrival_danger_until`, up to `AUTOTARGET_DANGER_WAIT` = 60 s after the arrival or entry; the
+  restored position's arrival after a restart), says so once ("Not targeting due to danger ... for up to N
+  seconds") and presses nothing meanwhile; the co-pilot button's second press cancels it like the countdown.
+  Interdicted, the FSD charging, or still in danger past the minute: refused as a real danger. Once the map's close
+  key went down, an FSD charge or a jump is a success when the target is set (you set off before step 7 looked).
+- **Here's icon legend lists only what is shown.** The footer under Here's list (`HERE_LEGEND` in page.js) names the
+  icons the list or schematic shows now, not every icon there is (the author's call, 2026-10-10), and is absent when
+  there are none; sticky to the bottom of the scrolling pane so it stays in view. The codex marks write the new
+  colour after them ("✪ Cobalt"): their tooltip never shows under the body summary that pops up over a row.
 - **Too much fuel for the next jump.** Spansh's exact plotter simulates the fuel, so a long neutron jump may be in
   range only with about the fuel it expects aboard (the Caspian's 487.9 ly ×6 jump: at most about 36 t; a full 160 t
   tank gives 75.3 × 6 = 452 ly). Checked on a live arrival in a route system (or a plot made where you are) and again

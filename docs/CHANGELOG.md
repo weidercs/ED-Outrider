@@ -2,6 +2,11 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-10 · Docs: the latest changes in the notes, screenshots with the Here legend
+- DESIGN_NOTES: the danger wait and the early FSD charge; the Here legend (only the icons shown) and the colour after
+  the codex marks. AGENT_GUIDE: target.py's danger wait, and a recipe for a new Here icon (its HERE_LEGEND entry).
+  Settings guide: the marks name the colour. overview, here, schematic and themes retaken (the legend).
+
 ## 2026-10-10 · Fable review fixes: the page
 - The checklist asks for every change (region, list, a scan) and draws only the newest answer: a region picked
   while an answer was on its way was dropped, the picker showing one region and the list another (#6).
