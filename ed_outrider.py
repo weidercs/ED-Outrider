@@ -508,7 +508,11 @@ SPEECH_NAMES = "Boss, Hefay, Sir"   # what the voice calls you ({name}), one at 
 # Auto honk (see outrider/honk.py): on arriving by hyperspace, hold a key bound to Primary Fire so the Discovery
 # Scanner fires. The D-Scanner MUST be on PRIMARY FIRE in the active fire group when you jump.
 AUTOHONK = {"enabled": False, "key": outrider.honk.DEFAULT_KEY, "delay": 2.0, "hold": 6.0, "skip_honked": True,
-            "announce": True}   # announce: say the body count (or "all bodies were found") when it completes
+            "announce": True,   # announce: say the body count (or "all bodies were found") when it completes
+            # target_next: after a honk the journal confirms, target the next system of the route you
+            # follow, target_delay seconds later (0 to HONK_TARGET_DELAY_MAX)
+            "target_next": False, "target_delay": 3.0}
+HONK_TARGET_DELAY_MAX = 60.0
 AUTOHONK_MAX_AGE = 30   # s: an arrival older than this is a journal being caught up on, not a live jump
 AUTOHONK_WAIT_MAX = 90  # s: how long the honk waits for you to close the galaxy map / FSS / a panel
 AUTOHONK_TEST_COUNTDOWN = 5   # s: the Test button's time to click into the game before the press
@@ -1072,7 +1076,10 @@ def settings_from(cfg, args, env_journals=None, detected=((), ())):
                      "delay": max(0.0, num("autohonk", ah, "delay", float, AUTOHONK["delay"])),
                      "hold": min(20.0, max(0.5, num("autohonk", ah, "hold", float, AUTOHONK["hold"]))),
                      "skip_honked": flag("autohonk", ah, "skip_honked", AUTOHONK["skip_honked"]),
-                     "announce": flag("autohonk", ah, "announce", AUTOHONK["announce"])},
+                     "announce": flag("autohonk", ah, "announce", AUTOHONK["announce"]),
+                     "target_next": flag("autohonk", ah, "target_next", AUTOHONK["target_next"]),
+                     "target_delay": min(HONK_TARGET_DELAY_MAX, max(0.0, num("autohonk", ah, "target_delay", float,
+                                                                           AUTOHONK["target_delay"])))},
         "copilot": {"enabled": flag("copilot", cp, "enabled", COPILOT["enabled"]),
                     "device": num("copilot", cp, "device", _config_str, COPILOT["device"]),
                     # a name (BTN_TRIGGER_HAPPY5) or the number --listen prints, bare or quoted
@@ -1212,6 +1219,8 @@ delay = {n(st["autohonk"]["delay"])}   # seconds after arriving before the press
 hold = {n(st["autohonk"]["hold"])}    # seconds to hold the trigger (the scanner fires once charged)
 skip_honked = {"true" if st["autohonk"]["skip_honked"] else "false"}   # leave systems you have already honked alone
 announce = {"true" if st["autohonk"]["announce"] else "false"}   # say "System scan completed, 12 bodies discovered" (or all found) afterwards
+target_next = {"true" if st["autohonk"]["target_next"] else "false"}   # after a successful auto honk, target the next system of the route you follow in the galaxy map (the page's Settings can switch it too)
+target_delay = {n(st["autohonk"]["target_delay"])}   # seconds between that honk and the targeting (0 to 60)
 
 [copilot]   # one HOTAS or keyboard button (Linux, read-only; see outrider/button.py): tap (flying the ship) target the next route system, double tap a status report, hold hush until the next jump
 # Unbind the button in Elite's controls. On an X-56 avoid the latching toggles and the mode wheel (they read as held).
@@ -7200,6 +7209,8 @@ class State:
         self.startup_target_key = t and (t["id64"], t["ts"])
         self.scoop = ScoopWatch()  # fuel scooping: "tank full" / "scooping stopped at 64 percent"
         self._honk_running = None  # the arrival an auto honk is working on (the briefing waits for it)
+        self.honk_target_note = None      # why the last honk's "then target" could not start (None: it did, or no route)
+        self.honk_target_pending = False  # a target run a honk started is counting down or running
         self._honk_cancel = None   # threading.Event: the running auto honk's own token (set by switching it off)
         self.honk_run_task = None  # the running auto honk (cancelled at shutdown with the State's other tasks)
         self._honk_done = None     # (arrival, time.time()) the last auto honk task ended
@@ -12625,7 +12636,10 @@ class State:
                 "wanted": bool(self.autohonk["enabled"]), "status": h.status if h else "not started",
                 "key": self.autohonk["key"], "hold": self.autohonk["hold"], "announce": bool(self.autohonk.get("announce", True)),
                 "pressing": (h.combo()[1] if h and h.available else None), "test": self.honk_test,
-                "groups": self.honk_groups()}
+                "groups": self.honk_groups(),
+                # target the next route system after a successful honk, the seconds between, why not last time
+                "target_next": bool(self.autohonk.get("target_next")),
+                "target_delay": self.autohonk.get("target_delay", AUTOHONK["target_delay"]), "target_note": self.honk_target_note}
 
     def autohonk_check(self):
         """GET /api/autohonk/check (S69): whether auto honk can work on this PC and how to fix what stops it, without
@@ -13969,6 +13983,33 @@ class State:
                 self.honker.status = "off"   # the test keeps the device until it ends; the status is off now
         self.bump()
 
+    def set_honk_target(self, enabled=None, delay=None):
+        """Auto honk's "then target the next route system" switch and its delay: the page's toggle and
+        seconds, remembered over restarts like auto honk's own toggle (meta autohonk_target)."""
+        if enabled is not None:
+            self.autohonk["target_next"] = bool(enabled)
+        if delay is not None:
+            self.autohonk["target_delay"] = min(HONK_TARGET_DELAY_MAX, max(0.0, float(delay)))
+        meta_set(self.db, "autohonk_target", {"enabled": self.autohonk["target_next"], "delay": self.autohonk["target_delay"]})
+        self.db.commit()   # now: a failing watcher tick would roll it back
+        if enabled is False and self.honk_target_pending:
+            self.cancel_autotarget(route="highway")   # the run a honk just started stops now
+        self.bump()
+
+    def honk_then_target(self, a):
+        """After an auto honk the journal confirmed: with [autohonk] target_next on and a route to follow,
+        target its next system target_delay seconds from now, by the same run as the page's Target next (so it needs
+        the keys auto-target needs, waits out the arrival's danger flag, and a cleared route stops it). Nothing is
+        said when there is no route; another refusal is kept for the page (autohonk_info's target_note)."""
+        self.honk_target_pending = False
+        if not self.autohonk.get("target_next") or self.journals.jump_arrival is not a:
+            return None
+        out, status = self.start_autotarget_run("next", countdown=self.autohonk.get("target_delay", AUTOHONK["target_delay"]))
+        no_route = status != 200 and not self.highway_summary()
+        self.honk_target_note = None if status == 200 or no_route else out.get("error")
+        self.honk_target_pending = status == 200
+        return out if status == 200 else None
+
     def start_honk_test(self):
         """The dialog's Test button: hold Primary Fire once after a countdown (time to click into the game),
         whether or not auto honk is on. (response, HTTP status). One test at a time: a second one's cleanup
@@ -14140,6 +14181,8 @@ class State:
                              why="" if ok else f"no discovery scan followed{with_group}: {focus_seen}" if focus_seen
                              else f"no discovery scan followed{with_group}: is the D-Scanner on primary fire"
                              + (" there?" if group else "?"))
+        if ok:
+            self.honk_then_target(a)   # the next route system, target_delay s from now, when switched on
         self.bump()
 
     def apply_own_changes(self):
@@ -19768,6 +19811,16 @@ def make_app(state, hosts=None):
             return web.json_response({"error": "expected JSON"}, status=400)
         if not isinstance(body, dict):
             return web.json_response({"error": "expected a JSON object"}, status=400)
+        # {target_next?, target_delay?} alone set "then target the next route system" and its seconds
+        tn, td = body.get("target_next"), body.get("target_delay")
+        if tn is not None or td is not None:
+            if (tn is not None and not isinstance(tn, bool)) or (td is not None and (
+                    isinstance(td, bool) or not isinstance(td, (int, float)) or not 0 <= td <= HONK_TARGET_DELAY_MAX)):
+                return web.json_response({"error": f"target_next must be true or false, target_delay 0 to {HONK_TARGET_DELAY_MAX:g} seconds"},
+                                         status=400)
+            state.set_honk_target(tn, td)
+            if "enabled" not in body:
+                return web.json_response(state.autohonk_info())
         if not isinstance(body.get("enabled"), bool):   # "false" (a string) would switch it on (CX-F10)
             return web.json_response({"error": "enabled must be true or false"}, status=400)
         state.set_autohonk(body["enabled"])
@@ -21018,6 +21071,12 @@ async def run(args, st):
     saved = meta_get(db, "autohonk_enabled")   # the page's toggle beats the config file once used
     if saved is not None:
         state.autohonk["enabled"] = bool(saved)
+    saved = meta_get(db, "autohonk_target")    # "then target the next route system" and its seconds, the same
+    if isinstance(saved, dict):
+        if isinstance(saved.get("enabled"), bool):
+            state.autohonk["target_next"] = saved["enabled"]
+        if isinstance(saved.get("delay"), (int, float)) and not isinstance(saved.get("delay"), bool):
+            state.autohonk["target_delay"] = min(HONK_TARGET_DELAY_MAX, max(0.0, float(saved["delay"])))
     if not state.game_pc:
         state.autohonk["enabled"] = False
     state.honker = outrider.honk.Honker(state.autohonk["key"], state.autohonk["hold"], LIVE_DIRS)

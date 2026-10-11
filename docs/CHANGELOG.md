@@ -2,6 +2,17 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-23 · Auto honk can then target the next route system
+- **Then target the next route system, N s after the honk** in ⚙ Settings → Auto honk (off by default; `[autohonk]
+  target_next`, `target_delay`, 0 to 60 s, 3 by default). After an auto honk the journal confirms with its discovery
+  scan, the next system of the route you follow in Plot Route is targeted that many seconds later, by the same run as
+  Target next: it needs the keys auto-target needs, waits out a dangerous arrival, and clearing the route stops it.
+- Only after a honk auto honk pressed and saw answered: not after your own honk, a skipped system or a missed one.
+  With no route followed nothing happens and nothing is said; another refusal (a missing key binding, say) is shown
+  beside the switch as "last time: ...". Switching it off stops a run that is counting down.
+- `State.honk_then_target`, `State.set_honk_target` (meta `autohonk_target`); POST `/api/autohonk` takes
+  `target_next` and `target_delay`, alone or with `enabled`; `autohonk_info` carries them and `target_note`.
+
 ## 2026-10-22 · Auto-target: control names in any case, its settings without a restart, keys in the log
 - From a Windows player's report on Reddit (the map found the system, then nothing was plotted):
   - **Control names in any case:** `UI_SELECT` or `ui_select` is `UI_Select`, in the steps and in `autotarget_keys`

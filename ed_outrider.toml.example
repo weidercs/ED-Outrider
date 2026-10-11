@@ -140,6 +140,9 @@
 # announce = true        # when it completes, say "System Scan Completed, 12 Bodies discovered" (or "...all
 #                        # bodies were found" when the honk found everything); ⚙ Settings → Auto honk can switch
 #                        # it per browser
+# target_next = false    # after a successful auto honk, target the next system of the route you follow
+#                        # (Plot Route) in the galaxy map, as Target next does; ⚙ Settings → Auto honk switches it too
+# target_delay = 3.0     # seconds between that honk and the targeting (0 to 60)
 
 [spansh]
 # concurrency = 4       # body-detail fetches in flight after an arrival (be kind to Spansh; at least 1)

@@ -494,7 +494,7 @@ Ids: a system id64 can exceed 2^53, so the page compares the string `id` fields,
   device that plays the galaxy map) with `_fake_evdev()` (key codes, no `UInput`), never `Honker.open()` on real evdev.
   Never POST to `/api/highway/autotarget/test` or `/api/highway/target` on a server that sees a live game. Never activate a real window either (auto-target brings the game forward with wmctrl): `FakeDesktop` (`tests/support.py`) stands in for wmctrl and xprop. Use the existing fakes: `FakeGame`, `_fake_evdev()`,
   `button_fake_evdev`, `FakeClock`/`use_fake_time` in `tests/support.py`, and the local `FakeHonker`/`FakeUI` classes
-  in `test_devices.py` and `test_config.py` as patterns. Never POST to `/api/autohonk` or `/api/autohonk/test` on a server that sees a live game.
+  in `test_devices.py` and `test_config.py` as patterns. Never POST to `/api/autohonk` or `/api/autohonk/test` on a server that sees a live game. A confirmed auto honk calls `State.honk_then_target` (`[autohonk] target_next`, `target_delay`; `start_autotarget_run("next", countdown)`), set by `State.set_honk_target` (meta `autohonk_target`); `tests/test_honk_target.py` fakes both the honker and the target run.
 - **No stray side effects.** Don't download Piper voices into the real `data/piper-voices/`, don't let a test
   rewrite `resources/bio_rules.json`, and don't write the real `data/speech_banned.json` (use a speech file in a
   temp folder: its bans go beside it).
