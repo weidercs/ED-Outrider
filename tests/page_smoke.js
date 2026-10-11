@@ -3720,6 +3720,9 @@ const settle = async maxMs => {
     got.links = [...body.querySelectorAll(".shlinks a")].map(a => `${a.textContent}>${a.getAttribute("href")}>${a.target}>${a.rel}`);
     got.rows = [...body.querySelectorAll(".shtable tbody tr")].map(t => [...t.cells].map(text).join(" | "));
     got.marks = [body.querySelector("tr.shoff") !== null, body.querySelectorAll(".shstat .ok").length, body.querySelectorAll(".shstat .noscoop").length];
+    // every cell of a module's row is a table cell (a flex cell lost its row line: the lines no longer met across columns)
+    got.cells = [...body.querySelectorAll(".shtable tbody td")].every(td => w.getComputedStyle(td).display !== "flex" && !td.classList.contains("shstats"))
+      && body.querySelectorAll(".shtable tbody td > .shstats").length === 1;
     got.pure = [w.eval(`shipStatHtml({label: "Integrity", value: 96, original: 0, pct: null, good: true})`), w.eval(`shNum(1692.6)`), w.eval(`shNum(0.4567891)`), w.eval(`shNum(null)`)];
     w.eval(`apiJson = async (u, o) => String(u) !== "api/ship" ? __shApi(u, o) : {ship: null}; SH.key = null`);
     await w.eval(`loadShip(true)`);
@@ -3730,7 +3733,7 @@ const settle = async maxMs => {
       links: ["open this ship in EDSY ↗>https://edsy.org/#/I=abc>_blank>noopener", "in Coriolis ↗>https://coriolis.io/import?data=abc>_blank>noopener"],
       rows: ["Medium 1 | 2 Pulse Laser Gimballed | stock |  | off P3 60%",
              "Frame Shift Drive | 5A Frame Shift Drive | Long Range G5 87%Mass Manager | Mass 26 +30%FSD Optimal Mass 1,693 +61.2%Damage Type Thermal | P1"],
-      marks: [true, 1, 1], pure: [`<span class="shstat">Integrity <b>96</b></span>`, "1,693", "0.457", "?"]};
+      marks: [true, 1, 1], cells: true, pure: [`<span class="shstat">Integrity <b>96</b></span>`, "1,693", "0.457", "?"]};
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
     if (!/^No ship yet/.test(got.none)) bad.push("none");
     const goodSH = !bad.length && errors.length === before;

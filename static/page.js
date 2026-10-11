@@ -3983,7 +3983,8 @@ function shipModuleHtml(m) {
                  m.health != null && m.health < 0.995 ? `<span class="${m.health < 0.8 ? "warnc" : "unk"}" title="module health">${Math.round(m.health * 100)}%</span>` : ""].filter(Boolean).join(" ");
   return `<tr${m.on === false ? ` class="shoff"` : ""}><td class="unk">${esc(m.slot_label || "")}</td>` +
     `<td><span class="shcls">${esc(cls)}</span> <b>${esc(m.name)}</b>${m.mount ? ` <span class="unk">${esc(m.mount)}</span>` : ""}</td>` +
-    `<td>${eng}</td><td class="shstats">${e && e.mods.length ? e.mods.map(shipStatHtml).join("") : ""}</td><td class="num">${state}</td></tr>`;
+    // the stats wrap inside a block of their own: a flex cell would stop being a table cell, and its row line with it
+    `<td>${eng}</td><td>${e && e.mods.length ? `<div class="shstats">${e.mods.map(shipStatHtml).join("")}</div>` : ""}</td><td class="num">${state}</td></tr>`;
 }
 // The ship's own figures as a row of small tiles. Pure.
 function shipFiguresHtml(s) {

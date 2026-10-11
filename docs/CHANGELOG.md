@@ -2,6 +2,10 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · Ship: the rows' lines meet across the columns
+- A module's Engineered stats cell was laid out as a flex box, so it stopped being a table cell and its line under
+  the row sat higher than the Engineering column's. The stats now wrap inside a block of their own within the cell.
+
 ## 2026-10-12 · This fork: the game's own route moves into Plot Route, as a list and on the map
 - While the game has a route plotted, Plot Route offers **Game route · N jumps** beside **Plotted here**. Chosen (per
   device), the tab shows the game's route in place of the routes plotted here: the heading, the list (each system,
