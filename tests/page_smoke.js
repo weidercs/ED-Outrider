@@ -51,8 +51,6 @@ const settle = async maxMs => {
   const ok = errors.length === 0 && /known within/.test(d.querySelector("#sub").textContent);
   console.log(ok ? "OK" : "FAIL", "| header |", d.querySelector("#sub").textContent.slice(0, 80), "| errors:", errors);
   // every view: [button, element that must end up with content]
-  // (Game Route has its own block further down and the tablet's page loop: one more stop here moves the page's 25 s
-  // poll into batch C's fast clock, which aborts it and leaves the page "not connected" for the checks after)
   const views = [["overview", "#ovPanes"], ["near", "#rows"], ["here", "#hereRows"], ["bio", "#bioRows"], ["bm", "#bmTable"],
                  ["search", "#searchForm"], ["hist", "#histRows"], ["log", "#logRows"], ["mat", "#matGrid"], ["firsts", "#firstsRows"], ["galnet", "#gnList"], ["hwy", "#hwyHead"], ["now", "#nowView"]];
   let allOk = ok;
@@ -2925,7 +2923,7 @@ const settle = async maxMs => {
     })()`));
     const want = {pure: [true, true, false, false, false, true], sizes: [true, false, false, true], now: false, back: true, body: "hidden", tabbable: true,
       panes: ["overview:auto:sticky", "near:auto:sticky", "here:auto:sticky", "bio:auto:sticky", "bm:auto:sticky", "search:auto:sticky",
-              "hist:auto:sticky", "log:auto:sticky", "mat:auto:-", "firsts:auto:sticky", "hwy:auto:sticky", "galnet:auto:-", "navroute:auto:sticky"],
+              "hist:auto:sticky", "log:auto:sticky", "mat:auto:-", "firsts:auto:sticky", "hwy:auto:sticky", "galnet:auto:-", "ship:auto:-"],
       ov: {map: true, inline: "", nearPane: "auto", here: "auto"}, ovPage: true, jump: 100 + (930 - 700), keep: 1100, more: [0, 1], pgdn: [360, true], winScrolls: 0,
       fold: {tiles: true, line: true, stored: "true", exported: true, btn: "▾", name: true, urgent: ["⛽ N%", "unsold N"]},
       unfold: {tiles: true, line: true, stored: "false", mode: "\"six\""}};
@@ -3697,74 +3695,108 @@ const settle = async maxMs => {
     console.log(goodTN ? "OK" : "FAIL", "| highway target next |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "line and box buttons post with a countdown (no tab, no copy), refusal in its words, Retry on the failed row only, the Highway spoken in the report and welcome", errors.slice(before));
   }
-  // Game Route (this fork): the game's own route as a list with the projected fuel, the run-dry warning and the
-  // places to refuel near there; a route the fuel lasts says so and asks for no refuel places
+  // Ship (this fork): the ship you fly from its Loadout: figures, modules by group with class and rating, engineering
+  // and the engineered stats with their change from stock, and the EDSY / Coriolis links
   {
-    const w = dom.window, d = w.document, before = errors.length, got = {}, asked = [], copied = [];
-    w.__nrAsked = asked; w.__nrCopied = copied;
-    w.eval(`window.__nrApi = apiJson; window.__nrCopy = copyText; window.__nrDry = true;
+    const w = dom.window, d = w.document, before = errors.length, got = {};
+    w.eval(`window.__shApi = apiJson;
+      apiJson = async (u, o) => String(u) !== "api/ship" ? __shApi(u, o) : {ship: {ts: "2026-10-11T12:00:00Z", ship_id: 7, type: "krait_light",
+        name: "Sample <Ship>", ident: "SP-01", hull_value: 40000000, modules_value: 60000000, rebuy: 5000000, hull_health: 0.98, unladen: 410.5, cargo: 8,
+        max_range: 58.4, fuel_main: 32, fuel_reserve: 0.63, hot: true, engineered: 1, count: 2,
+        links: {edsy: "https://edsy.org/#/I=abc", coriolis: "https://coriolis.io/import?data=abc"},
+        groups: [{name: "Hardpoints", modules: [{slot: "MediumHardpoint1", slot_label: "Medium 1", item: "hpt_pulselaser_gimbal_medium", name: "Pulse Laser",
+            size: 2, rating: null, mount: "Gimballed", on: false, priority: 3, health: 0.6, value: null, ammo: null, engineering: null}]},
+          {name: "Core internals", modules: [{slot: "FrameShiftDrive", slot_label: "Frame Shift Drive", item: "int_hyperdrive_size5_class5", name: "Frame Shift Drive",
+            size: 5, rating: "A", mount: null, on: true, priority: 1, health: 1, value: 5103953, ammo: null,
+            engineering: {blueprint: "Long Range", level: 5, quality: 0.87, experimental: "Mass Manager", engineer: "Felicity Farseer", mods: [
+              {label: "Mass", value: 26, original: 20, pct: 30, good: false}, {label: "FSD Optimal Mass", value: 1692.6, original: 1050, pct: 61.2, good: true},
+              {label: "Damage Type", text: "Thermal", value: null, original: null, pct: null, good: null}]}}]}]}};
+      SH.data = null; SH.key = null;`);
+    d.querySelector('[data-view="ship"]').click();
+    await sleep(150);
+    const body = d.getElementById("shipBody"), text = el => el ? el.textContent.replace(/\s+/g, " ").trim() : "";
+    got.shown = [d.getElementById("shipView").hidden, text(body.querySelector(".hwyttl")), body.querySelectorAll("h3.subhead").length, body.querySelectorAll(".shtable tbody tr").length];
+    got.figs = [...body.querySelectorAll(".shfig")].map(text);
+    got.links = [...body.querySelectorAll(".shlinks a")].map(a => `${a.textContent}>${a.getAttribute("href")}>${a.target}>${a.rel}`);
+    got.rows = [...body.querySelectorAll(".shtable tbody tr")].map(t => [...t.cells].map(text).join(" | "));
+    got.marks = [body.querySelector("tr.shoff") !== null, body.querySelectorAll(".shstat .ok").length, body.querySelectorAll(".shstat .noscoop").length];
+    got.pure = [w.eval(`shipStatHtml({label: "Integrity", value: 96, original: 0, pct: null, good: true})`), w.eval(`shNum(1692.6)`), w.eval(`shNum(0.4567891)`), w.eval(`shNum(null)`)];
+    w.eval(`apiJson = async (u, o) => String(u) !== "api/ship" ? __shApi(u, o) : {ship: null}; SH.key = null`);
+    await w.eval(`loadShip(true)`);
+    got.none = text(body);
+    w.eval(`apiJson = __shApi; SH.key = null; SH.data = null;`);
+    const want = {shown: [false, "Sample <Ship> · Krait Phantom · SP-01 as of 2026-10-11", 2, 2],
+      figs: ["Jump range58.40 ly", "Unladen mass410.5 t", "Cargo8 t", "Fuel32 t + 0.63", "Hull98%", "Hull value40.0M cr", "Modules60.0M cr", "Rebuy5.0M cr", "Engineered1 of 2", "Statushot"],
+      links: ["open this ship in EDSY ↗>https://edsy.org/#/I=abc>_blank>noopener", "in Coriolis ↗>https://coriolis.io/import?data=abc>_blank>noopener"],
+      rows: ["Medium 1 | 2 Pulse Laser Gimballed | stock |  | off P3 60%",
+             "Frame Shift Drive | 5A Frame Shift Drive | Long Range G5 87%Mass Manager | Mass 26 +30%FSD Optimal Mass 1,693 +61.2%Damage Type Thermal | P1"],
+      marks: [true, 1, 1], pure: [`<span class="shstat">Integrity <b>96</b></span>`, "1,693", "0.457", "?"]};
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    if (!/^No ship yet/.test(got.none)) bad.push("none");
+    const goodSH = !bad.length && errors.length === before;
+    allOk = allOk && goodSH;
+    console.log(goodSH ? "OK" : "FAIL", "| ship |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
+      : "the ship's figures, its modules by group with engineering and the engineered stats, the EDSY and Coriolis links", errors.slice(before));
+  }
+  // The game's own route in Plot Route (this fork): offered beside the routes plotted here while the game has one;
+  // chosen, it takes the heading, the list (each system, whether it is known, its star, the distances) and the map;
+  // names copy; nothing of it can be cleared here; "Plotted here" brings the tab back as it was
+  {
+    const w = dom.window, d = w.document, before = errors.length, got = {}, copied = [];
+    w.__nrCopied = copied;
+    w.eval(`window.__nrApi = apiJson; window.__nrCopy = copyText; window.__nrNone = false;
       apiJson = async (u, o) => {
-        const s = String(u);
-        if (!s.startsWith("api/navroute")) return __nrApi(u, o);
-        __nrAsked.push(s);
-        if (s === "api/navroute/refuel") return {needed: true, at: {name: "Dry Stop", i: 1}, pad: "L", hidden: {}, errors: [], rows: [
-          {kind: "station", name: "Fuel <Dock>", callsign: "", station_type: "Coriolis Starport", system: "Pump System", ly: 6.2, ls: 420, far: false,
-           pads: "L M S", age_s: 7200, warn: [], near: {i: 1, name: "Dry Stop", ly: 6.2}},
-          {kind: "carrier", name: "Deep Relay", callsign: "G0B-W2J", system: "Dry Stop", ly: 0, ls: 9000, far: true, pads: "L M", age_s: 90000,
-           warn: ["friends only"], near: {i: 1, name: "Dry Stop", ly: 0}}]};
-        const hop = (i, name, cls, sc, ly, tot, used, left, known) => ({i, id: String(100 + i), name, star_class: cls, scoopable: sc, ly, total_ly: tot,
-          fuel_used: used, fuel_left: left, visited: false, known});
-        return {position: {id: "1", name: "Start"}, route: {ts: "2026-10-11T10:00:00Z", count: 3, ly: 120.5, to: "Far End", hops: [
-            hop(0, "First Hop", "K", true, 40.2, 40.2, 5.1, 6.9, "explored"), hop(1, "Dry Stop", "N", false, 40.1, 80.3, 5.0, 1.9, "no bodies"),
-            hop(2, "Far End", "M", true, 40.2, 120.5, __nrDry ? null : 1.0, __nrDry ? null : 0.9, null)],
-          fuel: __nrDry ? {start: 12, empty_at: 2, why: "fuel", last: 1, need: 5.05, left: 1.9, end: null, capacity: 32, scoopable_before: 1,
-                           last_name: "Dry Stop", empty_name: "Far End"}
-                        : {start: 12, empty_at: null, why: null, last: 2, need: null, left: null, end: 0.9, capacity: 32, scoopable_before: 2,
-                           last_name: "Far End", empty_name: null}}};
+        if (String(u) !== "api/navroute") return __nrApi(u, o);
+        if (__nrNone) return {position: {id: "1", name: "Start"}, route: null};
+        const hop = (i, name, cls, sc, ly, tot, known, x) => ({i, id: String(100 + i), name, star_class: cls, scoopable: sc, ly, total_ly: tot, visited: false, known, x, z: 5});
+        return {position: {id: "1", name: "Start"}, route: {ts: "2026-10-11T10:00:00Z", count: 4, ly: 120.5, from: "Start", start: [0, 5], to: "Far End", hops: [
+            hop(0, "First <Hop>", "K", true, 40.2, 40.2, "explored", 40), hop(1, "Dry Stop", "N", false, 40.1, 80.3, "no bodies", 80),
+            hop(2, "Far End", null, null, 40.2, 120.5, null, 120)]}};
       };
       copyText = (text, what) => { __nrCopied.push(text); };
-      GR.data = null; GR.key = null; GR.refuel = null; GR.refuelKey = null;`);
-    d.querySelector('[data-view="navroute"]').click();
-    await sleep(200);
-    const view = d.getElementById("navrouteView"), text = sel => (d.querySelector(sel) || {textContent: ""}).textContent.replace(/\s+/g, " ").trim();
-    got.shown = [view.hidden, d.querySelectorAll("#nrRows tr").length, d.querySelectorAll("#nrRows tr.nrdry").length, d.querySelectorAll("#nrRows tr.nrempty").length];
-    got.head = text("#nrHead");
-    got.rows = [...d.querySelectorAll("#nrRows tr")].map(t => [...t.cells].map(c => c.textContent.replace(/\s+/g, " ").trim()).join(" | "));
-    got.refuel = text("#nrRefuel h3");
-    got.refuelCells = [...d.querySelectorAll("#nrRefuel tbody tr")].map(t => [...t.cells].map(c => c.textContent.replace(/\s+/g, " ").trim()).join(" | "));
-    got.refuelRows = d.querySelectorAll("#nrRefuel tbody tr").length;
-    got.safe = !/<Dock>/.test(d.getElementById("nrRefuel").innerHTML.replace(/&lt;Dock&gt;/g, ""));
-    d.querySelector("#nrRows tr .copy").click();
-    d.querySelector("#nrRefuel tbody .copy").click();
-    w.eval(`__nrDry = false`);
-    await w.eval(`loadNavRoute(true)`);
+      localStorage.removeItem("hwyGame"); GR.data = null; GR.key = null;`);
+    d.querySelector('[data-view="hwy"]').click();
+    await sleep(300);
+    const text = sel => (d.querySelector(sel) || {textContent: ""}).textContent.replace(/\s+/g, " ").trim();
+    const labels = () => [...d.querySelectorAll("#hwyGame label")].map(l => `${l.textContent.trim()}${l.querySelector("input").checked ? "*" : ""}`);
+    const headBefore = text("#hwyHead");
+    got.offered = [labels(), d.getElementById("nrPane").hidden, w.eval("gameShown()"), w.eval("(hwyMapRoute() || {}).plotter") === "game"];
+    d.querySelector('#hwyGame input[value="1"]').click();
     await sleep(100);
-    got.lasts = [text("#nrHead"), d.querySelectorAll("#nrRows tr.nrdry").length, d.getElementById("nrRefuel").innerHTML];
-    got.pure = [w.eval(`navFuelHtml(null, 3)`).includes("cannot be projected"),
-                /cannot make the first jump/.test(w.eval(`navFuelHtml({start: 1, empty_at: 0, why: "fuel", last: -1, need: 5, left: 1, scoopable_before: 0, empty_name: "X"}, 3)`)),
-                /longer than your ship jumps/.test(w.eval(`navFuelHtml({start: 9, empty_at: 1, why: "range", last: 0, need: null, left: 9, scoopable_before: 0, last_name: "A", empty_name: "B"}, 3)`)),
-                w.eval(`navRefuelHtml(null, true)`).includes("looking for places"), w.eval(`navRefuelHtml({needed: false, rows: []}, false)`),
-                /No place to refuel is reported/.test(w.eval(`navRefuelHtml({needed: true, at: {name: "A", i: 0}, pad: null, rows: [], errors: ["Spansh could not be reached (x)"]}, false)`)),
-                /could not be looked up/.test(w.eval(`navRefuelHtml({error: "no"}, false)`))];
-    w.eval(`apiJson = __nrApi; copyText = __nrCopy;`);
-    const bad = [];
-    if (JSON.stringify(got.shown) !== JSON.stringify([false, 3, 1, 1])) bad.push("shown");
-    if (!(/^To Far End · 3 jumps · 121 ly · as plotted in the game/.test(got.head) && /Without refuelling, the tank runs dry after jump 2 of 3, at Dry Stop/.test(got.head)
-          && /the jump to Far End needs 5\.0, you would have 1\.9/.test(got.head) && /1 scoopable star before then/.test(got.head))) bad.push("head");
-    if (JSON.stringify(got.rows) !== JSON.stringify(["1 | First Hop | ● | K ⛽ | 40.2 | 40 | 5.1 | 6.9", "2 | Dry Stop | ○ | N ✕ | 40.1 | 80 | 5.0 | 1.9",
-      "3 | Far End ⚠ not enough fuel for this jump |  | M ⛽ | 40.2 | 121 | — | —"])) bad.push("rows");
-    if (!(/^Refuel near Dry Stop · stations with a large pad, and fleet carriers, that sell fuel/.test(got.refuel) && got.refuelRows === 2
-          && JSON.stringify(got.refuelCells) === JSON.stringify(["Fuel <Dock> Coriolis Starport | Pump System | 6.2 ly from Dry Stop (jump 2) | 420 ls | L M S | 2 h old",
-            "Deep Relay (carrier G0B-W2J)⚠ friends only | Dry Stop | in Dry Stop (jump 2) | 9,000 ls | L M | 25 h old"]) && got.safe)) bad.push("refuel");
-    if (bad.includes("refuel")) got.refuel = [got.refuel, got.refuelCells];
-    if (JSON.stringify(copied) !== JSON.stringify(["First Hop", "Pump System"])) bad.push("copied");
-    if (!(/lasts the whole route: about 0\.9 left at the end/.test(got.lasts[0]) && got.lasts[1] === 0 && got.lasts[2] === "")) bad.push("lasts");
-    if (JSON.stringify(got.pure) !== JSON.stringify([true, true, true, true, "", true, true])) bad.push("pure");
-    if (asked.filter(s => s === "api/navroute/refuel").length !== 1) bad.push("asked");
+    got.shown = [labels(), d.getElementById("nrPane").hidden, d.getElementById("hwyPane").hidden, d.getElementById("richPane").hidden,
+                 d.getElementById("hwyPanes").classList.contains("noroute"), d.getElementById("hwyClear").disabled, w.localStorage.getItem("hwyGame")];
+    got.head = text("#hwyHead");
+    got.heads = [...d.querySelectorAll("#nrTable thead th")].map(t => t.textContent.trim());
+    got.rows = [...d.querySelectorAll("#nrRows tr")].map(t => [...t.cells].map(c => c.textContent.replace(/\s+/g, " ").trim()).join(" | "));
+    got.map = w.eval(`(() => { const m = hwyMapRoute(); return [m.plotter, m.from, m.to, m.at, JSON.stringify(m.points), m.ahead.map(a => a.i + ":" + a.system).join(","), hwyDoneTo(m, m.summary, m.points.length)]; })()`);
+    d.querySelector("#nrRows td.name").click();
+    d.querySelector("#hwyHead .copy").click();
+    await sleep(50);
+    w.eval(`__nrNone = true`);
+    await w.eval(`loadNavRoute(true)`);
+    got.cleared = [d.getElementById("hwyGame").innerHTML, d.getElementById("nrPane").hidden, w.eval("gameShown()"), text("#hwyHead") === headBefore];
+    w.eval(`__nrNone = false`);
+    await w.eval(`loadNavRoute(true)`);
+    got.again = [w.eval("gameShown()"), d.getElementById("nrPane").hidden];      // the device's choice is kept for the next route
+    d.querySelector('#hwyGame input[value="0"]').click();
+    await sleep(100);
+    got.back = [labels(), d.getElementById("nrPane").hidden, text("#hwyHead") === headBefore, w.localStorage.getItem("hwyGame")];
+    w.eval(`apiJson = __nrApi; copyText = __nrCopy; localStorage.removeItem("hwyGame"); GR.data = null; GR.key = null; render()`);
+    await sleep(200);
+    const want = {offered: [["Plotted here*", "Game route · 4 jumps"], true, false, false],
+      shown: [["Plotted here", "Game route · 4 jumps*"], false, true, true, false, true, "true"],
+      head: "To Far End from Start4 jumps · 121 ly · as plotted in the game's galaxy map",
+      heads: ["#", "System", "Known", "Star", "Jump ly", "Total ly"],
+      rows: ["1 | First <Hop> | ● | K ⛽ | 40.2 | 40", "2 | Dry Stop | ○ | N ✕ | 40.1 | 80", "3 | Far End |  |  | 40.2 | 121", "+1 more after these"],
+      map: ["game", "Start", "Far End", 0, "[[0,5],[40,5],[80,5],[120,5]]", "1:First <Hop>,2:Dry Stop,3:Far End", 0],
+      cleared: ["", true, false, true], again: [true, false], back: [["Plotted here*", "Game route · 4 jumps"], true, true, "false"]};
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    if (JSON.stringify(copied) !== JSON.stringify(["First <Hop>", "Far End"])) bad.push("copied");
+    if (d.querySelector('[data-view="navroute"]') || d.getElementById("navrouteView")) bad.push("tab");
     const goodNR = !bad.length && errors.length === before;
     allOk = allOk && goodNR;
-    console.log(goodNR ? "OK" : "FAIL", "| game route |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))} asked ${JSON.stringify(asked)} copied ${JSON.stringify(copied)}`
-      : "the game's route listed with its fuel, the run-dry warning and where to refuel near there; a route the fuel lasts asks for none", errors.slice(before));
+    console.log(goodNR ? "OK" : "FAIL", "| game route |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))} copied ${JSON.stringify(copied)}`
+      : "the game's route offered in Plot Route, shown with its list and on the map when chosen, names copy, back to the routes plotted here", errors.slice(before));
   }
   // GalNet News (this fork): the latest article shown, an earlier one picked from the list, a confirmed system marked
   // in the text (click: its name copied) and Plot route filling Plot Route's To
@@ -4046,9 +4078,9 @@ const settle = async maxMs => {
     got.status = [td.getElementById("tabSysV").textContent.length > 1, /t|—/.test(td.getElementById("tabFuelV").textContent)];
     // every page from the nav: its group opens, its view fills, nothing throws
     const fills = {now: "#nowView", near: "#rows", here: "#hereRows", bio: "#bioRows", bm: "#bmTable", search: "#searchForm", map: "#mapView",
-                   hwy: "#hwyHead", hist: "#histRows", log: "#logRows", mat: "#matGrid", firsts: "#firstsRows", galnet: "#gnList", navroute: "#nrHead"};
+                   hwy: "#hwyHead", hist: "#histRows", log: "#logRows", mat: "#matGrid", firsts: "#firstsRows", galnet: "#gnList", ship: "#shipBody"};
     got.pages = [];
-    for (const [g, vs] of Object.entries({explore: ["now", "near", "here", "bio"], navigate: ["bm", "search", "map", "hwy", "navroute"], records: ["hist", "log", "mat", "firsts", "galnet"]})) {
+    for (const [g, vs] of Object.entries({explore: ["now", "near", "here", "bio"], navigate: ["bm", "search", "map", "hwy"], records: ["hist", "log", "mat", "ship", "firsts", "galnet"]})) {
       td.querySelector(`#tabNav [data-group="${g}"]`).click();
       for (const v of vs) {
         const before = terr.length;

@@ -64,7 +64,7 @@ search any text, click a row for the raw event.
 </tr>
 <tr>
 <td width="50%" valign="top">
-<b>Game Route</b> (this fork) — the route you plotted in the game's galaxy map, jump by jump: each system (click to copy), whether it is already discovered, its star (⛽ scoopable), the jump, and the fuel the jump burns and leaves. The fuel is projected from what is aboard now, <i>without refuelling</i>: the line above the list says whether the tank lasts the route or after which jump it runs dry, and then lists the stations your ship can land at and the fleet carriers that sell fuel near there, with the route system each is closest to. Fuel needs your ship's Loadout and the running game; a route plotted with a boost the model does not know says so.
+<b>Ship</b> (this fork) — the ship you fly, from the Loadout the game writes at login and after outfitting: its figures (jump range, mass, cargo, fuel, hull, values, rebuy) and every module by group with class and rating, mount, power priority, health and engineering. An engineered module lists each changed stat with its value and the change from stock (green: better). The journal does not state a stock module's figures or the ship's totals (shields, speed, power): <b>open this ship in EDSY</b> or <b>Coriolis</b> shows those for the same Loadout.
 
 <b>GalNet</b> (this fork) — the game's latest news article, the 30 latest listed beside it to pick from. Star systems it mentions are marked: click one to copy its name, or use Copy / Plot route under the title. A name is marked only when you know the system or Spansh does, and only where the article says "the … system" or gives a catalogue or sector name.
 

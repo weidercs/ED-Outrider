@@ -37,7 +37,7 @@ const TABLET = typeof document !== "undefined" && !!document.body && document.bo
 // group: the nav group shown while you browse another one; beforeMap: the page to go back to when the surface map hides
 // (null: you were on Now already, or chose a page since); mapWas: whether the map showed at the last draw
 const TB = {group: null, beforeMap: null, mapWas: false, bannerTimer: null, bannerKey: null,
-            groups: {explore: ["now", "near", "here", "bio"], navigate: ["bm", "search", "map", "hwy", "navroute"], records: ["hist", "log", "mat", "firsts", "galnet"]},
+            groups: {explore: ["now", "near", "here", "bio"], navigate: ["bm", "search", "map", "hwy"], records: ["hist", "log", "mat", "ship", "firsts", "galnet"]},
             themes: ["lcars", "elite", "babylon5", "narn", "minbari", "centauri", "sith", "alliance", "dark"], railPending: {}, railEdit: null};
 // Where you are, as the exact id64 string (position.id). The JSON number position.id64 loses the last digits above
 // 2^53, so string comparisons with the server's exact ids (arrival, Here, moments) must use this.
@@ -1349,9 +1349,9 @@ function star(s) {
 }
 
 // the tablet keeps its own page (a desktop browser opening /tablet to try it must not lose its view) and has no Overview
-const TABLET_VIEWS = ["now", "near", "here", "bio", "bm", "search", "map", "hwy", "hist", "log", "mat", "firsts", "galnet", "navroute"];
+const TABLET_VIEWS = ["now", "near", "here", "bio", "bm", "search", "map", "hwy", "hist", "log", "mat", "firsts", "galnet", "ship"];
 let view = TABLET ? store.get("tabletView", "now") : store.get("view", "near");
-if (view === "rich") view = "hwy";   // Road to Riches had a tab of its own for a day (PR #1): it is a route type of Plot Route now
+if (view === "rich" || view === "navroute") view = "hwy";   // Road to Riches had a tab of its own for a day (PR #1): it is a route type of Plot Route now
 if (TABLET && !TABLET_VIEWS.includes(view)) view = "now";
 const saveView = () => store.set(TABLET ? "tabletView" : "view", view);
 let viewBeforeNow = view === "now" ? "overview" : view;
@@ -1418,7 +1418,7 @@ function keepPanes(fn) {
 function paneTop(...ids) { for (const id of ids) { const p = document.getElementById(id); if (p) p.scrollTop = 0; delete paneScroll[id]; } }
 // each view's main pane: Page Up/Down and Home/End scroll it while nothing that scrolls or types has the focus
 const VIEW_PANE = {overview: "nearPane", near: "nearPane", here: "hereMain", bio: "bioPane", bm: "bmPane", search: "searchPane",
-                   hist: "histPane", log: "logPane", mat: "matPane", firsts: "firstsPane", hwy: "hwyPane", galnet: "gnPane", navroute: "nrPane"};
+                   hist: "histPane", log: "logPane", mat: "matPane", firsts: "firstsPane", hwy: "hwyPane", galnet: "gnPane", ship: "shipPane"};
 // ---- Compact tables: a table wider than its box (its pane, the Overview's split, a phone) switches to its short forms
 // (compact: level 1), then to tighter ones that also drop or merge low-value columns (compact2: level 2), and back once
 // there is room again. Decided by fit, not by screen size, so a wide pane looks exactly as it always did.
@@ -2546,8 +2546,8 @@ function render() {
   document.querySelector("main").classList.toggle("nearPinned", nearPinned);
   document.getElementById("firstsView").hidden = view !== "firsts";
   document.getElementById("galnetView").hidden = view !== "galnet";
-  document.getElementById("navrouteView").hidden = view !== "navroute";
-  if (view === "navroute") loadNavRoute();
+  document.getElementById("shipView").hidden = view !== "ship";
+  if (view === "ship") loadShip();
   if (view === "galnet") loadGalnet();
   if (view === "firsts") { loadFirsts(); loadLeft(); }
   document.documentElement.style.setProperty("--head-h", document.querySelector("header").offsetHeight + "px");
@@ -2583,7 +2583,7 @@ function render() {
   nowWake();
   // opening the map asks again (Codex F5: the system's own history and scans changed while it was closed, A -> B -> A)
   if (view === "map") { if (!M.open) M.key = null; M.open = true; loadMap(); drawMap(); } else M.open = false;
-  if (view === "hwy") { loadHwy(); loadRich(); }
+  if (view === "hwy") { loadHwy(); loadRich(); loadNavRoute(); }
   refreshPop();
   const jr = effRange();
   let rows = data.systems.filter(s => sysId(s) !== sysId(p))
@@ -3945,17 +3945,88 @@ document.getElementById("cargoList").addEventListener("keydown", e => {
   if (e.key === "Enter" && e.target.closest(".cfind input")) { e.preventDefault(); document.getElementById("cargoFind").click(); }
 });
 
-// ---- Game Route (this fork): the route plotted in the game's galaxy map as a list (GET /api/navroute), with the fuel
-// each jump burns and leaves, projected from the fuel aboard without refuelling; where the tank would run dry, the
-// places to refuel near there (GET /api/navroute/refuel: stations for your pad and carriers, from Spansh) ----
-// GR: data (the server's answer), key (what it was asked for: the route, where you are, the fuel, the Known column),
-// refuel (the refuel answer), refuelKey (the route and run-dry point it was asked for)
-const GR = {data: null, key: null, loading: false, error: null, refuel: null, refuelKey: null, refuelBusy: false};
-const nrKey = () => { const r = data && data.route, f = data && data.fuel;
-  return JSON.stringify([r ? [r.ts, r.hops.length, r.known_v] : null, posId(), f && f.main != null ? Math.round(f.main * 10) : null]); };
+// ---- Ship (this fork): the ship you fly, from the journal's own Loadout (GET /api/ship): its figures and every
+// module by group with class, rating, mount and engineering, the engineered stats as the game states them (value and
+// the change from stock); EDSY and Coriolis open the same Loadout for the figures the journal does not state ----
+const SH = {data: null, key: null, loading: false, error: null};
+const shKey = () => { const s = data && data.ship; return JSON.stringify(s ? [s.ship_id, s.ts] : null); };
+async function loadShip(force = false) {
+  const key = shKey();
+  if (!force && (key === SH.key || SH.loading)) return renderShip();
+  SH.key = key; SH.loading = true;
+  const g = newRequest("ship");
+  let d;
+  try { d = await apiJson("api/ship"); } catch (err) { d = {error: err.message}; }
+  if (!isNewest("ship", g)) return;
+  SH.loading = false;
+  if (d.error) { SH.error = d.error; SH.key = null; } else { SH.error = null; SH.data = d; }
+  renderShip();
+  if (!d.error && view === "ship" && shKey() !== SH.key) loadShip();   // another Loadout came meanwhile: again
+}
+// a figure as the game would write it: whole numbers grouped, others to at most three places. Pure.
+const shNum = v => v == null ? "?" : Math.abs(v) >= 1000 ? Math.round(v).toLocaleString() : String(Math.round(v * 1000) / 1000);
+// One engineered stat: its name, value, and the change from stock, green when for the better. Pure.
+function shipStatHtml(m) {
+  if (m.text != null) return `<span class="shstat">${esc(m.label)} <b>${esc(m.text)}</b></span>`;
+  const pct = m.pct == null ? "" : ` <span class="${m.good === true ? "ok" : m.good === false ? "noscoop" : "unk"}" title="stock: ${esc(shNum(m.original))}">` +
+    `${m.pct > 0 ? "+" : m.pct < 0 ? "−" : ""}${Math.abs(m.pct).toLocaleString()}%</span>`;
+  return `<span class="shstat">${esc(m.label)} <b>${esc(shNum(m.value))}</b>${pct}</span>`;
+}
+// One module's row. Pure.
+function shipModuleHtml(m) {
+  const cls = (m.size != null && m.size > 0 ? m.size : "") + (m.rating || "");
+  const e = m.engineering;
+  const eng = !e ? `<span class="unk">stock</span>` : `<b>${esc(e.blueprint || "engineered")}</b>${e.level ? ` G${e.level}` : ""}` +
+    (e.quality != null && e.quality < 1 ? ` <span class="unk" title="how far this grade's roll got">${Math.round(e.quality * 100)}%</span>` : "") +
+    (e.experimental ? `<div class="unk">${esc(e.experimental)}</div>` : "");
+  const state = [m.on === false ? `<span class="warnc">off</span>` : "", m.priority ? `<span class="unk" title="power priority">P${m.priority}</span>` : "",
+                 m.health != null && m.health < 0.995 ? `<span class="${m.health < 0.8 ? "warnc" : "unk"}" title="module health">${Math.round(m.health * 100)}%</span>` : ""].filter(Boolean).join(" ");
+  return `<tr${m.on === false ? ` class="shoff"` : ""}><td class="unk">${esc(m.slot_label || "")}</td>` +
+    `<td><span class="shcls">${esc(cls)}</span> <b>${esc(m.name)}</b>${m.mount ? ` <span class="unk">${esc(m.mount)}</span>` : ""}</td>` +
+    `<td>${eng}</td><td class="shstats">${e && e.mods.length ? e.mods.map(shipStatHtml).join("") : ""}</td><td class="num">${state}</td></tr>`;
+}
+// The ship's own figures as a row of small tiles. Pure.
+function shipFiguresHtml(s) {
+  const tile = (k, v, title = "") => v == null || v === "" ? "" : `<span class="shfig"${title ? ` title="${esc(title)}"` : ""}><span class="unk">${k}</span><b>${v}</b></span>`;
+  return `<div class="shfigs">` +
+    tile("Jump range", s.max_range != null ? `${s.max_range.toFixed(2)} ly` : null, "the Loadout's MaxJumpRange: unladen, one jump's fuel aboard") +
+    tile("Unladen mass", s.unladen != null ? `${shNum(s.unladen)} t` : null) + tile("Cargo", s.cargo != null ? `${shNum(s.cargo)} t` : null) +
+    tile("Fuel", s.fuel_main != null ? `${shNum(s.fuel_main)} t${s.fuel_reserve != null ? ` + ${shNum(s.fuel_reserve)}` : ""}` : null, "main tank + reservoir") +
+    tile("Hull", s.hull_health != null ? `${Math.round(s.hull_health * 100)}%` : null) +
+    tile("Hull value", s.hull_value != null ? `${credits(s.hull_value)} cr` : null) + tile("Modules", s.modules_value != null ? `${credits(s.modules_value)} cr` : null) +
+    tile("Rebuy", s.rebuy != null ? `${credits(s.rebuy)} cr` : null) +
+    tile("Engineered", `${s.engineered} of ${s.count}`, "modules with an engineer's blueprint") + (s.hot ? tile("Status", `<span class="warnc">hot</span>`) : "") + `</div>`;
+}
+function renderShip() {
+  const el = document.getElementById("shipBody");
+  if (!el) return;
+  const s = SH.data && SH.data.ship;
+  let h;
+  if (SH.error) h = `<div class="noscoop">The ship could not be read: ${esc(SH.error)}</div>`;
+  else if (!s) h = `<div class="hwyttl">${SH.loading ? "Reading your ship…" : "No ship yet"}</div>` +
+    (SH.loading ? "" : `<div class="unk">The game writes your ship's Loadout when you log in and after any change in outfitting: it is shown here from then on.</div>`);
+  else {
+    const label = shipLabel(s.name, s.type), type = shipName(s.type);
+    h = `<div class="hwyttl">${esc(label)}${type !== label ? ` <span class="unk">· ${esc(type)}</span>` : ""}${s.ident ? ` <span class="unk">· ${esc(s.ident)}</span>` : ""}` +
+      ` <span class="unk" title="the Loadout this is read from">as of ${esc(day(s.ts))}</span></div>` + shipFiguresHtml(s) +
+      `<div class="shlinks">Every figure the journal does not state (shields, speed, power, a stock module's own): ` +
+      `<a href="${esc(s.links.edsy)}" target="_blank" rel="noopener">open this ship in EDSY ↗</a> · ` +
+      `<a href="${esc(s.links.coriolis)}" target="_blank" rel="noopener">in Coriolis ↗</a></div>` +
+      s.groups.map(g => `<h3 class="subhead">${esc(g.name)}</h3><table class="shtable"><thead><tr><th>Slot</th><th>Module</th><th>Engineering</th>` +
+        `<th>Engineered stats <span class="unk">(the change from stock)</span></th><th class="num"></th></tr></thead><tbody>${g.modules.map(shipModuleHtml).join("")}</tbody></table>`).join("");
+  }
+  if (el.innerHTML !== h) el.innerHTML = h;
+}
+// ---- The game's own route in Plot Route (this fork): the route plotted in the game's galaxy map (GET /api/navroute),
+// offered beside the routes plotted here whenever the game has one: its list (each system, click to copy; whether it
+// is known; its star; the jump and the light years flown) and the same map. Nothing here is followed, targeted or
+// copied for you: the game already has this route in its own computer ----
+// GR: data (the server's answer), key (what it was asked for: the route, where you are, the Known column)
+const GR = {data: null, key: null, loading: false, error: null};
+const nrKey = () => { const r = data && data.route; return JSON.stringify([r ? [r.ts, r.hops.length, r.known_v] : null, posId()]); };
 async function loadNavRoute(force = false) {
   const key = nrKey();
-  if (!force && (key === GR.key || GR.loading)) return renderNavRoute();
+  if (!force && (key === GR.key || GR.loading)) return;
   GR.key = key; GR.loading = true;
   const g = newRequest("navroute");
   let d;
@@ -3963,92 +4034,38 @@ async function loadNavRoute(force = false) {
   if (!isNewest("navroute", g)) return;
   GR.loading = false;
   if (d.error) { GR.error = d.error; GR.key = null; } else { GR.error = null; GR.data = d; }
-  renderNavRoute();
-  loadNavRefuel();
-  if (!d.error && view === "navroute" && nrKey() !== GR.key) loadNavRoute();   // it moved while this was asked: again
+  renderHwy();
+  if (!d.error && view === "hwy" && nrKey() !== GR.key) loadNavRoute();   // it moved while this was asked: again
 }
-// the refuel places, asked once per route and run-dry point (not on every fuel reading)
-async function loadNavRefuel() {
-  const r = GR.data && GR.data.route, f = r && r.fuel;
-  const key = f && f.empty_at != null ? JSON.stringify([r.ts, f.last_name, f.empty_at]) : null;
-  if (key === GR.refuelKey || GR.refuelBusy) return;
-  GR.refuelKey = key; GR.refuel = null;
-  if (!key) return renderNavRoute();
-  GR.refuelBusy = true; renderNavRoute();
-  let d;
-  try { d = await apiJson("api/navroute/refuel"); } catch (err) { d = {error: err.message}; }
-  GR.refuelBusy = false;
-  GR.refuel = d;
-  if (d.error) GR.refuelKey = null;   // asked again when the list is next drawn afresh
-  renderNavRoute();
+const gameRoute = () => (GR.data && GR.data.route) || null;
+// whether the tab shows the game's route: this device chose it (hwyGame) and the game has one
+const gameShown = () => !!gameRoute() && store.get("hwyGame", false) === true;
+// the switch above the heading, only while the game has a route. Pure.
+function gameSwitchHtml(r, shown) {
+  if (!r) return "";
+  return `<div class="seg hwykind" role="radiogroup" aria-label="whose route is shown">` +
+    `<label><input type="radio" name="hwyGame" value="0"${shown ? "" : " checked"}>Plotted here</label>` +
+    `<label title="the route in the game's own galaxy map"><input type="radio" name="hwyGame" value="1"${shown ? " checked" : ""}>Game route · ${r.count} jump${r.count === 1 ? "" : "s"}</label></div>`;
 }
-// The line about the fuel: whether it lasts the route, or where it runs out and what is on the way. Pure.
-function navFuelHtml(f, count) {
-  if (!f) return `<div class="unk">The fuel cannot be projected yet: it needs your ship's Loadout and a fuel reading from the running game.</div>`;
-  const t = v => fuelT(v);
-  if (f.empty_at == null)
-    return `<div class="nrfuel ok">⛽ ${t(f.start)} aboard lasts the whole route: about <b>${t(f.end)}</b> left at the end, without refuelling.</div>`;
-  const scoops = f.scoopable_before ? `${f.scoopable_before} scoopable star${f.scoopable_before === 1 ? "" : "s"} before then` : "no scoopable star before then";
-  const where = f.last < 0 ? "you cannot make the first jump" : `the tank runs dry after jump <b>${f.last + 1}</b> of ${count}, at <b>${esc(f.last_name || "?")}</b>`;
-  const why = f.why === "range" ? `the jump to ${esc(f.empty_name || "?")} is longer than your ship jumps with ${t(f.left)} aboard (plotted with a boost?)`
-    : `the jump to ${esc(f.empty_name || "?")} needs ${t(f.need)}, you would have ${t(f.left)}`;
-  return `<div class="nrfuel warnc">⚠ Without refuelling, ${where}: ${why}. <span class="unk">${scoops}.</span></div>`;
-}
-// The refuel box: the places to refuel near where the tank runs dry. Pure.
-function navRefuelHtml(a, busy) {
-  if (busy) return `<div class="nrrefuel unk">looking for places to refuel near there…</div>`;
-  if (!a) return "";
-  if (a.error) return `<div class="nrrefuel noscoop">The places to refuel could not be looked up: ${esc(a.error)}</div>`;
-  if (!a.needed) return "";
-  const pad = a.pad === "L" ? "a large pad" : a.pad === "M" ? "a medium pad or larger" : "any pad (your ship's size is not known)";
-  const head = `<h3 class="subhead">Refuel near ${esc((a.at && a.at.name) || "there")} <span class="unk">· stations with ${pad}, and fleet carriers, that sell fuel (Spansh)</span></h3>`;
-  const errs = (a.errors || []).map(e => `<div class="noscoop">${esc(e)}</div>`).join("");
-  if (!a.rows.length) return `<div class="nrrefuel">${head}${errs}<div class="unk">No place to refuel is reported near there. Scoop on the way, or carry more fuel.</div></div>`;
-  const rows = a.rows.map(r => {
-    const carrier = r.kind === "carrier", name = carrier ? (r.name || r.callsign) : r.name;
-    const near = r.near ? (r.near.ly < 0.5 ? `in ${r.near.i < 0 ? "this system" : `${esc(r.near.name)} (jump ${r.near.i + 1})`}`
-      : `${r.near.ly.toLocaleString()} ly from ${r.near.i < 0 ? "where you are" : `${esc(r.near.name)} (jump ${r.near.i + 1})`}`) : "";
-    return `<tr><td><b>${esc(name)}</b> <span class="unk">${carrier ? `(carrier${r.name && r.callsign ? ` ${esc(r.callsign)}` : ""}${r.own ? ", yours" : ""})` : esc(r.station_type || "")}</span>` +
-      `${(r.warn || []).map(x => `<div class="warnc small">⚠ ${esc(x)}</div>`).join("")}</td>` +
-      `<td><b class="copy" data-nr-copy="${esc(r.system || "")}" title="click to copy">${esc(r.system || "?")}</b></td>` +
-      `<td>${near}</td><td class="num${r.far ? " warnc" : ""}">${r.ls == null ? "" : `${r.ls.toLocaleString()} ls`}</td>` +
-      `<td>${esc(r.pads || "")}</td><td class="num unk">${r.own ? "" : ageText(r.age_s)}</td></tr>`;
-  }).join("");
-  return `<div class="nrrefuel">${head}${errs}<table class="nrtable"><thead><tr><th>Where</th><th>System</th><th>Nearest route system</th>` +
-    `<th class="num" title="how far from its star">From star</th><th>Pads</th><th class="num">Data</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-}
-function navRowHtml(r, f) {
-  const dry = f && f.empty_at != null && r.i >= f.empty_at;
+const gameHeadHtml = r => `<div class="hwyttl">To ${hwyName(r.to)} <span class="unk">from ${esc(r.from || "?")}</span></div>` +
+  `<div class="unk">${r.count} jump${r.count === 1 ? "" : "s"} · ${Math.round(r.ly).toLocaleString()} ly · as plotted in the game's galaxy map</div>`;
+function navRowHtml(r) {
   const star = r.star_class ? `${esc(r.star_class)}${r.scoopable ? ` <span class="hwyfuel" title="scoopable">⛽</span>` : r.scoopable === false ? ` <span class="unk" title="not scoopable">✕</span>` : ""}` : "";
-  return `<tr class="${dry ? "nrdry" : ""}${f && r.i === f.empty_at ? " nrempty" : ""}"><td class="num">${r.i + 1}</td>` +
-    `<td class="name"><b class="copy" data-nr-copy="${esc(r.name || "")}" title="click to copy">${esc(r.name || "?")}</b>` +
-    `${f && r.i === f.empty_at ? ` <span class="warnc small">⚠ not enough fuel for this jump</span>` : ""}</td>` +
+  return `<tr><td class="num">${r.i + 1}</td>` +
+    `<td class="name" data-name="${esc(r.name || "")}" title="click to copy">${nameWords(r.name || "?")}</td>` +
     `<td class="hwyc hwyk">${hwyKnownHtml(r.known)}</td><td>${star}</td>` +
-    `<td class="num">${r.ly.toFixed(1)}</td><td class="num">${Math.round(r.total_ly).toLocaleString()}</td>` +
-    `<td class="num">${r.fuel_used == null ? (dry ? "—" : "") : fuelT(r.fuel_used)}</td><td class="num">${r.fuel_left == null ? (dry ? "—" : "") : fuelT(r.fuel_left)}</td></tr>`;
+    `<td class="num">${r.ly.toFixed(1)}</td><td class="num">${Math.round(r.total_ly).toLocaleString()}</td></tr>`;
 }
-function renderNavRoute() {
-  const head = document.getElementById("nrHead"), rowsEl = document.getElementById("nrRows"), box = document.getElementById("nrRefuel");
-  if (!head) return;
-  const r = GR.data && GR.data.route;
-  if (GR.error || !r) {
-    head.innerHTML = GR.error ? `<div class="noscoop">The route could not be read: ${esc(GR.error)}</div>`
-      : `<div class="hwyttl">No route plotted in the game</div><div class="unk">Plot one in the galaxy map and it is listed here, jump by jump, with the fuel it takes.</div>`;
-    rowsEl.innerHTML = `<tr><td colspan="8" class="unk">${GR.loading ? "loading…" : "No route."}</td></tr>`;
-    box.innerHTML = "";
-    return;
-  }
-  head.innerHTML = `<div class="hwyttl">To <b class="copy" data-nr-copy="${esc(r.to || "")}" title="click to copy">${esc(r.to || "?")}</b> ` +
-    `<span class="unk">· ${r.count} jump${r.count === 1 ? "" : "s"} · ${Math.round(r.ly).toLocaleString()} ly · as plotted in the game</span></div>` + navFuelHtml(r.fuel, r.count);
-  rowsEl.innerHTML = r.hops.map(h => navRowHtml(h, r.fuel)).join("") +
-    (r.count > r.hops.length ? `<tr><td colspan="8" class="unk">+${(r.count - r.hops.length).toLocaleString()} more after these</td></tr>` : "");
-  const boxHtml = navRefuelHtml(GR.refuel, GR.refuelBusy);
-  if (box.innerHTML !== boxHtml) box.innerHTML = boxHtml;
+function renderNavRoute(r) {
+  const rowsEl = hEl("nrRows");
+  const h = !r ? "" : r.hops.map(navRowHtml).join("") +
+    (r.count > r.hops.length ? `<tr><td colspan="6" class="unk">+${(r.count - r.hops.length).toLocaleString()} more after these</td></tr>` : "");
+  if (rowsEl.innerHTML !== h) rowsEl.innerHTML = h;
 }
-document.getElementById("navrouteView").addEventListener("click", e => {
-  const c = e.target.closest("[data-nr-copy]");
-  if (c && c.dataset.nrCopy) copyText(c.dataset.nrCopy);
-});
+// the map draws the game's route as it draws the others: where you are is its start, the hops lie ahead
+const gameMapRoute = r => ({plotter: "game", from: r.from, to: r.to, at: 0, furthest: 0, points: [r.start].concat(r.hops.map(h => [h.x, h.z])),
+  neutrons: [], summary: {complete: false}, done: [{i: 0, system: r.from, x: r.start[0], z: r.start[1]}],
+  ahead: r.hops.map(h => ({i: h.i + 1, system: h.name, x: h.x, z: h.z}))});
 // ---- GalNet News (this fork): the game's news from Frontier's feed (GET /api/galnet), the latest shown, any earlier
 // one picked from the list; the systems an article mentions (GET /api/galnet/systems, each confirmed by the server)
 // marked in its text: click one to copy its name, or plot a route to it from the line under the title ----
@@ -5732,19 +5749,23 @@ function renderHwy() {
   drawHwyAuto();
   const hd = H.data;
   if (!hd) { hEl("hwyHead").innerHTML = H.error ? `<div class="err">Could not load the highway: ${esc(hwyErr(H.error))}</div>` : "loading…"; drawHwyStatus(); return; }
-  const r = hd.route, rd = R.data, rr = rd && rd.route, kind = routeKind(), rich = kind === "rich" && !!rr;
+  const gr = gameRoute(), game = gameShown();   // the game's own route, shown instead when this device chose it
+  const r = hd.route, rd = R.data, rr = rd && rd.route, kind = routeKind(), rich = kind === "rich" && !!rr && !game;
+  { const sw = gameSwitchHtml(gr, game), el = hEl("hwyGame"); if (el.innerHTML !== sw) el.innerHTML = sw; }
   const busy = [hd.plotting, rd && rd.plotting].some(p => p && p.state === "running");
-  hEl("hwyHead").innerHTML = (r && rr ? routeKindHtml(kind) : "") + (rich ? richHeadHtml(rd) + hwyClipHtml(hd.clipboard) : hwyHeadHtml(hd));
+  hEl("hwyHead").innerHTML = game ? gameHeadHtml(gr)
+    : (r && rr ? routeKindHtml(kind) : "") + (rich ? richHeadHtml(rd) + hwyClipHtml(hd.clipboard) : hwyHeadHtml(hd));
   // no route: no empty list, the form right under the heading
-  hEl("hwyPanes").classList.toggle("noroute", !r && !rr); hEl("hwyPane").hidden = !r || rich; hEl("richPane").hidden = !rich;
-  hEl("hwyClear").disabled = !(rich ? rr : r) && !busy;
+  hEl("hwyPanes").classList.toggle("noroute", !r && !rr && !game); hEl("hwyPane").hidden = !r || rich || game; hEl("richPane").hidden = !rich;
+  hEl("nrPane").hidden = !game; renderNavRoute(game ? gr : null);
+  hEl("hwyClear").disabled = game || (!(rich ? rr : r) && !busy);   // the game's route is cleared in the game
   renderHwyList(hd);
   renderRichList(rich ? rd : null);
   fillHwyForm(hd);
   // a new route (or none): the form folds away while one is followed, and opens when there is none
-  const rid = rich ? `rich|${rr.id}` : r ? r.id : null;
+  const rid = game ? `game|${gr.ts}|${gr.count}` : rich ? `rich|${rr.id}` : r ? r.id : null;
   if (rid !== H.routeId) {
-    if (H.routeId !== undefined && rid && H.watch && !rich) { const nj = (r.summary || {}).jumps_total ?? r.count - 1; setHwyStatus(`Plotted: ${nj.toLocaleString()} ${jumpsWord(nj)} to ${r.to}.${r.stand_in ? " " + r.stand_in : ""}`, r.stand_in ? "warnc" : "ok"); }
+    if (H.routeId !== undefined && rid && H.watch && !rich && !game) { const nj = (r.summary || {}).jumps_total ?? r.count - 1; setHwyStatus(`Plotted: ${nj.toLocaleString()} ${jumpsWord(nj)} to ${r.to}.${r.stand_in ? " " + r.stand_in : ""}`, r.stand_in ? "warnc" : "ok"); }
     H.watch = false;
     hEl("hwyPlot").open = !rid; H.routeId = rid; HM.auto = true;
   }
@@ -5805,6 +5826,10 @@ function routeKind() {
 const routeKindHtml = kind => `<div class="seg hwykind" role="radiogroup" aria-label="the route shown">` +
   [["hwy", "Highway"], ["rich", (SURVEY[(R.data && R.data.route && R.data.route.kind) || "riches"] || SURVEY.riches).name]].map(([k, t]) =>
     `<label><input type="radio" name="hwyKind" value="${k}"${k === kind ? " checked" : ""}>${t}</label>`).join("") + `</div>`;
+hEl("hwyGame").addEventListener("change", e => {
+  if (e.target.name !== "hwyGame") return;
+  store.set("hwyGame", e.target.value === "1"); HM.auto = true; renderHwy();
+});
 hEl("hwyHead").addEventListener("change", e => {
   if (e.target.name !== "hwyKind") return;
   store.set("hwyShow", e.target.value); HM.auto = true; renderHwy();
@@ -5961,7 +5986,8 @@ async function richSubmit(kind = "riches") {
 // the map draws a Riches route as it draws the Highway's (no neutrons, no refuel rings)
 const richMapRoute = rt => ({plotter: "riches", from: rt.from, to: rt.to, at: rt.at, furthest: rt.furthest, points: rt.points || [],
   neutrons: [], summary: {complete: !!rt.done_ts}, done: [], ahead: rt.systems.map(s => ({i: s.i, system: s.system, x: s.x, z: s.z}))});
-const hwyMapRoute = () => routeKind() === "rich" && R.data && R.data.route ? richMapRoute(R.data.route) : H.data && H.data.route;
+const hwyMapRoute = () => gameShown() ? gameMapRoute(gameRoute())
+  : routeKind() === "rich" && R.data && R.data.route ? richMapRoute(R.data.route) : H.data && H.data.route;
 // ---- the top-down map: X across, Z up (north: towards the galactic core, as galaxy maps show it) ----
 // A view is {cx, cz, scale (px per ly), w, h}: the world point at the canvas centre. Pure functions, so tests can check them.
 const HWY_MIN_SCALE = 1e-4, HWY_MAX_SCALE = 40;

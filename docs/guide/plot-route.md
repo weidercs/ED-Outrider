@@ -34,6 +34,10 @@ you plot another of its kind or **Clear route**.
 - **Too much fuel.** A long neutron jump may be in range only with the fuel the plotter expected. On arrival, and
   as you scoop, Outrider checks the next jump against the fuel aboard and warns ("⚠ too much fuel for the next
   jump: ≤ 36 t, you have 140 t").
+- **Game route** (this fork). While the game has a route plotted in its galaxy map, a switch above the heading
+  offers **Game route · N jumps** beside **Plotted here**. It shows the game's own route in the same list (each
+  system, click to copy; Known; its star, ⛽ scoopable; the jump and the light years flown) and on the same map.
+  Nothing of it is followed or targeted here: the game already has it. The choice is kept per device.
 - **Known** in the list says whether a system is already discovered: ✓ you have been there, ● every body is
   reported to Spansh, ◐ some are, ○ nobody has reported a body there, so it may be undiscovered (blank: not looked
   up yet; Spansh is asked about the listed systems one a second while the tab is open).

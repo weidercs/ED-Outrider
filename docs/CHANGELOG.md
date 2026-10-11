@@ -2,6 +2,25 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · This fork: the game's own route moves into Plot Route, as a list and on the map
+- While the game has a route plotted, Plot Route offers **Game route · N jumps** beside **Plotted here**. Chosen (per
+  device), the tab shows the game's route in place of the routes plotted here: the heading, the list (each system,
+  click to copy; the Known column; the star and whether it is scoopable; the jump and the light years flown) and the
+  same map, from where you are.
+- The Game Route tab is gone (a device that had it open lands on Plot Route), and with it the projected fuel and the
+  places to refuel: `GET /api/navroute/refuel` is removed, `/api/navroute` gives the route only. Nothing of the
+  game's route is followed, targeted or copied: the game already has it in its own computer.
+
+## 2026-10-12 · This fork: Ship, the ship you fly with its modules and engineering
+- A **Ship** tab (and tablet page): the ship's own figures (jump range, mass, cargo, fuel, hull, values, rebuy) and
+  every module by group (hardpoints, utility mounts, core and optional internals) with its class and rating, mount,
+  power priority, health and engineering: the blueprint and grade, the experimental effect, and each engineered stat
+  with its value and the change from stock, green when for the better.
+- From the journal's own Loadout, read when the tab opens (Inara's API has no ship data to read). What the journal
+  does not state (a stock module's figures, shields, speed, power) is one click away: **open this ship in EDSY** /
+  **Coriolis** carries the same Loadout to them.
+- `outrider/shipinfo.py`, `GET /api/ship`.
+
 ## 2026-10-11 · Version 2026.10.21
 - The in-game overlay (six panels, Arrange mode, themes, PyQt6 installed automatically; game PC only), GPL-3.0-or-later,
   the Exo-Biology genus ✓, EDDN's biology samples (scanorganic/1) and parity with EDMC (planetary Docked's body, no
