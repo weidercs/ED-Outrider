@@ -12,6 +12,10 @@ upstream project's choices, not rules of the game.
 - **Nothing is uploaded unless the player switches it on.** EDDN and EDSM (Settings → Uploads, off by default) are the
   only uploads; every other outside call is a read-only lookup (Spansh, EDSM, GitHub for bio rules, Hugging Face for
   voices, EDAstro for the DSSA carrier list when the Nearest finder opens).
+- **Inara is this fork's own upload** (`outrider/inara.py`, `[inara]`, off by default), apart from upstream's EDDN
+  and EDSM: live play only, kept in memory (what waits is lost at a stop), no catching up, no lease between two
+  Outriders (run it on one). It gives way to an EDMarketConnector that sends to Inara. Not yet tried against the
+  real service; it goes when upstream adds Inara.
 - **EDSM has no test endpoint**, so its developer switch is a dry run (`OUTRIDER_EDSM_DRYRUN=1`: requests built and
   logged to `data/edsm-dryrun.jsonl` without the key, nothing sent; the rows end as `dry` and are never sent later).
   EDDN's is its `/test` schemas (`OUTRIDER_EDDN_TEST=1`). Neither is a setting.

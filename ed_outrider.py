@@ -197,6 +197,7 @@ import outrider.ask        # questions by voice (POST /api/ask): fixed phrases, 
 import outrider.config_edit  # the Settings dialog's Server settings: every config key, edited in place
 import outrider.mcp        # the MCP bridge's [mcp] settings (the bridge itself runs as python3 -m outrider.mcp)
 import outrider.uploads    # EDDN / EDSM uploads (opt-in): the session, the live gate, the outbox
+import outrider.inara      # the fork's Inara upload ([inara], off by default), from its own tail of the journals
 import outrider.eddn       # EDDN's messages from journal events, and what its answers mean
 import outrider.edsm       # EDSM's journal upload: the events with where you were, and what its answers mean
 import outrider.checklist  # the exobiology checklist: every species by region, with your state (pure)
@@ -961,6 +962,7 @@ def settings_from(cfg, args, env_journals=None, detected=((), ())):
         **outrider.mcp.mcp_settings(cfg),
         "assistant": outrider.ask.assistant_settings(cfg),   # the voice's optional AI layer (off by default)
         **outrider.uploads.upload_settings(cfg),              # [eddn], [edsm]: written by Settings -> Uploads
+        "inara": outrider.inara.inara_settings(cfg),          # [inara]: the fork's Inara upload (off by default)
     }
 
 
@@ -1093,6 +1095,10 @@ api_key = {q(st["assistant"]["api_key"])}   # stays on this PC ("" for a local m
 model = {q(st["assistant"]["model"])}   # one that can call tools
 timeout = {n(st["assistant"]["timeout"])}   # seconds for the whole answer
 max_rounds = {st["assistant"]["max_rounds"]}   # tool rounds before it must answer
+
+[inara]
+enabled = {"true" if st["inara"]["enabled"] else "false"}   # send your travel, credits, ranks, reputation, ships, materials, missions and combat log to your Inara account as you play (needs api_key; live play only; applies at the next start)
+api_key = {q(st["inara"]["api_key"])}   # from inara.cz: Settings, API key; stays on this PC
 
 [mcp]
 {"url = " + q(st["mcp_url"]) if st["mcp_url"] else "# url = " + q("http://127.0.0.1:8025")}   # the running Outrider for the MCP bridge (python3 -m outrider.mcp); default: this PC at [server] port
@@ -5566,6 +5572,7 @@ class State:
         # uploads (EDDN, EDSM: opt-in, off by default; outrider/uploads.py): switched in Settings -> Uploads, which
         # writes [eddn]/[edsm] enabled into the config file. senders: {service: async fn(rows)} (the services add theirs).
         self.upload_cfg = json.loads(json.dumps(outrider.uploads.DEFAULTS))
+        self.inara = None          # outrider.inara.InaraSync: the fork's Inara upload ([inara]; set by run())
         self.upload_senders, self.upload_tasks, self.upload_session = {}, {}, None
         self.upload_status = {}   # service -> {error, at, held}: the last round's outcome for the status view
         self.uploads_hub = outrider.uploads.UploadHub(db, {"eddn": self.eddn_build, "edsm": self.edsm_build},
@@ -5624,6 +5631,8 @@ class State:
             "on_body": self.on_body(),
             "near_body": self.near_body(),
             "uploads": self.uploads_summary(),
+            # the fork's Inara upload: {on, sent, dropped, waiting, last, error, off}; None before run() made it
+            "inara": self.inara.info() if self.inara else None,
             "sampling": self.sampling_summary(),
             "surface": self.surface_summary(),
             # metres between samples per genus (a shipped table), shown before you land (review S1)
@@ -14034,6 +14043,14 @@ async def run(args, st):
     state.upload_session = ClientSession(timeout=ClientTimeout(total=20),
                                          headers={"User-Agent": f"ED-Outrider/{outrider.__version__}"})
     state.start_uploads()
+    # the fork's Inara upload reads the journals itself and sends live lines only; never with --simulate, and not
+    # while EDMarketConnector on this PC sends to Inara itself (the same events would arrive twice)
+    edmc = outrider.uploads.edmc_uploads() if st["inara"]["enabled"] else None
+    state.inara = outrider.inara.InaraSync(st["inara"], LIVE_DIRS, off=(
+        "--simulate" if state.simulate else
+        "EDMarketConnector is running and sends to Inara" if edmc and edmc.get("running") and edmc.get("inara") else None))
+    inara_task = asyncio.create_task(state.inara.run()) if state.inara.active else None
+    print("inara upload: " + state.inara.status_line())
     print("update check: " + ("on (GitHub's latest release, once a day)" if st["update_check"] else "off ([server] update_check)"))
     print("firsts watch: " + ("on (your unsold firsts on Spansh: one request every 10-30 s, each system once a day)"
                               if st["watch_firsts"] else "off ([spansh] watch_firsts)"))
@@ -14079,7 +14096,7 @@ async def run(args, st):
             state._honk_cancel.set()      # an auto honk holding Primary Fire lets go now (it held on for up to 20 s)
         if state.honker:
             state.honker.shutdown()       # ...and a press still waiting for the keyboard is refused
-        tasks = [t for t in (watcher, rules_task, button_task, firsts_task, update_task, images_task,   # the quit backup: finish_backup
+        tasks = [t for t in (watcher, rules_task, button_task, firsts_task, update_task, images_task, inara_task,   # the quit backup: finish_backup
                              *state.background_tasks()) if t]
         for t in tasks:
             t.cancel()

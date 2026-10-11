@@ -241,3 +241,10 @@
 # EDSM, the Elite Dangerous Star Map: your flight log and scans, to your EDSM account in batches (each jump, docking).
 # Switched in Settings -> Uploads, which writes this; your EDSM commander name and API key are set there too.
 # enabled = false
+
+[inara]
+# This fork's Inara upload: your travel, credits, ranks, reputation, ships, materials, missions and combat log to
+# your own Inara account as you play (docs/guide/uploads.md, Inara). Off until you switch it on; only live play is
+# sent; applies at the next start. Nothing is sent while EDMarketConnector on this PC sends to Inara itself.
+# enabled = false
+# api_key = ""              # from inara.cz: Settings, API key; stays on this PC

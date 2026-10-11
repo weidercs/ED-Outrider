@@ -2667,6 +2667,8 @@ function render() {
   drawUpdatePill();
   for (const id of ["setVersion", "tabOutVer"]) { const el = document.getElementById(id), v = data.outrider ? `version ${data.outrider}` : "";
     if (el && el.textContent !== v) el.textContent = v; }
+  { const el = document.getElementById("inaraLine"), v = inaraText(data.inara);
+    if (el && el.textContent !== v) el.textContent = v; }
   // a server away from the game PC ([server] game_pc false): what needs that PC is left out (body.notgamepc hides every
   // .pcOnly: Settings' Auto honk, "play on this PC", the Highway's auto-target box and 🎯 / Retry, the tablet's rail)
   document.body.classList.toggle("notgamepc", data.game_pc === false);
@@ -5023,6 +5025,15 @@ const H = {data: null, key: null, loading: false, poll: null, error: null, statu
 // conservative / conservative_ly: null until changed here ([highway] conservative and conservative_ly then)
 // Road to Riches, the tab's other route type: its api/riches answer, polling and form (see "Road to Riches" below)
 const R = {data: null, key: null, loading: false, poll: null, error: null, watch: false, filled: false, nextShown: null};
+// Server settings' line about the fork's Inara upload ([inara]), from the payload's `inara`: whether it is on, how
+// much went out, what waits, and the latest problem in Inara's own words. Pure.
+function inaraText(u) {
+  if (!u) return "";
+  if (u.off) return `Inara upload: off (${u.off}).`;
+  if (!u.on) return "Inara upload: off ([inara] below switches it on, at the next start).";
+  return `Inara upload (live play only): ${u.sent.toLocaleString()} sent` + (u.waiting ? `, ${u.waiting.toLocaleString()} waiting` : "") +
+    (u.dropped ? `, ${u.dropped.toLocaleString()} dropped` : "") + (u.error ? ` (${u.error})` : "") + ".";
+}
 const hwyCfg = Object.assign({plotter: "exact", injections: false, exclude_secondary: false, supercharged: false, no_neutrons: false,
                               refuel_every_scoopable: false, efficiency: null,
                               conservative: null, conservative_ly: null}, store.get("highway", {}));

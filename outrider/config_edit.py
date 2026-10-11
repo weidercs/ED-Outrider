@@ -18,8 +18,9 @@ SECTION_TITLES = {"journals": "Journal folders", "server": "Server: network, pas
                   "defaults": "Defaults for new browsers", "spansh": "Spansh", "speech": "Speech on this PC",
                   "autohonk": "Auto honk", "copilot": "Co-pilot button", "highway": "Neutron Highway and auto-target",
                   "assistant": "Voice: the AI layer", "mcp": "MCP bridge (AI clients)"}
+SECTION_TITLES["inara"] = "Inara upload"
 HIDDEN_SECTIONS = {"eddn", "edsm"}   # written by their own page sections (Settings -> Uploads), not the Server list
-SECRETS = {("server", "password"), ("assistant", "api_key"), ("mcp", "password")}   # never sent to the page, only "set" or not
+SECRETS = {("server", "password"), ("assistant", "api_key"), ("mcp", "password"), ("inara", "api_key")}   # never sent to the page, only "set" or not
 # keys with a fixed set of values, shown as a choice (ed_outrider.py adds [speech] server_player's, from outrider.tts)
 CHOICES = {("server", "game_pc"): ("auto", "true", "false"), ("highway", "autotarget_entry"): ("type", "paste")}
 HEADER = re.compile(r"^\s*\[\s*([A-Za-z0-9_.-]+)\s*\]")

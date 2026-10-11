@@ -81,3 +81,20 @@ twice: EDDN has no way to tell. So:
 The header's Data tile shows, live, a line per upload in use: what it sent, has waiting and had refused in the last
 day. Settings → Uploads shows the same per service, with why nothing can be sent now (held by another uploader, a key
 EDSM refused, the beta or Legacy game) and the last message (a refusal, "saved").
+
+## Inara (this fork)
+
+This fork can also send your flight log to your own [Inara](https://inara.cz) account: travel, credits, ranks,
+reputation, engineers, Powerplay, statistics, the ship you fly, materials, missions and your combat log. It is
+separate from the two uploads above and simpler:
+
+- **Off unless you switch it on**, in Settings → Server settings → Inara upload (or `[inara]` in the config file):
+  `enabled`, and `api_key` from inara.cz (Settings → API key). It applies at the next start.
+- **Live play only.** What you do while Outrider runs is sent, in batches about every 30 seconds; there is no
+  catching up, and what waits for an unreachable Inara is lost when Outrider stops.
+- Nothing from the Legacy game, a beta, or while you are crew in another commander's ship; nothing under
+  `--simulate`; and nothing while EDMarketConnector on this PC is running with its own Inara upload on (Outrider
+  says so at start), since Inara would get everything twice.
+- Not sent: a ship's module list, suits, community goals.
+- Server settings shows what went out, what waits, and a refusal in Inara's own words. A refused key stops the
+  sending until the next start.

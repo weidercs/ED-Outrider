@@ -2,6 +2,13 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-10 · This fork: an Inara upload (off by default); upstream's EDDN and EDSM uploads adopted
+- Upstream now has its own EDDN and EDSM uploads (Settings → Uploads), which replace the ones this fork had built
+  (`outrider/uplink.py`, `[uploads]`: both gone). What they did not cover is kept: `[inara]` (`enabled`, `api_key`)
+  sends your travel, credits, ranks, reputation, ships, materials, missions and combat log to your Inara account,
+  live play only, in batches. Off until switched on (Server settings → Inara upload; at the next start); never with
+  --simulate, and not while EDMarketConnector on this PC sends to Inara itself.
+
 ## 2026-10-10 · Version 2026.10.20
 - Bio/Geo (was Samples): the Exo-Biology and Geology checklists with Canonn's pictures linked; auto-target waiting out
   the game's own danger flag after a jump or supercruise entry (and an early FSD charge no longer a failure); exact

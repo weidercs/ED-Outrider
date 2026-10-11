@@ -128,6 +128,8 @@ ed_outrider.RELEASES_LATEST = OFF   # the update check never asks GitHub from he
 import outrider.eddn
 outrider.eddn.UPLOAD_URL = OFF        # nor EDDN (uploads are off there anyway)
 outrider.edsm.UPLOAD_URL = outrider.edsm.DISCARD_URL = OFF   # nor EDSM's journal upload
+import outrider.inara
+outrider.inara.INARA_URL = OFF       # nor Inara (off in the scratch config anyway)
 ed_outrider.DSSA_URL = OFF          # nor EDAstro for the DSSA list
 ed_outrider.Clipboard.TOOLS = ()   # the desktop clipboard is never touched by the smoke test
 if outrider.bio:
