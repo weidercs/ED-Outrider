@@ -625,14 +625,15 @@ const streakCfg = () => { const c = store.get("streakCfg", {}) || {}, v = k => {
 // items under this many credits per minute of supercruise get a muted "skip?" (per browser; blank = 100k)
 const skipFloor = () => { const v = Number(store.get("skipFloor", null) ?? 100000); return isFinite(v) && v >= 0 ? v : 100000; };
 const scText = sec => sec < 90 ? `~${Math.max(10, Math.round(sec / 5) * 5)} s` : `~${Math.round(sec / 60)} min`;
-// the map and bio items worth doing by your thresholds, nearest to the arrival star first, value per minute of
-// supercruise breaking ties, a body with no distance last (in the server's order)
 // metres between samples of a genus (the server's shipped table: review S1), or null for one it does not know
 const colonyM = g => (data && data.colony && g && data.colony[String(g).toLowerCase()]) || null;
 const colonyTxt = g => colonyM(g) ? ` <span class="unk" title="samples of one species must be this far apart">· ${colonyM(g).toLocaleString("en-US")} m</span>` : "";
 // how you are on the body, naming the vehicle the journal says you launched ("in the Rhino", "in the Nomad")
 const howOnBody = ob => ob.how === "in the SRV" && ob.vehicle ? `in the ${ob.vehicle}` : ob.how === "flying low" ? `flying low, ${surfDist(ob.alt)}` : ob.how;
 const onOrOver = ob => ob.how === "flying low" ? "Over" : "On";
+// the map and bio items worth doing by your thresholds, nearest to the arrival star first, value per minute of
+// supercruise breaking ties, a body with no distance last (in the server's order).
+// The overlay's Now panel has a Python copy (outrider/overlay.py plan_items): change both together.
 function planItems(l) {
   const w = worthLeavingFor(l);
   if (!w) return [];
@@ -859,7 +860,8 @@ function nowRiskLine() {
   if (lvl !== "warn" && lvl !== "urgent") return null;
   const sh = sellableHere(data.docked, u);
   if (sh && sh.value > 0) return {cls: sh.level === "ok" ? "" : sh.level, html: `💰 sell here: <b>${credits(sh.value)}</b>`};
-  const rebuy = data.ship && data.ship.rebuy, ss = data.since_sale, days = ss && ss.days >= 1 ? Math.round(ss.days) : 0;
+  // whole days passed, never rounded up (as the overlay's Now panel: overlay.unsold_age)
+  const rebuy = riskRebuy(), ss = data.since_sale, days = ss && ss.days >= 1 ? Math.floor(ss.days) : 0;
   const kinds = [(u.carto || {}).estimated_payout && `🗺 ${credits(u.carto.estimated_payout)}`, (u.bio || {}).estimated_value && `🧬 ${credits(u.bio.estimated_value)}`].filter(Boolean);
   return {cls: lvl, html: [`<b>${kinds.length ? kinds.join(" · ") : credits(u.total)}</b> aboard`, rebuy ? `${(u.total / rebuy).toFixed(1)}× rebuy` : "",
                            days ? `${days} d unsold` : ""].filter(Boolean).join(" · ")};
@@ -2085,7 +2087,7 @@ function welcomeText(away, dockSays) {
   const u = data.unsold, lvl = unsoldLevel(u), ss = data.since_sale, f = data.fuel, dk = data.docked, ob = data.on_body;
   const parts = [`Away ${away}.`];
   if (u && !u.error && lvl && lvl !== "ok" && !dockSays) {
-    const d = ss && ss.days >= 1 ? Math.round(ss.days) : 0;
+    const d = ss && ss.days >= 1 ? Math.floor(ss.days) : 0;   // whole days passed
     parts.push(`${credits(u.total)} aboard${d ? `, unsold for ${d} day${d === 1 ? "" : "s"}` : ""}.`);
   }
   if (f && f.pct != null) parts.push(`Fuel ${f.pct} percent.`);
@@ -2198,7 +2200,7 @@ function bodyBriefText(m) {
 // level or the rebuy multiple; null when it is not worth a word
 const highGravity = () => { const v = Number(store.get("highG", null) ?? (data && data.defaults && data.defaults.high_gravity) ?? 2); return isFinite(v) && v > 0 ? v : 2; };
 function highGStakes(m) {
-  const u = data && data.unsold, rebuy = data && data.ship && data.ship.rebuy;
+  const u = data && data.unsold, rebuy = riskRebuy();
   if (!m.landable || m.gravity == null || m.gravity < highGravity() || !u || u.error || u.total == null) return null;
   const lvl = unsoldLevel(u); if (lvl !== "warn" && lvl !== "urgent") return null;
   return {gravity: String(Math.round(m.gravity * 10) / 10), value: credits(u.total), rebuys: rebuy ? (u.total / rebuy).toFixed(1) : ""};
@@ -2297,7 +2299,7 @@ function statusReportText() {
   if (target && target.v === "none") parts.push(`${dest.name}: nothing to do`);
   if (plan.length) { const it = plan[0];
     parts.push(`Next: ${it.kind === "map" ? `map ${it.body}` : `biology on ${it.body}`}${nextValue(it, true) ? `, ${nextValue(it, true)}` : ""}${it.sec != null ? `, ${spokenTime(it.sec)}` : ""}`); }
-  const u = data && data.unsold, rebuy = data && data.ship && data.ship.rebuy;
+  const u = data && data.unsold, rebuy = riskRebuy();
   if (u && !u.error && u.total > 0) parts.push(`${credits(u.total)} aboard${rebuy ? `, ${(u.total / rebuy).toFixed(1)} rebuys` : ""}`);
   const hz = data && !hw ? horizon() : null;   // mid-route the next stop is the Highway's
   if (hz && hz.system) parts.push(`Nearest unvisited: ${hz.system.name}, ${Math.round(hz.system.distance * 10) / 10} light-years`);
@@ -2421,10 +2423,15 @@ function sellableHere(dk, u) {
 }
 const leftToSell = u => [(u.carto || {}).estimated_payout && `${credits(u.carto.estimated_payout)} cr cartographics (Universal Cartographics)`,
                          (u.bio || {}).estimated_value && `${credits(u.bio.estimated_value)} cr exobiology (Vista Genomics)`].filter(Boolean).join(", ");
+// The rebuy that the risk figures ("N× rebuy", the rebuy-multiple levels, the approach's "rebuys") compare with: null
+// for a ship whose hull has no credit value. An Arx-bought ship's Loadout has ModulesValue but no HullValue, and its
+// rebuy covers the modules only, so the data aboard reads as a hundred rebuys on any trip (the author, 2026-10-10).
+const riskRebuy = () => { const s = data && data.ship;
+  return s && s.rebuy > 0 && !(s.modules_value > 0 && !(s.hull_value > 0)) ? s.rebuy : null; };
 function unsoldLevel(u) {
   if (!u || u.error || u.total == null) return null;
   const [w, g] = unsoldThresholds(u);
-  const rebuy = data && data.ship && data.ship.rebuy, rw = unsoldCfg.rebuyWarn, ru = unsoldCfg.rebuyUrgent;
+  const rebuy = riskRebuy(), rw = unsoldCfg.rebuyWarn, ru = unsoldCfg.rebuyUrgent;
   const x = rebuy ? u.total / rebuy : 0;
   return u.total >= g || (ru && x >= ru) ? "urgent" : u.total >= w || (rw && x >= rw) ? "warn" : "ok";
 }
@@ -2434,7 +2441,7 @@ function renderUnsold() {
   if (!u) { el.innerHTML = `<div class="val"><span class="unk">estimating…</span></div>`; fl.innerHTML = ""; return; }
   if (u.error) { el.innerHTML = `<div class="val"><span class="unk">unavailable</span></div>`; fl.innerHTML = esc(u.error).slice(0, 80); return; }
   const f = u.firsts;
-  const rebuy = data.ship && data.ship.rebuy, ss = data.since_sale;
+  const rebuy = riskRebuy(), ss = data.since_sale;
   el.innerHTML = `<div class="val">${credits(u.total)} cr${rebuy ? ` <span class="unk" title="what the data on board is worth, in rebuys of your ship (${credits(rebuy)} cr)">= ${(u.total / rebuy).toFixed(u.total / rebuy < 10 ? 1 : 0)}× rebuy</span>` : ""}</div>` +
     `<div class="ln">🗺 <b>${credits(u.carto.estimated_payout ?? u.carto.estimated_value)}</b> · 🧬 <b>${credits(u.bio.estimated_value)}</b></div>` +
     (ss ? `<div class="ln" title="since your last sale to Universal Cartographics (${esc(ss.ts.slice(0, 10))})"><b>${ss.days}</b> d · <b>${Math.round(ss.ly).toLocaleString()}</b> ly since you last sold</div>` : "") +
@@ -2508,6 +2515,7 @@ function unsoldHtml(u) {
 
 function render() {
   renderUploads();
+  renderOverlay();
   if (!data) return;
   if (TABLET) tabAutoView();   // the surface map's switch to Now and back, before the views are shown
   const bms = bmMap();
@@ -4381,7 +4389,13 @@ function renderChecklist() {
     (s.elsewhere ? ` · <span class="clelse">${s.elsewhere} more found in other regions</span>` : "");
   const html = d.genera.map(g => {
     const found = g.species.filter(r => r.state && r.possible).length, poss = g.species.filter(r => r.possible).length;
-    return `<div class="clbox"><h4><span>${esc(g.genus)}</span><span class="unk">${found} / ${poss}</span></h4><table>` + g.species.map(r => {
+    // complete (the author, 2026-10-10): every species that can grow here has all its colours found (one with no colour
+    // table: found at all); a green ✓ beside the genus. Geology has no colours: no mark
+    const canGrow = g.species.filter(r => r.possible);
+    const complete = !geo && canGrow.length && canGrow.every(r => r.state && r.variants && r.variants.total > 0 && r.variants.found >= r.variants.total);
+    return `<div class="clbox${complete ? " cldone" : ""}"><h4><span>${esc(g.genus)}${complete
+      ? ` <span class="clcheck" title="complete: every colour of every species that can grow ${d.region == null ? "anywhere" : "here"} found">✓</span>` : ""}</span>` +
+      `<span class="unk">${found} / ${poss}</span></h4><table>` + g.species.map(r => {
       const cls = r.state ? `cl-${r.state}` : r.possible ? "" : "cl-no";
       const tip = geo ? `${r.name} · ${r.sites ? `${r.sites.toLocaleString()} reported sites ${d.region == null ? "in all" : "in this region"}`
           : "not reported in this region yet"}${r.elsewhere ? " · logged in another region" : ""}`
@@ -7833,6 +7847,128 @@ document.getElementById("uploadsBox").addEventListener("click", async e => {
     row.querySelectorAll("input").forEach(i => i.blur());   // Safari leaves the focus in the field: no redraw then
     uploadsDrawn = ""; renderUploads();
   }
+});
+// Settings -> In-game overlay (data.overlay: State.overlay_info): the switches, whether a window is drawing, the test
+// panels and Arrange mode, and each panel's place, size and transparency (POST api/overlay, api/overlay/layout)
+const OV_THEMES = ["default", "lcars", "elite", "babylon5", "narn", "minbari", "centauri", "sith", "alliance", "dark"];
+const OV_PANELS = [["system", "System", "the bodies worth your time, in supercruise"], ["body", "Body", "the body you are heading to or near"],
+                   ["radar", "Surface radar", "on a body's surface: samples, colony rings, the ship"],
+                   ["strip", "System strip", "two short lines across the top: where you are, the star, bodies found, values"],
+                   ["now", "Now (To-Do & Info)", "Now, condensed: the target, fuel, data at risk, what to do next, this session"],
+                   ["bio", "Bio signals", "every bio signal in the system, the ones worth it highlighted: samples, values"]];
+const OV_CORNERS = {nw: "top left", n: "top centre", ne: "top right", sw: "bottom left", s: "bottom centre", se: "bottom right"};
+let overlayDrawn = "", overlayNote = "";
+// the window's state: Outrider runs it on the game PC (o.runner); on a server it runs on the game PC by hand
+function overlayStatusHtml(o) {
+  const r = o.runner;
+  if (o.window) return `<span class="ok">the overlay window is drawing</span>`;
+  if (!r) return `<span class="unk">the overlay needs Outrider on the game PC</span>`;
+  const st = r.state;
+  // PyQt6 is installed by Outrider when the overlay is on (and by the launchers at start): no button for it
+  if (st === "no_qt") return `<span class="warnc">the overlay window needs PyQt6: Outrider installs it in its own venv while the overlay is on</span>`;
+  if (st === "installing") return `<span class="unk">installing PyQt6 in Outrider's venv for the overlay window… (about 100 MB, a minute or two)</span>`;
+  if (st === "install_failed") return `<span class="bad">installing PyQt6 failed: ${esc(r.why || "?")}</span> ` +
+    `<span class="unk">(switch the overlay off and on to try again)</span>`;
+  if (st === "starting") return `<span class="unk">starting the overlay window…</span>`;
+  if (st === "running") return `<span class="unk">the overlay window is running, waiting for the game's window</span>`;
+  if (st === "restarting") return `<span class="warnc">the overlay window ${esc(r.why || "stopped")}</span>`;
+  if (st === "failed") return `<span class="bad">the overlay window: ${esc(r.why || "it stopped")}</span>`;
+  return `<span class="unk">the overlay window starts when the overlay is on (or for the test panels)</span>`;
+}
+function overlayHtml(o) {
+  if (!o) return `<div class="unk">not known yet</div>`;
+  const opt = (vals, cur, label = v => v) => vals.map(v => `<option value="${v}"${v === cur ? " selected" : ""}>${esc(label(v))}</option>`).join("");
+  const pct = v => Math.round(v * 100);
+  const lay = o.layout || {};
+  const rows = OV_PANELS.map(([id, name, what]) => {
+    const e = lay[id] || {}, on = !!(o.panels || {})[id];
+    const num = (k, v, min, max, title) => `<td><input type="number" data-ovlay="${id}" data-k="${k}" min="${min}" max="${max}" step="1" value="${v}" title="${title}" style="width:4.5em"></td>`;
+    // each panel's own row: its on/off box (what it shows on hover), then where it goes; a panel switched off is dimmed
+    return `<tr class="${on ? "" : "ovoff"}"><th><label title="${esc(what)}"><input type="checkbox" data-ovpanel="${id}"${on ? " checked" : ""}> ${esc(name)}</label></th><td><select data-ovlay="${id}" data-k="corner" title="the corner of the game window it is placed from">${opt(Object.keys(OV_CORNERS), e.corner, c => OV_CORNERS[c])}</select></td>` +
+      num("x", pct(e.x || 0), 0, 95, "how far in from that corner's side, in % of the game window's width") +
+      num("y", pct(e.y || 0), 0, 95, "how far in from that corner's top or bottom, in % of the game window's height") +
+      num("scale", pct(e.scale || 1), 50, 250, "its size, in %") + num("bg", pct(e.bg ?? 0.65), 0, 100, "its background's opacity, in % (0: text only)") +
+      num("alpha", pct(e.alpha ?? 1), 10, 100, "the whole panel's opacity, in %") +
+      `<td><a href="#" data-ovreset="${id}" title="back to where it started">reset</a></td></tr>`;
+  }).join("");
+  return `<label class="mod"><input type="checkbox" data-ov="enabled"${o.enabled ? " checked" : ""}> <b>Show the overlay</b> <span class="hint">the panels below, when they have something to say</span></label>` +
+    `<div class="hint">${overlayStatusHtml(o)}</div>` +
+    `<div class="mod">Theme <select data-ov="theme">${opt(OV_THEMES, o.theme)}</select> · text <select data-ov="text_size">${opt(["small", "normal", "large"], o.text_size)}</select></div>` +
+    `<div class="mod"><button type="button" class="try" data-ovact="test">${o.test ? `test panels: ${o.test} s` : "▶ Show test panels"}</button> ` +
+    `<button type="button" class="try" data-ovact="arrange">${o.arrange ? `✓ Done arranging (${Math.ceil(o.arrange / 60)} min left)` : "✥ Arrange panels"}</button></div>` +
+    `<table class="ovlay"><thead><tr><th title="tick a panel to show it; hover its name for what it shows">Panel</th><th>Placed from</th><th>Across %</th><th>Down %</th><th>Size %</th><th>Background %</th><th>Panel %</th><th></th></tr></thead><tbody>${rows}</tbody></table>` +
+    `<div class="hint" id="overlayMsg">${esc(overlayNote)}</div>`;
+}
+// A popup while Outrider installs PyQt6 for the overlay window (the author, 2026-10-10), then its outcome for a few
+// seconds: installed (the window starts by itself) or failed (Settings says why). Shown in every window of the page.
+const OV_INSTALL_DONE_MS = 5000;
+let ovInstallWas = null, ovInstallTimer = null;
+function renderOverlayInstall(o) {
+  const el = document.getElementById("ovInstalling"), st = o && o.runner ? o.runner.state : null;
+  if (!el || st === ovInstallWas) return;
+  const was = ovInstallWas; ovInstallWas = st;
+  clearTimeout(ovInstallTimer);
+  if (st === "installing") {
+    el.className = ""; el.hidden = false;
+    el.innerHTML = `<span class="spin">⟳</span>Installing PyQt6 in Outrider's venv for the in-game overlay… <span class="unk">about 100 MB, a minute or two; nothing system-wide</span>`;
+  } else if (was === "installing") {
+    const failed = st === "install_failed";
+    el.className = failed ? "bad" : ""; el.hidden = false;
+    el.innerHTML = failed ? `Installing PyQt6 failed: <span class="unk">see Settings → In-game overlay</span>`
+                          : `✓ PyQt6 installed in Outrider's venv: <span class="unk">the overlay window is starting</span>`;
+    ovInstallTimer = setTimeout(() => { el.hidden = true; }, OV_INSTALL_DONE_MS);
+  } else el.hidden = true;
+}
+function renderOverlay() {
+  renderOverlayInstall(data && data.overlay);
+  const box = document.getElementById("overlayBox");
+  if (!box || !data) return;
+  if (box.contains(document.activeElement) && /^(INPUT|SELECT)$/.test(document.activeElement.tagName) && document.activeElement.type !== "checkbox") return;
+  const html = overlayHtml(data.overlay);
+  if (html === overlayDrawn) return;
+  box.innerHTML = html; overlayDrawn = html;
+}
+async function overlayPost(path, body) {
+  try {
+    const j = await apiJson(path, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+    overlayNote = j.error || j.note || "";
+    if (!j.error && data.overlay) {
+      if (j.layout) data.overlay.layout = j.layout;
+      else { delete j.note; data.overlay = j; }
+    }
+  } catch (err) {
+    overlayNote = `could not reach Outrider: ${err.message}`;
+  } finally {
+    overlayDrawn = ""; renderOverlay();
+  }
+}
+document.getElementById("overlayBox").addEventListener("change", e => {
+  const t = e.target;
+  if (t.dataset.ov === "enabled") overlayPost("api/overlay", {enabled: t.checked});
+  else if (t.dataset.ov) overlayPost("api/overlay", {[t.dataset.ov]: t.value});
+  else if (t.dataset.ovpanel) overlayPost("api/overlay", {panels: {[t.dataset.ovpanel]: t.checked}});
+  else if (t.dataset.ovlay) {
+    const k = t.dataset.k, v = k === "corner" ? t.value : Number(t.value) / 100;
+    if (k !== "corner" && !isFinite(v)) return;
+    t.blur();
+    overlayPost("api/overlay/layout", {[t.dataset.ovlay]: {[k]: v}});
+  }
+});
+document.getElementById("overlayBox").addEventListener("click", e => {
+  const act = e.target.closest("[data-ovact]"), reset = e.target.closest("[data-ovreset]");
+  if (act) {
+    const on = !(data.overlay || {})[act.dataset.ovact];
+    overlayPost("api/overlay", {[act.dataset.ovact]: on}).then(() => {
+      // nothing can draw them yet: say why, or the button seems to do nothing (the author, 2026-10-10)
+      const o = data.overlay;
+      if (on && !overlayNote && o && !o.window && (!o.runner || ["no_qt", "installing", "install_failed", "failed"].includes(o.runner.state))) {
+        overlayNote = o.runner ? "On, but the overlay window cannot run yet: see above." :
+          "On, but the overlay needs Outrider on the game PC.";
+        overlayDrawn = ""; renderOverlay();
+      }
+    });
+  }
+  else if (reset) { e.preventDefault(); overlayPost("api/overlay/layout", {[reset.dataset.ovreset]: {reset: true}}); }
 });
 // Canonn's Bioforge: what is known of a codex entry across the galaxy (where it grows, the conditions)
 const bioforgeLink = id => Number.isInteger(id) && id > 0

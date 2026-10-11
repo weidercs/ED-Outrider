@@ -158,6 +158,51 @@ class Packaging(unittest.TestCase):
                      "command -v wl-copy", "command -v xclip"):   # the clipboard tools pip cannot install: a hint
             self.assertIn(part, script)
 
+    @unittest.skipUnless(can_symlink(), "this account may not make symbolic links")
+    def test_launch_script_clipboard_hint(self):
+        """launch_outrider.sh's clipboard_hint (the author, 2026-10-11): on a Linux desktop session without the clipboard
+        program Outrider would use (wl-copy under Wayland, xclip with an X display), a block naming the right one with
+        this system's package-manager command and the both-at-once option; nothing when one is there or without a
+        session. Run in a PATH of fakes only, so this machine's own programs never decide it."""
+        import re as re_
+        import shutil
+        import subprocess
+        script = self.read("launch_outrider.sh")
+        func = re_.search(r"^clipboard_hint\(\) \{\n.*?^\}\n", script, re_.S | re_.M).group(0)
+        self.assertIn("\nclipboard_hint\n", script)                    # called at every start, before Outrider
+        self.assertLess(script.index("\nclipboard_hint\n"), script.index('exec python ed_outrider.py "$@"'))
+        bash, uname = shutil.which("bash"), shutil.which("uname")
+
+        def hint(env, tools=()):
+            with tempfile.TemporaryDirectory() as d:
+                os.symlink(uname, os.path.join(d, "uname"))
+                for t in tools:
+                    with open(os.path.join(d, t), "w") as f:
+                        f.write("#!/bin/sh\nexit 0\n")
+                    os.chmod(os.path.join(d, t), 0o755)
+                r = subprocess.run([bash, "-c", func + "clipboard_hint"], env=dict(env, PATH=d), capture_output=True,
+                                   text=True, timeout=10)
+                self.assertEqual(r.returncode, 0, r.stderr)
+                return r.stdout
+        wayland, x11 = {"WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0"}, {"DISPLAY": ":0", "XDG_SESSION_TYPE": "x11"}
+        out = hint(wayland, ["apt-get"])
+        self.assertIn("install wl-copy", out)
+        self.assertIn("sudo apt install wl-clipboard\n", out)
+        self.assertIn("sudo apt install wl-clipboard xclip", out)           # or both
+        self.assertNotIn("\033", out)                                     # no colours into a pipe
+        self.assertIn("wl-copy (the wl-clipboard package) in Wayland sessions and with xclip in X11 sessions", out)   # why each
+        self.assertIn("auto-target cannot paste the system name (by default it types the name", out)
+        out = hint(x11, ["dnf"])
+        self.assertIn("install xclip", out)
+        self.assertIn("sudo dnf install xclip\n", out)
+        self.assertIn("sudo pacman -S xclip", hint(x11, ["pacman"]))
+        self.assertIn("the xclip package with your distribution's package manager", hint(x11))   # no known manager
+        self.assertEqual(hint(wayland, ["wl-copy", "apt-get"]), "")
+        self.assertEqual(hint(wayland, ["xclip", "apt-get"]), "")          # Outrider falls back to xclip via XWayland
+        self.assertEqual(hint(x11, ["xclip"]), "")
+        self.assertIn("install xclip", hint(x11, ["wl-copy", "apt-get"]))  # wl-copy is no use without Wayland
+        self.assertEqual(hint({}, ["apt-get"]), "")                        # no desktop session: a server, nothing said
+
     def test_windows_launch_script(self):
         """launch_outrider.bat, launch_outrider.sh's twin for Windows: Windows line endings in the file and kept by git
         (.gitattributes), the same install rules, the stamp compared in Python (Wine's fc called identical files
@@ -175,6 +220,25 @@ class Packaging(unittest.TestCase):
         labels = {line[1:].strip() for line in script.splitlines() if line.startswith(":")}
         gotos = set(re.findall(r"goto (\w+)", script))
         self.assertLessEqual(gotos, labels)   # every goto has its label
+
+    def test_overlay_is_game_pc_only(self):
+        """The overlay is a game-PC feature (the author, 2026-10-10): no launcher for a window drawn from a server, no
+        [overlay] url or password, PyQt6 never in the Docker image."""
+        for gone in ("launch_overlay.sh", "launch_overlay.bat"):
+            self.assertFalse(os.path.exists(os.path.join(self.ROOT, gone)), gone)
+        self.assertIn("PyQt6", self.read("requirements-overlay.txt"))
+        self.assertNotIn("PyQt6", self.read("requirements.txt") + self.read("Dockerfile"))
+        self.assertNotIn("password", ed_outrider.outrider.overlay.DEFAULTS)
+
+    def test_launchers_install_the_overlays_pyqt6(self):
+        """PyQt6 is installed when the overlay is on, never from a menu (the author, 2026-10-10): both launchers run the
+        setup step before Outrider starts, with Outrider's own arguments (--config), and no install route is left."""
+        for name in ("launch_outrider.sh", "launch_outrider.bat"):
+            script = self.read(name)
+            step = script.index("-m outrider.overlay_runner --setup")
+            self.assertLess(step, script.index("ed_outrider.py \"$@\"" if name.endswith(".sh") else "ed_outrider.py %*"), name)
+        self.assertIn('--setup "$@" || true', self.read("launch_outrider.sh"))   # never stops Outrider starting
+        self.assertNotIn("/api/overlay/install", self.read("ed_outrider.py") + self.read("static/page.js"))
 
     def test_bundle_rewrites_the_compose_file(self):
         """scripts/docker_bundle.sh runs the saved image instead of a build: the two lines it rewrites are there, and the
@@ -312,7 +376,7 @@ class FableScriptFixes(unittest.TestCase):
         self.assertIn("--start-period=30m", self.read("Dockerfile"))
 
     def test_guide_matches(self):
-        self.assertIn("Auto honk, Uploads, Display", self.read("docs/guide/settings.md"))
+        self.assertIn("Auto honk, Uploads, In-game overlay, Display", self.read("docs/guide/settings.md"))
         self.assertIn("up to fifty lines per alert", self.read("docs/guide/voice-and-alerts.md"))
 
 

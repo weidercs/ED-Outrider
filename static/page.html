@@ -566,6 +566,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
   </form>
 </dialog>
 <div id="toast"></div>
+<div id="ovInstalling" role="status" aria-live="polite" hidden></div>
 <div id="pop"></div>
 <dialog id="alertDialog" class="settingsdlg" aria-labelledby="settingsTitle">
   <form method="dialog">
@@ -663,7 +664,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       <label class="mod">…or as a multiple of your ship's rebuy: amber at
         <input type="number" id="rebuyWarn" min="0" step="1" style="width:5em">× , red at
         <input type="number" id="rebuyUrgent" min="0" step="1" style="width:5em">× your rebuy <span class="reset" data-reset="rebuy">reset</span>
-        <span class="hint">blank = off; either rule can turn the header amber or red (a cheap ship carrying a fortune is the risk)</span></label>
+        <span class="hint">blank = off; either rule can turn the header amber or red (a cheap ship carrying a fortune is the risk). Not for a ship whose hull has no credit value (bought with Arx): its rebuy covers the modules only, so no "× rebuy" is shown for it</span></label>
       <label class="mod">Approach warning: a landable body of
         <input type="number" id="highG" min="0" step="0.1" style="width:5em"> g or more<span class="reset" data-reset="highG">reset</span>
         <span class="hint">said when you drop into orbital cruise there with unsold data over the amber level or the rebuy multiple below ("2.6 g, 480 million aboard, 3.2 rebuys"); the approach alert above switches it off</span></label>
@@ -715,6 +716,16 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       <div class="hint">Only one Outrider (or EDMC) should send each: two would send everything twice. Outrider leaves a note
         in your journal folder (<code>.outrider/</code>) so another Outrider can see it; EDMC on this PC is checked too.
         See the guide's Uploads page.</div>
+    </details>
+    <details class="setsec pcOnly" data-sec-key="overlay" data-chip="In-game overlay"><summary>In-game overlay <span class="sum-note">panels drawn over the game: what they show, where they go</span></summary>
+      <div id="overlayBox"></div>
+      <ul class="hint ovhelp">
+        <li><b>Game PC only.</b> Outrider runs the overlay window itself while the overlay is on (an Outrider on a server
+          has none). It installs PyQt6, which the window needs, in its own venv the first time.</li>
+        <li><b>Play Elite borderless or windowed.</b> The window sits over the game and lets every click through.</li>
+        <li><b>Arrange panels</b> right over the game: drag to move, drag the corner to resize, mouse wheel for the
+          background's transparency, Shift + wheel for the whole panel's. <b>Done</b> there or here ends it.</li>
+      </ul>
     </details>
     <details class="setsec" data-sec-key="display" data-chip="Display"><summary>Display <span class="sum-note">this device: theme, header tiles</span></summary>
       <label class="mod">Theme on this browser <select id="deskTheme"><option value="">Default - Outrider</option></select>

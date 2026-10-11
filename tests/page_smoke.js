@@ -104,6 +104,17 @@ const settle = async maxMs => {
       renderChecklist();
       const out = [document.getElementById("clStatus").textContent, document.querySelector("#clGrid .clbox h4 .unk").textContent];
       CL.data = saved; renderChecklist(); return JSON.stringify(out); })()`));
+    // a genus whose every species that can grow here has all its colours found gets a green ✓ (the author, 2026-10-10)
+    const ticks = JSON.parse(dom.window.eval(`(() => { const saved = CL.data;
+      const sp = (id, possible, state, found, total) => ({id, name: "Sp " + id, short: id, possible, state, value: 1, variants: {found, total, list: []}});
+      CL.data = Object.assign({}, saved, {kind: "bio", genera: [
+        {genus: "Done", species: [sp("a", "yes", "sold", 2, 2), sp("b", "parts", "logged", 1, 1), sp("c", null, null, 0, 3)]},
+        {genus: "Partly", species: [sp("d", "yes", "sold", 1, 2), sp("e", "yes", "sold", 1, 1)]},
+        {genus: "Never", species: [sp("f", null, null, 0, 1)]}]});
+      renderChecklist();
+      const out = [...document.querySelectorAll("#clGrid .clbox")].map(b => b.querySelector("h4 span").textContent.trim());
+      CL.data = saved; renderChecklist(); return JSON.stringify(out); })()`));
+    const ticksOk = JSON.stringify(ticks) === JSON.stringify(["Done ✓", "Partly", "Never"]);
     const countsOk = /^Galactic Centre: 2 of 2 entries reported here logged · 100\.00% complete · 1 logged that nobody has reported here yet/.test(counts[0])
       && counts[1] === "2 / 2";
     // keyboard (#8 of the Fable review, 2026-10-10): a species row is reachable with Tab, Enter opens it, and the row
@@ -140,9 +151,9 @@ const settle = async maxMs => {
     await sleep(300);
     const back = !d.getElementById("bioView").classList.contains("check") && dom.window.getComputedStyle(d.getElementById("bioPane")).display !== "none";
     const good = boxes >= 20 && /possible species found/.test(status) && options === 44 && side && side.textContent === name &&
-                 shown === "check" && geo && countsOk && keyOk && raceOk && back && errors.length === before;
+                 shown === "check" && geo && countsOk && ticksOk && keyOk && raceOk && back && errors.length === before;
     allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| exobiology checklist |", `${boxes} genus boxes, ${options} region choices, panel ${side && side.textContent}, geology ${geo} (${geoFirst}), counts ${countsOk || JSON.stringify(counts)}, keyboard ${keyOk}, region race ${raceOk || JSON.stringify(race)}, back to runs ${back}`,
+    console.log(good ? "OK" : "FAIL", "| exobiology checklist |", `${boxes} genus boxes, ${options} region choices, panel ${side && side.textContent}, geology ${geo} (${geoFirst}), counts ${countsOk || JSON.stringify(counts)}, genus ticks ${ticksOk || JSON.stringify(ticks)}, keyboard ${keyOk}, region race ${raceOk || JSON.stringify(race)}, back to runs ${back}`,
                 status.slice(0, 80), errors.slice(before));
   }
   // the map reopened while its request was on its way asks again with the same key: the older request's failure
@@ -513,6 +524,12 @@ const settle = async maxMs => {
         bioLeft: [bioLeftText({partial: {}, untouched: [{genus: "Bacterium", value: 12000000}, {genus: "Fungoida", value: 1000}]}),
                   bioLeftText({partial: {}, untouched: [{genus: "Fungoida", value: 1000}]})],
         hazard: [hazardSaid("N"), hazardSaid("K")],
+        // an Arx-bought ship (ModulesValue, no HullValue): no rebuy multiple anywhere; a hull with a value keeps it
+        arx: (() => { const keep = data.ship, out = [];
+          data.ship = {rebuy: 1087554, modules_value: 21751050, hull_value: null};
+          out.push(riskRebuy(), highGStakes({landable: true, gravity: 2.6}).rebuys);
+          data.ship = {rebuy: 1087554, modules_value: 21751050, hull_value: 50000000}; out.push(riskRebuy());
+          data.ship = keep; return out; })(),
       };
       const s0 = lastMomentSeq, mk = (i, m) => Object.assign({seq: s0 + i, ts: "2026-01-01T00:00:00Z"}, m);
       data.moments = [mk(1, {kind: "honk", ok: true, brief: true, system: "X", bodies: 14, all_found: false}),
@@ -550,6 +567,7 @@ const settle = async maxMs => {
       left: ["Stratum 2 of 3", "Stratum 2 of 3, and Tussock untouched, up to 14.0M", ""],   // Fungoida: under the bio threshold
       bioLeft: ["Bacterium, plus 1 small one", "only 1 small one"],   // F32: never "the last one" with a genus left
       hazard: ["Neutron star ahead: throttle down on arrival, mind the jet cone.", ""],
+      arx: [null, "", 1087554],
       styled: "Hi,en_US-ryan-high,1.2,,1",
     };
     const wantSaid = ["Undiscovered. 14 bodies. Scoopable K star.", "All 3 found. Nothing worth staying for.",
@@ -1818,7 +1836,7 @@ const settle = async maxMs => {
     got.risk = JSON.parse(w.eval(`(() => {
       const out = {};
       data.unsold = {total: 792e6, carto: {estimated_payout: 380e6}, bio: {estimated_value: 412e6}, thresholds: [50e6, 250e6]};
-      data.ship = Object.assign({}, data.ship, {rebuy: 247.5e6}); data.since_sale = {ts: "2026-01-01T00:00:00Z", days: 6.2, jumps: 1, ly: 1};
+      data.ship = Object.assign({}, data.ship, {rebuy: 247.5e6}); data.since_sale = {ts: "2026-01-01T00:00:00Z", days: 6.7, jumps: 1, ly: 1};   // 6 whole days, never rounded up
       data.docked = null; data.on_body = null; nowStakes = null;
       const txt = r => r ? r.html.replace(/<[^>]+>/g, "") + (r.cls ? " |" : "") : null;
       out.normal = txt(nowRiskLine());
@@ -3588,7 +3606,7 @@ const settle = async maxMs => {
     const want = {colony: [500, null, " · 1,000 m"], sortTh: ["dist", "grav", "now", "max"], sortCycle: ["dist", "-dist rev", "max"],
       nearCycle: ["value", "-value", "distance"], treeSort: "max", halves: [true, true, true], halvesOff: false, matRow: true, link: ["linked · 2 s", "linked"],
       stale: ["stale · 48 s", "stale"], none: ["no link · retrying since 14:02", "none"], pill: true,
-      chips: ["Alerts", "Voice", "What is said", "Sounds", "Values", "Risk & warnings", "Surface map", "Auto honk", "Uploads", "Display", "Sharing", "Server", "Spoken lines"],
+      chips: ["Alerts", "Voice", "What is said", "Sounds", "Values", "Risk & warnings", "Surface map", "Auto honk", "Uploads", "In-game overlay", "Display", "Sharing", "Server", "Spoken lines"],
       autoSmall: true, autoBig: false, line: true, cut: true};
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
     const goodB12 = !bad.length && errors.length === before;
@@ -4213,10 +4231,55 @@ const settle = async maxMs => {
     await sleep(100);
     got.push(w.eval(`JSON.stringify(Object.values(JSON.parse(localStorage.getItem("settingsOpen"))).some(Boolean))`));
     w.eval(`document.getElementById("alertDialog").close ? document.getElementById("alertDialog").close() : document.getElementById("alertDialog").removeAttribute("open")`);
-    const want = ["Settings", true, 13, ["alerts"], true, '[true,true,true,"","auto true false","1"]', JSON.stringify({server: {port: "9999"}, autohonk: {enabled: true}}), "false"];
+    const want = ["Settings", true, 14, ["alerts"], true, '[true,true,true,"","auto true false","1"]', JSON.stringify({server: {port: "9999"}, autohonk: {enabled: true}}), "false"];
     const goodS = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodS;
     console.log(goodS ? "OK" : "FAIL", "| settings |", goodS ? "12 folding sections, remembered; server settings from the config file (choices as a list); only changes sent" : JSON.stringify(got), errors.slice(before));
+  }
+  // Settings > In-game overlay: the switches and each panel's place from data.overlay; a change posts it (stubbed)
+  {
+    const w = dom.window, before = errors.length, real = w.fetch, posted = [];
+    const json = body => Promise.resolve({ok: true, status: 200, headers: {get: () => "application/json"}, json: async () => body});
+    w.fetch = (u, o) => /api\/overlay/.test(String(u)) && o && o.method === "POST"
+      ? (posted.push([String(u).replace(/.*api\//, ""), JSON.parse(o.body)]), json({layout: w.eval("data.overlay.layout")})) : real(u, o);
+    const saved = w.eval("JSON.stringify(data.overlay || null)");
+    w.eval(`data.overlay = {enabled: true, theme: "elite", text_size: "normal", panels: {system: true, body: false, radar: true},
+      window: false, test: 0, arrange: 0, runner: {state: "no_qt", why: null}, layout: {system: {corner: "nw", x: 0.02, y: 0.16, scale: 1, bg: 0.65, alpha: 1},
+      body: {corner: "ne", x: 0.02, y: 0.16, scale: 1.2, bg: 0.5, alpha: 0.8}, radar: {corner: "se", x: 0.02, y: 0.1, scale: 1, bg: 0.5, alpha: 1}}};
+      overlayDrawn = ""; renderOverlay();`);
+    const d = w.document, box = d.getElementById("overlayBox");
+    const got = {rows: box.querySelectorAll("table.ovlay tbody tr").length, body: box.querySelector('[data-ovlay="body"][data-k="scale"]').value,
+                 off: !box.querySelector('[data-ovpanel="body"]').checked, theme: box.querySelector('[data-ov="theme"]').value,
+                 // PyQt6 missing: said, no button (Outrider installs it while the overlay is on: the author, 2026-10-10)
+                 nowin: /needs PyQt6: Outrider installs it in its own venv/.test(box.textContent) && !box.querySelector("button[data-ovinstall]"),
+                 nowName: /Now \(To-Do & Info\)/.test(box.querySelector('[data-ovpanel="now"]').parentNode.textContent),
+                 // each panel's on/off box in its own row, what it shows as the hover tip, a panel switched off dimmed
+                 inRows: [...box.querySelectorAll("table.ovlay tbody tr")].every(tr => tr.querySelectorAll("[data-ovpanel]").length === 1),
+                 tip: /every bio signal/.test(box.querySelector('[data-ovpanel="bio"]').closest("label").title),
+                 dimmed: box.querySelector('[data-ovpanel="body"]').closest("tr").classList.contains("ovoff"),
+                 // the help under it: three short points, no button it no longer has
+                 help: d.querySelectorAll("ul.ovhelp li").length === 3 && !/button/.test(d.querySelector("ul.ovhelp").textContent)};
+    const x = box.querySelector('[data-ovlay="radar"][data-k="x"]');
+    x.value = "30"; x.dispatchEvent(new w.Event("change", {bubbles: true}));
+    box.querySelector('[data-ovact="test"]').click();
+    await sleep(100);
+    got.note = /cannot run yet/.test(w.eval("overlayNote"));   // nothing can draw yet: the button says why
+    got.posted = posted;
+    w.fetch = real;
+    // the PyQt6 install's popup: shown while installing, then the outcome, then gone (a state it never had: hidden)
+    const pop = d.getElementById("ovInstalling"), shown = () => pop.hidden ? "" : pop.textContent;
+    const step = st => { w.eval(`data.overlay = {...data.overlay, runner: {state: ${JSON.stringify(st)}, why: null}}; renderOverlay();`); return shown(); };
+    // never read as system-wide; ended through a failure, so the next sequence starts with the popup hidden
+    got.venv = [step("installing"), step("install_failed"), step("off")][0].includes("in Outrider's venv");
+    got.popup = [step("off"), step("installing"), step("starting"), step("installing"), step("install_failed"), step("off")]
+      .map(t => t.replace(/ .*/, "") + (/installed/.test(t) ? " installed" : /failed/.test(t) ? " failed" : ""));
+    w.eval(`data.overlay = JSON.parse(${JSON.stringify(saved)}); overlayNote = ""; overlayDrawn = ""; renderOverlay();`);
+    const want = {rows: 6, body: "120", off: true, theme: "elite", nowin: true, nowName: true, inRows: true, tip: true, dimmed: true, help: true, note: true,
+                  posted: [["overlay/layout", {radar: {x: 0.3}}], ["overlay", {test: true}]],
+                  venv: true, popup: ["", "⟳Installing", "✓ installed", "⟳Installing", "Installing failed", ""]};
+    const ok = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && ok;
+    console.log(ok ? "OK" : "FAIL", "| settings: in-game overlay |", ok ? "switches, panels' places, a change and the test button posted" : JSON.stringify(got), errors.slice(before));
   }
   // Settings > Voice > More voices: Piper's catalogue from the server (stubbed here: no network), one language at a time;
   // "Download and use" asks the server for that voice (POST api/voice, stubbed: nothing downloads)

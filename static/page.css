@@ -101,6 +101,12 @@ tr.prev.visited td { opacity: .7; }
 #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--panel);
   border: 1px solid var(--accent); padding: 6px 14px; border-radius: 6px; opacity: 0; transition: opacity .2s; }
 #toast.show { opacity: 1; }
+/* the overlay's PyQt6 install under way (and a few seconds of its outcome): renderOverlayInstall */
+#ovInstalling { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 50; background: var(--panel);
+  border: 1px solid var(--accent); padding: 8px 16px; border-radius: 6px; box-shadow: 0 2px 12px rgba(0, 0, 0, .4); }
+#ovInstalling .spin { display: inline-block; animation: ovspin 1.2s linear infinite; margin-right: 6px; }
+#ovInstalling.bad { border-color: var(--bad); }
+@keyframes ovspin { to { transform: rotate(360deg); } }
 td.bodies { cursor: help; }
 #pop { position: fixed; z-index: 5; max-width: 380px; background: var(--panel); border: 1px solid var(--line);
   border-radius: 8px; padding: 10px 12px; box-shadow: 0 6px 24px rgba(0,0,0,.35); font-size: 13px;
@@ -1070,6 +1076,7 @@ body.app #richPane { grid-column: 1; grid-row: 2; }
 .clbox { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; break-inside: avoid; display: inline-block;
   width: 100%; box-sizing: border-box; margin: 0 0 10px; }
 .clbox h4 { margin: 0 0 4px; font-size: 14px; display: flex; justify-content: space-between; gap: 8px; }
+.clbox h4 .clcheck { color: var(--good); font-weight: 700; }   /* a genus complete in this region */
 .clbox table, .clvars { width: 100%; border-collapse: collapse; font-size: 13px; }
 .clbox td, .clvars td, .clvars th { padding: 1px 4px; text-align: left; }
 .clbox table { table-layout: fixed; }
@@ -1108,3 +1115,7 @@ body.app #richPane { grid-column: 1; grid-row: 2; }
 #hereLegend[hidden] { display: none; }
 #hereLegend .lg { white-space: nowrap; } #hereLegend .lgi { color: var(--text); }
 body.app #hereMain.halves > #hereLegend { flex: 0 0 auto; position: static; margin: 0; padding: 4px 8px; }
+/* Settings -> In-game overlay: each panel's place, size and transparency */
+dialog ul.ovhelp { margin: 6px 0 0; padding-left: 18px; } dialog ul.ovhelp li { margin: 2px 0; }
+table.ovlay tr.ovoff td { opacity: .55; }   /* a panel switched off: its row dimmed */
+table.ovlay { border-collapse: collapse; margin: 6px 0; font-size: 13px; } table.ovlay th, table.ovlay td { padding: 2px 6px; text-align: left; }

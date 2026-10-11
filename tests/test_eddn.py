@@ -28,7 +28,7 @@ except ImportError:   # requirements-dev.txt has it; without it only the schema 
 
 def valid(envelope, schema_file):
     """Raise unless `envelope` passes EDDN's schema (draft-04, as EDDN's gateway validates)."""
-    with open(os.path.join(FIX, schema_file), encoding="utf-8") as f:
+    with open(os.path.join(FIX, schema_file), encoding="utf-8-sig") as f:   # some of EDDN's files start with a BOM
         schema = json.load(f)
     jsonschema.Draft4Validator(schema).validate(envelope)
 
@@ -100,6 +100,28 @@ class JournalSchema(unittest.TestCase):
         self.assertEqual(E.build(dict(SCAN, SystemAddress=999), s, "v"), [])  # another system: never sent
         s2 = session()
         self.assertEqual(E.build(SCAN, s2, "v"), [])                          # no position yet
+
+    def test_planetary_dock_names_its_body(self):
+        """A Docked at a station on a planet's surface carries the body approached (Body, BodyType "Planet"), as EDMC
+        adds it; an orbital station's never does, and nor does one with no body approached."""
+        s = session()
+        s.feed(FSDJUMP)
+        dock = {"timestamp": "2026-10-08T10:20:00Z", "event": "Docked", "StationName": "Thorn Constructions",
+                "StationType": "CraterOutpost", "StarSystem": "Smojooe AR-E b25-8", "SystemAddress": 18264118102193,
+                "MarketID": 3700000001}
+        [(_, env)] = E.build(dock, s, "v")
+        self.assertNotIn("Body", env["message"])                                  # nothing approached: nothing guessed
+        s.feed({"timestamp": "2026-10-08T10:10:00Z", "event": "ApproachBody", "StarSystem": "Smojooe AR-E b25-8",
+                "SystemAddress": 18264118102193, "Body": "Smojooe AR-E b25-8 A 1", "BodyID": 5})
+        [(_, env)] = E.build(dock, s, "v")
+        valid(env, "journal-v1.0.json")
+        self.assertEqual((env["message"]["Body"], env["message"]["BodyType"]), ("Smojooe AR-E b25-8 A 1", "Planet"))
+        [(_, env)] = E.build(dict(dock, StationType="Coriolis"), s, "v")
+        self.assertNotIn("Body", env["message"])                                  # an orbital station: no body
+        s.feed({"timestamp": "2026-10-08T10:30:00Z", "event": "LeaveBody", "StarSystem": "Smojooe AR-E b25-8",
+                "SystemAddress": 18264118102193, "Body": "Smojooe AR-E b25-8 A 1", "BodyID": 5})
+        [(_, env)] = E.build(dock, s, "v")
+        self.assertNotIn("Body", env["message"])
 
     def test_saa_signals_and_docked_and_location(self):
         s = session()
@@ -228,6 +250,39 @@ class RouteCodexSettlement(unittest.TestCase):
         self.s.status_body = None
         self.assertNotIn("BodyName", E.build(ev, self.s, "v")[0][1]["message"])
         self.assertEqual(E.build(dict(ev, Region=""), self.s, "v"), [])   # an empty required name: not sent
+
+    def test_scan_organic(self):
+        """scanorganic/1 (the author, 2026-10-10): Log and Sample, never Analyse; Body renamed BodyID; BodyName only for the
+        body approached with that id; Latitude/Longitude only from a live Status.json on that body, read at the scan."""
+        body = "Smojooe AR-E b25-8 A 1"
+        ev = {"timestamp": "2026-10-08T10:40:00Z", "event": "ScanOrganic", "ScanType": "Log",
+              "Genus": "$Codex_Ent_Fungoids_Genus_Name;", "Genus_Localised": "Fungoida",
+              "Species": "$Codex_Ent_Fungoids_01_Name;", "Species_Localised": "Fungoida Setisis",
+              "Variant": "$Codex_Ent_Fungoids_01_Polonium_Name;", "Variant_Localised": "Fungoida Setisis - Teal",
+              "SystemAddress": self.addr, "Body": 5}
+        [(name, env)] = E.build(ev, self.s, "v")                                  # nothing approached: no name, no place
+        valid(env, "scanorganic-v1.0.json")
+        m = env["message"]
+        self.assertEqual((name, m["StarSystem"], m["BodyID"], "Body" in m, "BodyName" in m, "Latitude" in m),
+                         ("scanorganic", "Smojooe AR-E b25-8", 5, False, False, False))
+        self.assertFalse(any(k.endswith("_Localised") for k in m))
+        self.s.feed({"event": "ApproachBody", "timestamp": "2026-10-08T10:30:00Z", "Body": body, "BodyID": 5})
+        self.s.status_pos = (12.5, -40.25, body, "2026-10-08T10:39:58Z")          # read 2 s before the scan
+        m = E.build(ev, self.s, "v")[0][1]["message"]
+        valid(E.build(ev, self.s, "v")[0][1], "scanorganic-v1.0.json")
+        self.assertEqual((m["BodyName"], m["Latitude"], m["Longitude"]), (body, 12.5, -40.25))
+        late = dict(ev, timestamp="2026-10-08T12:00:00Z")                         # a journal caught up later: no place
+        self.assertNotIn("Latitude", E.build(late, self.s, "v")[0][1]["message"])
+        self.s.status_pos = (12.5, -40.25, body, "2026-10-08T10:40:30Z")          # 30 s after: you have moved on
+        self.assertNotIn("Latitude", E.build(ev, self.s, "v")[0][1]["message"])
+        self.s.status_pos = (12.5, -40.25, "Smojooe AR-E b25-8 A 2", "2026-10-08T10:40:00Z")   # another body
+        self.assertNotIn("Latitude", E.build(ev, self.s, "v")[0][1]["message"])
+        other = E.build(dict(ev, Body=6), self.s, "v")[0][1]["message"]           # not the body approached
+        self.assertEqual(("BodyName" in other, other["BodyID"]), (False, 6))
+        self.assertNotIn("Variant", E.build({k: v for k, v in ev.items() if k != "Variant"}, self.s, "v")[0][1]["message"])
+        self.assertEqual(E.build(dict(ev, ScanType="Sample"), self.s, "v")[0][0], "scanorganic")
+        self.assertEqual(E.build(dict(ev, ScanType="Analyse"), self.s, "v"), [])   # can come anywhere: never sent
+        self.assertEqual(E.build(dict(ev, SystemAddress=1), self.s, "v"), [])      # the cross-check
 
     def test_settlement(self):
         ev = {"timestamp": "2026-10-08T10:30:00Z", "event": "ApproachSettlement", "Name": "Hamilton Base", "MarketID": 3820000000,
@@ -418,6 +473,7 @@ class StationData(unittest.TestCase):
         [(name, env)] = E.build(self.ev("Shipyard"), self.s, "v")
         valid(env, "shipyard-v2.0.json")
         self.assertEqual(env["message"]["ships"], ["adder", "sidewinder"])
+        self.assertNotIn("allowCobraMkIV", env["message"])   # about the commander, not the station: left out as the others do
         with open(os.path.join(self.dir, "FCMaterials.json"), "w", encoding="utf-8") as f:
             json.dump({"timestamp": self.t, "event": "FCMaterials", "MarketID": 3700251648, "CarrierName": "OUT OF THE BLUE",
                        "CarrierID": "G0X-85Z", "Items": [{"id": 128961524, "Name": "$aerogel_name;", "Name_Localised": "Aerogel",

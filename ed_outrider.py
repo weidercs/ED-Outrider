@@ -202,6 +202,8 @@ import outrider.eddn       # EDDN's messages from journal events, and what its a
 import outrider.edsm       # EDSM's journal upload: the events with where you were, and what its answers mean
 import outrider.checklist  # the exobiology checklist: every species by region, with your state (pure)
 import outrider.codex_images  # the checklists' pictures: Canonn's links and credits, refreshed once a day
+import outrider.overlay    # the in-game overlay's panels as draw lists (the window: python3 -m outrider.overlay_window)
+import outrider.overlay_runner  # Outrider runs that window itself on the game PC while the overlay is wanted
 from outrider.core import iso_ts, ts_seconds   # journal timestamps
 from outrider.fsd import (   # the frame shift drive's maths: range, fuel per jump, the fuel model, fleet figures
     FSD_RANGE_MODS, GUARDIAN_BOOST, conservative_optimal_mass, conservative_range, fleet_figures, fleet_range, fsd_range,
@@ -276,6 +278,11 @@ HIGHWAY = {"clipboard": True, "autotarget": False, "autotarget_delay": 5.0, "eff
            "autotarget_dry_run": False}
 AUTOTARGET_TEST_COUNTDOWN = 5   # s: the Plot Route tab's "test now": time to click into the game before the sequence
 AUTOTARGET_HONK_WAIT = 60       # s an auto-target waits for an auto honk on the same arrival to finish (honk first)
+OVERLAY_HIDE_FOCUS = {6, 7, 8, 9, 10, 11}   # Status.json GuiFocus: galaxy map, system map, orrery, FSS, SAA, codex (no panels over them)
+FLAG_SUPERCRUISE = 1 << 4
+OVERLAY_UA = "outrider-overlay"   # the overlay window's User-Agent (outrider/overlay_window.py): only it counts as drawing
+OVERLAY_TICK_S = 2             # s between checks that the overlay window runs while wanted
+OVERLAY_SEEN_S = 5             # s: an overlay window that asked this recently counts as connected (Settings says so)
 AUTOTARGET_DANGER_WAIT = 60     # s after an arrival a run waits for the game's own in-danger flag to clear (see arrival_danger_until)
 # The Highway map's optional background image ([highway] background_image): only the configured file is served
 # (GET /api/highway/background), and only one of these image types, checked by its first bytes too (no SVG: it can
@@ -605,6 +612,7 @@ BURST_END_GAP = 30        # s: ...and a collection is over after this quiet (a l
 BURST_RETARGET_S = 2      # s: a position read this soon after a collection's first ton can still move it onto a rig
 LOCATION_NEAR_M = 2000    # m: a saved site this close to a mining location's marker belongs to that location
 SURFACE_BUMP_M, SURFACE_BUMP_DEG, SURFACE_BUMP_S = 5, 10, 0.5   # the map's position updates: a move, a turn, at most 2/s
+FLAG_DOCKED = 1 << 0      # Status.json Flags: docked (at a station, a carrier or a port)
 FLAG_LANDED = 1 << 1      # Status.json Flags: landed (the ship on the ground)
 FLAG_IN_SRV = 1 << 26
 FLAG_IN_FIGHTER = 1 << 25   # with FLAG_IN_SRV: Status.json's Fuel and Cargo are the vehicle's, not the ship's
@@ -964,6 +972,7 @@ def settings_from(cfg, args, env_journals=None, detected=((), ())):
         **outrider.mcp.mcp_settings(cfg),
         "assistant": outrider.ask.assistant_settings(cfg),   # the voice's optional AI layer (off by default)
         **outrider.uploads.upload_settings(cfg),              # [eddn], [edsm]: written by Settings -> Uploads
+        **outrider.overlay.overlay_settings(cfg),             # [overlay]: the in-game overlay (Settings -> In-game overlay)
         "inara": outrider.inara.inara_settings(cfg),          # [inara]: the fork's Inara upload (off by default)
     }
 
@@ -1089,6 +1098,19 @@ conservative_ly = {n(st["highway"]["conservative_ly"])}   # that margin (ly, 0.5
 background_image = {p(_root_relative(st["highway"]["background_image"])) if st["highway"]["background_image"] else '""'}   # a top-down galaxy image you downloaded (PNG, JPEG, WebP or GIF) under the map; Outrider ships none
 background_extent = [{", ".join(n(x) for x in st["highway"]["background_extent"])}]   # ly: the image's edges, [xmin, xmax, zmin, zmax] (the usual galaxy images: -45000, 45000, -20000, 70000)
 background_opacity = {n(st["highway"]["background_opacity"])}   # 0.05 to 1
+
+[overlay]   # the in-game overlay: panels drawn over Elite's window by a window Outrider runs on the game PC (not on a server)
+enabled = {"true" if st["overlay"]["enabled"] else "false"}   # build the panels (the window shows nothing while false; Settings -> In-game overlay switches it)
+theme = {q(st["overlay"]["theme"])}   # the panels' colours: default, lcars, elite, babylon5, narn, minbari, centauri, sith, alliance or dark
+text_size = {q(st["overlay"]["text_size"])}   # small, normal or large
+system_panel = {"true" if st["overlay"]["system_panel"] else "false"}   # the system panel: the bodies worth your time, in supercruise
+body_panel = {"true" if st["overlay"]["body_panel"] else "false"}   # the body panel: the body you are heading to or near
+radar = {"true" if st["overlay"]["radar"] else "false"}   # the surface radar: samples, colony rings, the ship, on a body's surface
+strip_panel = {"true" if st["overlay"]["strip_panel"] else "false"}   # the system strip: two short lines across the top (where you are, the star, bodies found, values)
+now_panel = {"true" if st["overlay"]["now_panel"] else "false"}   # Now (To-Do & Info): Now condensed, the target, fuel, data at risk, what to do next, this session
+bio_panel = {"true" if st["overlay"]["bio_panel"] else "false"}   # every bio signal in the system, the ones over your bio_min highlighted, with samples and values
+system_seconds = {st["overlay"]["system_seconds"]}   # how long the system panel stays after arriving (0: while in supercruise in that system)
+radar_range = {st["overlay"]["radar_range"]}   # metres from the radar's centre to its edge (it widens to fit a colony ring)
 
 [assistant]
 enabled = {"true" if st["assistant"]["enabled"] else "false"}   # the voice's AI layer for questions the fixed phrases do not match (resources/ask.json); nothing is sent anywhere while false
@@ -1328,9 +1350,13 @@ CREATE TABLE IF NOT EXISTS jumps (
 -- What Spansh knew about a known system when you arrived (partial / complete): the streak strip's amber and
 -- blue. Live only, so it is kept through a journal re-read (not in RESET_JOURNAL_DATA): colours never change.
 CREATE TABLE IF NOT EXISTS arrival_verdicts (ts TEXT, id64 INTEGER, verdict TEXT, PRIMARY KEY (ts, id64));
+-- The systems of each route the game plotted, from NavRoute.json as it is read. Live only: kept through a journal
+-- re-read (not in RESET_JOURNAL_DATA), backups carry it.
 CREATE TABLE IF NOT EXISTS route_systems (
     id64 INTEGER PRIMARY KEY, name TEXT, x REAL, y REAL, z REAL,
     star_class TEXT, seen_ts TEXT);
+-- A system's main star class as the game told it (FSDTarget, StartJump, NavRoute.json), by id64. Kept through a
+-- journal re-read (not in RESET_JOURNAL_DATA): a re-read only writes the same rows again.
 CREATE TABLE IF NOT EXISTS star_classes (
     id64 INTEGER PRIMARY KEY, star_class TEXT);
 CREATE TABLE IF NOT EXISTS spansh_systems (
@@ -1696,6 +1722,18 @@ def journal_star(code):
     if code and code.startswith("D"):
         return f"White Dwarf ({code}) Star"
     return code
+
+
+def risk_rebuy(ship):
+    """The rebuy the risk figures compare the data aboard with ("N× rebuy"), or None: also None for a ship whose hull
+    has no credit value. An Arx-bought ship's Loadout has ModulesValue but no HullValue, and its rebuy covers the
+    modules only, so any trip's data reads as a hundred rebuys (the author, 2026-10-10). page.js riskRebuy is the same."""
+    s = ship or {}
+    rebuy = s.get("rebuy")
+    if not isinstance(rebuy, (int, float)) or rebuy <= 0:
+        return None
+    hull_free = (s.get("modules_value") or 0) > 0 and not (s.get("hull_value") or 0) > 0
+    return None if hull_free else rebuy
 
 
 def journal_planet(cls):
@@ -5553,6 +5591,13 @@ class State:
         self.route_known_on = False   # run() switches the lookups on: a State made elsewhere (tests) asks nobody
         self.route_known_wait = 0.0   # monotonic: no new lookups before (a minute after Spansh failed one)
         self.clipboard = None
+        # the in-game overlay ([overlay]; run() sets the config's): test panels until, Arrange mode until, the last
+        # time the overlay window asked (Settings says whether one is connected), and Here's summary cache for it
+        self.overlay_cfg = dict(outrider.overlay.DEFAULTS)
+        self.overlay_test_until = 0.0
+        self.overlay_arrange_until = 0.0
+        self.overlay_seen = 0.0
+        self.overlay_runner = None   # outrider.overlay_runner.OverlayRunner on the game PC (run() makes it; None in tests)
         self._hw_copied = (meta_get(db, "highway") or {}).get("arrival_ts")   # copied before a restart: not again
         self._autotarget_boost = (journals.boost or {}).get("ts")
         self.autotarget_task = None
@@ -5644,6 +5689,7 @@ class State:
             "inara": self.inara.info() if self.inara else None,
             "sampling": self.sampling_summary(),
             "surface": self.surface_summary(),
+            "overlay": self.overlay_info(),
             # metres between samples per genus (a shipped table), shown before you land (review S1)
             "colony": outrider.bio.colony_table() if outrider.bio else None,
             "since_sale": self.since_sale(),
@@ -6583,6 +6629,221 @@ class State:
         # is from the arrival star, so it is shown only while you are near nothing or near that star
         return {"body_id": d["Body"], "name": short_name(pos["name"], d.get("Name") or ""),
                 "near": short_name(pos["name"], st["body"]) if st.get("body") else None}
+
+    # ---- the in-game overlay (outrider/overlay.py; the window: outrider/overlay_window.py) ----
+
+    def overlay_layout(self):
+        """Where each overlay panel goes, how big, how opaque (meta overlay_layout: live-only, the player's own)."""
+        return outrider.overlay.clean_layout(meta_get(self.db, "overlay_layout"))
+
+    def overlay_palette(self):
+        return outrider.overlay.palette(self.overlay_cfg.get("theme", "default"))
+
+    def overlay_detail(self, id64):
+        """system_detail for the overlay's panels, kept until your scans or what is known of the system change (the
+        window asks once a second)."""
+        key = (id64, self.scan_version, id64 in self.bases, (self.systems.get(id64) or {}).get("status"))
+        cached = getattr(self, "_overlay_detail", None)
+        if cached and cached[0] == key:
+            return cached[1]
+        detail = self.system_detail(id64)
+        self._overlay_detail = (key, detail)
+        return detail
+
+    def overlay_strip_info(self, pos):
+        """What the system strip says about the system you are in."""
+        detail = self.overlay_detail(pos["id64"]) or {}
+        lv = detail.get("leaving") or {}
+        sol = math.dist((pos["x"], pos["y"], pos["z"]), (0, 0, 0)) if pos.get("x") is not None else None
+        firsts = detail.get("firsts") or {}
+        row = self.systems.get(pos["id64"]) or {}   # the Nearby list's row: Spansh's knowledge, planets, your maps
+        bodies = [b for b in detail.get("bodies") or [] if b.get("type") == "Planet"]
+        return {"name": pos.get("name"), "region": detail.get("region"), "sol_ly": sol, "star": self.here_star(),
+                "found": lv.get("scanned"), "total": lv.get("body_count") or row.get("body_count"),
+                "all_found": lv.get("all_found"), "honked": lv.get("honked"),
+                "value_now": detail.get("value_now"), "value_max": detail.get("value_max"),
+                "first": bool(firsts.get("system")), "firsts": firsts.get("bodies") or 0,
+                "mapped": sum(1 for b in bodies if b.get("mapped") or b.get("first_mapped")),
+                "planets": row.get("planets") or len(bodies) or None,
+                "in_spansh": row.get("in_spansh") if "in_spansh" in row else None}
+
+    def overlay_now_info(self, pos, now):
+        """What the Now panel says (outrider.overlay.now_panel): the inputs of the page's Now view, from the server."""
+        detail = self.overlay_detail(pos["id64"])
+        bodies = {b.get("name"): b for b in (detail or {}).get("bodies") or []}
+        ob = self.on_body() or self.near_body()
+        dest = self.destination()
+        a = self.arrival if self.arrival and self.arrival.get("id64") == str(pos["id64"]) else None
+        t = self.target
+        return {"name": pos.get("name"), "now": now, "arrival": a,
+                "target": t and {k: t.get(k) for k in ("name", "status", "known", "count", "star_class")},
+                "fuel": self.fuel_summary(), "boost": (self.journals.boost or {}).get("value"),
+                "unsold": self.unsold, "unsold_levels": (UNSOLD_WARN, UNSOLD_URGENT),
+                "rebuy": risk_rebuy(self.journals.ship), "since_sale": self.since_sale(),
+                "on_body": ob, "body": bodies.get(ob["body"]) if ob else None,
+                "sampling": self.sampling_summary() if ob else None,
+                "detail_ready": detail is not None, "leaving": (detail or {}).get("leaving"),
+                "value_now": (self.systems.get(pos["id64"]) or {}).get("value_now"),
+                "destination": dest["name"] if dest else None,
+                "destination_ls": (bodies.get(dest["name"]) or {}).get("dist_ls") if dest else None,
+                "this_session": self.this_session(), "last_session": self.last_session()}
+
+    def overlay_panels(self, now=None):
+        """The panels to draw now: the test panels while they show, else the ones switched on that have something to
+        say (none while [overlay] enabled is off, the game is not live, a map, the FSS, the SAA or the codex is open, or
+        in the hyperspace tunnel)."""
+        now = time.time() if now is None else now
+        cfg, pal = self.overlay_cfg, self.overlay_palette()
+        if now < self.overlay_test_until or now < self.overlay_arrange_until:
+            return outrider.overlay.test_panels(pal, cfg["text_size"], cfg["radar_range"])
+        st = self.journals.status_json or {}
+        if not cfg.get("enabled") or not st.get("live") or (st.get("gui_focus") or 0) in OVERLAY_HIDE_FOCUS \
+                or (st.get("flags") or 0) & FLAG_FSD_JUMP:   # nothing in the hyperspace tunnel: the system is changing
+            return []
+        flags, pos, out = st.get("flags") or 0, self.journals.pos, []
+        # the system panel: in supercruise in the system you are in (for system_seconds after arriving, when set)
+        if cfg.get("system_panel") and pos and flags & FLAG_SUPERCRUISE:
+            try:
+                fresh = not cfg.get("system_seconds") or now - ts_seconds(pos["ts"]) <= cfg["system_seconds"]
+            except (KeyError, TypeError, ValueError):
+                fresh = True
+            if fresh:
+                p = outrider.overlay.system_panel(self.overlay_detail(pos["id64"]), pal, cfg["text_size"], BODY_HIGHLIGHT, BIO_MIN)
+                if p:
+                    out.append(p)
+        # the body panel: the body targeted in game in this system, else the one you are flying near; flying your ship
+        # (landed, in the SRV or on foot the radar has the screen)
+        if cfg.get("body_panel") and pos and flags & FLAG_IN_MAIN_SHIP and not flags & (FLAG_LANDED | FLAG_IN_SRV) \
+                and not (st.get("flags2") or 0) & 1:
+            dest = self.destination()
+            name = dest["name"] if dest else short_name(pos["name"], st["body"]) if st.get("body") else None
+            detail = self.overlay_detail(pos["id64"]) if name else None
+            b = next((x for x in (detail or {}).get("bodies") or [] if x.get("name") == name), None)
+            p = outrider.overlay.body_panel(b, pal, cfg["text_size"], HIGH_GRAVITY,
+                                            outrider.bio.colony_table() if outrider.bio else None) if b else None
+            if p:
+                out.append(p)
+        # the system strip: where you are, wherever you are (ship, SRV, on foot)
+        if cfg.get("strip_panel") and pos:
+            p = outrider.overlay.strip_panel(self.overlay_strip_info(pos), pal, cfg["text_size"])
+            if p:
+                out.append(p)
+        # Now, condensed: anywhere in the system but docked (the ship docked, or on foot in a station, hangar or social
+        # space: the author, 2026-10-10); every bio signal in the system: anywhere, as the strip
+        docked = bool(flags & FLAG_DOCKED) or bool((st.get("flags2") or 0) & ON_FOOT_DOCKED)
+        if cfg.get("now_panel") and pos and not docked:
+            p = outrider.overlay.now_panel(self.overlay_now_info(pos, now), pal, cfg["text_size"], BODY_HIGHLIGHT, BIO_MIN,
+                                           HIGH_GRAVITY, CODEX_INTERESTING)
+            if p:
+                out.append(p)
+        if cfg.get("bio_panel") and pos:
+            p = outrider.overlay.bio_panel(self.overlay_detail(pos["id64"]), pal, cfg["text_size"], BIO_MIN, HIGH_GRAVITY,
+                                           CODEX_INTERESTING)
+            if p:
+                out.append(p)
+        # the surface radar: on a body (landed, in the SRV, on foot) or low over it, as the surface map shows
+        if cfg.get("radar"):
+            surf = self.surface_summary(now)
+            if surf and (surf.get("down") or surf.get("show")):
+                p = outrider.overlay.radar_panel(surf, pal, cfg["text_size"], cfg["radar_range"])
+                if p:
+                    out.append(p)
+        return out
+
+    def overlay_view(self, since=None, now=None, window=True):
+        """GET /api/overlay: what the overlay window draws, {version, enabled, arrange, canvas, layout, panels}; with
+        since = that version and nothing changed, only {same, version} (the window asks about once a second). window:
+        the overlay window asked (its User-Agent), not another visitor: only it counts as a window drawing."""
+        now = time.time() if now is None else now
+        if window:
+            self.overlay_seen = now
+        out = {"enabled": bool(self.overlay_cfg.get("enabled")), "arrange": now < self.overlay_arrange_until,
+               "test": now < self.overlay_test_until, "canvas": [outrider.overlay.CANVAS_W, outrider.overlay.CANVAS_H],
+               "layout": self.overlay_layout(), "panels": self.overlay_panels(now)}
+        version = hashlib.sha1(json.dumps(out, sort_keys=True).encode()).hexdigest()[:16]
+        if since and since == version:
+            return {"same": True, "version": version}
+        return dict(out, version=version)
+
+    def overlay_wanted(self, now=None):
+        """Whether Outrider should run the overlay window now: the overlay on, or the test panels or Arrange mode,
+        unless another overlay window (one started by hand) is already drawing."""
+        now = time.time() if now is None else now
+        want = bool(self.overlay_cfg.get("enabled")) or now < self.overlay_test_until or now < self.overlay_arrange_until
+        r = self.overlay_runner
+        other = r is not None and r.proc is None and r.state == "off" and now - self.overlay_seen < OVERLAY_SEEN_S
+        return want and not other
+
+    async def watch_overlay_window(self):
+        """Keep the overlay window running while it is wanted (OverlayRunner.tick every OVERLAY_TICK_S)."""
+        last = None
+        while True:
+            self.overlay_runner.tick(self.overlay_wanted())
+            st = self.overlay_runner.status()
+            if st != last:
+                last = st
+                self.bump()   # Settings shows the window's state
+            await asyncio.sleep(OVERLAY_TICK_S)
+
+    def overlay_info(self, now=None):
+        """The page's Settings -> In-game overlay: the switches, whether a window is drawing (it asked within the last
+        few seconds), the layout, and the test panels' and Arrange mode's time left."""
+        now = time.time() if now is None else now
+        cfg = self.overlay_cfg
+        return {"enabled": bool(cfg.get("enabled")), "theme": cfg.get("theme"), "text_size": cfg.get("text_size"),
+                "panels": {p: bool(cfg.get(f"{p}_panel" if p != "radar" else "radar")) for p in outrider.overlay.PANELS},
+                "window": now - self.overlay_seen < OVERLAY_SEEN_S, "layout": self.overlay_layout(),
+                "test": max(0, round(self.overlay_test_until - now)), "arrange": max(0, round(self.overlay_arrange_until - now)),
+                # Outrider runs the window itself on the game PC: its state; None on a server (the window runs elsewhere)
+                "runner": self.overlay_runner.status() if self.overlay_runner else None}
+
+    def overlay_set(self, body, now=None):
+        """POST /api/overlay {enabled?, theme?, text_size?, panels?: {system|body|radar|strip|now|bio: bool}, test?: bool, arrange?:
+        bool}: the switches, applied at once and written into [overlay] for the next start; test panels for
+        TEST_SECONDS; Arrange mode (the window takes the mouse to move and size the panels) until it is switched off or
+        ARRANGE_SECONDS pass. (answer, HTTP status)."""
+        now = time.time() if now is None else now
+        O = outrider.overlay
+        if not isinstance(body, dict) or not body:
+            return {"error": "expected {enabled, theme, text_size, panels, test, arrange}"}, 400
+        changes = {}
+        for key, val in body.items():
+            if key == "enabled" and isinstance(val, bool):
+                changes["enabled"] = val
+            elif key == "theme" and val in O.THEMES:
+                changes["theme"] = val
+            elif key == "text_size" and val in O.SIZES:
+                changes["text_size"] = val
+            elif key == "panels" and isinstance(val, dict) and val and all(
+                    p in O.PANELS and isinstance(v, bool) for p, v in val.items()):
+                changes.update({(f"{p}_panel" if p != "radar" else "radar"): v for p, v in val.items()})
+            elif key in ("test", "arrange") and isinstance(val, bool):
+                pass
+            else:
+                return {"error": f"{key}: not a setting, or not a valid value for it"}, 400
+        if "test" in body:
+            self.overlay_test_until = now + O.TEST_SECONDS if body["test"] else 0.0
+        if "arrange" in body:
+            self.overlay_arrange_until = now + O.ARRANGE_SECONDS if body["arrange"] else 0.0
+        note = None
+        if changes:
+            self.overlay_cfg.update(changes)
+            out, status = self.config_save({"overlay": changes})
+            if status != 200:
+                note = f"in use until Outrider stops, but the config file could not keep it: {out.get('error')}"
+        self.bump()
+        return dict(self.overlay_info(now), **({"note": note} if note else {})), 200
+
+    def overlay_layout_set(self, change):
+        """POST /api/overlay/layout {panel: {corner?, x?, y?, scale?, bg?, alpha?, reset?}}: from the window's Arrange
+        mode or Settings. (answer, HTTP status)."""
+        new, why = outrider.overlay.layout_update(self.overlay_layout(), change)
+        if why:
+            return {"error": why}, 400
+        meta_set(self.db, "overlay_layout", new)
+        self.db.commit()
+        self.bump()
+        return {"layout": new}, 200
 
     def region_info(self):
         """The galactic region you are in (codex entries are per region) and whether it is a nebula zone."""
@@ -11513,7 +11774,7 @@ class State:
                             *self.upload_tasks.values()) if t]
 
     def arrival_danger_until(self, now=None):
-        """The game sets Status.json's in-danger flag on every use of the FSD, from the charge until some 15-26 s after
+        """The game sets Status.json's in-danger flag on every use of the FSD, from the charge until some 16-26 s after
         a hyperspace arrival or entering supercruise (lifting off a planet...; logged in game 2026-10-09, any star,
         nothing near): no threat, but auto-target's guard refuses it. When that is all it can be (in danger, not
         interdicted, no jump charging, one of those here under AUTOTARGET_DANGER_WAIT s ago): the time a run may wait
@@ -13496,6 +13757,20 @@ def make_app(state, hosts=None):
                                              remove=body.get("remove") is True)
         return web.json_response(out, status=status)
 
+    async def overlay_get(request):
+        """GET /api/overlay[?since=version]: the overlay window's panels (State.overlay_view)."""
+        return web.json_response(state.overlay_view(request.query.get("since"),
+                                                     window=request.headers.get("User-Agent", "").startswith(OVERLAY_UA)))
+
+    async def overlay_post(request):
+        out, status = state.overlay_set(await json_object(request))
+        return web.json_response(out, status=status)
+
+    async def overlay_layout_post(request):
+        body = await json_object(request)
+        out, status = state.overlay_layout_set(body if body is not None else None)
+        return web.json_response(out, status=status)
+
     async def autohonk_view(request):
         try:
             body = await request.json()
@@ -13657,6 +13932,9 @@ def make_app(state, hosts=None):
     app.router.add_post("/api/copilot", copilot_view)
     app.router.add_post("/api/backup", backup_view)
     app.router.add_get("/api/highway", highway_view)
+    app.router.add_get("/api/overlay", overlay_get)
+    app.router.add_post("/api/overlay", pc_only(overlay_post))   # the overlay is a game-PC feature (the author, 2026-10-10)
+    app.router.add_post("/api/overlay/layout", pc_only(overlay_layout_post))
     app.router.add_get("/api/rail", rail_view)
     app.router.add_post("/api/ask", ask_view)
     app.router.add_get("/api/config", config_get_view)
@@ -13727,9 +14005,10 @@ def install_kind(root=None, env=None):
 
 
 async def check_bio_rules(state):
-    """Keep the exobiology spawn rules current. A copy ships with Outrider; each start asks GitHub
-    whether BioScan or the region map changed and fetches the new data if so (offline just keeps
-    the copy). Rows carry bio estimates, so they are rebuilt after an update."""
+    """Keep the exobiology spawn rules current. A copy ships with Outrider (without ExploData's colour tables, which
+    are downloaded on the first start into resources/bio_colours.json); each start asks GitHub whether BioScan,
+    ExploData or the region map changed and fetches the new data if so (offline just keeps the copy). Rows carry bio
+    estimates, so they are rebuilt after an update."""
     try:
         updated = await asyncio.get_running_loop().run_in_executor(None, lambda: outrider.bio.update_if_newer(log=print))
     except Exception as e:  # noqa: BLE001 -- no shipped copy and no network: the page works without predictions
@@ -14080,6 +14359,7 @@ async def run(args, st):
     print("co-pilot button: " + (f"{st['copilot']['button'] or '?'} on {st['copilot']['device'] or '?'}"
                                  if st["copilot"]["enabled"] else "off ([copilot] enabled)"))
     state.highway_cfg = dict(st["highway"])
+    state.overlay_cfg = dict(st["overlay"])
     state.upload_cfg = json.loads(json.dumps(st["uploads"]))   # [eddn]/[edsm] enabled, as Settings -> Uploads wrote them
     state.edsm_dry_path = os.path.join(outrider.DATA_DIR, "edsm-dryrun.jsonl")   # OUTRIDER_EDSM_DRYRUN's log
     saved = meta_get(db, "autotarget")   # the Highway tab's toggle and delay beat the config file once used
@@ -14115,6 +14395,12 @@ async def run(args, st):
     firsts_task = asyncio.create_task(state.watch_firsts()) if st["watch_firsts"] else None
     update_task = asyncio.create_task(state.watch_updates()) if st["update_check"] else None
     images_task = asyncio.create_task(state.watch_codex_images())   # the checklists' picture links, once a day
+    # the in-game overlay's window, run by Outrider on the game PC while the overlay is wanted (never on a server,
+    # under --simulate or with OUTRIDER_NO_OVERLAY_WINDOW: verify.sh's scratch server)
+    overlay_task = None
+    if state.game_pc and not state.simulate and not os.environ.get(outrider.overlay_runner.NO_WINDOW_ENV):
+        state.overlay_runner = outrider.overlay_runner.OverlayRunner(f"http://127.0.0.1:{args.port}")
+        overlay_task = asyncio.create_task(state.watch_overlay_window())
     # uploads: their own session (never queued behind Spansh), named and versioned as EDDN asks of a sender
     state.upload_session = ClientSession(timeout=ClientTimeout(total=20),
                                          headers={"User-Agent": f"ED-Outrider/{outrider.__version__}"})
@@ -14173,7 +14459,9 @@ async def run(args, st):
             state._honk_cancel.set()      # an auto honk holding Primary Fire lets go now (it held on for up to 20 s)
         if state.honker:
             state.honker.shutdown()       # ...and a press still waiting for the keyboard is refused
-        tasks = [t for t in (watcher, rules_task, button_task, firsts_task, update_task, images_task, inara_task,   # the quit backup: finish_backup
+        if state.overlay_runner:
+            state.overlay_runner.stop()   # the overlay window closes with Outrider
+        tasks = [t for t in (watcher, rules_task, button_task, firsts_task, update_task, images_task, overlay_task, inara_task,   # the quit backup: finish_backup
                              *state.background_tasks()) if t]
         for t in tasks:
             t.cancel()
@@ -14276,6 +14564,10 @@ def main(argv=None):
     p.add_argument("--list-backups", action="store_true",
                    help="List this database's backup zips in backup_dir (name, size, time) and exit.")
     args = p.parse_args(argv)
+    # the log's first line says which Outrider this is (the author, 2026-10-10): before the config is read, so before any
+    # of its warnings; not for the commands that print something and exit
+    if not (args.write_config or args.list_backups or args.restore is not None):
+        print(f"ED Outrider {outrider.__version__}")
     detected = (outrider.unsold.LIVE_DIRS, outrider.unsold.LEGACY_DIRS) if outrider.unsold else ([], [])
     st = settings_from(load_config(args.config), args, os.environ.get("ED_JOURNALS"), detected)
     if args.write_config:

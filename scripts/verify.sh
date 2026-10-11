@@ -112,15 +112,16 @@ EOF
   # Offline: every outside service goes to a closed local port, the bio-rules check keeps the shipped copy
   # (it would otherwise rewrite resources/bio_rules.json) and a missing Piper voice is not downloaded.
   # --journals: the fixture copy, whatever ED_JOURNALS says (the flag beats the environment, which beats the config)
-  OUTRIDER_VERIFY_STOP="$TMP/stop" "$PY" - --config "$TMP/scratch.toml" --db "$TMP/scratch.sqlite" --port "$PORT" --host 127.0.0.1 --journals "$TMP/journals" \
+  # OUTRIDER_NO_OVERLAY_WINDOW: never the overlay window on this machine's screen (Outrider runs it on a game PC)
+  OUTRIDER_NO_OVERLAY_WINDOW=1 OUTRIDER_VERIFY_STOP="$TMP/stop" "$PY" - --config "$TMP/scratch.toml" --db "$TMP/scratch.sqlite" --port "$PORT" --host 127.0.0.1 --journals "$TMP/journals" \
       >"$TMP/server.log" 2>&1 <<'EOF' &
 import os, sys
 sys.path.insert(0, ".")
 import ed_outrider, outrider.tts
 OFF = "http://127.0.0.1:9/offline"
 for k in ("SPANSH_SEARCH", "SPANSH_BODY_SEARCH", "SPANSH_STATION_SEARCH", "EDSM_SYSTEM", "EDSM_SPHERE", "EDSM_BODIES",
-          "SPANSH_ROUTE", "SPANSH_GENERIC_ROUTE", "SPANSH_SYSTEM_NAMES", "SPANSH_RICHES", "SPANSH_EXO",
-          "SPANSH_COMMODITIES", "SPANSH_TRADE"):
+          "SPANSH_ROUTE", "SPANSH_GENERIC_ROUTE", "SPANSH_SYSTEM_NAMES", "SPANSH_SYSTEM_SEARCH", "SPANSH_RICHES",
+          "SPANSH_EXO", "SPANSH_COMMODITIES", "SPANSH_TRADE"):
     setattr(ed_outrider, k, OFF)
 ed_outrider.SPANSH_DUMP = OFF + "/{id64}"
 ed_outrider.SPANSH_RESULTS = OFF + "/{job}"

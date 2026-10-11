@@ -1,4 +1,4 @@
-[ED Outrider](../../README.md) · [What's new](whats-new.md) · [Install and run](install.md) · [The views](views.md) · [Plot Route](plot-route.md) · [Cargo and trading](cargo-and-trading.md) · [Voice and alerts](voice-and-alerts.md) · **Automation** · [On a tablet](tablet.md) · [Uploads](uploads.md) · [Settings and good to know](settings.md) · [For the curious](for-developers.md)
+[ED Outrider](../../README.md) · [What's new](whats-new.md) · [Install and run](install.md) · [The views](views.md) · [Plot Route](plot-route.md) · [Cargo and trading](cargo-and-trading.md) · [Voice and alerts](voice-and-alerts.md) · **Automation** · [On a tablet](tablet.md) · [In-game overlay](overlay.md) · [Uploads](uploads.md) · [Settings and good to know](settings.md) · [For the curious](for-developers.md)
 
 # Automation
 
@@ -41,12 +41,14 @@ Docker), where the HOTAS is plugged in:
   Riches, Exomastery or trade route first, then the Highway's. Success or failure is said as for auto-target; with
   nothing to target, the voice says so in its personality. Out of the ship (the SRV, on foot, a fighter) a tap does
   nothing. A press during that half second cancels it before any key (a double tap that came a little slow) and
-  gives the status report instead. A double tap's second press must come within 400 ms of the first release
+  gives the status report instead; so does a press while the run is still waiting with no key pressed (waiting out
+  the game's danger flag after a jump, or an auto honk). A double tap's second press must come within 400 ms of the first release
   (`double_ms` under `[copilot]`; a tap waits that long to be sure it is one). It needs auto-target's key bindings
   (see [auto-target](plot-route.md)). It works whether or not
   auto-target after a supercharge is on: leave that off and tap the button when you are ready instead.
 - **Double tap:** a status report: fuel and jumps (and any core module under your level), on a Highway route the
-  boost and the next route system, the next stop, what is aboard against your rebuy, and the nearest unvisited
+  boost and the next route system, the next stop, what is aboard against your rebuy (only what is aboard for a ship
+  bought with Arx, whose hull has no credit value), and the nearest unvisited
   system (left out while you follow a route). With a body targeted it leads with that body
   ("A 3: 2.4 g, thin ammonia, 3 bio signals, up to 19 million, about 2 minutes, worth it"); mid-run on a body, the
   sampling. A double tap mid-line cuts it short.
@@ -68,4 +70,4 @@ Settings shows whether it is listening.
 
 ---
 
-[ED Outrider](../../README.md) · [Install and run](install.md) · [The views](views.md) · [Plot Route](plot-route.md) · [Cargo and trading](cargo-and-trading.md) · [Voice and alerts](voice-and-alerts.md) · **Automation** · [On a tablet](tablet.md) · [Settings and good to know](settings.md) · [For the curious](for-developers.md)
+[ED Outrider](../../README.md) · [What's new](whats-new.md) · [Install and run](install.md) · [The views](views.md) · [Plot Route](plot-route.md) · [Cargo and trading](cargo-and-trading.md) · [Voice and alerts](voice-and-alerts.md) · **Automation** · [On a tablet](tablet.md) · [In-game overlay](overlay.md) · [Uploads](uploads.md) · [Settings and good to know](settings.md) · [For the curious](for-developers.md)

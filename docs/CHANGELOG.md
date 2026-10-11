@@ -2,6 +2,286 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-11 · The launcher's clipboard note says which program serves which session
+- The block says wl-copy (wl-clipboard) is for Wayland sessions and xclip for X11 ones, and what is lost without it:
+  the copy, and auto-target's paste (it types the name by default, which still works).
+
+## 2026-10-11 · The launcher says which clipboard program to install
+- launch_outrider.sh checks the desktop session at every start (Wayland: wl-copy, X11: xclip, as Outrider picks them)
+  and, while the one it needs is missing, prints a marked block (coloured in a terminal) with the command for this
+  system's package manager (apt, dnf, pacman or zypper; otherwise the package's name) and the one that installs both.
+  Nothing without a desktop session (a server) or on macOS. It was a one-line hint after an install only.
+
+## 2026-10-10 · Docs: the overlay's side brought up to date (branch EDMC-Functionality)
+- The README and the overlay guide name all six panels (system, body, radar, the system strip, Now (To-Do & Info), Bio
+  signals). The overlay guide: the test panels draw every panel, none shows in the hyperspace tunnel, Now's target
+  words and at-risk line (the rebuy multiple, none for an Arx-bought ship, and how long since you sold), how PyQt6 is
+  installed (by the launcher and by Outrider, into `.venv`, and what happens when that fails), the crash give-up, where
+  each panel's tick box is and which start on, the layout kept in the database (copy `data/ed_outrider.sqlite` to carry
+  it), and a bottom nav line.
+- Install: the launcher's PyQt6 step, wmctrl and x11-utils on Linux, the overlay off in Docker. Settings: the In-game
+  overlay section, and `--simulate` keeps the overlay window off. For the curious: the overlay's files. Views, Voice and
+  alerts, Automation: no rebuy multiple for an Arx-bought ship.
+- The config's comments (and the example config, the page's panel tip): the system strip is two short lines; the
+  system panel's `system_seconds` counts from arriving, not the honk. The overlay window's docstring: PyQt6 is
+  installed while the overlay is on, not from Settings.
+- AGENT_GUIDE, DESIGN_NOTES and JOURNAL_REFERENCE: the overlay's modules, state, tests and limits, its config levels
+  and the page rules it copies, the new decisions (PyQt6 installed when the overlay is on, whole days since you sold,
+  where the panels hide), the Status.json flags and GuiFocus values it reads, and Loadout's HullValue/ModulesValue.
+  The changelog gains the missing entry for "the hint says Outrider runs the window" and O2's entry is corrected (the
+  ExploData tables were already downloaded, not shipped).
+- package.json's licence: GPL-3.0-or-later. `test_server_mode`'s guide check expects In-game overlay in the Settings list.
+
+## 2026-10-10 · Days since you sold: whole days on the page too (branch EDMC-Functionality)
+- Now's at-risk line ("6 d unsold") and the spoken welcome back ("unsold for 6 days") count whole days passed, as the
+  overlay's Now panel does, instead of rounding 6.7 days up to 7.
+
+## 2026-10-10 · Overlay: no Now panel while docked (branch EDMC-Functionality)
+- The Now (To-Do & Info) panel hides while you are docked: the ship's docked flag, or on foot in a station, hangar or
+  social space (`FLAG_DOCKED`, `ON_FOOT_DOCKED`), and comes back when you undock.
+
+## 2026-10-10 · Docs brought up to date
+- The guide: every page's bottom nav matches its top (What's new and Uploads included; Uploads and What's new gain
+  one); the README's tab list has Overview, Bookmarks and Plot Route. Views: Bookmarks is its own tab, Search's mining
+  filter is Local only, Now's at-risk line as it is (shown over your levels, "sell here", the high-g stakes, days
+  unsold), the surface map's sizes in Settings → Surface map. Voice and alerts: which alerts notify and which speak by
+  default, the Codex finds count row, the profanity share, the nearest-dock phrases. Plot Route: the two route slots,
+  Exomastery's options, Plot here with Trade chosen, the new voice phrases; the tablet's Plot Route; unique stops for
+  trade routes; the co-pilot press that cancels a waiting run. Uploads: every kind EDDN gets, what a catch-up cannot
+  send, a schema EDDN keeps refusing held until a restart, the developer switches' marks. Settings: the upload
+  switches are not among the Server settings. For the curious: the newer modules and scripts, where ExploData's
+  colours come from, what verify.sh checks.
+- The in-danger wait is 16 to 26 s (measured 16, 16, 26), not 15 to 26, in the guide, DESIGN_NOTES and a docstring.
+- ed_outrider.toml.example names ⚙ Settings and its sections instead of the old alerts dialog, the clipboard on
+  Windows, and biology samples among EDDN's data; launch_outrider.bat says which game-PC parts run on Windows.
+- DESIGN_NOTES: one full list of outside calls (Canonn, GitHub's update check and colour tables, EDAstro, and the AI
+  layer, which is not read-only), EDDN's field-for-field match with EDMC, EDDiscovery and EDDLite, biology samples on
+  scanorganic/1, the two status reports, one note for the survey / trade slot, duplicates cut. JOURNAL_REFERENCE:
+  the uploads see every line before the filter, and the uploads' traps. AGENT_GUIDE: `State.highway_ends`, the
+  newer tests, modules and scripts, the shorter speech keys, the live-only tables, the per-device keys.
+- The SCHEMA comments say `route_systems` and `star_classes` are kept through a journal re-read.
+- verify.sh takes SPANSH_SYSTEM_SEARCH offline too.
+
+## 2026-10-10 · EDDN: biology samples (scanorganic/1)
+- Each ScanOrganic Log and Sample goes to EDDN's scanorganic/1 (EDDI, EDO Materials Helper and EDEXO-Compare send it;
+  the schema is on EDDN's develop branch and the gateway takes it). Analyse never does (it can come in another system,
+  so the schema leaves it out). StarSystem and StarPos after the location cross-check, Body renamed BodyID, the
+  internal genus, species and variant names. BodyName only when the body you approached has that id; Latitude and
+  Longitude only from the live Status.json on that body, read between 90 s before and 10 s after the scan, so a
+  journal caught up later sends no position (`organic_message`, `Session.status_pos`).
+- The uploads guide says what is taken out more exactly: codex entries and samples keep where they were found.
+- tests/fixtures/eddn gains EDDN's scanorganic-v1.0.json (it starts with a BOM: the tests read the schemas with
+  utf-8-sig).
+
+## 2026-10-10 · The example config names Settings -> In-game overlay for [overlay] (branch EDMC-Functionality)
+- Its heading's list of where each setting is changed in the page gains the overlay's (whose switches apply at once).
+
+## 2026-10-10 · The example config says the page can change every setting
+- ed_outrider.toml.example's heading says every setting can be changed in the web page's Settings (Server settings,
+  Uploads), which writes ed_outrider.toml itself (comments kept, a .bak of the old copy).
+
+## 2026-10-10 · EDDN: planetary docks name their body; no allowCobraMkIV
+- Compared with EDMC, EDDiscovery and EDDLite on EDDN's relay (45 hours, 1.8 million of their messages): Outrider
+  sends every journal schema they do (ApproachSettlement, CarrierJump and FCMaterials not seen live yet), field for
+  field, with two differences, both now gone:
+- A Docked at a station on a planet's surface (crater outposts and ports, surface stations, settlements, planetary
+  construction depots) carries the body you approached, `Body` and `BodyType` "Planet", as EDMC adds them (the journal's
+  Docked has no body). An orbital station's never does.
+- shipyard/2 no longer carries `allowCobraMkIV`: it is about the commander, not the station, and the other three
+  leave it out.
+
+## 2026-10-10 · Overlay: the PyQt6 messages say "in Outrider's venv" (branch EDMC-Functionality)
+- The install popup, Settings' status, the launcher's line and the guide say PyQt6 goes into Outrider's own venv, so
+  nobody takes it for a system-wide install.
+
+## 2026-10-10 · Overlay: a popup while PyQt6 installs (branch EDMC-Functionality)
+- While Outrider installs PyQt6 for the overlay window, a popup at the top of the page says so ("Installing PyQt6 for
+  the in-game overlay…", with a spinner), in every window of the page; when it finishes it says "PyQt6 installed: the
+  overlay window is starting" or that it failed (Settings has why) for five seconds, then goes (`renderOverlayInstall`).
+
+## 2026-10-10 · No rebuy multiple for a ship whose hull has no value (branch EDMC-Functionality)
+- An Arx-bought ship's Loadout has ModulesValue but no HullValue, and its rebuy covers the modules only (the author's
+  ship: 1.09M), so any trip's data read as ~110 rebuys. For such a ship Outrider leaves the rebuy out of the risk
+  figures: no "× rebuy" on the unsold tile, Now's at-risk line, the overlay's Now panel or the status report; the
+  rebuy-multiple warning levels do not apply (the credit levels still do); the approach warning speaks a line without
+  rebuys. `risk_rebuy` (server) and `riskRebuy` (page). Settings says so beside the rebuy levels.
+
+## 2026-10-10 · Overlay: how long since you sold, in words (branch EDMC-Functionality)
+- The Now panel's data-at-risk line says "3 days unsold" (was "3 d unsold"), and from a week "2 weeks 2 days since
+  sold", or "2wk2d since sold" when the written-out form would not fit on the line (`overlay.unsold_age`). Whole days
+  passed, no longer rounded up.
+
+## 2026-10-10 · Settings: the overlay's help as three short points (branch EDMC-Functionality)
+- Settings -> In-game overlay: the paragraph under the table becomes a list (game PC only and PyQt6, borderless or
+  windowed, Arrange panels), without the Install PyQt6 button it still mentioned.
+
+## 2026-10-10 · Overlay: PyQt6 installed when the overlay is on; each panel's switch in its row (branch EDMC-Functionality)
+- No Install PyQt6 button any more (the author's call: not a menu option). launch_outrider.sh / .bat install PyQt6
+  before Outrider starts when `[overlay] enabled = true` is in the config and it is missing
+  (`python -m outrider.overlay_runner --setup`; on Linux they also say when wmctrl is missing), and Outrider installs
+  it itself, once per switching on, when the overlay (or the test panels, or Arrange mode) is switched on without it.
+  POST `/api/overlay/install` is gone.
+- Settings -> In-game overlay: each panel's on/off box is in its own row of the table, beside its place, size and
+  opacity (the list above the table is gone, so the section is smaller); what a panel shows is its name's hover tip,
+  and a panel switched off is dimmed.
+
+## 2026-10-10 · Overlay: the Now panel named "Now (To-Do & Info)" (branch EDMC-Functionality)
+- Its name in Settings -> In-game overlay, Arrange mode's labels, the config's comment and the guide (the key stays
+  `now_panel`). Settings writes the panels' names escaped.
+
+## 2026-10-10 · Overlay: the Now and Bio signals panels (branch EDMC-Functionality)
+- Two more optional panels, off by default (`[overlay] now_panel`, `bio_panel`; Settings -> In-game overlay).
+- **Now**, the page's Now view condensed: the system (and the arrival verdict for 20 s), the target, fuel, the data at
+  risk past `unsold_warn`, the on-body card with the sample spacing, or Next (the first of the suggested order, with the
+  supercruise time and per-minute value) and the targeted body, this session. Now's plan is ported to Python
+  (`overlay.plan_items`, the page's `worthLeavingFor` + `planItems`) with the config's levels.
+- **Bio signals**: every body with bio in the system, worth it or not. The ones meeting your levels (`bio_min`, a run
+  started, new to your codex, unpriced) are highlighted, the rest muted, the finished ones ticked; per species: the
+  samples, the colour, the codex mark and the value; not-DSS'd signals show what they could be.
+
+## 2026-10-10 · Overlay: the system strip's lines rearranged and centred (branch EDMC-Functionality)
+- Line 1 is the system, its region and the star; the distance from Sol, now, max and first discovered move to line 2,
+  before the body counts; both lines are centred in the box (a `runs` line can be centred: `align` "center", measured
+  with the window's real fonts).
+
+## 2026-10-10 · Overlay: a game-PC feature only (branch EDMC-Functionality)
+- The overlay joins the key presses as a game-PC feature (the author's call): Outrider on the game PC runs the window,
+  and an Outrider on a server has no overlay. Gone: launch_overlay.sh / .bat (a window drawn from a server),
+  `[overlay] url` and `password`, the window's sign-in; Settings -> In-game overlay is left out on a server (as Auto
+  honk is), and POST `/api/overlay` and `/api/overlay/layout` answer 409 there.
+
+## 2026-10-10 · Overlay: Windows' click-through both ways; where it works (branch EDMC-Functionality)
+- On Windows the window only ever added the click-through style (WS_EX_TRANSPARENT), so Arrange mode would never have
+  had the mouse there: it is taken away again for Arrange mode (`win_exstyle`).
+- The guide's "Good to know" says where the overlay works: X11 (a compositor needed), Wayland through XWayland (tried
+  on GNOME), not with Proton's native Wayland mode, fractional scaling untried, Windows untried, never exclusive
+  fullscreen or gamescope.
+
+## 2026-10-10 · Overlay: the system strip (branch EDMC-Functionality)
+- A fourth panel, optional (`[overlay] strip_panel`, off by default), made for the top of the screen: line 1 where you
+  are (system, region, distance from Sol, the star in words with ⛽ / ⚡, now and max, 🏁 first discovered), line 2
+  condensed (bodies, found of total, 🏁 discovered by you, 🗺 mapped of the planets, Spansh ✓ or ✗). It shows wherever
+  you are (ship, SRV, on foot). The author's EDMC had BioScan's line along the top.
+- Panels can be centred along the top or bottom edge (layout corners `n`, `s`; "top centre" and "bottom centre" in
+  Settings): Arrange mode centres a panel dropped about the middle. Star words name giants and supergiants.
+
+## 2026-10-10 · Overlay: test panels for a minute, whatever is in front (branch EDMC-Functionality)
+- The test panels showed only once you were back in the game (the overlay draws while the game is in front, and they
+  are pressed from Outrider's page), so most of their 20 s went by unseen. They now stay a minute and show over the
+  game's window whatever is in front, as Arrange mode does (`overlay_window.should_show`).
+
+## 2026-10-10 · Overlay settings: the hint says Outrider runs the window (branch EDMC-Functionality)
+- Settings -> In-game overlay's hint said to start the window by hand (`python3 -m outrider.overlay_window`, PyQt6
+  installed with pip). It now says Outrider runs the window itself on the game PC while the overlay is on, and gives
+  the command for the game PC when Outrider runs on a server (`./launch_overlay.sh --url ... --password ...`).
+
+## 2026-10-10 · Overlay: Outrider runs the window itself (branch EDMC-Functionality)
+- On the game PC, Outrider starts the overlay window while the overlay is on (or for the test panels and Arrange mode),
+  closes it when it is switched off and when Outrider stops, and starts it again after a crash (a growing wait; it
+  gives up after five in a row and says so). One application: launch_overlay.sh is only for an Outrider on a server.
+  It does not start a second window when one started by hand is drawing.
+- Without PyQt6, Settings -> In-game overlay says so with an **Install PyQt6** button (into Outrider's own
+  environment); the window's state is shown there (starting, drawing, restarting, failed).
+- The window sets GDK_BACKEND=x11 when it runs through XWayland: Qt's GNOME theme starts Gtk, which followed the
+  session's GDK_BACKEND=wayland and could exit the window.
+
+## 2026-10-10 · Overlay: say when no window is running (branch EDMC-Functionality)
+- Show test panels (or Arrange panels) with no overlay window running looked like it did nothing: the panels are drawn
+  by the window on the game PC. Settings -> In-game overlay now says so with the command to start it
+  (`./launch_overlay.sh`, Windows `launch_overlay.bat`), and pressing either button says nothing can show until it
+  runs. "An overlay window is drawing" counts only the window's own requests (its User-Agent), not any visitor's GET.
+
+## 2026-10-10 · Overlay: nothing in the hyperspace tunnel (branch EDMC-Functionality)
+- The panels hide while Status.json's FSD jump flag is on (BioScan's "hidden during FSD jumps"): the system is
+  changing under them.
+
+## 2026-10-10 · Overlay: the launchers and the guide (branch EDMC-Functionality)
+- `launch_overlay.sh` / `launch_overlay.bat` start the overlay window with Outrider's .venv and offer to install PyQt6
+  into it the first time (only on a yes); on Linux they warn when wmctrl, xprop or xwininfo is missing. Windows has
+  the code and the launcher but is not yet tried against the game.
+- The guide's new page, In-game overlay (docs/guide/overlay.md): what the panels show, starting the window (and
+  pointing it at a server), arranging, the settings; in every page's links and the README's index. DESIGN_NOTES: why
+  our own window, Modern Overlay's code and GPL-3, the layout kept by Outrider, the config's levels.
+
+## 2026-10-10 · Overlay O7: themes (branch EDMC-Functionality)
+- `[overlay] theme` colours the panels from the theme's own stylesheet (static/themes/<name>.css: its title, text,
+  muted, good, warn, bad, accent, panel and line colours, `var()` chains resolved; anything missing: the Default's,
+  which are the page's dark colours) and frames them as the 10-05 plan drew them: cut corners (Elite, Narn), a double
+  line (Centauri, Minbari), LCARS's bars, rounded for the rest.
+
+## 2026-10-10 · Overlay O6: the surface radar (branch EDMC-Functionality)
+- On a body (landed, in the SRV, on foot) or low over it, as the surface map shows: a heading-up radar from the
+  surface summary, you at the centre, N on the rim; the run in progress's sample points with their colony rings (red
+  while you are inside one, green once clear), other runs' faint, tagged plants, the ship with its distance, your
+  rigs; what lies beyond the edge on the rim in its direction. The edge is `[overlay] radar_range`, widened to fit
+  the run's colony ring. Underneath: "Next: 500 m from all · nearest 302 m", or "Clear: sample here".
+  The test panels' radar is built the same way.
+
+## 2026-10-10 · Overlay O5: the body panel (branch EDMC-Functionality)
+- Flying your ship, the body panel shows the body targeted in game in this system (else the one you are near): landable,
+  gravity (amber at your `high_gravity`), atmosphere, temperature; what mapping is still worth, first discovered, geo
+  signals; its life: each run under way ("2/3", with the colony distance), each finished species (✓, its value), each
+  likely species with its codex mark and colour, colony distance and "up to" value, or before the DSS what it could
+  be and pay; and "Worth landing: up to ..." with the ×5 first-footfall note. Landed, in the SRV or on foot it gives
+  way to the radar.
+
+## 2026-10-10 · Overlay O4: the system panel (branch EDMC-Functionality)
+- In supercruise, the system panel lists what is worth your time in the system you are in, from what Here knows
+  (`State.system_detail`, cached on the scan version): each body with mapping or bio left over your levels (the
+  config's `body_highlight_level` and `bio_min`), nearest first, as TO MAP, TO LAND, MAP + LAND or a run in progress
+  ("Bacterium 1/3") with the credits and the codex mark with its colour ("✪ Lime"); then the valuable ones done
+  (MAPPED, SAMPLED); curiosities on an "Also here" line; what is left in the whole system, and how many bodies are
+  under your levels. Hidden over the maps, the FSS, the SAA and the codex; `[overlay] system_seconds` limits it to
+  that long after arriving.
+
+## 2026-10-10 · Overlay O3: arranging the panels (branch EDMC-Functionality)
+- Arrange mode (Settings -> In-game overlay, **Arrange panels**): the overlay window takes the mouse and frames each
+  panel. Drag to move it (it is kept from the corner nearest where it lands, so a resolution change keeps it there),
+  drag its corner to size it, wheel over it for its background's opacity, Shift and wheel for the whole panel's;
+  **Done** at the top (or the page's button) ends it. Edits are sent when the drag ends or the wheel stops.
+- Settings -> In-game overlay: the overlay on or off, each panel on or off, the theme and text size, whether an
+  overlay window is drawing, Show test panels, Arrange panels, and each panel's corner, offsets, size and the two
+  opacities as fields (with a reset).
+
+## 2026-10-10 · Overlay O2: the window on the game PC, and GPL-3 (branch EDMC-Functionality)
+- `python3 -m outrider.overlay_window` (PyQt6: `pip install -r requirements-overlay.txt`; never in the Docker image):
+  a frameless, translucent, always-on-top window that lets clicks through, follows Elite's window (X11, and XWayland
+  on a Wayland session as Elite under Proton is; Windows untried), hides when the game is not in front, and paints the
+  panels from GET `/api/overlay` (once a second; signs in to a server with `[overlay] password`). `--render PNG` draws
+  one frame into a picture instead.
+- Finding the game's window (`outrider/overlay_tracking.py`) and the window's flags are adapted from EDMC Modern
+  Overlay (GPL v3), so **ED Outrider is now GPL v3 or later** (LICENSE, README, the Docker label). The README credits
+  Modern Overlay, and EDMarketConnector for the upload rules. EDMC-ExploData's colour tables (its repository has only
+  the GPL v2 text) do not stand in the way: since the commit before O1 they are downloaded, never shipped.
+
+## 2026-10-10 · Overlay O1: the panels' server side (branch EDMC-Functionality)
+- `outrider/overlay.py`: the in-game overlay's panels as draw lists on a 1280x960 canvas (text, rectangles, circles,
+  lines, markers), a text-panel builder, test panels, the `[overlay]` settings (enabled, theme, text_size, each panel
+  on/off, system_seconds, radar_range; url and password for the window on the game PC) and the panels' layout (per
+  panel a corner, an offset, a size, the background's and the whole panel's opacity; meta `overlay_layout`).
+- GET `/api/overlay` (with `since=<version>`: just `{same}` when nothing changed), POST `/api/overlay` (the switches,
+  written into the config; test panels for 20 s; Arrange mode for at most 10 minutes), POST `/api/overlay/layout`.
+  The real panels come in O4-O6; nothing draws them until the window (O2).
+
+## 2026-10-10 · Docs: the ExploData notes without the licence change still to come
+- The CHANGELOG and DESIGN_NOTES entries for the downloaded colour tables no longer say Outrider's licence changed.
+
+## 2026-10-10 · ExploData's colour tables downloaded, not shipped; the README's credits
+- The colour tables (EDMC-ExploData: its repository carries only the GPL v2 text, without "or later") leave the
+  repository: `resources/bio_rules.json` ships with no colours, and they are downloaded on the first
+  start into `resources/bio_colours.json` (git- and docker-ignored), merged in when the rules load and refreshed with
+  them; a missing colours file makes the rules out of date, so a fresh install or a new container fetches it. If
+  ExploData cannot be fetched, the colours already downloaded are kept. BioScan's rules and the region map still
+  ship; the colony distances stay in the code, credited to the game (the Genetic Sampler shows them).
+- The README's credits are a table: what, from whom, under which licence, and how Outrider holds it.
+
+## 2026-10-10 · The log's first line: the name and version
+- Starting the server prints "ED Outrider <version>" first, before the config's reading and its warnings, so a log
+  (Docker's included) says which Outrider wrote it. Not for --write-config, --list-backups or --restore.
+
+## 2026-10-10 · Exo-Biology: a green ✓ on a complete genus
+- A genus box's heading gets a green ✓ when every species that can grow in the region shown has all its colours
+  found (one with no colour table: found at all; All regions asks for every species). Not on Geology (no colours).
 ## 2026-10-10 · Sell / Buy: a fleet carrier's name in the results
 - A fleet carrier in the Sell / Buy lookup shows its own name with the callsign beside it ("Deep Space Relay (carrier
   G0B-W2J)"), from Spansh's `carrier_name`; a carrier Spansh has no name for shows its callsign as before.

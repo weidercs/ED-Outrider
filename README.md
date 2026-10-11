@@ -79,12 +79,13 @@ Everything about installing, the optional parts, Docker, other devices and backu
 |---|---|
 | **[What's new](docs/guide/whats-new.md)** | What each release brings: new things to try, settings worth a look, anything to know before updating |
 | <a id="-running-as-a-server-docker"></a><a id="-other-devices-on-your-network"></a><a id="-backups"></a>**[Install and run](docs/guide/install.md)** | Getting started in full (Linux, Windows, the optional parts), running as a server in Docker, other devices on your network, backups |
-| <a id="-the-views"></a><a id="-the-surface-map"></a>**[The views](docs/guide/views.md)** | Every tab (Nearby, Here, Map, History, Bio/Geo with the Exo-Biology and Geology checklists, Log, Materials, Search, My firsts, Now), the header tiles, the desktop themes, the surface map |
+| <a id="-the-views"></a><a id="-the-surface-map"></a>**[The views](docs/guide/views.md)** | Every tab (Overview, Nearby, Here, Map, History, Bio/Geo with the Exo-Biology and Geology checklists, Bookmarks, Log, Materials, Search, My firsts, Now; Plot Route has its own page), the header tiles, the desktop themes, the surface map |
 | <a id="-the-neutron-highway"></a>**[Plot Route](docs/guide/plot-route.md)** | The Neutron Highway (exact and neutron plotters), Road to Riches, Exomastery and trade routes, following a route, 🎯 and auto-target, the nearest place to dock |
 | <a id="-cargo-and-your-carrier"></a><a id="-trading"></a>**[Cargo and trading](docs/guide/cargo-and-trading.md)** | Your hold and your fleet carrier's (tracked, no Frontier sign-in), the carrier's tritium, Sell / Buy from Spansh's markets, trade routes |
 | <a id="-alerts"></a><a id="-the-voice"></a><a id="-ask-outrider-by-voice"></a><a id="-ask-an-ai-about-your-game"></a>**[Voice and alerts](docs/guide/voice-and-alerts.md)** | What Outrider tells you and when, the voice and its personalities, editing and banning lines, asking by voice, asking an AI |
 | <a id="-auto-honk"></a><a id="-the-co-pilot-button"></a>**[Automation](docs/guide/automation.md)** | Auto honk and the co-pilot button (on the game PC) |
 | <a id="-on-a-tablet"></a>**[On a tablet](docs/guide/tablet.md)** | The touch layout at /tablet, its nine themes, the control rail, the Android app |
+| **[In-game overlay](docs/guide/overlay.md)** | Panels drawn over the game: the system worth your time, the body you are heading to, a surface radar, the system strip, Now (To-Do & Info), bio signals; arranging them |
 | **[Uploads](docs/guide/uploads.md)** | EDDN and EDSM (opt-in, off by default): what is sent and never sent, one uploader at a time, EDSM's key |
 | <a id="-settings"></a><a id="-good-to-know"></a>**[Settings and good to know](docs/guide/settings.md)** | Every setting and config key, and the things worth knowing (what "not on the page" means, estimates, updates) |
 | <a id="-for-the-curious"></a>**[For the curious](docs/guide/for-developers.md)** | What's in the box, the code's layout, the status API for overlays; contributors start with the agent guide |
@@ -94,25 +95,29 @@ The project's history is in the [changelog](docs/CHANGELOG.md). Contributors and
 
 ---
 
-<p align="center">
-Data from <a href="https://spansh.co.uk">Spansh</a> and <a href="https://www.edsm.net">EDSM</a>.
-Exobiology spawn conditions are the community's work, as gathered by the Canonn Research Group and maintained in
-<a href="https://github.com/Silarn/EDMC-BioScan">EDMC-BioScan</a>; the galactic region map (for the exobiology rules and the Highway map's regions) is
-<a href="https://github.com/klightspeed/EliteDangerousRegionMap">klightspeed's</a> (MIT); sample colony
-distances and colour variants are from <a href="https://github.com/Silarn/EDMC-ExploData">EDMC-ExploData</a> (GPL-2.0).
-Planetary mining odds are CMDR Grumlop's survey from the
-<a href="https://edfieldmanual.com/index.php?title=Module:Data/SurfaceMiningProspecting">Elite Dangerous Field Manual</a>
-(<a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>), shipped unchanged in <code>resources/mining_odds.json</code>.<br>
-The geology checklist's reported sites are counted from <a href="https://canonn.science">Canonn</a>'s codex records
-(<code>resources/geo_codex.json</code>); the checklists' pictures are Canonn's screenshots, linked (never copied) and
-credited to the commander who took each (<code>resources/codex_images.json</code> holds only the links).<br>
-The tablet themes' emblems (in <code>static/emblems/</code>, each under the terms in its <code>CREDITS.txt</code>, not the GPL):
-the Explorer Elite badge is used under Frontier's media usage rules; the Babylon 5 emblems (© Warner Bros.) are public-domain
-redrawings from the Babylon 5 Wiki; the Sith emblem is Gameposo's, vectorised by Marnanel (Wikimedia Commons,
-CC BY-SA 4.0), and the Rebel Alliance emblem a public-domain Wikimedia Commons file (both Lucasfilm trademarks).
-Unofficial, non-commercial fan use.<br>
-ED Outrider is free software under the <a href="LICENSE">GNU GPL v2 or later</a>.<br>
+## Credits and licence
+
+| What | From | Licence | In Outrider |
+|---|---|---|---|
+| Systems, bodies, stations, routes | [Spansh](https://spansh.co.uk), [EDSM](https://www.edsm.net) | their terms | looked up as you play |
+| Exobiology spawn conditions, nebulae | the community's work, gathered by the Canonn Research Group, maintained in [EDMC-BioScan](https://github.com/Silarn/EDMC-BioScan) | GPL v2 or later | `resources/bio_rules.json`, refreshed when it changes |
+| Colour variants | [EDMC-ExploData](https://github.com/Silarn/EDMC-ExploData) | GPL v2 | downloaded on the first start, not shipped |
+| Colony distances | the game (the Genetic Sampler shows them) | | `outrider/bio.py` |
+| Galactic region map | [klightspeed's EliteDangerousRegionMap](https://github.com/klightspeed/EliteDangerousRegionMap) | MIT | in `resources/bio_rules.json` |
+| Planetary mining odds | CMDR Grumlop's survey, [Elite Dangerous Field Manual](https://edfieldmanual.com/index.php?title=Module:Data/SurfaceMiningProspecting) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) | `resources/mining_odds.json`, unchanged |
+| Geology sites; checklist pictures | [Canonn](https://canonn.science)'s codex records and screenshots | Canonn's | site counts in `resources/geo_codex.json`; pictures linked, never copied, credited to the commander who took each |
+| EDDN and EDSM upload rules | [EDMarketConnector](https://github.com/EDCD/EDMarketConnector) (EDCD) | GPL v2 or later | followed, with EDCD's notice in `outrider/eddn.py` |
+| The overlay window's code | [EDMC Modern Overlay](https://github.com/SweetJonnySauce/EDMCModernOverlay) | GPL v3 | adapted, with its notice: `outrider/overlay_tracking.py`, `outrider/overlay_window.py` |
+
+The tablet themes' emblems (`static/emblems/`, each under the terms in its `CREDITS.txt`, not the GPL): the Explorer
+Elite badge under Frontier's media usage rules; the Babylon 5 emblems (© Warner Bros.), public-domain redrawings from
+the Babylon 5 Wiki; the Sith emblem, Gameposo's, vectorised by Marnanel (Wikimedia Commons, CC BY-SA 4.0); the Rebel
+Alliance emblem, a public-domain Wikimedia Commons file (both Lucasfilm trademarks). Unofficial, non-commercial fan use.
+
+ED Outrider is free software under the [GNU GPL v3 or later](LICENSE).
+
+<p align="center"><sub>
 ED Outrider was created using assets and imagery from Elite Dangerous, with the permission of Frontier Developments
 plc, for non-commercial purposes. It is not endorsed by nor reflects the views or opinions of Frontier Developments and
 no employee of Frontier Developments was involved in the making of it.
-</p>
+</sub></p>

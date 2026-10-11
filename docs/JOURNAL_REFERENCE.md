@@ -10,7 +10,8 @@ the code; the constants named are in `ed_outrider.py` unless another file is giv
 - The game writes `"event":"Name"` with no space after the colon. `Journals.read_file` only parses lines
   containing one of the `WANTED` byte strings built from the `*_EVENTS` tuples, so **an event that is not in
   one of those tuples is never seen**. `outrider/unsold.py` has its own list (`INTERESTING`); `outrider/log.py` reads
-  every line for the Log.
+  every line for the Log. The uploads (`outrider/uploads.py`) see every line of a live folder before this filter
+  (`self.uploads.line(...)` in `read_file`), so EDDN and EDSM get events Outrider itself never parses.
 - Only complete lines are consumed (the game may be mid-write). Offsets are stored per file in
   `journal_files`; the same file seen in two folders (a copied legacy folder, two Proton prefixes) is read
   once (`twins`).
@@ -30,7 +31,7 @@ the code; the constants named are in `ed_outrider.py` unless another file is giv
 | `SAASignalsFound` | DSS results: signal counts, `Genuses` (which genera are on the body), ring hotspots. |
 | `SAAScanComplete` | A body mapped (`own_mapped`, the "mapped" call-out); for a ring, the only record that it was probed. |
 | `ScanBaryCentre` | Barycentre orbits for the schematic. |
-| `ScanOrganic` | Sample runs: `Log` starts (and abandons any other run), `Sample`, `Analyse` completes. `Body` is the body id. |
+| `ScanOrganic` | Sample runs: `Log` starts (and abandons any other run), `Sample`, `Analyse` completes. `Body` is the body id. It carries no position: a sample point is the live Status.json's within 90 s (`note_sample_point`). The game writes a biology `CodexEntry` in the same second just before a first `Log`: that is where you stand, not a plant. |
 | `CodexEntry` | Codex entries, "new to your codex", vouchers. A biology one (`Category` `$Codex_Category_Biology;`, `Name` `$Codex_Ent_<Genus>_<NN>_<variant>_Name;`, the species being `$Codex_Ent_<Genus>_<NN>_Name;`) is written each time the composition scanner reads a plant: it carries `Latitude`/`Longitude` on foot only (21 of the author's 23), so from the ship or SRV the position is Status.json's at that moment (`bio_tags`, BioScan's waypoints). |
 | `Disembark` | Footfall on a planet (`OnPlanet`). |
 | `ApproachBody`, `LeaveBody`, `Touchdown` | Approach briefing, leaving a body mid-run, the body you are at; your ship's landing spot. |
@@ -40,7 +41,7 @@ the code; the constants named are in `ed_outrider.py` unless another file is giv
 | `SellOrganicData` | Vista Genomics sales, each `BioData` entry with its `Bonus` (the x5 check). Two sales can share a second, so `bio_sales` rows are keyed by journal line (PARSER_VERSION 38); a visit sold in several goes (sales under 5 minutes apart) is one x5 check. |
 | `Died`, `Resurrect` | Deaths and whether the ship (and its data) was lost (`Option`). |
 | `LoadGame`, `Commander`, `Rank`, `Progress`, `Promotion`, `Statistics`, `Shutdown` | Logins and sessions, credits at login, ranks, career statistics, the quit (recap, quit backup). |
-| `Loadout` | Ship, jump range, fuel capacity, unladen mass, FSD and Guardian booster, engineering modifiers, hull and core module health, rebuy. Also the latest one per `ShipID` goes to `fleet_loadouts` (`note_fleet`, `fleet_figures` in `outrider/fsd.py`): the Highway's ship list and the exact plotter's inputs. |
+| `Loadout` | Ship, jump range, fuel capacity, unladen mass, FSD and Guardian booster, engineering modifiers, hull and core module health, rebuy, `HullValue`/`ModulesValue`. An Arx-bought ship's Loadout has `ModulesValue` but no `HullValue`, and its `Rebuy` covers the modules only, so the risk figures leave its rebuy out ("N× rebuy", the rebuy-multiple levels: `risk_rebuy`, page.js `riskRebuy`). Also the latest one per `ShipID` goes to `fleet_loadouts` (`note_fleet`, `fleet_figures` in `outrider/fsd.py`): the Highway's ship list and the exact plotter's inputs. |
 | `EngineerCraft` | Engineering that moves the jump range before the next `Loadout`. |
 | `Cargo` (`Vessel: Ship`) | Tonnes in the hold: the ship's mass for the fuel model. With `Inventory` (at login) the whole hold (`outrider.cargo.ship_snapshot`); otherwise only the count, the list being in Cargo.json. |
 | `MarketBuy`, `MarketSell` | What you paid (`BuyPrice`; `MarketSell.AvgPricePaid` is the game's own average cost, 0 when unknown). At your carrier's `MarketID`, your own trades there (`cargo_events`). At a trade route's stop, its progress. |
@@ -62,9 +63,12 @@ the code; the constants named are in `ed_outrider.py` unless another file is giv
 
 - **Status.json** (read on mtime change, `read_status`): `Fuel.FuelMain`/`FuelReservoir`, `Flags`, `Flags2`,
   `BodyName`, `Latitude`, `Longitude`, `Altitude`, `PlanetRadius`, `Heading`, `Cargo`, `Destination`,
-  `GuiFocus`, `FireGroup`, `timestamp`. Flags used: landed (bit 1), scooping (11), FSD charging (17), in SRV
+  `GuiFocus`, `FireGroup`, `timestamp`. Flags used: docked (bit 0; the overlay's Now panel hides, `FLAG_DOCKED`),
+  landed (1), supercruise (4, `FLAG_SUPERCRUISE`: the overlay's system panel shows only then), scooping (11), FSD
+  charging (17), in your main ship (24, `FLAG_IN_MAIN_SHIP`: the overlay's body panel shows only then), in SRV
   (26), HUD analysis mode (27), altitude from average radius (29), in the hyperspace tunnel (30, FsdJump: the jump line is said once it
-  comes on after a hyperspace StartJump; auto honk waits while it is set); Flags2
+  comes on after a hyperspace StartJump; auto honk waits while it is set; the overlay hides every panel); `GuiFocus`
+  6-11 (galaxy map, system map, orrery, FSS, SAA, codex) hide the overlay too (`OVERLAY_HIDE_FOCUS`); Flags2
   bit 0 on foot, bits 3/13/14 on foot in a station, hangar or social space (counted as docked). In the SRV, the
   Nomad or a fighter (bits 25, 26), `Fuel` and `Cargo` are the vehicle's, not the ship's: the fuel tile keeps the
   ship's last figures and shows the vehicle's separately.
@@ -178,6 +182,18 @@ the code; the constants named are in `ed_outrider.py` unless another file is giv
 - `Loadout` is only written at login and at outfitting, so an `EngineerCraft` in between is applied by hand (the
   fuel model does; `fleet_loadouts` rows stay as of their Loadout).
   Jet-cone boosts wear modules but health only updates at the next `Loadout`.
+
+**Uploads** (EDDN and EDSM: `outrider/uploads.py`, `outrider/eddn.py`)
+- `Docked` names no body. A station on a planet's surface (`eddn.PLANETARY_STATIONS`) gets the body you approached as
+  EDDN's `Body`/`BodyType`, as EDMC adds it.
+- `ScanOrganic` has no position. EDDN's `Latitude`/`Longitude` come from a live Status.json on that body read 90 s
+  before to 10 s after the scan (`ORGANIC_SYNC_S`), else are left out. `Analyse` is never sent: it can be written in
+  another system.
+- Crew in another commander's ship is told by `JoinACrew`'s `Captain` not being the commander: nothing is uploaded
+  then.
+- `horizons` / `odyssey` come from `LoadGame` only: a key it leaves out stays out.
+- Market.json, Outfitting.json, Shipyard.json, FCMaterials.json and NavRoute.json are sent only when their timestamp is
+  within 5 s of the event's and their `MarketID` is the event's (`_wait_check`): NFS can serve an older file.
 
 **Other**
 - `Shutdown` is written only on a clean quit; a crash writes nothing, so the last event is where a session

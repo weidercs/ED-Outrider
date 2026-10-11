@@ -1,4 +1,4 @@
-[ED Outrider](../../README.md) · [What's new](whats-new.md) · [Install and run](install.md) · [The views](views.md) · [Plot Route](plot-route.md) · [Cargo and trading](cargo-and-trading.md) · [Voice and alerts](voice-and-alerts.md) · [Automation](automation.md) · [On a tablet](tablet.md) · **Uploads** · [Settings and good to know](settings.md) · [For the curious](for-developers.md)
+[ED Outrider](../../README.md) · [What's new](whats-new.md) · [Install and run](install.md) · [The views](views.md) · [Plot Route](plot-route.md) · [Cargo and trading](cargo-and-trading.md) · [Voice and alerts](voice-and-alerts.md) · [Automation](automation.md) · [On a tablet](tablet.md) · [In-game overlay](overlay.md) · **Uploads** · [Settings and good to know](settings.md) · [For the curious](for-developers.md)
 
 # Uploads: EDDN and EDSM
 
@@ -7,9 +7,12 @@ upload. **Both are off unless you switch them on**, in Settings → Uploads. The
 the config file (`[eddn] enabled`, `[edsm] enabled`) for the next start; it is the only place to switch them (they are
 not among the Server settings).
 
-- **EDDN**, the Elite Dangerous Data Network: systems, scans, signals, codex entries, markets, outfitting, shipyards,
-  plotted routes, sent as they happen. Spansh, EDSM, Inara and others read it. EDDN gets your commander name and hashes
-  it before anyone else sees it; personal details (fines, fuel, your position on a planet) are taken out first.
+- **EDDN**, the Elite Dangerous Data Network: systems, scans, signals, codex entries, biology samples, settlement
+  approaches, docking answers, markets, outfitting, shipyards, carrier materials, plotted routes, sent as they happen.
+  Spansh, EDSM, Inara and others read it. EDDN gets your
+  commander name and hashes it before anyone else sees it; personal details (fines, fuel, wanted, where your ship is)
+  are taken out first. Codex entries and biology samples keep where on the planet they were found: that is the data
+  (a sample's place only when it was read live, at the moment of the scan).
   Station data goes once per visit: each docking sends it again, changed or not, since the sites date a station's
   data by it.
 - **EDSM**, the Elite Dangerous Star Map: your flight log, scans, materials, ship and cargo, to your own EDSM account.
@@ -31,9 +34,10 @@ hour, since EDDN's readers take what arrives as current. For the same reason an 
 hour (EDDN unreachable) is dropped, not sent late. A journal re-read sends nothing twice, a restored backup starts
 from where your journals are now, and switching an upload on starts from that moment: your history is never uploaded.
 
-Markets, outfitting, shipyards and plotted routes come from files the game rewrites each time, so a catch-up can send
-one only while the file is still the one that visit wrote (the last one, after a short gap). A codex entry caught up
-late has no body name (that comes from the live Status.json).
+Markets, outfitting, shipyards, carrier materials and plotted routes come from files the game rewrites each time, so a
+catch-up can send one only while the file is still the one that visit wrote (the last one, after a short gap). A codex
+entry caught up late has no body name, and a biology sample caught up late no position: both come from the live
+Status.json.
 
 Never sent:
 
@@ -82,6 +86,13 @@ The header's Data tile shows, live, a line per upload in use: what it sent, has 
 day. Settings → Uploads shows the same per service, with why nothing can be sent now (held by another uploader, a key
 EDSM refused, the beta or Legacy game) and the last message (a refusal, "saved").
 
+If EDDN refuses one kind of message (markets, say) three times within an hour, or once with 426 (a version it no
+longer takes), Outrider stops sending that kind until it restarts: usually a game update EDDN does not take yet.
+The other kinds still go.
+
+A developer's switch shows next to the service in Settings → Uploads: "(test schemas only)" when `OUTRIDER_EDDN_TEST`
+is set, "(dry run: nothing sent)" when `OUTRIDER_EDSM_DRYRUN` is.
+
 ## Inara (this fork)
 
 This fork can also send your flight log to your own [Inara](https://inara.cz) account: travel, credits, ranks,
@@ -98,3 +109,7 @@ separate from the two uploads above and simpler:
 - Not sent: a ship's module list, suits, community goals.
 - Server settings shows what went out, what waits, and a refusal in Inara's own words. A refused key stops the
   sending until the next start.
+
+---
+
+[ED Outrider](../../README.md) · [What's new](whats-new.md) · [Install and run](install.md) · [The views](views.md) · [Plot Route](plot-route.md) · [Cargo and trading](cargo-and-trading.md) · [Voice and alerts](voice-and-alerts.md) · [Automation](automation.md) · [On a tablet](tablet.md) · [In-game overlay](overlay.md) · **Uploads** · [Settings and good to know](settings.md) · [For the curious](for-developers.md)

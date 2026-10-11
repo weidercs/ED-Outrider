@@ -10,8 +10,11 @@ upstream project's choices, not rules of the game.
   Tab and act on Enter/Space instead.
 - **No VoiceAttack integration.** Not used upstream; the co-pilot button and the page cover the same ground.
 - **Nothing is uploaded unless the player switches it on.** EDDN and EDSM (Settings → Uploads, off by default) are the
-  only uploads; every other outside call is a read-only lookup (Spansh, EDSM, GitHub for bio rules, Hugging Face for
-  voices, EDAstro for the DSSA carrier list when the Nearest finder opens).
+  only uploads. Every other outside call is a read-only lookup: Spansh, EDSM, GitHub (the bio rules, ExploData's colour
+  tables and the update check), Hugging Face for voices, Canonn (its codex reference once a day; the page loads the
+  checklists' pictures from Canonn's storage), EDAstro for the DSSA carrier list when the Nearest finder opens. The
+  one exception is the AI layer (off by default, `[assistant]`): it sends the question and the read-only tools'
+  answers to the endpoint the player configures, so it is not a read-only lookup. This is the one full list.
 - **Inara is this fork's own upload** (`outrider/inara.py`, `[inara]`, off by default), apart from upstream's EDDN
   and EDSM: live play only, kept in memory (what waits is lost at a stop), no catching up, no lease between two
   Outriders (run it on one). It gives way to an EDMarketConnector that sends to Inara. Not yet tried against the
@@ -59,12 +62,12 @@ upstream project's choices, not rules of the game.
 - **Settings writes the config file** (the author, 2026-10-03: Outrider is becoming an always-on service). Server
   settings lists every key `config_text` knows, so nothing is left out and no second list drifts; a save edits only
   the changed keys in place (the file's comments and unknown keys stay), keeps the old file as `.bak`, and writes
-  nothing unless the result reads back and settings_from finds nothing new wrong. Changes apply at the next start
-  (no live reload yet). Secrets (the password, the AI key) never leave the server.
+  nothing unless the result reads back and settings_from finds nothing new wrong. Server settings' changes apply at
+  the next start (no live reload yet); the Settings → Uploads switches apply at once and are written into the file too. Secrets (the password, the AI key) never leave the server.
 - **The tablet layout is the same page, not a second app** (PLAN-tablet phase 3): `/tablet` serves page.html with
-  `body.tablet`, and page.js draws a shell round the views it already has (6,000 lines of rendering are not worth
-  duplicating). Themes are only for the tablet (the author, 2026-10-03): the desktop page keeps its look and has no
-  picker. LCARS is a theme, not the structure: the shell's parts are neutral and every look is custom properties, and
+  `body.tablet`, and page.js draws a shell round the views it already has (its rendering, most of some 9,000 lines, is
+  not worth duplicating). Themes began on the tablet (the author, 2026-10-03); the desktop page has had its own picker
+  since 2026-10-04 (the next note). LCARS is a theme, not the structure: the shell's parts are neutral and every look is custom properties, and
   Elite and Babylon 5 are stylesheets of their own (evoked, never a game's or the show's assets), with one exception
   the author chose: an emblem under the page list in the Elite, Babylon 5 and Star Wars themes (static/emblems/,
   each under the terms in its CREDITS.txt: Frontier's media usage rules for Elite, public-domain fan redrawings and
@@ -147,16 +150,21 @@ upstream project's choices, not rules of the game.
   server keeps each route on its own (tables, plot, progress, speech); the page shows one, with a switch when both
   exist, and only the newer copies its next system. It is never auto-targeted on its own: a Road to Riches is for
   stopping; 🎯 on any route system is the player's click (2026-10-07).
-- **One survey slot: Road to Riches or Exomastery** (the author, 2026-10-07; a trade route joined it the same day):
-  rarely flown together, and the route switch stays two-way (Highway and the slot's route). Exomastery's bodies carry life other commanders reported: the page says "known life" and
-  never implies first footfall. Progress is the journal's samples by BodyID and species name.
+- **One slot for a survey or trade route: Road to Riches, Exomastery or a trade route** (the author, 2026-10-07; a
+  trade route joined it the same day: "one slot is fine"): rarely flown together, a new plot of any replaces it, and
+  the route switch stays two-way (Highway and the slot's route). Exomastery's bodies carry life other commanders
+  reported: the page says "known life" and never implies first footfall; its progress is the journal's samples by
+  BodyID and species name. A trade route's stops are the stations (a hop's straight line, not its jumps: 🎯 targets
+  the system and the game plots the way), its progress is your MarketSell / MarketBuy at the stop's market, and its
+  plot gets 600 s (Spansh's trade planner is slow).
 - **Auto-target presses keys in the galaxy map** (opt-in, Linux, Windows experimental since 2026-10-05; decided with the author 2026-10-01): open the map,
   the search box (UI_Up highlights "Search the Galaxy", UI_Select puts the cursor in it; found in game 2026-10-02 — UI_Right, Auto_Neutron's older step, moves along the tab column to Trade Routes, and UI_Select alone opens the current system; `autotarget_search` changes it), type the name (US keymap; a name it cannot type is pasted when a
   clipboard tool exists), Enter twice after short waits (the search lists its suggestion a moment after the name goes in, and an Enter before that selects nothing; found in game 2026-10-02; `autotarget_submit`), the plot-route step (configurable: the map's focus after a search varies), close the
   map, then Status.json `Destination.System` must be the next id64. It shares auto honk's virtual keyboard and lock;
   an auto honk running on the arrival goes first. It checks GuiFocus, the system, a jump and danger before every step
   and while waiting, and on an abort closes the map only if it opened it and the map is still the focus. One try per
-  supercharge, nothing repeats. Its results are plain spoken lines under their own alerts row (no `speech.json` keys).
+  supercharge, nothing repeats. Its results are plain spoken lines under their own alerts row; only "nothing to target" is a `speech.json` key
+  (`autotarget_nothing`, with each personality's lines).
   The default sequence is what worked in game on 2026-10-03: the map reopens on the panel it last showed, so the
   search starts with a short CamYawRight (a camera move hands the focus back to the map); the first Enter waits
   1.5 s (the suggestion lists late on a long name); the plot step zooms out instead of turning, since a turn after
@@ -180,13 +188,64 @@ upstream project's choices, not rules of the game.
   TAP_S. Auto honk's miss is not held against the fire group when your own jump started during the hold or the
   wait for the scan.
   The toggle and delay are the server's (meta `autotarget`, beating the config once used), not per browser.
-  The game's own "in danger" (Status.json bit 22) is on for every FSD use, from the charge until 15-26 s after a
+  The game's own "in danger" (Status.json bit 22) is on for every FSD use, from the charge until 16-26 s after a
   hyperspace arrival or a SupercruiseEntry (logged in game 2026-10-09). A run that meets it in that window waits for
   it to clear (`State.arrival_danger_until`, up to `AUTOTARGET_DANGER_WAIT` = 60 s after the arrival or entry; the
   restored position's arrival after a restart), says so once ("Not targeting due to danger ... for up to N
   seconds") and presses nothing meanwhile; the co-pilot button's second press cancels it like the countdown.
   Interdicted, the FSD charging, or still in danger past the minute: refused as a real danger. Once the map's close
   key went down, an FSD charge or a jump is a success when the target is set (you set off before step 7 looked).
+- **ExploData's colour tables are downloaded, never shipped** (the author, 2026-10-10). EDMC-ExploData's repository
+  carries the GPL v2 text without "or later", so its tables are kept out of the repository and the Docker image, and
+  Outrider's own licence does not depend on them: `resources/bio_colours.json` is fetched on the first start (and refreshed with the
+  rules) and merged in at load. A first start offline has no colour check, which costs nothing: the game cannot be
+  played offline either. BioScan's rules (GPL v2 or later) and the region map (MIT) still ship. The colony distances
+  are the game's (the Genetic Sampler shows them), kept in `outrider/bio.py`.
+- **The in-game overlay is our own window** (the author, 2026-10-08 and 2026-10-10; the author's plan,
+  project/PLAN-overlay-build-2026-10-10.md, is private and git-ignored).
+  EDMC will not be running, so Modern Overlay (an EDMC plugin) is not used; its code for finding Elite's window,
+  following it, letting clicks through and its window flags is adapted instead (`outrider/overlay_tracking.py`,
+  parts of `outrider/overlay_window.py`), which made ED Outrider GPL-3.0-or-later. Outrider builds the panels as draw
+  lists (`outrider/overlay.py`, GET `/api/overlay`) and runs the window that draws them itself on the game PC
+  (`outrider/overlay_runner.py`). The overlay is a game-PC feature, as the key presses are (the author, 2026-10-10):
+  an Outrider on a server has none (no window drawn from a server: the game PC's Status.json reached a server a second
+  late over the share, and one application on the game PC is simpler). `--simulate` never starts the overlay window
+  either. The layout lives in the database (meta `overlay_layout`), not the config (the author agreed, 2026-10-10):
+  Arrange mode writes it on every drag, which would rewrite the toml again and again; copying the toml does not carry
+  it, copying the database does. A panel's place is kept from the window corner nearest it, or from the middle of the
+  top or bottom edge, as a share of the window, so a resolution change keeps the arrangement. Linux is where it is
+  tried (X11, and XWayland on a Wayland session, as Modern Overlay runs on GNOME); Windows has the code, untried;
+  native Wayland compositors, gamescope and exclusive fullscreen are out of scope.
+- **The overlay uses the config's levels.** The panels are built on the server, which cannot see a browser's levels:
+  the system panel `body_highlight_level` and `bio_min`; the body panel `high_gravity`; Now `body_highlight_level`,
+  `bio_min`, `high_gravity`, `codex_interesting`, `unsold_warn` and `unsold_urgent`; Bio signals `bio_min`,
+  `high_gravity` and `codex_interesting`. Now leaves out what only the page knows (the skip floor, the high-g approach
+  stakes, captions).
+- **The overlay copies some of the page's rules in Python:** Now's suggested order (`overlay.plan_items`; the page's
+  `worthLeavingFor` + `planItems`), the supercruise time (`overlay.sc_seconds`, `SC_KNEE`; the page's `scSeconds`),
+  the session figures (`overlay.session_bits`; the page's `sessionLine`), and the rebuy the risk figures use
+  (`risk_rebuy` in ed_outrider.py; the page's `riskRebuy`). Two copies of one rule: a change to either is made to both.
+- **PyQt6 is installed when the overlay is on, never from a button** (the author, 2026-10-10: not a menu option).
+  It is not one of Outrider's requirements (about 100 MB, and only the game PC's overlay window needs it). The
+  launchers run `python -m outrider.overlay_runner --setup`, which installs `requirements-overlay.txt` before Outrider
+  starts when `[overlay] enabled = true` and PyQt6 is missing (on Linux it also warns when wmctrl is missing) and never
+  stops the start. Outrider itself installs it once per switching on whenever the window is wanted (the overlay, the
+  test panels or Arrange mode), into the Python it runs with (the launcher's `.venv`), with a popup in every page
+  window; after a failure Settings says why and it waits until the overlay is switched off and on. There is no
+  Install button and no `/api/overlay/install`. A window that crashes is started again after a growing wait, and
+  given up after `CRASHES_MAX` (5) in a row until the overlay is switched off and on.
+- **Time since you sold counts whole days passed** (the author, 2026-10-10): 6.7 days is "6 days", never rounded up,
+  on the page (Now's at-risk line, the welcome back) and on the overlay's Now panel (`overlay.unsold_age`: "3 days
+  unsold", from a week "2 weeks 2 days since sold", or "2wk2d since sold" when the written-out form would not fit).
+- **The panels hide over the maps, the FSS, the SAA and the codex, and in the hyperspace tunnel; the Now panel also
+  while docked** (the author, 2026-10-10, for docked). GuiFocus 6-11 (`OVERLAY_HIDE_FOCUS`) and the FSD-jump flag hide
+  every panel; the ship's docked flag, or on foot in a station, hangar or social space (`FLAG_DOCKED`,
+  `ON_FOOT_DOCKED`), hides Now. The test panels and Arrange mode are the exception: they show over the game's window
+  whatever is in front.
+- **No rebuy multiple for a ship whose hull has no credit value** (the author, 2026-10-10). An Arx-bought ship's
+  Loadout carries ModulesValue but no HullValue, and its rebuy is 5% of the modules alone, so "N× rebuy" said ~110
+  on any trip and a rebuy-multiple level would always fire. Such a ship gets no rebuy in the risk figures (`risk_rebuy`,
+  page.js `riskRebuy`); the credit levels still warn. A Loadout with neither value keeps the rebuy as before.
 - **Here's icon legend lists only what is shown.** The footer under Here's list (`HERE_LEGEND` in page.js) names the
   icons the list or schematic shows now, not every icon there is (the author's call, 2026-10-10), and is absent when
   there are none; sticky to the bottom of the scrolling pane so it stays in view. The codex marks write the new
@@ -223,7 +282,8 @@ upstream project's choices, not rules of the game.
 - **`--simulate` is display only.** For screenshots and demos the panels read as if the game were running, with the
   last known values (fuel from the last reading, else the last jump, else a full tank; the Data tile doesn't flag the
   old journal). Nothing is invented (a target the game cleared stays cleared), every guard still reads the real
-  Status.json, and the virtual keyboard, the co-pilot button and the clipboard are off whatever the config says.
+  Status.json, and the virtual keyboard, the co-pilot button, the clipboard and the overlay window are off whatever
+  the config says.
 - **Here's bio items never break inside themselves,** and a compact table shows a codex entry as 📖 ✦ with the name
   in its tooltip (the run beside it already names the species), so a row stays one or two lines beside an open panel.
 - **History's sessions are split by 2 h without a jump.** A session's window runs from its login (the latest one
@@ -285,9 +345,21 @@ upstream project's choices, not rules of the game.
   service (a key EDSM refused) is different: it keeps queueing and sends once the key is fixed, since nobody else sent
   that stretch (the author lost twelve events before this).
 - **The upload switches live only in Settings → Uploads**, written to `[eddn]`/`[edsm] enabled` (hidden from the Server
-  settings). Developer switches are environment variables, never settings: `OUTRIDER_EDDN_TEST`, `OUTRIDER_EDSM_DRYRUN`.
+  settings).
 - **EDDN station data goes once per visit**, not once per change: the sites date a station's data by what arrives, so
   each docking sends it again; only the same screen reopened in one docking is skipped (`VISIT_ENDS`).
+- **EDDN sends what EDMC, EDDiscovery and EDDLite send, field for field** (compared on EDDN's relay, the author,
+  2026-10-10). A Docked at a station on a planet's surface gets `Body` and `BodyType` "Planet" from the body you
+  approached (`eddn.PLANETARY_STATIONS`), as EDMC adds them. shipyard/2 leaves out `allowCobraMkIV`: it describes the
+  commander, not the station, and the other three leave it out. commodity/3's optional `statusFlags` is not sent (the
+  author's call, 2026-10-10: not needed). outfitting/3 is not used (the author's call: the three main apps send
+  outfitting/2).
+- **Biology samples go to scanorganic/1, never the Analyse** (the author, 2026-10-10). The schema is on EDDN's develop
+  branch and the gateway takes it. Log and Sample only (Analyse can be written in another system), after the location
+  cross-check, `Body` sent as `BodyID`; `BodyName` only when the body you approached has that id; `Latitude` /
+  `Longitude` only from a live Status.json on that body read 90 s before to 10 s after the scan (`ORGANIC_SYNC_S`,
+  `Session.status_pos`): a journal caught up later sends no position rather than a wrong one. journal/1 still drops
+  `Latitude` / `Longitude` (`JOURNAL_DROP`).
 - **No "New to EDSM" mark**: EDSM's `systemCreated` usually names EDDN's copy of a jump (sent at once, read by EDSM)
   rather than the player's EDSM batch, so it would almost never show (tried and removed, 2026-10-09).
 - **The full-scan bonus is in the payout estimate** (plugin gaps D): 1,000 cr per body of a system you found complete
@@ -329,8 +401,9 @@ upstream project's choices, not rules of the game.
   (aplay has none), so the server scales the 16-bit WAV it hands them.
 - **Your own sounds are WAV only, up to 3 s** (review S16): every player and browser takes WAV, and the voice waits
   for a sound to end (the page holds it for the file's length, at most 3 s).
-- **The status report stays on the page for now** (review S23 deferred to PLAN-tablet phase 6): it depends on each
-  browser's thresholds and plan logic; Vespa's fixed "status report" is where a server version is needed.
+- **Two status reports** (review S23, done): Vespa's "status report" is composed on the server (`outrider/ask.py`:
+  the system, fuel, unsold, the Highway's next stop); the co-pilot button's double tap and the Now bar ask the window
+  that speaks for the page's, which depends on each browser's thresholds and plan logic.
 - **Header tiles: tooltips on cut lines, no wrapping yet** (review S17): wrapping or click-to-expand would change the
   header's height and the app layout; left for the author. The tiles' fold has a per-device mode (S44): auto (a
   small window), six, line, or none, which follows the shared `tilesCollapsed` that ▴/▾ sets; ▴/▾ also makes its
@@ -357,8 +430,8 @@ upstream project's choices, not rules of the game.
   sweep 2026-10-09, correcting the same night's first fix).
 - **Why not Frontier's companion API** (the author, 2026-10-07): it would list the carrier's cargo whole, but it
   means signing in to Frontier (as EDMC and Inara do). Outrider never does: it reads the player's own journal files
-  and makes only read-only queries to public services (Spansh, EDSM, GitHub, Hugging Face, EDAstro), so the player's Frontier
-  account is never involved. The sell-order method is the price of that, and the README says so.
+  and talks only to the public services listed under "Nothing is uploaded unless the player switches it on" above,
+  so the player's Frontier account is never involved. The sell-order method is the price of that, and the README says so.
 - **Old carrier history is trusted only while it adds up.** Unjournaled trades (other players buying from an old
   sell order) leave old lines wrong: the author's 2025 colonisation hauling left 34,000 t tracked that was long gone.
   At a market read that finds the carrier holding less than is tracked, tracked lines with no news for 30 days go
@@ -388,10 +461,6 @@ upstream project's choices, not rules of the game.
   fetched only when the finder opens, at most hourly and conditionally, its last copy kept; the voice and the AI's tool
   never fetch it (`cached=1`). DSSA carriers carry a badge (the author's ask). Reports older than 30 days are hidden by
   default, with the count said: carriers move, and Spansh keeps reports years old.
-- **Trade routes share the slot with the survey routes** (the author: "one slot is fine"): Road to Riches,
-  Exomastery or a trade route, a new plot of any replacing it. Its stops are the stations (a hop's straight line,
-  not its jumps: 🎯 targets the system and the game plots the way), progress is your MarketSell / MarketBuy at the
-  stop's market, and its plot gets 600 s (Spansh's trade planner is slow).
 
 ## Known limits
 
@@ -436,6 +505,11 @@ upstream project's choices, not rules of the game.
   a route from a station Spansh does not know fails with Spansh's own words.
 - **The Highway's ship list is as of each ship's latest Loadout;** an `EngineerCraft` after it is not applied, and a
   ship never flown (no Loadout) can only be plotted with the neutron plotter and a typed range.
+- **The in-game overlay's reach:** on Linux under X11 its transparency needs a compositor (a bare window manager shows
+  black around the panels); on Wayland it runs through XWayland, tried on GNOME, not with Proton's native Wayland mode
+  (`PROTON_ENABLE_WAYLAND=1`: Elite becomes a Wayland window the overlay cannot find); fractional display scaling is
+  untried; Windows has the code, untried against the game. Native Wayland compositors, gamescope and exclusive
+  fullscreen are out of scope.
 
 ## Not yet tried in a live game
 
@@ -467,5 +541,10 @@ confirmed while playing. Treat reports about them as likely real.
   current one (a camera yaw before the search, 1.5 s before Enter, a zoom in the plot step) is what worked on
   2026-10-03 (the author's bindings, Linux/Proton). Not yet tried: a run triggered by a real supercharge on a route,
   Target next and Retry from the page, other keyboard layouts and presets, and both entry modes side by side.
+- EDDN: ApproachSettlement, CarrierJump and FCMaterials messages have not been seen live on EDDN's relay yet, nor a
+  planetary station's Docked with its Body.
+- The in-game overlay's real panels in live play (only the test panels have been seen over the game), Arrange mode
+  over the game, PyQt6 installed by the launcher and by Outrider, the window's restart after a crash, and the overlay
+  on Windows.
 - The jump line's wait for Status.json's FsdJump flag (bit 30) in a live jump; your own sound files and Volume
   through the real players; the co-pilot button choosing the throttle of a real two-part X-56.
