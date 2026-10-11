@@ -2,6 +2,16 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-11 · This fork: GalNet News, with the systems an article mentions
+- A **GalNet** tab (and tablet page): the game's latest news article from Frontier's own feed, with the 30 latest
+  listed beside it to pick from; Refresh asks again (the server keeps its copy half an hour, and the last one when
+  the feed cannot be read).
+- Star systems an article mentions are marked in its text: click one to copy its name, or use Copy / Plot route in
+  the line under the title (Plot Route opens with it as the destination). A name is marked only once confirmed: a
+  system you know, or one Spansh knows by exactly that name. Found by the words before "system" and by catalogue
+  and sector names, so a system named with neither is not marked.
+- `outrider/galnet.py`, `GET /api/galnet` and `/api/galnet/systems`; nothing is asked until the tab is opened.
+
 ## 2026-10-11 · The launcher's clipboard note says which program serves which session
 - The block says wl-copy (wl-clipboard) is for Wayland sessions and xclip for X11 ones, and what is lost without it:
   the copy, and auto-target's paste (it types the name by default, which still works).

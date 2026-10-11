@@ -37,7 +37,7 @@ const TABLET = typeof document !== "undefined" && !!document.body && document.bo
 // group: the nav group shown while you browse another one; beforeMap: the page to go back to when the surface map hides
 // (null: you were on Now already, or chose a page since); mapWas: whether the map showed at the last draw
 const TB = {group: null, beforeMap: null, mapWas: false, bannerTimer: null, bannerKey: null,
-            groups: {explore: ["now", "near", "here", "bio"], navigate: ["bm", "search", "map", "hwy"], records: ["hist", "log", "mat", "firsts"]},
+            groups: {explore: ["now", "near", "here", "bio"], navigate: ["bm", "search", "map", "hwy"], records: ["hist", "log", "mat", "firsts", "galnet"]},
             themes: ["lcars", "elite", "babylon5", "narn", "minbari", "centauri", "sith", "alliance", "dark"], railPending: {}, railEdit: null};
 // Where you are, as the exact id64 string (position.id). The JSON number position.id64 loses the last digits above
 // 2^53, so string comparisons with the server's exact ids (arrival, Here, moments) must use this.
@@ -1349,7 +1349,7 @@ function star(s) {
 }
 
 // the tablet keeps its own page (a desktop browser opening /tablet to try it must not lose its view) and has no Overview
-const TABLET_VIEWS = ["now", "near", "here", "bio", "bm", "search", "map", "hwy", "hist", "log", "mat", "firsts"];
+const TABLET_VIEWS = ["now", "near", "here", "bio", "bm", "search", "map", "hwy", "hist", "log", "mat", "firsts", "galnet"];
 let view = TABLET ? store.get("tabletView", "now") : store.get("view", "near");
 if (view === "rich") view = "hwy";   // Road to Riches had a tab of its own for a day (PR #1): it is a route type of Plot Route now
 if (TABLET && !TABLET_VIEWS.includes(view)) view = "now";
@@ -1418,7 +1418,7 @@ function keepPanes(fn) {
 function paneTop(...ids) { for (const id of ids) { const p = document.getElementById(id); if (p) p.scrollTop = 0; delete paneScroll[id]; } }
 // each view's main pane: Page Up/Down and Home/End scroll it while nothing that scrolls or types has the focus
 const VIEW_PANE = {overview: "nearPane", near: "nearPane", here: "hereMain", bio: "bioPane", bm: "bmPane", search: "searchPane",
-                   hist: "histPane", log: "logPane", mat: "matPane", firsts: "firstsPane", hwy: "hwyPane"};
+                   hist: "histPane", log: "logPane", mat: "matPane", firsts: "firstsPane", hwy: "hwyPane", galnet: "gnPane"};
 // ---- Compact tables: a table wider than its box (its pane, the Overview's split, a phone) switches to its short forms
 // (compact: level 1), then to tighter ones that also drop or merge low-value columns (compact2: level 2), and back once
 // there is room again. Decided by fit, not by screen size, so a wide pane looks exactly as it always did.
@@ -2545,6 +2545,8 @@ function render() {
   document.getElementById("hereView").hidden = !(view === "here" || nearPinned || (view === "overview" && !ovState.collapsed));
   document.querySelector("main").classList.toggle("nearPinned", nearPinned);
   document.getElementById("firstsView").hidden = view !== "firsts";
+  document.getElementById("galnetView").hidden = view !== "galnet";
+  if (view === "galnet") loadGalnet();
   if (view === "firsts") { loadFirsts(); loadLeft(); }
   document.documentElement.style.setProperty("--head-h", document.querySelector("header").offsetHeight + "px");
   document.getElementById("hereView").classList.toggle("detail", !!selectedBody);
@@ -3941,6 +3943,93 @@ document.getElementById("cargoList").addEventListener("keydown", e => {
   if (e.key === "Enter" && e.target.closest(".cfind input")) { e.preventDefault(); document.getElementById("cargoFind").click(); }
 });
 
+// ---- GalNet News (this fork): the game's news from Frontier's feed (GET /api/galnet), the latest shown, any earlier
+// one picked from the list; the systems an article mentions (GET /api/galnet/systems, each confirmed by the server)
+// marked in its text: click one to copy its name, or plot a route to it from the line under the title ----
+// GN: data (the server's answer), at (when it came), sel (the article shown), picked (you chose it: a refresh keeps
+// it), systems {article id: [{text, name}]}, asking {article id: true while its systems are on their way}
+const GN = {data: null, at: 0, sel: null, picked: false, loading: false, error: null, systems: {}, asking: {}, sysError: {}};
+const GN_STALE_MS = 10 * 60 * 1000;   // the tab reopened after this long asks again (the server keeps its copy 30 min)
+const gnArticles = () => (GN.data && GN.data.articles) || [];
+const gnShown = () => gnArticles().find(a => a.id === GN.sel) || gnArticles()[0] || null;
+async function loadGalnet(force = false) {
+  if (GN.loading || (!force && GN.data && Date.now() - GN.at < GN_STALE_MS)) return renderGalnet();
+  GN.loading = true; renderGalnet();
+  const g = newRequest("galnet");
+  let d;
+  try { d = await apiJson(`api/galnet${force ? "?refresh=1" : ""}`); } catch (err) { d = {error: err.message}; }
+  if (!isNewest("galnet", g)) return;
+  GN.loading = false; GN.at = Date.now();
+  if (Array.isArray(d.articles) && (d.articles.length || !GN.data)) GN.data = d;   // a failed read keeps what was shown
+  GN.error = d.error || null;
+  if (!GN.picked || !gnArticles().some(a => a.id === GN.sel)) { GN.sel = gnArticles().length ? gnArticles()[0].id : null; GN.picked = false; }
+  renderGalnet();
+  loadGalnetSystems();
+}
+// the systems of the article shown, asked once per article (again after a failure, when it is shown again)
+async function loadGalnetSystems() {
+  const a = gnShown();
+  if (!a || GN.systems[a.id] || GN.asking[a.id]) return;
+  GN.asking[a.id] = true; renderGalnet();
+  let d;
+  try { d = await apiJson(`api/galnet/systems?id=${encodeURIComponent(a.id)}`); } catch (err) { d = {error: err.message}; }
+  delete GN.asking[a.id];
+  if (Array.isArray(d.systems) && !d.error) GN.systems[a.id] = d.systems;
+  GN.sysError[a.id] = d.error ? (Array.isArray(d.systems) ? d.systems : []) : null;   // what was confirmed before it failed
+  renderGalnet();
+}
+// An article's text as paragraphs, every mention of a confirmed system a button that copies the system's name. Pure.
+function galnetBodyHtml(text, systems) {
+  const names = (systems || []).filter(s => s && s.text && s.name).sort((x, y) => y.text.length - x.text.length);
+  const rx = names.length ? new RegExp("(^|[^A-Za-z0-9_])(" + names.map(s => s.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")(?![A-Za-z0-9_-])", "g") : null;
+  const mark = p => {
+    if (!rx) return esc(p);
+    let out = "", last = 0, m;
+    rx.lastIndex = 0;
+    while ((m = rx.exec(p))) {
+      const start = m.index + m[1].length, s = names.find(x => x.text === m[2]);
+      out += esc(p.slice(last, start)) + `<button type="button" class="gnsys" data-gn-copy="${esc(s.name)}" title="${esc(s.name)}: click to copy the system's name">${esc(m[2])}</button>`;
+      last = rx.lastIndex = start + m[2].length;
+    }
+    return out + esc(p.slice(last));
+  };
+  return String(text || "").split(/\n+/).filter(p => p.trim()).map(p => `<p>${mark(p)}</p>`).join("");
+}
+// the line under the title: each system with Copy and Plot route. Pure.
+function galnetSystemsHtml(systems, asking, failed) {
+  const list = systems || failed || [];
+  if (!list.length) return asking ? `<div class="gnsystems unk">looking for systems…</div>`
+    : failed ? `<div class="gnsystems unk">The systems mentioned could not be checked just now.</div>` : "";
+  return `<div class="gnsystems"><span class="unk">Systems mentioned:</span> ` + list.map(s =>
+    `<span class="gnchip"><b>${esc(s.name)}</b> <button type="button" class="mini" data-gn-copy="${esc(s.name)}" title="copy the system's name">Copy</button>` +
+    `<button type="button" class="mini" data-gn-plot="${esc(s.name)}" title="Plot Route with this system as the destination">Plot route</button></span>`).join(" ") +
+    (failed ? ` <span class="unk">(more may be mentioned: Spansh could not be asked about every name)</span>` : "") + `</div>`;
+}
+function renderGalnet() {
+  const list = document.getElementById("gnList"), art = document.getElementById("gnArticle"), st = document.getElementById("gnStatus");
+  if (!list) return;
+  const rows = gnArticles(), a = gnShown();
+  st.textContent = GN.loading ? "asking GalNet…" : GN.error ? GN.error : rows.length ? `${rows.length} articles, newest first` : "";
+  st.className = GN.error && !GN.loading ? "warnc" : "unk";
+  const listHtml = rows.map((r, i) => `<button type="button" class="gnitem${a && r.id === a.id ? " on" : ""}" data-gn="${esc(r.id)}"${a && r.id === a.id ? ` aria-current="true"` : ""}>` +
+    `<span class="gnt">${esc(r.title)}</span><span class="unk">${esc(r.date || "")}${i === 0 ? " · latest" : ""}</span></button>`).join("") ||
+    `<div class="unk">${GN.loading ? "" : "No articles yet."}</div>`;
+  if (list.innerHTML !== listHtml) list.innerHTML = listHtml;
+  const artHtml = !a ? "" : `<h2 class="gntitle">${esc(a.title)}</h2><div class="unk">${esc(a.date || "")}</div>` +
+    galnetSystemsHtml(GN.systems[a.id], !!GN.asking[a.id], GN.sysError[a.id]) + `<div class="gnbody">${galnetBodyHtml(a.text, GN.systems[a.id] || GN.sysError[a.id])}</div>`;
+  if (art.innerHTML !== artHtml) art.innerHTML = artHtml;
+}
+document.getElementById("galnetView").addEventListener("click", e => {
+  const pick = e.target.closest("[data-gn]"), copy = e.target.closest("[data-gn-copy]"), plot = e.target.closest("[data-gn-plot]");
+  if (e.target.closest("#gnRefresh")) return loadGalnet(true);
+  if (pick) { GN.sel = pick.dataset.gn; GN.picked = true; renderGalnet(); paneTop("gnPane"); return loadGalnetSystems(); }
+  if (copy) return copyText(copy.dataset.gnCopy);
+  if (plot) {
+    document.getElementById("hwyTo").value = plot.dataset.gnPlot;
+    const v = document.querySelector('[data-view="hwy"]'); if (v) v.click();
+    return toast(`Plot Route: to ${plot.dataset.gnPlot}`);
+  }
+});
 // ---- The Sell / Buy lookup: Spansh's stations for one commodity (GET /api/cargo/lookup, read only) ----
 // A lookup row's station: its name, and for a fleet carrier its own name with the callsign beside it (the callsign
 // alone while Spansh has no name for it). Pure.

@@ -132,6 +132,8 @@ outrider.edsm.UPLOAD_URL = outrider.edsm.DISCARD_URL = OFF   # nor EDSM's journa
 import outrider.inara
 outrider.inara.INARA_URL = OFF       # nor Inara (off in the scratch config anyway)
 ed_outrider.DSSA_URL = OFF          # nor EDAstro for the DSSA list
+import outrider.galnet
+outrider.galnet.URL = OFF            # nor Frontier's GalNet feed
 ed_outrider.Clipboard.TOOLS = ()   # the desktop clipboard is never touched by the smoke test
 if outrider.bio:
     outrider.bio.update_if_newer = lambda path=None, log=print: None

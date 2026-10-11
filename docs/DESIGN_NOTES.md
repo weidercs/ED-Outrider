@@ -15,6 +15,9 @@ upstream project's choices, not rules of the game.
   checklists' pictures from Canonn's storage), EDAstro for the DSSA carrier list when the Nearest finder opens. The
   one exception is the AI layer (off by default, `[assistant]`): it sends the question and the read-only tools'
   answers to the endpoint the player configures, so it is not a read-only lookup. This is the one full list.
+- **GalNet News is this fork's** (`outrider/galnet.py`): one more read-only lookup, Frontier's own feed, asked only
+  when the tab is opened. A system is marked in an article only once confirmed (yours, or Spansh's by exact name):
+  a marked name is never a guess, but a system the article names without "system" or a catalogue form is missed.
 - **Inara is this fork's own upload** (`outrider/inara.py`, `[inara]`, off by default), apart from upstream's EDDN
   and EDSM: live play only, kept in memory (what waits is lost at a stop), no catching up, no lease between two
   Outriders (run it on one). It gives way to an EDMarketConnector that sends to Inara. Not yet tried against the

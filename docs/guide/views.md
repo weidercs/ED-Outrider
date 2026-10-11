@@ -64,6 +64,8 @@ search any text, click a row for the raw event.
 </tr>
 <tr>
 <td width="50%" valign="top">
+<b>GalNet</b> (this fork) — the game's latest news article, the 30 latest listed beside it to pick from. Star systems it mentions are marked: click one to copy its name, or use Copy / Plot route under the title. A name is marked only when you know the system or Spansh does, and only where the article says "the … system" or gives a catalogue or sector name.
+
 <b>Materials</b> — your <b>Cargo</b> (the ship's hold and your carrier's, with Sell and Buy: see <a href="cargo-and-trading.md">Cargo and trading</a>), materials against their caps, and how many FSD injections, limpets, SRV refuels and
 repairs and Rhino rig restocks you can make now. <b>Mining sites</b> lists each body your SRV mined: minerals
 and tons, saved spots, the last date and the distance.

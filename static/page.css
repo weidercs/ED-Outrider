@@ -206,6 +206,20 @@ main > #hereView.detail > #bodyPanel { position: sticky; top: calc(var(--head-h,
 #sell.left { color: var(--warn); }   /* a sale that left data aboard */
 .strip .stale { color: var(--warn); } .strip .dead { color: var(--bad); }
 #firstsView { margin-top: 12px; }
+#galnetView { margin-top: 12px; }
+.gnwrap { display: flex; gap: 12px; align-items: flex-start; }
+.gnwrap > #gnListPane { flex: 0 1 340px; min-width: 220px; } .gnwrap > #gnPane { flex: 1 1 0; min-width: 0; }
+.gnlist { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; }
+.gnitem { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 6px 8px; border: 1px solid var(--line);
+  border-radius: 6px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.gnitem:hover { border-color: var(--accent); } .gnitem.on { border-color: var(--accent); background: var(--panel); }
+.gnitem .gnt { font-weight: 600; } .gnitem .unk { font-size: 0.85em; }
+.gntitle { margin: 8px 0 2px; font-size: 1.25em; } .gnbody { max-width: 72ch; line-height: 1.5; } .gnbody p { margin: 0.7em 0; }
+.gnsystems { margin: 8px 0; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.gnchip { display: inline-flex; gap: 4px; align-items: center; }
+.gnsys { font: inherit; color: var(--info); background: transparent; border: 0; border-bottom: 1px dotted var(--info); padding: 0;
+  cursor: pointer; } .gnsys:hover, .gnsys:focus-visible { color: var(--accent); border-bottom-color: var(--accent); }
+@media (max-width: 760px) { .gnwrap { flex-direction: column; align-items: stretch; } .gnwrap > #gnListPane { flex: 0 0 auto; max-height: 30vh; overflow: auto; } }
 #firstsRows td.by { white-space: normal; font-size: 12px; }
 #firstsRows .sold { color: var(--good); } #firstsRows .unsold { color: var(--warn); } #firstsRows .lost { color: var(--bad); }
 #firstsRows .rescan { font-size: 12px; font-weight: 600; white-space: normal; }
@@ -947,6 +961,7 @@ body.app .tablebar { padding-top: 0; }
 /* Overview: Nearby and This system side by side (or stacked), each the full height; Nearby's list scrolls under its
    options, the system's body table scrolls under its heading and to-do line, and the lower half (surface map or body
    panel) stays put */
+body.app .gnwrap { flex: 1 1 0; min-height: 0; align-items: stretch; }
 body.app #overView { margin-top: 0; }
 body.app #ovPanes { flex: 1 1 0; min-height: 0; display: flex; }
 body.app #overView.side #ovPanes { flex-direction: row; align-items: stretch; }

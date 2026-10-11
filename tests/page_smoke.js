@@ -52,7 +52,7 @@ const settle = async maxMs => {
   console.log(ok ? "OK" : "FAIL", "| header |", d.querySelector("#sub").textContent.slice(0, 80), "| errors:", errors);
   // every view: [button, element that must end up with content]
   const views = [["overview", "#ovPanes"], ["near", "#rows"], ["here", "#hereRows"], ["bio", "#bioRows"], ["bm", "#bmTable"],
-                 ["search", "#searchForm"], ["hist", "#histRows"], ["log", "#logRows"], ["mat", "#matGrid"], ["firsts", "#firstsRows"], ["hwy", "#hwyHead"], ["now", "#nowView"]];
+                 ["search", "#searchForm"], ["hist", "#histRows"], ["log", "#logRows"], ["mat", "#matGrid"], ["firsts", "#firstsRows"], ["galnet", "#gnList"], ["hwy", "#hwyHead"], ["now", "#nowView"]];
   let allOk = ok;
   for (const [v, sel] of views) {
     const btn = d.querySelector(`[data-view="${v}"]`);
@@ -2923,7 +2923,7 @@ const settle = async maxMs => {
     })()`));
     const want = {pure: [true, true, false, false, false, true], sizes: [true, false, false, true], now: false, back: true, body: "hidden", tabbable: true,
       panes: ["overview:auto:sticky", "near:auto:sticky", "here:auto:sticky", "bio:auto:sticky", "bm:auto:sticky", "search:auto:sticky",
-              "hist:auto:sticky", "log:auto:sticky", "mat:auto:-", "firsts:auto:sticky", "hwy:auto:sticky"],
+              "hist:auto:sticky", "log:auto:sticky", "mat:auto:-", "firsts:auto:sticky", "hwy:auto:sticky", "galnet:auto:-"],
       ov: {map: true, inline: "", nearPane: "auto", here: "auto"}, ovPage: true, jump: 100 + (930 - 700), keep: 1100, more: [0, 1], pgdn: [360, true], winScrolls: 0,
       fold: {tiles: true, line: true, stored: "true", exported: true, btn: "▾", name: true, urgent: ["⛽ N%", "unsold N"]},
       unfold: {tiles: true, line: true, stored: "false", mode: "\"six\""}};
@@ -3695,6 +3695,66 @@ const settle = async maxMs => {
     console.log(goodTN ? "OK" : "FAIL", "| highway target next |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "line and box buttons post with a countdown (no tab, no copy), refusal in its words, Retry on the failed row only, the Highway spoken in the report and welcome", errors.slice(before));
   }
+  // GalNet News (this fork): the latest article shown, an earlier one picked from the list, a confirmed system marked
+  // in the text (click: its name copied) and Plot route filling Plot Route's To
+  {
+    const w = dom.window, d = w.document, before = errors.length, got = {}, asked = [], copied = [];
+    w.eval(`window.__gnApi = apiJson; window.__gnCopy = copyText;`);
+    w.__gnAsked = asked; w.__gnCopied = copied;
+    w.eval(`apiJson = async (u, o) => {
+        const s = String(u);
+        if (!s.startsWith("api/galnet")) return __gnApi(u, o);
+        __gnAsked.push(s);
+        if (s.startsWith("api/galnet/systems")) return s.endsWith("id=new1")
+          ? {id: "new1", systems: [{text: "Talvik Reach", name: "Talvik Reach"}, {text: "HIP 12345", name: "HIP 12345"}], error: null}
+          : {id: "old1", systems: [], error: null};
+        return {checked: 1, error: null, articles: [
+          {id: "new1", title: "Ship <Found> in Talvik Reach", date: "08 OCT 3312", published: "2026-10-08T12:00:00+00:00",
+           text: "Pilots gathered in the Talvik Reach system.\\nNot Talvik Reaches, but HIP 12345 & beyond."},
+          {id: "old1", title: "Older News", date: "01 OCT 3312", published: "2026-10-01T12:00:00+00:00", text: "Nothing happened."}]};
+      };
+      copyText = (text, what) => { __gnCopied.push(text); };
+      GN.data = null; GN.at = 0; GN.sel = null; GN.picked = false; GN.systems = {}; GN.sysError = {};`);
+    d.querySelector('[data-view="galnet"]').click();
+    await sleep(150);
+    const view = d.getElementById("galnetView"), art = () => d.getElementById("gnArticle");
+    got.shown = [view.hidden, art().querySelector(".gntitle").textContent, d.querySelectorAll("#gnList .gnitem").length,
+                 d.querySelector("#gnList .gnitem.on .gnt").textContent, /latest/.test(d.querySelector("#gnList .gnitem").textContent)];
+    got.marks = [...art().querySelectorAll(".gnbody .gnsys")].map(b => `${b.textContent}>${b.dataset.gnCopy}`);
+    got.paras = art().querySelectorAll(".gnbody p").length;
+    got.chips = [...art().querySelectorAll(".gnsystems .gnchip b")].map(b => b.textContent);
+    art().querySelector(".gnbody .gnsys").click();
+    art().querySelector('.gnsystems [data-gn-copy="HIP 12345"]').click();
+    art().querySelector('.gnsystems [data-gn-plot="Talvik Reach"]').click();
+    await sleep(100);
+    got.plot = [d.getElementById("hwyTo").value, w.eval("view")];
+    d.querySelector('[data-view="galnet"]').click();
+    await sleep(50);
+    d.querySelectorAll("#gnList .gnitem")[1].click();
+    await sleep(100);
+    got.older = [art().querySelector(".gntitle").textContent, art().querySelector(".gnbody").textContent, art().querySelectorAll(".gnsys").length,
+                 d.querySelector("#gnList .gnitem.on .gnt").textContent];
+    d.getElementById("gnRefresh").click();
+    await sleep(100);
+    got.kept = art().querySelector(".gntitle").textContent;   // a refresh keeps the article you picked
+    got.pure = [w.eval(`galnetBodyHtml("A <b> in Sol.\\n\\nSolar and Sol-b, Sol!", [{text: "Sol", name: "Sol"}])`),
+                w.eval(`galnetSystemsHtml(null, true, null)`), w.eval(`galnetSystemsHtml([], false, null)`),
+                /could not be checked/.test(w.eval(`galnetSystemsHtml(null, false, [])`))];
+    w.eval(`apiJson = __gnApi; copyText = __gnCopy;`);
+    const sol = `<button type="button" class="gnsys" data-gn-copy="Sol" title="Sol: click to copy the system's name">Sol</button>`;
+    const want = {shown: [false, "Ship <Found> in Talvik Reach", 2, "Ship <Found> in Talvik Reach", true],
+      marks: ["Talvik Reach>Talvik Reach", "HIP 12345>HIP 12345"], paras: 2, chips: ["Talvik Reach", "HIP 12345"],
+      plot: ["Talvik Reach", "hwy"], older: ["Older News", "Nothing happened.", 0, "Older News"], kept: "Older News",
+      pure: [`<p>A &lt;b&gt; in ${sol}.</p><p>Solar and Sol-b, ${sol}!</p>`, `<div class="gnsystems unk">looking for systems…</div>`, "", true]};
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    if (JSON.stringify(copied) !== JSON.stringify(["Talvik Reach", "HIP 12345"])) bad.push("copied");
+    if (!(asked.filter(s => s === "api/galnet").length === 1 && asked.includes("api/galnet?refresh=1")
+          && asked.filter(s => s.startsWith("api/galnet/systems")).length === 2)) bad.push("asked");
+    const goodGN = !bad.length && errors.length === before;
+    allOk = allOk && goodGN;
+    console.log(goodGN ? "OK" : "FAIL", "| galnet |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))} asked ${JSON.stringify(asked)} copied ${JSON.stringify(copied)}`
+      : "the latest article, an earlier one picked, systems marked, copied and plotted to, a refresh keeps your pick", errors.slice(before));
+  }
   // too much fuel for the next jump: the warning in the strip and the Highway header; the Conservative range option
   // (off by default, [highway] defaults when this browser has none, the note, the plot body, saved per browser) and
   // the header's "conservative −5 ly"
@@ -3915,9 +3975,9 @@ const settle = async maxMs => {
     got.status = [td.getElementById("tabSysV").textContent.length > 1, /t|—/.test(td.getElementById("tabFuelV").textContent)];
     // every page from the nav: its group opens, its view fills, nothing throws
     const fills = {now: "#nowView", near: "#rows", here: "#hereRows", bio: "#bioRows", bm: "#bmTable", search: "#searchForm", map: "#mapView",
-                   hwy: "#hwyHead", hist: "#histRows", log: "#logRows", mat: "#matGrid", firsts: "#firstsRows"};
+                   hwy: "#hwyHead", hist: "#histRows", log: "#logRows", mat: "#matGrid", firsts: "#firstsRows", galnet: "#gnList"};
     got.pages = [];
-    for (const [g, vs] of Object.entries({explore: ["now", "near", "here", "bio"], navigate: ["bm", "search", "map", "hwy"], records: ["hist", "log", "mat", "firsts"]})) {
+    for (const [g, vs] of Object.entries({explore: ["now", "near", "here", "bio"], navigate: ["bm", "search", "map", "hwy"], records: ["hist", "log", "mat", "firsts", "galnet"]})) {
       td.querySelector(`#tabNav [data-group="${g}"]`).click();
       for (const v of vs) {
         const before = terr.length;

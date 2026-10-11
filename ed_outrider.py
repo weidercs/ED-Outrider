@@ -198,6 +198,7 @@ import outrider.config_edit  # the Settings dialog's Server settings: every conf
 import outrider.mcp        # the MCP bridge's [mcp] settings (the bridge itself runs as python3 -m outrider.mcp)
 import outrider.uploads    # EDDN / EDSM uploads (opt-in): the session, the live gate, the outbox
 import outrider.inara      # the fork's Inara upload ([inara], off by default), from its own tail of the journals
+import outrider.galnet     # the fork's GalNet News: Frontier's feed as articles, and the systems they mention
 import outrider.eddn       # EDDN's messages from journal events, and what its answers mean
 import outrider.edsm       # EDSM's journal upload: the events with where you were, and what its answers mean
 import outrider.checklist  # the exobiology checklist: every species by region, with your state (pure)
@@ -7498,6 +7499,61 @@ class State:
         return outrider.dock.dssa_rows(d.get("data")), {"checked": d.get("checked"), "modified": d.get("modified"),
                                                         "count": len(d.get("data") or []), "error": err}
 
+    async def galnet_news(self, refresh=False):
+        """GET /api/galnet: the latest GalNet articles (outrider/galnet.py), newest first, from Frontier's own feed.
+        The copy kept (meta galnet, live-only) is served for galnet.MAX_AGE_S; `refresh` asks the feed at once. A
+        feed that cannot be read leaves the copy as it is and says so. {articles, checked, error}."""
+        d = meta_get(self.db, "galnet") or {}
+        err = None
+        if refresh or time.time() - (d.get("checked") or 0) > outrider.galnet.MAX_AGE_S:
+            try:
+                session = getattr(self.spansh, "session", None)
+                if session is None:
+                    raise ValueError("no network session")
+                async with session.get(outrider.galnet.URL, params=outrider.galnet.query()) as r:
+                    r.raise_for_status()
+                    articles = outrider.galnet.parse(await r.json(content_type=None))
+                d = {"checked": time.time(), "articles": articles}
+                meta_set(self.db, "galnet", d)
+                self.db.commit()
+            except (ClientError, asyncio.TimeoutError, ValueError) as e:
+                err = f"GalNet could not be read ({e or type(e).__name__})"
+        return {"articles": d.get("articles") or [], "checked": d.get("checked"), "error": err}
+
+    async def galnet_systems(self, article_id):
+        """GET /api/galnet/systems?id=: the star systems one article mentions, each confirmed before it is named:
+        a system you know (your visits, bookmarks, the cache, a plotted route), else one Spansh knows by exactly
+        that name. [{text: as the article writes it, name: the system's own spelling}] in the article's order. What
+        was asked is kept (meta galnet_systems, live-only), so an article is worked out once. ({...}, status)."""
+        art = next((a for a in (meta_get(self.db, "galnet") or {}).get("articles") or [] if a.get("id") == article_id), None)
+        if not art:
+            return {"error": "no such article"}, 404
+        known = meta_get(self.db, "galnet_systems") or {}
+        out, err, changed = [], None, False
+        for forms in outrider.galnet.candidates(f"{art.get('title') or ''}\n{art.get('text') or ''}"):
+            for form in forms:
+                key = form.lower()
+                if key not in known:
+                    local = self.find_local(form)
+                    try:
+                        rec = {"name": local[1]} if local else await self.spansh.system_record(form)
+                    except (ClientError, asyncio.TimeoutError, ValueError, HighwayError, AttributeError) as e:
+                        err = f"Spansh could not be asked about every name ({e or type(e).__name__})"
+                        break   # not known either way: asked again next time
+                    known[key], changed = (rec["name"] if rec else None), True
+                if known[key]:
+                    if not any(s["name"] == known[key] for s in out):
+                        out.append({"text": form, "name": known[key]})
+                    break
+            if err:
+                break
+        if changed:
+            while len(known) > 3000:
+                known.pop(next(iter(known)))
+            meta_set(self.db, "galnet_systems", known)
+            self.db.commit()
+        return {"id": article_id, "systems": out, "error": err}, 200
+
     async def nearest_dock(self, q):
         """GET /api/nearest: the nearest places to dock (outrider/dock.py). q: stations, carriers ("0"/"1"), need
         (uc,vista,repair,refuel,shipyard,outfitting), age (days), permit ("1": keep permit systems), pad (auto, L, M,
@@ -13845,6 +13901,18 @@ def make_app(state, hosts=None):
         out, status = await state.cargo_lookup(dict(request.query))
         return web.json_response(out, status=status)
 
+    async def galnet_view(request):
+        """GET /api/galnet?refresh=: the latest GalNet articles (State.galnet_news). Read only but for the copy kept."""
+        return web.json_response(await state.galnet_news(refresh=request.query.get("refresh") in ("1", "true")))
+
+    async def galnet_systems_view(request):
+        """GET /api/galnet/systems?id=: the systems an article mentions (State.galnet_systems)."""
+        ident = request.query.get("id") or ""
+        if not outrider.galnet.ID_RE.fullmatch(ident):
+            return web.json_response({"error": "id: an article's id"}, status=400)
+        out, status = await state.galnet_systems(ident)
+        return web.json_response(out, status=status)
+
     async def nearest_view(request):
         """GET /api/nearest?stations=&carriers=&need=&age=&permit=&pad=&cached=: the nearest places to dock."""
         out, status = await state.nearest_dock(dict(request.query))
@@ -13918,6 +13986,8 @@ def make_app(state, hosts=None):
     app.router.add_post("/api/cargo/recount", cargo_recount_view)
     app.router.add_get("/api/cargo/lookup", cargo_lookup_view)
     app.router.add_get("/api/nearest", nearest_view)
+    app.router.add_get("/api/galnet", galnet_view)
+    app.router.add_get("/api/galnet/systems", galnet_systems_view)
     app.router.add_post("/api/radius", radius_view)
     app.router.add_get("/api/say", say_view)
     app.router.add_post("/api/say/play", pc_only(say_play_view))
