@@ -619,6 +619,73 @@ class Strip(unittest.TestCase):
         self.assertEqual(O.layout_update(None, {"system": {"corner": "s"}})[0]["system"]["corner"], "s")
 
 
+class RoutePanel(unittest.TestCase):
+    """The Route panel (this fork): the game's own route and the Highway's next stop."""
+    HOPS = [{"name": "Neu A", "star_class": "N", "scoopable": False, "ly": 58.24, "visited": False, "known": False},
+            {"name": "Scoop B", "star_class": "K", "scoopable": True, "ly": 61.0, "visited": False, "known": True},
+            {"name": "Been C", "star_class": None, "scoopable": None, "ly": 57.4, "visited": True, "known": True}]
+    HIGHWAY = {"destination": "Hwy End", "next": {"name": "Hwy Stop 38", "neutron": True, "distance": 4.2}, "jumps_left": 361,
+               "ly_left": 21500.4, "refuel_in": 3, "off_route": False, "complete": False}
+
+    @staticmethod
+    def left(p):
+        """The panel's lines without the right-aligned values (texts() lists those after their row)."""
+        return ["".join(r[0] for r in i["runs"]) for i in p["items"] if i["t"] == "runs"]
+
+    def route(self, **kw):
+        return dict({"hops": self.HOPS, "ly": 176.6, "next_scoop": 2, "longest_dry": 1}, **kw)
+
+    def test_the_game_route(self):
+        pal = O.palette()
+        p = O.route_panel({"route": self.route(), "to": "Been C"}, pal)
+        self.assertEqual((p["id"], p["w"], p["bg"]), ("route", O.ROUTE_W, pal["panel"]))
+        lines = self.left(p)
+        self.assertEqual(lines[:2], ["Route  to Been C", "3 jumps · 177 ly · next scoop in 2"])
+        self.assertEqual(lines[2:], ["1 Neu A ○", "2 Scoop B ●", "3 Been C ✓"])          # new to Spansh, known, visited
+        right = [i["s"] for i in p["items"] if i["t"] == "text"]
+        self.assertEqual(right, ["N  58.2 ly", "K ⛽  61.0 ly", "?  57.4 ly"])
+        colours = [i["c"] for i in p["items"] if i["t"] == "text"]
+        self.assertEqual(colours, [pal["warn"], pal["good"], pal["muted"]])               # not scoopable, scoopable, unknown
+        dry = self.left(O.route_panel({"route": self.route(next_scoop=None, longest_dry=5)}, pal))
+        self.assertEqual(dry[:3], ["Route  to Been C", "3 jumps · 177 ly · no scoopable star",
+                                   "longest stretch without a scoopable star: 5 jumps"])
+        one = self.left(O.route_panel({"route": self.route(hops=self.HOPS[:1], ly=58.2, next_scoop=None)}, pal))
+        self.assertEqual(one[1], "1 jump · 58 ly · no scoopable star")
+
+    def test_long_routes_are_cut(self):
+        pal = O.palette()
+        many = self.route(hops=[dict(self.HOPS[1], name=f"Stop {i}") for i in range(30)], ly=1800.0, next_scoop=1)
+        p = O.route_panel({"route": many}, pal)
+        lines = self.left(p)
+        self.assertEqual((lines[0], lines[1], lines[-1], len(lines)), ("Route  to Stop 29", "30 jumps · 1,800 ly · next scoop in 1",
+                                                                       "+24 more", 9))
+        self.assertEqual(len(self.left(O.route_panel({"route": many}, pal, max_rows=3))), 6)
+        long = O.route_panel({"route": self.route(hops=[dict(self.HOPS[0], name="Col 285 Sector " + "X" * 60)])}, pal)
+        self.assertTrue(all(O.text_width("".join(r[0] for r in i["runs"])) <= O.ROUTE_W for i in long["items"] if i["t"] == "runs"))
+
+    def test_the_highway(self):
+        pal = O.palette()
+        both = self.left(O.route_panel({"route": self.route(), "highway": self.HIGHWAY}, pal))
+        self.assertEqual(both[-2:], ["Highway: Hwy Stop 38 ⚡ · 4.2 ly", "361 jumps left · 21,500 ly · refuel in 3"])
+        only = self.left(O.route_panel({"highway": dict(self.HIGHWAY, off_route=True, refuel_in=0,
+                                                    next={"name": "Hwy Stop 39", "neutron": False, "distance": None})}, pal))
+        self.assertEqual(only, ["Route  to Hwy End", "Highway: Hwy Stop 39", "off the route · 361 jumps left · 21,500 ly",
+                                "refuel here"])                                    # what does not fit the line goes on the next
+        for nothing in ({}, None, {"route": None, "highway": None}, {"route": {"hops": []}},
+                        {"highway": dict(self.HIGHWAY, complete=True)}, {"highway": dict(self.HIGHWAY, next=None)}):
+            self.assertIsNone(O.route_panel(nothing, pal), nothing)
+        done = self.left(O.route_panel({"route": self.route(), "highway": dict(self.HIGHWAY, complete=True)}, pal))
+        self.assertFalse(any("Highway" in t for t in done))
+
+    def test_settings(self):
+        self.assertFalse(O.overlay_settings({})["overlay"]["route_panel"])            # optional: off by default
+        self.assertTrue(O.overlay_settings({"overlay": {"route_panel": True}})["overlay"]["route_panel"])
+        self.assertEqual(O.LAYOUT_DEFAULT["route"]["corner"], "ne")
+        self.assertEqual(O.PANEL_NAMES["route"], "Route")
+        test = O.test_panels(O.palette())[-1]
+        self.assertEqual((test["id"], texts(test)[0]), ("route", "Route  to Test Sector AB-C d1-9  test panel"))
+
+
 class Server(unittest.TestCase):
     def setUp(self):
         self.db = ed_outrider.open_db(":memory:")
@@ -635,11 +702,41 @@ class Server(unittest.TestCase):
         self.assertTrue(self.state.overlay_info(now=1002)["window"])   # it asked just now
         self.assertFalse(self.state.overlay_info(now=1000 + ed_outrider.OVERLAY_SEEN_S + 1)["window"])
 
+    def test_route_panel_shows_with_a_route(self):
+        """Off by default; on, it shows while the game has a route ahead of you (or a Highway route is followed),
+        wherever you are, and goes when the route is flown or a map is open."""
+        j = self.state.journals
+        j.handle({"event": "FSDJump", "timestamp": ed_outrider.iso_ts(1000), "StarSystem": "Start", "SystemAddress": 1,
+                  "StarPos": [0, 0, 0]})
+        hop = lambda i, name, cls: {"id64": i, "name": name, "star_class": cls, "x": 40.0 * (i - 1), "y": 0.0, "z": 0.0}
+        ed_outrider.meta_set(self.state.db, "route", {"ts": ed_outrider.iso_ts(1001), "hops": [
+            hop(1, "Start", "G"), hop(2, "Neu A", "N"), hop(3, "Scoop B", "K")]})
+        self.state.overlay_cfg.update(enabled=True, system_panel=False, body_panel=False, radar=False)
+        st = {"live": True, "flags": ed_outrider.FLAG_SUPERCRUISE | ed_outrider.FLAG_IN_MAIN_SHIP, "flags2": 0, "gui_focus": 0}
+        j.status_json = st
+        self.assertEqual(self.state.overlay_panels(now=1010), [])                      # off by default
+        self.state.overlay_cfg.update(route_panel=True)
+        p = self.state.overlay_panels(now=1010)
+        self.assertEqual([x["id"] for x in p], ["route"])
+        self.assertEqual(RoutePanel.left(p[0]), ["Route  to Scoop B", "2 jumps · 80 ly · next scoop in 2", "1 Neu A ○", "2 Scoop B ○"])
+        st.update(flags=ed_outrider.FLAG_DOCKED | ed_outrider.FLAG_IN_MAIN_SHIP)        # docked: still the route ahead
+        self.assertEqual([x["id"] for x in self.state.overlay_panels(now=1010)], ["route"])
+        st["gui_focus"] = 6                                                             # the galaxy map: nothing
+        self.assertEqual(self.state.overlay_panels(now=1010), [])
+        st["gui_focus"] = 0
+        j.pos = dict(j.pos, id64=3, name="Scoop B")                                     # arrived: no route left, no panel
+        self.assertEqual(self.state.overlay_panels(now=1010), [])
+        out, status = self.state.overlay_set({"panels": {"route": False}}, now=50)
+        self.assertEqual((status, out["panels"]["route"], self.state.overlay_cfg["route_panel"]), (200, False, False))
+        with open(self.state.config_path, encoding="utf-8") as f:
+            self.assertIn("route_panel = false", f.read())
+
     def test_switches(self):
         out, status = self.state.overlay_set({"enabled": True, "theme": "elite", "panels": {"radar": False}, "test": True}, now=50)
         self.assertEqual(status, 200)
         self.assertEqual((out["enabled"], out["theme"], out["panels"], out["test"]),
-                         (True, "elite", {"system": True, "body": True, "radar": False, "strip": False, "now": False, "bio": False},
+                         (True, "elite", {"system": True, "body": True, "radar": False, "strip": False, "now": False, "bio": False,
+                                          "route": False},
                           O.TEST_SECONDS))
         with open(self.state.config_path, encoding="utf-8") as f:   # written for the next start
             text = f.read()

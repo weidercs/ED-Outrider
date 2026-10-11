@@ -2,6 +2,14 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · This fork: a Route panel for the in-game overlay
+- A seventh overlay panel, optional (`[overlay] route_panel`, off by default; Settings → In-game overlay): the route
+  ahead. The game's own route: jumps and light years left, how many jumps to the next scoopable star (or that there
+  is none, and a long stretch without one), then the next six jumps with each star (⛽ scoopable in green), the jump,
+  and ✓ you have been there / ● reported / ○ not reported to Spansh. Under it, a Highway route's next stop with jumps
+  and light years left and the refuel coming up. It shows wherever you are while there is a route, and starts at the
+  top right under the body panel; placed, sized and themed like the others (`outrider.overlay.route_panel`).
+
 ## 2026-10-12 · Ship: the rows' lines meet across the columns
 - A module's Engineered stats cell was laid out as a flex box, so it stopped being a table cell and its line under
   the row sat higher than the Engineering column's. The stats now wrap inside a block of their own within the cell.

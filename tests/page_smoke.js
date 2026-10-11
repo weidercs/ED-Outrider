@@ -4422,6 +4422,10 @@ const settle = async maxMs => {
                  // each panel's on/off box in its own row, what it shows as the hover tip, a panel switched off dimmed
                  inRows: [...box.querySelectorAll("table.ovlay tbody tr")].every(tr => tr.querySelectorAll("[data-ovpanel]").length === 1),
                  tip: /every bio signal/.test(box.querySelector('[data-ovpanel="bio"]').closest("label").title),
+                 // the Route panel (this fork): its own row, off here, saying what it shows
+                 route: [/^\s*Route\s*$/.test(box.querySelector('[data-ovpanel="route"]').closest("label").textContent),
+                         box.querySelector('[data-ovpanel="route"]').checked, /the game's own route/.test(box.querySelector('[data-ovpanel="route"]').closest("label").title),
+                         !!box.querySelector('[data-ovlay="route"][data-k="corner"]')].join(),
                  dimmed: box.querySelector('[data-ovpanel="body"]').closest("tr").classList.contains("ovoff"),
                  // the help under it: three short points, no button it no longer has
                  wrapped: !!box.querySelector(".ovwrap > table.ovlay"),   // scrolled inside its section, never spilling out
@@ -4441,7 +4445,7 @@ const settle = async maxMs => {
     got.popup = [step("off"), step("installing"), step("starting"), step("installing"), step("install_failed"), step("off")]
       .map(t => t.replace(/ .*/, "") + (/installed/.test(t) ? " installed" : /failed/.test(t) ? " failed" : ""));
     w.eval(`data.overlay = JSON.parse(${JSON.stringify(saved)}); overlayNote = ""; overlayDrawn = ""; renderOverlay();`);
-    const want = {rows: 6, body: "120", off: true, theme: "elite", nowin: true, nowName: true, inRows: true, tip: true, dimmed: true, wrapped: true, help: true, note: true,
+    const want = {rows: 7, body: "120", off: true, theme: "elite", nowin: true, nowName: true, inRows: true, tip: true, route: "true,false,true,true", dimmed: true, wrapped: true, help: true, note: true,
                   posted: [["overlay/layout", {radar: {x: 0.3}}], ["overlay", {test: true}]],
                   venv: true, popup: ["", "⟳Installing", "✓ installed", "⟳Installing", "Installing failed", ""]};
     const ok = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;

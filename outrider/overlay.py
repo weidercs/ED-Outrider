@@ -29,9 +29,9 @@ import sys
 from . import ROOT
 
 CANVAS_W, CANVAS_H = 1280, 960
-PANELS = ("system", "body", "radar", "strip", "now", "bio")
+PANELS = ("system", "body", "radar", "strip", "now", "bio", "route")
 PANEL_NAMES = {"system": "System", "body": "Body", "radar": "Surface radar", "strip": "System strip",
-               "now": "Now (To-Do & Info)", "bio": "Bio signals"}
+               "now": "Now (To-Do & Info)", "bio": "Bio signals", "route": "Route"}
 # a panel is placed from a corner of the game window, or centred along its top or bottom edge (n, s: x is not used)
 CORNERS = ("nw", "ne", "sw", "se", "n", "s")
 SIZES = ("small", "normal", "large")
@@ -40,7 +40,7 @@ TEST_SECONDS = 60       # "Show test panels": how long they stay (shown whether 
 ARRANGE_SECONDS = 600   # Arrange mode ends by itself after this, so the overlay never stays in the way of the mouse
 
 DEFAULTS = {"enabled": False, "theme": "default", "text_size": "normal", "system_panel": True, "body_panel": True,
-            "radar": True, "strip_panel": False, "now_panel": False, "bio_panel": False, "system_seconds": 0,
+            "radar": True, "strip_panel": False, "now_panel": False, "bio_panel": False, "route_panel": False, "system_seconds": 0,
             "radar_range": 800}
 # where each panel starts: a corner of the game window, the offset from it as a share of the window's width (x) and
 # height (y), its size (1 = the canvas's own), its background's opacity (0: text only) and the whole panel's
@@ -49,7 +49,8 @@ LAYOUT_DEFAULT = {"system": {"corner": "nw", "x": 0.02, "y": 0.16, "scale": 1.0,
                   "radar": {"corner": "se", "x": 0.02, "y": 0.10, "scale": 1.0, "bg": 0.5, "alpha": 1.0},
                   "strip": {"corner": "n", "x": 0.0, "y": 0.005, "scale": 1.0, "bg": 0.5, "alpha": 1.0},
                   "now": {"corner": "sw", "x": 0.02, "y": 0.06, "scale": 1.0, "bg": 0.65, "alpha": 1.0},
-                  "bio": {"corner": "nw", "x": 0.02, "y": 0.45, "scale": 1.0, "bg": 0.65, "alpha": 1.0}}
+                  "bio": {"corner": "nw", "x": 0.02, "y": 0.45, "scale": 1.0, "bg": 0.65, "alpha": 1.0},
+                  "route": {"corner": "ne", "x": 0.02, "y": 0.45, "scale": 1.0, "bg": 0.65, "alpha": 1.0}}
 LIMITS = {"x": (0.0, 0.95), "y": (0.0, 0.95), "scale": (0.5, 2.5), "bg": (0.0, 1.0), "alpha": (0.1, 1.0)}
 
 # text metrics on the canvas: line heights and an average character width per size (the window's font is close to
@@ -137,7 +138,7 @@ def overlay_settings(cfg):
     if "overlay" in cfg and not isinstance(cfg.get("overlay"), dict):
         _warn("must be a section (a table of settings); ignored")
     out = dict(DEFAULTS)
-    for key in ("enabled", "system_panel", "body_panel", "radar", "strip_panel", "now_panel", "bio_panel"):
+    for key in ("enabled", "system_panel", "body_panel", "radar", "strip_panel", "now_panel", "bio_panel", "route_panel"):
         v = o.get(key)
         if v is None:
             continue
@@ -1032,6 +1033,79 @@ def bio_panel(detail, pal, size="normal", bio_min=10_000_000, high_gravity=2.0, 
 
 # ---- the test panels: every panel with sample data, to arrange them before flying ----
 
+# ---- the Route panel (this fork): the route in the game's own computer, and the one Outrider follows ----
+
+ROUTE_W = 430
+KNOWN_MARK = {"visited": ("✓", "good"), "known": ("●", "muted"), "new": ("○", "warn")}
+
+
+def route_panel(info, pal, size="normal", max_rows=6):
+    """The route ahead. info: {"route": State.route_summary() (the route plotted in the game's galaxy map: hops with
+    name, star_class, scoopable, ly, visited, known; ly; next_scoop; longest_dry), "highway": State.highway_summary()
+    (a route plotted in Plot Route: next, jumps_left, ly_left, refuel_in, off_route, complete), "to": the game
+    route's last system}. The game's route first: jumps and light years left, the next scoopable star, then the next
+    `max_rows` jumps, each with its star (scoopable in green, not in the warning colour), the jump, and ✓ you have
+    been there / ○ nobody has reported it to Spansh. Then the Highway's next stop. None with neither."""
+    info = info or {}
+    r, hw = info.get("route"), info.get("highway")
+    hops = (r or {}).get("hops") or []
+    if hw and (hw.get("complete") or not hw.get("next")):
+        hw = None
+    if not hops and not hw:
+        return None
+    rows, subtitle = [], None
+    if hops:
+        n = len(hops)
+        subtitle = f"to {info.get('to') or hops[-1].get('name') or '?'}"
+        scoop = r.get("next_scoop")
+        rows.append([(f"{n} jump{'' if n == 1 else 's'}", "text"), (f" · {r.get('ly') or 0:,.0f} ly", "text"),
+                     ((f" · next scoop in {scoop}", "good") if scoop else (" · no scoopable star", "warn"))])
+        if (r.get("longest_dry") or 0) >= 4:
+            rows.append([(f"longest stretch without a scoopable star: {r['longest_dry']} jumps", "warn")])
+        rows.append("rule")
+        for i, h in enumerate(hops[:max_rows]):
+            star = h.get("star_class") or "?"
+            mark = KNOWN_MARK["visited" if h.get("visited") else "known" if h.get("known") else "new"]
+            rows.append({"left": [(f"{i + 1} ", "muted"), (f"{h.get('name') or '?'} ", "title" if i == 0 else "text"),
+                                  (mark[0], mark[1])],
+                         "right": (f"{star}{' ⛽' if h.get('scoopable') else ''}  {h.get('ly') or 0:.1f} ly",
+                                   "good" if h.get("scoopable") else "warn" if h.get("scoopable") is False else "muted")})
+        if n > max_rows:
+            rows.append([(f"+{n - max_rows} more", "muted")])
+    if hw:
+        nx = hw["next"]
+        if rows:
+            rows.append("rule")
+        bits = [("Highway: ", "muted"), (f"{nx.get('name') or '?'}", "title")]
+        if nx.get("neutron"):
+            bits.append((" ⚡", "accent"))
+        if nx.get("distance") is not None:
+            bits.append((f" · {nx['distance']:,.1f} ly", "text"))
+        rows.append(bits)
+        more = []
+        if hw.get("off_route"):
+            more.append(("off the route", "warn"))
+        if hw.get("jumps_left") is not None:
+            more.append((f"{hw['jumps_left']:,} jump{'' if hw['jumps_left'] == 1 else 's'} left", "text"))
+        if hw.get("ly_left") is not None:
+            more.append((f"{hw['ly_left']:,.0f} ly", "text"))
+        if hw.get("refuel_in") is not None:
+            more.append(("refuel here" if hw["refuel_in"] == 0 else f"refuel in {hw['refuel_in']}", "warn" if hw["refuel_in"] <= 1 else "text"))
+        line_, used, room = [], 0.0, ROUTE_W - 2 * PAD   # as many as fit a line, the rest on the next
+        for txt, key in more:
+            seg = txt if not line_ else " · " + txt
+            if line_ and used + text_width(seg, size) > room:
+                rows.append(line_)
+                line_, used, seg = [], 0.0, txt
+            line_.append((seg, key))
+            used += text_width(seg, size)
+        if line_:
+            rows.append(line_)
+        if not hops:
+            subtitle = f"to {hw.get('destination') or '?'}"
+    return text_panel("route", "Route", rows, pal, width=ROUTE_W, size=size, subtitle=subtitle)
+
+
 def test_panels(pal, size="normal", radar_range=800):
     """Every panel with made-up contents ("Show test panels" in Settings, and the window's Arrange mode)."""
     system = text_panel("system", "Test Sector AB-C d1-2", [
@@ -1077,7 +1151,18 @@ def test_panels(pal, size="normal", radar_range=800):
          "organics": [{"genus": "Bacterium", "species": "Bacterium Acies", "variant": "Bacterium Acies - Cyan", "samples": 3,
                        "done": True, "value": 1_000_000}]}]}, pal, size)
     bio["items"][0]["runs"].append(["  test panel", pal["muted"], size, False])
-    return [system, body, radar_test(pal, size, radar_range), strip, now, bio]
+    route = route_panel({"to": "Test Sector AB-C d1-9", "route": {"ly": 412.6, "next_scoop": 2, "longest_dry": 2, "hops": [
+        {"name": "Test Sector AB-C d1-3", "star_class": "N", "scoopable": False, "ly": 58.2, "visited": False, "known": False},
+        {"name": "Test Sector AB-C d1-4", "star_class": "K", "scoopable": True, "ly": 61.0, "visited": False, "known": True},
+        {"name": "Test Sector AB-C d1-5", "star_class": "M", "scoopable": True, "ly": 57.4, "visited": True, "known": True},
+        {"name": "Test Sector AB-C d1-6", "star_class": "DA", "scoopable": False, "ly": 60.3, "visited": False, "known": False},
+        {"name": "Test Sector AB-C d1-7", "star_class": "F", "scoopable": True, "ly": 59.9, "visited": False, "known": True},
+        {"name": "Test Sector AB-C d1-8", "star_class": "G", "scoopable": True, "ly": 58.8, "visited": False, "known": True},
+        {"name": "Test Sector AB-C d1-9", "star_class": "K", "scoopable": True, "ly": 57.0, "visited": False, "known": True}]},
+        "highway": {"destination": "Test End", "next": {"name": "Test Stop 38", "neutron": True, "distance": 4.2},
+                    "jumps_left": 361, "ly_left": 21500, "refuel_in": 3, "off_route": False, "complete": False}}, pal, size)
+    route["items"][0]["runs"].append(["  test panel", pal["muted"], size, False])
+    return [system, body, radar_test(pal, size, radar_range), strip, now, bio, route]
 
 
 def radar_test(pal, size="normal", radar_range=800):

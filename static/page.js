@@ -8077,7 +8077,8 @@ const OV_PANELS = [["system", "System", "the bodies worth your time, in supercru
                    ["radar", "Surface radar", "on a body's surface: samples, colony rings, the ship"],
                    ["strip", "System strip", "two short lines across the top: where you are, the star, bodies found, values"],
                    ["now", "Now (To-Do & Info)", "Now, condensed: the target, fuel, data at risk, what to do next, this session"],
-                   ["bio", "Bio signals", "every bio signal in the system, the ones worth it highlighted: samples, values"]];
+                   ["bio", "Bio signals", "every bio signal in the system, the ones worth it highlighted: samples, values"],
+                   ["route", "Route", "the route ahead: the game's own route (jumps, light years, the next jumps with their stars, the next scoop) and the Highway's next stop"]];
 const OV_CORNERS = {nw: "top left", n: "top centre", ne: "top right", sw: "bottom left", s: "bottom centre", se: "bottom right"};
 let overlayDrawn = "", overlayNote = "";
 // the window's state: Outrider runs it on the game PC (o.runner); on a server it runs on the game PC by hand

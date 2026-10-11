@@ -1113,6 +1113,7 @@ radar = {"true" if st["overlay"]["radar"] else "false"}   # the surface radar: s
 strip_panel = {"true" if st["overlay"]["strip_panel"] else "false"}   # the system strip: two short lines across the top (where you are, the star, bodies found, values)
 now_panel = {"true" if st["overlay"]["now_panel"] else "false"}   # Now (To-Do & Info): Now condensed, the target, fuel, data at risk, what to do next, this session
 bio_panel = {"true" if st["overlay"]["bio_panel"] else "false"}   # every bio signal in the system, the ones over your bio_min highlighted, with samples and values
+route_panel = {"true" if st["overlay"]["route_panel"] else "false"}   # the route ahead: the game's own route (jumps, light years, the next jumps with their stars, the next scoop) and the Highway's next stop
 system_seconds = {st["overlay"]["system_seconds"]}   # how long the system panel stays after arriving (0: while in supercruise in that system)
 radar_range = {st["overlay"]["radar_range"]}   # metres from the radar's centre to its edge (it widens to fit a colony ring)
 
@@ -6745,6 +6746,13 @@ class State:
                                            CODEX_INTERESTING)
             if p:
                 out.append(p)
+        # the route (this fork): the game's own route and the Highway's next stop, anywhere you fly, drive or walk
+        if cfg.get("route_panel") and pos:
+            left, _ = self.navroute_ahead()
+            p = outrider.overlay.route_panel({"route": self.route_summary(), "highway": self.highway_summary(),
+                                              "to": left[-1]["name"] if left else None}, pal, cfg["text_size"])
+            if p:
+                out.append(p)
         # the surface radar: on a body (landed, in the SRV, on foot) or low over it, as the surface map shows
         if cfg.get("radar"):
             surf = self.surface_summary(now)
@@ -6802,7 +6810,7 @@ class State:
                 "runner": self.overlay_runner.status() if self.overlay_runner else None}
 
     def overlay_set(self, body, now=None):
-        """POST /api/overlay {enabled?, theme?, text_size?, panels?: {system|body|radar|strip|now|bio: bool}, test?: bool, arrange?:
+        """POST /api/overlay {enabled?, theme?, text_size?, panels?: {system|body|radar|strip|now|bio|route: bool}, test?: bool, arrange?:
         bool}: the switches, applied at once and written into [overlay] for the next start; test panels for
         TEST_SECONDS; Arrange mode (the window takes the mouse to move and size the panels) until it is switched off or
         ARRANGE_SECONDS pass. (answer, HTTP status)."""

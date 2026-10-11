@@ -95,11 +95,16 @@ transparencies), with a **reset**.
 The arrangement is kept in Outrider's database, not the config file: to take it to another PC, copy
 `data/ed_outrider.sqlite` along with `ed_outrider.toml`.
 
+- **Route** (this fork; optional): the route ahead, wherever you are. The game's own route: jumps and light years
+  left and how many jumps to the next scoopable star, then the next six jumps, each with its star (⛽ scoopable), the
+  jump's length and whether the system is known (✓ you have been there, ● reported, ○ nobody has reported it to
+  Spansh). With a Highway route followed too, its next stop, jumps and light years left and the refuel coming up.
+  Nothing shows without a route.
 ## Settings
 
 Each panel has its tick box at the start of its row in Settings → In-game overlay's table (hover its name for what
-it shows; a panel switched off has its row dimmed). The system, body and radar panels start on; the system strip, Now
-and Bio signals start off. The **theme** colours and frames the panels as the page's themes do (Elite's orange with
+it shows; a panel switched off has its row dimmed). The system, body and radar panels start on; the system strip, Now,
+Bio signals and Route start off. The **theme** colours and frames the panels as the page's themes do (Elite's orange with
 cut corners, LCARS's bars, ...); **text** is small, normal or large. In the config file (`[overlay]`):
 `system_seconds` keeps the system panel only that long after arriving (0: while you are in supercruise there), and
 `radar_range` is the radar's edge in metres (it widens to fit a colony ring).
