@@ -2,6 +2,20 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-11 · Version 2026.10.21
+- The in-game overlay (six panels, Arrange mode, themes, PyQt6 installed automatically; game PC only), GPL-3.0-or-later,
+  the Exo-Biology genus ✓, EDDN's biology samples (scanorganic/1) and parity with EDMC (planetary Docked's body, no
+  allowCobraMkIV), no rebuy multiple for an Arx-bought ship, whole days since you sold, the launcher's clipboard note,
+  ExploData's colours downloaded instead of shipped, the version in the log's first line, the docs review. No journal
+  re-read. What's new has its section; new screenshots overlay.png and overlay-settings.png, checklist.png retaken
+  (seven genera shown complete for the ✓, the page's copy of the data only: project/screenshots/extra.js DEMO_COMPLETE).
+
+## 2026-10-11 · Overlay: long rows wrap; Settings: the placement table fits its section
+- The Now panel's Next detail and the Bio signals footer were cut with … when too long ("7.1M/min…", "5 m…"): they
+  now go on to the next line, broken between their parts (`overlay.flow`).
+- The table was wider than Settings -> In-game overlay (726 px in 711 at a 1600 px window, its reset links cut off):
+  narrower number boxes and padding make it fit, and on a narrow window it scrolls sideways inside the section
+  instead of spilling out (`.ovwrap`).
 ## 2026-10-11 · This fork: Game Route, the game's own route as a list with its fuel
 - A **Game Route** tab (and tablet page) lists the route plotted in the game's galaxy map jump by jump: the system
   (click to copy), the Known column of Plot Route's list, the star and whether it is scoopable, the jump and the
