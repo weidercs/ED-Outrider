@@ -351,7 +351,7 @@ class Targeter:
             result.update(phase=0, label="wait for the keyboard", why="the virtual keyboard stayed busy (auto honk)")
             return
         here = origin if origin is not None else system()
-        expect, opened, cur = {GUI_COCKPIT}, False, None
+        expect, opened, cur, close_pressed = {GUI_COCKPIT}, False, None, False
         try:
             if h.ui is None or h.stop.is_set():
                 raise Abort(None, "the virtual keyboard is not open")
@@ -373,7 +373,7 @@ class Targeter:
                     if st.get("opens"):
                         expect, opened = {GUI_COCKPIT, GUI_GALAXY_MAP}, True
                     elif st.get("closes"):
-                        expect = {GUI_GALAXY_MAP, GUI_COCKPIT}
+                        expect, close_pressed = {GUI_GALAXY_MAP, GUI_COCKPIT}, True
                     self._tap(st["names"], st.get("secs", TAP_S), st)
                 elif d == "type" and untypeable(name):
                     if not (self.copy and st.get("paste_names")):
@@ -404,11 +404,22 @@ class Targeter:
             result.update(ok=True)
         except Abort as e:
             st = e.step or cur
+            # the FSD charged (or the jump went) once the route was plotted and the map was closing: you set off before
+            # step 7 looked. Not a failure when the target is set (or you arrived there): the jump confirms it
+            if close_pressed and e.code in ("jump", "moved") and (system() == id64 or targeted(status(), id64, route_end)):
+                say(f"{st['phase']} {st['label']}: {e.why}, the target was set: done")
+                result.update(ok=True)
+                return
             result.update(phase=st["phase"] if st else 0, label=st["label"] if st else "start", why=e.why,
                           code=e.code, **e.extra)
             say(f"stopped at step {result['phase']} ({result['label']}): {e.why}")
-            # close the map only if this run opened it and it is still open (pressing it otherwise would open it)
-            if opened and (status() or {}).get("gui_focus") == GUI_GALAXY_MAP and h.ui is not None and not h.stop.is_set():
+            # close the map only if this run opened it and it is still open (pressing it otherwise would open it). Once
+            # its close key went down the map is closing (Status.json lags): pressed again it would open, unless the
+            # close demonstrably failed (the wait for the cockpit timed out with the map still open)
+            close_failed = e.why == "the galaxy map did not close"
+            # (the device is still open under our lock even when switching off set `stop`: the finally closes it after)
+            if opened and (not close_pressed or close_failed) and (status() or {}).get("gui_focus") == GUI_GALAXY_MAP \
+                    and h.ui is not None:
                 close = next((s for s in steps if s.get("closes")), None)
                 try:
                     if close and close.get("names"):
@@ -428,10 +439,10 @@ class Targeter:
         if not s.get("live"):
             raise Abort(st, "the game is no longer live")
         if system() != here:
-            raise Abort(st, "the system changed")
+            raise Abort(st, "the system changed", code="moved")
         flags = s.get("flags") or 0
         if flags & (FLAG_FSD_CHARGING | FLAG_FSD_JUMP):
-            raise Abort(st, "an FSD jump started")
+            raise Abort(st, "an FSD jump started", code="jump")
         if flags & (FLAG_IN_DANGER | FLAG_INTERDICTED):
             raise Abort(st, "danger")
         focus = s.get("gui_focus") or 0

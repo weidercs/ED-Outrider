@@ -1,4 +1,4 @@
-[ED Outrider](../../README.md) · [Install and run](install.md) · [The views](views.md) · [Plot Route](plot-route.md) · [Cargo and trading](cargo-and-trading.md) · [Voice and alerts](voice-and-alerts.md) · [Automation](automation.md) · **On a tablet** · [Settings and good to know](settings.md) · [For the curious](for-developers.md)
+[ED Outrider](../../README.md) · [What's new](whats-new.md) · [Install and run](install.md) · [The views](views.md) · [Plot Route](plot-route.md) · [Cargo and trading](cargo-and-trading.md) · [Voice and alerts](voice-and-alerts.md) · [Automation](automation.md) · **On a tablet** · [Uploads](uploads.md) · [Settings and good to know](settings.md) · [For the curious](for-developers.md)
 
 # On a tablet
 
@@ -19,7 +19,7 @@ for this: see [Other devices on your network](install.md#-other-devices-on-your-
 
 - **The strip on top** shows the system, fuel and unsold data, and the link to Outrider in words ("LINKED",
   "STALE · 48 S AGO", "NO LINK · RETRYING").
-- **The pages** are on the left in three groups of four: Explore (Now, Nearby, Here, Samples), Navigate (Bookmarks,
+- **The pages** are on the left in three groups of four: Explore (Now, Nearby, Here, Bio/Geo), Navigate (Bookmarks,
   Search, Map, Highway) and Records (History, Log, Materials, My firsts). There is no Overview.
 - **Tap a row** in a table for all of its facts, including the columns too narrow to show, with Show in Here and
   Bookmark.
@@ -46,7 +46,8 @@ for this: see [Other devices on your network](install.md#-other-devices-on-your-
   (ship, SRV, Nomad, fighter, on foot), each pressing that control's keyboard binding on the PC once. The defaults are
   landing gear, cargo scoop, night vision, ship lights, flight assist, silent running, hardpoints and analysis mode;
   the SRV, the Nomad and fighters, and on foot have their own. A button shows the game's state (Status.json), SENT
-  until the game confirms a press, and "not confirmed" if it doesn't. A control with no keyboard binding says "bind a
+  until the game confirms a press, and "not confirmed" if it doesn't. Hardpoints, landing gear and cargo scoop show
+  N/A in supercruise, where they can't be used (the game even reports hardpoints deployed there after a jump). A control with no keyboard binding says "bind a
   key" (give it a second, keyboard binding in Elite's controls). Edit chooses, renames and orders each set (stored on
   the PC). The rail presses keys only while the game runs, through auto honk's keyboard (Linux; Windows experimental), and never
   while auto honk or auto-target is pressing; one tap per button, never a sequence.

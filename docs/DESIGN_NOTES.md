@@ -9,18 +9,12 @@ upstream project's choices, not rules of the game.
 - **No keyboard shortcuts.** A deliberate upstream choice, declined more than once; clickable things are reachable with
   Tab and act on Enter/Space instead.
 - **No VoiceAttack integration.** Not used upstream; the co-pilot button and the page cover the same ground.
-- **Nothing is uploaded unless you switch it on.** `[uploads]` (each off by default; `outrider/uplink.py`) can send
-  what the game shows everyone to EDDN, and your flight log to your own EDSM and Inara accounts, as EDMarketConnector
-  does. Otherwise outside calls are read-only lookups (Spansh, EDSM, GitHub for bio rules, Hugging Face for voices,
-  EDAstro for the DSSA carrier list when the Nearest finder opens).
-  Still no Frontier sign-in: markets, outfitting and shipyards go out only once you open that screen in game (the
-  game then writes the file), where EDMC can ask Frontier on docking.
-- **Uploads are live play only, and kept in memory.** An event older than five minutes is never sent (no backfill of
-  past journals, and journals synced from another PC with a delay send nothing); what waits for a service that
-  cannot be reached (up to 500 per service) is lost when Outrider stops. For Inara: travel, credits, ranks,
-  reputation, engineers, Powerplay, statistics, the ship you fly, materials, missions and combat; not a ship's
-  module list, suits or community goals. EDSM and Inara have not been tried against the real services yet
-  (the tests use the documented shapes); EDDN's messages are checked against EDDN's own schemas.
+- **Nothing is uploaded unless the player switches it on.** EDDN and EDSM (Settings → Uploads, off by default) are the
+  only uploads; every other outside call is a read-only lookup (Spansh, EDSM, GitHub for bio rules, Hugging Face for
+  voices, EDAstro for the DSSA carrier list when the Nearest finder opens).
+- **EDSM has no test endpoint**, so its developer switch is a dry run (`OUTRIDER_EDSM_DRYRUN=1`: requests built and
+  logged to `data/edsm-dryrun.jsonl` without the key, nothing sent; the rows end as `dry` and are never sent later).
+  EDDN's is its `/test` schemas (`OUTRIDER_EDDN_TEST=1`). Neither is a setting.
 - **Survey odds are odds, not contents.** The mining tooltip shows what a community survey found at that kind of
   ground; the game never says what a location holds.
 - **No hand-logging of mining location contents.** Considered and left out for now; "Mined previously" records
@@ -182,6 +176,17 @@ upstream project's choices, not rules of the game.
   TAP_S. Auto honk's miss is not held against the fire group when your own jump started during the hold or the
   wait for the scan.
   The toggle and delay are the server's (meta `autotarget`, beating the config once used), not per browser.
+  The game's own "in danger" (Status.json bit 22) is on for every FSD use, from the charge until 15-26 s after a
+  hyperspace arrival or a SupercruiseEntry (logged in game 2026-10-09). A run that meets it in that window waits for
+  it to clear (`State.arrival_danger_until`, up to `AUTOTARGET_DANGER_WAIT` = 60 s after the arrival or entry; the
+  restored position's arrival after a restart), says so once ("Not targeting due to danger ... for up to N
+  seconds") and presses nothing meanwhile; the co-pilot button's second press cancels it like the countdown.
+  Interdicted, the FSD charging, or still in danger past the minute: refused as a real danger. Once the map's close
+  key went down, an FSD charge or a jump is a success when the target is set (you set off before step 7 looked).
+- **Here's icon legend lists only what is shown.** The footer under Here's list (`HERE_LEGEND` in page.js) names the
+  icons the list or schematic shows now, not every icon there is (the author's call, 2026-10-10), and is absent when
+  there are none; sticky to the bottom of the scrolling pane so it stays in view. The codex marks write the new
+  colour after them ("✪ Cobalt"): their tooltip never shows under the body summary that pops up over a row.
 - **Too much fuel for the next jump.** Spansh's exact plotter simulates the fuel, so a long neutron jump may be in
   range only with about the fuel it expects aboard (the Caspian's 487.9 ly ×6 jump: at most about 36 t; a full 160 t
   tank gives 75.3 × 6 = 452 ly). Checked on a live arrival in a route system (or a plot made where you are) and again
@@ -220,11 +225,75 @@ upstream project's choices, not rules of the game.
 - **History's sessions are split by 2 h without a jump.** A session's window runs from its login (the latest one
   within 2 h before its first jump) to the next session's; a login no jump followed, 2 h or more after anything
   else, opens a session with no jumps (review F31), whose "end" is its last login (nothing later is known).
+- **Uploads catch up from a mark, at most a week back for EDSM and an hour for EDDN** (the author's choices over
+  "live lines only"; EDDN's readers take what arrives as current, so an EDDN message over an hour old is dropped even
+  at send, while EDSM is the player's own log: `eddn.CATCHUP_MAX_S`, the hub's `max_ages`). Each service's mark is the
+  last journal line it handled (file name and byte offset, compared by `uploads.pos_key`), stored in meta
+  `upload_marks` (live-only: a re-read sends nothing again) and in the instance's lease file, which stays at shutdown as
+  a handover note: switching on starts at another instance's mark, else at the reader's position (never your history).
+  Files the game overwrites (Market.json, NavRoute.json...) are caught up only while the file is still the one the
+  event wrote (its time and MarketID): the last one after a short gap, older ones never. A restored database forgets
+  its marks and unsent rows. Duplicates are possible only if another uploader covered a gap while Outrider was down.
+- **Several Outriders switched on for one service: one sends** (`uploads.lease_owners`). The one already sending keeps
+  it; with none sending (started together) or two (each started before seeing the other), the lowest instance id has
+  it. No clocks are compared (two machines'), and every instance works it out the same way from the same leases.
+  Nothing is claimed before the others' leases are read. An Outrider from before the rule (no `wanted` in its lease)
+  holds whenever another lease names the service, so it is always given way to. Before this, both held for good and
+  each followed as if the other sent (Codex F1, 2026-10-09).
+- **The exobiology checklist's states, best first: sold, aboard, lost, logged** (outrider/checklist.py). Lost is a
+  state of its own, in red (the author's choice): you found it there, and sampling it again pays. "Not here" is the
+  rules' prediction and is worded as one; a species with no rules at all (BioScan does not model it) is possible,
+  never ruled out. "Parts" when every ruleset that allows the region also ties it to a place within it. Colours
+  come from ExploData's tables; a species with none is its own one variant. Runs match by the game's species id, so a
+  misspelled duplicate in the rules (Stratum Aranaemus) cannot split a species. It lives in the Bio/Geo tab
+  (My Samples | Exo-Biology | Geology; the tab was Samples), not a tab of its own (the author: no 14th tab). **Completion** (the author's measure): the average,
+  over the species possible in the region, of each one's share of its colours found there in any state, so partial
+  progress counts (half of every species is 50%); a species with no colour table scores 0 or 1.
+- **The geology checklist's "possible" is "reported"** (resources/geo_codex.json, scripts/build_geo_codex.py). Geology
+  has no region rules (it follows a body's volcanism), so a region's entries are those players have reported there,
+  counted from Canonn's per-entry site dumps; one not reported is greyed but never called impossible. The file is
+  built offline and shipped (the dumps are tens of MB; it is 31 KB); run the script again to refresh the counts. Your
+  codex entries match by entry id.
+- **The checklists' pictures are linked, never copied** (the author's choice, 2026-10-09). Every image is a screenshot
+  of Frontier's game, so none is public domain or GPL; Frontier's media rules allow non-commercial fan use with
+  attribution, but bundled images would sit outside the GPL and each is a commander's own. So Outrider ships only the
+  links and credits (resources/codex_images.json, scripts/build_codex_images.py, from Canonn's codex reference) and the
+  page loads a picture from Canonn when an entry is opened, captioned with the commander and Canonn. The running
+  server refreshes the link list from Canonn once a day into data/codex_images.json (about 650 KB asked for, nothing
+  sent), used when sound (at least 500 entries) and else the shipped copy, so new pictures appear without a release.
+- **A plot's end Spansh does not know yet is stood in for** (2026-10-09). Both ends are looked up in Spansh's search
+  before every plot (a system known here, even where you are, is not necessarily one Spansh knows). One it does not
+  know, but Outrider can place, is replaced by a Spansh system near it: of those within the ship's range, the one
+  nearest the route's other end, else the nearest; for where you are, from the neighbourhood Spansh already sent. The
+  real end goes back as a leg of its own, its fuel left unknown rather than guessed, and the page says what was done.
+  Road to Riches and Exomastery too (`riches.splice_survey`: the real ends survey nothing); never a trade route, which
+  starts from a station's market as Spansh has it (no stand-in replaces that).
+- **The journal archive has no lock between instances** (Codex F8, 2026-10-09). Two Outriders sharing a backup folder
+  each copy through a .part file of their own and look at the archive again just before replacing it, so a lagging
+  mirror's shorter copy does not replace a fuller one. A narrow window remains; a lock would not close it on an NFS
+  share (where a shared folder is likely, and locks are unreliable), and the next backup copies the fuller journal again.
+- **A trade route counts tonnes, and undocking moves on** (Codex F4, the author's choice, 2026-10-09). A commodity is
+  done once its planned tonnes are traded; strict counting alone would leave a stop open for good when the station
+  had less than Spansh said, so undocking from a stop with anything traded there finishes it, and the voice says what
+  fell short instead of the plan's profit. Undocking with nothing traded does not.
+- **While another uploader has a service, Outrider follows without sending** (the hub's `follow`): its mark moves with
+  the journal and nothing of that stretch is caught up later; EDDN's waits are dropped (`eddn.quiet`). A *held*
+  service (a key EDSM refused) is different: it keeps queueing and sends once the key is fixed, since nobody else sent
+  that stretch (the author lost twelve events before this).
+- **The upload switches live only in Settings → Uploads**, written to `[eddn]`/`[edsm] enabled` (hidden from the Server
+  settings). Developer switches are environment variables, never settings: `OUTRIDER_EDDN_TEST`, `OUTRIDER_EDSM_DRYRUN`.
+- **EDDN station data goes once per visit**, not once per change: the sites date a station's data by what arrives, so
+  each docking sends it again; only the same screen reopened in one docking is skipped (`VISIT_ENDS`).
+- **No "New to EDSM" mark**: EDSM's `systemCreated` usually names EDDN's copy of a jump (sent at once, read by EDSM)
+  rather than the player's EDSM batch, so it would almost never show (tried and removed, 2026-10-09).
 - **The full-scan bonus is in the payout estimate** (plugin gaps D): 1,000 cr per body of a system you found complete
   (FSSAllBodiesFound's Count) while every star and planet was undiscovered. The sale pays it as `Bonus`, apart from
   `BaseValue`, which the calibration still compares against, so it is added only to `estimated_payout` and shown on
   its own line. Pioneer's form (non-bodies counted, the main star's discovery only) fits the sales worse. No belt
   counter: the honk's Count leaves belt clusters out and the game never says how many a system has.
+- **A species missing from the price list is valued at the bio rules' figure** (BioScan's), as the predictions
+  already are: Radicoida Unicus (119,037 cr there) is the one known case. Its Vista Genomics price is unconfirmed: no
+  sale of it in the author's journals (checked 2026-10-09). Add it to `ORGANIC_VALUES` once a SellOrganicData shows it.
 - **No x5 in a populated system** (BioScan's rule; plugin gaps C). The author's Vista sales say so: 0 of 8 runs in a
   populated system paid it, 208 of 208 elsewhere (`project/value-checks/RESULTS-2026-10-08.md`). A system's
   Population comes from its FSDJump / Location / CarrierJump (`system_population`); `own_firsts.bio_x5` holds the
@@ -265,7 +334,8 @@ upstream project's choices, not rules of the game.
 - **The link pill's "stale" is the long poll's limit, not quiet** (review S41): the server answers within 25 s even
   with nothing new, so "stale" starts at 30 s without an answer; the desktop's "linked · N s" counts up to that in
   quiet play. The tablet's pill says just "linked" (the ticking seconds distracted the author; 2026-10-04) and shows
-  the age only once stale.
+  the age only once stale. A long poll with no answer by `POLL_TIMEOUT_MS` (40 s) is aborted: a hung link (the PC
+  suspended) becomes "no link" and "Lost contact" instead of "stale" for good.
 - **The README is a front page; the guide is `docs/guide/`** (the author, 2026-10-07: the single README had grown to
   1,000 lines). Plain Markdown in the repository, not a wiki or a docs site: versioned with the code, changed in the
   same commit as a feature, no build step. Implementation detail lives in code comments and these notes.
@@ -277,7 +347,10 @@ upstream project's choices, not rules of the game.
   time order (`outrider/cargo.py` `carrier_fold`, rules in its docstring): your transfers and trades there, a sell
   order's amount as a floor (the game sells only what is held), a buy order's filled part worked out at the next
   market, Recount for what nothing shows. Checked on the author's carrier: its whole history (back to 2025) folds
-  to 16,076 t against the 16,085 t it reports, the 9 t gap being the two lines no order ever showed.
+  to 16,076 t against the 16,085 t it reports, the 9 t gap being the two lines no order ever showed. A buy order's
+  fill is not added to the carrier's reported total when a CarrierStats came since the market read before it: the
+  game writes one just before Market.json, and it already holds the fill (counted twice it made a false gap; Fable
+  sweep 2026-10-09, correcting the same night's first fix).
 - **Why not Frontier's companion API** (the author, 2026-10-07): it would list the carrier's cargo whole, but it
   means signing in to Frontier (as EDMC and Inara do). Outrider never does: it reads the player's own journal files
   and makes only read-only queries to public services (Spansh, EDSM, GitHub, Hugging Face, EDAstro), so the player's Frontier

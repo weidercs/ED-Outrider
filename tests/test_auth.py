@@ -219,9 +219,10 @@ class Auth(Base):
         self.assertEqual(ed_outrider.settings_from({}, args, None, ([], []))["password"], "")
         st = ed_outrider.settings_from({"server": {"password": "s3cret"}}, args, None, ([], []))
         self.assertEqual(tomllib.loads(ed_outrider.config_text(st))["server"]["password"], "s3cret")
+        # an unquoted number is its text (it used to be dropped, leaving the server open: the sweep of 2026-10-09)
         with contextlib.redirect_stderr(io.StringIO()) as err:
-            self.assertEqual(ed_outrider.settings_from({"server": {"password": 1234}}, args, None, ([], []))["password"], "")
-        self.assertIn("password must be a string", err.getvalue())
+            self.assertEqual(ed_outrider.settings_from({"server": {"password": 1234}}, args, None, ([], []))["password"], "1234")
+        self.assertIn("should be in quotes", err.getvalue())
         A = outrider.auth
         self.assertTrue(all(A.is_loopback(x) for x in ("127.0.0.1", "::1", "::ffff:127.0.0.1", "127.0.0.5")))
         self.assertFalse(any(A.is_loopback(x) for x in ("192.168.1.208", "fe80::1", None, "")))

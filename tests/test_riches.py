@@ -291,11 +291,38 @@ class RichesRoute(unittest.TestCase):
 
     # ---- the plot ----
 
-    def spansh(self, script):
+    def spansh(self, script, knows=None):
+        """Spansh answering `script`; its name search (State.highway_ends) knows every system, else only `knows`."""
         sp = ed_outrider.Spansh(self.db)
         sp.session = _HwSession(script)
+        sp.system_record = unittest.mock.AsyncMock(side_effect=lambda n: {"name": n, "id64": 1, "x": 0.0, "y": 0.0, "z": 0.0}
+                                                   if knows is None or n in knows else None)
         self.state.spansh = sp
         return sp
+
+    def test_plot_from_a_system_spansh_does_not_know(self):
+        """A fresh discovery Spansh does not know yet: the survey is plotted from a Spansh system near it (out of what
+        Spansh sent about the neighbourhood) and starts with the jump there, nothing to survey in yours."""
+        self.jump(-100, 900, "Fresh", -60)
+        self.state.bases = {1001: ("spansh", {"name": "Alpha Rich", "x": 0.0, "y": 0.0, "z": 0.0})}
+        sp = self.spansh([(200, {"job": "r1", "status": "ok", "result": RESULT})], knows=())
+
+        async def go():
+            with unittest.mock.patch.object(ed_outrider, "HIGHWAY_POLL_S", 0.01):
+                self.state.riches_start_plot({"range": 42.5})
+                await self.state.riches_task
+        asyncio.run(go())
+        p = self.state.riches_plotting
+        self.assertEqual(p["state"], "done", p["error"])
+        # nothing in range held: Spansh is asked around Fresh first (it knows nothing nearer here), then the plot
+        self.assertEqual([c[:2] for c in sp.session.calls][:2], [("POST", ed_outrider.SPANSH_SEARCH), ("POST", ed_outrider.SPANSH_RICHES)])
+        self.assertEqual(sp.session.calls[1][2]["from"], "Alpha Rich")
+        self.assertIn("Spansh doesn't know Fresh yet: the route starts with a 60.0 ly jump to Alpha Rich", p["note"])
+        self.assertIn("longer than this ship's 42.5 ly range", p["note"])
+        meta, rows = self.state.riches_state()
+        self.assertEqual([(r["system"], r["jumps"]) for r in rows[:2]], [("Fresh", 0), ("Alpha Rich", 2)])
+        self.assertEqual((meta["at"], meta["stand_in"]), (0, p["note"]))
+        self.assertEqual(riches.splice_survey(riches.riches_rows(RESULT), 42.5), riches.riches_rows(RESULT))   # nothing to do
 
     def test_plot_posts_form_fields_and_stores(self):
         self.jump(-100, 1001, "Alpha Rich", 0)

@@ -1,4 +1,4 @@
-[ED Outrider](../../README.md) · [Install and run](install.md) · [The views](views.md) · [Plot Route](plot-route.md) · [Cargo and trading](cargo-and-trading.md) · **Voice and alerts** · [Automation](automation.md) · [On a tablet](tablet.md) · [Settings and good to know](settings.md) · [For the curious](for-developers.md)
+[ED Outrider](../../README.md) · [What's new](whats-new.md) · [Install and run](install.md) · [The views](views.md) · [Plot Route](plot-route.md) · [Cargo and trading](cargo-and-trading.md) · **Voice and alerts** · [Automation](automation.md) · [On a tablet](tablet.md) · [Uploads](uploads.md) · [Settings and good to know](settings.md) · [For the curious](for-developers.md)
 
 # Voice and alerts
 
@@ -10,7 +10,9 @@ notification and be spoken (🗣), chosen per alert in **⚙ Settings → Alerts
 - a new discovery targeted, or arriving somewhere nobody has been
 - leaving with mapping or bio over your levels undone, or a first-discovered Earth-like, water, ammonia or
   terraformable world unmapped
-- a valuable body the moment the FSS resolves it, and a new codex entry
+- a valuable body the moment the FSS resolves it, and a new codex entry. A body someone else has already mapped is
+  never pointed out (nor warned about when you leave): the first one in a system gets one line instead, "Already
+  mapped, but there are still valuable bodies to map if you want to jump on the train"
 - low fuel where you cannot scoop, and a top-up worth taking before a dry stretch
 - docking where the station buys your data, and what you banked when you sold
 - a sale that left data aboard (Universal Cartographics sells 50 systems a page; at Vista Genomics, the species
@@ -58,6 +60,10 @@ Docker server too).
 Without Piper installed, the browser's own voice speaks. With Piper, the browser's voice is never used: a line Piper
 can't say is not said (what you asked for is still shown as a caption).
 
+**Body names are said letter by letter.** With an English Piper voice, "A 1" is "ay one" (not "uh one") and "ABC 3 a"
+is "ay, bee, see, three, ay", each letter clearly. Only a body's letters are spelled out: system, station and carrier
+names are read as they are written.
+
 **"Click Here To Allow Audio".** A browser plays no sound on a page until you click on it, and Outrider reloads the
 page itself after an update. When the window that speaks is held back like this, a red **🔇 Click Here To Allow
 Audio** pill appears on the menu bar (and 🔇 in the tab's title), the tablet's caption line says the PC's page needs a
@@ -67,7 +73,8 @@ Sound: Allow; Firefox: Autoplay: Allow Audio and Video).
 
 **Choosing how it sounds**
 
-- **Personalities.** Down to business, sarcastic and sweet, fifty lines per alert each; tick any mix.
+- **Personalities.** Down to business, sarcastic and sweet, up to fifty lines per alert each (fifty for most); tick
+  any mix.
   **With profanity** adds swearing versions. **One personality per system** holds one character a system.
 - **Danger alerts always down to business** (on by default): danger is said plainly, never sworn.
 - **Your names.** Commander names are often unpronounceable, so the voice calls you by the names in

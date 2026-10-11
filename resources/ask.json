@@ -3,12 +3,12 @@
   "commands": {
     "unhush": ["unhush", "un hush", "voice back", "unmute", "speak again", "you can talk", "end the hush", "cancel the hush", "stop the hush"],
     "hush": ["hush", "be quiet", "quiet", "shut up", "mute", "silence"],
+    "nearest_dock": ["nearest station", "nearest stations", "nearest carrier", "nearest fleet carrier", "nearest vista", "nearest vista genomics", "nearest genomics", "nearest cartographics", "nearest universal cartographics", "nearest uc", "nearest repair", "nearest refuel", "nearest shipyard", "nearest place to dock", "where can i dock", "where can i sell", "closest station", "closest carrier"],
     "next_jump": ["next jump", "next stop", "next system", "next waypoint", "highway", "route", "where am i going"],
     "status_report": ["status report", "status", "report", "sitrep", "how are we doing"],
     "fuel": ["fuel", "tank", "how far can i go", "jumps left"],
     "unsold": ["unsold", "carrying", "on board", "aboard", "data worth", "how much data", "how much am i carrying"],
     "whats_left": ["what's left", "whats left", "what is left", "left here", "left to do", "to do here", "anything else here", "worth staying", "worth landing", "this system"],
-    "nearest_unvisited": ["nearest unvisited", "unvisited", "new system", "where next", "nearest unexplored", "never been"],
-    "nearest_dock": ["nearest station", "nearest stations", "nearest carrier", "nearest fleet carrier", "nearest vista", "nearest vista genomics", "nearest genomics", "nearest cartographics", "nearest universal cartographics", "nearest uc", "nearest repair", "nearest refuel", "nearest shipyard", "nearest place to dock", "where can i dock", "where can i sell", "closest station", "closest carrier"]
+    "nearest_unvisited": ["nearest unvisited", "unvisited", "new system", "where next", "nearest unexplored", "never been"]
   }
 }

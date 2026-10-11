@@ -1,6 +1,12 @@
 # what never goes into the image: your own files, local tools, the plans, caches
 .git
 .venv
+**/.venv
+# local tools and scripts that git ignores too: never in the image (eddn_listener holds a large capture database)
+eddn_listener
+run.sh
+scripts/install.sh
+resources/bio_rules.json.tmp
 data
 docker/data
 docker/config

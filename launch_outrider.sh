@@ -9,7 +9,11 @@ cd "$(dirname "$0")"
 VENV=.venv
 STAMP="$VENV/.requirements.sha256"   # requirements.txt as it was when last installed
 
-want=$(sha256sum requirements.txt | cut -d' ' -f1)
+# hashed with Python, which this needs anyway: macOS has no sha256sum (only shasum)
+# (the same hex sha256sum gave, so an existing stamp still matches); the environment's own Python when it has one
+HASHPY="${PYTHON:-python3}"
+[ -x "$VENV/bin/python" ] && HASHPY="$VENV/bin/python"
+want=$("$HASHPY" -c 'import hashlib; print(hashlib.sha256(open("requirements.txt", "rb").read()).hexdigest())' 2>/dev/null || true)
 have=$(cat "$STAMP" 2>/dev/null || true)
 
 needs_install() {
@@ -20,6 +24,16 @@ needs_install() {
 }
 
 if needs_install; then
+    # a half-made environment (venv failed part way: python but no pip, e.g. before python3-venv was installed) is
+    # made again rather than failing on every run
+    if [ -x "$VENV/bin/python" ] && ! "$VENV/bin/python" -m pip --version >/dev/null 2>&1; then
+        echo "$VENV is incomplete (no pip): making it again"
+        rm -rf "$VENV"
+    elif [ -e "$VENV/pyvenv.cfg" ] && [ ! -x "$VENV/bin/python" ]; then
+        # its Python is gone (a dangling link after the system's Python was upgraded): venv would not replace it
+        echo "$VENV's Python is gone: making it again"
+        rm -rf "$VENV"
+    fi
     if [ ! -x "$VENV/bin/python" ]; then
         PY="${PYTHON:-python3}"
         if ! command -v "$PY" >/dev/null 2>&1; then
@@ -31,7 +45,8 @@ if needs_install; then
             exit 1
         fi
         echo "Setting up ED Outrider: creating $VENV (the first time takes a minute or two: about 100 MB with Piper)"
-        if ! "$PY" -m venv "$VENV"; then
+        if ! "$PY" -m venv "$VENV" || ! "$VENV/bin/python" -m pip --version >/dev/null 2>&1; then
+            rm -rf "$VENV"   # nothing half-made left behind: the next run starts clean
             echo "Could not create $VENV. On Debian or Ubuntu: sudo apt install python3-venv" >&2
             exit 1
         fi
@@ -46,7 +61,7 @@ if needs_install; then
     fi
     echo "$want" > "$STAMP"
     # not pip's to install (system programs): said once, after an install, when the desktop has neither
-    if ! command -v wl-copy >/dev/null 2>&1 && ! command -v xclip >/dev/null 2>&1; then
+    if [ "$(uname)" != "Darwin" ] && ! command -v wl-copy >/dev/null 2>&1 && ! command -v xclip >/dev/null 2>&1; then
         echo "Optional: for the Highway's clipboard copy, install wl-copy (Wayland: the wl-clipboard package) or xclip (X11)"
         echo "with your package manager, e.g. sudo apt install wl-clipboard"
     fi

@@ -63,7 +63,7 @@ def riches_rows(result):
                 "subtype": b.get("subtype") if isinstance(b.get("subtype"), str) else None,
                 "ls": _num(b.get("distance_to_arrival")),
                 "scan": _num(b.get("estimated_scan_value"), int), "map": _num(b.get("estimated_mapping_value"), int),
-                "terraformable": 1 if b.get("is_terraformable") or b.get("terraforming_state") == "Candidate for terraforming"
+                "terraformable": 1 if b.get("is_terraformable") or b.get("terraforming_state") in ("Candidate for terraforming", "Terraformable")
                 else 0,
                 # the game's BodyID, as body_id is everywhere else: a body id64's top 9 bits
                 "body_id": bid >> 55 if bid is not None and 0 <= bid < 2 ** 64 else None,
@@ -76,6 +76,23 @@ def riches_rows(result):
         raise RichesError("Spansh found no route with those settings: try a larger radius or a lower minimum value")
     if len(rows) > RICHES_MAX_SYSTEMS:
         raise RichesError(f"a route of {len(rows)} systems is longer than Outrider keeps ({RICHES_MAX_SYSTEMS})")
+    return rows
+
+
+def splice_survey(rows, reach, start=None, end=None):
+    """A survey route plotted between stand-ins (systems Spansh knows, for ends it does not know yet) with the real ends
+    put back: `start` before the first system and `end` after the last ({system, id64, x, y, z}), nothing to survey in
+    either, each `reach`'s jumps from its stand-in."""
+    rows = [dict(r) for r in rows]
+
+    def jumps(a, b):
+        d = math.dist((a["x"], a["y"], a["z"]), (b["x"], b["y"], b["z"]))
+        return max(1, math.ceil(d / reach)) if reach else 1
+    if end:
+        rows.append(dict(end, jumps=jumps(rows[-1], end), bodies=[]))
+    if start:
+        rows[0] = dict(rows[0], jumps=jumps(start, rows[0]))
+        rows.insert(0, dict(start, jumps=0, bodies=[]))
     return rows
 
 
@@ -128,7 +145,7 @@ def money(n):
     """A credit amount as said aloud: 1.2 million, 800 thousand."""
     if n is None:
         return None
-    if n >= 1_000_000:
+    if n >= 999_500:   # rounds to a million: "1 million", never "1000 thousand"
         v = round(n / 1_000_000, 1)
         return f"{v:g} million"
     if n >= 1000:

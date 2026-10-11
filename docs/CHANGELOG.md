@@ -2,6 +2,577 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-10 · Version 2026.10.20
+- Bio/Geo (was Samples): the Exo-Biology and Geology checklists with Canonn's pictures linked; auto-target waiting out
+  the game's own danger flag after a jump or supercruise entry (and an early FSD charge no longer a failure); exact
+  plots without neutron boosts; plotting from or to a system Spansh doesn't know yet; Here's icon legend and the
+  codex marks naming the new colour; bodies already mapped by others not pointed out; the rail's N/A in supercruise;
+  Spansh's "Terraformable" priced (CACHE_VERSION 17: Spansh data fetched again as you go); the Fable bug check's
+  fixes. No journal re-read. What's new has its section; four screenshots retaken for the legend.
+
+## 2026-10-10 · Docs: the latest changes in the notes, screenshots with the Here legend
+- DESIGN_NOTES: the danger wait and the early FSD charge; the Here legend (only the icons shown) and the colour after
+  the codex marks. AGENT_GUIDE: target.py's danger wait, and a recipe for a new Here icon (its HERE_LEGEND entry).
+  Settings guide: the marks name the colour. overview, here, schematic and themes retaken (the legend).
+
+## 2026-10-10 · Fable review fixes: the page
+- The checklist asks for every change (region, list, a scan) and draws only the newest answer: a region picked
+  while an answer was on its way was dropped, the picker showing one region and the list another (#6).
+- The map reopened while its request was on its way: the older request's failure no longer throws away the newer
+  answer ("map failed" over a map that had arrived) (#7).
+- The checklist's species rows and picture colour rows are reachable with Tab and open with Enter or Space, and the
+  row keeps focus when the list redraws (#8). The map's region tooltip on a tablet tap is left for later (the region
+  picker has the same figures).
+
+## 2026-10-10 · Fable review fixes: the checklists
+- Bark Mounds: the game and Canonn name it in the plural, the rules "Bark Mound", so a codex entry for it never
+  counted on the Exo-Biology checklist (not found, left out of the region's percentage) and its panel had no picture.
+  The rules' plural genus name is matched too (#2).
+- The status line's "N of M" counts only what M counts: Geology read "3 of 2 entries reported here logged" with an
+  entry nobody had reported in the region; now "2 of 2 ... · 1 logged that nobody has reported here yet". The same
+  for species found where the rules say they cannot grow, and for each box's "found / possible" (#3).
+
+## 2026-10-10 · Fable review fixes: uploads, the co-pilot button, ExploData
+- An Outrider giving way to another for an upload took over when the other stopped (or its lease went stale)
+  without looking at where it stopped: what was played between that stop and its next lease refresh (up to a
+  minute) was sent by nobody. Taking over now goes back to the other's handover note (or a crashed one's last marks)
+  and catches up from there (#1).
+- The co-pilot button's second press cancels a Target next that is still waiting with no key pressed (the arrival's
+  danger flag, an auto honk), as it did during the countdown; before, it said "auto-target is already running" and
+  the keys went down anyway (#4).
+- ExploData's genus.py with no `data` table at all (renamed or moved upstream) is a failed fetch, retried at the next
+  start, not "no colour variants" recorded as up to date (#9).
+- (#5, the danger wait after a restart, is in "Target next: the danger wait after supercruise entry too".)
+
+## 2026-10-10 · The new codex colour is written after ✪ / ✦
+- Which colour would be new to your codex ("Bacterium Acies - Cobalt") was only in the mark's tooltip, and that never
+  shows: a body's summary pops up over the row first, and the tablet has no hover. The mark now reads "✪ Cobalt"
+  (or "✦ Grey") in Here's rows, the body summary and the body panel; Now already names the colour beside its guess.
+
+## 2026-10-10 · Here: a legend for the icons in the list
+- A footer under Here's list (the tab, the Overview's pane, Nearby with a system pinned, the tablet) says what each
+  icon means: 🔭, ELW/WW/AW, T, ⛽, rings, belts, 🏁, 🗺 (first, or dim: not first), 👣, —, 🧬, 🧬?, n/3, ✓, ✗, ?, ≤,
+  ✪, ✦, 📖, 💰, 🪨, 🌋, ⛏. Only the icons the list or schematic shows now are listed, and with none there is no
+  footer. It stays in view: sticky to the bottom of the scrolling pane (or the window), below both halves in split.
+
+## 2026-10-10 · Target next: the danger wait after supercruise entry too, and it says it is waiting
+- The game sets the in-danger flag on entering supercruise as well (lifting off a planet: logged in game, 16 s), and
+  Target next pressed then still refused "you are in danger" (the wait counted only hyperspace arrivals). The window
+  now starts at the latest arrival or SupercruiseEntry here; after a restart the saved position's arrival time
+  stands in for the arrival, which is not read again (the Fable review of 2026-10-10, #5).
+- While it waits it says so once: "Not targeting due to danger. I will keep trying until you are out of danger, for
+  up to N seconds" (N: what is left of the minute), then the usual result line.
+
+## 2026-10-10 · Target next waits out the arrival's danger flag
+- The game sets Status.json's in-danger flag on every jump, from the FSD charge until some 16-26 s after arriving
+  (logged in game: any star, nothing near), so Target next pressed in those seconds refused "you are in danger"
+  until it cleared. When that is all it can be (not interdicted, no jump charging, an arrival under
+  `AUTOTARGET_DANGER_WAIT` = 60 s ago), the run now waits for the flag to clear and then goes; pressing nothing
+  meanwhile. Interdicted, or still in danger a minute after the arrival, it refuses as before.
+
+## 2026-10-10 · Plot a route: exact plots without neutron boosts
+- The exact plotter has a **no neutron boosts** tick: Spansh plans regular jumps only (its `use_supercharge` off),
+  for a route that never flies past a neutron star. Remembered like the other ticks; the route's line says
+  "no neutron boosts" when it was asked for.
+
+## 2026-10-10 · Auto-target: charging the FSD early is no failure
+- Starting the FSD charge (or the jump) after auto-target had plotted the route, while it was closing the map and
+  before its last check, stopped the run with "an FSD jump started" and said targeting failed, though the target was
+  set. Once the map's close key went down, a jump charging, or the system changing, now ends the run as a success
+  when the target is the next system (or you arrived there); without a target it is still a failure.
+
+## 2026-10-10 · Screenshots retaken for the Bio/Geo menu
+- Every guide image that shows the top menu, taken again (the scratch server, a copy of the database, the journals
+  read only): overview, nearby, here, schematic, map, highway (a route to Colonia), history, samples (My Samples),
+  log, materials, firsts, search, cargo (the Sell lookup), trade, nearest, checklist (a sold species' colours
+  dropped down), the four themes and the tablet (Explore with Bio/Geo, the surface map).
+
+## 2026-10-09 · The Samples tab is now Bio/Geo
+- The top menu's (and the tablet's) **Samples** is **Bio/Geo**, and its switch reads **My Samples** (was Runs),
+  **Exo-Biology** (was Checklist) and **Geology**: the tab holds the geology checklist too now. Only the words changed
+  (the view is still `bio`, your choices and links keep working). The guide, the README and the notes follow; the
+  screenshots are taken again with the new menu.
+
+## 2026-10-09 · Exobiology checklist: colours drop down under the species
+- Clicking a species drops its colours down under its row in the box (each with what gives it and your state; a
+  colour with a picture shows it when clicked), and clicking it again folds them up. The column beside the boxes
+  keeps only the species' line, its picture and the map.
+
+## 2026-10-09 · Checklists' pictures: the link list refreshed daily
+- The server asks Canonn's codex reference for its picture links once a day (two minutes after a start when its copy
+  is missing or a day old; an hour later after a failure) and keeps them in data/codex_images.json, used when sound
+  (at least 500 entries) and else the shipped resources/codex_images.json. New pictures appear without a release.
+  outrider/codex_images.py holds the parsing both it and scripts/build_codex_images.py use; the tests point its
+  cache into a scratch folder.
+
+## 2026-10-09 · Checklists: pictures from Canonn, linked
+- A species' and a geology entry's panels show a picture: Canonn's screenshot, loaded from Canonn when the entry is
+  opened (never copied), captioned with the commander who took it and Canonn, linked to full size. A species shows a
+  colour you have found (else the first with a picture); clicking a colour's row shows that colour's.
+- resources/codex_images.json holds only the links and credits (877 entries: 768 of 847 colours, 82 of 88 geology
+  and anomalies), built by scripts/build_codex_images.py from Canonn's codex reference. README credits.
+
+## 2026-10-09 · Samples → Geology: a checklist of the codex's Geology and Anomalies entries
+- A third Samples view, **Geology**: the 88 entries your codex files under Geology and Anomalies (fumaroles, gas
+  vents, geysers, lava spouts, Lagrange clouds and storm clouds, the lettered anomalies), by region: logged in your
+  codex there or not (or elsewhere), and how many sites players have reported there, greyed where none have.
+  Completion per region is the share of its reported entries you have logged; the region list shows it. Click one
+  for its sites in the galaxy, where you logged it, and a map of the regions it has been reported in.
+- The data: resources/geo_codex.json, built by scripts/build_geo_codex.py from Canonn's codex reference and its
+  per-entry site dumps (each site's region counted). Run it again to refresh the counts.
+
+## 2026-10-09 · Exobiology checklist on the tablet: two scrolling parts
+- On the tablet (and in the app) the checklist fills the page, and the species boxes and a species' details with its
+  map each scroll on their own (stacked on a narrow tablet, about half each); the page itself no longer scrolls.
+
+## 2026-10-09 · Exobiology checklist: the map names only the regions it grows in
+- The species panel's map shows a region's name on hover only over a lit region (one the species can grow in, or in
+  parts of); the faint ones say nothing.
+
+## 2026-10-09 · Exobiology checklist: completion by region, region names on the map
+- Each region in the list shows its completion ("Dryman's Point — 4.36%"), and the line above the boxes says it for
+  the region shown ("… · 11.70% complete for the species in this region"): the average, over the species that can
+  grow there, of the share of each one's colours you have found there (any state), so partial progress counts
+  (`outrider.checklist.completion`, every region in one pass; `completion` in the table's summary).
+- Hovering the species panel's map names the region under the pointer, with whether the species grows there and
+  that region's completion.
+
+## 2026-10-09 · Exobiology checklist: the layout, and "elsewhere"
+- The genus boxes flow down columns (no holes beside a long box), the species panel is wider with a larger map, and
+  a long name ends in … within its box ("not here" ran over the next box: greyed already says it, the tooltip in
+  words). A species you have none of in the region but found in another says *elsewhere* (its best there in the
+  tooltip), and the summary counts them: a region you never sampled in read all 0 / n with nothing to say you had them.
+
+## 2026-10-09 · Exobiology checklist, part C: the page (and the tablet)
+- Samples gets a **Runs | Checklist** switch (kept per device). The checklist: a region picker (where you are, All
+  regions, or any of the 42), a summary line, one box per genus with each species' state (sold, aboard, lost,
+  logged; greyed "not here"; ◐ in parts) and colours found / possible; click a species for its colours, what gives
+  each, and a galaxy map with the regions it can grow in lit (in their tints) and your samples as dots
+  (GET /api/checklist?species=). The tablet's Samples page has it as is. Guide: views.md, with a screenshot.
+- The page smoke test: the checklist end to end against the scratch server; the riches clear check counts a repeat
+  of the same request once (a poll landing in between added one now and then).
+
+## 2026-10-09 · Exobiology checklist, part B: GET /api/checklist
+- `State.checklist(region)` and GET `/api/checklist?region=here|all|<1-42>`: the checklist for where you are (or a
+  region, or all), from every run (its fate as Samples has it) and every codex entry, placed by region; with the
+  regions to choose from. A few milliseconds on a real database. Not on the page yet.
+
+## 2026-10-09 · Exobiology checklist, part A: the table (outrider/checklist.py)
+- The checklist's pure core: for a region (or all), every species the rules know, by genus: whether it can grow
+  there ("parts" when only near Guardian sites, in tuber zones, by nebulae or in one system; a species with no rules
+  is possible, not ruled out), your best state there (sold > aboard > lost > logged), and its colour variants with
+  what gives each. The rules' duplicate under a misspelled name (Stratum Aranaemus) is merged by game id, and runs
+  match by species id. `outrider.bio.ruleset_region_ok` is shared with `region_allows`. Not on the page yet.
+
+## 2026-10-09 · Spansh's "Terraformable" priced as terraformable (CACHE_VERSION 17)
+- Spansh's system dumps now spell a terraformable body's state "Terraformable" (it was "Candidate for terraforming").
+  Outrider did not know the new spelling, so every terraformable body known only from Spansh was priced as a plain
+  one: the arrival briefing named a terraformable high metal content world (rightly) at 59k instead of 674k. Both
+  spellings are known now, and the Road to Riches rows read it too. CACHE_VERSION 17: systems looked up before are
+  fetched again as they come up.
+
+## 2026-10-09 · Bodies someone else mapped are not pointed out; gear and scoop N/A in supercruise
+- A body your scan says someone else has already mapped (WasMapped) no longer sounds the find alert, is not named in
+  the arrival briefing or the FSS debrief, and does not make the leaving alert warn (the author's ask). The first one
+  over your levels in a system says one new line instead, in every personality: "Already mapped, but there are still
+  valuable bodies to map if you want to jump on the train" (speech key mapped_before). Spansh's records do not say
+  who mapped what, so a body you have not scanned yet is still mentioned.
+- The tablet's rail: Landing gear and Cargo scoop are N/A in supercruise too, as Hardpoints are.
+- The page smoke test's per-view check waits up to 10 s more for a slow view (Overview right after the load failed
+  now and then, filled a moment later).
+
+## 2026-10-09 · Hardpoints N/A in supercruise on the tablet's rail
+- The tablet's Hardpoints button lit "On" after every jump: the game sets Status.json's hardpoints flag in
+  supercruise (read in game, with Analysis mode on), where hardpoints cannot be deployed. In supercruise the button
+  is now N/A (greyed, not pressable, "in supercruise"), and follows the flag again in normal space.
+
+## 2026-10-09 · Road to Riches and Exomastery from a system Spansh doesn't know yet
+- The survey routes stand in for an end Spansh does not know yet as Plot Route's Highway does: plotted from (or to) a
+  Spansh system near it, on the way, with the real system put back as the first (or last) stop, nothing to survey
+  there. The plot status says so. Not a trade route: it starts from a station's market as Spansh has it.
+
+## 2026-10-09 · Plotting from a system Spansh doesn't know yet
+- Plot Route could not plot from a system Spansh has not heard of (a fresh discovery): the exact plotter said so and
+  stopped, the neutron one failed. Now both ends are looked up in Spansh's search first, and one it does not know
+  (but Outrider can place: where you are, a visit, a bookmark) is stood in for by a Spansh system near it, on the
+  way: within the ship's range, nearest the other end. The route is plotted from (or to) the stand-in and the real
+  end is put back as its first (or last) jump, its fuel not figured. The plot status says what was done, and warns
+  when that jump is longer than the ship's range. For where you are, the stand-in comes from the neighbourhood
+  Spansh already sent; elsewhere one search around it.
+
+## 2026-10-09 · Version 2026.10.19.1
+- A bug-fix release on 2026.10.19: body names said letter by letter by Piper ("ay one", not "uh one"); the Codex
+  review's fixes (one sender when two Outriders are switched on for an upload, trade routes counting tonnes with
+  undocking as moving on, a powered-off Guardian booster not counted, the map asking again when reopened, a late
+  companion file after a catch-up, the AI's round limit, the journal archive shared between instances, ExploData's
+  colours retried). No journal re-read: nothing stored changed shape. The What's new page is in the guide.
+
+## 2026-10-09 · Codex review fixes: the AI's rounds, the journal archive, the colour tables
+- The AI could run one more round of tools than `[assistant] max_rounds` allowed (Codex F7): the request after the
+  last round asks for the answer only (`tool_choice: "none"`), and a tool asked for then is not run.
+- Two Outriders archiving the same journal into a shared backup folder could leave the shorter copy (a lagging
+  mirror's) over the fuller one, and shared one staging file (Codex F8): each copy has its own .part file, and the
+  archive is looked at again just before the replace. No lock between instances (DESIGN_NOTES).
+- ExploData's colour table written as code upstream (not a plain literal) was taken as "no colours" and its version
+  recorded, so it was never fetched again: it now fails like a failed fetch, keeping the colours already there and
+  retrying at the next start.
+
+## 2026-10-09 · Codex review fixes: the map
+- The map kept what it had for a system while it was closed: leave a system and come back (or scan in it) with the
+  map in another tab, and it showed the old trace and markers (Codex F5). Opening the map asks again. Its cache key
+  is the system's exact id (`posId()`), not a number JavaScript rounds past 2^53.
+- An older map request failing after a newer one had answered said "map failed" over the newer one's map and dropped
+  its key, so a third request's answer could be thrown away (Codex F6): an older failure is ignored now.
+
+## 2026-10-09 · Codex review fixes: the booster and trade routes
+- A Guardian FSD booster switched off still added its light years to the range, the fuel figures and a route's hops
+  (Codex F3): it counts only while powered, as the fleet's fitting already had it.
+- A trade route ticked a commodity off at the first sale or purchase of it, whatever the amount: one tonne of a
+  planned 400 said the hop's profit and could end the route (Codex F4). Now the tonnes add up (each journal line once,
+  so a re-read counts nothing twice), the page shows "60 of 100 t" until it is all traded, and undocking with only
+  part traded moves on, said with what fell short ("sold 100 of 400 tonnes of Biowaste") instead of the profit. A
+  route in progress keeps what it had ticked.
+
+## 2026-10-09 · Codex review fixes: the uploads
+- Two Outriders switched on for the same upload (both started with it on: the game PC and a server sharing the
+  journals) both held for good, and each followed the journal as if the other sent, so nothing was sent and that
+  stretch was never caught up (Codex F1). Now exactly one sends: the one already sending keeps it, and started
+  together the lowest instance id has it. A lease now says what it sends (`services`) and what it is switched on for
+  (`wanted`); an Outrider from before (no `wanted`) is always given way to, so it sends.
+- A catch-up whose last line was a NavRoute, a docking's market or the like, with its file still on its way (a journal
+  share), gave the wait up at once: the catch-up's clock was moved on a minute to flush signals. The file's wait is now
+  checked at the real time and handed to the live session, which sends it when the file comes (Codex F2).
+
+## 2026-10-09 · Body names said letter by letter
+- Piper said "A 1" as "uh one" (espeak reads a lone A as the article) and ran "ABC 3" into one slurred word ("uh beh
+  ceh three"). A body's letters now go to Piper as its raw phonemes, each its own stressed word: "ay one", "ay, bee,
+  see, three". Stars, planets' moons, rings and belts ("B 3 A Ring", "A A Belt Cluster 3"), and a one-star system's
+  "2 a,". System, station and carrier names are left as they are (a catalogue number has more digits or a dash, and
+  star letters run in alphabetical order: "HIP 12345", "LHS 21" stay). English voices only; American ones say Z
+  "zee". Punctuation right after a letter goes inside its phonemes (Piper dropped that comma, and the pause with it).
+  The voice lab says them the same way.
+
+## 2026-10-09 · Docs: What's new, the version notes for players
+- A new guide page, docs/guide/whats-new.md: what each release since 2026.10.11 brings, in the player's words (new
+  features, settings, anything to know before updating), with screenshots of Settings → Uploads and the Data tile.
+  First in every guide page's nav and in the README's index. The agent guide's release steps now include it.
+
+## 2026-10-09 · Version 2026.10.19
+- The first release since 2026.10.16 (2026.10.17 and 2026.10.18 were withdrawn to be tested first). New since 10.16:
+  opt-in uploads to EDDN and EDSM (Settings -> Uploads; off by default); the nearest place to dock (Plot Route's
+  📍 Nearest..., with the DSSA carriers); the plugin gaps (tagged plants, no ×5 in populated systems, ✪ new to your
+  codex anywhere, the full-scan bonus, star kinds, Canonn Bioforge links...); and two whole-codebase bug sweeps, every
+  finding fixed with a test. The first start re-reads the journals (parser 44). Docker: the container always listens
+  on 8025 (set PORT in .env), and the health check waits for the first import.
+
+## 2026-10-09 · The thresholds followed across windows
+- The unsold and highlight thresholds changed (or reset by an import) in another window are followed by this one, as
+  the alert ticks now are; it kept its own copy and could write it back over the change.
+
+## 2026-10-09 · Fable sweep fixes: the page
+- A voice answer or a co-pilot status report is no longer spoken by a window with spoken alerts off: Outrider told
+  the Android app nobody would say it, so the app said it too and it was heard twice.
+- A hung connection (the PC suspended, a network path gone silent) now turns into "no link" and "Lost contact" after
+  40 s; the page stayed "stale" for good.
+- A 🎯 / Target next started on this page ends when another device's run replaced it or Outrider restarted (it showed
+  "targeting…" for good).
+- Settings changed in another window: the 🔔 button follows the notification switch, and a setting an import reset
+  there is reset here too (it was kept, and later written back over the import).
+- Uploads: declining "Is this the only Outrider uploading?" no longer leaves the question as the status line; Save
+  and remove redraw the section in Safari too (it kept the focus in the field, and nothing was redrawn).
+
+## 2026-10-09 · Fable sweep fixes: the uploads
+- Signals (fleet carriers, stations) that were the last lines while Outrider was down are now sent by the catch-up:
+  they waited for a next line that never came, and were dropped. Ones written just before their jump (Odyssey) go
+  with that jump once it is read.
+- On a Windows game PC, looking for EDMC no longer stalls Outrider for a second or two every minute.
+
+## 2026-10-09 · Fable sweep fixes: cargo, biology, voice, auto-target, auto honk
+- Carrier cargo: a buy order others filled was counted twice in the carrier's total (a false "+300 t" gap): the
+  CarrierStats the game writes just before Market.json already holds it. Last night's fix assumed otherwise; now the
+  fill is added only when the last CarrierStats is older than the market read before it.
+- Ship's hold: a second canister collected (or a purchase made) in the same second as the hold's snapshot is no
+  longer lost, and no 0 t line is shown.
+- Biology: a rules update in which a region, nebula or grid table is no longer plain data fails and keeps the
+  working file; it wrote empty tables, and Anemone, Brain Trees, Tubers and others were never predicted again.
+- Voice: a self-made voice picked in Settings is kept after a restart; an ask.json that is not an object falls back
+  to the command names instead of stopping Outrider; "1 million" instead of "1000 thousand" for 999,500 to 999,999.
+- Auto-target switched off mid-run with auto honk off closes the galaxy map it opened (it left the game in the map);
+  auto honk switched off and auto-target on within one hold keeps the keyboard.
+- The unsold command line takes --since 2026-09-01 (a bare date), and says what a bad one should look like.
+
+## 2026-10-09 · Fable sweep fixes: the server
+- A relog or game-mode switch while docked no longer repeats "Docked at <station>, N cr to sell" (and its spoken line).
+- A backup copy restarted at every step (a busy evening, a slow backup disk) now falls back to one step as meant; it
+  missed restarts that came right after restarts and could go on for thousands of steps.
+- A Spansh outage no longer makes the page ask for a system's bodies every 4 s for as long as it lasts.
+- Server settings no longer take another part's warning, printed at that moment, for a problem with the config (a
+  valid save could be refused).
+- Auto honk switched off during a Test says "off" at once.
+
+## 2026-10-09 · Fable sweep fixes: scripts, Docker, the guide
+- launch_outrider.sh works on macOS: it hashed requirements.txt with sha256sum, which macOS does not have (it stopped
+  before anything else). Existing installs keep their stamp. The clipboard-tool hint is no longer shown on macOS.
+- An environment whose Python is gone (a system Python upgrade) is made again instead of failing once with advice to
+  install python3-venv.
+- Docker's health check waits up to 30 minutes for the first start, which reads every journal before the server
+  answers (it turned "unhealthy" during a long first import).
+- The guide: Settings lists its Uploads section; personalities have up to fifty lines per alert (two have fifteen).
+
+## 2026-10-09 · Docs: the agent guide on scripts/install.sh
+- It is local to the author's checkout and git-ignored: never in the published repository.
+
+## 2026-10-09 · Sweep fixes: the page
+- Speech: a line the browser cannot play until a click is held only when the red pill asks for that click; with
+  "Play on this PC" (after its call failed) or speech off it stalled the whole queue, danger lines included.
+- "Back in contact" is said where "Lost contact" was (a tablet with Play alerts here never heard it).
+- The tablet shows low fuel, a lost ship, a rig too far and the carrier leaving as danger banners.
+- "Undiscovered" is said once when the briefing opens with a region crossing; the region line is no longer lost in
+  systems with very large ids.
+- Here shows nothing of the last system while another loads (its rows stayed, and clickable); the body panel takes
+  only the newest answer; Cargo's "Buy something else" keeps what you typed; a new Sell/Buy lookup does not show the
+  last one's commodity and price; an unnamed carrier is "your carrier" on the map, not "null".
+- Settings: alert ticks changed in another window are followed by the window that speaks (it overwrote them); a
+  section chip shows its heading, not under the sticky header; the route alerts have names on the tablet and in the
+  tally; the tablet's footer says "Voice here" with Play alerts here.
+
+## 2026-10-09 · Sweep fixes: cargo, the control rail, Nearest, mining, biology
+- Carrier cargo: what other players sell you through a buy order counts in the carrier's total too; it made real old
+  lines look stale, and they were dropped.
+- The control rail reads the right Status.json bits for on foot in a station: in a planetary port's concourse or
+  hangar it showed the on-foot buttons (flashlight, shields).
+- Nearest: a DSSA carrier the list places in another system than Spansh's no longer carries the old system's id
+  (wrong permit check) and arrival distance.
+- Mining Search: "Low Temp Diamonds" (the survey's name) and "Low Temperature Diamonds" (the journal's) are one mineral.
+- Biology: a rules update that does not parse is not written over the working copy (and is tried again); Radicoida
+  Unicus is valued at the rules' figure (it counted 0). The unsold command-line report: --since now takes later sales
+  and deaths off the biology too, and --calibrate no longer crashes on a pre-3.3 sale.
+
+## 2026-10-09 · Sweep fixes: the voice's questions and the AI tools
+- "What's left here?" (and the AI tool behind it) no longer fails in a system with a planet worth mapping: exactly
+  the systems where the answer matters. The test's fake data had a different shape from the real one.
+- "Nearest station with fuel" (or with Vista, repairs...) finds a station instead of reading the fuel gauge.
+- When Spansh cannot be reached, "nearest station" says so instead of naming a far carrier as the nearest place.
+- The AI tools take a single service given as text, and an infinite number, without losing the filter or failing;
+  the MCP bridge talks UTF-8 on Windows too (a carrier name with other characters ended it).
+
+## 2026-10-09 · Sweep fixes: backups, start-up checks, auto honk and auto-target
+- Stopping Outrider lets go of Primary Fire at once: an auto honk under way held it for up to 20 s more, and one
+  waiting for the keyboard could still press after the stop.
+- Auto-target stopped while the galaxy map was closing (danger, the route changed...) no longer presses the map key
+  again, which reopened the map.
+- --restore of a zip whose compressed data is damaged says it failed its check instead of crashing; with a
+  [server] host that is not this machine's any more it no longer says "stop ED Outrider first".
+- The start-up clean-up of interrupted backups removes only this database's files: another instance (--db) sharing
+  the backups folder could have its backup in progress.
+- Windows: a second copy started while one runs stops at once (the port check never saw the running one, so the
+  second copy began importing into the same database).
+
+## 2026-10-09 · Sweep fixes: the journal reader (PARSER_VERSION 44: the journals are read again at the next start)
+- Journals named the old way (before 2023) are read in time order, before the newer ones; read after them, your own
+  first discoveries could keep a later scan. The next start reads every journal again to put this right.
+- A journal re-read no longer loses your carrier's services (UC, Vista): the Nearest finder left your own carrier out.
+- An Apex shuttle's Loadout is not your ship: it replaced your ship, jump range and hull, and wiped the fuel model.
+- Stopping Outrider during its first big import no longer doubles part of a journal at the next start.
+- When Spansh was unreachable (EDSM stood in), an arrival is no longer marked "Spansh lacks bodies" for good; a system
+  past Spansh's sphere gets Spansh's bodies when you open it.
+
+## 2026-10-09 · Sweep fixes: the config file and Server settings
+- A decimal setting whose value is whole (speech speed 1, auto honk delay 2, radius 25...) takes a decimal again in
+  Server settings: it was offered and checked as a whole number. Numbers are written by their type ("1.0") and saved
+  exactly (a saved -45123.75 came back as -45123.8).
+- "inf" or 1e999 in a list of numbers is refused, not a server error.
+- `password = 1234` without quotes is taken as "1234"; a password that is not text at all now means nobody signs in
+  from another device until it is fixed. Before, both were dropped and the server ran with no password.
+- A config saved as "UTF-8 with BOM" (Notepad, PowerShell) is read, and saved back without the BOM; before, every
+  setting was at its default and Server settings could not save.
+- A config file that does not parse says so in Server settings (it showed the defaults and no problem).
+
+## 2026-10-09 · Sweep fixes: packaging and scripts
+- Docker builds leave out the local tools git ignores (eddn_listener/ with its capture database, any .venv, run.sh,
+  scripts/install.sh): they would have gone into the published image.
+- launch_outrider.sh and .bat: an environment left half made by a failed first setup (no pip, as before
+  python3-venv is installed) is made again, and a failed setup leaves nothing behind; before, every later run failed.
+- Docker: the container always listens on 0.0.0.0:8025, so a host or port changed in Settings can no longer make the
+  server unreachable (set PORT in .env instead).
+- Voice lab: it reads the same lines file as the server for an old `speech_file = "speech.json"`; it finds Piper in
+  a Windows .venv; a voice download abandoned by closing it no longer leaves its .part file behind for good (swept
+  an hour later); its advice names the launchers instead of a script the repository does not contain.
+
+## 2026-10-09 · Docs: uploads brought up to date
+- README: uploads are opt-in now (it said "never"). The Uploads guide rewritten for everything since: station data
+  once per visit, hour-old EDDN messages dropped, a crash's note ignored after an hour, Docker's note name, the
+  message line. Install points the Docker section at it; the agent guide's and design notes' uploads entries match
+  the code. (The commit before this one ignores a local tool's folder, eddn_listener/, in .gitignore.)
+
+## 2026-10-09 · Uploads: review of the bug-check fixes (branch EDMC-Functionality)
+- The upload note's identity: a database from before keeps its id; a new id (a moved or restored database on this
+  computer) removes its own old note, which was otherwise read as another Outrider's and could start an upload from its
+  old position. A copy of the database (Docker included, where every container has the same name and path) is told
+  apart by the file itself.
+- A crash's note is stale at once only when untouched for an hour (a file server's clock can be minutes behind); the
+  note written at shutdown includes a service switched on in its last minute; a handover position in an old-format
+  journal compares by time.
+- While another uploader sends EDDN, what EDDN was waiting on (signals, a market, a route) is dropped, and a docking
+  then counts as a new visit; one waiting past its time on the tick is dropped. A batch of signals in a catch-up is no
+  longer dropped for coming minutes before its next line.
+
+## 2026-10-09 · Uploads: bug check, the page (branch EDMC-Functionality)
+- Settings → Uploads keeps its message line: refusals ("EDMC on this PC is sending..."), EDSM's "saved", and the
+  config-file note were wiped by the redraw right after they were written, so they never showed.
+- A switch or Save that cannot reach Outrider says so, and the boxes show the server's state again (a failed request
+  left the box flipped).
+- An upload's box is ticked by what you switched, even while it is held or unavailable.
+- An EDSM name or key being typed survives the redraw of the counts.
+
+## 2026-10-09 · Uploads: bug check, EDDN (branch EDMC-Functionality)
+- Station data goes once per visit: each docking sends the market, outfitting and shipyard again, changed or not (EDDN's
+  readers date a station's data by it); only the same screen opened again in one docking is not sent twice. Before, an
+  unchanged market was not sent again while Outrider ran.
+- Any EDDN message an hour late (an outage, switched off and on) is dropped, not sent as current; a batch of signals
+  left over from before EDDN was switched off is dropped.
+- "Outdated schema" (426) stops that kind of message at once instead of after three refusals.
+
+## 2026-10-09 · Uploads: bug check, the upload core (branch EDMC-Functionality)
+- Journal files named the old way (before 2023) no longer stop uploads: positions compare by time, not by name.
+- While EDMC or another Outrider sends a service, Outrider's position moves with the journal, and a restart does not
+  catch up what they sent; with the other uploader still there it catches up nothing.
+- With every upload off, the next switch-on reads the current journal from its top, so a jump made meanwhile is
+  known (it sent the old system).
+- The note in the journal folder lists only the services this Outrider uploads (an old position of a service switched
+  off made another Outrider send that history). A note left by a crash long ago no longer blocks uploads for five
+  minutes after a start. The note's identity belongs to this computer and database file: a copied database gets its
+  own. In Docker the note names "outrider-docker" (OUTRIDER_HOST in .env), not a container ID.
+- A service that says "later" (a server error, unreachable) pauses its whole queue, not just that message; a database
+  error no longer ends a sender for good. Sent and refused messages are pruned after a week (nothing pruned them).
+- A restored backup starts uploading from where the journals are now: what was sent since the backup, and the
+  backup's own unsent messages, are not sent again.
+
+## 2026-10-09 · Uploads: long sessions, late files, quiet signals (branch EDMC-Functionality)
+- A long session that the game continues in a new journal file (part 2, no login after it) keeps uploading. Before,
+  Outrider took the new file for a new session and every upload stopped until the next login.
+- A market bracket the game writes as "" (not normally sold there, for sale now) goes to EDDN as "", not 0.
+- A market, outfitting, shipyard, bartender or route file written after its journal line now goes on Outrider's next
+  tick even when no further line comes (given up after 10 seconds); a batch of signals goes 3 seconds after its last
+  one when you are in that system (a jump's batch still waits for the jump line).
+
+## 2026-10-09 · Uploads: EDDN catches up an hour at most (branch EDMC-Functionality)
+- After a gap (Outrider not running while you played), EDDN gets only the last hour's lines; EDSM still gets up to a
+  week. EDDN's readers take what arrives as current, so day-old scans sent late could mislead them.
+
+## 2026-10-09 · Uploads: "New to EDSM" removed (branch EDMC-Functionality)
+- The badge and the Data tile's "new to EDSM" count are gone, with the table behind them (dropped from databases that
+  had it). EDDN's copy of a jump, sent at once, usually reaches EDSM before Outrider's own EDSM batch, so EDSM's
+  "systemCreated" seldom names your upload (seen on the author's first real uploads).
+
+## 2026-10-08 · Uploads: a held upload still queues (branch EDMC-Functionality)
+- While EDSM is held by a refused key, what you play is still queued, and goes once the key is fixed. Before, nothing
+  was queued while held, and the held stretch was skipped when the hold cleared (the author lost twelve events this
+  way). Another uploader (EDMC, a second Outrider) still stops the queueing: that one sends them.
+
+## 2026-10-08 · Uploads: the stored EDSM key's ends (branch EDMC-Functionality)
+- Settings → Uploads shows the stored EDSM key's first and last four characters and its length, to compare with
+  edsm.net when EDSM refuses it. Never the whole key: the page may be open to the network without a password.
+
+## 2026-10-08 · Uploads in the Data tile (branch EDMC-Functionality)
+- The header's Data tile has a line per upload in use (each its own line), live: sent, waiting and refused in the last day, test and dry
+  run marked, held or off said; EDSM's adds how many systems were new to EDSM (the all-time total on hover).
+
+## 2026-10-08 · Uploads: EDSM's batches wait together (branch EDMC-Functionality)
+- Events waiting for EDSM now share the first one's five-minute deadline. Before, each waited five minutes from its own
+  time, so a long stay in one system sent its scans one request at a time (seen in the author's dry run).
+
+## 2026-10-08 · Uploads: "New to EDSM" (branch EDMC-Functionality)
+- When EDSM answers an uploaded jump with "systemCreated" (nobody had sent it that system before), the system's detail
+  shows a quiet "New to EDSM" badge, dated. No spoken alert: the game's own first discoveries already have one.
+
+## 2026-10-08 · Uploads, part H: EDSM (branch EDMC-Functionality)
+- EDSM's journal upload (`outrider/edsm.py`): your events, minus EDSM's discard list (fetched while EDSM is on, a
+  built-in copy until then), each with where you were (system, coordinates, station, ship), to the account of the
+  commander who played them. Events wait for a jump, docking or Location (five minutes at most), then go together: one
+  commander and game version per request, up to 200 events. Cargo, ShipLocker and Backpack carry their file's contents
+  when the file is the one the event wrote.
+- EDSM's answers: a refused name or key holds EDSM until it changes; the Legacy game and bad requests are dropped;
+  single refused events are dropped; anything else is tried again later. A commander with no account sends nothing,
+  and Settings → Uploads says so.
+- EDSM has no test endpoint, so the developer's switch is a dry run: `OUTRIDER_EDSM_DRYRUN=1` builds and logs each
+  request (to `data/edsm-dryrun.jsonl`, never the key) and sends nothing; the console and Settings say so.
+
+## 2026-10-08 · Uploads: test mode said out loud (branch EDMC-Functionality)
+- The console says at start whether EDDN and EDSM are on, and "TEST: EDDN's test schemas only" when
+  `OUTRIDER_EDDN_TEST` is set. Settings → Uploads shows "(test schemas only)" whatever EDDN's state; before, the tag
+  disappeared while EDDN was held or unavailable.
+
+## 2026-10-08 · Uploads: switched in one place (branch EDMC-Functionality)
+- EDDN and EDSM are switched only in Settings → Uploads. The switch applies at once and writes `[eddn] enabled` /
+  `[edsm] enabled` into the config file, so the next start keeps it; those two sections are no longer among the Server
+  settings, and the database's separate copy of the switch is gone. If the file cannot be written, the page says the
+  switch holds only until Outrider stops.
+- EDDN's test schemas are a developer's switch, the environment variable `OUTRIDER_EDDN_TEST=1`, not a setting:
+  `[eddn] test` in the config is no longer read.
+
+## 2026-10-08 · Uploads, part A4: catching up (branch EDMC-Functionality)
+- Each upload remembers how far through the journals it has got (a mark). What was played while Outrider was not
+  running is sent at the next start, up to a week back (the author's cap); a journal re-read or a restore sends
+  nothing twice; switching an upload on starts from that moment. Lines NFS delivers late are no longer lost either.
+- A stopped Outrider's lease file stays with its marks, so another one switched on starts where it stopped.
+
+## 2026-10-08 · Uploads, part F: EDDN's station data (branch EDMC-Functionality)
+- Markets (commodity/3), outfitting, shipyards and your carrier's bartender materials, read from the journal folder's
+  files when their event comes, only the file that event wrote (its time and MarketID; tried again on the next lines
+  while NFS catches up), each sent only when it changed; station data that could not be sent within an hour is
+  dropped, not sent late. Docking granted and denied too. With this, EDDN carries everything EDMC sends from the journal.
+
+## 2026-10-08 · Uploads, part E: EDDN's signals (branch EDMC-Functionality)
+- The signals the FSS lists (stations, fleet carriers, tourist beacons, combat zones) go to EDDN as one message per
+  run, sent with the line that ends it: Spansh learns where fleet carriers are from these. Mission targets never go,
+  nor a signal of another system.
+
+## 2026-10-08 · Uploads, part D: EDDN's routes, codex entries, settlements (branch EDMC-Functionality)
+- A plotted route (from NavRoute.json, only the file that NavRoute event wrote: checked against its time, tried again on
+  the next lines while NFS catches up), codex entries (the body named only from the live Status.json, its id only when
+  it is the body you approached), and settlements you approach (not a login at a port, which has no position).
+
+## 2026-10-08 · Uploads, part C: EDDN's FSS family (branch EDMC-Functionality)
+- The honk (FSSDiscoveryScan), all bodies found, a body's signals, barycentres and nav beacon scans go to EDDN too,
+  each built from only the keys its schema lists (a field Frontier adds later cannot get it refused), the system's
+  name and position added after the cross-check.
+
+## 2026-10-08 · Uploads, part B: EDDN's journal messages (branch EDMC-Functionality)
+- With EDDN switched on, every jump, login, carrier jump, dock, scan and DSS result (journal/1) goes to EDDN as it
+  happens: personal fields out (fuel, fines, your reputation, a position on a planet), every `_Localised` name out,
+  the star's position added only when the event is in the system you are in, horizons/odyssey as LoadGame said,
+  the journal file's own game version. One message per request, gzipped; EDDN's refusals are never retried, and a
+  message type refused three times in an hour is held until Outrider restarts; a network failure waits a minute.
+- The tests check every message against EDDN's own schemas (copied into tests/fixtures/eddn, BSD); `jsonschema`
+  joins the development requirements.
+
+## 2026-10-08 · Uploads, part A3: one uploader at a time, EDSM accounts, Settings → Uploads (branch EDMC-Functionality)
+- Lease files in the journal folder (`.outrider/uploads-<id>.json`): an uploading Outrider says so there every minute;
+  another one refuses to start the same upload, both hold if they started together, a crashed one's note goes stale
+  after five minutes (by the reader's own clock). A read-only folder refuses when another claims it ("Filesystem is
+  read-only and another instance is set for upload") and otherwise asks first. EDMC running on this PC with its own
+  EDDN/EDSM upload on holds that upload.
+- EDSM's commander name and API key per in-game commander, kept in the database and never served back
+  (`POST /api/uploads/edsm`). Settings → Uploads: the switches, what each sent, why it is held.
+- Docker: an optional writable `.outrider` mount (commented out: the folder must exist on the share first). The guide
+  has an Uploads page. Still nothing is sent: EDDN comes next.
+- Tests never touch the real journal folders or EDMC's config any more (support.py blanks them).
+
+## 2026-10-08 · Uploads, part A2: switches, the sending loop, the status (branch EDMC-Functionality)
+- `[eddn] enabled / test` and `[edsm] enabled` (off by default), and `POST /api/uploads {service, on}` for the page's
+  switch, which wins over the config and is remembered; never in `--simulate`. The payload's `uploads` says, per
+  service, whether it is on, what is queued, sent and dropped in the last day, the last error, and why nothing can be
+  sent now (the beta, the Legacy game, crew in someone else's ship).
+- One sending loop per service on its own HTTP session (`ED-Outrider/<version>`): oldest first, about two a second;
+  after a network failure or a 5xx it waits a minute, longer each time. Still no service sends anything: EDDN is next.
+
+## 2026-10-08 · Uploads, part A1: the session, the live gate, the outbox (branch EDMC-Functionality)
+- The groundwork for EDDN and EDSM uploads (opt-in, off; nothing is sent yet): `outrider/uploads.py` follows each
+  journal line's game session (version and build per file, commander, Horizons/Odyssey, where you are, crew), lets only
+  the running tail's recent lines through (never a start-up catch-up, a re-read, a restore or a legacy folder), and
+  queues messages in a live-only outbox in the same transaction as their line.
+
 ## 2026-10-08 · Version 2026.10.18
 - Since 2026.10.17: the review's 21 fixes (a docked login counts as docked, the password behind a reverse proxy on the
   Outrider PC, Spansh's services filter, answers arriving out of order...); tagged plants as waypoints for the next
@@ -123,16 +694,6 @@ Newest first, one entry per commit.
   the Deep Space Support Array's carriers (EDAstro, fetched when the finder opens, at most hourly; marked 🛰 DSSA) and
   your own carrier. By voice: "nearest station", "nearest carrier", "nearest Vista", "nearest repair"...; for AI
   clients a read-only `nearest_dock` tool.
-
-## 2026-10-07 · Uploads: EDDN, EDSM and Inara (off by default)
-- `[uploads]`: Outrider can do what EDMarketConnector does. `eddn` shares what the game shows everyone (arrivals,
-  scans, signals, stations, and a market, outfitting or shipyard once opened) with EDDN; `edsm` and `inara` send your
-  flight log to your own account with your API key. Each is off until switched on; only live play is sent, never
-  past journals; never with --simulate. Settings shows what went out, what waits and any refusal.
-- `outrider/uplink.py` reads the journals on its own. Every EDDN message is checked in the tests against EDDN's
-  own schemas (`tests/fixtures/eddn`): personal fields and the player's language removed, a system's name and
-  position added only when the event agrees with the last arrival, a refused message never sent again.
-- The README's "uploads: never" is now "only if you switch them on". No Frontier sign-in, as before.
 
 ## 2026-10-07 · `scripts/verify.sh` passes on Windows (Git Bash)
 - `verify.sh` finds a Windows venv (`.venv/Scripts/python.exe`), names its scratch folder the Windows way so the

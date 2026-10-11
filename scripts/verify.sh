@@ -125,10 +125,10 @@ for k in ("SPANSH_SEARCH", "SPANSH_BODY_SEARCH", "SPANSH_STATION_SEARCH", "EDSM_
 ed_outrider.SPANSH_DUMP = OFF + "/{id64}"
 ed_outrider.SPANSH_RESULTS = OFF + "/{job}"
 ed_outrider.RELEASES_LATEST = OFF   # the update check never asks GitHub from here
+import outrider.eddn
+outrider.eddn.UPLOAD_URL = OFF        # nor EDDN (uploads are off there anyway)
+outrider.edsm.UPLOAD_URL = outrider.edsm.DISCARD_URL = OFF   # nor EDSM's journal upload
 ed_outrider.DSSA_URL = OFF          # nor EDAstro for the DSSA list
-import outrider.uplink   # the uploads are off in the scratch config; were they on, they would reach nobody
-for k in ("EDDN_URL", "EDSM_URL", "EDSM_DISCARD_URL", "INARA_URL"):
-    setattr(outrider.uplink, k, OFF)
 ed_outrider.Clipboard.TOOLS = ()   # the desktop clipboard is never touched by the smoke test
 if outrider.bio:
     outrider.bio.update_if_newer = lambda path=None, log=print: None

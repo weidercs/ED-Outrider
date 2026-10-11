@@ -33,7 +33,8 @@ class ConfigEdit(unittest.TestCase):
         st = settings({})
         secs = ce.entries(ed_outrider.config_text(st))
         self.assertEqual([s["section"] for s in secs],
-                         ["journals", "server", "defaults", "spansh", "speech", "autohonk", "copilot", "highway", "assistant", "uploads", "mcp"])
+                         ["journals", "server", "defaults", "spansh", "speech", "autohonk", "copilot", "highway", "assistant", "mcp",
+                          "eddn", "edsm"])
         keys = [(s["section"], k["key"]) for s in secs for k in s["keys"]]
         self.assertGreaterEqual(len(keys), 80)
         for want in [("server", "password"), ("server", "db"), ("server", "backup_dir"), ("journals", "live"), ("assistant", "api_key"),
@@ -253,3 +254,61 @@ class WritingFile(TempConfig):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SweepConfigFixes(TempConfig):
+    """The full sweep of 2026-10-09 (the config file and Server settings)."""
+
+    def read(self):
+        with open(self.path, encoding="utf-8") as f:
+            return f.read()
+
+    def test_decimal_settings_take_decimals(self):
+        """A decimal setting whose value is whole (speech_speed 1, autohonk delay 2) takes 1.3 and stays a decimal
+        after a whole value is saved (it was offered and checked as a whole number)."""
+        os.remove(self.path)                                   # the file Outrider would write
+        kinds = {(s["section"], k["key"]): k["kind"] for s in self.state.config_info()["sections"] for k in s["keys"]}
+        self.assertEqual((kinds["defaults", "speech_speed"], kinds["autohonk", "delay"], kinds["server", "port"]),
+                         ("float", "float", "int"))
+        self.assertEqual(self.state.config_save({"defaults": {"speech_speed": 2.0}})[1], 200)
+        self.assertIn("speech_speed = 2.0", self.read())
+        self.assertEqual(self.state.config_save({"defaults": {"speech_speed": 1.3}, "autohonk": {"delay": 2.5}})[1], 200)
+        self.assertEqual(ed_outrider.load_config(self.path)["defaults"]["speech_speed"], 1.3)
+
+    def test_saved_numbers_are_exact(self):
+        self.assertEqual(self.state.config_save({"highway": {"background_extent": "-45123.75, 45000, -20000, 70000"}})[1], 200)
+        self.assertEqual(ed_outrider.load_config(self.path)["highway"]["background_extent"], [-45123.75, 45000, -20000, 70000])
+        self.assertEqual(ce.literal(123456.7), "123456.7")
+        self.assertEqual(ce.literal(2.0), "2.0")
+
+    def test_infinite_numbers_are_refused_not_a_500(self):
+        out, status = self.state.config_save({"server": {"radius_choices": "20, inf"}})
+        self.assertEqual(status, 400)
+        self.assertIn("must be numbers", out["error"])
+        with self.assertRaises(ValueError):
+            ce.coerce("numbers", "1e999")
+
+    def test_unquoted_password(self):
+        """password = 1234 is taken as "1234"; something that is not text at all fails closed (an unknown password),
+        never open (it was dropped, leaving the server without one)."""
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(settings({"server": {"password": 1234}})["password"], "1234")
+            closed = settings({"server": {"password": True}})["password"]
+        self.assertTrue(closed and closed != "true")
+
+    def test_bom_is_read_and_dropped(self):
+        text = self.read()
+        with open(self.path, "w", encoding="utf-8-sig") as f:   # Notepad's "UTF-8 with BOM"
+            f.write(text)
+        self.assertEqual(ed_outrider.load_config(self.path)["server"]["password"], "hunter2")
+        self.assertEqual(self.state.config_save({"defaults": {"speech_speed": 1.2}})[1], 200)
+        with open(self.path, "rb") as f:
+            self.assertFalse(f.read().startswith(b"\xef\xbb\xbf"))   # written back without it
+
+    def test_a_file_that_does_not_parse_says_so(self):
+        with open(self.path, "w", encoding="utf-8") as f:
+            f.write('[server]\nport = 9000\n[journals]\nlive = ["C:\\Users\\me"]\n')   # a backslash escape: invalid
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            info = self.state.config_info()
+        self.assertTrue(any("ignored" in p for p in info["problems"]), info["problems"])
+        self.assertEqual(err.getvalue(), "")                    # said on the page, not only on the console

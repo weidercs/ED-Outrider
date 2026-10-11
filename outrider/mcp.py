@@ -177,6 +177,11 @@ def main(argv=None):
             print(f"{t['name']}: {t['description']}")
         return 0
     print(f"outrider.mcp: serving {len(tools.TOOLS)} read-only tools from {url}", file=sys.stderr)
+    # MCP's stdio is UTF-8 whatever the platform: Windows' pipes default to the ANSI code page, where a carrier name
+    # cp1252 cannot write ended the bridge (and the bytes it could write were not UTF-8)
+    for stream in (sys.stdin, sys.stdout):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", **({"newline": "\n"} if stream is sys.stdout else {}))
     serve(sys.stdin, sys.stdout, runner(http_get(url, password=args.password or st["mcp_password"]), st["mcp_rows"]))
     return 0
 

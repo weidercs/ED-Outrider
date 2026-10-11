@@ -25,6 +25,8 @@ RUN chmod -R a+rwX /app/resources && mkdir -p /app/data /config && chmod a+rwx /
 
 EXPOSE 8025
 STOPSIGNAL SIGTERM
-HEALTHCHECK --interval=60s --timeout=5s --start-period=120s --retries=3 \
+# start-period: the first start reads every journal before the server answers (a while for years of them); a success
+# ends the start period at once, so a quick start is not held back
+HEALTHCHECK --interval=60s --timeout=5s --start-period=30m --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8025/api/version', timeout=4)" || exit 1
 ENTRYPOINT ["docker/entrypoint.sh"]

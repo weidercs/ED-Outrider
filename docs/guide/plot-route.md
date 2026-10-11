@@ -1,4 +1,4 @@
-[ED Outrider](../../README.md) · [Install and run](install.md) · [The views](views.md) · **Plot Route** · [Cargo and trading](cargo-and-trading.md) · [Voice and alerts](voice-and-alerts.md) · [Automation](automation.md) · [On a tablet](tablet.md) · [Settings and good to know](settings.md) · [For the curious](for-developers.md)
+[ED Outrider](../../README.md) · [What's new](whats-new.md) · [Install and run](install.md) · [The views](views.md) · **Plot Route** · [Cargo and trading](cargo-and-trading.md) · [Voice and alerts](voice-and-alerts.md) · [Automation](automation.md) · [On a tablet](tablet.md) · [Uploads](uploads.md) · [Settings and good to know](settings.md) · [For the curious](for-developers.md)
 
 # Plot Route
 
@@ -13,7 +13,8 @@ until you plot another or **Clear route**.
 </p>
 
 - **Two plotters.** **Exact** (the default) plans every jump with its fuel and refuel stops from your ship's own
-  figures (drive, masses, tanks, Guardian booster, engineering) and your cargo. **Neutron** plans waypoints only,
+  figures (drive, masses, tanks, Guardian booster, engineering) and your cargo; tick **no neutron boosts** for a
+  route of regular jumps only (no neutron stars to fly past). **Neutron** plans waypoints only,
   from a range, the supercharge (×4, or ×6 with the SCO Mk II) and an efficiency: for a ship you haven't flown, or
   a quick plot.
 - **Refuel at every fuel star** (exact plotter, off by default): ticked, the route stops to top up at every
@@ -22,6 +23,13 @@ until you plot another or **Clear route**.
   ship's laden range; type another to override it.
 - **Conservative range** (off by default): jumps a margin (5 ly) shorter than the ship's range, leaving room for a
   fuller tank.
+- **A system Spansh doesn't know yet.** Spansh can only plot between systems it has heard of, and a system you
+  have just discovered may not be one of them. Outrider then plots from (or to) a system Spansh knows close by, on
+  the way, and puts yours back as the route's first (or last) jump: "Spansh doesn't know Drojau SL-D a53-5 yet: the
+  route starts with a 12.4 ly jump to Smojooe XY-Z a1-2". That jump's fuel isn't figured, and if it is longer than
+  your range the message says so. A destination works the same way when Outrider knows where it is (a system you
+  have visited or bookmarked). Road to Riches and Exomastery do the same; a trade route can't, since it starts from a
+  station's market as Spansh has it.
 - **Too much fuel.** A long neutron jump may be in range only with the fuel the plotter expected. On arrival, and
   as you scoop, Outrider checks the next jump against the fuel aboard and warns ("⚠ too much fuel for the next
   jump: ≤ 36 t, you have 140 t").
@@ -72,8 +80,13 @@ targeted neutron jump target Hwy Stop 38" (or "Failed to…") under its own aler
 - Switching it off, clearing the route or plotting a new one stops a run at once, even mid-way. If the game targets
   a different system it says so by name ("Targeted the wrong system: …. Check before you jump."). A waypoint the
   game reaches by a plotted route of several jumps counts as targeted.
-- It never runs docked, landed, in a vehicle or on foot, in danger, with the FSD charging or a panel open. It stops
-  if anything unexpected happens, closing the map only if it opened it.
+- It never runs docked, landed, in a vehicle or on foot, in danger, with the FSD charging or a panel open. The game
+  flags you "in danger" for every jump, and on entering supercruise, until some 15-26 s after: pressed in those
+  seconds, it says so ("Not targeting due to danger. I will keep trying until you are out of danger, for up to 55
+  seconds"), waits for that to clear and then runs (up to a minute after the jump or the supercruise entry; being
+  interdicted is never waited out). It stops
+  if anything unexpected happens, closing the map only if it opened it. Once the route is plotted you can start
+  the FSD charge without waiting for its last check: the target is set, so that counts as targeted.
 - **The keys go to whichever window has focus**: stay in the game until it is done.
 - The log gets one line per run ("highway auto-target: targeted Hwy Stop 38"); every step is printed only when it
   fails.
