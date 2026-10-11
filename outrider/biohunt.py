@@ -99,6 +99,50 @@ def rows(stops):
     return out
 
 
+LEAN_WEIGHT = 10        # how many systems' worth of "no lean" a species' counts are blended with
+LEAN_MIN_FOUND = 20     # fewer systems with the species than this near you: no lean is worked out
+LEAN_MIN_SCANNED = 50   # ...or fewer scanned systems to compare them with
+
+
+def code_counts(names):
+    """{mass code: how many of the system names carry it} (hand-named systems are not counted)."""
+    out = {}
+    for n in names:
+        c = mass_code(n)
+        if c:
+            out[c] = out.get(c, 0) + 1
+    return out
+
+
+def species_lean(found_names, scanned_names):
+    """How much likelier each mass code is to hold one species, from where players reported it: ({code: odds 0..1},
+    {code: lift}), or (None, None) with too little to go on.
+
+    found_names: the systems (near the start) with the species on record; scanned_names: scanned systems of the same
+    neighbourhood, whatever they hold. A code's lift is its share among the systems with the species over its share
+    among scanned systems (2: twice as common there as chance would have it), blended towards 1 by LEAN_WEIGHT so a
+    handful of reports cannot swing it; the odds are the lifts scaled so the best code is 1. It says which kind of
+    system to prefer, not how likely any one system is to have the species: that cannot be known unscanned."""
+    found, scanned = code_counts(set(found_names)), code_counts(set(scanned_names))
+    F, N = sum(found.values()), sum(scanned.values())
+    if F < LEAN_MIN_FOUND or N < LEAN_MIN_SCANNED:
+        return None, None
+    lift = {}
+    for c in MASS_CODES:
+        if not scanned.get(c) and not found.get(c):
+            lift[c] = 1.0                            # no system of this code near you either way: nothing known, no lean
+            continue
+        q = scanned.get(c, 0) / N or 0.5 / N        # found but never among the scanned sample: half a system's share
+        lift[c] = round((found.get(c, 0) + LEAN_WEIGHT * q) / ((F + LEAN_WEIGHT) * q), 2)
+    top = max(lift.values()) or 1.0
+    return {c: round(v / top, 3) for c, v in lift.items()}, lift
+
+
+def lift_text(lift):
+    """A species' lifts in words: the mass codes from the most favoured down."""
+    return ", ".join(f"{c} x{lift[c]:g}" for c in sorted(lift, key=lambda c: -lift[c]))
+
+
 def odds_text(rate):
     """The odds the route used, in words for its heading: the mass codes from the likeliest down."""
     r = rate or PRIOR

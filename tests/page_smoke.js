@@ -3771,6 +3771,21 @@ const settle = async maxMs => {
     got.saved = w.eval("JSON.parse(localStorage.getItem('highway')).plotter");
     radio("exact").click(); radio("exact").dispatchEvent(new w.Event("change"));
     got.exact = [show(".hwy-uopt"), show(".hwy-xopt")];
+    // a species to favour: the rules' species in the list, sent with the request, remembered; the route says what it leaned on
+    w.eval(`fillHwyForm(Object.assign({}, H.data, {bio_species: ["Stratum Tectonicas", "Fonticulua Fluctus"]}))`);
+    const fav = d.getElementById("hwyBioFor");
+    got.favour = [[...fav.options].map(o => o.textContent), fav.value];
+    fav.value = "Stratum Tectonicas"; fav.dispatchEvent(new w.Event("change"));
+    radio("unscanned").click(); radio("unscanned").dispatchEvent(new w.Event("change"));
+    d.getElementById("hwyGo").click();
+    await sleep(100);
+    got.favoured = [posted[1] && posted[1].species, w.eval("JSON.parse(localStorage.getItem('highway')).bio_for")];
+    fav.value = ""; fav.dispatchEvent(new w.Event("change"));
+    radio("exact").click(); radio("exact").dispatchEvent(new w.Event("change"));
+    got.lean = w.eval(`unscannedHow({range: 55.5, stops: 20, found: 20, species: "Stratum Tectonicas", odds: {c: 1, a: 0.1},
+      lean: {lift: {a: 0.23, c: 2.58, b: 1.24}, found: 440, scanned: 724, radius: 1328, why: null}})`);
+    got.noLean = w.eval(`unscannedHow({range: 55.5, stops: 20, found: 20, species: "Stratum Tectonicas", odds: {d: 0.6},
+      lean: {found: 5, scanned: 300, radius: 90, why: "too few reports of Stratum Tectonicas near Start to lean on (5 systems)"}})`);
     got.how = w.eval(`unscannedHow({range: 55.5, stops: 20, found: 12, toward: "Goal", odds: {a: 0.2, d: 0.6, c: 0.45}})`);
     got.howFull = w.eval(`unscannedHow({range: 55.5, stops: 20, found: 20, toward: null, odds: {d: 0.6}})`);
     // its route in the list: waypoints (the Jumps column, no fuel columns), as the neutron plotter's
@@ -3785,7 +3800,9 @@ const settle = async maxMs => {
       exact: [false, true],
       how: "unscanned systems (no body reported to Spansh: likely undiscovered) · 55.5 ly range · 12 of 20 found · towards Goal · picked by mass code, the share with life: d 60%, c 45%, a 20%",
       howFull: "unscanned systems (no body reported to Spansh: likely undiscovered) · 55.5 ly range · picked by mass code, the share with life: d 60%",
-      list: [true, "○"]};
+      list: [true, "○"], favour: [["any life", "Stratum Tectonicas", "Fonticulua Fluctus"], ""], favoured: ["Stratum Tectonicas", "Stratum Tectonicas"],
+      lean: "unscanned systems (no body reported to Spansh: likely undiscovered) · 55.5 ly range · favouring Stratum Tectonicas: mass codes by how much commoner they are among the 440 systems players reported it in within 1,328 ly: c ×2.58, b ×1.24, a ×0.23",
+      noLean: "unscanned systems (no body reported to Spansh: likely undiscovered) · 55.5 ly range · Stratum Tectonicas could not be favoured (too few reports of Stratum Tectonicas near Start to lean on (5 systems)): picked by mass code, the share with life: d 60%"};
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
     const goodU = !bad.length && errors.length === before;
     allOk = allOk && goodU;

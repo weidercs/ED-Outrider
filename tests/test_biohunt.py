@@ -61,6 +61,25 @@ class Pure(unittest.TestCase):
         self.assertEqual(B.pick(cands, here, 50.0, start=START, toward=toward)[0]["id64"], 5)   # the one nearer the goal
         self.assertEqual(B.pick(cands, START, 50.0, start=START)[0]["id64"], 5)       # the first hop: any direction (64 ly: two jumps)
 
+    def test_species_lean(self):
+        """Favouring one species: each mass code by how much commoner it is among the systems with the species than
+        among scanned systems at large; a code nobody near you has scanned or found it in is left neutral; too few
+        reports give no lean at all."""
+        found = [f"S AB-C c{i}" for i in range(30)] + [f"S AB-C b{i}" for i in range(20)] + [f"S AB-C a{i}" for i in range(2)]
+        scanned = [f"T AB-C c{i}" for i in range(20)] + [f"T AB-C b{i}" for i in range(30)] + [f"T AB-C a{i}" for i in range(50)]
+        odds, lift = B.species_lean(found + found[:5] + ["Sol"], scanned + ["Achenar"])      # repeats and hand names: not counted
+        self.assertEqual(lift, {"a": 0.23, "b": 1.24, "c": 2.58, "d": 1.0, "e": 1.0, "f": 1.0, "g": 1.0, "h": 1.0})
+        self.assertEqual((odds["c"], odds["b"], odds["a"], odds["d"]), (1.0, 0.481, 0.089, 0.388))   # the best code is 1
+        self.assertEqual(B.lift_text(lift), "c x2.58, b x1.24, d x1, e x1, f x1, g x1, h x1, a x0.23")
+        self.assertEqual(B.species_lean(found[:B.LEAN_MIN_FOUND - 1], scanned), (None, None))
+        self.assertEqual(B.species_lean(found, scanned[:B.LEAN_MIN_SCANNED - 1]), (None, None))
+        self.assertEqual(B.code_counts(["S AB-C c1", "S AB-C c2", "S AB-C d1", "Sol", ""]), {"c": 2, "d": 1})
+        only = B.species_lean([f"S AB-C h{i}" for i in range(25)], scanned)[1]              # found only where nothing was scanned
+        self.assertGreater(only["h"], 5)
+        # the lean decides the pick: the c system a little nearer beats the a system at the range
+        cands = [system(2, "S AB-C a1", 49), system(3, "S AB-C c1", 40)]
+        self.assertEqual(B.pick(cands, START, 50.0, odds)[0]["id64"], 3)
+
     def test_rows(self):
         chain = [dict(START), dict(system(2, "S AB-C d1", 40), hop_jumps=1), dict(system(3, "S AB-C d2", 40, 90), hop_jumps=2)]
         rows = B.rows(chain)
@@ -117,13 +136,13 @@ class Plot(unittest.TestCase):
 
         async def unscanned_near(pos, radius, size=200):
             self.searches.append((round(pos["x"], 1), radius))
-            if isinstance(self.fail, Exception):
-                raise self.fail
+            if isinstance(self.down, Exception):
+                raise self.down
             return [dict(s) for s in self.field if B.ly(pos, s) <= radius]
 
         async def system_record(name):
             return {"goal": system(900, "Goal", 0, 400)}.get(name.lower())
-        self.fail = None
+        self.down = None
         self.state = ed_outrider.State(self.db, self.j, types.SimpleNamespace(
             cached=lambda i: (None, None), unscanned_near=unscanned_near, system_record=system_record), 25)
         self.state.clipboard = None
@@ -180,6 +199,56 @@ class Plot(unittest.TestCase):
         # one jump range, then two, then four, for the hop that needed it and for the one that found nothing
         self.assertEqual([rad for _, rad in self.searches], [50, 50, 100, 200, 50, 100, 200])
 
+    def test_favouring_a_species(self):
+        """With a species named, the odds come from where players reported it: Spansh's bodies with that landmark
+        against the scanned systems around; the route records what it leaned on. Too few reports, or no answer: the
+        any-life odds, and the reason."""
+        asked = []
+
+        async def body_search(filters, pos, radius, max_pages):
+            asked.append(("bodies", filters, radius, max_pages))
+            if isinstance(self.down, Exception):
+                raise self.down
+            return [{"system_name": f"Rep AB-C {'a' if k % 10 == 0 else 'd'}{k}", "distance": 5.0 * k} for k in range(self.reports)], 123.4
+
+        async def sphere(pos, radius, max_pages=10):
+            asked.append(("sphere", radius, max_pages))
+            return [{"name": f"Near AB-C {'d' if k % 4 == 0 else 'a'}{k}", "bodies": [{}] if k % 2 else []} for k in range(400)]
+        self.reports = 60
+        self.state.spansh.body_search, self.state.spansh.sphere = body_search, sphere
+        # the field: an 'a' system at the range and a 'd' system a little nearer, every 50 ly
+        self.field = [system(100 + k, f"Field AB-C a{k}", 50.0 * k) for k in range(1, 6)] + \
+                     [system(200 + k, f"Field AB-C d{k}", 50.0 * k - 8) for k in range(1, 6)]
+        out, status, _ = self.run_plot(stops=2, species="stratum tectonicas")
+        self.assertEqual(status, 202)
+        self.assertEqual(asked[0], ("bodies", {"landmarks": [{"type": "Stratum", "subtype": ["Stratum Tectonicas"]}]},
+                                    ed_outrider.SPECIES_RADIUS, 1))
+        self.assertEqual(asked[1], ("sphere", ed_outrider.SPECIES_BASE_RADIUS, ed_outrider.SPECIES_BASE_PAGES))
+        r = self.state.highway_view()["route"]
+        o = r["options"]
+        self.assertEqual((o["species"], o["lean"]["found"], o["lean"]["scanned"], o["lean"]["radius"], o["lean"]["why"]),
+                         ("Stratum Tectonicas", 60, 200, 123, None))
+        self.assertGreater(o["lean"]["lift"]["d"], 1)                      # players found it in d systems, seldom in a
+        self.assertLess(o["lean"]["lift"]["a"], 1)
+        self.assertEqual((o["odds"]["d"], "odds" in o["lean"]), (1.0, False))
+        self.assertEqual([x["system"] for x in r["ahead"]], ["Field AB-C d1", "Field AB-C d2"])   # the d systems, though nearer
+        self.reports = 5                                                    # too few reports: any life, and why
+        self.run_plot(stops=2, species="Stratum Tectonicas")
+        o = self.state.highway_view()["route"]["options"]
+        self.assertEqual((o["odds"], o["lean"]["found"]), (B.rates(), 5))
+        self.assertIn("too few reports of Stratum Tectonicas near Start", o["lean"]["why"])
+        self.down = ed_outrider.ClientError("down")                         # Spansh not answering the question: the same
+        self.reports = 60
+        self.state.spansh.unscanned_near = unittest.mock.AsyncMock(return_value=[dict(s) for s in self.field])
+        self.run_plot(stops=2, species="Stratum Tectonicas")
+        o = self.state.highway_view()["route"]["options"]
+        self.assertIn("Spansh could not be asked where Stratum Tectonicas has been found (down)", o["lean"]["why"])
+        out, status, _ = self.run_plot(species="Stratum Imaginarius")
+        self.assertEqual((status, out["error"]), (400, "species: not a species the biology rules know"))
+        names = self.state.highway_view()["bio_species"]
+        self.assertIn("Stratum Tectonicas", names[:12])                     # the most valuable first
+        self.assertGreater(len(names), 80)
+
     def test_nothing_to_find_and_failures(self):
         self.field = []
         self.run_plot(stops=3)
@@ -187,10 +256,10 @@ class Plot(unittest.TestCase):
         self.assertEqual(p["state"], "failed")
         self.assertIn("Spansh knows no unscanned system within 200 ly of Start", p["error"])
         self.assertIsNone(self.state.highway_view()["route"])
-        self.fail = ed_outrider.ClientError("down")
+        self.down = ed_outrider.ClientError("down")
         self.run_plot(stops=3)
         self.assertIn("Spansh's system search failed (down)", self.state.highway_plotting["error"])
-        self.fail = None
+        self.down = None
         self.run_plot(stops=3, to="Nowhere At All")
         self.assertIn("neither Outrider nor Spansh knows a system named Nowhere At All", self.state.highway_plotting["error"])
 

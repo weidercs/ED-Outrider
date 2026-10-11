@@ -2,6 +2,19 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · This fork: the Unscanned (bio) plotter can favour one species
+- **Favour** in the plot form (any life, or any species the rules know, the most valuable first): with a species
+  chosen, the odds by mass code come from where players reported it. Spansh is asked for the 500 nearest bodies with
+  that species on record and for the scanned systems around you; a mass code's weight is how much commoner it is
+  among the systems with the species than among scanned systems at large (blended towards "no lean", so a handful of
+  reports cannot swing it; a code with nothing known near you is left neutral). The route's line shows the lifts and
+  how many reports they rest on.
+- For Stratum Tectonicas the reports checked from two places both favoured mass code c, then b and d, and all but
+  ruled out a. Too few reports near you (under 20 systems) or no answer from Spansh: the any-life odds, and the line
+  says why. It says which kind of system to prefer, not that a system has the species: that cannot be known unscanned.
+- `outrider.biohunt.species_lean`, `State.species_lean`; POST `/api/highway/plot` takes `species`; `/api/highway`
+  carries `bio_species` for the list.
+
 ## 2026-10-12 · Plot Route: the map keeps its space with the game's route shown
 - With **Game route** chosen in a window-filling layout, its list and its switch had no place in Plot Route's grid:
   they took cells of their own and squeezed the map. The list now sits in the Highway list's cell and the switch

@@ -5422,9 +5422,15 @@ function hwyClipHtml(cb) {
 // An Unscanned (bio) route's own line: what it is, the range it kept to, and the odds it picked by. Pure.
 function unscannedHow(o) {
   const odds = o.odds ? Object.entries(o.odds).sort((a, b) => b[1] - a[1]).map(([c, v]) => `${c} ${Math.round(v * 100)}%`).join(", ") : "";
+  const ln = o.lean, lift = ln && ln.lift ? Object.entries(ln.lift).sort((a, b) => b[1] - a[1]).map(([c, v]) => `${c} ×${v}`).join(", ") : "";
+  // a species favoured: the mass codes by how over-represented they are where players reported it; without enough
+  // reports, the any-life odds, and why
+  const by = o.species && lift
+    ? `favouring ${o.species}: mass codes by how much commoner they are among the ${ln.found} systems players reported it in within ${Number(ln.radius).toLocaleString()} ly: ${lift}`
+    : `${o.species ? `${o.species} could not be favoured (${(ln && ln.why) || "no reports"}): ` : ""}picked by mass code, the share with life${odds ? `: ${odds}` : ""}`;
   return `unscanned systems (no body reported to Spansh: likely undiscovered) · ${o.range != null ? `${o.range} ly range · ` : ""}` +
     `${o.found != null && o.stops != null && o.found < o.stops ? `${o.found} of ${o.stops} found · ` : ""}` +
-    `${o.toward ? `towards ${o.toward} · ` : ""}picked by mass code, the share with life${odds ? `: ${odds}` : ""}`;
+    `${o.toward ? `towards ${o.toward} · ` : ""}${by}`;
 }
 function hwyHeadHtml(hd) {
   const r = hd.route, live = data && data.highway, s = live && r && live.id === r.id ? live : r && r.summary;
@@ -5537,6 +5543,13 @@ function hwyFormShow() {
   hwyConsShow();
 }
 function fillHwyForm(hd) {
+  // the species the Unscanned (bio) plotter can favour (the rules' own), this browser's last choice kept
+  { const names = hd.bio_species || [], sel = hEl("hwyBioFor"), sig = names.length + "|" + (names[0] || "");
+    if (sel.dataset.sig !== sig) {
+      sel.dataset.sig = sig;
+      sel.innerHTML = `<option value="">any life</option>` + names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join("");
+      sel.value = names.includes(hwyCfg.bio_for) ? hwyCfg.bio_for : "";
+    } }
   const fl = hd.fleet || [], sel = hEl("hwyShip");
   const sig = JSON.stringify(fl.map(f => [f.ship_id, f.name, f.type, f.ts, f.range])) + "|" + hd.ship_id;
   if (H.fleetSig !== sig) {
@@ -5565,6 +5578,7 @@ function fillHwyForm(hd) {
   for (const [id, k] of [["hwyInject", "injections"], ["hwyNoSec", "exclude_secondary"], ["hwySuper", "supercharged"], ["hwyNoNeu", "no_neutrons"],
                         ["hwyRefuel", "refuel_every_scoopable"]])
     hEl(id).onchange = () => { hwyCfg[k] = hEl(id).checked; saveHwyCfg(); };
+  hEl("hwyBioFor").onchange = () => { hwyCfg.bio_for = hEl("hwyBioFor").value || null; saveHwyCfg(); };
   hEl("hwyEff").onchange = () => { const v = Math.round(Number(hEl("hwyEff").value));
     hwyCfg.efficiency = hEl("hwyEff").value === "" || !(v >= 1 && v <= 100) ? null : v; saveHwyCfg(); };
   hEl("hwyCons").onchange = () => { hwyCfg.conservative = hEl("hwyCons").checked; saveHwyCfg(); hwyConsShow(); };
@@ -5606,6 +5620,7 @@ function hwyBody() {
   else if (p === "unscanned") {
     if (num("hwyRange") != null) b.range = num("hwyRange");
     if (num("hwyStops") != null) b.stops = num("hwyStops");
+    if (hEl("hwyBioFor").value) b.species = hEl("hwyBioFor").value;   // one species to favour (else any life)
     return b;   // the range as it is: no conservative margin
   } else {
     if (num("hwyRange") != null) b.range = num("hwyRange");

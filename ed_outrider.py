@@ -254,6 +254,9 @@ NAVROUTE_ROWS = 300  # hops of the game's route GET /api/navroute lists
 UNSCANNED_STOPS = 20       # systems an Unscanned (bio) plot chains by default
 UNSCANNED_MAX_STOPS = 100  # ...and at most (one Spansh search per system)
 UNSCANNED_GAP_S = 0.5      # s between those searches
+SPECIES_RADIUS = 5000      # ly: how far from the start a favoured species' reports are looked for (the nearest 500)
+SPECIES_BASE_RADIUS = 300  # ly: ...and the scanned systems they are compared with (the nearest SPECIES_BASE_PAGES pages)
+SPECIES_BASE_PAGES = 2
 # Spansh's commodity names (its min_max keys): the Sell / Buy lookup asks by them; cached a week (meta spansh_commodities)
 SPANSH_COMMODITIES = "https://spansh.co.uk/api/stations/field_values/commodities"
 COMMODITIES_MAX_AGE_S = 7 * 86400
@@ -10994,7 +10997,15 @@ class State:
                 "position": with_id(pos), "clipboard": cb,
                 "autotarget": self.autotarget_info(),
                 "defaults": {k: self.highway_cfg[k] for k in ("efficiency", "conservative", "conservative_ly")},
-                "background": self.highway_background()}
+                "background": self.highway_background(),
+                # the species the Unscanned (bio) plotter can favour: the rules' own, the most valuable first
+                "bio_species": self.bio_species_names()}
+
+    def bio_species_names(self):
+        """Every species the biology rules know, the most valuable first (the plot form's Favour list); [] without
+        the rules."""
+        R = outrider.bio.load_rules() if outrider.bio else None
+        return [sp["name"] for sp in sorted((R or {}).get("species") or [], key=lambda sp: (-(sp.get("value") or 0), sp["name"]))]
 
     def highway_background(self):
         """The map's background image as the page needs it: image (one is configured and can be served now), its
@@ -11046,6 +11057,29 @@ class State:
             raise HighwayError(f"neither Outrider nor Spansh knows a system named {name}")
         return rec
 
+    async def species_lean(self, start, species):
+        """What the Unscanned (bio) plotter leans on to favour one species (outrider.biohunt.species_lean): the systems
+        nearest `start` where players reported it (Spansh's bodies with that landmark, one page) against the scanned
+        systems around there (Spansh's nearest systems that have a body). {odds, lift, found, scanned, radius} or, with
+        too little to go on or Spansh not answering, {odds: None, why}: the plot then uses the any-life odds."""
+        sp = outrider.bio.species_by_name(species) if outrider.bio else None
+        if not sp:
+            return {"odds": None, "why": f"{species} is not a species the rules know"}
+        try:
+            bodies, cut = await self.spansh.body_search({"landmarks": [{"type": sp["genus"], "subtype": [sp["name"]]}]},
+                                                        start, SPECIES_RADIUS, 1)
+            near = await self.spansh.sphere(start, SPECIES_BASE_RADIUS, max_pages=SPECIES_BASE_PAGES)
+        except (ClientError, asyncio.TimeoutError, ValueError, KeyError, TypeError, AttributeError) as e:
+            return {"odds": None, "why": f"Spansh could not be asked where {sp['name']} has been found ({e or type(e).__name__})"}
+        found = {b.get("system_name") for b in bodies if isinstance(b, dict) and isinstance(b.get("system_name"), str)}
+        scanned = {s.get("name") for s in near if isinstance(s, dict) and s.get("bodies") and isinstance(s.get("name"), str)}
+        odds, lift = outrider.biohunt.species_lean(found, scanned)
+        radius = round(cut if cut is not None else max((b.get("distance") or 0 for b in bodies if isinstance(b, dict)), default=0))
+        if not odds:
+            return {"odds": None, "found": len(found), "scanned": len(scanned), "radius": radius,
+                    "why": f"too few reports of {sp['name']} near {start['name']} to lean on ({len(found)} systems)"}
+        return {"odds": odds, "lift": lift, "found": len(found), "scanned": len(scanned), "radius": radius, "why": None}
+
     async def _unscanned_plot(self, frm, to, reach, stops, meta):
         """The Unscanned (bio) plot: from `frm`, `stops` hops, each to the unscanned system outrider.biohunt.pick
         chooses among Spansh's within one jump (two, then four jump ranges when there is none); stored as a Highway
@@ -11055,6 +11089,12 @@ class State:
             start = await self.route_end(frm)
             toward = await self.route_end(to) if to else None
             rate = outrider.biohunt.rates(self.bio_mass_counts())
+            lean = None
+            species = meta["options"].get("species")
+            if species:   # favour one species: the odds by mass code from where players reported it near the start
+                lean = await self.species_lean(start, species)
+                if lean.get("odds"):
+                    rate = lean["odds"]
             chain, here, taken = [dict(start)], start, {start["id64"]}
             if toward:
                 taken.add(toward["id64"])
@@ -11084,7 +11124,8 @@ class State:
             if len(chain) < 2:
                 raise HighwayError(f"Spansh knows no unscanned system within {reach * outrider.biohunt.REACH_STEPS[-1]:,.0f} ly "
                                    f"of {start['name']}" + (f" on the way to {toward['name']}" if toward else ""))
-            meta = dict(meta, options=dict(meta["options"], odds=rate, found=len(chain) - 1))
+            meta = dict(meta, options=dict(meta["options"], odds=rate, found=len(chain) - 1,
+                                           lean={k: v for k, v in (lean or {}).items() if k != "odds"} or None))
             self.highway_store(outrider.biohunt.rows(chain), meta)
             p.update(state="done", note=None)
             self.highway_copy_next(force=True)
@@ -11100,7 +11141,8 @@ class State:
 
     def unscanned_start_plot(self, body, frm, to):
         """highway_start_plot's Unscanned (bio) branch: {from, to (optional: a system to head towards), range (default:
-        the current ship's laden range), stops (how many systems, 2 to UNSCANNED_MAX_STOPS)}."""
+        the current ship's laden range), stops (how many systems, 2 to UNSCANNED_MAX_STOPS), species (optional: one to
+        favour, by the rules' name)}."""
         def number(k, lo, hi, conv, default):
             v = body.get(k)
             if v is None or v == "":
@@ -11127,7 +11169,16 @@ class State:
             return {"error": "give the jump range (ly), or pick a ship you have flown"}, 400
         if not frm or len(frm) > FIND_NAME_MAX or len(to) > FIND_NAME_MAX:
             return {"error": f"give the start system's name (up to {FIND_NAME_MAX} characters)"}, 400
-        meta = {"plotter": "unscanned", "options": {"range": round(rng, 2), "stops": stops, "toward": to or None},
+        species = body.get("species")
+        if species in (None, ""):
+            species = None
+        else:
+            sp = outrider.bio.species_by_name(species) if outrider.bio and isinstance(species, str) else None
+            if not sp:
+                return {"error": "species: not a species the biology rules know"}, 400
+            species = sp["name"]
+        meta = {"plotter": "unscanned", "options": {"range": round(rng, 2), "stops": stops, "toward": to or None,
+                                                    "species": species},
                 "ship": ship and {"ship_id": ship["ship_id"], "name": ship["name"], "type": ship["ship_type"], "ts": ship["ts"]}}
         self.highway_plotting = {"state": "running", "plotter": "unscanned", "from": frm, "to": to or None,
                                  "started": iso_ts(time.time()), "error": None, "found": 0, "stops": stops}

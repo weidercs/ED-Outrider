@@ -39,7 +39,9 @@ you plot another of its kind or **Clear route**.
   for as many **Systems** as you ask. **To** is optional: a system to head towards; without it the chain runs
   outward from where you are. Which systems are likely to have life is judged by the mass code in their name (the
   letter before the last number), with the odds counted from your own scans: the route's line shows them. Where
-  nothing unscanned is within a jump, a hop can take two or more. It is a guess about where to look: scan on
+  nothing unscanned is within a jump, a hop can take two or more. **Favour** picks one species instead of any life
+  (Stratum Tectonicas, say): the mass codes are then weighted by how much commoner each is among the systems where
+  players reported that species near you, and the route's line shows the weights and how many reports they rest on. It is a guess about where to look: scan on
   arrival to find out. Followed, targeted and spoken like any Highway route.
 - **Game route** (this fork). While the game has a route plotted in its galaxy map, a switch above the heading
   offers **Game route · N jumps** beside **Plotted here**. It shows the game's own route in the same list (each
