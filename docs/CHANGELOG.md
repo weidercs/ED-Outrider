@@ -2,6 +2,35 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · Plot Route: the map keeps its space with the game's route shown
+- With **Game route** chosen in a window-filling layout, its list and its switch had no place in Plot Route's grid:
+  they took cells of their own and squeezed the map. The list now sits in the Highway list's cell and the switch
+  above the grid, so the map fills the right as with any other route.
+
+## 2026-10-12 · This fork: Unscanned (bio), a plotter for systems nobody has scanned
+- A sixth plotter in Plot Route: a chain of systems Spansh knows by name and place only (no body reported: nobody
+  with an uploader has scanned anything there, so they are likely undiscovered), each hop as close to your jump range
+  as there is such a system. From where you are (or From), for as many systems as you ask (20; up to 100), outward
+  so it neither circles nor doubles back, or towards the system in To. A system you have been to is never picked.
+- **Likely to have life** is judged by the one thing known of an unscanned system: its name's mass code (the letter
+  before the last number, a to h: the heaviest star's mass class). The share of systems of each code that had a
+  biological signal is counted from your own journals and blended with a starting guess until you have enough of
+  your own; among the systems within a jump, odds times how much of the range the hop uses decides. The route's line
+  says the odds it used. A guess about where to look, not a promise.
+- With nothing unscanned within one jump it looks two, then four jump ranges out, and says how many jumps that hop
+  takes. The route is a Highway route: followed, spoken ("Next unscanned system: ..."), targeted and drawn like one.
+- `outrider/biohunt.py`, `Spansh.unscanned_near`, `State.unscanned_start_plot` (POST `/api/highway/plot` with
+  `plotter: "unscanned"`, `range`, `stops`, an optional `to`).
+
+## 2026-10-12 · This fork: a Rocky personality for the voice
+- A fourth personality, **Rocky (Project Hail Mary)**: twelve lines for every alert in his way of talking (short plain
+  sentences, no articles or contractions, a word three times for emphasis, questions ending ", question?", "Amaze!").
+  Tick it in the alerts dialog's personalities, alone to hear only him; `[defaults] speech_styles = ["rocky"]` starts
+  new browsers with it. No swearing versions.
+- The assistant answers to "Rocky" as to "Vespa". With the AI layer on and Rocky the server's only default
+  personality, its answers are worded his way too (`ask.system_prompt`); the facts still come from the tools.
+- His voice is the Piper voice you chose: no voice imitates the character's own.
+
 ## 2026-10-12 · This fork: a Route panel for the in-game overlay
 - A seventh overlay panel, optional (`[overlay] route_panel`, off by default; Settings → In-game overlay): the route
   ahead. The game's own route: jumps and light years left, how many jumps to the next scoopable star (or that there

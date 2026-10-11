@@ -3741,6 +3741,57 @@ const settle = async maxMs => {
     console.log(goodSH ? "OK" : "FAIL", "| ship |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "the ship's figures, its modules by group with engineering and the engineered stats, the EDSY and Coriolis links", errors.slice(before));
   }
+  // The Unscanned (bio) plotter (this fork): its own fields in the plot form (Systems, the range, an optional To, no
+  // conservative margin), the request it sends, the status while it looks, and the route's line saying how it picked
+  {
+    const w = dom.window, d = w.document, before = errors.length, got = {}, posted = [];
+    w.__uPosted = posted;
+    d.querySelector('[data-view="hwy"]').click();
+    await sleep(200);
+    w.eval(`window.__uApi = apiJson;
+      apiJson = async (u, o) => {
+        if (String(u) !== "api/highway/plot") return __uApi(u, o);
+        __uPosted.push(JSON.parse(o.body));
+        return {ok: true, plotting: {state: "running", plotter: "unscanned", from: "Start", to: null, found: 3, stops: 7, started: new Date().toISOString(), error: null}};
+      };`);
+    const form = d.getElementById("hwyForm"), radio = v => form.querySelector(`[name=hwyPlotter][value="${v}"]`);
+    const was = w.eval("hwyPlotter()"), shipWas = d.getElementById("hwyShip").value;
+    const show = sel => !form.querySelector(sel).hidden;
+    radio("unscanned").click(); radio("unscanned").dispatchEvent(new w.Event("change"));
+    got.fields = [show(".hwy-uopt"), show(".hwy-nopt"), show(".hwy-xopt"), show(".hwy-cons"), show(".hwy-shiprow"), show(".hwyto"),
+                  [...form.querySelectorAll(".hwy-nonly")].some(e => !e.hidden), d.getElementById("hwyTo").placeholder, d.getElementById("hwyStops").value];
+    got.label = radio("unscanned").closest("label").textContent.trim();
+    d.getElementById("hwyTo").value = ""; d.getElementById("hwyFrom").value = "";
+    d.getElementById("hwyRange").value = "55.5"; d.getElementById("hwyRange").dispatchEvent(new w.Event("input"));
+    d.getElementById("hwyStops").value = "7";
+    d.getElementById("hwyGo").click();
+    await sleep(100);
+    got.body = posted[0] && [posted[0].plotter, posted[0].to, posted[0].range, posted[0].stops, "conservative" in posted[0], "from" in posted[0]];
+    got.status = d.getElementById("hwyStatus").textContent.replace(/ \d+ s$/, "");
+    got.saved = w.eval("JSON.parse(localStorage.getItem('highway')).plotter");
+    radio("exact").click(); radio("exact").dispatchEvent(new w.Event("change"));
+    got.exact = [show(".hwy-uopt"), show(".hwy-xopt")];
+    got.how = w.eval(`unscannedHow({range: 55.5, stops: 20, found: 12, toward: "Goal", odds: {a: 0.2, d: 0.6, c: 0.45}})`);
+    got.howFull = w.eval(`unscannedHow({range: 55.5, stops: 20, found: 20, toward: null, odds: {d: 0.6}})`);
+    // its route in the list: waypoints (the Jumps column, no fuel columns), as the neutron plotter's
+    w.eval(`renderHwyList({route: {id: "u1", plotter: "unscanned", count: 2, at: 0, summary: {index: 1}, done: [], ahead: [
+      {i: 1, system: "Field AB-C d5", id: "105", distance: 50, jumps: 1, remaining: 0, neutron: false, refuel: false, known: "no bodies"}]}})`);
+    got.list = [d.getElementById("hwyTable").classList.contains("neutron"), d.querySelector("#hwyRows tr .hwyk").textContent.trim()];
+    w.eval(`apiJson = __uApi; H.status = null; if (H.data) H.data.plotting = null; drawHwyStatus(); renderHwy()`);
+    if (was !== "exact") { radio(was).click(); radio(was).dispatchEvent(new w.Event("change")); }
+    d.getElementById("hwyShip").value = shipWas;
+    const want = {fields: [true, true, false, false, true, true, false, "optional: a system to head towards", "20"], label: "Unscanned (bio)",
+      body: ["unscanned", "", 55.5, 7, false, false], status: "Looking for unscanned systems from Start: 3 of 7 found…", saved: "unscanned",
+      exact: [false, true],
+      how: "unscanned systems (no body reported to Spansh: likely undiscovered) · 55.5 ly range · 12 of 20 found · towards Goal · picked by mass code, the share with life: d 60%, c 45%, a 20%",
+      howFull: "unscanned systems (no body reported to Spansh: likely undiscovered) · 55.5 ly range · picked by mass code, the share with life: d 60%",
+      list: [true, "○"]};
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    const goodU = !bad.length && errors.length === before;
+    allOk = allOk && goodU;
+    console.log(goodU ? "OK" : "FAIL", "| unscanned plotter |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
+      : "its own form fields, the request without a destination, the status as it looks, the route's line and list", errors.slice(before));
+  }
   // The game's own route in Plot Route (this fork): offered beside the routes plotted here while the game has one;
   // chosen, it takes the heading, the list (each system, whether it is known, its star, the distances) and the map;
   // names copy; nothing of it can be cleared here; "Plotted here" brings the tab back as it was

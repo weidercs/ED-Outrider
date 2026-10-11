@@ -151,10 +151,14 @@ def highway_bg_file(path):
     return kind[0], st
 
 
-def highway_text(rows, i):
+def highway_text(rows, i, plotter=None):
     """The line said on arriving at route row i (not the last): the next stop, a refuel coming up or due here, and
-    the supercharge in a neutron system. Plain words (personality lines come later)."""
+    the supercharge in a neutron system. Plain words (personality lines come later). An Unscanned (bio) route (this
+    fork) names its next system for what it is, with the jumps when it is more than one away."""
     here, nxt = rows[i], rows[i + 1]
+    if plotter == "unscanned":
+        j = nxt.get("jumps") or 1
+        return f"Next unscanned system: {nxt['system']}" + (f", {number_words(j)} jumps away." if j > 1 else ".")
     k = highway_refuel_in(rows, i)
     text = f"Next Neutron Highway Stop: {nxt['system']}"
     if k is not None and k <= HIGHWAY_REFUEL_WARN:

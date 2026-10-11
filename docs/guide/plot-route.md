@@ -34,6 +34,13 @@ you plot another of its kind or **Clear route**.
 - **Too much fuel.** A long neutron jump may be in range only with the fuel the plotter expected. On arrival, and
   as you scoop, Outrider checks the next jump against the fuel aboard and warns ("⚠ too much fuel for the next
   jump: ≤ 36 t, you have 140 t").
+- **Unscanned (bio)** (this fork): a plotter for first discoveries with life. It chains systems Spansh knows only by
+  name and place (no body reported, so likely undiscovered), each hop as close to your **Range** as there is one,
+  for as many **Systems** as you ask. **To** is optional: a system to head towards; without it the chain runs
+  outward from where you are. Which systems are likely to have life is judged by the mass code in their name (the
+  letter before the last number), with the odds counted from your own scans: the route's line shows them. Where
+  nothing unscanned is within a jump, a hop can take two or more. It is a guess about where to look: scan on
+  arrival to find out. Followed, targeted and spoken like any Highway route.
 - **Game route** (this fork). While the game has a route plotted in its galaxy map, a switch above the heading
   offers **Game route · N jumps** beside **Plotted here**. It shows the game's own route in the same list (each
   system, click to copy; Known; its star, ⛽ scoopable; the jump and the light years flown) and on the same map.

@@ -201,6 +201,7 @@ import outrider.inara      # the fork's Inara upload ([inara], off by default), 
 import outrider.galnet     # the fork's GalNet News: Frontier's feed as articles, and the systems they mention
 import outrider.navroute   # the fork's Game Route list: the game's own route, jump by jump (pure)
 import outrider.shipinfo   # the fork's Ship view: the Loadout as figures and modules with their engineering
+import outrider.biohunt    # the fork's Unscanned (bio) plotter: mass codes, the odds, the pick of each hop (pure)
 import outrider.eddn       # EDDN's messages from journal events, and what its answers mean
 import outrider.edsm       # EDSM's journal upload: the events with where you were, and what its answers mean
 import outrider.checklist  # the exobiology checklist: every species by region, with your state (pure)
@@ -250,6 +251,9 @@ SPANSH_BODY_SEARCH = "https://spansh.co.uk/api/bodies/search"
 SPANSH_STATION_SEARCH = "https://spansh.co.uk/api/stations/search"
 DOCK_CACHE_S = 120   # s: the Nearest finder reuses its last search this long (a filter change re-filters it)
 NAVROUTE_ROWS = 300  # hops of the game's route GET /api/navroute lists
+UNSCANNED_STOPS = 20       # systems an Unscanned (bio) plot chains by default
+UNSCANNED_MAX_STOPS = 100  # ...and at most (one Spansh search per system)
+UNSCANNED_GAP_S = 0.5      # s between those searches
 # Spansh's commodity names (its min_max keys): the Sell / Buy lookup asks by them; cached a week (meta spansh_commodities)
 SPANSH_COMMODITIES = "https://spansh.co.uk/api/stations/field_values/commodities"
 COMMODITIES_MAX_AGE_S = 7 * 86400
@@ -2600,7 +2604,7 @@ class Journals:
                 hw["done_ts"] = ts
                 say = ("complete", "Highway complete.")
             else:
-                say = ("back" if back else "next", ("Back on the highway. " if back else "") + highway_text(rows, i))
+                say = ("back" if back else "next", ("Back on the highway. " if back else "") + highway_text(rows, i, hw.get("plotter")))
         meta_set(self.db, "highway", hw)
         if say and live_event(ts):
             nxt = rows[i + 1]["system"] if i is not None and i + 1 < len(rows) else None
@@ -4996,6 +5000,29 @@ class Spansh:
             raise ClientError("Spansh's answer is not a station list")
         return d
 
+    async def unscanned_near(self, pos, radius, size=200):
+        """The systems within `radius` ly of pos that Spansh knows but has no body of (no scan value: nobody with an
+        uploader has scanned anything there), the farthest first: the Unscanned (bio) plotter's candidates, as
+        {id64, name, x, y, z}. Systems needing a permit are left out."""
+        if self.session is None:
+            raise HighwayError("Spansh cannot be reached (no network session)")
+        body = {"filters": {"distance": {"min": "0", "max": str(round(radius, 2))},
+                            "estimated_scan_value": {"value": [0, 0], "comparison": "<=>"}},
+                "reference_coords": {"x": pos["x"], "y": pos["y"], "z": pos["z"]},
+                "sort": [{"distance": {"direction": "desc"}}], "size": size, "page": 0}
+        async with self.sem:
+            async with self.session.post(SPANSH_SEARCH, json=body) as r:
+                r.raise_for_status()
+                d = await r.json()
+        out = []
+        for x in (d.get("results") or []) if isinstance(d, dict) else []:
+            if not isinstance(x, dict) or x.get("bodies") or x.get("needs_permit") or not isinstance(x.get("name"), str):
+                continue
+            if isinstance(x.get("id64"), int) and not isinstance(x.get("id64"), bool) \
+                    and all(isinstance(x.get(k), (int, float)) and not isinstance(x.get(k), bool) for k in ("x", "y", "z")):
+                out.append({"id64": x["id64"], "name": x["name"], "x": x["x"], "y": x["y"], "z": x["z"]})
+        return out
+
     async def dock_search(self, pos, need=()):
         """Stations and fleet carriers nearest `pos` (two pages of the station search, each nearest first, out to
         outrider.dock.SEARCH_LY) that offer every service in `need` (outrider.dock's names). Without that filter the
@@ -5884,7 +5911,7 @@ class State:
             try:
                 async with ClientSession(timeout=ClientTimeout(total=self.assistant["timeout"] + 5),
                                          headers={"User-Agent": USER_AGENT}) as session:
-                    words = await outrider.ask.ai_answer(text, self.assistant, get, session)
+                    words = await outrider.ask.ai_answer(text, self.assistant, get, session, styles=SPEECH_STYLES)
             except outrider.ask.AIError as e:
                 return {"error": e.why, "code": e.code}, {"ai_timeout": 504, "ai_off": 503}.get(e.code, 502)
             except Exception as e:  # noqa: BLE001 -- a backstop (R4): the AI layer's own failure, never a 500
@@ -10986,6 +11013,128 @@ class State:
                 out["why"] = str(e)
         return out
 
+    # ---- the Unscanned (bio) plotter (this fork; outrider/biohunt.py) ----
+
+    def bio_mass_counts(self):
+        """{mass code: (systems you scanned, systems of those with a biological signal)} from your own journals: the
+        systems where you scanned more than the arrival star, by their name's mass code. What the Unscanned (bio)
+        plotter's odds are counted from (outrider.biohunt.rates)."""
+        counts = {}
+        for name, bio in self.db.execute(
+                """SELECT v.name, EXISTS(SELECT 1 FROM own_signals s WHERE s.system = v.id64 AND s.bio > 0)
+                   FROM visits v WHERE (SELECT count(*) FROM own_bodies b WHERE b.system = v.id64) >= 2"""):
+            code = outrider.biohunt.mass_code(name)
+            if code:
+                n, b = counts.get(code, (0, 0))
+                counts[code] = (n + 1, b + int(bool(bio)))
+        return counts
+
+    async def route_end(self, name):
+        """{name, id64, x, y, z} of a system by name for a route's end: where you are, one known here, else Spansh's.
+        HighwayError in words when nobody knows it."""
+        pos = self.journals.pos
+        if pos and pos.get("x") is not None and (pos.get("name") or "").lower() == name.lower():
+            return {"name": pos["name"], "id64": pos["id64"], "x": pos["x"], "y": pos["y"], "z": pos["z"]}
+        local = self.find_local(name)
+        if local:
+            return {"name": local[1], "id64": local[0], "x": local[2], "y": local[3], "z": local[4]}
+        try:
+            rec = await self.spansh.system_record(name)
+        except (ClientError, asyncio.TimeoutError, ValueError) as e:
+            raise HighwayError(f"Spansh cannot be reached ({e or type(e).__name__})") from None
+        if not rec or rec.get("x") is None:
+            raise HighwayError(f"neither Outrider nor Spansh knows a system named {name}")
+        return rec
+
+    async def _unscanned_plot(self, frm, to, reach, stops, meta):
+        """The Unscanned (bio) plot: from `frm`, `stops` hops, each to the unscanned system outrider.biohunt.pick
+        chooses among Spansh's within one jump (two, then four jump ranges when there is none); stored as a Highway
+        route. One search per hop, UNSCANNED_GAP_S apart."""
+        p = self.highway_plotting
+        try:
+            start = await self.route_end(frm)
+            toward = await self.route_end(to) if to else None
+            rate = outrider.biohunt.rates(self.bio_mass_counts())
+            chain, here, taken = [dict(start)], start, {start["id64"]}
+            if toward:
+                taken.add(toward["id64"])
+            for k in range(stops):
+                found = None
+                for step in outrider.biohunt.REACH_STEPS:
+                    try:
+                        cands = await self.spansh.unscanned_near(here, reach * step)
+                    except (ClientError, asyncio.TimeoutError, ValueError) as e:
+                        raise HighwayError(f"Spansh's system search failed ({e or type(e).__name__})") from None
+                    ids = [c["id64"] for c in cands if c["id64"] not in taken]
+                    been = {r[0] for r in self.db.execute(
+                        f"SELECT id64 FROM visits WHERE id64 IN ({','.join('?' * len(ids))})", ids)} if ids else set()
+                    found = outrider.biohunt.pick([c for c in cands if c["id64"] not in been], here, reach, rate,
+                                                  start=start, toward=toward, taken=taken)
+                    if found:
+                        break
+                if not found:
+                    break
+                c, _, jumps = found
+                chain.append(dict(c, hop_jumps=jumps))
+                taken.add(c["id64"])
+                here = c
+                p["found"] = len(chain) - 1          # the page's status line counts them as they come
+                if k + 1 < stops:
+                    await asyncio.sleep(UNSCANNED_GAP_S)
+            if len(chain) < 2:
+                raise HighwayError(f"Spansh knows no unscanned system within {reach * outrider.biohunt.REACH_STEPS[-1]:,.0f} ly "
+                                   f"of {start['name']}" + (f" on the way to {toward['name']}" if toward else ""))
+            meta = dict(meta, options=dict(meta["options"], odds=rate, found=len(chain) - 1))
+            self.highway_store(outrider.biohunt.rows(chain), meta)
+            p.update(state="done", note=None)
+            self.highway_copy_next(force=True)
+        except HighwayError as e:
+            p.update(state="failed", error=str(e))
+        except Exception as e:  # noqa: BLE001 -- say it on the page rather than lose it in a task
+            import traceback
+            traceback.print_exc()
+            p.update(state="failed", error=f"{type(e).__name__}: {e}")
+        finally:
+            p["ended"] = iso_ts(time.time())
+            self.bump()
+
+    def unscanned_start_plot(self, body, frm, to):
+        """highway_start_plot's Unscanned (bio) branch: {from, to (optional: a system to head towards), range (default:
+        the current ship's laden range), stops (how many systems, 2 to UNSCANNED_MAX_STOPS)}."""
+        def number(k, lo, hi, conv, default):
+            v = body.get(k)
+            if v is None or v == "":
+                return default
+            try:
+                if isinstance(v, bool) or not isinstance(v, (int, float, str)):
+                    raise ValueError(k)
+                v = conv(float(v))
+            except (ValueError, OverflowError):
+                raise ValueError(f"{k} is not a number") from None
+            if not (lo <= v <= hi):
+                raise ValueError(f"{k} is out of range ({lo:g} to {hi:g})")
+            return v
+        sid = body.get("ship_id", (self.journals.ship or {}).get("ship_id"))
+        ship = self.fleet_ship(sid) if isinstance(sid, int) and not isinstance(sid, bool) else None
+        same = ship and ship["ship_id"] == (self.journals.ship or {}).get("ship_id")
+        try:
+            cargo = number("cargo", 0, 100000, int, (self.journals.cargo or {}).get("count") if same else 0) or 0
+            rng = number("range", 1, 1000, float, fleet_range((ship or {}).get("figures") or {}, cargo) if ship else None)
+            stops = number("stops", 2, UNSCANNED_MAX_STOPS, int, UNSCANNED_STOPS)
+        except ValueError as e:
+            return {"error": str(e)}, 400
+        if not rng:
+            return {"error": "give the jump range (ly), or pick a ship you have flown"}, 400
+        if not frm or len(frm) > FIND_NAME_MAX or len(to) > FIND_NAME_MAX:
+            return {"error": f"give the start system's name (up to {FIND_NAME_MAX} characters)"}, 400
+        meta = {"plotter": "unscanned", "options": {"range": round(rng, 2), "stops": stops, "toward": to or None},
+                "ship": ship and {"ship_id": ship["ship_id"], "name": ship["name"], "type": ship["ship_type"], "ts": ship["ts"]}}
+        self.highway_plotting = {"state": "running", "plotter": "unscanned", "from": frm, "to": to or None,
+                                 "started": iso_ts(time.time()), "error": None, "found": 0, "stops": stops}
+        self.highway_task = asyncio.get_running_loop().create_task(self._unscanned_plot(frm, to, round(rng, 2), stops, meta))
+        self.bump()
+        return {"ok": True, "plotting": self.highway_plotting}, 202
+
     def highway_start_plot(self, body):
         """POST /api/highway/plot: check the request, start the Spansh job in the background, (answer, HTTP status).
         {plotter: exact | neutron, from (default: where you are), to, ship_id (default: the current ship), cargo,
@@ -10995,11 +11144,13 @@ class State:
         if self.highway_task and not self.highway_task.done():
             return {"error": "a route is being plotted already"}, 409
         plotter = body.get("plotter", "exact")
-        if plotter not in ("exact", "neutron"):
-            return {"error": "plotter must be exact or neutron"}, 400
+        if plotter not in ("exact", "neutron", "unscanned"):
+            return {"error": "plotter must be exact, neutron or unscanned"}, 400
         name = lambda v: " ".join(v.split()) if isinstance(v, str) else ""
         frm = name(body.get("from")) or (self.journals.pos or {}).get("name") or ""
         to = name(body.get("to"))
+        if plotter == "unscanned":   # this fork's: no destination needed, no Spansh job (outrider/biohunt.py)
+            return self.unscanned_start_plot(body, frm, to)
         if not frm or not to or len(frm) > FIND_NAME_MAX or len(to) > FIND_NAME_MAX:
             return {"error": f"give the from and to systems' names (up to {FIND_NAME_MAX} characters)"}, 400
         flag = lambda k: body.get(k) is True

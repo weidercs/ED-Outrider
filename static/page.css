@@ -215,7 +215,11 @@ main > #hereView.detail > #bodyPanel { position: sticky; top: calc(var(--head-h,
 .shtable th { color: var(--muted); font-weight: 600; } .shtable .num { text-align: right; white-space: nowrap; } .shtable tr.shoff td { opacity: 0.6; }
 .shcls { display: inline-block; min-width: 2.2em; color: var(--info); font-variant-numeric: tabular-nums; }
 .shstats { display: flex; flex-wrap: wrap; gap: 2px 14px; } .shstat { white-space: nowrap; }
-#hwyGame { margin-bottom: 6px; } #hwyGame:empty { display: none; }
+/* the game's own route in Plot Route (this fork): its switch sits above the panes (outside their grid), its list in
+   the place of the Highway's own */
+#hwyGame { margin-bottom: 6px; flex: 0 0 auto; } #hwyGame:empty { display: none; }
+#nrPane { order: 5; }
+body.app #nrPane { grid-column: 1; grid-row: 2; }
 .gnwrap { display: flex; gap: 12px; align-items: flex-start; }
 .gnwrap > #gnListPane { flex: 0 1 340px; min-width: 220px; } .gnwrap > #gnPane { flex: 1 1 0; min-width: 0; }
 .gnlist { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; }

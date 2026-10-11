@@ -5419,13 +5419,20 @@ function hwyClipHtml(cb) {
   if (!cb.available) return `<div class="hwyclip warnc" title="${esc(cb.why || "")}">No wl-copy/xclip found: install one to auto-copy the next system.</div>`;
   return `<div class="hwyclip unk" title="with ${esc(cb.tool || "")}; paste it into the galaxy map's search">Next system copied to the clipboard on arrival${cb.last && cb.last.text ? ` · last: ${esc(cb.last.text)}` : ""}.</div>`;
 }
+// An Unscanned (bio) route's own line: what it is, the range it kept to, and the odds it picked by. Pure.
+function unscannedHow(o) {
+  const odds = o.odds ? Object.entries(o.odds).sort((a, b) => b[1] - a[1]).map(([c, v]) => `${c} ${Math.round(v * 100)}%`).join(", ") : "";
+  return `unscanned systems (no body reported to Spansh: likely undiscovered) · ${o.range != null ? `${o.range} ly range · ` : ""}` +
+    `${o.found != null && o.stops != null && o.found < o.stops ? `${o.found} of ${o.stops} found · ` : ""}` +
+    `${o.toward ? `towards ${o.toward} · ` : ""}picked by mass code, the share with life${odds ? `: ${odds}` : ""}`;
+}
 function hwyHeadHtml(hd) {
   const r = hd.route, live = data && data.highway, s = live && r && live.id === r.id ? live : r && r.summary;
   if (!r) return `<div class="hwyttl">No route plotted</div><div class="unk">Plot one below: Spansh finds it, Outrider follows it as you fly ` +
     `(the next stop, neutron boosts, refuel stops) and says the next system on each arrival.</div>` + hwyClipHtml(hd.clipboard);
   const n = x => x == null ? "?" : Math.round(x).toLocaleString();
   const o = r.options || {}, sh = r.ship;
-  const how = (r.plotter === "neutron"
+  const how = (r.plotter === "unscanned" ? unscannedHow(o) : r.plotter === "neutron"
     ? `neutron plotter · ${o.range != null ? `${o.range} ly range · ` : ""}×${o.supercharge_multiplier || 4} · ${o.efficiency ?? "?"}% efficiency` +
       ` · no refuel stops: scoop as you go`
     : `exact plotter${o.injections ? " · injections" : ""}${o.exclude_secondary ? " · no secondary stars" : ""}${o.no_neutrons ? " · no neutron boosts" : ""}` +
@@ -5441,7 +5448,7 @@ function hwyHeadHtml(hd) {
 }
 function renderHwyList(hd) {
   const t = hEl("hwyTable"), r = hd.route, doneEl = hEl("hwyDone"), rowsEl = hEl("hwyRows");
-  t.classList.toggle("neutron", !!r && r.plotter === "neutron");
+  t.classList.toggle("neutron", !!r && (r.plotter === "neutron" || r.plotter === "unscanned"));   // waypoints: jumps, no fuel
   if (!r) {
     doneEl.innerHTML = "";
     rowsEl.innerHTML = `<tr><td colspan="${HWY_COLS}" class="unk">No route yet.</td></tr>`;
@@ -5506,6 +5513,8 @@ function hwyFormShow() {
   hForm.querySelector(".hwy-nopt").hidden = p === "exact";
   hForm.querySelectorAll(".hwy-nonly").forEach(e => { e.hidden = p !== "neutron"; });
   hForm.querySelector(".hwy-xopt").hidden = p !== "exact";
+  const unscanned = p === "unscanned";   // this fork's: unscanned systems likely to hold life, a jump range apart
+  hForm.querySelector(".hwy-uopt").hidden = !unscanned;
   const trade = p === "trade", survey = p === "riches" || p === "exo", slot = survey || trade;
   hForm.querySelectorAll(".hwy-ropt").forEach(e => { e.hidden = !survey; });
   hForm.querySelectorAll(".rich-only").forEach(e => { e.hidden = p !== "riches"; });
@@ -5514,8 +5523,8 @@ function hwyFormShow() {
   hForm.querySelector(".hwyto").hidden = trade;
   hForm.querySelector(".hwy-shiprow").hidden = trade;
   if (trade) hForm.querySelector(".hwy-nopt").hidden = true;
-  hForm.querySelector(".hwy-cons").hidden = slot;   // Spansh's survey and trade routes take the range as it is
-  hEl("hwyTo").placeholder = survey ? "optional: where to end" : "destination system";
+  hForm.querySelector(".hwy-cons").hidden = slot || unscanned;   // Spansh's survey and trade routes take the range as it is
+  hEl("hwyTo").placeholder = survey ? "optional: where to end" : unscanned ? "optional: a system to head towards" : "destination system";
   // one slot: a Road to Riches, an Exomastery or a trade plot replaces the route there is
   const rr = R.data && R.data.route;
   hEl("hwyGo").textContent = slot && rr ? `Plot (replaces your ${(SURVEY[rr.kind] || SURVEY.riches).what})` : "Plot";
@@ -5548,7 +5557,7 @@ function fillHwyForm(hd) {
   hwyFormShow();
 }
 {
-  const p = hForm.querySelector(`[name=hwyPlotter][value="${["neutron", "riches", "exo", "trade"].includes(hwyCfg.plotter) ? hwyCfg.plotter : "exact"}"]`); if (p) p.checked = true;
+  const p = hForm.querySelector(`[name=hwyPlotter][value="${["neutron", "riches", "exo", "trade", "unscanned"].includes(hwyCfg.plotter) ? hwyCfg.plotter : "exact"}"]`); if (p) p.checked = true;
   hEl("hwyInject").checked = !!hwyCfg.injections; hEl("hwyNoSec").checked = !!hwyCfg.exclude_secondary; hEl("hwySuper").checked = !!hwyCfg.supercharged;
   hEl("hwyNoNeu").checked = !!hwyCfg.no_neutrons;
   hEl("hwyRefuel").checked = !!hwyCfg.refuel_every_scoopable;
@@ -5594,7 +5603,11 @@ function hwyBody() {
   if (p === "exact") Object.assign(b, {injections: hEl("hwyInject").checked, exclude_secondary: hEl("hwyNoSec").checked,
                                        supercharged: hEl("hwySuper").checked, no_neutrons: hEl("hwyNoNeu").checked,
                                        refuel_every_scoopable: hEl("hwyRefuel").checked});
-  else {
+  else if (p === "unscanned") {
+    if (num("hwyRange") != null) b.range = num("hwyRange");
+    if (num("hwyStops") != null) b.stops = num("hwyStops");
+    return b;   // the range as it is: no conservative margin
+  } else {
     if (num("hwyRange") != null) b.range = num("hwyRange");
     if (num("hwyEff") != null) b.efficiency = num("hwyEff");
     b.supercharge_multiplier = Number(hEl("hwyMult").value) || 4;
@@ -5614,7 +5627,9 @@ function drawHwyStatus() {
     text = `Asking Spansh for ${rp.kind === "exo" ? "an Exomastery route" : rp.kind === "trade" ? "a trade route" : "a Road to Riches route"} from ${rp.from}…${secs != null ? ` ${secs} s` : ""}`; cls = "busy";
   } else if (p && p.state === "running") {
     const secs = p.started ? Math.max(0, Math.round((Date.now() - new Date(p.started)) / 1000)) : null;
-    text = `Plotting ${p.from} → ${p.to} with Spansh (${p.plotter} plotter)…${secs != null ? ` ${secs} s` : ""}`; cls = "busy";
+    text = p.plotter === "unscanned"
+      ? `Looking for unscanned systems from ${p.from}${p.to ? ` towards ${p.to}` : ""}: ${p.found || 0} of ${p.stops || "?"} found…${secs != null ? ` ${secs} s` : ""}`
+      : `Plotting ${p.from} → ${p.to} with Spansh (${p.plotter} plotter)…${secs != null ? ` ${secs} s` : ""}`; cls = "busy";
   } else if (H.status) ({text, cls} = H.status);
   else if (p && p.state === "failed") { text = p.error === "cancelled" ? "The plot was cancelled." : `Could not plot the route: ${p.error}.`; cls = "err"; }
   else if (H.error) { text = `Could not load the highway: ${hwyErr(H.error)}.`; cls = "err"; }
@@ -5624,7 +5639,7 @@ hForm.addEventListener("submit", async e => {
   e.preventDefault();
   if (["riches", "exo", "trade"].includes(hwyPlotter())) return richSubmit(hwyPlotter());
   const b = hwyBody();
-  if (!b.to) return setHwyStatus("Type the destination system.", "err");
+  if (!b.to && b.plotter !== "unscanned") return setHwyStatus("Type the destination system.", "err");
   if (b.plotter === "neutron" && b.range == null) return setHwyStatus("Give the jump range (ly) for the neutron plotter.", "err");
   H.status = null;
   setHwyStatus("Asking Spansh…", "busy");

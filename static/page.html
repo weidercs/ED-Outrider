@@ -298,8 +298,8 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     The grid is the galactic plane through your position; stalks drop each system onto it.</div>
 </section>
 <section id="hwyView" hidden>
+  <div id="hwyGame"></div>
   <div id="hwyPanes">
-    <div id="hwyGame"></div>
     <div id="hwyHead"></div>
     <div class="pane" id="hwyPane">
     <table id="hwyTable">
@@ -334,7 +334,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       <summary>Plot a route</summary>
       <form id="hwyForm" autocomplete="off">
         <div class="srow">
-          <span class="seg" role="radiogroup" aria-label="plotter"><label title="every jump with its fuel, from your ship's own figures (Spansh's galaxy plotter)"><input type="radio" name="hwyPlotter" value="exact" checked>Exact</label><label title="neutron stars as boosts, waypoints only (Spansh's neutron plotter): any ship, from its range"><input type="radio" name="hwyPlotter" value="neutron">Neutron</label><label title="a chain of systems whose planets are worth scanning (and mapping), from where you are (Spansh's Road to Riches): stop, scan, move on"><input type="radio" name="hwyPlotter" value="riches">Road to Riches</label><label title="a chain of systems with valuable life already reported on their bodies (Spansh's Expressway to Exomastery): land, sample, move on. Known life: first footfall is unlikely"><input type="radio" name="hwyPlotter" value="exo">Exomastery</label><label title="station to station: what to buy at each and where to sell it (Spansh's trade planner), from the station you start at"><input type="radio" name="hwyPlotter" value="trade">Trade</label></span>
+          <span class="seg" role="radiogroup" aria-label="plotter"><label title="every jump with its fuel, from your ship's own figures (Spansh's galaxy plotter)"><input type="radio" name="hwyPlotter" value="exact" checked>Exact</label><label title="neutron stars as boosts, waypoints only (Spansh's neutron plotter): any ship, from its range"><input type="radio" name="hwyPlotter" value="neutron">Neutron</label><label title="a chain of systems whose planets are worth scanning (and mapping), from where you are (Spansh's Road to Riches): stop, scan, move on"><input type="radio" name="hwyPlotter" value="riches">Road to Riches</label><label title="a chain of systems with valuable life already reported on their bodies (Spansh's Expressway to Exomastery): land, sample, move on. Known life: first footfall is unlikely"><input type="radio" name="hwyPlotter" value="exo">Exomastery</label><label title="station to station: what to buy at each and where to sell it (Spansh's trade planner), from the station you start at"><input type="radio" name="hwyPlotter" value="trade">Trade</label><label title="a chain of systems nobody has reported a body of, picked by how likely their kind is to hold life (the mass code in their name, counted from your own scans), each hop as close to your jump range as there is one"><input type="radio" name="hwyPlotter" value="unscanned">Unscanned (bio)</label></span>
           <label>From <input type="text" id="hwyFrom" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100" placeholder="where you are" list="hwyFromNames"></label>
           <label class="hwyto">To <input type="text" id="hwyTo" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100" placeholder="destination system" list="hwyNames"><button type="button" id="hwyNearest" class="mini nearbtn" title="the nearest station or fleet carrier you can dock at and use: pick one to plot there">📍 Nearest…</button></label>
           <datalist id="hwyNames"></datalist><datalist id="hwyFromNames"></datalist>
@@ -372,6 +372,10 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
           <button type="button" id="hwyRangeReset" class="mini" title="back to the ship's laden range" hidden>↺ ship</button>
           <label class="hwy-nonly" title="the neutron supercharge: ×4, or ×6 with the SCO Mk II drive">Supercharge <select id="hwyMult"><option value="4">×4</option><option value="6">×6</option></select></label>
           <label class="hwy-nonly" title="lower takes longer detours to use neutron stars; 100 flies straighter">Efficiency <input type="number" id="hwyEff" min="1" max="100" step="1" inputmode="numeric"> %</label>
+        </div>
+        <div class="srow hwy-uopt" hidden>
+          <label title="how many systems the route chains (one Spansh search each)">Systems <input type="number" id="hwyStops" min="2" max="100" step="1" inputmode="numeric" value="20"></label>
+          <span class="unk">each hop as close to the range as there is an unscanned system; To is optional: a system to head towards</span>
         </div>
         <div class="srow hwy-xopt">
           <label title="FSD injections (jumponium) where they shorten the route"><input type="checkbox" id="hwyInject"> use injections</label>

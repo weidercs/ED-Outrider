@@ -213,6 +213,28 @@ class Speech(unittest.TestCase):
         for key in outrider.speech.KEYS:   # the voice lab's sample values fill every placeholder an alert has
             self.assertLessEqual(outrider.speech.fills(key) - set(outrider.speech.ALWAYS), set(outrider.speech.SAMPLES.get(key, {})), key)
 
+    def test_rocky_personality(self):
+        """This fork's Rocky: a personality like the others (a list for every alert), in his way of talking: no
+        contractions, his tripled words and ", question?" somewhere in most alerts, and never a swear list."""
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(here, "resources", "speech.json"), encoding="utf-8") as f:
+            doc = json.load(f)
+        self.assertEqual(doc["styles"]["rocky"], "Rocky (Project Hail Mary)")
+        import re
+        triple = re.compile(r"\b(\w+) \1 \1\b", re.I)
+        marked = 0
+        for key, entry in doc["lines"].items():
+            lines = entry["rocky"]
+            self.assertEqual((len(lines), len(set(lines))), (12, 12), key)
+            self.assertNotIn("rocky_profane", entry)
+            for text in lines:
+                self.assertNotIn("'", text, f"{key}: {text}")          # no contractions, no possessives
+                self.assertLessEqual(len(text), 110, f"{key}: {text}")
+            marked += any(triple.search(t) or "question?" in t or "Amaze" in t for t in lines)
+        self.assertGreaterEqual(marked, len(doc["lines"]) - 2)             # his marks in (nearly) every alert
+        # {jumps} may be missing when the tank fills: in few of its lines, as the other personalities have it
+        self.assertLessEqual(sum("{jumps}" in t for t in doc["lines"]["tank_full"]["rocky"]), 3)
+
     def test_shipped_lines(self):
         # speech.json covers every alert in every personality, and the page asks for exactly those alerts
         here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

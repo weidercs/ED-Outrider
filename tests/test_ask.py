@@ -31,6 +31,21 @@ class Phrases(unittest.TestCase):
         for text, want in cases.items():
             self.assertEqual(ask.match(text, ph), want, text)
 
+    def test_rocky_wake_word_and_voice(self):
+        """This fork's Rocky personality: the assistant answers to "Rocky" as to "Vespa", and the AI layer speaks as
+        Rocky when he is the only personality the server starts browsers with (the facts stay the tools')."""
+        ph = ask.load_phrases()
+        for text, want in {"Hey Rocky, status report.": "status_report", "rocky what's my fuel": "fuel", "Rocky, be quiet!": "hush",
+                           "rockyroad": None}.items():
+            self.assertEqual(ask.match(text, ph), want, text)
+        self.assertEqual(ask.system_prompt(), ask.SYSTEM_PROMPT)
+        self.assertEqual(ask.system_prompt(["business"]), ask.SYSTEM_PROMPT)
+        self.assertEqual(ask.system_prompt(["rocky", "business"]), ask.SYSTEM_PROMPT)      # a mix: the plain voice
+        rocky = ask.system_prompt(("rocky",))
+        self.assertTrue(rocky.startswith("You are Rocky"))
+        for words in ("question?", "good good good", "Use the tools for facts", "never invent"):
+            self.assertIn(words, rocky)
+
     def test_broken_phrase_file(self):
         with tempfile.TemporaryDirectory() as d:
             p = os.path.join(d, "ask.json")

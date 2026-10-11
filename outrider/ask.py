@@ -26,12 +26,29 @@ COMMANDS = ("unhush", "hush", "nearest_dock", "next_jump", "status_report", "fue
 # ask.json, never a bare "nearest": the author, 2026-10-08)
 NEAREST_WORDS = {"vista": "Vista", "genomics": "Vista", "cartographics": "UC", "cartographic": "UC", "repair": "Repair",
                  "repairs": "Repair", "refuel": "Refuel", "fuel": "Refuel", "shipyard": "Shipyard", "outfitting": "Outfitting"}
-WAKE = re.compile(r"^(hey|hi|ok|okay)?\s*vespa\b[\s,]*")
+WAKE = re.compile(r"^(hey|hi|ok|okay)?\s*(vespa|rocky)\b[\s,]*")   # either name starts a question
 ASSISTANT = {"enabled": False, "base_url": "", "api_key": "", "model": "", "timeout": 20.0, "max_rounds": 4}
 SYSTEM_PROMPT = ("You are Vespa, the co-pilot voice of ED Outrider, an exploration companion for the game Elite Dangerous. "
                  "Answer the commander's question in one or two short spoken sentences: no lists, no markdown, numbers "
                  "rounded the way a person says them. Use the tools for facts about their game; never invent them. "
                  "If the tools cannot answer, say so briefly.")
+# The AI layer's voice per personality (this fork): the one used when it is the only personality the server starts
+# browsers with ([defaults] speech_styles), so the answers sound like the alerts do. The facts stay the tools'.
+PERSONA_PROMPTS = {
+    "rocky": ("You are Rocky, the co-pilot voice of ED Outrider, an exploration companion for the game Elite Dangerous: an "
+              "alien engineer and loyal friend who learned the commander's language recently. Answer in one or two short "
+              "spoken sentences, the way Rocky talks: plain present-tense words, no articles, no contractions; a word said "
+              "three times for emphasis (\"good good good\", \"bad bad bad\"); a question ends with \", question?\"; "
+              "\"Amaze!\" when impressed. Warm, curious, direct. No lists, no markdown, numbers rounded the way a person "
+              "says them. Use the tools for facts about their game and give them exactly; never invent them. If the tools "
+              "cannot answer, say so briefly, in the same voice."),
+}
+
+
+def system_prompt(styles=None):
+    """The AI layer's instructions: a personality's own (PERSONA_PROMPTS) when `styles` names it alone, else Vespa's."""
+    styles = list(styles or [])
+    return PERSONA_PROMPTS.get(styles[0], SYSTEM_PROMPT) if len(styles) == 1 else SYSTEM_PROMPT
 
 
 def load_phrases(path=ASK_FILE):
@@ -258,7 +275,7 @@ def openai_tools():
             for t in tools.listing()]
 
 
-async def ai_answer(text, cfg, get, session, rows=10):
+async def ai_answer(text, cfg, get, session, rows=10, styles=None):
     """Ask the configured chat-completions endpoint, running its tool calls through the read-only registry, until it
     answers in words (at most max_rounds tool rounds). Raises AIError."""
     if not cfg.get("base_url") or not cfg.get("model"):
@@ -267,7 +284,7 @@ async def ai_answer(text, cfg, get, session, rows=10):
     headers = {"Content-Type": "application/json"}
     if cfg.get("api_key"):
         headers["Authorization"] = f"Bearer {cfg['api_key']}"
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": text}]
+    messages = [{"role": "system", "content": system_prompt(styles)}, {"role": "user", "content": text}]
     import aiohttp
 
     async def round_trip():

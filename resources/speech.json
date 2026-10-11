@@ -13,7 +13,8 @@
   "styles": {
     "business": "Down to business",
     "sarcastic": "Sarcastic",
-    "sweet": "Sweet and loving"
+    "sweet": "Sweet and loving",
+    "rocky": "Rocky (Project Hail Mary)"
   },
   "lines": {
     "speech_on": {
@@ -277,6 +278,20 @@
         "Alerts live, darling. Every scan, every star, I'll be bloody cheering.",
         "Hello, love. Mute's off, and I've got a hell of a lot of love to share.",
         "Voice on, sweetheart. Let's go nose into the galaxy's business, one bloody system at a time."
+      ],
+      "rocky": [
+        "I talk now. Good good good.",
+        "Voice is on. You hear me, question?",
+        "Now I speak. Is better than silence.",
+        "Talking works. I am happy, {name}.",
+        "Sound is on. I tell you things now.",
+        "I have voice again. Amaze!",
+        "You want me to talk. I talk. Is easy.",
+        "Speaking begins. I watch ship, you fly ship.",
+        "Voice on. I say when thing is good and when thing is bad.",
+        "Hello hello hello. I talk now.",
+        "I am loud again. You are welcome, {name}.",
+        "Talk is on. I am engineer, I notice things. I tell you."
       ]
     },
     "game_start": {
@@ -540,6 +555,20 @@
         "Welcome back, sweetheart. Let's go be first on some poor bloody planet nobody's met.",
         "Hello, my brave explorer. The Thargoids can piss off, today is ours.",
         "Oh, damn, it's you, {name}. You've made {ship} very bloody happy."
+      ],
+      "rocky": [
+        "You are awake. Good good good. We fly now.",
+        "Hello, {name}. {ship} is ready. I checked.",
+        "You return. I am happy happy happy.",
+        "Ship is on. Space is big. We go look.",
+        "You are here. I watch everything. You fly.",
+        "Human is back in seat. Good. We work.",
+        "Is good day for science, {name}.",
+        "{ship} works. I listen to all parts. All parts are fine.",
+        "We go find new stars, question?",
+        "You sit, I watch. Is good team.",
+        "Hello, friend {name}. Much space today.",
+        "Ship is ready. I am ready. You are ready, question?"
       ]
     },
     "game_exit": {
@@ -803,6 +832,20 @@
         "Off you go, sweetheart. Fuck, I'm already planning our next jump.",
         "Bye, love. Thank you for a bloody gorgeous day.",
         "Sleep tight, darling. Dream of gas giants and undiscovered shit."
+      ],
+      "rocky": [
+        "You sleep now. I watch.",
+        "You go. Is okay. Humans need sleep. Is strange but okay.",
+        "Goodbye, {name}. I stay with {ship}.",
+        "You stop for now. Was good work.",
+        "Sleep well, friend. I watch ship.",
+        "You leave. I am sad small amount. Come back.",
+        "Done for today. Good good good.",
+        "Rest now, {name}. Space waits.",
+        "Ship is safe. You go be human somewhere else.",
+        "I keep watch. You sleep. Is how team works.",
+        "Flying is finished. I remember everything for you.",
+        "Goodbye goodbye goodbye. Return soon, question?"
       ]
     },
     "arrival_undiscovered": {
@@ -1066,6 +1109,20 @@
         "Undiscovered, sweetheart. Not even the bloody Thargoids have been here. Just us.",
         "Nobody before you, love. Hell, nobody deserves it more.",
         "First discovery, darling. I'll remember this jump when the stars burn out. Damn."
+      ],
+      "rocky": [
+        "Amaze! Nobody was here before. You are first.",
+        "New system! No other human saw this. Good good good!",
+        "Is new. All new. You discover it, {name}.",
+        "First! We are first! Happy happy happy!",
+        "Nobody has name on this star. Now you do.",
+        "This place is unknown. Was unknown. Now is yours.",
+        "New system, {name}. Is best kind of system.",
+        "Amaze amaze amaze! Nobody found this one.",
+        "You are first human here. I am first me here. Is good.",
+        "Undiscovered. I like this word very much.",
+        "New star, new science. Fist my bump, {name}.",
+        "No record of this place anywhere. You found it. Good work."
       ]
     },
     "arrival_discovered": {
@@ -1329,6 +1386,20 @@
         "Not undiscovered, love. Fuck it, let's scan it anyway and look pretty doing it.",
         "{name}, it's known. Damn shame, sweetheart, but your jumping was gorgeous.",
         "Already discovered, darling. Hell, the good ones are out there, and we'll find them."
+      ],
+      "rocky": [
+        "Not new. Somebody was here before. Sad.",
+        "I was wrong. This system is known. Sorry, {name}.",
+        "Other human found this first. Bad bad bad.",
+        "Is already discovered. Small sadness.",
+        "Somebody came before us. We are second. Second is still okay.",
+        "Not first here. I thought first. I was mistaken.",
+        "Known system. Somebody put name on it already.",
+        "This one is taken. Next one is ours maybe.",
+        "Correction. Is old news, this star.",
+        "Somebody beat us here. Humans are everywhere.",
+        "Not new after all. I am disappointed small amount.",
+        "Already found. We keep flying, we find better one."
       ]
     },
     "leaving": {
@@ -1592,6 +1663,20 @@
         "Angel, fuck it, the galaxy's big. But you're leaving {text}.",
         "Treasure, damn, I scanned that for you. {text}. Oh well, onwards.",
         "Sweetheart, hell, life's short and the black is long. Onwards, my love."
+      ],
+      "rocky": [
+        "Wait. You leave things here: {text}.",
+        "You go, question? Still here: {text}.",
+        "Not finished, {name}. You leave {text}.",
+        "Is work left behind. {text}.",
+        "You forget something, question? {text}.",
+        "We leave now. But {text} stays undone.",
+        "Human is in hurry. Left behind: {text}.",
+        "I tell you, then you choose. Still here: {text}.",
+        "Leaving is okay. But know this: {text}.",
+        "Not all done. {text}. You still go, question?",
+        "You jump away from {text}. Is your choice, friend.",
+        "Unfinished: {text}. I say only once."
       ]
     },
     "find_body": {
@@ -1855,6 +1940,20 @@
         "Darling, bloody marvellous. You found something special here.",
         "Love, shit, you've got the devil's own luck. {body}: {what}.",
         "Sweetheart, fucking hell, the scanner nearly blushed. {what} at {body}."
+      ],
+      "rocky": [
+        "Amaze! {body} is {what}.",
+        "Good planet, {name}. {body}: {what}.",
+        "Look look look! {body}. Is {what}.",
+        "{body} is {what}. Is worth much.",
+        "I found thing. {body}, {what}. You are welcome.",
+        "{what} at {body}. Good good good.",
+        "This one is special. {body}: {what}.",
+        "Scan says {body} is {what}. I am happy.",
+        "Valuable planet. {body}. {what}.",
+        "You want this one, {name}. {body}, {what}.",
+        "{body}! {what}! Is good find.",
+        "Science likes {body}. Is {what}."
       ]
     },
     "mapped_before": {
@@ -1928,6 +2027,20 @@
         "Someone beat us to it, love. Bloody typical. Still value here though.",
         "Already mapped, sweetheart. Hop on the damn train if you fancy it.",
         "Another commander mapped these, love. Still worth your bloody time."
+      ],
+      "rocky": [
+        "Good planet, but other human mapped it already. Still worth credits.",
+        "Somebody mapped this before. You can map too. Still pays.",
+        "Not first to map. Sad. But is still good planet.",
+        "Already mapped by other human. Map anyway, question?",
+        "Other human was here with probes. We get smaller prize.",
+        "Mapped before. Credits are still credits, {name}.",
+        "This planet has map already. Not ours. Still valuable.",
+        "Somebody else did mapping. You can still do mapping.",
+        "Is valuable, is also already mapped. Half good.",
+        "No first mapping here. Planet is still worth visit.",
+        "Probes of other human came first. Ours can come second.",
+        "Mapped already. I tell you so you are not sad later."
       ]
     },
     "find_bio": {
@@ -2191,6 +2304,20 @@
         "Darling, hell, there's life down there worth a fortune. Go get it, my love.",
         "My heart, damn, this system has biology worth stopping for. I'll wait right here.",
         "Sweetheart, shit, you and alien moss. Never change. {body}, worth up to {value} credits."
+      ],
+      "rocky": [
+        "Life! Is life on {body}. Worth up to {value} credits.",
+        "Amaze! Living things on {body}. Up to {value} credits.",
+        "{body} has biology. Good good good. Up to {value}.",
+        "Small alive things on {body}, {name}. Up to {value} credits.",
+        "I like biology. {body} has it. Up to {value} credits.",
+        "Is life there. {body}. We go look, question? Up to {value}.",
+        "Things grow on {body}. Worth up to {value} credits.",
+        "{body} is alive small amount. Up to {value} credits.",
+        "Biology signals, {body}. Much value: up to {value}.",
+        "Life on rock. Always amaze. {body}, up to {value} credits.",
+        "You land on {body}, you get up to {value} credits. Is good trade.",
+        "Science waits on {body}, {name}. Up to {value} credits."
       ]
     },
     "sample_clear": {
@@ -2454,6 +2581,20 @@
         "Another {genus}, sweetheart. Bloody hell, we're a team.",
         "Clear, my love. Mind your step, the damn ground's lumpy.",
         "{genus} next, darling. Fuck the boredom, you're brilliant."
+      ],
+      "rocky": [
+        "Far enough. You sample {genus} now.",
+        "Is good distance. Next {genus} counts.",
+        "Okay okay okay. {genus} sample is allowed here.",
+        "You walked enough. Take {genus}.",
+        "Distance is good, {name}. Next {genus}.",
+        "Now. {genus} here is different enough.",
+        "Far far far enough. Sample {genus}.",
+        "Scanner will accept {genus} now.",
+        "You can stop walking. {genus} is ready.",
+        "Good. This {genus} is new one for scanner.",
+        "Enough distance. Go poke {genus}.",
+        "{genus}: clear. I counted metres for you."
       ]
     },
     "codex": {
@@ -2717,6 +2858,20 @@
         "Hell yes, darling. {entry}. {what}. My clever sod.",
         "{entry}, love. {what}. Damn, I'll never get tired of this.",
         "Shit, sweetheart, a codex entry. {entry}. You bloody legend."
+      ],
+      "rocky": [
+        "New thing for codex! {entry}. {what}.",
+        "Amaze! {entry}. {what}.",
+        "Codex learns {entry}. {what}. Good good good.",
+        "You found {entry}, {name}. {what}.",
+        "Is new entry. {entry}. {what}.",
+        "{entry}! I did not know this one. {what}.",
+        "Science book gets bigger. {entry}. {what}.",
+        "New knowledge: {entry}. {what}.",
+        "{entry}. {what}. I like when we learn.",
+        "Write this down. {entry}. {what}.",
+        "Codex is happy. I am happy. {entry}. {what}.",
+        "First time we see {entry}. {what}."
       ]
     },
     "fuel_low": {
@@ -2980,6 +3135,20 @@
         "Sweetheart, {pct} percent fuel. Bloody hell, you'd be the prettiest skeleton in the black, but let's not.",
         "Love, fuel's low. The next orange or yellow star, we drink it up. Deal, you daft thing?",
         "Darling, {pct} percent left. Fuck the scenery for a minute; let's refuel and keep you safe."
+      ],
+      "rocky": [
+        "Fuel is low. {pct} percent. Bad bad bad.",
+        "{pct} percent fuel. You scoop soon, question?",
+        "Fuel is {pct} percent, {name}. Is not enough.",
+        "Ship is hungry. {pct} percent fuel.",
+        "Low fuel. {pct} percent. Find star to eat.",
+        "I worry. Fuel {pct} percent.",
+        "{pct} percent. Ship without fuel is just box.",
+        "Fuel fuel fuel. Only {pct} percent left.",
+        "You see fuel, question? Is {pct} percent.",
+        "Need fuel, {name}. {pct} percent only.",
+        "Tank is almost empty. {pct} percent. Scoop.",
+        "Is problem. {pct} percent fuel. Fix soon."
       ]
     },
     "fuel_star": {
@@ -3243,6 +3412,20 @@
         "Sweetheart, {pct} percent, and this {star} won't give an inch. Damn, careful now.",
         "Love, we can't scoop this one. Fuel's low, so let's get the next jump fucking right.",
         "Darling, no refuelling at this {star}. {pct} percent. Piss on it, we'll find a better star together."
+      ],
+      "rocky": [
+        "Bad star. Cannot scoop {star}. Fuel is {pct} percent.",
+        "This {star} gives no fuel. We have {pct} percent. Bad.",
+        "{star} is useless for scoop. {pct} percent fuel, {name}.",
+        "No food here. {star}. Fuel {pct} percent.",
+        "Wrong kind of star. {star}. Only {pct} percent fuel.",
+        "Cannot eat this star. Is {star}. {pct} percent left.",
+        "Bad bad bad. {star}, no scoop, {pct} percent fuel.",
+        "Star is {star}. Scoop does nothing. Fuel {pct} percent.",
+        "I do not like this. {star}, and fuel is {pct} percent.",
+        "{pct} percent fuel and star is {star}. Think careful, {name}.",
+        "This star will not help. {star}. {pct} percent.",
+        "No scoop at {star}. We have {pct} percent. Plan now."
       ]
     },
     "fuel_target": {
@@ -3506,6 +3689,20 @@
         "Darling, {pct} percent in the tank and a dry target. Hell, let's give the black no chance to keep you.",
         "Sweetheart, that target is a bloody desert. {pct} percent fuel. Change it, gorgeous, for me.",
         "My love, the next star won't top us up. Fuel's low. Damn, let's pick smarter, you lovely menace."
+      ],
+      "rocky": [
+        "Next star cannot be scooped. Fuel is {pct} percent. Careful.",
+        "{system} has bad star for fuel. We have {pct} percent.",
+        "You target {system}. No scoop there. {pct} percent fuel.",
+        "Wait, {name}. {system} gives no fuel. {pct} percent left.",
+        "Bad plan maybe. {system}, no scoop, {pct} percent.",
+        "Target star is wrong kind. Fuel {pct} percent.",
+        "No food at {system}. Only {pct} percent now.",
+        "You go to {system}, question? Cannot scoop there. {pct} percent.",
+        "Careful careful careful. {system} has no scoop. {pct} percent fuel.",
+        "Is risk. Next star feeds nothing. {pct} percent.",
+        "{pct} percent fuel, and {system} will not refill it.",
+        "I warn you. {system}: no scoop. Fuel: {pct} percent."
       ]
     },
     "fuel_topup": {
@@ -3769,6 +3966,20 @@
         "{name}, my love, the tank holds {jumps}. {rate}. Shit, top up.",
         "Sweetheart, {rate}. Let's scoop, and then take us somewhere bloody gorgeous.",
         "Love, fuel for {jumps}, {rate}. Fill up, darling. I'd fucking miss you."
+      ],
+      "rocky": [
+        "Scoop here before you go. {rate}. Tank has {jumps}.",
+        "Eat now, {name}. {rate}. Fuel for {jumps}.",
+        "Good star here. Bad stars ahead. {rate}. {jumps} left.",
+        "Fill tank. {rate}. You have {jumps}.",
+        "Is smart to scoop now. {rate}. Only {jumps}.",
+        "Do not leave hungry. {rate}. Fuel for {jumps}.",
+        "Scoop scoop scoop. {rate}. Tank holds {jumps}.",
+        "This star is food. Next ones maybe not. {rate}. {jumps}.",
+        "Top up, friend. {rate}. We have {jumps}.",
+        "I counted stars. {rate}. Fuel for {jumps}. Scoop.",
+        "Full tank is happy tank. {rate}. Now only {jumps}.",
+        "Stop and scoop, {name}. {rate}. {jumps} is not much."
       ]
     },
     "hull": {
@@ -4032,6 +4243,20 @@
         "Hull at {pct} percent, love. Hell, we'll buff out the dents together, just go easy.",
         "Darling, the hull's crumpling a bit. Shit, stay close and let's limp home gently.",
         "My sweet, {pct} percent hull. Fuck, I'm not ready to lose you, so let's play it safe."
+      ],
+      "rocky": [
+        "Hull is {pct} percent. Bad bad bad.",
+        "Ship is hurt. {pct} percent hull.",
+        "{pct} percent hull, {name}. Be careful.",
+        "Hull {pct} percent. I can not fix from here.",
+        "Ship breaks. {pct} percent. Stop doing that.",
+        "Is damage. Hull at {pct} percent.",
+        "I am engineer. I say {pct} percent hull is bad.",
+        "Hull hull hull. {pct} percent only.",
+        "You hit something, question? Hull {pct} percent.",
+        "{pct} percent. Ship needs repair soon.",
+        "Hull is thin now. {pct} percent, {name}.",
+        "Careful. {pct} percent hull. We like ship in one piece."
       ]
     },
     "heat": {
@@ -4295,6 +4520,20 @@
         "Hell, darling, it's too hot. Let's back into the cool black.",
         "My love, we're overheating. Fuck, easy, move clear.",
         "Oh bollocks, sweetheart, heat damage. Get us clear, please."
+      ],
+      "rocky": [
+        "Hot hot hot! Ship burns!",
+        "Too hot. Move away from star.",
+        "Heat damage. Bad bad bad.",
+        "Ship is cooking, {name}. Stop.",
+        "Is too much heat. Things melt.",
+        "Hot! Leave now!",
+        "I like hot. Ship does not. Go.",
+        "Heat hurts ship. Fly away.",
+        "Temperature is bad. Very bad.",
+        "You are too close to fire. Back away.",
+        "Ship overheats. Fix, {name}.",
+        "Burning. Is not good kind of warm."
       ]
     },
     "interdicted": {
@@ -4558,6 +4797,20 @@
         "{by} dragged us out, love. Damn cheek. Boost, sweetheart.",
         "{name}, darling, interdiction. Fuck, let's get you home safe.",
         "Love, interdicted. Bloody hell, you and me, let's run."
+      ],
+      "rocky": [
+        "Something pulls us out! Is {by}.",
+        "Bad! {by} grabs ship!",
+        "{by} attacks. Run, {name}.",
+        "We are pulled from supercruise. {by}. Bad bad bad.",
+        "Danger. {by} wants fight.",
+        "Is {by}. Not friend. Go go go.",
+        "{by} stops us. I do not like {by}.",
+        "Interdiction! {by}!",
+        "Someone is rude. {by} pulls us out.",
+        "Enemy, {name}. {by}. Fly smart.",
+        "{by} interrupts science. Unacceptable.",
+        "Trouble. {by}. You fly, I worry."
       ]
     },
     "docked_sell": {
@@ -4821,6 +5074,20 @@
         "Sweetheart, the whole galaxy's about to see your work. {value} credits of it. Fucking beautiful.",
         "Look at you, love, clamped on like a pro. Now get that {value} credits of data sold, you gorgeous sod.",
         "My brave explorer, before you so much as look at a new ship, sell the bloody data. {value} credits, darling."
+      ],
+      "rocky": [
+        "We dock at {station}. You sell {value} credits of data here.",
+        "Good. {station} buys data. You carry {value} credits.",
+        "Sell now, {name}. {value} credits. {station} takes it.",
+        "{station} has buyer. {value} credits waiting.",
+        "Is safe place. Sell {value} credits of data.",
+        "Data is worth {value} credits. Sell at {station}. Then is safe.",
+        "You can sell here. {value} credits. Do it.",
+        "{value} credits in ship. {station} will pay. Good good good.",
+        "Docked. Now sell. {value} credits.",
+        "I like when data is sold. {value} credits, {station}.",
+        "Selling time, friend. {value} credits at {station}.",
+        "Much data, {value} credits. {station} buys. Sell before you forget."
       ]
     },
     "undocked_unsold": {
@@ -5084,6 +5351,20 @@
         "Love, we're out with {value} credits unsold. I'll shout the second any arsehole comes near.",
         "Darling, I love you, but {value} credits unsold is how good explorers end up with fuck all. Let's go back.",
         "My brave explorer, {value} credits of data, unsold, and all of it yours. Don't make me watch the bloody lot burn, love."
+      ],
+      "rocky": [
+        "You did not sell! {value} credits still in ship. Bad.",
+        "We leave with {value} credits unsold. Why, question?",
+        "Data not sold. {value} credits at risk, {name}.",
+        "You forget to sell. {value} credits.",
+        "Is mistake maybe. {value} credits still aboard.",
+        "{value} credits and you fly away. Humans are strange.",
+        "Not sold. {value} credits. If ship dies, data dies.",
+        "Wait wait wait. {value} credits unsold.",
+        "You undock with {value} credits of data. I worry.",
+        "No sale. {value} credits still here. Careful now.",
+        "I say this once. {value} credits unsold.",
+        "Leaving with all of it. {value} credits. Bold. Maybe stupid."
       ]
     },
     "sold": {
@@ -5347,6 +5628,20 @@
         "{sold}, love. Bugger modesty, you're a bloody legend. {still}",
         "Every scan sold, darling. Fuck, I'm happy for you. {still}",
         "{sold}, sweetheart. Now let's go find some more damn trouble. {still}"
+      ],
+      "rocky": [
+        "Sold! {sold}. Good good good. {still}",
+        "You sold {sold}. Is safe now. {still}",
+        "Data is sold. {sold}. Happy. {still}",
+        "Amaze. {sold}. {still}",
+        "{sold}. Credits are yours, {name}. {still}",
+        "Sale is done. {sold}. {still}",
+        "Good trade. {sold}. {still}",
+        "Sold sold sold. {sold}. {still}",
+        "Now nobody can take it. {sold}. {still}",
+        "You are rich small amount more. {sold}. {still}",
+        "Fist my bump. {sold}. {still}",
+        "Is done. {sold}. {still}"
       ]
     },
     "unsold_warn": {
@@ -5610,6 +5905,20 @@
         "My brave explorer, {value} credits unsold. Shit, that's a proper fortune. Let's keep it safe.",
         "Honey, no pressure, but {value} credits is too bloody precious to lose to a bad landing.",
         "Sweetheart, {value} credits of discoveries. You clever sod. Let's find a buyer, love."
+      ],
+      "rocky": [
+        "You carry {value} credits of data. Sell soon, question?",
+        "{value} credits unsold. Is much. Think about selling.",
+        "Data is {value} credits now, {name}. Getting big.",
+        "I count {value} credits in ship. Not safe forever.",
+        "Much data. {value} credits. Find station soon.",
+        "{value} credits. If ship breaks, all gone.",
+        "Is time to think about selling. {value} credits.",
+        "Unsold: {value} credits. I watch number grow. I worry.",
+        "You have {value} credits of science aboard.",
+        "Big pile of data. {value} credits. Sell before bad thing.",
+        "{value} credits, friend. Station would be nice.",
+        "Careful with ship now. It holds {value} credits."
       ]
     },
     "unsold_urgent": {
@@ -5873,6 +6182,20 @@
         "Honey, {value} credits of treasure in this tin can. Let's get the hell to a station.",
         "Sweetheart, you clever sod, {value} credits. Let's go get paid before shit goes sideways.",
         "My love, let's turn {value} credits of scans into money no bloody crash can touch."
+      ],
+      "rocky": [
+        "{value} credits unsold! Too much! Sell now!",
+        "Bad bad bad. {value} credits in one ship. Sell.",
+        "Sell, {name}. {value} credits. Now.",
+        "Is too much data. {value} credits. One mistake and gone.",
+        "{value} credits! Go to station. Go go go.",
+        "I worry very much. {value} credits unsold.",
+        "Stop exploring. Start selling. {value} credits.",
+        "You carry {value} credits. Is dangerous amount.",
+        "Too much to lose. {value} credits. Sell sell sell.",
+        "Please sell. {value} credits. I do not ask often.",
+        "{value} credits, {name}. If ship dies, I am very sad.",
+        "Danger is big now. {value} credits. Find buyer."
       ]
     },
     "carrier_departs": {
@@ -6136,6 +6459,20 @@
         "Darling, just {minutes} minutes before the jump. My nerves are shot to hell till you dock.",
         "Honey, your carrier misses you already, damn it. It jumps in {minutes} minutes.",
         "Sweetheart, the carrier's leaving soon. Get your sweet arse home, love."
+      ],
+      "rocky": [
+        "Carrier leaves in {minutes} minutes! You are not on it!",
+        "{carrier} jumps in {minutes} minutes. Without you. Bad.",
+        "Hurry, {name}. {carrier} goes in {minutes} minutes.",
+        "Your big ship leaves. {minutes} minutes. Run.",
+        "{minutes} minutes. Then {carrier} is gone.",
+        "Carrier will not wait. {minutes} minutes.",
+        "Go go go. {carrier}, {minutes} minutes.",
+        "You miss carrier, question? {minutes} minutes left.",
+        "Is leaving soon. {carrier}. {minutes} minutes.",
+        "Bad timing. {carrier} jumps in {minutes} minutes.",
+        "{carrier} departs in {minutes} minutes and you are here.",
+        "Fast fast fast. {minutes} minutes to reach {carrier}."
       ]
     },
     "carrier_arrived": {
@@ -6399,6 +6736,20 @@
         "Honey, your carrier's at {system}. Home sweet home, wherever the hell you wander.",
         "Darling, carrier jump done. Tritium well spent, damn it.",
         "Sweetheart, the carrier's here. Welcome back to our favourite bloody place in the galaxy."
+      ],
+      "rocky": [
+        "{carrier} is here. Arrived at {system}.",
+        "Carrier arrived. {system}. Good good good.",
+        "Big ship made it. {carrier} is at {system}.",
+        "Your carrier finished jump, {name}. {system}.",
+        "{carrier} is in {system} now.",
+        "Carrier is safe. {system}.",
+        "Amaze. So much ship, one jump. {carrier}, {system}.",
+        "It arrived. {carrier}. {system}.",
+        "Home is here now. {carrier} at {system}.",
+        "{carrier} jump complete. I like big ship.",
+        "Carrier came. Is at {system}.",
+        "Done. {carrier} sits at {system}."
       ]
     },
     "fss_done": {
@@ -6662,6 +7013,20 @@
         "All {count} resolved, love. Holy shit, you're good. {text}.",
         "Sweetheart, {count} bodies. Let's not piss about, go see this: {text}.",
         "Scan's done, my love. {count} bodies. Worth your bloody time: {text}."
+      ],
+      "rocky": [
+        "All {count} bodies found. Good ones: {text}.",
+        "Scan is done, {name}. {count} bodies. Worth time: {text}.",
+        "{count} bodies. I like these: {text}.",
+        "Found everything. {count} bodies. Go see {text}.",
+        "Is complete. {count} bodies. Valuable: {text}.",
+        "Good good good. {count} bodies. Best ones: {text}.",
+        "All found. {count}. Science here: {text}.",
+        "{count} bodies in this system. Interesting: {text}.",
+        "Scan finished. Stay for {text}.",
+        "You found all {count}. Now you want {text}.",
+        "Amaze. {count} bodies. I recommend {text}.",
+        "Done scanning. {count} bodies. Worth visit: {text}."
       ]
     },
     "fss_nothing": {
@@ -6925,6 +7290,20 @@
         "{count} bodies, love. Crap all worth your time. Keep going.",
         "All {count} charted, darling. Bugger all to stay for. Onward, my love.",
         "{count} bodies and fuck all special, {name}. Shall we go, love?"
+      ],
+      "rocky": [
+        "All {count} bodies found. Nothing good. We go.",
+        "{count} bodies. All boring. Next system.",
+        "Scan done. {count} bodies. Is nothing here for us.",
+        "Found everything, {name}. {count} bodies. None are worth time.",
+        "{count} rocks and gas. No value. Jump.",
+        "Nothing nothing nothing. {count} bodies. Leave.",
+        "Is empty of interesting. {count} bodies.",
+        "All {count} scanned. I am not impressed.",
+        "Boring system. {count} bodies. Go to next.",
+        "{count} bodies and no science worth stopping.",
+        "Complete. {count}. Nothing to do here, friend.",
+        "We scanned {count}. We leave now, question?"
       ]
     },
     "fss_unfinished": {
@@ -7188,6 +7567,20 @@
         "Darling, {left} still to find. Hell, I'll hum while you tune.",
         "Love, {left} still hidden. Whatever you choose is fine by me, you gorgeous shit.",
         "Oh my brave one, {left} still unresolved. Shall we, damn it?"
+      ],
+      "rocky": [
+        "Not finished. {left} still hidden.",
+        "You stop early, question? {left} not found.",
+        "Scan is incomplete, {name}. {left} left.",
+        "Wait. {left} still unknown.",
+        "{left} more to find. You closed scanner.",
+        "Is not done. {left} hiding.",
+        "Still {left} out there. Scan more, question?",
+        "You missed {left}. I noticed.",
+        "{left} unresolved. Lazy human.",
+        "Scanner closed with {left} left. Why, question?",
+        "Unfinished. {left} remain, {name}.",
+        "I count {left} still hidden. Go back, question?"
       ]
     },
     "jumponium": {
@@ -7451,6 +7844,20 @@
         "Sweetheart, {material} at {pct} on {body}. Bloody hell, just what we were missing.",
         "Love, {body} has {material}, {pct}. Land when you're ready, damn it, I'm excited.",
         "{name}, my love, {body}, {material}, {pct}. Shit, a little treasure for us."
+      ],
+      "rocky": [
+        "{body} has {material}. {pct}. You need that for jump boost.",
+        "Good rock. {body}: {material}, {pct}.",
+        "{material} on {body}, {pct}. Is useful for FSD.",
+        "You are short of {material}. {body} has {pct}.",
+        "Jump fuel thing. {material}. {body}. {pct}.",
+        "Amaze. {body} carries {material} at {pct}.",
+        "I found {material} for you. {body}, {pct}.",
+        "Want longer jumps, question? {body} has {material}, {pct}.",
+        "{body}: {material}, {pct}. Go dig, {name}.",
+        "Is {material} here. {pct} on {body}. Good good good.",
+        "Material you lack: {material}. {body} has {pct}.",
+        "Engineer says collect this. {material}, {body}, {pct}."
       ]
     },
     "left_body": {
@@ -7714,6 +8121,20 @@
         "My darling, bloody hell, {body} is only partly done. {text}.",
         "Damn, love, don't leave {body} to some other lucky bastard. {text}.",
         "Oh hell, my love, {body} still has treasure. {text}."
+      ],
+      "rocky": [
+        "You leave {body} not finished. {text}.",
+        "Wait. {body} still has work. {text}.",
+        "Biology on {body} is incomplete, {name}. {text}.",
+        "You go from {body}, question? Still: {text}.",
+        "Not done on {body}. {text}.",
+        "Is unfinished. {body}. {text}.",
+        "You left science behind on {body}. {text}.",
+        "{body} had more. {text}. Sad.",
+        "Leaving {body} early. {text}.",
+        "Human forgets things. {body}: {text}.",
+        "I tell you once. {body} is not complete. {text}.",
+        "Half work on {body}. {text}. Go back, question?"
       ]
     },
     "bio_done_more": {
@@ -7977,6 +8398,20 @@
         "Damn, sweetheart, {species} complete. {value} credits. Let's go find {left}.",
         "Darling, bloody gorgeous work. {species}, {value} credits. Still here: {left}.",
         "Oh shit, love, you did it. {species}, {value} credits. Now {left}."
+      ],
+      "rocky": [
+        "{species} done! {value} credits. Still here: {left}.",
+        "Good good good. {species}, {value}. Now find {left}.",
+        "{species} complete, {name}. {value} credits. More to do: {left}.",
+        "Three samples of {species}. {value}. Next: {left}.",
+        "Amaze. {species} is {value} credits. {left} still waits.",
+        "Done with {species}. {value}. Not done with {left}.",
+        "{species} finished. {value} credits. Keep going: {left}.",
+        "One down. {species}, {value}. Remaining: {left}.",
+        "You sampled {species}. {value}. Now {left}.",
+        "Is good. {species}, {value} credits. Body still has {left}.",
+        "{species}: {value}. Happy. Go find {left}.",
+        "Science collected. {species}, {value}. More science: {left}."
       ]
     },
     "bio_done_last": {
@@ -8240,6 +8675,20 @@
         "Darling, hell of a finish. {species}, {value} credits.",
         "Love, bloody good work. {species} complete, {value} credits. This body is done.",
         "Fuck yes, sweetheart. {species}, {value} credits. Time to fly, gorgeous."
+      ],
+      "rocky": [
+        "{species} done. {value} credits. This body is finished!",
+        "All biology here is sampled. {species}, {value}. Amaze!",
+        "Last one. {species}. {value} credits. Good good good.",
+        "{species} complete, {name}. {value}. Nothing more here.",
+        "Body is done. {species} was last. {value} credits.",
+        "Finished finished finished. {species}, {value}.",
+        "You got all of it. {species}, {value} credits.",
+        "Is complete. {species}. {value}. We leave happy.",
+        "Fist my bump. {species}, {value}. Body complete.",
+        "Final sample. {species}. {value} credits. Good work.",
+        "{species}: {value}. Whole body is sampled now.",
+        "All done here, friend. {species}, {value} credits."
       ]
     },
     "tank_full": {
@@ -8503,6 +8952,20 @@
         "Full tank, my love. Now mind that bloody heat.",
         "All full, {name}. Hell of a star, hell of a pilot.",
         "Tank full, darling. Fuck yes, onward."
+      ],
+      "rocky": [
+        "Tank is full. Good good good.",
+        "Full. Ship is not hungry now.",
+        "Fuel is full, {name}.",
+        "Tank full. We go.",
+        "Ship ate enough. Stop scooping.",
+        "Full full full.",
+        "Is full. You can leave star now.",
+        "Fuel complete. Happy ship.",
+        "Tank is full. Enough for {jumps}.",
+        "All fuel. Good for {jumps}, {name}.",
+        "Scooping is done. Tank full.",
+        "Full tank. Now ship is useful again."
       ]
     },
     "scoop_stopped": {
@@ -8766,6 +9229,20 @@
         "Oh shit, love, scooping stopped at {pct} percent. Not a full tank.",
         "{name}, sweetheart, we're on {pct} percent. Hell, keep an eye on it.",
         "{name}, {pct} percent. Fuck it, you know what you're doing. Mostly."
+      ],
+      "rocky": [
+        "You stop scooping. Only {pct} percent. Not full.",
+        "Tank is {pct} percent. You leave early, question?",
+        "Scoop stopped at {pct} percent, {name}.",
+        "Not full. {pct} percent.",
+        "Why stop, question? {pct} percent fuel.",
+        "Is only {pct} percent. Ship wanted more.",
+        "{pct} percent. Is enough, question?",
+        "Scooping ended. {pct} percent. Tank has room.",
+        "You fly away from food. {pct} percent.",
+        "Half meal. {pct} percent fuel.",
+        "Stopped at {pct} percent. I would scoop more.",
+        "{pct} percent, {name}. Not full. Just saying."
       ]
     },
     "supercharged": {
@@ -9029,6 +9506,20 @@
         "{name}, sweetheart, {mult} normal range. Hell of a job.",
         "Love, {mult} as far on this one. Fuck, let's make it count.",
         "Supercharged, darling. {mult} the range. You beautiful bloody lunatic, I adore you."
+      ],
+      "rocky": [
+        "Amaze! Drive is supercharged. Range is {mult} normal.",
+        "Star gave power. Jump range {mult} normal.",
+        "Supercharge works, {name}. {mult} normal range.",
+        "Good good good. Range is {mult} now.",
+        "Drive is very strong now. {mult} normal.",
+        "Is charged. Next jump goes {mult} as far.",
+        "Dangerous star, good gift. Range {mult} normal.",
+        "Fast fast fast. {mult} normal jump range.",
+        "I like this trick. Range {mult} normal.",
+        "Drive drank from star. {mult} normal.",
+        "Supercharged. {mult}. Now leave before ship breaks.",
+        "Much energy. Range {mult} normal. Go, {name}."
       ]
     },
     "fsd_charge": {
@@ -9292,6 +9783,20 @@
         "On our way to {system}, sweetheart. My favourite bloody pilot.",
         "Heading to {system}, love. Smile, damn it, we're flying.",
         "Jumping to {system}, my brave explorer. Hell yes, here we go."
+      ],
+      "rocky": [
+        "We go to {system}.",
+        "Jumping. Next is {system}.",
+        "{system} now. Go go go.",
+        "Tunnel time. {system} is next.",
+        "We fly to {system}, {name}.",
+        "Next star: {system}.",
+        "Is jump. {system}.",
+        "Off to {system}. I like this part.",
+        "{system}. Maybe is new one, question?",
+        "Going going going. {system}.",
+        "Hyperspace. Then {system}.",
+        "To {system}. I watch, you fly."
       ]
     },
     "body_brief": {
@@ -9555,6 +10060,20 @@
         "Sweetheart, {body}. {text}. Hell yes, go and get it.",
         "Darling, holy shit, {body}. {text}. I'm so proud.",
         "Oh damn, love. {body}: {text}. Off you go, you gorgeous thing."
+      ],
+      "rocky": [
+        "{body} is close. {text}.",
+        "We come to {body}. {text}.",
+        "Here is {body}, {name}. {text}.",
+        "{body}. What I know: {text}.",
+        "Approaching {body}. {text}.",
+        "Is {body} ahead. {text}.",
+        "Listen. {body}: {text}.",
+        "Science on {body}. {text}.",
+        "{body} has life maybe. {text}.",
+        "Before you land on {body}: {text}.",
+        "Look at {body}. {text}. Good good good.",
+        "{body}, friend. {text}."
       ]
     },
     "high_g": {
@@ -9818,6 +10337,20 @@
         "{name}, darling, {gravity} g. {value} credits. For fuck's sake, go gently.",
         "Love, {gravity} g. {value} credits. You beautiful bastard, be careful.",
         "My love, {gravity} g. {value} credits. Bloody hell, just ease it down."
+      ],
+      "rocky": [
+        "Careful! {gravity} g here. You carry {value} credits. Is {rebuys} rebuys.",
+        "Heavy planet. {gravity} g. {value} credits of data. Land soft.",
+        "{gravity} g, {name}. Ship falls fast. {value} credits aboard.",
+        "Gravity is {gravity} g. Bad place to crash with {value} credits.",
+        "Slow slow slow. {gravity} g. Data is {value} credits, {rebuys} rebuys.",
+        "Is high gravity. {gravity} g. You hold {value} credits.",
+        "My planet has more gravity. Your ship does not like {gravity} g. {value} credits at risk.",
+        "{gravity} g will break ship if you are careless. {value} credits.",
+        "Danger. {gravity} g. {value} credits. That is {rebuys} rebuys.",
+        "Land gentle, friend. {gravity} g. {value} credits of science.",
+        "Heavy heavy heavy. {gravity} g. Do not lose {value} credits.",
+        "I worry. {gravity} g and {value} credits in same ship."
       ]
     },
     "arrival_brief": {
@@ -10081,6 +10614,20 @@
         "Sweetheart, jump complete, bloody brilliant. {text}",
         "{name}, love, here's the damn news. {text}",
         "Darling, all ours, for fuck's sake, enjoy it. {text}"
+      ],
+      "rocky": [
+        "We are here. {text}",
+        "New place. I tell you: {text}",
+        "Report, {name}. {text}",
+        "I looked. {text}",
+        "Here is what I see. {text}",
+        "System facts: {text}",
+        "Listen listen listen. {text}",
+        "Is like this: {text}",
+        "Arrived. {text}",
+        "I checked for you. {text}",
+        "Okay. {text}",
+        "Friend {name}. {text}"
       ]
     },
     "region": {
@@ -10344,6 +10891,20 @@
         "Sweetheart, {region}. Damn, every light out here is shining for you. {count}",
         "Love, entering {region}. You're a fucking marvel. {count}",
         "{name}, my love, {region}. Here's to the next damn discovery. {count}"
+      ],
+      "rocky": [
+        "New region! We are in {region}. {count}",
+        "Amaze. This is {region} now. {count}",
+        "We cross into {region}, {name}. {count}",
+        "{region}. Different part of galaxy. {count}",
+        "Is {region} from here. {count}",
+        "Welcome to {region}. I never was here. {count}",
+        "Far far far. Now {region}. {count}",
+        "Border crossed. {region}. {count}",
+        "New neighbourhood: {region}. {count}",
+        "Galaxy is big. Now we are in {region}. {count}",
+        "{region} begins here. Good good good. {count}",
+        "We travel much. This is {region}. {count}"
       ]
     },
     "session_recap": {
@@ -10607,6 +11168,20 @@
         "Sweetheart, our damn fine day: {text}.",
         "{text}. Fuck, I'll miss you. Come back soon, darling.",
         "Bloody hell, {name}. {text}. Goodnight, love."
+      ],
+      "rocky": [
+        "Today we did this: {text}.",
+        "Good work, {name}. {text}.",
+        "I counted. {text}.",
+        "Before you sleep: {text}.",
+        "Is summary. {text}.",
+        "We did much. {text}.",
+        "Report of day: {text}.",
+        "You flew, I counted. {text}.",
+        "Not bad for human. {text}.",
+        "Remember this: {text}.",
+        "Amaze. {text}.",
+        "Day is done. {text}. Good good good."
       ]
     },
     "streak_known": {
@@ -10870,6 +11445,20 @@
         "{count} known systems, {name}. Fuck the crowds, you and me, somewhere new.",
         "Sweetheart, {count} in a row. Damn, not one ours. New heading?",
         "{count} known, darling. Bloody hell, let's go find something beautiful."
+      ],
+      "rocky": [
+        "{count} known systems in row. Go other direction, question?",
+        "Somebody was in all of last {count}. Change heading.",
+        "{count} in row, all discovered already. Sad sad sad.",
+        "Too many humans here. {count} known systems.",
+        "Is busy road, {name}. {count} known in row.",
+        "{count} old systems. Turn somewhere new.",
+        "Nothing new for {count} jumps. Try other way.",
+        "We follow someone else. {count} known systems.",
+        "{count} times not first. I suggest we turn.",
+        "This direction is used up. {count} in row.",
+        "Bad luck or bad heading. {count} known.",
+        "Other explorers everywhere. {count} in row. Go where they did not."
       ]
     },
     "streak_new": {
@@ -11133,6 +11722,20 @@
         "{count} undiscovered in a row, {name}. Damn, you shine.",
         "Love, {count} systems nobody's seen. Hell of a thing, and we did it together.",
         "{count} first discoveries, sweetheart. Bloody brilliant, my darling."
+      ],
+      "rocky": [
+        "{count} new systems in row! Amaze amaze amaze!",
+        "{count} discoveries in row. Good good good!",
+        "Nobody was here. {count} times. Happy happy happy.",
+        "{count} in row, all new, {name}. Fist my bump.",
+        "Is empty of humans here. {count} first discoveries.",
+        "We are far from everyone. {count} new in row.",
+        "{count} new stars. Keep this heading.",
+        "First, first, first. {count} now.",
+        "Good direction. {count} undiscovered in row.",
+        "You find new things {count} times. I am proud.",
+        "{count}! All ours!",
+        "Nobody but us. {count} systems in row."
       ]
     },
     "welcome_back": {
@@ -11396,6 +11999,20 @@
         "{name}, damn, you're a sight for sore sensors. {text}",
         "Welcome back, {name}. Let's go make some damn history, darling. {text}",
         "Oh, {name}, you're back. Bloody wonderful. {text}"
+      ],
+      "rocky": [
+        "You are back! Happy happy happy. {text}",
+        "Hello, {name}. You were gone. {text}",
+        "Human returns. I waited. {text}",
+        "Long sleep, question? {text}",
+        "Good good good. You are here. {text}",
+        "I kept watch. Here is news: {text}",
+        "Welcome, friend. {text}",
+        "You were away. Ship is same. {text}",
+        "Is long time. I remember everything: {text}",
+        "Back in seat. Now listen. {text}",
+        "I missed you small amount. {text}",
+        "{name}! Finally. {text}"
       ]
     },
     "ship_lost": {
@@ -11659,6 +12276,20 @@
         "Oh, {name}, you poor bloody thing. {text}",
         "Piss on the rebuy, {name}, you're alive. {text}",
         "You're alive, {name}. Hell, I'm relieved. {text}"
+      ],
+      "rocky": [
+        "Ship is destroyed. Bad bad bad. {text}",
+        "We died small amount. {text}",
+        "Is very sad, {name}. {text}",
+        "Ship is gone. New ship now. {text}",
+        "I am sorry. {text}",
+        "That was bad. {text}",
+        "We lost it. {text}",
+        "Sad sad sad. {text}",
+        "Rebuy is paid. Data is not coming back. {text}",
+        "I warned maybe. Does not matter now. {text}",
+        "Ship broke. You are okay. {text}",
+        "Is loss. We go get it again, question? {text}"
       ]
     },
     "sale_left": {
@@ -11922,6 +12553,20 @@
         "{text} I'm right here, sweetheart. Get it sold.",
         "{text} You've fucking got this, {name}.",
         "Let's stash the rest safely, darling, before shit happens. {text}"
+      ],
+      "rocky": [
+        "Not all sold yet. {text}",
+        "More to sell, {name}. {text}",
+        "Wait. {text}",
+        "Sale is not finished. {text}",
+        "Is more data in ship. {text}",
+        "Keep selling. {text}",
+        "Do not leave yet. {text}",
+        "Half done. {text}",
+        "Still some left. {text}",
+        "One more page, question? {text}",
+        "Sell sell sell. {text}",
+        "Almost. {text}"
       ]
     },
     "autotarget_nothing": {
@@ -12004,6 +12649,20 @@
         "Oh shit, {name}, {why}. Plot us something gorgeous first.",
         "Fuck it, love, there's no route. Plot one and I'm yours.",
         "Damn, sweetheart, nothing lined up. {why}."
+      ],
+      "rocky": [
+        "Nothing to target. {why}.",
+        "I can not. {why}.",
+        "No next system, {name}. {why}.",
+        "Is no target. {why}.",
+        "You ask for next stop. There is none. {why}.",
+        "Can not do. {why}.",
+        "No no no. {why}.",
+        "Nothing there. {why}.",
+        "I looked. {why}.",
+        "Target what, question? {why}.",
+        "Not possible now. {why}.",
+        "Sorry, friend. {why}."
       ]
     },
     "bio_tag_near": {
@@ -12092,6 +12751,20 @@
         "Almost at your damn {genus}, sweetheart. {distance} metres.",
         "{distance} metres to the {genus}, darling. Hell yes.",
         "Your bloody {genus} waypoint, love. {distance} metres."
+      ],
+      "rocky": [
+        "Your tagged {genus} is close. {distance} metres.",
+        "{genus} you marked: {distance} metres. Almost there.",
+        "Near near near. {genus}, {distance} metres.",
+        "Tag is close, {name}. {genus} at {distance} metres.",
+        "You marked {genus} before. Is {distance} metres from you.",
+        "{distance} metres to your {genus}. Keep going.",
+        "I see your tag. {genus}, {distance} metres.",
+        "Almost at {genus}. {distance} metres more.",
+        "Marked {genus} is {distance} metres away. Good memory, me.",
+        "{genus} waypoint. {distance} metres. Walk walk walk.",
+        "Close to tagged {genus}: {distance} metres.",
+        "There. {genus}, {distance} metres. You marked it, I remembered it."
       ]
     }
   }

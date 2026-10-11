@@ -77,5 +77,29 @@ class View(unittest.TestCase):
         self.assertEqual(payload["known_v"], 0)            # the page reloads the list as the Known column comes in
 
 
+class Layout(unittest.TestCase):
+    def test_the_list_takes_the_highways_place(self):
+        """In the window-filling layout Plot Route is a grid: the list on the left, the map filling the right. The
+        game route's list must sit in the Highway list's cell and its switch outside the grid, or they land in cells of
+        their own and the map is squeezed (seen 2026-10-12)."""
+        import os
+        import re
+        static = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
+        with open(os.path.join(static, "page.html"), encoding="utf-8") as f:
+            html = f.read()
+        with open(os.path.join(static, "page.css"), encoding="utf-8") as f:
+            css = f.read()
+        view = html[html.index('<section id="hwyView"'):]
+        view = view[:view.index("</section>")]
+        panes = view[view.index('<div id="hwyPanes">'):]
+        self.assertLess(view.index('id="hwyGame"'), view.index('id="hwyPanes"'))        # the switch: above the grid
+        self.assertNotIn('id="hwyGame"', panes)
+        self.assertIn('id="nrPane"', panes)                                              # the list: one of its panes
+        place = lambda sel: re.search(r"body\.app %s \{ grid-column: (\d+); grid-row: (\d+); \}" % re.escape(sel), css)
+        self.assertEqual(place("#nrPane").groups(), place("#hwyPane").groups())          # the Highway list's own cell
+        self.assertEqual(place("#nrPane").groups(), place("#richPane").groups())
+        self.assertRegex(css, r"(?m)^#nrPane \{ order: 5; \}")                           # and its place in the narrow layout
+
+
 if __name__ == "__main__":
     unittest.main()
