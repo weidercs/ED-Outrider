@@ -2,6 +2,17 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-11 · This fork: auto honk can then target the next route system
+- **Then target the next route system, N s after the honk** in ⚙ Settings → Auto honk (off by default; `[autohonk]
+  target_next`, `target_delay`, 0 to 60 s, 3 by default). After an auto honk the journal confirms with its discovery
+  scan, the next system of the route you follow in Plot Route is targeted that many seconds later, by the same run as
+  Target next: it needs the keys auto-target needs, waits out a dangerous arrival, and clearing the route stops it.
+- Only after a honk auto honk pressed and saw answered: not after your own honk, a skipped system or a missed one.
+  With no route followed nothing happens and nothing is said; another refusal (a missing key binding, say) is shown
+  beside the switch as "last time: ...". Switching it off stops a run that is counting down.
+- `State.honk_then_target`, `State.set_honk_target` (meta `autohonk_target`); POST `/api/autohonk` takes
+  `target_next` and `target_delay`, alone or with `enabled`; `autohonk_info` carries them and `target_note`.
+
 ## 2026-10-12 · This fork: the Unscanned (bio) plotter can favour one species
 - **Favour** in the plot form (any life, or any species the rules know, the most valuable first): with a species
   chosen, the odds by mass code come from where players reported it. Spansh is asked for the 500 nearest bodies with

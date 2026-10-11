@@ -727,6 +727,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     <details class="setsec pcOnly" data-sec-key="honk" data-chip="Auto honk"><summary>Auto honk and the co-pilot button</summary>
       <label class="mod"><input type="checkbox" id="autoHonk"> Honk automatically on arriving in a system by hyperspace
         <span id="autoHonkStatus" class="hint"></span></label>
+      <label class="mod pcOnly" title="after an auto honk that found its discovery scan, open the galaxy map and target the next system of the route you follow in Plot Route (the same run as Target next: it needs the keys auto-target needs). Nothing happens without a route"><input type="checkbox" id="autoHonkTarget"> Then target the next route system, <input type="number" id="autoHonkTargetDelay" min="0" max="60" step="0.5" inputmode="decimal" style="width:4.5em"> s after the honk <span id="autoHonkTargetNote" class="warnc small"></span></label>
       <label class="mod"><input type="checkbox" id="autoHonkSay"> When it completes, say how many bodies it found
         <span class="hint">"System Scan Completed, 12 Bodies discovered", or "System scan complete, and all bodies were found" when the honk found everything</span></label>
       <div class="hint"><b>The Discovery Scanner must be on primary fire</b> in the fire group that is active when you jump.

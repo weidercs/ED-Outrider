@@ -2103,10 +2103,28 @@ const settle = async maxMs => {
     got.forget = !!d.getElementById("autoHonkForget");
     w.eval(`data.autohonk = Object.assign({}, data.autohonk, {groups: null}); drawHonk()`);
     got.hidden = d.getElementById("autoHonkGroups").hidden;
+    // this fork: "then target the next route system": drawn from the server's answer, off with auto honk off, and a
+    // change posts only its own key (the fake answers: nothing reaches a server)
+    w.eval(`data.autohonk = Object.assign({}, data.autohonk, {wanted: true, target_next: true, target_delay: 4.5, target_note: "no keyboard binding for Galaxy map"}); drawHonk()`);
+    const tb = d.getElementById("autoHonkTarget"), tdel = d.getElementById("autoHonkTargetDelay");
+    got.target = [tb.checked, tb.disabled, tdel.value, d.getElementById("autoHonkTargetNote").textContent];
+    w.eval(`globalThis.__realApi = apiJson; globalThis.__honkPosts = [];
+      apiJson = async (u, o) => u.includes("api/autohonk") ? (__honkPosts.push(JSON.parse(o.body)), {}) : __realApi(u, o)`);
+    try {
+      tb.checked = false; tb.dispatchEvent(new w.Event("change"));
+      tdel.value = "12"; tdel.dispatchEvent(new w.Event("change"));
+      tdel.value = "99"; tdel.dispatchEvent(new w.Event("change"));          // out of range: not sent, put back
+      await sleep(50);
+      got.targetPosts = [w.eval("JSON.stringify(__honkPosts)"), tdel.value];
+    } finally { w.eval("apiJson = __realApi"); }
+    w.eval(`data.autohonk = Object.assign({}, data.autohonk, {wanted: false, target_next: false}); drawHonk()`);
+    got.targetOff = [tb.checked, tb.disabled, tdel.disabled, d.getElementById("autoHonkTargetNote").textContent];
     w.eval(`data.autohonk = ${savedAh}; drawHonk()`);
     got.say = w.eval(`honkGroup("no discovery scan followed with fire group C selected: is the D-Scanner on primary fire there?")`) +
       w.eval(`honkGroup("gave up waiting: fire group D selected; honks missed there before")`) + w.eval(`honkGroup("no discovery scan followed: is the D-Scanner on primary fire?")`);
     const want = {tile: true, unverified: false, shown: true, forget: true, hidden: true, say: "CD",
+      target: [true, false, "4.5", "last time: no keyboard binding for Galaxy map"],
+      targetPosts: ['[{"target_next":false},{"target_delay":12}]', "4.5"], targetOff: [false, true, true, ""],
       line: "scanner worked on fire groups A, B; missed on C (auto honk waits while that is selected)"};
     for (const k of Object.keys(want)) if (JSON.stringify(got[k]) !== JSON.stringify(want[k])) bad.push(k);
     const goodGH = !bad.length && errors.length === before;

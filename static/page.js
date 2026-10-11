@@ -7782,6 +7782,12 @@ function drawHonk() {
   honkBox.checked = !!(a && a.wanted); honkBox.disabled = !(a && a.available);
   honkSayBox.checked = honkAnnounce(); honkSayBox.disabled = !(a && a.wanted);   // only means anything with auto honk on
   honkSayBox.closest("label").style.opacity = honkSayBox.disabled ? .5 : 1;
+  // this fork: "then target the next route system" and its seconds: only with auto honk on
+  { const tb = document.getElementById("autoHonkTarget"), td = document.getElementById("autoHonkTargetDelay");
+    tb.checked = !!(a && a.target_next); tb.disabled = td.disabled = !(a && a.wanted);
+    if (document.activeElement !== td) td.value = a && a.target_delay != null ? a.target_delay : 3;
+    tb.closest("label").style.opacity = tb.disabled ? .5 : 1;
+    document.getElementById("autoHonkTargetNote").textContent = a && a.target_next && a.target_note ? `last time: ${a.target_note}` : ""; }
   document.getElementById("autoHonkStatus").textContent = a ? a.status : "";
   document.getElementById("autoHonkKey").textContent = a ? (a.pressing || a.key) : "";
   document.getElementById("autoHonkTest").disabled = !(a && a.available);
@@ -7819,6 +7825,18 @@ document.getElementById("autoHonkForget").onclick = async e => {
   e.preventDefault();
   try { await apiJson("api/autohonk/forget", {method: "POST"}); }
   catch { toast("could not forget the fire groups"); }
+};
+// this fork: auto honk's "then target the next route system" switch and seconds (kept by the server)
+async function honkTargetSave(body) {
+  try { const r = await apiJson("api/autohonk", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+        if (r && r.error) toast(r.error); }
+  catch { toast("could not change auto honk's targeting"); }
+}
+document.getElementById("autoHonkTarget").onchange = e => honkTargetSave({target_next: e.target.checked});
+document.getElementById("autoHonkTargetDelay").onchange = e => {
+  const v = Number(e.target.value);
+  if (e.target.value === "" || !(v >= 0 && v <= 60)) { e.target.value = (data && data.autohonk && data.autohonk.target_delay) ?? 3; return; }
+  honkTargetSave({target_delay: v});
 };
 honkBox.onchange = async () => {
   try { await apiJson("api/autohonk", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({enabled: honkBox.checked})}); }
