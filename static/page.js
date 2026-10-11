@@ -37,7 +37,7 @@ const TABLET = typeof document !== "undefined" && !!document.body && document.bo
 // group: the nav group shown while you browse another one; beforeMap: the page to go back to when the surface map hides
 // (null: you were on Now already, or chose a page since); mapWas: whether the map showed at the last draw
 const TB = {group: null, beforeMap: null, mapWas: false, bannerTimer: null, bannerKey: null,
-            groups: {explore: ["now", "near", "here", "bio"], navigate: ["bm", "search", "map", "hwy"], records: ["hist", "log", "mat", "firsts", "galnet"]},
+            groups: {explore: ["now", "near", "here", "bio"], navigate: ["bm", "search", "map", "hwy", "navroute"], records: ["hist", "log", "mat", "firsts", "galnet"]},
             themes: ["lcars", "elite", "babylon5", "narn", "minbari", "centauri", "sith", "alliance", "dark"], railPending: {}, railEdit: null};
 // Where you are, as the exact id64 string (position.id). The JSON number position.id64 loses the last digits above
 // 2^53, so string comparisons with the server's exact ids (arrival, Here, moments) must use this.
@@ -1349,7 +1349,7 @@ function star(s) {
 }
 
 // the tablet keeps its own page (a desktop browser opening /tablet to try it must not lose its view) and has no Overview
-const TABLET_VIEWS = ["now", "near", "here", "bio", "bm", "search", "map", "hwy", "hist", "log", "mat", "firsts", "galnet"];
+const TABLET_VIEWS = ["now", "near", "here", "bio", "bm", "search", "map", "hwy", "hist", "log", "mat", "firsts", "galnet", "navroute"];
 let view = TABLET ? store.get("tabletView", "now") : store.get("view", "near");
 if (view === "rich") view = "hwy";   // Road to Riches had a tab of its own for a day (PR #1): it is a route type of Plot Route now
 if (TABLET && !TABLET_VIEWS.includes(view)) view = "now";
@@ -1418,7 +1418,7 @@ function keepPanes(fn) {
 function paneTop(...ids) { for (const id of ids) { const p = document.getElementById(id); if (p) p.scrollTop = 0; delete paneScroll[id]; } }
 // each view's main pane: Page Up/Down and Home/End scroll it while nothing that scrolls or types has the focus
 const VIEW_PANE = {overview: "nearPane", near: "nearPane", here: "hereMain", bio: "bioPane", bm: "bmPane", search: "searchPane",
-                   hist: "histPane", log: "logPane", mat: "matPane", firsts: "firstsPane", hwy: "hwyPane", galnet: "gnPane"};
+                   hist: "histPane", log: "logPane", mat: "matPane", firsts: "firstsPane", hwy: "hwyPane", galnet: "gnPane", navroute: "nrPane"};
 // ---- Compact tables: a table wider than its box (its pane, the Overview's split, a phone) switches to its short forms
 // (compact: level 1), then to tighter ones that also drop or merge low-value columns (compact2: level 2), and back once
 // there is room again. Decided by fit, not by screen size, so a wide pane looks exactly as it always did.
@@ -2546,6 +2546,8 @@ function render() {
   document.querySelector("main").classList.toggle("nearPinned", nearPinned);
   document.getElementById("firstsView").hidden = view !== "firsts";
   document.getElementById("galnetView").hidden = view !== "galnet";
+  document.getElementById("navrouteView").hidden = view !== "navroute";
+  if (view === "navroute") loadNavRoute();
   if (view === "galnet") loadGalnet();
   if (view === "firsts") { loadFirsts(); loadLeft(); }
   document.documentElement.style.setProperty("--head-h", document.querySelector("header").offsetHeight + "px");
@@ -3943,6 +3945,110 @@ document.getElementById("cargoList").addEventListener("keydown", e => {
   if (e.key === "Enter" && e.target.closest(".cfind input")) { e.preventDefault(); document.getElementById("cargoFind").click(); }
 });
 
+// ---- Game Route (this fork): the route plotted in the game's galaxy map as a list (GET /api/navroute), with the fuel
+// each jump burns and leaves, projected from the fuel aboard without refuelling; where the tank would run dry, the
+// places to refuel near there (GET /api/navroute/refuel: stations for your pad and carriers, from Spansh) ----
+// GR: data (the server's answer), key (what it was asked for: the route, where you are, the fuel, the Known column),
+// refuel (the refuel answer), refuelKey (the route and run-dry point it was asked for)
+const GR = {data: null, key: null, loading: false, error: null, refuel: null, refuelKey: null, refuelBusy: false};
+const nrKey = () => { const r = data && data.route, f = data && data.fuel;
+  return JSON.stringify([r ? [r.ts, r.hops.length, r.known_v] : null, posId(), f && f.main != null ? Math.round(f.main * 10) : null]); };
+async function loadNavRoute(force = false) {
+  const key = nrKey();
+  if (!force && (key === GR.key || GR.loading)) return renderNavRoute();
+  GR.key = key; GR.loading = true;
+  const g = newRequest("navroute");
+  let d;
+  try { d = await apiJson("api/navroute"); } catch (err) { d = {error: err.message}; }
+  if (!isNewest("navroute", g)) return;
+  GR.loading = false;
+  if (d.error) { GR.error = d.error; GR.key = null; } else { GR.error = null; GR.data = d; }
+  renderNavRoute();
+  loadNavRefuel();
+  if (!d.error && view === "navroute" && nrKey() !== GR.key) loadNavRoute();   // it moved while this was asked: again
+}
+// the refuel places, asked once per route and run-dry point (not on every fuel reading)
+async function loadNavRefuel() {
+  const r = GR.data && GR.data.route, f = r && r.fuel;
+  const key = f && f.empty_at != null ? JSON.stringify([r.ts, f.last_name, f.empty_at]) : null;
+  if (key === GR.refuelKey || GR.refuelBusy) return;
+  GR.refuelKey = key; GR.refuel = null;
+  if (!key) return renderNavRoute();
+  GR.refuelBusy = true; renderNavRoute();
+  let d;
+  try { d = await apiJson("api/navroute/refuel"); } catch (err) { d = {error: err.message}; }
+  GR.refuelBusy = false;
+  GR.refuel = d;
+  if (d.error) GR.refuelKey = null;   // asked again when the list is next drawn afresh
+  renderNavRoute();
+}
+// The line about the fuel: whether it lasts the route, or where it runs out and what is on the way. Pure.
+function navFuelHtml(f, count) {
+  if (!f) return `<div class="unk">The fuel cannot be projected yet: it needs your ship's Loadout and a fuel reading from the running game.</div>`;
+  const t = v => fuelT(v);
+  if (f.empty_at == null)
+    return `<div class="nrfuel ok">⛽ ${t(f.start)} aboard lasts the whole route: about <b>${t(f.end)}</b> left at the end, without refuelling.</div>`;
+  const scoops = f.scoopable_before ? `${f.scoopable_before} scoopable star${f.scoopable_before === 1 ? "" : "s"} before then` : "no scoopable star before then";
+  const where = f.last < 0 ? "you cannot make the first jump" : `the tank runs dry after jump <b>${f.last + 1}</b> of ${count}, at <b>${esc(f.last_name || "?")}</b>`;
+  const why = f.why === "range" ? `the jump to ${esc(f.empty_name || "?")} is longer than your ship jumps with ${t(f.left)} aboard (plotted with a boost?)`
+    : `the jump to ${esc(f.empty_name || "?")} needs ${t(f.need)}, you would have ${t(f.left)}`;
+  return `<div class="nrfuel warnc">⚠ Without refuelling, ${where}: ${why}. <span class="unk">${scoops}.</span></div>`;
+}
+// The refuel box: the places to refuel near where the tank runs dry. Pure.
+function navRefuelHtml(a, busy) {
+  if (busy) return `<div class="nrrefuel unk">looking for places to refuel near there…</div>`;
+  if (!a) return "";
+  if (a.error) return `<div class="nrrefuel noscoop">The places to refuel could not be looked up: ${esc(a.error)}</div>`;
+  if (!a.needed) return "";
+  const pad = a.pad === "L" ? "a large pad" : a.pad === "M" ? "a medium pad or larger" : "any pad (your ship's size is not known)";
+  const head = `<h3 class="subhead">Refuel near ${esc((a.at && a.at.name) || "there")} <span class="unk">· stations with ${pad}, and fleet carriers, that sell fuel (Spansh)</span></h3>`;
+  const errs = (a.errors || []).map(e => `<div class="noscoop">${esc(e)}</div>`).join("");
+  if (!a.rows.length) return `<div class="nrrefuel">${head}${errs}<div class="unk">No place to refuel is reported near there. Scoop on the way, or carry more fuel.</div></div>`;
+  const rows = a.rows.map(r => {
+    const carrier = r.kind === "carrier", name = carrier ? (r.name || r.callsign) : r.name;
+    const near = r.near ? (r.near.ly < 0.5 ? `in ${r.near.i < 0 ? "this system" : `${esc(r.near.name)} (jump ${r.near.i + 1})`}`
+      : `${r.near.ly.toLocaleString()} ly from ${r.near.i < 0 ? "where you are" : `${esc(r.near.name)} (jump ${r.near.i + 1})`}`) : "";
+    return `<tr><td><b>${esc(name)}</b> <span class="unk">${carrier ? `(carrier${r.name && r.callsign ? ` ${esc(r.callsign)}` : ""}${r.own ? ", yours" : ""})` : esc(r.station_type || "")}</span>` +
+      `${(r.warn || []).map(x => `<div class="warnc small">⚠ ${esc(x)}</div>`).join("")}</td>` +
+      `<td><b class="copy" data-nr-copy="${esc(r.system || "")}" title="click to copy">${esc(r.system || "?")}</b></td>` +
+      `<td>${near}</td><td class="num${r.far ? " warnc" : ""}">${r.ls == null ? "" : `${r.ls.toLocaleString()} ls`}</td>` +
+      `<td>${esc(r.pads || "")}</td><td class="num unk">${r.own ? "" : ageText(r.age_s)}</td></tr>`;
+  }).join("");
+  return `<div class="nrrefuel">${head}${errs}<table class="nrtable"><thead><tr><th>Where</th><th>System</th><th>Nearest route system</th>` +
+    `<th class="num" title="how far from its star">From star</th><th>Pads</th><th class="num">Data</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+function navRowHtml(r, f) {
+  const dry = f && f.empty_at != null && r.i >= f.empty_at;
+  const star = r.star_class ? `${esc(r.star_class)}${r.scoopable ? ` <span class="hwyfuel" title="scoopable">⛽</span>` : r.scoopable === false ? ` <span class="unk" title="not scoopable">✕</span>` : ""}` : "";
+  return `<tr class="${dry ? "nrdry" : ""}${f && r.i === f.empty_at ? " nrempty" : ""}"><td class="num">${r.i + 1}</td>` +
+    `<td class="name"><b class="copy" data-nr-copy="${esc(r.name || "")}" title="click to copy">${esc(r.name || "?")}</b>` +
+    `${f && r.i === f.empty_at ? ` <span class="warnc small">⚠ not enough fuel for this jump</span>` : ""}</td>` +
+    `<td class="hwyc hwyk">${hwyKnownHtml(r.known)}</td><td>${star}</td>` +
+    `<td class="num">${r.ly.toFixed(1)}</td><td class="num">${Math.round(r.total_ly).toLocaleString()}</td>` +
+    `<td class="num">${r.fuel_used == null ? (dry ? "—" : "") : fuelT(r.fuel_used)}</td><td class="num">${r.fuel_left == null ? (dry ? "—" : "") : fuelT(r.fuel_left)}</td></tr>`;
+}
+function renderNavRoute() {
+  const head = document.getElementById("nrHead"), rowsEl = document.getElementById("nrRows"), box = document.getElementById("nrRefuel");
+  if (!head) return;
+  const r = GR.data && GR.data.route;
+  if (GR.error || !r) {
+    head.innerHTML = GR.error ? `<div class="noscoop">The route could not be read: ${esc(GR.error)}</div>`
+      : `<div class="hwyttl">No route plotted in the game</div><div class="unk">Plot one in the galaxy map and it is listed here, jump by jump, with the fuel it takes.</div>`;
+    rowsEl.innerHTML = `<tr><td colspan="8" class="unk">${GR.loading ? "loading…" : "No route."}</td></tr>`;
+    box.innerHTML = "";
+    return;
+  }
+  head.innerHTML = `<div class="hwyttl">To <b class="copy" data-nr-copy="${esc(r.to || "")}" title="click to copy">${esc(r.to || "?")}</b> ` +
+    `<span class="unk">· ${r.count} jump${r.count === 1 ? "" : "s"} · ${Math.round(r.ly).toLocaleString()} ly · as plotted in the game</span></div>` + navFuelHtml(r.fuel, r.count);
+  rowsEl.innerHTML = r.hops.map(h => navRowHtml(h, r.fuel)).join("") +
+    (r.count > r.hops.length ? `<tr><td colspan="8" class="unk">+${(r.count - r.hops.length).toLocaleString()} more after these</td></tr>` : "");
+  const boxHtml = navRefuelHtml(GR.refuel, GR.refuelBusy);
+  if (box.innerHTML !== boxHtml) box.innerHTML = boxHtml;
+}
+document.getElementById("navrouteView").addEventListener("click", e => {
+  const c = e.target.closest("[data-nr-copy]");
+  if (c && c.dataset.nrCopy) copyText(c.dataset.nrCopy);
+});
 // ---- GalNet News (this fork): the game's news from Frontier's feed (GET /api/galnet), the latest shown, any earlier
 // one picked from the list; the systems an article mentions (GET /api/galnet/systems, each confirmed by the server)
 // marked in its text: click one to copy its name, or plot a route to it from the line under the title ----

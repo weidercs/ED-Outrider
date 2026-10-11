@@ -64,6 +64,8 @@ search any text, click a row for the raw event.
 </tr>
 <tr>
 <td width="50%" valign="top">
+<b>Game Route</b> (this fork) — the route you plotted in the game's galaxy map, jump by jump: each system (click to copy), whether it is already discovered, its star (⛽ scoopable), the jump, and the fuel the jump burns and leaves. The fuel is projected from what is aboard now, <i>without refuelling</i>: the line above the list says whether the tank lasts the route or after which jump it runs dry, and then lists the stations your ship can land at and the fleet carriers that sell fuel near there, with the route system each is closest to. Fuel needs your ship's Loadout and the running game; a route plotted with a boost the model does not know says so.
+
 <b>GalNet</b> (this fork) — the game's latest news article, the 30 latest listed beside it to pick from. Star systems it mentions are marked: click one to copy its name, or use Copy / Plot route under the title. A name is marked only when you know the system or Spansh does, and only where the article says "the … system" or gives a catalogue or sector name.
 
 <b>Materials</b> — your <b>Cargo</b> (the ship's hold and your carrier's, with Sell and Buy: see <a href="cargo-and-trading.md">Cargo and trading</a>), materials against their caps, and how many FSD injections, limpets, SRV refuels and

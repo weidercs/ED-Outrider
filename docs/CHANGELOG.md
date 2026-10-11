@@ -2,6 +2,18 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-11 · This fork: Game Route, the game's own route as a list with its fuel
+- A **Game Route** tab (and tablet page) lists the route plotted in the game's galaxy map jump by jump: the system
+  (click to copy), the Known column of Plot Route's list, the star and whether it is scoopable, the jump and the
+  light years flown by then.
+- **Projected fuel:** what each jump burns and leaves, from the fuel aboard now with your ship's fuel model (each
+  jump at the mass it is made at), without refuelling. It says whether the tank lasts the route, or after which jump
+  it runs dry and how many scoopable stars come before then; the rows past that point are greyed.
+- **Where to refuel:** when it would run dry, the stations your ship can land at and the fleet carriers that sell
+  fuel nearest the last system the tank reaches (Spansh's station search, as the Nearest finder; your own carrier
+  too), each with the route system it is closest to.
+- `outrider/navroute.py`, `GET /api/navroute` and `/api/navroute/refuel`.
+
 ## 2026-10-11 · This fork: GalNet News, with the systems an article mentions
 - A **GalNet** tab (and tablet page): the game's latest news article from Frontier's own feed, with the 30 latest
   listed beside it to pick from; Refresh asks again (the server keeps its copy half an hour, and the last one when

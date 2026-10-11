@@ -207,6 +207,13 @@ main > #hereView.detail > #bodyPanel { position: sticky; top: calc(var(--head-h,
 .strip .stale { color: var(--warn); } .strip .dead { color: var(--bad); }
 #firstsView { margin-top: 12px; }
 #galnetView { margin-top: 12px; }
+#navrouteView { margin-top: 12px; }
+#nrHead .hwyttl { font-size: 16px; font-weight: 600; } #nrHead .hwyttl .unk { font-size: 13px; font-weight: 400; }
+#navrouteView .copy { cursor: copy; } .nrfuel { margin-top: 6px; } .nrfuel.ok { color: var(--good); }
+#nrTable tr.nrdry td { color: var(--muted); } #nrTable tr.nrempty td { border-top: 2px solid var(--warn); }
+.nrrefuel { margin-top: 10px; } .nrrefuel h3.subhead { margin-top: 0; } .nrrefuel h3.subhead .unk { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.nrtable td, .nrtable th { padding: 3px 10px 3px 0; text-align: left; vertical-align: top; } .nrtable .num { text-align: right; }
+body.app #nrRefuel { flex: 0 1 auto; max-height: 40%; overflow: auto; }
 .gnwrap { display: flex; gap: 12px; align-items: flex-start; }
 .gnwrap > #gnListPane { flex: 0 1 340px; min-width: 220px; } .gnwrap > #gnPane { flex: 1 1 0; min-width: 0; }
 .gnlist { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; }

@@ -15,6 +15,11 @@ upstream project's choices, not rules of the game.
   checklists' pictures from Canonn's storage), EDAstro for the DSSA carrier list when the Nearest finder opens. The
   one exception is the AI layer (off by default, `[assistant]`): it sends the question and the read-only tools'
   answers to the endpoint the player configures, so it is not a read-only lookup. This is the one full list.
+- **The Game Route's fuel is a projection without refuelling** (this fork, `outrider/navroute.py`): the fuel model's
+  figure for each jump of the game's own route from the fuel aboard now. It does not know whether you carry a fuel
+  scoop or will use it, so it says where the tank runs dry if you do nothing, counts the scoopable stars before
+  then, and looks for places to refuel near the last system reached. A jump longer than the model's range (a
+  neutron or jumponium boost) stops the projection and says so rather than guessing.
 - **GalNet News is this fork's** (`outrider/galnet.py`): one more read-only lookup, Frontier's own feed, asked only
   when the tab is opened. A system is marked in an article only once confirmed (yours, or Spansh's by exact name):
   a marked name is never a guess, but a system the article names without "system" or a catalogue form is missed.

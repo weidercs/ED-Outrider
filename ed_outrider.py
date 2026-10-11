@@ -199,6 +199,7 @@ import outrider.mcp        # the MCP bridge's [mcp] settings (the bridge itself 
 import outrider.uploads    # EDDN / EDSM uploads (opt-in): the session, the live gate, the outbox
 import outrider.inara      # the fork's Inara upload ([inara], off by default), from its own tail of the journals
 import outrider.galnet     # the fork's GalNet News: Frontier's feed as articles, and the systems they mention
+import outrider.navroute   # the fork's Game Route list: the game's own route with the fuel it takes (pure)
 import outrider.eddn       # EDDN's messages from journal events, and what its answers mean
 import outrider.edsm       # EDSM's journal upload: the events with where you were, and what its answers mean
 import outrider.checklist  # the exobiology checklist: every species by region, with your state (pure)
@@ -247,6 +248,8 @@ SPANSH_DUMP = "https://spansh.co.uk/api/dump/{id64}"
 SPANSH_BODY_SEARCH = "https://spansh.co.uk/api/bodies/search"
 SPANSH_STATION_SEARCH = "https://spansh.co.uk/api/stations/search"
 DOCK_CACHE_S = 120   # s: the Nearest finder reuses its last search this long (a filter change re-filters it)
+NAVROUTE_ROWS = 300  # hops of the game's route GET /api/navroute lists
+NAVROUTE_REFUEL_ROWS = 8   # places to refuel it names near where the tank runs dry
 # Spansh's commodity names (its min_max keys): the Sell / Buy lookup asks by them; cached a week (meta spansh_commodities)
 SPANSH_COMMODITIES = "https://spansh.co.uk/api/stations/field_values/commodities"
 COMMODITIES_MAX_AGE_S = 7 * 86400
@@ -10606,6 +10609,85 @@ class State:
             self.bump()
         self.seller_task = asyncio.create_task(go())
 
+    def navroute_ahead(self):
+        """(the game route's hops ahead of you, where you are), or (None, pos) with no route plotted in the game (or
+        none left: you arrived)."""
+        route, pos = meta_get(self.db, "route"), self.journals.pos
+        if not route or not pos or pos.get("x") is None:
+            return None, pos
+        hops = route["hops"]
+        i = next((k for k, h in enumerate(hops) if h["id64"] == pos["id64"]), None)
+        return (hops[i + 1:] if i is not None else hops) or None, pos
+
+    def navroute_view(self):
+        """GET /api/navroute: the route plotted in the game's galaxy map as a list (outrider/navroute.py), each hop
+        with its star, the jump, whether the system is known (the Plot Route list's states), and the fuel the jump
+        burns and leaves: projected from the fuel aboard now with the ship's fuel model, without refuelling. `fuel`
+        says where the tank no longer covers a jump (None without a fuel model: no Loadout mass, or no reading)."""
+        left, pos = self.navroute_ahead()
+        if not left:
+            return {"route": None, "position": with_id(pos)}
+        now = self.fuel_now()
+        rows, fuel = outrider.navroute.project(left, pos, *(now or (None, None, None)))
+        self.route_known_check([{"id64": h["id64"]} for h in left[:HIGHWAY_AHEAD]])
+        visited = {r[0] for r in self.db.execute(
+            f"SELECT id64 FROM visits WHERE id64 IN ({','.join('?' * len(left))})", [h["id64"] for h in left])}
+        for row, h in zip(rows, left):
+            scoop = class_scoopable(h["star_class"]) if h.get("star_class") else None
+            row.update(id=str(h["id64"]), name=h["name"], star_class=h.get("star_class"), scoopable=scoop,
+                       visited=h["id64"] in visited, known=self.route_known_state(h["id64"]))
+        if fuel:
+            reached = rows[:fuel["last"] + 1]
+            fuel.update(capacity=(self.journals.ship or {}).get("fuel_main"),
+                        scoopable_before=sum(1 for r in reached if r["scoopable"]),
+                        last_name=reached[-1]["name"] if reached else pos.get("name"),
+                        empty_name=rows[fuel["empty_at"]]["name"] if fuel["empty_at"] is not None else None)
+        return {"route": {"ts": (meta_get(self.db, "route") or {}).get("ts"), "count": len(rows), "ly": rows[-1]["total_ly"],
+                          "to": rows[-1]["name"], "hops": rows[:NAVROUTE_ROWS], "fuel": fuel},
+                "position": with_id(pos)}
+
+    async def navroute_refuel(self):
+        """GET /api/navroute/refuel: where to refuel near where the tank would run dry on the game's route: the
+        stations (your ship's pad) and fleet carriers with Refuel nearest the last system the fuel reaches, from
+        Spansh's station search (as the Nearest finder; the DSSA copy and your own carrier too), each with the
+        reachable route system it is closest to. ({needed: False} when the fuel lasts; ({...}, status))."""
+        left, pos = self.navroute_ahead()
+        if not left:
+            return {"error": "no route is plotted in the game"}, 409
+        now = self.fuel_now()
+        if not now:
+            return {"error": "the fuel cannot be projected yet (no ship mass or fuel reading)"}, 409
+        _, fuel = outrider.navroute.project(left, pos, *now)
+        if fuel["empty_at"] is None:
+            return {"needed": False, "rows": [], "errors": []}, 200
+        ref = left[fuel["last"]] if fuel["last"] >= 0 else pos
+        errors = []
+        key = (ref.get("id64"), "navroute-refuel")
+        hit = self.dock_cache.get("navroute")
+        try:
+            if hit and hit[0] == key and time.time() - hit[1] < DOCK_CACHE_S:
+                found = hit[2]
+            else:
+                found = await self.spansh.dock_search(ref, ["Refuel"])
+                self.dock_cache["navroute"] = (key, time.time(), found)
+            spansh = outrider.dock.spansh_rows(found)
+        except (ClientError, asyncio.TimeoutError, ValueError, AttributeError) as e:
+            spansh = []
+            errors.append(f"Spansh could not be reached ({e or type(e).__name__})")
+        dssa, _ = await self.dssa_list(fetch=False)
+        c = self.carrier_summary() or {}
+        own = outrider.dock.own_row(dict(self.journals.carrier or {}, **{k: c.get(k) for k in ("x", "y", "z", "has_uc", "has_vista")},
+                                         decommission=self.carrier_decommission()))
+        ship = self.journals.ship or {}
+        pad = outrider.cargo.SHIP_PAD.get((ship.get("type") or "").lower())
+        out = outrider.dock.nearest(outrider.dock.merge(spansh, dssa, own), ref, need=["Refuel"], pad=pad, permit=True,
+                                    laden=self.range_now() or ship.get("max_range"), limit=NAVROUTE_REFUEL_ROWS)
+        rows = outrider.navroute.nearest_hops(out["rows"], pos, left, fuel["last"])
+        for r in rows:
+            r.update(id64=str(r["id64"]) if r.get("id64") is not None else None, seen=None)
+        return {"needed": True, "at": {"name": ref.get("name"), "i": fuel["last"]}, "pad": pad, "rows": rows,
+                "hidden": out["hidden"], "errors": errors}, 200
+
     def route_summary(self):
         """The plotted route from where you are: each hop's star (scoopable or not), whether you have been
         there, and the longest stretch without a scoopable star (where fuel runs out)."""
@@ -10631,7 +10713,8 @@ class State:
                         "ly": round(d, 1), "visited": h["id64"] in visited, "known": known})
             prev = h
         next_scoop = next((k + 1 for k, h in enumerate(out) if h["scoopable"]), None)
-        return {"hops": out, "ly": round(total, 1), "longest_dry": longest, "next_scoop": next_scoop, "ts": route.get("ts")}
+        return {"hops": out, "ly": round(total, 1), "longest_dry": longest, "next_scoop": next_scoop, "ts": route.get("ts"),
+                "known_v": self.route_known_v}   # grows as the Game Route list's Known column comes in: it reloads
 
     def next_stop_summary(self):
         ns, pos = meta_get(self.db, "next_stop"), self.journals.pos
@@ -13901,6 +13984,15 @@ def make_app(state, hosts=None):
         out, status = await state.cargo_lookup(dict(request.query))
         return web.json_response(out, status=status)
 
+    async def navroute_view(_):
+        """GET /api/navroute: the game's own route as a list with the projected fuel (State.navroute_view)."""
+        return web.json_response(state.navroute_view())
+
+    async def navroute_refuel_view(_):
+        """GET /api/navroute/refuel: where to refuel near where the tank runs dry (State.navroute_refuel)."""
+        out, status = await state.navroute_refuel()
+        return web.json_response(out, status=status)
+
     async def galnet_view(request):
         """GET /api/galnet?refresh=: the latest GalNet articles (State.galnet_news). Read only but for the copy kept."""
         return web.json_response(await state.galnet_news(refresh=request.query.get("refresh") in ("1", "true")))
@@ -13986,6 +14078,8 @@ def make_app(state, hosts=None):
     app.router.add_post("/api/cargo/recount", cargo_recount_view)
     app.router.add_get("/api/cargo/lookup", cargo_lookup_view)
     app.router.add_get("/api/nearest", nearest_view)
+    app.router.add_get("/api/navroute", navroute_view)
+    app.router.add_get("/api/navroute/refuel", navroute_refuel_view)
     app.router.add_get("/api/galnet", galnet_view)
     app.router.add_get("/api/galnet/systems", galnet_systems_view)
     app.router.add_post("/api/radius", radius_view)

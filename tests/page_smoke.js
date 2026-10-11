@@ -51,6 +51,8 @@ const settle = async maxMs => {
   const ok = errors.length === 0 && /known within/.test(d.querySelector("#sub").textContent);
   console.log(ok ? "OK" : "FAIL", "| header |", d.querySelector("#sub").textContent.slice(0, 80), "| errors:", errors);
   // every view: [button, element that must end up with content]
+  // (Game Route has its own block further down and the tablet's page loop: one more stop here moves the page's 25 s
+  // poll into batch C's fast clock, which aborts it and leaves the page "not connected" for the checks after)
   const views = [["overview", "#ovPanes"], ["near", "#rows"], ["here", "#hereRows"], ["bio", "#bioRows"], ["bm", "#bmTable"],
                  ["search", "#searchForm"], ["hist", "#histRows"], ["log", "#logRows"], ["mat", "#matGrid"], ["firsts", "#firstsRows"], ["galnet", "#gnList"], ["hwy", "#hwyHead"], ["now", "#nowView"]];
   let allOk = ok;
@@ -2923,7 +2925,7 @@ const settle = async maxMs => {
     })()`));
     const want = {pure: [true, true, false, false, false, true], sizes: [true, false, false, true], now: false, back: true, body: "hidden", tabbable: true,
       panes: ["overview:auto:sticky", "near:auto:sticky", "here:auto:sticky", "bio:auto:sticky", "bm:auto:sticky", "search:auto:sticky",
-              "hist:auto:sticky", "log:auto:sticky", "mat:auto:-", "firsts:auto:sticky", "hwy:auto:sticky", "galnet:auto:-"],
+              "hist:auto:sticky", "log:auto:sticky", "mat:auto:-", "firsts:auto:sticky", "hwy:auto:sticky", "galnet:auto:-", "navroute:auto:sticky"],
       ov: {map: true, inline: "", nearPane: "auto", here: "auto"}, ovPage: true, jump: 100 + (930 - 700), keep: 1100, more: [0, 1], pgdn: [360, true], winScrolls: 0,
       fold: {tiles: true, line: true, stored: "true", exported: true, btn: "▾", name: true, urgent: ["⛽ N%", "unsold N"]},
       unfold: {tiles: true, line: true, stored: "false", mode: "\"six\""}};
@@ -3695,6 +3697,75 @@ const settle = async maxMs => {
     console.log(goodTN ? "OK" : "FAIL", "| highway target next |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "line and box buttons post with a countdown (no tab, no copy), refusal in its words, Retry on the failed row only, the Highway spoken in the report and welcome", errors.slice(before));
   }
+  // Game Route (this fork): the game's own route as a list with the projected fuel, the run-dry warning and the
+  // places to refuel near there; a route the fuel lasts says so and asks for no refuel places
+  {
+    const w = dom.window, d = w.document, before = errors.length, got = {}, asked = [], copied = [];
+    w.__nrAsked = asked; w.__nrCopied = copied;
+    w.eval(`window.__nrApi = apiJson; window.__nrCopy = copyText; window.__nrDry = true;
+      apiJson = async (u, o) => {
+        const s = String(u);
+        if (!s.startsWith("api/navroute")) return __nrApi(u, o);
+        __nrAsked.push(s);
+        if (s === "api/navroute/refuel") return {needed: true, at: {name: "Dry Stop", i: 1}, pad: "L", hidden: {}, errors: [], rows: [
+          {kind: "station", name: "Fuel <Dock>", callsign: "", station_type: "Coriolis Starport", system: "Pump System", ly: 6.2, ls: 420, far: false,
+           pads: "L M S", age_s: 7200, warn: [], near: {i: 1, name: "Dry Stop", ly: 6.2}},
+          {kind: "carrier", name: "Deep Relay", callsign: "G0B-W2J", system: "Dry Stop", ly: 0, ls: 9000, far: true, pads: "L M", age_s: 90000,
+           warn: ["friends only"], near: {i: 1, name: "Dry Stop", ly: 0}}]};
+        const hop = (i, name, cls, sc, ly, tot, used, left, known) => ({i, id: String(100 + i), name, star_class: cls, scoopable: sc, ly, total_ly: tot,
+          fuel_used: used, fuel_left: left, visited: false, known});
+        return {position: {id: "1", name: "Start"}, route: {ts: "2026-10-11T10:00:00Z", count: 3, ly: 120.5, to: "Far End", hops: [
+            hop(0, "First Hop", "K", true, 40.2, 40.2, 5.1, 6.9, "explored"), hop(1, "Dry Stop", "N", false, 40.1, 80.3, 5.0, 1.9, "no bodies"),
+            hop(2, "Far End", "M", true, 40.2, 120.5, __nrDry ? null : 1.0, __nrDry ? null : 0.9, null)],
+          fuel: __nrDry ? {start: 12, empty_at: 2, why: "fuel", last: 1, need: 5.05, left: 1.9, end: null, capacity: 32, scoopable_before: 1,
+                           last_name: "Dry Stop", empty_name: "Far End"}
+                        : {start: 12, empty_at: null, why: null, last: 2, need: null, left: null, end: 0.9, capacity: 32, scoopable_before: 2,
+                           last_name: "Far End", empty_name: null}}};
+      };
+      copyText = (text, what) => { __nrCopied.push(text); };
+      GR.data = null; GR.key = null; GR.refuel = null; GR.refuelKey = null;`);
+    d.querySelector('[data-view="navroute"]').click();
+    await sleep(200);
+    const view = d.getElementById("navrouteView"), text = sel => (d.querySelector(sel) || {textContent: ""}).textContent.replace(/\s+/g, " ").trim();
+    got.shown = [view.hidden, d.querySelectorAll("#nrRows tr").length, d.querySelectorAll("#nrRows tr.nrdry").length, d.querySelectorAll("#nrRows tr.nrempty").length];
+    got.head = text("#nrHead");
+    got.rows = [...d.querySelectorAll("#nrRows tr")].map(t => [...t.cells].map(c => c.textContent.replace(/\s+/g, " ").trim()).join(" | "));
+    got.refuel = text("#nrRefuel h3");
+    got.refuelCells = [...d.querySelectorAll("#nrRefuel tbody tr")].map(t => [...t.cells].map(c => c.textContent.replace(/\s+/g, " ").trim()).join(" | "));
+    got.refuelRows = d.querySelectorAll("#nrRefuel tbody tr").length;
+    got.safe = !/<Dock>/.test(d.getElementById("nrRefuel").innerHTML.replace(/&lt;Dock&gt;/g, ""));
+    d.querySelector("#nrRows tr .copy").click();
+    d.querySelector("#nrRefuel tbody .copy").click();
+    w.eval(`__nrDry = false`);
+    await w.eval(`loadNavRoute(true)`);
+    await sleep(100);
+    got.lasts = [text("#nrHead"), d.querySelectorAll("#nrRows tr.nrdry").length, d.getElementById("nrRefuel").innerHTML];
+    got.pure = [w.eval(`navFuelHtml(null, 3)`).includes("cannot be projected"),
+                /cannot make the first jump/.test(w.eval(`navFuelHtml({start: 1, empty_at: 0, why: "fuel", last: -1, need: 5, left: 1, scoopable_before: 0, empty_name: "X"}, 3)`)),
+                /longer than your ship jumps/.test(w.eval(`navFuelHtml({start: 9, empty_at: 1, why: "range", last: 0, need: null, left: 9, scoopable_before: 0, last_name: "A", empty_name: "B"}, 3)`)),
+                w.eval(`navRefuelHtml(null, true)`).includes("looking for places"), w.eval(`navRefuelHtml({needed: false, rows: []}, false)`),
+                /No place to refuel is reported/.test(w.eval(`navRefuelHtml({needed: true, at: {name: "A", i: 0}, pad: null, rows: [], errors: ["Spansh could not be reached (x)"]}, false)`)),
+                /could not be looked up/.test(w.eval(`navRefuelHtml({error: "no"}, false)`))];
+    w.eval(`apiJson = __nrApi; copyText = __nrCopy;`);
+    const bad = [];
+    if (JSON.stringify(got.shown) !== JSON.stringify([false, 3, 1, 1])) bad.push("shown");
+    if (!(/^To Far End · 3 jumps · 121 ly · as plotted in the game/.test(got.head) && /Without refuelling, the tank runs dry after jump 2 of 3, at Dry Stop/.test(got.head)
+          && /the jump to Far End needs 5\.0, you would have 1\.9/.test(got.head) && /1 scoopable star before then/.test(got.head))) bad.push("head");
+    if (JSON.stringify(got.rows) !== JSON.stringify(["1 | First Hop | ● | K ⛽ | 40.2 | 40 | 5.1 | 6.9", "2 | Dry Stop | ○ | N ✕ | 40.1 | 80 | 5.0 | 1.9",
+      "3 | Far End ⚠ not enough fuel for this jump |  | M ⛽ | 40.2 | 121 | — | —"])) bad.push("rows");
+    if (!(/^Refuel near Dry Stop · stations with a large pad, and fleet carriers, that sell fuel/.test(got.refuel) && got.refuelRows === 2
+          && JSON.stringify(got.refuelCells) === JSON.stringify(["Fuel <Dock> Coriolis Starport | Pump System | 6.2 ly from Dry Stop (jump 2) | 420 ls | L M S | 2 h old",
+            "Deep Relay (carrier G0B-W2J)⚠ friends only | Dry Stop | in Dry Stop (jump 2) | 9,000 ls | L M | 25 h old"]) && got.safe)) bad.push("refuel");
+    if (bad.includes("refuel")) got.refuel = [got.refuel, got.refuelCells];
+    if (JSON.stringify(copied) !== JSON.stringify(["First Hop", "Pump System"])) bad.push("copied");
+    if (!(/lasts the whole route: about 0\.9 left at the end/.test(got.lasts[0]) && got.lasts[1] === 0 && got.lasts[2] === "")) bad.push("lasts");
+    if (JSON.stringify(got.pure) !== JSON.stringify([true, true, true, true, "", true, true])) bad.push("pure");
+    if (asked.filter(s => s === "api/navroute/refuel").length !== 1) bad.push("asked");
+    const goodNR = !bad.length && errors.length === before;
+    allOk = allOk && goodNR;
+    console.log(goodNR ? "OK" : "FAIL", "| game route |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))} asked ${JSON.stringify(asked)} copied ${JSON.stringify(copied)}`
+      : "the game's route listed with its fuel, the run-dry warning and where to refuel near there; a route the fuel lasts asks for none", errors.slice(before));
+  }
   // GalNet News (this fork): the latest article shown, an earlier one picked from the list, a confirmed system marked
   // in the text (click: its name copied) and Plot route filling Plot Route's To
   {
@@ -3975,9 +4046,9 @@ const settle = async maxMs => {
     got.status = [td.getElementById("tabSysV").textContent.length > 1, /t|—/.test(td.getElementById("tabFuelV").textContent)];
     // every page from the nav: its group opens, its view fills, nothing throws
     const fills = {now: "#nowView", near: "#rows", here: "#hereRows", bio: "#bioRows", bm: "#bmTable", search: "#searchForm", map: "#mapView",
-                   hwy: "#hwyHead", hist: "#histRows", log: "#logRows", mat: "#matGrid", firsts: "#firstsRows", galnet: "#gnList"};
+                   hwy: "#hwyHead", hist: "#histRows", log: "#logRows", mat: "#matGrid", firsts: "#firstsRows", galnet: "#gnList", navroute: "#nrHead"};
     got.pages = [];
-    for (const [g, vs] of Object.entries({explore: ["now", "near", "here", "bio"], navigate: ["bm", "search", "map", "hwy"], records: ["hist", "log", "mat", "firsts", "galnet"]})) {
+    for (const [g, vs] of Object.entries({explore: ["now", "near", "here", "bio"], navigate: ["bm", "search", "map", "hwy", "navroute"], records: ["hist", "log", "mat", "firsts", "galnet"]})) {
       td.querySelector(`#tabNav [data-group="${g}"]`).click();
       for (const v of vs) {
         const before = terr.length;
