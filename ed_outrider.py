@@ -288,6 +288,8 @@ HIGHWAY_POLL_S = 1.5        # s between two asks for a plot job's result (Spansh
 HIGHWAY_PLOT_TIMEOUT = 180  # s a plot may take before we give up on it
 HIGHWAY_AHEAD = 200         # route rows GET /api/highway lists ahead of you...
 HIGHWAY_DONE = 20           # ...and done rows above them (the most recent)
+ROUTE_KNOWN_GAP_S = 1.0     # s between two Spansh lookups of the listed route systems' discovery state
+ROUTE_KNOWN_BATCH = 10      # lookups between two page updates
 HIGHWAY_LIVE_S = 120        # s: an arrival or a supercharge older than this is catch-up (no clipboard, no auto-target)
 HIGHWAY_SUGGEST_CACHE = 200  # system-name suggestions kept (per typed prefix)
 HIGHWAY_HEAVY_SLACK = 0.5    # t: fuel over the most the next jump allows by more than this is "too heavy" (Spansh plans
@@ -5543,6 +5545,13 @@ class State:
                                 background_opacity=HIGHWAY_BG_OPACITY)
         self.highway_plotting = None
         self.highway_task = None
+        # the route list's Known column: {id64: "explored" | "partial" | "no bodies"} as Spansh answered this run
+        # (in memory: asked again after a restart), the task asking, and a counter the page reloads the list on
+        self.route_known = {}
+        self.route_known_task = None
+        self.route_known_v = 0
+        self.route_known_on = False   # run() switches the lookups on: a State made elsewhere (tests) asks nobody
+        self.route_known_wait = 0.0   # monotonic: no new lookups before (a minute after Spansh failed one)
         self.clipboard = None
         self._hw_copied = (meta_get(db, "highway") or {}).get("arrival_ts")   # copied before a restart: not again
         self._autotarget_boost = (journals.boost or {}).get("ts")
@@ -10405,6 +10414,7 @@ class State:
                              else nxt["distance"]},
             "boost_here": bool(here and here["neutron"]),
             "heavy": self.highway_heavy(hw),
+            "known_v": self.route_known_v,   # grows as the listed systems' discovery state comes in: the list reloads
         }
 
     @staticmethod
@@ -10492,12 +10502,76 @@ class State:
         return {"need_t": math.floor(need * 10) / 10, "have_t": round(fuel, 1), "distance": round(d, 1), "boost": mult,
                 "next": nxt["system"]}
 
-    @staticmethod
-    def highway_row_out(i, r):
+    def highway_row_out(self, i, r):
         return {"i": i, "system": r["system"], "id": str(r["id64"]) if r["id64"] is not None else None,
                 "x": r["x"], "y": r["y"], "z": r["z"], "distance": r["distance"], "fuel_used": r["fuel_used"],
                 "fuel_left": r["fuel_left"], "neutron": bool(r["neutron"]), "refuel": bool(r["refuel"]),
-                "jumps": r["jumps"], "remaining": r["remaining"]}
+                "jumps": r["jumps"], "remaining": r["remaining"], "known": self.route_known_state(r["id64"])}
+
+    def route_known_state(self, id64):
+        """What is known of a route system without asking anyone: "visited" (you have been there), else what Spansh
+        has of it, "explored" (every body reported), "partial" (some) or "no bodies" (the system is on Spansh's map
+        but nobody has reported a body: it may be undiscovered), from this run's lookups, the sphere around you or the
+        cache. None: not looked up yet (`route_known_check` asks)."""
+        if id64 is None:
+            return None
+        if self.db.execute("SELECT 1 FROM visits WHERE id64=?", (id64,)).fetchone():
+            return "visited"
+        if id64 in self.route_known:
+            return self.route_known[id64]
+        source, base = self.bases.get(id64) or (None, None)
+        if base is None or source == "route":
+            base = cached_base(self.db, id64)[1]
+        return self.known_state(base.get("records"), base.get("body_count")) if base else None
+
+    @staticmethod
+    def known_state(records, body_count):
+        known = sum(1 for r in records or [] if r.get("type") in ("Star", "Planet"))
+        return "no bodies" if not known else "explored" if body_count and known >= body_count else "partial"
+
+    def route_known_check(self, rows):
+        """Ask Spansh about the listed route systems not known yet, in the background: one at a time,
+        ROUTE_KNOWN_GAP_S apart, in route order. Started by the Plot Route tab asking for the route; nothing runs
+        while nobody looks, and a failed lookup ends it until the tab asks again."""
+        if not self.route_known_on or (self.route_known_task and not self.route_known_task.done()) \
+                or time.monotonic() < self.route_known_wait:
+            return
+        todo = [r["id64"] for r in rows if r["id64"] is not None and self.route_known_state(r["id64"]) is None]
+        if not todo or not getattr(self.spansh, "session", None):
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:   # not in the server's loop (a test reading the view): nothing to ask with
+            return
+        self.route_known_task = loop.create_task(self._route_known(todo))
+
+    async def _route_known(self, ids):
+        asked = 0
+        try:
+            for id64 in ids:
+                if self.route_known_state(id64) is not None:   # visited or fetched meanwhile
+                    continue
+                if asked:
+                    await asyncio.sleep(ROUTE_KNOWN_GAP_S)
+                dump = await self.spansh.lookup(id64, interactive=False)
+                system = (dump or {}).get("system") or {}
+                self.route_known[id64] = self.known_state(system.get("bodies"), system.get("bodyCount"))
+                asked += 1
+                if asked % ROUTE_KNOWN_BATCH == 0:
+                    self.route_known_v += 1
+                    self.bump()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:   # Spansh down or slow: the rest stay unknown until the tab asks again, a minute on
+            self.route_known_wait = time.monotonic() + 60
+            print(f"route systems: Spansh lookup failed ({type(e).__name__}: {e}); {asked} of {len(ids)} looked up",
+                  file=sys.stderr)
+        finally:
+            if asked % ROUTE_KNOWN_BATCH:
+                self.route_known_v += 1
+                self.bump()
+            while len(self.route_known) > 5000:
+                self.route_known.pop(next(iter(self.route_known)))
 
     def highway_view(self):
         """GET /api/highway: the route with its progress (the next HIGHWAY_AHEAD rows and the HIGHWAY_DONE most recent
@@ -10507,6 +10581,7 @@ class State:
         if hw:
             nx = self.highway_next(hw, rows)
             start = nx if nx is not None else len(rows)
+            self.route_known_check(rows[start:start + HIGHWAY_AHEAD])
             route = dict({k: hw.get(k) for k in ("id", "plotter", "ship", "options", "created_ts", "at", "furthest",
                                                   "off_route", "arrival_ts", "done_ts", "stand_in")},
                          **{"from": rows[0]["system"], "to": rows[-1]["system"], "count": len(rows),
@@ -11433,6 +11508,7 @@ class State:
         plot can run up to TRADE_PLOT_TIMEOUT: review 2026-10-08 #7, it was left running into the closed session)."""
         return [t for t in (self.refresh_task, self.target_task, self.unsold_task, self.seller_task, self.carrier_task,
                             self.searcher.task, self.honk_test_task, self.honk_run_task, self.highway_task, self.riches_task,
+                            self.route_known_task,
                             self.autotarget_task, self.autotarget_test_task, self.lease_task, self.edsm_discard_task,
                             *self.upload_tasks.values()) if t]
 
@@ -14052,6 +14128,7 @@ async def run(args, st):
     inara_task = asyncio.create_task(state.inara.run()) if state.inara.active else None
     print("inara upload: " + state.inara.status_line())
     print("update check: " + ("on (GitHub's latest release, once a day)" if st["update_check"] else "off ([server] update_check)"))
+    state.route_known_on = True   # the Plot Route list asks Spansh which route systems are already discovered
     print("firsts watch: " + ("on (your unsold firsts on Spansh: one request every 10-30 s, each system once a day)"
                               if st["watch_firsts"] else "off ([spansh] watch_firsts)"))
     print(state.uploads_line())

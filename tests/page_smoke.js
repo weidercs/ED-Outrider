@@ -3173,6 +3173,16 @@ const settle = async maxMs => {
     if (JSON.stringify(got.inara) !== JSON.stringify(["Inara upload: off ([inara] below switches it on, at the next start).",
       `Inara upload (live play only): ${(1234).toLocaleString()} sent, 2 waiting, 1 dropped (Inara could not be reached (timed out)).`,
       "Inara upload: off (--simulate).", ""])) bad.push("inara");
+    // the route list's Known column: a mark per state with what it means, nothing for a system not looked up yet
+    got.known = ["visited", "explored", "partial", "no bodies", null, "?"].map(k => w.eval(`hwyKnownHtml(${JSON.stringify(k)})`).replace(/<[^>]+>/g, "") +
+      "|" + (/title="([^"]*)"/.exec(w.eval(`hwyKnownHtml(${JSON.stringify(k)})`)) || [])[1]);
+    got.knownCol = [/^already discovered\?/.test(d.querySelector("#hwyTable th:nth-child(3)").title), d.querySelectorAll("#hwyTable thead th").length,
+      w.eval(`hwyRowHtml({i: 3, system: "X", known: "no bodies", distance: 5, remaining: 9}, "ahead")`).split("<td").length - 1,
+      /hwyk-new/.test(w.eval(`hwyRowHtml({i: 3, system: "X", known: "no bodies", distance: 5, remaining: 9}, "ahead")`))];
+    if (JSON.stringify(got.known) !== JSON.stringify(["✓|you have been here", "●|already discovered: every body is reported to Spansh",
+      "◐|already discovered: some of its bodies are reported to Spansh", "○|nobody has reported a body here: it may be undiscovered",
+      "|not looked up yet", "|not looked up yet"])) bad.push("known");
+    if (JSON.stringify(got.knownCol) !== JSON.stringify([true, 10, 10, true])) bad.push("knownCol");
     if (!(got.err[0] === "Could not plot the route: a route is being plotted already." && got.err[1] === "err")) bad.push("err");
     if (!(got.saved && got.saved.plotter === "exact" && got.saved.injections === true && got.saved.refuel_every_scoopable === true)) bad.push("saved");
     if (!(JSON.stringify(p.v) === "[50,25,2]" && JSON.stringify(p.a) === "[10,110]" && JSON.stringify(p.b) === "[210,10]" && p.one && p.none === null
