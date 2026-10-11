@@ -3934,6 +3934,13 @@ document.getElementById("cargoList").addEventListener("keydown", e => {
 });
 
 // ---- The Sell / Buy lookup: Spansh's stations for one commodity (GET /api/cargo/lookup, read only) ----
+// A lookup row's station: its name, and for a fleet carrier its own name with the callsign beside it (the callsign
+// alone while Spansh has no name for it). Pure.
+function lookStationHtml(r) {
+  if (!r.carrier) return `<b>${esc(r.station)}</b>`;
+  return r.carrier_name ? `<b>${esc(r.carrier_name)}</b> <span class="unk">(carrier ${esc(r.station)})</span>`
+    : `<b>${esc(r.station)}</b> <span class="unk">(carrier)</span>`;
+}
 // LK: what is asked (commodity, label, mode, tons, from: ship | carrier | here, key: the line it came from) and how
 // (sort, within, age, carriers); answer: the server's; open: the station row opened
 const LK = {q: null, sort: "price", within: 500, age: 14, carriers: false, answer: null, open: null, busy: false};
@@ -3985,8 +3992,8 @@ function renderLook() {
       `<th class="num">${sell ? "Demand" : "Supply"}</th><th class="num">${sell ? `Your ${tons(q.tons)}` : "Cost"}</th><th class="num">Data</th></tr></thead><tbody>` +
       a.rows.map((r, n) => {
         const open = LK.open === n;
-        let row = `<tr class="lookrow${open ? " open" : ""}" data-n="${n}"><td><span class="tw">${open ? "▾" : "▸"}</span> <b>${esc(r.station)}</b>` +
-          `${r.carrier ? ` <span class="unk">(carrier)</span>` : ""}<div class="unk">${esc(r.system)}</div></td>` +
+        let row = `<tr class="lookrow${open ? " open" : ""}" data-n="${n}"><td><span class="tw">${open ? "▾" : "▸"}</span> ${lookStationHtml(r)}` +
+          `<div class="unk">${esc(r.system)}</div></td>` +
           `<td class="num">${r.distance.toLocaleString()} ly${r.jumps ? `<div class="unk">≈ ${r.jumps} jump${r.jumps === 1 ? "" : "s"}</div>` : ""}</td>` +
           `<td class="num${r.far ? " warnc" : ""}">${r.ls.toLocaleString()} ls${r.far ? `<div class="small">⚠ far from the star</div>` : ""}</td>` +
           `<td class="num">${r.price.toLocaleString()}<div class="unk">cr/t</div></td><td class="num">${r.qty.toLocaleString()}</td>` +

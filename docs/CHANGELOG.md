@@ -2,6 +2,10 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-10 · Sell / Buy: a fleet carrier's name in the results
+- A fleet carrier in the Sell / Buy lookup shows its own name with the callsign beside it ("Deep Space Relay (carrier
+  G0B-W2J)"), from Spansh's `carrier_name`; a carrier Spansh has no name for shows its callsign as before.
+
 ## 2026-10-10 · This fork: an Inara upload (off by default); upstream's EDDN and EDSM uploads adopted
 - Upstream now has its own EDDN and EDSM uploads (Settings → Uploads), which replace the ones this fork had built
   (`outrider/uplink.py`, `[uploads]`: both gone). What they did not cover is kept: `[inara]` (`enabled`, `api_key`)

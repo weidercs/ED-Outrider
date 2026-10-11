@@ -1513,6 +1513,11 @@ const settle = async maxMs => {
     const look = d.getElementById("cargoLook");
     got.head = (look.querySelector(".lookhead") || {}).textContent;
     got.rows = look.querySelectorAll("tr.lookrow").length;
+    // a fleet carrier's row leads with the carrier's own name, its callsign beside it; without a name, the callsign
+    got.stationCell = [{station: "G0B-W2J", carrier: true, carrier_name: "Deep <Space> Relay"}, {station: "G0B-W2J", carrier: true, carrier_name: null},
+      {station: "Jung Base", carrier: false, carrier_name: null}].map(r => w.eval(`lookStationHtml(${JSON.stringify(r)})`));
+    if (JSON.stringify(got.stationCell) !== JSON.stringify(['<b>Deep &lt;Space&gt; Relay</b> <span class="unk">(carrier G0B-W2J)</span>',
+      '<b>G0B-W2J</b> <span class="unk">(carrier)</span>', "<b>Jung Base</b>"])) errors.push("lookStationHtml: " + JSON.stringify(got.stationCell));
     got.far = /⚠ far from the star/.test(look.textContent);
     got.sel = !!d.querySelector('#cargoList tr.sel[data-cid="platinum"]');
     look.querySelectorAll("tr.lookrow")[1].click();

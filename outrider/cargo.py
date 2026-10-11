@@ -516,6 +516,9 @@ def market_rows(results, name, mode, tons, holding=(), avg=None, laden=None, now
         rows.append({"station": r.get("name"), "system": r.get("system_name"), "id64": str(r.get("system_id64") or ""),
                      "distance": ly, "jumps": jumps_estimate(ly, laden), "ls": ls, "far": ls > FAR_LS,
                      "type": r.get("type"), "carrier": r.get("type") == CARRIER_TYPE,
+                     # a fleet carrier's own name (its "station" is the callsign); Spansh has it only once reported
+                     "carrier_name": " ".join(r["carrier_name"].split()) or None
+                     if r.get("type") == CARRIER_TYPE and isinstance(r.get("carrier_name"), str) else None,
                      "pad": LARGE if r.get("has_large_pad") or r.get("large_pads") else MEDIUM if r.get("medium_pads") else SMALL,
                      "price": price, "qty": qty, "value": price * tons,
                      "profit": round((price - avg) * tons) if mode == "sell" and avg else None,

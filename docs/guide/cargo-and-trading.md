@@ -38,7 +38,7 @@ players last reported, so the newer the data, the safer the trip.
 
 - **Sell / Buy** on any line of your Cargo asks where to sell all of it (or buy that much): best price or closest,
   within a distance, data under an age, your ship's pad size, fleet carriers left out unless ticked (their orders
-  are often years old). Each station shows how far it is (and how far from its star), the price, demand or supply,
+  are often years old; a carrier shows its own name with its callsign beside it). Each station shows how far it is (and how far from its star), the price, demand or supply,
   what your load earns and the profit over what you paid. Opened, it lists what else it buys from your hold and its
   services (and whether it buys exploration data and samples too), with Copy, Bookmark and **Plot route here**.
   **Buy something else** looks up any commodity.

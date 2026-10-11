@@ -435,6 +435,13 @@ class Lookup(unittest.TestCase):
         rows = cargo.market_rows(answer["results"], "Platinum", "sell", 64, holding=[("Gold", 10), ("Platinum", 64)],
                                  avg=45210, laden=50, now=1791400000)
         self.assertEqual([r["carrier"] for r in rows], [True, True, False, False, False])
+        self.assertEqual([r["carrier_name"] for r in rows], [None] * 5)   # this answer's carriers had reported none
+        # a carrier's own name comes with its callsign; a station is never given one
+        named = [dict(answer["results"][0], carrier_name="  DEEP  SPACE\tRELAY "), dict(answer["results"][0], carrier_name=""),
+                 dict(answer["results"][0], carrier_name=7), dict(answer["results"][2], carrier_name="Not A Carrier")]
+        got = cargo.market_rows(named, "Platinum", "sell", 64)
+        self.assertEqual([(r["station"], r["carrier_name"]) for r in got],
+                         [("Q1M-90Q", "DEEP SPACE RELAY"), ("Q1M-90Q", None), ("Q1M-90Q", None), ("Jung Base", None)])
         jung = rows[2]
         self.assertEqual((jung["station"], jung["system"], jung["price"], jung["far"], jung["jumps"]),
                          ("Jung Base", "HIP 11402", 302844, True, 7))
