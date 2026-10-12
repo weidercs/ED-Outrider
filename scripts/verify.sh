@@ -55,9 +55,9 @@ fi
 
 step "pyflakes (any warning fails)"
 if "$PY" -m pyflakes --version >/dev/null 2>&1; then
-  if "$PY" -m pyflakes ed_outrider.py outrider/*.py voice_lab.py tests/*.py; then echo "no warnings"; else FAIL=1; fi
+  if "$PY" -m pyflakes ed_outrider.py outrider/*.py tests/*.py; then echo "no warnings"; else FAIL=1; fi
 elif command -v pyflakes >/dev/null 2>&1; then
-  if pyflakes ed_outrider.py outrider/*.py voice_lab.py tests/*.py; then echo "no warnings"; else FAIL=1; fi
+  if pyflakes ed_outrider.py outrider/*.py tests/*.py; then echo "no warnings"; else FAIL=1; fi
 else
   echo "pyflakes not installed: skipped (pip install -r requirements-dev.txt)"
 fi
@@ -130,7 +130,7 @@ import outrider.eddn
 outrider.eddn.UPLOAD_URL = OFF        # nor EDDN (uploads are off there anyway)
 outrider.edsm.UPLOAD_URL = outrider.edsm.DISCARD_URL = OFF   # nor EDSM's journal upload
 import outrider.inara
-outrider.inara.INARA_URL = OFF       # nor Inara (off in the scratch config anyway)
+outrider.inara.URL = OFF             # nor Inara (off in the scratch config anyway)
 ed_outrider.DSSA_URL = OFF          # nor EDAstro for the DSSA list
 import outrider.galnet
 outrider.galnet.URL = OFF            # nor Frontier's GalNet feed
@@ -148,6 +148,8 @@ if os.name == "nt":
             time.sleep(0.2)
         signal.raise_signal(signal.SIGINT)
     threading.Thread(target=stop_on_file, daemon=True).start()
+# your own pronunciations (data/pronounce.json) are never read or written from here: a scratch file beside the database
+outrider.tts.PRONOUNCE.own = os.path.join(os.path.dirname(sys.argv[sys.argv.index("--db") + 1]), "pronounce.json")
 ed_outrider.main(sys.argv[1:])
 EOF
   PID=$!

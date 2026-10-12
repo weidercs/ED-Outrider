@@ -279,6 +279,19 @@ class CarrierFuel(unittest.TestCase):
                                         (348.35, 89, 22399, 875), (497.2, 118, 20112, 385)):
             self.assertEqual(cargo.carrier_burn(ly, used, depot), burned, (ly, used, depot))
 
+    def test_reserved_space_weighs_nothing(self):
+        """Space a buy order reserves is not cargo: the game's own JumpRangeCurr (the jump the depot pays for in full)
+        matches the formula only without it. The author's CarrierStats (in-game data), 4,500 t and 2,065 t reserved:
+        counted as cargo, the first read 54 t for a 50 t jump of 198.6 ly (the review, 2026-10-12)."""
+        for fuel, reach, space in ((50, 198.627258, {"TotalCapacity": 25000, "Crew": 6150, "Cargo": 13399, "CargoSpaceReserved": 4500,
+                                                     "ShipPacks": 0, "ModulePacks": 712, "FreeSpace": 239}),
+                                   (11, 27.241772, {"TotalCapacity": 25000, "Crew": 4270, "Cargo": 14769, "CargoSpaceReserved": 2065,
+                                                    "ShipPacks": 0, "ModulePacks": 0, "FreeSpace": 3896})):
+            st = cargo.carrier_fold(CARRIER, [("2026-01-01T00:00:00Z", {"event": "CarrierStats", "CarrierID": CARRIER,
+                                                                        "FuelLevel": fuel, "JumpRangeCurr": reach, "SpaceUsage": space})])
+            self.assertEqual(st["stats"]["used"], space["TotalCapacity"] - space["FreeSpace"] - space["CargoSpaceReserved"])
+            self.assertEqual(cargo.carrier_burn(reach, st["stats"]["used"], fuel), fuel, (fuel, reach))
+
     def test_jumps(self):
         # the author's carrier on 2026-10-07: depot 668 t, 13,531 t in the hold, 17,355 t of capacity used
         self.assertEqual(cargo.carrier_jumps(668, 13531, 17355), 151)
@@ -306,6 +319,17 @@ class CargoState(unittest.TestCase):
     def write_market(self, fx):
         with open(os.path.join(self.dir, "Market.json"), "w", encoding="utf-8") as f:
             json.dump(dict(fx["market"], event="Market"), f)
+
+    def test_an_older_dock_read_late_does_not_move_the_market(self):
+        """A legacy folder's old Docked imported after the live one (review 2026-10-11): the market a CargoTransfer is
+        filed under stays the newer dock's."""
+        dock = lambda ts, mid: {"timestamp": ts, "event": "Docked", "StationName": "S", "StationType": "FleetCarrier",
+                                "MarketID": mid, "StarSystem": "X", "SystemAddress": 1}
+        self.j.handle(dock("2026-10-01T00:00:00Z", 7))
+        self.j.handle(dock("2025-01-01T00:00:00Z", 99))   # read late, from long ago
+        self.assertEqual(self.j.cargo_dock, 7)
+        self.j.handle(dock("2026-10-02T00:00:00Z", 8))    # a newer one still moves it
+        self.assertEqual(self.j.cargo_dock, 8)
 
     def test_summary_rereads_the_same(self):
         fx, _, _ = real()
@@ -628,6 +652,18 @@ class TradeRoute(unittest.TestCase):
         self.assertIn("Hop 2 done", self.moments()[-1][1])
         self.market(-40, "MarketSell", r[0], "Biowaste")   # a stop in another system: never jumps the route back
         self.assertEqual(self.state.survey_summary()["at"], 2)
+
+    def test_two_stops_in_one_system_copy_the_next_system(self):
+        """Two stops in one system then one in another: arriving at the first copies the other system (it copied its own
+        system's name, and moving on by a trade never copied the next one: review 2026-10-11)."""
+        r = [dict(x) for x in self.rows]
+        r[1].update(system=r[0]["system"], id64=r[0]["id64"])   # the second stop in the first stop's system
+        copied = []
+        self.state.clipboard = types.SimpleNamespace(enabled=True, tool="wl-copy", copy=lambda text: copied.append(text) or True)
+        self.jump(-10, r[0]["id64"], r[0]["system"], 0)
+        self.state.riches_store(r, {"options": {}, "kind": "trade"})
+        self.state.riches_copy_next(force=True)
+        self.assertEqual(copied, [r[2]["system"]])
 
     def test_plot(self):
         self.jump(-100, self.rows[0]["id64"], "Sol", 0)

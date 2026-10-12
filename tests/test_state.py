@@ -6,6 +6,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import tempfile
 import sys
 import time
 import unittest
@@ -354,6 +355,173 @@ class Batch2Server(unittest.TestCase):
         self.assertEqual(rows, [{"kind": "cloud", "reached_ts": None}])
         self.j.handle({"event": "SupercruiseDestinationDrop", "timestamp": "2026-01-01T00:09:00Z", "Type": "$Fixed_Event_Life_Cloud;"})
         self.assertEqual(self.db.execute("SELECT reached_ts FROM phenomena").fetchone()[0], "2026-01-01T00:09:00Z")
+
+    def test_phenomena_counted_and_announced_once(self):
+        """The FSS lists several phenomena of a kind as identical lines in one moment: counted (they were folded into
+        one), never added up when the FSS lists them again, and announced (live) the first time a system has any
+        (the author's Smojooe XF-G b24-0, three rings, 2026-10-11: nothing said, one 🌀 shown)."""
+        now = time.time()
+        at = lambda s: ed_outrider.iso_ts(now - 60 + s)
+        self.j.handle({"event": "FSDJump", "timestamp": at(0), "StarSystem": "Smojooe XF-G b24-0", "SystemAddress": 614582987473,
+                       "StarPos": [0, 0, 0]})
+        sig = lambda s, kind="Ring": {"event": "FSSSignalDiscovered", "timestamp": at(s), "SystemAddress": 614582987473,
+                                      "SignalName": f"$Fixed_Event_Life_{kind};", "SignalName_Localised": "Notable stellar phenomena",
+                                      "SignalType": "Codex"}
+        for _ in range(3):
+            self.j.handle(sig(9))
+        self.j.handle(sig(9, "Cloud"))
+        rows = {r["kind"]: r["n"] for r in self.db.execute("SELECT kind, n FROM phenomena WHERE system=614582987473")}
+        self.assertEqual(rows, {"ring": 3, "cloud": 1})
+        said = [m for m in self.j.moments if m["kind"] == "phenomena"]
+        self.assertEqual([(m["count"], m["kinds"], m["system_name"]) for m in said], [(4, {"ring": 3, "cloud": 1}, "Smojooe XF-G b24-0")])
+        for _ in range(3):                                                    # the FSS opened again later
+            self.j.handle(sig(40))
+        self.assertEqual(self.db.execute("SELECT n FROM phenomena WHERE kind='ring'").fetchone()[0], 3)   # not 6
+        self.assertEqual(len([m for m in self.j.moments if m["kind"] == "phenomena"]), 1)   # known now: not said again
+        detail = self.state.system_detail(614582987473)
+        self.assertEqual(sorted((p["kind"], p["n"]) for p in detail["phenomena"]), [("cloud", 1), ("ring", 3)])
+        # a re-read of old journals: counted, never announced
+        self.j.handle({"event": "FSSSignalDiscovered", "timestamp": "2020-01-01T00:00:00Z", "SystemAddress": 5,
+                       "SignalName": "$Fixed_Event_Life_Cloud;", "SignalType": "Codex"})
+        self.assertEqual(len([m for m in self.j.moments if m["kind"] == "phenomena"]), 1)
+
+    def test_phenomena_sites_visited(self):
+        """Visited counts the drops at a kind, at most how many the FSS found: the journal says only "a ring phenomenon",
+        and two sites can share a ring (the author, 2026-10-11), so nothing better tells them apart."""
+        now = time.time()
+        at = lambda s: ed_outrider.iso_ts(now - 60 + s)
+        self.j.handle({"event": "FSDJump", "timestamp": at(0), "StarSystem": "Sys R", "SystemAddress": 7, "StarPos": [0, 0, 0]})
+        for _ in range(3):
+            self.j.handle({"event": "FSSSignalDiscovered", "timestamp": at(1), "SystemAddress": 7,
+                           "SignalName": "$Fixed_Event_Life_Ring;", "SignalType": "Codex"})
+        drop = lambda s: self.j.handle({"event": "SupercruiseDestinationDrop", "timestamp": at(s), "Type": "$Fixed_Event_Life_Ring;", "Threat": 0})
+        visited = lambda: self.state.system_detail(7)["phenomena"][0]["visited"]
+        drop(10)
+        self.assertEqual(visited(), 1)
+        drop(20)                                # another site (it may share the ring)
+        self.assertEqual(visited(), 2)
+        drop(10)                                # the same line read again: not another drop
+        self.assertEqual(visited(), 2)
+        self.assertIn("phenomena_sites", ed_outrider.RESET_JOURNAL_DATA)   # journal-derived: a re-read rebuilds it
+
+    def test_surface_sites_kept_and_announced(self):
+        """Guardian, Thargoid and planetary-anomaly body signals were dropped (only bio, geo and mining were kept): now
+        kept per body and said once (live). The FSS says an anomaly; the DSS's map adds Guardian and Thargoid (HIP 22460
+        10 b on EDDN, 2026-10-10). "Other" is kept but never said: nobody knows what it is yet."""
+        now = time.time()
+        at = lambda s: ed_outrider.iso_ts(now - 60 + s)
+        self.j.handle({"event": "FSDJump", "timestamp": at(0), "StarSystem": "HIP 22460", "SystemAddress": 8, "StarPos": [0, 0, 0]})
+        self.j.handle({"event": "Scan", "timestamp": at(1), "ScanType": "Detailed", "StarSystem": "HIP 22460", "SystemAddress": 8,
+                       "BodyID": 40, "BodyName": "HIP 22460 10 b", "PlanetClass": "Rocky body", "DistanceFromArrivalLS": 900.0,
+                       "Landable": True, "WasDiscovered": True, "WasMapped": True})
+        sig = lambda s, name, types: {"event": name, "timestamp": at(s), "SystemAddress": 8, "StarSystem": "HIP 22460",
+                                      "BodyName": "HIP 22460 10 b", "BodyID": 40,
+                                      "Signals": [{"Type": t, "Count": n} for t, n in types]}
+        self.j.handle(sig(2, "FSSBodySignals", [("$SAA_SignalType_PlanetAnomaly;", 1), ("$SAA_SignalType_Geological;", 3)]))
+        self.j.handle(sig(9, "SAASignalsFound", [("$SAA_SignalType_PlanetAnomaly;", 1), ("$SAA_SignalType_Geological;", 3),
+                                                  ("$SAA_SignalType_Guardian;", 2), ("$SAA_SignalType_Thargoid;", 1),
+                                                  ("$SAA_SignalType_Other;", 4), ("$SAA_SignalType_Human;", 2)]))
+        said = [m["what"] for m in self.j.moments if m["kind"] == "surface_site"]
+        self.assertEqual(said, ["an unknown planetary anomaly on 10 b", "Guardian and Thargoid sites on 10 b"])   # each news once
+        body = next(b for b in self.state.system_detail(8)["bodies"] if b["name"] == "10 b")
+        self.assertEqual(body["sites"], {"guardian": 2, "thargoid": 1, "anomaly": 1, "other": 4})
+        self.assertEqual(body["geo"], 3)                                         # the rest as before
+        # a later honk's FSS line names only the anomaly: the DSS's sites stay, and mapping again is no news (review)
+        self.j.handle(sig(15, "FSSBodySignals", [("$SAA_SignalType_PlanetAnomaly;", 1)]))
+        body = next(b for b in self.state.system_detail(8)["bodies"] if b["name"] == "10 b")
+        self.assertEqual(body["sites"], {"guardian": 2, "thargoid": 1, "anomaly": 1, "other": 4})
+        self.j.handle(sig(16, "SAASignalsFound", [("$SAA_SignalType_PlanetAnomaly;", 1), ("$SAA_SignalType_Guardian;", 2),
+                                                   ("$SAA_SignalType_Thargoid;", 1), ("$SAA_SignalType_Other;", 4)]))
+        self.assertEqual(len([m for m in self.j.moments if m["kind"] == "surface_site"]), 2)
+        self.j.handle(sig(20, "SAASignalsFound", [("$SAA_SignalType_Guardian;", 2)]))
+        self.assertEqual(len([m for m in self.j.moments if m["kind"] == "surface_site"]), 2)   # mapped again: nothing new
+
+    def test_signals_worth_a_detour(self):
+        """FSS signals worth a detour (a Titan, a listening post, tourist beacons...) were thrown away by the reader's
+        filter: now kept; the rare kinds said once (live), the common ones only shown."""
+        import tempfile, json as _j
+        now = time.time()
+        at = lambda s: ed_outrider.iso_ts(now - 60 + s)
+        d = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, d)
+        lines = [{"timestamp": at(0), "event": "FSDJump", "StarSystem": "HIP 8887", "SystemAddress": 11, "StarPos": [0, 0, 0]},
+                 {"timestamp": at(5), "event": "FSSSignalDiscovered", "SystemAddress": 11, "SignalName": "Titan Cocijo", "SignalType": "Titan"},
+                 {"timestamp": at(5), "event": "FSSSignalDiscovered", "SystemAddress": 11, "SignalName": "$ListeningPost:#index=1;",
+                  "SignalName_Localised": "Listening Post", "SignalType": "Generic"},
+                 {"timestamp": at(5), "event": "FSSSignalDiscovered", "SystemAddress": 11, "SignalName": "$ListeningPost:#index=2;",
+                  "SignalName_Localised": "Listening Post", "SignalType": "Generic"},
+                 {"timestamp": at(5), "event": "FSSSignalDiscovered", "SystemAddress": 11, "SignalName": "Listening Post Pollux D568",
+                  "SignalType": "Generic"},
+                 {"timestamp": at(5), "event": "FSSSignalDiscovered", "SystemAddress": 11, "SignalName": "Europa Ice Geyser", "SignalType": "TouristBeacon"},
+                 {"timestamp": at(5), "event": "FSSSignalDiscovered", "SystemAddress": 11, "SignalName": "$USS_DegradedEmissions;", "SignalType": "USS"}]
+        with open(os.path.join(d, "Journal.2026-10-11T100000.01.log"), "w") as f:
+            for e in lines:
+                f.write(_j.dumps(e, separators=(",", ":")) + "\n")   # the game's own spacing, as the filter sees it
+        self.j.scan_dir(d)
+        rows = [tuple(r) for r in self.db.execute("SELECT kind, name FROM poi WHERE system=11 ORDER BY kind")]
+        # two indexed posts are two, and a named one passes the filter too (review 2026-10-11)
+        self.assertEqual(rows, [("listening_post", "Listening Post #1"), ("listening_post", "Listening Post #2"),
+                                ("listening_post", "Listening Post Pollux D568"), ("titan", "Titan Cocijo"),
+                                ("tourist", "Europa Ice Geyser")])
+        said = [m["what"] for m in self.j.moments if m["kind"] == "signal_poi"]
+        self.assertEqual(said, ["the Titan Cocijo", "a listening post"])   # the tourist beacon is shown, not said
+        self.assertEqual(len(self.state.system_detail(11)["pois"]), 5)
+        self.j.handle(dict(lines[1], timestamp=at(30)))                     # the FSS lists it again
+        self.assertEqual(len([m for m in self.j.moments if m["kind"] == "signal_poi"]), 2)
+        self.assertIn("DELETE FROM poi", ed_outrider.RESET_JOURNAL_DATA)    # journal-derived
+
+    def test_rare_planet_curiosities_and_the_curious_line(self):
+        """Rare planet classes are curiosities (a water giant, helium giants, Sudarsky class V; a green gas giant from its
+        codex entry), and a system with curiosities gets one "curious" line, once ever, while the game is live: "check
+        your panels", not the list (the author, 2026-10-11)."""
+        tags = lambda r: [t for t, _ in ed_outrider.curiosities(dict({"type": "Planet"}, **r))]
+        self.assertEqual(tags({"subtype": "Water giant"}), ["water giant"])
+        self.assertEqual(tags({"subtype": "Helium gas giant"}), ["helium giant"])
+        self.assertEqual(tags({"subtype": "Class V gas giant"}), ["class V giant"])
+        self.assertEqual(tags({"subtype": "Class I gas giant", "codex": [{"name": "Green Class I Gas Giant"}]}), ["green gas giant"])
+        self.assertEqual(tags({"subtype": "Class I gas giant"}), [])
+        now = time.time()
+        self.j.handle({"event": "FSDJump", "timestamp": ed_outrider.iso_ts(now - 30), "StarSystem": "Odd", "SystemAddress": 12, "StarPos": [0, 0, 0]})
+        self.j.handle({"event": "Scan", "timestamp": ed_outrider.iso_ts(now - 20), "ScanType": "Detailed", "StarSystem": "Odd",
+                       "SystemAddress": 12, "BodyID": 3, "BodyName": "Odd 3", "PlanetClass": "Water giant", "DistanceFromArrivalLS": 400.0,
+                       "WasDiscovered": False, "WasMapped": False})
+        self.j.status_json = {"live": False}
+        self.state.maybe_curious()
+        self.assertEqual([m for m in self.j.moments if m["kind"] == "curious"], [])   # the game not live: nothing said
+        self.j.status_json = {"live": True}
+        ed_outrider.meta_set(self.db, "curious_said", [99, 5])   # said before: 99, then 5
+        with unittest.mock.patch.object(ed_outrider, "CURIOUS_KEEP", 2):
+            self.state.maybe_curious()
+            self.state.maybe_curious()
+        said = [m for m in self.j.moments if m["kind"] == "curious"]
+        self.assertEqual([(m["system"], m["bodies"]) for m in said], [("12", ["3"])])   # once
+        # kept for after a restart; past CURIOUS_KEEP the oldest said goes, not the smallest id64 (review 2026-10-11)
+        self.assertEqual(ed_outrider.meta_get(self.db, "curious_said"), [5, 12])
+
+    def test_rare_stars_announced_and_shown(self):
+        """A rare star (a black hole, a Wolf-Rayet...) resolved live is a "rare_star" moment, once; Nearby and Here list
+        the rare stars, Spansh's included (seen before you go); common stars say nothing."""
+        now = time.time()
+        at = lambda s: ed_outrider.iso_ts(now - 60 + s)
+        self.j.handle({"event": "FSDJump", "timestamp": at(0), "StarSystem": "Rare", "SystemAddress": 9, "StarPos": [0, 0, 0]})
+        star = lambda s, bid, name, kind, dist=0.0: {"event": "Scan", "timestamp": at(s), "ScanType": "AutoScan", "StarSystem": "Rare",
+                                                     "SystemAddress": 9, "BodyID": bid, "BodyName": name, "StarType": kind,
+                                                     "DistanceFromArrivalLS": dist, "WasDiscovered": False, "WasMapped": False}
+        self.j.handle(star(1, 0, "Rare A", "H"))                          # the arrival star
+        self.j.handle(star(2, 1, "Rare B", "WC", 1200.0))                 # another, from the FSS
+        self.j.handle(star(3, 2, "Rare C", "M", 3000.0))                  # a red dwarf: nothing
+        self.j.handle(star(4, 1, "Rare B", "WC", 1200.0))                 # scanned again: not news again
+        said = [m["what"] for m in self.j.moments if m["kind"] == "rare_star"]
+        self.assertEqual(said, ["a black hole, the main star", "a Wolf-Rayet star at B"])
+        detail = self.state.system_detail(9)
+        self.assertEqual([r["what"] for r in detail["rare_stars"]], ["a black hole", "a Wolf-Rayet star"])
+        self.assertEqual(ed_outrider.rare_stars([{"name": "X A", "type": "Star", "subtype": "Herbig Ae/Be Star"},
+                                                 {"name": "X B", "type": "Star", "subtype": "Neutron Star"},
+                                                 {"name": "X 1", "type": "Planet", "subtype": "Black Hole"}], "X"),
+                         [{"body": "A", "what": "a Herbig Ae Be star", "main": False}])   # Spansh's names too
+        self.j.handle({"event": "Scan", "timestamp": "2020-01-01T00:00:00Z", "ScanType": "AutoScan", "StarSystem": "Old",
+                       "SystemAddress": 10, "BodyID": 0, "BodyName": "Old", "StarType": "H", "DistanceFromArrivalLS": 0.0})
+        self.assertEqual(len([m for m in self.j.moments if m["kind"] == "rare_star"]), 2)   # a re-read: never said
 
     def test_phenomena_lines_pass_the_filter(self):
         import tempfile, json as _j
@@ -711,6 +879,9 @@ class Batch3Journal(unittest.TestCase):
         self.j.handle({"timestamp": "2026-01-01T00:00:00Z", "event": "HullDamage", "Health": 0.57, "PlayerPilot": True, "Fighter": False})
         self.j.handle({"timestamp": "2026-01-01T00:01:00Z", "event": "Repair", "Items": ["Paint"], "Cost": 2})
         self.assertEqual(self.j.hull["pct"], 57)
+        # "Wear" is the ship's integrity: a damaged hull's repair names "Hull" too (review 2026-10-11)
+        self.j.handle({"timestamp": "2026-01-01T00:01:30Z", "event": "Repair", "Items": ["Wear"], "Cost": 3134})
+        self.assertEqual(self.j.hull["pct"], 57)
         self.j.handle({"timestamp": "2026-01-01T00:02:00Z", "event": "Repair", "Items": ["Hull"], "Cost": 3134})
         self.assertEqual(self.j.hull["pct"], 100)
         self.j.handle({"timestamp": "2026-01-01T00:03:00Z", "event": "HullDamage", "Health": 0.5, "PlayerPilot": True, "Fighter": False})
@@ -783,6 +954,34 @@ class Batch3Server(unittest.TestCase):
         del self.state.bases[7]
         asyncio.run(self.state.ensure_records(7))                 # on demand: not asked again within the day
         self.assertEqual(calls, [7])
+
+    def test_a_codex_entry_without_a_body_is_on_no_body(self):
+        """A CodexEntry with no BodyID (a phenomenon found in space) was listed, voucher and all, on every body of the
+        system you had not scanned yourself (review 2026-10-11)."""
+        self.j.handle({"event": "FSDJump", "timestamp": "2026-01-01T00:00:00Z", "StarSystem": "Sys", "SystemAddress": 7,
+                       "StarPos": [0, 0, 0]})
+        self.j.handle({"timestamp": "2026-01-01T00:01:00Z", "event": "CodexEntry", "EntryID": 2100701, "Name": "$Codex_Ent_L_Clouds;",
+                       "Name_Localised": "Lagrange Cloud", "SystemAddress": 7, "System": "Sys", "IsNewEntry": True,
+                       "VoucherAmount": 2500, "NearestDestination": "$SAA_Unknown_Signal:#type=$SAA_SignalType_Stellar;"})
+        base = {"v": ed_outrider.CACHE_VERSION, "name": "Sys", "x": 0, "y": 0, "z": 0, "body_count": 2, "records": [
+            {"name": "Sys 1", "type": "Planet", "subtype": "Icy body", "full": True},
+            {"name": "Sys 2", "type": "Planet", "subtype": "Rocky body", "full": True}]}
+        self.state.bases[7] = ("spansh", base)
+        bodies = [b for b in self.state.system_detail(7)["bodies"] if b.get("type") == "Planet"]
+        self.assertEqual([(b["name"], b["codex"]) for b in bodies], [("Sys 1", []), ("Sys 2", [])])
+
+    def test_dump_replaces_an_edsm_stand_in(self):
+        """A system first found through EDSM (find_system's fallback) and later filled from Spansh's dump is Spansh's:
+        it kept the edsm marker, so spansh_verdict ignored it (review 2026-10-11)."""
+        import asyncio
+        sp, _ = self.fake_spansh({"system": {"bodyCount": 1, "bodies": [
+            {"name": "Sys A", "type": "Star", "subType": "K (Yellow-Orange) Star", "solarMasses": 0.8}]}})
+        stand_in = ed_outrider.base_from_edsm({"name": "Sys", "coords": {"x": 0, "y": 0, "z": 0},
+                                               "primaryStar": {"type": "K (Yellow-Orange) Star", "isScoopable": True}})
+        self.assertEqual(ed_outrider.cached_source(stand_in), "edsm")
+        got = asyncio.run(sp.full_records(7, "u1", stand_in))
+        self.assertNotIn("edsm", got)
+        self.assertEqual(ed_outrider.cached_source(got), "spansh")
 
     def test_dump_body_count_is_kept(self):   # F53
         import asyncio
@@ -2606,6 +2805,31 @@ class SchemaUpgrade(unittest.TestCase):
         row = db.execute("SELECT x, y, z FROM spansh_systems WHERE id64 = 42").fetchone()
         self.assertEqual(tuple(row), (1.5, -2.0, 300.25))
         self.assertEqual(ed_outrider.meta_get(db, "parser_version"), ed_outrider.PARSER_VERSION)
+
+
+class RereadNote(unittest.TestCase):
+    """The start-up log says when and why every journal is read again (the author, 2026-10-11)."""
+
+    def test_message_and_when_it_is_said(self):
+        V = ed_outrider.PARSER_VERSION
+        self.assertIn(V, ed_outrider.PARSER_CHANGES)   # every bump says why in the player's words
+        m = ed_outrider.reread_message(V - 1)
+        self.assertIn(f"the journal reader changed (version {V - 1} -> {V}: {ed_outrider.PARSER_CHANGES[V]})", m)
+        self.assertIn("older change", ed_outrider.reread_message(V - 9))   # three reasons at most, the rest counted
+        self.assertIn("a new database", ed_outrider.reread_message(None))
+        self.assertIn("--rescan", ed_outrider.reread_message(V, rescan=True))
+        self.assertIn("newer Outrider", ed_outrider.reread_message(V + 1))
+        with tempfile.TemporaryDirectory() as d:
+            path, said = os.path.join(d, "x.sqlite"), []
+            ed_outrider.open_db(path, on_reread=said.append).close()
+            ed_outrider.open_db(path, on_reread=said.append).close()          # up to date: nothing said
+            self.assertEqual(len(said), 1)
+            self.assertIn("a new database", said[0])
+            db = ed_outrider.open_db(path)
+            ed_outrider.meta_set(db, "parser_version", V - 1)
+            db.commit(), db.close()
+            ed_outrider.open_db(path, on_reread=said.append).close()
+            self.assertIn(f"version {V - 1} -> {V}", said[-1])
 
 
 class JournalsRegistry(unittest.TestCase):

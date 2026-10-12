@@ -134,7 +134,7 @@ def completion(species_list, region_ok, runs, codex, region_count):
     return out
 
 
-def table(species_list, region, region_ok, runs, codex, region_count):
+def table(species_list, region, region_ok, runs, codex, region_count, value_of=None):
     """The checklist for region number `region` (None: All regions).
 
     species_list  the rules' species ({name, genus, value, rulesets, colors})
@@ -143,6 +143,7 @@ def table(species_list, region, region_ok, runs, codex, region_count):
                   (number or None), state}], state one of "sold", "aboard", "lost", "in progress"
     codex         your codex entries: [{name ("Bacterium Aurasus - Teal" or "Luteolum Anemone"), region (number)}]
     region_count  the number of regions (their numbers run 1..region_count)
+    value_of      name -> credits from the price list (outrider.bio.species_value), else the rules' value
 
     -> {"genera": [{genus, species: [row]}], "summary": {...}}; a row: {id, name, short, value, possible, state,
     elsewhere (your best in other regions, when none here), runs, variants: {total, found, list: [{colour, where, state}]}}."""
@@ -151,6 +152,7 @@ def table(species_list, region, region_ok, runs, codex, region_count):
 
     species_list, names = merge_species(species_list)
     got, got_colour, n_runs, anywhere = {}, {}, {}, {}
+    carried = set()   # species with samples aboard here, whatever else you did with them (a colour sold before)
 
     def note(key, colour, r, state):
         if key is None:
@@ -159,6 +161,8 @@ def table(species_list, region, region_ok, runs, codex, region_count):
         if not here(r):
             return
         got[key] = best(got.get(key), state)
+        if state == "aboard":
+            carried.add(key)
         if colour:
             got_colour[(key, colour)] = best(got_colour.get((key, colour)), state)
 
@@ -187,7 +191,10 @@ def table(species_list, region, region_ok, runs, codex, region_count):
         else:   # its own one variant: found when the species is
             vlist = [{"colour": None, "where": None, "state": state}]
         found = sum(1 for v in vlist if v["state"])
-        row = {"id": key, "name": sp["name"], "short": short_name(sp), "value": sp.get("value"), "possible": poss, "state": state,
+        # the price list's figure when it has one (value_of: outrider.bio.species_value), as My Samples and the
+        # predictions use: the rules carry BioScan's, a placeholder for some (Concha Biconcavis 16,777,215)
+        value = (value_of(sp["name"]) if value_of else None) or sp.get("value")
+        row = {"id": key, "name": sp["name"], "short": short_name(sp), "value": value, "possible": poss, "state": state,
                "elsewhere": anywhere.get(key) if region is not None and not state else None,
                "runs": n_runs.get(key, 0), "variants": {"total": len(vlist), "found": found, "list": vlist}}
         genera.setdefault(sp.get("genus") or "?", []).append(row)
@@ -200,7 +207,10 @@ def table(species_list, region, region_ok, runs, codex, region_count):
             totals["colours_found"] += found
             if state:
                 totals["found"] += 1
-                totals[state] += 1
+                totals[state] += 1 if state != "aboard" else 0
+            # aboard: every species you carry unsold samples of, not only those with nothing better (a new colour of
+            # a species sold before is aboard too: the author, 2026-10-11); sold, lost and logged stay best-state counts
+            totals["aboard"] += 1 if key in carried else 0
     totals["completion"] = round(100 * done / totals["possible"], 2) if totals["possible"] else None
     out = [{"genus": g, "species": sorted(rows, key=lambda x: x["short"])} for g, rows in sorted(genera.items())]
     return {"genera": out, "summary": totals}

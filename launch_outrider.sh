@@ -7,7 +7,11 @@
 # (./launch_outrider.sh --port 8026).
 # PYTHON=/path/to/python3.x picks the Python that makes the environment (3.11 or newer).
 set -euo pipefail
+# relative paths in the arguments (--config my.toml, --db, --journals .) are the caller's: Outrider is started from
+# the folder this was run in, with the repository's files by their full path
+CALLER=$PWD
 cd "$(dirname "$0")"
+HERE=$PWD
 
 VENV=.venv
 STAMP="$VENV/.requirements.sha256"   # requirements.txt as it was when last installed
@@ -55,7 +59,7 @@ if needs_install; then
         fi
     fi
     echo "Installing ED Outrider's requirements into $VENV"
-    "$VENV/bin/python" -m pip install --quiet --upgrade pip
+    "$VENV/bin/python" -m pip install --quiet --upgrade pip || true   # offline or refused: the installed pip will do
     if ! "$VENV/bin/python" -m pip install --quiet -r requirements.txt; then
         echo "Installing the requirements failed. evdev (auto honk, the co-pilot button) is built from source and needs" >&2
         echo "your Python's development headers (Debian/Ubuntu: sudo apt install python3-dev); or remove its line from" >&2
@@ -66,8 +70,8 @@ if needs_install; then
 fi
 
 # the in-game overlay's PyQt6, installed when [overlay] enabled is true in the config and it is missing (never stops
-# Outrider from starting)
-"$VENV/bin/python" -m outrider.overlay_runner --setup "$@" || true
+# Outrider from starting). Run in the caller's folder like Outrider, so a relative --config is the same file.
+(cd "$CALLER" && PYTHONPATH="$HERE${PYTHONPATH:+:$PYTHONPATH}" "$HERE/$VENV/bin/python" -m outrider.overlay_runner --setup "$@") || true
 
 # Plot Route's clipboard copy (and auto-target's paste) on Linux needs a system program, not pip's: wl-copy under
 # Wayland, xclip under X11 (outrider/highway.py Clipboard: wl-copy when WAYLAND_DISPLAY is set, else xclip when DISPLAY
@@ -122,4 +126,5 @@ clipboard_hint
 
 # shellcheck disable=SC1091
 source "$VENV/bin/activate"
-exec python ed_outrider.py "$@"
+cd "$CALLER"
+exec python "$HERE/ed_outrider.py" "$@"

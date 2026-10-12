@@ -82,8 +82,8 @@ counts as the FSS finds them, where the frame shift drive is taking you (said in
 over the game's countdown call) and whether that star is scoopable, brief you on arrival, after the FSS, on approach and on leaving a body, welcome you back
 after a break, debrief a ship loss and recap the session on quit, and it names the galactic region you cross into. Lines you tire of can be
 banned from the Spoken lines list (data/speech_banned.json). Lines go through a priority queue in
-one browser window (danger first; the queue clears when the FSD charges). voice_lab.py is a separate
-window for trying voices and lines. Optionally the server plays the speech and the alert sounds itself
+one browser window (danger first; the queue clears when the FSD charges). The voice lab (Settings > Voice) tries
+voices, their speakers and lines in the page. Optionally the server plays the speech and the alert sounds itself
 (POST /api/say/play, /api/sound/play; static/sounds.json, or your own <name>.wav files from [speech] sound_dir,
 served to the page by GET /api/sound/file/{name}), so no click on the page is needed; the next line is
 synthesised while one plays (POST /api/say/prefetch), and Volume is set per device. When Outrider stops
@@ -197,17 +197,20 @@ import outrider.ask        # questions by voice (POST /api/ask): fixed phrases, 
 import outrider.config_edit  # the Settings dialog's Server settings: every config key, edited in place
 import outrider.mcp        # the MCP bridge's [mcp] settings (the bridge itself runs as python3 -m outrider.mcp)
 import outrider.uploads    # EDDN / EDSM uploads (opt-in): the session, the live gate, the outbox
-import outrider.inara      # the fork's Inara upload ([inara], off by default), from its own tail of the journals
 import outrider.galnet     # the fork's GalNet News: Frontier's feed as articles, and the systems they mention
 import outrider.navroute   # the fork's Game Route list: the game's own route, jump by jump (pure)
 import outrider.shipinfo   # the fork's Ship view: the Loadout as figures and modules with their engineering
 import outrider.biohunt    # the fork's Unscanned (bio) plotter: mass codes, the odds, the pick of each hop (pure)
 import outrider.eddn       # EDDN's messages from journal events, and what its answers mean
 import outrider.edsm       # EDSM's journal upload: the events with where you were, and what its answers mean
+import outrider.inara      # Inara's commander profile: travel, ranks, ships, inventory..., and what its answers mean
 import outrider.checklist  # the exobiology checklist: every species by region, with your state (pure)
 import outrider.codex_images  # the checklists' pictures: Canonn's links and credits, refreshed once a day
 import outrider.overlay    # the in-game overlay's panels as draw lists (the window: python3 -m outrider.overlay_window)
 import outrider.overlay_runner  # Outrider runs that window itself on the game PC while the overlay is wanted
+import outrider.ggg        # potential green gas giants: the community's seven-layer ladder model (pure)
+import outrider.boxel      # boxel exploration: the cube a procedural name places a system in, its systems, its id64s (pure)
+import outrider.codex_bodies  # star and planet types as codex entries: what a body would log (pure)
 from outrider.core import iso_ts, ts_seconds   # journal timestamps
 from outrider.fsd import (   # the frame shift drive's maths: range, fuel per jump, the fuel model, fleet figures
     FSD_RANGE_MODS, GUARDIAN_BOOST, conservative_optimal_mass, conservative_range, fleet_figures, fleet_range, fsd_range,
@@ -308,6 +311,13 @@ HIGHWAY_AHEAD = 200         # route rows GET /api/highway lists ahead of you...
 HIGHWAY_DONE = 20           # ...and done rows above them (the most recent)
 ROUTE_KNOWN_GAP_S = 1.0     # s between two Spansh lookups of the listed route systems' discovery state
 ROUTE_KNOWN_BATCH = 10      # lookups between two page updates
+BOXEL_SPANSH_CHUNK = 300   # names per Spansh request (an exact list of a boxel's names)
+BOXEL_SPANSH_MAX = 3000    # names asked about at most for one boxel
+BOXEL_SPANSH_MAX_AGE = 86400   # s: Spansh's list of a boxel is asked again after a day
+BOXEL_NEAR_SHOW = 3        # recommended boxels per mass code
+BOXEL_NEAR_LOOK = 12       # ...looked through for them (done and complete ones are passed over)
+BOXEL_GRID_CODES = "bcdefgh"  # the sector grid's mass codes (a: 128 x 128 boxels a layer, too many to show)
+BOXEL_SPANSH_KEEP = 60     # boxels whose Spansh list is kept (meta boxel_spansh: the one explored and those recommended)
 HIGHWAY_LIVE_S = 120        # s: an arrival or a supercharge older than this is catch-up (no clipboard, no auto-target)
 HIGHWAY_SUGGEST_CACHE = 200  # system-name suggestions kept (per typed prefix)
 HIGHWAY_HEAVY_SLACK = 0.5    # t: fuel over the most the next jump allows by more than this is "too heavy" (Spansh plans
@@ -546,9 +556,12 @@ def honk_decision(status, now, groups=None):
     running, something other than the cockpit has focus (the galaxy map straight after arriving, say), since
     Primary Fire does nothing there, or the HUD is in combat mode (Primary Fire would fire the weapons). With
     this ship's learned fire groups (honk_learn: {"good": [...], "bad": [...]}) it also waits while a group
-    where honks missed before is selected; an unknown group still gets the press. Without a live, recent
-    Status.json it presses, as before."""
+    where honks missed before is selected; an unknown group still gets the press. A reading that says the game is not
+    live (its menu, or closed) waits: the key would go to whatever window has focus. Without a recent reading at all
+    it presses, as before."""
     st = status or {}
+    if st and st.get("live") is False:
+        return "wait", "the game is not live"
     if not status_fresh(st, now):
         return "press", None
     flags = st.get("flags")
@@ -689,6 +702,8 @@ def _config_value(section, key, value, conv, default):
     if value is None:
         return default
     try:
+        if isinstance(value, bool) and conv in (int, float, _config_radius):   # int(True) is 1: not a number here
+            raise TypeError("not a number")
         out = conv(value)
         if isinstance(out, float) and not math.isfinite(out):   # TOML allows inf and nan
             raise ValueError("not a finite number")
@@ -898,7 +913,7 @@ def settings_from(cfg, args, env_journals=None, detected=((), ())):
         # a relative --db is relative to the current folder, like every other path flag; a relative db in the
         # config file is relative to the repository folder (where this script is), so a copied folder keeps working
         "db": (os.path.abspath(os.path.expanduser(args.db)) if args.db
-               else os.path.join(SCRIPT_DIR, os.path.expanduser(str(sv.get("db") or DB_PATH)))),
+               else os.path.join(SCRIPT_DIR, os.path.expanduser(num("server", sv, "db", _config_str, None) or DB_PATH))),
         "unsold_warn": num("defaults", df, "unsold_warn", int, UNSOLD_WARN),
         "unsold_urgent": num("defaults", df, "unsold_urgent", int, UNSOLD_URGENT),
         "bio_min": num("defaults", df, "bio_min", int, BIO_MIN),
@@ -915,7 +930,8 @@ def settings_from(cfg, args, env_journals=None, detected=((), ())):
         "surface_map_strip": flag("defaults", df, "surface_map_strip", SURFACE_MAP_STRIP),
         # under the 5 km at which the game destroys a rig, or the warning would come too late
         "rig_warn": min(RIG_LOST_M - 100.0, max(100.0, num("defaults", df, "rig_warn", float, RIG_WARN))),
-        "voice": str(df.get("voice") or VOICE), "voice_fallback": str(df.get("voice_fallback") or VOICE_FALLBACK),
+        "voice": num("defaults", df, "voice", _config_str, None) or VOICE,
+        "voice_fallback": num("defaults", df, "voice_fallback", _config_str, None) or VOICE_FALLBACK,
         "speech_styles": [str(x) for x in (styles if styles is not None else SPEECH_STYLES)],
         "speech_profanity": flag("defaults", df, "speech_profanity", SPEECH_PROFANITY),
         "speech_profanity_pct": min(100, max(0, num("defaults", df, "speech_profanity_pct", int, SPEECH_PROFANITY_PCT))),
@@ -932,7 +948,7 @@ def settings_from(cfg, args, env_journals=None, detected=((), ())):
         # your own alert sounds: <name>.wav files replacing sounds.json's (review S16); "" for none
         "sound_dir": os.path.join(SCRIPT_DIR, os.path.expanduser(str(spk["sound_dir"])))
                      if isinstance(spk.get("sound_dir"), str) and spk["sound_dir"].strip() else "",
-        "backup_dir": os.path.join(SCRIPT_DIR, os.path.expanduser(str(sv.get("backup_dir") or BACKUP_DIR))),
+        "backup_dir": os.path.join(SCRIPT_DIR, os.path.expanduser(num("server", sv, "backup_dir", _config_str, None) or BACKUP_DIR)),
         "backup_keep": max(1, num("server", sv, "backup_keep", int, BACKUP_KEEP)),
         "backup_every_days": max(0.0, num("server", sv, "backup_every_days", float, BACKUP_EVERY_DAYS)),
         # at least 1 (a Semaphore(0) would hang every body fetch, a negative one fails at start), and a map of
@@ -942,7 +958,7 @@ def settings_from(cfg, args, env_journals=None, detected=((), ())):
         "map_max_pages": max(1, num("spansh", sp, "map_max_pages", int, MAP_MAX_PAGES)),
         "watch_firsts": flag("spansh", sp, "watch_firsts", WATCH_FIRSTS),
         "autohonk": {"enabled": flag("autohonk", ah, "enabled", AUTOHONK["enabled"]),
-                     "key": str(ah.get("key") or AUTOHONK["key"]),
+                     "key": num("autohonk", ah, "key", _config_str, None) or AUTOHONK["key"],
                      "delay": max(0.0, num("autohonk", ah, "delay", float, AUTOHONK["delay"])),
                      "hold": min(20.0, max(0.5, num("autohonk", ah, "hold", float, AUTOHONK["hold"]))),
                      "skip_honked": flag("autohonk", ah, "skip_honked", AUTOHONK["skip_honked"]),
@@ -991,7 +1007,6 @@ def settings_from(cfg, args, env_journals=None, detected=((), ())):
         "assistant": outrider.ask.assistant_settings(cfg),   # the voice's optional AI layer (off by default)
         **outrider.uploads.upload_settings(cfg),              # [eddn], [edsm]: written by Settings -> Uploads
         **outrider.overlay.overlay_settings(cfg),             # [overlay]: the in-game overlay (Settings -> In-game overlay)
-        "inara": outrider.inara.inara_settings(cfg),          # [inara]: the fork's Inara upload (off by default)
     }
 
 
@@ -1030,7 +1045,7 @@ game_pc = {q(st["game_pc"] if st["game_pc"] == "auto" else ("true" if st["game_p
 update_check = {"true" if st["update_check"] else "false"}   # once a day, ask GitHub whether a newer Outrider release is out, and say so on the page (only the request: nothing about you is sent)
 radius = {n(st["radius"])}      # ly: the sphere of nearby systems the page lists
 radius_choices = [{", ".join(n(x) for x in st["radius_choices"])}]   # ly: what the page's radius dropdown offers
-backup_dir = {p(st["backup_dir"])}   # backups: dated database zips, and every live journal copied once into its journals/
+backup_dir = {p(_root_relative(st["backup_dir"]))}   # backups: dated database zips, and every live journal copied once into its journals/
 backup_keep = {st["backup_keep"]}   # dated database zips kept (the journal archive is never pruned)
 backup_every_days = {n(st["backup_every_days"])}   # automatic backup at start when the last is older than this, and when the game quits (0 = off)
 speech_file = {p(_root_relative(st["speech_file"]))}   # the spoken alerts' lines, per personality
@@ -1121,7 +1136,7 @@ background_opacity = {n(st["highway"]["background_opacity"])}   # 0.05 to 1
 
 [overlay]   # the in-game overlay: panels drawn over Elite's window by a window Outrider runs on the game PC (not on a server)
 enabled = {"true" if st["overlay"]["enabled"] else "false"}   # build the panels (the window shows nothing while false; Settings -> In-game overlay switches it)
-theme = {q(st["overlay"]["theme"])}   # the panels' colours: default, lcars, elite, babylon5, narn, minbari, centauri, sith, alliance or dark
+theme = {q(st["overlay"]["theme"])}   # the panels' colours: default, lcars, elite, babylon5, narn, minbari, centauri, vorlon, shadow, sith, alliance or dark
 text_size = {q(st["overlay"]["text_size"])}   # small, normal or large
 system_panel = {"true" if st["overlay"]["system_panel"] else "false"}   # the system panel: the bodies worth your time, in supercruise
 body_panel = {"true" if st["overlay"]["body_panel"] else "false"}   # the body panel: the body you are heading to or near
@@ -1141,10 +1156,6 @@ model = {q(st["assistant"]["model"])}   # one that can call tools
 timeout = {n(st["assistant"]["timeout"])}   # seconds for the whole answer
 max_rounds = {st["assistant"]["max_rounds"]}   # tool rounds before it must answer
 
-[inara]
-enabled = {"true" if st["inara"]["enabled"] else "false"}   # send your travel, credits, ranks, reputation, ships, materials, missions and combat log to your Inara account as you play (needs api_key; live play only; applies at the next start)
-api_key = {q(st["inara"]["api_key"])}   # from inara.cz: Settings, API key; stays on this PC
-
 [mcp]
 {"url = " + q(st["mcp_url"]) if st["mcp_url"] else "# url = " + q("http://127.0.0.1:8025")}   # the running Outrider for the MCP bridge (python3 -m outrider.mcp); default: this PC at [server] port
 max_rows = {st["mcp_rows"]}   # how many rows a list in a tool's answer holds (the rest are counted)
@@ -1157,6 +1168,10 @@ enabled = {"true" if st["uploads"]["eddn"]["enabled"] else "false"}   # send to 
 [edsm]
 # EDSM uploads: switched on and off in the page's Settings -> Uploads, which writes this (the key is set there too).
 enabled = {"true" if st["uploads"]["edsm"]["enabled"] else "false"}   # send your flight log and scans to EDSM
+
+[inara]
+# Inara uploads: switched on and off in the page's Settings -> Uploads, which writes this (the API key is set there too).
+enabled = {"true" if st["uploads"]["inara"]["enabled"] else "false"}   # keep your Inara commander profile current
 
 """
 
@@ -1221,7 +1236,7 @@ CARGO_EVENTS = frozenset(CARGO_ONLY) | {"Cargo", "Docked", "Undocked", "CarrierS
 CARRIER_CARGO_EVENTS = ("CarrierStats", "CarrierTradeOrder", "CargoTransfer", "MarketBuy", "MarketSell")
 WANTED = tuple(f'"event":"{e}"'.encode()
                for e in POSITION_EVENTS + STAR_CLASS_EVENTS + SCAN_EVENTS + DATA_EVENTS + SHIP_EVENTS
-               + CMDR_EVENTS + MATERIAL_EVENTS + BODY_EVENTS + SRV_EVENTS + CARGO_ONLY + ("Loadout", "Shutdown"))
+               + CMDR_EVENTS + MATERIAL_EVENTS + BODY_EVENTS + SRV_EVENTS + CARGO_ONLY + ("Loadout", "Shutdown", "Fileheader"))
 
 # Bump when the journal parser learns new events: forces a one-off re-read of every journal.
 # 27: sale pages keyed by journal position (same-second 'Sell all' pages were dropped before); logins.
@@ -1243,7 +1258,25 @@ WANTED = tuple(f'"event":"{e}"'.encode()
 #     were dropped; the SRV's refinery and scoop stay out of the ship's hold; an older Location's relog is judged
 #     against the arrival before it (a legacy folder read late counted every login as a visit).
 # 43: a system's population (system_population) and own_firsts.bio_x5: no x5 bio bonus in populated systems.
-PARSER_VERSION = 44
+PARSER_VERSION = 49
+# 49: named listening posts ("Listening Post Pollux D568") are kept, and two indexed ones in a system are two rows
+# 48: FSS signals worth a detour are kept (poi: Titans, Guardian beacons, generation ships, listening posts...)
+# 47: body signals keep Guardian, Thargoid, planetary anomaly and other counts (own_signals.sites)
+# 46: each drop at a notable stellar phenomenon is kept (phenomena_sites): "1 of 3 visited"
+# 45: notable stellar phenomena are counted (phenomena.n: the most in one FSS burst; the game writes several of a kind
+#     as identical lines, which the (system, kind) key had folded into one)
+# Why each version reads the journals again, in the player's words: said at the start that re-reads (reread_message).
+# Every bump adds its line here too (a test checks PARSER_VERSION has one).
+PARSER_CHANGES = {
+    49: "named listening posts are kept, and two in one system count as two",
+    48: "FSS signals worth a detour are kept (Titans, Guardian beacons, generation ships, listening posts...)",
+    47: "Guardian, Thargoid and planetary anomaly sites on bodies are kept",
+    46: "each drop at a notable stellar phenomenon is kept (which ones you visited)",
+    45: "notable stellar phenomena are counted",
+    44: "fixes in the journal reader",
+}
+CURIOUS_KEEP = 2000   # systems remembered as told about their curiosities (meta curious_said)
+NSP_BURST_S = 5   # s: the FSS's lines for a system's phenomena that count as one listing (they come in the same second)
 # Scans read off a nav beacon (as outrider.unsold.NAV_BEACON_SCANS): their Was* flags are not the game's record of the body.
 NAV_BEACON_SCANS = ("NavBeaconDetail", "NavBeacon")
 
@@ -1393,7 +1426,7 @@ CREATE TABLE IF NOT EXISTS own_barycentres (
     system INTEGER, body_id INTEGER, record TEXT, ts TEXT,
     PRIMARY KEY (system, body_id));
 CREATE TABLE IF NOT EXISTS own_signals (
-    system INTEGER, name TEXT, bio INTEGER, geo INTEGER, ts TEXT, mining INTEGER,
+    system INTEGER, name TEXT, bio INTEGER, geo INTEGER, ts TEXT, mining INTEGER, sites TEXT,
     PRIMARY KEY (system, name));
 -- Discovery flags from your *first* scan of each body (later rescans say "discovered" once you've sold).
 -- bio_x5: whether Vista Genomics pays the x5 first-footfall bonus for its samples: nobody had set foot there when you
@@ -1486,9 +1519,18 @@ CREATE TABLE IF NOT EXISTS sale_events (
 -- so a journal re-read keeps it (not in RESET_JOURNAL_DATA); the ledger joins it to sale_events by (ts, kind).
 CREATE TABLE IF NOT EXISTS sale_estimates (ts TEXT, kind TEXT, estimate INTEGER, PRIMARY KEY (ts, kind));
 -- Notable stellar phenomena (the FSS "Codex" signals $Fixed_Event_Life_Cloud/Ring): kind cloud|ring;
--- reached_ts is set when you drop out of supercruise at one.
+-- reached_ts is set when you drop out of supercruise at one; n how many of that kind (the most the FSS listed at once:
+-- the game writes them as identical lines, all in the same moment). Journal-derived.
 CREATE TABLE IF NOT EXISTS phenomena (
-    system INTEGER, kind TEXT, ts TEXT, reached_ts TEXT, PRIMARY KEY (system, kind));
+    system INTEGER, kind TEXT, ts TEXT, reached_ts TEXT, n INTEGER, PRIMARY KEY (system, kind));
+-- Each drop at a phenomenon (SupercruiseDestinationDrop). The journal says only "a ring phenomenon", not which of the
+-- system's three, and two sites can share a ring (the author, 2026-10-11: two in one ring held different things), so
+-- every drop counts as a site visited; visited = the drops, at most n (dropping twice at one site counts twice).
+-- Journal-derived.
+CREATE TABLE IF NOT EXISTS phenomena_sites (system INTEGER, kind TEXT, ts TEXT, site TEXT, PRIMARY KEY (system, kind, ts));
+-- FSS signals worth a detour (outrider's POI_KINDS: Titans, Guardian beacons, generation ships, listening posts, number
+-- stations, tourist beacons, memorials), one row per signal name. Journal-derived.
+CREATE TABLE IF NOT EXISTS poi (system INTEGER, kind TEXT, name TEXT, ts TEXT, PRIMARY KEY (system, kind, name));
 -- The firsts watch: what Spansh showed of a system holding your unsold first discoveries when last checked (see
 -- firsts_reported). reported_ts is the earliest report by someone else of a body you discovered (the first sighting);
 -- bodies how many of yours Spansh has from others, spansh_bodies of body_count the bodies it has in all. Live only
@@ -1552,16 +1594,36 @@ DELETE FROM journal_files; DELETE FROM visits; DELETE FROM jumps;
 DELETE FROM own_systems; DELETE FROM own_bodies; DELETE FROM own_signals; DELETE FROM own_ring_signals;
 DELETE FROM own_firsts; DELETE FROM own_mapped; DELETE FROM own_footfall; DELETE FROM sales; DELETE FROM deaths;
 DELETE FROM own_genera; DELETE FROM own_organic; DELETE FROM codex; DELETE FROM bio_sales;
-DELETE FROM own_barycentres; DELETE FROM phenomena; DELETE FROM sale_events; DELETE FROM logins;
+DELETE FROM own_barycentres; DELETE FROM phenomena; DELETE FROM phenomena_sites; DELETE FROM poi; DELETE FROM sale_events; DELETE FROM logins;
 DELETE FROM own_mined; DELETE FROM meta WHERE key IN ('srv_state', 'vehicle', 'ship_marker', 'body_here');
 DELETE FROM fleet_loadouts; DELETE FROM cargo_events; DELETE FROM system_population;
 DELETE FROM meta WHERE key IN ('ship_cargo', 'cargo_dock');
-DELETE FROM meta WHERE key IN ('ship', 'carrier', 'fuel_hist', 'last_scoop', 'commander', 'materials', 'last_session', 'cargo');
+DELETE FROM meta WHERE key IN ('ship', 'carrier', 'fuel_hist', 'last_scoop', 'commander', 'materials', 'last_session', 'cargo',
+                               'game_load');
 DELETE FROM meta WHERE key LIKE 'legacy:%' OR key IN ('pos', 'prev', 'jump_range', 'state_ts');
 """
 
 
-def open_db(path, rescan=False):
+def reread_message(old, rescan=False):
+    """The start-up line saying why every journal is read again: asked for (--rescan), a new database, or the journal
+    reader changed since the database was written (PARSER_CHANGES: what, newest first, three at most)."""
+    if rescan:
+        return "re-reading every journal: asked for (--rescan)"
+    try:
+        old = int(old)
+    except (TypeError, ValueError):
+        return "reading every journal: a new database (the first start can take a few minutes)"
+    if old > PARSER_VERSION:
+        return (f"re-reading every journal: the database was written by a newer Outrider (journal reader version {old}, "
+                f"this one is {PARSER_VERSION})")
+    why = [PARSER_CHANGES[v] for v in range(PARSER_VERSION, old, -1) if v in PARSER_CHANGES]
+    more = len(range(PARSER_VERSION, old, -1)) - min(len(why), 3)
+    return (f"re-reading every journal once: the journal reader changed (version {old} -> {PARSER_VERSION}"
+            + (": " + "; ".join(why[:3]) if why else "") + (f"; and {more} older change{'' if more == 1 else 's'}" if more > 0 else "")
+            + "). This can take a few minutes.")
+
+
+def open_db(path, rescan=False, on_reread=None):
     db = sqlite3.connect(path)
     db.row_factory = sqlite3.Row
     db.executescript(SCHEMA + outrider.uploads.SCHEMA)
@@ -1588,7 +1650,10 @@ def open_db(path, rescan=False):
                        (b.get("x"), b.get("y"), b.get("z"), r["id64"]))
         db.execute("CREATE INDEX IF NOT EXISTS spansh_xyz ON spansh_systems (x, y, z)")
         db.commit()
-    if rescan or meta_get(db, "parser_version") != PARSER_VERSION:
+    old = meta_get(db, "parser_version")
+    if rescan or old != PARSER_VERSION:
+        if on_reread:
+            on_reread(reread_message(old, rescan))
         stamp_next_stop(db)
         db.executescript(RESET_JOURNAL_DATA)
         meta_set(db, "parser_version", PARSER_VERSION)
@@ -2085,6 +2150,8 @@ def own_data(db, id64, system):
         r = records.get(short_name(system, row["name"]))
         if r:
             r["bio"], r["geo"], r["mining"] = row["bio"], row["geo"], row["mining"] or 0
+            if row["sites"]:
+                r["sites"] = json.loads(row["sites"])   # Guardian, Thargoid, anomaly, other: {kind: signals}
             r["signals_seen"] = True   # an FSS or DSS of yours counted its signals
     hotspots = {}
     for row in db.execute("SELECT * FROM own_ring_signals WHERE system=?", (id64,)):
@@ -2248,6 +2315,8 @@ class Journals:
         self.regions_said = set()  # galactic regions announced (or left) this game session: see note_region
         self.region_entered = None  # the latest region crossing {id64, ts, region, spoken, count}
         self.jumponium = None      # this system's best jumponium body so far {system, body, material, pct, said}
+        # the FSS's notable stellar phenomena as they come (several lines in one moment): {system, t, counts, new, seq}
+        self.nsp_burst = None
         # a live sale still coming in (a 'Sell all' writes a page every 10 s to a minute or so): State.maybe_sale_left
         # says what it left aboard once the pages stop. {carto, systems, bio, species, read_at (wall clock)}
         self.sale_run = None
@@ -2675,11 +2744,12 @@ class Journals:
         return (self.moment_seq, list(self.moments), self.last_heat,
                 set(self.body_touched), set(self.approached), self.brief_key,
                 set(self.regions_said), self.region_entered, self.jumponium, dict(self.sale_run or {}) or None,
-                json.loads(json.dumps(self.burst)), self.uploads.snapshot() if self.uploads else None)
+                json.loads(json.dumps(self.burst)), self.uploads.snapshot() if self.uploads else None,
+                json.loads(json.dumps(self.nsp_burst)))
 
     def restore(self, cp):
         (self.moment_seq, moments, self.last_heat, touched, approached, self.brief_key,
-         regions, self.region_entered, self.jumponium, self.sale_run, self.burst, uploads) = cp
+         regions, self.region_entered, self.jumponium, self.sale_run, self.burst, uploads, self.nsp_burst) = cp
         if self.uploads and uploads:
             self.uploads.restore(uploads)
         self.body_touched, self.approached, self.regions_said = set(touched), set(approached), set(regions)
@@ -2715,6 +2785,9 @@ class Journals:
         # newest event that is not part of loading into the game (the menu's Commander, Materials, Rank...):
         # where the last session ended, crash or not, for the login's "away 3 days"
         self.last_play_ts = self._play_saved = meta_get(db, "last_play_ts")
+        # {start: the newest game launch (Fileheader) or LoadGame, ready: the newest Location}: the game is still
+        # loading while start is the newer (see loading())
+        self.game_load = meta_get(db, "game_load") or {}
         self.docked = meta_get(db, "docked")    # {station, type, services, market_id, ts} while docked
         self.jump_range = meta_get(db, "jump_range")
         # {name, fid, credits (at the last LoadGame), login_ts, earned (exploration sales since)}
@@ -2820,7 +2893,7 @@ class Journals:
                     print(f"uploads: a line was skipped ({type(e).__name__}: {e})", file=sys.stderr)
             elif self.uploads is not None and self.upload_mode:
                 self.uploads.forget()   # not following now: switched on again, it reads the file from its top
-            if any(w in line for w in WANTED) or b"Fixed_Event_Life" in line:
+            if any(w in line for w in WANTED) or b"Fixed_Event_Life" in line or any(w in line for w in POI_BYTES):
                 # where the line is (the file's name, so a twin copy in another folder gives the same key):
                 # tells apart sale pages written in the same second (sale_events)
                 self.line_source = f"{b}:{at}"
@@ -2855,6 +2928,10 @@ class Journals:
         name = ev.get("event")
         if name not in LOGIN_EVENTS and ts > (self.last_play_ts or ""):
             self.last_play_ts = ts
+        if name in ("Fileheader", "LoadGame", "Location"):
+            self.note_loading(name, ev, ts)
+            if name == "Fileheader":
+                return
         if name in ("FSSSignalDiscovered", "SupercruiseDestinationDrop"):
             self.handle_phenomenon(name, ev, ts)
             return
@@ -3120,6 +3197,10 @@ class Journals:
             if self.pos and self.pos["id64"] != id64:
                 self.prev = self.pos
                 meta_set(self.db, "prev", self.prev)
+                # a jumponium body not said in the system left (a carrier jump, a respawn: no StartJump flushed it)
+                # would be announced at the next FSD charge, somewhere else
+                if self.jumponium and self.jumponium["system"] != id64:
+                    self.jumponium = None
             # a relog keeps the arrival's ts: the briefing and the FSS warning are once per arrival, not per login
             self.pos = {"name": ev.get("StarSystem"), "id64": id64, "x": x, "y": y, "z": z,
                         "ts": self.pos["ts"] if relog else ts}
@@ -3532,20 +3613,66 @@ class Journals:
         code = ev.get("SignalName") if name == "FSSSignalDiscovered" else ev.get("Type")
         m = re.match(r"^\$Fixed_Event_Life_(\w+?);?$", code or "")
         if not m:
+            if name == "FSSSignalDiscovered":
+                self.handle_poi(ev, ts)
             return
         kind = m.group(1).lower()
         if name == "FSSSignalDiscovered":
             system = ev.get("SystemAddress")
             if system is None:
                 return
-            self.db.execute("INSERT OR IGNORE INTO phenomena VALUES (?, ?, ?, NULL)", (system, kind, ts))
+            self.phenomenon_found(system, kind, ts)
         elif self.pos and ts >= self.pos.get("ts", ""):   # the drop happens in the system you are in (not an old one read later)
             system = self.pos["id64"]
-            self.db.execute("INSERT INTO phenomena VALUES (?, ?, ?, ?) ON CONFLICT(system, kind) "
+            self.db.execute("INSERT INTO phenomena (system, kind, ts, reached_ts, n) VALUES (?, ?, ?, ?, 1) ON CONFLICT(system, kind) "
                             "DO UPDATE SET reached_ts = coalesce(reached_ts, excluded.reached_ts)", (system, kind, ts, ts))
+            # each drop is a site visited (the journal cannot tell which of a kind's sites it was)
+            self.db.execute("INSERT OR IGNORE INTO phenomena_sites VALUES (?, ?, ?, ?)", (system, kind, ts, f"drop:{ts}"))
         else:
             return
         self.dirty.add(system)
+
+    def handle_poi(self, ev, ts):
+        """An FSS signal worth a detour (poi_kind): kept per system; the rare kinds (POI_SPOKEN) are news the first time
+        a system has that signal, said with delight (live play only)."""
+        kind, name = poi_kind(ev)
+        system = ev.get("SystemAddress")
+        if not kind or system is None:
+            return
+        known = self.db.execute("SELECT 1 FROM poi WHERE system=? AND kind=? LIMIT 1", (system, kind)).fetchone()
+        cur = self.db.execute("INSERT OR IGNORE INTO poi VALUES (?, ?, ?, ?)", (system, kind, name, ts))
+        if cur.rowcount and not known and kind in POI_SPOKEN and live_event(ts):   # a second listening post is no news
+            self.moment("signal_poi", ts, system=str(system), poi=kind, name=name, what=poi_words(kind, name))
+
+    def phenomenon_found(self, system, kind, ts):
+        """One FSS line for a notable stellar phenomenon. The FSS lists a system's phenomena together, as identical lines
+        for the same kind: a burst (lines of one system within NSP_BURST_S) is counted, and each kind keeps the most one
+        burst had (opening the FSS again later lists them again: never added up). The first burst in a system with none
+        recorded is news: a "phenomena" moment (live play only), its count kept up to date as the burst's lines come."""
+        b = self.nsp_burst
+        try:
+            near = b and b["system"] == system and abs(ts_seconds(ts) - b["t"]) <= NSP_BURST_S
+        except (TypeError, ValueError):
+            near = False
+        if not near:
+            known = self.db.execute("SELECT 1 FROM phenomena WHERE system=? LIMIT 1", (system,)).fetchone() is not None
+            b = self.nsp_burst = {"system": system, "t": ts_seconds(ts), "counts": {}, "new": not known, "seq": None}
+        b["counts"][kind] = b["counts"].get(kind, 0) + 1
+        self.db.execute("INSERT INTO phenomena (system, kind, ts, reached_ts, n) VALUES (?, ?, ?, NULL, ?) "
+                        "ON CONFLICT(system, kind) DO UPDATE SET n = max(coalesce(n, 1), excluded.n)",
+                        (system, kind, ts, b["counts"][kind]))
+        if not b["new"] or not live_event(ts):
+            return
+        here = self.pos if self.pos and self.pos.get("id64") == system else {}
+        fields = {"system": str(system), "system_name": here.get("name"), "count": sum(b["counts"].values()),
+                  "kinds": dict(b["counts"])}
+        if b["seq"] is None:
+            self.moment("phenomena", ts, **fields)
+            b["seq"] = self.moment_seq
+        else:   # the same burst's next line: the moment says the new count (a new dict: a checkpoint holds the old one)
+            for i, mo in enumerate(self.moments):
+                if mo.get("seq") == b["seq"]:
+                    self.moments[i] = dict(mo, **fields)
 
     def handle_cmdr(self, name, ev, ts):
         c = self.commander or {}
@@ -3620,7 +3747,8 @@ class Journals:
             if name == "Undocked" and not ev.get("Taxi") and not ev.get("Multicrew"):
                 self.trade_left_stop(ev, ts)   # a trade stop left with part of its trades made
             at = ev.get("MarketID") if name == "Docked" and not ev.get("Taxi") and not ev.get("Multicrew") else None
-            if at != self.cargo_dock:
+            # an older dock read late (a legacy folder imported after the live one) must not move it back
+            if self.fresh("cargo_dock", ts) and at != self.cargo_dock:
                 self.cargo_dock = at
                 meta_set(self.db, "cargo_dock", at)
             return
@@ -3714,9 +3842,11 @@ class Journals:
                 meta_set(self.db, "hull", self.hull)
             return
         if name in ("RepairAll", "Repair"):
-            # current journals list what was repaired (Items: ["Hull"], ["Wear"], ["Paint"]...); older ones say Item
+            # current journals list what was repaired (Items: ["Hull"], ["Wear"], ["Paint"]...); older ones say Item.
+            # "Wear" is the ship's integrity, not its hull: a damaged hull's repair lists "Hull" beside it (the
+            # author's journals, 2023-2025: every wear-only repair was made at 100 % hull)
             items = ev.get("Items") if isinstance(ev.get("Items"), list) else [ev["Item"]] if ev.get("Item") else []
-            if (name == "RepairAll" or any(str(i).lower() in ("hull", "all", "wear") for i in items)) \
+            if (name == "RepairAll" or any(str(i).lower() in ("hull", "all") for i in items)) \
                     and ts >= (self.hull or {}).get("ts", ""):
                 self.hull = {"pct": 100, "ts": ts}
                 meta_set(self.db, "hull", self.hull)
@@ -3945,8 +4075,19 @@ class Journals:
                                 (system, ev["BodyID"], ev["BodyName"], json.dumps(record), ts, json.dumps(ev)))
                 flag = lambda k: None if k not in ev else int(bool(ev[k]))
                 undisc = ts if ev.get("WasDiscovered") is False else None
+                if record["type"] == "Star" and not known and live_event(ts):
+                    words = rare_star_words(record.get("subtype"))
+                    if words:   # a rare star resolved (the arrival's own scan, or the FSS): said with delight
+                        body = short_name(ev.get("StarSystem") or (self.pos or {}).get("name"), ev.get("BodyName") or "")
+                        what = f"{words}, the main star" if record.get("main") or not body else f"{words} at {body}"
+                        self.moment("rare_star", ts, system=str(system), what=what, star=record.get("subtype"))
                 if record["type"] == "Planet" and not known:
                     self.moment("scan", ts, system=system, body_id=ev["BodyID"])
+                    p = outrider.ggg.predict(ev) if live_event(ts) else None
+                    if p:   # a potential green gas giant (a guess from the ladder model), said with delight
+                        body = short_name(ev.get("StarSystem") or (self.pos or {}).get("name"), ev.get("BodyName") or "") or ev.get("BodyName")
+                        self.moment("ggg", ts, system=str(system), body=body, chance=p["chance"],
+                                    what=outrider.ggg.SPOKEN_CLASS.get(p["class"], "a gas giant"))
                     if ev.get("Landable") and ev.get("Materials"):
                         self.note_jumponium(system, ev, ts)
                 # a nav-beacon scan's Was* flags are not the game's record of the body (outrider.unsold skips them too):
@@ -4019,9 +4160,21 @@ class Journals:
                 self.db.execute("INSERT OR REPLACE INTO own_ring_signals VALUES (?, ?, ?, ?)",
                                 (system, body, json.dumps(minerals(signals)), ts))
             else:
-                self.db.execute("INSERT OR REPLACE INTO own_signals (system, name, bio, geo, ts, mining) "
-                                "VALUES (?, ?, ?, ?, ?, ?)",
-                                (system, body, signals.get(BIO, 0), signals.get(GEO, 0), ts, signals.get(MINING, 0)))
+                # surface sites: Guardian, Thargoid, a planetary anomaly (the FSS says it), others (the DSS says them)
+                sites = {k: signals[t] for k, t in SITE_SIGNALS.items() if signals.get(t)}
+                had = self.db.execute("SELECT sites FROM own_signals WHERE system=? AND name=?", (system, body)).fetchone()
+                had = json.loads(had["sites"]) if had and had["sites"] else {}
+                if name == "FSSBodySignals":   # the FSS sees only the anomaly: the DSS's Guardian/Thargoid sites stay
+                    sites = {**had, **sites}
+                self.db.execute("INSERT OR REPLACE INTO own_signals (system, name, bio, geo, ts, mining, sites) "
+                                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                                (system, body, signals.get(BIO, 0), signals.get(GEO, 0), ts, signals.get(MINING, 0),
+                                 json.dumps(sites) if sites else None))
+                news = [k for k in SITE_SPOKEN if sites.get(k) and not had.get(k)]
+                if news and live_event(ts):   # Guardian or Thargoid sites, an anomaly: news once per body, said with delight
+                    short = short_name(ev.get("StarSystem") or (self.pos or {}).get("name"), body) or body
+                    self.moment("surface_site", ts, system=str(system), body=short, sites={k: sites[k] for k in news},
+                                what=site_words(news, short))
                 if name == "FSSBodySignals" and (signals.get(BIO) or signals.get(GEO)):   # the FSS just found them
                     self.moment("signals", ts, system=system, body_name=body, bio=signals.get(BIO, 0), geo=signals.get(GEO, 0))
                 if signals.get(BIO) and ev.get("BodyID") is not None and name == "FSSBodySignals":
@@ -4044,6 +4197,21 @@ class Journals:
         before = self.db.execute("SELECT 1 FROM jumps WHERE id64=? AND ts < ? LIMIT 1", (system, row["ts"])).fetchone()
         verdict = "visited" if before else "known" if was_discovered else "new"
         self.db.execute("UPDATE jumps SET verdict=? WHERE ts=? AND id64=?", (verdict, row["ts"], system))
+
+    def note_loading(self, name, ev, ts):
+        """A game launch (a journal's first part: a long session's later parts continue it) or a LoadGame starts
+        loading; the session's Location ends it."""
+        key = "ready" if name == "Location" else "start"
+        if name == "Fileheader" and (ev.get("part") or 1) != 1:
+            return
+        if ts > self.game_load.get(key, ""):
+            self.game_load = dict(self.game_load, **{key: ts})
+            meta_set(self.db, "game_load", self.game_load)
+
+    def loading(self):
+        """The game is starting or loading a session: from its launch or LoadGame until the Location. A crashed game's
+        Status.json still says live with the old session's flags until the new session rewrites it."""
+        return self.game_load.get("start", "") > self.game_load.get("ready", "")
 
     def read_status(self, d):
         """Status.json: the live fuel gauge (rewritten by the game every few seconds)."""
@@ -4553,6 +4721,201 @@ def star_short(subtype):
     return subtype.split()[0]
 
 
+# rare stars, as the voice and the page say them (any star's subtype: your own scans and Spansh's records name them
+# alike): black holes, Wolf-Rayet, carbon, O, Herbig Ae/Be, supergiants, the rarer white dwarfs, the exotic types
+CARBON_STARS = {"CS Star", "C Star", "CN Star", "CJ Star", "CH Star", "CHd Star"}
+RARE_WHITE_DWARFS = {"DAV", "DBV", "DCV", "DAO", "DO", "DOV", "DX", "DBZ"}
+SUPERGIANT_WORDS = {"Blue-White": "a blue-white supergiant", "White": "a white supergiant",
+                    "White-Yellow": "a yellow-white supergiant", "Red": "a red supergiant"}
+
+
+def codex_type(r):
+    """The codex entry a body's type logs ({id, name}: "K-type giant"), or None (outrider.codex_bodies)."""
+    i = outrider.codex_bodies.entry_for(r)
+    return {"id": i, "name": outrider.codex_bodies.NAMES.get(i, "")} if i else None
+
+
+def codex_types_scanned(db, after=0, into=None, regions=None):
+    """The star and planet types you have scanned, per region: ({region: {entry id}}, the last own_bodies rowid read).
+    Only rows after `after` are read, added to `into` (an incremental update); `regions` caches each system's region.
+    A nav beacon's scan logs nothing in the codex: left out."""
+    out = into if into is not None else {}
+    regions = regions if regions is not None else {}
+    last = after
+    if not outrider.bio:
+        return out, last
+    for rowid, system, record in db.execute("SELECT rowid, system, record FROM own_bodies WHERE rowid > ? AND record IS NOT NULL",
+                                            (after,)):
+        last = max(last, rowid)
+        if system not in regions:
+            v = db.execute("SELECT x, y, z FROM visits WHERE id64=?", (system,)).fetchone()
+            regions[system] = outrider.bio.region_name(*v) if v and None not in v else None
+        if not regions[system]:
+            continue
+        try:
+            r = json.loads(record)
+        except ValueError:
+            continue
+        if r.get("scan_type") == "NavBeaconDetail":
+            continue
+        i = outrider.codex_bodies.entry_for(r)
+        if i:
+            out.setdefault(regions[system], set()).add(i)
+    return out, last
+
+
+def codex_types_logged(db, scanned=None):
+    """Your codex's star and planet types per region: {region: [entry id]} (the page's ✦ / ✪ on bodies). The codex
+    lines in your journals, and every type you have scanned in a region (`scanned`: codex_types_scanned's map): the
+    game logs a type only the first time you scan one there, and a commander's codex is often older than the journals
+    kept (the author's go back to 2023, their codex further), so a type scanned without a line was logged before."""
+    out = {k: set(v) for k, v in (scanned if scanned is not None else codex_types_scanned(db)[0]).items()}
+    for region, i in db.execute("SELECT DISTINCT region, entry_id FROM codex WHERE entry_id BETWEEN 1100000 AND 1399999"):
+        out.setdefault(region or "", set()).add(i)
+    return {k: sorted(v) for k, v in out.items()}
+
+
+def boxel_fully_scanned(sp):
+    """Whether Spansh has every body of a boxel's system (its reported bodies reach the honk's count)."""
+    k, c = sp.get("bodies_known"), sp.get("body_count")
+    return isinstance(k, int) and isinstance(c, int) and c > 0 and k >= c
+
+
+def boxel_next_number(visited, spansh, end, skip=False):
+    """A boxel's Next: the lowest number you have not been to, from 0 up to the probable end (else TRY_ABOVE above the
+    highest known), passing over a system someone has fully scanned when skip is on. visited: the numbers you have
+    been to; spansh: {number: Spansh's facts}. None when every one is visited."""
+    top = max(set(visited) | set(spansh), default=-1)
+    last = end - 1 if end is not None else top + outrider.boxel.TRY_ABOVE
+    return next((n for n in range(last + 1) if n not in visited
+                 and not (skip and n in spansh and boxel_fully_scanned(spansh[n]))), None)
+
+
+def ggg_state(record, codex_names=()):
+    """A body's green gas giant state: {"confirmed": True} when its codex entry says so, else the model's prediction
+    (outrider.ggg.predict_record: {chance, class, rung, border, temperature}) or None."""
+    if outrider.ggg.confirmed(codex_names):
+        return {"confirmed": True}
+    return outrider.ggg.predict_record(record)
+
+
+def ggg_bodies(db, id64, system_name, records):
+    """[{body, chance}] for a system's potential green gas giants (yours and Spansh's records), and the count of ones a
+    codex entry confirms: what Nearby's row says (a system worth going to)."""
+    green = {r[0] for r in db.execute(f"SELECT body_id FROM codex WHERE system=? AND name IN ({','.join('?' * len(outrider.ggg.CODEX_GREEN))})",
+                                      (id64, *outrider.ggg.CODEX_GREEN))}
+    out = []
+    for r in records:
+        if r.get("body_id") in green:
+            continue
+        p = outrider.ggg.predict_record(r)
+        if p:
+            out.append({"body": short_name(system_name, r.get("name") or "") or r.get("name"), "chance": p["chance"]})
+    return out, len(green)
+
+
+def rare_star_words(subtype):
+    """'a black hole', 'a Wolf-Rayet star', 'a red supergiant'... for a rare star's subtype, else None."""
+    st = str(subtype or "")
+    if st == "Supermassive Black Hole":
+        return "the supermassive black hole"
+    if st == "Black Hole":
+        return "a black hole"
+    if st.startswith("Wolf-Rayet"):
+        return "a Wolf-Rayet star"
+    if st in CARBON_STARS:
+        return "a carbon star"
+    if st == "MS-type Star":
+        return "an MS-type star"
+    if st == "S-type Star":
+        return "an S-type star"
+    if st.startswith("O ("):
+        return "an O-type star"
+    if st == "Herbig Ae/Be Star":
+        return "a Herbig Ae Be star"
+    m = re.match(r"^[ABFGKM] \(([\w-]+) super giant\)", st)
+    if m:
+        return SUPERGIANT_WORDS.get(m.group(1), "a supergiant")
+    m = re.match(r"^White Dwarf \((\w+)\)", st)
+    if m and m.group(1) in RARE_WHITE_DWARFS:
+        return "a pulsating white dwarf" if m.group(1).endswith("V") else "a rare white dwarf"
+    return {"X": "an exotic star", "RoguePlanet": "a rogue planet", "Nebula": "a nebula",
+            "StellarRemnantNebula": "a stellar remnant nebula"}.get(st)
+
+
+def rare_stars(records, system_name=None):
+    """[{body, what}] for the rare stars among a system's records (as rare_star_words), main star first."""
+    out = []
+    for r in sorted((r for r in records or [] if r.get("type") == "Star"), key=lambda r: not r.get("main")):
+        what = rare_star_words(r.get("subtype"))
+        if what:
+            body = short_name(system_name, r.get("name")) if system_name else r.get("name")
+            out.append({"body": body or "", "what": what, "main": bool(r.get("main"))})
+    return out
+
+
+# body signals that are surface sites (Settings' "Surface sites" alert): SAASignalsFound / FSSBodySignals types. The
+# FSS says a planetary anomaly; Guardian, Thargoid and the others only once the DSS has mapped the body.
+SITE_SIGNALS = {"guardian": "$SAA_SignalType_Guardian;", "thargoid": "$SAA_SignalType_Thargoid;",
+                "anomaly": "$SAA_SignalType_PlanetAnomaly;", "other": "$SAA_SignalType_Other;"}
+SITE_SPOKEN = ("guardian", "thargoid", "anomaly")   # "other" is shown, never said: nobody knows what it is yet
+
+
+def site_words(kinds, body):
+    """'Guardian sites on B 3', 'Guardian and Thargoid sites on A 1', 'an unknown planetary anomaly on C 2'."""
+    names = [{"guardian": "Guardian", "thargoid": "Thargoid"}[k] for k in kinds if k in ("guardian", "thargoid")]
+    parts = [" and ".join(names) + " sites"] if names else []
+    if "anomaly" in kinds:
+        parts.append("an unknown planetary anomaly")
+    return " and ".join(parts) + (f" on {body}" if body else "")
+
+
+def surface_sites(records, system_name=None):
+    """[{body, sites}] for the bodies with surface sites among a system's records (your own scans only)."""
+    return [{"body": short_name(system_name, r.get("name")) if system_name else r.get("name"), "sites": r["sites"]}
+            for r in records or [] if r.get("sites")]
+
+
+# FSS signals worth a detour (FSSSignalDiscovered; the reader lets these through by POI_BYTES): kind, matched how
+POI_BYTES = (b'"SignalType":"Titan"', b'"SignalType":"TouristBeacon"', b"$ListeningPost", b"Listening Post", b"$NumberStation",
+             b"Generation Ship", b"Guardian Beacon", b"Memorial")
+POI_SPOKEN = ("titan", "guardian_beacon", "generation_ship", "listening_post")   # the rest are shown, not said
+
+
+def poi_kind(ev):
+    """(kind, name) for an FSS signal worth a detour, else (None, None). Names as the game shows them."""
+    code, label, kind = ev.get("SignalName") or "", ev.get("SignalName_Localised") or ev.get("SignalName") or "", ev.get("SignalType")
+    if kind == "Titan":
+        return "titan", label
+    if "Generation Ship" in label:
+        return "generation_ship", label
+    if "Guardian Beacon" in label:
+        return "guardian_beacon", label
+    # two in one system are both "Listening Post" in the game's words: the index keeps them apart
+    index = re.search(r"#index=(\d+);", code) if code.startswith("$") else None
+    numbered = f"{label} #{index.group(1)}" if index else label
+    if code.startswith("$ListeningPost") or "Listening Post" in label:   # some are named: "Listening Post Pollux D568"
+        return "listening_post", numbered
+    if code.startswith("$NumberStation"):
+        return "number_station", numbered
+    if kind == "TouristBeacon":
+        return "tourist", label
+    if kind == "Generic" and "Memorial" in label:
+        return "memorial", label
+    return None, None
+
+
+def poi_words(kind, name):
+    """'the Titan Cocijo', 'a Guardian beacon', 'a generation ship, the Thetis', 'a listening post'."""
+    if kind == "titan":
+        return f"the {name}" if name else "a Titan"
+    if kind == "generation_ship":
+        rest = (name or "").replace("Generation Ship", "").strip()
+        return f"a generation ship, the {rest}" if rest else "a generation ship"
+    return {"guardian_beacon": "a Guardian beacon", "listening_post": "a listening post", "number_station": "a number station",
+            "tourist": f"a tourist beacon, {name}" if name else "a tourist beacon", "memorial": name or "a memorial"}.get(kind, name or kind)
+
+
 def subtype_scoopable(subtype):
     return bool(subtype) and re.match(r"^[OBAFGKM] \(", subtype) is not None
 
@@ -4632,7 +4995,20 @@ def curiosities(r, parent=None, raw=None, binary=False):
         out.append(("moon of a moon", "a moon orbiting a moon"))
     if planet and binary:
         out.append(("planet pair", "circles a shared centre with another planet"))
+    rare = RARE_PLANETS.get(r.get("subtype") or "")
+    if planet and rare:   # rare classes: a sight, if not a fortune
+        out.append(rare)
+    if planet and any("green" in str((c or {}).get("name") or "").lower() and "gas giant" in str((c or {}).get("name") or "").lower()
+                      for c in r.get("codex") or []):   # the codex is the only place the game says it
+        out.append(("green gas giant", "a green gas giant: one of the rarest sights"))
     return out
+
+
+# rare planet classes as curiosities (the same names in your scans and Spansh's records)
+RARE_PLANETS = {"Water giant": ("water giant", "a water giant: rare"),
+                "Helium-rich gas giant": ("helium-rich", "a helium-rich gas giant: rare"),
+                "Helium gas giant": ("helium giant", "a helium gas giant: very rare"),
+                "Class V gas giant": ("class V giant", "a Sudarsky class V gas giant: rare")}
 
 
 def system_curiosities(system, records, raws=None):
@@ -5240,6 +5616,7 @@ class Spansh:
             records.append(r)
         base = dict(base, records=records, body_count=system.get("bodyCount") or base.get("body_count"))
         base.pop("no_dump", None)
+        base.pop("edsm", None)   # Spansh's dump now: an EDSM stand-in it replaces is no longer EDSM's (cached_source)
         self.store(id64, updated_at, base)
         return base
 
@@ -5550,6 +5927,7 @@ class State:
         # is gitignored, speech.json is edited in place). The paths actually in use, set at start (None in tests)
         self.speech_path = None
         self.config_path = None
+        self.pronounce_path = None   # your pronunciations (outrider.tts.PRONOUNCE.own), backed up with your lines
         self.backup_task = None
         self.backup_done_at = None  # time.monotonic() when the last backup ended
         self.seller_task = None
@@ -5646,6 +6024,13 @@ class State:
         self.overlay_runner = None   # outrider.overlay_runner.OverlayRunner on the game PC (run() makes it; None in tests)
         self._hw_copied = (meta_get(db, "highway") or {}).get("arrival_ts")   # copied before a restart: not again
         self._autotarget_boost = (journals.boost or {}).get("ts")
+        # boxel exploration: the arrival an automatic boxel run was decided for (one per arrival), Spansh's fetch running
+        self._boxel_arrival = (journals.pos or {}).get("ts")
+        self._boxel_fetching = set()
+        self._boxel_next = (None, None)   # (the payload's boxel key, boxel_next() for it)
+        self._codex_types = (None, None)  # (your scans' and codex lines' key, codex_types_logged for it)
+        self._codex_scanned = None        # (codex_types_scanned's map, last rowid read, regions, row count)
+        self._boxel_sectors = (None, {})   # (visits count when built, {(sx, sy, sz): sector name})
         self.autotarget_task = None
         self._autotarget_cancel = None   # threading.Event: the automatic run's own token (switch-off, route cleared/replaced)
         self._autotarget_next_cancel = None   # the same for a Target next / Retry run (route cleared/replaced only)
@@ -5669,26 +6054,32 @@ class State:
         self.riches_plotting = None
         self.riches_task = None
         self.dock_cache = {}   # the Nearest finder's last Spansh search and permit check (DOCK_CACHE_S)
-        # uploads (EDDN, EDSM: opt-in, off by default; outrider/uploads.py): switched in Settings -> Uploads, which
-        # writes [eddn]/[edsm] enabled into the config file. senders: {service: async fn(rows)} (the services add theirs).
+        # uploads (EDDN, EDSM, Inara: opt-in, off by default; outrider/uploads.py): switched in Settings -> Uploads, which
+        # writes [eddn]/[edsm]/[inara] enabled into the config file. senders: {service: async fn(rows)}.
         self.upload_cfg = json.loads(json.dumps(outrider.uploads.DEFAULTS))
-        self.inara = None          # outrider.inara.InaraSync: the fork's Inara upload ([inara]; set by run())
         self.upload_senders, self.upload_tasks, self.upload_session = {}, {}, None
         self.upload_status = {}   # service -> {error, at, held}: the last round's outcome for the status view
-        self.uploads_hub = outrider.uploads.UploadHub(db, {"eddn": self.eddn_build, "edsm": self.edsm_build},
-                                                      enabled=self.upload_queueing, holds={"edsm": outrider.edsm.hold},
+        # what each commander's Inara profile already has (meta inara_sent, live-only: a re-read must not send it again)
+        self.inara_sent = outrider.inara.Sent(meta_get(db, "inara_sent") if isinstance(meta_get(db, "inara_sent"), dict) else {},
+                                              save=lambda data: meta_set(self.db, "inara_sent", data))
+        self.uploads_hub = outrider.uploads.UploadHub(db, {"eddn": self.eddn_build, "edsm": self.edsm_build,
+                                                           "inara": self.inara_build},
+                                                      enabled=self.upload_queueing,
+                                                      holds={"edsm": outrider.edsm.hold, "inara": outrider.inara.hold},
                                                       max_ages={"eddn": outrider.eddn.CATCHUP_MAX_S},
                                                       idlers={"eddn": self.eddn_idle}, follow=self.upload_wanted,
-                                                      quiet={"eddn": outrider.eddn.quiet},
+                                                      quiet={"eddn": outrider.eddn.quiet}, keep={"inara": self.inara_sent},
                                                       save=lambda marks: meta_set(self.db, "upload_marks", marks))
         marks = meta_get(db, "upload_marks")   # how far each service has queued (live-only: a re-read keeps it)
         self.uploads_hub.marks = {k: v for k, v in marks.items() if isinstance(v, list)} if isinstance(marks, dict) else {}
         self.upload_senders["eddn"] = self.eddn_send
         self.upload_senders["edsm"] = self.edsm_send
+        self.upload_senders["inara"] = self.inara_send
         self.eddn_hold = outrider.eddn.SchemaHold()
         self.edsm_discard = outrider.edsm.DISCARD   # EDSM's list of unwanted events: the built-in copy until fetched
         self.edsm_discard_task = None
         self.edsm_dry_path = None                   # OUTRIDER_EDSM_DRYRUN: where the requests are logged (run(): data/)
+        self.inara_dry_path = None                  # OUTRIDER_INARA_DRYRUN: the same for Inara
         journals.uploads = self.uploads_hub
         # one uploader at a time (PLAN-edmc-functionality "One uploader at a time"): leases in the journal folders,
         # and EDMC on this PC. Refreshed by watch_leases every LEASE_EVERY_S.
@@ -5723,6 +6114,9 @@ class State:
             "speech": self.speech.info() if self.speech else None,
             "autohonk": self.autohonk_info(),
             "autotarget": self.autotarget_info(), "rail": self.rail_info(),   # the tablet's game buttons
+            # boxel exploration: the page fetches api/boxel when this changes (a jump, a scan, Spansh's answer, a pick)
+            "boxel": self.boxel_payload(),
+            "codex_types": self.codex_types(),   # your codex's body types per region (✦ / ✪ on bodies)
             "hush": self.hush_info(),
             "firsts_watch": self.firsts_watch_info(),
             "copilot": dict(self.copilot, button=self.button.status if self.button else None),
@@ -5731,8 +6125,6 @@ class State:
             "on_body": self.on_body(),
             "near_body": self.near_body(),
             "uploads": self.uploads_summary(),
-            # the fork's Inara upload: {on, sent, dropped, waiting, last, error, off}; None before run() made it
-            "inara": self.inara.info() if self.inara else None,
             "sampling": self.sampling_summary(),
             "surface": self.surface_summary(),
             "overlay": self.overlay_info(),
@@ -5934,8 +6326,7 @@ class State:
                 return {"error": f"the AI layer failed ({type(e).__name__})", "code": "ai_error"}, 502
         else:
             matched = "none"
-            words = ("I only know a few questions so far: a status report, fuel, unsold data, the next jump, what's left "
-                     "here, the nearest unvisited system, hush and unhush.")
+            words = outrider.ask.known_questions()
         words = outrider.tts.clip_text(words)
         self.copilot_action(action, words)
         return {"answer": words, "spoken": self.speaker_present(), "matched": matched, "command": cmd}, 200
@@ -6431,8 +6822,8 @@ class State:
         so nothing is ever deleted for a backup that did not work; once the zip is good, a journal that could
         not be archived is reported (warning: the backup itself worked) but the rotation still runs, so a lasting
         failure cannot pile up zips. Legacy folders stay out of the archive: they are a copy of something already
-        and never change. The zip also holds the speech file and the config file in use when they exist, and the lines you banned (see
-        State.speech_path); one of those that cannot be read is a warning too. Runs on a worker thread; returns
+        and never change. The zip also holds the speech file, the config file and your pronunciations when they
+        exist, and the lines you banned (see State.speech_path); one of those that cannot be read is a warning too. Runs on a worker thread; returns
         {path, size, kept, journals_to, copied, files, verified} (+ warning), files being the names inside the
         zip. The database copy must pass SQLite's quick_check and the zip testzip() before the zip replaces
         anything or the rotation runs; a copy or zip that fails raises (and the bad zip is deleted)."""
@@ -6466,7 +6857,7 @@ class State:
                 extra_failed = []
                 banned = outrider.speech.banned_path(self.speech_path) if self.speech_path else None
                 for src_path, arc in ((self.speech_path, "speech.json"), (banned, outrider.speech.BANNED_FILE),
-                                      (self.config_path, "ed_outrider.toml")):
+                                      (self.config_path, "ed_outrider.toml"), (self.pronounce_path, "pronounce.json")):
                     if not src_path or not os.path.exists(src_path):
                         continue
                     try:
@@ -6713,16 +7104,31 @@ class State:
                 "planets": row.get("planets") or len(bodies) or None,
                 "in_spansh": row.get("in_spansh") if "in_spansh" in row else None}
 
+    def overlay_route(self):
+        """The route Now's panel gives the next stop of: the unfinished one plotted last (route_newest: the page
+        shows this device's pick with both), {kind, summary} or None."""
+        kind = self.route_newest()
+        s = self.highway_summary() if kind == "highway" else self.survey_summary() if kind == "riches" else None
+        return {"kind": kind, "summary": s} if s else None
+
+    def overlay_boxel(self):
+        """The kept boxel's Next for Now's panel (a boxel only followed, not kept, says nothing there), or None."""
+        bx = self.boxel_payload()["next"]
+        return bx if bx and bx.get("picked") else None
+
     def overlay_now_info(self, pos, now):
         """What the Now panel says (outrider.overlay.now_panel): the inputs of the page's Now view, from the server."""
         detail = self.overlay_detail(pos["id64"])
         bodies = {b.get("name"): b for b in (detail or {}).get("bodies") or []}
         ob = self.on_body() or self.near_body()
         dest = self.destination()
+        # a body of this system by its id, as the page's Now view finds it: a targeted station or mining site is none
+        dest = dest and next((b for b in bodies.values() if b.get("body_id") == dest["body_id"]), None)
         a = self.arrival if self.arrival and self.arrival.get("id64") == str(pos["id64"]) else None
         t = self.target
         return {"name": pos.get("name"), "now": now, "arrival": a,
                 "target": t and {k: t.get(k) for k in ("name", "status", "known", "count", "star_class")},
+                "route": self.overlay_route(), "boxel": self.overlay_boxel(),
                 "fuel": self.fuel_summary(), "boost": (self.journals.boost or {}).get("value"),
                 "unsold": self.unsold, "unsold_levels": (UNSOLD_WARN, UNSOLD_URGENT),
                 "rebuy": risk_rebuy(self.journals.ship), "since_sale": self.since_sale(),
@@ -6731,19 +7137,20 @@ class State:
                 "detail_ready": detail is not None, "leaving": (detail or {}).get("leaving"),
                 "value_now": (self.systems.get(pos["id64"]) or {}).get("value_now"),
                 "destination": dest["name"] if dest else None,
-                "destination_ls": (bodies.get(dest["name"]) or {}).get("dist_ls") if dest else None,
+                "destination_ls": dest.get("dist_ls") if dest else None,
                 "this_session": self.this_session(), "last_session": self.last_session()}
 
     def overlay_panels(self, now=None):
         """The panels to draw now: the test panels while they show, else the ones switched on that have something to
-        say (none while [overlay] enabled is off, the game is not live, a map, the FSS, the SAA or the codex is open, or
-        in the hyperspace tunnel)."""
+        say (none while [overlay] enabled is off, the game is not live or still loading, a map, the FSS, the SAA or the
+        codex is open, or in the hyperspace tunnel)."""
         now = time.time() if now is None else now
         cfg, pal = self.overlay_cfg, self.overlay_palette()
         if now < self.overlay_test_until or now < self.overlay_arrange_until:
             return outrider.overlay.test_panels(pal, cfg["text_size"], cfg["radar_range"])
         st = self.journals.status_json or {}
-        if not cfg.get("enabled") or not st.get("live") or (st.get("gui_focus") or 0) in OVERLAY_HIDE_FOCUS \
+        if not cfg.get("enabled") or not st.get("live") or self.journals.loading() \
+                or (st.get("gui_focus") or 0) in OVERLAY_HIDE_FOCUS \
                 or (st.get("flags") or 0) & FLAG_FSD_JUMP:   # nothing in the hyperspace tunnel: the system is changing
             return []
         flags, pos, out = st.get("flags") or 0, self.journals.pos, []
@@ -6762,9 +7169,11 @@ class State:
         if cfg.get("body_panel") and pos and flags & FLAG_IN_MAIN_SHIP and not flags & (FLAG_LANDED | FLAG_IN_SRV) \
                 and not (st.get("flags2") or 0) & 1:
             dest = self.destination()
-            name = dest["name"] if dest else short_name(pos["name"], st["body"]) if st.get("body") else None
-            detail = self.overlay_detail(pos["id64"]) if name else None
-            b = next((x for x in (detail or {}).get("bodies") or [] if x.get("name") == name), None)
+            near = short_name(pos["name"], st["body"]) if st.get("body") else None
+            bodies = (self.overlay_detail(pos["id64"]) or {}).get("bodies") or [] if dest or near else []
+            # the targeted body by its id (a station or mining site targeted is no body: the one you are near then)
+            b = next((x for x in bodies if dest and x.get("body_id") == dest["body_id"]), None) \
+                or next((x for x in bodies if near and x.get("name") == near), None)
             p = outrider.overlay.body_panel(b, pal, cfg["text_size"], HIGH_GRAVITY,
                                             outrider.bio.colony_table() if outrider.bio else None) if b else None
             if p:
@@ -8307,7 +8716,13 @@ class State:
                 "bio_potential": bio_val,
                 # undecided before the DSS: every genus it could be, and the range ("Stratum or Bacterium")
                 "bio_options": bio_options(r, star, ctx, {o["genus"] for o in held}) if r.get("bio") and not known_genera else None,
-                "organics": organics.get(bid, []), "codex": codex.get(bid, []),
+                # a codex entry with no body (a phenomenon in space) is no unscanned body's: those have bid None too
+                "organics": organics.get(bid, []), "codex": codex.get(bid, []) if bid is not None else [],
+                # a potential green gas giant (the ladder model on its full-precision temperature) or a confirmed one
+                "ggg": ggg_state(r, [c["name"] for c in (codex.get(bid, []) if bid is not None else [])]),
+                # the codex entry its type logs (the page marks one not in your codex for the region: ✦ / ✪)
+                "codex_type": codex_type(r),
+                "sites": r.get("sites") or None,
                 "scanned": bid is not None, "first_discovered": first_disc, "mapped": is_mapped,
                 "first_mapped": first_map, "map_state": map_state, "footfall": bool(f and f["foot_ts"]),
                 "first_footfall": bool(f and f["was_footfalled"] == 0 and f["foot_ts"]),
@@ -8334,12 +8749,13 @@ class State:
         spansh_recs = (base or {}).get("records") or []
         partial = bool(spansh_recs) and not any(x.get("full") for x in spansh_recs) \
             and self.dump_tries.get(id64, 0) < DUMP_MAX_TRIES and not (base or {}).get("no_dump")
-        phenomena = [dict(r) for r in self.db.execute("SELECT kind, ts, reached_ts FROM phenomena WHERE system=?", (id64,))]
+        phenomena = [dict(r) for r in self.db.execute("SELECT kind, ts, reached_ts, coalesce(n, 1) AS n, max((SELECT count(DISTINCT site) FROM phenomena_sites ps WHERE ps.system = phenomena.system AND ps.kind = phenomena.kind), reached_ts IS NOT NULL) AS visited FROM phenomena WHERE system=?", (id64,))]
         leaving = self.leaving_summary(id64)
         if leaving is not None:   # the checklist's "N not on Spansh" (leaving_summary itself runs on every poll)
             leaving["base_known"] = base_known(base, source)
         return {"id64": str(id64), "name": name, "bodies": out, "tree": tree, "partial": partial, "region": region,
-                "phenomena": phenomena,
+                "phenomena": phenomena, "rare_stars": rare_stars(out),
+                "pois": [dict(r) for r in self.db.execute("SELECT kind, name FROM poi WHERE system=? ORDER BY ts", (id64,))],
                 "leaving": leaving,
                 "firsts": own_firsts(self.db, id64, name),
                 "value_now": sum(b["value_now"] for b in out), "value_max": sum(b["value_max"] for b in out),
@@ -9010,7 +9426,8 @@ class State:
                          "region": region_of(r["system"]), "state": state})
         codex = [{"name": c["name"], "region": number.get((c["region"] or "").lower())}
                  for c in self.db.execute("SELECT name, region FROM codex")]
-        out = outrider.checklist.table(R["species"], region, outrider.bio.ruleset_region_ok, runs, codex, count)
+        out = outrider.checklist.table(R["species"], region, outrider.bio.ruleset_region_ok, runs, codex, count,
+                                         value_of=outrider.bio.species_value)
         done = outrider.checklist.completion(R["species"], outrider.bio.ruleset_region_ok, runs, codex, count)
         return dict(out, kind="bio", regions=[{"id": i, "name": n, "completion": done.get(i)} for i, n in enumerate(names) if n],
                     completion_all=done["all"], here=here, region=region, region_name=names[region] if region else None), 200
@@ -9324,9 +9741,10 @@ class State:
         return {"value_now": int(now_c + now_b), "value_max": int(now_c + now_b + rem_c + rem_b),
                 "value_parts": {"carto_now": int(now_c), "bio_now": int(now_b), "carto_left": int(rem_c), "bio_left": int(rem_b)}}
 
-    def row(self, id64):
-        """Page row for a system: its Spansh base merged with your own scans."""
-        source, base = self.bases[id64]
+    def row(self, id64, fallback=None):
+        """Page row for a system: its Spansh base merged with your own scans. `fallback`: (source, base) for a system
+        not in the Nearby sphere (a boxel's: {name, x, y, z, records: []}, your own scans only)."""
+        source, base = self.bases[id64] if id64 in self.bases else fallback
         own, hotspots, own_count = own_data(self.db, id64, base["name"])
         records = merge_records(base.get("records") or [], own, hotspots)
         counts = [c for c in (base.get("body_count"), own_count) if c]
@@ -9340,7 +9758,7 @@ class State:
             own_genera.setdefault(short_name(base["name"], r_["name"]), []).append(r_["genus_name"])
         s = summarise(records, body_count, star, ctx, own_genera)
         s.update(id64=id64, id=str(id64), name=base["name"], source=source, in_spansh=source == "spansh",
-                 visited=id64 in self.visited, distance=round(dist(self.center, base), 2),
+                 visited=id64 in self.visited, distance=round(dist(self.center or base, base), 2),   # (no sphere yet: 0)
                  own_scans=len(own), firsts=own_firsts(self.db, id64, base["name"]),
                  mapped=self.db.execute(
                      """SELECT count(*) FROM own_firsts f LEFT JOIN own_mapped m
@@ -9349,7 +9767,15 @@ class State:
                      (id64,)).fetchone()[0])
         s.update(self.system_value(id64, base["name"], records, star, ctx))
         s["no_dump"] = bool(base.get("no_dump"))   # Spansh has no body details: the popup stops saying "loading"
-        s["phenomena"] = [dict(r) for r in self.db.execute("SELECT kind, reached_ts FROM phenomena WHERE system=?", (id64,))]
+        s["phenomena"] = [dict(r) for r in self.db.execute("SELECT kind, reached_ts, coalesce(n, 1) AS n, max((SELECT count(DISTINCT site) FROM phenomena_sites ps WHERE ps.system = phenomena.system AND ps.kind = phenomena.kind), reached_ts IS NOT NULL) AS visited FROM phenomena WHERE system=?", (id64,))]
+        s["rare_stars"] = rare_stars(records, base["name"])   # from Spansh's records too: seen before you go
+        s["ggg"], s["ggg_green"] = ggg_bodies(self.db, id64, base["name"], records)   # Spansh's too: a system to go to
+        # the star and planet types here as codex entries, Spansh's too (the page marks the ones new to your codex)
+        s["codex_types"] = [dict(t, body=r["name"]) for r in records for t in [codex_type(r)] if t]
+        s["region"] = outrider.bio.region_name(base["x"], base["y"], base["z"]) \
+            if outrider.bio and all(isinstance(base.get(k), (int, float)) for k in "xyz") else None
+        s["sites"] = surface_sites(records, base["name"])     # Guardian, Thargoid, anomalies: your own scans
+        s["pois"] = [dict(r) for r in self.db.execute("SELECT kind, name FROM poi WHERE system=? ORDER BY ts", (id64,))]
         raws = {short_name(base["name"], r_["name"]): json.loads(r_["raw"]) for r_ in self.db.execute(
             "SELECT name, raw FROM own_bodies WHERE system=? AND raw IS NOT NULL", (id64,))}
         cur = system_curiosities(base["name"], records, raws)
@@ -9560,9 +9986,9 @@ class State:
             self.safe_row(id64)
             self.bump()
         if failed and self.failed_dumps:
-            self.status = f"ok ({failed} body lookups failed again, retrying in {self.schedule_retry()}s)"
+            self.status = f"ok ({failed} Spansh body lookups failed again, retrying in {self.schedule_retry()}s)"
         elif failed:   # every failure has used up its tries: stop retrying, but say so
-            self.status = f"ok ({failed} body lookups failed; giving up on them until you move)"
+            self.status = f"ok ({failed} Spansh body lookups failed; giving up on them until you move)"
         else:
             self.retry_backoff = 30
             self.status = "ok"
@@ -9692,9 +10118,9 @@ class State:
         await asyncio.gather(*(one(*t) for t in need_dump))
         if need_dump:
             if failed and self.failed_dumps:
-                self.status = f"ok ({failed} body lookups failed, retrying in {self.schedule_retry()}s)"
+                self.status = f"ok ({failed} Spansh body lookups failed, retrying in {self.schedule_retry()}s)"
             elif failed:
-                self.status = f"ok ({failed} body lookups failed; giving up on them until you move)"
+                self.status = f"ok ({failed} Spansh body lookups failed; giving up on them until you move)"
             else:
                 self.retry_backoff = 30
                 self.status = "ok"
@@ -9886,7 +10312,8 @@ class State:
             return f"also uploading from {other}"
         e = self.edmc or {}
         if e.get("running") and e.get(service):
-            return f"EDMC on this PC sends to {service.upper()} too: switch its {service.upper()} off (or this one)"
+            n = outrider.uploads.NAMES.get(service, service)
+            return f"EDMC on this PC sends to {n} too: switch its {n} off (or this one)"
         return None
 
     def upload_queueing(self, service):
@@ -9915,7 +10342,8 @@ class State:
                     else f"Already uploading from {other['host']}: switch it off there first")
         e = self.edmc or {}
         if e.get("running") and e.get(service):
-            return ("edmc", f"EDMC on this PC is sending to {service.upper()}: switch its {service.upper()} off first")
+            n = outrider.uploads.NAMES.get(service, service)
+            return ("edmc", f"EDMC on this PC is sending to {n}: switch its {n} off first")
         if readonly and not confirmed:
             return ("confirm_needed", "Is this the only Outrider uploading? Other instances can't see this one")
         return None
@@ -9975,7 +10403,7 @@ class State:
         # switched off (it leaves the hold because it is not wanted)
         took = [s for s in wanted if held_before and s in held_before and s not in self.lease_hold]
         if took:
-            theirs_all = outrider.uploads.lease_marks(LIVE_DIRS, self.leases.instance)
+            theirs_all = outrider.uploads.lease_marks(LIVE_DIRS, self.leases.instance, senders_only=True)
             for s in took:
                 theirs, mine = theirs_all.get(s), self.uploads_hub.marks.get(s)
                 if theirs and (mine is None or outrider.uploads.pos_key(theirs) < outrider.uploads.pos_key(mine)):
@@ -10064,6 +10492,11 @@ class State:
                     f"keep it: {out.get('error')}")
             print(f"uploads: {note}", file=sys.stderr)
         self.upload_status.pop(service, None)
+        if was and not on and self.uploads_hub.marks.pop(service, None) is not None:
+            # its mark goes: a next start that finds it on in the file (a write that failed) begins from then, as a
+            # switch-on does, never catching up what was played while it was off (review 2026-10-11)
+            self.uploads_hub.marks_dirty = True
+            self.uploads_hub.flush()
         if on and not was:
             pos, ts = self.upload_start_mark(service)
             if pos:
@@ -10100,6 +10533,7 @@ class State:
         out["eddn"]["test"] = outrider.uploads.eddn_test_mode()
         out["edsm"]["dry_run"] = outrider.edsm.dry_run()
         out["edsm"]["accounts"] = self.edsm_account_list()
+        out["inara"].update(dry_run=outrider.inara.dry_run(), dev=outrider.inara.dev_mode(), accounts=self.inara_account_list())
         out["readonly"] = bool(self.lease_writable) and not any(self.lease_writable.values())
         out["simulate"] = bool(self.simulate)
         return out
@@ -10238,6 +10672,89 @@ class State:
             out.insert(0, {"commander": cur, "name": cur, "set": False, "hint": None})
         return out
 
+    def inara_build(self, ev, session):
+        """What a live journal line sends to the commander's Inara profile (outrider.inara.build: only what changed)."""
+        return outrider.inara.build(ev, session, self.inara_sent)
+
+    async def inara_send(self, rows):
+        """Send the leading rows of one commander (outrider.inara.same_batch) to Inara with that commander's API key, in
+        one request. A commander with no key: dropped, and the status says so. Under the developer's
+        OUTRIDER_INARA_DRYRUN the request is logged (the key left out) and nothing is sent; OUTRIDER_INARA_DEV marks it
+        isBeingDeveloped (a test account's trial)."""
+        batch = outrider.inara.same_batch(rows)
+        cmdr = batch[0]["cmdr"]
+        key = (self.inara_accounts().get(cmdr or "") or {}).get("key")
+        if not key:
+            why = f"not sent: no Inara API key for CMDR {cmdr} (Settings -> Uploads)"
+            self.inara_sent.forget(cmdr)   # its snapshots never arrived: sent again once there is a key
+            return [(r["id"], "dropped", why, None) for r in batch]
+        body = outrider.inara.request(batch, key, outrider.__version__, developing=outrider.inara.dev_mode())
+        if outrider.inara.dry_run():
+            self.inara_dry_log(body)
+            return [(r["id"], "dry", "dry run: not sent", None) for r in batch]
+        async with self.upload_session.post(outrider.inara.URL, json=body) as resp:
+            if resp.status != 200:
+                raise ConnectionError(f"Inara answered HTTP {resp.status}")
+            reply = await resp.json(content_type=None)
+        results = outrider.inara.answer(batch, reply)
+        bad = next((status for _, state, status, _ in results if state in ("held", "dropped")), None)
+        if bad:
+            print(f"Inara: {bad}", file=sys.stderr)
+        return results
+
+    def inara_dry_log(self, body):
+        """A dry run's request: one line on the console, the whole request (never the key) appended to inara_dry_path."""
+        names = collections.Counter(e.get("eventName") for e in body["events"])
+        print(f"Inara dry run: {len(body['events'])} event{'' if len(body['events']) == 1 else 's'} for "
+              f"{body['header'].get('commanderName')} (" + ", ".join(f"{n} x{c}" if c > 1 else n for n, c in names.items())
+              + "), not sent")
+        if self.inara_dry_path:
+            try:
+                with open(self.inara_dry_path, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(dict(body, header=dict(body["header"], APIkey="(not logged)")), separators=(",", ":")) + "\n")
+            except OSError as e:
+                print(f"Inara dry run: cannot write {self.inara_dry_path}: {e}", file=sys.stderr)
+
+    def inara_accounts(self):
+        """{in-game commander: {key: Inara API key}} (meta inara_accounts, live-only). Never served: the page sees the
+        key's ends only (inara_account_list)."""
+        a = meta_get(self.db, "inara_accounts")
+        return {k: v for k, v in a.items() if isinstance(v, dict)} if isinstance(a, dict) else {}
+
+    def set_inara_account(self, commander, key=None, remove=False):
+        """Add, change or remove one in-game commander's Inara API key. An empty key keeps the one stored. (answer,
+        status)."""
+        commander = str(commander or "").strip()
+        if not commander or len(commander) > 64:
+            return {"error": "commander: the in-game commander's name"}, 400
+        accounts = self.inara_accounts()
+        had = (accounts.get(commander) or {}).get("key")
+        if remove:
+            accounts.pop(commander, None)
+        else:
+            key = str(key or "").strip() or had
+            if not outrider.inara.key_ok(key):
+                return {"error": "api_key: the key from inara.cz -> Settings -> API key (letters and digits)"}, 400
+            accounts[commander] = {"key": key}
+        if remove or key != had:   # maybe another Inara profile: it has none of what the old one was sent
+            self.inara_sent.forget(commander)
+        meta_set(self.db, "inara_accounts", accounts)
+        self.upload_status.pop("inara", None)   # a new key: try again
+        self.db.commit()
+        self.bump()
+        return {"ok": True, "accounts": self.inara_account_list()}, 200
+
+    def inara_account_list(self):
+        """For the page: [{commander, set, hint}], the commander in the journals first if missing. Never the key: hint is
+        its first and last four characters and its length (the page may be open to the network without a password)."""
+        accounts = self.inara_accounts()
+        hint = lambda k: f"{k[:4]}…{k[-4:]} ({len(k)} characters)" if k and len(k) >= 16 else None
+        out = [{"commander": c, "set": bool(a.get("key")), "hint": hint(a.get("key"))} for c, a in sorted(accounts.items())]
+        cur = (self.journals.commander or {}).get("name")
+        if cur and cur not in accounts:
+            out.insert(0, {"commander": cur, "set": False, "hint": None})
+        return out
+
     def catch_up_uploads(self):
         """At start: each service that is on queues what was played while Outrider was not running (from its mark to
         where the start-up scan got to, at most a week back); one with no mark yet starts where the reader is."""
@@ -10269,11 +10786,15 @@ class State:
     def uploads_line(self):
         """The start-up line: each upload on or off, and EDDN's test schemas when the developer's OUTRIDER_EDDN_TEST
         is set (said even while EDDN is off, so a test run is never mistaken for a live one)."""
-        parts = [f"{s.upper()} {'on' if self.upload_wanted(s) else 'off'}" for s in outrider.uploads.SERVICES]
+        parts = [f"{outrider.uploads.NAMES[s]} {'on' if self.upload_wanted(s) else 'off'}" for s in outrider.uploads.SERVICES]
         if outrider.uploads.eddn_test_mode():
             parts[0] += f" (TEST: EDDN's test schemas only, {outrider.uploads.TEST_ENV} is set)"
         if outrider.edsm.dry_run():
             parts[1] += f" (DRY RUN: built and logged, nothing sent, {outrider.edsm.DRY_ENV} is set)"
+        if outrider.inara.dry_run():
+            parts[2] += f" (DRY RUN: built and logged, nothing sent, {outrider.inara.DRY_ENV} is set)"
+        elif outrider.inara.dev_mode():
+            parts[2] += f" (development mode: {outrider.inara.DEV_ENV} is set)"
         return "uploads: " + ", ".join(parts) + ("" if self.simulate else " (switched in Settings -> Uploads)")
 
     def start_uploads(self):
@@ -10286,9 +10807,10 @@ class State:
             self.edsm_discard_task = asyncio.get_running_loop().create_task(self.watch_edsm_discard())
         for service, send in self.upload_senders.items():
             if service not in self.upload_tasks:
+                batch = {"eddn": 1, "inara": outrider.inara.BATCH}.get(service, outrider.edsm.BATCH)   # EDDN: one per request
                 self.upload_tasks[service] = asyncio.get_running_loop().create_task(outrider.uploads.upload_loop(
-                    service, self.db, send, self.upload_on, report=self.upload_report,
-                    batch=1 if service == "eddn" else outrider.edsm.BATCH))   # EDDN takes one message per request
+                    service, self.db, send, self.upload_on, report=self.upload_report, batch=batch,
+                    min_gap=outrider.inara.MIN_GAP_S if service == "inara" else 0))
 
     def set_autohonk(self, enabled):
         """Switch auto honk on or off (the page's toggle; remembered over restarts)."""
@@ -10458,10 +10980,14 @@ class State:
             except ValueError as e:   # nothing to press: Primary Fire has no keyboard binding, say
                 if switched_off():
                     return
+                if shown:   # not left saying "waiting: ..." in Settings
+                    self.honker.status = ready_status
                 self.journals.moment("honk", a["ts"], ok=False, system=a["name"], why=str(e))
                 self.bump()
                 return
             except Exception as e:  # noqa: BLE001 -- say so on the page rather than die quietly
+                if shown:
+                    self.honker.status = ready_status
                 self.journals.moment("honk", a["ts"], ok=False, system=a["name"], why=f"{type(e).__name__}: {e}")
                 self.bump()
                 return
@@ -10764,6 +11290,11 @@ class State:
             return None
         return dict(ns, id=str(ns["id64"]), distance=round(dist(pos, ns), 1) if pos else None)
 
+    def remember_speakers(self, chosen):
+        """Each voice's speaker picked on the page ({voice: id}, meta voice_speakers): kept over restarts."""
+        meta_set(self.db, "voice_speakers", chosen)
+        self.db.commit()
+
     def remember_voice(self, name):
         """The voice picked in the alerts dialog, once it has loaded: preferred at the next start (a choice that
         never loaded is not saved, so a broken voice does not replace the working one after a restart)."""
@@ -10783,6 +11314,450 @@ class State:
                                             "set_ts": (self.journals.pos or {}).get("ts") or iso_ts(time.time())})
         self.db.commit()
         self.bump()
+        return True
+
+    # ---- boxel exploration (outrider/boxel.py; the author, 2026-10-11) ----
+
+    def boxel_sectors(self):
+        """{(sx, sy, sz): sector name} for every standard sector you have a system of (sector names are not generated:
+        a system seen in one names it). Rebuilt when your visits grow."""
+        n = self.db.execute("SELECT count(*) FROM visits").fetchone()[0]
+        if self._boxel_sectors[0] != n:
+            names = {}
+            for name, x, y, z in self.db.execute("SELECT name, x, y, z FROM visits WHERE x IS NOT NULL"):
+                b = outrider.boxel.of_system(name, {"x": x, "y": y, "z": z})
+                if b and b["standard"]:
+                    names[tuple(b["sector_index"])] = b["sector"]
+            self._boxel_sectors = (n, names)
+        return self._boxel_sectors[1]
+
+    def boxel_active(self):
+        """The boxel being explored: the one picked (meta boxel_active: {prefix, sector_index, mc}), else the one you are
+        in (None in a hand-named system). {prefix, label, mc, standard, sector_index?, boxel?, center?, here}."""
+        pick, pos = meta_get(self.db, "boxel_active"), self.journals.pos
+        here = outrider.boxel.of_system(pos["name"], pos) if pos and pos.get("name") else None
+        if isinstance(pick, dict) and isinstance(pick.get("prefix"), str):
+            p = outrider.boxel.parse(outrider.boxel.name_of(pick["prefix"], 0))
+            if p:
+                if here and here["prefix"] == p["prefix"]:
+                    return dict(here, here=True, picked=True)
+                si = pick.get("sector_index")
+                if isinstance(si, list) and len(si) == 3 and all(isinstance(v, int) for v in si):
+                    bx = outrider.boxel.boxel_index(p["letters"], p["n1"])
+                    p.update(standard=True, sector_index=si, boxel=list(bx), center=outrider.boxel.center(si, bx, p["mc"]))
+                else:
+                    p["standard"] = False
+                return dict(p, here=False, picked=True)
+        return dict(here, here=True, picked=False) if here else None
+
+    def boxel_set(self, prefix=None, sector_index=None):
+        """Explore another boxel (a recommended one: its prefix and sector index), or None: the one you are in again.
+        False for a prefix that is no boxel's."""
+        if prefix is None:
+            meta_set(self.db, "boxel_active", None)
+        else:
+            p = outrider.boxel.parse(outrider.boxel.name_of(prefix, 0)) if isinstance(prefix, str) else None
+            if not p or p["prefix"] != prefix:
+                return False
+            ok = isinstance(sector_index, list) and len(sector_index) == 3 and all(isinstance(v, int) and not isinstance(v, bool) for v in sector_index)
+            meta_set(self.db, "boxel_active", {"prefix": prefix, "mc": p["mc"], "sector_index": sector_index if ok else None})
+        self.db.commit()
+        self.bump()
+        return True
+
+    def boxel_visited(self, prefix):
+        """{number: (id64, name, x, y, z)} of the boxel's systems you have been to."""
+        out = {}
+        like = prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        for id64, name, x, y, z in self.db.execute("SELECT id64, name, x, y, z FROM visits WHERE name LIKE ? ESCAPE '\\'", (like,)):
+            n = outrider.boxel.number_of(prefix, name)
+            if n is not None:
+                out[n] = (id64, name, x, y, z)
+        return out
+
+    def boxel_known(self, prefix):
+        """Every number of the boxel known to exist: yours and Spansh's."""
+        cache = (meta_get(self.db, "boxel_spansh") or {}).get(prefix) or {}
+        return set(self.boxel_visited(prefix)) | {int(k) for k in (cache.get("systems") or {}) if str(k).isdigit()}
+
+    def boxel_end(self, prefix, known=None):
+        """The boxel's probable end (the first number the galaxy map could not find), only while it is above every number
+        known to exist: a name found since (yours or Spansh's) makes it no end (a failed search can be a hiccup)."""
+        end = (meta_get(self.db, "boxel_ends") or {}).get(prefix)
+        known = self.boxel_known(prefix) if known is None else known
+        return end if isinstance(end, int) and end > max(known, default=-1) else None
+
+    def boxel_view(self, now=None):
+        """The active boxel's list for the page: one row per number from 0 to the highest known (yours or Spansh's), then
+        TRY_ABOVE more, until a name was not found (meta boxel_ends). Visited rows carry your scan summary (as Nearby's);
+        Spansh's carry where they are. next: the lowest number you have not been to."""
+        b = self.boxel_active()
+        auto = bool(meta_get(self.db, "boxel_auto"))
+        if not b:
+            return {"boxel": None, "auto": auto, "why": "this system has a hand-made name, so it is in no boxel: pick one below"}
+        prefix, pos = b["prefix"], self.journals.pos
+        visited = self.boxel_visited(prefix)
+        cache = (meta_get(self.db, "boxel_spansh") or {}).get(prefix) or {}
+        spansh = {int(k): v for k, v in (cache.get("systems") or {}).items() if str(k).isdigit() and isinstance(v, dict)}
+        known = set(visited) | set(spansh)
+        top = max(known, default=-1)
+        end = self.boxel_end(prefix, known)
+        last = end - 1 if end is not None else top + outrider.boxel.TRY_ABOVE
+        rows = []
+        for n in range(0, last + 1):
+            name = outrider.boxel.name_of(prefix, n)
+            sp = spansh.get(n) or {}
+            r = {"n": n, "name": name, "visited": n in visited, "spansh": n in spansh, "distance": None, "summary": None,
+                 # what Spansh has of it: its bodies reported of the honk's count (most were only passed through)
+                 "known": {"bodies": sp.get("bodies_known"), "count": sp.get("body_count")} if n in spansh else None,
+                 "scanned": n in spansh and boxel_fully_scanned(sp)}
+            if b.get("standard"):
+                r["id"] = str(outrider.boxel.id64(b["sector_index"], b["boxel"], b["mc"], n))
+            where = visited.get(n) or spansh.get(n)
+            xyz = ({"x": where[2], "y": where[3], "z": where[4]} if n in visited else
+                   {k: where.get(k) for k in "xyz"} if where else None)
+            if pos and xyz and all(isinstance(xyz.get(k), (int, float)) for k in "xyz"):
+                r["distance"] = round(dist(pos, xyz), 2)
+            if n in visited:
+                id64 = visited[n][0]
+                try:
+                    r["summary"] = self.row(id64, ("own", {"name": name, "x": visited[n][2], "y": visited[n][3], "z": visited[n][4], "records": []}))
+                except (KeyError, TypeError, ValueError) as e:   # a row that cannot be made: the list still shows
+                    print(f"boxel: no summary for {name} ({type(e).__name__}: {e})", file=sys.stderr)
+            rows.append(r)
+        # ✓ complete: the end is known and every number below it visited (no button needed); done: you said so (meta
+        # boxel_done). Either way Next offers nothing more (the rows' own 🎯 still work)
+        complete = end is not None and all(n in visited for n in range(end))   # end 0: an empty boxel, complete too
+        done = prefix in (meta_get(self.db, "boxel_done") or {})
+        # skip (opt-in): Next passes over the systems someone has fully scanned (every body reported); one only passed
+        # through or partly scanned still has its first discoveries open (review suggestion, 2026-10-12)
+        skip = bool(meta_get(self.db, "boxel_skip_known"))
+        nxt = None if complete or done else boxel_next_number(visited, spansh, end, skip)
+        return {"complete": complete, "done": done, "boxel": {"prefix": prefix, "label": b["label"], "mc": b["mc"], "size": outrider.boxel.size(b["mc"]),
+                          "kind": outrider.boxel.KINDS[b["mc"]], "standard": bool(b.get("standard")), "here": b["here"],
+                          "picked": b["picked"], "center": b.get("center"), "sector_index": b.get("sector_index"),
+                          "distance": round(dist(pos, b["center"]), 1) if pos and b.get("center") else None},
+                "rows": rows, "next": nxt, "end": end, "top": top, "visited": len(visited), "spansh": len(spansh),
+                "spansh_ts": cache.get("ts"), "spansh_error": cache.get("error"), "spansh_asking": prefix in self._boxel_fetching,
+                "auto": auto, "skip_known": skip}
+
+    def boxel_spansh_due(self, prefix, now=None):
+        """Whether Spansh's list of this boxel is older than BOXEL_SPANSH_MAX_AGE (or was never asked for)."""
+        cache = (meta_get(self.db, "boxel_spansh") or {}).get(prefix) or {}
+        try:
+            return (time.time() if now is None else now) - ts_seconds(cache["ts"]) > BOXEL_SPANSH_MAX_AGE
+        except (KeyError, TypeError, ValueError):
+            return True
+
+    async def boxel_spansh_fetch(self, prefix):
+        """Ask Spansh which of the boxel's names it knows: BOXEL_SPANSH_CHUNK at a time, an exact list of names, until a
+        chunk has none (at most BOXEL_SPANSH_MAX names). Kept a day (meta boxel_spansh, the BOXEL_SPANSH_KEEP latest
+        boxels); a failure is said in the list and asked again on the next look."""
+        if prefix in self._boxel_fetching or not self.spansh.session:
+            return
+        self._boxel_fetching.add(prefix)
+        self.bump()
+        found, err = {}, None
+        try:
+            for start in range(0, BOXEL_SPANSH_MAX, BOXEL_SPANSH_CHUNK):
+                names = [outrider.boxel.name_of(prefix, n) for n in range(start, start + BOXEL_SPANSH_CHUNK)]
+                body = {"filters": {"name": {"value": names}}, "size": BOXEL_SPANSH_CHUNK, "page": 0}
+                async with self.spansh.sem_fast:
+                    async with self.spansh.session.post(SPANSH_SEARCH, json=body) as r:
+                        r.raise_for_status()
+                        d = await r.json()
+                got = 0
+                for s in d.get("results") or []:
+                    n = outrider.boxel.number_of(prefix, s.get("name"))
+                    if n is not None:
+                        found[str(n)] = dict({k: s.get(k) for k in ("id64", "x", "y", "z", "body_count")},
+                                             # how many of its bodies anyone reported (the honk's count is body_count)
+                                             bodies_known=len(s["bodies"]) if isinstance(s.get("bodies"), list) else None)
+                        got += 1
+                if not got:
+                    break
+        except (ClientError, asyncio.TimeoutError, ValueError) as e:
+            err = f"Spansh could not be asked ({type(e).__name__})"
+        finally:
+            self._boxel_fetching.discard(prefix)
+        allc = meta_get(self.db, "boxel_spansh") or {}
+        old = allc.get(prefix) or {}
+        allc[prefix] = {"ts": iso_ts(time.time()) if not err else old.get("ts"), "systems": found if not err else old.get("systems") or {},
+                        "error": err}
+        for k in sorted(allc, key=lambda k: str((allc[k] or {}).get("ts") or ""))[:-BOXEL_SPANSH_KEEP]:
+            allc.pop(k, None)
+        meta_set(self.db, "boxel_spansh", allc)
+        self.db.commit()
+        self.bump()
+
+    def boxel_code_stats(self):
+        """Your own figures per mass code (the recommendations' "from your scans"): {code: {systems, bio (systems with a
+        biological signal), elw, ww, aw, terraformable}}."""
+        bio = {r[0] for r in self.db.execute("SELECT DISTINCT system FROM own_signals WHERE bio > 0")}
+        kinds = {}
+        for system, sub, terra in self.db.execute("SELECT system, json_extract(record, '$.subtype'), json_extract(record, '$.terraformable') FROM own_bodies"):
+            k = kinds.setdefault(system, {"elw": 0, "ww": 0, "aw": 0, "terraformable": 0})
+            k["elw"] += sub == "Earth-like world"
+            k["ww"] += sub == "Water world"
+            k["aw"] += sub == "Ammonia world"
+            k["terraformable"] += bool(terra)
+        out = {c: {"systems": 0, "bio": 0, "elw": 0, "ww": 0, "aw": 0, "terraformable": 0} for c in outrider.boxel.CODES}
+        for id64, name in self.db.execute("SELECT id64, name FROM visits"):
+            p = outrider.boxel.parse(name)
+            if not p:
+                continue
+            o = out[p["mc"]]
+            o["systems"] += 1
+            o["bio"] += id64 in bio
+            for k, v in (kinds.get(id64) or {}).items():
+                o[k] += v
+        return out
+
+    def boxel_nearby(self):
+        """The recommended boxels near you (outrider.boxel.nearby, sectors you have systems in), each with how many of its
+        systems you have been to; and per mass code what it tends to hold and your own figures."""
+        pos = self.journals.pos
+        if not pos or pos.get("x") is None:
+            return {"boxels": [], "finished": [], "codes": {}}
+        boxels, finished, per = [], [], {}
+        for b in outrider.boxel.nearby(pos, self.boxel_sectors(), per_code=BOXEL_NEAR_LOOK):
+            f = self.boxel_finished(b["prefix"])
+            if f:   # done or complete: listed apart, the next nearest of its kind takes its place
+                finished.append({"prefix": b["prefix"], "label": b["label"], "mc": b["mc"], "distance": b["distance"], "state": f})
+            elif per.get(b["mc"], 0) < BOXEL_NEAR_SHOW:
+                per[b["mc"]] = per.get(b["mc"], 0) + 1
+                boxels.append(b)
+        cache = meta_get(self.db, "boxel_spansh") or {}
+        for b in boxels:
+            v = self.boxel_visited(b["prefix"])
+            sp = {int(k) for k in ((cache.get(b["prefix"]) or {}).get("systems") or {}) if str(k).isdigit()}
+            # the highest number known, yours or Spansh's (the author: where it is from does not matter there)
+            b.update(visited=len(v), top=max(set(v) | sp, default=None), spansh_asked=b["prefix"] in cache,
+                     kind=outrider.boxel.KINDS[b["mc"]], size=outrider.boxel.size(b["mc"]))
+        stats = self.boxel_code_stats()
+        return {"boxels": boxels, "finished": finished, "codes": {c: {"kind": outrider.boxel.KINDS[c], "size": outrider.boxel.size(c), "yours": stats[c]}
+                                            for c in outrider.boxel.CODES}}
+
+    def boxel_sector(self, mc=None, layer=None):
+        """The sector you are in as a grid of mass code `mc`'s boxels (b..h; a's 128 x 128 per layer is left out), one Y
+        layer at a time (None: the one you are in): {mc, n (boxels per side), sector, sector_index, layer, you, kept,
+        cells [{x, z, visited, spansh, state}] (only the ones with something to show), layers {y: boxels with
+        visits}}, or {why}. All local: your visits, the done and end marks, the Spansh lists asked for."""
+        pos, active = self.journals.pos, self.boxel_active()
+        if not pos or not all(isinstance(pos.get(k), (int, float)) for k in "xyz"):
+            return {"why": "your position is not known yet"}
+        mc = mc or (active["mc"] if active and active["mc"] in BOXEL_GRID_CODES else "d")
+        sector, here = outrider.boxel.locate(pos, mc)
+        name = self.boxel_sectors().get(sector)
+        if not name:
+            return {"why": "this sector has no name Outrider knows: no system of yours is in a standard sector here"}
+        n = outrider.boxel.SECTOR // outrider.boxel.size(mc)
+        layer = here[1] if layer is None else max(0, min(n - 1, layer))
+        visited, layers = {}, {}
+        like = name.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + " %"
+        for (sysname,) in self.db.execute("SELECT name FROM visits WHERE name LIKE ? ESCAPE '\\'", (like,)):
+            p = outrider.boxel.parse(sysname)
+            if p and p["sector"] == name and p["mc"] == mc:
+                visited.setdefault(p["prefix"], set()).add(p["n2"])
+        spansh = {k: {int(x) for x in (v or {}).get("systems") or {} if str(x).isdigit()}
+                  for k, v in (meta_get(self.db, "boxel_spansh") or {}).items()}
+        done = meta_get(self.db, "boxel_done") or {}
+
+        def place(prefix):
+            p = outrider.boxel.parse(outrider.boxel.name_of(prefix, 0))
+            return outrider.boxel.boxel_index(p["letters"], p["n1"]) if p and p["sector"] == name and p["mc"] == mc else None
+        cells = {}
+        for prefix in set(visited) | {k for k, v in spansh.items() if v} | set(done):
+            at = place(prefix)
+            if not at:
+                continue
+            if visited.get(prefix):
+                layers[at[1]] = layers.get(at[1], 0) + 1
+            if at[1] != layer:
+                continue
+            seen = visited.get(prefix, set())
+            end = self.boxel_end(prefix, seen | spansh.get(prefix, set()))
+            state = "done" if prefix in done else "complete" if end is not None and set(range(end)) <= seen else None
+            cells[prefix] = {"x": at[0], "z": at[2], "visited": len(seen), "spansh": len(spansh.get(prefix, ())), "state": state}
+        kept = active and active.get("picked") and active.get("standard") and active["mc"] == mc \
+            and tuple(active["sector_index"]) == tuple(sector) and active["boxel"]
+        return {"mc": mc, "n": n, "sector": name, "sector_index": list(sector), "layer": layer, "you": list(here),
+                "kept": list(kept) if kept else None, "cells": sorted(cells.values(), key=lambda c: (c["z"], c["x"])),
+                "layers": {str(k): v for k, v in sorted(layers.items())}, "codes": BOXEL_GRID_CODES}
+
+    def sector_names(self, limit=40):
+        """The procedural sectors you have visited most, for the voice lab: [{name, say, visits}] ("Smojooe",
+        "SMOH-joo"), each word as the voice reads it (your own or the shipped table's way, else the rule's)."""
+        words, counts = outrider.tts.PRONOUNCE.words(), {}
+        for name, n in self.db.execute("SELECT name, count FROM visits"):
+            m = outrider.boxel.NAME.match(name or "")
+            if m and outrider.pronounce.sector_name(m["sector"]):
+                counts[m["sector"]] = counts.get(m["sector"], 0) + (n or 1)
+        top = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:limit]
+        return [{"name": s, "visits": n, "say": " ".join(words.get(w.lower()) or outrider.pronounce.sector_respelling(w)
+                                                         for w in s.split())} for s, n in top]
+
+    def codex_types(self):
+        """codex_types_logged, worked out again only when your scans or codex lines change; your scans are read once and
+        then only the new ones (a re-read of the journals renumbers them: then all again)."""
+        top = self.db.execute("SELECT max(rowid), count(*) FROM own_bodies").fetchone()
+        key = (top, self.db.execute("SELECT count(*), max(ts) FROM codex").fetchone())
+        if self._codex_types[0] == key:
+            return self._codex_types[1]
+        seen = self._codex_scanned
+        if seen is None or (top[0] or 0) < seen[1] or top[1] < seen[3]:   # fewer or renumbered rows: from scratch
+            seen = ({}, 0, {}, 0)
+        found, last = codex_types_scanned(self.db, seen[1], seen[0], seen[2])
+        self._codex_scanned = (found, last, seen[2], top[1])
+        self._codex_types = (key, codex_types_logged(self.db, found))
+        return self._codex_types[1]
+
+    def boxel_payload(self):
+        """The payload's boxel: the key the page refetches api/boxel on (a jump, a scan, Spansh's answer, a pick), the
+        auto-target opt-in, and the active boxel's Next (for Now: worked out again only when the key changes)."""
+        pos = self.journals.pos or {}
+        key = "|".join(str(x) for x in ((meta_get(self.db, "boxel_active") or {}).get("prefix"), pos.get("id64"), len(self.visited),
+                                        # your scans here (a boxel row's summary), not every journal line
+                                        (self.db.execute("SELECT max(ts) FROM own_bodies WHERE system=?",
+                                                         (pos.get("id64"),)).fetchone() or [None])[0],
+                                        len(self._boxel_fetching), json.dumps(meta_get(self.db, "boxel_ends")),
+                                        json.dumps({k: (v or {}).get("ts") for k, v in (meta_get(self.db, "boxel_spansh") or {}).items()}),
+                                        meta_get(self.db, "boxel_auto"), meta_get(self.db, "boxel_skip_known"),
+                                        json.dumps(meta_get(self.db, "boxel_done"))))
+        if self._boxel_next[0] != key:
+            self._boxel_next = (key, self.boxel_next())
+        return {"key": key, "auto": bool(meta_get(self.db, "boxel_auto")), "next": self._boxel_next[1]}
+
+    def boxel_next(self):
+        """The active boxel's Next for Now and the overlay's Now panel, without the list's per-row summaries: {prefix,
+        label, picked, standard, n, name, spansh, known, scanned, complete, done}, None with no boxel."""
+        b = self.boxel_active()
+        if not b:
+            return None
+        prefix = b["prefix"]
+        visited = self.boxel_visited(prefix)
+        spansh = {int(k): v for k, v in (((meta_get(self.db, "boxel_spansh") or {}).get(prefix) or {}).get("systems") or {}).items()
+                  if str(k).isdigit() and isinstance(v, dict)}
+        end = self.boxel_end(prefix, set(visited) | set(spansh))
+        complete = end is not None and all(n in visited for n in range(end))
+        done = prefix in (meta_get(self.db, "boxel_done") or {})
+        n = None if complete or done else boxel_next_number(visited, spansh, end, bool(meta_get(self.db, "boxel_skip_known")))
+        sp = spansh.get(n) or {}
+        return {"prefix": prefix, "label": b["label"], "picked": b["picked"], "standard": bool(b.get("standard")), "n": n,
+                "name": outrider.boxel.name_of(prefix, n) if n is not None else None, "spansh": n in spansh,
+                "known": {"bodies": sp.get("bodies_known"), "count": sp.get("body_count")} if n in spansh else None,
+                "scanned": n in spansh and boxel_fully_scanned(sp), "complete": complete, "done": done}
+
+    def boxel_target(self, n=None):
+        """({name, id64, here, route: None, index, boxel}, None) for 🎯 on number n of the active boxel (None: the next
+        you have not been to), or (None, why not). The id64 is computed (a system nobody has been to has one too), so
+        only a standard sector's boxel can be targeted and checked."""
+        b, pos = self.boxel_active(), self.journals.pos
+        if not b:
+            return None, "no boxel is being explored"
+        if not b.get("standard"):
+            return None, f"{b['label']} is in a hand-made sector: Outrider cannot check its systems"
+        if not pos or pos.get("id64") is None:
+            return None, "your position is not known yet"
+        if n is None:
+            v = self.boxel_view()
+            n = v.get("next")
+            if n is None:
+                return None, (f"{b['label']} is complete" if v.get("complete") else f"{b['label']} is marked done" if v.get("done")
+                              else f"every system of {b['label']} you know of is visited")
+        if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+            return None, "the number must be a whole number"
+        id64 = outrider.boxel.id64(b["sector_index"], b["boxel"], b["mc"], n)
+        name = outrider.boxel.name_of(b["prefix"], n)
+        if id64 == pos["id64"]:
+            return None, f"you are in {name} already"
+        return {"name": name, "id64": id64, "here": pos["id64"], "route": None, "index": n, "boxel": b["prefix"]}, None
+
+    def boxel_not_found(self, tgt, res):
+        """An auto-target run for a boxel system ended with nothing (or something else) targeted: when its number is above
+        every one known (yours and Spansh's), the galaxy map probably had no such name: the boxel probably ends there
+        (meta boxel_ends; a name found later undoes it). True when marked."""
+        if not tgt.get("boxel") or res.get("ok") or not (res.get("code") == "wrong" or res.get("why") == "no system was targeted"):
+            return False
+        prefix, n = tgt["boxel"], tgt.get("index")
+        known = self.boxel_known(prefix)
+        if not isinstance(n, int) or n <= max(known, default=-1):
+            return False
+        end = self.boxel_end(prefix, known)   # a stale mark (a name found above it since) does not block a new one
+        if end is not None and end <= n:
+            return False
+        ends = meta_get(self.db, "boxel_ends") or {}
+        ends[prefix] = n
+        meta_set(self.db, "boxel_ends", ends)
+        self.db.commit()
+        return True
+
+    def boxel_mark_done(self, done=True):
+        """Mark the boxel being explored done with (or not): kept in meta boxel_done {prefix: {ts, visited}}; a kept boxel
+        marked done is let go (the boxel you are in is followed again). False when no boxel is being explored."""
+        b = self.boxel_active()
+        if not b:
+            return False
+        marks = meta_get(self.db, "boxel_done") or {}
+        if done:
+            marks[b["prefix"]] = {"ts": iso_ts(time.time()), "visited": len(self.boxel_visited(b["prefix"]))}
+            if b["picked"]:
+                meta_set(self.db, "boxel_active", None)
+        else:
+            marks.pop(b["prefix"], None)
+        meta_set(self.db, "boxel_done", marks)
+        self.db.commit()
+        self.bump()
+        return True
+
+    def boxel_finished(self, prefix):
+        """"done" (marked so), "complete" (its end known and every number below it visited) or None."""
+        if prefix in (meta_get(self.db, "boxel_done") or {}):
+            return "done"
+        end = self.boxel_end(prefix)
+        if end is not None and set(range(end)) <= set(self.boxel_visited(prefix)):   # end 0: empty, complete too
+            return "complete"
+        return None
+
+    def boxel_clear_end(self):
+        """The active boxel's end mark taken back (Retry: a failed run is not always a missing name)."""
+        b = self.boxel_active()
+        ends = meta_get(self.db, "boxel_ends") or {}
+        if b and ends.pop(b["prefix"], None) is not None:
+            meta_set(self.db, "boxel_ends", ends)
+            self.db.commit()
+        self.bump()
+
+    def maybe_boxel_autotarget(self, now=None):
+        """The opt-in (meta boxel_auto): arriving live in a system of the boxel being explored, target its next system
+        after autotarget_delay s (one attempt per arrival, as the Highway's does after a supercharge). Only a boxel kept
+        (📌, or picked from the recommendations): following whichever boxel you jump into would take over every target."""
+        pos = self.journals.pos
+        if not pos or pos.get("ts") == self._boxel_arrival:
+            return False
+        self._boxel_arrival = pos.get("ts")
+        if not meta_get(self.db, "boxel_auto"):
+            return False
+        now = time.time() if now is None else now
+        try:
+            if now - ts_seconds(pos["ts"]) > HIGHWAY_LIVE_S:
+                return False
+        except (KeyError, TypeError, ValueError):
+            return False
+        b = self.boxel_active()
+        if not b or not b["picked"] or outrider.boxel.number_of(b["prefix"], pos.get("name")) is None:
+            return False
+        tgt, _why = self.boxel_target()
+        if not tgt or not self.targeter or not self.targeter.available:
+            return False
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:   # no event loop (a test driving tick() by hand): nothing to schedule
+            return False
+        if self.autotarget_busy():
+            return False
+        self._autotarget_cancel = cancel = threading.Event()
+        self.autotarget_task = loop.create_task(self._autotarget(tgt, cancel=cancel))
         return True
 
     # ---- the Neutron Highway ----
@@ -11798,6 +12773,8 @@ class State:
         """"highway" or "riches": of the two routes, the one plotted last (None without either). With both, only that
         one copies its next system to the clipboard on arrival: one copy per jump, not two racing for it."""
         hw, rc = meta_get(self.db, "highway"), meta_get(self.db, "riches")
+        # a finished route left on screen copies nothing: the other one has the clipboard (review 2026-10-11)
+        hw, rc = (hw if hw and not hw.get("done_ts") else None), (rc if rc and not rc.get("done_ts") else None)
         if not (hw and rc):
             return "highway" if hw else "riches" if rc else None
         return "riches" if (rc.get("created_ts") or "") > (hw.get("created_ts") or "") else "highway"
@@ -11821,7 +12798,12 @@ class State:
                               time.time() - ts_seconds(rc["arrival_ts"]) <= HIGHWAY_LIVE_S):
             return False
         nx = self.riches_next(rc, rows)
-        if nx is None:
+        # a trade route's next stop in this same system (another station) is no jump: the first stop elsewhere is
+        # what the galaxy map wants, and moving on there by a trade copies nothing again (review 2026-10-11)
+        here = rows[rc["at"]]["system"] if rc["at"] < len(rows) else None
+        while nx is not None and nx < len(rows) and rows[nx]["system"] == here:
+            nx += 1
+        if nx is None or nx >= len(rows):
             return False
         name = rows[nx]["system"]
         try:
@@ -11865,10 +12847,30 @@ class State:
             return None, f"{r['system']} has no id64 to check the target against"
         return {"name": r["system"], "id64": r["id64"], "here": pos["id64"], "route": hw.get("id"), "index": nx}, None
 
+    def carrier_target(self):
+        """({name, id64, here, route: None}, None) for 🎯 beside your fleet carrier (the author, 2026-10-11): the system it
+        is in; or (None, why not)."""
+        c = self.journals.carrier or {}
+        if not c.get("id64"):
+            return None, "no fleet carrier in your journals"
+        if (self.carrier_decommission() or {}).get("done"):
+            return None, "your carrier is decommissioned"
+        pos = self.journals.pos
+        if not pos or pos.get("id64") is None:
+            return None, "your position is not known yet"
+        if c["id64"] == pos["id64"]:
+            return None, f"your carrier is in this system ({c.get('system')})"
+        return {"name": c.get("system") or str(c["id64"]), "id64": c["id64"], "here": pos["id64"], "route": None}, None
+
     def route_target(self, route, index):
         """({name, id64, here, route, index}, None) for 🎯 on a system of a route ("highway" or "survey": Road to Riches /
         Exomastery), or (None, why not): a row of the route plotted now, not the system you are in, with an id64 (the
-        target is checked against Status.json's Destination by id64)."""
+        target is checked against Status.json's Destination by id64). Route "carrier": your carrier's system; "boxel":
+        number `index` of the boxel being explored (None: the next you have not been to)."""
+        if route == "carrier":
+            return self.carrier_target()
+        if route == "boxel":
+            return self.boxel_target(index)
         if route not in ("highway", "survey"):
             return None, "route must be highway or survey"
         if isinstance(index, bool) or not isinstance(index, int):
@@ -12212,6 +13214,9 @@ class State:
             return "stopped"
         if test:
             return None
+        if tgt.get("boxel"):   # the boxel opt-in's run: switched off, or another boxel picked meanwhile
+            b = self.boxel_active()
+            return None if meta_get(self.db, "boxel_auto") and b and b["prefix"] == tgt["boxel"] else "switched off"
         if not self.highway_cfg["autotarget"]:
             return "switched off"
         if (meta_get(self.db, "highway") or {}).get("id") != tgt.get("route"):
@@ -12277,6 +13282,10 @@ class State:
         self.autotarget_last = {"system": name, "ts": iso_ts(time.time()), "done": ok or already, "phase": res.get("phase"),
                                 "label": res.get("label"), "why": why, "dry_run": bool(res.get("dry_run")),
                                 "test": kind == "test", "kind": kind, "route": tgt.get("route"), "index": tgt.get("index")}
+        end = self.boxel_not_found(tgt, res)   # a boxel system nowhere to be found: probably the boxel's end
+        if end:
+            why = f"{name} was not found: probably the end of the boxel"
+            self.autotarget_last["why"] = why
         if test:
             test.update(state="done" if ok or already else "failed", why=why)
         print(f"highway auto-target{' test' if kind == 'test' else ' (target next)' if kind == 'next' else ''}: " + (
@@ -12285,9 +13294,10 @@ class State:
         if say and not already and not res.get("dry_run"):
             wrong = res.get("wrong") if res.get("code") == "wrong" else None   # said by name: you must not jump to it (Q3)
             self.journals.moment("autotarget", iso_ts(time.time()), ok=ok, system=name, phase=res.get("phase"), why=why,
-                                 text=(f"Successfully targeted neutron jump target {name}" if ok
+                                 text=(f"{name} was not found. That is probably the end of the boxel." if end
+                                       else (f"Targeted {name}." if tgt.get("boxel") else f"Successfully targeted neutron jump target {name}") if ok
                                        else f"Targeted the wrong system: {wrong}. Check before you jump." if wrong
-                                       else f"Failed to target neutron jump target {name}"))
+                                       else f"Failed to target {'' if tgt.get('boxel') else 'neutron jump target '}{name}"))
         self.bump()
 
     async def highway_suggest(self, q):
@@ -12363,6 +13373,28 @@ class State:
             self.unsold_from = started
             self.bump()
         self.unsold_task = asyncio.create_task(run())
+
+    def maybe_curious(self):
+        """Once per system ever (meta curious_said, live-only): the first time the system you are in shows curiosities
+        (🔭: rare classes, odd orbits, ringed landables...) while the game is live, a "curious" moment: one line that
+        there is something to look at, not a list (the author, 2026-10-11)."""
+        pos, st = self.journals.pos, self.journals.status_json or {}
+        if not pos or not st.get("live"):
+            return
+        said = getattr(self, "_curious_said", None)
+        if said is None:
+            # oldest first (a dict keeps the order said): the oldest are the ones dropped past CURIOUS_KEEP
+            said = self._curious_said = dict.fromkeys(meta_get(self.db, "curious_said") or [])
+        if pos["id64"] in said:
+            return
+        detail = self.overlay_detail(pos["id64"])   # cached until your scans or the system's record change
+        bodies = [b["name"] for b in (detail or {}).get("bodies") or [] if b.get("curiosities")]
+        if not bodies:
+            return
+        said[pos["id64"]] = None
+        meta_set(self.db, "curious_said", list(said)[-CURIOUS_KEEP:])
+        self.journals.moment("curious", iso_ts(time.time()), system=str(pos["id64"]), bodies=bodies[:6])
+        self.bump()
 
     def maybe_sale_left(self, now=None):
         """Once a live sale's pages have stopped coming (SALE_QUIET_S with no further page: Universal
@@ -12464,9 +13496,11 @@ class State:
             for name, step in (("watch_status", lambda: self.watch_status(time.time())), ("maybe_refresh", self.maybe_refresh),
                                ("apply_own_changes", self.apply_own_changes), ("maybe_classify_target", self.maybe_classify_target),
                                ("maybe_unsold", self.maybe_unsold), ("maybe_sale_left", self.maybe_sale_left),
+                               ("maybe_curious", self.maybe_curious),
                                ("maybe_locate_carrier", self.maybe_locate_carrier), ("maybe_find_sellers", self.maybe_find_sellers),
                                ("maybe_backup_on_quit", self.maybe_backup_on_quit), ("highway_copy_next", self.highway_copy_next), ("riches_copy_next", self.riches_copy_next),
-                               ("highway_heavy_check", self.highway_heavy_check), ("maybe_autotarget", self.maybe_autotarget)):
+                               ("highway_heavy_check", self.highway_heavy_check), ("maybe_autotarget", self.maybe_autotarget),
+                               ("maybe_boxel_autotarget", self.maybe_boxel_autotarget)):
                 try:
                     step()
                 except sqlite3.Error:
@@ -13036,9 +14070,10 @@ def register_static_types():
 
 register_static_types()
 TABLET_STYLES = ("tablet.css", "themes/lcars.css", "themes/elite.css", "themes/babylon5.css", "themes/narn.css",
-                 "themes/minbari.css", "themes/centauri.css", "themes/sith.css", "themes/alliance.css", "themes/dark.css")
+                 "themes/minbari.css", "themes/centauri.css", "themes/vorlon.css", "themes/shadow.css", "themes/sith.css",
+                 "themes/alliance.css", "themes/dark.css")
 DESKTOP_STYLES = tuple(n for n in TABLET_STYLES if n.startswith("themes/"))   # the themes, without the tablet's shell
-TABLET_THEMES = ("lcars", "elite", "babylon5", "narn", "minbari", "centauri", "sith", "alliance", "dark")
+TABLET_THEMES = ("lcars", "elite", "babylon5", "narn", "minbari", "centauri", "vorlon", "shadow", "sith", "alliance", "dark")
 FONT_DIR = os.path.join(outrider.DATA_DIR, "fonts")
 USER_FONT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._-]{0,80}\.(ttf|otf|woff2?)")
 
@@ -13295,6 +14330,12 @@ def own_addresses():
     except OSError:
         pass
     return {n for n in names if n and "%" not in n}   # a link-local address with a scope never appears in Host
+
+
+def loopback_too(host):
+    """Whether Outrider listens on 127.0.0.1 as well as `host`: the overlay window talks to this PC's loopback (where no
+    sign-in is asked), and a [server] host set to one LAN address does not listen there."""
+    return host not in WILDCARD_HOSTS and host != "localhost" and not outrider.auth.is_loopback(host)
 
 
 def allowed_hosts(host, port, extra=(), own=own_addresses):
@@ -13796,10 +14837,17 @@ def make_app(state, hosts=None):
                                or not 0 <= cd <= 10):
             return web.json_response({"error": "countdown must be 0 to 10 seconds"}, status=400)
         aim = None
-        if "route" in body or "index" in body:   # 🎯 on a system of a route: {route: "highway" | "survey", index}
+        if body.get("route") == "carrier":       # 🎯 beside your carrier: its system
+            aim = ("carrier", None)
+        elif body.get("route") == "boxel":       # a boxel's system by number (none: the next you have not been to)
+            n = body.get("index")
+            if n is not None and (isinstance(n, bool) or not isinstance(n, int)):
+                return web.json_response({"error": "index must be a whole number"}, status=400)
+            aim = ("boxel", n)
+        elif "route" in body or "index" in body:   # 🎯 on a system of a route: {route: "highway" | "survey", index}
             aim = (body.get("route"), body.get("index"))
             if aim[0] not in ("highway", "survey") or isinstance(aim[1], bool) or not isinstance(aim[1], int):
-                return web.json_response({"error": "route must be highway or survey, index a whole number"}, status=400)
+                return web.json_response({"error": "route must be highway, survey or carrier, index a whole number"}, status=400)
         out, status = state.start_autotarget_run("next", cd, aim)
         return web.json_response(out, status=status)
 
@@ -13846,9 +14894,18 @@ def make_app(state, hosts=None):
         except (ClientError, asyncio.TimeoutError, ValueError) as e:
             return web.json_response({"error": f"Spansh cannot be reached ({type(e).__name__})"}, status=502)
 
-    async def synth(sp, text, speed, voice):
+    def speaker_arg(v):
+        """A speaker number as the page sent it ("37" in a query, 37 in a body), or None."""
+        try:
+            n = int(v) if v not in (None, "") and not isinstance(v, bool) else None
+        except (TypeError, ValueError):
+            return None
+        return n if n is not None and n >= 0 else None
+
+    async def synth(sp, text, speed, voice, speaker=None):
         """A line as WAV from Piper, or None (the page then uses browser speech for it). `speed` and `voice` as
-        the page sent them: a personality's own voice only if installed, so a name from the page never downloads."""
+        the page sent them: a personality's own voice only if installed, so a name from the page never downloads.
+        `speaker`: one of that voice's people (the voice lab's try); None: the one picked for the voice."""
         try:
             speed = float(speed or SPEECH_SPEED)
         except (TypeError, ValueError):
@@ -13859,7 +14916,9 @@ def make_app(state, hosts=None):
         if voice and state.speech:   # room for every personality voice, so none is reloaded before each line
             sp.size_extra(outrider.speech.style_voices(state.speech.lines()["styles"]))
         try:
-            return await asyncio.get_running_loop().run_in_executor(None, sp.say, text, speed, voice)
+            speaker = speaker_arg(speaker)
+            return await asyncio.get_running_loop().run_in_executor(
+                None, lambda: sp.say(text, speed, voice) if speaker is None else sp.say(text, speed, voice, speaker))
         except Exception as e:  # noqa: BLE001 -- a line Piper cannot speak: the page uses browser speech for it
             print(f"spoken alerts: could not speak {text[:60]!r}: {type(e).__name__}: {e}", file=sys.stderr)
             return None
@@ -13870,7 +14929,7 @@ def make_app(state, hosts=None):
         sp = state.speaker
         if not sp or not sp.ready or not text.strip():
             return web.json_response({"error": "no Piper voice ready" if text.strip() else "no text"}, status=503)
-        audio = await synth(sp, text, request.query.get("speed"), request.query.get("voice"))
+        audio = await synth(sp, text, request.query.get("speed"), request.query.get("voice"), request.query.get("speaker"))
         if not audio:
             return web.json_response({"error": "no Piper voice ready"}, status=503)
         return web.Response(body=audio, content_type="audio/wav", headers={"Cache-Control": "no-store"})
@@ -13883,7 +14942,8 @@ def make_app(state, hosts=None):
         voice's lock first would make the line being said wait for it. Fire and forget: a failure costs nothing."""
         if not isinstance(d, dict) or not isinstance(d.get("text"), str) or not d["text"].strip() or not sp or not sp.ready:
             return None
-        t = asyncio.get_running_loop().create_task(synth(sp, outrider.tts.clip_text(d["text"]), d.get("speed"), d.get("voice")))
+        t = asyncio.get_running_loop().create_task(synth(sp, outrider.tts.clip_text(d["text"]), d.get("speed"), d.get("voice"),
+                                                         d.get("speaker")))
         prefetching.add(t)
         t.add_done_callback(lambda x: (prefetching.discard(x), x.cancelled() or x.exception()))
         return t
@@ -13943,7 +15003,7 @@ def make_app(state, hosts=None):
         if line is None:
             return web.json_response({"error": "another line is playing"}, status=409)
         try:
-            audio = await synth(sp, text, body.get("speed"), body.get("voice"))
+            audio = await synth(sp, text, body.get("speed"), body.get("voice"), body.get("speaker"))
             if not audio:
                 return web.json_response({"error": "no Piper voice ready"}, status=503)
             prefetch(sp, body.get("next"))   # the page's next line, made while this one plays
@@ -14088,10 +15148,11 @@ def make_app(state, hosts=None):
         return web.json_response(state.autohonk_info())
 
     async def uploads_view(request):
-        """POST /api/uploads {service: "eddn" | "edsm", on: bool}: the page's switch for one uploader."""
+        """POST /api/uploads {service: "eddn" | "edsm" | "inara", on: bool}: the page's switch for one uploader."""
         body = await json_object(request)
         if body is None or body.get("service") not in outrider.uploads.SERVICES or not isinstance(body.get("on"), bool):
-            return web.json_response({"error": "expected {service: \"eddn\" or \"edsm\", on: true or false}"}, status=400)
+            return web.json_response({"error": "expected {service: \"eddn\", \"edsm\" or \"inara\", on: true or false}"},
+                                     status=400)
         if body["on"]:
             why = state.check_upload_start(body["service"], body.get("confirm") is True)
             if why:
@@ -14099,6 +15160,15 @@ def make_app(state, hosts=None):
         note = state.set_upload(body["service"], body["on"])
         state.refresh_leases()   # the lease says so at once
         return web.json_response(dict(state.uploads_summary(), **({"note": note} if note else {})))
+
+    async def inara_account_view(request):
+        """POST /api/uploads/inara {commander, api_key?, remove?}: an in-game commander's Inara API key (it stays here;
+        nothing answers with it)."""
+        body = await json_object(request)
+        if body is None:
+            return web.json_response({"error": "expected a JSON object"}, status=400)
+        out, status = state.set_inara_account(body.get("commander"), body.get("api_key"), remove=body.get("remove") is True)
+        return web.json_response(out, status=status)
 
     async def edsm_account_view(request):
         """POST /api/uploads/edsm {commander, name?, api_key?, remove?}: an in-game commander's EDSM account (the key
@@ -14147,12 +15217,25 @@ def make_app(state, hosts=None):
         return web.json_response(state.autohonk_info())
 
     async def voice_view(request):
-        try:
-            name = str((await request.json())["voice"])[:100]
-        except (ValueError, KeyError, TypeError):
+        """POST /api/voice {voice, speaker?}: speak in that voice (downloaded first when it is not installed). speaker:
+        which of an installed several-person voice's people (a number from /api/voices/speakers; null: its first),
+        kept for that voice; {speaker} alone changes the voice in use's."""
+        body = await json_object(request)
+        if body is None or not (isinstance(body.get("voice"), str) or "speaker" in body):
             return web.json_response({"error": "bad request"}, status=400)
         if not state.speaker or not state.speaker.available:
             return web.json_response({"error": "Piper is not installed"}, status=503)
+        name = str(body.get("voice") or getattr(state.speaker, "voice_name", None) or "")[:100]
+        if "speaker" in body:
+            sid = body["speaker"]
+            if sid is not None and (isinstance(sid, bool) or not isinstance(sid, int)):
+                return web.json_response({"error": "speaker must be a number or null"}, status=400)
+            if not state.speaker.set_speaker(name, sid):
+                return web.json_response({"error": f"{name} has no speaker {sid} (or is not installed yet)"}, status=400)
+        if not isinstance(body.get("voice"), str):   # {speaker} alone: the voice in use's speaker, nothing to switch
+            return web.json_response({"ok": True})
+        # a voice named is always use()d, the one speaking too: its switch loop remembers it (voice_choice) and it wins
+        # over a background switch to the configured voice (review 2026-10-12)
         if not state.speaker.use(name):
             return web.json_response({"error": "not a Piper voice name"}, status=400)
         # remembered (over restarts, like the radius and auto honk) once it loads: see remember_voice
@@ -14169,6 +15252,119 @@ def make_app(state, hosts=None):
             state.speaker_audio_blocked = body["blocked"]
             state.bump()
         return web.json_response({"ok": True})
+
+    async def boxel_view(_):
+        """GET /api/boxel: the boxel being explored (State.boxel_view); Spansh is asked about it when its list is older
+        than a day (in the background: the payload's boxel key changes when it answers)."""
+        out = state.boxel_view()
+        b = out.get("boxel")
+        if b and state.boxel_spansh_due(b["prefix"]) and b["prefix"] not in state._boxel_fetching:
+            task = asyncio.get_running_loop().create_task(state.boxel_spansh_fetch(b["prefix"]))
+            boxel_tasks.add(task)
+            task.add_done_callback(boxel_tasks.discard)
+            out["spansh_asking"] = True
+        return web.json_response(out)
+
+    boxel_tasks = set()
+
+    async def boxel_set_view(request):
+        """POST /api/boxel {prefix: str | null, sector_index?: [sx, sy, sz]} picks the boxel to explore (null: the one
+        you are in); {auto: bool} the opt-in auto-target on arrival; {clear_end: true} takes back the active boxel's end;
+        {done: bool} marks the active boxel done with (a kept one is let go) or not."""
+        body = await json_object(request)
+        if body is None or not ({"prefix", "auto", "clear_end", "done", "skip_known"} & set(body)):
+            return web.json_response({"error": "expected {prefix}, {auto}, {skip_known}, {clear_end} or {done}"}, status=400)
+        if "skip_known" in body:   # Next passes over the systems Spansh knows (someone has been there)
+            if not isinstance(body["skip_known"], bool):
+                return web.json_response({"error": "skip_known must be true or false"}, status=400)
+            meta_set(state.db, "boxel_skip_known", body["skip_known"])
+            state.db.commit()
+        if "done" in body:   # the boxel being explored, done with (or not)
+            if not isinstance(body["done"], bool):
+                return web.json_response({"error": "done must be true or false"}, status=400)
+            if not state.boxel_mark_done(body["done"]):
+                return web.json_response({"error": "no boxel is being explored"}, status=400)
+        if "auto" in body:
+            if not isinstance(body["auto"], bool):
+                return web.json_response({"error": "auto must be true or false"}, status=400)
+            meta_set(state.db, "boxel_auto", body["auto"])
+            state.db.commit()
+        if "prefix" in body and not state.boxel_set(body["prefix"], body.get("sector_index")):
+            return web.json_response({"error": "not a boxel's name (the name of one of its systems, less its number)"}, status=400)
+        if body.get("clear_end"):
+            state.boxel_clear_end()
+        state.bump()
+        return web.json_response(state.boxel_view())
+
+    async def boxel_nearby_view(_):
+        """GET /api/boxel/nearby: recommended boxels near you, by mass code, with what each tends to hold and your figures.
+        Spansh is asked about the ones it has no list of yet (a day old), one after another in the background."""
+        out = state.boxel_nearby()
+        due = [b["prefix"] for b in out["boxels"] if state.boxel_spansh_due(b["prefix"])]
+        if due and not any(not t.done() for t in boxel_tasks):
+            async def ask_each(prefixes):
+                for p in prefixes:
+                    await state.boxel_spansh_fetch(p)
+            task = asyncio.get_running_loop().create_task(ask_each(due))
+            boxel_tasks.add(task)
+            task.add_done_callback(boxel_tasks.discard)
+        return web.json_response(out)
+
+    async def pronounce_view(_):
+        """GET /api/pronounce: how the voice says the words espeak gets wrong: [{word, say, source: "shipped" | "yours",
+        shipped?}] (resources/pronounce.json, your data/pronounce.json on top), and `sectors`: the sectors you have
+        visited most as the voice reads them (State.sector_names; procedural sector names are read by rule)."""
+        return web.json_response({"words": outrider.tts.PRONOUNCE.entries(), "file": "data/pronounce.json",
+                                  "sectors": state.sector_names()})
+
+    async def pronounce_set_view(request):
+        """POST /api/pronounce {word, say}: your own way of saying a word (a respelling, "fon-TIK-yoo-loo-uh", or raw
+        phonemes in [[ ]]), written to data/pronounce.json; say null takes yours back out. 400 for anything else."""
+        body = await json_object(request)
+        if body is None or not isinstance(body.get("word"), str) or "say" not in body \
+                or not (body["say"] is None or isinstance(body["say"], str)):
+            return web.json_response({"error": "expected {word, say} (say: a respelling, or null)"}, status=400)
+        try:
+            ok = outrider.tts.PRONOUNCE.save(body["word"], body["say"])
+        except OSError as e:
+            return web.json_response({"error": f"could not write data/pronounce.json: {e}"}, status=500)
+        if not ok:
+            return web.json_response({"error": "one word, said as syllables joined by '-' with the stressed one in capitals "
+                                               "(fon-TIK-yoo-loo-uh), or as phonemes in [[ ]]"}, status=400)
+        return web.json_response({"words": outrider.tts.PRONOUNCE.entries(), "file": "data/pronounce.json"})
+
+    async def boxel_sector_view(request):
+        """GET /api/boxel/sector?mc=d&layer=5: the sector you are in as a grid of one mass code's boxels, one Y layer
+        (none: yours). 400 for a code outside b..h or a layer that is no whole number."""
+        mc, layer = request.query.get("mc") or None, request.query.get("layer")
+        if mc is not None and mc not in BOXEL_GRID_CODES:
+            return web.json_response({"error": f"mc must be one of {', '.join(BOXEL_GRID_CODES)}"}, status=400)
+        if layer is not None and not re.fullmatch(r"\d{1,3}", layer):
+            return web.json_response({"error": "layer must be a whole number"}, status=400)
+        return web.json_response(state.boxel_sector(mc, int(layer) if layer is not None else None))
+
+    async def voice_download_view(request):
+        """POST /api/voices/download {voice}: download a Piper voice without switching to it (the voice lab's More
+        voices); the payload's tts.fetching lists it meanwhile, then tts.voices has it (or tts.fetch_failed says why)."""
+        body = await json_object(request)
+        if body is None or not isinstance(body.get("voice"), str):
+            return web.json_response({"error": "expected {voice}"}, status=400)
+        if not state.speaker or not state.speaker.available:
+            return web.json_response({"error": "Piper is not installed"}, status=503)
+        if not state.speaker.fetch(body["voice"][:100]):
+            return web.json_response({"error": "not a Piper voice name"}, status=400)
+        state.bump()
+        return web.json_response({"ok": True})
+
+    async def voice_speakers_view(request):
+        """GET /api/voices/speakers?voice=: an installed voice's people, {voice, speakers: [{id, name}] ([] for a
+        one-person voice), speaker (the one picked for it, or null)}. 404 for a voice that is not installed."""
+        sp, name = state.speaker, str(request.query.get("voice") or "")[:100]
+        if not sp or not sp.available:
+            return web.json_response({"error": "Piper is not installed"}, status=503)
+        if name not in sp.installed():
+            return web.json_response({"error": f"{name or 'no voice'} is not installed"}, status=404)
+        return web.json_response({"voice": name, "speakers": sp.voice_speakers(name), "speaker": sp.speaker_for(name)})
 
     async def voice_catalogue_view(request):
         """GET /api/voices/catalogue[?refresh=1]: Piper's voices for Settings > Voice > More voices, {voices: [{name,
@@ -14346,10 +15542,19 @@ def make_app(state, hosts=None):
     app.router.add_get("/api/status.txt", status_txt_view)
     app.router.add_post("/api/voice", voice_view)
     app.router.add_get("/api/voices/catalogue", voice_catalogue_view)
+    app.router.add_get("/api/voices/speakers", voice_speakers_view)
+    app.router.add_post("/api/voices/download", voice_download_view)
+    app.router.add_get("/api/boxel", boxel_view)
+    app.router.add_post("/api/boxel", boxel_set_view)
+    app.router.add_get("/api/boxel/nearby", boxel_nearby_view)
+    app.router.add_get("/api/boxel/sector", boxel_sector_view)
+    app.router.add_get("/api/pronounce", pronounce_view)
+    app.router.add_post("/api/pronounce", pronounce_set_view)
     app.router.add_post("/api/speaker/audio", speaker_audio_view)
     app.router.add_post("/api/autohonk", pc_only(autohonk_view))
     app.router.add_post("/api/uploads", uploads_view)
     app.router.add_post("/api/uploads/edsm", edsm_account_view)
+    app.router.add_post("/api/uploads/inara", inara_account_view)
     app.router.add_post("/api/autohonk/test", pc_only(autohonk_test_view))
     app.router.add_post("/api/autohonk/forget", pc_only(autohonk_forget_view))
     app.router.add_get("/api/firsts", firsts_view)
@@ -14566,6 +15771,12 @@ def restore_backup(zip_path, db_path, host, port, now=None):
                     if os.path.exists(db_path + ext):
                         os.replace(db_path + ext, aside + ext)
                 lines.append(f"the old database is kept as {aside}")
+            else:   # the file itself gone, its journal left: SQLite would roll that into the restored file
+                for ext in ("-journal", "-wal", "-shm"):
+                    if os.path.exists(db_path + ext):
+                        os.replace(db_path + ext, f"{db_path}.pre-restore-{stamp}{ext}")
+                        lines.append(f"a stray {os.path.basename(db_path + ext)} was set aside as "
+                                     f"{db_path}.pre-restore-{stamp}{ext}")
             os.replace(tmp, db_path)
         finally:
             try:
@@ -14644,7 +15855,7 @@ async def run(args, st):
         raise SystemExit(1)
     migrate_old_layout(args.db)   # an upgrade from before data/: your database and files come along
     os.makedirs(os.path.dirname(os.path.abspath(args.db)), exist_ok=True)   # data/ on a fresh copy
-    db = open_db(args.db, rescan=args.rescan)
+    db = open_db(args.db, rescan=args.rescan, on_reread=print)   # says why when every journal is read again
     journals = Journals(db)
 
     # a stop (SIGTERM: docker stop, systemd) during the import, which is synchronous: end at once with what is read
@@ -14695,6 +15906,7 @@ async def run(args, st):
     state.searcher = Searcher(state)
     state.db_path = args.db
     state.speech_path, state.config_path = st["speech_file"], args.config
+    state.pronounce_path = outrider.tts.PRONOUNCE.own
     loop = asyncio.get_running_loop()
     voice = meta_get(db, "voice_choice")   # picked in the alerts dialog: beats the config file once used
     # a Piper name, or any voice installed in piper-voices/ (a self-made one: the dialog lets you pick it, and it was
@@ -14703,8 +15915,11 @@ async def run(args, st):
                                         or voice in outrider.tts.installed_voices(outrider.tts.VOICES_DIR))):
         voice = VOICE
     # the voice picked in the dialog is remembered once it loads, on the loop thread (not Piper's)
+    spk = meta_get(db, "voice_speakers")   # each voice's speaker picked on the page
     state.speaker = outrider.tts.Speaker(voice, VOICE_FALLBACK, on_change=lambda: loop.call_soon_threadsafe(state.bump),
-                                   on_switched=lambda name: loop.call_soon_threadsafe(state.remember_voice, name))
+                                   on_switched=lambda name: loop.call_soon_threadsafe(state.remember_voice, name),
+                                   speakers=spk if isinstance(spk, dict) else None,
+                                   on_speaker=lambda chosen: loop.call_soon_threadsafe(state.remember_speakers, chosen))
     print("spoken alerts: " + ("Piper found, preparing a voice" if state.speaker.available else
                                "Piper not installed, the page uses browser speech (see outrider/tts.py)"))
     state.speaker.start()
@@ -14755,6 +15970,7 @@ async def run(args, st):
     state.overlay_cfg = dict(st["overlay"])
     state.upload_cfg = json.loads(json.dumps(st["uploads"]))   # [eddn]/[edsm] enabled, as Settings -> Uploads wrote them
     state.edsm_dry_path = os.path.join(outrider.DATA_DIR, "edsm-dryrun.jsonl")   # OUTRIDER_EDSM_DRYRUN's log
+    state.inara_dry_path = os.path.join(outrider.DATA_DIR, "inara-dryrun.jsonl")   # OUTRIDER_INARA_DRYRUN's log
     saved = meta_get(db, "autotarget")   # the Highway tab's toggle and delay beat the config file once used
     if isinstance(saved, dict):
         if isinstance(saved.get("enabled"), bool):
@@ -14798,14 +16014,6 @@ async def run(args, st):
     state.upload_session = ClientSession(timeout=ClientTimeout(total=20),
                                          headers={"User-Agent": f"ED-Outrider/{outrider.__version__}"})
     state.start_uploads()
-    # the fork's Inara upload reads the journals itself and sends live lines only; never with --simulate, and not
-    # while EDMarketConnector on this PC sends to Inara itself (the same events would arrive twice)
-    edmc = outrider.uploads.edmc_uploads() if st["inara"]["enabled"] else None
-    state.inara = outrider.inara.InaraSync(st["inara"], LIVE_DIRS, off=(
-        "--simulate" if state.simulate else
-        "EDMarketConnector is running and sends to Inara" if edmc and edmc.get("running") and edmc.get("inara") else None))
-    inara_task = asyncio.create_task(state.inara.run()) if state.inara.active else None
-    print("inara upload: " + state.inara.status_line())
     print("update check: " + ("on (GitHub's latest release, once a day)" if st["update_check"] else "off ([server] update_check)"))
     state.route_known_on = True   # the Plot Route list asks Spansh which route systems are already discovered
     print("firsts watch: " + ("on (your unsold firsts on Spansh: one request every 10-30 s, each system once a day)"
@@ -14822,6 +16030,11 @@ async def run(args, st):
         await spansh.close()
         await state.upload_session.close()
         raise SystemExit(1)
+    if state.overlay_runner and loopback_too(args.host):
+        try:
+            await web.TCPSite(runner, "127.0.0.1", args.port).start()
+        except OSError as e:
+            print(f"cannot listen on 127.0.0.1:{args.port} for the in-game overlay window: {e.strerror or e}", file=sys.stderr)
     # a wildcard address is not a place a browser can go (and not a name the Host check answers): loopback is
     shown = "127.0.0.1" if args.host in WILDCARD_HOSTS else _host_name(args.host)
     print(f"serving on http://{shown}:{args.port}/  (Ctrl-C to stop)")
@@ -14854,7 +16067,7 @@ async def run(args, st):
             state.honker.shutdown()       # ...and a press still waiting for the keyboard is refused
         if state.overlay_runner:
             state.overlay_runner.stop()   # the overlay window closes with Outrider
-        tasks = [t for t in (watcher, rules_task, button_task, firsts_task, update_task, images_task, overlay_task, inara_task,   # the quit backup: finish_backup
+        tasks = [t for t in (watcher, rules_task, button_task, firsts_task, update_task, images_task, overlay_task,   # the quit backup: finish_backup
                              *state.background_tasks()) if t]
         for t in tasks:
             t.cancel()

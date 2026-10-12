@@ -1,7 +1,7 @@
 # ED Outrider configuration — copy to ed_outrider.toml next to ed_outrider.py and edit.
 #
 # You do not have to edit this file by hand: every setting in it can be changed in Outrider's web page, under
-# ⚙ Settings (Server settings for most of them, Uploads for [eddn] and [edsm], In-game overlay for [overlay]). The
+# ⚙ Settings (Server settings for most of them, Uploads for [eddn], [edsm] and [inara], In-game overlay for [overlay]). The
 # page writes your changes into ed_outrider.toml itself, keeping its comments and the previous copy as a .bak; most
 # take effect the next time Outrider starts (the overlay's switches at once).
 #
@@ -226,7 +226,7 @@
 # The in-game overlay: panels drawn over Elite's window (borderless or windowed) by a small window Outrider runs on the
 # game PC (a game-PC feature: not on a server). The page's Settings -> In-game overlay switches it and arranges the panels.
 # enabled = false
-# theme = "default"         # the panels' colours: default, lcars, elite, babylon5, narn, minbari, centauri, sith, alliance, dark
+# theme = "default"         # the panels' colours: default, lcars, elite, babylon5, narn, minbari, centauri, vorlon, shadow, sith, alliance, dark
 # text_size = "normal"      # small, normal or large
 # system_panel = true       # the bodies worth your time, in supercruise
 # body_panel = true         # the body you are heading to or near
@@ -269,8 +269,7 @@
 # enabled = false
 
 [inara]
-# This fork's Inara upload: your travel, credits, ranks, reputation, ships, materials, missions and combat log to
-# your own Inara account as you play (docs/guide/uploads.md, Inara). Off until you switch it on; only live play is
-# sent; applies at the next start. Nothing is sent while EDMarketConnector on this PC sends to Inara itself.
+# Inara: keeps your commander profile there current (travel, ranks, credits, ships, inventory, missions...), in
+# batches. Switched in Settings -> Uploads, which writes this; your Inara API key is set there too. Switch Inara off in
+# EDMC, EDDI or EDDiscovery first: two apps sending can get the key revoked.
 # enabled = false
-# api_key = ""              # from inara.cz: Settings, API key; stays on this PC

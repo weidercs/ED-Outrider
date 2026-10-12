@@ -66,6 +66,11 @@ tr.scoopnext td.name::after { content: " ⛽ nearest scoopable"; color: var(--go
 #hereTable td.bio { white-space: normal; font-size: 12px; max-width: 320px; }
 #hereTable .sp { display: inline-block; margin-right: 6px; white-space: nowrap; }   /* "Bacterium 3/3 ✓ 38.9M" wraps between items, not inside one */ #hereTable .sp.done { color: var(--good); } #hereTable .sp.part { color: var(--warn); }
 #hereTable .fl { margin-right: 4px; }
+/* a species' colour word in that colour (hereBio().colours), mixed with the text colour so it reads on either theme;
+   its own rule, so a row's colour (done green, the bio highlight's purple) never covers it */
+#hereTable .vc { color: color-mix(in srgb, var(--vc) 80%, var(--text)); }
+@media (prefers-color-scheme: light) { #hereTable .vc { color: color-mix(in srgb, var(--vc) 55%, var(--text)); } }
+#hereTable td.rings { white-space: normal; }   /* "2", "2 mapped", "1 hotspot" stacked: no wider than its heading */
 tr.main td { font-weight: 500; }
 #histView { margin-top: 12px; } #histView .exports a { color: var(--info); }
 #histRows tr.sess { cursor: pointer; } #histRows tr.sess td:first-child::before { content: "▸ "; color: var(--muted); }
@@ -170,6 +175,9 @@ main > #hereView.detail > #bodyPanel { position: sticky; top: calc(var(--head-h,
    is set to end at the window's bottom; the table keeps a few rows, and the map inside is sized by ovMapFit) */
 #ovHere #hereView.mapon { display: flex; flex-direction: column; height: 78vh; }
 #ovHere #hereView.mapon > #hereMain { flex: 1 1 0; overflow: auto; min-height: 140px; }
+/* with the map up, the firsts and the checklist under the system's name stand down: the room goes to the bodies (the
+   author, 2026-10-11) */
+#ovHere #hereView.mapon > #hereLeaving { display: none; }
 #ovMap { flex: 0 1 50%; min-height: 0; overflow: hidden; display: flex; gap: 12px; align-items: stretch; border-top: 2px solid var(--line); margin-top: 6px; padding-top: 6px; }
 #ovMap .smap { flex: 0 0 auto; } #ovMap canvas { display: block; touch-action: manipulation; }
 #ovMap .smap-legend { flex: 1 1 auto; min-width: 0; overflow: auto; font-size: 13px; }
@@ -259,6 +267,32 @@ dialog .reset { color: var(--info); cursor: pointer; font-size: 11px; margin-lef
 .views button:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: var(--accent); }
 .views button.on { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
 #nearOpts { display: inline-flex; gap: 16px; }
+/* boxel exploration (2026-10-11): the switch, and the boxel pane in Nearby's place */
+.nearmode { display: inline-flex; gap: 2px; border: 1px solid var(--line); border-radius: 6px; padding: 1px 4px; }
+.nearmode label { display: inline-flex; align-items: center; gap: 3px; padding: 1px 4px; }
+#nearWrap.boxel .stdonly { display: none; }
+.bxhead { margin: 6px 0; } .bxhead .bxname { font-weight: 600; } .bxhead .bxkind { color: var(--muted); }
+/* a green gas giant (sure) or the ladder model's guess (?) */
+.ggg { display: inline-flex; align-items: center; gap: 1px; color: #3FBF6A; font-weight: 700; font-size: .95em; white-space: nowrap; cursor: help; }
+.ggg svg { vertical-align: -2px; }
+.bxfin { font-weight: 600; margin-right: 4px; }
+.bxwarn { color: var(--warn); font-size: 12px; margin-left: 1.2em; }   /* beside "you have visited · Spansh knows" */
+.bxacts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0; font-size: 13px; }
+#boxelTable td.n { color: var(--muted); text-align: right; width: 3em; }
+#boxelTable tr.visited td { opacity: .85; } #boxelTable tr.next td { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+#boxelTable tr.try td.name { color: var(--muted); font-style: italic; }
+#boxelTable tr.skipped td { opacity: .45; }   /* someone has been there, and Next passes over them (skip on) */
+.bxnear { margin-top: 10px; } .bxnear h4 { margin: 8px 0 2px; font-size: 13px; } .bxnear .bxcode { margin: 0 0 6px; font-size: 12px; }
+.bxnear .bxyours { color: var(--muted); }
+.bxgrid { margin-top: 10px; } .bxgctl { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 6px 0; font-size: 12px; }
+.bxgctl .mini.on { background: var(--accent); color: var(--bg); }
+.bxg { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.bxc { aspect-ratio: 1; background: var(--panel); font-size: 10px; line-height: 1; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--bg); overflow: hidden; }
+.bxc.k { background: color-mix(in srgb, var(--info) 40%, var(--panel)); }
+.bxc.v { background: var(--accent); } .bxc.c { background: var(--good); } .bxc.d { background: color-mix(in srgb, var(--good) 50%, var(--panel)); }
+.bxc.you { outline: 2px solid var(--text); outline-offset: -2px; } .bxc.kept { box-shadow: inset 0 0 0 2px var(--warn); }
+.bxglegend .bxc { display: inline-block; width: 10px; height: 10px; vertical-align: middle; margin-left: 6px; border: 1px solid var(--line); cursor: default; }
 #searchView { margin-top: 12px; }
 .srow { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; }
 #findForm { margin-bottom: 10px; }
@@ -621,6 +655,7 @@ table .sub2 { margin-top: 2px; font-weight: 400; font-size: 12px; }
 
 .cxnew { color: var(--accent); font-weight: 700; cursor: help; }
 .cxnew.cxgal { color: var(--good); }   /* ✪: new to your codex anywhere */
+.nb.cxtype { color: var(--accent); cursor: help; } .nb.cxtype.cxgal { color: var(--good); }   /* a body type new to your codex */
 .cxnew .cxcol { font-weight: 600; }   /* the new colour after the mark: ✪ Cobalt */
 /* Now is read at a glance, often on a tablet with no hover: spell the ✦ out there */
 body.nowmode .cxnew::after { content: " new codex"; font-weight: 600; }
@@ -1040,9 +1075,15 @@ body.notgamepc .pcOnly, body.notgamepc [data-aim] { display: none !important; }
 .morevoices { margin: 6px 0; }
 .morevoices > summary { cursor: pointer; }
 .mvlist { max-height: 16em; overflow-y: auto; margin-top: 4px; }
-.mvrow { display: flex; align-items: center; gap: 0.7em; padding: 2px 0; }
-.mvrow .mvname { min-width: 9em; text-transform: capitalize; }
-.mvrow button { margin-left: auto; }
+/* the voice lab (Settings > Voice): a dialog over Settings */
+.labdlg { width: min(720px, 94vw); }
+.labdlg .labwords { min-height: 2.6em; margin: 6px 0; color: var(--text); font-style: italic; }
+.labdlg #labSpk { max-width: 12em; } .labdlg #labSpkWrap button { padding: 2px 8px; }
+.labdlg h4:first-of-type { margin-top: 6px; }
+/* four columns that line up row to row: name, quality/speakers/size, ▶ sample, the action (2026-10-11) */
+.mvrow { display: grid; grid-template-columns: minmax(6em, 10em) minmax(0, 1fr) 6.5em 8.5em; align-items: center; gap: 0.7em; padding: 2px 0; }
+.mvrow .mvname { text-transform: capitalize; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mvrow > :nth-child(3), .mvrow > :nth-child(4) { justify-self: end; }
 
 /* ---- a desktop theme (Settings > Display; themes/*.css, loaded here too): only with one chosen, never the Default.
    Each theme's display face (the one it gives the tablet) on the frame of the page: the title, the view pills, the
@@ -1152,3 +1193,8 @@ table.ovlay tr.ovoff td { opacity: .55; }   /* a panel switched off: its row dim
 table.ovlay { border-collapse: collapse; margin: 6px 0; font-size: 13px; } table.ovlay th, table.ovlay td { padding: 2px 4px; text-align: left; }
 table.ovlay input[type=number] { width: 3.4em; appearance: textfield; -moz-appearance: textfield; }   /* no spin arrows: room for "100" (typing and the arrow keys still work) */
 table.ovlay input[type=number]::-webkit-inner-spin-button, table.ovlay input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; } table.ovlay th { white-space: nowrap; }
+/* Settings → Alerts: a heading over a group of alerts (the discoveries) */
+#alertOpts tr.agroup th { text-align: left; padding-top: .7em; font-weight: 600; }
+.pronbox { margin-top: 8px; } .pronbox input { width: 12em; } #pronList a { color: var(--accent); }
+.pronsectors { display: flex; flex-wrap: wrap; gap: 2px 14px; max-height: 9.5em; overflow-y: auto; }
+.pronsectors a { color: var(--accent); } .pronsec { white-space: nowrap; }

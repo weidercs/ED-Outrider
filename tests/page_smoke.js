@@ -961,9 +961,48 @@ const settle = async maxMs => {
         hereData = Object.assign({}, hd, {bodies: [Object.assign({}, fake, plain, {bio: 0, genera: [], organics: [], bio_guess: [], codex: []})], tree: null});
         renderHere();
         o.legend = shown && used === "1/3 ✦ 📖" && lg.hidden && icons().length === 0 ? true : [shown, used, lg.hidden, icons()];
+        // a body not DSS'd: the count and range on one line, then the genera, no " or " between each (the author, 2026-10-11)
+        const gen = (genus, value) => ({genus, value, species: [genus + " One"]});
+        hereData = Object.assign({}, hd, {bodies: [Object.assign({}, fake, plain, {bio: 3, genera: [], organics: [], bio_guess: [], codex: [],
+          bio_options: {low: 24800000, high: 64600000, genera: [gen("Concha", 38900000), gen("Aleoida", 16900000), gen("Tussock", 8800000)]}})], tree: null});
+        renderHere();
+        const nd = document.querySelector('#hereRows tr[data-body="Fake 1"] td.bio');
+        const ndLf = nd ? [...nd.querySelectorAll(".lf")].map(e => e.textContent).join("|") : "";
+        o.noDss = !!nd && ndLf === "3 signals, not DSS'd · 24.8M–64.6M:" && !/ or |of these/.test(nd.textContent)
+          && [...nd.querySelectorAll(".sp")].map(e => e.textContent).join("|") === "Concha ≤38.9M|Aleoida ≤16.9M|Tussock ≤8.8M"
+          ? true : [ndLf, nd && nd.textContent];
+        // a finished species is its codex line with the value, not a second "3/3 ✓" line; coloured as its name says
+        // (switchable); the Rings cell stacks its lines to stay about its heading's width (the author, 2026-10-11)
+        const doneBody = () => Object.assign({}, fake, plain, {bio: 2, genera: ["Bacterium", "Stratum"], bio_guess: [], value_parts: {bio_factor: 1},
+          organics: [{genus: "Bacterium", species: "Bacterium Alcyoneum", variant: "Bacterium Alcyoneum - Red", samples: 3, done: true, lost: false, value: 8300000},
+                     {genus: "Stratum", species: "Stratum Tectonicas", variant: "Stratum Tectonicas - Grey", samples: 1, done: false, lost: false, value: 19010800}],
+          codex: [{name: "Bacterium Alcyoneum - Red", new: true}, {name: "Stratum Tectonicas - Grey"}],
+          rings: 2, rings_mapped: 2, hotspots: 1});
+        const hb1 = localStorage.getItem("hereBio");
+        localStorage.setItem("hereBio", JSON.stringify({colours: true}));
+        hereData = Object.assign({}, hd, {bodies: [doneBody()], tree: null}); renderHere();
+        let dc = document.querySelector('#hereRows tr[data-body="Fake 1"] td.bio');
+        const sp = dc ? [...dc.querySelectorAll(".sp")] : [], lf = e => e.querySelector(".lf") ? e.querySelector(".lf").textContent : e.textContent;
+        const fin = sp.find(e => /Alcyoneum/.test(e.textContent));
+        const rc = document.querySelector('#hereRows tr[data-body="Fake 1"] td.rings');
+        // only the colour's word is coloured (its own element, so a highlighted row's colour cannot cover it)
+        const word = fin && fin.querySelector(".vc");
+        const colOn = !!word && word.textContent === "Red" && word.style.getPropertyValue("--vc") === "#ff5a5a"
+          && [...dc.querySelectorAll(".vc")].map(e => e.textContent).join() === "Red,Grey";
+        localStorage.setItem("hereBio", JSON.stringify({colours: false})); renderHere();
+        dc = document.querySelector('#hereRows tr[data-body="Fake 1"] td.bio');
+        const colOff = !!dc && !dc.querySelector(".vc");
+        if (hb1 === null) localStorage.removeItem("hereBio"); else localStorage.setItem("hereBio", hb1);
+        o.finished = !!fin && sp.filter(e => /Bacterium/.test(e.textContent)).length === 1 && !dc.textContent.includes("3/3")
+          && fin.textContent.startsWith("📖 ") && lf(fin) === "Bacterium Alcyoneum - Red" && fin.querySelector(".sf").textContent === "Bacterium"
+          && fin.textContent.endsWith(" ✦ 8.3M")
+          && fin.title.startsWith("codex: Bacterium Alcyoneum - Red") && dc.textContent.includes("Stratum 1/3")
+          && sp.some(e => lf(e) === "Stratum Tectonicas - Grey") && colOn && colOff
+          && !!rc && rc.textContent === "22 mapped1 hotspot" && rc.title === "2 (2 mapped, 1 with hotspots)"
+          ? true : [fin && fin.textContent, fin && fin.title, colOn, colOff, rc && rc.textContent, dc && dc.textContent];
         if (hg === null) localStorage.removeItem("highG"); else localStorage.setItem("highG", hg);
         hereData = hd; hereKey = hk; renderHere();
-      } else { o.hereWrap = "no Here data"; o.here = "no Here data"; o.legend = "no Here data"; }
+      } else { o.hereWrap = "no Here data"; o.here = "no Here data"; o.legend = "no Here data"; o.noDss = "no Here data"; o.finished = "no Here data"; }
       // F39: injections at cap: nothing is "limiting"; 3 left: the short material is
       const md = matData;
       const mat = craftable => ({rows: [{id: "polonium", name: "Polonium", count: craftable, cap: 150}], snapshot_ts: "2026-01-01T00:00:00Z", ts: "2026-01-01T00:00:00Z",
@@ -1043,7 +1082,7 @@ const settle = async maxMs => {
     w.setTimeout = realST; w.fetch = realFetch;
     w.eval("search = null; searchWant = 0; searchRefused = false; render()");
     w.speak = realSpeak; w.play = realPlay;
-    const want = {unwarned: null, kept: true, outage: true, spacing: true, spacing2: true, region: true, simFresh: true, hereWrap: true, here: true, legend: true, mat: true,
+    const want = {unwarned: null, kept: true, outage: true, spacing: true, spacing2: true, region: true, simFresh: true, hereWrap: true, here: true, legend: true, noDss: true, finished: true, mat: true,
                   streak: 2, nulls: ["{}", "ts"], impNull: "bioSort", saved: true, dock: "2026-01-01T01:00:00Z", hlRender: true, more: true};
     const want2 = {onbody: true, here: true, logError: null};
     const goodH = JSON.stringify(out) === JSON.stringify(want) && JSON.stringify(out2) === JSON.stringify(want2)
@@ -1092,6 +1131,15 @@ const settle = async maxMs => {
       renderNow(); o.nowHead = document.getElementById("nowView").textContent;
       data.destination = {body_id: 0, name: "A", near: null};
       renderNow(); o.nowStar = document.getElementById("nowView").textContent;
+      // Now says where the next jump goes: the route's next stop, the kept boxel's Next (review suggestion 2026-10-12)
+      const keep = {highway: data.highway, survey: data.survey, boxel: data.boxel}, q = sel => (document.querySelector(sel) || {}).textContent || "";
+      data.highway = {index: 38, at: 37, total: 120, destination: "Colonia", refuel_in: 3, next: {name: "Stop 38", jumps: 1, distance: 4.23}};
+      data.survey = null;
+      data.boxel = {key: "k", next: {label: "Smojooe KL-P d5", name: "Smojooe KL-P d5-41", n: 41, picked: true, standard: true, spansh: true, known: {bodies: 3, count: 14}}};
+      renderNow(); o.nowRoute = q("#nowBody .now-route"); o.nowBoxel = q("#nowBody .now-boxel");
+      data.boxel.next.picked = false; data.highway = null; renderNow();
+      o.nowNone = !document.querySelector("#nowBody .now-route") && !document.querySelector("#nowBody .now-boxel");
+      Object.assign(data, keep);
       Object.assign(data, saved); hereData = hd; renderNow();
       o.holds = /holds: x\.sqlite, speech\.json, ed_outrider\.toml/.test(backupHtml({ts: new Date().toISOString(), kept: 3, path: "/b/x.zip",
                                                                                  files: ["x.sqlite", "speech.json", "ed_outrider.toml"]}));
@@ -1106,6 +1154,7 @@ const settle = async maxMs => {
       now: /➜ B 1 · Icy body · 0\.30 g · 1,200 ls · ~\d+ s · nothing to do here/.test(got.nowOther) && !/ls · ~\d+ s · nothing/.test(got.nowFar)
         && /Next: ➜ bio on C 2/.test(got.nowHead) && !/➜ C 2 ·/.test(got.nowHead) && /➜ A · K \(Yellow-Orange\) Star · 0 ls · ~15 s · scoopable star/.test(got.nowStar),
       holds: got.holds,
+      nowNext: /Next: Stop 38.*· 4\.2 ly · 38 of 120 · refuel in 3 jumps/.test(got.nowRoute) && /Boxel: next Smojooe KL-P d5-41.*known · 3 of 14 bodies/.test(got.nowBoxel) && got.nowNone,
     };
     const bad = Object.entries(checks).filter(([, v]) => !v).map(([k]) => k);
     const goodS1 = !bad.length && errors.length === before;
@@ -1150,6 +1199,10 @@ const settle = async maxMs => {
     w.eval('speak("A find.", {kind: "find"})'); await sleep(20); w.eval('speak("Hull at 40 percent.", {kind: "hull", tag: "hull"})');
     await sleep(400);
     w.eval("speechOn = false"); w.eval('alertOut("codex", "Codex entry", "", {say: "Codex."})'); w.eval("speechOn = true");
+    // this screen set never to speak: the transcript says so, not "another window speaks" (review 2026-10-11)
+    const savedMode = w.eval('localStorage.getItem("speakMode")');
+    w.eval('localStorage.setItem("speakMode", JSON.stringify("never"))'); w.eval('alertOut("codex", "Codex never", "", {say: "Codex."})');
+    w.eval(savedMode === null ? 'localStorage.removeItem("speakMode")' : `localStorage.setItem("speakMode", ${JSON.stringify(savedMode)})`);
     got.fates = JSON.parse(w.eval(`JSON.stringify(speechLog.map(e => [e.words, e.fate]))`));
     const fate = words => (got.fates.find(f => f[0] === words) || [])[1];
     const heatFates = got.fates.filter(f => f[0] === "Heat damage.").map(f => f[1]).sort().join("|");
@@ -1171,7 +1224,8 @@ const settle = async maxMs => {
     for (const k of Object.keys(want)) if (JSON.stringify(got[k]) !== JSON.stringify(want[k])) bad.push(k);
     const fatesOk = fate("Old find.") === "dropped: waited over 20 s" && heatFates === "refused: said under 30 s ago|said"
       && fate("Tank at 40.") === "replaced by a newer scoop" && fate("Tank full.") === "said" && fate("A find.") === "cut short by danger"
-      && fate("Hull at 40 percent.") === "said" && fate("Codex entry") === "silent: speech off";
+      && fate("Hull at 40 percent.") === "said" && fate("Codex entry") === "silent: speech off"
+      && fate("Codex never") === "silent: this screen never speaks (Settings)";
     if (!fatesOk) bad.push("fates");
     if (!(got.drawn === got.fates.length && got.drawnSaid >= 3 && got.copyLines === got.fates.length)) bad.push("drawn");
     const goodS2 = !bad.length && errors.length === before;
@@ -1462,6 +1516,15 @@ const settle = async maxMs => {
       renderCarrier();
       o.without = document.getElementById("carrierLine").textContent;
       o.tritGone = !document.getElementById("carrierTrit");
+      // 🎯 beside it in another system, on the game PC (the author, 2026-10-11); none aboard or with no keys to press
+      const aim = () => [...document.querySelectorAll('#carrierLine button[data-aim="next"][data-route="carrier"]')].length;
+      const pc0 = data.game_pc, inside = aim();
+      data.carrier = Object.assign({}, data.carrier, {aboard: false, here: false, system: "Far Away", distance: 120.5});
+      data.game_pc = true; renderCarrier(); const away = aim();
+      data.game_pc = false; renderCarrier(); const noPc = aim();
+      data.game_pc = pc0;
+      o.aim = [inside, away, noPc];
+      data.carrier = Object.assign({}, data.carrier, {aboard: true, here: true, system: "Smojooe AR-E b25-8", distance: null});
       // decommissioning, then decommissioned: in red with the date, never a hidden tile
       data.carrier = Object.assign({}, data.carrier, {decommission: {ts: "2026-10-02T10:00:00Z", scrap_ts: "2026-10-09T12:00:00Z", refund: 4850000000, done: false}});
       renderCarrier();
@@ -1497,6 +1560,7 @@ const settle = async maxMs => {
     if (!/Tritium in Depot: 668 t/.test(got.with) || got.trit !== "Total Tritium: 14,199 t (151 jumps)") bad.push("tile with tritium");
     if (!/UC ✓ · Vista ✓ · 668 t tritium/.test(got.without) || !got.tritGone) bad.push("tile without");
     if (JSON.stringify(got.noTile) !== "[true,true]" || !got.tileBack) bad.push("no carrier tile");
+    if (JSON.stringify(got.aim) !== "[0,1,0]") bad.push("carrier 🎯 " + JSON.stringify(got.aim));
     if (!/Decommissioning: scrapped (Oct 9|9 Oct) · 4\.85B cr back/.test(got.pending[0]) || !/aboard/.test(got.pending[0]) || !got.pending[1] || !got.pending[2]) bad.push("decommissioning");
     if (!/Out Of The Blue.*Decommissioned (Oct 9|9 Oct)/.test(got.gone[0]) || /aboard/.test(got.gone[0]) || !got.gone[1]) bad.push("decommissioned");
     if (JSON.stringify(got.noCarrier) !== "[false,false]") bad.push("no carrier cargo");
@@ -2147,7 +2211,7 @@ const settle = async maxMs => {
       const th = [...document.querySelectorAll("#hereTable thead th")].map(t => t.textContent);
       const row = n => document.querySelector('#hereRows tr[data-body="' + n + '"]');
       const col = th.indexOf("⛏");
-      o.col = col > 0; o.cells = ["M 1", "M 2", "M 3"].map(n => row(n) ? row(n).querySelectorAll("td")[col].textContent.trim() : "missing");
+      o.col = col > 0 && th.indexOf("Rings") === col - 1; o.cells = ["M 1", "M 2", "M 3"].map(n => row(n) ? row(n).querySelectorAll("td")[col].textContent.trim() : "missing");
       const span = row("M 1").querySelector("[data-minepop]");
       span.dispatchEvent(new MouseEvent("mousemove", {bubbles: true, clientX: 10, clientY: 10}));
       o.pop = document.getElementById("pop").textContent;
@@ -2348,10 +2412,28 @@ const settle = async maxMs => {
       const box = document.getElementById("ovMap"), hv = document.getElementById("hereView"), cv = document.getElementById("ovMapCanvas");
       const size = (wd, ht) => { Object.defineProperty(box, "clientWidth", {value: wd, configurable: true});
                                  Object.defineProperty(box, "clientHeight", {value: ht, configurable: true}); };
-      const state = () => ({shown: !box.hidden, mapon: hv.classList.contains("mapon"), S: parseInt(cv.style.width) || 0, stack: box.classList.contains("stack"),
+      const state = () => ({shown: !box.hidden, mapon: hv.classList.contains("mapon"),
+                            leaving: getComputedStyle(document.getElementById("hereLeaving")).display !== "none", S: parseInt(cv.style.width) || 0, stack: box.classList.contains("stack"),
                             legend: document.getElementById("ovMapLegend").textContent.includes("ABC 1"), strip: !document.getElementById("obMap").hidden,
                             inHere: hv.contains(box) && document.getElementById("ovHere").contains(hv)});
-      size(640, 380); render(); o.on = state();
+      // the body you are on comes to the top of the list above the map when the map comes up, once (the author, 2026-10-11)
+      const hd0 = hereData, rv0 = revealIn, shown = [];
+      hereData = Object.assign({}, hd0 && !hd0.error ? hd0 : {}, {id64: "5", name: "ABC", leaving: null, phenomena: [], tree: null,
+        bodies: ["ABC 2", "ABC 1"].map((name, i) => ({name, body_id: i + 2, type: "Planet", subtype: "Rocky body", genera: [], bio: 0, geo: 0,
+          organics: [], codex: [], curiosities: [], bio_guess: [], value_parts: {bio_factor: 1}, mining: 0}))});
+      revealIn = (el, block, box) => { if (block === "start") shown.push(el.dataset.body + " " + block + " " + (box ? box.id : "-")); };
+      const hm = document.getElementById("hereMain");   // the list scrolls (jsdom lays nothing out: told so)
+      Object.defineProperty(hm, "scrollHeight", {value: 900, configurable: true}); Object.defineProperty(hm, "clientHeight", {value: 300, configurable: true});
+      size(640, 380); renderHere(); render(); o.on = state();
+      render(); o.revealOnce = shown.slice();
+      data.surface = {...data.surface, show: false, down: undefined}; render();
+      data.surface = {...data.surface, show: true, down: true}; render(); o.revealAgain = shown.length;
+      // a short list (it does not scroll): nothing moves, the window least of all (review 2026-10-12)
+      Object.defineProperty(hm, "scrollHeight", {value: 200, configurable: true});
+      data.surface = {...data.surface, show: false, down: undefined}; render(); data.surface = {...data.surface, show: true, down: true}; render();
+      o.revealShort = shown.slice(2); o.app = appOn();
+      delete hm.scrollHeight; delete hm.clientHeight;
+      revealIn = rv0; hereData = hd0;
       size(300, 400); render(); o.narrow = state();
       size(640, 380);
       selectedBody = "ABC 1"; render(); o.body = state();
@@ -2370,11 +2452,14 @@ const settle = async maxMs => {
     const want = {
       fits: got.fits.every(inBox) && got.fits.slice(0, 4).every(f => f.beside && f.S === f.height && f.legendW >= 220) &&
         !got.fits[4].beside && got.fits[4].S === 300 && !got.fits[5].beside,
-      on: got.on.shown && got.on.mapon && got.on.inHere && !got.on.stack && got.on.S >= 160 && got.on.S <= 380 && got.on.legend && !got.on.strip,
+      on: got.on.shown && got.on.mapon && got.on.inHere && !got.on.leaving && got.closed.leaving === false && got.body.leaving && !got.on.stack && got.on.S >= 160 && got.on.S <= 380 && got.on.legend && !got.on.strip,
       narrow: got.narrow.shown && got.narrow.stack && got.narrow.S <= 300 && got.narrow.S > 0,
       body: !got.body.shown && !got.body.mapon && got.body.strip, closed: got.closed.shown && got.closed.mapon,
       off: !got.collapsed.shown && !got.off.shown && !got.off.mapon && !got.none.shown && !got.none.mapon,
-      hereView: !got.hereView.shown && !got.hereView.mapon && got.hereView.strip};
+      hereView: !got.hereView.shown && !got.hereView.mapon && got.hereView.strip,
+      reveal: got.revealOnce.length === 1 && got.revealOnce[0] === "ABC 1 start hereMain" && got.revealAgain === 2 &&
+        // a short list: nothing on the plain page; in app mode the row's pane scrolls (never the window: no box given)
+        JSON.stringify(got.revealShort) === JSON.stringify(got.app ? ["ABC 1 start -"] : [])};
     const good = Object.values(want).every(Boolean) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| overview surface map |", good ? "lower half of the system pane, sized to the box, the body panel takes the spot while open, hidden when the map is off" : JSON.stringify({want, got}), errors.slice(before));
@@ -2524,6 +2609,7 @@ const settle = async maxMs => {
       o.row1 = [...rows[0].cells].map(td => td.textContent.trim()).join(" | ");
       o.row2 = [...rows[1].cells].map(td => td.textContent.trim()).join(" | ");
       o.forgets = el.querySelectorAll("[data-forget]").length;
+      o.goto = el.querySelector(".goto[data-body]").dataset.body;   // Here's own (short) name, as the Log's link gives
       o.restock = document.getElementById("matSynth").textContent.replace(/\\s+/g, " ").trim();
       window.confirm = () => false; el.querySelector("[data-forget]").click(); await new Promise(r => setTimeout(r, 50));
       o.declined = posted.length;
@@ -2536,7 +2622,7 @@ const settle = async maxMs => {
     })()`));
     w.fetch = realFetch; delete w.posted;
     const want = {served: Array.isArray(served.mining_sites) && served.synthesis.some(r => r.name === "Mining rig restock"),
-      head: got.head, row1: /^ABC 3 d 🔍Smojooe AR-E b25-8⌖ \| Water 10 t · Methanol Monohydrate Crystals 20 t2 rigs · 1 unmarked · L3 · (30 Sep|Sep 30) \| 0 ly \| forget$/.test(got.row1),
+      head: got.head, goto: got.goto === "ABC 3 d", row1: /^ABC 3 d 🔍Smojooe AR-E b25-8⌖ \| Water 10 t · Methanol Monohydrate Crystals 20 t2 rigs · 1 unmarked · L3 · (30 Sep|Sep 30) \| 0 ly \| forget$/.test(got.row1),
       row2: /^4 d 🔍LTT 4961⌖ \| Gold 22 t(26 Sep|Sep 26) \| 41.2 ly \| $/.test(got.row2), forgets: got.forgets === 1,
       restock: /×2 ?Mining rig restock Iron 10\/3 · Nickel 5\/2 · Mechanical Equipment 4\/1/.test(got.restock),
       forget: got.declined === 0 && got.posted && got.posted[0] === "api/sites/forget" &&
@@ -3208,12 +3294,6 @@ const settle = async maxMs => {
     if (!(got.polls >= 3 && /^Plotted: 399 jumps to Hwy End/.test(got.afterPlot[0]) && got.afterPlot[1] && got.afterPlot[2] === 200)) bad.push("afterPlot");
     if (JSON.stringify(got.exactBody) !== JSON.stringify({plotter: "exact", to: "Colonia", ship_id: 7, cargo: 4, injections: true, exclude_secondary: false, supercharged: false, no_neutrons: false, refuel_every_scoopable: true, conservative: false})) bad.push("exactBody");
     if (got.refuelOff !== false) bad.push("refuelOff");
-    // Server settings' line about the fork's Inara upload: off by default and says so; on, what went out and the refusal
-    got.inara = [d.getElementById("inaraLine").textContent, w.eval(`inaraText({on: true, sent: 1234, dropped: 1, waiting: 2,
-      error: "Inara could not be reached (timed out)", off: null})`), w.eval(`inaraText({on: false, sent: 0, off: "--simulate"})`), w.eval("inaraText(null)")];
-    if (JSON.stringify(got.inara) !== JSON.stringify(["Inara upload: off ([inara] below switches it on, at the next start).",
-      `Inara upload (live play only): ${(1234).toLocaleString()} sent, 2 waiting, 1 dropped (Inara could not be reached (timed out)).`,
-      "Inara upload: off (--simulate).", ""])) bad.push("inara");
     // the route list's Known column: a mark per state with what it means, nothing for a system not looked up yet
     got.known = ["visited", "explored", "partial", "no bodies", null, "?"].map(k => w.eval(`hwyKnownHtml(${JSON.stringify(k)})`).replace(/<[^>]+>/g, "") +
       "|" + (/title="([^"]*)"/.exec(w.eval(`hwyKnownHtml(${JSON.stringify(k)})`)) || [])[1]);
@@ -3597,9 +3677,14 @@ const settle = async maxMs => {
       o.matRow = !!document.querySelector("#matTables > #matSources + #matSites");
       // S41
       const lh = lastHeard, dc = disconnected;
+      // states only, no timer (the author, 2026-10-12): linked / linked · no game / unlinked · retrying
+      const fr0 = data.freshness; data.freshness = Object.assign({}, fr0, {live: true});
       lastHeard = Date.now() - 2000; disconnected = null; o.link = [linkState().text, linkState().state];
+      data.freshness = Object.assign({}, fr0, {live: false}); o.nogame = [linkState().text, linkState().state];
+      data.freshness = Object.assign({}, fr0, {live: true});
       lastHeard = Date.now() - 48000; o.stale = [linkState().text, linkState().state];
       disconnected = "14:02"; o.none = [linkState().text, linkState().state];
+      data.freshness = fr0;
       lastHeard = lh; disconnected = dc; drawLinkPill();
       o.pill = !!document.getElementById("linkPill").textContent;
       // S43
@@ -3622,8 +3707,8 @@ const settle = async maxMs => {
       sortKeys.here = s0; hereData = h0;
       return JSON.stringify(o); })()`));
     const want = {colony: [500, null, " · 1,000 m"], sortTh: ["dist", "grav", "now", "max"], sortCycle: ["dist", "-dist rev", "max"],
-      nearCycle: ["value", "-value", "distance"], treeSort: "max", halves: [true, true, true], halvesOff: false, matRow: true, link: ["linked · 2 s", "linked"],
-      stale: ["stale · 48 s", "stale"], none: ["no link · retrying since 14:02", "none"], pill: true,
+      nearCycle: ["value", "-value", "distance"], treeSort: "max", halves: [true, true, true], halvesOff: false, matRow: true, link: ["linked", "linked"],
+      nogame: ["linked · no game", "linked"], stale: ["unlinked · retrying", "stale"], none: ["unlinked · retrying", "none"], pill: true,
       chips: ["Alerts", "Voice", "What is said", "Sounds", "Values", "Risk & warnings", "Surface map", "Auto honk", "Uploads", "In-game overlay", "Display", "Sharing", "Server", "Spoken lines"],
       autoSmall: true, autoBig: false, line: true, cut: true};
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
@@ -4192,8 +4277,12 @@ const settle = async maxMs => {
       on(); document.querySelector('#tabNav [data-view="bm"]').click(); off(); o.push([view, tag()]);
       return JSON.stringify(o); })()`));
     // the link in words (linkState's states), and the pill drawn with them
-    got.link = tw.eval(`[tabLinkText({state: "linked"}, lastHeard + 2400), tabLinkText({state: "stale"}, lastHeard + 48000), tabLinkText({state: "none"})]`);
-    tw.eval("drawLinkPill()");
+    got.link = tw.eval(`(() => { const fr0 = data.freshness, d0 = disconnected, h0 = lastHeard; data.freshness = Object.assign({}, fr0, {live: true});
+      lastHeard = Date.now() - 2400; disconnected = null; const a = tabLinkText(linkState());
+      lastHeard = Date.now() - 48000; const b = tabLinkText(linkState());
+      disconnected = "14:02"; const c = tabLinkText(linkState());
+      data.freshness = fr0; disconnected = d0; lastHeard = h0; return [a, b, c]; })()`);
+    tw.eval("data.freshness = Object.assign({}, data.freshness, {live: true}); drawLinkPill()");   // the game running
     got.pill = [td.getElementById("tabLink").textContent === "linked", td.getElementById("tabLink").className];
     // an alert: a banner (danger marked), nothing queued to speak
     got.banner = JSON.parse(tw.eval(`(() => { alertOut("hull", "Hull at 40%", "take it easy");
@@ -4431,14 +4520,14 @@ const settle = async maxMs => {
     const want = {desk: [true, true, true, true], shell: [true, true, true, true, true], moved: [true, true, true], theme: "lcars", start: "now",
       quiet: [false, false, "never", false], status: [true, true], pages: [],
       mapSwitch: [["now", true], ["hwy", false], ["bm", false]],
-      themes: [["elite", "babylon5", "lcars", "lcars"], ["elite", "babylon5", "lcars", "lcars"], ["lcars", "elite", "babylon5", "narn", "minbari", "centauri", "sith", "alliance", "dark"]],
+      themes: [["elite", "babylon5", "lcars", "lcars"], ["elite", "babylon5", "lcars", "lcars"], ["lcars", "elite", "babylon5", "narn", "minbari", "centauri", "vorlon", "shadow", "sith", "alliance", "dark"]],
       bodies: [true, true, ["gas", "elw", "water", "ammonia", "ice", "ice", "metal", "metal", "rock", "gas"], true, null, null, "star", true, true, true, 2, true, true, true],
       schemArt: [true, true, 2, true, false, true, true, false],
       ask: [true, "Fuel at 41 percent.", 0, "Nearest unvisited: Smojooe ZC-D c12-2, 10.8 light years.", false, 1, true],
       rail: [3, "tb-rb off", true, true, "Ship controls", "tb-rb pending", '[{"context":"ship","id":"gear"}]', "tb-rb on", "tb-rb notconf",
              "tb-rb nolink|no rail: docked|0", "tb-rb na|true|in supercruise|N/A"],
       serverRail: ["none", true],
-      reload: [true, true, false, false, 0, false, 0, true, true, 1], hint: [true, false], searchSheet: "123456", popKeeps: true, link: ["linked", "stale · 48 s ago", "no link · retrying"], pill: [true, "tb-link linked"],
+      reload: [true, true, false, false, 0, false, 0, true, true, 1], hint: [true, false], searchSheet: "123456", popKeeps: true, link: ["linked", "unlinked · retrying", "unlinked · retrying"], pill: [true, "tb-link linked"],
       banner: [true, true, true, 0], sheet: [true, true, true, true, true, true, true], sheetHere: [false, "here"],
       target: '{"countdown":0}', railEnter: ["Wheels", true, false], pinch: '{"dx":10,"dy":5,"scale":2,"x":15,"y":5}',
       settings: [true, true, "a browser (no app)", true], signOut: [true, false], emblem: [false, true, true, true, "false", false],
@@ -4488,12 +4577,79 @@ const settle = async maxMs => {
     allOk = allOk && goodS;
     console.log(goodS ? "OK" : "FAIL", "| settings |", goodS ? "12 folding sections, remembered; server settings from the config file (choices as a list); only changes sent" : JSON.stringify(got), errors.slice(before));
   }
+  // Plot Route: Clear route while a survey or trade plot runs into an empty slot stops that plot (it cleared the Highway)
+  {
+    const w = dom.window, d = w.document, before = errors.length, real = w.fetch, posted = [];
+    const json = body => Promise.resolve({ok: true, status: 200, headers: {get: () => "application/json"}, json: async () => body});
+    w.fetch = (u, o) => o && o.method === "POST" && /clear$/.test(String(u)) ? (posted.push(String(u).replace(/.*api\//, "")), json({ok: true}))
+      : /api\/(riches|highway)/.test(String(u)) ? json({route: null, plotting: {state: "idle"}}) : real(u, o);
+    const saved = w.eval("JSON.stringify([H.data || null, R.data || null])");
+    w.eval(`H.data = {route: {created_ts: "2026-01-01T00:00:00Z", rows: []}, plotting: {state: "idle"}};
+            R.data = {route: null, plotting: {state: "running", kind: "trade"}}; H.clearArmed = null;`);
+    const btn = d.getElementById("hwyClear");
+    btn.click(); await sleep(50); btn.click(); await sleep(300);
+    const got = {posted: posted.slice()};
+    w.fetch = real;
+    w.eval(`[H.data, R.data] = JSON.parse(${JSON.stringify(saved)});`);
+    const ok = JSON.stringify(got) === JSON.stringify({posted: ["riches/clear"]}) && errors.length === before;
+    allOk = allOk && ok;
+    console.log(ok ? "OK" : "FAIL", "| plot route: clear during a survey plot |", ok ? "the running plot is stopped, the Highway kept" : JSON.stringify(got), errors.slice(before));
+  }
+  // notable stellar phenomena (the author's three rings, 2026-10-11): counted in words, Nearby's 🌀 with the count, a line
+  // in Now, and the alert said with delight from its own lines
+  {
+    const w = dom.window, before = errors.length;
+    const got = JSON.parse(await w.eval(`(async () => {
+      const o = {};
+      o.what = [phenomenaWhat({ring: 3}), phenomenaWhat({cloud: 1}), phenomenaWhat({ring: 2, cloud: 1}), phenomenaWhat({})];
+      const t = document.createElement("div"); t.innerHTML = phenomenaTag([{kind: "ring", n: 3, reached_ts: null}]);
+      o.tag = t.textContent;
+      const saved = {position: data.position, arrival: data.arrival, on_body: data.on_body}, hd = hereData, big = "9007199254740995";
+      data.on_body = null; data.position = Object.assign({}, saved.position, {id64: Number(big), id: big});
+      hereData = {id64: big, bodies: [], leaving: {honked: true, unscanned: 0, all_found: true, body_count: 5, bio_pending: [], unmapped: []},
+                  phenomena: [{kind: "ring", n: 3, reached_ts: null}]};
+      renderNow();
+      o.now = /🌀 Three notable stellar phenomena, all in rings none visited yet/.test(document.getElementById("nowView").textContent.replace(/\\s+/g, " "));
+      hereData.phenomena = [{kind: "ring", n: 3, reached_ts: "x", visited: 1}]; renderNow();
+      o.nowOne = /1 of 3 visited/.test(document.getElementById("nowView").textContent);
+      const t3 = document.createElement("div"); t3.innerHTML = phenomenaTag([{kind: "ring", n: 3, reached_ts: "x", visited: 3}]);
+      o.allDone = t3.firstChild.classList.contains("done") && /all visited/.test(t3.firstChild.title);
+      hereData = hd; Object.assign(data, saved); renderNow();
+      const ao = window.alertOut; let said = null;
+      window.alertOut = (kind, title, body, opt) => { said = [kind, title, typeof opt.say === "function" ? opt.say() : opt.say]; };
+      sayPhenomena({kind: "phenomena", count: 3, kinds: {ring: 3}, system_name: "Smojooe XF-G b24-0"});
+      window.alertOut = ao;
+      o.said = !!said && said[0] === "phenomena" && /Three notable stellar phenomena/.test(said[1]) && /three notable stellar phenomena, all in rings/.test(said[2]);
+      return JSON.stringify(o); })()`));
+    got.rare = JSON.parse(await w.eval(`(() => {
+      const d = document.createElement("div"); d.innerHTML = rareStarTag([{body: "", what: "a black hole", main: true}, {body: "B", what: "a Wolf-Rayet star", main: false}]);
+      const s = d.firstChild;
+      // the Discoveries group heading in Settings -> Alerts, its alerts each with their own switches
+      const head = [...document.querySelectorAll("#alertOpts tr.agroup th")].map(th => th.textContent);
+      const rows = ["phenomena", "rare_star", "surface_site", "signal_poi", "curious"].every(k => document.querySelector('#alertOpts [data-aspeak="' + k + '"]') && document.querySelector('#alertOpts [data-alert="' + k + '"]'));
+      const st = document.createElement("div"); st.innerHTML = siteTags({guardian: 2, anomaly: 1});
+      const nb = document.createElement("div"); nb.innerHTML = sitesTag([{body: "10 b", sites: {guardian: 2, thargoid: 1}}]);
+      const pt = poiText([{kind: "titan", name: "Titan Cocijo"}, {kind: "tourist", name: "A"}, {kind: "tourist", name: "B"}, {kind: "listening_post", name: "Listening Post"}]);
+      return JSON.stringify([s.textContent, s.title, head.length === 1 && /^Discoveries/.test(head[0]), rows,
+                             st.textContent, nb.firstChild.textContent, nb.firstChild.title, pt]); })()`));
+    const want = {what: ["three notable stellar phenomena, all in rings", "a notable stellar phenomenon, in a cloud",
+                         "three notable stellar phenomena: two in rings and one in a cloud", ""], tag: "🌀 3", now: true, nowOne: true, allDone: true, said: true,
+                  rare: ["⭐ 2", "rare: a black hole (main star), a Wolf-Rayet star at B", true, true,
+                         "🏛❔", "🏛👾", "🏛👾 Guardian sites, Thargoid sites on 10 b", "Titan Cocijo · a listening post · 2 tourist beacons"]};
+    const ok = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && ok;
+    console.log(ok ? "OK" : "FAIL", "| stellar phenomena |", ok ? "counted, in Now and the 🌀, said from its lines" : JSON.stringify(got), errors.slice(before));
+  }
   // Settings > In-game overlay: the switches and each panel's place from data.overlay; a change posts it (stubbed)
   {
     const w = dom.window, before = errors.length, real = w.fetch, posted = [];
     const json = body => Promise.resolve({ok: true, status: 200, headers: {get: () => "application/json"}, json: async () => body});
+    // as the server answers: api/overlay/layout the layout, api/overlay the whole state (its layout too), with a note
+    let ovNote = null;
     w.fetch = (u, o) => /api\/overlay/.test(String(u)) && o && o.method === "POST"
-      ? (posted.push([String(u).replace(/.*api\//, ""), JSON.parse(o.body)]), json({layout: w.eval("data.overlay.layout")})) : real(u, o);
+      ? (posted.push([String(u).replace(/.*api\//, ""), JSON.parse(o.body)]),
+         json(/layout$/.test(String(u)) ? {layout: w.eval("data.overlay.layout")}
+              : Object.assign({}, w.eval("data.overlay"), JSON.parse(o.body), ovNote ? {note: ovNote} : {}))) : real(u, o);
     const saved = w.eval("JSON.stringify(data.overlay || null)");
     w.eval(`data.overlay = {enabled: true, theme: "elite", text_size: "normal", panels: {system: true, body: false, radar: true},
       window: false, test: 0, arrange: 0, runner: {state: "no_qt", why: null}, layout: {system: {corner: "nw", x: 0.02, y: 0.16, scale: 1, bg: 0.65, alpha: 1},
@@ -4521,6 +4677,13 @@ const settle = async maxMs => {
     box.querySelector('[data-ovact="test"]').click();
     await sleep(100);
     got.note = /cannot run yet/.test(w.eval("overlayNote"));   // nothing can draw yet: the button says why
+    // a theme picked from its list: the select keeps the focus, yet the server's answer and its note are drawn
+    // (before the fix the whole-state answer was taken for a layout answer: the theme stayed the old one)
+    ovNote = "the config file could not keep it";
+    const th = box.querySelector('[data-ov="theme"]');
+    th.focus(); th.value = "default"; th.dispatchEvent(new w.Event("change", {bubbles: true}));
+    await sleep(100);
+    got.themeNote = /could not keep it/.test(box.textContent) && box.querySelector('[data-ov="theme"]').value === "default";
     got.posted = posted;
     w.fetch = real;
     // the PyQt6 install's popup: shown while installing, then the outcome, then gone (a state it never had: hidden)
@@ -4531,8 +4694,8 @@ const settle = async maxMs => {
     got.popup = [step("off"), step("installing"), step("starting"), step("installing"), step("install_failed"), step("off")]
       .map(t => t.replace(/ .*/, "") + (/installed/.test(t) ? " installed" : /failed/.test(t) ? " failed" : ""));
     w.eval(`data.overlay = JSON.parse(${JSON.stringify(saved)}); overlayNote = ""; overlayDrawn = ""; renderOverlay();`);
-    const want = {rows: 7, body: "120", off: true, theme: "elite", nowin: true, nowName: true, inRows: true, tip: true, route: "true,false,true,true", dimmed: true, wrapped: true, help: true, note: true,
-                  posted: [["overlay/layout", {radar: {x: 0.3}}], ["overlay", {test: true}]],
+    const want = {rows: 7, body: "120", off: true, theme: "elite", nowin: true, nowName: true, inRows: true, tip: true, route: "true,false,true,true", dimmed: true, wrapped: true, help: true, note: true, themeNote: true,
+                  posted: [["overlay/layout", {radar: {x: 0.3}}], ["overlay", {test: true}], ["overlay", {theme: "default"}]],
                   venv: true, popup: ["", "⟳Installing", "✓ installed", "⟳Installing", "Installing failed", ""]};
     const ok = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && ok;
@@ -4544,28 +4707,49 @@ const settle = async maxMs => {
     const w = dom.window, before = errors.length, real = w.fetch, posted = [];
     const cat = {current: "en_GB-cori-medium", voices: [
       {name: "de_DE-thorsten-high", language: "de_DE", language_name: "German (Germany)", quality: "high", speakers: 1, size_mb: 114, installed: false},
-      {name: "en_GB-alan-low", language: "en_GB", language_name: "English (Great Britain)", quality: "low", speakers: 1, size_mb: 63, installed: false},
-      {name: "en_GB-cori-medium", language: "en_GB", language_name: "English (Great Britain)", quality: "medium", speakers: 1, size_mb: 63, installed: true}]};
+      {name: "en_GB-alan-low", language: "en_GB", language_name: "English (Great Britain)", quality: "low", speakers: 1, size_mb: 63, installed: false,
+       sample: "https://rhasspy.github.io/piper-samples/samples/en/en_GB/alan/low/speaker_0.mp3"},
+      {name: "en_GB-cori-medium", language: "en_GB", language_name: "English (Great Britain)", quality: "medium", speakers: 1, size_mb: 63, installed: true},
+      {name: "en_GB-vctk-medium", language: "en_GB", language_name: "English (Great Britain)", quality: "medium", speakers: 109, size_mb: 77, installed: false}]};
     const json = body => Promise.resolve({ok: true, status: 200, headers: {get: () => "application/json"}, json: async () => body});
     w.fetch = (u, o) => /api\/voices\/catalogue/.test(String(u)) ? json(cat)
-      : /api\/voice$/.test(String(u)) && o && o.method === "POST" ? (posted.push(JSON.parse(o.body).voice), json({ok: true})) : real(u, o);
-    w.eval("mvVoices = null; data.tts = Object.assign({}, data.tts, {voice: 'en_GB-cori-medium'})");
+      : /api\/voices\/download$/.test(String(u)) && o && o.method === "POST" ? (posted.push(JSON.parse(o.body).voice), json({ok: true}))
+      : /api\/voices\/speakers/.test(String(u)) ? json({speakers: [], speaker: null}) : real(u, o);
+    w.eval("mvVoices = null; __tts0 = data.tts; data.tts = Object.assign({}, data.tts, {voice: 'en_GB-cori-medium', voices: ['en_GB-cori-medium'], fetching: [], fetch_failed: {}}); store.set('mvSort', null); __played = []; __sound0 = labSound; labSound = url => (__played.push(url), {done: Promise.resolve(), stop() {}}); tabShow(document.getElementById('labDlg'))");
     const d = w.document, mv = d.getElementById("moreVoices");
     mv.open = true; mv.dispatchEvent(new w.Event("toggle"));
     await sleep(150);
     const rows = () => [...d.querySelectorAll("#mvList .mvrow")].map(r => r.textContent.replace(/\s+/g, " ").trim());
-    const got = {langs: [...d.querySelectorAll("#mvLang option")].map(o => o.value), lang: d.getElementById("mvLang").value, rows: rows()};
-    d.querySelector('#mvList [data-mv="en_GB-alan-low"]').click();
+    const got = {langs: [...d.querySelectorAll("#mvLang option")].map(o => o.value), lang: d.getElementById("mvLang").value, rows: rows(),
+                 // four cells in every row, sample or not, so the grid's columns line up (the author's screenshot, 2026-10-11)
+                 cells: [...d.querySelectorAll("#mvList .mvrow")].map(r => r.children.length).join(),
+                 grid: w.getComputedStyle(d.querySelector("#mvList .mvrow")).display};
+    d.querySelector('#mvList [data-mvsample]').click();             // Piper's own sample, before downloading
+    await sleep(50);
+    got.played = w.eval("__played.slice()");
+    const order = k => { d.getElementById("mvSort").value = k; d.getElementById("mvSort").dispatchEvent(new w.Event("change"));
+      return [...d.querySelectorAll("#mvList .mvname")].map(x => x.textContent).join(","); };
+    got.sorted = [order("quality"), order("-size"), order("size"), order("name")];
+    d.querySelector('#mvList [data-mv="en_GB-alan-low"]').click();   // Download: fetched, not switched to
     await sleep(100);
     got.posted = posted;
+    got.downloading = d.querySelector('#mvList .mvrow button[disabled]') ? d.querySelector('#mvList .mvrow button[disabled]').textContent : null;
+    // the download lands: the voice joins the lab's list, picked there, ready to hear and use
+    w.eval("data.tts = Object.assign({}, data.tts, {voices: ['en_GB-alan-low', 'en_GB-cori-medium']}); drawTts()");
+    await sleep(50);
+    got.picked = [d.getElementById("labVoice").value, /alan-low downloaded/.test(d.getElementById("labMsg").textContent)];
     d.getElementById("mvLang").value = "de_DE"; d.getElementById("mvLang").dispatchEvent(new w.Event("change"));
     got.de = rows();
-    w.fetch = real; mv.open = false; w.eval("mvVoices = null");
-    const want = {langs: ["en_GB", "de_DE"], lang: "en_GB", rows: ["alanlow · 63 MBDownload and use", "corimedium · 63 MBin use"],   // (the spans' text run together)
-                  posted: ["en_GB-alan-low"], de: ["thorstenhigh · 114 MBDownload and use"]};
+    w.fetch = real; mv.open = false; w.eval("mvVoices = null; labSound = __sound0; store.set('mvSort', null); tabClose(document.getElementById('labDlg')); data.tts = __tts0; drawTts()");
+    const want = {langs: ["en_GB", "de_DE"], lang: "en_GB", rows: ["alanlow · 63 MB▶ sampleDownload", "corimedium · 63 MBin use",
+                                                                   "vctkmedium · 109 speakers · 77 MBDownload"],   // (the spans' text run together)
+                  cells: "4,4,4", grid: "grid",
+                  played: ["https://rhasspy.github.io/piper-samples/samples/en/en_GB/alan/low/speaker_0.mp3"],
+                  sorted: ["cori,vctk,alan", "vctk,alan,cori", "alan,cori,vctk", "alan,cori,vctk"],
+                  posted: ["en_GB-alan-low"], downloading: "downloading…", picked: ["en_GB-alan-low", true], de: ["thorstenhigh · 114 MBDownload"]};
     const goodV = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodV;
-    console.log(goodV ? "OK" : "FAIL", "| more voices |", goodV ? "Piper's catalogue by language; Download and use asks the server for it" : JSON.stringify(got), errors.slice(before));
+    console.log(goodV ? "OK" : "FAIL", "| more voices |", goodV ? "Piper's catalogue by language, sorted by name, quality or size; ▶ sample plays Piper's recording; Download fetches it without switching, then it is picked in the lab" : JSON.stringify(got), errors.slice(before));
   }
   // the desktop theme (Settings > Display): Default - Outrider and the tablet's nine; a choice is set on <html>, changes
   // the colours, is remembered for this browser; the Default again removes it
@@ -4578,11 +4762,11 @@ const settle = async maxMs => {
     got.on = [d.documentElement.dataset.theme, w.localStorage.getItem("desktopTheme"), bg() !== bg0];
     sel.value = ""; sel.dispatchEvent(new w.Event("change"));
     got.off = [d.documentElement.hasAttribute("data-theme"), w.localStorage.getItem("desktopTheme"), bg() === bg0];
-    const want = {opts: ["", "lcars", "elite", "babylon5", "narn", "minbari", "centauri", "sith", "alliance", "dark"], first: "Default - Outrider",
+    const want = {opts: ["", "lcars", "elite", "babylon5", "narn", "minbari", "centauri", "vorlon", "shadow", "sith", "alliance", "dark"], first: "Default - Outrider",
                   label: "LCARS", on: ["elite", '"elite"', true], off: [false, '""', true]};
     const goodTh = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodTh;
-    console.log(goodTh ? "OK" : "FAIL", "| desktop theme |", goodTh ? "Default - Outrider and nine themes; set, remembered, back to the Default" : JSON.stringify(got), errors.slice(before));
+    console.log(goodTh ? "OK" : "FAIL", "| desktop theme |", goodTh ? "Default - Outrider and eleven themes; set, remembered, back to the Default" : JSON.stringify(got), errors.slice(before));
   }
   // a newer release (payload update, [server] update_check): the Update pill shows it, opens how to update for this
   // install (Docker here) with GitHub's link, "Skip this version" hides it for that version only; none: no pill
@@ -4687,7 +4871,7 @@ const settle = async maxMs => {
         .map(h => h.replace(/<[^>]+>/g, "").trim());
       [data.on_body, data.near_body] = keep; renderOnBody();
       return o; })()`);
-    const want = {tag: "🧬? 2 to check in the FSS🧬? 2", filters: '{"hideDone":true,"minSig":3}', why: true, over: true,
+    const want = {tag: "🧬? 2 to check in the FSS🧬? 2", filters: '{"hideDone":true,"minSig":3,"colours":true}', why: true, over: true,
                   stars: ["main sequence", "giant", "white dwarf (hydrogen-rich), variable", "white dwarf (carbon)", ""], forge: [true, ""],
                   counts: ["3/12 known · EDSM 5/12", "2 known · EDSM: not logged", ""]};
     const goodC = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
@@ -4709,8 +4893,18 @@ const settle = async maxMs => {
               // test mode is said whatever the state: here while EDDN is unavailable
               /\(test schemas only\)/.test(uploadsHtml({eddn: {available: true, test: true, blocked: "the game version is not known yet"}, edsm: {}})),
               // EDSM's dry run (OUTRIDER_EDSM_DRYRUN) and what it built
-              /EDSM.*\(dry run: nothing sent\).*12 in dry runs/s.test(uploadsHtml({eddn: {}, edsm: {available: true, on: true, dry_run: true, dry_24h: 12}}))]; })()`);
-    const goodU = JSON.stringify(got) === JSON.stringify([true, true, true, 2, true, true, true, true]) && errors.length === before;
+              /EDSM.*\(dry run: nothing sent\).*12 in dry runs/s.test(uploadsHtml({eddn: {}, edsm: {available: true, on: true, dry_run: true, dry_24h: 12}})),
+              // Inara: its switch, a key per commander (its ends only, never the key), the other apps' warning, its developer marks
+              (() => { const b = document.createElement("div");
+                b.innerHTML = uploadsHtml({eddn: {}, edsm: {}, inara: {available: true, on: true, dev: true, sent_24h: 5,
+                  accounts: [{commander: "Briadin", set: true, hint: "a1B2…k1L2 (24 characters)"}, {commander: "Alt", set: false, hint: null}]}});
+                const x = b.textContent;
+                return [!!b.querySelector('[data-upload="inara"]'), !!b.querySelector('.inaraacc[data-cmdr="Briadin"] .inaraKey[placeholder^="set"]'),
+                        !!b.querySelector('.inaraacc[data-cmdr="Alt"] .inaraKey[placeholder="API key"]'), /stored key: a1B2…k1L2/.test(x),
+                        /\(development mode\)/.test(x), /EDMC, EDDI or EDDiscovery/.test(x),
+                        !!b.querySelector('a[href="https://inara.cz/elite/cmdr-settings-api/"]')].every(Boolean); })(),
+              /Inara.*\(dry run: nothing sent\)/s.test(uploadsHtml({eddn: {}, edsm: {}, inara: {available: true, dry_run: true}}))]; })()`);
+    const goodU = JSON.stringify(got) === JSON.stringify([true, true, true, 3, true, true, true, true, true, true]) && errors.length === before;
     allOk = allOk && goodU;
     console.log(goodU ? "OK" : "FAIL", "| uploads settings |", goodU ? "the switches, a hold, test only, EDSM's account without its key" : JSON.stringify(got), errors.slice(before));
   }
@@ -4721,9 +4915,10 @@ const settle = async maxMs => {
       const t = h => { const d = document.createElement("div"); d.innerHTML = h; return [...d.children].map(c => c.textContent).join(" | "); };
       return [t(uploadLineHtml({eddn: {on: true, sent_24h: 1234, queued: 2, dropped_24h: 1, test: true}, edsm: {on: true, sent_24h: 59, dry_run: true, dry_24h: 18}})),
               uploadLineHtml({eddn: {on: false}, edsm: {on: false}}), uploadLineHtml(null),
-              t(uploadLineHtml({eddn: {on: false, sent_24h: 3}, edsm: {on: true, held: "203 EDSM refused the commander name or API key"}}))]; })()`);
+              t(uploadLineHtml({eddn: {on: false, sent_24h: 3}, edsm: {on: true, held: "203 EDSM refused the commander name or API key"}})),
+              t(uploadLineHtml({eddn: {}, edsm: {}, inara: {on: true, sent_24h: 7, queued: 3, dev: true}}))]; })()`);
     const want = ["EDDN (test) 1,234 sent · 2 waiting · 1 refused | EDSM (dry run) 59 sent · 18 dry run", "", "",
-                  "EDDN 3 sent off | EDSM 0 sent held"];   // a line (div) per service
+                  "EDDN 3 sent off | EDSM 0 sent held", "Inara (development) 7 sent · 3 waiting"];   // a line (div) per service
     const goodL = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodL;
     console.log(goodL ? "OK" : "FAIL", "| uploads in the Data tile |", goodL ? "per service, test/dry-run marks, nothing when unused" : JSON.stringify(got), errors.slice(before));
@@ -4814,6 +5009,17 @@ const settle = async maxMs => {
       document.querySelector(".edsmacc .edsmSave").click();
       await new Promise(res => setTimeout(res, 50));
       r.saved = document.getElementById("uploadsMsg").textContent === "saved" && /stored key/.test(document.getElementById("uploadsBox").textContent);
+      // Inara's key: posted to its own endpoint with the commander, and only its ends shown afterwards
+      data.uploads = {eddn: {available: true}, edsm: {available: true}, inara: {available: true, accounts: [{commander: "Briadin", set: false}]}};
+      uploadsNote = ""; uploadsDrawn = ""; renderUploads();
+      const ik = document.querySelector(".inaraacc .inaraKey"); ik.value = "a1B2c3D4e5F6g7H8i9J0k1L2"; ik.focus();
+      let sentTo = null;
+      window.apiJson = async (u, o) => { sentTo = [u, JSON.parse(o.body)]; return {ok: true, accounts: [{commander: "Briadin", set: true, hint: "a1B2…k1L2 (24 characters)"}]}; };
+      document.querySelector(".inaraacc .inaraSave").click();
+      await new Promise(res => setTimeout(res, 50));
+      const ub = document.getElementById("uploadsBox").textContent;
+      r.inaraSaved = !!sentTo && sentTo[0] === "api/uploads/inara" && sentTo[1].commander === "Briadin" && sentTo[1].api_key === "a1B2c3D4e5F6g7H8i9J0k1L2"
+        && document.getElementById("uploadsMsg").textContent === "saved" && /stored key: a1B2…k1L2/.test(ub) && !ub.includes("a1B2c3D4e5F6g7H8i9J0k1L2");
       window.apiJson = aj; window.confirm = cf; data.uploads = keepU; uploadsNote = ""; uploadsDrawn = ""; renderUploads();
       // the thresholds followed across windows too (the night's sweep left them out)
       const hb = hlCfg.body;
@@ -4821,7 +5027,7 @@ const settle = async maxMs => {
       r.thresholds = hlCfg.body === 1234567 && document.getElementById("hlBody").value === "1234567";
       store.set("highlightCfg", {body: hb, bio: null}); window.dispatchEvent(Object.assign(new Event("storage"), {key: "highlightCfg"}));
       return r; })()`);
-    const want = {copilot: true, timeout: true, superseded: true, bell: true, reset: true, declined: true, saved: true, thresholds: true};
+    const want = {copilot: true, timeout: true, superseded: true, bell: true, reset: true, declined: true, saved: true, inaraSaved: true, thresholds: true};
     const goodF = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodF;
     console.log(goodF ? "OK" : "FAIL", "| the Fable sweep's page fixes |", goodF ? "co-pilot, poll timeout, superseded run, bell, reset, declined confirm" : JSON.stringify(got), errors.slice(before));
@@ -4940,6 +5146,234 @@ const settle = async maxMs => {
     const goodO = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodO;
     console.log(goodO ? "OK" : "FAIL", "| answers out of order |", goodO ? "on-body strip, a pin's loading, Find, a failed older firsts, the map: the newest answer kept; the map asks again when reopened" : JSON.stringify(got), errors.slice(before));
+  }
+  // the voice lab (2026-10-11; it was voice_lab.py): Settings > Voice shows a several-person voice's speaker; the lab
+  // steps through speakers (each played, through api/say with the speaker), uses one, plays and cuts a line, saves a WAV
+  {
+    const w = dom.window, realFetch = w.fetch, before = errors.length, said = [], posted = [];
+    const people = [{id: 0, name: "p225"}, {id: 1, name: "p226"}, {id: 2, name: "p227"}];
+    const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), {status, headers: {"Content-Type": "application/json"}}));
+    w.fetch = (u, o) => {
+      const s = String(u);
+      if (s.startsWith("api/voices/speakers")) return json({voice: "en_GB-vctk-medium", speakers: s.includes("vctk") ? people : [], speaker: 1});
+      if (s.startsWith("api/say?")) { said.push(Object.fromEntries(new URLSearchParams(s.slice(8)))); return Promise.resolve(new Response(new w.Blob(["RIFF"]), {status: 200, headers: {"Content-Type": "audio/wav"}})); }
+      if (s === "api/voice" || s.startsWith("api/speech/ban")) { posted.push([s, JSON.parse(o.body)]); return json({ok: true}); }
+      // How is it said: the table (never the real one: answered here, nothing written)
+      if (s === "api/pronounce" && o && o.method === "POST") { const b = JSON.parse(o.body); posted.push([s, b]);
+        return json({words: [{word: "Osseus", say: "OSS-ee-uss", source: "shipped"}].concat(b.say ? [{word: b.word, say: b.say, source: "yours"}] : [])}); }
+      if (s === "api/pronounce") return json({words: [{word: "Fonticulua", say: "fon-TIK-yoo-loo-uh", source: "shipped"}, {word: "Osseus", say: "OSS-ee-uss", source: "shipped"}],
+        sectors: [{name: "Smojooe", visits: 5, say: "SMOH-joo"}, {name: "Flyeia Hypa", visits: 4, say: "fligh-AY-uh HIGH-puh"}]});
+      return realFetch(u, o);
+    };
+    const got = await w.eval(`(async () => {
+      const o = {}, t0 = data.tts, sound0 = labSound, cu = URL.createObjectURL, ru = URL.revokeObjectURL, sp0 = store.get("speechSpeed", null);
+      const tick = () => new Promise(r => setTimeout(r, 30));
+      URL.createObjectURL = () => "blob:lab"; URL.revokeObjectURL = () => {};
+      labSound = () => ({done: Promise.resolve(), stop() {}});
+      data.tts = {engine: "piper", available: true, status: "ready", voices: ["en_GB-cori-medium", "en_GB-vctk-medium"],
+                  voice: "en_GB-vctk-medium", speaker: 1, speakers: 3, speaker_name: "p226"};
+      for (const k of Object.keys(speakerLists)) delete speakerLists[k];
+      drawTts(); await tick();
+      o.settings = [!document.getElementById("ttsSpkWrap").hidden, document.getElementById("ttsSpk").value, document.getElementById("ttsSpk").options.length];
+      const lib0 = speechLib;
+      speechLib = {version: "lab", banned: {}, styles: {business: "Down to business", sarcastic: {label: "Sarcastic", voice: "en_GB-nope-low"}},
+                   lines: {leaving: {when: "leaving a system", business: ["Leaving with {text}.", "Off we go, {name}."], sarcastic: ["Bye then."]}}};
+      await labOpen(); await tick();
+      o.open = [document.getElementById("labDlg").open, !labEl("labSpkWrap").hidden, labEl("labSpk").value, labEl("labInUse").textContent, labEl("labSpkCount").textContent];
+      labEl("labSpkNext").click(); await tick();          // the next person, played at once
+      labEl("labUse").click(); await tick();
+      labEl("labVoice").value = "en_GB-cori-medium"; labEl("labVoice").dispatchEvent(new Event("change")); await tick();
+      o.onePerson = labEl("labSpkWrap").hidden;
+      // vctk no longer the voice in use: the lab opens it on the speaker kept for it (2, just used), not #0 (review 2026-10-12)
+      data.tts = Object.assign({}, data.tts, {voice: "en_GB-cori-medium", speaker: null, speakers: 0});
+      labEl("labVoice").value = "en_GB-vctk-medium"; labEl("labVoice").dispatchEvent(new Event("change")); await tick();
+      o.kept = labEl("labSpk").value;
+      labEl("labVoice").value = "en_GB-cori-medium"; labEl("labVoice").dispatchEvent(new Event("change")); await tick();
+      const key = "leaving";
+      labEl("labAlert").value = key; labEl("labStyle").value = "business";
+      labEl("labLine").click(); await tick();
+      o.line = [labEl("labWords").textContent.startsWith(key + " · "), labEl("labCut").disabled];
+      labEl("labCut").click(); await tick();
+      labEl("labText").value = "Hello {name}"; labEl("labSave").click(); await tick();
+      o.saved = labEl("labMsg").textContent;
+      // How is it said: the list loads when opened, a word picked fills its way, ▶ this way tries it unsaved, Save
+      labEl("pronBox").open = true; labEl("pronBox").dispatchEvent(new Event("toggle")); await tick();
+      o.pron = [labEl("pronWords").options.length, labEl("pronList").textContent];
+      labEl("pronWord").value = "fonticulua"; labEl("pronWord").dispatchEvent(new Event("change"));
+      o.pron.push(labEl("pronSay").value);
+      labEl("pronSay").value = "fon-TIK-yoo-LOO uh"; labEl("pronHearNew").click(); await tick();
+      o.pron.push(labEl("pronMsg") ? "" : labEl("labMsg").className);
+      labEl("pronSay").value = "fon-TIK-yoo-loo-wuh"; labEl("pronHearNew").click(); await tick();
+      labEl("pronWord").value = "Jameson"; labEl("pronSay").value = "JAYM-sun"; labEl("pronSave").click(); await tick();
+      o.pron.push(labEl("labMsg").textContent, labEl("pronList").textContent);
+      // the sectors you visited most: ▶ plays one as a sector, a click on a word puts it and its reading in the box
+      o.sectors = [labEl("pronSectors").querySelectorAll("[data-sector]").length];
+      labEl("pronSectors").querySelector('[data-sector="Flyeia Hypa"]').click(); await tick();
+      labEl("pronSectors").querySelector('[data-secword="Hypa"]').click(); await tick();
+      o.sectors.push(labEl("pronWord").value, labEl("pronSay").value);
+      labEl("pronWord").value = "Synuefe"; labEl("pronHearSector").click(); await tick();
+      labEl("pronBox").open = false;
+      tabClose(document.getElementById("labDlg"));
+      speechLib = lib0;
+      labSound = sound0; URL.createObjectURL = cu; URL.revokeObjectURL = ru; data.tts = t0;
+      if (sp0 === null) store.set("speechSpeed", null); else store.set("speechSpeed", sp0);
+      drawTts();
+      return o; })()`);
+    w.fetch = realFetch;
+    const ban = posted.find(p => p[0] === "api/speech/ban");
+    const want = {
+      settings: JSON.stringify(got.settings) === JSON.stringify([true, "1", 3]),
+      open: JSON.stringify(got.open) === JSON.stringify([true, true, "1", "✓ the voice in use", "3 people"]),
+      stepped: said.length >= 1 && said[0].voice === "en_GB-vctk-medium" && said[0].speaker === "2" && /speaker p227/.test(said[0].text),
+      used: posted.some(p => p[0] === "api/voice" && p[1].voice === "en_GB-vctk-medium" && p[1].speaker === 2),
+      onePerson: got.onePerson === true, kept: got.kept === "2",
+      line: got.line[0] && got.line[1] === false && said.some(x => x.voice === "en_GB-cori-medium" && !("speaker" in x)),
+      cut: !!ban && typeof ban[1].alert === "string" && typeof ban[1].template === "string",
+      saved: got.saved === "Saved as outrider-en_GB-cori-medium.wav" && said.some(x => /^Hello \S/.test(x.text)),
+      pron: JSON.stringify(got.pron) === JSON.stringify([2, "2 shipped · none of yours yet", "fon-TIK-yoo-loo-uh", "warnc",
+        "Saved: Jameson is said JAYM-sun from now on", "1 shipped · yours: Jameson JAYM-sun"])
+        && said.some(x => x.text === "{fon-TIK-yoo-loo-wuh}") && !said.some(x => x.text.includes("LOO uh"))
+        && posted.some(p => p[0] === "api/pronounce" && p[1].word === "Jameson" && p[1].say === "JAYM-sun"),
+      sectors: JSON.stringify(got.sectors) === JSON.stringify([2, "Hypa", "HIGH-puh"])
+        && said.some(x => x.text === "{{Flyeia Hypa}}") && said.some(x => x.text === "{{Synuefe}}")};
+    const good = Object.values(want).every(Boolean) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| voice lab |", good ? "speaker in Settings; the lab steps speakers, uses one, plays and cuts a line, saves a WAV, How is it said, sector names" : JSON.stringify({want, got, said, posted}), errors.slice(before));
+  }
+  // boxel exploration (2026-10-11): Nearby's Standard / Boxel switch shows the boxel's list (visited with your scans,
+  // Spansh's, the ones to try), the warning, Target next and 🎯 by number, Keep, and the recommended boxels by mass code
+  {
+    const w = dom.window, realFetch = w.fetch, before = errors.length, posted = [];
+    const view = {boxel: {prefix: "Drojau TF-H c13-", label: "Drojau TF-H c13", mc: "c", size: 40, kind: "K and M stars, some G", standard: true,
+                          here: true, picked: false, center: {x: 0, y: 0, z: 0}, sector_index: [35, 31, 54], distance: 3},
+                  rows: [{n: 0, name: "Drojau TF-H c13-0", visited: true, spansh: true, distance: 0, id: "76873176434",
+                          summary: {name: "Drojau TF-H c13-0", firsts: null, main_star: "K", body_count: 3, bodies_known: 3, value_now: 0, value_max: 1000}},
+                         {n: 1, name: "Drojau TF-H c13-1", visited: false, spansh: true, distance: 4.2, summary: null},
+                         {n: 2, name: "Drojau TF-H c13-2", visited: false, spansh: false, distance: null, summary: null}],
+                  next: 1, end: null, top: 1, visited: 1, spansh: 2, spansh_ts: "2026-10-11T20:00:00Z", auto: false};
+    const near = {boxels: [{mc: "d", label: "Drojau AB-U d4", prefix: "Drojau AB-U d4-", sector_index: [35, 31, 54], distance: 120, visited: 2, top: 37}],
+                  finished: [{prefix: "Drojau QQ-A d4-", label: "Drojau QQ-A d4", mc: "d", distance: 90, state: "complete"}],
+                  codes: {c: {kind: "K and M stars", size: 40, yours: {systems: 10, bio: 4, elw: 0, ww: 1, aw: 0, terraformable: 2}},
+                          d: {kind: "F, G and K stars", size: 80, yours: {systems: 20, bio: 9, elw: 1, ww: 2, aw: 0, terraformable: 3}}}};
+    // the sector map (2026-10-12): the sector you are in, one mass code, one layer
+    const asked = [], grid = {mc: "c", n: 32, sector: "Drojau", sector_index: [35, 31, 54], layer: 31, you: [25, 31, 14], kept: null, codes: "bcdefgh",
+                              cells: [{x: 3, z: 2, visited: 0, spansh: 4, state: null}, {x: 4, z: 2, visited: 5, spansh: 0, state: "complete"},
+                                      {x: 25, z: 14, visited: 2, spansh: 0, state: null}], layers: {"31": 2, "30": 1}};
+    const json = o => Promise.resolve(new Response(JSON.stringify(o), {status: 200, headers: {"Content-Type": "application/json"}}));
+    w.fetch = (u, o) => {
+      const s = String(u);
+      if (s === "api/boxel" && o && o.method === "POST") { posted.push(JSON.parse(o.body)); return json(view); }
+      if (s === "api/boxel") return json(view);
+      if (s === "api/boxel/nearby") return json(near);
+      if (s.startsWith("api/boxel/sector")) { asked.push(s.split("?")[1]); return json(grid); }
+      return realFetch(u, o);
+    };
+    const got = await w.eval(`(async () => {
+      const o = {}, m0 = store.get("nearMode", null), pc0 = data.game_pc, tick = () => new Promise(r => setTimeout(r, 60));
+      data.game_pc = true; data.boxel = {key: "smoke-" + Math.random(), auto: false};
+      store.set("nearMode", "boxel"); boxelKey = null; boxelNearKey = null; render(); await tick(); await tick();
+      const pane = document.getElementById("boxelPane");
+      o.shown = [!pane.hidden, document.getElementById("nearPane").hidden, document.getElementById("nearWrap").classList.contains("boxel")];
+      o.warning = pane.textContent.includes("Outrider cannot know how many systems a boxel holds")
+        && !!pane.querySelector(".bxhead .hint .bxwarn");   // on the "you have visited" line (the author, 2026-10-11)
+      // the switch sits on the Overview's bar, left of "This system", and back in Nearby's options on the Nearby tab
+      const v0 = view; view = "overview"; render();
+      const bar = document.querySelector("#overView .ovbar");
+      o.place = [bar.firstElementChild.classList.contains("nearmode"), bar.querySelector(".nearmode + #ovCollapse") !== null];
+      view = "near"; render();
+      o.place.push(document.getElementById("nearOpts").firstElementChild.classList.contains("nearmode"));
+      view = v0; render(); await tick();
+      o.rows = [...pane.querySelectorAll("#boxelTable tbody tr")].map(r => r.className);
+      o.next = !!pane.querySelector('.bxacts button[data-aim="next"][data-route="boxel"]:not([data-index])');
+      o.aims = [...pane.querySelectorAll('#boxelTable button[data-route="boxel"]')].map(b => b.dataset.index).join();
+      o.near = [pane.textContent.includes("from your 20 d systems: 45% with biology"), !!pane.querySelector("[data-bxpick]"),
+                pane.textContent.includes("Drojau AB-U d4 · 120 ly · you visited 2 · highest known -37"), pane.textContent.includes("highest known -1"),
+                pane.textContent.includes("done or complete nearby (left out above): Drojau QQ-A d4 ✓ complete")];
+      o.doneBtn = !!pane.querySelector('[data-bxdone="1"]');
+      const kw = r => boxelKnown(r).replace(/<[^>]+>/g, "");   // how much of a known system was found (2026-10-12)
+      o.known = [kw({known: {bodies: 3, count: 14}, scanned: false}), kw({known: {bodies: 9, count: 9}, scanned: true}),
+                 kw({known: {bodies: 0, count: 14}, scanned: false}), kw({known: {bodies: null, count: null}, scanned: false})];
+      const skip = pane.querySelector("#bxSkip"); skip.checked = true; skip.dispatchEvent(new Event("change", {bubbles: true})); await tick();
+      pane.querySelector('[data-bxdone="1"]').click(); await tick();
+      pane.querySelector("[data-bxkeep]").click(); await tick();
+      pane.querySelector("[data-bxpick]").click(); await tick();
+      const cells = [...pane.querySelectorAll(".bxg .bxc")], at = (x, z) => cells[(31 - z) * 32 + x];
+      o.grid = [cells.length, at(25, 14).className, at(25, 14).textContent, at(3, 2).className, at(4, 2).className, at(0, 0).className,
+                pane.querySelector(".bxglayer").textContent];
+      at(25, 14).dispatchEvent(new MouseEvent("mouseover", {bubbles: true})); o.gridTitle = at(25, 14).title;
+      at(25, 14).click(); await tick();                                   // explore it: its prefix from the letters
+      pane.querySelector('[data-bxglayer="30"]').click(); await tick();   // ▼
+      pane.querySelector('[data-bxgmc="d"]').click(); await tick();
+      store.set("bxGridMc", ""); bxGridLayer = null;
+      store.set("nearMode", m0 === null ? null : m0); data.game_pc = pc0; render();
+      o.back = !document.getElementById("nearPane").hidden;
+      return o; })()`);
+    w.fetch = realFetch;
+    const want = {shown: [true, true, true], warning: true, place: [true, true, true], rows: ["visited", "next", "try"], next: true, aims: "1,2", near: [true, true, true, true, true], doneBtn: true,
+                  known: ["known · 3 of 14 bodies", "known · all 9 bodies", "known · honked only", "known · nothing reported"],
+                  grid: [1024, "bxc v you", "2", "bxc k", "bxc c", "bxc", "layer 32 of 32 (yours)"],
+                  gridTitle: "Drojau TF-H c13 · you visited 2 · tap to explore this boxel",
+                  back: true, posted: [{skip_known: true}, {done: true}, {prefix: "Drojau TF-H c13-", sector_index: [35, 31, 54]}, {prefix: "Drojau AB-U d4-", sector_index: [35, 31, 54]},
+                                       {prefix: "Drojau TF-H c13-", sector_index: [35, 31, 54]}], asked: ["layer=30", "mc=d"]};
+    got.posted = posted; got.asked = asked.filter(Boolean);
+    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| boxel mode |", good ? "the switch, the boxel's list and warning, Target next and 🎯 by number, Keep, the boxels nearby" : JSON.stringify({got, want}), errors.slice(before));
+  }
+  // green gas giants (2026-10-12): the ladder model's guess as a green planet with "?", a confirmed one without; on the
+  // body in Here, a Now line ("check in the system map"), Nearby's tag, the legend, and its own alert switch
+  {
+    const w = dom.window, before = errors.length;
+    const got = w.eval(`(() => {
+      const o = {}, hd0 = hereData, v0 = view;
+      const body = (name, ggg, id) => ({name, body_id: id, type: "Planet", subtype: "Class I gas giant", genera: [], bio: 0, geo: 0, organics: [],
+        codex: [], curiosities: [], bio_guess: [], value_parts: {bio_factor: 1}, mining: 0, ggg});
+      hereData = {id64: posId(), name: "Gree", leaving: null, phenomena: [], tree: null,
+                  bodies: [body("B 3", {chance: "likely", class: "class1", rung: 1, border: 250}, 4), body("C 1", {confirmed: true}, 7), body("D 2", null, 8)]};
+      renderHere();
+      o.here = [...document.querySelectorAll("#hereRows tr[data-body]")].map(r => { const g = r.querySelector(".ggg"); return g ? (g.classList.contains("sure") ? "sure" : "guess:" + g.textContent) : "-"; });
+      o.legend = [...document.querySelectorAll("#hereLegend .lgi")].some(e => e.querySelector(".ggg"));
+      view = "now"; renderNow();
+      const line = document.querySelector("#nowView .now-ggg");
+      o.now = line ? line.textContent.replace(/\\s+/g, " ").trim() : null;
+      o.nearby = notable({ggg: [{body: "B 3", chance: "likely"}, {body: "A 1", chance: "possible"}], ggg_green: 0}).includes('class="ggg"');
+      o.alert = !!document.querySelector('#alertOpts input[data-alert="ggg"]');
+      hereData = hd0; view = v0; render();
+      return JSON.stringify(o); })()`);
+    const g = JSON.parse(got);
+    const want = {here: ["guess:?", "sure", "-"], legend: true, now: "? Potential green gas giant: B 3 · check in the system map · Green gas giant: C 1", nearby: true, alert: true};
+    const good = JSON.stringify(g) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| green gas giants |", good ? "the guess with ?, the confirmed one, Now's line, Nearby's tag, the legend, the alert switch" : JSON.stringify({g, want}), errors.slice(before));
+  }
+  // star and planet types new to your codex (2026-10-12): ✦ not in this region's codex, ✪ in none; Here's name cell,
+  // Nearby's tag naming each, the legend; nothing at all without a single body type logged
+  {
+    const w = dom.window, before = errors.length;
+    const got = w.eval(`(() => {
+      const o = {}, hd0 = hereData, v0 = view, ct0 = data.codex_types;
+      const body = (name, t, id) => ({name, body_id: id, type: "Planet", subtype: "Water world", genera: [], bio: 0, geo: 0, organics: [],
+        codex: [], curiosities: [], bio_guess: [], value_parts: {bio_factor: 1}, mining: 0, codex_type: t});
+      const ww = {id: 1300301, name: "water world"}, k = {id: 1100601, name: "K-type star"}, elw = {id: 1300100, name: "Earth-like world"};
+      data.codex_types = {"Inner Orion Spur": [1300301], "Norma Expanse": [1100601]};
+      view = "here";
+      hereData = {id64: posId(), name: "Cx", region: "Inner Orion Spur", leaving: null, phenomena: [], tree: null,
+                  bodies: [body("A", k, 0), body("B 1", ww, 4), body("B 2", elw, 5), body("C 1", null, 7)]};
+      renderHere();
+      o.here = [...document.querySelectorAll("#hereRows tr[data-body]")].map(r => { const m = r.querySelector(".cxtype"); return m ? m.textContent : "-"; });
+      o.title = (document.querySelector('#hereRows tr[data-body="A"] .cxtype') || {}).title;
+      o.legend = [...document.querySelectorAll("#hereLegend .lgi")].some(e => e.querySelector(".cxtype"));
+      const row = {region: "Inner Orion Spur", codex_types: [Object.assign({body: "A"}, k), Object.assign({body: "B 1"}, ww), Object.assign({body: "B 2"}, elw), Object.assign({body: "B 3"}, elw)]};
+      const tag = notable(row);
+      o.nearby = tag.includes('class="nb cxtype cxgal"') && tag.includes(">✪2<") && tag.includes("Earth-like world (B 2, B 3), anywhere") && tag.includes("K-type star (A)");
+      data.codex_types = {}; o.none = notable(row).includes("cxtype");
+      data.codex_types = ct0; hereData = hd0; view = v0; render();
+      return JSON.stringify(o); })()`);
+    const g = JSON.parse(got);
+    const want = {here: ["✦", "-", "✪", "-"], title: "K-type star: new to your codex in this region (logged when you scan it)", legend: true, nearby: true, none: false};
+    const good = JSON.stringify(g) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| codex body types |", good ? "✦ / ✪ in Here's name cell, Nearby's tag, the legend, nothing without a codex" : JSON.stringify({g, want}), errors.slice(before));
   }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",

@@ -18,6 +18,7 @@ one or turns it off). LinePlayer does the playing and render_sound turns static/
 import asyncio
 import glob
 import hashlib
+import http.client
 import io
 import json
 import math
@@ -34,8 +35,11 @@ import wave
 from collections import OrderedDict
 
 from . import DATA_DIR, ROOT
+from . import pronounce
 
 VOICES_DIR = os.path.join(DATA_DIR, "piper-voices")
+# how the words espeak gets wrong are said (resources/pronounce.json, your data/pronounce.json on top)
+PRONOUNCE = pronounce.Table()
 DEFAULT_VOICE = "en_GB-cori-medium"   # the author's pick (2026-10-04); Southern English Female before
 DEFAULT_FALLBACK = "en_GB-jenny_dioco-medium"
 CACHE_PHRASES = 50
@@ -50,15 +54,17 @@ EXTRA_VOICES_MAX = 4
 # which would write the download outside piper-voices/.
 VOICE_NAME = re.compile(r"^[a-z]{2,3}_[A-Z]{2}-[A-Za-z0-9_]+-(x_low|low|medium|high)$")
 FILE_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/{path}?download=true"
-# Piper's list of every voice (Settings > Voice > More voices, and the voice lab), kept beside the voices for a week
+# Piper's list of every voice (the voice lab's More voices), kept beside the voices for a week
 CATALOGUE_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/voices.json?download=true"
 CATALOGUE_CACHE = os.path.join(VOICES_DIR, "voices.json")
+# Piper's own recording of each voice (its first speaker), on the project's samples site: More voices' ▶ sample
+SAMPLE_URL = "https://rhasspy.github.io/piper-samples/samples/{base}/speaker_0.mp3"
 CATALOGUE_MAX_AGE = 7 * 86400
 # The longest line spoken (about a minute of speech): a cap on the synthesis work one request can ask for.
 # A longer line is cut at a sentence or clause boundary, never mid-word (see clip_text).
 SAY_MAX = 1000
 # Audio players, in the order "auto" tries them: (name, command playing a file (its path is appended), command
-# reading a WAV on stdin, or None when it needs a file). The voice lab uses the file commands.
+# reading a WAV on stdin, or None when it needs a file).
 PLAYERS = (("pw-play", ["pw-play"], None),
            ("paplay", ["paplay"], ["paplay"]),
            ("aplay", ["aplay", "-q"], ["aplay", "-q", "-"]),
@@ -103,7 +109,8 @@ LETTER_SOUNDS = dict(zip("ABCDEFGHIJKLMNOPQRSTUVWXYZ", (
     "ˈeɪ", "bˈiː", "sˈiː", "dˈiː", "ˈiː", "ˈɛf", "dʒˈiː", "ˈeɪtʃ", "ˈaɪ", "dʒˈeɪ", "kˈeɪ", "ˈɛl", "ˈɛm", "ˈɛn",
     "ˈəʊ", "pˈiː", "kjˈuː", "ˈɑː", "ˈɛs", "tˈiː", "jˈuː", "vˈiː", "dˈʌbəljˌuː", "ˈɛks", "wˈaɪ", "zˈɛd")))
 LETTER_SOUNDS_US = {**LETTER_SOUNDS, "O": "ˈoʊ", "R": "ˈɑːɹ", "Z": "zˈiː"}
-# A body's short name in a spoken line: its star letters ("A", "ABC") and planet number, then moons ("A 2 a b")
+# A body's short name in a spoken line: its star letters ("A", "ABC", "ABCD": a planet round four stars' barycentre,
+# up to eight) and planet number, then moons ("A 2 a b")
 # and a ring ("B 3 A Ring"); a belt ("A Belt Cluster 3", "A A Belt"); or, in a one-star system, a planet's number
 # with moons or a ring ("2 a," "3 A Ring"), its moons only at the end of a clause (so "3 a day" stays English).
 # Names are left alone: a catalogue number has more digits ("HIP 12345") or a dash ("G 139-21"), and star
@@ -112,10 +119,10 @@ LETTER_SOUNDS_US = {**LETTER_SOUNDS, "O": "ˈoʊ", "R": "ˈɑːɹ", "Z": "zˈiː
 # after a [[block]] and runs on into the next word ("2 a, up to" said "two ay-up to").
 _BODY_NAME = re.compile(r"""
     (?<![\w'’.-])
-    (?: (?P<stars>[A-Z]{1,3})\ (?P<num>\d{1,2})(?![.,]\d)
+    (?: (?P<stars>[A-Z]{1,8})\ (?P<num>\d{1,2})(?![.,]\d)
         (?P<moons>(?:\ [a-z](?![\w'’-]))*)
         (?P<ring>\ [A-Z](?=\ (?:Ring|Belt)\b))?
-      | (?P<belt>[A-Z]{1,3}(?:\ [A-Z])?)(?=\ Belt\b)
+      | (?P<belt>[A-Z]{1,8}(?:\ [A-Z])?)(?=\ Belt\b)
       | (?P<lone>\d{1,2})
         (?=(?:\ [a-z])+(?:$|[,.;:!?)])|\ [A-Z]\ Ring\b)
         (?P<lmoons>(?:\ [a-z])*)
@@ -176,8 +183,11 @@ def fetch_catalogue(force=False, cache=None):
                 return doc
         except (OSError, ValueError):   # a cut-short copy: fetch it again rather than trust it for a week
             pass
-    with urllib.request.urlopen(CATALOGUE_URL, timeout=30) as r:
-        data = r.read()
+    try:
+        with urllib.request.urlopen(CATALOGUE_URL, timeout=30) as r:
+            data = r.read()
+    except http.client.HTTPException as e:   # cut off mid-answer (IncompleteRead) is no OSError: said as one
+        raise OSError(f"{type(e).__name__}: {e}") from e
     doc = json.loads(data)
     os.makedirs(os.path.dirname(cache), exist_ok=True)
     # a temp file moved into place: an interrupted write never leaves a truncated catalogue behind
@@ -198,7 +208,8 @@ def fetch_catalogue(force=False, cache=None):
 
 def catalogue_summary(doc, installed=()):
     """The catalogue for the page: [{name, language (en_GB), language_name ("English (Great Britain)"), quality,
-    speakers, size_mb (the model), installed}], by name; entries that are not well-formed voices are left out."""
+    speakers, size_mb (the model), installed, sample (Piper's recording of it)}], by name; entries that are not
+    well-formed voices are left out."""
     out, have = [], set(installed)
     for name, v in (doc or {}).items():
         if not isinstance(v, dict) or not VOICE_NAME.fullmatch(name):
@@ -210,7 +221,8 @@ def catalogue_summary(doc, installed=()):
                     "language_name": f"{lang.get('name_english') or ''} ({lang.get('country_english') or ''})".replace(" ()", "").strip(),
                     "quality": v.get("quality") or name.rsplit("-", 1)[1],
                     "speakers": v.get("num_speakers") if isinstance(v.get("num_speakers"), int) else 1,
-                    "size_mb": round(size / 1e6) if size else None, "installed": name in have})
+                    "size_mb": round(size / 1e6) if size else None, "installed": name in have,
+                    "sample": SAMPLE_URL.format(base=voice_paths(name)[1].rsplit("/", 1)[0])})
     return sorted(out, key=lambda x: x["name"])
 
 
@@ -228,9 +240,9 @@ PART_STALE_S = 3600   # a .part untouched this long belongs to no download any m
 
 
 def sweep_parts(voices_dir, now=None):
-    """Remove .part files left by downloads that never finished (the voice lab closed mid-way: its download thread
-    is abandoned at exit, so its own clean-up never runs). Only ones untouched for PART_STALE_S: another program
-    (Outrider and the voice lab) may be downloading right now. Returns how many went."""
+    """Remove .part files left by downloads that never finished (Outrider stopped mid-way, or the retired voice lab
+    closed mid-way). Only ones untouched for PART_STALE_S: another copy of Outrider may be downloading right now.
+    Returns how many went."""
     now, n = time.time() if now is None else now, 0
     try:
         names = os.listdir(voices_dir)
@@ -259,8 +271,8 @@ def download_voice_files(files, voices_dir, progress=None, timeout=60):
     try:
         for path, meta in sorted(files, key=lambda x: x[0].endswith(".onnx")):   # the small config first
             dest = os.path.join(voices_dir, os.path.basename(path))
-            # a .part of its own: two downloads of the same voice at once (Outrider starting while the voice lab
-            # fetches it) must not write into one file, or one installs a mix and the other finds its file gone
+            # a .part of its own: two downloads of the same voice at once (two copies of Outrider, or a start-up
+            # download while the page picks the same voice) must not write into one file, or one installs a mix and the other finds its file gone
             fd, part = tempfile.mkstemp(dir=voices_dir, prefix=os.path.basename(path) + ".", suffix=".part")
             parts.append((part, dest))
             md5, got = hashlib.md5(), 0
@@ -343,8 +355,14 @@ class Speaker:
     `say()` returns None until a voice is ready, and the page uses browser speech meanwhile."""
 
     def __init__(self, voice=DEFAULT_VOICE, fallback=DEFAULT_FALLBACK, voices_dir=VOICES_DIR, on_change=None,
-                 on_switched=None):
+                 on_switched=None, speakers=None, on_speaker=None):
         self.on_change = on_change or (lambda: None)   # called (from the thread) when status changes
+        # a voice trained on several people speaks as one of them, its "speaker": {voice: speaker id} picked on the
+        # page (the voice lab), each voice keeping its own; on_speaker(that dict) remembers it (2026-10-11)
+        self.chosen_speakers = {k: v for k, v in (speakers or {}).items()
+                                if isinstance(k, str) and isinstance(v, int) and not isinstance(v, bool) and v >= 0}
+        self.on_speaker = on_speaker or (lambda chosen: None)
+        self._speaker_lists = {}   # voice -> (the config's mtime, [{id, name}]): read once per change of its file
         # called (from the thread) with the voice name once a use() switch has it speaking: the place to
         # remember the choice (a choice that never loads must not be tried again at the next start)
         self.on_switched = on_switched or (lambda name: None)
@@ -366,6 +384,8 @@ class Speaker:
         self._extra_lock = threading.Lock()
         self._extra_bad = set()     # voices that failed to load (not tried again this run)
         self._extra_slots = EXTRA_VOICES
+        self.fetching = set()       # voices downloading for the voice lab (fetch: not switched to)
+        self.fetch_failed = {}      # voice -> why its last fetch failed (the lab says so)
         self.status = "Piper not installed" if not self.PiperVoice else "starting"
 
     @property
@@ -386,8 +406,61 @@ class Speaker:
         self.on_change()
 
     def info(self):
+        sid = self.speaker_for(self.voice_name) if self.voice_name else None
+        people = self.voice_speakers(self.voice_name) if self.voice_name else []
         return {"engine": "piper" if self.ready else None, "voice": self.voice_name, "status": self.status,
-                "voices": self.installed() if self.available else [], "available": self.available}
+                "voices": self.installed() if self.available else [], "available": self.available,
+                "fetching": sorted(self.fetching), "fetch_failed": dict(self.fetch_failed),
+                # the voice's speaker when it has several (the list itself: GET /api/voices/speakers)
+                "speaker": sid, "speakers": len(people),
+                "speaker_name": next((p["name"] for p in people if p["id"] == sid), None) if sid is not None else None}
+
+    def voice_speakers(self, name):
+        """[{id, name}] for an installed voice trained on several people (its .onnx.json's num_speakers and
+        speaker_id_map, by id); [] for a one-person voice, one not installed or an unreadable config."""
+        path = os.path.join(self.dir, f"{name}.onnx.json") if name else None
+        try:
+            mtime = os.path.getmtime(path)
+        except (OSError, TypeError):
+            return []
+        hit = self._speaker_lists.get(name)
+        if hit and hit[0] == mtime:
+            return hit[1]
+        try:
+            with open(path, encoding="utf-8") as f:
+                cfg = json.load(f)
+        except (OSError, ValueError):
+            cfg = {}
+        cfg = cfg if isinstance(cfg, dict) else {}
+        ids = cfg.get("speaker_id_map") if isinstance(cfg.get("speaker_id_map"), dict) else {}
+        n = cfg.get("num_speakers")
+        n = n if isinstance(n, int) and not isinstance(n, bool) else len(ids)
+        names = {v: str(k) for k, v in ids.items() if isinstance(v, int) and not isinstance(v, bool)}
+        out = [{"id": i, "name": names.get(i, str(i))} for i in range(n)] if n > 1 else []
+        self._speaker_lists[name] = (mtime, out)
+        return out
+
+    def speaker_for(self, name):
+        """The speaker picked for a voice, while it is one of its speakers; None (the voice's first) otherwise."""
+        sid = self.chosen_speakers.get(name)
+        return sid if sid is not None and sid < len(self.voice_speakers(name)) else None
+
+    def set_speaker(self, name, sid):
+        """Pick a voice's speaker (None: its first again). False for a voice that is not installed or has no such
+        speaker. Remembered through on_speaker; the cached lines of that voice are dropped."""
+        if name not in self.installed():
+            return False
+        if sid is not None and (isinstance(sid, bool) or not isinstance(sid, int) or not 0 <= sid < len(self.voice_speakers(name))):
+            return False
+        if sid is None:
+            self.chosen_speakers.pop(name, None)
+        else:
+            self.chosen_speakers[name] = sid
+        with self._lock:
+            self._cache.clear()
+        self.on_speaker(dict(self.chosen_speakers))
+        self.on_change()
+        return True
 
     def start(self):
         if self.available:
@@ -410,6 +483,39 @@ class Speaker:
             self._switching = True
         threading.Thread(target=self._switch_loop, daemon=True, name="piper").start()
         return True
+
+    def fetch(self, name):
+        """Download a voice without switching to it (the voice lab's More voices: download, try, then use). True once
+        asked (or already there); False without Piper or for a name that is not a Piper voice."""
+        if not (self.available and VOICE_NAME.fullmatch(name or "")):
+            return False
+        if name in self.installed():
+            return True
+        with self._switch_lock:
+            if name in self.fetching:
+                return True
+            self.fetching.add(name)
+        self.fetch_failed.pop(name, None)
+        threading.Thread(target=self._fetch_only, args=(name,), daemon=True, name="piper-download").start()
+        return True
+
+    def _fetch_only(self, name):
+        before, mine = self.status, f"downloading {name} for the voice lab (about 63 MB)"
+        try:
+            ok = self._download(name, mine)
+        except Exception as e:  # noqa: BLE001 -- the lab says it failed, nothing else changes
+            ok = False
+            print(f"spoken alerts: could not download {name}: {type(e).__name__}: {e}", file=sys.stderr)
+        with self._switch_lock:
+            self.fetching.discard(name)
+        if not ok:
+            self.fetch_failed[name] = "the download failed"
+        # the status goes back to what it said (the voice in use did not change), unless a switch or another download
+        # changed it meanwhile: that one's says what is going on (review 2026-10-12); the page sees the new voice either way
+        if self.status == mine:
+            self._set_status(before if before.startswith(("ready", "using")) else ("ready" if self.ready else before))
+        else:
+            self.on_change()
 
     def _switch_loop(self):
         while True:
@@ -527,14 +633,19 @@ class Speaker:
                     self._extra.popitem(last=False)
             return self._extra[name]
 
-    def _synth(self, voice, text, speed):
+    def _synth(self, voice, text, speed, speaker=None):
         """WAV bytes, or None for a line with nothing to pronounce ('...', a lone dash): Piper skips a
-        sentence without phonemes, writes no audio and the WAV header is never set (wave.Error)."""
+        sentence without phonemes, writes no audio and the WAV header is never set (wave.Error). speaker: which of
+        a several-person voice's people speaks (None: its first)."""
         buf = io.BytesIO()
-        cfg = self.SynthesisConfig(length_scale=1.0 / speed) if speed != 1.0 else None
+        kw = dict({"length_scale": 1.0 / speed} if speed != 1.0 else {}, **({"speaker_id": speaker} if speaker is not None else {}))
+        cfg = self.SynthesisConfig(**kw) if kw else None
         try:
             with wave.open(buf, "wb") as wf:
-                voice.synthesize_wav(body_letters(text, voice_espeak(voice)), wf, syn_config=cfg)
+                esv = voice_espeak(voice)
+                known = getattr(getattr(voice, "config", None), "phoneme_id_map", None)
+                voice.synthesize_wav(pronounce.apply(body_letters(text, esv), esv, PRONOUNCE,
+                                                     known=set(known) if isinstance(known, dict) else None), wf, syn_config=cfg)
         except wave.Error:
             return None
         return buf.getvalue() or None
@@ -544,25 +655,32 @@ class Speaker:
         while len(self._cache) > CACHE_PHRASES:
             self._cache.popitem(last=False)
 
-    def say(self, text, speed=1.0, voice=None):
+    def say(self, text, speed=1.0, voice=None, speaker=None):
         """WAV bytes for `text` at `speed` (1 = the voice's own pace), or None if no voice is ready yet.
-        `voice`: a personality's own voice, when it is installed (else the main voice). Recent phrases are cached."""
+        `voice`: a personality's own voice (or one tried in the voice lab), when it is installed (else the main
+        voice). `speaker`: one of that voice's people (the lab's try); None: the one picked for it. Recent phrases
+        are cached."""
         text = clip_text(text)
         if not text or not self.ready:
             return None
         speed = min(2.0, max(0.5, float(speed or 1.0)))
         extra = self.extra_voice(voice)
-        key = (text, round(speed, 2), voice if extra else None)
+        who = voice if extra else self.voice_name
+        if speaker is None or isinstance(speaker, bool) or not isinstance(speaker, int) \
+                or not 0 <= speaker < len(self.voice_speakers(who)):
+            speaker = self.speaker_for(who)
+        # the pronunciation table's version too: a word said differently is heard at once, not from the cache
+        key = (text, round(speed, 2), voice if extra else None, speaker, PRONOUNCE.stamp())
         with self._lock:
             if key in self._cache:
                 self._cache.move_to_end(key)
                 return self._cache[key]
             if not extra:
-                audio = self._synth(self._voice, text, speed)
+                audio = self._synth(self._voice, text, speed, speaker)
                 self._keep(key, audio)
                 return audio
         with extra[1]:   # its own lock: the main voice keeps speaking meanwhile
-            audio = self._synth(extra[0], text, speed)
+            audio = self._synth(extra[0], text, speed, speaker)
         with self._lock:
             self._keep(key, audio)
         return audio

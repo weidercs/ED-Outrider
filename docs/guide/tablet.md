@@ -5,9 +5,11 @@
 ## 📱 On a tablet
 
 Open `http://<your PC>:8025/tablet` on a tablet in landscape (made for a larger tablet, about 1280 × 800 CSS pixels):
-the same pages in a cockpit layout, in one of nine themes: LCARS (below), Elite (the cockpit HUD's orange, with cut
-corners), four from Babylon 5 (Earthforce: navy and steel; Narn: rust and ochre, wedge-cut; Minbari: indigo, lilac and
-pearl, soft arches and thin double lines; Centauri: gold on royal purple, ornate notched double borders), Sith (black,
+the same pages in a cockpit layout, in one of eleven themes: LCARS (below), Elite (the cockpit HUD's orange, with cut
+corners), six from Babylon 5 (Earthforce: navy and steel; Narn: rust and ochre, wedge-cut; Minbari: indigo, lilac and
+pearl, soft arches and thin double lines; Centauri: gold on royal purple, ornate notched double borders; Vorlon: sea
+green and gold on deep green-black, soft arcs with a faint glow; Shadows: violet and light grey on black and dark purple,
+thorn-cut corners and spiked lettering), Sith (black,
 crimson, thin hard lines), Rebel Alliance (cockpit orange and sand, blue for what is chosen) or Dark (a modern app's dark mode: slate
 cards, switches and line icons beside the words). Settings picks one per tablet. The Elite, Babylon 5 and Star Wars
 themes show their emblem in the free space under the page list (credits at the bottom of this page). Outrider must listen on your network
@@ -18,11 +20,11 @@ for this: see [Other devices on your network](install.md#-other-devices-on-your-
 </p>
 
 - **The strip on top** shows the system, fuel and unsold data, and the link to Outrider in words ("LINKED",
-  "STALE · 48 S AGO", "NO LINK · RETRYING").
+  "LINKED · NO GAME", "UNLINKED · RETRYING").
 - **The pages** are on the left in three groups of four: Explore (Now, Nearby, Here, Bio/Geo), Navigate (Bookmarks,
   Search, Map, Plot Route) and Records (History, Log, Materials, My firsts). There is no Overview.
-- **Tap a row** in a table for all of its facts, including the columns too narrow to show, with Show in Here and
-  Bookmark.
+- **Tap a row** in a table for all of its facts, including the columns too narrow to show, with Show in Here,
+  Bookmark and, on a route's row (game PC), 🎯 Target.
 - **The maps by touch:** on the galaxy map one finger rotates, two fingers move it and a pinch zooms; on Plot Route's
   map two fingers move and pinch.
 - **On a planet** the tablet switches to Now when the surface map appears (the Now button says MAP) and back to your
@@ -34,8 +36,9 @@ for this: see [Other devices on your network](install.md#-other-devices-on-your-
   with a Docker server and no browser open (turn one off if you hear both). **Choose alerts…** under it picks which
   alerts the tablet says (🗣) and plays (🔊), apart from the PC's choices; it starts from what the PC saved as defaults
   for new browsers.
-- **Target next** on Plot Route runs at once (no countdown), since tapping the tablet leaves the game focused. Auto
-  honk, auto-target's switch and test, backups and the voice settings stay on the PC.
+- **Target next** on Plot Route and every 🎯 (a route's systems, a boxel's) run at once (no countdown), since
+  tapping the tablet leaves the game focused. Auto honk, auto-target's switch and test, backups and the voice
+  settings stay on the PC.
 - **Settings** (bottom right): the theme, a dim switch, the theme's emblem, **Show the game controls** (off: no rail
   on this tablet and the pages take its width, for a second tablet), Play alerts here and Choose alerts…, the screen size in CSS
   pixels, the app's version and, in the Android app, its own screens (Server…, Voice…, App menu…), and Sign out when
@@ -59,10 +62,10 @@ Any browser at `/tablet` works too, without the wake word and Ask.
 
 The fonts are Antonio and Barlow Condensed, both under the SIL Open Font License and shipped with Outrider, as are the
 other themes' (Michroma, Saira, Orbitron, Exo 2, Russo One, Marcellus, Cinzel, Cormorant Garamond, Share Tech Mono, Rajdhani,
-Oxanium, Inter); Dark's icons
+Oxanium, Inter, Metal Mania); Dark's icons
 are Lucide's (ISC licence, in `static/icons/`). A heading font of your own goes in your git-ignored `data/` folder and
 is never shared: `data/fonts/<theme>-display.ttf`: `lcars-display.ttf`, `elite-display.ttf` (a Eurostile-style
-face), `babylon5-display.ttf`, `narn-display.ttf`, `minbari-display.ttf`, `centauri-display.ttf`, `sith-display.ttf` or
+face), `babylon5-display.ttf`, `narn-display.ttf`, `minbari-display.ttf`, `centauri-display.ttf`, `vorlon-display.ttf`, `shadow-display.ttf`, `sith-display.ttf` or
 `alliance-display.ttf`.
 
 ---

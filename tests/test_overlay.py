@@ -98,16 +98,16 @@ def body(name, dist, **kw):
 
 
 DETAIL = {"name": "Test Sector AB-C d1-2", "bodies": [
-    {"name": "A", "type": "Star", "subtype": "K (Yellow-Orange) Star", "dist_ls": 0, "value_parts": {"carto_left": 0}},
-    body("A 3", 900, notable="WW", terraformable=True, subtype="Water world", value_parts={"carto_left": 2_400_000}),
-    body("A 1", 300, value_parts={"carto_left": 90_000}),                                        # small: not listed
-    body("B 1", 50, subtype="Icy body", value_parts={"bio_left": 19_000_000}, genera=["Stratum"],
+    {"name": "A", "body_id": 0, "type": "Star", "subtype": "K (Yellow-Orange) Star", "dist_ls": 0, "value_parts": {"carto_left": 0}},
+    body("A 3", 900, body_id=9, notable="WW", terraformable=True, subtype="Water world", value_parts={"carto_left": 2_400_000}),
+    body("A 1", 300, body_id=7, value_parts={"carto_left": 90_000}),                                        # small: not listed
+    body("B 1", 50, body_id=12, subtype="Icy body", value_parts={"bio_left": 19_000_000}, genera=["Stratum"],
          bio_guess=[{"genus": "Stratum", "codex_new": True, "codex_galaxy_new": True, "variants": ["Stratum Tectonicas - Lime"],
                      "codex_have": []}]),
-    body("B 2", 70, subtype="Rocky body", value_parts={"bio_left": 4_000_000}, organics=[
+    body("B 2", 70, body_id=13, subtype="Rocky body", value_parts={"bio_left": 4_000_000}, organics=[
         {"genus": "Bacterium", "samples": 1, "done": False, "lost": False}]),
-    body("C 1", 20, mapped=True, value_max=3_000_000, value_parts={"carto_left": 0}),
-    body("C 2", 25, value_parts={"carto_left": 600_000}, curiosities=[{"tag": "close ring", "why": "x"}]),
+    body("C 1", 20, body_id=20, mapped=True, value_max=3_000_000, value_parts={"carto_left": 0}),
+    body("C 2", 25, body_id=21, value_parts={"carto_left": 600_000}, curiosities=[{"tag": "close ring", "why": "x"}]),
 ]}
 
 
@@ -133,11 +133,14 @@ class SystemPanel(unittest.TestCase):
         self.assertIsNone(O.system_panel({"name": "Empty", "bodies": [body("A 1", 10)]}, pal))   # nothing worth it: no panel
 
     def test_credits(self):
-        self.assertEqual([O.credits(v) for v in (950, 59_400, 2_400_000, 1_230_000_000, None)], ["950", "59k", "2.4M", "1.2B", "0"])
+        self.assertEqual([O.credits(v) for v in (950, 59_400, 2_400_000, 1_230_000_000, None)], ["950", "59k", "2.4M", "1.23B", "0"])
+        # as page.js credits(): the unit follows what the figure rounds to (review 2026-10-11)
+        self.assertEqual([O.credits(v) for v in (999_999, 999_600, 999_950_000, 1_250_000_000, 999.6, 2_500)],
+                         ["1.0M", "1.0M", "1.00B", "1.25B", "1k", "3k"])
 
 
 class BodyPanel(unittest.TestCase):
-    B = body("B 1", 50, subtype="Icy body", landable=True, gravity=0.42, atmosphere="Thin Neon atmosphere", temperature=27.4,
+    B = body("B 1", 50, body_id=12, subtype="Icy body", landable=True, gravity=0.42, atmosphere="Thin Neon atmosphere", temperature=27.4,
              first_discovered=True, geo=2, value_parts={"carto_left": 1_200_000, "bio_left": 20_000_000, "bio_factor": 5},
              genera=["Stratum", "Bacterium"],
              bio_guess=[{"genus": "Stratum", "best": "Stratum Tectonicas", "value": 3_800_000, "codex_galaxy_new": True,
@@ -353,6 +356,30 @@ class Runner(unittest.TestCase):
         self.assertEqual(said, [])
         self.assertEqual(self.R.main(["--port", "8026", "--config", os.path.join(tmp.name, "none.toml"), "--setup"]), 0)   # Outrider's own arguments pass
 
+    def test_pip_ok_without_pyqt_is_not_repeated(self):
+        """pip answers 0 but this Python still cannot import PyQt6 (a --user or target install elsewhere): said once,
+        not a new pip run on every tick (review 2026-10-11)."""
+        self.qt, self.pip_answer = False, (0, "")
+        for _ in range(4):
+            self.run.tick(True)
+        self.assertEqual(len(self.pips), 1)
+        st = self.run.status()
+        self.assertEqual(st["state"], "install_failed")
+        self.assertIn("still cannot be imported", st["why"])
+
+    def test_a_stop_after_a_healthy_run_starts_a_new_count(self):
+        """'Five times in a row' (the guide): a window that drew for a while and then stopped is not a start-up crash,
+        so stops spread over days of play never add up to giving up (review 2026-10-11)."""
+        self.run.tick(True)
+        for n in range(self.R.CRASHES_MAX + 2):
+            self.t += self.R.HEALTHY_S + 1                            # it ran a good while
+            self.started[-1].code = 1
+            self.run.tick(True)
+            self.assertEqual(self.run.status()["state"], "restarting", n)
+            self.t += self.R.BACKOFF_S[0]                             # always the first, shortest wait
+            self.run.tick(True)
+        self.assertEqual(len(self.started), self.R.CRASHES_MAX + 3)
+
     def test_crashes_back_off_then_give_up(self):
         self.run.tick(True)
         for n in range(1, self.R.CRASHES_MAX + 1):
@@ -461,6 +488,35 @@ class NowPanel(unittest.TestCase):
         self.assertEqual(colour_of(quiet, "⛽ 80%"), pal["text"])
         self.assertEqual(texts(quiet)[-1], "Last session · 3 jumps")
         self.assertIsNone(O.now_panel({}, pal))
+
+    def test_now_route_and_boxel(self):
+        """Now's panel says where the next jump goes: the route's next stop as the page's strip words it, the kept
+        boxel's Next (review suggestion, 2026-10-12)."""
+        pal = O.palette()
+        join = lambda parts: "".join(t for t, _ in parts)
+        hw = {"index": 38, "at": 37, "total": 120, "destination": "Colonia", "refuel_in": 3,
+              "next": {"name": "Stop 38", "jumps": 1, "distance": 4.23, "neutron": True}}
+        self.assertEqual(join(O.route_parts({"kind": "highway", "summary": hw})),
+                         "🛣 Next: Stop 38 · ⚡ neutron · 4.2 ly · 38 of 120 · refuel in 3 jumps")
+        self.assertEqual(join(O.route_parts({"kind": "highway", "summary": dict(hw, index=0, at=None, refuel_in=None, refuel_here=True)})),
+                         "🛣 Start: Stop 38 · ⚡ neutron · 4.2 ly · 0 of 120 · ⛽ refuel here")
+        self.assertEqual(join(O.route_parts({"kind": "highway", "summary": dict(hw, off_route=True, nearest={"name": "Stop 12", "distance": 8.04})})),
+                         "🛣 Off Route: Detour · nearest Stop 12 8.0 ly")
+        self.assertEqual(join(O.route_parts({"kind": "highway", "summary": dict(hw, complete=True)})), "🛣 Highway complete")
+        rc = {"kind": "exo", "index": 2, "at": 1, "total": 9, "left_here": 2, "next": {"name": "Pru Aim", "jumps": 3, "distance": None}}
+        self.assertEqual(join(O.route_parts({"kind": "riches", "summary": rc})), "🧬 Next: Pru Aim · 3 jumps · 2 of 9 · 2 species to sample here")
+        self.assertEqual(O.route_parts(None), [])
+        bx = {"label": "Smojooe KL-P d5", "name": "Smojooe KL-P d5-41", "n": 41, "spansh": False}
+        self.assertEqual(join(O.boxel_parts(bx)), "▦ Boxel: next Smojooe KL-P d5-41 · to try")
+        self.assertEqual(join(O.boxel_parts(dict(bx, spansh=True, known={"bodies": 3, "count": 14}))), "▦ Boxel: next Smojooe KL-P d5-41 · known · 3 of 14 bodies")
+        self.assertEqual(join(O.boxel_parts(dict(bx, complete=True))), "▦ Smojooe KL-P d5 ✓ complete")
+        self.assertEqual([O.boxel_known_words(dict(spansh=True, scanned=True, known={"bodies": 9, "count": 9})),
+                          O.boxel_known_words(dict(known={"bodies": 0, "count": 9})), O.boxel_known_words(dict(known={"bodies": 1}))],
+                         ["known · all 9 bodies", "known · honked only", "known · 1 body, count unknown"])
+        lines = texts(O.now_panel(dict(self.INFO, route={"kind": "highway", "summary": hw}, boxel=bx), pal))
+        self.assertEqual(lines[2:5], ["🛣 Next: Stop 38 · ⚡ neutron · 4.2 ly · 38 of 120", "   refuel in 3 jumps",   # wrapped, not cut
+                                      "▦ Boxel: next Smojooe KL-P d5-41 · to try"])   # under the target, before fuel
+        self.assertTrue(lines[5].startswith("⛽ 22%"))
 
     def test_long_rows_wrap_not_cut(self):
         """A row too long for the panel goes on the next line, broken between its parts, never cut with … (the Next
@@ -779,6 +835,32 @@ class Server(unittest.TestCase):
         self.state.overlay_cfg.update(system_panel=True, enabled=False)
         self.assertEqual(self.state.overlay_panels(now=1010), [])
 
+    def test_nothing_while_the_game_loads(self):
+        """After a crash the old Status.json still says live: the relaunched game's loading screens, before the menu
+        and after it, showed the dead session's panels until the new session's Location (the author, 2026-10-11)."""
+        j = self.state.journals
+        j.handle({"event": "FSDJump", "timestamp": ed_outrider.iso_ts(1000), "StarSystem": "Test Sector AB-C d1-2",
+                  "SystemAddress": 77, "StarPos": [0, 0, 0]})
+        self.state.system_detail = lambda id64: DETAIL if id64 == 77 else None
+        self.state.overlay_cfg.update(enabled=True)
+        j.status_json = {"live": True, "flags": ed_outrider.FLAG_SUPERCRUISE, "gui_focus": 0}   # the crashed session's
+        shown = lambda: [p["id"] for p in self.state.overlay_panels(now=1010)]
+        self.assertEqual(shown(), ["system"])
+        j.handle({"event": "Fileheader", "timestamp": ed_outrider.iso_ts(1100), "part": 1})       # relaunched
+        self.assertEqual(shown(), [])
+        j.handle({"event": "Location", "timestamp": ed_outrider.iso_ts(1200), "StarSystem": "Test Sector AB-C d1-2",
+                  "SystemAddress": 77, "StarPos": [0, 0, 0]})
+        self.assertEqual(shown(), ["system"])
+        j.handle({"event": "Fileheader", "timestamp": ed_outrider.iso_ts(1300), "part": 2})       # a long session's next file
+        self.assertEqual(shown(), ["system"])
+        j.handle({"event": "LoadGame", "timestamp": ed_outrider.iso_ts(1400), "Commander": "Test", "FID": "F1"})   # menu, then in
+        self.assertEqual(shown(), [])
+        # kept over a restart of Outrider (the reader resumes from its offsets)
+        self.assertTrue(ed_outrider.Journals(self.db).loading())
+        j.handle({"event": "Location", "timestamp": ed_outrider.iso_ts(1400), "StarSystem": "Test Sector AB-C d1-2",
+                  "SystemAddress": 77, "StarPos": [0, 0, 0]})   # the same second as the LoadGame: loaded
+        self.assertEqual(shown(), ["system"])
+
     def test_body_panel_shows_flying_near_or_heading_to(self):
         self.state.journals.handle({"event": "FSDJump", "timestamp": ed_outrider.iso_ts(1000), "StarSystem": "Test Sector AB-C d1-2",
                                     "SystemAddress": 77, "StarPos": [0, 0, 0]})
@@ -790,10 +872,32 @@ class Server(unittest.TestCase):
         self.assertEqual([p["items"][0]["runs"][0][0] for p in self.state.overlay_panels(now=1010)], ["B 1"])   # near it
         st.update(destination={"System": 77, "Body": 9, "Name": "Test Sector AB-C d1-2 A 3"})
         self.assertEqual([p["items"][0]["runs"][0][0] for p in self.state.overlay_panels(now=1010)], ["A 3"])   # targeted wins
+        # a station or a mining site targeted is no body: the one you are near stays (review 2026-10-11)
+        st.update(destination={"System": 77, "Body": 40, "Name": "Harper Dock"})
+        self.assertEqual([p["items"][0]["runs"][0][0] for p in self.state.overlay_panels(now=1010)], ["B 1"])
+        st.update(destination={"System": 77, "Body": 13, "Name": "$SAA_Unknown_Signal:#type=$PlanetaryMiningLocation_Name;:#index=3;"})
+        self.assertEqual([p["items"][0]["runs"][0][0] for p in self.state.overlay_panels(now=1010)], ["B 2"])   # its planet
+        st.update(destination={"System": 77, "Body": 9, "Name": "Test Sector AB-C d1-2 A 3"})
         st["flags"] = ship | ed_outrider.FLAG_LANDED                                                    # landed: the radar's
         self.assertEqual(self.state.overlay_panels(now=1010), [])
         st.update(flags=ship, destination=None, body=None)                                             # nothing near
         self.assertEqual(self.state.overlay_panels(now=1010), [])
+
+    def test_now_heads_only_for_a_body_of_this_system(self):
+        """Now's heading-to line: a targeted station or mining site is no body (the page's Now view matches by body id
+        too), so no "➜ Harper Dock · nothing to do here" and no raw $SAA_ name (review 2026-10-11)."""
+        self.state.journals.handle({"event": "FSDJump", "timestamp": ed_outrider.iso_ts(1000), "StarSystem": "Test Sector AB-C d1-2",
+                                    "SystemAddress": 77, "StarPos": [0, 0, 0]})
+        self.state.system_detail = lambda id64: DETAIL if id64 == 77 else None
+        st = {"live": True, "flags": ed_outrider.FLAG_SUPERCRUISE | ed_outrider.FLAG_IN_MAIN_SHIP, "gui_focus": 0}
+        self.state.journals.status_json = st
+        info = lambda: self.state.overlay_now_info(self.state.journals.pos, 1010)
+        st["destination"] = {"System": 77, "Body": 40, "Name": "Harper Dock"}
+        self.assertEqual((info()["destination"], info()["destination_ls"]), (None, None))
+        st["destination"] = {"System": 77, "Body": 13, "Name": "$SAA_Unknown_Signal:#type=$PlanetaryMiningLocation_Name;:#index=3;"}
+        self.assertEqual((info()["destination"], info()["destination_ls"]), ("B 2", 70))   # the site's planet
+        st["destination"] = {"System": 77, "Body": 9, "Name": "Test Sector AB-C d1-2 A 3"}
+        self.assertEqual((info()["destination"], info()["destination_ls"]), ("A 3", 900))
 
     def test_radar_on_a_body(self):
         self.state.overlay_cfg.update(enabled=True, system_panel=False, body_panel=False)
@@ -805,6 +909,14 @@ class Server(unittest.TestCase):
         self.assertEqual(self.state.overlay_panels(now=1), [])
         self.state.surface_summary = lambda now=None: None
         self.assertEqual(self.state.overlay_panels(now=1), [])
+
+    def test_loopback_for_the_window(self):
+        """The window always asks http://127.0.0.1:<port>: with [server] host one LAN address Outrider listens on
+        loopback too, or the window draws nothing (review 2026-10-11)."""
+        self.assertTrue(ed_outrider.loopback_too("192.168.1.20"))
+        self.assertTrue(ed_outrider.loopback_too("mypc.lan"))
+        for h in ("127.0.0.1", "::1", "localhost", "0.0.0.0", "::", ""):
+            self.assertFalse(ed_outrider.loopback_too(h), h)
 
     def test_window_wanted(self):
         import outrider.overlay_runner as R

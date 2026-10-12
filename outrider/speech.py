@@ -12,8 +12,8 @@ plain wording.
 The file is re-read whenever it changes, so an edit takes effect without restarting Outrider.
 
 Lines you never want to hear again go in data/speech_banned.json, or next to a speech file of your own
-({alert: [line, ...]}, written by the 👎 in the page's "Spoken lines" list and the voice lab's "Cut this line").
-They are left out here, so the page and the voice lab both get the trimmed lists; a ban never empties a list (the last line of one cannot be banned, and a
+({alert: [line, ...]}, written by the 👎 in the page's "Spoken lines" list and the voice lab's "✂ Cut this line").
+They are left out here, so the page (and its voice lab) gets the trimmed lists; a ban never empties a list (the last line of one cannot be banned, and a
 list whose every line is banned by hand is used whole).
 """
 import json
@@ -40,6 +40,21 @@ KEYS = {
     "bio_tag_near": "within 100 m of a plant you tagged with the composition scanner where the next sample of the "
                     "species you are sampling would count: {genus}, {distance} (metres)",
     "codex": "a new codex entry: {entry} (the entry's name), {what} (voucher or new to the region)",
+    "phenomena": "the FSS found notable stellar phenomena in a system where you have none on record (said with delight, in "
+                 "every style: the co-pilot loves new things): {what} (already phrased, e.g. 'three notable stellar "
+                 "phenomena, all in rings')",
+    "rare_star": "a rare star resolved, by the arrival's own scan or the FSS (said with delight, in every style): {what} "
+                 "(already phrased, e.g. 'a black hole at B', 'a Wolf-Rayet star, the main star')",
+    "surface_site": "surface sites found on a body: Guardian or Thargoid sites (the DSS's map says them) or an unknown "
+                    "planetary anomaly (the FSS says it), said with delight in every style: {what} (already phrased, e.g. "
+                    "'Guardian sites on B 3')",
+    "signal_poi": "the FSS found a signal worth a detour, new to this system: a Titan, a Guardian beacon, a generation ship "
+                  "or a listening post (said with delight, in every style): {what} (already phrased, e.g. 'the Titan "
+                  "Cocijo', 'a Guardian beacon')",
+    "curious": "the system you are in shows curiosities for the first time (rare planet classes, odd orbits, ringed "
+               "landables...): one line that there is something to look at on the panels, never the list",
+    "ggg": "one of your own scans predicts a green gas giant (the community's seven-layer ladder model: a guess, said "
+           "with delight, never a fact): {body} (the body's short name, e.g. 'B 3')",
     "fuel_low": "the game's low fuel warning: {pct}",
     "fuel_star": "arrived under 30% fuel at a star you cannot scoop: {pct}, {star}",
     "fuel_target": "targeted a star you cannot scoop with under 30% fuel: {pct}, {system}",
@@ -106,7 +121,7 @@ VOICE_NAME = re.compile(r"^[a-z]{2,3}_[A-Z]{2}-[A-Za-z0-9_]+-(x_low|low|medium|h
 def resolve_speech_file(name, root, default, resources=RESOURCES_DIR, warn=None):
     """[server] speech_file, resolved: relative to `root`, ~ expanded; `default` when unset. A relative name missing
     there but present in resources/ (a config written before the layout move, speech_file = "speech.json") is taken
-    from resources/, and warn(text) says so (review F22). The server and the voice lab both resolve it here, so they
+    from resources/, and warn(text) says so (review F22). The server resolves it here, so it and the tests
     always speak from the same file."""
     if not name:
         return default
@@ -304,7 +319,7 @@ class SpeechLines:
 
     def version(self):
         self.refresh()
-        # the bans are part of it: a 👎 (or the voice lab's cut) makes every page fetch the trimmed lines
+        # the bans are part of it: a 👎 (or the voice lab's ✂) makes every page fetch the trimmed lines
         return f"{self._mtime}-{self._bans_mtime}-{self._bans_gen}" if self.doc else None
 
     def info(self):
@@ -374,11 +389,11 @@ class SpeechLines:
 
 
 def ban_line(speech_path, alert, template, ban=True):
-    """set_ban on the speech file at `speech_path` (the voice lab's "Cut this line")."""
+    """set_ban on the speech file at `speech_path` (a script's or a test's way to cut a line)."""
     return SpeechLines(speech_path).set_ban(alert, template, ban)
 
 
-# ---- filling and tidying lines outside the page (the voice lab; the page has its own copies in page.js) ----
+# ---- filling and tidying lines outside the page (a Python mirror of page.js's, kept in step by the tests) ----
 
 # made-up values for trying lines out, already phrased the way the page phrases them
 SAMPLES = {
@@ -387,6 +402,12 @@ SAMPLES = {
     "find_body": {"what": "Water world, terraformable, undiscovered", "body": "A 3", "value": "2.3M"}, "mapped_before": {},
     "find_bio": {"body": "B 7", "value": "19.0M"}, "sample_clear": {"genus": "Stratum"}, "bio_tag_near": {"genus": "Tussock", "distance": 80},
     "codex": {"entry": "Stratum Tectonicas", "what": "new to your codex for this region"},
+    "phenomena": {"what": "three notable stellar phenomena, all in rings"},
+    "rare_star": {"what": "a black hole at B"},
+    "surface_site": {"what": "Guardian sites on B 3"},
+    "signal_poi": {"what": "a Guardian beacon"},
+    "curious": {},
+    "ggg": {"body": "B 3"},
     "fuel_low": {"pct": 18}, "fuel_star": {"pct": 22, "star": "white dwarf"},
     "fuel_target": {"pct": 22, "system": "Drojau LL-O b26-3"},
     "fuel_topup": {"rate": "8 of the last 20 stars were scoopable", "jumps": "about 6 jumps"}, "hull": {"pct": 42}, "interdicted": {"by": "someone"},
@@ -416,7 +437,7 @@ SAMPLES = {
     "sale_left": {"text": "Sold 50 systems for 14.8M. 43 systems are still unsold, 2.0M, 270 first discoveries: "
                           "sell the next page."},
 }
-# the voice lab's Audition: one personality across the alerts that matter, in the order a session hears them
+# the voice lab's Audition (page.js AUDITION_KEYS): one personality across the alerts that matter, in a session's order
 AUDITION = ("game_start", "arrival_brief", "find_body", "leaving", "fuel_low", "sold", "bio_done_last", "session_recap")
 DEFAULT_NAMES = "Boss, Hefay, Sir"
 

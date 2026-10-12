@@ -232,9 +232,10 @@ class Continuation(unittest.TestCase):
 class Settings(unittest.TestCase):
 
     def test_config(self):
-        self.assertEqual(U.upload_settings({})["uploads"], {"eddn": {"enabled": False}, "edsm": {"enabled": False}})
-        got = U.upload_settings({"eddn": {"enabled": True, "test": True}, "edsm": {"enabled": "yes"}})["uploads"]
-        self.assertEqual(got, {"eddn": {"enabled": True}, "edsm": {"enabled": False}})   # a non-bool is the default
+        self.assertEqual(U.upload_settings({})["uploads"], {"eddn": {"enabled": False}, "edsm": {"enabled": False},
+                                                          "inara": {"enabled": False}})
+        got = U.upload_settings({"eddn": {"enabled": True, "test": True}, "edsm": {"enabled": "yes"}, "inara": {"enabled": True}})["uploads"]
+        self.assertEqual(got, {"eddn": {"enabled": True}, "edsm": {"enabled": False}, "inara": {"enabled": True}})   # a non-bool is the default
 
     def test_test_mode_is_the_developers(self):
         """EDDN's test schemas: an environment variable, never a setting (nothing in the config reads it)."""
@@ -273,7 +274,7 @@ class StateSwitches(unittest.TestCase):
         self.assertEqual(self.written()["eddn"]["enabled"], False)   # written into the config file
         st.set_upload("edsm", True)
         self.assertTrue(st.upload_on("edsm"))
-        self.assertEqual(self.written(), {"eddn": {"enabled": False}, "edsm": {"enabled": True}})
+        self.assertEqual(self.written(), {"eddn": {"enabled": False}, "edsm": {"enabled": True}, "inara": {"enabled": False}})
         st.upload_report("edsm", {"error": None, "at": 1, "results": [(1, "held", "203 Commander name/API Key not found", None)]})
         self.assertFalse(st.upload_on("edsm"))                   # waiting on the player
         self.assertEqual(st.uploads_summary()["edsm"]["held"], "203 Commander name/API Key not found")
@@ -286,11 +287,11 @@ class StateSwitches(unittest.TestCase):
         """The console says whether each upload is on, and EDDN's test schemas whenever OUTRIDER_EDDN_TEST is set."""
         st = self.state
         with unittest.mock.patch.dict(os.environ, {U.TEST_ENV: ""}):
-            self.assertEqual(st.uploads_line(), "uploads: EDDN off, EDSM off (switched in Settings -> Uploads)")
+            self.assertEqual(st.uploads_line(), "uploads: EDDN off, EDSM off, Inara off (switched in Settings -> Uploads)")
         st.upload_cfg["eddn"]["enabled"] = True
         with unittest.mock.patch.dict(os.environ, {U.TEST_ENV: "1"}):
             self.assertEqual(st.uploads_line(), "uploads: EDDN on (TEST: EDDN's test schemas only, OUTRIDER_EDDN_TEST is set), "
-                                                "EDSM off (switched in Settings -> Uploads)")
+                                                "EDSM off, Inara off (switched in Settings -> Uploads)")
             self.assertTrue(st.uploads_summary()["eddn"]["test"])
 
     def test_written_in_place(self):
@@ -305,11 +306,18 @@ class StateSwitches(unittest.TestCase):
         self.assertIn("port = 8030   # kept", text)
         self.assertIn("[eddn]\nenabled = true", text)
         self.assertIsNone(self.state.set_upload("eddn", True))
+        self.state.uploads_hub.set_mark("eddn", ("Journal.2026-10-01T000000.01.log", 100), "2026-10-01T00:00:00Z")
+        self.state.uploads_hub.flush()
+        self.assertIn("eddn", ed_outrider.meta_get(self.db, "upload_marks"))
         self.state.config_path = os.path.join(self.state.config_path, "not-a-folder", "x.toml")
         with unittest.mock.patch("sys.stderr"):
             note = self.state.set_upload("eddn", False)
         self.assertFalse(self.state.upload_on("eddn"))
         self.assertTrue(note.startswith("EDDN is off until Outrider stops, but the config file could not keep it"), note)
+        # its mark is gone with the switch: a next start reading enabled = true from the file starts from then, not from
+        # where it was switched off (review 2026-10-11)
+        self.assertNotIn("eddn", self.state.uploads_hub.marks)
+        self.assertNotIn("eddn", ed_outrider.meta_get(self.db, "upload_marks") or {})
 
     def test_not_among_server_settings(self):
         secs = [s["section"] for s in self.state.config_info()["sections"]]
@@ -326,7 +334,7 @@ class StateSwitches(unittest.TestCase):
         async def go():
             async with TestClient(TestServer(ed_outrider.make_app(self.state))) as c:
                 out = [(await c.post("/api/uploads", json={"service": "eddn", "on": True})).status]
-                for bad in ({"service": "inara", "on": True}, {"service": "eddn", "on": "yes"}, ["eddn"]):
+                for bad in ({"service": "spansh", "on": True}, {"service": "eddn", "on": "yes"}, ["eddn"]):
                     out.append((await c.post("/api/uploads", json=bad)).status)
                 return out
         self.assertEqual(asyncio.run(go()), [200, 400, 400, 400])
@@ -663,6 +671,30 @@ class MarksAndCatchUp(unittest.TestCase):
         self.assertEqual([m["event"] for m in self.queued()], ["FSDJump"])   # Bsys, not lost
         self.state.refresh_leases()                                # nothing queued twice
         self.assertEqual(len(self.queued()), 1)
+
+    def test_take_over_with_a_third_instance_following(self):
+        """Three Outriders on one journal: A sends, this one and C follow. A stops; this one takes over and rewinds to A's
+        handover mark, not to C's (C only followed, its mark at the journal's end): the stretch after A's stop was sent
+        by nobody (review 2026-10-11)."""
+        self.write(header(now_ts(900)), loadgame(now_ts(899)))
+        at_a = os.path.getsize(self.path)
+        self.write(self.jump(800, "A"))
+        self.j.scan_dir(self.dir, commit_each=True, upload="catchup")
+        self.state.set_upload("eddn", True)
+        mark = [os.path.basename(self.path), at_a, now_ts(800)]
+        U.write_lease(self.dir, "aaaaaa0", {"host": "erangel", "services": ["eddn"], "wanted": ["eddn"], "beat": 1,
+                                            "marks": {"eddn": mark}})
+        self.state.refresh_leases()
+        self.assertFalse(self.state.upload_on("eddn"))
+        self.write(self.jump(30, "Bsys"))
+        end = [os.path.basename(self.path), os.path.getsize(self.path), now_ts(30)]
+        U.write_lease(self.dir, "zzzzzz9", {"host": "third", "services": [], "wanted": ["eddn"], "beat": 1,
+                                            "marks": {"eddn": end}})   # C: follows, its mark past Bsys
+        U.write_lease(self.dir, "aaaaaa0", {"host": "erangel", "services": [], "stopped": True, "marks": {"eddn": mark}})
+        self.j.scan_dir(self.dir, upload="live")
+        self.state.refresh_leases()
+        self.assertTrue(self.state.upload_on("eddn"))
+        self.assertEqual([m["event"] for m in self.queued()], ["FSDJump"])   # Bsys, from A's mark
 
     def test_cap(self):
         self.write(header(now_ts(9 * 86400)), loadgame(now_ts(9 * 86400 - 1)))

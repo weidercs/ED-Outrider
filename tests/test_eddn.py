@@ -123,6 +123,25 @@ class JournalSchema(unittest.TestCase):
         [(_, env)] = E.build(dock, s, "v")
         self.assertNotIn("Body", env["message"])
 
+    def test_a_docked_location_is_no_body(self):
+        """Logged in docked: the game's Location names the station as the Body (BodyType "Station"). A planetary Docked
+        then sent the station's name as its planet (review 2026-10-11); a Location at a planet still gives its body."""
+        loc = {"timestamp": "2026-10-08T10:00:00Z", "event": "Location", "Docked": True, "StationName": "Thorn Port",
+               "StationType": "CraterPort", "MarketID": 3700000002, "StarSystem": "Smojooe AR-E b25-8",
+               "SystemAddress": 18264118102193, "StarPos": [-4177.09, -1.0, 3324.53],
+               "Body": "Thorn Port", "BodyID": 40, "BodyType": "Station"}
+        dock = {"timestamp": "2026-10-08T10:20:00Z", "event": "Docked", "StationName": "Thorn Port",
+                "StationType": "CraterPort", "StarSystem": "Smojooe AR-E b25-8", "SystemAddress": 18264118102193,
+                "MarketID": 3700000002}
+        s = session()
+        s.feed(loc)
+        [(_, env)] = E.build(dock, s, "v")
+        self.assertNotIn("Body", env["message"])
+        s = session()
+        s.feed(dict(loc, Docked=False, Body="Smojooe AR-E b25-8 A 1", BodyID=5, BodyType="Planet"))
+        [(_, env)] = E.build(dock, s, "v")
+        self.assertEqual((env["message"]["Body"], env["message"]["BodyType"]), ("Smojooe AR-E b25-8 A 1", "Planet"))
+
     def test_saa_signals_and_docked_and_location(self):
         s = session()
         s.feed(FSDJUMP)
@@ -443,6 +462,46 @@ class StationData(unittest.TestCase):
         self.s.now = 6000.0 + E.FILE_WAIT_S + 1
         self.assertEqual(E.idle(self.s, "v"), [])
         self.assertNotIn("shipyard", self.s.pending)                  # given up
+
+    def test_a_carrier_market_written_late(self):
+        """The first market of a carrier docking: Market.json can be stamped seconds after the Market line (the server's
+        data), so no commodity went (the author, 2026-10-11). A file up to FILE_LATE_S after its line is that one; an
+        older file never is; a wait that ends unsent says so."""
+        import io
+        import contextlib
+        from outrider.core import iso_ts, ts_seconds
+        t = ts_seconds(self.t)
+        self.s.source, self.s.now = "J.log:700", t   # a live line: the server's clock is the line's time
+        self.file("Market.json", {"timestamp": iso_ts(t - 60), "event": "Market", "Items": []})   # the last visit's
+        self.assertEqual(E.build(self.ev("Market", StationType="FleetCarrier"), self.s, "v"), [])
+        self.s.now = t + 12
+        self.file("Market.json", {"timestamp": iso_ts(t + 12), "event": "Market", "StationType": "FleetCarrier", "Items": []})
+        [(name, env, origin)] = E.idle(self.s, "v")
+        self.assertEqual((name, origin, env["message"]["timestamp"]), ("commodity", "J.log:700", iso_ts(t + 12)))
+        # the next docking, and the file never comes: given up after FILE_WAIT_S, and said
+        for n in ("Undocked", "Docked"):
+            self.s.feed(self.ev(n))
+            E.build(self.ev(n), self.s, "v")
+        t2 = t + 1000
+        self.s.now = t2
+        self.file("Market.json", {"timestamp": iso_ts(t - 60), "event": "Market", "Items": []})
+        E.build(self.ev("Market", StationType="FleetCarrier", timestamp=iso_ts(t2)), self.s, "v")
+        self.s.now = t2 + E.FILE_WAIT_S + 1
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(E.idle(self.s, "v"), [])
+        self.assertNotIn("commodity", self.s.pending)
+        self.assertIn(f"Market.json was not written for the line of {iso_ts(t2)} (the file says {iso_ts(t - 60)}, market 128)", out.getvalue())
+        # a catch-up's wait (its line hours old): ended by lines, never timed, and nothing said (review 2026-10-12)
+        self.s.now = t2 + 5000
+        E.build(self.ev("Market", StationType="FleetCarrier", timestamp=iso_ts(t2 + 100)), self.s, "v")
+        self.assertFalse(self.s.pending["commodity"]["live"])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            for i in range(E.NAVROUTE_TRIES):
+                E.build({"timestamp": iso_ts(t2 + 101), "event": "Music"}, self.s, "v")
+        self.assertNotIn("commodity", self.s.pending)
+        self.assertEqual(out.getvalue(), "")
 
     def test_empty_bracket_kept(self):
         """A bracket the game writes as "" ("not normally sold here") goes as "", not 0 (EDDN's schema)."""

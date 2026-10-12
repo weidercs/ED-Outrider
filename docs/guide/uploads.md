@@ -1,11 +1,11 @@
 [ED Outrider](../../README.md) · [What's new](whats-new.md) · [Install and run](install.md) · [The views](views.md) · [Plot Route](plot-route.md) · [Cargo and trading](cargo-and-trading.md) · [Voice and alerts](voice-and-alerts.md) · [Automation](automation.md) · [On a tablet](tablet.md) · [In-game overlay](overlay.md) · **Uploads** · [Settings and good to know](settings.md) · [For the curious](for-developers.md)
 
-# Uploads: EDDN and EDSM
+# Uploads: EDDN, EDSM and Inara
 
-Outrider can send what your journals say to two community services, as EDMC does, so you need not run EDMC just to
-upload. **Both are off unless you switch them on**, in Settings → Uploads. The switch applies at once and is kept in
-the config file (`[eddn] enabled`, `[edsm] enabled`) for the next start; it is the only place to switch them (they are
-not among the Server settings).
+Outrider can send what your journals say to three community services, as EDMC does, so you need not run EDMC just to
+upload. **All are off unless you switch them on**, in Settings → Uploads. The switch applies at once and is kept in
+the config file (`[eddn] enabled`, `[edsm] enabled`, `[inara] enabled`) for the next start; it is the only place to
+switch them (they are not among the Server settings).
 
 - **EDDN**, the Elite Dangerous Data Network: systems, scans, signals, codex entries, biology samples, settlement
   approaches, docking answers, markets, outfitting, shipyards, carrier materials, plotted routes, sent as they happen.
@@ -25,17 +25,43 @@ not among the Server settings).
   - A key EDSM refuses stops the sending (not the recording) until you change the key or switch EDSM off and on:
     what you played meanwhile then goes.
   - If EDSM keeps refusing a key you know is right, make a new key on edsm.net and paste that one.
+- **Inara**: keeps your commander profile there current, as EDMC's Inara upload does, so a player who uses Outrider
+  alone loses nothing on it:
+  - your flight log and location (jumps, carrier jumps, dockings, landings), credits (once per session, the game's own
+    figures at login), the game's statistics;
+  - every rank and its progress (Combat, Trade, Exploration, CQC, Mercenary, Exobiologist, the two navies), Powerplay,
+    the engineers;
+  - reputation with the superpowers and the factions you meet;
+  - materials, your ship's cargo and the ship locker; the ship you fly and its loadout, your fleet (bought, sold,
+    swapped, sent elsewhere, renamed, where each one is) and your stored modules;
+  - community goals you take part in, missions, the combat log, friends and suit loadouts.
+
+  Never anything about your fleet carrier (Inara's API has no carrier hold) or the SRV's cargo.
+  - It goes in batches (each jump or docking, the end of your login, at most five minutes' wait), at most one request
+    every 35 seconds, and only what changed since your profile last got it: the game rewrites your ranks, cargo and
+    loadout often, and Inara asks apps not to send the same thing twice.
+  - It needs your Inara API key ([inara.cz → Settings → API key](https://inara.cz/elite/cmdr-settings-api/)), per
+    in-game commander, set in Settings → Uploads. The key stays on this Outrider: the page shows only its first and
+    last four characters.
+  - A commander with no key sends nothing, and Settings says so. Once you enter a key (or another one), your ranks,
+    ship, inventory and the rest go whole again the next time the game writes them, most of it at your next login.
+  - **Switch Inara off in any other app first** (EDMC, EDDI, EDDiscovery, EDDLite): two apps sending can get your key
+    revoked. Outrider sees EDMC's setting on this PC and holds its own while EDMC sends; it cannot see the others.
+  - A key or app Inara refuses stops the sending (not the recording) with Inara's words in Settings, until you change
+    the key or switch Inara off and on. A refusal for sending too often waits an hour by itself.
 
 ## Catching up, and what is never sent
 
 Each upload remembers how far through your journals it has got. If Outrider was not running while you played (or the
-server was down), the next start sends what you played meanwhile: to EDSM up to a week back, to EDDN only the last
+server was down), the next start sends what you played meanwhile: to EDSM and Inara up to a week back, to EDDN only the last
 hour, since EDDN's readers take what arrives as current. For the same reason an EDDN message that could not go for an
 hour (EDDN unreachable) is dropped, not sent late. A journal re-read sends nothing twice, a restored backup starts
 from where your journals are now, and switching an upload on starts from that moment: your history is never uploaded.
 
 Markets, outfitting, shipyards, carrier materials and plotted routes come from files the game rewrites each time, so a
-catch-up can send one only while the file is still the one that visit wrote (the last one, after a short gap). A codex
+catch-up can send one only while the file is still the one that visit wrote (the last one, after a short gap). Live,
+Outrider waits up to about half a minute for the game to write the file (it can write a fleet carrier's market well
+after the line); if it never comes, that one is not sent, and Outrider's log says so with what the file held. A codex
 entry caught up late has no body name, and a biology sample caught up late no position: both come from the live
 Status.json.
 
@@ -76,40 +102,21 @@ twice: EDDN has no way to tell. So:
     It sees the game PC's note, but the game PC cannot see its own, so if the server uploads, keep the game PC's
     uploads off yourself (that is what the "only Outrider" question is about).
   - Its note names it "outrider-docker"; set `OUTRIDER_HOST` in `.env` for another name.
-- **EDMC on the same PC.** If it runs with its own EDDN or EDSM upload on, Outrider holds that upload and says so.
-  Switch EDMC's off (its File → Settings → EDDN / EDSM tabs) before switching Outrider's on. EDMC on another computer
-  cannot be seen: switch it off there yourself.
+- **EDMC on the same PC.** If it runs with its own EDDN, EDSM or Inara upload on, Outrider holds that upload and says
+  so. Switch EDMC's off (its File → Settings → EDDN / EDSM / Inara tabs) before switching Outrider's on. EDMC on another
+  computer cannot be seen: switch it off there yourself, as in EDDI or EDDiscovery for Inara.
 
 ## Status
 
 The header's Data tile shows, live, a line per upload in use: what it sent, has waiting and had refused in the last
 day. Settings → Uploads shows the same per service, with why nothing can be sent now (held by another uploader, a key
-EDSM refused, the beta or Legacy game) and the last message (a refusal, "saved").
+EDSM or Inara refused, the beta or Legacy game) and the last message (a refusal, "saved").
 
 If EDDN refuses one kind of message (markets, say) three times within an hour, or once with 426 (a version it no
 longer takes), Outrider stops sending that kind until it restarts: usually a game update EDDN does not take yet.
 The other kinds still go.
 
 A developer's switch shows next to the service in Settings → Uploads: "(test schemas only)" when `OUTRIDER_EDDN_TEST`
-is set, "(dry run: nothing sent)" when `OUTRIDER_EDSM_DRYRUN` is.
-
-## Inara (this fork)
-
-This fork can also send your flight log to your own [Inara](https://inara.cz) account: travel, credits, ranks,
-reputation, engineers, Powerplay, statistics, the ship you fly, materials, missions and your combat log. It is
-separate from the two uploads above and simpler:
-
-- **Off unless you switch it on**, in Settings → Server settings → Inara upload (or `[inara]` in the config file):
-  `enabled`, and `api_key` from inara.cz (Settings → API key). It applies at the next start.
-- **Live play only.** What you do while Outrider runs is sent, in batches about every 30 seconds; there is no
-  catching up, and what waits for an unreachable Inara is lost when Outrider stops.
-- Nothing from the Legacy game, a beta, or while you are crew in another commander's ship; nothing under
-  `--simulate`; and nothing while EDMarketConnector on this PC is running with its own Inara upload on (Outrider
-  says so at start), since Inara would get everything twice.
-- Not sent: a ship's module list, suits, community goals.
-- Server settings shows what went out, what waits, and a refusal in Inara's own words. A refused key stops the
-  sending until the next start.
-
----
-
-[ED Outrider](../../README.md) · [What's new](whats-new.md) · [Install and run](install.md) · [The views](views.md) · [Plot Route](plot-route.md) · [Cargo and trading](cargo-and-trading.md) · [Voice and alerts](voice-and-alerts.md) · [Automation](automation.md) · [On a tablet](tablet.md) · [In-game overlay](overlay.md) · **Uploads** · [Settings and good to know](settings.md) · [For the curious](for-developers.md)
+is set, "(dry run: nothing sent)" when `OUTRIDER_EDSM_DRYRUN` or `OUTRIDER_INARA_DRYRUN` is (the requests go to
+`data/edsm-dryrun.jsonl` / `data/inara-dryrun.jsonl`, never the key), "(development mode)" when `OUTRIDER_INARA_DEV`
+is (Inara's `isBeingDeveloped`: for a test account).

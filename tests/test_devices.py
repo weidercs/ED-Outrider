@@ -171,9 +171,9 @@ class BatchGHonkBackups(unittest.TestCase):
         self.assertEqual(d(self.live(fire_group=1), t, groups), ("press", None))   # unknown group: still pressed
         self.assertEqual(d(self.live(fire_group=0), t, groups), ("press", None))
         self.assertEqual(d(self.live(fire_group=2), t), ("press", None))            # nothing learned for this ship
-        # a stale reading presses, whatever it says
+        # a stale reading presses, whatever it says; one saying the game is not live waits (review 2026-10-11)
         self.assertEqual(d(self.live(fire_group=2, flags=1 << 4), t + 120, groups), ("press", None))
-        self.assertEqual(d(dict(self.live(fire_group=2), live=False), t, groups), ("press", None))
+        self.assertEqual(d(dict(self.live(fire_group=2), live=False), t, groups), ("wait", "the game is not live"))
 
     def test_honk_learn(self):
         learn = ed_outrider.honk_learn
@@ -536,6 +536,21 @@ class BatchGHonkBackups(unittest.TestCase):
             self.assertTrue(lines[0].startswith(f"restored {dbp} from {z}"))
             self.assertIn("also in the zip, not restored: speech.json", lines[-1])
             self.assertFalse([f for f in os.listdir(d) if f.endswith(".part")])
+
+    def test_restore_sets_a_stray_journal_aside(self):
+        """The database file gone (deleted by hand after a crash), its rollback journal left: SQLite would roll that
+        journal into the restored file. It is set aside too (review 2026-10-11)."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            dbp = os.path.join(d, "x.sqlite")
+            with open(dbp + "-journal", "w") as f:
+                f.write("left over")
+            z = self.make_zip(d, rows=10)
+            lines = ed_outrider.restore_backup(z, dbp, "127.0.0.1", 0, now=0)
+            stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(0))
+            self.assertFalse(os.path.exists(dbp + "-journal"))
+            self.assertTrue(os.path.exists(f"{dbp}.pre-restore-{stamp}-journal"))
+            self.assertTrue(any("stray x.sqlite-journal" in line for line in lines), lines)
 
     def test_restore_a_database_not_named_sqlite(self):   # F33
         import tempfile, zipfile
@@ -1002,7 +1017,7 @@ class BatchBVoiceControl(unittest.TestCase):
         self.assertEqual(got["banned"], {"hull": ["Hull {pct}."]})
         self.assertNotEqual(sl.version(), v0)                                        # pages fetch the trimmed lines
         self.assertEqual(sl.set_ban("hull", "Hull {pct}.")[1]["banned"], 1)         # twice is once
-        # a second reader (the voice lab, another process) sees the same bans
+        # a second reader (another process) sees the same bans
         self.assertEqual(outrider.speech.SpeechLines(path).lines()["lines"]["hull"]["business"], ["Hull at {pct} percent.", "Hull damage."])
         self.assertEqual(sl.set_ban("hull", "Hull {pct}.", ban=False), (200, {"ok": True, "banned": 0}))
         self.assertEqual(len(sl.lines()["lines"]["hull"]["business"]), 3)
@@ -1065,17 +1080,6 @@ class BatchBVoiceControl(unittest.TestCase):
         self.assertEqual(out["files"], ["x.sqlite", "speech.json", "speech_banned.json"])
         with zipfile.ZipFile(out["path"]) as z:
             self.assertEqual(json.loads(z.read("speech_banned.json")), {"heat": ["Hot."]})
-
-    def test_voice_lab_sees_the_bans(self):
-        try:
-            import voice_lab
-        except (ImportError, SystemExit):
-            self.skipTest("voice_lab needs tkinter")
-        path = self.speech_file()
-        self.assertEqual(outrider.speech.ban_line(path, "hull", "Hull damage.")[0], 200)
-        styles, lines = voice_lab.load_lines(path)
-        self.assertEqual(lines["hull"]["business"], ["Hull {pct}.", "Hull at {pct} percent."])
-        self.assertIn("sarcastic", styles)
 
     def test_gitignored(self):
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

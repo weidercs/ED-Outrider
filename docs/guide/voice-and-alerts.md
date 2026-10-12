@@ -13,6 +13,21 @@ notification and be spoken (🗣), chosen per alert in **⚙ Settings → Alerts
 - a valuable body the moment the FSS resolves it, and a new codex entry. A body someone else has already mapped is
   never pointed out (nor warned about when you leave): the first one in a system gets one line instead, "Already
   mapped, but there are still valuable bodies to map if you want to jump on the train"
+- **discoveries**, grouped together in Settings → Alerts, each with its own switches, said with delight in every
+  personality (the sarcastic and profane ones included: the co-pilot likes new things):
+  - notable stellar phenomena the FSS finds in a system where you have none on record ("three notable stellar
+    phenomena, all in rings")
+  - a rare star resolved by the arrival's own scan or the FSS ("a black hole, the main star", "a Wolf-Rayet star at
+    B": black holes, Wolf-Rayet, carbon, MS- and S-type, O-type and Herbig Ae/Be stars, supergiants, the rarer white
+    dwarfs, exotic stars; neutron stars and ordinary giants are too common to count)
+  - a potential green gas giant: one of your own scans fits the community's ladder model, a guess to check in the
+    system map (see [Potential green gas giants](views.md#-potential-green-gas-giants))
+  - surface sites on a body: Guardian or Thargoid sites (said once the DSS has mapped the body: the journal names them
+    only then) or an unknown planetary anomaly (said when the FSS finds it)
+  - an FSS signal worth a detour, new to the system: a Titan, a Guardian beacon, a generation ship, a listening post
+    (tourist beacons, number stations and memorials are shown on the page, not said)
+  - curiosities (the 🔭 marks: rare planet classes, odd orbits, ringed landables...) in the system you are in, once per
+    system: one line to check your panels ("You might be interested in some curious things I found here"), not the list
 - low fuel where you cannot scoop, and a top-up worth taking before a dry stretch
 - docking where the station buys your data, and what you banked when you sold
 - a sale that left data aboard (Universal Cartographics sells 50 systems a page; at Vista Genomics, the species
@@ -57,9 +72,30 @@ as docked. A carrier jump booked just before you quit shows as "not yet confirme
 
 Alerts are spoken when 🗣 in the header is on. **Piper**, a neural voice running on your CPU, sounds far
 better than the browser's own voice. The voice is Cori (`en_GB-cori-medium`) unless you pick another, and it
-downloads into `data/piper-voices/` the first time. ⚙ Settings → Voice switches between installed voices, and its
-**More voices** lists every Piper voice by language: pick one and Outrider downloads it and switches to it (on a
-Docker server too).
+downloads into `data/piper-voices/` the first time. ⚙ Settings → Voice switches between installed voices.
+
+**🎙 Voice lab** (⚙ Settings → Voice) is where you try them out first. It plays in the browser you are using, wherever
+Outrider runs (a Docker server too):
+- **Voice**: pick an installed voice and a speed, then **▶ Hear it**. **Use this voice** makes it Outrider's voice
+  (with that speed).
+- **Speakers**: some Piper voices are many people in one download (`en_GB-vctk-medium` has 109, `en_US-libritts_r-medium`
+  about 900). The lab shows a speaker list for those: **‹ ›** step through them and **🎲** picks one at random, each
+  played as you go. The speaker you use is kept for that voice, and Settings → Voice shows it beside the voice, where
+  you can change it too.
+- **More voices** lists every Piper voice by language, sorted by name, quality or size. **▶ sample** plays Piper's own
+  recording of a voice (from its website) before you download anything. **Download** fetches it without switching:
+  when it is ready it is picked above, so you can ▶ Hear it (and its speakers) and press Use this voice if you like it.
+  **Select** picks one you already have.
+- **Lines**: pick an alert and a personality for **▶ Random line** (filled with made-up values), or **▶ Audition** for
+  eight key alerts in a row. A personality with a voice of its own (speech.json) speaks in it. **✂ Cut this line**
+  bans the line just played, like 👎.
+- **Your own words**: type anything for **▶ Speak**, or **⬇ Save WAV** to keep it.
+- **How is it said**: a word the voice says wrong, said your way. Pick or type the word, write how it sounds as
+  syllables joined by "-" with the stressed one in capitals (**fon-TIK-yoo-loo-uh**; "uh", "eh", "ih" are short
+  sounds, the rest spelled plainly as English says it: kew, few, NIGH), **▶ this way** to hear it, **Save** to keep it.
+  **▶ as now** plays the word as it is said today, **↺ mine out** takes yours back out. **▶ as a sector** plays a
+  word (or two) read as a sector's name, and below the box are the sectors you have visited most: ▶ plays one, a click
+  on one of its words puts it in the box with the rule's reading, ready to change.
 
 Without Piper installed, the browser's own voice speaks. With Piper, the browser's voice is never used: a line Piper
 can't say is not said (what you asked for is still shown as a caption).
@@ -67,6 +103,20 @@ can't say is not said (what you asked for is still shown as a caption).
 **Body names are said letter by letter.** With an English Piper voice, "A 1" is "ay one" (not "uh one") and "ABC 3 a"
 is "ay, bee, see, three, ay", each letter clearly. Only a body's letters are spelled out: system, station and carrier
 names are read as they are written.
+
+**The exobiology names are said the usual way.** espeak's English rules mangle their Latin ("Fonticulua", "Osseus",
+"Clypeus Lacrimam"), so Outrider ships how each genus and species word is said, a first pass in the community's usual
+(anglicised) reading: "fon-TIK-yoo-loo-uh", "OSS-ee-uss", "KLIP-ee-uss LAK-rim-am". Yours go on top, in
+`data/pronounce.json` (the voice lab's How is it said box writes it): a station, a carrier, a system name, your commander
+name, or a shipped word said differently. Piper voices in English only; the browser's own speech reads as it always has.
+
+**Sector names are read by rule.** The game builds the names of procedural sectors (Smojooe, Flyeia Hypa, Synuefe)
+from a fixed set of pieces, so Outrider reads every one the same way instead of listing them: it splits the word into
+syllables and says each as English would ("SMOH-joo", "fligh-AY-uh HIGH-puh", "sigh-NOO-fee"), the stress on the
+first of two syllables and on the second last of more. Only a sector right before a system's code is read this way
+(Smojooe AR-E b25-8); hand-named sectors (Col 285 Sector, Hyades Sector) and the Dark Regions are read as written. A
+sector word of yours in How is it said wins over the rule. There is no official way to say these: the rule aims to be
+consistent and natural, and yours can say any of them your way.
 
 **"Click Here To Allow Audio".** A browser plays no sound on a page until you click on it, and Outrider reloads the
 page itself after an update. When the window that speaks is held back like this, a red **🔇 Click Here To Allow
@@ -152,16 +202,11 @@ puts it on the clipboard.
 
 - Above the list, **This session** counts each alert's lines, noisiest first ("Arrival brief 42 · FSD charge
   40 (3 dropped)"). **🔇** beside one stops speaking that alert (its 🗣 tick), with an undo.
-- Press **👎** beside a line to never hear that wording again, in any browser or in the voice lab.
+- Press **👎** beside a line to never hear that wording again, in any browser.
 - "3 lines banned · review / undo" above the list lets you take a ban back.
 - Bans live in `data/speech_banned.json` (beside your own copy when `speech_file` names one), so editing
   `speech.json` never loses them.
 - The last line of a list can't be banned, so no alert ever goes quiet.
-
-**The voice lab.** `python3 voice_lab.py` opens a small window for trying voices before you settle on one.
-Play a random line from any alert and personality, or type your own; Save WAV keeps it. **✂ Cut this line**
-bans it, like 👎. **▶ Audition** plays eight key alerts in a row. The lower half lists every Piper voice on
-Hugging Face: double-click one to download it for Outrider too.
 
 ## 🎙️ Ask Outrider by voice
 

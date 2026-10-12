@@ -1061,6 +1061,15 @@ class BatchS1(unittest.TestCase):
                 self.assertIn("speech.json not backed up", out["warning"])
                 self.assertTrue(os.path.exists(out["path"]))
             os.chmod(self.state.speech_path, 0o600)
+            # your own pronunciations (data/pronounce.json, the voice lab's How is it said) go in too (the docs sweep,
+            # 2026-10-12: hand-made, like your lines)
+            self.state.pronounce_path = os.path.join(d, "pronounce.json")
+            with open(self.state.pronounce_path, "w") as f:
+                f.write('{"words": {"Jameson": "JAYM-sun"}}')
+            with unittest.mock.patch.object(ed_outrider, "BACKUP_DIR", os.path.join(d, "b4")), \
+                    unittest.mock.patch.object(ed_outrider, "LIVE_DIRS", []):
+                out = self.state.make_backup()
+            self.assertEqual(out["files"], ["x.sqlite", "speech.json", "ed_outrider.toml", "pronounce.json"])
 
 
 class Batch4Review(unittest.TestCase):
@@ -1193,54 +1202,6 @@ class Batch4Review(unittest.TestCase):
             self.assertIsNone(sp.say("…"))
             self.assertEqual(calls, ["…"])                               # remembered, not synthesised again
 
-    # ---- voice lab ----
-    def _lab(self):
-        try:
-            import voice_lab
-        except (ImportError, SystemExit):
-            self.skipTest("no tkinter")
-        return voice_lab
-
-    def test_voice_lab_reads_the_configured_speech_file(self):   # F59
-        voice_lab = self._lab()
-        with unittest.mock.patch.object(voice_lab, "_config", lambda: {"server": {"speech_file": "~/my_lines.json"}}):
-            self.assertEqual(voice_lab.configured_speech_file(), os.path.expanduser("~/my_lines.json"))
-        with unittest.mock.patch.object(voice_lab, "_config", lambda: {"server": {"speech_file": "mine.json"}}):
-            self.assertEqual(voice_lab.configured_speech_file(), os.path.join(voice_lab.outrider.ROOT, "mine.json"))
-        with unittest.mock.patch.object(voice_lab, "_config", lambda: {}):
-            self.assertEqual(voice_lab.configured_speech_file(), voice_lab.SPEECH_FILE)
-
-    def test_voice_lab_removes_each_spoken_wav(self):   # F60
-        import tempfile
-        voice_lab = self._lab()
-        with tempfile.TemporaryDirectory() as d:
-            p = voice_lab.Player()
-            p.cmd = None                                                  # nothing is played in a test
-            a, b = os.path.join(d, "a.wav"), os.path.join(d, "b.wav")
-            for path in (a, b):
-                open(path, "wb").close()
-            p.play(a)
-            p.play(b)
-            self.assertEqual(os.listdir(d), ["b.wav"])
-            p.stop()
-            self.assertEqual(os.listdir(d), [])
-
-    def test_voice_lab_refetches_a_truncated_catalogue(self):   # F61
-        import io, tempfile
-        voice_lab = self._lab()
-        with tempfile.TemporaryDirectory() as d:
-            cache = os.path.join(d, "voices.json")
-            with open(cache, "w") as f:
-                f.write('{"en_GB-a-low": {"lang')
-            with unittest.mock.patch.object(voice_lab, "VOICES_DIR", d), \
-                    unittest.mock.patch.object(voice_lab, "CATALOGUE_CACHE", cache), \
-                    unittest.mock.patch.object(voice_lab.outrider.tts.urllib.request, "urlopen",
-                                               lambda url, timeout: io.BytesIO(b'{"en_GB-a-low": {}}')):
-                self.assertEqual(voice_lab.fetch_catalogue(), {"en_GB-a-low": {}})
-            with open(cache) as f:
-                self.assertEqual(json.load(f), {"en_GB-a-low": {}})
-            self.assertEqual(os.listdir(d), ["voices.json"])              # no .part left behind
-
     def test_numpad_operator_labels(self):   # F57
         import outrider.honk
         self.assertEqual([outrider.honk.key_label(k) for k in ("KEY_KPPLUS", "KEY_KPENTER", "KEY_KPDOT", "KEY_SYSRQ",
@@ -1275,6 +1236,17 @@ class BatchEExobio(unittest.TestCase):
         genus = name.split()[0]
         return {"event": "ScanOrganic", "timestamp": ts, "SystemAddress": addr, "Body": body_id, "ScanType": kind,
                 "Genus": f"$Codex_Ent_{genus}_Genus_Name;", "Genus_Localised": genus, "Species": species, "Species_Localised": name}
+
+    def test_a_species_not_in_the_price_list_is_priced_from_the_rules(self):
+        """Radicoida Unicus is missing from the Vista Genomics list: the unsold estimate counted it as 0 ("not priced")
+        while My Samples priced it from the bio rules; both use the rules' figure now (review 2026-10-11)."""
+        ev = lambda e: (T(e["timestamp"]), None, e)
+        unicus = "$Codex_Ent_Ingensradices_Unicus_Name;"
+        events = [ev(self.organic("2026-01-03T00:01:00Z", 1, "Analyse", unicus, "Radicoida Unicus"))]
+        bio = outrider.unsold.analyse(events, ARGS)["exobiology"]
+        self.assertEqual(bio["unknown_species"], [])
+        self.assertEqual(bio["base_value"], outrider.bio.species_value("Radicoida Unicus"))
+        self.assertGreater(bio["base_value"], 0)
 
     # ---- P8: per-run pricing ----
     def test_per_run_pricing(self):
@@ -1537,6 +1509,21 @@ class BatchEExobio(unittest.TestCase):
                        "SystemAddress": 3, "StarClass": "K"})
         said = [m for m in self.j.moments if m["kind"] == "jumponium"]
         self.assertEqual((said[-1]["system"], said[-1]["jumponium"]["body"]), (2, "1"))
+
+    def test_jumponium_of_a_system_left_by_carrier_is_not_said_elsewhere(self):
+        """Left without an FSD charge (a carrier jump, a respawn): the body found there is not announced at the next
+        charge, in another system (review 2026-10-11)."""
+        for move in ("CarrierJump", "Location"):
+            self.j.moments.clear()
+            self.mats_login()
+            self.j.handle(self.rich("2026-01-01T00:02:00Z", 3, 1.3))
+            self.j.handle({"event": move, "timestamp": "2026-01-01T00:05:00Z", "StarSystem": "Two", "SystemAddress": 2,
+                           "StarPos": [0, 0, 5]})
+            self.j.handle({"event": "FSSAllBodiesFound", "timestamp": "2026-01-01T00:06:00Z", "SystemName": "Two",
+                           "SystemAddress": 2, "Count": 3})
+            self.j.handle({"event": "StartJump", "timestamp": "2026-01-01T00:07:00Z", "JumpType": "Hyperspace",
+                           "StarSystem": "Three", "SystemAddress": 3, "StarClass": "K"})
+            self.assertEqual([m for m in self.j.moments if m["kind"] == "jumponium"], [], move)
 
     def test_jumponium_silent_when_counts_are_stale(self):
         self.mats_login(snap_ts="2025-12-31T00:00:00Z")   # the login wrote no Materials line: yesterday's counts

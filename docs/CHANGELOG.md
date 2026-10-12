@@ -2,6 +2,513 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · This fork: upstream merged in; upstream's Inara upload replaces the fork's
+- Upstream's work up to its 2026-10-22 release is merged in (boxels, green gas giants, codex marks on body types,
+  rare discoveries said once, the voice lab in the page, the Vorlon and Shadow themes and more), beside the fork's
+  Ship view, Unscanned (bio) plotter, GalNet News, game route, Rocky, the overlay's Route panel and auto honk's
+  "then target the next route system".
+- Upstream now uploads to Inara itself (Settings → Uploads, a key per commander), so the fork's own Inara upload is
+  gone, as planned: `[inara] enabled` is now the Uploads switch, and an `[inara] api_key` in the config file is no
+  longer read: give the key again in Settings → Uploads.
+
+## 2026-10-12 · Sector names said by rule
+- The voice now says procedural sector names the same natural way everywhere (the author's ask): Smojooe as
+  "SMOH-joo", Flyeia Hypa as "fligh-AY-uh HIGH-puh", Synuefe as "sigh-NOO-fee", not espeak's guesses. The game builds
+  them from a fixed set of pieces, so they are read by rule, not listed: every sector in the galaxy is covered. A
+  word splits into syllables at its consonant and vowel clusters, each said as English would; stress on the first of
+  two syllables, else the second last. The phonemes are written directly for British and American voices.
+- Only words right before a system's code (Smojooe AR-E b25-8) are read this way; hand-named sectors (Col 285
+  Sector, Hyades Sector), the Dark Regions and an English word leading the name ("Leaving Smojooe ...") are left as
+  they were. Your own word in How is it said wins over the rule.
+- The voice lab's How is it said box: **▶ as a sector**, and the sectors you have visited most listed below it (▶ to
+  hear one, a click on a word to change it). GET /api/pronounce gives them as `sectors`.
+- Tested on every sector seen on EDDN in two days of all apps' traffic plus the author's journals (1,612 names,
+  `tests/fixtures/sector_names.txt`): each reads, with one stress and only known sounds; every sound is in the
+  installed Piper voices' phoneme maps, and a voice added later whose map lacks one says that word as plain text
+  (Piper would drop the sound).
+
+## 2026-10-12 · Babylon 5 - Shadows theme
+- An eleventh theme for the tablet, the desktop page (Settings → Display) and the overlay's panels (the author's ask):
+  **Babylon 5 - Shadows**, the Shadows' ships evoked, not copied. Black with a purple floor, dark purple panels, light
+  grey text, the emblem's violet for what is chosen and pale lilac for headings; thorn-cut corners (a long slant at top
+  right and bottom left), a faint purple shadow; the overlay's panels cut-cornered. Metal Mania (spiked serifs, the
+  author asked for a jagged face) for headings, newly shipped with its SIL OFL licence, and Exo 2 for text; your own
+  heading font as `data/fonts/shadow-display.ttf`.
+- Its emblem under the tablet's page list: an AI-generated image the author made, loosely based on the Shadows' ships,
+  recoloured from black to the theme's purples so it shows on a dark page, credited in `static/emblems/CREDITS.txt`.
+
+## 2026-10-12 · The link pill says states only
+- The link pill counted seconds ("linked · 2 s", "stale · 48 s", "no link · retrying since 14:02"); it now says only
+  the state (the author's ask): "linked", "linked · no game" when Outrider answers but the game is not running, and
+  "unlinked · retrying" (amber after 30 s without an answer, red once the link is down). The tablet's pill says the
+  same.
+
+## 2026-10-12 · Version 2026.10.22
+- Boxel exploration (the list, Next with 🎯, complete/done, keep, auto-target, skip fully scanned, known counts, boxels
+  nearby, the sector map), rare finds (rare stars, phenomena, surface sites, signals worth a detour, potential green
+  gas giants, ✦ body types new to your codex, rarer curiosities), Inara uploads, the voice lab in the page with
+  speakers, More voices and the pronunciation table, the Vorlon theme, Now's next-stop line, the carrier 🎯, and the
+  review fixes. What's new has its section. PARSER_VERSION 49: the first start re-reads the journals once.
+
+## 2026-10-12 · Docs sweep, screenshots in the Elite theme
+- Every guide page, the README and the developer notes checked against the code and the work since 2026.10.21: Inara,
+  the carrier's 🎯, boxel mode and its sector map, the rare finds, the ✦ body-type marks, the voice lab's speakers and
+  How is it said, every config key with its default in Settings, and stale details fixed.
+- Every page screenshot retaken in the Elite theme (the overlay's too), the tablet in its LCARS; Overview and Here
+  show a system with work left; new: Boxel mode and its sector map in the guide.
+
+## 2026-10-12 · ✦ on body types: your scans count as logged; pronunciations backed up
+- The ✦ / ✪ on star and planet types marked nearly every body in the regions explored before the journals kept (the
+  author's go back to May 2023, their codex further: Inner Orion Spur held 2 body-type codex lines, so 42 types read as
+  new; found in the release screenshots). The game logs a type only the first time you scan one in a region (109 of the
+  author's 111 such lines say new), so a type you have scanned there without a line was logged before: your own scans
+  (not a nav beacon's) now count. Read once (25,874 scans in 0.2 s), then only the new ones.
+- Your own pronunciations (`data/pronounce.json`, the voice lab's How is it said) go into the dated backups with your
+  lines and the config (found by the docs sweep).
+
+## 2026-10-12 · Carrier tritium: reserved space weighs nothing
+- The carrier's tritium jumps counted the space a buy order reserves as cargo, so with a buy order open each jump read
+  heavier than it is (found by the Fable review of the suggestion plan, checked on the author's journals). The game's
+  own JumpRangeCurr in CarrierStats matches the fitted formula on every line under 500 ly only with the reserved space
+  left out: 4,500 t reserved, 198.6 ly, where counting it gave 180.7. `used` is now TotalCapacity − FreeSpace −
+  CargoSpaceReserved. No re-read needed (the fold is worked out from the stored events).
+
+## 2026-10-12 · How the voice says the exobiology names
+- Piper's English voices read the Latin of the exobiology names by espeak's English rules and mangled most of them
+  ("Fonticulua", "Osseus", "Clypeus Lacrimam"; a Fable suggestion the author picked). `resources/pronounce.json` now
+  says the 120 genus and species words in a respelling ("fon-TIK-yoo-loo-uh", the stressed syllable in capitals), a
+  first pass for the author's ears; `outrider/pronounce.py` turns each into Piper's raw phonemes in the voice's own
+  accent (each syllable through Piper's own espeak, under its lock) and swaps whole words in a line for them. Your own
+  `data/pronounce.json` goes on top: the voice lab's new **How is it said** box tries a respelling (▶ this way), saves
+  it, or takes yours out (GET/POST `/api/pronounce`). The phrase cache's key carries the table's version, so a change
+  is heard at once. verify.sh's scratch server writes its own file, never yours.
+
+## 2026-10-12 · Boxels: the sector map
+- Boxels nearby listed the nearest three per mass code, with no picture of progress across a sector (a Fable
+  suggestion the author picked). Boxel mode now has a **Sector map**: the sector you are in as a grid of one mass
+  code's boxels (b to h), one Y layer at a time with ▲ ▼: visited, ✓ complete, done, Spansh knows, you and the kept
+  boxel marked; a tap explores that boxel. All local (your visits, the done and end marks, the Spansh lists asked for):
+  GET `/api/boxel/sector?mc=d&layer=5`. A cell's tooltip is made on hover (a b grid has 4,096 cells).
+
+## 2026-10-12 · ✦ on star and planet types new to your codex
+- ✦ / ✪ marked only species new to your codex, though the codex logs every star and planet type once per region too (a
+  Fable suggestion the author picked; shown only, not spoken). `outrider/codex_bodies.py` says which codex entry a
+  body's type logs, by EntryID: the localised names are ambiguous for planets ("Terraformable", "Standard gas giant").
+  The table is from the author's journals and EDDN's codex traffic (giants by luminosity class III, supergiants by I,
+  a solid planet's "Ter" entries the ones with an atmosphere). Here marks the body (✦ not in this region's codex, ✪ in
+  none), Nearby's row gets one tag naming each type, Spansh's bodies included; the payload carries your codex's types
+  per region so the marks are always current.
+
+## 2026-10-12 · Now says where the next jump goes
+- Now (and the overlay's Now panel) never said where the next jump goes: the route's next stop showed only in the
+  strip on Overview, Nearby and Here, a kept boxel's Next only in Boxel mode (a Fable suggestion the author picked).
+  Both now sit under the target: "🛣 Next: Stop 38 · 4.2 ly · 38 of 120 · refuel in 3 jumps" (or the survey route's)
+  and "▦ Boxel: next Smojooe KL-P d5-41 · to try", with 🎯 on the page. The payload carries the active boxel's Next,
+  worked out only when the boxel's key changes; the overlay shows a kept boxel's only, and the unfinished route plotted
+  last.
+
+## 2026-10-12 · Boxels: how much of a known system was found
+- A boxel row Spansh knows said only "known", and "skip systems someone has visited" passed over all of them, though
+  most were only honked or partly scanned in passing and keep their bodies' first discoveries (a Fable suggestion the
+  author picked). The Spansh request the boxel already makes returns each system's bodies: the row now says "known · 3
+  of 14 bodies", "known · honked only" or "known · all 38 bodies", and the switch, now **skip systems already fully
+  scanned**, passes over only the ones with every body reported. (A list fetched before keeps Next on them until it is
+  asked again, within a day.)
+
+## 2026-10-12 · Review fixes: the overnight check
+A Fable check of 2cb1e60..9af0984 (and the EDDN listener tool): 8 bugs in the repository, all fixed with a test each.
+- Voice: picking the voice already speaking (Settings or the lab's Use this voice) answered ok but did nothing: it was
+  neither remembered nor did it stop a background switch to the configured voice. A voice named is always used now.
+- Voice lab: a voice not in use opened on speaker #0, and Use this voice then overwrote the speaker kept for it; it
+  opens on its kept speaker now. A lab download ending no longer wipes a switch's or another download's status.
+- Boxels: a stale end mark (a hiccup, then that number found) blocked every later end and made the recommendations call
+  the boxel complete; one place now says a boxel's end. An empty boxel (-0 not found) is complete ("✓ empty").
+- Boxel mode refetched its list and the recommendations on every journal line; now on a jump, a scan here, or a change.
+- Overview: bringing your body into view scrolled the whole window when the list was short; only the list moves now.
+- EDDN: a catch-up's companion-file wait was timed like a live one, re-read the file on every catch-up line and logged
+  a misleading "not written"; a catch-up's wait ends after its lines again, quietly.
+
+## 2026-10-12 · Potential green gas giants
+- The community's seven-layer ladder model (CMDR Regza, from a hint by Dr. K. Ross and CMDR Arcanic; published by
+  Canonn on 2026-10-05) predicts which gas giants render green from the journal's own temperature, mass and radius
+  (`outrider/ggg.py`, written from the published rules: the same verdict as Canonn's code on 21,747 giants). Not a
+  curiosity, where it would blend in (the author): its own **green planet with "?"** on the body in Here and on the
+  system's row in Nearby (from Spansh's records of other people's scans too, which keep the journal's temperature:
+  a system to go to), a **Now line**, and a **"Potential green gas giant"** alert when your own scan fits, with its
+  own lines in every personality (`ggg`, 50 a list) and its own switch under Discoveries. A codex entry confirms one:
+  the "?" goes. Class II, V and helium giants, and the model's "nudged" temperatures, cannot be predicted: nothing said.
+
+## 2026-10-12 · Boxels: skip the systems someone has visited
+- Next (and the auto-target on arrival) went to the lowest number you had not visited, including ones Spansh knows
+  (someone has been there). An opt-in, **skip systems someone has visited** (meta `boxel_skip_known`, off by default),
+  passes over those for first discoveries only; the list dims them while it is on (the author agreed).
+
+## 2026-10-11 · Boxels: complete and done
+- A boxel is **✓ complete** by itself once its end is known (a name the galaxy map could not find) and you have visited
+  every system below it; **✓ Done with this boxel** marks one finished, complete or not (the author agreed; meta
+  `boxel_done`, undo any time). Either way Next (and the auto-target on arrival) offers nothing more, a kept boxel is
+  let go, and it leaves the recommendations: the next nearest of its kind takes its place (12 looked through per kind,
+  3 shown), and "done or complete nearby" lists the ones left out.
+
+## 2026-10-11 · Boxel mode: the switch beside This system, the highest known number
+- The Standard / Boxel switch sits on the Overview's own bar, left of "This system" (back in Nearby's options on the
+  Nearby tab); the warning that Outrider cannot know a boxel's size sits on the "you have visited · Spansh knows" line
+  (the author).
+- The boxel's head and every recommended boxel show the **highest known number** (yours or Spansh's, whichever is
+  higher: the author). Spansh is asked about the recommended boxels it has no list of yet, one after another in the
+  background, kept a day like the explored one's (meta `boxel_spansh` now keeps 60 boxels).
+
+## 2026-10-11 · Babylon 5 - Vorlon theme
+- A tenth theme for the tablet, the desktop page (Settings → Display) and the overlay's panels (the author's ask):
+  **Babylon 5 - Vorlon**, the Vorlon Empire's living ships evoked, not copied. Deep sea-green dark, the emblem's sea
+  greens and golden tendrils, a pale glowing core; soft arcs like the emblem's crescents and a faint inner glow.
+  Marcellus and Inter (already shipped, SIL OFL); your own heading font as `data/fonts/vorlon-display.ttf`.
+- Its emblem under the tablet's page list: the Vorlon Empire's, a public-domain fan redrawing by Blind Wolf on the
+  Babylon 5 Wiki (Category:User-created public domain images, as the Narn, Minbari and Centauri ones), credited in
+  `static/emblems/CREDITS.txt`.
+
+## 2026-10-11 · Boxel exploration
+- **Nearby → Boxel** (the author's idea; a switch in Nearby's bar, shared by the Overview pane and the Nearby tab, per
+  browser) lists the boxel you are in by number: your visits with your scans (Nearby's cells), Spansh's known systems
+  (asked automatically with an exact list of the boxel's names, 300 a request, kept a day), the numbers to try, the
+  warning that Outrider cannot know a boxel's size. **Next** and every row's 🎯 auto-target by number (POST
+  `/api/highway/target` {route: "boxel", index}); a name the galaxy map cannot find above every known number marks
+  "probably the end" (meta `boxel_ends`, **retry**). **📌 Keep this boxel**; opt-in **auto-target the next on arrival**
+  (meta `boxel_auto`, a kept boxel only). **Boxels nearby**: the nearest of each mass code in sectors you have been to,
+  what each tends to hold and your own figures per code; **Explore this boxel**.
+- `outrider/boxel.py` computes a boxel and any of its systems' id64 from a known position: checked against the author's
+  journals, 2,763 of 2,763 standard-sector systems (hand-authored sectors differ: list only).
+
+## 2026-10-11 · More voices in columns
+- More voices' rows did not line up: ▶ sample sat wherever the text before it ended (the author's screenshot). Each row
+  is a grid of four columns now (name, quality/speakers/size, ▶ sample, the action), with an empty cell where a voice
+  has no sample.
+
+## 2026-10-11 · More voices: download first, then try
+- More voices' "Download and use" switched Outrider to a voice before you had heard it, and a downloaded voice only
+  showed in the lab's list after reopening it (the author agreed to change both). Now **Download** fetches it without
+  switching (POST `/api/voices/download`, `Speaker.fetch`; the payload's `tts.fetching` / `tts.fetch_failed`), and when it
+  is here the lab picks it in its voice list, ready for ▶ Hear it and Use this voice. A voice already installed is
+  **Select** (picked in the list). The lab's voice list follows new voices while it is open.
+
+## 2026-10-11 · More voices: sorted, and Piper's samples
+- More voices (in the voice lab) sorts by name, quality (best first) or size either way (the author; per browser), and
+  each voice has **▶ sample**: Piper's own recording of it from the project's samples site (rhasspy.github.io/
+  piper-samples, its first speaker), heard before downloading anything. The catalogue gains `sample` (`SAMPLE_URL`);
+  25 voices picked at random from all 176, plus three newer ones, all had theirs. It plays through the lab's player:
+  ■ Stop stops it.
+
+## 2026-10-11 · The voice lab moves into the page, with speakers
+- **🎙 Voice lab** in ⚙ Settings → Voice replaces `voice_lab.py` (a separate Tk window, now removed with its tests;
+  the author's ask). It plays in the browser you are using, from the server's Piper (`api/say`), so it works on a
+  Docker server and the tablet and needs no python3-tk: try a voice and speed without switching (**▶ Hear it**), **Use
+  this voice**; More voices (download any of Piper's) moved into it; any alert's lines in any personality (**▶ Random
+  line**, **▶ Audition**: eight key alerts, `AUDITION_KEYS` kept equal to `outrider.speech.AUDITION` by a test), **✂
+  Cut this line**; your own words (**▶ Speak**, **⬇ Save WAV**). It never goes through the alert queue, hush or "play
+  on this PC".
+- **Speakers**: a Piper voice trained on many people (`en_GB-vctk-medium` 109, `en_US-libritts_r-medium` ~900) now
+  speaks as the one picked for it; Outrider always used the first. The lab steps through them (‹ › 🎲, each played);
+  Settings → Voice shows the voice in use's speaker beside it. Each voice keeps its own (meta `voice_speakers`, over
+  restarts), personality voices too. `Speaker.voice_speakers` reads the names from the voice's `.onnx.json`; POST
+  `/api/voice` takes `{voice, speaker}` (or `{speaker}` alone); GET `/api/voices/speakers?voice=`; `/api/say` (and
+  play, prefetch) take `speaker`; the payload's `tts` gains `speaker`, `speakers` (a count) and `speaker_name`.
+
+## 2026-10-11 · EDDN: a carrier's market written late still goes
+- Docked at the carrier and opened the market: no commodity message; the second visit's went (the author). The EDDN
+  builder is right (a replay of the journal sends it); the file was not: Outrider took Market.json only when stamped
+  within 5 s of the Market line and gave up after 10 s, and the game seems to write a carrier's first market of a docking
+  late (the data comes from its server). A companion file stamped up to 30 s after its line now counts (`FILE_LATE_S`),
+  the live wait lasts 35 s (`FILE_WAIT_S`; a catch-up keeps its line count), and a wait that ends unsent says so on the
+  console with what the file held ("EDDN: Market.json was not written for the line of ... (the file says ...)"), so
+  the next miss can be told apart.
+
+## 2026-10-11 · 🎯 beside your carrier; Here's heading stands down for the map
+- The Carrier tile (and the folded tiles line) has a 🎯 beside your carrier's system when it is elsewhere (the author):
+  auto-target puts that system in the galaxy map, through the same countdown run as a route's 🎯 (POST
+  api/highway/target {route: "carrier"}; a route cleared does not stop it). Game PC only; none aboard, in its system or
+  decommissioned.
+- Here's firsts no longer end in "sell at Universal Cartographics to claim what's unsold": players know (the author).
+- With the surface map up in the Overview, the firsts and the checklist under the system's name are hidden, so the
+  room goes to the bodies; they come back with the map.
+
+## 2026-10-11 · Overview: the map brings your body into view; a shorter Here legend
+- When the surface map comes up in the Overview's system pane, the body you are on is scrolled to the top of the list
+  above it (the author); again when you are on another body, never while you scroll the list yourself. Only the list
+  moves, not the window.
+- Here's icon legend drops the explanations in brackets ("something unusual (hover it)", "samples of a species taken
+  (3 analyses it)", "planetary mining locations (hover for the likely minerals)"...): the line got too long (the
+  author). The cells' own hovers still explain.
+
+## 2026-10-11 · Here: Rings before ⛏
+- Here's long bio lines ran into the ⛏ column next to them (the author). Rings now comes first: few bodies with bio have
+  rings, so the cell beside the bio column is usually empty and gives it room.
+
+## 2026-10-11 · Exo-Biology checklist: "aboard" counts what you carry
+- The checklist's header counted each species once by its best state, so a new colour of a species sold before (Gold
+  Vesicula aboard, Cyan sold) was not "aboard": it said "0 aboard" with eleven species' samples in the hold (the
+  author). "Aboard" now counts every species you carry unsold samples of in the region (its hover says so); sold, lost
+  and logged stay as they were.
+
+## 2026-10-11 · The start-up log says why the journals are read again
+- A start that reads every journal again said nothing about it, only a slower "journals up to date in ..." (the
+  author). It now says so first, with why: "re-reading every journal once: the journal reader changed (version 48 ->
+  49: named listening posts are kept, and two in one system count as two). This can take a few minutes."; or a new
+  database, `--rescan`, or a database written by a newer Outrider. The reasons are `PARSER_CHANGES`, in the player's
+  words (three at most, the rest counted); every PARSER_VERSION bump adds its line (a test checks).
+
+## 2026-10-11 · Here: one line per finished species, in its colour
+- Here listed a finished species twice: "Bacterium 3/3 ✓ 8.3M" and its codex line "📖 Bacterium Alcyoneum - Red ✦"
+  (the author). Now one line, the codex entry with what it pays ("📖 Bacterium Alcyoneum - Red ✦ 8.3M"; compact: the
+  genus); a species still being sampled keeps its "1/3" line and its codex line.
+- In codex lines the colour's word is drawn in that colour ("Bacterium Alcyoneum - Red": "Red" in red), mixed with the
+  theme's text colour so it reads on light and dark, and kept on a highlighted row; to try: Settings → Display → "Here:
+  species in their colour" turns it off (this device).
+- The Rings column stacks "2", "2 mapped", "1 hotspot" (the whole sentence on hover), so it is about as wide as its
+  heading and the bio column gets the room.
+
+## 2026-10-11 · Review fixes: today's code
+A Fable review of everything written since v2026.10.21 (d7be805..2cb1e60): six bugs confirmed, all fixed.
+- Inara: snapshots dropped because the commander had no API key yet were still recorded as sent, so ranks, reputation,
+  the ship and friends never reached the profile once the key was entered (until each changed). A drop for no key now
+  forgets that commander's record, and so does a new or removed key (maybe another Inara profile).
+- Inara: a dock after a hyperspace jump charged straight from normal space (no SupercruiseEntry, the usual way off a
+  carrier) was taken for docking again where you undocked and left out of the flight log; a login's dock suppression
+  also outlived the undocking when the game wrote no Docked. Both cleared by the jump and the undocking now.
+- Surface sites: a later FSS line for a body (it names only the anomaly) wiped the DSS's Guardian and Thargoid sites, and
+  mapping it again announced them again. The FSS now adds to what is known.
+- FSS signals: named listening posts ("Listening Post Pollux D568") never passed the reader's filter, and two indexed
+  ones in a system were one row ("Listening Post #1", "#2" now; said once per system and kind). PARSER_VERSION 49: the
+  next start re-reads the journals.
+- Curiosities: the systems already told (meta `curious_said`) were trimmed to the 2000 largest id64s, not the 2000 most
+  recent: kept in the order said now.
+- Launchers: the PyQt6 step ran in the repository while Outrider runs in the caller's folder, so a relative `--config`
+  named two different files and the early install was skipped. It runs in the caller's folder too (the repository on
+  PYTHONPATH); the .bat is untested on Windows.
+
+## 2026-10-11 · Tidier bio lists for bodies not DSS'd
+- Here's bio cell for signals not identified yet read "3 signals, not DSS'd", then "3 of these, 24.8M to 64.6M:", then
+  each genus on a line ending in "or" (the author: clean it up). Now one line for the count and the range ("3 signals,
+  not DSS'd · 24.8M–64.6M:"), then the genera with their best price dimmed, without "or" between them.
+
+## 2026-10-11 · No overlay while the game loads
+- After a crash the game writes no Shutdown and leaves Status.json saying live with the dead session's flags; the
+  relaunched game does not rewrite it until the session is in, so the overlay drew the old panels over the loading
+  screens, before the main menu and after it (the author). The reader now notes the newest game launch (a journal's
+  first part) or LoadGame and the newest Location (meta `game_load`, journal-derived): from one to the other the game is
+  loading and the overlay shows nothing.
+
+## 2026-10-11 · Rare planet classes, and one line for curiosities
+- Rare planet classes are 🔭 curiosities now: water giants, helium-rich and helium gas giants, Sudarsky class V gas
+  giants, and green gas giants (from their codex entry: the game says it nowhere else).
+- A new alert under Discoveries, "Curiosities": the first time the system you are in shows curiosities while the game is
+  live, one line to look at the panels, never the list ("You might be interested in some curious things I found here.
+  Check your panels.": the author's idea), with its own `curious` lines in every personality (50 a list). Once per
+  system ever (meta `curious_said`, live-only): a revisit stays quiet.
+
+## 2026-10-11 · FSS signals worth a detour
+- The reader's filter threw away every FSS signal but the phenomena: Titans, Guardian beacons, generation ships,
+  listening posts, number stations, tourist beacons and memorials now pass and are kept per system (`poi`;
+  PARSER_VERSION 48: the next start re-reads the journals). Ordinary megaships are traffic, not destinations: left out.
+- A new alert under Discoveries, "Signals worth a detour": "the Titan Cocijo", "a Guardian beacon", "a generation ship,
+  the Thetis", "a listening post", the first time a system has it, with its own `signal_poi` lines in every
+  personality, all delighted (50 a list). Tourist beacons, number stations and memorials (common in the bubble) are
+  shown, not said.
+- 📍 on Nearby and Here counts them (which, on hover), and Now has a line ("📍 Titan Cocijo · 2 tourist beacons").
+
+## 2026-10-11 · Surface sites: Guardian, Thargoid, planetary anomalies
+- Body signals other than biology, geology and mining were dropped: Guardian and Thargoid sites (the journal names them
+  only once the DSS has mapped the body), the new planetary anomaly (the FSS names it; nobody has documented what it is
+  yet) and "other" signals are kept now (`own_signals.sites`; PARSER_VERSION 47: the next start re-reads the journals).
+- A new alert under Discoveries, "Surface sites": "Guardian and Thargoid sites on 10 b", "an unknown planetary anomaly
+  on C 2", once per body and kind, with its own `surface_site` lines in every personality, all delighted (50 a list).
+  "Other" is shown, never said.
+- Here tags the body (🏛 Guardian, 👾 Thargoid, ❔ anomaly, 📡 other; the legend explains them), Nearby marks the system,
+  and Now has a line.
+
+## 2026-10-11 · Notable stellar phenomena: which ones you have visited
+- The journal says only "a ring phenomenon" when you drop at one, not which of the system's three, and two sites can
+  share a ring (the author found two in one ring with different things), so each drop counts as a site visited
+  (`phenomena_sites`, journal-derived; dropping twice at one site counts twice): Now says "1 of 3 visited" (then "all
+  visited"), the 🌀's hover the same, and it dims only once every one is visited. PARSER_VERSION 46: the next start
+  re-reads the journals once (for the drops already made). Asked by the author, 2026-10-11.
+
+## 2026-10-11 · Rare stars, announced and marked
+- A new alert, "Rare star": a black hole, Wolf-Rayet, carbon, MS/S-type, O-type or Herbig Ae/Be star, a supergiant, a
+  rarer white dwarf (pulsating DAV/DBV..., DO, DX...) or an exotic type, resolved live by the arrival's own scan or the
+  FSS, once per star ("a black hole, the main star", "a Wolf-Rayet star at B"), with its own `rare_star` lines in
+  every personality, all delighted (50 a list). Neutron stars and ordinary giants are too common to count.
+- ⭐ on Nearby and Here marks rare stars, Spansh's records included (a black hole nearby shows before you go); Now has
+  a line for them.
+- Settings -> Alerts groups the discoveries under one heading ("Discoveries"), each still with its own sound,
+  notification and voice switches (the author: a toggle per type, together in the list).
+
+## 2026-10-11 · Notable stellar phenomena: counted, in Now, and announced
+- The FSS lists a system's phenomena as identical lines (the author's Smojooe XF-G b24-0: three rings in one second),
+  and the (system, kind) key folded them into one: each kind now keeps how many (`phenomena.n`, the most one FSS
+  listing had; opening the FSS again never adds up). PARSER_VERSION 45: **the next start re-reads the journals** once,
+  so past systems get their counts.
+- A new alert, "Stellar phenomena": the first time the FSS finds phenomena in a system with none on record, live, "three
+  notable stellar phenomena, all in rings" (a cloud, rings, or both, in words), with its own `phenomena` lines in every
+  personality: all delighted, the sarcastic and profane ones too (50 a list). Nothing was said before.
+- Nearby's and Here's 🌀 shows the count ("🌀 3", what they are on hover; it showed one 🌀 for any number), and Now has
+  a line: "🌀 Three notable stellar phenomena, all in rings · none visited yet".
+
+## 2026-10-11 · Piper spells four star letters too
+- A body round four stars' barycentre ("ABCD 3 a", "ABCD 3 b a": the author's, today) was said "abd three ay": the
+  letters were spelled only up to three. Up to eight now, under the same rule that keeps words out (the letters in
+  alphabetical order, none twice: "ABBA 2" stays a word). Belts the same.
+
+## 2026-10-11 · Inara uploads, part G: the docs
+- The Uploads guide covers Inara: what goes, never the carrier, the batching and the change-only rule, the API key,
+  switching Inara off in any other app first (EDMC, EDDI, EDDiscovery, EDDLite: two senders can get the key revoked),
+  refusals, the developer switches. README, the Settings and Install guides, DESIGN_NOTES (why the whole profile, why
+  change-only, login-only credits) and AGENT_GUIDE's code map (`outrider/inara.py`, the hub's TRACKERS and keep).
+- Inara still has to accept "ED Outrider" before anything reaches it: until then it refuses, and Settings shows its
+  words.
+
+## 2026-10-11 · Inara uploads, part E2: missions, combat, friends and suits (parity with EDMC's plugin)
+- So a player using Outrider as their only connector loses nothing on their Inara profile (the author, 2026-10-11):
+  the mission log (accepted: where, for whom, what; completed: rewards, permits, the factions' gains; failed;
+  abandoned) and a mission's permits; the combat log (deaths with the killer or the wing's names, interdictions both
+  ways, escapes, PvP kills: Inara records only those); friends (added or seen online once, removed when declined or
+  lost; adding sends a friend request on Inara, as the game's does); Odyssey suit loadouts (whole when worn, changed
+  ones only: the game writes SuitLoadout at every disembark; equipped, renamed, deleted).
+- An NPC's code name ("$LUASC_..._SpecOps_A;") goes as its readable one ("Spec Ops Wing Alpha"). Unlike EDMC's
+  plugin, a renamed suit loadout sends its new name.
+
+## 2026-10-11 · Inara uploads, part E: community goals
+- Every community goal you take part in (exploration and biology goals too: the author, 2026-10-11): the goal (name,
+  place, expiry, tier reached and the top tier, contributors, total; Inara keeps each goal's page from what the apps
+  send) then your progress (contribution, percentile band and its reward, top rank). The game writes CommunityGoal often
+  while you are signed up (1,593 times in the author's journals): each goal goes only when its figures changed.
+
+## 2026-10-11 · Inara uploads, part D: the fleet and stored modules
+- Ships bought (the old one stored where you are, or sold), sold (on a rebuy too), swapped (the old one stored; the
+  Loadout that follows marks the new one current), sent elsewhere (with the transfer time) and renamed.
+- The fleet's places when the shipyard lists it (StoredShips: changed ships only; a ship in transit has no place yet)
+  and the stored modules whole (StoredModules, engineering included; an emptied store is sent empty).
+
+## 2026-10-11 · Inara uploads, part C2: reputation and inventory
+- Reputation with the superpowers (at login) and with each arrival system's factions, as Inara's -1..1, changed ones.
+- The inventories as whole snapshots, which Inara replaces whole: materials (the Materials tab's own fold), the
+  ship's hold (from Cargo.json when the line is the short form) and the Odyssey ship locker (reset, then set, so an
+  emptied kind empties there too). Taken when a batch goes (a jump, a docking, the end of the login's lines, a
+  shut-down) and only when changed: never on every pickup (the author's journals hold 14,049 Cargo and 19,467
+  ShipLocker lines). An emptied hold is sent empty.
+- Never the SRV's hold, and never anything about the fleet carrier (transfers, its market, trade orders): Inara's
+  API has no carrier inventory, and the carrier tracker's figures stay in Outrider.
+
+## 2026-10-11 · Inara uploads, part C: ranks, credits, statistics and the ship flown
+- Every rank and its progress (Combat, Trade, Exploration, CQC, Mercenary, Exobiologist, Federation, Empire; a
+  promotion at 0 %), the engineers (stage, rank), Powerplay (power, rank, merits at login; joining, leaving, defecting,
+  a new rank).
+- Credits once per session as the game says them at login (LoadGame's credits and loan, Statistics' wealth as the
+  assets): never Outrider's own sums, which Inara warns against; the game's statistics whole.
+- The ship flown (name, ident, values, rebuy, jump range, cargo; marked current) and its loadout with the engineering.
+- Only what changed since the commander's profile last got it (meta `inara_sent`): the game writes Rank, Progress,
+  Loadout and Statistics at every login and Loadout often, which would otherwise all go again.
+
+## 2026-10-11 · Inara uploads, part B: the foundation and travel (project/PLAN-inara-2026-10-11.md)
+- A third uploader beside EDDN and EDSM, off by default: Settings -> Uploads switches it (`[inara] enabled`, hidden from
+  the Server settings like the others) and takes an Inara API key per in-game commander (kept here; the page sees its
+  ends only). `outrider/inara.py` builds the events, batches them (a jump, a docking, the end of the login's lines, or
+  5 minutes) and paces the requests (one every 35 s at most: `upload_loop`'s new `min_gap`); Inara's answers: a refused
+  batch holds the service with Inara's words, a rate refusal waits an hour, a refused event is dropped.
+- So far the flight log and location: jumps, carrier jumps, dockings (not the one a login or a ship swap writes, nor
+  re-docking without leaving), landings (Touchdown, a dropship's deployment) and the location (login, supercruise exit,
+  settlements), with the ship flown or the taxi. Ranks, credits, ships, inventory and the rest follow in the next parts.
+- EDMC sending to Inara on this PC holds Outrider's (two senders can get the key revoked); the page asks for Inara to be
+  off in EDDI and EDDiscovery too, which Outrider cannot see.
+- Developer switches (environment, never settings): `OUTRIDER_INARA_DRYRUN=1` builds and logs the requests into
+  data/inara-dryrun.jsonl (no key) and sends nothing; `OUTRIDER_INARA_DEV=1` marks them `isBeingDeveloped`.
+- The upload hub: a service may follow the session itself (`uploads.TRACKERS`, kept in the session's snapshot) and keep
+  its own memory in the tick's checkpoint (`UploadHub(keep=...)`: Inara's record of what each profile has, meta
+  `inara_sent`, live-only); a service's hold sees the session.
+
+## 2026-10-11 · Review fixes: Mining sites opens its body in Here
+- Materials -> Mining sites' 🔍 opened the body under its full name ("Smojooe AR-E b25-8 ABC 3 d") while Here and the
+  body panel go by the short one ("ABC 3 d"): the row was not marked, the panel missed Here's facts and did not
+  refresh after a scan. It passes the short name, as the Log's 🔍 does. (A lead from the review's re-check.)
+
+## 2026-10-11 · Review fixes: uploads
+- EDDN: logged in docked, the game's Location names the station as the Body ("Thorn Port", BodyType "Station"); a
+  later Docked at a planetary port then sent the station's name as its planet. A Location's body is now taken only
+  when it is a planet or a star, as EDMC does.
+- Switching an upload off forgets its mark: when the config file could not keep the switch, the next start found it
+  on and caught up everything played while it was off (up to a week for EDSM).
+- Three Outriders on one journal folder: the one taking over from a stopped sender rewinds to the sender's handover
+  mark, not to a third instance's that only followed (its mark at the journal's end skipped the stretch nobody sent).
+
+## 2026-10-11 · Review fixes: voice and AI
+- The voice's answer when nothing matched ("I only know a few questions so far: ...") names the nearest station or
+  carrier too; the list is built from one label per command (`outrider.ask.LABELS`), so a new one is never left out.
+- The AI's `body_detail` tool says when no body by that name is known, instead of answering an empty body.
+- Spoken lines: with this screen set never to speak (or a tablet not playing alerts), a line's fate says so; it
+  blamed "another window".
+- The voice lab opens on a speech file whose top level is not an object (it said so and stopped).
+
+## 2026-10-11 · Review fixes: routes
+- Plot Route: Clear route while a Road to Riches, Exomastery or trade plot runs into an empty slot stops that plot. It
+  posted to the Highway's clear instead: "Route cleared." while the plot ran on, or your Highway route deleted.
+- A finished survey or trade route left on screen no longer keeps the clipboard from the Highway (nothing was copied
+  for the rest of the Highway until it was cleared); a finished Highway likewise gives it back.
+- A trade route's clipboard copies the first stop in another system: with two stops in one system it copied the
+  system you were in, and the one after them never.
+
+## 2026-10-11 · Review fixes: journal data and values
+- A station repair of "Wear" alone no longer sets the hull to 100 %: wear is the ship's integrity, and a damaged
+  hull's repair names "Hull" beside it (checked against the author's journals, 2023-2025).
+- A jumponium body found in a system you left without an FSD charge (a carrier jump, a respawn) is no longer
+  announced at the next charge, in another system.
+- A codex entry with no body (a phenomenon found in space) is no longer shown, voucher and all, on every body of the
+  system you have not scanned yourself.
+- A system first found through EDSM and later filled from Spansh's data is Spansh's: it kept EDSM's mark, so the
+  arrival verdict was never refined from it.
+- `--restore` with the database file gone but its rollback journal left sets the journal aside: SQLite would have
+  rolled it into the restored database.
+- An older Docked read late (a legacy folder imported after the live one) no longer moves the market a carrier
+  transfer is filed under.
+- Exo-Biology checklist: Concha Biconcavis shows 19,010,800 cr (the price list), not BioScan's placeholder 16,777,215;
+  the unsold estimate prices a species missing from the price list (Radicoida Unicus) from the bio rules, as My Samples
+  does, instead of "not priced".
+- No journal re-read: the fixes apply from the next lines read.
+
+## 2026-10-11 · Review fixes: config and launchers
+- A config value of the wrong type is reported at start and the default kept, as the example file says: a boolean
+  for a number (`module_warn = true` read as 1, `radius = true` as 1 ly) and a non-text `db`, `backup_dir`, `voice`,
+  `voice_fallback` or `[autohonk] key` (`db = 5` became a database called "5") were taken silently.
+- `--write-config` and the first Server settings save write `backup_dir` relative to the Outrider folder
+  ("data/backups"), as `db` is: an absolute path kept pointing at the old folder after a move or rename.
+- `ed_outrider.toml.new` (Server settings write through it; it holds the password while it exists) is git-ignored.
+- launch_outrider.sh and .bat start Outrider in the folder they were run from, so relative paths in the arguments
+  (`--config my.toml`, `--journals .`) are the caller's, not the repository's. The Linux launcher no longer stops
+  when pip's own upgrade fails (offline): the requirements' install after it says what matters, as on Windows.
+
+## 2026-10-11 · Review fixes: auto honk and the server
+- Auto honk no longer presses Primary Fire when Status.json says the game is at its menu or closed: quitting during
+  its wait for the cockpit (galaxy map open after arriving, say) sent the key into whatever window had focus. It waits,
+  then gives up as the other waits do. A press that fails puts its status back to ready (it stayed "waiting: ...").
+- Sign-in: a proxy that sends only RFC 7239 `Forwarded` gets each device its own count of wrong passwords (all shared
+  one before); addresses that stopped trying are forgotten, not kept for the life of the process.
+- Failed body-detail lookups say "Spansh body lookups failed", so the Data tile names Spansh, not "server error".
+- More voices: a catalogue download cut off mid-way answers the page's "cannot be fetched" (502), not a bare 500.
+- With `[server] host` set to one LAN address, Outrider also listens on 127.0.0.1 for the overlay window, which
+  always talks to loopback: it drew nothing.
+
+## 2026-10-11 · Review fixes: the overlay
+- The overlay's figures are written as the page writes them: 999,999 was "1000k" (the page: "1.0M"), 999.95M
+  "1000.0M", 1.25B "1.2B" (`overlay.credits` follows page.js `credits`).
+- A station or a mining site targeted in game is no body: the body panel kept to the body you are near (it vanished),
+  and Now no longer says "➜ Harper Dock · nothing to do here" or a raw `$SAA_Unknown_Signal` name; a mining site's
+  planet is matched by its id, as the page's Now view does.
+- The overlay window's feed survives a connection cut mid-answer (an `http.client` error is not an OSError): it ended
+  and the last panels stayed drawn over the game.
+- The runner: a window that drew for a minute or more and then stopped starts a new count (five stops over days of
+  play no longer gave up for good: "five times in a row"); a pip run that succeeds while this Python still cannot
+  import PyQt6 is reported once, not run again every few seconds.
+- Settings -> In-game overlay: the answer to a switch (theme, text size, on/off, test panels) was taken for a layout
+  answer and dropped until the next poll; and after a pick from a list the server's note was never drawn (the list
+  kept the focus, which holds the redraw off).
 ## 2026-10-11 · This fork: auto honk can then target the next route system
 - **Then target the next route system, N s after the honk** in ⚙ Settings → Auto honk (off by default; `[autohonk]
   target_next`, `target_delay`, 0 to 60 s, 3 by default). After an auto honk the journal confirms with its discovery

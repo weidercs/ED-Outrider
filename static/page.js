@@ -38,7 +38,7 @@ const TABLET = typeof document !== "undefined" && !!document.body && document.bo
 // (null: you were on Now already, or chose a page since); mapWas: whether the map showed at the last draw
 const TB = {group: null, beforeMap: null, mapWas: false, bannerTimer: null, bannerKey: null,
             groups: {explore: ["now", "near", "here", "bio"], navigate: ["bm", "search", "map", "hwy"], records: ["hist", "log", "mat", "ship", "firsts", "galnet"]},
-            themes: ["lcars", "elite", "babylon5", "narn", "minbari", "centauri", "sith", "alliance", "dark"], railPending: {}, railEdit: null};
+            themes: ["lcars", "elite", "babylon5", "narn", "minbari", "centauri", "vorlon", "shadow", "sith", "alliance", "dark"], railPending: {}, railEdit: null};
 // Where you are, as the exact id64 string (position.id). The JSON number position.id64 loses the last digits above
 // 2^53, so string comparisons with the server's exact ids (arrival, Here, moments) must use this.
 const posId = () => data && data.position ? data.position.id ?? String(data.position.id64) : null;
@@ -137,6 +137,11 @@ function dual(fullHtml, shortHtml, {title = null, titleHtml = null, s2 = null} =
 // a system name whose words never break inside ("Synuefe BH-D d11-101" wraps at its spaces, not after a hyphen,
 // when a compact2 table lets names wrap)
 // (compact2 only: the split copy renders a hair differently, so a table that fits keeps the name in one piece)
+// a green gas giant: a green ringed planet, with "?" while it is only the ladder model's guess (the author, 2026-10-12)
+const GGG_SVG = `<svg viewBox="0 0 18 14" width="17" height="13" aria-hidden="true"><ellipse cx="9" cy="7" rx="8.2" ry="2.3" fill="none" stroke="#9BE7A9" stroke-width="1.1" transform="rotate(-18 9 7)"/><circle cx="9" cy="7" r="4.6" fill="#3FBF6A"/><path d="M5.2 5.6 Q9 4.4 12.8 5.6" stroke="#B8F5C5" stroke-width=".8" fill="none"/></svg>`;
+const gggIcon = (sure, title, n = 1) => `<span class="ggg${sure ? " sure" : ""}" title="${esc(title)}">${GGG_SVG}${sure ? "" : "?"}${n > 1 ? "×" + n : ""}</span>`;
+const gggTitle = g => g.confirmed ? "a green gas giant: your codex entry confirms it"
+  : `a potential green gas giant (${g.chance}): the community's seven-layer ladder model puts a cloud layer exactly on a colour border (layer ${g.rung}, ${g.border} K). A guess: check it in the system map, the codex confirms it`;
 const nameWords = n => { const split = esc(n).split(" ").map(w => /-/.test(w) ? `<span class="nw">${w}</span>` : w).join(" ");
   return split === esc(n) ? split : `<span class="c2hide">${esc(n)}</span><span class="sf2">${split}</span>`; };
 // a plain text in both forms
@@ -170,13 +175,38 @@ function valueTitle(s) {
   const part = (c, b) => [c ? `${credits(c)} cartographics` : "", b ? `${credits(b)} exobiology` : ""].filter(Boolean).join(" + ") || "nothing";
   return `On board from here: ${part(v.carto_now, v.bio_now)}\nStill available: ${part(v.carto_left, v.bio_left)}\n\nExobiology counts ×5 on bodies nobody had set foot on when you scanned them, ×1 on bodies you have not scanned.`;
 }
+// star and planet types new to your codex (the review's suggestion, 2026-10-12): a body's type logs a codex entry the
+// first time you scan one in a region. "galaxy" (✪): in your codex nowhere; "region" (✦): not in this region; null:
+// logged, or not known (data.codex_types: your codex's types per region, always current)
+function codexTypeState(t, region) {
+  if (!t || !t.id) return null;
+  const logged = (data && data.codex_types) || {};
+  if (!Object.keys(logged).length) return null;   // no body type in your journals' codex at all: nothing to compare with
+  if (!Object.values(logged).some(ids => ids.includes(t.id))) return "galaxy";
+  return region && !(logged[region] || []).includes(t.id) ? "region" : null;
+}
+function codexTypeMark(t, region) {
+  const st = codexTypeState(t, region);
+  return !st ? "" : ` <span class="cxnew cxtype${st === "galaxy" ? " cxgal" : ""}" title="${esc(t.name)}: new to your codex ${st === "galaxy" ? "anywhere" : "in this region"} (logged when you scan it)">${st === "galaxy" ? "✪" : "✦"}</span>`;
+}
+// Nearby: the types here new to your codex, one tag ("✦2"), each named in its title
+function codexTypesTag(s) {
+  const fresh = (s.codex_types || []).map(t => ({t, st: codexTypeState(t, s.region)})).filter(x => x.st);
+  if (!fresh.length) return "";
+  const kinds = [...new Map(fresh.map(x => [x.t.id, x])).values()], gal = kinds.some(x => x.st === "galaxy");
+  return `<span class="nb cxtype${gal ? " cxgal" : ""}" title="new to your codex${s.region ? ` in ${esc(s.region)}` : ""}: ${kinds.map(x =>
+    esc(`${x.t.name} (${fresh.filter(y => y.t.id === x.t.id).map(y => y.t.body).join(", ")})${x.st === "galaxy" ? ", anywhere" : ""}`)).join("; ")}">${gal ? "✪" : "✦"}${kinds.length > 1 ? kinds.length : ""}</span>`;
+}
 function notable(s) {
   const n = s.notable || {};
   const names = {ELW: "Earth-like", WW: "water world", AW: "ammonia world", T: "terraformable"};
+  const gg = s.ggg || [];
   return ["ELW", "WW", "AW", "T"].filter(k => n[k]).map(k =>
     `<span class="nb ${k}" title="${names[k]}${n[k] > 1 ? "s" : ""}">${k}${n[k] > 1 ? "×" + n[k] : ""}</span>`).join("") +
     (s.bio_potential ? `<span class="nb bio" title="exobiology: up to this much across ${s.bio_bodies_guessed} bod${s.bio_bodies_guessed === 1 ? "y" : "ies"}, from spawn rules">🧬≤${credits(s.bio_potential)}</span>` : "") +
-    phenomenaTag(s.phenomena) + oldDataTag(s.stale_bio) + bioUnknownTag(s.bio_unknown) +
+    (gg.length ? gggIcon(false, `potential green gas giant${gg.length > 1 ? "s" : ""} (the community's ladder model, from your scans or Spansh's): ` +
+      gg.map(x => `${x.body} (${x.chance})`).join(", "), gg.length) : "") + (s.ggg_green ? gggIcon(true, "a green gas giant your codex confirms", s.ggg_green) : "") +
+    codexTypesTag(s) + phenomenaTag(s.phenomena) + rareStarTag(s.rare_stars) + sitesTag(s.sites) + poiTag(s.pois) + oldDataTag(s.stale_bio) + bioUnknownTag(s.bio_unknown) +
     (s.curiosities ? `<span class="nb cur" title="${(s.curiosity_list || []).map(c => esc(`${c.body}: ${c.tag} (${c.why})`)).join("&#10;")}">🔭${s.curiosities > 1 ? "×" + s.curiosities : ""}</span>` : "");
 }
 // pre-Odyssey Spansh data (stale_bio {bodies, genera_top, up_to, reported}): thin-atmosphere worlds marked not
@@ -193,11 +223,42 @@ const bioUnknownTag = n => !n ? "" : `<span class="nb" title="${n} bod${n === 1 
 const oldDataTag = o => { if (!o || !o.bodies) return "";
   const full = `old data: ${o.bodies} bod${o.bodies === 1 ? "y" : "ies"}`;
   return `<span class="nb old" title="${oldDataTitle(o)}">${dual(full, `old ${o.bodies}`, {titleHtml: `${full}. ${oldDataTitle(o)}`})}</span>`; };
-// 🌀 notable stellar phenomena your FSS found in a system (life clouds, rings); dimmed once you have been to it
+// 🌀 notable stellar phenomena your FSS found in a system (life clouds, rings), with how many; dimmed once you have been
+// to every kind
+const phenomenaCount = list => (list || []).reduce((a, p) => a + (p.n || 1), 0);
+// how many sites you have dropped at (each told apart by the body you were next to: State's phenomena_sites), at most n
+const phenomenaVisited = list => (list || []).reduce((a, p) => a + Math.min(p.n || 1, p.visited ?? (p.reached_ts ? 1 : 0)), 0);
+const phenomenaLeftText = list => { const n = phenomenaCount(list), v = phenomenaVisited(list);
+  return !v ? "none visited yet" : v >= n ? "all visited" : `${v} of ${n} visited`; };
+// surface sites on a body (body signals): Guardian, Thargoid, a planetary anomaly, others nobody has named yet
+const SITE_LOOK = {guardian: ["🏛", "Guardian sites"], thargoid: ["👾", "Thargoid sites"], anomaly: ["❔", "an unknown planetary anomaly"],
+                   other: ["📡", "unidentified surface signals"]};
+const siteIcons = sites => Object.keys(SITE_LOOK).filter(k => (sites || {})[k]).map(k => SITE_LOOK[k][0]).join("");
+const siteTags = sites => Object.keys(SITE_LOOK).filter(k => (sites || {})[k]).map(k =>
+  `<span class="sp site site-${k}" title="${esc(SITE_LOOK[k][1])}: ${sites[k]} signal${sites[k] === 1 ? "" : "s"}">${SITE_LOOK[k][0]}</span>`).join("");
+const siteText = list => (list || []).map(x => `${siteIcons(x.sites)} ${Object.keys(SITE_LOOK).filter(k => x.sites[k]).map(k => SITE_LOOK[k][1]).join(", ")} on ${x.body}`).join(" · ");
+const sitesTag = list => !list || !list.length ? "" : `<span class="nb sites" title="${esc(siteText(list))}">${[...new Set([...list.map(x => siteIcons(x.sites)).join("")])].join("")}${list.length > 1 ? " " + list.length : ""}</span>`;
+// 📍 FSS signals worth a detour (State's poi): the rare ones by name, the common ones counted
+const POI_NAMES = {titan: ["Titan", "Titans"], guardian_beacon: ["Guardian beacon", "Guardian beacons"],
+                   generation_ship: ["generation ship", "generation ships"], listening_post: ["listening post", "listening posts"],
+                   number_station: ["number station", "number stations"], tourist: ["tourist beacon", "tourist beacons"],
+                   memorial: ["memorial", "memorials"]};
+function poiText(list) {
+  const by = {};
+  for (const p of list || []) (by[p.kind] = by[p.kind] || []).push(p.name);
+  return Object.keys(POI_NAMES).filter(k => by[k]).map(k => k === "titan" || k === "generation_ship" ? by[k].join(", ")
+    : by[k].length === 1 ? `a ${POI_NAMES[k][0]}` : `${by[k].length} ${POI_NAMES[k][1]}`).join(" · ");
+}
+const poiTag = list => !list || !list.length ? "" : `<span class="nb poi" title="${esc(poiText(list))}">📍${list.length > 1 ? " " + list.length : ""}</span>`;
+// ⭐ rare stars in a system (a black hole, a Wolf-Rayet...: from Spansh's records too, before you go), what on hover
+const rareStarText = list => (list || []).map(r => r.main || !r.body ? `${r.what} (main star)` : `${r.what} at ${r.body}`).join(", ");
+const rareStarTag = list => !list || !list.length ? "" :
+  `<span class="nb rarestar" title="rare: ${esc(rareStarText(list))}">⭐${list.length > 1 ? " " + list.length : ""}</span>`;
 function phenomenaTag(list) {
   if (!list || !list.length) return "";
-  const left = list.filter(p => !p.reached_ts);
-  return `<span class="nb nsp${left.length ? "" : " done"}" title="notable stellar phenomena: ${list.map(p => p.kind + (p.reached_ts ? " (reached)" : "")).join(", ")}">🌀${list.length > 1 ? "×" + list.length : ""}</span>`;
+  const n = phenomenaCount(list), done = phenomenaVisited(list) >= n;
+  return `<span class="nb nsp${done ? " done" : ""}" title="${esc(phenomenaWhat(Object.fromEntries(list.map(p => [p.kind, p.n || 1]))))}` +
+    ` · ${phenomenaLeftText(list)}">🌀 ${n}</span>`;
 }
 // Journal ship ids -> the names the game shows.
 const SHIP_NAMES = {sidewinder: "Sidewinder", eagle: "Eagle", hauler: "Hauler", adder: "Adder", empire_eagle: "Imperial Eagle",
@@ -263,6 +324,10 @@ document.getElementById("radiusSel").onchange = async e => {
 setInterval(() => { if (data) renderStrip(); }, 30000);
 // ---- carrier tile: where it is, the rendezvous maths, and a live countdown to a booked jump ----
 let carrierWarned = null;
+// 🎯 beside your carrier when it is in another system (the author, 2026-10-11): auto-target puts its system in the
+// galaxy map, as 🎯 on a route's row does; on the game PC only (it presses keys there)
+const carrierAim = c => c && !c.aboard && !c.here && c.system && !(c.decommission && c.decommission.done) && data.game_pc !== false
+  ? hwyAimBtn(c.system, "carrier", null, true) : "";
 function renderCarrier() {
   const c = data && data.carrier, cl = document.getElementById("carrierLine");
   const val = (v, title) => `<div class="val"${title ? ` title="${title}"` : ""}>${v}</div>`, ln = v => v ? `<div class="ln">${v}</div>` : "";
@@ -280,7 +345,8 @@ function renderCarrier() {
   }
   const fmtLy = d => d.toLocaleString("en-US", {maximumFractionDigits: 1});
   let where = c.aboard ? "<b>aboard</b>" : c.here ? "<b>in this system</b>"
-    : `<span class="copy" data-name="${esc(c.system)}" title="click to copy">${esc(c.system)}</span>` + (c.distance != null ? ` · <b>${fmtLy(c.distance)} ly</b>` : "");
+    : `<span class="copy" data-name="${esc(c.system)}" title="click to copy">${esc(c.system)}</span>` + (c.distance != null ? ` · <b>${fmtLy(c.distance)} ly</b>` : "")
+      + carrierAim(c);
   // the game was not running when a booked jump left: this is where it was booked to go
   if (c.assumed) where += ` <span class="unk" title="the booked jump's destination: the journal confirms it at your next login">(booked jump, not yet confirmed)</span>`;
   // straight-line lower bounds: the real route is never shorter
@@ -530,13 +596,27 @@ document.getElementById("tilesBtn").onclick = () => {
 // Here's bio column on this device (store hereBio): leave out finished species, and the bio of bodies with fewer than
 // minSig signals (BioScan's display options)
 const hereBio = () => { const c = store.get("hereBio", null) || {};
-  return {hideDone: !!c.hideDone, minSig: Number.isInteger(c.minSig) && c.minSig > 0 ? Math.min(20, c.minSig) : 0}; };
+  return {hideDone: !!c.hideDone, minSig: Number.isInteger(c.minSig) && c.minSig > 0 ? Math.min(20, c.minSig) : 0,
+          colours: c.colours !== false}; };
 {
-  const hd = document.getElementById("hereHideDone"), ms = document.getElementById("hereMinSig");
-  const draw = () => { const c = hereBio(); hd.checked = c.hideDone; ms.value = c.minSig; };
-  const save = () => { store.set("hereBio", {hideDone: hd.checked, minSig: Math.max(0, Math.min(20, parseInt(ms.value, 10) || 0))}); draw(); if (data) renderHere(); };
-  hd.onchange = save; ms.onchange = save; draw();
+  const hd = document.getElementById("hereHideDone"), ms = document.getElementById("hereMinSig"), vc = document.getElementById("hereColours");
+  const draw = () => { const c = hereBio(); hd.checked = c.hideDone; ms.value = c.minSig; vc.checked = c.colours; };
+  const save = () => { store.set("hereBio", {hideDone: hd.checked, minSig: Math.max(0, Math.min(20, parseInt(ms.value, 10) || 0)),
+                                             colours: vc.checked}); draw(); if (data) renderHere(); };
+  hd.onchange = save; ms.onchange = save; vc.onchange = save; draw();
 }
+// A species' colour as the game names it ("Bacterium Alcyoneum - Red"): in Here's codex lines the colour's word is drawn
+// in it ("Red" in red) when hereBio().colours is on (the author, 2026-10-11: to try). The CSS mixes it with the theme's
+// text colour (.vc), so it reads on light and dark alike. To take the colours out: this, colourName's two uses in
+// rowHtml (back to esc(name)), the checkbox and .vc in page.css.
+const VARIANT_COLOURS = {Amethyst: "#b48cf0", Aquamarine: "#6fe3c8", Black: "#8a8f96", Blue: "#5b9dff", Brown: "#b07a4a",
+  Cobalt: "#5a82ff", Cyan: "#4fd8e8", Emerald: "#3ccf7f", Gold: "#e8c040", Green: "#5cc95c", Grey: "#a8adb3", Indigo: "#8a7dff",
+  Lemon: "#f0e868", Lilac: "#c8a2f0", Lime: "#a6e04a", Magenta: "#e85ad8", Maroon: "#c0506a", Mauve: "#c99ad6",
+  Mulberry: "#c25a8f", Ocher: "#d29a3a", Orange: "#ff9a3c", Peach: "#ffb48a", Pink: "#ff8fc0", Purple: "#b070e0",
+  Red: "#ff5a5a", Ruby: "#e8406a", Sage: "#a3bf8f", Silver: "#c8ccd2", Teal: "#3cc0b0", Turquoise: "#40e0d0",
+  White: "#f2f2f2", Yellow: "#f5d84a"};
+const colourName = name => { const m = /^(.* - )([A-Za-z]+)$/.exec(String(name || "")), c = m && VARIANT_COLOURS[m[2]];
+  return c && hereBio().colours ? `${esc(m[1])}<span class="vc" style="--vc: ${c}">${esc(m[2])}</span>` : esc(name); };
 const tilesModeEl = document.getElementById("tilesMode");
 const drawTilesMode = () => { tilesModeEl.value = tilesMode() || ""; };
 tilesModeEl.onchange = () => { store.set("tilesMode", tilesModeEl.value || null); drawTilesFold(); if (data) render(); };
@@ -558,7 +638,7 @@ function tilesLineHtml() {
     const pl = c.planned, left = pl && pl.departure ? (Date.parse(pl.departure) - Date.now()) / 1000 : null;
     const where = c.aboard ? "aboard" : c.here ? "here" : c.distance != null ? ly(c.distance) : esc(c.system || "");
     const dep = left != null && left > 0 ? ` · departs in ${left >= 3600 ? `${Math.floor(left / 3600)} h ${Math.floor(left % 3600 / 60)} min` : `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, "0")}`}` : "";
-    out.push(bit(`carrier ${where}${dep}`, dep && left < 300 && !c.aboard ? "urgent" : "", c.name || "your fleet carrier"));
+    out.push(bit(`carrier ${where}${dep}`, dep && left < 300 && !c.aboard ? "urgent" : "", c.name || "your fleet carrier") + carrierAim(c));
   }
   const dl = tileLevel("tData");
   if (dl) out.push(bit(dataBit, dl, "the Data tile: unfold the tiles for the detail"));
@@ -806,6 +886,10 @@ function renderNow() {
       (t.star_class ? ` <span class="${/^[OBAFGKM](_|$)/.test(t.star_class) ? "ok" : "noscoop"}">${esc(t.star_class)}${/^[OBAFGKM](_|$)/.test(t.star_class) ? " ⛽" : " ✕"}</span>` : "") +
       (hz ? ` <span class="hazard">⚠ ${esc(hz)}</span>` : "") + `</div>`);
   }
+  // where the next jump goes: the route's next stop (as the strip says it), the kept boxel's Next
+  const nr = nowRouteHtml(), nb = nowBoxelHtml();
+  if (nr) lines.push(`<div class="now-line now-route">${nr}</div>`);
+  if (nb) lines.push(`<div class="now-line now-boxel">${nb}</div>`);
   if (f && f.live && f.pct != null)
     lines.push(`<div class="now-line ${f.pct < 15 ? "urgent" : f.pct < 30 ? "warn" : ""}">⛽ <b>${f.pct}%</b>` +
       (f.jumps_max != null ? ` · ${f.jumps_max} ${jumpsWord(f.jumps_max)}` : "") + (f.since_scoop != null ? ` · ${f.since_scoop} since scoop` : "") +
@@ -833,6 +917,29 @@ function renderNow() {
     // a body targeted that is not the next item: an extra line, never in place of Next (Status.json keeps the target
     // after you finish a body, so Next must stay visible)
     if (dest && !destIsNext) lines.push(`<div class="now-line now-small">${nowDestText(hd, l, plan, dest)}</div>`);
+    const siteBodies = hd ? (hd.bodies || []).filter(b => b.sites && ["guardian", "thargoid", "anomaly"].some(k => b.sites[k])) : [];
+    if (siteBodies.length)   // Guardian or Thargoid sites, an anomaly, on this system's bodies
+      lines.push(`<div class="now-line now-sites"><span class="ok">${esc(siteText(siteBodies.map(b => ({body: b.name, sites: b.sites}))))}</span></div>`);
+    if (hd && hd.pois && hd.pois.length)   // FSS signals worth a detour: Titans, beacons, listening posts...
+      lines.push(`<div class="now-line now-poi"><span class="ok">📍 ${esc(poiText(hd.pois).replace(/^./, c => c.toUpperCase()))}</span></div>`);
+    // green gas giants here: the model's guesses (check them in the system map) and any your codex confirms
+    const gggs = hd && hd.bodies ? hd.bodies.filter(b => b.ggg) : [];
+    if (gggs.length) {
+      const guess = gggs.filter(b => !b.ggg.confirmed), sure = gggs.filter(b => b.ggg.confirmed);
+      lines.push(`<div class="now-line now-ggg">` + (guess.length ? `${gggIcon(false, gggTitle(guess[0].ggg))} <span class="ok">Potential green gas giant${guess.length > 1 ? "s" : ""}: ` +
+        `${guess.map(b => `${esc(b.name)}${b.ggg.chance === "possible" ? " (possible)" : ""}`).join(", ")}</span> <span class="unk">· check in the system map</span>` : "") +
+        (sure.length ? `${guess.length ? " · " : ""}${gggIcon(true, gggTitle(sure[0].ggg))} <span class="ok">Green gas giant${sure.length > 1 ? "s" : ""}: ${sure.map(b => esc(b.name)).join(", ")}</span>` : "") + `</div>`);
+    }
+    if (hd && hd.rare_stars && hd.rare_stars.length)   // a black hole, a Wolf-Rayet...: rare stars here
+      lines.push(`<div class="now-line now-rare"><span class="ok">⭐ ${esc(rareStarText(hd.rare_stars).replace(/^./, c => c.toUpperCase()))}</span></div>`);
+    // notable stellar phenomena the FSS found here: how many and where, and how many are still to visit
+    const nsp = hd && hd.phenomena && hd.phenomena.length ? hd.phenomena : null;
+    if (nsp) {
+      const what = phenomenaWhat(Object.fromEntries(nsp.map(p => [p.kind, p.n || 1])));
+      const all = phenomenaVisited(nsp) >= phenomenaCount(nsp);
+      lines.push(`<div class="now-line now-nsp"><span class="${all ? "ok" : "warnc"}">🌀 ${esc(what[0].toUpperCase() + what.slice(1))}</span>` +
+        ` <span class="unk">${phenomenaLeftText(nsp)}</span></div>`);
+    }
   }
   const hz = horizon(), sk = data.streak;
   if (hz || (sk && sk.total)) lines.push(`<div class="now-line now-small">${[sk && sk.total ? `<b>${sk.new}/${sk.total}</b> new` : "",
@@ -848,6 +955,23 @@ function renderNow() {
     lines.push(`<div class="now-line now-small now-hint">screen may sleep: set the tablet's screen timeout, or open over localhost/HTTPS</div>`);
   el.innerHTML = lines.join("");
   renderSurface();
+}
+// Now's route line: the route the strip shows (this device's pick with both), its next stop with 🎯 (the review's
+// suggestion, 2026-10-12: Now never said where the next jump goes)
+function nowRouteHtml() {
+  const hw = data.highway, sv = data.survey;
+  return lineKind(hw, sv) === "rich" ? surveyLineHtml(sv, {short: true}) : hw ? hwyLineHtml(hw, {short: true}) : "";
+}
+// Now's boxel line: the kept boxel's Next (or the one followed, in Boxel mode), as the boxel pane's Next
+function nowBoxelHtml() {
+  const bx = data.boxel && data.boxel.next;
+  if (!bx || !bx.label || !(bx.picked || nearMode() === "boxel")) return "";
+  const head = `<span class="hwyg" aria-hidden="true">▦</span> `;
+  if (bx.complete || bx.done) return `${head}${esc(bx.label)} <span class="ok">✓ ${bx.complete ? "complete" : "done"}</span>`;
+  if (!bx.name) return `${head}${esc(bx.label)} <span class="unk">every system known is visited</span>`;
+  return `${head}<span class="warnc">Boxel: next</span> <span class="copy" data-name="${esc(bx.name)}" title="click to copy">${esc(bx.name)}</span>` +
+    (data.game_pc !== false && bx.standard ? hwyAimBtn(bx.name, "boxel", null) : "") +
+    ` · ${bx.spansh ? boxelKnown(bx) : `<span class="unk">to try</span>`}`;
 }
 // Now's at-risk line, under fuel: what the data aboard stands to lose, shown only once it matters (your amber level
 // or rebuy multiple). Docked where it sells, what selling here pays; on a high-g approach, that approach's stakes
@@ -1141,6 +1265,7 @@ function nowArea() {
   const r = document.getElementById("tabMain").getBoundingClientRect();
   return {vw: r.width || innerWidth, vh: (r.bottom || innerHeight) + (window.scrollY || 0)};
 }
+let ovMapRevealed = null;   // the body whose row the Overview's map last brought into view (renderSurface)
 function renderSurface() {
   const s = data && data.surface, show = surfaceShows(s), cfg = surfaceCfg();
   const box = document.getElementById("nowMap"), strip = document.getElementById("obMap"), nv = document.getElementById("nowView");
@@ -1182,6 +1307,22 @@ function renderSurface() {
     const L = surfaceLayout(s, cfg, F.S);
     drawSurface(document.getElementById("ovMapCanvas"), L, F.S < 200);
     setSurfLegend(legend, s, L, cfg);
+  }
+  // the body you are on brought to the top of the list above the map when the map comes up (or you are on another
+  // body): the author, 2026-10-11. Only then: afterwards the list stays where you scroll it. Tried again on the next
+  // render while its row is not drawn yet.
+  const ovKey = onOv && s.body ? `${s.system}|${s.body_id}|${s.body}` : null;
+  if (!ovKey) ovMapRevealed = null;
+  else if (ovKey !== ovMapRevealed) {
+    const row = [...document.querySelectorAll("#hereRows tr[data-body]")].find(r => r.dataset.body === s.body);
+    if (row) {
+      // only the list moves: when it does not scroll (a short list), nothing (scrollIntoView would scroll the window:
+      // review 2026-10-12); in app mode the row's pane scrolls instead
+      const list = document.getElementById("hereMain");
+      if (list.scrollHeight > list.clientHeight) revealIn(row, "start", list);
+      else if (appOn()) revealIn(row, "start");
+      ovMapRevealed = ovKey;
+    }
   }
   const onStrip = show && cfg.strip && view !== "now" && !onOv;
   strip.hidden = !onStrip;
@@ -1382,10 +1523,11 @@ function applyAppMode() {
 // the pane an element scrolls in (app mode), or null for the window
 const paneOf = el => appOn() && el && el.closest ? el.closest(".pane") : null;
 // Bring an element into view: in app mode inside its pane, under the pane's sticky table heading, never by scrolling
-// the window; otherwise the window, as before. block: "nearest" (only if it is out of view) or "start".
-function revealIn(el, block = "nearest") {
+// the window; otherwise the window, as before. block: "nearest" (only if it is out of view) or "start". box: the box
+// that scrolls, when it is not a pane (the Overview's list above its map), so the window stays put.
+function revealIn(el, block = "nearest", box = null) {
   if (!el || el.closest("[hidden]")) return;   // in a hidden table (Here's schematic mode): no box to scroll to (F17)
-  const p = paneOf(el);
+  const p = box || paneOf(el);
   if (!p) { if (el.scrollIntoView) el.scrollIntoView({block}); return; }
   const table = el.closest("tbody") && el.closest("table"), head = table && table.tHead ? table.tHead.offsetHeight : 0;
   const pr = p.getBoundingClientRect(), er = el.getBoundingClientRect();
@@ -1516,6 +1658,12 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["saleleft", "a sale left data aboard: Universal Cartographics sells 50 systems a page, so a sale that stops after one page leaves the rest unsold (said once the pages stop and the estimate has caught up); likewise completed samples still unsold after a Vista Genomics sale", "alert"],
   ["unsold", "unsold data crosses a threshold", "cash"], ["hull", "hull damage, heat damage, interdiction", "danger"],
   ["carrier", "your carrier arrives somewhere", "chime"], ["codex", "a new codex entry", "chime"],
+  ["phenomena", "notable stellar phenomena (life in clouds or rings) the FSS finds in a system where you have none on record: how many", "find"],
+  ["ggg", "a potential green gas giant: one of your own scans fits the community's seven-layer ladder model (a guess: check it in the system map)", "find"],
+  ["rare_star", "a rare star resolved (a black hole, Wolf-Rayet, carbon, O-type, Herbig Ae/Be, a supergiant, a rare white dwarf...)", "find"],
+  ["surface_site", "surface sites on a body: Guardian or Thargoid sites (once the DSS has mapped it) or an unknown planetary anomaly (the FSS)", "find"],
+  ["signal_poi", "an FSS signal worth a detour, new to the system: a Titan, a Guardian beacon, a generation ship, a listening post (tourist beacons, number stations and memorials are shown, not said)", "find"],
+  ["curious", "a system with curiosities (🔭: rare planet classes, odd orbits, ringed landables...), once per system: one line to check your panels, not the list", "chime"],
   ["loss", "your ship was destroyed with data aboard (or samples died with you): what was lost, and the nearest system to rescan", "danger"],
   ["rigs", "Rhino mining rigs: the co-pilot button's confirmation (rig placed, picked up, six out) and what a rig collected", null],
   ["rigleash", "a Rhino mining rig too far from you (over the rig warning distance, again at 4.5 km; the game destroys it at 5 km)", "danger"],
@@ -1675,7 +1823,7 @@ function alertOut(kind, title, body, {sound, say, delay = 0, tag = null, still =
     linePlain = true;
     try { addCaption((typeof say === "function" ? say() : say) || title); } catch { addCaption(title); } finally { linePlain = false; }
   }
-  setFate(entry, !loud ? "silent: another window speaks" : !speechOn ? "silent: speech off" : UNSPOKEN.has(kind) ? "not spoken (the arrival is)"
+  setFate(entry, !loud ? `silent: ${hushReason()}` : !speechOn ? "silent: speech off" : UNSPOKEN.has(kind) ? "not spoken (the arrival is)"
     : quiet ? (typeof quiet === "string" ? quiet : "merged into another line (quiet)")
     : hush && alertSpeak[kind] ? "silent: hushed" : "silent: not ticked to speak");
   return notified;
@@ -1693,10 +1841,10 @@ const JUMP_LINE_WAIT = 8000;   // ms: the jump line's latest start after the cha
 // ms after Status.json says "in the tunnel" (it says so about 2 s before the countdown ends): the line then starts
 // with the tunnel itself (the author's timing, in game 2026-10-03)
 const JUMP_TUNNEL_DELAY = 2500;
-const SPEECH_SYS_BOUND = new Set(["find", "signals", "jump", "honk", "brief", "fss", "mapped", "approach", "bodybrief", "jumponium", "highway", "riches", "exo", "trade", "autotarget"]);
+const SPEECH_SYS_BOUND = new Set(["find", "signals", "jump", "honk", "brief", "fss", "mapped", "approach", "bodybrief", "jumponium", "phenomena", "ggg", "rare_star", "surface_site", "signal_poi", "curious", "highway", "riches", "exo", "trade", "autotarget"]);
 // a rig confirmation answers your own press, like a line asked for
 const speechPrio = (kind, tag) => DANGER.has(tag) || kind === "hull" || kind === "fuel" ? 0 : kind === "manual" || kind === "rigs" ? 1
-  : ["find", "signals", "codex", "bodybrief", "supercharge", "jumponium"].includes(kind) ? 3 : 2;
+  : ["find", "signals", "codex", "phenomena", "ggg", "rare_star", "surface_site", "signal_poi", "bodybrief", "supercharge", "jumponium"].includes(kind) ? 3 : 2;
 // the queue without what went stale by `now` with the ship at `pos`
 const speechExpire = (items, now, pos) => items.filter(it => now - it.notBefore <= SPEECH_MAX_AGE
   && (it.sys == null || it.sys === pos) && (!it.still || it.still()));
@@ -1763,7 +1911,10 @@ function clearForJump() {
   dropFates(before, speechItems, "dropped: the FSD charged for a jump");
   if (speechNow && speechNow.prio !== 0 && speechNow.kind !== "manual") { setFate(speechPlaying, "cut short: the FSD charged"); speechNow.stop(); }
 }
-const hushReason = () => !speechOn ? "speech off" : "another window speaks";
+// why this window says nothing: speech off, this screen set never to speak (Settings), or another window speaks
+const hushReason = () => !speechOn ? "speech off"
+  : speakMode() === "never" ? (TABLET ? "this tablet does not play alerts (Settings)" : "this screen never speaks (Settings)")
+  : "another window speaks";
 let lastSaid = null;   // the last line actually said (the words, not the queue item): the co-pilot's "say again"
 // a hush began: what is queued or playing below danger goes (lines asked for in this window stay)
 function cutForHush() {
@@ -2058,6 +2209,8 @@ const LINE_SAMPLES = {
   find_body: {what: "Water world, terraformable, undiscovered", body: "A 3", value: "2.3M"}, mapped_before: {},
   find_bio: {body: "B 7", value: "19.0M"}, sample_clear: {genus: "Stratum"},
   codex: {entry: "Stratum Tectonicas", what: "new to your codex for this region"},
+  phenomena: {what: "three notable stellar phenomena, all in rings"}, ggg: {body: "B 3"}, rare_star: {what: "a black hole at B"},
+  surface_site: {what: "Guardian sites on B 3"}, signal_poi: {what: "a Guardian beacon"}, curious: {},
   fuel_low: {pct: 18}, fuel_star: {pct: 22, star: "white dwarf"}, fuel_target: {pct: 22, system: "Drojau LL-O b26-3"},
   fuel_topup: {rate: "8 of the last 20 stars were scoopable", jumps: "about 6 jumps"}, hull: {pct: 42}, interdicted: {by: "someone"},
   docked_sell: {value: "114.1M", station: "Jaques Station"}, undocked_unsold: {value: "260.4M"},
@@ -2242,6 +2395,27 @@ function sayRegion(m) {
 // "B 4 has polonium, 1.3 percent": a jumponium body, in the FSS debrief or alone
 const jumponiumSaid = j => `${j.body} has ${(j.name || j.material || "").toLowerCase()}, ${j.pct} percent.`;
 const jumponiumOn = () => !!(alertSpeak.jumponium || (alertCfg.enabled && alertCfg.jumponium) || alertSound.jumponium);
+// Notable stellar phenomena in words: {ring: 3} -> "three notable stellar phenomena, all in rings"; {ring: 2, cloud: 1}
+// -> "three notable stellar phenomena: two in rings and one in a cloud"; {cloud: 1} -> "a notable stellar phenomenon, in a cloud"
+const NSP_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
+const nspCount = n => NSP_WORDS[n] || String(n);
+const nspWhere = (kind, n) => ({ring: n === 1 ? "in a ring" : "in rings", cloud: n === 1 ? "in a cloud" : "in clouds"}[kind]
+  || (n === 1 ? `of the ${kind} kind` : `of the ${kind} kind`));
+function phenomenaWhat(kinds) {
+  const parts = Object.entries(kinds || {}).filter(([, n]) => n > 0);
+  const total = parts.reduce((a, [, n]) => a + n, 0);
+  if (!total) return "";
+  const head = total === 1 ? "a notable stellar phenomenon" : `${nspCount(total)} notable stellar phenomena`;
+  if (parts.length === 1) return `${head}, ${total === 1 ? "" : "all "}${nspWhere(parts[0][0], total)}`;
+  return `${head}: ` + parts.map(([k, n]) => `${nspCount(n)} ${nspWhere(k, n)}`).join(" and ").replace(/ and (?=[^]* and )/g, ", ");
+}
+// the FSS found phenomena in a system with none on record (State's "phenomena" moment): said with delight
+function sayPhenomena(m) {
+  const what = phenomenaWhat(m.kinds);
+  if (!what) return;
+  alertOut("phenomena", `🌀 ${what[0].toUpperCase()}${what.slice(1)}`, m.system_name || "",
+           {say: () => line("phenomena", {what}, `Notable stellar phenomena: ${what}.`)});
+}
 function sayJumponium(j) {
   const material = (j.name || j.material || "").toLowerCase(), pct = `${j.pct} percent`;
   if (jumponiumOn()) toast(`⛽ ${j.body}: ${material} ${j.pct}%`);
@@ -2393,8 +2567,8 @@ function firstsHtml(f) {
     f.mapped && `${n(f.mapped, "body first mapped", "bodies first mapped")} · ${by(f.mapped_by)}`,
     f.footfall && n(f.footfall, "first footfall", "first footfalls") + " (credited on landing)",
   ].filter(Boolean);
-  const advice = {unsold: `<span class="unsold">sell at Universal Cartographics to claim what's unsold</span>`,
-                  lost: `<span class="lost">lost data can be re-earned by scanning those bodies again</span>`,
+  // nothing for unsold: players know to sell at Universal Cartographics (the author, 2026-10-11)
+  const advice = {lost: `<span class="lost">lost data can be re-earned by scanning those bodies again</span>`,
                   sold: `<span class="sold">all sold: the tags should be yours</span>`}[f.sale];
   return `<div class="sec firsts"><div class="lbl">Your firsts</div><ul>` +
     items.map(i => `<li>🏁 <span>${i}</span></li>`).join("") + (advice ? `<li>${advice}</li>` : "") + `</ul></div>`;
@@ -2405,7 +2579,7 @@ function bmIcon(id, name, bms) {
     ` title="${b ? "" : "bookmark this system"}">${b ? "★" : "☆"}</span>`;
 }
 
-// the unit is picked by what the value rounds to: 999,600 is "1.0M", not "1000k"
+// the unit is picked by what the value rounds to: 999,600 is "1.0M", not "1000k" (outrider/overlay.py credits() copies this)
 const credits = n => n >= 999.95e6 ? (n / 1e9).toFixed(2) + "B" : n >= 999.5e3 ? (n / 1e6).toFixed(1) + "M"
                     : n >= 999.5 ? Math.round(n / 1e3) + "k" : String(Math.round(n));
 // Your own thresholds for the unsold-data warning; the server's defaults apply until you change them.
@@ -2675,11 +2849,10 @@ function render() {
       <td class="notable c2hide">${nb}</td><td class="num hide-sm" title="${valueTitle(s)}">${valueCell(s)}</td><td class="num hide-sm c2hide">${known}</td></tr>`;
   }).join("") || `<tr><td colspan="10" class="unk">${emptyMessage(rows)}</td></tr>`;
   refocus("rows", fkRows);
+  renderBoxelMode();
   document.getElementById("updateLine").hidden = !data.restart_needed;
   drawUpdatePill();
   for (const id of ["setVersion", "tabOutVer"]) { const el = document.getElementById(id), v = data.outrider ? `version ${data.outrider}` : "";
-    if (el && el.textContent !== v) el.textContent = v; }
-  { const el = document.getElementById("inaraLine"), v = inaraText(data.inara);
     if (el && el.textContent !== v) el.textContent = v; }
   // a server away from the game PC ([server] game_pc false): what needs that PC is left out (body.notgamepc hides every
   // .pcOnly: Settings' Auto honk, "play on this PC", the Highway's auto-target box and 🎯 / Retry, the tablet's rail)
@@ -2689,6 +2862,189 @@ function render() {
   // the strips drawn above may have grown the header past what app mode leaves room for (or shrunk it back)
   if (applyAppMode()) { renderSurface(); drawMap(); drawHwyMap(); }
 }
+// ---- boxel exploration (2026-10-11): Nearby's Standard / Boxel switch (one choice per browser, the Overview pane and
+// the Nearby tab alike). Boxel lists the boxel you are in, or one kept (📌, or picked below), by number: your visits
+// filled in with your scans, Spansh's known ones, the unknown ones to try; 🎯 / Target next by auto-target (the id64 is
+// computed: a system nobody has visited is checked too); recommended boxels nearby by mass code (api/boxel/nearby).
+const nearMode = () => store.get("nearMode", "standard") === "boxel" ? "boxel" : "standard";
+let boxelData = null, boxelKey = null, boxelNear = null, boxelNearKey = null, boxelLoading = false;
+document.querySelectorAll("input[name=nearMode]").forEach(r => r.onchange = () => { store.set("nearMode", r.value); boxelKey = null; render(); });
+async function loadBoxel() {
+  if (boxelLoading) return;
+  boxelLoading = true;
+  try { const r = await fetch("api/boxel"); if (r.ok) boxelData = await r.json(); } catch {}
+  boxelLoading = false;
+  drawBoxel();
+}
+async function loadBoxelNear() {
+  try { const r = await fetch("api/boxel/nearby"); if (r.ok) boxelNear = await r.json(); } catch {}
+  drawBoxel();
+}
+async function boxelPost(body) {
+  let r;
+  try { r = await apiJson("api/boxel", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}); }
+  catch { r = {error: "Outrider not reachable"}; }
+  if (r.error) { toast(r.error); return; }
+  boxelData = r; drawBoxel();
+}
+function renderBoxelMode() {
+  const on = nearMode() === "boxel";
+  document.querySelectorAll("input[name=nearMode]").forEach(r => { r.checked = r.value === nearMode(); });
+  document.getElementById("nearWrap").classList.toggle("boxel", on);
+  document.getElementById("nearPane").hidden = on;
+  document.getElementById("boxelPane").hidden = !on;
+  if (!on || !data) return;
+  const key = data.boxel && data.boxel.key;
+  if (key !== boxelKey) { boxelKey = key; loadBoxel(); }
+  const nk = `${posId()}|${key}`;   // a jump, or Spansh's answers about the boxels nearby
+  if (nk !== boxelNearKey) { boxelNearKey = nk; loadBoxelNear(); }
+  const gk = `${nk}|${store.get("bxGridMc", "")}|${bxGridLayer}`;   // the sector map: the code or layer picked too
+  if (gk !== boxelGridKey) { boxelGridKey = gk; loadBoxelGrid(); }
+}
+// ---- the sector map (a review suggestion the author picked, 2026-10-12): the sector you are in as a grid of one mass
+// code's boxels, one Y layer at a time: which you have explored (visited, ✓ complete, done), which Spansh knows, you and
+// the kept boxel marked; a tap explores that boxel. api/boxel/sector; the letters are boxel.py's letters()
+let boxelGrid = null, boxelGridKey = null, bxGridLayer = null;   // bxGridLayer null: the layer you are in
+async function loadBoxelGrid() {
+  const q = new URLSearchParams(), mc = store.get("bxGridMc", "");
+  if (mc) q.set("mc", mc);
+  if (bxGridLayer != null) q.set("layer", bxGridLayer);
+  try { const r = await fetch(`api/boxel/sector?${q}`); if (r.ok) boxelGrid = await r.json(); } catch {}
+  drawBoxel();
+}
+function bxLetters(bx, by, bz) {
+  const p = bx + by * 128 + bz * 16384, L = v => String.fromCharCode(65 + v % 26);
+  return [`${L(p)}${L(Math.floor(p / 26))}-${L(Math.floor(p / 676))}`, Math.floor(p / 17576)];
+}
+const bxPrefix = (g, x, z) => { const [l, n1] = bxLetters(x, g.layer, z); return `${g.sector} ${l} ${g.mc}${n1 ? `${n1}-` : ""}`; };
+const bxLabel = p => p.endsWith("-") ? p.slice(0, -1) : p;
+function boxelGridHtml(g) {
+  const open = store.get("bxGridOpen", true) ? " open" : "";
+  const head = `<details class="bxgrid setsec"${open}><summary>Sector map <span class="sum-note">the boxels of the sector you are in, one layer at a time: a tap explores one</span></summary>`;
+  if (!g) return "";
+  if (g.why) return `${head}<div class="hint">${esc(g.why)}</div></details>`;
+  const cells = new Map(g.cells.map(c => [`${c.x},${c.z}`, c])), you = g.you, kept = g.kept, n = g.n;
+  const mine = you[1] === g.layer, keptHere = kept && kept[1] === g.layer;
+  let grid = "";
+  for (let z = n - 1; z >= 0; z--) for (let x = 0; x < n; x++) {   // +Z (toward the core) up, +X right, as the galaxy map
+    const c = cells.get(`${x},${z}`);
+    const cls = ["bxc", c && (c.state === "done" ? "d" : c.state === "complete" ? "c" : c.visited ? "v" : c.spansh ? "k" : ""),
+      mine && you[0] === x && you[2] === z && "you", keptHere && kept[0] === x && kept[2] === z && "kept"].filter(Boolean).join(" ");
+    grid += `<div class="${cls}" data-bxcell="${x},${z}">${c && c.visited && n <= 32 ? c.visited : c && c.state && n <= 32 ? "✓" : ""}</div>`;
+  }
+  const layers = Object.entries(g.layers || {}).map(([y, k]) => [Number(y), k]);
+  return head + `<div class="bxgctl">` + g.codes.split("").map(mc => `<button type="button" class="mini${mc === g.mc ? " on" : ""}" data-bxgmc="${mc}" title="${mc}: ${outriderBoxelSize(mc)} ly boxels, ${1280 / outriderBoxelSize(mc)} a side">${mc}</button>`).join("") +
+    ` <span class="bxglayer">layer <b>${g.layer + 1}</b> of ${n}${mine ? " (yours)" : ""}</span>` +
+    `<button type="button" class="mini" data-bxglayer="${g.layer + 1}"${g.layer >= n - 1 ? " disabled" : ""} title="the layer above (+Y)">▲</button>` +
+    `<button type="button" class="mini" data-bxglayer="${g.layer - 1}"${g.layer <= 0 ? " disabled" : ""} title="the layer below (−Y)">▼</button>` +
+    (!mine ? ` <button type="button" class="mini" data-bxglayer="yours">yours</button>` : "") +
+    (layers.length ? ` <span class="unk">visited in layer${layers.length > 1 ? "s" : ""} ${layers.map(([y, k]) =>
+      `<a href="#" data-bxglayer="${y}" title="${k} boxel${k === 1 ? "" : "s"} with your visits">${y + 1}</a>`).join(", ")}</span>` : "") + `</div>` +
+    `<div class="bxg" style="grid-template-columns: repeat(${n}, 1fr); width: min(100%, ${Math.min(512, n * 30)}px)">${grid}</div>` +
+    `<div class="hint bxglegend"><span class="bxc v"></span> visited <span class="bxc c"></span> ✓ complete <span class="bxc d"></span> done ` +
+    `<span class="bxc k"></span> Spansh knows <span class="bxc you"></span> you <span class="bxc kept"></span> the kept boxel · ${esc(g.sector)}, +Z up, +X right</div></details>`;
+}
+const outriderBoxelSize = mc => 10 << "abcdefgh".indexOf(mc);
+// a system Spansh knows: how much of it anyone reported ("known · 3 of 14 bodies"): one only passed through keeps its
+// first discoveries open
+function boxelKnown(r) {
+  const k = r.known || {}, b = k.bodies, c = k.count;
+  const words = r.scanned ? `known · all ${c} bodies` : Number.isInteger(c) && c > 0 ? (b ? `known · ${b} of ${c} bodies` : "known · honked only")
+    : b ? `known · ${b} bod${b === 1 ? "y" : "ies"}, count unknown` : "known · nothing reported";
+  return `<span class="unk" title="Spansh knows it: someone has been here${r.scanned ? ", and every body is reported" : "; bodies nobody reported may still be first discoveries"}">${words}</span>`;
+}
+const BOXEL_WARNING = "Outrider cannot know how many systems a boxel holds: explore until a name the galaxy map cannot find.";
+const boxelCodeLine = (mc, c) => { const y = c && c.yours;
+  return `<b>${mc}</b> · ${c ? c.size : ""} ly cubes · ${esc(c ? c.kind : "")}` + (y && y.systems ? ` <span class="bxyours">· from your ${y.systems} ${mc} system${y.systems === 1 ? "" : "s"}: ` +
+    `${Math.round(100 * y.bio / y.systems)}% with biology${y.elw ? `, ${y.elw} Earth-like` : ""}${y.ww ? `, ${y.ww} water world${y.ww === 1 ? "" : "s"}` : ""}` +
+    `${y.terraformable ? `, ${y.terraformable} terraformable` : ""}</span>` : ""); };
+function drawBoxel() {
+  const el = document.getElementById("boxelPane");
+  if (!el || el.hidden) return;
+  const d = boxelData, pc = data && data.game_pc !== false;
+  let html = "";
+  if (!d) html = `<div class="unk">loading…</div>`;
+  else if (!d.boxel) html = `<div class="bxhead unk">${esc(d.why || "no boxel")}</div>`;
+  else {
+    const b = d.boxel, nxt = d.next != null ? d.rows.find(r => r.n === d.next) : null;
+    const spansh = d.spansh_asking ? "asking Spansh…" : d.spansh_error ? `<span class="warnc">${esc(d.spansh_error)}</span>`
+      : d.spansh_ts ? `Spansh knows ${d.spansh}${d.spansh ? ` (up to -${Math.max(...d.rows.filter(r => r.spansh).map(r => r.n))})` : ""}` : "";
+    const fin = d.complete ? `<span class="ok bxfin" title="the end is known and you have visited every system below it">${d.end ? `✓ complete: ${d.end} of ${d.end} systems` : "✓ empty: the galaxy map found none of its names"}</span> `
+      : d.done ? `<span class="ok bxfin" title="marked done with: it is left out of the recommendations">✓ done</span> ` : "";
+    html += `<div class="bxhead">${fin}<span class="bxname copy" data-name="${esc(b.label)}" title="click to copy">${esc(b.label)}</span>` +
+      `${b.here ? " · you are here" : b.distance != null ? ` · ${b.distance.toFixed(0)} ly away` : ""} · <span class="bxkind">${boxelCodeLine(b.mc, {size: b.size, kind: b.kind, yours: boxelNear && boxelNear.codes && boxelNear.codes[b.mc] && boxelNear.codes[b.mc].yours})}</span>` +
+      `<div class="hint">you have visited ${d.visited}${spansh ? ` · ${spansh}` : ""}${d.top >= 0 ? ` · highest known <b>-${d.top}</b>` : ""}${d.end != null ? ` · -${d.end} not found: probably the end` : ""}` +
+      ` <span class="bxwarn">⚠ ${BOXEL_WARNING}</span></div></div>` +
+      `<div class="bxacts">` +
+      (pc && nxt && b.standard ? `<span>Next: <b>${esc(nxt.name)}</b>${hwyAimBtn(nxt.name, "boxel", null)}</span>` : "") +
+      (!b.picked ? `<button type="button" class="try" data-bxkeep="${esc(b.prefix)}" title="keep exploring this boxel when you jump out of it (auto-target works on a kept boxel)">📌 Keep this boxel</button>`
+        : `<button type="button" class="try" data-bxback="1" title="follow the boxel you are in again">${b.here ? "📌 kept · let go" : "↩ the boxel I am in"}</button>`) +
+      (pc ? `<label title="arriving in a system of the kept boxel, auto-target its next one (after the Highway's delay)"><input type="checkbox" id="bxAuto"${d.auto ? " checked" : ""}> auto-target the next on arrival${d.auto && !b.picked ? ` <span class="warnc">(keep a boxel first)</span>` : ""}</label>` : "") +
+      `<label title="Next and the auto-target pass over the systems someone has fully scanned (every body reported to Spansh); one only passed through or partly scanned still has first discoveries to find"><input type="checkbox" id="bxSkip"${d.skip_known ? " checked" : ""}> skip systems already fully scanned</label>` +
+      (d.done ? `<button type="button" class="try" data-bxdone="0" title="take the done mark back">undo done</button>`
+        : !d.complete ? `<button type="button" class="try" data-bxdone="1" title="finished with this boxel, complete or not: it leaves the recommendations (a kept boxel is let go)">✓ Done with this boxel</button>` : "") +
+      (d.end != null ? `<button type="button" class="try" data-bxretry="1" title="a failed search is not always a missing name: offer the numbers above it again">retry above -${d.end}</button>` : "") +
+      (!b.standard ? `<span class="unk">a hand-made sector: 🎯 cannot check its systems</span>` : "") + `</div>`;
+    const rowHtml = r => { const s = r.summary;
+      return `<tr class="${[r.visited && "visited", r.n === d.next && "next", !r.visited && !r.spansh && "try", d.skip_known && r.scanned && !r.visited && "skipped"].filter(Boolean).join(" ")}">` +
+        `<td class="n">-${r.n}</td><td class="name copy" data-name="${esc(r.name)}" title="click to copy">${nameWords(r.name)}${s ? firstsIcon(s.firsts) : ""}</td>` +
+        `<td class="num">${r.distance != null ? r.distance.toFixed(1) : ""}</td>` +
+        `<td>${r.visited ? `<span class="ok" title="you have been here">✓ visited</span>` : r.spansh ? boxelKnown(r) : `<span class="unk">to try</span>`}</td>` +
+        `<td>${s ? star(s) : ""}</td><td>${s ? bodies(s) : ""}</td><td class="num"${s ? ` title="${valueTitle(s)}"` : ""}>${s ? valueCell(s) : ""}</td>` +
+        `<td>${pc && b.standard && !r.visited ? hwyAimBtn(r.name, "boxel", r.n, true) : ""}</td></tr>`; };
+    html += `<table id="boxelTable"><thead><tr><th class="num">#</th><th>System</th><th class="num">Dist</th><th>Status</th><th>Main star</th><th>Bodies</th><th class="num">Value now / max</th><th></th></tr></thead>` +
+      `<tbody>${d.rows.map(rowHtml).join("")}</tbody></table>`;
+  }
+  // the recommendations: the nearest boxels per mass code, in sectors you have systems in
+  const nb = boxelNear;
+  if (nb && nb.boxels && nb.boxels.length) {
+    const codes = [...new Set(nb.boxels.map(x => x.mc))];
+    html += `<details class="bxnear setsec" open><summary>Boxels nearby <span class="sum-note">the nearest of each kind, in sectors you have been to; what each tends to hold is what explorers have seen, not a promise</span></summary>` +
+      codes.map(mc => `<h4>${boxelCodeLine(mc, nb.codes[mc])}</h4>` + `<div class="bxcode">` + nb.boxels.filter(x => x.mc === mc).map(x =>
+        `<div>${esc(x.label)} · ${x.distance.toFixed(0)} ly${x.visited ? ` · you visited ${x.visited}` : ""}` +
+        `${x.top != null ? ` · highest known <b>-${x.top}</b>` : x.spansh_asked ? " · none known yet" : ""} ` +
+        `<button type="button" class="try" data-bxpick="${esc(x.prefix)}" data-bxsec="${esc(JSON.stringify(x.sector_index))}">Explore this boxel</button></div>`).join("") + `</div>`).join("") +
+      ((nb.finished || []).length ? `<div class="hint bxdone">done or complete nearby (left out above): ` + nb.finished.map(x =>
+        `${esc(x.label)} ${x.state === "complete" ? "✓ complete" : "✓ done"}`).join(" · ") + `</div>` : "") +
+      `</details>`;
+  }
+  html += boxelGridHtml(boxelGrid);
+  if (el.innerHTML !== html) el.innerHTML = html;
+}
+document.getElementById("boxelPane").addEventListener("click", e => {
+  const gmc = e.target.closest("[data-bxgmc]"), gl = e.target.closest("[data-bxglayer]"), cell = e.target.closest("[data-bxcell]");
+  if (gmc || gl || cell) {
+    e.preventDefault();
+    if (gmc) { store.set("bxGridMc", gmc.dataset.bxgmc); bxGridLayer = null; }
+    else if (gl) bxGridLayer = gl.dataset.bxglayer === "yours" ? null : Number(gl.dataset.bxglayer);
+    else { const g = boxelGrid, [x, z] = cell.dataset.bxcell.split(",").map(Number);
+      if (g && g.sector) boxelPost({prefix: bxPrefix(g, x, z), sector_index: g.sector_index}); }
+    renderBoxelMode();
+    return;
+  }
+  const k = e.target.closest("[data-bxkeep]"), back = e.target.closest("[data-bxback]"), pick = e.target.closest("[data-bxpick]"), retry = e.target.closest("[data-bxretry]");
+  const done = e.target.closest("[data-bxdone]");
+  if (done) { boxelPost({done: done.dataset.bxdone === "1"}).then(() => loadBoxelNear()); return; }
+  if (k) boxelPost({prefix: k.dataset.bxkeep, sector_index: boxelData && boxelData.boxel && boxelData.boxel.sector_index});
+  else if (back) boxelPost({prefix: null});
+  else if (pick) boxelPost({prefix: pick.dataset.bxpick, sector_index: JSON.parse(pick.dataset.bxsec || "null")});
+  else if (retry) boxelPost({clear_end: true});
+});
+// a cell's title when the pointer reaches it (a sector of b has 4,096 cells: no title each up front)
+document.getElementById("boxelPane").addEventListener("mouseover", e => {
+  const cell = e.target.closest("[data-bxcell]"), g = boxelGrid;
+  if (!cell || cell.title || !g || !g.sector) return;
+  const [x, z] = cell.dataset.bxcell.split(",").map(Number), c = g.cells.find(k => k.x === x && k.z === z);
+  cell.title = [bxLabel(bxPrefix(g, x, z)), c && c.visited ? `you visited ${c.visited}` : "", c && c.spansh ? `Spansh knows ${c.spansh}` : "",
+                c && c.state ? `✓ ${c.state}` : "", "tap to explore this boxel"].filter(Boolean).join(" · ");
+});
+document.getElementById("boxelPane").addEventListener("toggle", e => {
+  if (e.target.classList && e.target.classList.contains("bxgrid")) store.set("bxGridOpen", e.target.open);
+}, true);
+document.getElementById("boxelPane").addEventListener("change", e => {
+  if (e.target.id === "bxAuto") boxelPost({auto: e.target.checked});
+  else if (e.target.id === "bxSkip") boxelPost({skip_known: e.target.checked});
+});
 function emptyMessage(rows) {
   const others = data.systems.filter(s => sysId(s) !== posId()).length;
   if (/^asking|^fetching/.test(data.status)) return "loading…";
@@ -2810,6 +3166,11 @@ function placeOverview() {
   const ov = document.getElementById("overView"), here = document.getElementById("hereView"), near = document.getElementById("nearWrap");
   const paneHere = document.getElementById("ovHere"), paneNear = document.getElementById("ovNear");
   if (!ovHome.here) { ovHome.here = here.nextSibling; ovHome.near = near.nextSibling; }
+  // the Standard / Boxel switch: on the Overview's own bar, left of "This system" (the author, 2026-10-11); in
+  // Nearby's options on the Nearby tab
+  const mode = document.querySelector(".nearmode"), bar = document.querySelector("#overView .ovbar"), opts = document.getElementById("nearOpts");
+  if (view === "overview") { if (mode.parentNode !== bar) bar.insertBefore(mode, bar.firstChild); }
+  else if (mode.parentNode !== opts) opts.insertBefore(mode, opts.firstChild);
   if (view === "overview") {
     if (here.parentNode !== paneHere) paneHere.appendChild(here);
     if (near.parentNode !== paneNear) paneNear.appendChild(near);
@@ -2883,7 +3244,7 @@ function renderHere() {
     // the bookmark star (its dialog also sets the next stop) for a viewed system, which may be in no other list
     (pinned ? bmIcon(pinnedSystem, h.name, bmMap()) + " " : "") +
     `<b>${esc(h.name)}</b>` + (away != null ? ` <span class="unk">· ${away.toFixed(2)} ly away</span>` : "") +
-    ` · ${h.bodies.length} bod${h.bodies.length === 1 ? "y" : "ies"} known · ` + (h.phenomena && h.phenomena.length ? phenomenaTag(h.phenomena) + " · " : "") +
+    ` · ${h.bodies.length} bod${h.bodies.length === 1 ? "y" : "ies"} known · ` + (h.phenomena && h.phenomena.length ? phenomenaTag(h.phenomena) + " · " : "") + (h.rare_stars && h.rare_stars.length ? rareStarTag(h.rare_stars) + " · " : "") + (h.pois && h.pois.length ? poiTag(h.pois) + " · " : "") +
     `<span title="what selling now would pay for data you hold from here / the most this system could pay">now <b>${credits(h.value_now || 0)} cr</b> · max <b>${credits(maxOf(h) || 0)} cr</b>${maxBonus() ? "" : ` <span class="unk" title="Max leaves out first-discovery, first-mapped and first-footfall bonuses (alerts & thresholds dialog)">no bonus</span>`}</span>` +
     ` <a class="unk" href="api/export?what=system&id=${encodeURIComponent(h.id64)}" download title="this system's bodies and values as a spreadsheet (CSV)">⬇ CSV</a>` +
     `<span class="modes">${HERE_MODES.filter(([m]) => m !== "split" || hereCtx() === "tab").map(([m, label, title]) =>
@@ -2912,6 +3273,8 @@ function renderHere() {
   if (showSch) sEl.innerHTML = schematicHtml(h);
   const dest = data.destination && posId() === h.id64 ? data.destination : null;
   const destBody = dest && h.bodies.find(b => b.body_id === dest.body_id);
+  // one cell per heading of #hereTable, in its order: Rings before ⛏ (the author, 2026-10-11: an empty Rings cell, the
+  // usual one, sits beside the bio column and gives its long lines room)
   const rowHtml = (b, ind = "") => {
     // the colony distance in the genus's tooltip (S1): the row's text stays as it is
     const ct = g => colonyM(g) ? ` title="${esc(g)}: samples ${colonyM(g)} m apart"` : "";
@@ -2919,9 +3282,21 @@ function renderHere() {
     const guessOf = g => (b.bio_guess || []).find(x => x.genus === g), hb = hereBio();
     if (hb.minSig && b.bio && b.bio < hb.minSig) bio.push(`<span class="unk" title="fewer than ${hb.minSig} signals: left out (Settings, Display)">${b.bio} sig</span>`);
     const guessTxt = x => !x || !x.best ? "" : ` <span class="unk" title="likeliest by value: ${esc(x.species.join(" / "))}">(${esc(x.best.split(" ").slice(1).join(" "))}? ${credits(x.value * f)})</span>` + codexMark(x, h.region);
+    // a finished species is one line: its codex entry with what it pays ("📖 Bacterium Alcyoneum - Red ✦ 8.3M"), not
+    // "Bacterium 3/3 ✓ 8.3M" and the codex line again (the author, 2026-10-11)
+    const codexOf = o => b.codex.find(c => c.name === o.variant) || (o.species ? b.codex.find(c => c.name.startsWith(o.species + " - ")) : null);
+    const merged = new Set();
     for (const g of hb.minSig && b.bio && b.bio < hb.minSig ? [] : bioGenera(b)) {
       const o = b.organics.find(o => o.genus === g);
       if (hb.hideDone && o && o.done && !o.lost) continue;
+      if (o && o.done && !o.lost) {
+        const c = codexOf(o), name = c ? c.name : o.variant || o.species || g;
+        if (c) merged.add(c);
+        bio.push(`<span class="sp done" title="${c ? `codex: ${esc(name)} · analysed` : `${esc(name)}: analysed (no codex entry on this body)`}${colonyM(g) ? ` · samples ${colonyM(g)} m apart` : ""}">` +
+                 `${c ? "📖" : "✓"} ${dual(colourName(name), esc(g), {title: false})}${c ? (c.voucher ? " 💰" : c.new ? " ✦" : "") : ""}` +
+                 `${o.value ? ` <span class="unk">${credits(o.value * f)}</span>` : ""}</span>`);
+        continue;
+      }
       bio.push(o ? `<span class="sp ${o.lost ? "lost" : o.done ? "done" : "part"}" title="${esc(o.species || "")}${o.variant ? " · " + esc(o.variant) : ""}${o.lost ? " · lost with the ship, sample again" : ""}${colonyM(g) ? ` · samples ${colonyM(g)} m apart` : ""}">${esc(g)} ${o.lost ? "lost ✗" : `${o.samples}/3${o.done ? " ✓" : ""}`}${!o.lost && o.value ? ` <span class="unk">${credits(o.value * f)}</span>` : ""}</span>` +
                    // a run under way prices the species you logged (known from its first sample), like the pop-up and
                    // the panel; the predictor's guess is only for a lost run or one whose species has no price
@@ -2932,24 +3307,27 @@ function renderHere() {
     const unk = hb.minSig && b.bio && b.bio < hb.minSig ? null : bioUnknown(b);
     if (unk) {
       const {opt, list: gl} = unk;
-      // compact: "2 sig, no DSS" / "+1 sig", and the options' range without the words
-      const unkShort = bioGenera(b).length ? `+${unk.n} sig` : `${unk.n} sig, no DSS`;
-      bio.push((bio.length ? "<br>" : "") + `<span class="unk">${dual(unk.label, unkShort)}</span>` + (gl.length
-        ? `<br><span class="unk">${opt ? dual(`${optLabel(unk.n, opt, f)}: `, `${credits(opt.low * f)}–${credits(opt.high * f)}: `) : dual("likely: ", "", {title: false})}</span>${gl.map(x => `<span class="sp" title="${esc(x.species.join(" / "))}">${esc(x.genus)} ≤${credits((x.value || 0) * f)}${codexMark(x, h.region)}</span>`).join(opt ? `<span class="unk"> or </span>` : "")}` : ""));
+      // one line for the count and the range ("3 signals, not DSS'd · 24.8M–64.6M:"; compact: "3 sig, no DSS · ..."), then
+      // what they could be, without "or" between each: the count already says how many of them are there
+      const range = opt ? ` · ${credits(opt.low * f)}–${credits(opt.high * f)}` : "", colon = gl.length ? ":" : "";
+      const unkShort = (bioGenera(b).length ? `+${unk.n} sig` : `${unk.n} sig, no DSS`) + range + colon;
+      bio.push((bio.length ? "<br>" : "") + `<span class="unk">${dual(unk.label + range + colon, unkShort)}</span>` + (gl.length
+        ? `<br>${opt ? "" : `<span class="unk">${dual("likely: ", "", {title: false})}</span>`}${gl.map(x => `<span class="sp" title="${esc(x.species.join(" / "))}">${esc(x.genus)} <span class="unk">≤${credits((x.value || 0) * f)}</span>${codexMark(x, h.region)}</span>`).join("")}` : ""));
     }
     // the codex name ("Bacterium Volu - Gold") repeats the run's species: a compact table shows only 📖 and its mark
-    const codex = b.codex.map(c => `<span class="sp" title="codex: ${esc(c.name)}">📖 ${dual(esc(c.name), "", {title: false})}${c.voucher ? " 💰" : c.new ? " ✦" : ""}</span>`).join("");
+    const codex = b.codex.filter(c => !merged.has(c)).map(c =>
+      `<span class="sp" title="codex: ${esc(c.name)}">📖 ${dual(colourName(c.name), "", {title: false})}${c.voucher ? " 💰" : c.new ? " ✦" : ""}</span>`).join("");
     const firsts = [b.first_discovered && `<span class="fl" title="first discovered">🏁</span>`, b.first_mapped && `<span class="fl" title="first mapped">🗺</span>`,
                     !b.first_mapped && b.mapped && `<span class="fl unk" title="mapped (not first)">🗺</span>`,
                     b.first_footfall && `<span class="fl" title="first footfall">👣</span>`, !b.scanned && `<span class="unk" title="known to Spansh, not scanned by you">—</span>`].filter(Boolean).join("");
-    return `<tr class="${b.main ? "main" : ""}${selectedBody === b.name ? " sel" : ""}${destBody === b ? " dest" : ""}${hotClasses(b)}" data-body="${esc(b.name)}" data-bodypop="${esc(b.name)}"><td class="name" data-name="${esc(b.name)}">${ind}${esc(b.name)}${(b.curiosities || []).length ? ` <span class="cur" title="${b.curiosities.map(c => esc(c.tag + ": " + c.why)).join("&#10;")}">🔭</span>` : ""}${b.notable ? ` <span class="nb ${b.notable}">${b.notable}</span>` : ""}${b.terraformable ? ` <span class="nb T">T</span>` : ""}${firsts ? `<div class="sf2 sub2">${firsts}</div>` : ""}</td>
+    return `<tr class="${b.main ? "main" : ""}${selectedBody === b.name ? " sel" : ""}${destBody === b ? " dest" : ""}${hotClasses(b)}" data-body="${esc(b.name)}" data-bodypop="${esc(b.name)}"><td class="name" data-name="${esc(b.name)}">${ind}${esc(b.name)}${codexTypeMark(b.codex_type, h.region)}${b.ggg ? " " + gggIcon(!!b.ggg.confirmed, gggTitle(b.ggg)) : ""}${(b.curiosities || []).length ? ` <span class="cur" title="${b.curiosities.map(c => esc(c.tag + ": " + c.why)).join("&#10;")}">🔭</span>` : ""}${b.notable ? ` <span class="nb ${b.notable}">${b.notable}</span>` : ""}${b.terraformable ? ` <span class="nb T">T</span>` : ""}${firsts ? `<div class="sf2 sub2">${firsts}</div>` : ""}</td>
       <td>${sfText(b.type === "Star" ? "star" : "planet", b.subtype || "")}${b.type === "Star" ? (b.scoopable ? ` <span class="scoop">⛽</span>` : "") : ""}${b.rings ? `<span class="sf2"> ${icon("ring", "i-ring", b.rings, ringsText(b))}</span>` : ""}${b.dist_ls != null ? `<div class="sf2 sub2 unk">${Math.round(b.dist_ls).toLocaleString()} ls</div>` : ""}</td>
       <td class="num c2hide">${b.dist_ls != null ? Math.round(b.dist_ls).toLocaleString() : ""}</td>
       <td class="num${b.gravity >= highGravity() ? " noscoop" : ""}">${b.gravity != null && b.type === "Planet" ? b.gravity.toFixed(2) : ""}${atm ? `<div class="sf2 atm2" title="${esc(atm)}">${esc(shortForm("atmosphere", atm))}</div>` : ""}</td>
       <td class="hide-sm c2hide">${b.type === "Planet" ? (atm ? sfText("atmosphere", atm) : b.landable ? dual("none · landable", "landable") : "") : ""}${b.stale_bio ? ` <span class="unk old" title="${esc(staleBodyTitle(b))}">${dual("landable? (old data)", "landable?", {title: `landable? (old data): ${staleBodyTitle(b)}`})}</span>` : ""}${b.bio_unknown ? ` <span class="warnc" title="${BIO_UNKNOWN_TITLE}">${dual("bio possible: check the FSS", "🧬?")}</span>` : ""}</td>
-      <td class="bio">${bio.join(" ")}${geoTag(b)}${volcanoIcon(b)}${codex}${b.mining || (b.mined || []).length ? `<span class="sf2"> ${mineTag(b)}</span>` : ""}</td>
+      <td class="bio">${bio.join(" ")}${geoTag(b)}${volcanoIcon(b)}${codex}${siteTags(b.sites)}${b.mining || (b.mined || []).length ? `<span class="sf2"> ${mineTag(b)}</span>` : ""}</td>
+      <td class="c2hide rings"${b.rings ? ` title="${esc(ringsText(b))}"` : ""}>${b.rings ? `${b.rings}${b.rings_mapped ? `<div class="sub2 unk">${b.rings_mapped} mapped</div>${b.hotspots < b.rings_mapped ? `<div class="sub2 unk">${b.hotspots} hotspot${b.hotspots === 1 ? "" : "s"}</div>` : ""}` : ""}` : ""}</td>
       <td class="num mine c2hide">${mineTag(b)}</td>
-      <td class="c2hide">${b.rings ? dual(esc(ringsText(b)), `${b.rings}${b.rings_mapped ? ` (${b.rings_mapped}🗺${b.hotspots < b.rings_mapped ? `, ${b.hotspots} hot` : ""})` : ""}`) : ""}</td>
       <td class="c2hide">${firsts}</td>
       <td class="num c2hide" title="${bodyValueTitle(b)}">${b.value_now ? credits(b.value_now) : ""}</td>
       <td class="num" title="${bodyValueTitle(b)}">${maxOf(b) ? credits(maxOf(b)) : ""}${b.value_now ? `<div class="sf2 sub2 unk">now ${credits(b.value_now)}</div>` : ""}</td></tr>`;
@@ -2985,9 +3363,12 @@ let lastDestKey = null;
 // Here's footer (the author, 2026-10-10): what the icons mean, for the icons the list or the schematic shows now and
 // only those (none shown: no footer). It sits under the scrolling list, so it stays in view. Each entry: [test, the
 // icon as shown, what it means]; a test gets q(selector) over the parts shown, s(glyph) for the schematic's badges
-// (their plain text: a dim 🗺 there is a span) and has(selector, text) for a shown element with that text
+// (their plain text: a dim 🗺 there is a span) and has(selector, text) for a shown element with that text. A few words
+// each, no explanations in brackets (the author, 2026-10-11: the line got too long); the cells' own hovers say more.
 const HERE_LEGEND = [
-  [(q, s) => q(".cur"), "🔭", "something unusual (hover it)"],
+  [(q, s) => q(".cur"), "🔭", "something unusual"],
+  [q => q(".ggg:not(.sure)"), gggIcon(false, ""), "potential green gas giant"],
+  [q => q(".ggg.sure"), gggIcon(true, ""), "green gas giant"],
   [q => q(".nb.ELW"), `<span class="nb ELW">ELW</span>`, "Earth-like world"],
   [q => q(".nb.WW"), `<span class="nb WW">WW</span>`, "water world"],
   [q => q(".nb.AW"), `<span class="nb AW">AW</span>`, "ammonia world"],
@@ -2997,24 +3378,29 @@ const HERE_LEGEND = [
   [q => q(".belt"), "⋯", "asteroid belts"],
   [(q, s) => q('.fl[title="first discovered"]') || s("🏁"), "🏁", "first discovered by you"],
   [(q, s) => q('.fl[title="first mapped"]') || s("🗺"), "🗺", "first mapped by you"],
-  [q => q('.fl.unk[title^="mapped"], #hereSchematic .badges > span.unk'), `<span class="unk">🗺</span>`, "mapped (not first)"],
+  [q => q('.fl.unk[title^="mapped"], #hereSchematic .badges > span.unk'), `<span class="unk">🗺</span>`, "mapped, not first"],
   [(q, s) => q('.fl[title="first footfall"]') || s("👣"), "👣", "first footfall"],
-  [q => q('span.unk[title^="known to Spansh"]'), "—", "not scanned by you (Spansh knows it)"],
+  [q => q('span.unk[title^="known to Spansh"]'), "—", "not scanned by you"],
   [(q, s) => s("🧬"), "🧬", "biological signals"],
   [q => q(".warnc"), "🧬?", "bio possible: check the FSS"],
-  [q => q(".sp.part"), "1/3", "samples of a species taken (3 analyses it)"],
-  [q => q(".sp.done"), "✓", "species analysed"],
+  [q => q(".sp.part"), "1/3", "samples of a species taken"],
+  [(q, s, has) => has(".sp.done", "✓"), "✓", "species analysed"],
   [q => q(".sp.lost"), "✗", "samples lost with the ship: sample again"],
   [q => q('span.unk[title^="likeliest by value"]'), "?", "the likeliest species, not yet known"],
   [(q, s, has) => has("td.bio .sp", "≤"), "≤", "the most the likely species could pay"],
-  [q => q(".cxgal"), `<span class="cxnew cxgal">✪</span>`, "new to your codex anywhere"],
-  [(q, s, has) => q(".cxnew:not(.cxgal)") || has('.sp[title^="codex:"]', "✦"),
+  [q => q(".cxgal:not(.cxtype)"), `<span class="cxnew cxgal">✪</span>`, "new to your codex anywhere"],
+  [(q, s, has) => q(".cxnew:not(.cxgal):not(.cxtype)") || has('.sp[title^="codex:"]', "✦"),
    `<span class="cxnew">✦</span>`, "new to your codex in this region"],
+  [q => q(".cxtype"), `<span class="cxnew cxtype">✦</span>`, "a star or planet type new to your codex (✪: anywhere)"],
   [q => q('.sp[title^="codex:"]'), "📖", "a codex entry you logged here"],
   [(q, s, has) => has('.sp[title^="codex:"]', "💰"), "💰", "the codex paid for it"],
   [(q, s) => q(".sp.geo") || s("🪨"), "🪨", "geological signals"],
-  [q => q(".volc, #hereSchematic .badges span[title]:not(.nb):not(.scoop):not(.unk)"), "🌋", "volcanism (brighter: landable, geological sites possible)"],
-  [(q, s) => q(".minec") || s("⛏"), "⛏", "planetary mining locations (hover for the likely minerals)"],
+  [q => q(".volc, #hereSchematic .badges span[title]:not(.nb):not(.scoop):not(.unk)"), "🌋", "volcanism"],
+  [(q, s) => q(".minec") || s("⛏"), "⛏", "planetary mining locations"],
+  [q => q(".site-guardian"), "🏛", "Guardian sites"],
+  [q => q(".site-thargoid"), "👾", "Thargoid sites"],
+  [q => q(".site-anomaly"), "❔", "a planetary anomaly"],
+  [q => q(".site-other"), "📡", "other surface signals the game does not name"],
 ];
 function drawHereLegend() {
   const el = document.getElementById("hereLegend");
@@ -4270,7 +4656,7 @@ function matSitesHtml(list) {
     list.map(s => {
       const spots = [s.rigs ? plural(s.rigs, "rig") : "", s.unmarked ? `${s.unmarked} unmarked` : ""].filter(Boolean).join(" · ");
       const detail = [spots, s.locations.map(n => "L" + n).join(" "), s.last ? shortDay(s.last) : ""].filter(Boolean).join(" · ");
-      return `<tr><td><b>${esc(s.body)}</b>${s.body_name ? ` <span class="goto" data-body="${esc(s.body_name)}" data-bsys="${esc(s.id)}" title="open ${esc(s.body)} in Here">🔍</span>` : ""}` +
+      return `<tr><td><b>${esc(s.body)}</b>${s.body_name ? ` <span class="goto" data-body="${esc(s.body)}" data-bsys="${esc(s.id)}" title="open ${esc(s.body)} in Here">🔍</span>` : ""}` +
         `<div>${s.system ? `<span class="name" data-name="${esc(s.system)}" title="click to copy">${esc(s.system)}</span><span class="goto" data-goto="${esc(s.id)}" title="open in Here">⌖</span>` : `<span class="unk">unknown system</span>`}</div></td>` +
         `<td>${s.minerals.map(x => `${esc(x.name)} ${x.tons} t`).join(" · ")}${detail ? `<div class="unk">${esc(detail)}</div>` : ""}</td>` +
         `<td class="num">${s.distance != null ? s.distance + " ly" : ""}</td>` +
@@ -4597,7 +4983,7 @@ function renderChecklist() {
   if (!geo) st.innerHTML = `${esc(where)}: <b>${inM}</b> of ${s.possible} possible species found · <b>${clPct(s.completion)}</b> complete ${pctWhat}` +
     (extra ? ` · ${extra} found where the rules say ${extra === 1 ? "it cannot" : "they cannot"} grow` : "") +
     ` · <span class="cl-sold">${s.sold} sold</span>` +
-    ` · <span class="cl-aboard">${s.aboard} aboard</span>` + (s.lost ? ` · <span class="cl-lost">${s.lost} lost</span>` : "") +
+    ` · <span class="cl-aboard" title="species you carry unsold samples of (a colour of one may be sold already)">${s.aboard} aboard</span>` + (s.lost ? ` · <span class="cl-lost">${s.lost} lost</span>` : "") +
     (s.logged ? ` · <span class="cl-logged">${s.logged} logged</span>` : "") + ` · colours ${s.colours_found} of ${s.colours}` +
     (s.elsewhere ? ` · <span class="clelse">${s.elsewhere} more found in other regions</span>` : "");
   const html = d.genera.map(g => {
@@ -5259,15 +5645,6 @@ const H = {data: null, key: null, loading: false, poll: null, error: null, statu
 // conservative / conservative_ly: null until changed here ([highway] conservative and conservative_ly then)
 // Road to Riches, the tab's other route type: its api/riches answer, polling and form (see "Road to Riches" below)
 const R = {data: null, key: null, loading: false, poll: null, error: null, watch: false, filled: false, nextShown: null};
-// Server settings' line about the fork's Inara upload ([inara]), from the payload's `inara`: whether it is on, how
-// much went out, what waits, and the latest problem in Inara's own words. Pure.
-function inaraText(u) {
-  if (!u) return "";
-  if (u.off) return `Inara upload: off (${u.off}).`;
-  if (!u.on) return "Inara upload: off ([inara] below switches it on, at the next start).";
-  return `Inara upload (live play only): ${u.sent.toLocaleString()} sent` + (u.waiting ? `, ${u.waiting.toLocaleString()} waiting` : "") +
-    (u.dropped ? `, ${u.dropped.toLocaleString()} dropped` : "") + (u.error ? ` (${u.error})` : "") + ".";
-}
 const hwyCfg = Object.assign({plotter: "exact", injections: false, exclude_secondary: false, supercharged: false, no_neutrons: false,
                               refuel_every_scoopable: false, efficiency: null,
                               conservative: null, conservative_ly: null}, store.get("highway", {}));
@@ -5309,10 +5686,10 @@ let hwyRun = null;   // the run this page started (test now, Target next, Retry)
 // 🎯 on a route system (the author, 2026-10-07): route "highway" | "survey" and its row, or (no route) the Highway's
 // Target next as before (the next system, off the route the nearest); `icon`: just 🎯 (a list's rows)
 function hwyAimBtn(name, route = null, index = null, icon = false) {
-  const key = route ? `${route}:${index}` : "next", r = hwyRun, mine = r && r.kind === "next" && !r.done && (r.key || "next") === key;
+  const key = route ? `${route}:${index ?? ""}` : "next", r = hwyRun, mine = r && r.kind === "next" && !r.done && (r.key || "next") === key;
   const label = !mine ? (icon ? "🎯" : "🎯 target") : r.n > 0 ? `🎯 in ${r.n} s` : "🎯 targeting…";
   return ` <button type="button" class="mini hwyaim${icon ? " icon" : ""}" data-aim="next"` +
-    (route ? ` data-route="${route}" data-index="${index}"` : "") + `${mine ? " disabled" : ""}` +
+    (route ? ` data-route="${route}"${index != null ? ` data-index="${index}"` : ""}` : "") + `${mine ? " disabled" : ""}` +
     ` title="target ${esc(name)} in the galaxy map${TABLET ? "" : ", 5 s from now: click back into the game meanwhile"}">${label}</button>`;
 }
 // the strip under the header: only on Overview, Nearby and Here, only with a route
@@ -5674,7 +6051,10 @@ hEl("hwyClear").onclick = async () => {
     btn.textContent = "Click again to clear"; return;
   }
   clearTimeout(H.clearArmed); H.clearArmed = null; btn.textContent = "Clear route";
-  const rich = routeKind() === "rich" && ((R.data && R.data.route) || (R.data && R.data.plotting && R.data.plotting.state === "running"));
+  // the slot's route when it has one (and it is the one shown); with none, its plot while that is the one running
+  // (routeKind() is "rich" only with a route: a trade plot into an empty slot could not be stopped, review 2026-10-11)
+  const running = d => !!(d && d.plotting && d.plotting.state === "running");
+  const rich = R.data && R.data.route ? routeKind() === "rich" : running(R.data) && !running(H.data);
   let r;
   try { r = await apiJson(rich ? "api/riches/clear" : "api/highway/clear", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"}); }
   catch (err) { r = {error: err.message}; }
@@ -5742,12 +6122,12 @@ async function hwyAutoStart(kind, aim = null) {
   try { r = await fetch(url, opts); j = await r.json(); }
   catch { show("could not reach Outrider"); return; }
   if (!r.ok) { show(`cannot ${w}: ${j.error || "?"}`); return; }
-  const mine = hwyRun = {seq: j.seq, kind, key: aim ? `${aim.route}:${aim.index}` : "next", system: j.system, n: j.in, dry: j.dry_run, done: false, msg: "",
+  const mine = hwyRun = {seq: j.seq, kind, key: aim ? `${aim.route}:${aim.index ?? ""}` : "next", system: j.system, n: j.in, dry: j.dry_run, done: false, msg: "",
                          at: Date.now()};
   const tick = () => {
     if (mine.done || mine !== hwyRun) return;
     mine.msg = mine.n > 0 ? `click into the game: targeting ${j.system} in ${mine.n} s${j.dry_run ? " (dry run)" : ""}` : `targeting ${j.system}…`;
-    drawHwyAuto(); renderHwyLine();
+    drawHwyAuto(); renderHwyLine(); renderCarrier(); renderTilesLine(); drawBoxel();   // the carrier's and the boxel's 🎯 count down too
     if (view === "hwy") renderHwy();   // the list's 🎯 counts down too
     if (mine.n > 0) { mine.n--; setTimeout(tick, 1000); }
   };
@@ -5773,7 +6153,8 @@ document.addEventListener("click", e => {
   const b = e.target.closest("[data-aim]");
   if (!b) return;
   e.stopPropagation(); e.preventDefault();
-  if (!b.disabled) hwyAutoStart(b.dataset.aim, b.dataset.route ? {route: b.dataset.route, index: Number(b.dataset.index)} : null);
+  if (!b.disabled) hwyAutoStart(b.dataset.aim, b.dataset.route ? Object.assign({route: b.dataset.route},
+    b.dataset.index != null ? {index: Number(b.dataset.index)} : {}) : null);
 }, true);
 function renderHwy() {
   if (view !== "hwy") return;
@@ -7291,6 +7672,22 @@ function onData() {
         else sayRegion(m);
       }
       else if (m.kind === "jumponium" && m.jumponium) sayJumponium(m.jumponium);
+      else if (m.kind === "phenomena" && m.count) sayPhenomena(m);
+      else if (m.kind === "curious")   // curiosities here: one line to look at the panels, never the list
+        alertOut("curious", "🔭 Curiosities here", (m.bodies || []).join(", "),
+                 {say: () => line("curious", {}, "You might be interested in some curious things I found here. Check your panels.")});
+      else if (m.kind === "signal_poi" && m.what)   // a Titan, a Guardian beacon...: said with delight
+        alertOut("signal_poi", `📍 ${m.what[0].toUpperCase()}${m.what.slice(1)}`, "",
+                 {say: () => line("signal_poi", {what: m.what}, `Signal worth a detour: ${m.what}.`)});
+      else if (m.kind === "surface_site" && m.what)   // Guardian / Thargoid sites, an anomaly: said with delight
+        alertOut("surface_site", `${siteIcons(m.sites)} ${m.what[0].toUpperCase()}${m.what.slice(1)}`, "",
+                 {say: () => line("surface_site", {what: m.what}, `Surface sites: ${m.what}.`)});
+      else if (m.kind === "ggg" && m.body)   // a potential green gas giant: the ladder model's guess, said with delight
+        alertOut("ggg", `Potential green gas giant: ${m.body}`, `${m.what || "a gas giant"}${m.chance === "possible" ? ", possible" : ""}: check it in the system map`,
+                 {say: () => line("ggg", {body: m.body}, `Possible green gas giant: ${m.body}.`)});
+      else if (m.kind === "rare_star" && m.what)   // a rare star resolved: said with delight
+        alertOut("rare_star", `⭐ ${m.what[0].toUpperCase()}${m.what.slice(1)}`, m.star || "",
+                 {say: () => line("rare_star", {what: m.what}, `Rare star: ${m.what}.`)});
       else if (m.kind === "arrival_brief") {   // after the honk (or 12 s after arriving without one): one sentence
         let text = arrivalBriefText(m);
         // the arrival alert has just said this system is undiscovered: the briefing starts at the bodies, not twice
@@ -7542,7 +7939,7 @@ const speechLogFacts = e => [e.kind + (e.tag ? "/" + e.tag : ""), e.style, e.voi
 const ALERT_SHORT = {arrival: "Arrival", game: "Game start and quit", jump: "FSD charge", honk: "Honk", brief: "Arrival brief", fss: "FSS",
   leaving: "Leaving", fuel: "Fuel", scoop: "Tank full", scoopstop: "Scooping stopped", supercharge: "Supercharge", find: "Find",
   jumponium: "Jumponium", sampling: "Sampling", approach: "High-g approach", bodybrief: "Body brief", sell: "Selling", saleleft: "Sale left data",
-  unsold: "Unsold", hull: "Hull and danger", carrier: "Carrier", codex: "Codex", loss: "Ship lost", rigs: "Rigs", rigleash: "Rig leash",
+  unsold: "Unsold", hull: "Hull and danger", carrier: "Carrier", codex: "Codex", phenomena: "Stellar phenomena", ggg: "Green gas giant?", rare_star: "Rare star", surface_site: "Surface sites", signal_poi: "Signals worth a detour", curious: "Curiosities", loss: "Ship lost", rigs: "Rigs", rigleash: "Rig leash",
   rigsout: "Rigs out", mapped: "Mapped", signals: "Signals", highway: "Neutron Highway", autotarget: "Auto-target", manual: "Asked for",
   exo: "Exomastery route", riches: "Road to Riches", trade: "Trade route"};
 const speechMuted = new Set();   // kinds turned off from the tally this session (each shows an undo)
@@ -7572,7 +7969,7 @@ function drawSpeechLog() {
   document.getElementById("speechTally").innerHTML = speechTallyHtml();
   // 👎 on a line picked from the lines file: never that wording again (not on plain wording, which has no versions)
   const ban = e => !e.template || !e.key ? "" : e.banned ? ` <span class="unk">· banned</span>`
-    : ` <button type="button" class="try ban" data-ban="${e.id}" title="never say this line again (every browser, and the voice lab)">👎</button>`;
+    : ` <button type="button" class="try ban" data-ban="${e.id}" title="never say this line again (every browser)">👎</button>`;
   document.getElementById("speechLog").innerHTML = speechLog.length ? [...speechLog].reverse().map(e =>
     `<div class="slog ${fateGroup(e.fate)}"><span class="unk">${hms(e.t)}</span> <b>${esc(e.fate || "waiting")}</b> <span class="unk">· ${esc(speechLogFacts(e).join(" · "))}</span>${ban(e)}<br>“${esc(e.words)}”</div>`).join("")
     : `<div class="unk">Nothing yet in this window since it opened.</div>`;
@@ -7630,7 +8027,10 @@ document.getElementById("speechLogBox").addEventListener("toggle", drawSpeechLog
 document.getElementById("speechLogCopy").onclick = () => copyText(speechLogText() || "(nothing yet)", `${speechLog.length} lines`);
 // ---- alert settings ----
 const alertDialog = document.getElementById("alertDialog");
+// a heading over a group of alerts in the list, before its first one: the discoveries together, each still its own row
+const ALERT_GROUPS = {phenomena: "Discoveries: the rare and curious things the FSS finds, said with delight (each has its own switches)"};
 document.getElementById("alertOpts").innerHTML = ALERTS.map(([k, label, snd]) =>
+  (ALERT_GROUPS[k] ? `<tr class="agroup"><th colspan="4">${esc(ALERT_GROUPS[k])}</th></tr>` : "") +
   `<tr><td>${esc(label)}</td><td><input type="checkbox" data-alert="${k}" aria-label="notify"></td>` +
   `<td>${snd || k === "arrival" ? `<input type="checkbox" data-asound="${k}" aria-label="sound">` : `<span class="unk" title="${k === "discovery" ? "the target sound" : "no sound"}">·</span>`}</td>` +
   `<td>${UNSPOKEN.has(k) ? `<span class="unk" title="not spoken: arriving there is">·</span>` : `<input type="checkbox" data-aspeak="${k}" aria-label="speak">`}</td></tr>`).join("");
@@ -7866,7 +8266,11 @@ function drawTts() {
   }
   if (t && t.voice && document.activeElement !== sel) sel.value = t.voice;
   sel.disabled = !opts.length;
+  const sw = document.getElementById("ttsSpkWrap");   // a voice of several people: which one speaks
+  sw.hidden = !(t && t.voice && t.speakers > 1);
+  if (!sw.hidden) fillSpeakers(document.getElementById("ttsSpk"), t.voice, t.speaker);
   if (mvVoices) { for (const v of mvVoices) v.installed = opts.includes(v.name); if (document.getElementById("moreVoices").open) drawMoreVoices(); }
+  labWatch();   // the voice lab: a voice just downloaded joins its list, picked
   const sf = data && data.sound_files, own = sf ? Object.keys(sf.own || {}) : [];   // [speech] sound_dir (S16)
   document.getElementById("soundFiles").textContent = !sf ? "" : (own.length ? `Your own sounds: ${own.join(", ")}.` : "No sound files of your own found.")
     + ((sf.problems || []).length ? ` Not used: ${sf.problems.join("; ")}.` : "");
@@ -7876,9 +8280,39 @@ function drawTts() {
 }
 drawSpeechBtn();
 document.getElementById("ttsVoice").onchange = e => apiJson("api/voice", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({voice: e.target.value})});
+// ---- speakers: a Piper voice trained on several people speaks as one of them (2026-10-11). Each voice keeps the
+// one picked for it (the server remembers it); the lists are fetched once per voice (some have hundreds).
+const speakerLists = {};   // voice -> [{id, name}]
+const speakerPicked = {};  // voice -> the speaker kept for it (the server's), so the lab opens a voice on its own pick
+async function speakersOf(voice) {
+  if (!voice) return [];
+  if (speakerLists[voice]) return speakerLists[voice];
+  try {
+    const r = await fetch("api/voices/speakers?voice=" + encodeURIComponent(voice));
+    if (!r.ok) return [];
+    const j = await r.json();
+    if (Number.isInteger(j.speaker)) speakerPicked[voice] = j.speaker;
+    return (speakerLists[voice] = Array.isArray(j.speakers) ? j.speakers : []);
+  } catch { return []; }
+}
+const speakerLabel = p => p.name === String(p.id) ? `#${p.id}` : `${p.name} (#${p.id})`;
+// fill a speaker <select> for `voice`, picking `current` (null: its first); resolves to the list
+async function fillSpeakers(sel, voice, current) {
+  const list = await speakersOf(voice);
+  if (sel.dataset.voice !== voice) {
+    sel.innerHTML = list.map(p => `<option value="${p.id}">${esc(speakerLabel(p))}</option>`).join("");
+    sel.dataset.voice = voice;
+  }
+  if (document.activeElement !== sel) sel.value = String(current ?? 0);
+  return list;
+}
+document.getElementById("ttsSpk").onchange = e => {
+  const t = data && data.tts; if (t && t.voice) speakerPicked[t.voice] = Number(e.target.value);
+  apiJson("api/voice", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({speaker: Number(e.target.value)})});
+};
 // ---- More voices (Settings > Voice): Piper's catalogue, from the server (GET api/voices/catalogue). Picking one
-// downloads it where Outrider runs and switches to it (POST api/voice, as the voice list above does): no voice lab
-// needed, so a Docker install has every voice too. The download's progress shows in the status beside Voice.
+// downloads it where Outrider runs and switches to it (POST api/voice, as the voice list does), so a Docker install has
+// every voice too. It sits in the voice lab's dialog. The download's progress shows in the status beside Voice.
 async function loadMoreVoices(refresh = false) {
   const msg = document.getElementById("mvMsg");
   msg.textContent = "reading Piper's voice list…";
@@ -7893,27 +8327,326 @@ async function loadMoreVoices(refresh = false) {
   sel.value = names.has(want) ? want : langs.length ? langs[0][0] : "";
   drawMoreVoices();
 }
+// More voices' order (per browser): by name, by quality (best first), or by the download's size either way
+const MV_QUALITY = {x_low: 0, low: 1, medium: 2, high: 3};
+const mvSortKey = () => { const k = store.get("mvSort", "name"); return ["name", "quality", "size", "-size"].includes(k) ? k : "name"; };
+function mvSorted(list) {
+  const k = mvSortKey(), name = v => v.name.split("-")[1] || v.name, q = v => MV_QUALITY[v.quality] ?? -1, mb = v => v.size_mb ?? Infinity;
+  const byName = (a, b) => name(a).localeCompare(name(b)) || q(b) - q(a);
+  return [...list].sort(k === "quality" ? (a, b) => q(b) - q(a) || byName(a, b) : k === "size" ? (a, b) => mb(a) - mb(b) || byName(a, b)
+    : k === "-size" ? (a, b) => (b.size_mb ?? -1) - (a.size_mb ?? -1) || byName(a, b) : byName);
+}
 function drawMoreVoices() {
-  const lang = document.getElementById("mvLang").value, cur = data && data.tts && data.tts.voice;
-  document.getElementById("mvList").innerHTML = (mvVoices || []).filter(v => v.language === lang).map(v =>
+  const lang = document.getElementById("mvLang").value, t = data && data.tts, cur = t && t.voice;
+  const fetching = (t && t.fetching) || [], failed = (t && t.fetch_failed) || {};
+  document.getElementById("mvSort").value = mvSortKey();
+  document.getElementById("mvList").innerHTML = mvSorted((mvVoices || []).filter(v => v.language === lang)).map(v =>
     `<div class="mvrow"><span class="mvname">${esc(v.name.split("-")[1].replace(/_/g, " "))}</span>` +
     `<span class="unk">${esc(v.quality)}${v.speakers > 1 ? ` · ${v.speakers} speakers` : ""}${v.size_mb ? ` · ${v.size_mb} MB` : ""}</span>` +
-    (v.name === cur ? `<span class="ok">in use</span>` : `<button type="button" data-mv="${esc(v.name)}">${v.installed ? "Use" : "Download and use"}</button>`) +
+    // Piper's own recording of the voice (its website), before downloading anything
+    (v.sample ? `<button type="button" class="try" data-mvsample="${esc(v.sample)}" title="Piper's own recording of this voice, from its website${v.speakers > 1 ? " (its first speaker)" : ""}">▶ sample</button>` : "<span></span>") +   // a cell either way: the columns line up
+    // in the lab: Download fetches it without switching (then it is picked above, to hear and use); one already here is
+    // Select (picked above); the voice in use says so
+    (v.name === cur ? `<span class="ok">in use</span>`
+      : fetching.includes(v.name) ? `<button type="button" disabled>downloading…</button>`
+      : `<button type="button" data-mv="${esc(v.name)}"${failed[v.name] ? ` title="the last download failed: try again"` : ""}>${v.installed ? "Select" : failed[v.name] ? "Download again" : "Download"}</button>`) +
     `</div>`).join("") || `<div class="hint">no voices in this language</div>`;
 }
 document.getElementById("moreVoices").addEventListener("toggle", e => { if (e.target.open && !mvVoices) loadMoreVoices(); });
 document.getElementById("mvLang").onchange = drawMoreVoices;
+document.getElementById("mvSort").onchange = e => { store.set("mvSort", e.target.value); drawMoreVoices(); };
 document.getElementById("mvRefresh").onclick = () => loadMoreVoices(true);
 document.getElementById("mvList").addEventListener("click", async e => {
+  const smp = e.target.closest("[data-mvsample]");
+  if (smp) { labPlayUrl(smp.dataset.mvsample, "Piper's sample could not be played (offline, or the browser held it back: click the page first)"); return; }
   const b = e.target.closest("[data-mv]"); if (!b) return;
-  const v = (mvVoices || []).find(x => x.name === b.dataset.mv);
+  const name = b.dataset.mv, v = (mvVoices || []).find(x => x.name === name);
+  if (v && v.installed) { labSelectVoice(name); return; }   // already here: picked above, to hear and use
   let r;
-  try { r = await apiJson("api/voice", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({voice: b.dataset.mv})}); }
+  try { r = await apiJson("api/voices/download", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({voice: name})}); }
   catch { r = {error: "Outrider not reachable"}; }
-  if (r.error) { toast(`Not switched: ${r.error}`); return; }
-  b.disabled = true;
-  toast(v && v.installed ? `Switching to ${b.dataset.mv}` : `Downloading ${b.dataset.mv}${v && v.size_mb ? ` (${v.size_mb} MB)` : ""}, then switching to it`);
+  if (r.error) { labMsg(`Not downloaded: ${r.error}`, true); return; }
+  b.disabled = true; b.textContent = "downloading…";
+  labWant = name;   // picked above once it is here (drawTts)
+  labMsg(`Downloading ${name}${v && v.size_mb ? ` (${v.size_mb} MB)` : ""}: it is picked above when it is ready`);
 });
+// ---- the voice lab (Settings > Voice > 🎙 Voice lab…, 2026-10-11; it was voice_lab.py, a separate Tk window): try a
+// voice and its speakers without switching, any alert's lines in any personality (the eight-alert audition too), cut a
+// line, speak your own words or save them as WAV. Everything comes from the server's Piper (api/say), so what you
+// hear is what Outrider says, and it plays here in this browser: never through the alert queue, hush or "play on this
+// PC".
+const AUDITION_KEYS = ["game_start", "arrival_brief", "find_body", "leaving", "fuel_low", "sold", "bio_done_last", "session_recap"];   // outrider.speech.AUDITION
+const labEl = id => document.getElementById(id);
+let labToken = 0, labNow = null, labLast = null, labWant = null;   // labWant: a voice downloading, picked once here   // labLast: {key, template} of the line just played (✂ cuts it)
+// play a WAV from its URL: {done (resolves when it ends or stops), stop}. Swapped in the page test (jsdom plays nothing)
+let labSound = url => {
+  const a = new Audio(url);
+  a.volume = outVolume();
+  const done = a.play().then(() => new Promise(res => { a.onended = res; a.onpause = res; }));
+  return {done, stop: () => a.pause()};
+};
+const labMsg = (t, bad = false) => { const m = labEl("labMsg"); m.textContent = t || ""; m.className = bad ? "warnc" : "hint"; };
+function labStop() {
+  labToken++;
+  if (labNow) { const n = labNow; labNow = null; n.stop(); }
+}
+// what the voice part picks: {voice, speaker (null for a one-person voice), speed}
+function labPick() {
+  const spk = labEl("labSpkWrap").hidden ? null : Number(labEl("labSpk").value);
+  return {voice: labEl("labVoice").value, speaker: Number.isInteger(spk) ? spk : null, speed: Number(labEl("labSpeed").value) || 1};
+}
+async function labFetch(text, {voice, speaker, speed}) {
+  const q = new URLSearchParams({text: spokenText(text), speed: String(Math.round(speed * 100) / 100)});
+  if (voice) q.set("voice", voice);
+  if (speaker != null) q.set("speaker", String(speaker));
+  try {
+    const r = await fetch("api/say?" + q);
+    if (r.ok) return await r.blob();
+    labMsg(r.status === 503 ? "No Piper voice is ready yet (see the status beside Voice)" : `Outrider could not say it (${r.status})`, true);
+  } catch { labMsg("Could not reach Outrider", true); }
+  return null;
+}
+// say `text`; resolves true once it played to the end, false when stopped or failed
+async function labSay(text, how) {
+  labStop();
+  const token = labToken;
+  labMsg("…");
+  const blob = await labFetch(text, how);
+  if (!blob || token !== labToken) return false;
+  const url = URL.createObjectURL(blob);
+  labNow = labSound(url);
+  labMsg("");
+  try { await labNow.done; }
+  catch { labMsg("The browser held the sound back: click anywhere on the page, then try again", true); return false; }
+  finally { URL.revokeObjectURL(url); if (token === labToken) labNow = null; }
+  return token === labToken;
+}
+// play a recording from a URL (More voices' ▶ sample) through the lab's player, so ■ Stop and closing stop it too
+async function labPlayUrl(url, failed) {
+  labStop();
+  const token = labToken;
+  labNow = labSound(url);
+  labMsg("");
+  try { await labNow.done; } catch { if (token === labToken) labMsg(failed, true); }
+  finally { if (token === labToken) labNow = null; }
+}
+const labStyleName = st => { const base = st.replace(/_profane$/, ""), v = (speechLib.styles || {})[base];
+  return (typeof v === "string" ? v : (v && v.label) || base) + (st.endsWith("_profane") ? ", swearing" : ""); };
+// a random line of alert `key` in personality `style` (null: any, clean lines only), filled with sample values
+function labLine(key, style) {
+  const e = speechLib.lines && speechLib.lines[key];
+  if (!e || typeof e !== "object") return null;
+  const styles = style ? [style] : Object.keys(speechLib.styles || {});
+  const pool = styles.flatMap(st => (Array.isArray(e[st]) ? e[st] : []).filter(x => typeof x === "string" && x.trim()).map(x => [st, x]));
+  if (!pool.length) return null;
+  const [st, template] = pool[Math.floor(Math.random() * pool.length)];
+  return {key, style: st, template, text: fillLine(template, lineVars(LINE_SAMPLES[key] || {}))};
+}
+// play a line: in its personality's own voice and pace when speech.json gives it one (and it is installed), else
+// the voice part's voice and speaker
+async function labPlayLine(ln) {
+  const pick = labPick(), sv = styleVoice(ln.style.replace(/_profane$/, ""));
+  const own = sv.voice && ((data && data.tts && data.tts.voices) || []).includes(sv.voice) ? sv.voice : null;
+  labLast = {key: ln.key, template: ln.template};
+  labEl("labCut").disabled = false;
+  labEl("labWords").textContent = `${ln.key} · ${labStyleName(ln.style)}${own ? ` · in ${own}` : ""}: “${spokenText(ln.text)}”`;
+  return labSay(ln.text, own ? {voice: own, speaker: null, speed: pick.speed * sv.pace} : {...pick, speed: pick.speed * sv.pace});
+}
+async function labDrawSpeakers() {
+  const voice = labEl("labVoice").value, t = data && data.tts;
+  // the voice in use: its speaker; another voice: the speaker kept for it, never #0 by default (review 2026-10-12)
+  const list = await speakersOf(voice);
+  const cur = voice === (t && t.voice) ? t.speaker : speakerPicked[voice] ?? null;
+  await fillSpeakers(labEl("labSpk"), voice, cur);
+  labEl("labSpkWrap").hidden = list.length < 2;
+  labEl("labSpkCount").textContent = list.length > 1 ? `${list.length} people` : "";
+  labDrawInUse();
+}
+function labDrawInUse() {
+  const t = data && data.tts, p = labPick();
+  const same = t && p.voice === t.voice && (p.speaker == null || p.speaker === (t.speaker ?? 0));
+  labEl("labInUse").textContent = same ? "✓ the voice in use" : "";
+  labEl("labUse").disabled = !p.voice || (same && Math.abs(p.speed - speechSpeed()) < 0.001);
+}
+function labFillVoices() {
+  const t = data && data.tts, voices = (t && t.voices) || [], sel = labEl("labVoice"), keep = sel.value;
+  if (sel.dataset.opts === voices.join(",")) return;
+  sel.innerHTML = voices.map(v => `<option>${esc(v)}</option>`).join("") || `<option value="">(no Piper voice installed: More voices below)</option>`;
+  sel.dataset.opts = voices.join(",");
+  sel.value = voices.includes(keep) ? keep : (t && t.voice) || voices[0] || "";
+}
+// a voice picked in the voice part (More voices' Select, or a download just done), ready for ▶ Hear it and Use
+function labSelectVoice(name) {
+  labFillVoices();
+  labEl("labVoice").value = name;
+  labStop();
+  labDrawSpeakers();
+  labEl("labVoice").scrollIntoView && labEl("labVoice").scrollIntoView({block: "nearest"});
+}
+// each payload, with the lab open: a new voice installed joins the list, and the one downloading is picked when here
+function labWatch() {
+  const d = labEl("labDlg"), t = data && data.tts;
+  if (!d.open || !t) return;
+  labFillVoices();
+  if (labWant && (t.voices || []).includes(labWant)) {
+    const name = labWant; labWant = null;
+    labSelectVoice(name);
+    labMsg(`${name} downloaded: ▶ Hear it, then Use this voice if you like it`);
+  } else if (labWant && (t.fetch_failed || {})[labWant] && !(t.fetching || []).includes(labWant)) {
+    labMsg(`Could not download ${labWant}: ${t.fetch_failed[labWant]}`, true); labWant = null;
+  }
+}
+async function labOpen() {
+  if (!Object.keys(speechLib.lines || {}).length) await loadSpeechLib();   // the lines, if the page has none yet
+  const t = data && data.tts;
+  labEl("labVoice").dataset.opts = "";
+  labFillVoices();
+  if (t && t.voice) labEl("labVoice").value = t.voice;
+  labEl("labSpeed").value = String(speechSpeed());
+  labEl("labSpeedOut").textContent = speechSpeed().toFixed(2) + "×";
+  const keys = Object.keys(speechLib.lines || {}).sort();
+  labEl("labAlert").innerHTML = keys.map(k => { const w = (speechLib.lines[k] || {}).when;
+    return `<option value="${esc(k)}">${esc(k)}${typeof w === "string" ? ` · ${esc(w.length > 60 ? w.slice(0, 57) + "…" : w)}` : ""}</option>`; }).join("");
+  const lines = Object.values(speechLib.lines || {}), styles = Object.keys(speechLib.styles || {});
+  const swear = styles.filter(k => lines.some(e => e && Array.isArray(e[k + "_profane"]) && e[k + "_profane"].length));
+  labEl("labStyle").innerHTML = `<option value="">any personality</option>` +
+    [...styles, ...swear.map(k => k + "_profane")].map(k => `<option value="${esc(k)}">${esc(labStyleName(k))}</option>`).join("");
+  labEl("labWords").textContent = ""; labEl("labCut").disabled = true; labLast = null; labMsg("");
+  labDrawSpeakers();
+  tabShow(labEl("labDlg"));
+}
+labEl("labOpen").onclick = labOpen;
+labEl("labVoice").onchange = () => { labStop(); labDrawSpeakers(); };
+labEl("labSpk").onchange = () => { labDrawInUse(); labHear(); };
+labEl("labSpeed").oninput = () => { labEl("labSpeedOut").textContent = Number(labEl("labSpeed").value).toFixed(2) + "×"; labDrawInUse(); };
+const labStep = d => { const sel = labEl("labSpk"), n = sel.options.length; if (!n) return;
+  sel.selectedIndex = d === "rand" ? Math.floor(Math.random() * n) : (sel.selectedIndex + d + n) % n; labDrawInUse(); labHear(); };
+labEl("labSpkPrev").onclick = () => labStep(-1);
+labEl("labSpkNext").onclick = () => labStep(1);
+labEl("labSpkRand").onclick = () => labStep("rand");
+function labHear() {
+  const p = labPick(), names = speechNames(), name = names[Math.floor(Math.random() * names.length)] || "Commander";
+  const who = p.speaker != null ? ` I am speaker ${speakerLabel((speakerLists[p.voice] || []).find(x => x.id === p.speaker) || {id: p.speaker, name: String(p.speaker)})}.` : "";
+  return labSay(`Hello, ${name}.${who} Three biological signals on A 2, worth up to 19 million.`, p);
+}
+labEl("labHear").onclick = labHear;
+labEl("labUse").onclick = async () => {
+  const p = labPick(), body = {voice: p.voice};
+  if (p.speaker != null) body.speaker = p.speaker;
+  let r;
+  try { r = await apiJson("api/voice", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}); }
+  catch { r = {error: "Outrider not reachable"}; }
+  if (r.error) { labMsg(`Not switched: ${r.error}`, true); return; }
+  if (p.speaker != null) speakerPicked[p.voice] = p.speaker;
+  if (Math.abs(p.speed - speechSpeed()) >= 0.001) { store.set("speechSpeed", p.speed); speedBox.value = String(p.speed); speedOut.textContent = p.speed.toFixed(2) + "×"; drawSpeechStyles(); }
+  labMsg(`Outrider speaks in ${p.voice}${p.speaker != null ? `, speaker #${p.speaker}` : ""} at ${p.speed.toFixed(2)}× from now on`);
+  labEl("labUse").disabled = true;
+};
+labEl("labLine").onclick = () => {
+  const ln = labLine(labEl("labAlert").value, labEl("labStyle").value || null);
+  if (!ln) { labMsg("No lines for that alert in that personality", true); return; }
+  labPlayLine(ln);
+};
+labEl("labCut").onclick = async () => {
+  if (!labLast) return;
+  if (await banLine(labLast.key, labLast.template, true)) { labEl("labCut").disabled = true; labEl("labWords").textContent += " (cut)"; labLast = null; }
+};
+labEl("labAudition").onclick = async () => {
+  const chosen = labEl("labStyle").value || null;
+  const styles = chosen ? [chosen] : Object.keys(speechLib.styles || {});
+  const steps = styles.flatMap(st => AUDITION_KEYS.map(k => [st, k]));
+  labStop();
+  for (const [st, k] of steps) {
+    const ln = labLine(k, st);
+    if (!ln) continue;   // that personality has nothing for this alert
+    if (!(await labPlayLine(ln))) return;   // stopped (or failed): the audition ends
+    const token = labToken;
+    await new Promise(res => setTimeout(res, 2000));
+    if (token !== labToken) return;
+  }
+  labMsg("Audition done");
+};
+const labOwnText = () => fillLine(labEl("labText").value, lineVars({}));
+labEl("labSpeak").onclick = () => { if (labEl("labText").value.trim()) labSay(labOwnText(), labPick()); else labMsg("Type something first", true); };
+labEl("labSave").onclick = async () => {
+  if (!labEl("labText").value.trim()) { labMsg("Type something first", true); return; }
+  const p = labPick(), blob = await labFetch(labOwnText(), p);
+  if (!blob) return;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `outrider-${p.voice || "voice"}${p.speaker != null ? `-${p.speaker}` : ""}.wav`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  labMsg(`Saved as ${a.download}`);
+};
+// ---- How is it said (a review suggestion the author picked, 2026-10-12): the pronunciation table, word by word ----
+// api/pronounce: the shipped words with yours on top; a respelling ("fon-TIK-yoo-loo-uh") is tried as "{...}" in a line
+const PRON_SAY = /^(?:[A-Za-z]+(?:-[A-Za-z]+)*|\[\[[^\[\]{}]+\]\])$/, PRON_WORD = /^\p{L}[\p{L}\p{N}_'’-]*$/u;
+let pronEntries = null, pronSectors = [];
+const pronFind = w => (pronEntries || []).find(e => e.word.toLowerCase() === w.trim().toLowerCase());
+// a sector word's reading as the server gave it ("Smojooe" -> "SMOH-joo"), from the sectors you visited most
+const pronSectorSay = w => { const lw = w.trim().toLowerCase();
+  for (const s of pronSectors) { const i = s.name.toLowerCase().split(" ").indexOf(lw); if (i >= 0) return s.say.split(" ")[i]; }
+  return null; };
+function pronDraw() {
+  const mine = (pronEntries || []).filter(e => e.source === "yours");
+  labEl("pronWords").innerHTML = (pronEntries || []).map(e => `<option value="${esc(e.word)}">`).join("");
+  labEl("pronList").innerHTML = `${(pronEntries || []).length - mine.length} shipped` + (mine.length ? ` · yours: ` + mine.map(e =>
+    `<a href="#" data-pron="${esc(e.word)}">${esc(e.word)}</a> <span class="unk">${esc(e.say)}</span>`).join(", ") : " · none of yours yet");
+  labEl("pronSectors").innerHTML = pronSectors.length ? pronSectors.map(s => `<span class="pronsec"><button type="button" class="mini"
+    data-sector="${esc(s.name)}" title="hear it">▶</button> ${s.name.split(" ").map(w => `<a href="#" data-secword="${esc(w)}">${esc(w)}</a>`).join(" ")}
+    <span class="unk">${esc(s.say)}</span></span>`).join("") : "No procedural sectors visited yet.";
+}
+async function pronLoad() {
+  try { const r = await apiJson("api/pronounce"); pronEntries = r.words; pronSectors = r.sectors || []; }
+  catch { pronEntries = null; labMsg("Could not reach Outrider", true); }
+  pronDraw();
+}
+async function pronPost(word, say) {
+  let r;
+  try { r = await apiJson("api/pronounce", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({word, say})}); }
+  catch { r = {error: "Outrider not reachable"}; }
+  if (r.error) { labMsg(r.error, true); return false; }
+  pronEntries = r.words; pronDraw();
+  // the sectors again (a saved word changes how one reads), the words kept as the save gave them
+  apiJson("api/pronounce").then(g => { pronSectors = g.sectors || pronSectors; pronDraw(); }).catch(() => {});
+  return true;
+}
+const pronReady = () => { if (((data && data.tts && data.tts.voices) || []).length) return true;
+  labMsg("How is it said needs a Piper voice (the browser's own speech does not use it)", true); return false; };
+labEl("pronBox").addEventListener("toggle", () => { if (labEl("pronBox").open && !pronEntries) pronLoad(); });
+labEl("pronWord").addEventListener("change", () => { const e = pronFind(labEl("pronWord").value); if (e) labEl("pronSay").value = e.say; });
+labEl("pronList").addEventListener("click", ev => { const a = ev.target.closest("[data-pron]"); if (!a) return;
+  ev.preventDefault(); const e = pronFind(a.dataset.pron); labEl("pronWord").value = a.dataset.pron; labEl("pronSay").value = e ? e.say : ""; });
+labEl("pronSectors").addEventListener("click", ev => {
+  const b = ev.target.closest("[data-sector]"), a = ev.target.closest("[data-secword]");
+  if (b) { if (pronReady()) labSay(`{{${b.dataset.sector}}}`, labPick()); return; }
+  if (!a) return;
+  ev.preventDefault(); const w = a.dataset.secword, e = pronFind(w);
+  labEl("pronWord").value = w; labEl("pronSay").value = e ? e.say : (pronSectorSay(w) || "");
+});
+labEl("pronHearSector").onclick = () => { const w = labEl("pronWord").value.trim();
+  if (!/^[A-Za-z]+(?: [A-Za-z]+)?$/.test(w)) { labMsg("Type a sector's name first: one or two words of letters", true); return; }
+  if (pronReady()) labSay(`{{${w}}}`, labPick()); };
+labEl("pronHearNow").onclick = () => { const w = labEl("pronWord").value.trim();
+  if (!w) { labMsg("Type a word first", true); return; } if (pronReady()) labSay(w, labPick()); };
+labEl("pronHearNew").onclick = () => { const say = labEl("pronSay").value.trim();
+  if (!PRON_SAY.test(say)) { labMsg('Say it as syllables joined by "-", the stressed one in capitals: fon-TIK-yoo-loo-uh', true); return; }
+  if (pronReady()) labSay(say.startsWith("[[") ? say : `{${say}}`, labPick()); };
+labEl("pronSave").onclick = async () => {
+  const w = labEl("pronWord").value.trim(), say = labEl("pronSay").value.trim();
+  if (!PRON_WORD.test(w)) { labMsg("One word to save", true); return; }
+  if (!PRON_SAY.test(say)) { labMsg('Say it as syllables joined by "-", the stressed one in capitals: fon-TIK-yoo-loo-uh', true); return; }
+  if (await pronPost(w, say)) labMsg(`Saved: ${w} is said ${say} from now on`);
+};
+labEl("pronReset").onclick = async () => {
+  const w = labEl("pronWord").value.trim(), e = pronFind(w);
+  if (!e || e.source !== "yours") { labMsg(`${w || "That word"} has no way of yours to take out`, true); return; }
+  if (await pronPost(e.word, null)) { const back = pronFind(w); labEl("pronSay").value = back ? back.say : "";
+    labMsg(back ? `${w}: the shipped way again` : `${w}: espeak's own reading again`); }
+};
+labEl("labStop").onclick = () => { labStop(); labMsg("Stopped"); };
+labEl("labDlg").addEventListener("close", labStop);   // closing the lab stops what it plays
 alertDialog.querySelectorAll("[data-alert]").forEach(cb => {
   cb.checked = !!alertCfg[cb.dataset.alert];
   cb.onchange = async () => {
@@ -8004,9 +8737,11 @@ function starWords(cls, lum) {
   }
   return LUMINOSITY_WORDS[l] || LUMINOSITY_WORDS[l.replace(/[ab]+$/, "")] || "";   // "Vab", "IIIb": their class
 }
-// ---- Settings → Uploads (EDDN, EDSM): the switches, what each has sent, why it is held, EDSM's accounts ----
+// ---- Settings → Uploads (EDDN, EDSM, Inara): the switches, what each has sent, why it is held, the accounts ----
 const UPLOAD_NAMES = {eddn: ["EDDN", "the data network Spansh, EDSM, Inara and others read: systems, scans, signals, markets, as they happen"],
-                      edsm: ["EDSM", "your flight log and scans, to your EDSM account (in batches: each jump, docking)"]};
+                      edsm: ["EDSM", "your flight log and scans, to your EDSM account (in batches: each jump, docking)"],
+                      inara: ["Inara", "your commander profile: travel, ranks, credits, ships, inventory, missions (in batches: each jump, docking)"]};
+const UPLOAD_SERVICES = Object.keys(UPLOAD_NAMES);
 let uploadsDrawn = "";
 // the Uploads section's last message (a refusal, a saved key, "could not reach Outrider"): part of what is drawn, so the
 // redraw right after an answer keeps it (the bug check of 2026-10-09: it was wiped as soon as it was written)
@@ -8015,14 +8750,14 @@ let uploadsNote = "";
 // was refused, live with each payload; nothing when no upload is in use
 function uploadLineHtml(u) {
   if (!u) return "";
-  const parts = ["eddn", "edsm"].map(s => {
+  const parts = UPLOAD_SERVICES.map(s => {
     const x = u[s] || {}, [name] = UPLOAD_NAMES[s];
     if (!x.on && !x.sent_24h && !x.queued && !x.dry_24h) return "";
     const bits = [`${(x.sent_24h || 0).toLocaleString("en-US")} sent`];
     if (x.queued) bits.push(`${x.queued.toLocaleString("en-US")} waiting`);
     if (x.dropped_24h) bits.push(`<span class="warnc">${x.dropped_24h.toLocaleString("en-US")} refused</span>`);
     if (x.dry_24h) bits.push(`${x.dry_24h.toLocaleString("en-US")} dry run`);
-    const mode = s === "eddn" && x.test ? " (test)" : s === "edsm" && x.dry_run ? " (dry run)" : "";
+    const mode = s === "eddn" && x.test ? " (test)" : x.dry_run ? " (dry run)" : s === "inara" && x.dev ? " (development)" : "";
     const state = x.held ? ` <span class="bad" title="${esc(x.held)}">held</span>` : !x.on ? ` <span class="unk">off</span>` : "";
     return `<div title="uploads in the last 24 hours (Settings → Uploads has the detail)"><b>${name}</b>${mode} ${bits.join(" · ")}${state}</div>`;
   }).filter(Boolean);
@@ -8038,7 +8773,9 @@ function uploadsHtml(u) {
       : x.on ? `<span class="ok">on</span>` : `<span class="unk">off</span>`;
     // OUTRIDER_EDDN_TEST: said whatever the state, so a developer's run is never mistaken for a live one
     const test = s === "eddn" && x.test ? ` <span class="warnc" title="OUTRIDER_EDDN_TEST is set: EDDN's test schemas only, nothing reaches the live data">(test schemas only)</span>`
-      : s === "edsm" && x.dry_run ? ` <span class="warnc" title="OUTRIDER_EDSM_DRYRUN is set: each request is built and logged (data/edsm-dryrun.jsonl), nothing is sent">(dry run: nothing sent)</span>` : "";
+      : s === "edsm" && x.dry_run ? ` <span class="warnc" title="OUTRIDER_EDSM_DRYRUN is set: each request is built and logged (data/edsm-dryrun.jsonl), nothing is sent">(dry run: nothing sent)</span>`
+      : s === "inara" && x.dry_run ? ` <span class="warnc" title="OUTRIDER_INARA_DRYRUN is set: each request is built and logged (data/inara-dryrun.jsonl), nothing is sent">(dry run: nothing sent)</span>`
+      : s === "inara" && x.dev ? ` <span class="warnc" title="OUTRIDER_INARA_DEV is set: requests say isBeingDeveloped (a test account's trial)">(development mode)</span>` : "";
     const nums = [x.queued ? `${x.queued} waiting` : "", x.sent_24h ? `${x.sent_24h} sent today` : "", x.dropped_24h ? `${x.dropped_24h} refused` : "", x.dry_24h ? `${x.dry_24h} in dry runs` : ""].filter(Boolean).join(" · ");
     // ticked by what the player switched (wanted), whatever holds or blocks it now
     const ticked = x.wanted ?? (x.on || !!x.held);
@@ -8052,9 +8789,18 @@ function uploadsHtml(u) {
     ` <button type="button" class="try edsmSave">Save</button>${a.set ? ` <a href="#" class="edsmRemove">remove</a>` : ""}` +
     // never the key itself: its ends, to compare with edsm.net → Settings → API key
     (a.hint ? `<div class="hint">stored key: <code title="its first and last four characters: compare them with your key on edsm.net">${esc(a.hint)}</code></div>` : "") + `</div>`).join("");
+  // Inara: one API key per in-game commander (never served back: its ends only)
+  const inacc = ((u.inara || {}).accounts || []).map(a =>
+    `<div class="inaraacc" data-cmdr="${esc(a.commander)}"><b>${esc(a.commander)}</b> → Inara` +
+    ` key <input type="password" class="inaraKey" autocomplete="new-password" placeholder="${a.set ? "set (type to change)" : "API key"}" size="22">` +
+    ` <button type="button" class="try inaraSave">Save</button>${a.set ? ` <a href="#" class="inaraRemove">remove</a>` : ""}` +
+    (a.hint ? `<div class="hint">stored key: <code title="its first and last four characters: compare them with your key on inara.cz">${esc(a.hint)}</code></div>` : "") + `</div>`).join("");
   return row("eddn") + row("edsm") +
     `<div class="hint">EDSM accounts, per in-game commander (your key is at <a href="https://www.edsm.net/en/settings/api" target="_blank" rel="noopener">edsm.net → Settings → API key</a>; it stays on this Outrider):</div>` +
-    (acc || `<div class="unk">no commander seen yet</div>`) + `<div class="hint" id="uploadsMsg">${esc(uploadsNote)}</div>` +
+    (acc || `<div class="unk">no commander seen yet</div>`) + row("inara") +
+    `<div class="hint">Inara API keys, per in-game commander (yours is at <a href="https://inara.cz/elite/cmdr-settings-api/" target="_blank" rel="noopener">inara.cz → Settings → API key</a>; it stays on this Outrider). ` +
+    `Switch Inara off in EDMC, EDDI or EDDiscovery first: two apps sending can get the key revoked (Outrider sees only EDMC's setting).</div>` +
+    (inacc || `<div class="unk">no commander seen yet</div>`) + `<div class="hint" id="uploadsMsg">${esc(uploadsNote)}</div>` +
     (u.simulate ? `<div class="unk">--simulate: nothing is uploaded</div>` : "");
 }
 function renderUploads() {
@@ -8064,15 +8810,20 @@ function renderUploads() {
   if (box.contains(document.activeElement) && document.activeElement.tagName === "INPUT" && document.activeElement.type !== "checkbox") return;
   const html = uploadsHtml(data.uploads);
   if (html === uploadsDrawn) return;
-  // what was typed in an EDSM account row and not saved yet stays (a redraw of the counts must not wipe it)
+  // what was typed in an account row and not saved yet stays (a redraw of the counts must not wipe it)
   const typed = [...box.querySelectorAll(".edsmacc")].map(row => [row.dataset.cmdr, row.querySelector(".edsmName").value,
                                                                    row.querySelector(".edsmKey").value, row.querySelector(".edsmName").defaultValue]);
+  const typedInara = [...box.querySelectorAll(".inaraacc")].map(row => [row.dataset.cmdr, row.querySelector(".inaraKey").value]);
   box.innerHTML = html; uploadsDrawn = html;
   for (const [cmdr, name, key, was] of typed) {
     const row = [...box.querySelectorAll(".edsmacc")].find(r => r.dataset.cmdr === cmdr);
     if (!row) continue;
     if (name !== was) row.querySelector(".edsmName").value = name;
     if (key) row.querySelector(".edsmKey").value = key;
+  }
+  for (const [cmdr, key] of typedInara) {
+    const row = [...box.querySelectorAll(".inaraacc")].find(r => r.dataset.cmdr === cmdr);
+    if (row && key) row.querySelector(".inaraKey").value = key;
   }
 }
 async function setUpload(service, on, confirmed) {
@@ -8095,6 +8846,26 @@ async function setUpload(service, on, confirmed) {
 document.getElementById("uploadsBox").addEventListener("change", e => {
   const box = e.target.closest("[data-upload]");
   if (box) setUpload(box.dataset.upload, box.checked);
+});
+document.getElementById("uploadsBox").addEventListener("click", async e => {
+  const row = e.target.closest(".inaraacc"); if (!row) return;
+  const save = e.target.closest(".inaraSave"), remove = e.target.closest(".inaraRemove");
+  if (!save && !remove) return;
+  e.preventDefault();
+  const body = remove ? {commander: row.dataset.cmdr, remove: true} : {commander: row.dataset.cmdr, api_key: row.querySelector(".inaraKey").value};
+  try {
+    const j = await apiJson("api/uploads/inara", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+    uploadsNote = j.error || (remove ? "removed" : "saved");
+    if (!j.error) {
+      if (data.uploads && data.uploads.inara) data.uploads.inara.accounts = j.accounts;
+      row.querySelector(".inaraKey").value = "";   // saved: nothing typed is kept over the redraw
+    }
+  } catch (err) {
+    uploadsNote = `could not reach Outrider: ${err.message}`;
+  } finally {
+    row.querySelectorAll("input").forEach(i => i.blur());
+    uploadsDrawn = ""; renderUploads();
+  }
 });
 document.getElementById("uploadsBox").addEventListener("click", async e => {
   const row = e.target.closest(".edsmacc"); if (!row) return;
@@ -8120,7 +8891,7 @@ document.getElementById("uploadsBox").addEventListener("click", async e => {
 });
 // Settings -> In-game overlay (data.overlay: State.overlay_info): the switches, whether a window is drawing, the test
 // panels and Arrange mode, and each panel's place, size and transparency (POST api/overlay, api/overlay/layout)
-const OV_THEMES = ["default", "lcars", "elite", "babylon5", "narn", "minbari", "centauri", "sith", "alliance", "dark"];
+const OV_THEMES = ["default", "lcars", "elite", "babylon5", "narn", "minbari", "centauri", "vorlon", "shadow", "sith", "alliance", "dark"];
 const OV_PANELS = [["system", "System", "the bodies worth your time, in supercruise"], ["body", "Body", "the body you are heading to or near"],
                    ["radar", "Surface radar", "on a body's surface: samples, colony rings, the ship"],
                    ["strip", "System strip", "two short lines across the top: where you are, the star, bodies found, values"],
@@ -8203,8 +8974,9 @@ async function overlayPost(path, body) {
   try {
     const j = await apiJson(path, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
     overlayNote = j.error || j.note || "";
+    // api/overlay answers the whole state (its layout too), api/overlay/layout the layout: told apart by the path
     if (!j.error && data.overlay) {
-      if (j.layout) data.overlay.layout = j.layout;
+      if (/\/layout$/.test(path)) { if (j.layout) data.overlay.layout = j.layout; }
       else { delete j.note; data.overlay = j; }
     }
   } catch (err) {
@@ -8216,7 +8988,8 @@ async function overlayPost(path, body) {
 document.getElementById("overlayBox").addEventListener("change", e => {
   const t = e.target;
   if (t.dataset.ov === "enabled") overlayPost("api/overlay", {enabled: t.checked});
-  else if (t.dataset.ov) overlayPost("api/overlay", {[t.dataset.ov]: t.value});
+  // a select keeps the focus, which holds renderOverlay off: let go, so the server's answer (its note) is drawn
+  else if (t.dataset.ov) { t.blur(); overlayPost("api/overlay", {[t.dataset.ov]: t.value}); }
   else if (t.dataset.ovpanel) overlayPost("api/overlay", {panels: {[t.dataset.ovpanel]: t.checked}});
   else if (t.dataset.ovlay) {
     const k = t.dataset.k, v = k === "corner" ? t.value : Number(t.value) / 100;
@@ -8596,15 +9369,16 @@ async function saveServerConfig() {
 }
 
 let disconnected = null, disconnectedAt = 0, lostSaid = false;
-// The link pill (review S41, the author's version): "linked · 2 s" since the last answer; "stale · 48 s" past what
-// a long poll should take (25 s, plus a little); "no link · retrying since 14:02". The page still dims when the link
-// is down. linkState() is the tablet's too.
+// The link pill: states only, no timer (the author, 2026-10-12): "linked", "linked · no game" (Outrider answers, the
+// game is not running), "unlinked · retrying" (no answer past what a long poll should take, 25 s plus a little, or
+// the link down: amber, then red). The page still dims when the link is down. linkState() is the tablet's too.
 const LINK_STALE_MS = 30000;
 function linkState(now = Date.now()) {
-  if (disconnected) return {state: "none", text: `no link · retrying since ${disconnected}`};
+  if (disconnected) return {state: "none", text: "unlinked · retrying"};
   if (!lastHeard) return {state: "stale", text: "connecting…"};
-  const age = Math.max(0, Math.round((now - lastHeard) / 1000));
-  return age * 1000 > LINK_STALE_MS ? {state: "stale", text: `stale · ${age} s`} : {state: "linked", text: `linked · ${age} s`};
+  if (now - lastHeard > LINK_STALE_MS) return {state: "stale", text: "unlinked · retrying"};
+  const live = !!(data && data.freshness && data.freshness.live);
+  return {state: "linked", text: live ? "linked" : "linked · no game"};
 }
 function drawLinkPill() {
   const el = document.getElementById("linkPill"); if (!el) return;
@@ -8646,7 +9420,7 @@ async function prepareLostLine() {
 // Its fate goes in the dialog's Spoken lines like any line, so a silent one says why.
 async function sayLost() {
   const entry = logSpeech({kind: "connection", words: LOST_TEXT});
-  if (!(speechOn && speakerHere())) { toast(LOST_TEXT); setFate(entry, !speechOn ? "silent: speech off" : "silent: another window speaks"); return ""; }
+  if (!(speechOn && speakerHere())) { toast(LOST_TEXT); setFate(entry, `silent: ${hushReason()}`); return ""; }
   const ctx = await runningAudio();   // paused audio starts again if this page has had a click since it loaded
   if (!ctx) {
     toast(LOST_TEXT + " (click the page once so it may play sound)");
@@ -8904,7 +9678,7 @@ function tabSetup() {
   tabDrawNav(); tabDrawCaption(); tabDrawAsk();
 }
 // the themes with an emblem under the page list (their stylesheets set it; static/emblems/CREDITS.txt)
-const TB_EMBLEMS = ["elite", "babylon5", "narn", "minbari", "centauri", "sith", "alliance"];
+const TB_EMBLEMS = ["elite", "babylon5", "narn", "minbari", "centauri", "vorlon", "shadow", "sith", "alliance"];
 function tabEmblem(on) {   // Settings: Show the theme's emblem (per tablet, on by default)
   document.documentElement.classList.toggle("tb-noemblem", !on);
   document.getElementById("tabEmblem").checked = !!on;
@@ -8974,12 +9748,8 @@ function tabDrawHush() {
   if (b.textContent !== text) b.textContent = text;
   b.classList.toggle("on", on);
 }
-// the link pill in words: LINKED · 2 S AGO, STALE · 48 S AGO, NO LINK · RETRYING (linkState's states)
-function tabLinkText(l, now = Date.now()) {
-  const age = lastHeard ? Math.max(0, Math.round((now - lastHeard) / 1000)) : null;
-  // linked: no seconds ticking by (the author: distracting); the age only once it is stale, when it means something
-  return l.state === "none" ? "no link · retrying" : age == null ? "connecting…" : l.state === "linked" ? "linked" : `stale · ${age} s ago`;
-}
+// the tablet's pill says what the desktop's does (linkState)
+const tabLinkText = l => l.text;
 function tabDrawLink(l) {
   const el = document.getElementById("tabLink"), text = tabLinkText(l);
   if (el.textContent !== text) el.textContent = text;
@@ -9079,7 +9849,7 @@ const TAB_ALERT_NAMES = {discovery: "Targeting a system", arrival: "Arriving som
   supercharge: "Supercharged", highway: "Highway next stop", autotarget: "Auto-target", find: "Valuable body",
   jumponium: "Jumponium materials", sampling: "Exobiology unfinished", approach: "High gravity", bodybrief: "Bio signals on approach",
   sell: "Selling", saleleft: "Data left after a sale", unsold: "Unsold data", hull: "Hull, heat, interdiction",
-  carrier: "Carrier arrived", codex: "New codex entry", loss: "Ship lost", rigs: "Mining rigs", rigleash: "Rig too far",
+  carrier: "Carrier arrived", codex: "New codex entry", phenomena: "Stellar phenomena", ggg: "Green gas giant?", rare_star: "Rare star", surface_site: "Surface sites", signal_poi: "Signals worth a detour", curious: "Curiosities", loss: "Ship lost", rigs: "Mining rigs", rigleash: "Rig too far",
   rigsout: "Rigs still out"};
 function tabDrawAlerts() {
   const tog = (attr, k, on, what) => `<label class="tb-tog"><input type="checkbox" data-${attr}="${esc(k)}"${on ? " checked" : ""}> ${what}</label>`;

@@ -71,10 +71,13 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
 </section>
 <div id="nearWrap">
   <div class="tablebar" id="nearOpts">
-    <label><input type="checkbox" id="showVisited" checked> show visited</label>
-    <label><input type="checkbox" id="showExplored" checked> show fully explored</label>
-    <label><input type="checkbox" id="oneJump"> one jump only</label>
-    <span class="unk">click a column heading to sort</span>
+    <span class="nearmode" role="radiogroup" aria-label="exploration">
+      <label title="the systems around you"><input type="radio" name="nearMode" value="standard"> Standard</label>
+      <label title="the boxel you are in (or one you keep): its systems by number, and boxels nearby"><input type="radio" name="nearMode" value="boxel"> Boxel</label></span>
+    <label class="stdonly"><input type="checkbox" id="showVisited" checked> show visited</label>
+    <label class="stdonly"><input type="checkbox" id="showExplored" checked> show fully explored</label>
+    <label class="stdonly"><input type="checkbox" id="oneJump"> one jump only</label>
+    <span class="unk stdonly">click a column heading to sort</span>
   </div>
 <div class="pane" id="nearPane">
 <table id="nearTable">
@@ -85,6 +88,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
   <tbody id="rows"></tbody>
 </table>
 </div>
+<div class="pane" id="boxelPane" hidden></div>
 </div>
 <section id="hereView" hidden>
   <div id="hereHead"></div>
@@ -93,7 +97,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
   <div id="hereTableBox">
   <table id="hereTable">
     <thead><tr><th>Body</th><th>Class</th><th class="num c2hide" data-sort="dist" title="distance from the arrival star in light-seconds (click to sort, nearest first; again to reverse; a third time back to Max)">Dist ls</th><th class="num" data-sort="grav" title="surface gravity in g (click to sort, lowest first; again to reverse; a third time back to Max)">Grav</th><th class="hide-sm c2hide">Atmosphere</th>
-      <th title="biological and geological signals">Bio / Geo</th><th class="num c2hide" title="planetary mining locations (hover or tap a count for the likely minerals)">⛏</th><th class="c2hide">Rings</th><th class="c2hide">Firsts</th><th class="num c2hide" data-sort="now" title="what this body's data would pay if sold now (click to sort, the most first; again to reverse; a third time back to Max)">Now</th><th class="num" id="hereMaxTh" data-sort="max" title="the most it could pay once scanned, mapped and sampled">Max</th></tr></thead>
+      <th title="biological and geological signals">Bio / Geo</th><th class="c2hide">Rings</th><th class="num c2hide" title="planetary mining locations (hover or tap a count for the likely minerals)">⛏</th><th class="c2hide">Firsts</th><th class="num c2hide" data-sort="now" title="what this body's data would pay if sold now (click to sort, the most first; again to reverse; a third time back to Max)">Now</th><th class="num" id="hereMaxTh" data-sort="max" title="the most it could pay once scanned, mapped and sampled">Max</th></tr></thead>
     <tbody id="hereRows"></tbody>
   </table>
   <div class="hint" id="hereHint">Hover a body for a summary, click it for everything known. <b>Now</b> is what the data you hold from the body would
@@ -567,7 +571,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
 <dialog id="tabSettings" class="tb-sheet" aria-labelledby="tabSetTitle">
   <form method="dialog">
     <div class="tb-sheethead"><h2 id="tabSetTitle">This tablet</h2><button type="button" data-close class="tb-btn" aria-label="close">✕</button></div>
-    <label class="tb-row">Theme <select id="tabTheme"><option value="lcars">LCARS</option><option value="elite">Elite (cockpit HUD)</option><option value="babylon5">Babylon 5 - Earthforce</option><option value="narn">Babylon 5 - Narn</option><option value="minbari">Babylon 5 - Minbari</option><option value="centauri">Babylon 5 - Centauri</option><option value="sith">Sith (Star Wars)</option><option value="alliance">Rebel Alliance (Star Wars)</option><option value="dark">Dark (modern)</option></select></label>
+    <label class="tb-row">Theme <select id="tabTheme"><option value="lcars">LCARS</option><option value="elite">Elite (cockpit HUD)</option><option value="babylon5">Babylon 5 - Earthforce</option><option value="narn">Babylon 5 - Narn</option><option value="minbari">Babylon 5 - Minbari</option><option value="centauri">Babylon 5 - Centauri</option><option value="vorlon">Babylon 5 - Vorlon</option><option value="shadow">Babylon 5 - Shadows</option><option value="sith">Sith (Star Wars)</option><option value="alliance">Rebel Alliance (Star Wars)</option><option value="dark">Dark (modern)</option></select></label>
     <label class="tb-row"><input type="checkbox" id="tabDim"> Dim the screen</label>
     <label class="tb-row" id="tabEmblemRow"><input type="checkbox" id="tabEmblem"> Show the theme's emblem</label>
     <label class="tb-row" id="tabRailRow"><input type="checkbox" id="tabRailOn"> Show the game controls <span class="tb-note">the ship, SRV and on-foot buttons on the right; off gives the pages the whole width (a second tablet, say)</span></label>
@@ -612,13 +616,12 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       <div class="hint">Alerts only fire for something out of the ordinary. The tab title also carries the current state, so a background tab still tells you something.</div>
     </details>
     <details class="setsec" data-sec-key="voice" data-chip="Voice"><summary>Voice <span id="ttsEngine" class="unk"></span> <span class="sum-note">the voice, its personality, pace and volume, which screen speaks</span></summary>
-      <label class="mod">Voice <select id="ttsVoice"></select> <span id="ttsStatus" class="hint"></span></label>
+      <label class="mod">Voice <select id="ttsVoice"></select>
+        <span id="ttsSpkWrap" hidden>speaker <select id="ttsSpk" aria-label="speaker"></select></span>
+        <span id="ttsStatus" class="hint"></span></label>
       <div class="hint" id="ttsHint"></div>
-      <details id="moreVoices" class="morevoices"><summary>More voices <span class="sum-note">any of Piper's, downloaded where Outrider runs when you pick one</span></summary>
-        <div class="mod inlineopts">Language <select id="mvLang" aria-label="language"></select>
-          <button type="button" id="mvRefresh" title="fetch Piper's voice list again (it is kept for a week)">refresh list</button> <span id="mvMsg" class="hint"></span></div>
-        <div id="mvList" class="mvlist"></div>
-      </details>
+      <div class="mod"><button type="button" class="try" id="labOpen">🎙 Voice lab…</button>
+        <span class="hint">hear voices, their speakers and every alert's lines before you choose; download more voices</span></div>
       <div class="mod inlineopts">Personality: <span id="speechStyles" class="sstyles"></span>
         <span class="profrow"><label><input type="checkbox" id="speechProfanity"> with profanity <span id="speechProfanityWho" class="unk"></span></label>
         <label title="how often a line comes from the swearing versions instead of the clean ones"><input type="number" id="speechProfanityPct" min="0" max="100" step="5" style="width:4.5em">% of the time</label></span></div>
@@ -741,7 +744,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         <a href="#" id="autoHonkForget" title="clear what auto honk learned about this ship's fire groups">forget</a></div>
       <div class="hint" id="copilotLine" hidden></div>
     </details>
-    <details class="setsec" data-sec-key="uploads" data-chip="Uploads"><summary>Uploads <span class="sum-note">EDDN and EDSM: send what you find (off unless you switch it on)</span></summary>
+    <details class="setsec" data-sec-key="uploads" data-chip="Uploads"><summary>Uploads <span class="sum-note">EDDN, EDSM and Inara: send what you find, keep your profiles current (off unless you switch it on)</span></summary>
       <div id="uploadsBox"></div>
       <div class="hint">Only one Outrider (or EDMC) should send each: two would send everything twice. Outrider leaves a note
         in your journal folder (<code>.outrider/</code>) so another Outrider can see it; EDMC on this PC is checked too.
@@ -766,6 +769,8 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         <span class="hint">"small" is under 800 px high or 1200 px wide; ▴/▾ beside the tiles still folds or unfolds them, and makes that this device's choice</span></label>
       <label class="mod"><input type="checkbox" id="hereHideDone"> Here: leave out species you have finished
         <span class="hint">the bio column lists only what is still to do (a sample lost with the ship stays)</span></label>
+      <label class="mod"><input type="checkbox" id="hereColours"> Here: species in their colour
+        <span class="hint">in a codex line the colour's word in that colour ("Bacterium Alcyoneum - Red": "Red" in red)</span></label>
       <label class="mod">Here: leave out the bio of bodies with fewer than <input type="number" id="hereMinSig" min="0" max="20" step="1" style="width: 4em"> signals
         <span class="hint">0 shows them all; such a body says only its count, muted</span></label>
     </details>
@@ -782,13 +787,12 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         The view, layouts, the search form and which screen speaks stay per device. The voice is kept by the server already.</div>
     </details>
     <details class="setsec" data-sec-key="server" data-chip="Server" id="serverSettings"><summary>Server settings <span class="sum-note">the config file: network, password, paths, backups, Spansh, the Highway, the voice's AI and more</span></summary>
-      <div class="hint" id="inaraLine" title="[inara] below: your flight log to your Inara account, off until you switch it on; only live play is sent"></div>
       <div id="serverSettingsBody" class="srvset"><div class="hint">loading…</div></div>
     </details>
     <details id="speechLogBox" class="speechlog setsec" data-sec-key="log" data-chip="Spoken lines"><summary>Spoken lines <span class="sum-note">the last 100 alerts in this window and what became of each</span></summary>
       <div class="hint">Newest first: said, cut short, dropped (waited too long, you left the system, replaced by newer news, a cooldown, hushed) or
         silent (speech off, not ticked, another window speaks, hushed). Only this window's, and a reload starts afresh.
-        👎 on a line from the lines file means never say that one again (for every browser and the voice lab; the last line of a list stays).
+        👎 on a line from the lines file means never say that one again (for every browser; the last line of a list stays).
         <button type="button" class="try" id="speechLogCopy">copy</button></div>
       <div id="speechTally" class="hint"></div>
       <div id="speechBans" class="hint"></div>
@@ -810,6 +814,56 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       <th class="num">Pads</th><th>Docking</th><th class="src">Data</th><th></th></tr></thead><tbody id="nearRows"></tbody></table></div>
     <div id="nearFoot" class="hint"></div>
     <div class="btns"><span class="grow"></span><button type="button" data-close>Close</button></div>
+  </form>
+</dialog>
+<dialog id="labDlg" class="labdlg" aria-labelledby="labTitle">
+  <form method="dialog">
+    <h3 id="labTitle">🎙 Voice lab</h3>
+    <p class="hint">Try voices and lines before you choose. It plays here in this browser, whatever the speech settings.</p>
+    <h4>Voice</h4>
+    <div class="mod inlineopts"><select id="labVoice" aria-label="voice"></select>
+      <span id="labSpkWrap" hidden>speaker <button type="button" id="labSpkPrev" title="the previous speaker, played">‹</button><select id="labSpk" aria-label="speaker"></select><button type="button" id="labSpkNext" title="the next speaker, played">›</button>
+        <button type="button" id="labSpkRand" title="a random speaker, played">🎲</button> <span id="labSpkCount" class="unk"></span></span></div>
+    <div class="mod inlineopts">speed <input type="range" id="labSpeed" min="0.5" max="2" step="0.05" style="width:10em;vertical-align:middle"> <span id="labSpeedOut"></span>
+      <button type="button" id="labHear">▶ Hear it</button>
+      <button type="button" id="labUse" class="primary" title="Outrider speaks in this voice (and speaker, and speed) from now on">Use this voice</button>
+      <span id="labInUse" class="hint"></span></div>
+      <details id="moreVoices" class="morevoices"><summary>More voices <span class="sum-note">any of Piper's, downloaded where Outrider runs when you pick one</span></summary>
+        <div class="mod inlineopts">Language <select id="mvLang" aria-label="language"></select>
+          sorted by <select id="mvSort" aria-label="sort the voices"><option value="name">name</option><option value="quality">quality, best first</option>
+            <option value="size">size, smallest first</option><option value="-size">size, largest first</option></select>
+          <button type="button" id="mvRefresh" title="fetch Piper's voice list again (it is kept for a week)">refresh list</button> <span id="mvMsg" class="hint"></span></div>
+        <div id="mvList" class="mvlist"></div>
+      </details>
+    <h4>Lines</h4>
+    <div class="mod inlineopts"><select id="labAlert" aria-label="alert"></select> <select id="labStyle" aria-label="personality"></select></div>
+    <div class="mod inlineopts"><button type="button" id="labLine">▶ Random line</button>
+      <button type="button" id="labAudition" title="eight key alerts in a row, in each personality (or the one picked)">▶ Audition</button>
+      <button type="button" id="labCut" disabled title="never say the line just played again (every browser)">✂ Cut this line</button></div>
+    <div id="labWords" class="labwords hint"></div>
+    <h4>Your own words</h4>
+    <textarea id="labText" rows="2" placeholder="Type anything, then ▶ Speak"></textarea>
+    <div class="mod inlineopts"><button type="button" id="labSpeak">▶ Speak</button> <button type="button" id="labSave">⬇ Save WAV</button></div>
+    <details id="pronBox" class="pronbox"><summary>How is it said <span class="sum-note">a word the voice says wrong, said your way (Piper voices in English)</span></summary>
+      <div class="mod inlineopts"><input id="pronWord" list="pronWords" placeholder="a word: Fonticulua" aria-label="word" autocomplete="off">
+        <input id="pronSay" placeholder="fon-TIK-yoo-loo-uh" aria-label="how it is said" autocomplete="off">
+        <button type="button" id="pronHearNow" title="the word as the voice says it now">▶ as now</button>
+        <button type="button" id="pronHearNew" title="the word said the way typed beside it (not saved)">▶ this way</button>
+        <button type="button" id="pronHearSector" title="the word read as a sector's name is (the rule, or your way when saved)">▶ as a sector</button>
+        <button type="button" id="pronSave" class="primary">Save</button>
+        <button type="button" id="pronReset" title="take your own back out: the shipped way (or espeak's own reading) again">↺ mine out</button></div>
+      <datalist id="pronWords"></datalist>
+      <p class="hint">Syllables joined by "-", the stressed one in CAPITALS: <b>fon-TIK-yoo-loo-uh</b>. "uh", "eh", "ih" are short
+        sounds; spell the rest plainly as English says it (kew, few, NIGH). Yours are kept in data/pronounce.json, on top of
+        the shipped ones; the browser's own speech does not use them.</p>
+      <div id="pronList" class="hint"></div>
+      <p class="hint"><b>Sector names</b> (Smojooe, Flyeia Hypa) are read by rule from the pieces the game builds them from,
+        so every sector is covered; yours that you have visited most are below. One said wrong: click its word, change it
+        above and Save (yours wins over the rule).</p>
+      <div id="pronSectors" class="pronsectors hint"></div>
+    </details>
+    <div class="btns"><span id="labMsg" class="hint"></span><span class="grow"></span>
+      <button type="button" id="labStop">■ Stop</button><button type="button" data-close>Close</button></div>
   </form>
 </dialog>
 <dialog id="recountDlg" class="recountdlg" aria-labelledby="recountTitle">
