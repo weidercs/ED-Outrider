@@ -4,6 +4,10 @@ Read `docs/AGENT_GUIDE.md` first: code map, data flow, testing, the rules and re
 The other notes are in `docs/`: `JOURNAL_REFERENCE.md` (game data and its traps), `DESIGN_NOTES.md`
 (deliberate decisions, known limits) and `CHANGELOG.md`.
 
+This is a fork: read `docs/FORK.md` too. Everything about the fork (its changelog, code map, design notes,
+settings, how upstream is merged in) goes there, never into upstream's documents; the remotes are `origin`
+(the fork) and `upstream`.
+
 Layout: `ed_outrider.py` at the root, the modules in `outrider/` (CLIs: `python3 -m
 outrider.<name>`), shipped data in `resources/`, the player's own files in `data/` (git-ignored).
 

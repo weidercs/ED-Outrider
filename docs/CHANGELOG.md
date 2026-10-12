@@ -8,15 +8,6 @@ Newest first, one entry per commit.
   author's 6-jump plot showed "Route: 3 jumps": an older in-game route). It now says **"In-Game Route:"** (the
   author's wording). The two differ until 🎯 targets Outrider's next stop, which plots the game's route there.
 
-## 2026-10-12 · This fork: upstream merged in; upstream's Inara upload replaces the fork's
-- Upstream's work up to its 2026-10-22 release is merged in (boxels, green gas giants, codex marks on body types,
-  rare discoveries said once, the voice lab in the page, the Vorlon and Shadow themes and more), beside the fork's
-  Ship view, Unscanned (bio) plotter, GalNet News, game route, Rocky, the overlay's Route panel and auto honk's
-  "then target the next route system".
-- Upstream now uploads to Inara itself (Settings → Uploads, a key per commander), so the fork's own Inara upload is
-  gone, as planned: `[inara] enabled` is now the Uploads switch, and an `[inara] api_key` in the config file is no
-  longer read: give the key again in Settings → Uploads.
-
 ## 2026-10-12 · Sector names said by rule
 - The voice now says procedural sector names the same natural way everywhere (the author's ask): Smojooe as
   "SMOH-joo", Flyeia Hypa as "fligh-AY-uh HIGH-puh", Synuefe as "sigh-NOO-fee", not espeak's guesses. The game builds
@@ -515,89 +506,6 @@ A Fable review of everything written since v2026.10.21 (d7be805..2cb1e60): six b
 - Settings -> In-game overlay: the answer to a switch (theme, text size, on/off, test panels) was taken for a layout
   answer and dropped until the next poll; and after a pick from a list the server's note was never drawn (the list
   kept the focus, which holds the redraw off).
-## 2026-10-11 · This fork: auto honk can then target the next route system
-- **Then target the next route system, N s after the honk** in ⚙ Settings → Auto honk (off by default; `[autohonk]
-  target_next`, `target_delay`, 0 to 60 s, 3 by default). After an auto honk the journal confirms with its discovery
-  scan, the next system of the route you follow in Plot Route is targeted that many seconds later, by the same run as
-  Target next: it needs the keys auto-target needs, waits out a dangerous arrival, and clearing the route stops it.
-- Only after a honk auto honk pressed and saw answered: not after your own honk, a skipped system or a missed one.
-  With no route followed nothing happens and nothing is said; another refusal (a missing key binding, say) is shown
-  beside the switch as "last time: ...". Switching it off stops a run that is counting down.
-- `State.honk_then_target`, `State.set_honk_target` (meta `autohonk_target`); POST `/api/autohonk` takes
-  `target_next` and `target_delay`, alone or with `enabled`; `autohonk_info` carries them and `target_note`.
-
-## 2026-10-12 · This fork: the Unscanned (bio) plotter can favour one species
-- **Favour** in the plot form (any life, or any species the rules know, the most valuable first): with a species
-  chosen, the odds by mass code come from where players reported it. Spansh is asked for the 500 nearest bodies with
-  that species on record and for the scanned systems around you; a mass code's weight is how much commoner it is
-  among the systems with the species than among scanned systems at large (blended towards "no lean", so a handful of
-  reports cannot swing it; a code with nothing known near you is left neutral). The route's line shows the lifts and
-  how many reports they rest on.
-- For Stratum Tectonicas the reports checked from two places both favoured mass code c, then b and d, and all but
-  ruled out a. Too few reports near you (under 20 systems) or no answer from Spansh: the any-life odds, and the line
-  says why. It says which kind of system to prefer, not that a system has the species: that cannot be known unscanned.
-- `outrider.biohunt.species_lean`, `State.species_lean`; POST `/api/highway/plot` takes `species`; `/api/highway`
-  carries `bio_species` for the list.
-
-## 2026-10-12 · Plot Route: the map keeps its space with the game's route shown
-- With **Game route** chosen in a window-filling layout, its list and its switch had no place in Plot Route's grid:
-  they took cells of their own and squeezed the map. The list now sits in the Highway list's cell and the switch
-  above the grid, so the map fills the right as with any other route.
-
-## 2026-10-12 · This fork: Unscanned (bio), a plotter for systems nobody has scanned
-- A sixth plotter in Plot Route: a chain of systems Spansh knows by name and place only (no body reported: nobody
-  with an uploader has scanned anything there, so they are likely undiscovered), each hop as close to your jump range
-  as there is such a system. From where you are (or From), for as many systems as you ask (20; up to 100), outward
-  so it neither circles nor doubles back, or towards the system in To. A system you have been to is never picked.
-- **Likely to have life** is judged by the one thing known of an unscanned system: its name's mass code (the letter
-  before the last number, a to h: the heaviest star's mass class). The share of systems of each code that had a
-  biological signal is counted from your own journals and blended with a starting guess until you have enough of
-  your own; among the systems within a jump, odds times how much of the range the hop uses decides. The route's line
-  says the odds it used. A guess about where to look, not a promise.
-- With nothing unscanned within one jump it looks two, then four jump ranges out, and says how many jumps that hop
-  takes. The route is a Highway route: followed, spoken ("Next unscanned system: ..."), targeted and drawn like one.
-- `outrider/biohunt.py`, `Spansh.unscanned_near`, `State.unscanned_start_plot` (POST `/api/highway/plot` with
-  `plotter: "unscanned"`, `range`, `stops`, an optional `to`).
-
-## 2026-10-12 · This fork: a Rocky personality for the voice
-- A fourth personality, **Rocky (Project Hail Mary)**: twelve lines for every alert in his way of talking (short plain
-  sentences, no articles or contractions, a word three times for emphasis, questions ending ", question?", "Amaze!").
-  Tick it in the alerts dialog's personalities, alone to hear only him; `[defaults] speech_styles = ["rocky"]` starts
-  new browsers with it. No swearing versions.
-- The assistant answers to "Rocky" as to "Vespa". With the AI layer on and Rocky the server's only default
-  personality, its answers are worded his way too (`ask.system_prompt`); the facts still come from the tools.
-- His voice is the Piper voice you chose: no voice imitates the character's own.
-
-## 2026-10-12 · This fork: a Route panel for the in-game overlay
-- A seventh overlay panel, optional (`[overlay] route_panel`, off by default; Settings → In-game overlay): the route
-  ahead. The game's own route: jumps and light years left, how many jumps to the next scoopable star (or that there
-  is none, and a long stretch without one), then the next six jumps with each star (⛽ scoopable in green), the jump,
-  and ✓ you have been there / ● reported / ○ not reported to Spansh. Under it, a Highway route's next stop with jumps
-  and light years left and the refuel coming up. It shows wherever you are while there is a route, and starts at the
-  top right under the body panel; placed, sized and themed like the others (`outrider.overlay.route_panel`).
-
-## 2026-10-12 · Ship: the rows' lines meet across the columns
-- A module's Engineered stats cell was laid out as a flex box, so it stopped being a table cell and its line under
-  the row sat higher than the Engineering column's. The stats now wrap inside a block of their own within the cell.
-
-## 2026-10-12 · This fork: the game's own route moves into Plot Route, as a list and on the map
-- While the game has a route plotted, Plot Route offers **Game route · N jumps** beside **Plotted here**. Chosen (per
-  device), the tab shows the game's route in place of the routes plotted here: the heading, the list (each system,
-  click to copy; the Known column; the star and whether it is scoopable; the jump and the light years flown) and the
-  same map, from where you are.
-- The Game Route tab is gone (a device that had it open lands on Plot Route), and with it the projected fuel and the
-  places to refuel: `GET /api/navroute/refuel` is removed, `/api/navroute` gives the route only. Nothing of the
-  game's route is followed, targeted or copied: the game already has it in its own computer.
-
-## 2026-10-12 · This fork: Ship, the ship you fly with its modules and engineering
-- A **Ship** tab (and tablet page): the ship's own figures (jump range, mass, cargo, fuel, hull, values, rebuy) and
-  every module by group (hardpoints, utility mounts, core and optional internals) with its class and rating, mount,
-  power priority, health and engineering: the blueprint and grade, the experimental effect, and each engineered stat
-  with its value and the change from stock, green when for the better.
-- From the journal's own Loadout, read when the tab opens (Inara's API has no ship data to read). What the journal
-  does not state (a stock module's figures, shields, speed, power) is one click away: **open this ship in EDSY** /
-  **Coriolis** carries the same Loadout to them.
-- `outrider/shipinfo.py`, `GET /api/ship`.
 
 ## 2026-10-11 · Version 2026.10.21
 - The in-game overlay (six panels, Arrange mode, themes, PyQt6 installed automatically; game PC only), GPL-3.0-or-later,
@@ -613,27 +521,6 @@ A Fable review of everything written since v2026.10.21 (d7be805..2cb1e60): six b
 - The table was wider than Settings -> In-game overlay (726 px in 711 at a 1600 px window, its reset links cut off):
   narrower number boxes and padding make it fit, and on a narrow window it scrolls sideways inside the section
   instead of spilling out (`.ovwrap`).
-## 2026-10-11 · This fork: Game Route, the game's own route as a list with its fuel
-- A **Game Route** tab (and tablet page) lists the route plotted in the game's galaxy map jump by jump: the system
-  (click to copy), the Known column of Plot Route's list, the star and whether it is scoopable, the jump and the
-  light years flown by then.
-- **Projected fuel:** what each jump burns and leaves, from the fuel aboard now with your ship's fuel model (each
-  jump at the mass it is made at), without refuelling. It says whether the tank lasts the route, or after which jump
-  it runs dry and how many scoopable stars come before then; the rows past that point are greyed.
-- **Where to refuel:** when it would run dry, the stations your ship can land at and the fleet carriers that sell
-  fuel nearest the last system the tank reaches (Spansh's station search, as the Nearest finder; your own carrier
-  too), each with the route system it is closest to.
-- `outrider/navroute.py`, `GET /api/navroute` and `/api/navroute/refuel`.
-
-## 2026-10-11 · This fork: GalNet News, with the systems an article mentions
-- A **GalNet** tab (and tablet page): the game's latest news article from Frontier's own feed, with the 30 latest
-  listed beside it to pick from; Refresh asks again (the server keeps its copy half an hour, and the last one when
-  the feed cannot be read).
-- Star systems an article mentions are marked in its text: click one to copy its name, or use Copy / Plot route in
-  the line under the title (Plot Route opens with it as the destination). A name is marked only once confirmed: a
-  system you know, or one Spansh knows by exactly that name. Found by the words before "system" and by catalogue
-  and sector names, so a system named with neither is not marked.
-- `outrider/galnet.py`, `GET /api/galnet` and `/api/galnet/systems`; nothing is asked until the tab is opened.
 
 ## 2026-10-11 · The launcher's clipboard note says which program serves which session
 - The block says wl-copy (wl-clipboard) is for Wayland sessions and xclip for X11 ones, and what is lost without it:
@@ -915,16 +802,6 @@ A Fable review of everything written since v2026.10.21 (d7be805..2cb1e60): six b
 ## 2026-10-10 · Exo-Biology: a green ✓ on a complete genus
 - A genus box's heading gets a green ✓ when every species that can grow in the region shown has all its colours
   found (one with no colour table: found at all; All regions asks for every species). Not on Geology (no colours).
-## 2026-10-10 · Sell / Buy: a fleet carrier's name in the results
-- A fleet carrier in the Sell / Buy lookup shows its own name with the callsign beside it ("Deep Space Relay (carrier
-  G0B-W2J)"), from Spansh's `carrier_name`; a carrier Spansh has no name for shows its callsign as before.
-
-## 2026-10-10 · This fork: an Inara upload (off by default); upstream's EDDN and EDSM uploads adopted
-- Upstream now has its own EDDN and EDSM uploads (Settings → Uploads), which replace the ones this fork had built
-  (`outrider/uplink.py`, `[uploads]`: both gone). What they did not cover is kept: `[inara]` (`enabled`, `api_key`)
-  sends your travel, credits, ranks, reputation, ships, materials, missions and combat log to your Inara account,
-  live play only, in batches. Off until switched on (Server settings → Inara upload; at the next start); never with
-  --simulate, and not while EDMarketConnector on this PC sends to Inara itself.
 
 ## 2026-10-10 · Version 2026.10.20
 - Bio/Geo (was Samples): the Exo-Biology and Geology checklists with Canonn's pictures linked; auto-target waiting out
@@ -1618,32 +1495,6 @@ A Fable review of everything written since v2026.10.21 (d7be805..2cb1e60): six b
   the Deep Space Support Array's carriers (EDAstro, fetched when the finder opens, at most hourly; marked 🛰 DSSA) and
   your own carrier. By voice: "nearest station", "nearest carrier", "nearest Vista", "nearest repair"...; for AI
   clients a read-only `nearest_dock` tool.
-
-## 2026-10-07 · Plot Route: a Known column in the route list
-- The Highway's list says whether each system is already discovered: ✓ you have been there (your journal), ● every
-  body reported to Spansh, ◐ some reported, ○ nobody has reported a body (it may be undiscovered); blank until
-  looked up. Spansh is asked in the background for the listed systems only (the next 200), one a second, while the
-  tab is open; a failed lookup pauses it for a minute. Kept in memory: asked again after a restart.
-
-## 2026-10-07 · `scripts/verify.sh` passes on Windows (Git Bash)
-- `verify.sh` finds a Windows venv (`.venv/Scripts/python.exe`), names its scratch folder the Windows way so the
-  scratch config's paths mean something to Python, and stops the server through a stop file (Ctrl-C to the server:
-  Windows has no SIGTERM to send).
-- Fixed on Windows: all-time views asking for a date before 1970 (`iso_ts` reads it as 1970), `--help` and the log on a
-  piped or redirected stdout (cp1252), a port in use reported as "forbidden" rather than "already in use", and two
-  downloads of one voice at once failing with "Access is denied" (the move into place is tried again).
-- Tests no longer assume Linux: absolute paths, TOML paths, the clipboard tools and key wording are pinned or asked of
-  the platform, a database in a temporary folder is closed before the folder goes (`support.temp_dir`), and tests of
-  file modes, symlinks and `tzset` are skipped where the system has none.
-
-## 2026-10-07 · Refuel at every fuel star: a tick in Plot Route
-- The exact plotter's options have **refuel at every fuel star** (off by default, remembered per browser): ticked,
-  Spansh plans a top-up at every scoopable star (`refuel_every_scoopable`); left empty, only where the tank needs it,
-  as since the entry below. The route's header says when it was plotted that way.
-
-## 2026-10-07 · Exact plotter: no refuel at every scoopable star
-- The exact plotter asks Spansh with `refuel_every_scoopable` off, so a route refuels only where the tank needs it
-  rather than stopping to top up at every fuel star.
 
 ## 2026-10-07 · The README split into a front page and a guide
 - The README (1,000 lines) is now a front page: what Outrider is, at a glance, a short start and an index of the

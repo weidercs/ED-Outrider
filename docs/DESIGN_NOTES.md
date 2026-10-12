@@ -50,18 +50,6 @@ upstream project's choices, not rules of the game.
   for the DSSA carrier list when the Nearest finder opens. The one exception is the AI layer (off by default,
   `[assistant]`): it sends the question and the read-only tools' answers to the endpoint the player configures, so it is
   not a read-only lookup. This is the one full list.
-- **The Ship view shows what the journal states, no more** (this fork, `outrider/shipinfo.py`): the Loadout's own
-  figures, and for an engineered module the stats the game lists with their stock values. It carries no module
-  database, so a stock module has no figures and there are no ship totals (shields, speed, power, damage): the
-  EDSY and Coriolis links carry the same Loadout to tools that do. Inara's API has no ship or module data to read.
-- **The Unscanned (bio) plotter guesses, and says so** (this fork, `outrider/biohunt.py`). A system with no scan data
-  gives away only its name and place, so "likely to have life" rests on the name's mass code alone, with odds counted
-  from the player's own scans (a starting guess until then); "unscanned" means Spansh has no body of it, which is
-  likely but not certainly undiscovered, and a system Spansh has never heard of cannot be routed to at all. It asks
-  Spansh once per hop (up to three times where space is thin), half a second apart.
-- **GalNet News is this fork's** (`outrider/galnet.py`): one more read-only lookup, Frontier's own feed, asked only
-  when the tab is opened. A system is marked in an article only once confirmed (yours, or Spansh's by exact name):
-  a marked name is never a guess, but a system the article names without "system" or a catalogue form is missed.
 - **EDSM has no test endpoint**, so its developer switch is a dry run (`OUTRIDER_EDSM_DRYRUN=1`: requests built and
   logged to `data/edsm-dryrun.jsonl` without the key, nothing sent; the rows end as `dry` and are never sent later).
   EDDN's is its `/test` schemas (`OUTRIDER_EDDN_TEST=1`). Neither is a setting.
