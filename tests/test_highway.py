@@ -10,7 +10,7 @@ import unittest
 import unittest.mock
 
 from support import (  # also puts the repository root on sys.path
-    AUTHOR_BINDS, FakeGame, HWY_EXACT, _HwSession, _fake_evdev, hwy_jump, hwy_plot_exact, hwy_ts, make_controls,
+    AUTHOR_BINDS, FakeDesktop, FakeGame, HWY_EXACT, _HwSession, _fake_evdev, hwy_jump, hwy_plot_exact, hwy_ts, make_controls,
     outrider_honk, types_ns, use_fake_time, user_docs,
 )
 import outrider.bio  # noqa: E402
@@ -1457,6 +1457,37 @@ class HighwayAutoTarget(unittest.TestCase):
         self.assertTrue(r["log"][0].startswith("would press Left Alt + Right Alt + T"))
         self.assertEqual(len(r["log"]), 16)
 
+    # ---- S74: no key unless Elite's window is the one in front ----
+
+    def test_no_key_unless_the_game_is_in_front(self):
+        """The window check (run's `front`) is asked before the first key and before every key after it: not in front
+        at the start, nothing is pressed; lost mid-way (you clicked into the browser), nothing more is pressed, not even
+        the key that would close the map it opened."""
+        import outrider.game_window as G
+        self.fake_time()
+        r = self.run_target(front=lambda: G.NOT_FRONT)
+        self.assertEqual((r["ok"], r["phase"], r["code"], r["why"], self.game.writes), (False, 0, "window", G.NOT_FRONT, []))
+        self.assertIsNone(self.targeter.run_front)   # the check belongs to that run only
+        desk = FakeDesktop(active=FakeDesktop.GAME)
+        gw = desk.window()
+        self.assertTrue(gw.bring_forward()["front"])
+        switched = []
+
+        def click_away(game):
+            if len(game.text) == 2:
+                desk.active = FakeDesktop.BROWSER
+                switched.append(len(game.writes))
+        self.game.on_type = click_away
+        r = self.run_target(front=gw.front_why)
+        self.assertEqual((r["ok"], r["phase"], r["code"], r["why"]), (False, 3, "window", G.NOT_FRONT))
+        self.assertEqual([v for _n, v in self.game.writes[switched[0]:]], [0])   # only the typed key let go: no key after
+        self.assertEqual(self.game.text, "Br")
+        self.assertTrue(self.released())
+        self.assertEqual(self.status["gui_focus"], 6)   # the map stays open: closing it would be a key into the browser
+        # in front all the way: the run as ever
+        self.game.on_type, desk.active, self.status["gui_focus"] = None, FakeDesktop.GAME, 0
+        self.assertTrue(self.run_target(front=gw.front_why)["ok"])
+
     # ---- review batch 4: cancelling, the checks under the lock, multi-hop plots, the wrong system ----
 
     def test_run_token_stops_it_mid_way(self):   # CX-F1, F12: auto-target switched off while auto honk keeps the device open
@@ -1877,7 +1908,7 @@ class HighwayAutoTarget(unittest.TestCase):
         self.assertEqual(out["binds"][0], 400)
         self.assertIn("no keyboard binding for GalaxyMapOpen", out["binds"][1]["error"])
         self.assertEqual(out["guard"], 403)
-        self.assertEqual(out["started"], (200, {"system": "Bridge B", "in": 0.05, "seq": 1, "dry_run": False, "kind": "test"}))
+        self.assertEqual(out["started"], (200, {"system": "Bridge B", "in": 0.05, "seq": 1, "dry_run": False, "kind": "test", "front": False}))
         self.assertEqual(out["busy"], 409)
         self.assertEqual((out["test"]["state"], out["test"]["system"]), ("done", "Bridge B"))
         self.assertEqual(self.moments(), [(True, "Successfully targeted neutron jump target Bridge B")])
@@ -1923,7 +1954,7 @@ class HighwayAutoTarget(unittest.TestCase):
         out = asyncio.run(go())
         self.assertEqual(out["noroute"], (400, {"error": "no route is plotted"}))
         self.assertEqual((out["bad"], out["badjson"], out["guard"]), ([400, 400, 400], 400, 403))
-        self.assertEqual(out["started"], (200, {"system": "Bridge B", "in": 0, "seq": 1, "dry_run": False, "kind": "next"}))
+        self.assertEqual(out["started"], (200, {"system": "Bridge B", "in": 0, "seq": 1, "dry_run": False, "kind": "next", "front": False}))
         self.assertEqual(out["busy"], 409)
         last = out["last"]
         self.assertEqual((last["done"], last["kind"], last["test"], last["index"], last["system"]), (True, "next", False, 2, "Bridge B"))
@@ -1975,6 +2006,82 @@ class HighwayAutoTarget(unittest.TestCase):
         self.assertIn(said[0]["secs"], (54, 55))
         self.assertEqual(said[0]["text"], "Not targeting due to danger. I will keep trying until you are out of danger, "
                                           f"for up to {said[0]['secs']} seconds.")
+
+    def test_runs_bring_the_game_forward(self):
+        """S74: where this PC can bring Elite's window to the front (a fake desktop here: nothing real is activated), the
+        page's 🎯 runs at once, no countdown; the activation ignored, it counts down after all, saying why, and still
+        checks before the first key; with no wmctrl, the countdown as before; the automatic run and the co-pilot's
+        bring it forward too and stop, said, when it does not come."""
+        import asyncio
+        import outrider.game_window as G
+        self.state.honker, self.state.targeter = self.honker, self.targeter
+        self.j.status_json = self.status
+        hwy_plot_exact(self)
+        hwy_jump(self, 1, 101, "Neu A", 50)
+        self.state.autotarget_test_countdown = 0.3
+        p = unittest.mock.patch.object(G, "FRONT_WAIT_S", 0.05)
+        p.start()
+        self.addCleanup(p.stop)
+        desk = FakeDesktop()
+        self.state.game_window = desk.window()
+        self.assertEqual(self.state.autotarget_info()["front"], {"front": True, "why": None})
+
+        async def run(**kw):
+            self.status["destination"] = None
+            out = self.state.start_autotarget_run("next", **kw)
+            await self.state.autotarget_test_task
+            return out
+        # brought forward: no countdown
+        body, status = asyncio.run(run())
+        self.assertEqual((status, body["in"], body["front"]), (200, 0, True))
+        self.assertEqual((desk.activations(), desk.active), (["0x03c00007"], FakeDesktop.GAME))
+        self.assertEqual((self.state.autotarget_last["done"], self.status["destination"]["System"]), (True, 102))
+        # the tablet's 0 s too
+        desk.active = FakeDesktop.BROWSER
+        body, status = asyncio.run(run(countdown=0))
+        self.assertEqual((body["in"], body["front"], self.state.autotarget_last["done"]), (0, True, True))
+        # the activation ignored: the countdown after all, with the reason; you click into the game meanwhile
+        desk.obeys, desk.active = False, FakeDesktop.BROWSER
+
+        async def click_in():
+            self.status["destination"] = None
+            body, _ = self.state.start_autotarget_run("next")
+            await asyncio.sleep(0.15)
+            seen = dict(self.state.autotarget_test)
+            desk.active = FakeDesktop.GAME
+            await self.state.autotarget_test_task
+            return body, seen
+        body, seen = asyncio.run(click_in())
+        self.assertEqual((body["in"], seen["state"], seen["in"], seen["note"]), (0, "counting", 0.3, G.NOT_FRONT))
+        self.assertTrue(self.state.autotarget_last["done"])
+        # ...or you do not: nothing pressed
+        desk.active, writes = FakeDesktop.BROWSER, len(self.game.writes)
+        asyncio.run(run())
+        last = self.state.autotarget_last
+        self.assertEqual((last["done"], last["phase"], last["why"]), (False, 0, G.NOT_FRONT))
+        self.assertEqual(len(self.game.writes), writes)
+        # the automatic run after a supercharge: refused before any key, and said
+        self.state.highway_cfg.update(autotarget=True, autotarget_delay=0.01)
+
+        async def boost():
+            self.status["destination"] = None
+            self.j.handle({"event": "JetConeBoost", "timestamp": self.ts(5), "BoostValue": 4})
+            self.assertTrue(self.state.maybe_autotarget())
+            await self.state.autotarget_task
+        asyncio.run(boost())
+        self.assertEqual(len(self.game.writes), writes)
+        self.assertEqual(self.moments()[-1], (False, "Not targeting Bridge B: Elite is not the active window. Click into the game."))
+        # the co-pilot's run keeps its short wait (for a cancelling press) and brings the game forward too
+        desk.obeys, n = True, len(desk.activations())
+        body, _ = asyncio.run(run(countdown=0.01, fallback=False))
+        self.assertEqual((body["in"], body["front"], len(desk.activations()), self.state.autotarget_last["done"]),
+                         (0.01, False, n + 1, True))
+        # no wmctrl: the countdown as before, nothing checked or run on the desktop
+        desk = FakeDesktop()
+        self.state.game_window = desk.window(tools=("xprop",))
+        body, _ = asyncio.run(run())
+        self.assertEqual((body["in"], body["front"], desk.calls, self.state.autotarget_last["done"]), (0.3, False, [], True))
+        self.assertEqual(self.state.autotarget_info()["front"], {"front": False, "why": "wmctrl is not installed"})
 
     def test_danger_wait_after_supercruise_entry_and_a_restart(self):
         """The flag comes on for entering supercruise too (lifting off a planet 15 min after the arrival, logged in game

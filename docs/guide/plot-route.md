@@ -68,8 +68,8 @@ same place as Road to Riches and Exomastery (one of the three at a time). See [T
 Highway, 💰 Road to Riches, 🧬 Exomastery, 💱 a trade route). The **In-Game Route:** line above it is the game's own
 route, the one plotted in the galaxy map: it can differ from Outrider's until 🎯 targets the next stop, which has the
 game plot its route there. A 🎯 beside that next system, and beside every system in the tab's lists,
-targets it in the galaxy map for you (game PC only, after a 5 s countdown to click back into the game; on the tablet,
-the row's sheet has 🎯 Target). The same 🎯 sits beside your carrier's system on the Carrier tile while it is elsewhere,
+targets it in the galaxy map for you (game PC only; Outrider brings the game to the front itself where it can, else
+after a 5 s countdown to click back into the game; on the tablet, the row's sheet has 🎯 Target). The same 🎯 sits beside your carrier's system on the Carrier tile while it is elsewhere,
 and beside a boxel's Next and its rows (see [Boxel exploration](views.md#-boxel-exploration), whose opt-in **auto-target
 the next on arrival** uses the same run).
 
@@ -91,13 +91,24 @@ targeted neutron jump target Hwy Stop 38" (or "Failed to…") under its own aler
   interdicted is never waited out). It stops
   if anything unexpected happens, closing the map only if it opened it. Once the route is plotted you can start
   the FSD charge without waiting for its last check: the target is set, so that counts as targeted.
-- **The keys go to whichever window has focus**: stay in the game until it is done.
+- **It brings the game to the front itself** before the keys, and presses no key unless Elite is the active window
+  (checked before every key): click into the browser mid-way and it stops at once. This needs **`wmctrl`** and
+  `xprop` on Linux (`sudo apt install wmctrl x11-utils`, as for the [overlay](overlay.md)); it works with the game
+  under X11, and under XWayland on a Wayland desktop (tried on GNOME; KDE Plasma should work, untried). On Windows it
+  is untried. The box says whether it does, or why not.
+  - When the game does not come to the front, 🎯, Target next and Test now count down 5 s instead ("Elite is not the
+    active window: click into the game") and still check before the first key; the automatic run and the co-pilot
+    button's say so and press nothing.
+  - Where it cannot see the game's window (no `wmctrl`; the game as a native Wayland window, Proton's Wayland driver;
+    Sway, Hyprland and window managers that refuse focus stealing ignore it): the 5 s countdown as before, and then
+    **the keys go to whichever window has focus**: stay in the game until it is done.
 - The log gets one line per run ("highway auto-target: targeted Hwy Stop 38"); every step is printed only when it
   fails.
 - **🎯 Target next** (in the box, and beside "Next:" in the route line on Overview, Nearby, Here and Now) does the same
-  on demand, whether or not auto-target is on: the next route system, or off the route the closest one, after a
-  5-second countdown to click back into the game. A failed run puts **⟳ Retry** on its route row.
-- **Test now** in the box targets the nearest known system a plain jump away, after a 5-second countdown.
+  on demand, whether or not auto-target is on: the next route system, or off the route the closest one, at once when
+  it brings the game to the front, else after a 5-second countdown to click back into the game. A failed run puts
+  **⟳ Retry** on its route row.
+- **Test now** in the box targets the nearest known system a plain jump away, the same way.
   `python3 -m outrider.target --show` prints the steps with your keys.
 - Every step can be changed under `[highway]` (`autotarget_search`, `autotarget_submit`, `autotarget_plot`…) if a
   game update moves things; `autotarget_entry = "paste"` pastes the name instead of typing it. Pasting (also how

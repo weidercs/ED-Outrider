@@ -2,6 +2,19 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · 🎯 brings the game to the front itself
+- Every auto-target run (🎯, Target next, Test now, the automatic one after a supercharge, the co-pilot button's) now
+  finds Elite's window, brings it to the front (`wmctrl -i -a` on Linux, the game under X11 or XWayland; Windows
+  untried) and runs at once: no 5 s countdown to click back into the game (S74, the author's ask). The window is
+  matched by the game's whole title, "Elite - Dangerous (CLIENT)", never a browser tab about the game.
+- No key is pressed unless Elite's window is the active one, checked before every key, the map's close on the way
+  out included: click into the browser mid-way and the run stops at once. When the game does not come forward, the
+  page's runs count down 5 s after all with "Elite is not the active window: click into the game" (the button and
+  the box follow); the automatic run and the co-pilot's say so and press nothing.
+- Where it cannot see the game's window (no wmctrl or xprop, the game as a native Wayland window) it does as before:
+  the countdown, keys unchecked. The Plot Route tab's auto-target box says whether it brings the game forward or why
+  not; the start-up log too. New `outrider/game_window.py`; the overlay's tracker takes a title match.
+
 ## 2026-10-12 · Co-pilot targets the boxel, Nearby rows open, header tiles tidied
 - The co-pilot button's tap targets the Next of the boxel being explored too, as 🎯 beside it does (the author's ask
   while testing boxels; S76). The order: the survey / trade route's next; the Highway's while you are on it (at a route

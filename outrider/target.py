@@ -18,7 +18,9 @@ The default sequence (each key can be overridden with [highway] autotarget_keys,
     7 check                      Status.json Destination.System is the next system
 
 It stops when GuiFocus goes anywhere unexpected, a step times out, the system changes, a jump starts or danger
-comes; it then closes the galaxy map only if it opened it. The keys go to whichever window has focus.
+comes; it then closes the galaxy map only if it opened it. The keys go to whichever window has focus: the server
+brings Elite's window to the front first where it can (outrider/game_window.py) and then hands run() a `front` check,
+asked before every key, so a key is pressed only while the game's window is the one in front (S74).
 
     python3 -m outrider.target --show          print the steps with your keys (a dry run: nothing is pressed)
     python3 -m outrider.target --show --name "Col 285 Sector AB-C d13-5"
@@ -220,6 +222,15 @@ class Targeter:
     def run_cancel(self, token):
         self._run_local.cancel = token
 
+    @property
+    def run_front(self):
+        """The running sequence's window check (run's `front`), per thread like run_cancel."""
+        return getattr(self._run_local, "front", None)
+
+    @run_front.setter
+    def run_front(self, check):
+        self._run_local.front = check
+
     def cancelled(self):
         """Shutdown, or the current run's own token."""
         token = self.run_cancel
@@ -300,14 +311,16 @@ class Targeter:
         return out
 
     # ---- running ----
-    def run(self, name, id64, status, system, dry_run=None, cancel=None, origin=None, route_end=None):
+    def run(self, name, id64, status, system, dry_run=None, cancel=None, origin=None, route_end=None, front=None):
         """Target `name` (id64) now: status() gives Status.json's reading ({gui_focus, flags, flags2, destination,
         live}), system() the current system's id64. cancel: this run's own token (a threading.Event its owner sets:
         auto-target switched off, the route cleared or replaced); origin: the system the run was decided in (default:
         where you are when it starts), so a jump while it waited for the keyboard aborts it instead of becoming its new
         baseline; route_end: a callable giving the last hop of the route the game plotted (NavRoute.json), so a waypoint
-        several jumps away counts as targeted. -> {"ok", "phase", "label", "why", "code", "log", "dry_run"}; code
-        "already" (nothing to do) or "wrong" (a different system was targeted: `wrong` names it).
+        several jumps away counts as targeted; front: a callable giving None while Elite's window is the one in front,
+        else why not, asked before every key (the first one too): a no stops the run, code "window" (None: nothing to
+        check with, every key goes to whichever window has focus). -> {"ok", "phase", "label", "why", "code", "log",
+        "dry_run"}; code "already" (nothing to do) or "wrong" (a different system was targeted: `wrong` names it).
         The step log is printed only when the run fails, or throughout a dry run: a success is the caller's one line."""
         dry = self.cfg.get("dry_run") if dry_run is None else dry_run
         result = {"ok": False, "phase": None, "label": None, "why": None, "code": None, "log": [], "dry_run": bool(dry)}
@@ -317,7 +330,7 @@ class Targeter:
             result["log"].append(line)
             if dry:
                 self.log(tag + line)
-        self.run_cancel = cancel
+        self.run_cancel, self.run_front = cancel, front
         try:
             self._run(result, say, name, id64, status, system, dry, origin, route_end)
         except BaseException:
@@ -325,7 +338,7 @@ class Targeter:
                 self.log(tag + line)
             raise
         finally:
-            self.run_cancel = None
+            self.run_cancel = self.run_front = None
         if not result["ok"] and not dry:
             for line in result["log"]:
                 self.log(tag + line)
@@ -364,6 +377,10 @@ class Targeter:
             again = guard(status(), id64, route_end)
             if again:
                 result.update(phase=0, label="check before the first key", why=again[1], code=again[0])
+                return
+            not_front = self.run_front() if self.run_front else None   # S74: the game's window is the one in front
+            if not_front:
+                result.update(phase=0, label="check before the first key", why=not_front, code="window")
                 return
             for st in steps:
                 cur = st
@@ -456,6 +473,9 @@ class Targeter:
         ui, e = h.ui, ev.ecodes
         if ui is None:
             raise Abort(st, "the virtual keyboard is not open")
+        not_front = self.run_front() if self.run_front else None   # every key, closing the map too (S74)
+        if not_front:
+            raise Abort(st, not_front, code="window")
         down = []
         try:
             for n in names:

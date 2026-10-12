@@ -9,6 +9,9 @@ overlay window runs through XWayland, as Modern Overlay does on GNOME) and the W
 compositor trackers left out; the trackers take an injectable `run` (subprocess.run) so tests need no X server; the
 tracker factory reads no EDMC environment variables; `native_rect_to_qt` is Modern Overlay's
 _convert_native_rect_to_qt_standard without its logging, and `title_bar_offset` its _apply_title_bar_offset likewise.
+Changed on 2026-10-12 for auto-target (outrider/game_window.py): the trackers and `create_tracker` take a `match`
+(which titles count as the game's: auto-target wants the game's own title exactly, never a browser tab about it), the
+X11 tracker a `min_interval` (0: every poll asks afresh) and `create_tracker` the `run` it hands to it.
 """
 from __future__ import annotations
 
@@ -120,12 +123,14 @@ class X11Tracker:
     XWayland window on a Wayland session)."""
 
     def __init__(self, logger: logging.Logger, title_hint: str = TITLE_HINT,
-                 monitor_provider: Optional[MonitorProvider] = None, run=None) -> None:
+                 monitor_provider: Optional[MonitorProvider] = None, run=None, match=None,
+                 min_interval: float = 0.3) -> None:
         self._logger = logger
         self._title_hint = title_hint.lower()
+        self._match = match or (lambda title: matches_window_title(title, self._title_hint))
         self._last_state: Optional[WindowState] = None
         self._last_refresh: float = 0.0
-        self._min_interval: float = 0.3
+        self._min_interval: float = min_interval
         self._wmctrl_missing = False
         self._monitor_provider = monitor_provider
         self._run = run or subprocess.run
@@ -166,7 +171,7 @@ class X11Tracker:
             if len(fields) < 9:
                 continue
             win_id_hex, _desktop, x, y, w, h, _wm_class, _host, title = fields
-            if not matches_window_title(title, self._title_hint):
+            if not self._match(title):
                 continue
             try:
                 x_val, y_val, width, height = int(x), int(y), int(w), int(h)
@@ -252,11 +257,12 @@ class _RECT(ctypes.Structure):
 class WindowsTracker:
     """Locate Elite's window using Win32 APIs (not yet tried against the game: Windows is experimental)."""
 
-    def __init__(self, logger: logging.Logger, title_hint: str = TITLE_HINT) -> None:
+    def __init__(self, logger: logging.Logger, title_hint: str = TITLE_HINT, match=None) -> None:
         if wintypes is None or not hasattr(ctypes, "windll"):
             raise RuntimeError("the Win32 API is unavailable")
         self._logger = logger
         self._title_hint = title_hint.lower()
+        self._match = match
         self._user32 = ctypes.windll.user32
         try:
             dwmapi = ctypes.windll.dwmapi
@@ -325,21 +331,24 @@ class WindowsTracker:
         buffer = ctypes.create_unicode_buffer(length + 1)
         self._user32.GetWindowTextW(hwnd, buffer, length + 1)
         title = buffer.value.strip().lower()
-        return bool(title) and self._title_hint in title and bool(self._user32.IsWindowVisible(hwnd))
+        hit = self._match(buffer.value) if self._match else self._title_hint in title
+        return bool(title) and hit and bool(self._user32.IsWindowVisible(hwnd))
 
 
 def create_tracker(logger: logging.Logger, title_hint: str = TITLE_HINT,
-                   monitor_provider: Optional[MonitorProvider] = None, platform: Optional[str] = None):
-    """The tracker for this platform, or None where there is none."""
+                   monitor_provider: Optional[MonitorProvider] = None, platform: Optional[str] = None, run=None,
+                   match=None, min_interval: float = 0.3):
+    """The tracker for this platform, or None where there is none. match: which titles are the game's (default: the
+    overlay's, any title naming the game); run: the X11 tracker's subprocess.run."""
     platform = platform or sys.platform
     if platform.startswith("win"):
         try:
-            return WindowsTracker(logger, title_hint)
+            return WindowsTracker(logger, title_hint, match=match)
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning("Windows tracker unavailable: %s", exc)
             return None
     if platform.startswith("linux"):
-        return X11Tracker(logger, title_hint, monitor_provider)
+        return X11Tracker(logger, title_hint, monitor_provider, run=run, match=match, min_interval=min_interval)
     logger.info("The overlay cannot follow the game's window on '%s'", platform)
     return None
 

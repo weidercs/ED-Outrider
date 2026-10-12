@@ -384,13 +384,15 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       <div class="srow">
         <label title="after an FSD supercharge on the route, press keys in the galaxy map to make the next route system the target (Linux, Windows experimental; the same keyboard as auto honk)"><input type="checkbox" id="hwyAutoOn"> Auto-target after a supercharge</label>
         <label title="seconds after the supercharge before the keys are pressed">after <input type="number" id="hwyAutoDelay" min="0" max="60" step="any" inputmode="decimal"> s</label>
-        <button type="button" class="try" id="hwyAutoTest" title="one run against the nearest known system a plain jump away (no route needed), 5 seconds from now: click into the game meanwhile">▶ test now</button>
-        <button type="button" class="try" id="hwyAutoNext" data-aim="next" title="target the next route system now (off the route: the closest one), 5 seconds from now: click into the game meanwhile. Works with auto-target off">🎯 target next</button>
+        <button type="button" class="try" id="hwyAutoTest" title="one run against the nearest known system a plain jump away (no route needed): Outrider brings the game to the front where it can, else 5 seconds from now: click into the game meanwhile">▶ test now</button>
+        <button type="button" class="try" id="hwyAutoNext" data-aim="next" title="target the next route system now (off the route: the closest one): Outrider brings the game to the front where it can, else 5 seconds from now: click into the game meanwhile. Works with auto-target off">🎯 target next</button>
         <span id="hwyAutoTestMsg" role="status"></span>
       </div>
+      <div id="hwyAutoFront" class="unk"></div>
       <div id="hwyAutoLast"></div>
       <div id="hwyAutoMissing" class="warnc" hidden></div>
-      <div class="hint">The keys go to whichever window has focus: stay in the game until it is done. It opens the galaxy map,
+      <div class="hint">The keys go to the window that has focus: Outrider brings the game to the front first where it can
+        (wmctrl on Linux) and then presses no key unless Elite is the active window (the line above says whether it can). Stay in the game until it is done. It opens the galaxy map,
         searches for the next system, plots the route, closes the map and checks the target in Status.json; it stops if
         anything else opens, a step takes too long or you jump. The plot-route keys must be confirmed in game
         ([highway] autotarget_plot). Results are spoken under "Auto-target" in Settings.</div>

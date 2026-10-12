@@ -45,7 +45,7 @@ Not from pip, and optional too: on Linux the Highway's clipboard copy (and auto-
 every start and, while the one it needs is missing, prints a block with the command for your package manager (apt,
 dnf, pacman or zypper) and the one that installs both. Windows needs nothing. On Linux the [in-game overlay](overlay.md) finds
 Elite's window with **`wmctrl`** and **`xprop`** / **`xwininfo`** (the `x11-utils` package):
-`sudo apt install wmctrl x11-utils`.
+`sudo apt install wmctrl x11-utils`. Auto-target uses the same two to bring the game to the front before its keys.
 
 Start Outrider with the `.venv`'s Python (`.venv/bin/python ed_outrider.py`, as above): plain `python3 ed_outrider.py` finds Piper and evdev in a `.venv` in the Outrider folder, but aiohttp must then be installed for that `python3` too.
 Your own files (the database, backups, downloaded voices, banned lines, your own pronunciations) all go in `data/`.

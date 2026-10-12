@@ -244,6 +244,19 @@ upstream project's choices, not rules of the game.
   seconds") and presses nothing meanwhile; the co-pilot button's second press cancels it like the countdown.
   Interdicted, the FSD charging, or still in danger past the minute: refused as a real danger. Once the map's close
   key went down, an FSD charge or a jump is a success when the target is set (you set off before step 7 looked).
+  **It brings the game to the front itself, and presses no key into another window** (the author, 2026-10-12, S74;
+  `wmctrl -a "Elite - Dangerous (CLIENT)"` tried by the author on GNOME Wayland with the game under XWayland). Every
+  run (🎯, Target next, Test now, the automatic one, the co-pilot's) first finds Elite's window with the overlay's
+  tracker, by its whole title only (a browser tab about the game, in front, would otherwise pass for it), activates
+  it and waits up to a second for the tracker to see it in front; then the Targeter asks before every key, the
+  map's closing key on the way out included, and stops (code "window") the moment it is not. The page's runs then
+  have no countdown; when the game did not come, they count down 5 s after all ("Elite is not the active window:
+  click into the game"), the server telling the page through the test's `note`; the automatic run and the
+  co-pilot's (whose short wait is for a cancelling press) stop and say so. Where nothing can be known (no wmctrl
+  or xprop, no window with that title: the game as a native Wayland window) it does as before: the countdown, keys
+  unchecked; the box says why. On Windows, SetForegroundWindow from a background process needs the usual
+  workaround: attaching to the input of the thread in front, not the other usual one, an Alt tap, which would be a
+  key into the window in front. Untried there.
 - **ExploData's colour tables are downloaded, never shipped** (the author, 2026-10-10). EDMC-ExploData's repository
   carries the GPL v2 text without "or later", so its tables are kept out of the repository and the Docker image, and
   Outrider's own licence does not depend on them: `resources/bio_colours.json` is fetched on the first start (and refreshed with the

@@ -190,6 +190,7 @@ import outrider.tts        # spoken alerts; Piper itself is optional (the page f
 import outrider.speech     # the words for spoken alerts, per personality (resources/speech.json)
 import outrider.honk       # auto honk: holds Primary Fire on arrival (optional; Linux with evdev, Windows experimental)
 import outrider.target     # the Highway's auto-target: targets the next route system in the galaxy map (same keyboard)
+import outrider.game_window  # auto-target brings Elite's window to the front and presses keys only while it is there
 import outrider.button     # the co-pilot button: tap, double tap, hold on a HOTAS button (optional; Linux, read-only)
 import outrider.auth       # [server] password: sign-in for devices on the network (the tablet and its app)
 import outrider.rail       # the tablet's control rail: contexts, default sets, button states
@@ -5988,6 +5989,9 @@ class State:
         self.autotarget_test = None
         self.autotarget_test_task = None
         self.autotarget_test_countdown = AUTOTARGET_TEST_COUNTDOWN
+        # Elite's window (outrider.game_window.GameWindow, S74): brought to the front before a run and checked before
+        # every key. Set by run() on a game PC; None (tests, a server, --simulate): nothing checked, the countdown as before
+        self.game_window = None
         self.password = ""   # [server] password: "" asks no device for one (set by run())
         self.signin_limit = outrider.auth.RateLimit()
         self._suggest = collections.OrderedDict()   # typed name -> Spansh's system names (HIGHWAY_SUGGEST_CACHE kept)
@@ -6391,7 +6395,7 @@ class State:
             return
         kind, aim = nxt
         try:
-            out, status = self.start_autotarget_run(kind, countdown=self.COPILOT_TARGET_DELAY_S, aim=aim)
+            out, status = self.start_autotarget_run(kind, countdown=self.COPILOT_TARGET_DELAY_S, aim=aim, fallback=False)
         except RuntimeError:   # no event loop (a test calling it bare): nothing can run
             out, status = {"error": "auto-target is not running"}, 500
         if status < 400:
@@ -12503,7 +12507,11 @@ class State:
         info = {"enabled": bool(cfg["autotarget"]), "delay": cfg["autotarget_delay"], "entry": cfg.get("autotarget_entry"),
                 "dry_run": bool(cfg.get("autotarget_dry_run")), "available": bool(t and t.available),
                 "last": self.autotarget_last, "test": self.autotarget_test, "running": self.autotarget_running is not None,
-                "missing": [], "steps": [], "countdown": self.autotarget_test_countdown}
+                "missing": [], "steps": [], "countdown": self.autotarget_test_countdown,
+                # S74: whether a run brings the game to the front itself, or why not (Settings -> Auto-target)
+                "front": (self.game_window.status() if self.game_window is not None else
+                          {"front": False, "why": "not on a server or with --simulate" if not self.game_pc or self.simulate
+                           else "not started"})}
         if not t:
             info["status"] = "not started"
             return info
@@ -12735,12 +12743,16 @@ class State:
         whether or not auto-target is on. (response, HTTP status)."""
         return self.start_autotarget_run("test")
 
-    def start_autotarget_run(self, kind="test", countdown=None, aim=None):
+    def start_autotarget_run(self, kind="test", countdown=None, aim=None, fallback=True):
         """A run the page asked for, after a countdown (time to click back into the game: the click took the keyboard
         focus), whether or not auto-target is on. kind "test": "test now", against a system a plain jump away (no
         route needed); "next": Target next / Retry (review Q4), against the next route system or, off the route, the
         closest one; with `aim` (route, index): 🎯 on that system of that route (route_target). Refused, saying why,
-        when it could not run. (response, HTTP status)."""
+        when it could not run. (response, HTTP status).
+        Where this PC can bring Elite's window to the front (game_window, S74), the page's run has no countdown: it
+        starts at once ("front": true) and counts down (the countdown asked for, at least the default's) only when
+        the game did not come forward. fallback False (the co-pilot button: its short wait is for a cancelling press,
+        and you are in the game): the countdown is kept and a game not in front stops the run."""
         t, h = self.targeter, self.honker
         if not t or not t.available:
             return {"error": (h.status if h else "not started")}, 400
@@ -12765,6 +12777,9 @@ class State:
         wait = self.autotarget_test_countdown if countdown is None else countdown
         test = {"seq": (self.autotarget_test or {}).get("seq", 0) + 1, "kind": kind, "state": "counting",
                 "system": tgt["name"], "why": None, "in": wait}
+        gw = self.game_window
+        if fallback and gw is not None and gw.why_not() is None:   # brought forward at once; the countdown if not
+            test.update({"in": 0, "front": True, "fallback": wait or self.autotarget_test_countdown})
         cancel = None
         if kind == "next":   # a cleared or replaced route stops it (cancel_autotarget)
             self._autotarget_next_cancel = cancel = threading.Event()
@@ -12772,7 +12787,8 @@ class State:
         self.autotarget_test = test
         self.autotarget_test_task = asyncio.get_running_loop().create_task(self._autotarget_test(tgt, test, dry, cancel))
         self.bump()
-        return {"system": tgt["name"], "in": wait, "seq": test["seq"], "dry_run": dry, "kind": kind}, 200
+        return {"system": tgt["name"], "in": test["in"], "seq": test["seq"], "dry_run": dry, "kind": kind,
+                "front": bool(test.get("front"))}, 200
 
     async def _autotarget_test(self, tgt, test, dry, cancel=None):
         try:
@@ -12836,19 +12852,46 @@ class State:
                                                "why": "auto honk was still running"}, test)
         if (self.journals.pos or {}).get("id64") != tgt["here"]:   # jumped during the honk wait
             return self._autotarget_done(tgt, {"ok": False, "phase": 0, "label": "wait", "why": "you had jumped"}, test, say=False)
+        # S74: Elite's window to the front, then checked before every key (none where nothing can be checked)
+        front = None
+        if self.game_window is not None and not self.highway_cfg.get("autotarget_dry_run"):
+            front = await self._autotarget_front(tgt, test, cancel)
+            if front is False:
+                return
         self.autotarget_running = tgt
         self.bump()
         try:
             res = await asyncio.get_running_loop().run_in_executor(None, functools.partial(
                 self.targeter.run, tgt["name"], tgt["id64"], lambda: self.journals.status_json,
                 lambda: (self.journals.pos or {}).get("id64"), cancel=cancel, origin=tgt["here"],
-                route_end=lambda: self.journals.navroute_end))
+                route_end=lambda: self.journals.navroute_end, front=front))
         except Exception as e:  # noqa: BLE001 -- say so on the page rather than lose it in a task
             res = {"ok": False, "phase": 0, "label": "run", "why": f"{type(e).__name__}: {e}"}
         finally:
             self.autotarget_running = None
         # stopped on purpose (switched off, the route cleared or replaced): recorded, not spoken
         self._autotarget_done(tgt, res, test, say=not self._autotarget_stale(tgt, test, cancel))
+
+    async def _autotarget_front(self, tgt, test, cancel):
+        """Bring Elite's window to the front for a run (S74): the Targeter's check before every key (`front`), None when
+        nothing can be checked (no wmctrl, no game window found: the keys go as before), or False when the run ended
+        meanwhile (stale, jumped). A page run that started without its countdown counts it down now, saying why, when
+        the game did not come forward; any other run goes on and its check refuses the first key."""
+        gw, loop = self.game_window, asyncio.get_running_loop()
+        got = await loop.run_in_executor(None, gw.bring_forward)
+        if not got["front"] and test and test.get("fallback"):
+            test.update({"state": "counting", "in": test.pop("fallback"), "note": outrider.game_window.NOT_FRONT})
+            self.bump()
+            await asyncio.sleep(test["in"])
+            test["state"] = "running"
+            self.bump()
+            if self._autotarget_stale(tgt, test, cancel):
+                return False
+            if (self.journals.pos or {}).get("id64") != tgt["here"]:
+                self._autotarget_done(tgt, {"ok": False, "phase": 0, "label": "wait", "why": "you had jumped"}, test, say=False)
+                return False
+            got = {"checked": await loop.run_in_executor(None, gw.locate)}   # you clicked into the game (or not): the check says
+        return gw.front_why if got["checked"] else None
 
     def _autotarget_done(self, tgt, res, test=None, say=True):
         name, ok = tgt["name"], bool(res.get("ok"))
@@ -12872,6 +12915,8 @@ class State:
             wrong = res.get("wrong") if res.get("code") == "wrong" else None   # said by name: you must not jump to it (Q3)
             self.journals.moment("autotarget", iso_ts(time.time()), ok=ok, system=name, phase=res.get("phase"), why=why,
                                  text=(f"{name} was not found. That is probably the end of the boxel." if end
+                                       else f"Not targeting {name}: Elite is not the active window. Click into the game."
+                                       if res.get("code") == "window"
                                        else (f"Targeted {name}." if tgt.get("boxel") else f"Successfully targeted neutron jump target {name}") if ok
                                        else f"Targeted the wrong system: {wrong}. Check before you jump." if wrong
                                        else f"Failed to target {'' if tgt.get('boxel') else 'neutron jump target '}{name}"))
@@ -15517,6 +15562,8 @@ async def run(args, st):
     state.clipboard = Clipboard(st["highway"]["clipboard"])
     state.targeter = outrider.target.Targeter(state.honker, LIVE_DIRS, state.autotarget_cfg(),
                                               copy=lambda text: state.clipboard.copy(text, force=True))
+    if state.game_pc and not state.simulate:   # never on a server: there is no game window there
+        state.game_window = outrider.game_window.GameWindow()
     if not state.game_pc:
         state.highway_cfg["autotarget"] = False
     if state.highway_cfg["autotarget"] and state.honker.available and not state.highway_cfg["autotarget_dry_run"]:
@@ -15526,6 +15573,10 @@ async def run(args, st):
                                    "off ([highway] clipboard)" if not state.clipboard.enabled else
                                    "neither wl-copy nor xclip found"))
     print("highway auto-target: " + ("off" if not state.highway_cfg["autotarget"] else state.autotarget_info()["status"]))
+    if state.game_window is not None and state.targeter.available:
+        fw = state.game_window.why_not()
+        print("auto-target: " + ("brings the game to the front itself before its keys" if fw is None
+                                 else f"cannot bring the game to the front ({fw}): click into the game during the countdown"))
     bg = state.highway_background()
     if bg["name"]:
         print(f"highway map background: {st['highway']['background_image']}" +

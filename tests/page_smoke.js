@@ -3394,7 +3394,7 @@ const settle = async maxMs => {
     got.last = txt("hwyAutoLast");
     got.missing = [d.getElementById("hwyAutoMissing").hidden, txt("hwyAutoMissing")];
     got.steps = d.querySelectorAll("#hwyAutoSteps li").length;
-    got.hint = /keys go to whichever window has focus/.test(txt("hwyAuto"));
+    got.hint = /keys go to the window that has focus: Outrider brings the game to the front first/.test(txt("hwyAuto"));
     const on = d.getElementById("hwyAutoOn");
     on.checked = true; on.dispatchEvent(new w.Event("change")); await sleep(150);
     const dl = d.getElementById("hwyAutoDelay");
@@ -3774,6 +3774,47 @@ const settle = async maxMs => {
     allOk = allOk && goodTN;
     console.log(goodTN ? "OK" : "FAIL", "| highway target next |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "line and box buttons post with a countdown (no tab, no copy), refusal in its words, Retry on the failed row only, the Highway spoken in the report and welcome", errors.slice(before));
+  }
+  // S74: a run that brings the game to the front itself (no countdown: "bringing the game to the front"), the server's
+  // countdown after all when the game did not come (its reason on the box and the button), and the box's line saying
+  // whether it brings the game forward or why not. Every request is answered here: nothing reaches the server
+  {
+    const w = dom.window, before = errors.length, realFetch = w.fetch, got = {};
+    const json = o => Promise.resolve(new Response(JSON.stringify(o), {status: 200, headers: {"Content-Type": "application/json"}}));
+    const fx = hwyFixture(), txt = id => d.getElementById(id).textContent.replace(/\s+/g, " ").trim();
+    w.fetch = (u, o) => {
+      const url = String(u);
+      if (url === "api/highway/target") return json({system: "Hwy Stop 38", in: 0, seq: 21, dry_run: false, kind: "next", front: true});
+      if (url.startsWith("api/highway")) return json(hwyPayload(fx));
+      return realFetch(u, o);
+    };
+    const at = {enabled: false, delay: 5, available: true, status: "off", running: false, countdown: 5, last: null, test: null,
+                missing: [], steps: [], front: {front: true, why: null}};
+    w.eval(`hwyRun = null; data.autotarget = ${JSON.stringify(at)}; data.highway = ${JSON.stringify(fx.summary)}; view = "hwy"; render()`);
+    await sleep(300);
+    got.line = [txt("hwyAutoFront"), d.getElementById("hwyAutoFront").className, d.getElementById("hwyAutoNext").title.includes("brings the game to the front")];
+    d.getElementById("hwyAutoNext").click(); await sleep(150);
+    got.front = [txt("hwyAutoTestMsg"), w.eval("hwyRun.front && hwyRun.n")];
+    w.eval(`data.autotarget = Object.assign({}, data.autotarget, {test: {seq: 21, kind: "next", state: "counting", in: 5,
+      note: "Elite is not the active window: click into the game", system: "Hwy Stop 38", why: null}}); render()`);
+    await sleep(100);
+    got.counting = [txt("hwyAutoTestMsg"), w.eval("hwyRun.n")];
+    w.eval(`data.autotarget = Object.assign({}, data.autotarget, {test: {seq: 21, kind: "next", state: "done", system: "Hwy Stop 38", why: null},
+      front: {front: false, why: "wmctrl is not installed"}}); render()`);
+    got.done = txt("hwyAutoTestMsg");
+    got.cannot = [txt("hwyAutoFront"), d.getElementById("hwyAutoFront").className];
+    w.fetch = realFetch;
+    w.eval(`hwyRun = null; data.autotarget = null; data.highway = null`);
+    const want = {line: ["Brings the game to the front itself: no countdown, and no key unless Elite is the active window.", "unk", true],
+      front: ["bringing the game to the front: targeting Hwy Stop 38…", 0],
+      counting: ["Elite is not the active window: click into the game · targeting Hwy Stop 38 in 5 s", 4],
+      done: "target next done: targeted Hwy Stop 38",
+      cannot: ["Does not bring the game to the front (wmctrl is not installed): click into the game during the countdown.", "warnc"]};
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    const goodS74 = !bad.length && errors.length === before;
+    allOk = allOk && goodS74;
+    console.log(goodS74 ? "OK" : "FAIL", "| target brings the game forward |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
+      : "no countdown when it brings the game forward, the server's countdown with its reason when not, the box says which", errors.slice(before));
   }
   // too much fuel for the next jump: the warning in the strip and the Highway header; the Conservative range option
   // (off by default, [highway] defaults when this browser has none, the note, the plot body, saved per browser) and

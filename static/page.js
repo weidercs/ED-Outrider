@@ -5461,7 +5461,8 @@ function hwyLineHtml(s, {short = false, glyph = true} = {}) {
     `≤ ${Math.floor(hv.need_t)} t, you have ${Math.round(hv.have_t)} t</span>`);
   return g + bits.join(" · ");
 }
-let hwyRun = null;   // the run this page started (test now, Target next, Retry): {seq, kind, system, n, dry, done, msg}
+let hwyRun = null;   // the run this page started (test now, Target next, Retry): {seq, kind, system, n, dry, done, msg,
+// front: Outrider brings the game to the front itself (no countdown), note: why it counts down after all (S74)}
 // Target next (review Q4): beside the line's next system; the run's countdown shows on it while this page's run counts
 // 🎯 on a route system (the author, 2026-10-07): route "highway" | "survey" and its row, or (no route) the Highway's
 // Target next as before (the next system, off the route the nearest); `icon`: just 🎯 (a list's rows)
@@ -5470,7 +5471,13 @@ function hwyAimBtn(name, route = null, index = null, icon = false) {
   const label = !mine ? (icon ? "🎯" : "🎯 target") : r.n > 0 ? `🎯 in ${r.n} s` : "🎯 targeting…";
   return ` <button type="button" class="mini hwyaim${icon ? " icon" : ""}" data-aim="next"` +
     (route ? ` data-route="${route}"${index != null ? ` data-index="${index}"` : ""}` : "") + `${mine ? " disabled" : ""}` +
-    ` title="target ${esc(name)} in the galaxy map${TABLET ? "" : ", 5 s from now: click back into the game meanwhile"}">${label}</button>`;
+    ` title="target ${esc(name)} in the galaxy map${hwyFront() ? " (Outrider brings the game to the front)" : TABLET ? ""
+      : ", 5 s from now: click back into the game meanwhile"}">${label}</button>`;
+}
+// S74: whether a run brings Elite's window to the front itself (no countdown), from data.autotarget.front
+function hwyFront() {
+  const f = data && data.autotarget && data.autotarget.front;
+  return !!(f && f.front);
 }
 // the strip under the header: only on Overview, Nearby and Here, only with a route
 function renderHwyLine() {
@@ -5801,7 +5808,8 @@ document.addEventListener("click", e => {
   if (H.data) renderHwyList(H.data);
 });
 // ---- auto-target (the server presses the keys; this is its toggle, delay, test and last result) ----
-// data.autotarget: {enabled, delay, available, status, last, test, running, missing: [{key, why}], steps, dry_run, countdown}
+// data.autotarget: {enabled, delay, available, status, last, test, running, missing: [{key, why}], steps, dry_run, countdown,
+// front: {front, why}: whether a run brings the game to the front itself, or why not (S74)}
 const hwyHm = ts => { const d = new Date(ts); return isNaN(d) ? "" : d.toTimeString().slice(0, 5); };
 function hwyAutoLastText(l) {
   if (!l) return "";
@@ -5826,6 +5834,10 @@ function drawHwyAuto() {
   miss.textContent = m.length ? "Missing keyboard bindings (auto-target will not run): " + m.map(x => `${x.key}: ${x.why}`).join("; ") : "";
   const steps = (a.steps || []).map(x => `<li>${esc(x)}</li>`).join("");   // "5 plot the route: hold …": the step numbers results use
   if (hEl("hwyAutoSteps").innerHTML !== steps) hEl("hwyAutoSteps").innerHTML = steps;
+  const fr = a.front, frEl = hEl("hwyAutoFront");
+  frEl.textContent = !fr ? "" : fr.front ? "Brings the game to the front itself: no countdown, and no key unless Elite is the active window."
+    : `Does not bring the game to the front (${fr.why || "?"}): click into the game during the countdown.`;
+  frEl.className = fr && !fr.front ? "warnc" : "unk";
   hwyRunTrack();
   hEl("hwyAutoTestMsg").textContent = hwyRun ? hwyRun.msg : "";
 }
@@ -5837,6 +5849,10 @@ function hwyRunTrack() {
   // superseded: a newer run (another device's), or no run at all long after this one's countdown (Outrider restarted)
   if ((t && typeof r.seq === "number" && t.seq > r.seq) || (!t && r.at && Date.now() - r.at > ((r.n || 0) + 120) * 1000)) {
     r.done = true; r.msg = `${w0}: no result (Outrider restarted, or another device started a run)`; return;
+  }
+  // the game did not come to the front (S74): the server counts down after all, saying why; the page follows it
+  if (t && t.seq === r.seq && t.state === "counting" && t.note && !r.note && r.tick) {
+    r.note = t.note; r.n = t.in; clearTimeout(r.timer); r.tick(); return;
   }
   if (!t || t.seq !== r.seq || !["done", "failed"].includes(t.state)) return;
   r.done = true;
@@ -5856,13 +5872,14 @@ async function hwyAutoStart(kind, aim = null) {
   catch { show("could not reach Outrider"); return; }
   if (!r.ok) { show(`cannot ${w}: ${j.error || "?"}`); return; }
   const mine = hwyRun = {seq: j.seq, kind, key: aim ? `${aim.route}:${aim.index ?? ""}` : "next", system: j.system, n: j.in, dry: j.dry_run, done: false, msg: "",
-                         at: Date.now()};
-  const tick = () => {
+                         at: Date.now(), front: !!j.front, note: null, timer: null};
+  const tick = mine.tick = () => {
     if (mine.done || mine !== hwyRun) return;
-    mine.msg = mine.n > 0 ? `click into the game: targeting ${j.system} in ${mine.n} s${j.dry_run ? " (dry run)" : ""}` : `targeting ${j.system}…`;
+    mine.msg = mine.n > 0 ? `${mine.note ? `${mine.note} ·` : "click into the game:"} targeting ${j.system} in ${mine.n} s${j.dry_run ? " (dry run)" : ""}`
+      : mine.front && !mine.note ? `bringing the game to the front: targeting ${j.system}…` : `targeting ${j.system}…`;
     drawHwyAuto(); renderHwyLine(); renderCarrier(); renderTilesLine(); drawBoxel();   // the carrier's and the boxel's 🎯 count down too
     if (view === "hwy") renderHwy();   // the list's 🎯 counts down too
-    if (mine.n > 0) { mine.n--; setTimeout(tick, 1000); }
+    if (mine.n > 0) { mine.n--; mine.timer = setTimeout(tick, 1000); }
   };
   tick();
 }
