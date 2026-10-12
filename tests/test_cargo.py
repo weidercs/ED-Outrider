@@ -337,6 +337,8 @@ class CargoState(unittest.TestCase):
         self.write_market(fx)
         self.assertTrue(self.j.read_market(self.dir))
         self.assertFalse(self.j.read_market(self.dir))   # read once
+        # names your journal has not given: known from Spansh's list (S57)
+        self.state.spansh_commodities = {"ts": time.time(), "norm": {"metaalloys": "Meta-Alloys", "modularterminals": "Modular Terminals"}}
         out, status = self.state.cargo_recount({"Meta-Alloys": 3, "Modular Terminals": 6, "Tritium": 5})
         self.assertEqual(status, 200)
         self.assertEqual(out["skipped"], ["tritium"])   # confirmed by the market: left as it says
@@ -457,6 +459,58 @@ class CargoState(unittest.TestCase):
         self.feed(self.j, fx)
         for bad in (None, {}, {"gold": -1}, {"gold": 1.5}, {"gold": True}, {"": 3}, {"gold": 10 ** 6}):
             self.assertEqual(self.state.cargo_recount(bad)[1], 400, bad)
+
+    def test_recount_refuses_typos(self):   # S57
+        """A name that is no commodity is refused with up to three close names (it made a line of its own, never moved
+        again); Spansh's list (the copy kept) adds the commodities your journal has not named, by Spansh's spelling, and
+        the two whose letters are not the journal's id by the journal's. Without that list only your journal's."""
+        fx, _, _ = real()
+        self.feed(self.j, fx)
+        out, status = self.state.cargo_recount({"Tritum": 5})
+        self.assertEqual(status, 400)
+        self.assertEqual(out["suggestions"][0], "Tritium")
+        self.assertIn("Did you mean: Tritium", out["error"])
+        self.assertIn("only names from your journal", out["error"])   # no Spansh list yet
+        self.assertEqual(self.state.cargo_recount({"Grandidierite": 5})[1], 400)   # not in this journal
+        self.state.spansh_commodities = {"ts": time.time(), "norm": {cargo.norm(n): n for n in (
+            "Tritium", "Titanium", "Grandidierite", "Low Temperature Diamonds", "Void Opal", "Meta-Alloys")}}
+        out, status = self.state.cargo_recount({"Titanum": 5, "Grandidierite": 2})
+        self.assertEqual(status, 400)   # nothing saved: one bad name refuses the lot
+        self.assertEqual(out["name"], "Titanum")
+        self.assertEqual(out["suggestions"][:2], ["Titanium", "Tritium"])
+        self.assertLessEqual(len(out["suggestions"]), 3)
+        self.assertNotIn("only names from your journal", out["error"])
+        self.assertEqual(self.db.execute("SELECT count(*) FROM carrier_counts").fetchone()[0], 0)
+        out, status = self.state.cargo_recount({"grandidierite": 2, "Low Temperature Diamonds": 3, "void opal": 4})
+        self.assertEqual(status, 200)
+        rows = {r[0]: r[1] for r in self.db.execute("SELECT commodity, name FROM carrier_counts")}
+        self.assertEqual(rows, {"grandidierite": "Grandidierite", "lowtemperaturediamond": "Low Temperature Diamonds",
+                                "opal": "Void Opal"})
+        lines = {x["id"]: x["name"] for x in self.state.cargo_summary()["carrier"]["lines"]}
+        self.assertEqual(lines["lowtemperaturediamond"], "Low Temperature Diamonds")
+
+    def test_recount_route_fetches_spansh_list_once(self):   # S57
+        """POST /api/cargo/recount: a name your journal does not know and no copy of Spansh's list yet: the list is
+        fetched and the counts asked again; a typo is still refused, with its suggestions."""
+        from aiohttp.test_utils import TestClient, TestServer
+        fx, _, _ = real()
+        self.feed(self.j, fx)
+        fetched = []
+
+        async def commodity_list():
+            fetched.append(1)
+            self.state.spansh_commodities = {"ts": time.time(), "norm": {"grandidierite": "Grandidierite", "tritium": "Tritium"}}
+            return self.state.spansh_commodities["norm"]
+        self.state.commodity_list = commodity_list
+
+        async def go():
+            async with TestClient(TestServer(ed_outrider.make_app(self.state))) as c:
+                r1 = await c.post("/api/cargo/recount", json={"counts": {"Grandidierite": 2}})
+                r2 = await c.post("/api/cargo/recount", json={"counts": {"Grandiderite": 2}})
+                return r1.status, r2.status, await r2.json()
+        s1, s2, body = asyncio.run(go())
+        self.assertEqual((s1, s2, len(fetched)), (200, 400, 1))
+        self.assertEqual(body["suggestions"], ["Grandidierite"])
 
 
 class Lookup(unittest.TestCase):

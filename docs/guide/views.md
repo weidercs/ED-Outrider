@@ -50,8 +50,9 @@ pinch zooms); tick <i>boost stars</i> for neutron stars and white dwarfs.
 <br><br><img src="../images/map.png" alt="The 3D map">
 </td>
 <td width="50%" valign="top">
-<b>History</b> — sessions (jumps, light-years, discoveries, mapping, samples), an all-time row, "since
-your last sale" and the game's career statistics. Below: every trip from sale to sale with what it paid
+<b>History</b> — sessions (jumps, light-years, discoveries, mapping, samples, what you sold, and ✗ for a
+death: its hover says when and whether the ship was lost), an all-time row, "since your last sale" and the game's
+career statistics. Below: every trip from sale to sale with what it paid
 against Outrider's estimate, the exobiology ×5 checked against the prediction, credits per hour and per jump,
 what each death cost, and your 25 most valuable finds.
 <br><br><img src="../images/history.png" alt="History">

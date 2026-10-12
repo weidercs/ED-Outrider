@@ -153,6 +153,7 @@ import asyncio
 import collections
 import contextlib
 import copy
+import difflib
 import functools
 import hashlib
 import io
@@ -3186,6 +3187,7 @@ class Journals:
             elif name == "Resurrect":
                 death = self.db.execute("SELECT max(ts) FROM deaths WHERE ts <= ?", (ts,)).fetchone()[0]
                 self.db.execute("UPDATE deaths SET option = ? WHERE ts = ?", (ev.get("Option"), death))
+                self.bio_sales_changed = True   # History asks again: its ✗ says whether the ship was lost (S63)
                 # the ship-loss debrief (State works out what died with it at poll time; nothing when it cost
                 # nothing). Only a Resurrect just now: a journal re-read or catch-up must not narrate old deaths.
                 if death and live_event(ts):
@@ -8308,28 +8310,40 @@ class State:
 
     def cargo_recount(self, counts):
         """POST /api/cargo/recount {counts: {commodity: tons}}: your counts for carrier lines Outrider cannot confirm.
-        A name not seen yet ("Add a commodity") is matched to a known one, letters only. Confirmed lines (a sell order
-        at your carrier) are left as the market says."""
+        A name not seen yet ("Add a commodity") is matched to a known one, letters only: the journal's names first,
+        then Spansh's commodity list (the copy kept from the last lookup; stored with Spansh's spelling and the journal
+        id its letters give, MINERAL_NAMES' two by theirs). Anything else is refused with up to three names it is
+        close to (S57: a typo made a line of its own that no journal event would ever move); without Spansh's list
+        only the journal's names are known. Confirmed lines (a sell order at your carrier) are left as the market
+        says."""
         cid = (self.journals.carrier or {}).get("id")
         if cid is None:
             return {"error": "no carrier in your journals"}, 409
         if not isinstance(counts, dict) or not counts or len(counts) > 300:
             return {"error": "expected {counts: {commodity: tons}}"}, 400
         st = self.carrier_cargo()
-        known = {outrider.cargo.norm(i): i for i in set(st["lines"]) | set(self.journals.commodity_names) | set(st["names"])}
-        known.update({outrider.cargo.norm(n): i for i, n in {**st["names"], **self.journals.commodity_names}.items()})
+        names = {**st["names"], **self.journals.commodity_names}
+        known = {outrider.cargo.norm(i): i for i in set(st["lines"]) | set(names)}
+        known.update({outrider.cargo.norm(n): i for i, n in names.items()})
+        spansh = (self.spansh_commodities or {}).get("norm") or {}
+        # Spansh's names whose letters are not the journal's id: the journal's own wins
+        aliases = {outrider.cargo.norm(v): k.lower() for k, v in MINERAL_NAMES.items()}
         rows, skipped = [], []
         for key, n in counts.items():
             if not isinstance(key, str) or not key.strip() or len(key) > 80 or isinstance(n, bool) \
                     or not isinstance(n, int) or not 0 <= n <= 100000:
                 return {"error": f"bad count for {str(key)[:80]!r}: whole tons, 0 to 100,000"}, 400
-            i = known.get(outrider.cargo.norm(key)) or outrider.cargo.norm(key)
+            k, name = outrider.cargo.norm(key), None
+            i = known.get(k)
+            if not i and k in spansh:
+                i = known.get(aliases.get(k)) or aliases.get(k) or k
+                name = None if i in names else spansh[k]
             if not i:
-                return {"error": f"not a commodity name: {key[:80]!r}"}, 400
+                return self.recount_refusal(key, known, names, spansh), 400
             if (st["lines"].get(i) or {}).get("state") == "confirmed":
                 skipped.append(i)
                 continue
-            rows.append((i, n, None if i in st["lines"] or i in self.journals.commodity_names else key.strip()))
+            rows.append((i, n, name))
         ts = iso_ts(time.time())
         self.db.executemany("INSERT OR REPLACE INTO carrier_counts VALUES (?, ?, ?, ?, ?)",
                             [(ts, cid, i, n, name) for i, n, name in rows])
@@ -8337,6 +8351,19 @@ class State:
         self.counts_version += 1
         self.bump()
         return {"ok": True, "saved": len(rows), "skipped": skipped, "cargo": self.cargo_summary()}, 200
+
+    @staticmethod
+    def recount_refusal(key, known, names, spansh):
+        """Recount's answer to a name that is no commodity (S57): {error, name, suggestions} with up to three names whose
+        letters are close (the journal's spelling, else Spansh's), and why there may be none."""
+        pool = {k: names.get(i) or outrider.cargo.display(i, names, spansh) for k, i in known.items()}
+        pool.update({k: v for k, v in spansh.items() if k not in pool})
+        close = difflib.get_close_matches(outrider.cargo.norm(key), list(pool), n=6, cutoff=0.6)
+        suggestions = list(dict.fromkeys(pool[k] for k in close))[:3]
+        text = key.strip()[:80]
+        return {"error": f"Not a commodity: {text!r}." + (f" Did you mean: {', '.join(suggestions)}?" if suggestions else "") +
+                ("" if spansh else " (Spansh's commodity list is not to hand: only names from your journal are known)"),
+                "name": text, "suggestions": suggestions, "journal_only": not spansh}
 
     def docked_summary(self):
         """Where you are docked, if anywhere, and whether it buys exploration data."""
@@ -9071,6 +9098,11 @@ class State:
         "footfalls": "SELECT count(*) FROM own_footfall WHERE ts BETWEEN ? AND ?",
         "samples": "SELECT count(*) FROM own_organic WHERE done_ts BETWEEN ? AND ?",
         "codex_new": "SELECT count(*) FROM codex WHERE is_new=1 AND ts BETWEEN ? AND ?",
+        # History's sold column (S63): what Universal Cartographics and Vista Genomics paid, every sale
+        "sold": "SELECT coalesce(sum(total), 0) FROM sale_events WHERE ts BETWEEN ? AND ?",
+        # its ✗: every death, and the ships lost (SHIP_LOSS_SQL: a death with no Resurrect yet counts as a rebuy)
+        "died": "SELECT count(*) FROM deaths WHERE ts BETWEEN ? AND ?",
+        "lost": f"SELECT count(*) FROM deaths WHERE {SHIP_LOSS_SQL} AND ts BETWEEN ? AND ?",
     }
 
     def export_system(self, id64):
@@ -9476,7 +9508,12 @@ class State:
             # a session owns everything from its login (or first jump) until the next session's window starts
             # (scans and samples after its last jump, a long stay with no jump); the latest runs on ("~" sorts
             # after any time)
-            s_.update(self.range_counts(s_["from"], second_before(s_["until"]) if s_["until"] else "~"))
+            end = second_before(s_["until"]) if s_["until"] else "~"
+            s_.update(self.range_counts(s_["from"], end))
+            # each death with its Resurrect choice, for the ✗ in the Session cell (S63)
+            s_["deaths"] = [{"ts": r[0], "option": r[1], "ship": (r[1] or "rebuy") not in SHIP_SURVIVED_OPTIONS}
+                            for r in self.db.execute("SELECT ts, option FROM deaths WHERE ts BETWEEN ? AND ? ORDER BY ts",
+                                                     (s_["from"], end))]
         everything = self.sessions("")
         all_time = {"jumps": sum(x["jumps"] for x in everything), "ly": round(sum(x["ly"] for x in everything), 1),
                     "max_sol": max((x["max_sol"] for x in everything), default=0), "sessions": len(everything),
@@ -15415,6 +15452,10 @@ def make_app(state, hosts=None):
         if body is None:
             return web.json_response({"error": "expected {counts: {commodity: tons}}"}, status=400)
         out, status = state.cargo_recount(body.get("counts"))
+        if status == 400 and "suggestions" in out and not (state.spansh_commodities or {}).get("norm"):
+            # a name your journal does not know and no copy of Spansh's list yet: fetched once (kept a week), asked again
+            if await state.commodity_list():
+                out, status = state.cargo_recount(body.get("counts"))
         return web.json_response(out, status=status)
 
     async def log_view(request):

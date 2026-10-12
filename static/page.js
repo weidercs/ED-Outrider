@@ -4248,6 +4248,14 @@ function cargoLineTitle(x) {
   const mark = CARGO_MARK[x.state] || CARGO_MARK.seen;
   return [mark[2] + (x.ts ? ` (${shortDay(x.ts)})` : ""), ...(x.moves || [])].join("\n");
 }
+// how fresh a confirmed count is (S58): whole days since the market read, shown from a day on ("✓ 9 d"), amber over
+// CONFIRM_STALE_D; past that the carrier's heading asks for a market read
+const CONFIRM_STALE_D = 7;
+const cargoDays = ts => ts ? Math.max(0, Math.floor((Date.now() - Date.parse(ts)) / 86400000)) : 0;
+function cargoAgeHtml(x) {
+  const d = x.state === "confirmed" ? cargoDays(x.ts) : 0;
+  return d >= 1 ? ` <span class="cage ${d > CONFIRM_STALE_D ? "warnc" : "unk"}" title="the sell order's count, read from your carrier's market ${d} day${d === 1 ? "" : "s"} ago">${d} d</span>` : "";
+}
 function renderCargo(cg) {
   cargoData = cg || null;
   const el = document.getElementById("cargoList");
@@ -4265,9 +4273,13 @@ function renderCargo(cg) {
       `<div class="unk clegend">${Object.values(CARGO_MARK).map(m => `<span class="st ${m[1]}">${m[0]}</span> ${m[1] === "c" ? "confirmed (sell order)" : m[1] === "l" ? "last seen" : "entered by you"}`).join(" · ")}` +
       ` <button type="button" class="mini" id="recountBtn" title="enter the counts Outrider cannot confirm (the game's Inventory screen at your carrier lists them all)">Recount…</button></div>`;
     if (!c.market_ts) h += `<div class="hint">Open your carrier's commodity market once while docked there: its sell orders confirm what it holds.</div>`;
+    else if (c.lines.some(x => x.state === "confirmed") && cargoDays(c.market_ts) > CONFIRM_STALE_D) {
+      const d = cargoDays(c.market_ts);
+      h += `<div class="hint warnc cstale">Sell-order counts read ${d} days ago: open your carrier's commodity market while docked there to refresh them.</div>`;
+    }
     h += c.lines.length ? `<table class="cargoTable"><tbody>` + c.lines.map(x => {
       const mark = CARGO_MARK[x.state] || CARGO_MARK.seen;
-      return `<tr data-cid="${esc(x.id)}" data-from="carrier"><td><span class="st ${mark[1]}" title="${esc(cargoLineTitle(x))}">${mark[0]}</span> ${esc(x.name)}</td>` +
+      return `<tr data-cid="${esc(x.id)}" data-from="carrier"><td><span class="st ${mark[1]}" title="${esc(cargoLineTitle(x))}">${mark[0]}</span>${cargoAgeHtml(x)} ${esc(x.name)}</td>` +
         `<td class="num">${tons(x.count)}</td><td class="num cact">${LOOK_BTNS}</td></tr>`;
     }).join("") + `</tbody></table>` : `<div class="unk">Nothing tracked at your carrier yet.</div>`;
   }
@@ -4293,6 +4305,7 @@ function openRecount() {
   document.getElementById("recountRows").innerHTML = c.lines.filter(x => x.state !== "confirmed").map(x =>
     `<tr><td>${esc(x.name)}</td><td class="num"><input type="number" min="0" max="100000" step="1" class="qn" data-rc="${esc(x.id)}" data-was="${x.count}" value="${x.count}"></td>` +
     `<td class="unk">${x.state === "entered" ? "entered" : "last seen"}</td></tr>`).join("");
+  recountSuggest(null);
   recountTotal();
   tabShow(document.getElementById("recountDlg"));
 }
@@ -4305,6 +4318,25 @@ function recountTotal() {
     (total === c.reported ? `<span class="good">✓ in sync</span>` : `<span class="warnc">${tons(Math.abs(c.reported - total))} ${total < c.reported ? "short" : "over"}</span>`) : "");
 }
 document.getElementById("recountRows").addEventListener("input", recountTotal);
+// Recount refuses a name that is no commodity (S57): "Not a commodity: “Titanum”. Did you mean: [Titanium] [Tritium]";
+// a click puts that name in the row. null clears it
+function recountSuggest(r) {
+  const el = document.getElementById("recountMsg");
+  document.querySelectorAll("#recountRows .rcname.bad").forEach(i => i.classList.remove("bad"));
+  el.hidden = !r;
+  if (!r) { el.innerHTML = ""; return; }
+  const row = [...document.querySelectorAll("#recountRows .rcname")].find(i => i.value.trim() === r.name);
+  if (row) { row.classList.add("bad"); row.focus(); }
+  el.innerHTML = `Not a commodity: “${esc(r.name)}”.` + (r.suggestions.length ? ` Did you mean: ` +
+    r.suggestions.map(n => `<button type="button" class="mini" data-rcfix="${esc(n)}" data-rcwas="${esc(r.name)}">${esc(n)}</button>`).join(" ") : "") +
+    (r.journal_only ? ` <span class="unk">Spansh's commodity list is not to hand: only names from your journal are known.</span>` : "");
+}
+document.getElementById("recountMsg").addEventListener("click", e => {
+  const b = e.target.closest("[data-rcfix]"); if (!b) return;
+  const row = [...document.querySelectorAll("#recountRows .rcname")].find(i => i.value.trim() === b.dataset.rcwas);
+  if (row) row.value = b.dataset.rcfix;
+  recountSuggest(null);
+});
 document.getElementById("recountAdd").onclick = () => {
   const tr = document.createElement("tr");
   tr.innerHTML = `<td><input type="text" class="qn rcname" placeholder="commodity" maxlength="80" spellcheck="false"></td>` +
@@ -4325,6 +4357,7 @@ document.getElementById("recountSave").onclick = async () => {
   let r;
   try { r = await apiJson("api/cargo/recount", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({counts})}); }
   catch (err) { r = {error: err.message}; }
+  if (r.error && r.suggestions) return recountSuggest(r);
   if (r.error) return toast(`could not save the counts: ${r.error}`);
   tabClose(document.getElementById("recountDlg"));
   if (matData) { matData.cargo = r.cargo; renderCargo(r.cargo); }
@@ -4352,7 +4385,11 @@ document.getElementById("cargoList").addEventListener("keydown", e => {
 // ---- The Sell / Buy lookup: Spansh's stations for one commodity (GET /api/cargo/lookup, read only) ----
 // LK: what is asked (commodity, label, mode, tons, from: ship | carrier | here, key: the line it came from) and how
 // (sort, within, age, carriers); answer: the server's; open: the station row opened
-const LK = {q: null, sort: "price", within: 500, age: 14, carriers: false, answer: null, open: null, busy: false};
+const LK = {q: null, sort: "price", within: 500, age: 14, carriers: false, load: "all", answer: null, open: null, busy: false};
+// One shipload or all of it (S56): more than the ship's hold (its capacity, not what is free) can be asked as one
+// shipload; none before a Loadout says the hold
+const lookCap = q => { const c = cargoData && cargoData.ship && cargoData.ship.capacity; return q && c > 0 && q.tons > c ? c : null; };
+const lookTons = q => LK.load === "ship" && lookCap(q) ? lookCap(q) : q.tons;
 // a carrier with no name yet (bought, no CarrierStats since): its callsign, else "your carrier" (it said "null")
 const carrierName = c => (c && (c.name || c.callsign)) || "your carrier";
 function startLook(q) { LK.q = q; LK.open = null; LK.answer = null; loadLook(); }   // not the last lookup's heading
@@ -4363,7 +4400,7 @@ async function loadLook() {
   LK.busy = true; renderLook();
   markLookRow();
   const g = newRequest("look");
-  const params = new URLSearchParams({commodity: q.commodity, mode: q.mode, tons: q.tons, from: q.from, sort: LK.sort,
+  const params = new URLSearchParams({commodity: q.commodity, mode: q.mode, tons: lookTons(q), from: q.from, sort: LK.sort,
                                       within: LK.within, age: LK.age, carriers: LK.carriers ? "1" : "0", pad: "auto"});
   let r;
   try { r = await apiJson(`api/cargo/lookup?${params}`); } catch (err) { r = {error: err.message}; }
@@ -4383,7 +4420,8 @@ function renderLook() {
   if (!q) { el.hidden = true; el.innerHTML = ""; return; }
   const sell = q.mode === "sell";
   const avg = a && !a.error && a.avg;
-  let h = `<h3 class="subhead lookhead">${sell ? "Sell" : "Buy"} ${tons(q.tons)} ${esc(a && a.commodity || q.label)}` +
+  const cap = lookCap(q), n = lookTons(q);
+  let h = `<h3 class="subhead lookhead">${sell ? "Sell" : "Buy"} ${n !== q.tons ? `${tons(n)} of ${tons(q.tons)}` : tons(q.tons)} ${esc(a && a.commodity || q.label)}` +
     (avg ? ` <span class="unk">· you paid ${q.tons ? "Avg " : ""}${Math.round(avg).toLocaleString()} cr/t</span>` : "") +
     `<button type="button" class="mini lookclose" data-lk="close" title="close the lookup">✕</button></h3>`;
   h += `<div class="lookbar"><span class="seg2"><button type="button" class="mini${LK.sort === "price" ? " on" : ""}" data-lk="price">Best price</button>` +
@@ -4391,14 +4429,17 @@ function renderLook() {
     `<label>within <select data-lk="within">${[50, 100, 250, 500, 1000, 2500, 10000].map(v => `<option value="${v}"${v === LK.within ? " selected" : ""}>${v.toLocaleString()} ly</option>`).join("")}</select></label>` +
     `<label>data under <select data-lk="age">${[1, 3, 7, 14, 30, 90].map(v => `<option value="${v}"${v === LK.age ? " selected" : ""}>${v} d</option>`).join("")}</select></label>` +
     `<label title="fleet carriers' orders are often years old: left out unless ticked"><input type="checkbox" data-lk="carriers"${LK.carriers ? " checked" : ""}> carriers</label>` +
+    (cap ? `<span class="seg2 lookload" title="your ship's hold is ${tons(cap)}"><button type="button" class="mini${n === q.tons ? " on" : ""}" data-lk="all">All ${tons(q.tons)}</button>` +
+      `<button type="button" class="mini${n !== q.tons ? " on" : ""}" data-lk="ship">One shipload ${tons(cap)}</button></span>` +
+      `<span class="unk">≈ ${Math.ceil(q.tons / cap).toLocaleString()} shiploads for all of it</span>` : "") +
     (a && !a.error ? `<span class="unk">${a.pad === "L" ? "large pad" : a.pad === "M" ? "medium pad" : a.pad_known ? "" : "any pad (your ship's size is not known)"}` +
-      ` · ${sell ? `where they take all ${tons(q.tons)}` : `where they have ${tons(q.tons)}`}</span>` : "") + `</div>`;
+      ` · ${sell ? `where they take all ${tons(n)}` : `where they have ${tons(n)}`}</span>` : "") + `</div>`;
   if (LK.busy) h += `<div class="unk">asking Spansh…</div>`;
   else if (!a || a.error) h += `<div class="noscoop">${esc(a ? a.error : "")}</div>`;
-  else if (!a.rows.length) h += `<div class="unk">No station within ${a.within.toLocaleString()} ly ${sell ? "takes" : "has"} ${tons(q.tons)} with data under ${a.age} days. Try further, or older data.</div>`;
+  else if (!a.rows.length) h += `<div class="unk">No station within ${a.within.toLocaleString()} ly ${sell ? "takes" : "has"} ${tons(n)} with data under ${a.age} days. Try further, or older data.</div>`;
   else {
     h += `<table class="lookTable"><thead><tr><th>Station</th><th class="num">Distance</th><th class="num">From star</th><th class="num">Price</th>` +
-      `<th class="num">${sell ? "Demand" : "Supply"}</th><th class="num">${sell ? `Your ${tons(q.tons)}` : "Cost"}</th><th class="num">Data</th></tr></thead><tbody>` +
+      `<th class="num">${sell ? "Demand" : "Supply"}</th><th class="num">${sell ? `Your ${tons(n)}` : "Cost"}</th><th class="num">Data</th></tr></thead><tbody>` +
       a.rows.map((r, n) => {
         const open = LK.open === n;
         let row = `<tr class="lookrow${open ? " open" : ""}" data-n="${n}"><td><span class="tw">${open ? "▾" : "▸"}</span> <b>${esc(r.station)}</b>` +
@@ -4429,6 +4470,7 @@ document.getElementById("cargoLook").addEventListener("click", e => {
     const k = b.dataset.lk;
     if (k === "close") { LK.q = null; LK.answer = null; renderLook(); return markLookRow(); }
     if (k === "price" || k === "near") { if (LK.sort !== k) { LK.sort = k; LK.open = null; loadLook(); } return; }
+    if (k === "all" || k === "ship") { if (LK.load !== k) { LK.load = k; LK.open = null; loadLook(); } return; }
     if (k === "copy") return copyText(b.dataset.name);
     if (k === "bm") return openBookmark(b.dataset.id, b.dataset.name);
     if (k === "plot") {
@@ -5014,6 +5056,23 @@ function tripBioText(t) {
   }
   return parts.join(" · ");
 }
+// History's sold column and its ✗ (S63): what the sales paid, and each death with what it was ("died 14:32: ship lost
+// (rebuy)"; a death with no Resurrect in the journal yet counts as a loss, as everywhere else)
+const soldCell = (n, title = "what Universal Cartographics and Vista Genomics paid") =>
+  `<td class="num c2hide"${n ? ` title="${esc(title)}"` : ""}>${n ? credits(n) : ""}</td>`;
+function deathWhat(d) {
+  return d.ship ? `ship lost${d.option ? ` (${d.option})` : ""}` : `the ship survived (${d.option})`;
+}
+function deathsHtml(ds) {
+  if (!ds || !ds.length) return "";
+  const title = ds.map(d => `died ${d.ts.slice(11, 16)}: ${deathWhat(d)}`).join("\n");
+  return ` <span class="lost" title="${esc(title)}">✗${ds.length > 1 ? ds.length : ""}</span>`;
+}
+function diedHtml(x) {
+  if (!x || !x.died) return "";
+  const title = `${x.died} death${x.died === 1 ? "" : "s"}, ${x.lost || 0} ship${x.lost === 1 ? "" : "s"} lost`;
+  return ` <span class="lost" title="${esc(title)}">✗${x.died > 1 ? x.died : ""}</span>`;
+}
 const openSessions = new Set();
 function renderHistory() {
   renderLastSession();
@@ -5024,23 +5083,25 @@ function renderHistory() {
   const fmt = ts => ts.slice(0, 10) + " " + ts.slice(11, 16);
   const a = h.all_time;
   document.getElementById("histAll").innerHTML = !a ? "" : `<tr class="alltime" title="every session in your journals${a.since ? ", since " + a.since.slice(0, 10) : ""}">
-      <td><b>All time</b> <span class="unk c1hide">${a.sessions.toLocaleString()} sessions</span></td>
+      <td><b>All time</b> <span class="unk c1hide">${a.sessions.toLocaleString()} sessions</span>${diedHtml(a)}</td>
       <td class="num">${a.jumps.toLocaleString()}</td><td class="num">${Math.round(a.ly).toLocaleString()}</td><td class="num hide-sm c2hide">${a.max_sol.toLocaleString()}</td>
       <td class="num">${a.firsts.toLocaleString()}</td><td class="num hide-sm c2hide">${a.bodies_first.toLocaleString()}</td><td class="num">${a.mapped.toLocaleString()}</td>
-      <td class="num hide-sm">${a.footfalls.toLocaleString()}</td><td class="num">${a.samples.toLocaleString()}</td><td class="num hide-sm c2hide">${a.codex_new.toLocaleString()}</td></tr>`;
+      <td class="num hide-sm">${a.footfalls.toLocaleString()}</td><td class="num">${a.samples.toLocaleString()}</td>${soldCell(a.sold)}<td class="num hide-sm c2hide">${a.codex_new.toLocaleString()}</td></tr>`;
   const L = h.ledger || {}, ss = L.since_last_sale, car = L.career;
   if (ss && ss.since) document.getElementById("histAll").insertAdjacentHTML("beforeend",
-    `<tr class="alltime sincesale" title="everything since your last sale to Universal Cartographics"><td><b>${dual("Since your last sale", "Since sale")}</b> <span class="unk">${ss.days} d<span class="c1hide"> · ${esc(ss.since.slice(0, 10))}</span></span></td>
+    `<tr class="alltime sincesale" title="everything since your last sale to Universal Cartographics"><td><b>${dual("Since your last sale", "Since sale")}</b> <span class="unk">${ss.days} d<span class="c1hide"> · ${esc(ss.since.slice(0, 10))}</span></span>${diedHtml(ss)}</td>
       <td class="num">${ss.jumps.toLocaleString()}</td><td class="num">${Math.round(ss.ly).toLocaleString()}</td><td class="num hide-sm c2hide">${ss.max_sol.toLocaleString()}</td>
       <td class="num">${ss.firsts}</td><td class="num hide-sm c2hide">${ss.bodies_first}</td><td class="num">${ss.mapped}</td>
-      <td class="num hide-sm">${ss.footfalls}</td><td class="num">${ss.samples}</td><td class="num hide-sm c2hide">${ss.codex_new}</td></tr>`);
+      <td class="num hide-sm">${ss.footfalls}</td><td class="num">${ss.samples}</td>${soldCell(ss.sold, "since your last sale to Universal Cartographics: what Vista Genomics paid")}<td class="num hide-sm c2hide">${ss.codex_new}</td></tr>`);
   if (car && car.Exploration) { const e = car.Exploration, o = car.Exobiology || {};
     document.getElementById("histAll").insertAdjacentHTML("beforeend",
       `<tr class="alltime career" title="the game's own statistics (your whole career, including journals Outrider never saw), as of ${esc((car.ts || "").slice(0, 10))}">
         <td><b>Career</b> <span class="unk c1hide">game statistics</span></td><td class="num">${(e.Total_Hyperspace_Jumps || 0).toLocaleString()}</td>
         <td class="num">${Math.round(e.Total_Hyperspace_Distance || 0).toLocaleString()}</td><td class="num hide-sm c2hide" title="greatest distance from your start">${Math.round(e.Greatest_Distance_From_Start || 0).toLocaleString()}</td>
         <td class="num" title="systems visited">${(e.Systems_Visited || 0).toLocaleString()}</td><td class="num hide-sm c2hide"></td><td class="num" title="planets mapped (surface scans)">${(e.Planets_Scanned_To_Level_3 || 0).toLocaleString()}</td>
-        <td class="num hide-sm">${(e.First_Footfalls || 0).toLocaleString()}</td><td class="num" title="organic species encountered">${(o.Organic_Species_Encountered || 0).toLocaleString()}</td><td class="num hide-sm c2hide"></td></tr>`); }
+        <td class="num hide-sm">${(e.First_Footfalls || 0).toLocaleString()}</td><td class="num" title="organic species encountered">${(o.Organic_Species_Encountered || 0).toLocaleString()}</td>` +
+        soldCell((e.Exploration_Profits || 0) + (o.Organic_Data_Profits || 0), "exploration profits and organic data profits, the game's statistics") +
+        `<td class="num hide-sm c2hide"></td></tr>`); }
   const fmtD = t => t ? t.slice(0, 10) : "start";
   // compact: "✗ 09-01 −12.3M" (the split between carto and bio stays in the full form and the title)
   const lossHtml = ls => ls.map(l => {
@@ -5077,13 +5138,13 @@ function renderHistory() {
       <td class="${f.state === "lost" ? "lost" : f.state === "sold" ? "sold" : "unsold"}">${f.state === "unsold" ? "aboard" : f.state}</td><td class="hide-sm c2hide">${esc((f.ts || "").slice(0, 10))}</td></tr>`).join("");
   document.getElementById("histRows").innerHTML = h.sessions.map((s, i) => {
     const open = openSessions.has(s.start);
-    return `<tr class="sess${open ? " open" : ""}" data-sess="${esc(s.start)}"><td>${dual(`${fmt(s.start)} → ${s.end.slice(11, 16)}`, `${fmt(s.start).slice(5)} → ${s.end.slice(11, 16)}`, {s2: esc(fmt(s.start).slice(5))})}</td>
+    return `<tr class="sess${open ? " open" : ""}" data-sess="${esc(s.start)}"><td>${dual(`${fmt(s.start)} → ${s.end.slice(11, 16)}`, `${fmt(s.start).slice(5)} → ${s.end.slice(11, 16)}`, {s2: esc(fmt(s.start).slice(5))})}${deathsHtml(s.deaths)}</td>
       <td class="num">${s.jumps}</td><td class="num">${s.ly.toLocaleString()}</td><td class="num hide-sm c2hide">${s.max_sol.toLocaleString()}</td>
       <td class="num">${s.firsts}</td><td class="num hide-sm c2hide">${s.bodies_first}</td><td class="num">${s.mapped}</td>
-      <td class="num hide-sm">${s.footfalls}</td><td class="num">${s.samples}</td><td class="num hide-sm c2hide">${s.codex_new}</td></tr>` +
-      (open ? `<tr><td colspan="10" class="systems">${s.systems.map(x => `<span><span class="name" data-name="${esc(x.name)}" title="click to copy">${esc(x.name)}</span>` +
+      <td class="num hide-sm">${s.footfalls}</td><td class="num">${s.samples}</td>${soldCell(s.sold)}<td class="num hide-sm c2hide">${s.codex_new}</td></tr>` +
+      (open ? `<tr><td colspan="11" class="systems">${s.systems.map(x => `<span><span class="name" data-name="${esc(x.name)}" title="click to copy">${esc(x.name)}</span>` +
         `${x.kind === "CarrierJump" ? " 🚢" : x.kind === "Location" ? " ⟳" : ""} <span class="unk">${x.ts.slice(11, 16)}</span></span>`).join("")}</td></tr>` : "");
-  }).join("") || `<tr><td colspan="10" class="unk">No jumps in this period.</td></tr>`;
+  }).join("") || `<tr><td colspan="11" class="unk">No jumps in this period.</td></tr>`;
 }
 document.getElementById("histRows").addEventListener("click", e => {
   const name = e.target.closest(".name"); if (name) return copyText(name.dataset.name);

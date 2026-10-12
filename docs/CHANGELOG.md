@@ -2,6 +2,26 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · History's sold and ✗, how fresh a confirmed count is, one shipload, Recount refuses typos
+- **History: sold and ✗** (S63): a "sold" column after 🧬 (what Universal Cartographics and Vista Genomics paid in that
+  session, every sale; the all-time and "since your last sale" rows too, the career row from the game's exploration
+  and organic data profits), and ✗ in a session's cell for a death, its hover each one with what it was ("died 14:32:
+  ship lost (rebuy)", "the ship survived (recover)"; a death with no Resurrect yet counts as a loss, as everywhere);
+  the all-time row's ✗ says the deaths and the ships lost. `COUNT_QUERIES` gain `sold`, `died`, `lost`
+  (`SHIP_LOSS_SQL`); each session carries `deaths`. A Resurrect now has History ask again (it waited for the next jump
+  or sale, so the ✗ said "ship lost" after a recover).
+- **How fresh "confirmed" is** (S58): a sell order's count says its age from a day on ("✓ 9 d"), amber after a week,
+  and then the carrier's heading says "Sell-order counts read 12 days ago: open your carrier's commodity market while
+  docked there to refresh them".
+- **One shipload or all of it** (S56): a Sell / Buy lookup for more than the ship's hold (its capacity, not what is
+  free) switches between "All 16,000 t" and "One shipload 720 t" ("≈ 23 shiploads for all of it"), asking Spansh for
+  that much: "Sell 720 t of 16,000 t". Not shown before a Loadout gives the hold. Page only.
+- **Recount refuses typos** (S57): a name added in Recount must be one your journal has given or one Spansh lists (the
+  copy the lookup keeps; fetched once by Recount when there is none), stored by Spansh's spelling, Low Temperature
+  Diamonds and Void Opal by the journal's id; anything else is refused with up to three close names, "Not a commodity:
+  “Titanum”. Did you mean: [Titanium] [Tritium]", a click putting one in the row. A typo used to make a line of its own
+  that nothing would ever move.
+
 ## 2026-10-12 · Progress while reading journals, and Outrider as a service
 - **The page answers while Outrider starts** (S9): a small starting app takes the port before the database is opened,
   so a long first start or journal re-read shows "ED Outrider is starting · Reading your journals: March 2024, 41%"

@@ -1631,6 +1631,115 @@ const settle = async maxMs => {
     console.log(goodLK ? "OK" : "FAIL", "| cargo lookup |", goodLK ? "Sell asks for the line, the answer and an opened row, Closest and carriers ask again" :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
   }
+  // S58: a confirmed count says how old it is ("✓ 9 d" from a day on, amber over 7) and, past 7 days, the carrier's heading
+  // asks for a market read; S56: a line bigger than the ship's hold can be asked as one shipload (hold capacity), not
+  // before a Loadout says the hold; S57: Recount refuses a name that is no commodity with "Did you mean" buttons
+  {
+    const w = dom.window, d = w.document, before = errors.length;
+    w.eval(`window.__s5Asked = []; window.__s5Real = apiJson; window.__s5Recount = []; window.__s5Cargo = cargoData;
+      apiJson = async (u, o) => {
+        const s = String(u);
+        if (s.startsWith("api/cargo/recount")) { __s5Recount.push(o.body);
+          return /Titanum/.test(o.body) ? {error: "Not a commodity: 'Titanum'. Did you mean: Titanium, Tritium?", name: "Titanum",
+                                            suggestions: ["Titanium", "Tritium"], journal_only: false} : {ok: true, saved: 1, skipped: [], cargo: cargoData}; }
+        if (!s.startsWith("api/cargo/lookup")) return __s5Real(u, o);
+        __s5Asked.push(s);
+        return {commodity: "Tritium", mode: "sell", tons: 1, from: "carrier", where: "X", avg: null, sort: "price", within: 500, age: 14,
+                carriers: false, pad: "L", pad_known: true, count: 0, rows: []};
+      };`);
+    const got = JSON.parse(w.eval(`(() => {
+      const o = {}, ago = days => new Date(Date.now() - days * 86400000 - 3600000).toISOString();
+      const cg = (days, cap) => ({ship: {name: "Hauler", capacity: cap, lines: []},
+        carrier: {name: "C", total: 16010, reported: 16010, gap: 0, market_ts: ago(days), lines: [
+          {id: "tritium", name: "Tritium", count: 16000, state: "confirmed", ts: ago(days), moves: []},
+          {id: "water", name: "Water", count: 10, state: "seen", ts: ago(40), moves: []}]}});
+      const line = () => document.querySelector('#cargoList tr[data-cid="tritium"] td').textContent.trim();
+      const age = () => { const x = document.querySelector('#cargoList tr[data-cid="tritium"] .cage'); return x ? x.className : null; };
+      const note = () => (document.querySelector("#cargoList .cstale") || {}).textContent || null;
+      renderCargo(cg(9, 720)); o.old = [line(), age(), note()];
+      o.seenAge = !document.querySelector('#cargoList tr[data-cid="water"] .cage');
+      renderCargo(cg(3, 720)); o.recent = [line(), age(), note()];
+      renderCargo(cg(0, 720)); o.today = [line(), age(), note()];
+      return JSON.stringify(o); })()`));
+    const bad = [];
+    if (got.old[0] !== "✓ 9 d Tritium" || !/warnc/.test(got.old[1]) ||
+        got.old[2] !== "Sell-order counts read 9 days ago: open your carrier's commodity market while docked there to refresh them.") bad.push("9 days");
+    if (!got.seenAge) bad.push("a seen line has no age");
+    if (got.recent[0] !== "✓ 3 d Tritium" || /warnc/.test(got.recent[1]) || got.recent[2] !== null) bad.push("3 days");
+    if (got.today[0] !== "✓ Tritium" || got.today[1] !== null || got.today[2] !== null) bad.push("today");
+    // S56: the carrier's 16,000 t, a 720 t hold
+    d.querySelector('#cargoList tr[data-cid="tritium"] [data-look="sell"]').click(); await sleep(50);
+    const look = d.getElementById("cargoLook");
+    const all = {head: look.querySelector(".lookhead").textContent, bar: look.querySelector(".lookbar").textContent};
+    look.querySelector('[data-lk="ship"]').click(); await sleep(50);
+    const one = {head: look.querySelector(".lookhead").textContent, on: (look.querySelector(".lookload .on") || {}).textContent,
+                 bar: look.querySelector(".lookbar").textContent};
+    look.querySelector('[data-lk="all"]').click(); await sleep(50);
+    const asked = w.eval("__s5Asked.slice()").map(u => new URLSearchParams(u.split("?")[1]).get("tons"));
+    w.eval(`renderCargo(Object.assign({}, cargoData, {ship: {name: "Hauler", capacity: null, lines: []}})); renderLook();`);
+    const noLoadout = !look.querySelector(".lookload") && /^Sell 16,000 t Tritium/.test(look.querySelector(".lookhead").textContent);
+    look.querySelector('[data-lk="close"]').click();
+    if (!/^Sell 16,000 t Tritium/.test(all.head) || !/All 16,000 tOne shipload 720 t/.test(all.bar) || !/≈ 23 shiploads for all of it/.test(all.bar)) bad.push("all");
+    if (!/^Sell 720 t of 16,000 t Tritium/.test(one.head) || one.on !== "One shipload 720 t" || !/where they take all 720 t/.test(one.bar)) bad.push("one shipload");
+    if (JSON.stringify(asked) !== JSON.stringify(["16000", "720", "16000"])) bad.push("asked " + JSON.stringify(asked));
+    if (!noLoadout) bad.push("no Loadout: no switch");
+    // S57: Recount's new row with a typo
+    w.eval(`openRecount(); document.getElementById("recountAdd").click();
+      const r = [...document.querySelectorAll("#recountRows tr")].pop(); r.querySelector(".rcname").value = "Titanum";
+      r.querySelector("input[data-rc]").value = "5";`);
+    d.getElementById("recountSave").click(); await sleep(50);
+    const msg = d.getElementById("recountMsg");
+    const typo = {open: d.getElementById("recountDlg").open, msg: msg.hidden ? null : msg.textContent.trim(),
+                  bad: !!d.querySelector("#recountRows .rcname.bad")};
+    msg.querySelector('[data-rcfix="Titanium"]').click();
+    const fixed = {name: d.querySelector("#recountRows .rcname").value, hidden: msg.hidden, bad: !!d.querySelector("#recountRows .rcname.bad")};
+    d.getElementById("recountSave").click(); await sleep(50);
+    const sent = w.eval("__s5Recount.slice()");
+    w.eval(`tabClose(document.getElementById("recountDlg")); apiJson = __s5Real; renderCargo(__s5Cargo)`);
+    if (!typo.open || typo.msg !== "Not a commodity: “Titanum”. Did you mean: Titanium Tritium" || !typo.bad) bad.push("typo " + JSON.stringify(typo));
+    if (fixed.name !== "Titanium" || !fixed.hidden || fixed.bad) bad.push("fixed " + JSON.stringify(fixed));
+    if (sent.length !== 2 || !/"Titanium":5/.test(sent[1]) || d.getElementById("recountDlg").open) bad.push("saved " + JSON.stringify(sent));
+    const goodS5 = !bad.length && errors.length === before;
+    allOk = allOk && goodS5;
+    console.log(goodS5 ? "OK" : "FAIL", "| S58 S56 S57 cargo |", goodS5 ? "✓ 9 d and the stale note, One shipload asks 720 t of 16,000 t, Recount's Did you mean" :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+  }
+  // S63: History's sold column after 🧬 and the ✗ in a session's cell, its hover saying each death and what it was
+  {
+    const w = dom.window, before = errors.length;
+    const got = JSON.parse(w.eval(`(() => {
+      const h = histData, open = new Set(openSessions), o = {};
+      const sess = (start, deaths, sold) => ({start, end: start.slice(0, 11) + "23:00:00Z", from: start, until: null, jumps: 3, ly: 40, max_sol: 100,
+        firsts: 1, bodies_first: 2, mapped: 1, footfalls: 0, samples: 2, codex_new: 0, sold, died: deaths.length, lost: 0, deaths, systems: []});
+      histData = {sessions: [sess("2026-10-02T14:00:00Z", [{ts: "2026-10-02T14:32:00Z", option: "rebuy", ship: true},
+                                                          {ts: "2026-10-02T15:10:00Z", option: "recover", ship: false}], 52300000),
+                             sess("2026-10-01T14:00:00Z", [], 0)],
+                  all_time: {jumps: 6, ly: 80, max_sol: 100, sessions: 2, since: "2026-10-01T14:00:00Z", firsts: 2, bodies_first: 4, mapped: 2,
+                             footfalls: 0, samples: 4, codex_new: 0, sold: 52300000, died: 2, lost: 1}, ledger: {trips: [], losses: []}};
+      openSessions.clear(); openSessions.add("2026-10-01T14:00:00Z"); renderHistory();
+      const rows = [...document.querySelectorAll("#histRows tr")];
+      o.heads = [...document.querySelectorAll("#histTable thead th")].map(t => t.textContent);
+      o.cells = rows.map(r => r.cells.length);
+      o.colspan = rows[2].cells[0].colSpan;
+      o.x = (rows[0].querySelector(".lost") || {}).title || null;
+      o.xText = (rows[0].querySelector(".lost") || {}).textContent || null;
+      o.none = !rows[1].querySelector(".lost");
+      o.sold = [rows[0].cells[9].textContent, rows[1].cells[9].textContent];
+      const all = document.querySelector("#histAll tr.alltime");
+      o.all = [all.cells.length, all.cells[9].textContent, (all.querySelector(".lost") || {}).title || null];
+      openSessions.clear(); open.forEach(x => openSessions.add(x)); histData = h; if (h) renderHistory();
+      return JSON.stringify(o); })()`));
+    const bad = [];
+    if (got.heads.length !== 11 || got.heads[8] !== "🧬" || got.heads[9] !== "sold") bad.push("heading");
+    if (JSON.stringify(got.cells) !== "[11,11,1]" || got.colspan !== 11) bad.push("cells");
+    if (got.x !== "died 14:32: ship lost (rebuy)\ndied 15:10: the ship survived (recover)" || got.xText !== "✗2" || !got.none) bad.push("✗");
+    if (JSON.stringify(got.sold) !== '["52.3M",""]') bad.push("sold");
+    if (got.all[0] !== 11 || got.all[1] !== "52.3M" || got.all[2] !== "2 deaths, 1 ship lost") bad.push("all time");
+    const goodS63 = !bad.length && errors.length === before;
+    allOk = allOk && goodS63;
+    console.log(goodS63 ? "OK" : "FAIL", "| S63 history |", goodS63 ? "sold after 🧬, ✗ with each death's time and what it was, 11 columns" :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+  }
   // Nearest place to dock: the finder beside To asks api/nearest (stubbed: the scratch server has no Spansh), shows the
   // rows with the DSSA badge and the docking warnings, asks again when a filter changes (remembered per device), and
   // Plot here fills To and posts the plot

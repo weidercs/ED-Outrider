@@ -663,7 +663,15 @@ upstream project's choices, not rules of the game.
 - **Your carrier's untracked lines can be wrong** until a market read or a Recount: other players' purchases from a
   sell order are journaled nowhere, nor is a sell order that ends without a CancelTrade (cargo moved out under it).
   The total check against CarrierStats shows the gap; it is only as fresh as the last time the carrier management
-  or market was opened.
+  or market was opened. A confirmed count is as fresh as the market read: from a day on its mark says how old ("✓ 9
+  d", amber after `CONFIRM_STALE_D` 7 days, when the carrier's heading asks for a market read; S58).
+- **Recount takes only commodity names** (S57): the names your journal has given first, then Spansh's commodity list
+  (the copy the Sell / Buy lookup keeps, fetched by Recount itself when there is none yet), stored with Spansh's
+  spelling under the id its letters give; for the two whose letters are not the journal's id (`MINERAL_NAMES`: Low
+  Temperature Diamonds, Void Opal) the journal's id. Anything else is refused with up to three close names: a typo
+  used to make a line of its own that no journal event would ever move. With no copy of Spansh's list and no network
+  only your journal's names are known. A name Spansh spells differently from the game beyond those two would make a
+  second line once the journal names it (Recount 0 removes it).
 - **Market.json is read only when it changes and only kept for your own carrier;** a market opened while Outrider
   was not running is gone (the game overwrites the file at the next market), so the next one confirms instead.
 - **Trade prices are what players last reported** (Spansh, via EDDN): a stop's price or demand can have moved on, and

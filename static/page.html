@@ -155,7 +155,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
   <div class="pane" id="histPane">
   <table id="histTable">
     <thead><tr><th>Session</th><th class="num">Jumps</th><th class="num">ly</th><th class="num hide-sm c2hide">Max from Sol</th>
-      <th class="num">🏁 systems</th><th class="num hide-sm c2hide">bodies</th><th class="num">mapped</th><th class="num hide-sm">👣</th><th class="num">🧬</th><th class="num hide-sm c2hide">📖</th></tr></thead>
+      <th class="num">🏁 systems</th><th class="num hide-sm c2hide">bodies</th><th class="num">mapped</th><th class="num hide-sm">👣</th><th class="num">🧬</th><th class="num c2hide" title="what Universal Cartographics and Vista Genomics paid">sold</th><th class="num hide-sm c2hide">📖</th></tr></thead>
     <tbody id="histAll"></tbody>
     <tbody id="histRows"></tbody>
   </table>
@@ -859,6 +859,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     <h3 id="recountTitle">Recount your carrier</h3>
     <p class="hint" id="recountHint"></p>
     <table id="recountRows"></table>
+    <p class="hint warnc" id="recountMsg" hidden></p>
     <div class="btns">
       <button type="button" id="recountAdd" title="a commodity Outrider has not seen at your carrier">+ Add a commodity</button>
       <span class="grow"></span>

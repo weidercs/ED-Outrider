@@ -11,12 +11,15 @@ The **Materials** tab starts with your **Cargo**.
 - **Your fleet carrier's hold** is not written anywhere whole, so Outrider tracks it:
   - ✓ **confirmed**: a commodity on a **sell order** at your carrier. Opening its commodity market lists every sell
     order with its stock, and that stock is the count. Put a sell order (at a price nobody will pay) on everything
-    you want counted.
+    you want counted. From a day on the mark says how old that count is ("✓ 9 d", amber after a week), and after a
+    week the carrier's heading asks you to open its commodity market while docked there to refresh them.
   - ◷ **last seen**: everything else, followed from your journal (transfers, your own buying and selling there,
     orders set and cancelled). Other players' trades with your carrier are written nowhere in your journal: a buy
     order's filled part is worked out the next time you open the market.
   - ✎ **entered**: a count you typed in. **Recount…** lists the lines Outrider cannot confirm; the game's Inventory
-    screen at your carrier shows them all.
+    screen at your carrier shows them all. **+ Add a commodity** takes the names your journal has given and those
+    Spansh lists; anything else (a typo) is refused with the closest names: "Not a commodity: “Titanum”. Did you mean:
+    Titanium Tritium", a click puts one in.
   - The total is checked against the carrier's own ("✓ in sync: 16,085 t", or the tons not accounted for).
   - This is the only way to track a carrier's cargo without signing in to Frontier's servers (their companion API,
     as EDMC and Inara do). Outrider deliberately never does that: it reads your own journal files and queries only
@@ -46,6 +49,10 @@ players last reported, so the newer the data, the safer the trip.
   what your load earns and the profit over what you paid. Opened, it lists what else it buys from your hold and its
   services (and whether it buys exploration data and samples too), with Copy, Bookmark and **Plot route here**.
   **Buy something else** looks up any commodity.
+- **One shipload or all of it:** when a line is more than your ship's hold (its size, not what is free), the bar
+  switches between "All 16,000 t" and "One shipload 720 t" ("≈ 23 shiploads for all of it"); a shipload asks for
+  stations that take (or have) that much: "Sell 720 t of 16,000 t". Not shown before the game has written your ship's
+  loadout.
 - **Trade routes.** Plot Route's **Trade** plotter asks Spansh's [trade planner](https://spansh.co.uk/trade) for
   station-to-station hops from the station you are docked at, with your credits and hold (from the journal), and its
   options: hops, hop distance, distance from the star, data age, pad, planetary and player-owned stations,

@@ -1258,6 +1258,35 @@ class Batch3Server(unittest.TestCase):
         self.assertEqual([s["mapped"] for s in h["sessions"]], [1, 2])   # newest first; together = all time
         self.assertEqual(h["all_time"]["mapped"], 3)
 
+    def test_history_sold_and_deaths(self):   # S63
+        """Each session's sold (every sale, cartographics and exobiology) and its deaths with the Resurrect choice;
+        the all-time row counts the deaths and the ships lost. A Resurrect has History ask again."""
+        self.jump("2026-01-01T10:00:00Z", 1, 0)
+        self.j.handle({"event": "MultiSellExplorationData", "timestamp": "2026-01-01T10:10:00Z", "TotalEarnings": 300,
+                       "BaseValue": 300, "Bonus": 0, "Discovered": []})
+        self.j.handle({"event": "SellOrganicData", "timestamp": "2026-01-01T10:20:00Z", "MarketID": 1,
+                       "BioData": [{"Genus": "$Codex_Ent_Bacterial_Genus_Name;", "Species": "$Codex_Ent_Bacterial_01_Name;",
+                                    "Value": 1000, "Bonus": 4000}]})
+        self.j.handle({"event": "Died", "timestamp": "2026-01-01T10:30:00Z"})
+        self.j.handle({"event": "Resurrect", "timestamp": "2026-01-01T10:31:00Z", "Option": "rebuy", "Cost": 1, "Bankrupt": False})
+        self.j.handle({"event": "Died", "timestamp": "2026-01-01T10:40:00Z"})
+        self.j.handle({"event": "Resurrect", "timestamp": "2026-01-01T10:41:00Z", "Option": "recover", "Cost": 0, "Bankrupt": False})
+        self.jump("2026-01-02T10:00:00Z", 2, 10)
+        self.j.handle({"event": "Died", "timestamp": "2026-01-02T10:05:00Z"})   # no Resurrect yet: counted as a loss
+        h = self.state.history(3650 * 3)
+        new, old = h["sessions"]
+        self.assertEqual((old["sold"], new["sold"]), (5300, 0))
+        self.assertEqual([(d["ts"][11:16], d["option"], d["ship"]) for d in old["deaths"]],
+                         [("10:30", "rebuy", True), ("10:40", "recover", False)])
+        self.assertEqual([(d["option"], d["ship"]) for d in new["deaths"]], [(None, True)])
+        self.assertEqual((h["all_time"]["sold"], h["all_time"]["died"], h["all_time"]["lost"]), (5300, 3, 2))
+        self.state.apply_own_changes()
+        v = self.state.history_version
+        self.j.handle({"event": "Resurrect", "timestamp": "2026-01-02T10:06:00Z", "Option": "recover", "Cost": 0, "Bankrupt": False})
+        self.state.apply_own_changes()
+        self.assertEqual(self.state.history_version, v + 1)
+        self.assertFalse(self.state.history(3650 * 3)["sessions"][0]["deaths"][0]["ship"])
+
     def test_trip_hours_clip_sessions_at_the_sale(self):   # F16
         # one session: 3 h flying home, a sale, 1 h more exploring (jumps every 30 min keep it one session)
         t0 = ed_outrider.ts_seconds("2026-01-01T00:00:00Z")
