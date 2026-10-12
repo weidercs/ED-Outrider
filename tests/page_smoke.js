@@ -5259,6 +5259,61 @@ const settle = async maxMs => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| notices and the log |", good ? "the banner (escaped, its action, ✕ in every window), Show log with the server's lines and its file" : JSON.stringify({got, want}), errors.slice(before));
   }
+  // S43 / S44 (2026-10-12): a first run with no journals (the Data tile says where to set the folder and opens Settings ->
+  // Server with [journals] live focused; Docker's words instead; no position yet: "No FSD jump yet"), and Settings ->
+  // Server -> Backups (Back up now on the scratch server, its zip listed with what made it, the restore command for
+  // this install, Copy)
+  {
+    const w = dom.window, before = errors.length;
+    const got = JSON.parse(w.eval(`(() => {
+      const o = {}, fr0 = data.freshness, pos0 = data.position, fl = document.getElementById("freshLine");
+      data.freshness = Object.assign({}, fr0, {journal: null, missing: true, install: "git"}); render();
+      o.git = [fl.textContent.includes("no journals found · set the journal folder"), !!fl.querySelector("[data-openjournals]"),
+               document.getElementById("tData").classList.contains("warn")];
+      data.freshness.install = "docker"; render();
+      o.docker = [fl.textContent.includes("no journals in /journals: is the game PC's journal folder mounted? (JOURNALS in .env)"),
+                  !!fl.querySelector("[data-openjournals]")];
+      data.freshness.install = "git"; data.position = null; render();
+      o.nojournals = document.getElementById("here").textContent;
+      data.freshness.missing = false; render();
+      o.nojump = document.getElementById("here").textContent;
+      data.position = pos0; data.freshness.missing = true; render();
+      fl.querySelector("[data-openjournals]").click();
+      window.__fr0 = fr0;
+      return JSON.stringify(o); })()`));
+    await settle(2500);
+    got.focus = JSON.parse(w.eval(`(() => { const a = document.activeElement;
+      return JSON.stringify([document.getElementById("alertDialog").open, document.getElementById("serverSettings").open,
+        a && a.id, !!(a && a.classList.contains("srvfocus")), !!(a && a.closest('details[data-srvsec="journals"][open]'))]); })()`));
+    w.eval(`data.freshness = window.__fr0; render(); document.getElementById("srvBackups").open = true; loadBackups();`);
+    await settle(2000);
+    got.empty = w.eval(`document.getElementById("srvBackupsBody").textContent.includes("No backups yet.")`);
+    w.eval(`document.getElementById("srvBackupBtn").click()`);
+    let n = 0;
+    for (let i = 0; i < 20 && !n; i++) {
+      await sleep(500);
+      w.eval(`loadBackups()`); await settle(1000);
+      n = w.eval(`(bk.list && bk.list.backups || []).length`);
+    }
+    const copied = [];
+    const realCopy = w.copyText;
+    w.copyText = (text, what) => copied.push([text, what]);
+    got.list = JSON.parse(w.eval(`(() => { const b = document.getElementById("srvBackupsBody");
+      const row = b.querySelector("tr[data-bk]"), cmd = (document.getElementById("bkCmd") || {}).textContent || "";
+      document.getElementById("bkCopy").click();
+      return JSON.stringify([b.querySelectorAll("tr[data-bk]").length, row.classList.contains("sel"), /^outrider-scratch-\\d{8}-\\d{6}Z\\.zip$/.test(row.dataset.bk),
+        (row.querySelector(".bkkind") || {}).textContent, /launch_outrider\\.sh .*--db .*scratch\\.sqlite --restore outrider-scratch-/.test(cmd),
+        cmd === bk.list.backups[0].command, /stop Outrider, then run/.test(b.textContent)]); })()`));
+    got.copied = copied.length === 1 && copied[0][1] === "the restore command" && copied[0][0].includes("--restore outrider-scratch-");
+    w.copyText = realCopy;
+    w.eval(`document.getElementById("srvBackups").open = false; tabClose(document.getElementById("alertDialog"));`);
+    const want = {git: [true, true, true], docker: [true, false], nojournals: "no journals yet: see the Data tile",
+                  nojump: "No FSD jump yet: the page fills in after your first jump", focus: [true, true, "srv-journals-live", true, true],
+                  empty: true, list: [1, true, true, "by hand", true, true, true], copied: true};
+    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| first run and backups S43 S44 |", good ? "no journals: where to set the folder (focused), Docker's words, no jump yet; Backups listed with the restore command and Copy" : JSON.stringify({got, want}), errors.slice(before));
+  }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",
     headers: Object.assign({"Content-Type": "application/json"}, origin ? {Origin: origin} : {})}).then(r => r.status);

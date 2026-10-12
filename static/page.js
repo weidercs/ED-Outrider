@@ -390,7 +390,7 @@ function renderCarrier() {
 // the countdown ticks without new data
 setInterval(() => { if (data && data.carrier && data.carrier.planned) { renderCarrier(); if (tilesFolded) renderTilesLine(); } }, 1000);
 document.addEventListener("click", async e => {
-  if (!e.target.closest || !e.target.closest("#backupBtn")) return;
+  if (!e.target.closest || !e.target.closest("#backupBtn, #srvBackupBtn")) return;
   let r;
   try { r = await apiJson("api/backup", {method: "POST"}); }
   catch (err) { r = {error: err.message}; }   // the server is not answering (restarting, stopped)
@@ -412,7 +412,8 @@ function backupHtml(bk) {
     (warning && !error ? `the last backup worked, but: ${warning}\n` : "") +
     (bk.path ? `latest: ${bk.path}${bk.verified ? " (read back: the database passed quick_check, the zip testzip)" : ""}` : "no backup made yet") +
     // what that zip holds (the database, and your browser defaults, lines and settings when they exist)
-    (bk.path && Array.isArray(bk.files) && bk.files.length ? `\nholds: ${bk.files.join(", ")}` : "") + (bk.journals_dir ? `\njournals archived in ${bk.journals_dir} (restore: --legacy that folder)` : "") + (bk.path ? "\nrestore the database: stop Outrider, then ed_outrider.py --restore" : "") +
+    (bk.path && Array.isArray(bk.files) && bk.files.length ? `\nholds: ${bk.files.join(", ")}` : "") + (bk.journals_dir ? `\njournals archived in ${bk.journals_dir} (restore: --legacy that folder)` : "") + (bk.path && bk.restore ? `\nrestore the newest: ${data && data.freshness && data.freshness.install === "docker" ? "" : "stop Outrider, then "}${bk.restore}` +
+      " (another: Settings → Server → Backups)" : "") +
     (every > 0 ? `\nautomatic: at start when the last is over ${every} day${every === 1 ? "" : "s"} old, and when the game quits` : "\nautomatic backups are off (backup_every_days = 0)");
   // the warning's detail (which file, why) is in the title: the line keeps "1 journal not archived (…)"
   const warnShort = warning && !error ? warning.replace(/\s*\(.*$/s, "") + (/\(/.test(warning) ? " (…)" : "") : "";
@@ -420,6 +421,15 @@ function backupHtml(bk) {
                 bk.journals_to && !warnShort ? `journals to ${bk.journals_to}` : "", warnShort].filter(Boolean);
   return `<span class="${cls}" title="${esc(title)}">${esc(bits.join(" · "))}${error ? " · last one failed" : ""}</span> <button type="button" id="backupBtn" class="mini">back up now</button>`;
 }
+// No position yet (S43): no journals at all (the Data tile says where to set the folder), or journals without a jump
+const noJumpText = () => data && data.freshness && data.freshness.missing ? "no journals yet: see the Data tile"
+  : "No FSD jump yet: the page fills in after your first jump";
+document.addEventListener("click", e => {   // the Data tile's "set the journal folder" (S43)
+  const a = e.target.closest && e.target.closest("[data-openjournals]");
+  if (!a) return;
+  e.preventDefault();
+  openServerSettings("journals", "live");
+});
 // The discovery streak: the last 20 arrivals as dots, each coloured when its arrival star was scanned and never
 // again: gold new (nobody had discovered it), amber known with bodies Spansh had not heard of, blue fully
 // reported, grey visited before, hollow known but Spansh had nothing on it at the time, blank not scanned.
@@ -516,7 +526,13 @@ function renderStrip() {
     const stale = fr.live && !fr.simulated, cls = stale && age > 10 ? "bad" : stale && age > 3 ? "warn" : "";
     dot = cls; tcls = cls === "bad" ? "urgent" : cls;
     text = `journal ${esc(fr.journal.slice(11, 16))} UTC` + (age >= 1 ? ` · ${age < 90 ? Math.round(age) + " min" : Math.round(age / 60) + " h"} ago` : "") + (fr.live ? "" : " · game off");
-  } else text = fr && !fr.dirs.length ? "no journal folder — pass --journals" : "waiting for a journal";
+  } else if (fr && fr.missing) {
+    // S43: a first run on an empty or wrong folder (or none): where to set it. Docker's folder is the /journals mount,
+    // set in .env; the tablet has no Server settings
+    dot = "warn"; tcls = "warn";
+    text = fr.install === "docker" ? esc(DOCKER_NO_JOURNALS) : TABLET ? "no journals found: set the journal folder in Server settings on the PC"
+      : `no journals found · <a href="#" data-openjournals title="Settings → Server → [journals] live">set the journal folder</a>`;
+  } else text = "waiting for a journal";
   const failed = /failed|error/.test(data.status || "");
   const problems = [disconnected && `NOT CONNECTED since ${disconnected}`, data.tail_error && "journal tailing error — see the terminal",
                     pageError && `page error (${esc(pageError)}) — see the browser console`,
@@ -525,10 +541,11 @@ function renderStrip() {
   td.className = "tile " + tcls; td.title = data.tail_error || data.status || "";
   // the folded tiles' line names it, in a few words, when the tile is coloured (the tile has the detail)
   dataBit = disconnected ? `not connected since ${disconnected}` : data.tail_error ? "journal tailing error" : pageError ? "page error"
-    : failed ? (/spansh/i.test(data.status || "") ? "Spansh failed" : "server error") : text;
+    : failed ? (/spansh/i.test(data.status || "") ? "Spansh failed" : "server error") : fr && !fr.journal && fr.missing ? "no journals found" : text;
   fl.innerHTML = val(`<span class="dot ${dot}"></span>${text}`);
   sl.innerHTML = problems.length ? problems.join(" · ") : /^asking|^fetching/.test(data.status || "") ? esc(data.status) : "Spansh ok";
   document.getElementById("backupLine").innerHTML = backupHtml(data.backup || {});
+  backupsFollow(data.backup || {});
   document.getElementById("uploadLine").innerHTML = uploadLineHtml(data.uploads);
   // docked somewhere that buys data with a worthwhile amount aboard: say so plainly
   const dk = data.docked, sellHere = sellableHere(dk, data.unsold), se = document.getElementById("sell");
@@ -633,7 +650,7 @@ function tilesLineHtml() {
   const p = data.position, f = data.fuel, cm = data.commander, u = data.unsold, c = data.carrier;
   const bit = (html, lvl, title) => `<span class="tl${lvl ? " tl-" + lvl : ""}"${title ? ` title="${esc(title)}"` : ""}>${html}</span>`;
   const ly = d => `${d.toLocaleString("en-US", {maximumFractionDigits: d < 10 ? 1 : 0})} ly`;
-  const out = [p ? `<span class="copy tl-sys" data-name="${esc(p.name)}" title="click to copy">${esc(p.name)}</span>` : `<span class="unk">waiting for your first jump…</span>`];
+  const out = [p ? `<span class="copy tl-sys" data-name="${esc(p.name)}" title="click to copy">${esc(p.name)}</span>` : `<span class="unk">${esc(noJumpText())}</span>`];
   if (f && f.live && f.main != null) out.push(bit(`⛽ ${f.pct != null ? f.pct + "%" : f.main.toFixed(1) + " t"}`, tileLevel("tFuel"), "fuel in the main tank"));
   if (cm && cm.credits != null) out.push(bit(`${credits(cm.credits)} cr`, "", "credits at login plus exploration and exobiology sales since"));
   if (u && !u.error && u.total != null) out.push(bit(`unsold ${credits(u.total)}`, tileLevel("tUnsold"), "unsold data on board (estimate): hover the tiles for the detail"));
@@ -877,7 +894,7 @@ function renderRoute() {
 function renderNow() {
   drawNowBar();
   const el = document.getElementById("nowBody"), p = data.position, f = data.fuel, t = data.target, a = data.arrival;
-  if (!p) { el.innerHTML = `<div class="now-sys">waiting for your first jump…</div>`; renderSurface(); return; }
+  if (!p) { el.innerHTML = `<div class="now-sys">${esc(noJumpText())}</div>`; renderSurface(); return; }
   const lines = [`<div class="now-sys">${esc(p.name)}</div>`];
   // the arrival verdict, for twenty seconds after a jump
   if (a && a.id64 === posId() && Date.now() - Date.parse(a.ts) < 20000)
@@ -2709,7 +2726,7 @@ function render() {
   const fkHere = focusKey("here");
   // where you jumped from, beside the name in the lines' smaller font (S75: it had a line of its own, "came from")
   const prev = data.previous, from = prev && p ? `from ${prev.name} (${Math.hypot(prev.x - p.x, prev.y - p.y, prev.z - p.z).toFixed(1)} ly)` : "";
-  document.getElementById("here").innerHTML = !p ? "waiting for your first jump…" :
+  document.getElementById("here").innerHTML = !p ? esc(noJumpText()) :
     `<span class="copy" data-name="${esc(p.name)}" title="click to copy"` +
     (known ? ` data-pop data-id="${esc(here.id)}"` : "") + `>${esc(p.name)}</span>` + (here ? firstsIcon(here.firsts) : "") +
     (here ? bmIcon(here.id, here.name, bms) : "") + (from ? ` <span class="from" title="${esc(from)}">${esc(from)}</span>` : "");
@@ -8992,7 +9009,7 @@ function setSecsRestore() {
 setSecs.forEach(d => d.addEventListener("toggle", () => {
   const open = Object.fromEntries(setSecs.map(x => [x.dataset.secKey, x.open]));
   store.set("settingsOpen", open);
-  if (d.id === "serverSettings" && d.open) loadServerSettings();
+  if (d.id === "serverSettings" && d.open) { loadServerSettings(); if (document.getElementById("srvBackups").open) loadBackups(); }
 }));
 document.getElementById("setOpenAll").onclick = () => setSecs.forEach(d => { d.open = true; });
 document.getElementById("setCloseAll").onclick = () => setSecs.forEach(d => { d.open = false; });
@@ -9038,6 +9055,8 @@ if (!TABLET) {
 // Outrider's next start. Grouped by the file's sections, each folding; the password and the AI key are never shown,
 // only whether they are set. Only the keys you change are written: the file keeps its comments and other keys.
 const SRV_SET_OPEN = {};   // which config sections are open in this window
+let srvFocus = null;       // the id of the field openServerSettings(section, key) asked for, focused once drawn
+const DOCKER_NO_JOURNALS = "no journals in /journals: is the game PC's journal folder mounted? (JOURNALS in .env)";
 async function loadServerSettings() {
   const box = document.getElementById("serverSettingsBody");
   let c;
@@ -9070,6 +9089,9 @@ async function loadServerSettings() {
   box.querySelectorAll("[data-key]").forEach(el => { el.dataset.orig = srvValue(el); });
   box.querySelectorAll("details.srvsec").forEach(d => d.addEventListener("toggle", () => { SRV_SET_OPEN[d.dataset.srvsec] = d.open; }));
   document.getElementById("srvSave").onclick = saveServerConfig;
+  const focus = srvFocus && document.getElementById(srvFocus);
+  srvFocus = null;
+  if (focus) { focus.classList.add("srvfocus"); focus.focus(); }
 }
 // a field's value as it is sent (and compared with what it was when drawn: only changes are saved)
 function srvValue(el) {
@@ -9102,13 +9124,77 @@ async function saveServerConfig() {
   m.textContent = `Saved ${r.changed} setting${r.changed === 1 ? "" : "s"}: restart Outrider to use ${r.changed === 1 ? "it" : "them"}.`; m.className = "hint ok";
 }
 // Settings opened on Server settings (a notice's button): `section`, a config section to unfold ("journals")
-function openServerSettings(section) {
+function openServerSettings(section, key) {
   if (section) SRV_SET_OPEN[section] = true;
+  srvFocus = section && key ? `srv-${section}-${key}` : null;   // that key's field gets the focus once drawn (S43)
   if (!alertDialog.open) document.getElementById("alertsBtn").click();
   const i = alertSections.findIndex(s => s.id === "serverSettings"), d = alertSections[i];
   const wasOpen = d.open;
   showAlertSection(i);
   if (wasOpen) loadServerSettings();   // already open: no toggle event to draw it again with that section open
+}
+
+// ---- Settings -> Server -> Backups (S44): this database's zips (GET api/backups), newest first, with what made each
+// when that is known (a re-read's is in its name; automatic or by hand only for the latest, from last_backup), Back up
+// now, and the command that restores the one picked (the newest unless another row is clicked) for this install, with
+// Copy. No restore button: Outrider must be stopped for it.
+const BK_KIND = {"pre-reread": ["before a re-read", "taken by itself before a journal re-read"],
+                 auto: ["automatic", "at start or when the game quit"], manual: ["by hand", "Back up now"]};
+const bk = {list: null, pick: null, seen: null, gen: 0};
+async function loadBackups() {
+  const gen = ++bk.gen;
+  let r;
+  try { r = await apiJson("api/backups"); } catch { r = {error: "Outrider not reachable"}; }
+  if (gen !== bk.gen) return;
+  bk.list = r || {error: "?"};
+  renderBackups();
+}
+function renderBackups() {
+  const box = document.getElementById("srvBackupsBody"), r = bk.list;
+  if (!box || !r) return;
+  const rows = Array.isArray(r.backups) ? r.backups : [];
+  if (!rows.some(b => b.name === bk.pick)) bk.pick = rows.length ? rows[0].name : null;
+  const pick = rows.find(b => b.name === bk.pick), docker = r.install === "docker";
+  const when = t => new Date(t * 1000).toLocaleString([], {year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"});
+  const every = Number(r.every_days) || 0;
+  box.innerHTML = (r.folder ? `<div class="hint">In <code>${esc(r.folder)}</code>, newest first: the newest ${esc(r.keep)} are kept. ` +
+      (every > 0 ? `Automatic at start when the last is over ${every} day${every === 1 ? "" : "s"} old, and when the game quits;` : "Automatic backups are off;") +
+      ` one is always taken before a journal re-read.</div>` : "") +
+    (r.error ? `<div class="hint warnc">Cannot list the backups: ${esc(r.error)}</div>` : "") +
+    (rows.length ? `<table class="bklist"><thead><tr><th>Backup</th><th>Made</th><th>Size</th></tr></thead><tbody>` + rows.map(b => {
+      const k = BK_KIND[b.kind];
+      return `<tr data-bk="${esc(b.name)}"${b.name === bk.pick ? ` class="sel" aria-selected="true"` : ""} tabindex="0" title="click: the command below restores this one">` +
+        `<td><code>${esc(b.name)}</code>${k ? ` <span class="bkkind ${esc(b.kind)}" title="${esc(k[1])}">${esc(k[0])}</span>` : ""}</td>` +
+        `<td>${esc(when(b.ts))}</td><td class="num">${(b.size / 1e6).toFixed(1)} MB</td></tr>`;
+    }).join("") + `</tbody></table>` : r.error ? "" : `<div class="hint">No backups yet.</div>`) +
+    `<div class="btns"><button type="button" id="srvBackupBtn"${r.running ? " disabled" : ""}>Back up now</button>` +
+    `<span class="hint">${r.running ? "backing up…" : ""}</span></div>` +
+    (pick ? `<div class="bkcmd"><div class="hint">To restore <b>${esc(pick.name)}</b>: ${docker ? "in the folder with docker-compose.yml, run" : "stop Outrider, then run"}</div>` +
+      `<div class="bkline"><code id="bkCmd">${esc(pick.command)}</code> <button type="button" id="bkCopy">Copy</button></div>` +
+      `<div class="hint">It checks the zip first and keeps the database it replaces beside it (<code>…pre-restore-&lt;date-time&gt;</code>).` +
+      `${docker ? "" : " It refuses while Outrider is running."}</div></div>` : "");
+}
+document.getElementById("srvBackupsBody").addEventListener("click", e => {
+  const row = e.target.closest("tr[data-bk]");
+  if (row) { bk.pick = row.dataset.bk; renderBackups(); return; }
+  if (e.target.closest("#bkCopy")) {
+    const pick = ((bk.list && bk.list.backups) || []).find(b => b.name === bk.pick);
+    if (pick) copyText(pick.command, "the restore command");
+  }
+});
+document.getElementById("srvBackupsBody").addEventListener("keydown", e => {
+  const row = e.target.closest("tr[data-bk]");
+  if (row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); bk.pick = row.dataset.bk; renderBackups(); }
+});
+document.getElementById("srvBackups").addEventListener("toggle", e => { if (e.target.open) loadBackups(); });
+// a backup started or finished (the payload's backup line): the list follows while it is open
+function backupsFollow(b) {
+  const key = `${b.ts || ""}|${!!b.running}`;
+  if (key === bk.seen) return;
+  const first = bk.seen === null;
+  bk.seen = key;
+  const d = document.getElementById("srvBackups");
+  if (!first && d && d.open && document.getElementById("serverSettings").open) loadBackups();
 }
 
 // ---- Outrider's own log (S5b): Settings -> Server's Show log. What the server printed in its terminal since it
@@ -9164,7 +9250,7 @@ document.getElementById("logDlg").addEventListener("close", () => { srvLog.gen++
 // action is a name mapped here to a button; one this page does not know (or the tablet cannot do) is left out.
 const NOTICE_ACTIONS = {
   "open:server": ["Server settings", () => openServerSettings()],
-  "open:server:journals": ["Journal folders", () => openServerSettings("journals")],
+  "open:server:journals": ["Journal folders", () => openServerSettings("journals", "live")],
   "open:log": ["Show log", () => openServerLog()],
 };
 const NOTICE_MARK = {info: "ⓘ", warn: "⚠", bad: "⛔"};

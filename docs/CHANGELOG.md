@@ -2,6 +2,30 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · A backup before every journal re-read, Backups in Settings, the first run with no journals
+- **A backup before a journal re-read** (S4): when an update (or `--rescan`) makes Outrider read every journal again, the
+  database is backed up first, before any row is cleared, even with `backup_every_days = 0` (the one destructive step
+  Outrider takes by itself). The zip is `outrider-<db>-<stamp>Z-pre-reread.zip` (the tag after the stamp: it sorts
+  and rotates with the others; `--restore`, `--list-backups` and the leftover sweep know it); the Data tile's backup
+  line is not changed by it. A failed one does not stop the re-read: the terminal and the banner say so. More than
+  half the journal files the database was read from gone (an uninstall under Steam/Proton): the banner says so, with
+  `--legacy <backups>/journals`. `write_backup` is lifted out of `make_backup`; `open_db(before_reset=)` runs it.
+- **Settings → Server → Backups** (S44): the zips, newest first, size and time, "before a re-read" from the name, and
+  "automatic" or "by hand" for the latest only (a zip's name does not say it; the others say nothing); Back up now;
+  the command that restores the one you click for this install, with Copy: `./launch_outrider.sh --restore NAME`,
+  `launch_outrider.bat --restore NAME` (with `--config`/`--db` when Outrider was started with them), or for Docker
+  `docker compose stop && docker compose run --rm outrider --restore NAME && docker compose up -d`. No restore button
+  (Outrider must be stopped). GET `/api/backups`. The install guide's Backups section and the Data tile's title give
+  the working commands (they said `python3 ed_outrider.py --restore`).
+- **`--restore` refuses while Outrider is running, from any port or container** (S44): a running Outrider holds an OS
+  lock on `<db>.lock` beside the database for its whole run (gone with the process, however it ends); the port check
+  could not see a Docker container. A second Outrider started on the same database is said on the banner.
+- **A first run with no journals** (S43): the Data tile says "no journals found · set the journal folder", which opens
+  Settings → Server with `[journals] live` focused (the banner's Journal folders button too); in Docker instead "no
+  journals in /journals: is the game PC's journal folder mounted? (JOURNALS in .env)". A banner says the same while
+  the folder holds no journal and goes with the first one read. With journals but no jump yet the views say "No FSD
+  jump yet: the page fills in after your first jump". The payload's `freshness` carries `missing` and `install`.
+
 ## 2026-10-12 · Show log, and start-up problems on a banner
 - **Show log** (S5b): Settings → Server's top row says "Outrider <version> · Show log". The log is what Outrider prints
   in its terminal, kept from the first line (its last 2,000 lines, GET `/api/serverlog`, behind the sign-in), in a

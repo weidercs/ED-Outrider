@@ -1033,7 +1033,7 @@ radius = {n(st["radius"])}      # ly: the sphere of nearby systems the page list
 radius_choices = [{", ".join(n(x) for x in st["radius_choices"])}]   # ly: what the page's radius dropdown offers
 backup_dir = {p(_root_relative(st["backup_dir"]))}   # backups: dated database zips, and every live journal copied once into its journals/
 backup_keep = {st["backup_keep"]}   # dated database zips kept (the journal archive is never pruned)
-backup_every_days = {n(st["backup_every_days"])}   # automatic backup at start when the last is older than this, and when the game quits (0 = off)
+backup_every_days = {n(st["backup_every_days"])}   # automatic backup at start when the last is older than this, and when the game quits (0 = off; a journal re-read is still backed up first)
 speech_file = {p(_root_relative(st["speech_file"]))}   # the spoken alerts' lines, per personality
 db = {p(_root_relative(st["db"]))}   # the database: everything Outrider knows (relative paths start at the Outrider folder)
 
@@ -1606,7 +1606,11 @@ def reread_message(old, rescan=False):
             + "). This can take a few minutes.")
 
 
-def open_db(path, rescan=False, on_reread=None):
+def open_db(path, rescan=False, on_reread=None, before_reset=None):
+    """The database at `path`, its schema brought up to date. A journal re-read (PARSER_VERSION changed, or `rescan`)
+    clears the journal-derived tables (RESET_JOURNAL_DATA): `on_reread(why)` is told first, then, for a database that
+    was in use (its stored parser version is not None: a crashed first run leaves an empty file), `before_reset(db)`
+    runs before any row is deleted: run()'s backup before the re-read (S4, backup_before_reread). Tests pass none."""
     db = sqlite3.connect(path)
     db.row_factory = sqlite3.Row
     db.executescript(SCHEMA + outrider.uploads.SCHEMA)
@@ -1637,6 +1641,9 @@ def open_db(path, rescan=False, on_reread=None):
     if rescan or old != PARSER_VERSION:
         if on_reread:
             on_reread(reread_message(old, rescan))
+        if before_reset and old is not None:
+            db.commit()   # the backup reads the file through its own connection: nothing of this one's left pending
+            before_reset(db)
         stamp_next_stop(db)
         db.executescript(RESET_JOURNAL_DATA)
         meta_set(db, "parser_version", PARSER_VERSION)
@@ -5754,12 +5761,19 @@ def copy_database(src, dst, pages=256, pause=0.005, restarts=5):
         src.backup(dst)
 
 
-def backup_name(db_path, t=None):
+def backup_name(db_path, t=None, tag=""):
     """The dated zip for a backup of db_path: outrider-<database name>-YYYYMMDD-HHMMSSZ.zip, in UTC (a clock
     going back an hour or a timezone change must not make a new zip sort before older ones). Named after the
-    database so a second instance run with --db, sharing the backups folder, rotates only its own zips."""
+    database so a second instance run with --db, sharing the backups folder, rotates only its own zips. A `tag`
+    ("pre-reread": the backup before a journal re-read, S4) goes AFTER the stamp, so the zip sorts by its time with the
+    others and rotates out with them (a prefix would sort after every dated zip, never rotate out and become
+    --restore's default for good)."""
     stem = os.path.splitext(os.path.basename(db_path))[0]
-    return f"outrider-{stem}-{time.strftime('%Y%m%d-%H%M%S', time.gmtime(t))}Z.zip"
+    return f"outrider-{stem}-{time.strftime('%Y%m%d-%H%M%S', time.gmtime(t))}Z{'-' + tag if tag else ''}.zip"
+
+
+BACKUP_TAGS = ("pre-reread",)   # backup_name's tags: backup_zips, the leftover sweep and the Backups list know them
+_TAG_RE = "(?:" + "|".join(re.escape("-" + t) for t in BACKUP_TAGS) + ")?"
 
 
 def _same_journal(src, out):
@@ -5824,10 +5838,10 @@ def archive_journals(dirs, dest):
 
 
 def backup_zips(folder, db_path):
-    """db_path's dated zips in `folder` (see backup_name; for the default database also the older
+    """db_path's dated zips in `folder` (see backup_name, tagged ones too; for the default database also the older
     outrider-YYYYMMDD-HHMMSS.zip names), oldest first. Raises OSError when the folder cannot be listed."""
     stem = os.path.splitext(os.path.basename(db_path))[0]
-    mine = re.compile(re.escape(f"outrider-{stem}-") + r"\d{8}-\d{6}Z\.zip")
+    mine = re.compile(re.escape(f"outrider-{stem}-") + r"\d{8}-\d{6}Z" + _TAG_RE + r"\.zip")
     legacy = os.path.basename(db_path) == os.path.basename(DB_PATH)
     return sorted((f for f in os.listdir(folder)
                    if (mine.fullmatch(f) or (legacy and LEGACY_BACKUP_NAME.fullmatch(f)))
@@ -5873,6 +5887,135 @@ def rotate_backups(folder, keep, db_path, current=None):
     for f in drop:
         os.remove(os.path.join(folder, f))
     return len(zips) - len(drop)
+
+
+def backup_extras(speech_path, config_path, pronounce_path):
+    """The files a backup zip holds beside the database (your lines, the ones you banned, your settings and your
+    pronunciations): (path, name in the zip); write_backup leaves out the ones that do not exist."""
+    banned = outrider.speech.banned_path(speech_path) if speech_path else None
+    return [(speech_path, "speech.json"), (banned, outrider.speech.BANNED_FILE), (config_path, "ed_outrider.toml"),
+            (pronounce_path, "pronounce.json")]
+
+
+def write_backup(db_path, folder, keep, extras=(), live_dirs=(), tag=""):
+    """A backup in `folder`: a dated zip (backup_name, with `tag` after the stamp: "pre-reread") holding a consistent
+    copy of the database (SQLite's backup API, safe while the tailer writes) and the browser defaults if saved; then
+    every journal of `live_dirs` archived into folder/journals (copied once, see archive_journals); then this
+    database's dated zips beyond `keep` deleted (see backup_name). A failure before the zip is written stops it before
+    the rotation, so nothing is ever deleted for a backup that did not work; once the zip is good, a journal that could
+    not be archived is reported (warning: the backup itself worked) but the rotation still runs, so a lasting failure
+    cannot pile up zips. Legacy folders stay out of the archive: they are a copy of something already and never
+    change. The zip also holds `extras` ((path, name in the zip), see backup_extras) when they exist; one of those that
+    cannot be read is a warning too. Returns {path, size, kept, journals_to, copied, files, verified} (+ warning),
+    files being the names inside the zip. The database copy must pass SQLite's quick_check and the zip testzip()
+    before the zip replaces anything or the rotation runs; a copy or zip that fails raises (and the bad zip is
+    deleted). State.make_backup (the header's, the automatic ones) and the backup before a journal re-read (S4,
+    backup_before_reread) both use it."""
+    import zipfile
+    os.makedirs(folder, exist_ok=True)
+    name = backup_name(db_path, tag=tag)
+    path = os.path.join(folder, name)
+    tmp_db = os.path.join(folder, f".db-{name[:-4]}.sqlite")
+    try:
+        # read-only, and never created: a database moved or renamed while the server runs must fail the
+        # backup, not copy a new empty file and rotate a good zip out for it
+        src = sqlite3.connect(f"file:{urllib.parse.quote(os.path.abspath(db_path))}?mode=ro", uri=True)
+        dst = sqlite3.connect(tmp_db)
+        try:
+            copy_database(src, dst)
+            # the copy must read back before it goes in the zip: a bad backup never rotates a good one out
+            problem = dst.execute("PRAGMA quick_check").fetchone()[0]
+            if problem != "ok":
+                raise RuntimeError(f"the database copy failed its check: {problem}")
+        finally:
+            dst.close(); src.close()
+        with zipfile.ZipFile(path + ".part", "w", zipfile.ZIP_DEFLATED) as z:
+            z.write(tmp_db, os.path.basename(db_path))
+            defaults = browser_defaults_path(db_path)
+            files = [os.path.basename(db_path)]
+            if os.path.exists(defaults):
+                z.write(defaults, BROWSER_DEFAULTS_FILE)
+                files.append(BROWSER_DEFAULTS_FILE)
+            # your lines and your settings: extras, so one that cannot be read is a warning, never a failed
+            # backup (the database is what the zip is for)
+            extra_failed = []
+            for src_path, arc in extras:
+                if not src_path or not os.path.exists(src_path):
+                    continue
+                try:
+                    z.write(src_path, arc)
+                    files.append(arc)
+                except OSError as e:
+                    extra_failed.append(f"{arc} not backed up ({e.strerror or e})")
+        # every member read back with its CRC before the zip counts (the finally deletes a bad one)
+        bad = check_zip(path + ".part")
+        if bad:
+            raise RuntimeError(f"the zip failed its check: {bad}")
+        os.replace(path + ".part", path)
+    finally:
+        # never leave the database copy or a half-written zip behind (a full disk would only get fuller)
+        for leftover in (tmp_db, path + ".part"):
+            try:
+                os.remove(leftover)
+            except FileNotFoundError:
+                pass
+    size = os.path.getsize(path)
+    extra_warning = "; ".join(extra_failed) or None
+    try:
+        copied, journals_to, failed = archive_journals(live_dirs, os.path.join(folder, "journals"))
+        warning = (f"{len(failed)} journal{'' if len(failed) == 1 else 's'} not archived ({failed[0][0]}: {failed[0][1]}"
+                   + (", …" if len(failed) > 1 else "") + ")") if failed else None
+    except OSError as e:   # the archive folder itself (cannot be made, a full disk): the zip still counts
+        copied, journals_to, warning = 0, None, f"journal archive: {e.strerror or e}"
+    if extra_warning:
+        warning = f"{extra_warning}; {warning}" if warning else extra_warning
+    try:
+        kept = rotate_backups(folder, keep, db_path, current=path)
+    except OSError as e:   # an old zip that cannot be removed: this one is still good and still the latest
+        msg = f"old backups not rotated ({os.path.basename(e.filename) + ': ' if e.filename else ''}{e.strerror or e})"
+        warning = f"{warning}; {msg}" if warning else msg
+        try:
+            kept = rotate_backups(folder, 10 ** 9, db_path)   # deletes nothing: just the count
+        except OSError:
+            kept = None
+    out = {"path": path, "size": size, "kept": kept, "journals_to": journals_to, "copied": copied, "files": files,
+           "verified": True}   # the database copy passed quick_check and the zip testzip()
+    # not an error: the database zip was written and counts as the latest backup (the Data tile goes amber)
+    return dict(out, warning=warning) if warning else out
+
+
+def journals_gone(db):
+    """(gone, known): of the journal files the database has read (journal_files), how many are no longer there."""
+    paths = [r[0] for r in db.execute("SELECT path FROM journal_files")]
+    return sum(1 for p in paths if not os.path.exists(p)), len(paths)
+
+
+def backup_before_reread(db, db_path, folder, keep, extras=(), live_dirs=(), board=None):
+    """S4, open_db's before_reset in run(): a journal re-read deletes what the journals gave (RESET_JOURNAL_DATA) and
+    reads them again, the one destructive step Outrider takes by itself, so the database is backed up first whatever
+    backup_every_days says (0 turns off the automatic ones only). The zip is tagged "pre-reread" (backup_name) and
+    rotates with the others; last_backup is not touched (the Data tile's line is about the regular backups). A failed
+    backup does not stop the re-read: said on stderr and on the banner. When more than half the journal files the
+    database was read from are gone (an uninstall under Steam/Proton deletes them), the re-read cannot bring back what
+    they held: said too, with the archive to read them from. Synchronous: run() calls it before serving anything.
+    Returns write_backup's answer, or None when it failed."""
+    gone, known = journals_gone(db)
+    if known and gone * 2 > known:
+        outrider.notices.warn("reread_journals_gone", f"warning: {gone} of the {known} journal files this database was "
+                              "read from are gone, so the journal re-read cannot bring back what they held. The backup "
+                              "taken before it keeps the database as it was; journals archived by a backup can be read "
+                              f"again with --legacy {os.path.join(folder, 'journals')}", action="open:log", board=board)
+    print(f"backup before the journal re-read: backing up to {folder}")
+    try:
+        out = write_backup(db_path, folder, keep, extras, live_dirs, tag="pre-reread")
+    except Exception as e:  # noqa: BLE001 -- whatever stopped the backup, the re-read goes on (it was asked for)
+        outrider.notices.warn("reread_backup", f"The backup before the journal re-read failed ({type(e).__name__}: {e}); "
+                              "the re-read went ahead", level="bad", action="open:log", board=board)
+        return None
+    print(f"backup before the journal re-read written: {out['path']} ({out['size'] / 1e6:.1f} MB, {out['kept']} kept)")
+    if out.get("warning"):
+        print(f"backup: {out['warning']}", file=sys.stderr)
+    return out
 
 
 def backup_due(last, every_days, now=None):
@@ -5940,6 +6083,10 @@ class State:
         self.speech_path = None
         self.config_path = None
         self.pronounce_path = None   # your pronunciations (outrider.tts.PRONOUNCE.own), backed up with your lines
+        # how this copy runs, for the restore command (S44) and the Data tile's words (S43): "docker", "git" or
+        # "download" (install_kind); the --config/--db Outrider was started with, which --restore needs too (run())
+        self.install = install_kind()
+        self.restore_extra = ()
         self.backup_task = None
         self.backup_done_at = None  # time.monotonic() when the last backup ended
         self.seller_task = None
@@ -6157,7 +6304,7 @@ class State:
             "highway": self.highway_summary(),
             "survey": self.survey_summary(),   # Road to Riches / Exomastery: the line under the tiles, as the Highway's
             "backup": dict(meta_get(self.db, "last_backup") or {}, running=bool(self.backup_task and not self.backup_task.done()),
-                           every_days=BACKUP_EVERY_DAYS, keep=BACKUP_KEEP),
+                           every_days=BACKUP_EVERY_DAYS, keep=BACKUP_KEEP, restore=self.restore_command(None)),
             "last_session": self.last_session(),
             "this_session": self.this_session(),
             "streak": self.streak(),
@@ -6184,7 +6331,10 @@ class State:
                           "status": (self.journals.status_json or {}).get("ts"),
                           "live": bool(self.shown_status().get("live")),
                           "simulated": bool(self.shown_status().get("simulated")),   # --simulate: an old journal is no fault
-                          "dirs": LIVE_DIRS, "legacy": LEGACY_DIRS},
+                          "dirs": LIVE_DIRS, "legacy": LEGACY_DIRS,
+                          # S43: no journal file read yet (a first run on an empty or wrong folder), and how this copy
+                          # runs (Docker's folder is /journals, set in .env, not in Settings)
+                          "missing": not self.journals.offsets, "install": self.install},
             "docked": self.docked_summary(),
             # the last Docked event's ts even while Status.json says you are not docked (out in the SRV at a
             # planetary port): a page that baselines then must not take the same dock as new when you board
@@ -6846,92 +6996,50 @@ class State:
 
     # ---- commander, materials, fuel, carrier, current system ----
 
-    def make_backup(self):
-        """A backup in BACKUP_DIR: a dated zip holding a consistent copy of the database (SQLite's backup API,
-        safe while the tailer writes) and the browser defaults if saved; then every live journal archived into
-        BACKUP_DIR/journals (copied once, see archive_journals); then this database's dated zips beyond
-        BACKUP_KEEP deleted (see backup_name). A failure before the zip is written stops it before the rotation,
-        so nothing is ever deleted for a backup that did not work; once the zip is good, a journal that could
-        not be archived is reported (warning: the backup itself worked) but the rotation still runs, so a lasting
-        failure cannot pile up zips. Legacy folders stay out of the archive: they are a copy of something already
-        and never change. The zip also holds the speech file, the config file and your pronunciations when they
-        exist, and the lines you banned (see State.speech_path); one of those that cannot be read is a warning too. Runs on a worker thread; returns
-        {path, size, kept, journals_to, copied, files, verified} (+ warning), files being the names inside the
-        zip. The database copy must pass SQLite's quick_check and the zip testzip() before the zip replaces
-        anything or the rotation runs; a copy or zip that fails raises (and the bad zip is deleted)."""
-        import zipfile
-        os.makedirs(BACKUP_DIR, exist_ok=True)
-        name = backup_name(self.db_path)
-        path = os.path.join(BACKUP_DIR, name)
-        tmp_db = os.path.join(BACKUP_DIR, f".db-{name[:-4]}.sqlite")
+    def restore_command(self, name):
+        """The command that restores backup `name` (None: the newest) on this install (S44, restore_command)."""
+        return restore_command(name, self.install, os.name == "nt", extra=self.restore_extra)
+
+    def backup_list(self):
+        """GET /api/backups (Settings -> Server -> Backups, S44): this database's zips in BACKUP_DIR, newest first,
+        each {name, size, ts (its file's time), kind, command}. kind: "pre-reread" from the name (S4); whether a zip
+        was automatic or made by hand is not in its name, only last_backup's `auto` says it of the latest ("auto" |
+        "manual"), so the rest have None. command: restore_command for it. No restore from the page: Outrider has to
+        be stopped for that."""
+        out = {"folder": BACKUP_DIR, "every_days": BACKUP_EVERY_DAYS, "keep": BACKUP_KEEP, "install": self.install,
+               "running": bool(self.backup_task and not self.backup_task.done()), "backups": [], "error": None}
+        if not self.db_path:
+            return dict(out, error="no database path")
         try:
-            # read-only, and never created: a database moved or renamed while the server runs must fail the
-            # backup, not copy a new empty file and rotate a good zip out for it
-            src = sqlite3.connect(f"file:{urllib.parse.quote(os.path.abspath(self.db_path))}?mode=ro", uri=True)
-            dst = sqlite3.connect(tmp_db)
+            zips = backup_zips(BACKUP_DIR, self.db_path)
+        except FileNotFoundError:
+            return out   # none made yet
+        except OSError as e:
+            return dict(out, error=f"{BACKUP_DIR}: {e.strerror or e}")
+        last = meta_get(self.db, "last_backup") or {}
+        # after a failed attempt `auto` is that attempt's, not the zip's: then the latest's kind is not known either
+        latest = os.path.basename(last.get("path") or "") if not last.get("error") else None
+        for name in reversed(zips):
             try:
-                copy_database(src, dst)
-                # the copy must read back before it goes in the zip: a bad backup never rotates a good one out
-                problem = dst.execute("PRAGMA quick_check").fetchone()[0]
-                if problem != "ok":
-                    raise RuntimeError(f"the database copy failed its check: {problem}")
-            finally:
-                dst.close(); src.close()
-            with zipfile.ZipFile(path + ".part", "w", zipfile.ZIP_DEFLATED) as z:
-                z.write(tmp_db, os.path.basename(self.db_path))
-                defaults = browser_defaults_path(self.db_path)
-                files = [os.path.basename(self.db_path)]
-                if os.path.exists(defaults):
-                    z.write(defaults, BROWSER_DEFAULTS_FILE)
-                    files.append(BROWSER_DEFAULTS_FILE)
-                # your lines and your settings: extras, so one that cannot be read is a warning, never a failed
-                # backup (the database is what the zip is for)
-                extra_failed = []
-                banned = outrider.speech.banned_path(self.speech_path) if self.speech_path else None
-                for src_path, arc in ((self.speech_path, "speech.json"), (banned, outrider.speech.BANNED_FILE),
-                                      (self.config_path, "ed_outrider.toml"), (self.pronounce_path, "pronounce.json")):
-                    if not src_path or not os.path.exists(src_path):
-                        continue
-                    try:
-                        z.write(src_path, arc)
-                        files.append(arc)
-                    except OSError as e:
-                        extra_failed.append(f"{arc} not backed up ({e.strerror or e})")
-            # every member read back with its CRC before the zip counts (the finally deletes a bad one)
-            bad = check_zip(path + ".part")
-            if bad:
-                raise RuntimeError(f"the zip failed its check: {bad}")
-            os.replace(path + ".part", path)
-        finally:
-            # never leave the database copy or a half-written zip behind (a full disk would only get fuller)
-            for leftover in (tmp_db, path + ".part"):
-                try:
-                    os.remove(leftover)
-                except FileNotFoundError:
-                    pass
-        size = os.path.getsize(path)
-        extra_warning = "; ".join(extra_failed) or None
-        try:
-            copied, journals_to, failed = archive_journals(LIVE_DIRS, os.path.join(BACKUP_DIR, "journals"))
-            warning = (f"{len(failed)} journal{'' if len(failed) == 1 else 's'} not archived ({failed[0][0]}: {failed[0][1]}"
-                       + (", …" if len(failed) > 1 else "") + ")") if failed else None
-        except OSError as e:   # the archive folder itself (cannot be made, a full disk): the zip still counts
-            copied, journals_to, warning = 0, None, f"journal archive: {e.strerror or e}"
-        if extra_warning:
-            warning = f"{extra_warning}; {warning}" if warning else extra_warning
-        try:
-            kept = rotate_backups(BACKUP_DIR, BACKUP_KEEP, self.db_path, current=path)
-        except OSError as e:   # an old zip that cannot be removed: this one is still good and still the latest
-            msg = f"old backups not rotated ({os.path.basename(e.filename) + ': ' if e.filename else ''}{e.strerror or e})"
-            warning = f"{warning}; {msg}" if warning else msg
-            try:
-                kept = rotate_backups(BACKUP_DIR, 10 ** 9, self.db_path)   # deletes nothing: just the count
+                st = os.stat(os.path.join(BACKUP_DIR, name))
             except OSError:
-                kept = None
-        out = {"path": path, "size": size, "kept": kept, "journals_to": journals_to, "copied": copied, "files": files,
-               "verified": True}   # the database copy passed quick_check and the zip testzip()
-        # not an error: the database zip was written and counts as the latest backup (the Data tile goes amber)
-        return dict(out, warning=warning) if warning else out
+                continue   # rotated out meanwhile
+            kind = next((t for t in BACKUP_TAGS if name.endswith(f"-{t}.zip")), None)
+            if kind is None and name == latest and isinstance(last.get("auto"), bool):
+                kind = "auto" if last["auto"] else "manual"
+            out["backups"].append({"name": name, "size": st.st_size, "ts": st.st_mtime, "kind": kind,
+                                   "command": self.restore_command(name)})
+        return out
+
+    def make_backup(self):
+        """A backup in BACKUP_DIR (see write_backup): the database, the browser defaults, the speech file and the lines
+        you banned (see State.speech_path), the config file and your pronunciations when they exist; every live journal
+        archived; this database's zips beyond BACKUP_KEEP rotated out. Runs on a worker thread."""
+        return write_backup(self.db_path, BACKUP_DIR, BACKUP_KEEP, self.backup_extras(), LIVE_DIRS)
+
+    def backup_extras(self):
+        """The files a backup zip holds beside the database: (path, name in the zip), each only when it exists."""
+        return backup_extras(self.speech_path, self.config_path, self.pronounce_path)
 
     async def backup(self, auto=False):
         try:
@@ -13190,6 +13298,8 @@ class State:
                         self.bump()
                     if self.surface_moved(time.monotonic()):   # the surface map follows you (5 m, 10°, 2/s at most)
                         self.bump()
+            if self.journals.offsets:   # a first journal read at last (S43): its banner goes
+                self.notices.clear("no_journal_files")
             if self.journals.settle_carrier(time.time()):
                 self.bump()
             self.uploads_hub.idle()   # EDDN: a companion file written after its line, signals after a quiet spell
@@ -14463,6 +14573,10 @@ def make_app(state, hosts=None):
         body, status = state.start_backup()
         return web.json_response(body, status=status)
 
+    async def backups_view(_):
+        """GET /api/backups: Settings -> Server's Backups list (State.backup_list). Behind the sign-in; not an AI tool."""
+        return web.json_response(state.backup_list())   # a folder listing: quick (and the database is this thread's)
+
     async def highway_view(_):
         return web.json_response(state.highway_view())
 
@@ -15209,6 +15323,7 @@ def make_app(state, hosts=None):
     app.router.add_post("/api/hush", hush_view)
     app.router.add_post("/api/copilot", copilot_view)
     app.router.add_post("/api/backup", backup_view)
+    app.router.add_get("/api/backups", backups_view)
     app.router.add_get("/api/highway", highway_view)
     app.router.add_get("/api/overlay", overlay_get)
     app.router.add_post("/api/overlay", pc_only(overlay_post))   # the overlay is a game-PC feature (the author, 2026-10-10)
@@ -15384,6 +15499,65 @@ def port_free(host, port):
     return listen_problem(host, port) is None
 
 
+DB_LOCK_SUFFIX = ".lock"   # <db>.lock beside the database: held by a running Outrider (S44)
+
+
+def db_lock(db_path, create=True):
+    """<db>.lock, locked by a running Outrider for its whole run (S44): an OS lock on the open file, so it goes with the
+    process however that ends (a crash leaves no stale lock; the file itself stays). --restore refuses while another
+    holds it (db_in_use): an Outrider in another container (the port check cannot see one: Docker) or on another port.
+    Returns the open file holding the lock (closing it lets go), or None when another process holds it; raises
+    OSError when it cannot be locked here (a folder that cannot be written, a share without locks), and
+    FileNotFoundError with create=False when there is no lock file."""
+    f = open(db_path + DB_LOCK_SUFFIX, "a+b" if create else "r+b")
+    try:
+        f.seek(0)
+        if os.name == "nt":
+            import msvcrt
+            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as e:
+        f.close()
+        if isinstance(e, BlockingIOError) or os.name == "nt":   # Windows says "locked" as a plain OSError
+            return None
+        raise
+    return f
+
+
+def db_in_use(db_path):
+    """Is <db>.lock held by another process (a running Outrider)? False when it is not, when there is no lock file (none
+    ever ran here since S44), or when it cannot be told here (the port check is then all --restore has). Never makes
+    the file."""
+    try:
+        f = db_lock(db_path, create=False)
+    except OSError:
+        return False
+    if f is None:
+        return True
+    f.close()
+    return False
+
+
+def restore_command(name, install, windows=False, root=None, extra=()):
+    """S44: the command that puts the backup zip `name` back (None: --restore's newest), for this install. Docker: stop
+    the container, restore in a one-off one (the entrypoint passes the config; its port is the container's own, so
+    only the stop and the database's lock keep it from running beside the server), start it again: one line, each
+    step only when the one before worked. Else the launcher in Outrider's folder (`root`), with `extra` (--config,
+    --db as Outrider was started with them, absolute paths) quoted for the shell it runs in."""
+    if install == "docker":
+        return f"docker compose stop && docker compose run --rm outrider --restore{' ' + name if name else ''} && docker compose up -d"
+    import shlex
+    root = root or outrider.ROOT
+    if windows:
+        q = lambda a: f'"{a}"' if re.search(r'[\s&()^|<>"]', a) else a   # cmd.exe: no shlex
+        args = " ".join(q(a) for a in [*extra, "--restore", *([name] if name else [])])
+        return f"cd /d {q(root)} && launch_outrider.bat {args}"
+    args = " ".join(shlex.quote(a) for a in [*extra, "--restore", *([name] if name else [])])
+    return f"cd {shlex.quote(root)} && ./launch_outrider.sh {args}"
+
+
 def list_backups(folder, db_path):
     """--list-backups: one line per zip of db_path's (see backup_zips), oldest first."""
     try:
@@ -15416,13 +15590,16 @@ def forget_upload_position(path):
 
 def restore_backup(zip_path, db_path, host, port, now=None):
     """--restore: put the database (and browser_defaults.json, when the zip holds it) from a backup zip back in
-    place. Refuses while host:port is bound (a running Outrider holds the database open); checks the zip
+    place. Refuses while a running Outrider holds <db>.lock (db_lock) or host:port is bound; checks the zip
     (testzip) and the database in it (quick_check, extracted to a temp file next to the target) before
     touching anything; the current database moves aside to <db>.pre-restore-<stamp> (with its -journal, when
     one is left over), and browser_defaults.json the same way. Returns the lines to print; raises
     RuntimeError with the reason when it will not restore."""
     import shutil
     import zipfile
+    if db_in_use(db_path):   # whatever port or container it runs in (S44)
+        raise RuntimeError(f"ED Outrider is running with {db_path} (it holds {os.path.basename(db_path)}{DB_LOCK_SUFFIX}): "
+                           "stop it first")
     problem = listen_problem(host, port)
     if problem and "already in use" in problem:   # only a port in use means a running Outrider may hold the database
         raise RuntimeError(f"port {port} is in use: stop ED Outrider first (a running one holds the database open)")
@@ -15508,6 +15685,10 @@ def restore_backup(zip_path, db_path, host, port, now=None):
     return lines
 
 
+# S43: Docker's journal folder is the mount at /journals, set by JOURNALS in .env (not in Settings)
+DOCKER_NO_JOURNALS = "No journals in /journals: is the game PC's journal folder mounted? (JOURNALS in .env)"
+
+
 def startup_notices(st, config_path):
     """run()'s first notices on a fresh board (outrider.notices.reset): the journal folders not found (said in the
     terminal too) and the config file's problems (said already while it was read)."""
@@ -15552,14 +15733,19 @@ async def run(args, st):
     BACKUP_DIR, BACKUP_KEEP, BACKUP_EVERY_DAYS = st["backup_dir"], st["backup_keep"], st["backup_every_days"]
     SPANSH_CONCURRENCY, MAP_MAX_RADIUS, MAP_MAX_PAGES = st["concurrency"], st["map_max_radius"], st["map_max_pages"]
     radius_flag = args.radius   # --radius on the command line beats a radius chosen on the page
+    # what --restore needs besides the zip's name to find this database (S44's command): the --config and --db given
+    restore_extra = ([] if os.path.abspath(args.config) == os.path.abspath(CONFIG_PATH) else ["--config", os.path.abspath(args.config)]) \
+        + (["--db", os.path.abspath(args.db)] if args.db else [])
     args.host, args.port, args.radius, args.db = st["host"], st["port"], st["radius"], st["db"]
     if outrider.unsold:
         outrider.unsold.LIVE_DIRS, outrider.unsold.LEGACY_DIRS = LIVE_DIRS, LEGACY_DIRS
         outrider.unsold.DEFAULT_DIRS = LIVE_DIRS + LEGACY_DIRS
+    docker = install_kind() == "docker"
     if not LIVE_DIRS:
-        outrider.notices.warn("no_journals", "No Elite Dangerous journal folder found. Pass --journals PATH (the folder "
-                              "holding Journal.*.log, usually '<Saved Games>/Frontier Developments/Elite Dangerous') or "
-                              "set ED_JOURNALS.", action="open:server:journals")
+        outrider.notices.warn("no_journals", DOCKER_NO_JOURNALS if docker else
+                              "No Elite Dangerous journal folder found. Set Settings -> Server -> [journals] live (the folder "
+                              "holding Journal.*.log, usually '<Saved Games>/Frontier Developments/Elite Dangerous'), or "
+                              "pass --journals PATH or set ED_JOURNALS.", action=None if docker else "open:server:journals")
     else:
         print("journals: " + ", ".join(LIVE_DIRS) + (f"  (legacy: {', '.join(LEGACY_DIRS)})" if LEGACY_DIRS else ""))
         for i, line in enumerate(nfs_cache_warnings(LIVE_DIRS)):
@@ -15570,9 +15756,24 @@ async def run(args, st):
         raise SystemExit(1)
     migrate_old_layout(args.db)   # an upgrade from before data/: your database and files come along
     os.makedirs(os.path.dirname(os.path.abspath(args.db)), exist_ok=True)   # data/ on a fresh copy
+    # <db>.lock for the whole run: --restore refuses while it is held, from any port or container (S44)
+    try:
+        lock = db_lock(args.db)
+    except OSError as e:
+        lock = None
+        print(f"note: cannot lock {args.db}{DB_LOCK_SUFFIX} ({e.strerror or e}): --restore relies on the port check alone",
+              file=sys.stderr)
+    else:
+        if lock is None:
+            outrider.notices.warn("db_in_use", f"warning: another ED Outrider is running with {args.db} (it holds "
+                                  f"{os.path.basename(args.db)}{DB_LOCK_SUFFIX}): two at once write the same database. "
+                                  "Stop one, or give one its own --db.", action="open:log")
     if outrider.serverlog.ACTIVE:   # beside the database, never outrider.DATA_DIR (verify.sh's server would write data/)
         outrider.serverlog.ACTIVE.open(os.path.join(os.path.dirname(os.path.abspath(args.db)), outrider.serverlog.FILE_NAME))
-    db = open_db(args.db, rescan=args.rescan, on_reread=print)   # says why when every journal is read again
+    # says why when every journal is read again, and backs the database up first (S4: even with backup_every_days = 0)
+    extras = backup_extras(st["speech_file"], args.config, outrider.tts.PRONOUNCE.own)
+    db = open_db(args.db, rescan=args.rescan, on_reread=print, before_reset=lambda d: backup_before_reread(
+        d, args.db, BACKUP_DIR, BACKUP_KEEP, extras, LIVE_DIRS, notices))
     journals = Journals(db)
 
     # a stop (SIGTERM: docker stop, systemd) during the import, which is synchronous: end at once with what is read
@@ -15612,6 +15813,10 @@ async def run(args, st):
         print(f"current system: {journals.pos['name']}")
     elif LIVE_DIRS:
         print("no jump found in the journals yet: the page fills in after your first FSD jump")
+    if LIVE_DIRS and not journals.offsets:   # S43: a first run on an empty (or the wrong) folder; State.tick clears it
+        notices.set("no_journal_files", DOCKER_NO_JOURNALS if docker else
+                    f"No journals in {', '.join(LIVE_DIRS)} yet. Is it the folder the game writes Journal.*.log to? "
+                    "The page fills in after your first jump.", action=None if docker else "open:server:journals")
 
     spansh = Spansh(db)
     await spansh.start()
@@ -15625,6 +15830,7 @@ async def run(args, st):
     state.notices = notices
     state.searcher = Searcher(state)
     state.db_path = args.db
+    state.restore_extra = tuple(restore_extra)
     state.speech_path, state.config_path = st["speech_file"], args.config
     state.pronounce_path = outrider.tts.PRONOUNCE.own
     loop = asyncio.get_running_loop()
@@ -15811,6 +16017,8 @@ async def run(args, st):
         await state.upload_session.close()
         db.commit()
         db.close()
+        if lock:
+            lock.close()   # after the database: --restore may go ahead from here
         print("stopped cleanly")
 
 
@@ -15829,7 +16037,7 @@ def sweep_backup_leftovers(folder, db_path=None):
     except OSError:
         return removed
     stem = re.escape(os.path.splitext(os.path.basename(db_path or DB_PATH))[0])
-    mine = re.compile(rf"^(outrider-{stem}-\d{{8}}-\d{{6}}Z\.zip\.part|\.db-outrider-{stem}-\d{{8}}-\d{{6}}Z.*\.sqlite)$")
+    mine = re.compile(rf"^(outrider-{stem}-\d{{8}}-\d{{6}}Z{_TAG_RE}\.zip\.part|\.db-outrider-{stem}-\d{{8}}-\d{{6}}Z.*\.sqlite)$")
     for name in names:
         if mine.match(name):
             try:

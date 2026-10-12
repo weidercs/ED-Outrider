@@ -28,7 +28,9 @@ is welcome.
 > The first start reads all your journals (a few seconds, or a few minutes for years of them); after that it only
 > reads what's new. When an update changes how journals are read, its first start reads them all again once, and the
 > start-up log says so first, with why.
-> Journal folders are found automatically on Windows and Steam/Proton. A browser needs one click on the
+> Journal folders are found automatically on Windows and Steam/Proton. When none is found, or the folder holds no
+> journals yet, the Data tile and a line at the top of the page say so, and **set the journal folder** opens ⚙
+> Settings → Server at `[journals] live`. A browser needs one click on the
 > page before it plays sound: the red **Click Here To Allow Audio** pill asks for it.
 
 `requirements.txt` also installs two optional parts; leave either line out if you don't want it:
@@ -129,7 +131,8 @@ turns the automation off inside a container by itself; `false` does the same on 
   ```
 
 **3. First run.** `docker compose logs -f` shows it reading every journal (a while for years of them) and then
-"serving on…". It writes its config to `docker/config/ed_outrider.toml` (every network address, the journals at
+"serving on…". With no journals in `/journals` (the share not mounted, or `JOURNALS` in `.env` pointing elsewhere)
+the page says so at the top and in the Data tile. It writes its config to `docker/config/ed_outrider.toml` (every network address, the journals at
 `/journals`) and downloads the Cori voice. Open `http://<server>:8025/`, then ⚙ Settings → Server: set a
 **password** (nothing on a server counts as "this PC", so every device signs in, your own browser too), add the
 server's name to **allowed hosts** if you open it by name, save, and `docker compose restart`. The address and port
@@ -188,7 +191,7 @@ would without the proxy.
 ## 💾 Backups
 
 Outrider backs itself up at start when the last backup is over a day old, and a few seconds after you quit
-the game. **Back up now** in the Data tile does it on demand.
+the game. **Back up now** in the Data tile, or in ⚙ Settings → Server → **Backups**, does it on demand.
 
 - Each backup is a dated zip in `data/backups/` holding the database, `browser_defaults.json`, the speech files,
   your config file and your own pronunciations (`pronounce.json`). The newest 7 are kept (`backup_keep`).
@@ -197,16 +200,30 @@ the game. **Back up now** in the Data tile does it on demand.
 - Every backup is checked before it counts; a bad one never rotates a good one out.
 - The Data tile reads "backed up 3 h ago · verified · 7 kept", amber when overdue, red when one failed.
 - `backup_every_days = 0` turns automatic backups off.
+- Before a journal re-read (after an update that changes how journals are read, or `--rescan`) the database is always
+  backed up first, even with `backup_every_days = 0`: the zip's name ends in `-pre-reread`, and it rotates out with
+  the others. If more than half the journals the database was read from are gone, Outrider says so at the top of the
+  page.
+- ⚙ Settings → Server → **Backups** lists the zips, newest first (marked "automatic", "by hand" or "before a re-read"
+  where that is known), with the command that restores the one you click and a **Copy** button.
 
 **Restoring.** The journals alone can rebuild everything:
 `python3 ed_outrider.py --legacy data/backups/journals` reads them into a fresh database.
 
-To get the database back (bookmarks, the Spansh cache, your settings), stop Outrider and run
-`python3 ed_outrider.py --restore` for the newest zip, or name one
-(`--restore outrider-ed_outrider-20260930-181500Z.zip`). It refuses while Outrider is running, checks the zip
-first, and keeps the database it replaces as `ed_outrider.sqlite.pre-restore-<date-time>`. `--list-backups`
-lists the zips; add `--db` for a second database. `--restore` leaves `speech.json`, `speech_banned.json` and
-`ed_outrider.toml` alone: unzip those by hand if you need them (an old `speech.json` lacks newer lines).
+To get the database back (bookmarks, the Spansh cache, your settings), stop Outrider, then from the Outrider folder:
+
+| Install | Restore the newest zip (or add its name: `--restore outrider-ed_outrider-20260930-181500Z.zip`) |
+|---|---|
+| Linux, macOS | `./launch_outrider.sh --restore` |
+| Windows | `launch_outrider.bat --restore` |
+| Docker (from the folder with `docker-compose.yml`) | `docker compose stop`, then `docker compose run --rm outrider --restore`, then `docker compose up -d` |
+
+Settings → Server → Backups gives the exact command for the zip you pick, with `--config` and `--db` when Outrider
+was started with them. `--restore` refuses while Outrider is running (it holds `ed_outrider.sqlite.lock` beside the
+database, in any container or on any port), checks the zip first, and keeps the database it replaces as
+`ed_outrider.sqlite.pre-restore-<date-time>`. `--list-backups` lists the zips; add `--db` for a second database.
+`--restore` leaves `speech.json`, `speech_banned.json` and `ed_outrider.toml` alone: unzip those by hand if you need
+them (an old `speech.json` lacks newer lines).
 
 ---
 

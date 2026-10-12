@@ -570,6 +570,21 @@ upstream project's choices, not rules of the game.
   the clipboard programs still write to the terminal alone. The file lives beside the database, not in `data/`, so a
   second copy (`--db`) or verify.sh's scratch server keeps its own. Secrets: the code never prints them and the log
   hides them again (`serverlog.hide`), since an exception's text could carry one.
+- **A journal re-read is backed up first, always** (S4, 2026-10-12; the recommended default the author accepted): it is
+  the one destructive step Outrider takes by itself (journal-derived tables cleared, then rebuilt from journals that
+  may be gone: an uninstall under Steam/Proton deletes them), so it is backed up even with `backup_every_days = 0`.
+  The zip is tagged after its stamp (`…Z-pre-reread.zip`) so it sorts and rotates with the others: a prefix would
+  sort after every dated zip, never rotate out and stay `--restore`'s default. It does not touch `last_backup` (the
+  Data tile's line is about the regular backups). A failed one does not stop the re-read (it was asked for): stderr
+  and a banner. More than half the journal files the database was read from gone: a banner too, pointing at
+  `--legacy <backups>/journals`.
+- **Backups are listed, never restored, from the page** (S44): a restore replaces the database Outrider has open, so it
+  needs Outrider stopped; the page gives the command for this install (the launcher, the .bat, or Docker's stop, a
+  one-off `run --rm`, `up -d`) with Copy. Whether a zip was automatic or by hand is not in its name: only the latest
+  is known (`last_backup.auto`), the rest say nothing rather than guess. `--restore` refuses while `<db>.lock` is held
+  (an OS lock held by run(), gone with the process however it ends), which the port check cannot see from another
+  container or another port; the lock file itself stays (deleting a lock file races whoever opens it next). Two
+  Outriders on one database are not refused, only said on the banner.
 
 ## Known limits
 
@@ -645,7 +660,9 @@ confirmed while playing. Treat reports about them as likely real.
 - The fuel model against a live Status.json and a laden ship; EngineerCraft at a real engineer.
 - Colour-variant prediction against a fresh in-game codex entry (backtested only).
 - The firsts watch's rotation against live Spansh; an OBS source on `/api/status` after the guard change.
-- `--restore` and `--list-backups` against a real database (temp files only).
+- `--restore` and `--list-backups` against a real database (temp files only); the Backups list's restore command run
+  as given, for Docker (stop, a one-off `run --rm`, up) and Windows (the .bat); the database's lock on a Docker bind
+  mount and on Windows; the backup before a re-read on a real update.
 - The Highway's plots against live Spansh (both plotters send the requests Spansh's site and Auto_Neutron send;
   tested with a mocked Spansh), following a route in game, and whether a name copied by `wl-copy`/`xclip` pastes
   into the galaxy map under Proton. The too-heavy warning and a conservative plot against a real route.

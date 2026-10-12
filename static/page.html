@@ -759,6 +759,9 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     </details>
     <details class="setsec" data-sec-key="server" data-chip="Server" id="serverSettings"><summary>Server settings <span class="sum-note">the config file: network, password, paths, backups, Spansh, the Highway, the voice's AI and more</span></summary>
       <div class="srvtop"><b>Outrider <span id="srvVersion"></span></b> · <button type="button" id="srvLogBtn" title="what Outrider has printed in its terminal since it started (and saved beside its database)">Show log</button></div>
+      <details class="srvbk" id="srvBackups"><summary>Backups <span class="sum-note">the zips Outrider made, and the command that puts one back</span></summary>
+        <div id="srvBackupsBody"><div class="hint">loading…</div></div>
+      </details>
       <div id="serverSettingsBody" class="srvset"><div class="hint">loading…</div></div>
     </details>
     <details id="speechLogBox" class="speechlog setsec" data-sec-key="log" data-chip="Spoken lines"><summary>Spoken lines <span class="sum-note">the last 100 alerts in this window and what became of each</span></summary>

@@ -62,7 +62,8 @@
 # backup_keep = 7          # dated database zips kept (outrider-<database name>-*.zip; older ones are deleted
 #                          # after a new one is written); the journal archive is never pruned
 # backup_every_days = 1    # an automatic backup at start when the last one is older than this, and when the game
-#                          # quits (its Shutdown event); 0 turns automatic backups off ("back up now" still works)
+#                          # quits (its Shutdown event); 0 turns automatic backups off ("back up now" still works,
+#                          # and the database is still backed up before a journal re-read)
 # speech_file = "resources/speech.json"   # the spoken alerts' lines, per personality (edit it, or point this at
 #                          # your own copy; lines banned with the page's 👎 go in data/speech_banned.json, or next
 #                          # to a copy of your own)
