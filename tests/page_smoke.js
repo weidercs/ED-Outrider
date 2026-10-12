@@ -5314,6 +5314,66 @@ const settle = async maxMs => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| first run and backups S43 S44 |", good ? "no journals: where to set the folder (focused), Docker's words, no jump yet; Backups listed with the restore command and Copy" : JSON.stringify({got, want}), errors.slice(before));
   }
+  // S10 / S69 (2026-10-12): Restart (Settings -> Server's top row: off with the reason on verify.sh's server, which runs
+  // as `python -`; with data.restart.can: a confirm, POST api/restart (answered here: nothing restarts), "Restarting…",
+  // the update line's Restart now, done on another run_id) and Auto honk's readiness (the scratch server's own answer,
+  // which only looks; then a not-ready one with its fix and Copy)
+  {
+    const w = dom.window, before = errors.length;
+    const realFetch = w.fetch, realConfirm = w.confirm, realCopy = w.copyText, posted = [], copied = [], asked = [];
+    const got = {};
+    got.off = JSON.parse(w.eval(`(() => { const b = document.getElementById("srvRestartBtn");
+      return JSON.stringify([data.restart.can, b.disabled, b.title.includes("not started as ed_outrider.py"),
+        document.getElementById("updRestart").hidden, document.getElementById("srvRestartMsg").textContent.startsWith("cannot restart from here")]); })()`));
+    w.fetch = (u, o) => {
+      if (/api\/restart/.test(String(u))) {
+        posted.push(o && o.method);
+        return Promise.resolve({ok: true, status: 202, headers: {get: () => "application/json"},
+                                json: async () => ({ok: true, how: "launcher", backup: true})});
+      }
+      return realFetch(u, o);
+    };
+    w.confirm = q => { asked.push(q); return asked.length > 1; };   // the first one is cancelled
+    w.copyText = (text, what) => copied.push([text, what]);
+    got.can = JSON.parse(w.eval(`(() => {
+      window.__rs0 = [data.restart, data.restart_needed, data.run_id];
+      data.restart = {can: true, how: "launcher", why: null, note: null, restarting: false}; data.restart_needed = true; render();
+      const u = document.getElementById("updRestart");
+      const o = [document.getElementById("updateLine").hidden, u.hidden, u.disabled, document.getElementById("srvRestartBtn").disabled];
+      u.click();
+      return JSON.stringify(o); })()`));
+    await settle(500);
+    got.cancelled = [asked.length, posted.length];
+    w.eval(`document.getElementById("srvRestartBtn").click()`);
+    await settle(500);
+    got.asked = JSON.parse(w.eval(`JSON.stringify([document.getElementById("srvRestartMsg").textContent,
+      document.getElementById("srvRestartBtn").disabled, document.getElementById("updRestart").disabled])`));
+    got.posted = posted.slice();
+    got.back = JSON.parse(w.eval(`(() => { data.run_id = data.run_id + 1; render();
+      const o = [document.getElementById("srvRestartMsg").textContent, document.getElementById("srvRestartBtn").disabled, rst.asked];
+      [data.restart, data.restart_needed, data.run_id] = window.__rs0; render();
+      return JSON.stringify(o); })()`));
+    w.fetch = realFetch; w.confirm = realConfirm;
+    w.eval(`loadHonkCheck()`);
+    await settle(1500);
+    got.honk = JSON.parse(w.eval(`(() => { const t = document.getElementById("autoHonkReady").textContent;
+      return JSON.stringify([/^(Ready|Not ready):/.test(t), t.includes("Primary Fire"), t.includes("check again")]); })()`));
+    got.notReady = JSON.parse(w.eval(`(() => { drawHonkCheck({ready: false, checks: [{id: "evdev", ok: true, label: "evdev", fix: null, commands: []},
+        {id: "uinput", ok: false, label: "/dev/uinput is missing", fix: "load <it>", commands: ["sudo modprobe uinput"]}]});
+      const b = document.getElementById("autoHonkReady");
+      b.querySelector("[data-copycmd]").click();
+      return JSON.stringify([b.querySelector(".hrhead").textContent, b.querySelectorAll(".hrno").length, b.querySelector(".hrfix").textContent.startsWith("Fix: load <it>"),
+        b.querySelector(".bkline code").textContent]); })()`));
+    got.copied = copied;
+    w.copyText = realCopy;
+    const want = {off: [false, true, true, true, true], can: [false, false, false, false], cancelled: [1, 0],
+                  asked: ["Restarting… (finishing a backup first)", true, true], posted: ["POST"], back: ["", false, null],
+                  honk: [true, true, true], notReady: ["Not ready:", 1, true, "sudo modprobe uinput"],
+                  copied: [["sudo modprobe uinput", "the command"]]};
+    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| restart and auto honk readiness S10 S69 |", good ? "Restart off with its reason, then confirm, POST, Restarting… and back; readiness from the server, a fix with Copy" : JSON.stringify({got, want}), errors.slice(before));
+  }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",
     headers: Object.assign({"Content-Type": "application/json"}, origin ? {Origin: origin} : {})}).then(r => r.status);

@@ -345,6 +345,7 @@ USER_AGENT = "ED Outrider (personal exploration helper)"
 POLL_SECONDS = 1.0
 CARRIER_RETRY_S = 600      # s: a carrier system Spansh could not place is looked up again after this
 RUN_ID = int(time.time())  # identifies this server process to the page
+STARTED = time.monotonic() # when this process started: a restart in Docker waits RESTART_MIN_UPTIME_S from here
 
 # 3D map: how far out it can look, and how many Spansh pages (of 500 systems) it will fetch.
 # Spansh returns at most 10,000 systems per search; near the bubble each page is several MB.
@@ -510,6 +511,7 @@ def simulate_keyboard_off(honker, why="--simulate"):
     """--simulate, and a server away from the game PC: no virtual keyboard at all, so every open, press, test and
     auto-target run is refused (nothing may press a key into whatever window has focus)."""
     honker.evdev, honker.status = None, f"off ({why})"
+    honker.off_why = why   # auto honk's readiness check says so rather than "evdev is not installed" (S69)
     return honker
 
 
@@ -6087,6 +6089,11 @@ class State:
         # "download" (install_kind); the --config/--db Outrider was started with, which --restore needs too (run())
         self.install = install_kind()
         self.restore_extra = ()
+        # Restart (S10): how this process can start itself again (restart_plan, set by run(); a test's State cannot),
+        # whether the page asked for it, and run()'s stop event, which the restart sets after its clean stop
+        self.restart = restart_plan(argv0="")
+        self.restart_wanted = False
+        self.stop_event = None
         self.backup_task = None
         self.backup_done_at = None  # time.monotonic() when the last backup ended
         self.seller_task = None
@@ -6267,6 +6274,7 @@ class State:
             "game_pc": self.game_pc,   # False: the page leaves out what needs the game PC
             "outrider": outrider.__version__,   # Settings' line beside the GitHub link
             "notices": self.notices.active(),   # the banner: start-up problems, until fixed or dismissed
+            "restart": self.restart_info(),     # Settings -> Server's Restart: whether it can, how, why not
             # a newer release ({version, current, url, kind}: kind says how to update this install), else None
             "update": dict(self.update_available, current=outrider.__version__, kind=install_kind())
             if self.update_available else None,
@@ -6995,6 +7003,37 @@ class State:
         return sorted(out, key=lambda t: t["dist"])
 
     # ---- commander, materials, fuel, carrier, current system ----
+
+    # ---- Restart (S10): Settings -> Server's top row, after a save, the "updated: restart" line. Any device the page
+    # answers may ask (the same guard as POST /api/config: the author, 2026-10-12); the stop is the usual clean one
+    # (the quit backup finishes first), then restart_process starts Outrider again the way restart_plan chose ----
+    def restart_info(self):
+        r = self.restart
+        return {"can": bool(r.get("can")), "how": r.get("how"), "why": r.get("why"), "note": r.get("note"),
+                "restarting": self.restart_wanted}
+
+    def request_restart(self, now=None):
+        """POST /api/restart: (answer, status). 202 {ok, how, backup}: stopping now (backup: a backup finishes first);
+        409 when this Outrider cannot start itself again (why) or, in Docker, started under RESTART_MIN_UPTIME_S ago
+        (Docker's restart policy skips a container that ran under 10 s); 503 without a running server (a test's app)."""
+        r = self.restart
+        backup = bool((self.backup_task and not self.backup_task.done())
+                      or (self.backup_wait_task and not self.backup_wait_task.done()))
+        if self.restart_wanted:
+            return {"ok": True, "how": r.get("how"), "backup": backup}, 202
+        if not r.get("can"):
+            return {"error": f"Outrider cannot restart itself: {r.get('why')}", "code": "cannot_restart"}, 409
+        if self.stop_event is None:
+            return {"error": "Outrider is not serving from here", "code": "cannot_restart"}, 503
+        up = (time.monotonic() if now is None else now) - STARTED
+        if r.get("how") == "docker" and up < RESTART_MIN_UPTIME_S:
+            return {"error": f"Outrider started {up:.0f} s ago: Docker starts a container again only once it has run "
+                             f"10 s. Try again in {RESTART_MIN_UPTIME_S - up:.0f} s.", "code": "too_soon"}, 409
+        self.restart_wanted = True
+        print(f"restart: asked for from the page; {RESTART_WORDS.get(r.get('how'), r.get('how'))}")
+        asyncio.get_running_loop().call_later(0.2, self.stop_event.set)   # the answer goes out first
+        self.bump()
+        return {"ok": True, "how": r.get("how"), "backup": backup}, 202
 
     def restore_command(self, name):
         """The command that restores backup `name` (None: the newest) on this install (S44, restore_command)."""
@@ -10355,6 +10394,12 @@ class State:
                 "key": self.autohonk["key"], "hold": self.autohonk["hold"], "announce": bool(self.autohonk.get("announce", True)),
                 "pressing": (h.combo()[1] if h and h.available else None), "test": self.honk_test,
                 "groups": self.honk_groups()}
+
+    def autohonk_check(self):
+        """GET /api/autohonk/check (S69): whether auto honk can work on this PC and how to fix what stops it, without
+        pressing a key or opening a device (outrider.honk.readiness)."""
+        h = self.honker or outrider.honk.Honker(self.autohonk["key"], self.autohonk["hold"], LIVE_DIRS)
+        return outrider.honk.readiness(h.evdev, h.combo, off=getattr(h, "off_why", None))
 
     # the fire groups auto honk has worked and missed in, per ship (meta honk_groups: {ShipID: {good, bad}}),
     # learned from its own presses only (a manual or FSS honk does not say which trigger or group it used)
@@ -14950,6 +14995,12 @@ def make_app(state, hosts=None):
         """GET /api/config: every config key for the Settings dialog's Server settings (secrets only as set or not)."""
         return web.json_response(state.config_info())
 
+    async def restart_view(_):
+        """POST /api/restart (S10): the clean stop, then Outrider starts again (State.request_restart). Guarded as POST
+        /api/config is: any device the page answers, signed in when a password is set; never cross-site."""
+        out, status = state.request_restart()
+        return web.json_response(out, status=status)
+
     async def config_post_view(request):
         """POST /api/config {section: {key: value}}: written into the config file (applied at the next start)."""
         body = await json_object(request)
@@ -14985,6 +15036,9 @@ def make_app(state, hosts=None):
     async def autohonk_test_view(_):
         body, status = state.start_honk_test()
         return web.json_response(body, status=status)
+
+    async def autohonk_check_view(_):
+        return web.json_response(state.autohonk_check())
 
     async def autohonk_forget_view(_):
         state.forget_honk_groups()   # the current ship's learned fire groups
@@ -15334,6 +15388,7 @@ def make_app(state, hosts=None):
     app.router.add_get("/api/serverlog", serverlog_view)
     app.router.add_post("/api/notices/dismiss", notices_dismiss_view)
     app.router.add_post("/api/config", config_post_view)
+    app.router.add_post("/api/restart", restart_view)   # not pc_only: a server restarts from the tablet (S10)
     app.router.add_post("/api/rail/press", pc_only(rail_press_view))
     app.router.add_post("/api/rail/sets", pc_only(rail_sets_view))
     app.router.add_get("/api/highway/systems", highway_systems_view)
@@ -15369,6 +15424,7 @@ def make_app(state, hosts=None):
     app.router.add_post("/api/uploads/inara", inara_account_view)
     app.router.add_post("/api/autohonk/test", pc_only(autohonk_test_view))
     app.router.add_post("/api/autohonk/forget", pc_only(autohonk_forget_view))
+    app.router.add_get("/api/autohonk/check", pc_only(autohonk_check_view))   # S69: looks, never presses
     app.router.add_get("/api/firsts", firsts_view)
     app.router.add_get("/api/left", left_view)
     app.router.add_get("/api/body", body_view)
@@ -15406,6 +15462,81 @@ def install_kind(root=None, env=None):
     if env.get("OUTRIDER_CONTAINER"):
         return "docker"
     return "git" if os.path.exists(os.path.join(root or outrider.ROOT, ".git")) else "download"
+
+
+# Restart (S10). The exit code that asks to be started again: launch_outrider.bat loops on it, Docker's restart policy
+# (restart: unless-stopped) starts any stopped container again, and a systemd unit can name it (RestartForceExitStatus)
+RESTART_EXIT = 75
+RESTART_MIN_UPTIME_S = 15   # Docker applies a restart policy only to a container that ran 10 s: refused before this
+RESTART_WORDS = {"launcher": "starting launch_outrider.sh again in its place, setup included",
+                 "python": "starting ed_outrider.py again in its place",
+                 "bat": f"exiting with {RESTART_EXIT}: launch_outrider.bat starts it again",
+                 "docker": f"exiting with {RESTART_EXIT}: the container's restart policy starts it again"}
+
+
+def restart_plan(argv0=None, env=None, platform=None, script=None):
+    """How this Outrider can start itself again (S10): {can, how, why, note, launcher, script}. how:
+    "launcher": exec launch_outrider.sh (it exports OUTRIDER_LAUNCHER) in this process's place: the same PID, terminal
+      and Ctrl-C, and its setup runs again (requirements changed by a git pull);
+    "python": exec this Python on ed_outrider.py with the same arguments (started without the launcher);
+    "bat": exit RESTART_EXIT and launch_outrider.bat starts it again (Windows has no real exec);
+    "docker": exit RESTART_EXIT and the container's restart policy brings it back.
+    Only when this process IS ed_outrider.py (argv0): a test, verify.sh's `python -` or anything else embedding it can
+    never restart (can False, why)."""
+    argv0 = sys.argv[0] if argv0 is None else argv0
+    env = os.environ if env is None else env
+    platform = sys.platform if platform is None else platform
+    script = script or os.path.join(SCRIPT_DIR, "ed_outrider.py")
+    out = {"can": False, "how": None, "why": None, "note": None, "launcher": None, "script": script}
+    try:
+        real = bool(argv0) and os.path.isfile(argv0) and os.path.samefile(argv0, script)
+    except OSError:
+        real = False
+    if not real:
+        return dict(out, why="it was not started as ed_outrider.py (a test or another program runs it): start it again by hand")
+    launcher = env.get("OUTRIDER_LAUNCHER") or ""
+    if not os.path.isfile(launcher):
+        launcher = ""
+    if env.get("OUTRIDER_CONTAINER"):
+        return dict(out, can=True, how="docker", note="the container's restart policy starts it again (restart: "
+                    "unless-stopped in docker-compose.yml); a container run without one just stops")
+    if platform.startswith("win"):
+        if launcher:
+            return dict(out, can=True, how="bat", launcher=launcher)
+        return dict(out, why="Windows cannot start a program again in its own place: start Outrider with "
+                             "launch_outrider.bat to restart it from here")
+    if launcher:
+        return dict(out, can=True, how="launcher", launcher=launcher)
+    return dict(out, can=True, how="python")
+
+
+def restart_argv(argv):
+    """The arguments to start again with: as given, but never --rescan (or its abbreviation), which would read every
+    journal again at each restart."""
+    return [a for a in argv if not (len(a) > 5 and "--rescan".startswith(a.split("=", 1)[0]))]
+
+
+def restart_process(plan, argv, execv=None, which=None):
+    """After run()'s clean stop: start Outrider again (restart_plan's how). Never returns: exec replaces this process,
+    or SystemExit(RESTART_EXIT) for the .bat's loop and Docker. Tests pass execv (nothing is ever executed)."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.flush()
+        except (OSError, ValueError):
+            pass
+    how = plan.get("how")
+    if how in ("bat", "docker"):
+        raise SystemExit(RESTART_EXIT)
+    execv = execv or os.execv
+    try:
+        if how == "launcher":
+            bash = (which or shutil.which)("bash") or "/bin/bash"
+            execv(bash, [bash, plan["launcher"], *argv])
+        else:
+            execv(sys.executable, [sys.executable, plan["script"], *argv])
+    except OSError as e:
+        print(f"restart: could not start Outrider again ({e}): start it by hand", file=sys.stderr)
+        raise SystemExit(1)
 
 
 async def check_bio_rules(state):
@@ -15829,6 +15960,7 @@ async def run(args, st):
     state.server_log = outrider.serverlog.ACTIVE
     state.notices = notices
     state.searcher = Searcher(state)
+    state.restart = restart_plan()   # S10: how Settings' Restart starts this Outrider again, or why it cannot
     state.db_path = args.db
     state.restore_extra = tuple(restore_extra)
     state.speech_path, state.config_path = st["speech_file"], args.config
@@ -15984,7 +16116,7 @@ async def run(args, st):
     for i, line in enumerate(exposure_warnings(args.host, state.password, st["allowed_hosts"])):
         outrider.notices.warn(f"network{i}", line, action="open:server")
     # stop as on Ctrl-C when asked to (SIGTERM: docker stop, systemd, verify.sh): the same cleanup below, exit code 0
-    stop = asyncio.Event()
+    stop = state.stop_event = asyncio.Event()   # POST /api/restart sets it too (S10)
     try:
         asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, stop.set)
     except (NotImplementedError, RuntimeError, ValueError):   # Windows has no such handler: Ctrl-C only
@@ -16019,7 +16151,9 @@ async def run(args, st):
         db.close()
         if lock:
             lock.close()   # after the database: --restore may go ahead from here
-        print("stopped cleanly")
+        print("stopped cleanly" + (f"; restarting: {RESTART_WORDS.get(state.restart.get('how'))}" if state.restart_wanted else ""))
+    # Restart (S10): main() starts Outrider again once this has returned and the log's streams are put back
+    return state.restart if state.restart_wanted else None
 
 
 BACKUP_SHUTDOWN_WAIT = 300   # s a backup running at shutdown (the quit backup) gets to finish and be recorded
@@ -16108,8 +16242,9 @@ def main(argv=None):
     # Outrider's own log (S5b): the server's lines from here on, for Show log and <db dir>/outrider.log (opened in
     # run()); put back when main() ends, so a test calling it leaves nothing behind
     restore_streams = outrider.serverlog.install() if serving else None
+    restart = None
     try:
-        main_with(args, serving)
+        restart = main_with(args, serving)
     except Exception:
         # a crash: Python prints it to the terminal after this, when the log is no longer there; the log gets it here
         if restore_streams and outrider.serverlog.ACTIVE:
@@ -16119,6 +16254,8 @@ def main(argv=None):
     finally:
         if restore_streams:
             restore_streams()
+    if restart:   # Settings' Restart (S10), after the clean stop: the same arguments, never --rescan again
+        restart_process(restart, restart_argv(sys.argv[1:] if argv is None else list(argv)))
 
 
 def main_with(args, serving):
@@ -16162,9 +16299,9 @@ def main_with(args, serving):
             raise SystemExit(1)
         return
     try:
-        asyncio.run(run(args, st))
+        return asyncio.run(run(args, st))   # the restart plan when the page asked for a restart (S10)
     except KeyboardInterrupt:
-        pass
+        return None
 
 
 if __name__ == "__main__":

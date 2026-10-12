@@ -2865,6 +2865,7 @@ function render() {
   refocus("rows", fkRows);
   renderBoxelMode();
   document.getElementById("updateLine").hidden = !data.restart_needed;
+  drawRestart();
   renderNotices();
   drawUpdatePill();
   for (const id of ["setVersion", "tabOutVer"]) { const el = document.getElementById(id), v = data.outrider ? `version ${data.outrider}` : "";
@@ -9010,6 +9011,7 @@ setSecs.forEach(d => d.addEventListener("toggle", () => {
   const open = Object.fromEntries(setSecs.map(x => [x.dataset.secKey, x.open]));
   store.set("settingsOpen", open);
   if (d.id === "serverSettings" && d.open) { loadServerSettings(); if (document.getElementById("srvBackups").open) loadBackups(); }
+  if (d.id === "honkSettings" && d.open) loadHonkCheck();
 }));
 document.getElementById("setOpenAll").onclick = () => setSecs.forEach(d => { d.open = true; });
 document.getElementById("setCloseAll").onclick = () => setSecs.forEach(d => { d.open = false; });
@@ -9120,8 +9122,12 @@ async function saveServerConfig() {
   catch { r = {error: "Outrider not reachable"}; }
   if (r.error) { msg.textContent = `Not saved: ${r.error}`; msg.className = "hint warnc"; return; }
   await loadServerSettings();
-  const m = document.getElementById("srvMsg");
-  m.textContent = `Saved ${r.changed} setting${r.changed === 1 ? "" : "s"}: restart Outrider to use ${r.changed === 1 ? "it" : "them"}.`; m.className = "hint ok";
+  const m = document.getElementById("srvMsg"), rs0 = data && data.restart, them = r.changed === 1 ? "it" : "them";
+  // S10: restart from here when Outrider can start itself again; else why not
+  m.innerHTML = `Saved ${r.changed} setting${r.changed === 1 ? "" : "s"}` + (rs0 && rs0.can
+    ? `. <button type="button" class="try" data-restart>Restart now</button> to use ${them}.`
+    : `: restart Outrider to use ${them}${rs0 && rs0.why ? ` (${esc(rs0.why)})` : ""}.`);
+  m.className = "hint ok";
 }
 // Settings opened on Server settings (a notice's button): `section`, a config section to unfold ("journals")
 function openServerSettings(section, key) {
@@ -9196,6 +9202,91 @@ function backupsFollow(b) {
   const d = document.getElementById("srvBackups");
   if (!first && d && d.open && document.getElementById("serverSettings").open) loadBackups();
 }
+
+// ---- Restart (S10): Settings -> Server's top row, the "Saved N settings" line and the "updated: restart" line, from
+// any device (the same guard as saving the settings). POST api/restart stops Outrider cleanly (a backup running
+// finishes first) and it starts itself again (data.restart.how: the launcher again, ed_outrider.py again, the .bat's
+// loop or Docker's restart policy); the page waits for another run_id. data.restart.can false: the button is off and
+// says why (started some other way: start it again by hand).
+const RESTART_SLOW_MS = 120000;   // not back after this (plus RESTART_BACKUP_MS with a backup): say where to look
+const RESTART_BACKUP_MS = 300000;
+const rst = {asked: null, timer: null};   // asked: {run, at, backup} once this window asked
+function restartText() {
+  const r = data && data.restart, a = rst.asked;
+  if (a) {
+    if (data && data.run_id !== a.run) return "";
+    const slow = Date.now() - a.at > RESTART_SLOW_MS + (a.backup ? RESTART_BACKUP_MS : 0);
+    return slow ? `Outrider is not back yet: look at its terminal${r && r.how === "docker" ? " (docker compose logs)" : ""}`
+      : `Restarting…${a.backup ? " (finishing a backup first)" : ""}`;
+  }
+  if (r && r.restarting) return "Restarting…";
+  return r && !r.can && r.why ? `cannot restart from here: ${r.why}` : "";
+}
+function drawRestart() {
+  const r = data && data.restart, a = rst.asked;
+  if (a && data && data.run_id !== a.run) {   // back, as another process
+    rst.asked = null; clearInterval(rst.timer); rst.timer = null;
+    toast("Outrider restarted");
+  }
+  const busy = !!(rst.asked || (r && r.restarting));
+  document.querySelectorAll("[data-restart]").forEach(b => {
+    b.disabled = !(r && r.can) || busy;
+    b.title = r && r.can ? "stop Outrider cleanly and start it again: saved settings and an update take effect"
+      + (r.note ? ` (${r.note})` : "") : (r && r.why) || "";
+  });
+  document.getElementById("updRestart").hidden = !(r && r.can);
+  const msg = document.getElementById("srvRestartMsg"), t = restartText();
+  if (msg.textContent !== t) msg.textContent = t;
+  msg.className = "hint" + (t && !busy ? " warnc" : "");
+}
+async function restartOutrider() {
+  const r = data && data.restart;
+  if (!r || !r.can || rst.asked) return;
+  const backup = !!(data.backup && data.backup.running);
+  if (!confirm(`Restart Outrider now? It stops cleanly${backup ? " (the backup running finishes first)" : ""} and starts again; `
+    + "every window reconnects by itself.")) return;
+  let j;
+  try { j = await apiJson("api/restart", {method: "POST"}); } catch { j = {error: "Outrider not reachable"}; }
+  if (!j || j.error) { toast(`Not restarted: ${(j && j.error) || "?"}`); return; }
+  rst.asked = {run: data.run_id, at: Date.now(), backup: !!j.backup};
+  clearInterval(rst.timer);
+  rst.timer = setInterval(drawRestart, 1000);   // no payloads while it is down: the words still move on
+  drawRestart();
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest && e.target.closest("[data-restart]");
+  if (b) { e.preventDefault(); restartOutrider(); }
+});
+
+// ---- Settings -> Auto honk's readiness (S69): whether it can work on this PC, said before you tick it, and the fix
+// for what stops it (GET api/autohonk/check: evdev, /dev/uinput there and writable, Primary Fire's keyboard binding).
+// It only looks: nothing is pressed and no device opened. Asked when the section opens; "check again" after a fix.
+let honkCheckGen = 0;
+async function loadHonkCheck() {
+  if (data && data.game_pc === false) return;   // a server: the section is hidden and the route refused
+  const gen = ++honkCheckGen;
+  let r;
+  try { r = await apiJson("api/autohonk/check"); } catch { r = {error: "Outrider not reachable"}; }
+  if (gen === honkCheckGen) drawHonkCheck(r);
+}
+function drawHonkCheck(r) {
+  const box = document.getElementById("autoHonkReady");
+  if (!r || r.error || !Array.isArray(r.checks)) {
+    box.innerHTML = `<span class="hint warnc">Cannot check auto honk: ${esc((r && r.error) || "?")}</span>`; return;
+  }
+  const bad = r.checks.filter(c => !c.ok);
+  box.innerHTML = `<span class="hrhead ${r.ready ? "ok" : "no"}">${r.ready ? "Ready" : "Not ready"}:</span> ` +
+    r.checks.map(c => `<span class="${c.ok ? "hrok" : "hrno"}">${esc(c.label)} ${c.ok ? "✓" : "✗"}</span>`).join(" · ") +
+    ` <a href="#" data-honkcheck>check again</a>` +
+    bad.map(c => `<div class="hrfix">Fix: ${esc(c.fix || "")}` + (c.commands || []).map(cmd =>
+      `<div class="bkline"><code>${esc(cmd)}</code> <button type="button" data-copycmd="${esc(cmd)}">Copy</button></div>`).join("") +
+      `</div>`).join("");
+}
+document.getElementById("autoHonkReady").addEventListener("click", e => {
+  const c = e.target.closest("[data-copycmd]");
+  if (c) { copyText(c.dataset.copycmd, "the command"); return; }
+  if (e.target.closest("[data-honkcheck]")) { e.preventDefault(); loadHonkCheck(); }
+});
 
 // ---- Outrider's own log (S5b): Settings -> Server's Show log. What the server printed in its terminal since it
 // started (GET api/serverlog?after=<seq>, its last 2,000 lines; the file beside the database keeps more), asked every

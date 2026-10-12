@@ -2,6 +2,25 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · Restart from Settings, and whether auto honk can work here
+- **Restart** (S10): Settings → Server's top row ("Outrider <version> · Show log · Restart"), "Saved 2 settings. Restart
+  now", and the "Outrider has been updated: restart it" line. A confirm, then POST `/api/restart`: the usual clean stop
+  (a backup running finishes first, "Restarting… (finishing a backup first)"), then Outrider starts again and every
+  window reconnects (the page waits for a new `run_id`). From any device the page answers, with the guard of POST
+  `/api/config` (the author's decision): never cross-site, signed in from another device when a password is set. How:
+  `launch_outrider.sh` now exports `OUTRIDER_LAUNCHER` and Outrider execs it in its own place (same PID, terminal and
+  Ctrl-C; the setup runs again after a `git pull`); without it, ed_outrider.py again with the same arguments;
+  `launch_outrider.bat` sets it too and loops when Outrider exits 75 (Windows has no real exec); Docker exits 75 and
+  compose's `restart: unless-stopped` starts it again (refused in its first 15 s: Docker skips a container that ran
+  under 10 s). Never `--rescan` again. A process that is not ed_outrider.py itself (verify.sh's `python -`, the tests)
+  cannot restart: the button is greyed out and says why. The payload's `restart` {can, how, why, note, restarting}.
+- **Is auto honk ready?** (S69): Settings → Auto honk says it at the top: "Ready: evdev ✓ · /dev/uinput ✓ · /dev/uinput
+  writable ✓ · Primary Fire: Left Alt + K ✓", or what is missing with the fix and its commands (Copy): `sudo modprobe
+  uinput` (and at every boot), a udev `uaccess` rule for `/dev/uinput` (the input group only mentioned), evdev in the
+  .venv, a keyboard binding for Primary Fire; "off (--simulate)" when it is. It only looks: no virtual keyboard is
+  created, nothing pressed (`outrider.honk.readiness`). GET `/api/autohonk/check`, game-PC only (409 `not_game_pc` on a
+  server).
+
 ## 2026-10-12 · A backup before every journal re-read, Backups in Settings, the first run with no journals
 - **A backup before a journal re-read** (S4): when an update (or `--rescan`) makes Outrider read every journal again, the
   database is backed up first, before any row is cleared, even with `backup_every_days = 0` (the one destructive step

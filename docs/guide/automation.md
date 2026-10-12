@@ -19,6 +19,10 @@ you tick it in ⚙ Settings.
 
 Setting it up:
 
+- **Is it ready?** ⚙ Settings → Auto honk says it at the top, before you tick anything: "Ready: evdev ✓ ·
+  /dev/uinput ✓ · /dev/uinput writable ✓ · Primary Fire: Left Alt + K ✓", or what is missing with the fix and its
+  commands to copy (load the `uinput` module, a udev rule that lets you write `/dev/uinput`, a keyboard binding for
+  Primary Fire). It only looks: nothing is pressed. **check again** after a fix.
 - **The Discovery Scanner must be on primary fire** in the fire group active when you jump.
 - **Primary Fire needs a keyboard binding** in Elite's controls (as its second binding, if your trigger is
   the first). Outrider reads it from your active controls preset, modifiers too. A built-in preset can't be

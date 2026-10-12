@@ -44,7 +44,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
   <div id="arrival"></div>
   <div id="sell"></div>
   <div id="noticeBar" class="noticebar" role="status" aria-live="polite" hidden></div>
-  <div id="updateLine" class="updline" role="status" hidden>Outrider has been updated: restart it to finish (this page then reloads by itself).</div>
+  <div id="updateLine" class="updline" role="status" hidden>Outrider has been updated: restart it to finish (this page then reloads by itself). <button type="button" class="try" id="updRestart" data-restart hidden>Restart now</button></div>
 </header>
 <section id="nowView" hidden>
   <div id="nowBar"><button type="button" id="nowSpeech" title="spoken alerts on or off (this browser, as 🗣 in the header)">🗣</button><button type="button" id="nowHush" title="hush the voice for 30 minutes (danger lines still speak), wherever it is speaking">hush 30 min</button><button type="button" id="nowStatus" title="the co-pilot's status report, said by the window that is speaking">status report</button><button type="button" id="nowBack" title="back to the page (or double-tap)">✕ back</button></div>
@@ -699,7 +699,8 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
           warning for it uses the config file's <code>rig_warn</code>, since the server says it for every window. Blank = the config file's value.</span></label>
       <label class="mod"><input type="checkbox" id="surfStrip"> Also a small copy of the surface map in the on-body strip (under the header), with a one-line legend</label>
     </details>
-    <details class="setsec pcOnly" data-sec-key="honk" data-chip="Auto honk"><summary>Auto honk and the co-pilot button</summary>
+    <details class="setsec pcOnly" data-sec-key="honk" data-chip="Auto honk" id="honkSettings"><summary>Auto honk and the co-pilot button</summary>
+      <div id="autoHonkReady" class="honkready" role="status"><span class="hint">checking whether auto honk can work here…</span></div>
       <label class="mod"><input type="checkbox" id="autoHonk"> Honk automatically on arriving in a system by hyperspace
         <span id="autoHonkStatus" class="hint"></span></label>
       <label class="mod"><input type="checkbox" id="autoHonkSay"> When it completes, say how many bodies it found
@@ -758,7 +759,8 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         The view, layouts, the search form and which screen speaks stay per device. The voice is kept by the server already.</div>
     </details>
     <details class="setsec" data-sec-key="server" data-chip="Server" id="serverSettings"><summary>Server settings <span class="sum-note">the config file: network, password, paths, backups, Spansh, the Highway, the voice's AI and more</span></summary>
-      <div class="srvtop"><b>Outrider <span id="srvVersion"></span></b> · <button type="button" id="srvLogBtn" title="what Outrider has printed in its terminal since it started (and saved beside its database)">Show log</button></div>
+      <div class="srvtop"><b>Outrider <span id="srvVersion"></span></b> · <button type="button" id="srvLogBtn" title="what Outrider has printed in its terminal since it started (and saved beside its database)">Show log</button>
+        · <button type="button" id="srvRestartBtn" data-restart>Restart</button> <span id="srvRestartMsg" class="hint" role="status"></span></div>
       <details class="srvbk" id="srvBackups"><summary>Backups <span class="sum-note">the zips Outrider made, and the command that puts one back</span></summary>
         <div id="srvBackupsBody"><div class="hint">loading…</div></div>
       </details>

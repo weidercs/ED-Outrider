@@ -585,14 +585,28 @@ upstream project's choices, not rules of the game.
   (an OS lock held by run(), gone with the process however it ends), which the port check cannot see from another
   container or another port; the lock file itself stays (deleting a lock file races whoever opens it next). Two
   Outriders on one database are not refused, only said on the banner.
+- **Restart from any device, guarded like the settings** (S10; the author, 2026-10-12): POST `/api/restart` has POST
+  `/api/config`'s guard (never cross-site; from another device signed in when a password is set), not `pc_only`: a
+  Docker server is always reached from another device. Saving the settings from a device could already change paths
+  and the password; the restart only makes it take effect now, and it is not destructive (the clean stop, the quit
+  backup first). How it starts again: `launch_outrider.sh` exports `OUTRIDER_LAUNCHER` and Outrider execs it in its
+  own place (same PID, terminal and Ctrl-C, systemd sees no exit, and the setup runs again after a `git pull`);
+  started without it, it execs `ed_outrider.py` with the same arguments; Windows has no real exec, so it exits 75 and
+  `launch_outrider.bat` loops; Docker exits 75 and the restart policy starts the container again (refused in its first
+  15 s, as Docker skips a container that ran under 10 s). Never `--rescan` twice. A process that is not
+  `ed_outrider.py` itself (verify.sh's `python -`, the tests) cannot restart: the button says why.
+- **Auto honk's readiness only looks** (S69): Settings says before you tick it whether auto honk can work (evdev, the
+  `uinput` module, `/dev/uinput` writable, Primary Fire's keyboard binding), with the fix. It never creates the virtual
+  keyboard to find out: that is exactly what could press a key. The udev `uaccess` rule is the fix offered first; the
+  `input` group works too but lets every program read every keyboard. GET `/api/autohonk/check` is game-PC only.
 
 ## Known limits
 
 - **New versions: a notice, never an update** (`[server] update_check`, on by default). GitHub's latest release at
   start (after a minute) and daily; a newer one is a quiet pill in the theme's accent, not an alert or a spoken
   line, with the steps for this install (Docker, a git clone, a download). No self-update: a container cannot
-  replace its own image, a download cannot safely replace its own files, and a clone's pull and restart was left
-  until someone wants it. Watchtower, the usual Docker auto-updater, is archived (2025), so the README names none.
+  replace its own image, a download cannot safely replace its own files, and a clone's pull is left to you (Settings →
+  Server's **Restart** then finishes it, S10). Watchtower, the usual Docker auto-updater, is archived (2025), so the README names none.
 - **Key presses on Windows are a stand-in for evdev** (`outrider/winkeys.py`): the same evdev key names mapped to
   scan codes and sent with `SendInput` (scan-code mode, extended flag for arrows, right Ctrl, numpad Enter...), so
   auto honk, auto-target and the rail run unchanged above it. Chosen by platform at start (`honk.keyboard_backend`).
@@ -663,6 +677,10 @@ confirmed while playing. Treat reports about them as likely real.
 - `--restore` and `--list-backups` against a real database (temp files only); the Backups list's restore command run
   as given, for Docker (stop, a one-off `run --rm`, up) and Windows (the .bat); the database's lock on a Docker bind
   mount and on Windows; the backup before a re-read on a real update.
+- Settings' Restart (S10) in Docker (exit 75 and compose's restart policy), under `launch_outrider.bat` on Windows (its
+  loop on 75 checked under Wine only) and under systemd; the launcher and plain `python ed_outrider.py` were restarted
+  on a scratch server (the same PID, a new run). Auto honk's readiness (S69) on a PC where `/dev/uinput` is missing or
+  not writable.
 - The Highway's plots against live Spansh (both plotters send the requests Spansh's site and Auto_Neutron send;
   tested with a mocked Spansh), following a route in game, and whether a name copied by `wl-copy`/`xclip` pastes
   into the galaxy map under Proton. The too-heavy warning and a conservative plot against a real route.

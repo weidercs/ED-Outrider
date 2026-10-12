@@ -15,7 +15,9 @@ installs again only when `requirements.txt` has changed (after a `git pull`) or 
 otherwise starts Outrider at once; its arguments go to Outrider (`./launch_outrider.sh --port 8026`), and relative
 paths in them (`--config my.toml`) are taken from the folder you run it in. With the [in-game overlay](overlay.md) on
 (`[overlay] enabled = true`) it also installs PyQt6 (about 100 MB, into `.venv`) when it is missing; a failed install
-never stops Outrider starting. By hand it is
+never stops Outrider starting. ⚙ Settings → Server → **Restart** (after saving settings, or after a `git pull`) starts
+the launcher again in the same window, setup included; started with `python ed_outrider.py`, it starts that again; on
+Windows it needs `launch_outrider.bat` around it. By hand it is
 `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`, then `.venv/bin/python ed_outrider.py`.
 
 **On Windows**, install [Python](https://www.python.org/downloads/) 3.11 or newer and double-click
@@ -135,10 +137,12 @@ turns the automation off inside a container by itself; `false` does the same on 
 the page says so at the top and in the Data tile. It writes its config to `docker/config/ed_outrider.toml` (every network address, the journals at
 `/journals`) and downloads the Cori voice. Open `http://<server>:8025/`, then ⚙ Settings → Server: set a
 **password** (nothing on a server counts as "this PC", so every device signs in, your own browser too), add the
-server's name to **allowed hosts** if you open it by name, save, and `docker compose restart`. The address and port
+server's name to **allowed hosts** if you open it by name, save, and **Restart** (or `docker compose restart`). The address and port
 inside the container are fixed (0.0.0.0, 8025): to use another port, set `PORT` in `.env`, not in Settings. If the log says it
 cannot write `/config` or `/app/data`, the folders belong to someone else: `sudo chown -R $(id -u):$(id -g) docker/`
-and `docker compose restart`. Later, ⚙ Settings → Server → **Show log** shows Outrider's log from any device.
+and `docker compose restart`. Later, ⚙ Settings → Server → **Show log** shows Outrider's log from any device, and
+**Restart** restarts it: the container stops and compose's `restart: unless-stopped` starts it again (a container
+started by hand with `docker run` and no `--restart` policy just stops).
 
 **Updating.** The page's **⬆ Update** pill says when a new release is out.
 

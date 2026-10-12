@@ -13,10 +13,16 @@
 own (Sharing exports them or makes them the defaults for new browsers). **Server** is the config file
 itself, every key of it but the upload switches (`[eddn]`, `[edsm]`, `[inara]`: Settings → Uploads): the network and the client password, the journal folders, paths, backups, Spansh, the
 Highway, the voice's AI layer and more. Saving there writes `ed_outrider.toml` (only the keys you changed; its
-comments stay, and the previous file is kept as `ed_outrider.toml.bak`), and Outrider uses them from its next start.
+comments stay, and the previous file is kept as `ed_outrider.toml.bak`), and Outrider uses them from its next start:
+**Restart now** beside "Saved" does that at once.
 The passwords (`[server]`'s and `[mcp]`'s) and the AI key are never shown, only whether they are set.
 
-**Server**'s top row says which Outrider is running and has **Show log**: what Outrider has printed in its terminal
+**Server**'s top row says which Outrider is running and has **Restart** and **Show log**. **Restart** stops Outrider
+cleanly (a backup running finishes first) and starts it again, from any device the page answers (signed in when a
+password is set); every window reconnects by itself. It works when Outrider was started by `launch_outrider.sh`
+(started again in the same window, its setup included), `python ed_outrider.py`, `launch_outrider.bat` or Docker
+(compose's restart policy); otherwise the button is greyed out and says why. "Outrider has been updated: restart it"
+under the header has the same button. **Show log** shows what Outrider has printed in its terminal
 since it started (its last 2,000 lines, newest at the bottom, following along while it is open; problems in amber),
 with **Copy** for a bug report. It works from any device, a server's too. The same lines are saved beside the database
 in `outrider.log` (`data/outrider.log` by default; the older part in `outrider.log.1`). Passwords and API keys never
