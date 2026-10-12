@@ -2,6 +2,12 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · "In-Game Route:"
+- The line with the game's own route (the one plotted in the galaxy map, NavRoute.json: jumps, light years, next scoop
+  and the star chips) said only "Route:", easy to take for Outrider's route on the "Next:" line just below it (the
+  author's 6-jump plot showed "Route: 3 jumps": an older in-game route). It now says **"In-Game Route:"** (the
+  author's wording). The two differ until 🎯 targets Outrider's next stop, which plots the game's route there.
+
 ## 2026-10-12 · This fork: upstream merged in; upstream's Inara upload replaces the fork's
 - Upstream's work up to its 2026-10-22 release is merged in (boxels, green gas giants, codex marks on body types,
   rare discoveries said once, the voice lab in the page, the Vorlon and Shadow themes and more), beside the fork's

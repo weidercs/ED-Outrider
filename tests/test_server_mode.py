@@ -366,6 +366,7 @@ class FableScriptFixes(unittest.TestCase):
         self.assertNotIn("sha256sum", r.stderr)
         self.assertIn("STARTED", r.stdout, r.stderr)        # the stamp matched: no reinstall, Outrider started
 
+    @unittest.skipIf(os.name == "nt", "Git Bash names folders its own way (/tmp/...), not as Python does")
     def test_relative_arguments_are_the_callers(self):
         """Run from another folder, the launcher starts Outrider in that folder (with the repository's files by their
         full path), so --config my.toml or --journals . mean the caller's (review 2026-10-11): they meant files in the
