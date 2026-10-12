@@ -2,6 +2,21 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · Less work every second: journals over a share, the carrier, what's left here
+- **Journal files over a network share** (S18): every second Outrider still lists the journal folder (a new journal is
+  read at once) but checks the size of only the newest two files and those still changing; a file whose size stayed
+  the same three checks in a row is settled, and every file is checked once a minute (a sync tool adding to an older
+  journal is read within the minute). A journal cut without its last newline settles too (it used to be re-read every
+  second); an unreadable one never does. A rolled-back tick forgets what settled. The install guide's share section
+  says so.
+- **The carrier's hold is folded again only when its history changes** (S66): its own events and Market.json reads
+  (`carrier_version`), no longer every canister scooped or ton bought into the ship's hold.
+- **"What's left here" is worked out once** (S17): `leaving_summary`, asked for on every poll while a target is set
+  (and by the moments, Here and the FSS check), is cached per system until the journal writes something it reads
+  (`Journals.data_seq`: scans, codex, deaths, both sales tables; the seven `dirty.add` sites are now `mark()`), the
+  system's place changes, or the exobiology rules are updated (`State.bio_rules_gen`, new). Each caller gets its own
+  copy.
+
 ## 2026-10-12 · 🎯 brings the game to the front itself
 - Every auto-target run (🎯, Target next, Test now, the automatic one after a supercharge, the co-pilot button's) now
   finds Elite's window, brings it to the front (`wmctrl -i -a` on Linux, the game under X11 or XWayland; Windows

@@ -152,6 +152,7 @@ import argparse
 import asyncio
 import collections
 import contextlib
+import copy
 import functools
 import hashlib
 import io
@@ -444,6 +445,7 @@ SCOOP_SETTLE = 2.5        # s: the flag must stay off this long before the scoop
 SCOOP_JUMP_GRACE = 10     # s: a scoop that ends this soon after a hyperspace StartJump was left on purpose
 BRIEF_WAIT = 12           # s after a hyperspace arrival with no honk: the arrival briefing from Spansh data alone
 FSS_SETTLE = 2.0          # s after the FSS closes before judging it: the journal's last Scan lines may still be coming
+LEAVING_CACHE_MAX = 64    # systems whose leaving_summary is kept (the target's, the pinned ones, the moments')
 
 
 class ScoopWatch:
@@ -2176,6 +2178,12 @@ def merge_records(spansh, own, hotspots):
 # --------------------------------------------------------------------------
 
 CARRIER_SETTLE = 300   # s after a booked carrier jump's departure: by then it has arrived
+# The live tail's quick scan (S18, a journal folder over a network share: every stat is a round trip). A journal whose
+# size was the same this many stats in a row is settled: the tick lists the folder (a new file is seen at once) but
+# stats only the files not settled and the newest two, and every file once per JOURNAL_FULL_CHECK_S (a sync tool that
+# appends to an older file). Unchanged size, not size == offset: a file cut without its final newline never gets there
+JOURNAL_SETTLE_STATS = 3
+JOURNAL_FULL_CHECK_S = 60
 
 
 def carrier_seen(c, system, id64, ts, jumped=False):
@@ -2304,7 +2312,24 @@ class Journals:
         self._hw_rows = (None, [])   # (route id, highway_route rows): the Highway's route, read once per plot
         self._rc_rows = (None, [])   # (route id, riches_route rows with their bodies): Road to Riches, read once per plot
         self.cargo_version = 0     # bumped by every cargo change (the ship's hold, a carrier event or market read)
+        # bumped by your carrier's history only (a cargo_events row, a carrier Market.json): State.carrier_cargo's fold is
+        # keyed on it, so the ship's hold changing (every canister scooped) does not fold the carrier again (S66)
+        self.carrier_version = 0
+        # bumped by every write leaving_summary reads (mark(), deaths and sales): its cache key (S17)
+        self.data_seq = 0
+        # the live tail's quick scan (S18): per journal its last size and how many stats in a row found it unchanged;
+        # `settled` the files unchanged for JOURNAL_SETTLE_STATS stats, which a quick scan does not stat again until
+        # the folder's full re-check (full_check_at, on `clock`) comes round
+        self.sizes = {}
+        self.settled = set()
+        self.full_check_at = {}
+        self.clock = time.monotonic
         self.reload()
+
+    def mark(self, system):
+        """A system's own data changed: State rebuilds its rows (dirty) and leaving_summary's cache moves on."""
+        self.dirty.add(system)
+        self.data_seq += 1
 
     def moment(self, kind, ts, **kw):
         self.moment_seq += 1
@@ -2796,6 +2821,11 @@ class Journals:
         self.cargo_dock = meta_get(db, "cargo_dock")
         self.commodity_names = meta_get(db, "commodity_names", {})
         self.cargo_version += 1
+        self.carrier_version += 1
+        self.data_seq += 1   # rolled-back rows: whatever was cached from them goes
+        # a rolled-back tick's offsets went back: a file it read must be stat'd (and read) again, settled or not
+        self.settled.clear()
+        self.sizes.clear()
 
     def import_legacy(self):
         for d in LEGACY_DIRS:
@@ -2809,25 +2839,45 @@ class Journals:
             self.db.commit()
             print(f"imported {n} journal files from {d}")
 
-    def scan_dir(self, d, commit_each=False, upload=None):
+    def scan_dir(self, d, commit_each=False, upload=None, quick=False):
         """Read new data from every journal in d. Returns the number of files touched. commit_each: commit after every
         file (the start-up import: a stop part way keeps the files already read; review R13). upload: what the
         uploaders' hub may do with these lines: None (a legacy folder: nothing), "catchup" (the start-up scan: the
-        session's state only) or "live" (the running tail: it may queue)."""
+        session's state only) or "live" (the running tail: it may queue). quick: the tick's scan, which leaves out the
+        settled files between the folder's full re-checks (S18: JOURNAL_SETTLE_STATS)."""
         self.upload_mode = upload
         try:
-            return self._scan_dir(d, commit_each)
+            return self._scan_dir(d, commit_each, quick)
         finally:
             self.upload_mode = None
 
-    def _scan_dir(self, d, commit_each):
+    def _scan_dir(self, d, commit_each, quick=False):
         touched = 0
         # in time order: the old names (Journal.YYMMDDhhmmss.NN.log, before 2023) sort after every new one as text
-        for path in sorted(glob(os.path.join(glob_escape(d), "Journal.*.log")), key=outrider.uploads.name_key):
+        paths = sorted(glob(os.path.join(glob_escape(d), "Journal.*.log")), key=outrider.uploads.name_key)
+        skip = set()
+        if quick:
+            now = self.clock()
+            if now >= self.full_check_at.get(d, 0):
+                self.full_check_at[d] = now + JOURNAL_FULL_CHECK_S
+            else:
+                skip = self.settled.difference(paths[-2:])   # the newest two are stat'd every time
+        for path in paths:
+            if path in skip:
+                continue
             try:
                 size = os.path.getsize(path)
             except OSError:
+                self.sizes.pop(path, None)
+                self.settled.discard(path)
                 continue
+            last, same = self.sizes.get(path, (None, 0))
+            same = same + 1 if size == last else 0
+            self.sizes[path] = (size, same)
+            if same >= JOURNAL_SETTLE_STATS and path not in self.bad_files:
+                self.settled.add(path)
+            else:
+                self.settled.discard(path)
             if size > self.start_offset(path):
                 try:
                     self.read_file(path)
@@ -2835,6 +2885,7 @@ class Journals:
                     if path not in self.bad_files:
                         self.bad_files.add(path)
                         print(f"journal skipped, cannot read it ({e.strerror or e}): {path}", file=sys.stderr)
+                    self.settled.discard(path)   # stat'd every time: it is tried again as it was before
                     continue
                 self.bad_files.discard(path)
                 touched += 1
@@ -3100,6 +3151,7 @@ class Journals:
                 for sysname in ev.get("Systems") or []:
                     self.db.execute("INSERT INTO sales VALUES (?, ?, NULL)", (sysname, ts))
             self.sales_changed = True
+            self.data_seq += 1   # deaths, sales and bio_sales judge what is left to do (leaving_summary)
             return
         id64, star_pos = ev.get("SystemAddress"), ev.get("StarPos")
         if id64 is None or not star_pos:
@@ -3148,7 +3200,7 @@ class Journals:
                  first_ts = min(first_ts, excluded.first_ts),
                  last_ts = max(last_ts, excluded.last_ts)""",
             (id64, ev.get("StarSystem"), x, y, z, ts, ts, 0 if relog else 1))
-        self.dirty.add(id64)
+        self.mark(id64)
         if not relog:
             star = self.jump_class.pop(id64, None)
             if not star:
@@ -3393,7 +3445,7 @@ class Journals:
                    source = excluded.source
                WHERE excluded.source = '' OR own_mined.source IS NOT excluded.source""",
             (srv["system"], srv["body_id"], commodity, ev.get("Type_Localised") or commodity.title(), ts, ts, src))
-        self.dirty.add(srv["system"])
+        self.mark(srv["system"])
         if cur.rowcount and live_event(ts):   # the same ton, placed on the surface map (live play only)
             self.note_burst(srv, ev.get("Type_Localised") or commodity.title(), ts)
 
@@ -3608,7 +3660,7 @@ class Journals:
             self.db.execute("INSERT OR IGNORE INTO phenomena_sites VALUES (?, ?, ?, ?)", (system, kind, ts, f"drop:{ts}"))
         else:
             return
-        self.dirty.add(system)
+        self.mark(system)
 
     def handle_poi(self, ev, ts):
         """An FSS signal worth a detour (poi_kind): kept per system; the rare kinds (POI_SPOKEN) are news the first time
@@ -3742,6 +3794,7 @@ class Journals:
                 if self.db.execute("INSERT OR IGNORE INTO cargo_events VALUES (?, ?, ?, ?, ?)",
                                    (self.line_source or f"{ts}:{name}", ts, name, market, json.dumps(data))).rowcount:
                     self.cargo_version += 1
+                    self.carrier_version += 1
         if name == "CarrierDepositFuel" and self.carrier and ev.get("CarrierID") == self.carrier.get("id") \
                 and isinstance(ev.get("Total"), int) and self.fresh("carrier", ts, self.carrier_ts()):
             self.carrier["fuel"] = ev["Total"]   # the depot after it (the tile's tritium)
@@ -3806,6 +3859,7 @@ class Journals:
                                (m["timestamp"], m["MarketID"], json.dumps(m["Items"]))).rowcount:
             return False
         self.cargo_version += 1
+        self.carrier_version += 1
         return True
 
     def handle_ship(self, name, ev, ts):
@@ -4008,7 +4062,7 @@ class Journals:
             if kind == "Analyse":   # "Stratum Tectonicas complete, 19.2 million; two left here" (priced by State)
                 self.moment("bio_done", ts, system=system, body_id=body,
                             species=ev.get("Species_Localised") or "", genus=ev.get("Genus_Localised") or "")
-            self.dirty.add(system)
+            self.mark(system)
             return
         if name == "CodexEntry":
             self.db.execute(
@@ -4019,7 +4073,7 @@ class Journals:
                  ev.get("NewTraitsDiscovered") and json.dumps(ev["NewTraitsDiscovered"]),
                  ev.get("VoucherAmount")))
             self.note_bio_tag(ev, system, ts)
-            self.dirty.add(system)
+            self.mark(system)
             return
         if name == "ScanBaryCentre":
             if ev.get("BodyID") is not None:
@@ -4027,7 +4081,7 @@ class Journals:
                                               "OrbitalPeriod", "Periapsis", "AscendingNode", "MeanAnomaly")}
                 self.db.execute("INSERT OR REPLACE INTO own_barycentres VALUES (?, ?, ?, ?)",
                                 (system, ev["BodyID"], json.dumps(rec), ts))
-                self.dirty.add(system)
+                self.mark(system)
             return
         if name == "Scan":
             record = record_from_scan(ev)
@@ -4161,7 +4215,7 @@ class Journals:
                     if g.get("Genus") and ev.get("BodyID") is not None:
                         self.db.execute("INSERT OR IGNORE INTO own_genera VALUES (?, ?, ?, ?, ?)",
                                         (system, ev["BodyID"], g["Genus"], g.get("Genus_Localised"), ts))
-        self.dirty.add(system)
+        self.mark(system)
 
     def note_verdict(self, system, ts, was_discovered):
         """The discovery streak's verdict on an arrival, fixed by its arrival-star scan and never changed after:
@@ -5914,8 +5968,12 @@ class State:
         self.materials_version = 0  # bumps when the materials inventory changes (Materials view keys on it)
         self._copilot_run = (None, None)   # (the run a tap started, its cancel token): a press while it counts cancels it
         self._copilot_cancelled = False    # that press's own gesture is the double press it meant
-        self.counts_version = 0     # bumps with every Recount (the carrier's fold is cached on it and cargo_version)
+        self.counts_version = 0     # bumps with every Recount (the carrier's fold is cached on it and carrier_version)
         self._carrier_fold = (None, None)   # (key, outrider.cargo.carrier_fold's answer)
+        # leaving_summary per system: id64 -> (key, answer); the key is (Journals.data_seq, where the system is,
+        # bio_rules_gen). The payload asks for it on every poll with a target set (S17)
+        self._leaving = {}
+        self.bio_rules_gen = 0      # bumps when check_bio_rules installs new spawn rules (bio estimates change)
         # Spansh's commodity names ({ts, norm: {letters-only: name}}): the lookup asks by these; cached a week (meta,
         # live-only)
         self.spansh_commodities = meta_get(db, "spansh_commodities")
@@ -7764,9 +7822,10 @@ class State:
         return dict(d, done=done)
 
     def carrier_cargo(self):
-        """Your carrier's hold, folded from its history (outrider.cargo.carrier_fold): cached until a cargo change."""
+        """Your carrier's hold, folded from its history (outrider.cargo.carrier_fold): cached until the carrier's history
+        changes (carrier_version: its events and market reads, not the ship's hold) or a Recount."""
         cid = (self.journals.carrier or {}).get("id")
-        key = (cid, self.journals.cargo_version, self.counts_version)
+        key = (cid, self.journals.carrier_version, self.counts_version)
         if self._carrier_fold[0] == key:
             return self._carrier_fold[1]
         events, markets, counts = [], [], []
@@ -8385,7 +8444,19 @@ class State:
             "WHERE is_new = 1 OR voucher IS NOT NULL ORDER BY ts DESC LIMIT ?", (n,))]
 
     def leaving_summary(self, id64):
-        """What is unfinished in a system: unscanned bodies, unsampled bio, unmapped valuables."""
+        """What is unfinished in a system: unscanned bodies, unsampled bio, unmapped valuables. Cached until the
+        journal writes something it reads (data_seq), the system's name or place changes (locate's answer: the region
+        decides codex_new) or the bio rules are updated; each caller gets its own copy (system_detail adds to it)."""
+        where = self.locate(id64)
+        key = (self.journals.data_seq, where, self.bio_rules_gen)
+        hit = self._leaving.get(id64)
+        if hit is None or hit[0] != key:
+            if len(self._leaving) >= LEAVING_CACHE_MAX:
+                self._leaving.clear()
+            hit = self._leaving[id64] = (key, self._leaving_summary(id64, where))
+        return copy.deepcopy(hit[1])
+
+    def _leaving_summary(self, id64, where):
         sysrow = self.db.execute("SELECT body_count, all_found FROM own_systems WHERE id64=?", (id64,)).fetchone()
         star_row = self.db.execute("SELECT star_class FROM jumps WHERE id64=? ORDER BY ts DESC LIMIT 1", (id64,)).fetchone()
         star = star_row["star_class"] if star_row else None
@@ -8393,7 +8464,7 @@ class State:
                   self.db.execute("SELECT body_id, record FROM own_bodies WHERE system=?", (id64,))}
         if not sysrow and not bodies:
             return None
-        where = self.locate(id64) or ("", None, None, None)
+        where = where or ("", None, None, None)
         count = sysrow["body_count"] if sysrow else None
         ctx = bio_context(where[0], bodies.values(), where[1], where[2], where[3], star, count)
         name_of = lambda bid: short_name(where[0], bodies[bid]["name"])
@@ -13062,7 +13133,7 @@ class State:
         seq_before = self.journals.moment_seq
         try:
             for d in LIVE_DIRS:
-                if self.journals.scan_dir(d, upload="live"):
+                if self.journals.scan_dir(d, upload="live", quick=True):
                     self.unsold_dirty = True
                 nr = os.path.join(d, "NavRoute.json")
                 try:
@@ -15199,6 +15270,7 @@ async def check_bio_rules(state):
     if updated:
         print(f"exobiology rules: updated from BioScan ({info['species']} species)")
         state.journals.dirty |= set(state.bases)
+        state.bio_rules_gen += 1   # leaving_summary's cached bio estimates are the old rules'
     elif updated is None:   # could not check or update: update_if_newer said why
         print(f"exobiology rules: {info['species']} species from BioScan (copy from {(info.get('generated') or '')[:10]})")
     else:

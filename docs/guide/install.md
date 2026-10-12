@@ -96,6 +96,9 @@ turns the automation off inside a container by itself; `false` does the same on 
   (`//gamepc/elite-journals /mnt/elite-journals cifs ro,username=you,password=…,vers=3.0 0 0`); CIFS caches for a
   second by default.
 - Or let Docker mount it: `docker-compose.yml` has NFS and CIFS volume examples.
+- Every second Outrider lists the folder and checks only the newest journals and those still growing: a long journal
+  history costs the share no more than a short one. Each older file is checked once a minute, so a sync tool that adds
+  to one is still read.
 
 **2. Install,** as the user who will own the files, one of three ways:
 

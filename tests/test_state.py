@@ -3,7 +3,9 @@
 Run all: python3 -m unittest discover tests (or scripts/verify.sh).
 """
 import argparse
+import contextlib
 import datetime as dt
+import io
 import json
 import os
 import tempfile
@@ -222,6 +224,94 @@ class LogTailRace(unittest.TestCase):
         self.assertEqual([r["system"] for r in t1["rows"] + t2["rows"]], ["S1"])
 
 
+class QuickScan(unittest.TestCase):
+    """S18: the tick's scan of a journal folder over a network share stats only the files still changing and the newest
+    two; every file once a minute."""
+
+    def setUp(self):
+        import shutil
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir)
+        self.db = ed_outrider.open_db(":memory:")
+        self.addCleanup(self.db.close)
+        self.j = ed_outrider.Journals(self.db)
+        self.now = 1000.0
+        self.j.clock = lambda: self.now
+        self.paths = [self.write(n, "A") for n in range(1, 6)]
+
+    def write(self, n, system, end="\n"):
+        p = os.path.join(self.dir, f"Journal.2026-01-0{n}T000000.01.log")
+        with open(p, "a", encoding="utf-8") as f:
+            f.write(json.dumps({"timestamp": f"2026-01-0{n}T00:00:00Z", "event": "FSDJump", "StarSystem": system,
+                                "SystemAddress": n, "StarPos": [n, 0, 0]}) + end)
+        return p
+
+    def scan(self, step=1):
+        """One quick scan `step` seconds after the last: the paths it stat'd."""
+        self.now += step
+        seen, real = [], os.path.getsize
+        with unittest.mock.patch("os.path.getsize", lambda p: seen.append(p) or real(p)):
+            self.j.scan_dir(self.dir, quick=True)
+        return seen
+
+    def test_settled_files_wait_for_the_full_check(self):
+        self.assertEqual(self.scan(), self.paths)                        # the first scan stats every file
+        for _ in range(ed_outrider.JOURNAL_SETTLE_STATS):
+            self.scan()
+        self.assertEqual(self.j.settled, set(self.paths))
+        self.assertEqual(self.scan(), self.paths[-2:])                   # settled: only the newest two
+        new = self.write(7, "B")                                         # a new journal is listed and read at once
+        self.assertEqual(self.scan(), self.paths[-1:] + [new])
+        self.assertEqual(self.j.offsets[new], os.path.getsize(new))
+        self.write(1, "C")                                               # a sync tool adds to an old one: not yet...
+        self.assertNotIn(self.paths[0], self.scan())
+        self.assertEqual(self.scan(ed_outrider.JOURNAL_FULL_CHECK_S), self.paths + [new])   # ...but within the minute
+        self.assertEqual(self.j.offsets[self.paths[0]], os.path.getsize(self.paths[0]))
+        self.assertNotIn(self.paths[0], self.j.settled)                  # it changed: settles again from scratch
+
+    def test_a_file_cut_short_settles_and_a_bad_one_never(self):
+        cut = self.write(2, "Half", end="")                              # its last line never finished
+        real = self.j.read_file
+
+        def read(path):
+            if path == self.paths[2]:
+                raise PermissionError(13, "Permission denied")
+            return real(path)
+        with unittest.mock.patch.object(self.j, "read_file", read), \
+                unittest.mock.patch("sys.stderr", io.StringIO()):
+            for _ in range(ed_outrider.JOURNAL_SETTLE_STATS + 1):
+                self.scan()
+            self.assertLess(self.j.offsets[cut], os.path.getsize(cut))      # size never reaches the offset...
+            self.assertIn(cut, self.j.settled)                               # ...but it stopped changing
+            self.assertNotIn(self.paths[2], self.j.settled)                  # unreadable: tried every time
+            self.assertIn(self.paths[2], self.scan())
+
+    def test_reload_forgets_what_settled(self):
+        for _ in range(ed_outrider.JOURNAL_SETTLE_STATS + 1):
+            self.scan()
+        self.assertTrue(self.j.settled)
+        self.j.reload()                                                   # a rolled-back tick: offsets went back
+        self.assertEqual(self.j.settled, set())
+        self.assertEqual(self.scan(), self.paths)
+
+    def test_the_tick_scans_quick(self):
+        import types
+        state = ed_outrider.State(self.db, self.j, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        calls = []
+        later = ("watch_status", "maybe_refresh", "apply_own_changes", "maybe_classify_target", "maybe_unsold",
+                 "maybe_sale_left", "maybe_curious", "maybe_locate_carrier", "maybe_find_sellers", "maybe_backup_on_quit",
+                 "highway_copy_next", "riches_copy_next", "highway_heavy_check", "maybe_autotarget",
+                 "maybe_boxel_autotarget")
+        with contextlib.ExitStack() as stack:
+            for name in later:
+                stack.enter_context(unittest.mock.patch.object(state, name, lambda *a: None))
+            stack.enter_context(unittest.mock.patch.object(ed_outrider, "LIVE_DIRS", [self.dir]))
+            stack.enter_context(unittest.mock.patch.object(self.j, "scan_dir", lambda d, **kw: calls.append(kw) and 0))
+            state.tick({})
+        self.assertIsNone(state.tail_error)
+        self.assertEqual(calls, [{"upload": "live", "quick": True}])
+
+
 class NamedBodyPanel(unittest.TestCase):
     def test_named_body_finds_its_scan(self):
         import asyncio, types
@@ -305,6 +395,57 @@ class Batch1Server(unittest.TestCase):
         self.db.commit()
         u5 = next(x for x in self.state.leaving_summary(1)["unmapped"] if x["body"] == "5")
         self.assertEqual(u5["value_mapped_bonus"], u5["value_mapped"])
+
+    def test_leaving_summary_cached_until_its_data_changes(self):   # S17
+        """The payload asks for the target's leaving summary on every poll: worked out once until the journal writes
+        something it reads (data_seq: scans, deaths, sales), the system's place changes, the bio rules are updated or a
+        tick is rolled back; each caller gets its own copy."""
+        ev = scan("2026-01-01T00:05:00Z", "Sys", 1, 4, "Sys 4", disc=True)[2]
+        ev.update(PlanetClass="Sudarsky class II gas giant", MassEM=300)
+        self.j.handle(ev)
+        self.j.handle({"event": "SAAScanComplete", "timestamp": "2026-01-01T00:06:00Z", "SystemAddress": 1, "BodyID": 4,
+                       "BodyName": "Sys 4", "ProbesUsed": 5, "EfficiencyTarget": 6})
+        self.db.commit()
+        calls, real = [], ed_outrider.bio_context
+        unmapped = lambda: [u["body"] for u in self.state.leaving_summary(1)["unmapped"]]
+        with unittest.mock.patch.object(ed_outrider, "bio_context", lambda *a, **k: calls.append(1) or real(*a, **k)):
+            first = self.state.leaving_summary(1)
+            self.assertEqual(first["unmapped"], [])                     # mapped
+            first["unmapped"].append("changed by its caller")         # system_detail adds to its copy
+            self.assertEqual(unmapped(), [])
+            self.assertEqual(len(calls), 1)                             # worked out once
+            for _, _, e in death("2026-01-01T00:07:00Z"):             # the map died with the ship: to do again
+                self.j.handle(e)
+            self.assertEqual(unmapped(), ["4"])
+            self.assertEqual(len(calls), 2)
+            self.j.handle(sale("2026-01-01T00:08:00Z", ["Sys"])[2])  # a sale (no dirty system) moves it too
+            unmapped()
+            self.assertEqual(len(calls), 3)
+            self.j.handle(scan("2026-01-01T00:09:00Z", "Sys", 1, 5, "Sys 5")[2])
+            self.assertEqual(self.state.leaving_summary(1)["scanned"], 2)
+            self.assertEqual(len(calls), 4)
+            self.state.bio_rules_gen += 1                               # check_bio_rules installed new rules
+            unmapped()
+            self.assertEqual(len(calls), 5)
+            self.state.bases[1] = ("spansh", {"name": "Sys", "x": 1.0, "y": 2.0, "z": 3.0})   # a new place: the region
+            unmapped()
+            self.assertEqual(len(calls), 6)
+            self.j.reload()                                             # a rolled-back tick
+            unmapped()
+            self.assertEqual(len(calls), 7)
+            unmapped()
+            self.assertEqual(len(calls), 7)
+
+    def test_updated_bio_rules_count_a_generation(self):   # S17: leaving_summary's cache key
+        import asyncio
+        with unittest.mock.patch.object(outrider.bio, "update_if_newer", lambda log=print: True), \
+                unittest.mock.patch.object(outrider.bio, "rules_info", lambda: {"species": 1, "generated": ""}), \
+                unittest.mock.patch("sys.stdout", io.StringIO()):
+            asyncio.run(ed_outrider.check_bio_rules(self.state))
+            self.assertEqual(self.state.bio_rules_gen, 1)
+            with unittest.mock.patch.object(outrider.bio, "update_if_newer", lambda log=print: False):
+                asyncio.run(ed_outrider.check_bio_rules(self.state))   # up to date: the same rules
+            self.assertEqual(self.state.bio_rules_gen, 1)
 
     def test_mapped_by_someone_else_is_flagged(self):
         """The author (2026-10-09): a body someone else mapped (WasMapped) is never pointed out. The leaving list and the
@@ -2064,7 +2205,7 @@ class BatchBState(unittest.TestCase):
             for name in later:
                 stack.enter_context(unittest.mock.patch.object(self.state, name, lambda *a: None))
             stack.enter_context(unittest.mock.patch.object(
-                self.j, "scan_dir", lambda d: self.j.moment("supercharged", "2026-01-01T00:01:00Z", mult=4.0) and False))
+                self.j, "scan_dir", lambda d, **kw: self.j.moment("supercharged", "2026-01-01T00:01:00Z", mult=4.0) and False))
             v = self.state.version
             self.state.tick({})
         self.assertGreater(self.state.version, v)

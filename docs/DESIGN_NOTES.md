@@ -9,6 +9,18 @@ upstream project's choices, not rules of the game.
 - **No keyboard shortcuts.** A deliberate upstream choice, declined more than once; clickable things are reachable with
   Tab and act on Enter/Space instead.
 - **No VoiceAttack integration.** Not used upstream; the co-pilot button and the page cover the same ground.
+- **The tick stats only the journals still changing** (2026-10-12, S18, `Journals._scan_dir(quick=True)`). Over a
+  network share every stat is a round trip, and a long history is thousands of files a second. The folder is still
+  listed every tick (a new journal is read at once); a file is settled when its size was the same for
+  `JOURNAL_SETTLE_STATS` stats in a row (not when it reaches its offset: a journal cut without its final newline never
+  does), and only the unsettled ones and the newest two are stat'd; every file once per `JOURNAL_FULL_CHECK_S` (60 s).
+  So a sync tool that appends to an older journal is read up to a minute late. An unreadable file never settles (it is
+  retried every tick, as before); a rolled-back tick forgets what settled.
+- **Summaries cached on the reader's own counters** (2026-10-12, S17 and S66). `leaving_summary` (asked for on every
+  poll with a target set) is kept per system until `Journals.data_seq` moves (every write it reads: scans, codex,
+  deaths, sales; `mark()`), the system's `locate` answer changes (its region decides "new to your codex") or the bio
+  rules are updated (`bio_rules_gen`); not on `scan_version`, which moves later in the tick. The carrier's fold is
+  kept until its own history changes (`carrier_version`), not on every change to the ship's hold.
 - **Green gas giants are a guess, said as one** (2026-10-12, `outrider/ggg.py`). The seven-layer ladder model is a
   community reconstruction (Canonn's issue 222, 2026-10-05), not the game's code: a match is "potential", never a fact,
   and a codex entry replaces it. It needs the journal's own temperature (green windows can be 0.00002 K wide): yours

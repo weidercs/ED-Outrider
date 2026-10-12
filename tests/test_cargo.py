@@ -400,6 +400,35 @@ class CargoState(unittest.TestCase):
                          BlackMarket=False, Commodity="tritium", CancelTrade=True))
         self.assertIsNone(self.state.carrier_tritium())
 
+    def test_the_carrier_is_folded_again_only_when_its_history_changes(self):   # S66
+        """The carrier's fold is keyed on its own history (carrier_version), not on every change to the ship's hold:
+        mining, scooping or buying moved cargo_version and folded the whole carrier history again each time."""
+        fx, _, _ = real()
+        self.feed(self.j, fx)
+        folds, fold = [], cargo.carrier_fold
+        with unittest.mock.patch.object(cargo, "carrier_fold", lambda *a: folds.append(1) or fold(*a)):
+            first = self.state.carrier_cargo()
+            self.assertIs(self.state.carrier_cargo(), first)
+            self.assertEqual(len(folds), 1)
+            before = self.j.cargo_version
+            self.j.line_source = "Journal.test.log:9000"
+            self.j.handle(ev("2026-10-07T10:30:00Z", "CollectCargo", Type="gold", Stolen=False))   # the ship's hold only
+            self.assertGreater(self.j.cargo_version, before)
+            self.state.carrier_cargo()
+            self.assertEqual(len(folds), 1)
+            self.write_market(fx)
+            self.assertTrue(self.j.read_market(self.dir))   # a Market.json read at your carrier
+            self.state.carrier_cargo()
+            self.assertEqual(len(folds), 2)
+            self.j.line_source = "Journal.test.log:9999"   # one of the carrier's own events
+            self.j.handle(ev("2026-10-07T11:00:00Z", "CarrierTradeOrder", CarrierID=CARRIER, CarrierType="FleetCarrier",
+                             BlackMarket=False, Commodity="tritium", CancelTrade=True))
+            self.state.carrier_cargo()
+            self.assertEqual(len(folds), 3)
+            self.j.reload()                                # a rolled-back tick: folded from what the database holds
+            self.state.carrier_cargo()
+            self.assertEqual(len(folds), 4)
+
     def test_market_elsewhere_ignored(self):
         fx, _, _ = real()
         self.feed(self.j, fx)
