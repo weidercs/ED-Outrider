@@ -28,8 +28,9 @@ is welcome.
 
 > [!TIP]
 > The first start reads all your journals (a few seconds, or a few minutes for years of them); after that it only
-> reads what's new. When an update changes how journals are read, its first start reads them all again once, and the
-> start-up log says so first, with why.
+> reads what's new. When an update changes how journals are read, its first start reads them all again once (after a
+> backup), and the start-up log says so first, with why. Meanwhile the page already answers: "Reading your journals:
+> March 2024, 41%", with Show log, and it opens by itself when Outrider is ready (a page left open says "starting").
 > Journal folders are found automatically on Windows and Steam/Proton. When none is found, or the folder holds no
 > journals yet, the Data tile and a line at the top of the page say so, and **set the journal folder** opens ⚙
 > Settings → Server at `[journals] live`. A browser needs one click on the
@@ -53,6 +54,26 @@ Elite's window with **`wmctrl`** and **`xprop`** / **`xwininfo`** (the `x11-util
 
 Start Outrider with the `.venv`'s Python (`.venv/bin/python ed_outrider.py`, as above): plain `python3 ed_outrider.py` finds Piper and evdev in a `.venv` in the Outrider folder, but aiohttp must then be installed for that `python3` too.
 Your own files (the database, backups, downloaded voices, banned lines, your own pronunciations) all go in `data/`.
+
+### Start with your computer
+
+To have Outrider running without a terminal to keep open, install it as a service, with the arguments you give
+(`--config`, `--port`...):
+
+```bash
+./launch_outrider.sh --install-service          # Linux; remove it with --uninstall-service
+launch_outrider.bat --install-service           # Windows
+```
+
+Or ⚙ Settings → Server → **Start with this computer**, in the browser on that PC (not from another device). On Linux
+it is a systemd user service (`~/.config/systemd/user/ed-outrider.service`) that starts when you log in to your desktop;
+switch to it now with `systemctl --user start ed-outrider` after stopping the Outrider you started by hand. Its output:
+`journalctl --user -u ed-outrider -f`, and Show log as always. It comes back by itself after a crash, and Settings'
+**Restart** goes through it. If it does not start at login, your desktop does not start `graphical-session.target`
+(GNOME and KDE do). On a Linux server (`[server] game_pc = false`) it starts with your user's systemd instead; `loginctl
+enable-linger` starts it at boot. On Windows it is `ED Outrider.cmd` in your Startup folder (`shell:startup`), which
+starts `launch_outrider.bat` minimised when you sign in. Not in Docker (the container's restart policy already is the
+service) and not on macOS yet (add `launch_outrider.sh` to Login Items).
 
 Run this way, on the PC the game runs on, everything works. Further down: [opening the page from a tablet or
 another device](#-other-devices-on-your-network), [running Outrider as a server in Docker](#-running-as-a-server-docker)

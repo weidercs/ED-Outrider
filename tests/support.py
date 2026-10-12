@@ -26,6 +26,17 @@ outrider.uploads.edmc_uploads = lambda home=None, **kw: _edmc_uploads(home=home,
 # ...nor the player's fetched picture list (data/codex_images.json): the shipped one, or a test's own
 import outrider.codex_images  # noqa: E402
 outrider.codex_images.CACHE = os.path.join(tempfile.mkdtemp(prefix="outrider-test-images-"), "codex_images.json")
+# ...nor the player's ~/.config/systemd/user or Startup folder (S70's service), nor systemctl itself: a scratch folder,
+# and a runner that refuses (a test that wants systemctl's answers sets its own fake)
+import outrider.service  # noqa: E402
+outrider.service.TARGET_DIR = tempfile.mkdtemp(prefix="outrider-test-service-")
+
+
+def _no_systemctl(cmd, **kw):
+    raise OSError(f"tests never run {cmd[0]}")
+
+
+outrider.service.RUNNER = _no_systemctl
 
 
 def user_docs():

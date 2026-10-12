@@ -5374,6 +5374,88 @@ const settle = async maxMs => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| restart and auto honk readiness S10 S69 |", good ? "Restart off with its reason, then confirm, POST, Restarting… and back; readiness from the server, a fix with Copy" : JSON.stringify({got, want}), errors.slice(before));
   }
+  // S70 / S9 (2026-10-12): Settings -> Server -> Start with this computer (the scratch server's own answer, from this PC;
+  // then injected ones: Install posts (answered here: nothing is ever installed from the smoke test), Remove asks first,
+  // another device gets the command with Copy, Docker / macOS the reason), Outrider starting again (503 "starting" from
+  // the poll: "starting · 41%", not "not connected", and Restarting… says what it is doing; a normal answer clears it),
+  // and the starting page itself (static/starting.html) in a window of its own, reloading once Outrider is ready
+  {
+    const w = dom.window, before = errors.length;
+    const realFetch = w.fetch, realConfirm = w.confirm, realCopy = w.copyText, posted = [], copied = [], asked = [];
+    const got = {};
+    w.eval(`document.getElementById("srvService").open = true; loadService();`);
+    await settle(2000);
+    got.real = w.eval(`(() => { const t = document.getElementById("srvServiceBody").textContent;
+      return !!(svc.info && svc.info.this_pc === true && (svc.info.can ? /Install as a service|Remove the service/.test(t) : t.startsWith("Not here:"))); })()`);
+    const json = body => Promise.resolve({ok: true, status: 200, headers: {get: () => "application/json"}, json: async () => body});
+    const installed = {kind: "systemd", can: true, why: null, installed: true, path: "/x/ed-outrider.service", running: false, this_pc: true,
+                       command: "cd /o && ./launch_outrider.sh --install-service --port 8026", remove: "cd /o && ./launch_outrider.sh --uninstall-service"};
+    w.fetch = (u, o) => {
+      if (/api\/service/.test(String(u)) && o && o.method === "POST") {
+        posted.push(JSON.parse(o.body).action);
+        return json({ok: true, lines: ["wrote /x/ed-outrider.service", "enabled: ED Outrider starts when you log in"], service: installed});
+      }
+      return realFetch(u, o);
+    };
+    w.confirm = q => { asked.push(q); return false; };
+    w.copyText = (text, what) => copied.push([text, what]);
+    w.__svc = installed;
+    got.install = JSON.parse(w.eval(`(() => { svc.info = Object.assign({}, window.__svc, {installed: false}); svc.lines = null; renderService();
+      const b = document.getElementById("svcBtn"), o = [b.textContent, document.getElementById("svcCmd").textContent];
+      b.click(); return JSON.stringify(o); })()`));
+    await settle(500);
+    got.installed = JSON.parse(w.eval(`(() => { const t = document.getElementById("srvServiceBody").textContent;
+      return JSON.stringify([t.includes("Installed as a systemd user service"), t.includes("enabled: ED Outrider starts when you log in"),
+        document.getElementById("svcBtn").textContent, document.getElementById("svcCmd").textContent]); })()`));
+    w.eval(`document.getElementById("svcBtn").click()`);   // Remove: asks first (cancelled here)
+    await settle(300);
+    got.removeAsked = [asked.length, posted.slice()];
+    got.otherDevice = JSON.parse(w.eval(`(() => { svc.info = Object.assign({}, window.__svc, {this_pc: false}); svc.lines = null; renderService();
+      document.getElementById("svcCopy").click();
+      return JSON.stringify([!!document.getElementById("svcBtn"), document.getElementById("srvServiceBody").textContent.includes("Only from this PC's own browser")]); })()`));
+    got.copied = copied.slice();
+    got.refused = w.eval(`(() => { svc.info = {kind: null, can: false, why: "not on macOS yet", this_pc: true}; renderService();
+      return document.getElementById("srvServiceBody").textContent; })()`);
+    w.eval(`document.getElementById("srvService").open = false;`);
+    // Outrider starting again: every /api/ call answered 503 "starting"
+    const starting = {phase: "journals", text: "Reading your journals: March 2024, 41%", pct: 41, why: null, since: 1};
+    w.fetch = (u, o) => /api\/nearby/.test(String(u))
+      ? Promise.resolve({ok: false, status: 503, headers: {get: () => "application/json"},
+                         json: async () => ({error: `Outrider is starting: ${starting.text}`, code: "starting", starting})})
+      : realFetch(u, o);
+    await w.eval(`poll(true)`);
+    got.starting = JSON.parse(w.eval(`(() => { rst.asked = {run: data.run_id, at: Date.now() - 600000, backup: false};
+      const o = [linkState().text, !!disconnected, restartText()]; rst.asked = null; return JSON.stringify(o); })()`));
+    w.fetch = (u, o) => /api\/nearby/.test(String(u)) ? Promise.resolve({ok: true, status: 204, headers: {get: () => ""}}) : realFetch(u, o);
+    await w.eval(`poll(true)`);
+    got.back = JSON.parse(w.eval(`JSON.stringify([pageStarting, linkState().text.startsWith("starting")])`));
+    w.fetch = realFetch; w.confirm = realConfirm; w.copyText = realCopy;
+    // the starting page, as served while Outrider reads the journals
+    const answers = [{status: 200, body: starting}, {status: 200, body: {phase: "ready"}}];
+    const sw = new JSDOM(await (await fetch(base + "static/starting.html")).text(), {url: base, runScripts: "dangerously",
+      beforeParse(x) {
+        x.fetch = () => { const a = answers.length > 1 && !x.__ready ? answers[0] : answers[1];
+          return Promise.resolve({ok: true, status: a.status, json: async () => a.body}); };
+        x.addEventListener("error", e => errors.push("starting page: " + e.message));
+      }}).window;
+    sw.eval(`reloadPage = () => { window.__reloaded = (window.__reloaded || 0) + 1; }`);
+    await sleep(300);
+    got.page = JSON.parse(sw.eval(`JSON.stringify([document.getElementById("text").textContent, document.querySelector("#bar > i").style.width,
+      document.getElementById("logBtn").hidden, window.__reloaded || 0])`));
+    sw.__ready = true;
+    await sleep(1500);
+    got.reloaded = sw.eval(`window.__reloaded || 0`);
+    sw.close();
+    const want = {real: true, install: ["Install as a service", "cd /o && ./launch_outrider.sh --install-service --port 8026"],
+                  installed: [true, true, "Remove the service", "cd /o && ./launch_outrider.sh --uninstall-service"],
+                  removeAsked: [1, ["install"]], otherDevice: [false, true],
+                  copied: [["cd /o && ./launch_outrider.sh --uninstall-service", "the command"]], refused: "Not here: not on macOS yet",
+                  starting: ["starting · 41%", false, "Restarting… Reading your journals: March 2024, 41%"], back: [null, false],
+                  page: ["Reading your journals: March 2024, 41%", "41%", false, 0], reloaded: 1};
+    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| service and starting S70 S9 |", good ? "Start with this computer (install, remove asks, another device, refused); 503 starting is starting; the starting page reloads when ready" : JSON.stringify({got, want}), errors.slice(before));
+  }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",
     headers: Object.assign({"Content-Type": "application/json"}, origin ? {Origin: origin} : {})}).then(r => r.status);

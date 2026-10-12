@@ -77,14 +77,6 @@ class JournalReader(unittest.TestCase):
         self.j.handle(loadout("2026-10-01T11:00:00Z", "adder_taxi", 99, 12.0, 0.5))
         self.assertEqual((dict(self.j.ship or {}), self.j.jump_range, dict(self.j.hull or {}), list(self.j.fuel_hist)), before)
 
-    def test_a_stop_during_the_import_keeps_whole_files_only(self):
-        """A SIGTERM during the start-up import drops the part of the file being read (it was committed without its
-        offset, and the next start doubled it)."""
-        src = inspect.getsource(ed_outrider.run)
-        handler = src[src.index("def stop_during_start"):src.index("signal.signal(signal.SIGTERM, stop_during_start)")]
-        self.assertIn("db.rollback()", handler)
-        self.assertNotIn("db.commit()", handler)
-
 
 class SpanshStandIns(unittest.TestCase):
     """Batch C: what Spansh knew, apart from stand-ins."""

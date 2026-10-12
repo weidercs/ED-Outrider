@@ -401,8 +401,12 @@ class FableScriptFixes(unittest.TestCase):
         src = self.read("launch_outrider.sh")
         self.assertIn('elif [ -e "$VENV/pyvenv.cfg" ] && [ ! -x "$VENV/bin/python" ]; then', src)
 
-    def test_health_check_waits_for_the_first_import(self):
-        self.assertIn("--start-period=30m", self.read("Dockerfile"))
+    def test_health_check_answers_during_the_import(self):
+        """S9: /api/version answers while the journals are read (the starting app), so no long start period."""
+        df = self.read("Dockerfile")
+        self.assertIn("--start-period=2m", df)
+        self.assertIn("/api/version", df)
+        self.assertNotIn("--start-period=30m", df)
 
     def test_guide_matches(self):
         self.assertIn("Auto honk, Uploads, In-game overlay, Display", self.read("docs/guide/settings.md"))

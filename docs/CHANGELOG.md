@@ -2,6 +2,30 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · Progress while reading journals, and Outrider as a service
+- **The page answers while Outrider starts** (S9): a small starting app takes the port before the database is opened,
+  so a long first start or journal re-read shows "ED Outrider is starting · Reading your journals: March 2024, 41%"
+  (bytes read of those to read, the month from the file's name), "Backing up your database before reading every
+  journal again" as its own phase, why it re-reads, and Show log; it reloads into the real page when that is ready.
+  GET `/api/starting` (the real app answers "ready"); `/api/version` keeps its shape; every other `/api/` answers 503
+  `{error, code: "starting"}`: an open page says "starting · 41%" (and "Restarting… Reading your journals…") instead of
+  "not connected", and no "Lost contact" during a long re-read. A device on the network that is not signed in learns only
+  that it is starting. The import runs one file at a time on the event loop (`import_journals`,
+  `Journals.import_steps`/`scan_steps`), the backup on a worker (`open_db(reset=False)`, `reread_due`,
+  `reset_journal_data`); legacy folders are committed per file too. A SIGTERM during the start ends between two files
+  (each read whole and committed) or after the backup, instead of raising mid-file. verify.sh waits for `/api/starting`
+  "ready"; Docker's health check is healthy during the import (start period 2 minutes, was 30).
+- **Start with this computer** (S70): `./launch_outrider.sh --install-service` (or `launch_outrider.bat`), or Settings →
+  Server → Start with this computer from the browser on that PC: on Linux a systemd user service
+  (`~/.config/systemd/user/ed-outrider.service`, running the launcher with the arguments given, at login; on a server
+  with the user's systemd), on Windows `ED Outrider.cmd` in the Startup folder (the .bat, minimised). Enabled, not
+  started (this Outrider holds the port: the words say how to switch). `--uninstall-service` and Remove take it away.
+  Refused with the reason in Docker (compose's restart policy is the service) and on macOS. New `outrider/service.py`.
+- **Restart and the service agree**: the unit sets `OUTRIDER_SERVICE=systemd`; Restart then exits 75 and the unit's
+  `RestartForceExitStatus=75` starts it again (`Restart=on-failure` for a crash; `TimeoutStopSec=330`, over the
+  backup Outrider waits for at shutdown). Tests and verify.sh write the unit into a scratch folder and never run
+  systemctl.
+
 ## 2026-10-12 · Restart from Settings, and whether auto honk can work here
 - **Restart** (S10): Settings → Server's top row ("Outrider <version> · Show log · Restart"), "Saved 2 settings. Restart
   now", and the "Outrider has been updated: restart it" line. A confirm, then POST `/api/restart`: the usual clean stop

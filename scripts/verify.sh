@@ -12,7 +12,8 @@
 #
 # Safe by construction: it never reads or writes your own data/ (ed_outrider.sqlite, ...) or ed_outrider.toml, never uses
 # port 8025, never plays audio, never presses keys (auto honk off) or opens input devices (co-pilot off), makes
-# no backups, and stays offline (Spansh, EDSM, GitHub and voice downloads are pointed at a closed local port).
+# no backups, never writes a service (systemd user unit, Startup entry) where yours would go, and stays offline (Spansh,
+# EDSM, GitHub and voice downloads are pointed at a closed local port).
 # Everything it makes goes in a mktemp folder that is deleted at the end; the server is stopped by its PID.
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -106,7 +107,7 @@ EOF
   # OUTRIDER_NO_OVERLAY_WINDOW: never the overlay window on this machine's screen (Outrider runs it on a game PC)
   OUTRIDER_NO_OVERLAY_WINDOW=1 "$PY" - --config "$TMP/scratch.toml" --db "$TMP/scratch.sqlite" --port "$PORT" --host 127.0.0.1 --journals "$TMP/journals" \
       >"$TMP/server.log" 2>&1 <<'EOF' &
-import sys
+import os, sys
 sys.path.insert(0, ".")
 import ed_outrider, outrider.tts
 OFF = "http://127.0.0.1:9/offline"
@@ -122,10 +123,14 @@ outrider.eddn.UPLOAD_URL = OFF        # nor EDDN (uploads are off there anyway)
 outrider.edsm.UPLOAD_URL = outrider.edsm.DISCARD_URL = OFF   # nor EDSM's journal upload
 ed_outrider.DSSA_URL = OFF          # nor EDAstro for the DSSA list
 ed_outrider.Clipboard.TOOLS = ()   # the desktop clipboard is never touched by the smoke test
+import outrider.service   # nor your own ~/.config/systemd/user or Startup folder, nor systemctl (S70's service)
+outrider.service.TARGET_DIR = os.path.join(os.path.dirname(sys.argv[sys.argv.index("--db") + 1]), "service")
+def _no_systemctl(cmd, **kw):
+    raise OSError("verify.sh never runs systemctl")
+outrider.service.RUNNER = _no_systemctl
 if outrider.bio:
     outrider.bio.update_if_newer = lambda path=None, log=print: None
 outrider.tts.Speaker._download = lambda self, name, status=None: False
-import os
 # your own pronunciations (data/pronounce.json) are never read or written from here: a scratch file beside the database
 outrider.tts.PRONOUNCE.own = os.path.join(os.path.dirname(sys.argv[sys.argv.index("--db") + 1]), "pronounce.json")
 ed_outrider.main(sys.argv[1:])
@@ -134,7 +139,9 @@ EOF
   up=0
   for _ in $(seq 1 60); do
     if ! kill -0 "$PID" 2>/dev/null; then break; fi
-    if "$PY" -c "import urllib.request,sys; urllib.request.urlopen('http://127.0.0.1:$PORT/', timeout=2)" 2>/dev/null; then up=1; break; fi
+    # ready = the real page is served: while it starts, a starting page answers on the port (S9) and /api/starting
+    # says what it is doing; the real app answers "ready"
+    if "$PY" -c "import json,urllib.request,sys; sys.exit(json.load(urllib.request.urlopen('http://127.0.0.1:$PORT/api/starting', timeout=2)).get('phase') != 'ready')" 2>/dev/null; then up=1; break; fi
     sleep 1
   done
   if [ "$up" != 1 ]; then

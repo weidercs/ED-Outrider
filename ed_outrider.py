@@ -211,6 +211,7 @@ import outrider.serverlog  # Outrider's own log: the terminal's lines kept for S
 import outrider.notices    # the notices banner: start-up problems shown on every page until fixed or dismissed
 import outrider.boxel      # boxel exploration: the cube a procedural name places a system in, its systems, its id64s (pure)
 import outrider.codex_bodies  # star and planet types as codex entries: what a body would log (pure)
+import outrider.service    # Install as a service (S70): a systemd user unit on Linux, a Startup .cmd on Windows
 from outrider.core import iso_ts, ts_seconds   # journal timestamps
 from outrider.fsd import (   # the frame shift drive's maths: range, fuel per jump, the fuel model, fleet figures
     FSD_RANGE_MODS, GUARDIAN_BOOST, conservative_optimal_mass, conservative_range, fleet_figures, fleet_range, fsd_range,
@@ -1608,11 +1609,13 @@ def reread_message(old, rescan=False):
             + "). This can take a few minutes.")
 
 
-def open_db(path, rescan=False, on_reread=None, before_reset=None):
+def open_db(path, rescan=False, on_reread=None, before_reset=None, reset=True):
     """The database at `path`, its schema brought up to date. A journal re-read (PARSER_VERSION changed, or `rescan`)
     clears the journal-derived tables (RESET_JOURNAL_DATA): `on_reread(why)` is told first, then, for a database that
     was in use (its stored parser version is not None: a crashed first run leaves an empty file), `before_reset(db)`
-    runs before any row is deleted: run()'s backup before the re-read (S4, backup_before_reread). Tests pass none."""
+    runs before any row is deleted: the backup before the re-read (S4, backup_before_reread). Tests pass none.
+    reset False: no re-read here; run() does it in steps (reread_due, its backup off the event loop, reset_journal_data),
+    so the starting page answers during the backup (S9)."""
     db = sqlite3.connect(path)
     db.row_factory = sqlite3.Row
     db.executescript(SCHEMA + outrider.uploads.SCHEMA)
@@ -1639,18 +1642,45 @@ def open_db(path, rescan=False, on_reread=None, before_reset=None):
                        (b.get("x"), b.get("y"), b.get("z"), r["id64"]))
         db.execute("CREATE INDEX IF NOT EXISTS spansh_xyz ON spansh_systems (x, y, z)")
         db.commit()
-    old = meta_get(db, "parser_version")
-    if rescan or old != PARSER_VERSION:
+    due, old = reread_due(db, rescan)
+    if due and reset:
         if on_reread:
             on_reread(reread_message(old, rescan))
         if before_reset and old is not None:
             db.commit()   # the backup reads the file through its own connection: nothing of this one's left pending
             before_reset(db)
-        stamp_next_stop(db)
-        db.executescript(RESET_JOURNAL_DATA)
-        meta_set(db, "parser_version", PARSER_VERSION)
-        db.commit()
+        reset_journal_data(db)
     return db
+
+
+def reread_due(db, rescan=False):
+    """(whether every journal is read again now, the stored journal reader version): --rescan, a new database (None),
+    or a PARSER_VERSION other than the one that wrote it."""
+    old = meta_get(db, "parser_version")
+    return bool(rescan or old != PARSER_VERSION), old
+
+
+def reset_journal_data(db):
+    """The journal re-read's clearing: what the journals gave goes (RESET_JOURNAL_DATA), to be read again."""
+    stamp_next_stop(db)
+    db.executescript(RESET_JOURNAL_DATA)
+    meta_set(db, "parser_version", PARSER_VERSION)
+    db.commit()
+
+
+MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November",
+          "December")
+
+
+def journal_month(path):
+    """The month a journal file's name says it was started in, as the starting page shows it ("March 2024"), from both
+    naming styles (Journal.2024-03-05T201512.01.log; before 2023, Journal.240305201512.01.log), else None."""
+    b = os.path.basename(path or "")
+    m = re.match(r"Journal\.(\d{4})-(\d{2})-\d{2}T", b) or re.match(r"Journal\.(\d{2})(\d{2})\d{8}\.", b)
+    if not m:
+        return None
+    year, month = int(m.group(1)), int(m.group(2))
+    return f"{MONTHS[month - 1]} {year + 2000 if year < 100 else year}" if 1 <= month <= 12 else None
 
 
 def not_a_ship(kind):
@@ -2840,16 +2870,41 @@ class Journals:
         self.sizes.clear()
 
     def import_legacy(self):
-        for d in LEGACY_DIRS:
-            if meta_get(self.db, f"legacy:{d}"):
-                continue
+        """The legacy folders not read yet, at once (the start-up import goes through import_steps)."""
+        for _ in self.import_steps([]):
+            pass
+
+    def import_steps(self, live_dirs):
+        """The start-up import one journal file at a time (S9): the legacy folders not read yet, then the live ones
+        (their uploads' catch-up). Each file is committed as it is read (a stop between two keeps what is read), and a
+        step {done, total, path} is yielded after it: bytes read so far and to read (a copy of one file in two folders
+        counted once), the file just read. run() awaits between steps, so the starting page answers meanwhile."""
+        legacy = [d for d in LEGACY_DIRS if not meta_get(self.db, f"legacy:{d}")]
+        left = {}
+        for d in legacy + list(live_dirs):
+            for path in glob(os.path.join(glob_escape(d), "Journal.*.log")):
+                try:
+                    n = os.path.getsize(path) - self.start_offset(path)
+                except OSError:
+                    continue
+                b = os.path.basename(path)
+                left[b] = max(left.get(b, 0), n)
+        total, done = sum(n for n in left.values() if n > 0), 0
+        for d in legacy:
             if not os.path.isdir(d):
                 print(f"legacy journal dir not found, skipping: {d}", file=sys.stderr)
                 continue
-            n = self.scan_dir(d)
+            n = 0
+            for path, read in self.scan_steps(d, commit_each=True):
+                n, done = n + 1, done + read
+                yield {"done": done, "total": total, "path": path}
             meta_set(self.db, f"legacy:{d}", True)
             self.db.commit()
             print(f"imported {n} journal files from {d}")
+        for d in live_dirs:
+            for path, read in self.scan_steps(d, commit_each=True, upload="catchup"):
+                done += read
+                yield {"done": done, "total": total, "path": path}
 
     def scan_dir(self, d, commit_each=False, upload=None, quick=False):
         """Read new data from every journal in d. Returns the number of files touched. commit_each: commit after every
@@ -2857,14 +2912,17 @@ class Journals:
         uploaders' hub may do with these lines: None (a legacy folder: nothing), "catchup" (the start-up scan: the
         session's state only) or "live" (the running tail: it may queue). quick: the tick's scan, which leaves out the
         settled files between the folder's full re-checks (S18: JOURNAL_SETTLE_STATS)."""
+        return sum(1 for _ in self.scan_steps(d, commit_each, upload, quick))
+
+    def scan_steps(self, d, commit_each=False, upload=None, quick=False):
+        """scan_dir one file at a time: yields (path, bytes read) after each file read (and committed, commit_each)."""
         self.upload_mode = upload
         try:
-            return self._scan_dir(d, commit_each, quick)
+            yield from self._scan_steps(d, commit_each, quick)
         finally:
             self.upload_mode = None
 
-    def _scan_dir(self, d, commit_each, quick=False):
-        touched = 0
+    def _scan_steps(self, d, commit_each, quick=False):
         # in time order: the old names (Journal.YYMMDDhhmmss.NN.log, before 2023) sort after every new one as text
         paths = sorted(glob(os.path.join(glob_escape(d), "Journal.*.log")), key=outrider.uploads.name_key)
         skip = set()
@@ -2890,7 +2948,8 @@ class Journals:
                 self.settled.add(path)
             else:
                 self.settled.discard(path)
-            if size > self.start_offset(path):
+            start = self.start_offset(path)
+            if size > start:
                 try:
                     self.read_file(path)
                 except OSError as e:   # unreadable (permissions, a disk error): skip it, keep tailing the rest
@@ -2900,10 +2959,9 @@ class Journals:
                     self.settled.discard(path)   # stat'd every time: it is tried again as it was before
                     continue
                 self.bad_files.discard(path)
-                touched += 1
                 if commit_each:
                     self.db.commit()
-        return touched
+                yield path, max(0, self.offsets.get(path, start) - start)
 
     def start_offset(self, path):
         """Where reading `path` starts: its own offset, or where another folder's copy of the same file was read
@@ -5992,16 +6050,17 @@ def journals_gone(db):
     return sum(1 for p in paths if not os.path.exists(p)), len(paths)
 
 
-def backup_before_reread(db, db_path, folder, keep, extras=(), live_dirs=(), board=None):
+def backup_before_reread(db, db_path, folder, keep, extras=(), live_dirs=(), board=None, gone=None):
     """S4, open_db's before_reset in run(): a journal re-read deletes what the journals gave (RESET_JOURNAL_DATA) and
     reads them again, the one destructive step Outrider takes by itself, so the database is backed up first whatever
     backup_every_days says (0 turns off the automatic ones only). The zip is tagged "pre-reread" (backup_name) and
     rotates with the others; last_backup is not touched (the Data tile's line is about the regular backups). A failed
     backup does not stop the re-read: said on stderr and on the banner. When more than half the journal files the
     database was read from are gone (an uninstall under Steam/Proton deletes them), the re-read cannot bring back what
-    they held: said too, with the archive to read them from. Synchronous: run() calls it before serving anything.
-    Returns write_backup's answer, or None when it failed."""
-    gone, known = journals_gone(db)
+    they held: said too, with the archive to read them from. Synchronous: run() calls it on a worker thread (the
+    starting page answers meanwhile, S9) with `gone` (journals_gone's answer) worked out first on the loop's thread, so
+    the database connection is never used from the worker. Returns write_backup's answer, or None when it failed."""
+    gone, known = journals_gone(db) if gone is None else gone
     if known and gone * 2 > known:
         outrider.notices.warn("reread_journals_gone", f"warning: {gone} of the {known} journal files this database was "
                               "read from are gone, so the journal re-read cannot bring back what they held. The backup "
@@ -6094,6 +6153,8 @@ class State:
         self.restart = restart_plan(argv0="")
         self.restart_wanted = False
         self.stop_event = None
+        # Start with this computer (S70): the arguments the service starts Outrider with (service_args, set by run())
+        self.service_args = []
         self.backup_task = None
         self.backup_done_at = None  # time.monotonic() when the last backup ended
         self.seller_task = None
@@ -7034,6 +7095,42 @@ class State:
         asyncio.get_running_loop().call_later(0.2, self.stop_event.set)   # the answer goes out first
         self.bump()
         return {"ok": True, "how": r.get("how"), "backup": backup}, 202
+
+    # ---- Start with this computer (S70): Settings -> Server's row; installed only from this PC's own browser ----
+    def service_command(self, action):
+        """The launcher command that does the same as the row's button, for this install (S70)."""
+        import shlex
+        flag = f"--{action}-service"
+        if os.name == "nt":
+            args = " ".join(outrider.service.cmd_quote(a) for a in [flag, *(self.service_args if action == "install" else [])])
+            return f"cd /d {outrider.service.cmd_quote(outrider.ROOT)} && launch_outrider.bat {args}"
+        args = " ".join(shlex.quote(a) for a in [flag, *(self.service_args if action == "install" else [])])
+        return f"cd {shlex.quote(outrider.ROOT)} && ./launch_outrider.sh {args}"
+
+    def service_info(self, this_pc):
+        """GET /api/service: {kind, can, why, installed, path, running, this_pc, command, remove}. kind "systemd" |
+        "startup" | None (can False: why, Docker and macOS among them)."""
+        how, why = outrider.service.kind(container=self.install == "docker")
+        info = outrider.service.status(how, why)
+        return dict(info, this_pc=bool(this_pc), command=self.service_command("install") if how else None,
+                    remove=self.service_command("uninstall") if how else None)
+
+    async def service_set(self, action, this_pc):
+        """POST /api/service {action: install | uninstall}: (answer, status). Only from this PC (a service is the
+        computer's, not a device's): 403 this_pc_only otherwise; 409 with why when it cannot be done here."""
+        if action not in ("install", "uninstall"):
+            return {"error": "expected {action: install | uninstall}", "code": "bad_request"}, 400
+        if not this_pc:
+            return {"error": "only from this PC's own browser: the service is installed on the computer Outrider runs on",
+                    "code": "this_pc_only"}, 403
+        try:   # systemctl may take a moment: off the event loop
+            lines = await asyncio.get_running_loop().run_in_executor(
+                None, lambda: service_change(action, list(self.service_args), self.game_pc, self.install == "docker"))
+        except outrider.service.ServiceError as e:
+            return {"error": str(e), "code": "service", "service": self.service_info(this_pc)}, 409
+        for line in lines:
+            print(f"service: {line}")
+        return {"ok": True, "lines": lines, "service": self.service_info(this_pc)}, 200
 
     def restore_command(self, name):
         """The command that restores backup `name` (None: the newest) on this install (S44, restore_command)."""
@@ -14991,6 +15088,22 @@ def make_app(state, hosts=None):
             return web.json_response({"error": "expected {id}"}, status=400)
         return web.json_response({"ok": state.notices.dismiss(nid), "notices": state.notices.active()})
 
+    async def starting_view(_):
+        """GET /api/starting (S9): the starting page's question; here the answer is always ready."""
+        return web.json_response({"phase": "ready", "text": STARTING_WORDS["ready"], "pct": 100, "why": None,
+                                  "since": None}, headers={"Cache-Control": "no-store"})
+
+    async def service_view(request):
+        """GET /api/service (S70): Settings -> Server's Start with this computer."""
+        return web.json_response(state.service_info(outrider.auth.from_this_pc(request.remote, request.headers)))
+
+    async def service_post_view(request):
+        """POST /api/service {action}: install or remove the service, from this PC only (S70)."""
+        body = await json_object(request)
+        out, status = await state.service_set((body or {}).get("action"),
+                                              outrider.auth.from_this_pc(request.remote, request.headers))
+        return web.json_response(out, status=status)
+
     async def config_get_view(_):
         """GET /api/config: every config key for the Settings dialog's Server settings (secrets only as set or not)."""
         return web.json_response(state.config_info())
@@ -15389,6 +15502,9 @@ def make_app(state, hosts=None):
     app.router.add_post("/api/notices/dismiss", notices_dismiss_view)
     app.router.add_post("/api/config", config_post_view)
     app.router.add_post("/api/restart", restart_view)   # not pc_only: a server restarts from the tablet (S10)
+    app.router.add_get("/api/starting", starting_view)   # S9: the starting page reloads on this
+    app.router.add_get("/api/service", service_view)       # S70: this PC only for the POST (not the game PC: a server too)
+    app.router.add_post("/api/service", service_post_view)
     app.router.add_post("/api/rail/press", pc_only(rail_press_view))
     app.router.add_post("/api/rail/sets", pc_only(rail_sets_view))
     app.router.add_get("/api/highway/systems", highway_systems_view)
@@ -15438,6 +15554,152 @@ def make_app(state, hosts=None):
     return app
 
 
+# ---- Progress while reading journals (S9): while run() opens the database, backs it up before a re-read and reads the
+# journals, a small app answers on the same port: the starting page (static/starting.html) at / and /tablet, which
+# reloads into the real page once it serves; GET /api/starting (the real app answers {phase: "ready"}); /api/version
+# in its usual shape (Docker's health check, the Android app); /api/serverlog (Show log); every other /api/ 503
+# {error, code: "starting"} (the page shows "starting", not "not connected"). The same Host / other-site checks as the
+# real app; with a password, a device that is not signed in learns only that Outrider is starting ----
+STARTING_PAGE = os.path.join(SCRIPT_DIR, "static", "starting.html")
+STARTING_WORDS = {"start": "Opening the database", "backup": "Backing up your database before reading every journal again",
+                  "journals": "Reading your journals", "setup": "Getting ready", "ready": "Ready"}
+
+
+class Starting:
+    """What run() is doing before the page is served (S9): phase "start" | "backup" | "journals" | "setup", the bytes of
+    journal read of those to read (done, total), the file read last (its month: journal_month), why every journal is
+    read again (reread_message)."""
+
+    def __init__(self, password="", game_pc=True, log=None, stop=None):
+        self.phase, self.done, self.total, self.path, self.why = "start", 0, 0, None, None
+        self.password, self.game_pc, self.log = password or "", bool(game_pc), log
+        self.stop = stop   # run()'s stop event: a SIGTERM ends the start-up between two journal files
+        self.db = None   # set once open: sessions (a device on the network) are checked against it, read only
+        self.since = time.time()
+
+    def step(self, step):
+        """One of Journals.import_steps' steps."""
+        self.done, self.total, self.path = step["done"], step["total"], step["path"]
+
+    def pct(self):
+        if self.phase != "journals" or not self.total:
+            return None
+        return min(99, int(100 * self.done / self.total))   # 100 only once it is serving
+
+    def text(self):
+        """"Reading your journals: March 2024, 41%"."""
+        words = STARTING_WORDS.get(self.phase, self.phase)
+        if self.phase == "journals" and self.total:
+            month = journal_month(self.path)
+            return f"{words}: {month + ', ' if month else ''}{self.pct()}%"
+        return words
+
+    def info(self, details=True):
+        """GET /api/starting. details False (a device not signed in): only that it is starting."""
+        if not details:
+            return {"phase": "starting", "text": "ED Outrider is starting", "pct": None, "why": None, "since": None}
+        return {"phase": self.phase, "text": self.text(), "pct": self.pct(), "why": self.why, "since": self.since}
+
+    def session_ok(self, token):
+        """State.session_ok without a State: the database's secret and revoked list, read only (never makes a secret)."""
+        if not self.password or not token or self.db is None:
+            return False
+        try:
+            sec, revoked = meta_get(self.db, "session_secret"), meta_get(self.db, "revoked_sessions") or []
+        except (sqlite3.Error, ValueError):
+            return False
+        if not (isinstance(sec, str) and len(sec) >= 32):
+            return False
+        return outrider.auth.check_token(sec, self.password, token, set(revoked))
+
+    def signed_in(self, request):
+        return not self.password or outrider.auth.from_this_pc(request.remote, request.headers) or \
+            self.session_ok(outrider.auth.request_token(request.headers, request.cookies))
+
+
+def make_starting_app(starting, hosts=None):
+    """The app that answers while Outrider starts (S9; see Starting). `hosts` as make_app's."""
+    app = web.Application(middlewares=[request_guard(hosts)])
+    no_store = {"Cache-Control": "no-store"}
+
+    async def page(_):
+        try:
+            with open(STARTING_PAGE, encoding="utf-8") as f:
+                html = f.read()
+        except OSError:
+            html = "<!doctype html><title>ED Outrider</title><p>ED Outrider is starting: reload in a moment."
+        return web.Response(text=html, content_type="text/html", headers=no_store)
+
+    async def starting_view(request):
+        return web.json_response(starting.info(starting.signed_in(request)), headers=no_store)
+
+    async def version_view(request):
+        """The real app's /api/version, the same shape (the Android app's contract)."""
+        return web.json_response({"outrider": outrider.__version__, "api": API_VERSION, "min_app": MIN_APP_VERSION,
+                                  "password": bool(starting.password), "signed_in": bool(starting.signed_in(request)),
+                                  "game_pc": starting.game_pc})
+
+    async def serverlog_view(request):
+        """Show log during a long re-read: the real app's /api/serverlog, behind the sign-in."""
+        if not starting.signed_in(request):
+            return web.json_response({"error": "sign in first: this Outrider asks devices on the network for its password",
+                                      "code": "signin_required"}, status=401)
+        try:
+            after = max(0, int(request.query.get("after", "0")))
+        except ValueError:
+            return web.json_response({"error": "after: a line number"}, status=400)
+        if starting.log is None:
+            return web.json_response({"lines": [], "last": 0, "first": 1, "path": None, "file_error": None})
+        return web.json_response(starting.log.since(after))
+
+    async def not_yet(request):
+        """Everything else: 503 "starting" (the page and the app say starting, not unreachable)."""
+        words = starting.info(starting.signed_in(request))
+        if request.path.startswith("/api/"):
+            return web.json_response({"error": f"Outrider is starting: {words['text']}", "code": "starting",
+                                      "starting": words}, status=503, headers={"Retry-After": "2", **no_store})
+        return web.Response(status=503, text=f"ED Outrider is starting: {words['text']}. Try again in a moment.\n",
+                            headers={"Retry-After": "2", **no_store})
+
+    app.router.add_get("/", page)
+    app.router.add_get("/tablet", page)
+    app.router.add_get("/api/starting", starting_view)
+    app.router.add_get("/api/version", version_view)
+    app.router.add_get("/api/serverlog", serverlog_view)
+    app.router.add_route("*", "/{tail:.*}", not_yet)
+    return app
+
+
+async def import_journals(journals, live_dirs, starting):
+    """S9: the start-up import (Journals.import_steps) on the event loop, one file at a time, the starting page answered
+    between two (the database connection is this thread's: no worker). False when starting.stop came part way: every
+    file read is whole and committed, the rest is read at the next start."""
+    steps = journals.import_steps(live_dirs)
+    try:
+        for step in steps:
+            starting.step(step)
+            await asyncio.sleep(0)
+            if starting.stop is not None and starting.stop.is_set():
+                return False
+    finally:
+        steps.close()
+    return True
+
+
+async def serve_starting(starting, hosts, host, port):
+    """Start the starting app on host:port: its AppRunner (cleaned up when the real app takes over). A port taken in
+    the moment since listen_problem() said it was free: said, and Outrider stops (as the real app's start does)."""
+    runner = web.AppRunner(make_starting_app(starting, hosts))
+    await runner.setup()
+    try:
+        await web.TCPSite(runner, host, port).start()
+    except OSError as e:
+        await runner.cleanup()
+        print(f"cannot listen on {host}:{port}: {e.strerror or e}", file=sys.stderr)
+        raise SystemExit(1)
+    return runner
+
+
 def newer_release(answer, current):
     """GitHub's latest-release answer as {version, url, published} when it is newer than `current`, else None (the same
     or older, a draft or pre-release, or an answer that is not a release). Tags look like v2026.10.13."""
@@ -15471,7 +15733,8 @@ RESTART_MIN_UPTIME_S = 15   # Docker applies a restart policy only to a containe
 RESTART_WORDS = {"launcher": "starting launch_outrider.sh again in its place, setup included",
                  "python": "starting ed_outrider.py again in its place",
                  "bat": f"exiting with {RESTART_EXIT}: launch_outrider.bat starts it again",
-                 "docker": f"exiting with {RESTART_EXIT}: the container's restart policy starts it again"}
+                 "docker": f"exiting with {RESTART_EXIT}: the container's restart policy starts it again",
+                 "systemd": f"exiting with {RESTART_EXIT}: systemd starts the service again"}
 
 
 def restart_plan(argv0=None, env=None, platform=None, script=None):
@@ -15480,7 +15743,9 @@ def restart_plan(argv0=None, env=None, platform=None, script=None):
       and Ctrl-C, and its setup runs again (requirements changed by a git pull);
     "python": exec this Python on ed_outrider.py with the same arguments (started without the launcher);
     "bat": exit RESTART_EXIT and launch_outrider.bat starts it again (Windows has no real exec);
-    "docker": exit RESTART_EXIT and the container's restart policy brings it back.
+    "docker": exit RESTART_EXIT and the container's restart policy brings it back;
+    "systemd": started by the service --install-service writes (S70: OUTRIDER_SERVICE=systemd), exit RESTART_EXIT and
+      its RestartForceExitStatus starts it again (the unit runs the launcher: setup included).
     Only when this process IS ed_outrider.py (argv0): a test, verify.sh's `python -` or anything else embedding it can
     never restart (can False, why)."""
     argv0 = sys.argv[0] if argv0 is None else argv0
@@ -15505,9 +15770,39 @@ def restart_plan(argv0=None, env=None, platform=None, script=None):
             return dict(out, can=True, how="bat", launcher=launcher)
         return dict(out, why="Windows cannot start a program again in its own place: start Outrider with "
                              "launch_outrider.bat to restart it from here")
+    if env.get(outrider.service.SERVICE_ENV) == "systemd":
+        return dict(out, can=True, how="systemd", launcher=launcher or None,
+                    note="systemd starts the service again (journalctl --user -u ed-outrider shows it)")
     if launcher:
         return dict(out, can=True, how="launcher", launcher=launcher)
     return dict(out, can=True, how="python")
+
+
+def service_args(args):
+    """S70: the arguments the service starts Outrider with, from the command line given now (argparse's Namespace, before
+    run() fills in the config's values): only what was given, paths made absolute (the service starts elsewhere), never
+    --rescan, --simulate or the service flags themselves."""
+    out = []
+    if getattr(args, "config", None) and os.path.abspath(args.config) != os.path.abspath(CONFIG_PATH):
+        out += ["--config", os.path.abspath(args.config)]
+    if getattr(args, "db", None):
+        out += ["--db", os.path.abspath(args.db)]
+    for flag in ("host", "port", "radius"):
+        if getattr(args, flag, None) is not None:
+            out += [f"--{flag}", f"{getattr(args, flag):g}" if flag == "radius" else str(getattr(args, flag))]
+    for flag in ("journals", "legacy"):
+        for d in getattr(args, flag, None) or []:
+            out += [f"--{flag}", os.path.abspath(os.path.expanduser(d))]
+    return out
+
+
+def service_change(action, args, game_pc, container=None):
+    """--install-service / --uninstall-service, and Settings' Start with this computer (S70): the lines to say;
+    raises outrider.service.ServiceError with why not."""
+    how, why = outrider.service.kind(container=in_container() if container is None else container)
+    if action == "install":
+        return outrider.service.install(SCRIPT_DIR, args, how, why, graphical=game_pc)
+    return outrider.service.uninstall(how, why)
 
 
 def restart_argv(argv):
@@ -15518,14 +15813,14 @@ def restart_argv(argv):
 
 def restart_process(plan, argv, execv=None, which=None):
     """After run()'s clean stop: start Outrider again (restart_plan's how). Never returns: exec replaces this process,
-    or SystemExit(RESTART_EXIT) for the .bat's loop and Docker. Tests pass execv (nothing is ever executed)."""
+    or SystemExit(RESTART_EXIT) for the .bat's loop, Docker and the systemd service. Tests pass execv (nothing is ever executed)."""
     for stream in (sys.stdout, sys.stderr):
         try:
             stream.flush()
         except (OSError, ValueError):
             pass
     how = plan.get("how")
-    if how in ("bat", "docker"):
+    if how in ("bat", "docker", "systemd"):
         raise SystemExit(RESTART_EXIT)
     execv = execv or os.execv
     try:
@@ -15867,6 +16162,7 @@ async def run(args, st):
     # what --restore needs besides the zip's name to find this database (S44's command): the --config and --db given
     restore_extra = ([] if os.path.abspath(args.config) == os.path.abspath(CONFIG_PATH) else ["--config", os.path.abspath(args.config)]) \
         + (["--db", os.path.abspath(args.db)] if args.db else [])
+    service = service_args(args)   # S70: what the service starts Outrider with, as given now (not the config's values)
     args.host, args.port, args.radius, args.db = st["host"], st["port"], st["radius"], st["db"]
     if outrider.unsold:
         outrider.unsold.LIVE_DIRS, outrider.unsold.LEGACY_DIRS = LIVE_DIRS, LEGACY_DIRS
@@ -15901,30 +16197,57 @@ async def run(args, st):
                                   "Stop one, or give one its own --db.", action="open:log")
     if outrider.serverlog.ACTIVE:   # beside the database, never outrider.DATA_DIR (verify.sh's server would write data/)
         outrider.serverlog.ACTIVE.open(os.path.join(os.path.dirname(os.path.abspath(args.db)), outrider.serverlog.FILE_NAME))
-    # says why when every journal is read again, and backs the database up first (S4: even with backup_every_days = 0)
-    extras = backup_extras(st["speech_file"], args.config, outrider.tts.PRONOUNCE.own)
-    db = open_db(args.db, rescan=args.rescan, on_reread=print, before_reset=lambda d: backup_before_reread(
-        d, args.db, BACKUP_DIR, BACKUP_KEEP, extras, LIVE_DIRS, notices))
-    journals = Journals(db)
-
-    # a stop (SIGTERM: docker stop, systemd) during the import, which is synchronous: end at once with what is read
-    # kept (each journal file is committed as it is read) instead of being killed with it all rolled back (review R13);
-    # once serving, the event loop's handler below takes over and stops through the usual cleanup
-    def stop_during_start(signum, frame):
-        # the files read whole are committed already (commit_each); the one part way through is dropped, not kept
-        # without its offset (the next start would read it again and double what it counts)
-        db.rollback()
-        print("stopped during start-up (the journals not read yet are read at the next start)")
-        raise SystemExit(0)
+    loop = asyncio.get_running_loop()
+    # a stop (SIGTERM: docker stop, systemd, verify.sh) from here on: during the start-up it ends between two journal
+    # files (each is committed as it is read: what is read stays), once serving through the usual cleanup below
+    stop = asyncio.Event()   # POST /api/restart sets it too (S10)
     try:
-        signal.signal(signal.SIGTERM, stop_during_start)
-    except ValueError:   # not the main thread (a test): no handler
-        pass
+        loop.add_signal_handler(signal.SIGTERM, stop.set)
+    except (NotImplementedError, RuntimeError, ValueError):   # Windows: no loop handler (Ctrl-C works anyway)
+        try:
+            signal.signal(signal.SIGTERM, lambda signum, frame: loop.call_soon_threadsafe(stop.set))
+        except ValueError:   # not the main thread (a test)
+            pass
+    # S9: the starting page answers on the port at once, while the database is backed up and the journals are read
+    hosts = allowed_hosts(args.host, args.port, st["allowed_hosts"])
+    starting = Starting(st["password"], resolve_game_pc(st["game_pc"])[0], outrider.serverlog.ACTIVE, stop)
+    starting_runner = await serve_starting(starting, hosts, args.host, args.port)
+    shown = "127.0.0.1" if args.host in WILDCARD_HOSTS else _host_name(args.host)
+    print(f"starting: http://{shown}:{args.port}/ shows the progress until the page is ready")
+
+    async def stopped_starting(what):
+        """A stop before the page was served: what is read is committed; the rest is read at the next start."""
+        await starting_runner.cleanup()
+        db.commit()
+        db.close()
+        if lock:
+            lock.close()
+        print(f"stopped during start-up ({what})")
+    db = open_db(args.db, reset=False)
+    starting.db = db
+    due, old = reread_due(db, args.rescan)
+    if due:   # says why when every journal is read again, and backs the database up first (S4: even with backup_every_days = 0)
+        starting.why = reread_message(old, args.rescan)
+        print(starting.why)
+        if old is not None:   # a database in use (a crashed first run leaves an empty one: nothing to keep)
+            starting.phase = "backup"
+            db.commit()   # the backup reads the file through its own connection: nothing of this one's left pending
+            extras = backup_extras(st["speech_file"], args.config, outrider.tts.PRONOUNCE.own)
+            gone = journals_gone(db)   # on this thread: the worker never touches this connection
+            await loop.run_in_executor(None, lambda: backup_before_reread(
+                None, args.db, BACKUP_DIR, BACKUP_KEEP, extras, LIVE_DIRS, notices, gone=gone))
+            if stop.is_set():   # waited for the backup (a thread cannot be stopped part way); nothing cleared yet
+                await stopped_starting("before the journal re-read: it happens at the next start")
+                return None
+        reset_journal_data(db)
+    journals = Journals(db)
     sweep_backup_leftovers(BACKUP_DIR, db.execute("PRAGMA database_list").fetchone()[2] or DB_PATH)
+    starting.phase = "journals"
     t = time.time()
-    journals.import_legacy()
+    if not await import_journals(journals, LIVE_DIRS, starting):
+        await stopped_starting("the journals not read yet are read at the next start")
+        return None
     for d in LIVE_DIRS:
-        journals.scan_dir(d, commit_each=True, upload="catchup")
         journals.read_navroute(d)
         journals.read_status(d)
     db.commit()
@@ -15948,6 +16271,7 @@ async def run(args, st):
         notices.set("no_journal_files", DOCKER_NO_JOURNALS if docker else
                     f"No journals in {', '.join(LIVE_DIRS)} yet. Is it the folder the game writes Journal.*.log to? "
                     "The page fills in after your first jump.", action=None if docker else "open:server:journals")
+    starting.phase = "setup"
 
     spansh = Spansh(db)
     await spansh.start()
@@ -15963,9 +16287,9 @@ async def run(args, st):
     state.restart = restart_plan()   # S10: how Settings' Restart starts this Outrider again, or why it cannot
     state.db_path = args.db
     state.restore_extra = tuple(restore_extra)
+    state.service_args = service
     state.speech_path, state.config_path = st["speech_file"], args.config
     state.pronounce_path = outrider.tts.PRONOUNCE.own
-    loop = asyncio.get_running_loop()
     notices.on_change = lambda: loop.call_soon_threadsafe(state.bump)   # a notice set later, from any thread
     voice = meta_get(db, "voice_choice")   # picked in the alerts dialog: beats the config file once used
     # a Piper name, or any voice installed in piper-voices/ (a self-made one: the dialog lets you pick it, and it was
@@ -16084,9 +16408,9 @@ async def run(args, st):
                               if st["watch_firsts"] else "off ([spansh] watch_firsts)"))
     print(state.uploads_line())
 
-    hosts = allowed_hosts(args.host, args.port, st["allowed_hosts"])
     runner = web.AppRunner(make_app(state, hosts))
     await runner.setup()
+    await starting_runner.cleanup()   # the real app takes the port over (S9): open starting pages reload into it
     try:
         await web.TCPSite(runner, args.host, args.port).start()
     except OSError as e:   # taken in the moment since port_free() said it was free
@@ -16100,8 +16424,7 @@ async def run(args, st):
         except OSError as e:
             outrider.notices.warn("overlay_bind", f"cannot listen on 127.0.0.1:{args.port} for the in-game overlay window: "
                                   f"{e.strerror or e}")
-    # a wildcard address is not a place a browser can go (and not a name the Host check answers): loopback is
-    shown = "127.0.0.1" if args.host in WILDCARD_HOSTS else _host_name(args.host)
+    # a wildcard address is not a place a browser can go (and not a name the Host check answers): loopback is (shown)
     print(f"serving on http://{shown}:{args.port}/  (Ctrl-C to stop)")
     # the automatic backup that covers crashes (no Shutdown event, so no quit backup): at start, when due
     if backup_due(meta_get(db, "last_backup"), BACKUP_EVERY_DAYS):
@@ -16115,12 +16438,9 @@ async def run(args, st):
               + ", ".join(sorted(h for h in hosts if h.endswith(f":{args.port}"))))
     for i, line in enumerate(exposure_warnings(args.host, state.password, st["allowed_hosts"])):
         outrider.notices.warn(f"network{i}", line, action="open:server")
-    # stop as on Ctrl-C when asked to (SIGTERM: docker stop, systemd, verify.sh): the same cleanup below, exit code 0
-    stop = state.stop_event = asyncio.Event()   # POST /api/restart sets it too (S10)
-    try:
-        asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, stop.set)
-    except (NotImplementedError, RuntimeError, ValueError):   # Windows has no such handler: Ctrl-C only
-        pass
+    # stop as on Ctrl-C when asked to (SIGTERM: docker stop, systemd, verify.sh; set up above): the same cleanup below,
+    # exit code 0
+    state.stop_event = stop   # POST /api/restart sets it too (S10)
     try:
         await stop.wait()
     finally:
@@ -16237,8 +16557,13 @@ def main(argv=None):
                         "were running. Auto honk, auto-target, the co-pilot button and the clipboard are off.")
     p.add_argument("--list-backups", action="store_true",
                    help="List this database's backup zips in backup_dir (name, size, time) and exit.")
+    p.add_argument("--install-service", action="store_true",
+                   help="Start Outrider with your computer, with the other arguments given here: a systemd user service "
+                        "on Linux (at login), a Startup entry on Windows; then exit.")
+    p.add_argument("--uninstall-service", action="store_true", help="Remove what --install-service made, and exit.")
     args = p.parse_args(argv)
-    serving = not (args.write_config or args.list_backups or args.restore is not None)
+    serving = not (args.write_config or args.list_backups or args.restore is not None or args.install_service
+                   or args.uninstall_service)
     # Outrider's own log (S5b): the server's lines from here on, for Show log and <db dir>/outrider.log (opened in
     # run()); put back when main() ends, so a test calling it leaves nothing behind
     restore_streams = outrider.serverlog.install() if serving else None
@@ -16278,6 +16603,14 @@ def main_with(args, serving):
         return
     if args.list_backups:
         print("\n".join(list_backups(st["backup_dir"], st["db"])))
+        return
+    if args.install_service or args.uninstall_service:
+        try:
+            print("\n".join(service_change("install" if args.install_service else "uninstall", service_args(args),
+                                           resolve_game_pc(st["game_pc"])[0])))
+        except outrider.service.ServiceError as e:
+            print(f"not {'installed' if args.install_service else 'removed'}: {e}", file=sys.stderr)
+            raise SystemExit(1)
         return
     if args.restore is not None:
         zip_path = os.path.expanduser(args.restore)

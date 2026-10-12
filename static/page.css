@@ -1074,6 +1074,8 @@ body.app #hwyPanes.noroute #hwyAuto { grid-row: 3; align-self: start; }
 .bkcmd .bkline code { flex: 1; min-width: 0; overflow-wrap: anywhere; background: var(--panel); border: 1px solid var(--line);
   border-radius: 6px; padding: 4px 8px; font-size: 12px; user-select: all; }
 .srvset .srvin .srvfocus { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Settings -> Server -> Start with this computer (S70): what Install / Remove said */
+#srvServiceBody .btns { margin: 6px 0; } .svclines { margin: 4px 0; } .svclines .hint { overflow-wrap: anywhere; }
 /* Restart (S10): the top row's button and what it is doing; the update line's own button */
 #srvRestartMsg.warnc { color: var(--warn); } .updline .try { margin-left: 6px; font-weight: 400; }
 /* Settings -> Auto honk's readiness (S69): each check ✓ or ✗, a failed one's fix with its commands and Copy */

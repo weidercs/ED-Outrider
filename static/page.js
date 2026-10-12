@@ -9010,7 +9010,11 @@ function setSecsRestore() {
 setSecs.forEach(d => d.addEventListener("toggle", () => {
   const open = Object.fromEntries(setSecs.map(x => [x.dataset.secKey, x.open]));
   store.set("settingsOpen", open);
-  if (d.id === "serverSettings" && d.open) { loadServerSettings(); if (document.getElementById("srvBackups").open) loadBackups(); }
+  if (d.id === "serverSettings" && d.open) {
+    loadServerSettings();
+    if (document.getElementById("srvBackups").open) loadBackups();
+    if (document.getElementById("srvService").open) loadService();
+  }
   if (d.id === "honkSettings" && d.open) loadHonkCheck();
 }));
 document.getElementById("setOpenAll").onclick = () => setSecs.forEach(d => { d.open = true; });
@@ -9203,10 +9207,63 @@ function backupsFollow(b) {
   if (!first && d && d.open && document.getElementById("serverSettings").open) loadBackups();
 }
 
+// ---- Settings -> Server -> Start with this computer (S70): Outrider as a service (GET api/service): a systemd user
+// unit on Linux (at login; Settings' Restart then goes through systemd), a Startup entry on Windows; refused with the
+// reason in Docker and on macOS. Install / Remove only from this PC's own browser (the service is the computer's);
+// elsewhere the launcher command that does it, with Copy. The service starts with the arguments Outrider has now.
+const SVC_KIND = {systemd: "a systemd user service: it starts when you log in to your desktop",
+                  startup: "a Startup entry: it starts, minimised, when you sign in to Windows"};
+const svc = {info: null, lines: null, busy: false, gen: 0};
+async function loadService() {
+  const gen = ++svc.gen;
+  let r;
+  try { r = await apiJson("api/service"); } catch { r = {error: "Outrider not reachable"}; }
+  if (gen !== svc.gen) return;
+  svc.info = r || {error: "?"};
+  renderService();
+}
+function renderService() {
+  const box = document.getElementById("srvServiceBody"), r = svc.info;
+  if (!box || !r) return;
+  if (r.error && !("can" in r)) { box.innerHTML = `<div class="hint warnc">Cannot tell: ${esc(r.error)}</div>`; return; }
+  if (!r.can) { box.innerHTML = `<div class="hint">Not here: ${esc(r.why || "?")}</div>`; return; }
+  const what = SVC_KIND[r.kind] || r.kind, cmd = r.installed ? r.remove : r.command;
+  box.innerHTML = `<div class="hint">${r.installed ? `<b>Installed</b> as ${esc(what)}. <code>${esc(r.path || "")}</code>` +
+      (r.running ? " This Outrider runs as that service now." : "")
+    : `Not installed: Outrider runs while you keep it started. Install it as ${esc(what)}, with the arguments this Outrider was started with.`}</div>` +
+    (r.this_pc ? `<div class="btns"><button type="button" id="svcBtn" data-svc="${r.installed ? "uninstall" : "install"}"${svc.busy ? " disabled" : ""}>` +
+      `${r.installed ? "Remove the service" : "Install as a service"}</button><span class="hint">${svc.busy ? "working…" : ""}</span></div>`
+      : `<div class="hint">Only from this PC's own browser (the service is the computer's), or run this there:</div>`) +
+    (svc.lines ? `<div class="svclines">${svc.lines.map(l => `<div class="hint${svc.lines.bad ? " warnc" : ""}">${esc(l)}</div>`).join("")}</div>` : "") +
+    (cmd ? `<div class="bkcmd"><div class="hint">${r.this_pc ? "The same from a terminal:" : ""}</div>` +
+      `<div class="bkline"><code id="svcCmd">${esc(cmd)}</code> <button type="button" id="svcCopy">Copy</button></div></div>` : "");
+}
+async function serviceAction(action) {
+  if (svc.busy) return;
+  if (action === "uninstall" && !confirm("Remove the service? Outrider then no longer starts with this computer.")) return;
+  svc.busy = true; svc.lines = null; renderService();
+  let j;
+  try { j = await apiJson("api/service", {method: "POST", body: JSON.stringify({action})}); } catch { j = {error: "Outrider not reachable"}; }
+  svc.busy = false;
+  if (j && j.service) svc.info = j.service;
+  svc.lines = j && j.ok ? j.lines || [] : [`Not done: ${(j && j.error) || "?"}`];
+  svc.lines.bad = !(j && j.ok);
+  renderService();
+}
+document.getElementById("srvServiceBody").addEventListener("click", e => {
+  const b = e.target.closest("[data-svc]");
+  if (b) { serviceAction(b.dataset.svc); return; }
+  if (e.target.closest("#svcCopy")) {
+    const c = document.getElementById("svcCmd");
+    if (c) copyText(c.textContent, "the command");
+  }
+});
+document.getElementById("srvService").addEventListener("toggle", e => { if (e.target.open) loadService(); });
+
 // ---- Restart (S10): Settings -> Server's top row, the "Saved N settings" line and the "updated: restart" line, from
 // any device (the same guard as saving the settings). POST api/restart stops Outrider cleanly (a backup running
 // finishes first) and it starts itself again (data.restart.how: the launcher again, ed_outrider.py again, the .bat's
-// loop or Docker's restart policy); the page waits for another run_id. data.restart.can false: the button is off and
+// loop, Docker's restart policy or the systemd service's, S70); the page waits for another run_id. data.restart.can false: the button is off and
 // says why (started some other way: start it again by hand).
 const RESTART_SLOW_MS = 120000;   // not back after this (plus RESTART_BACKUP_MS with a backup): say where to look
 const RESTART_BACKUP_MS = 300000;
@@ -9215,8 +9272,10 @@ function restartText() {
   const r = data && data.restart, a = rst.asked;
   if (a) {
     if (data && data.run_id !== a.run) return "";
+    if (pageStarting) return `Restarting… ${pageStarting.text || ""}`.trim();   // back, reading the journals (S9)
     const slow = Date.now() - a.at > RESTART_SLOW_MS + (a.backup ? RESTART_BACKUP_MS : 0);
-    return slow ? `Outrider is not back yet: look at its terminal${r && r.how === "docker" ? " (docker compose logs)" : ""}`
+    const where = {docker: " (docker compose logs)", systemd: " (journalctl --user -u ed-outrider)"}[r && r.how] || "";
+    return slow ? `Outrider is not back yet: look at its terminal${where}`
       : `Restarting…${a.backup ? " (finishing a backup first)" : ""}`;
   }
   if (r && r.restarting) return "Restarting…";
@@ -9382,12 +9441,14 @@ document.getElementById("noticeBar").addEventListener("click", async e => {
 });
 
 let disconnected = null, disconnectedAt = 0, lostSaid = false;
+let pageStarting = null;   // S9: Outrider's starting answer ({phase, text, pct}) while it starts again, else null (see poll)
 // The link pill: states only, no timer (the author, 2026-10-12): "linked", "linked · no game" (Outrider answers, the
 // game is not running), "unlinked · retrying" (no answer past what a long poll should take, 25 s plus a little, or
 // the link down: amber, then red). The page still dims when the link is down. linkState() is the tablet's too.
 const LINK_STALE_MS = 30000;
 function linkState(now = Date.now()) {
   if (disconnected) return {state: "none", text: "unlinked · retrying"};
+  if (pageStarting) return {state: "stale", text: `starting${typeof pageStarting.pct === "number" ? ` · ${pageStarting.pct}%` : "…"}`};
   if (!lastHeard) return {state: "stale", text: "connecting…"};
   if (now - lastHeard > LINK_STALE_MS) return {state: "stale", text: "unlinked · retrying"};
   const live = !!(data && data.freshness && data.freshness.live);
@@ -9500,8 +9561,16 @@ function signInAgain() {
 // the server answers a long poll within 25 s: one with no answer by this time is a hung link (the PC suspended, a path
 // that died without a reset), and becomes "no link" and, later, "Lost contact" (it stayed "stale" for good)
 const POLL_TIMEOUT_MS = 40000;
+// Outrider starting again (S9: a restart, an update, a crash brought back by its service) answers every /api/ call with
+// 503 {code: "starting", starting: {text, pct...}} while it reads the journals: the page says "starting", not "not
+// connected" (no "Lost contact" for a long re-read), and asks again every STARTING_POLL_MS until the real answer comes.
+const STARTING_POLL_MS = 1500;
+async function startingAnswer(r) {
+  if (r.status !== 503) return null;
+  try { const j = await r.json(); return j && j.code === "starting" ? (j.starting || {text: "starting"}) : null; } catch { return null; }
+}
 async function poll(once = false) {
-  let ok = false, fresh = false;
+  let ok = false, fresh = false, starting = null;
   heard(false);   // a request sent long after the last answer: timers were frozen, or the server was unreachable
   const ac = typeof AbortController === "function" ? new AbortController() : null,
         timer = ac && setTimeout(() => ac.abort(), POLL_TIMEOUT_MS);
@@ -9514,13 +9583,16 @@ async function poll(once = false) {
     if (r.status === 200) { data = await r.json(); version = data.version; fresh = true; }
     else if (r.status === 204 && woke) version = -1;   // no news, but come back with the whole payload to re-baseline on
     ok = r.status === 200 || r.status === 204;
+    starting = await startingAnswer(r);
+    if (starting) heard(true);
   } catch {} finally { if (timer) clearTimeout(timer); }
   if (fresh) pageError = null;
-  let drawn = guarded("drawing", () => setConnected(ok));
+  pageStarting = starting;
+  let drawn = guarded("drawing", () => setConnected(ok || !!starting));
   if (fresh) { const alerted = guarded("alerts", onData), rendered = guarded("drawing", render); drawn = drawn && alerted && rendered; }
   if (!drawn && data) guarded("drawing", renderStrip);   // at least the Data tile, which says what failed
   // the server holds the request until something changes, so ask again at once; back off if it failed
-  if (!once) setTimeout(poll, ok ? 0 : 2000);
+  if (!once) setTimeout(poll, ok ? 0 : starting ? STARTING_POLL_MS : 2000);
 }
 poll();
 

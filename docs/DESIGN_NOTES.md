@@ -590,11 +590,35 @@ upstream project's choices, not rules of the game.
   Docker server is always reached from another device. Saving the settings from a device could already change paths
   and the password; the restart only makes it take effect now, and it is not destructive (the clean stop, the quit
   backup first). How it starts again: `launch_outrider.sh` exports `OUTRIDER_LAUNCHER` and Outrider execs it in its
-  own place (same PID, terminal and Ctrl-C, systemd sees no exit, and the setup runs again after a `git pull`);
-  started without it, it execs `ed_outrider.py` with the same arguments; Windows has no real exec, so it exits 75 and
-  `launch_outrider.bat` loops; Docker exits 75 and the restart policy starts the container again (refused in its first
-  15 s, as Docker skips a container that ran under 10 s). Never `--rescan` twice. A process that is not
-  `ed_outrider.py` itself (verify.sh's `python -`, the tests) cannot restart: the button says why.
+  own place (same PID, terminal and Ctrl-C, and the setup runs again after a `git pull`); started without it, it execs
+  `ed_outrider.py` with the same arguments; Windows has no real exec, so it exits 75 and `launch_outrider.bat` loops;
+  Docker exits 75 and the restart policy starts the container again (refused in its first 15 s, as Docker skips a
+  container that ran under 10 s); the service S70 installs exits 75 too (below). Never `--rescan` twice. A process that
+  is not `ed_outrider.py` itself (verify.sh's `python -`, the tests) cannot restart: the button says why.
+- **The starting page: a second small app on the same port** (S9): run() starts it before it opens the database, so
+  a long re-read (the backup before it, then years of journals) answers at once: `/` and `/tablet` a self-contained
+  page ("Reading your journals: March 2024, 41%", Show log), `/api/version` in its usual shape (Docker's health check,
+  the Android app), every other `/api/` 503 `{error, code: "starting"}` (no API_VERSION bump: the app shows an unknown
+  code's text). The real app takes the port over when it is ready (the starting runner cleaned up, then the real
+  site bound: a gap of milliseconds that the page's retries cover). The import stays on the event loop, one journal
+  file at a time (`import_journals`; the database connection is the loop thread's: a worker would need its own),
+  so each request waits at most for one file; the backup, which copies the database and the journals, runs on a
+  worker with `journals_gone` worked out first. Progress is bytes read of bytes to read (a file in two folders
+  counted once), the month from the file's name; 99% at most until it serves. A SIGTERM sets the stop event, seen
+  between two files (each committed whole: the old handler raised mid-file and had to roll back) or after the
+  backup (nothing cleared yet). A device on the network that is not signed in sees only "starting" (the session is
+  checked against the database read only; no secret is made before State). Docker's health check is healthy during
+  the import now, so its start period is 2 minutes, not 30.
+- **Start with this computer: enabled, not started; exit 75 under systemd** (S70): `--install-service` (or Settings,
+  from this PC's own browser only: a service is the computer's, not a device's; not `pc_only`, a Linux server has one
+  too) writes a systemd user unit running `launch_outrider.sh` with the arguments given (paths absolute) and enables
+  it; starting it while this Outrider holds the port would fail, so it starts at the next login (the words say how to
+  switch now). It sets `OUTRIDER_SERVICE=systemd`, which makes Restart exit 75 (`RestartForceExitStatus=75`) rather
+  than exec in place: systemd then starts the unit as itself, and `Restart=on-failure` covers a crash.
+  `TimeoutStopSec=330` is over the 300 s Outrider waits for a backup at shutdown; `KillMode=mixed` leaves the overlay
+  window to Outrider's own stop. A game PC's unit is part of `graphical-session.target` (the overlay, the keys and
+  the game's window need the desktop), a server's of `default.target`. Windows: a `.cmd` in the Startup folder
+  starting the .bat minimised (its loop on 75 already restarts). Docker and macOS are refused with words.
 - **Auto honk's readiness only looks** (S69): Settings says before you tick it whether auto honk can work (evdev, the
   `uinput` module, `/dev/uinput` writable, Primary Fire's keyboard binding), with the fix. It never creates the virtual
   keyboard to find out: that is exactly what could press a key. The udev `uaccess` rule is the fix offered first; the
@@ -678,7 +702,10 @@ confirmed while playing. Treat reports about them as likely real.
   as given, for Docker (stop, a one-off `run --rm`, up) and Windows (the .bat); the database's lock on a Docker bind
   mount and on Windows; the backup before a re-read on a real update.
 - Settings' Restart (S10) in Docker (exit 75 and compose's restart policy), under `launch_outrider.bat` on Windows (its
-  loop on 75 checked under Wine only) and under systemd; the launcher and plain `python ed_outrider.py` were restarted
+  loop on 75 checked under Wine only) and under the systemd service (S70: the unit checked with `systemd-analyze
+  verify` only; never installed, started or logged into from a test; the Windows Startup entry not tried);
+  the starting page (S9) through a real re-read of years of journals, in the Android app and behind Docker's health
+  check (tested on the sample journals and with a slowed import); the launcher and plain `python ed_outrider.py` were restarted
   on a scratch server (the same PID, a new run). Auto honk's readiness (S69) on a PC where `/dev/uinput` is missing or
   not writable.
 - The Highway's plots against live Spansh (both plotters send the requests Spansh's site and Auto_Neutron send;
