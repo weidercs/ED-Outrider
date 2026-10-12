@@ -1043,6 +1043,23 @@ body.app #hwyPanes.noroute #hwyAuto { grid-row: 3; align-self: start; }
 /* Outrider updated on disk but still running the old code */
 .updline { margin-top: 4px; font-size: 13px; color: var(--warn); font-weight: 600; }
 .updline::before { content: "⟳ "; }
+/* the notices banner (S5a): start-up problems the server keeps, one row each, until fixed or hidden (✕) */
+.noticebar { margin-top: 4px; display: flex; flex-direction: column; gap: 3px; }
+.noticebar .notice { display: flex; align-items: baseline; gap: 8px; padding: 4px 8px; border: 1px solid var(--line);
+  border-left: 3px solid var(--warn); border-radius: 6px; background: var(--panel); font-size: 13px; color: var(--text); }
+.noticebar .notice.info { border-left-color: var(--info); } .noticebar .notice.bad { border-left-color: var(--bad); }
+.noticebar .nmark { color: var(--warn); flex: none; } .noticebar .info .nmark { color: var(--info); } .noticebar .bad .nmark { color: var(--bad); }
+.noticebar .ntext { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.noticebar button { flex: none; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
+  padding: 1px 8px; font: inherit; font-size: 12px; cursor: pointer; }
+.noticebar .nclose { border: none; color: var(--muted); padding: 1px 4px; }
+/* Settings > Server's top row, and Show log's dialog: Outrider's own log, the error stream amber */
+.srvtop { margin: 4px 0 8px; font-size: 13px; color: var(--muted); } .srvtop b { color: var(--text); }
+.logdlg { width: min(960px, 96vw); }
+.logdlg .loglines { height: min(60vh, 560px); overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+  padding: 6px 8px; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.logdlg .logln.err { color: var(--warn); }
+.logdlg .logt { color: var(--muted); }
 /* a server away from the game PC (payload game_pc false): what needs that PC is left out, not shown broken */
 body.notgamepc .pcOnly, body.notgamepc [data-aim] { display: none !important; }
 /* Settings > Voice > More voices: Piper's catalogue, one language at a time */

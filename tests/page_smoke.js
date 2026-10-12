@@ -5215,6 +5215,50 @@ const settle = async maxMs => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| header tiles S75 |", good ? `jump range under the ship, "from" beside the name, no horizon in the tile, Now keeps it` : JSON.stringify({g, want}), errors.slice(before));
   }
+  // S5a / S5b (2026-10-12): the notices banner (the server's notices: escaped text, a known action's button, an
+  // unknown action left out, ✕ hides it here at once and tells the server) and Settings -> Server's Show log (what the
+  // scratch server printed, from GET api/serverlog, with where the file is)
+  {
+    const w = dom.window, before = errors.length;
+    if (!w.HTMLDialogElement.prototype.showModal) w.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
+    if (!w.Element.prototype.scrollIntoView) w.Element.prototype.scrollIntoView = function () {};   // jsdom lays nothing out
+    const real = w.fetch, posted = [];
+    w.fetch = (u, o) => { if (o && o.method === "POST" && /notices\/dismiss/.test(String(u))) posted.push(JSON.parse(o.body)); return real(u, o); };
+    const got = JSON.parse(w.eval(`(() => {
+      const o = {};
+      window.__n0 = data.notices;
+      data.notices = [{id: "config:abc", key: "config", text: "scratch.toml has 1 problem <b>x</b>", level: "warn", action: "open:server"},
+                      {id: "x:1", key: "x", text: "something else", level: "info", action: "launch:rockets"}];
+      render();
+      const bar = document.getElementById("noticeBar");
+      o.shown = !bar.hidden && bar.querySelectorAll(".notice").length;
+      o.escaped = bar.querySelector(".ntext").textContent;
+      o.buttons = [...bar.querySelectorAll(".nact")].map(b => b.textContent);
+      o.info = bar.querySelectorAll(".notice.info .nclose").length;
+      bar.querySelector('[data-ndismiss="x:1"]').click();
+      o.left = [...bar.querySelectorAll(".notice")].map(n => n.dataset.nid);
+      return JSON.stringify(o); })()`));
+    await settle(1000);
+    got.posted = posted.slice();
+    w.eval(`document.querySelector('#noticeBar [data-naction="open:server"]').click()`);
+    await settle(2500);
+    got.settings = JSON.parse(w.eval(`JSON.stringify([document.getElementById("alertDialog").open, document.getElementById("serverSettings").open,
+      document.getElementById("srvVersion").textContent === data.outrider, !!document.querySelector("#serverSettingsBody details.srvsec")])`));
+    w.eval(`document.getElementById("srvLogBtn").click()`);
+    await settle(2500);
+    got.log = JSON.parse(w.eval(`(() => { const t = document.getElementById("logLines").textContent;
+      return JSON.stringify([document.getElementById("logDlg").open, t.includes("ED Outrider "), t.includes("serving on http://127.0.0.1:"),
+        /^Saved in .*outrider\\.log/.test(document.getElementById("logFoot").textContent), /\\d+ lines/.test(document.getElementById("logCount").textContent),
+        logText().split("\\n")[0].includes("| ED Outrider")]); })()`));
+    w.eval(`for (const id of ["logDlg", "alertDialog"]) tabClose(document.getElementById(id));
+      data.notices = window.__n0; render();`);
+    w.fetch = real;
+    const want = {shown: 2, escaped: "scratch.toml has 1 problem <b>x</b>", buttons: ["Server settings"], info: 1, left: ["config:abc"],
+                  posted: [{id: "x:1"}], settings: [true, true, true, true], log: [true, true, true, true, true, true]};
+    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| notices and the log |", good ? "the banner (escaped, its action, ✕ in every window), Show log with the server's lines and its file" : JSON.stringify({got, want}), errors.slice(before));
+  }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",
     headers: Object.assign({"Content-Type": "application/json"}, origin ? {Origin: origin} : {})}).then(r => r.status);

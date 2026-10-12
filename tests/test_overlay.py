@@ -256,8 +256,9 @@ class Themes(unittest.TestCase):
 
 
 class FakeProc:
-    def __init__(self, cmd, cwd=None):
-        self.cmd, self.cwd, self.code, self.pid, self.signals = cmd, cwd, None, 4242, []
+    def __init__(self, cmd, cwd=None, output=None, **kw):
+        self.cmd, self.cwd, self.code, self.pid, self.signals, self.kw = cmd, cwd, None, 4242, [], kw
+        self.stdout = io.BytesIO(output) if output is not None else None   # the window's piped output (S5b)
 
     def poll(self):
         return self.code
@@ -288,10 +289,28 @@ class Runner(unittest.TestCase):
         self.pips.append(cmd)
         return types.SimpleNamespace(returncode=self.pip_answer[0], stdout="", stderr=self.pip_answer[1])
 
-    def popen(self, cmd, cwd=None):
-        p = FakeProc(cmd, cwd)
+    def popen(self, cmd, cwd=None, **kw):
+        p = FakeProc(cmd, cwd, **kw)
         self.started.append(p)
         return p
+
+    def test_the_windows_output_reaches_outriders_log(self):
+        """S5b: the window's output is piped (stdout and stderr together, unbuffered, UTF-8) and passed on as Outrider's
+        own lines, so Show log and outrider.log have it; its last words are read before "it stopped" is said."""
+        import subprocess
+        said = []
+        self.run.log = said.append
+        self.run.popen = lambda cmd, cwd=None, **kw: self.popen(cmd, cwd, output="drawing\nTraceback: boom ✗\n".encode(), **kw)
+        self.run.tick(True)
+        p = self.started[0]
+        self.assertEqual((p.kw["stdout"], p.kw["stderr"]), (subprocess.PIPE, subprocess.STDOUT))
+        self.assertEqual((p.kw["env"]["PYTHONUNBUFFERED"], p.kw["env"]["PYTHONIOENCODING"]), ("1", "utf-8"))
+        p.code = 1
+        self.run.tick(True)
+        self.assertEqual(said, ["overlay window: started (pid 4242)", "overlay window: drawing",
+                                "overlay window: Traceback: boom ✗", "overlay window: it stopped (exit 1)"])
+        self.assertTrue(p.stdout.closed)
+        self.assertIsNone(self.run.drain)
 
     def test_runs_while_wanted(self):
         self.run.tick(False)

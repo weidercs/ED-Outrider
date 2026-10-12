@@ -47,6 +47,7 @@ class OverlayRunner:
         self.url, self.popen, self.has_qt, self.python, self.root = url, popen, has_qt, python or sys.executable, root
         self.log, self.clock, self.pip, self.background = log, clock, pip, background
         self.proc, self.crashes, self.next_try, self.started_at = None, 0, 0.0, 0.0
+        self.drain = None   # the thread passing the window's output on to Outrider's (and so into its log)
         self.state, self.why = "off", None
         self.installing, self.install_error = False, None
 
@@ -70,6 +71,7 @@ class OverlayRunner:
                 self.state, self.why = "running", None
                 return
             self.proc = None
+            self.end_drain()   # its last words (a traceback) are read before "it stopped"
             if self.clock() - self.started_at >= HEALTHY_S:   # "in a row": a stop after hours of drawing is a first
                 self.crashes = 0
             self.crashes += 1
@@ -91,24 +93,55 @@ class OverlayRunner:
         if self.clock() < self.next_try:
             return
         try:
-            self.proc = self.popen([self.python, "-m", "outrider.overlay_window", "--url", self.url], cwd=self.root)
+            # its output piped into Outrider's, so it reaches Show log and outrider.log (S5b); unbuffered and UTF-8, or a
+            # pipe would hold its lines back and Windows would write them in its own code page
+            self.proc = self.popen([self.python, "-m", "outrider.overlay_window", "--url", self.url], cwd=self.root,
+                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                   env=dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8"))
         except OSError as e:
             self.proc = None
             self.state, self.why = "failed", f"could not start it: {e}"
             return
         self.state, self.why, self.started_at = "starting", None, self.clock()
         self.log(f"overlay window: started (pid {getattr(self.proc, 'pid', '?')})")
+        out = getattr(self.proc, "stdout", None)
+        if out is not None:
+            self.drain = threading.Thread(target=self.pass_on, args=(out,), name="overlay-output", daemon=True)
+            self.drain.start()
+
+    def pass_on(self, stream):
+        """The window's output, line by line, as Outrider's ("overlay window: ..."), until it closes its end."""
+        try:
+            for raw in iter(stream.readline, b""):
+                line = raw.decode("utf-8", "replace").rstrip()
+                if line:
+                    self.log(f"overlay window: {line}")
+        except (OSError, ValueError):   # the pipe closed under us
+            pass
+        finally:
+            try:
+                stream.close()
+            except OSError:
+                pass
+
+    def end_drain(self, wait=2.0):
+        """The window has ended: its pipe's last lines are read (EOF ends the thread)."""
+        t, self.drain = self.drain, None
+        if t is not None:
+            t.join(wait)
 
     def stop(self):
         """Close the window (asked first, then killed), if it runs."""
         proc, self.proc = self.proc, None
         if proc is None or proc.poll() is not None:
+            self.end_drain()
             return
         proc.terminate()
         try:
             proc.wait(timeout=STOP_WAIT_S)
         except subprocess.TimeoutExpired:
             proc.kill()
+        self.end_drain()
         self.log("overlay window: stopped")
 
     def install(self, run=None, background=None):

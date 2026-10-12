@@ -43,6 +43,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
   <div id="obMap" hidden><canvas id="obMapCanvas" aria-label="surface map"></canvas><div id="obMapLine" class="smap-line"></div></div>
   <div id="arrival"></div>
   <div id="sell"></div>
+  <div id="noticeBar" class="noticebar" role="status" aria-live="polite" hidden></div>
   <div id="updateLine" class="updline" role="status" hidden>Outrider has been updated: restart it to finish (this page then reloads by itself).</div>
 </header>
 <section id="nowView" hidden>
@@ -757,6 +758,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         The view, layouts, the search form and which screen speaks stay per device. The voice is kept by the server already.</div>
     </details>
     <details class="setsec" data-sec-key="server" data-chip="Server" id="serverSettings"><summary>Server settings <span class="sum-note">the config file: network, password, paths, backups, Spansh, the Highway, the voice's AI and more</span></summary>
+      <div class="srvtop"><b>Outrider <span id="srvVersion"></span></b> · <button type="button" id="srvLogBtn" title="what Outrider has printed in its terminal since it started (and saved beside its database)">Show log</button></div>
       <div id="serverSettingsBody" class="srvset"><div class="hint">loading…</div></div>
     </details>
     <details id="speechLogBox" class="speechlog setsec" data-sec-key="log" data-chip="Spoken lines"><summary>Spoken lines <span class="sum-note">the last 100 alerts in this window and what became of each</span></summary>
@@ -768,6 +770,14 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       <div id="speechBans" class="hint"></div>
       <div id="speechLog"></div></details>
     </div>
+  </form>
+</dialog>
+<dialog id="logDlg" class="logdlg" aria-labelledby="logTitle">
+  <form method="dialog">
+    <h3 id="logTitle">Outrider's log <span id="logCount" class="unk"></span></h3>
+    <div id="logLines" class="loglines" tabindex="0" aria-label="Outrider's log, newest at the bottom"></div>
+    <div id="logFoot" class="hint"></div>
+    <div class="btns"><button type="button" id="logCopy">Copy</button><span class="grow"></span><button type="button" data-close>Close</button></div>
   </form>
 </dialog>
 <dialog id="nearDlg" class="neardlg" aria-labelledby="nearTitle">

@@ -16,6 +16,17 @@ Highway, the voice's AI layer and more. Saving there writes `ed_outrider.toml` (
 comments stay, and the previous file is kept as `ed_outrider.toml.bak`), and Outrider uses them from its next start.
 The passwords (`[server]`'s and `[mcp]`'s) and the AI key are never shown, only whether they are set.
 
+**Server**'s top row says which Outrider is running and has **Show log**: what Outrider has printed in its terminal
+since it started (its last 2,000 lines, newest at the bottom, following along while it is open; problems in amber),
+with **Copy** for a bug report. It works from any device, a server's too. The same lines are saved beside the database
+in `outrider.log` (`data/outrider.log` by default; the older part in `outrider.log.1`). Passwords and API keys never
+appear in it.
+
+**Notices.** What Outrider finds wrong when it starts (a journal folder not found, problems in the config file or the
+spoken lines file, listening on your network with no password, journals on a share that shows them late, the in-game
+overlay's address taken) shows as a line under the header, in every window and on the tablet, with a button where one
+helps (Server settings, Show log). ✕ hides it everywhere until Outrider restarts, or until the message changes.
+
 You can also edit the file by hand: copy `ed_outrider.toml.example` to `ed_outrider.toml` next to the script and
 edit the lines you need. The example explains every key. Relative paths in it (`db`, `backup_dir`, `speech_file`, `sound_dir`,
 `background_image`) are relative to the Outrider folder; the first three default to `data/ed_outrider.sqlite`, `data/backups`

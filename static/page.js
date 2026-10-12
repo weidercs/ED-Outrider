@@ -2848,9 +2848,12 @@ function render() {
   refocus("rows", fkRows);
   renderBoxelMode();
   document.getElementById("updateLine").hidden = !data.restart_needed;
+  renderNotices();
   drawUpdatePill();
   for (const id of ["setVersion", "tabOutVer"]) { const el = document.getElementById(id), v = data.outrider ? `version ${data.outrider}` : "";
     if (el && el.textContent !== v) el.textContent = v; }
+  const srvVer = document.getElementById("srvVersion");
+  if (srvVer.textContent !== (data.outrider || "")) srvVer.textContent = data.outrider || "";
   // a server away from the game PC ([server] game_pc false): what needs that PC is left out (body.notgamepc hides every
   // .pcOnly: Settings' Auto honk, "play on this PC", the Highway's auto-target box and 🎯 / Retry, the tablet's rail)
   document.body.classList.toggle("notgamepc", data.game_pc === false);
@@ -9098,6 +9101,108 @@ async function saveServerConfig() {
   const m = document.getElementById("srvMsg");
   m.textContent = `Saved ${r.changed} setting${r.changed === 1 ? "" : "s"}: restart Outrider to use ${r.changed === 1 ? "it" : "them"}.`; m.className = "hint ok";
 }
+// Settings opened on Server settings (a notice's button): `section`, a config section to unfold ("journals")
+function openServerSettings(section) {
+  if (section) SRV_SET_OPEN[section] = true;
+  if (!alertDialog.open) document.getElementById("alertsBtn").click();
+  const i = alertSections.findIndex(s => s.id === "serverSettings"), d = alertSections[i];
+  const wasOpen = d.open;
+  showAlertSection(i);
+  if (wasOpen) loadServerSettings();   // already open: no toggle event to draw it again with that section open
+}
+
+// ---- Outrider's own log (S5b): Settings -> Server's Show log. What the server printed in its terminal since it
+// started (GET api/serverlog?after=<seq>, its last 2,000 lines; the file beside the database keeps more), asked every
+// LOG_POLL_MS while the dialog is open. Newest at the bottom, followed only while you are at the bottom; the error
+// stream's lines amber. A restarted Outrider numbers its lines afresh: the dialog starts again.
+const LOG_POLL_MS = 2000, LOG_KEEP = 2000;
+const srvLog = {gen: 0, last: 0, lines: [], timer: null};
+const logTime = t => new Date(t * 1000).toTimeString().slice(0, 8);
+const logLineHtml = l => `<div class="logln${l.kind === "err" ? " err" : ""}"><span class="logt">${esc(logTime(l.t))}</span> ${esc(l.text)}</div>`;
+const logText = () => srvLog.lines.map(l => `${logTime(l.t)} ${l.kind === "err" ? "!" : "|"} ${l.text}`).join("\n");
+function logReset() {
+  srvLog.last = 0; srvLog.lines = [];
+  document.getElementById("logLines").innerHTML = "";
+}
+async function pollServerLog(gen) {
+  const dlg = document.getElementById("logDlg"), box = document.getElementById("logLines");
+  if (gen !== srvLog.gen || !dlg.open) return;
+  let r;
+  try { r = await apiJson(`api/serverlog?after=${srvLog.last}`); } catch { r = {error: "Outrider not reachable"}; }
+  if (gen !== srvLog.gen || !dlg.open) return;
+  const foot = document.getElementById("logFoot");
+  if (r && !r.error) {
+    if (r.last < srvLog.last) { logReset(); srvLog.timer = setTimeout(() => pollServerLog(gen), 0); return; }   // restarted
+    const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 24;
+    if (r.lines.length) {
+      srvLog.lines.push(...r.lines);
+      box.insertAdjacentHTML("beforeend", r.lines.map(logLineHtml).join(""));
+      const extra = srvLog.lines.length - LOG_KEEP;
+      if (extra > 0) { srvLog.lines.splice(0, extra); for (let i = 0; i < extra && box.firstElementChild; i++) box.firstElementChild.remove(); }
+      if (atBottom) box.scrollTop = box.scrollHeight;
+    }
+    srvLog.last = r.last;
+    foot.textContent = (r.path ? `Saved in ${r.path}${r.file_error ? ` (it cannot be written: ${r.file_error})` : ""}` : "Not saved to a file")
+      + " · the latest lines here, newest at the bottom";
+  } else foot.textContent = `Cannot read the log: ${(r && r.error) || "?"}`;
+  document.getElementById("logCount").textContent = `${srvLog.lines.length} line${srvLog.lines.length === 1 ? "" : "s"}`;
+  srvLog.timer = setTimeout(() => pollServerLog(gen), LOG_POLL_MS);
+}
+function openServerLog() {
+  clearTimeout(srvLog.timer);
+  logReset();
+  tabShow(document.getElementById("logDlg"));
+  return pollServerLog(++srvLog.gen);
+}
+document.getElementById("srvLogBtn").onclick = openServerLog;
+document.getElementById("logCopy").onclick = () => copyText(logText() || "(nothing yet)", `${srvLog.lines.length} lines`);
+document.getElementById("logDlg").addEventListener("close", () => { srvLog.gen++; clearTimeout(srvLog.timer); });
+
+// ---- the notices banner (S5a): what Outrider found wrong at start (a journal folder missing, the config's problems,
+// no password on the network...), kept by the server (data.notices) and shown at the top of every window and the
+// tablet. ✕ hides one in every window until Outrider restarts or its text changes (POST api/notices/dismiss). An
+// action is a name mapped here to a button; one this page does not know (or the tablet cannot do) is left out.
+const NOTICE_ACTIONS = {
+  "open:server": ["Server settings", () => openServerSettings()],
+  "open:server:journals": ["Journal folders", () => openServerSettings("journals")],
+  "open:log": ["Show log", () => openServerLog()],
+};
+const NOTICE_MARK = {info: "ⓘ", warn: "⚠", bad: "⛔"};
+const noticeGone = new Set();   // dismissed in this window, until the server's answer leaves them out
+let noticeDrawn = null;
+function noticeAction(a) {
+  if (!a || !Object.prototype.hasOwnProperty.call(NOTICE_ACTIONS, a)) return null;
+  return TABLET && a.startsWith("open:server") ? null : NOTICE_ACTIONS[a];   // the tablet has no Server settings
+}
+function renderNotices() {
+  const bar = document.getElementById("noticeBar");
+  const all = (data && Array.isArray(data.notices)) ? data.notices : [];
+  for (const id of noticeGone) if (!all.some(n => n.id === id)) noticeGone.delete(id);   // the server has it
+  const list = all.filter(n => !noticeGone.has(n.id));
+  const key = JSON.stringify(list.map(n => [n.id, n.action]));
+  if (key === noticeDrawn) return;
+  noticeDrawn = key;
+  bar.hidden = !list.length;
+  bar.innerHTML = list.map(n => {
+    const act = noticeAction(n.action);
+    return `<div class="notice ${NOTICE_MARK[n.level] ? n.level : "warn"}" data-nid="${esc(n.id)}"><span class="nmark" aria-hidden="true">${NOTICE_MARK[n.level] || "⚠"}</span>` +
+      `<span class="ntext">${esc(n.text)}</span>` +
+      (act ? `<button type="button" class="nact" data-naction="${esc(n.action)}">${esc(act[0])}</button>` : "") +
+      `<button type="button" class="nclose" data-ndismiss="${esc(n.id)}" title="hide until Outrider restarts" aria-label="hide until Outrider restarts">✕</button></div>`;
+  }).join("");
+}
+document.getElementById("noticeBar").addEventListener("click", async e => {
+  const act = e.target.closest("[data-naction]");
+  if (act) { const a = noticeAction(act.dataset.naction); if (a) a[1](); return; }
+  const x = e.target.closest("[data-ndismiss]");
+  if (!x) return;
+  const id = x.dataset.ndismiss;
+  noticeGone.add(id); noticeDrawn = null; renderNotices();
+  let r;
+  try { r = await apiJson("api/notices/dismiss", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({id})}); }
+  catch { r = {error: "Outrider not reachable"}; }
+  if (r.error) { noticeGone.delete(id); noticeDrawn = null; renderNotices(); toast(`Could not hide it: ${r.error}`); }
+});
 
 let disconnected = null, disconnectedAt = 0, lostSaid = false;
 // The link pill: states only, no timer (the author, 2026-10-12): "linked", "linked · no game" (Outrider answers, the

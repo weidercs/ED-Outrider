@@ -207,6 +207,8 @@ import outrider.codex_images  # the checklists' pictures: Canonn's links and cre
 import outrider.overlay    # the in-game overlay's panels as draw lists (the window: python3 -m outrider.overlay_window)
 import outrider.overlay_runner  # Outrider runs that window itself on the game PC while the overlay is wanted
 import outrider.ggg        # potential green gas giants: the community's seven-layer ladder model (pure)
+import outrider.serverlog  # Outrider's own log: the terminal's lines kept for Show log and in <db dir>/outrider.log
+import outrider.notices    # the notices banner: start-up problems shown on every page until fixed or dismissed
 import outrider.boxel      # boxel exploration: the cube a procedural name places a system in, its systems, its id64s (pure)
 import outrider.codex_bodies  # star and planet types as codex entries: what a body would log (pure)
 from outrider.core import iso_ts, ts_seconds   # journal timestamps
@@ -864,7 +866,8 @@ def settings_from(cfg, args, env_journals=None, detected=((), ())):
         game_pc = "auto"
     password = sv.get("password", "")
     if isinstance(password, (int, float)) and not isinstance(password, bool):
-        print(f"config: [server] password = {password!r} should be in quotes; taken as {str(password)!r}", file=sys.stderr)
+        # never its value: this line reaches outrider.log, Show log and GET /api/config's problems (S5b)
+        print("config: [server] password should be in quotes; the number is taken as the password", file=sys.stderr)
         password = str(password)
     elif not isinstance(password, str):
         # never "no password": the server could be open to the network. An unknown one instead: devices on the
@@ -6095,6 +6098,15 @@ class State:
         self.lease_hold = None
         self.leases, self.lease_task = None, None
         self._rc_copied = (meta_get(db, "riches") or {}).get("arrival_ts")
+        # the notices banner (S5a; run() gives it the board its start-up warnings went to) and Outrider's own log
+        # (S5b: GET /api/serverlog; None when the streams are not teed, as in tests)
+        self.notices = outrider.notices.Board(on_change=self.bump)
+        self.server_log = None
+
+    def hide_secrets(self):
+        """Keep the passwords and keys out of Outrider's log (outrider.serverlog.hide), the EDSM and Inara keys too."""
+        keys = [a.get("key") for a in (*self.edsm_accounts().values(), *self.inara_accounts().values())]
+        outrider.serverlog.hide(self.password, (self.assistant or {}).get("api_key"), *keys)
 
     def bump(self):
         self.version += 1
@@ -6107,6 +6119,7 @@ class State:
             "version": self.version, "run_id": RUN_ID, "page_stamp": stamp["page"], "restart_needed": stamp["restart_needed"],
             "game_pc": self.game_pc,   # False: the page leaves out what needs the game PC
             "outrider": outrider.__version__,   # Settings' line beside the GitHub link
+            "notices": self.notices.active(),   # the banner: start-up problems, until fixed or dismissed
             # a newer release ({version, current, url, kind}: kind says how to update this install), else None
             "update": dict(self.update_available, current=outrider.__version__, kind=install_kind())
             if self.update_available else None,
@@ -10620,6 +10633,7 @@ class State:
             if not key or not re.fullmatch(r"[0-9a-fA-F]{20,64}", key):
                 return {"error": "api_key: the key from www.edsm.net/settings/api (40 hexadecimal characters)"}, 400
             accounts[commander] = {"name": name, "key": key}
+            outrider.serverlog.hide(key)
         meta_set(self.db, "edsm_accounts", accounts)
         self.upload_status.pop("edsm", None)   # a new key: try again
         self.db.commit()
@@ -10703,6 +10717,7 @@ class State:
             if not outrider.inara.key_ok(key):
                 return {"error": "api_key: the key from inara.cz -> Settings -> API key (letters and digits)"}, 400
             accounts[commander] = {"key": key}
+            outrider.serverlog.hide(key)
         if remove or key != had:   # maybe another Inara profile: it has none of what the old one was sent
             self.inara_sent.forget(commander)
         meta_set(self.db, "inara_accounts", accounts)
@@ -14796,6 +14811,27 @@ def make_app(state, hosts=None):
             return await handler(request)
         return guarded
 
+    async def serverlog_view(request):
+        """GET /api/serverlog?after=<seq>: Outrider's own log (Settings -> Server's Show log), the lines after that one.
+        Behind the sign-in like the rest; not one of the AI's tools."""
+        try:
+            after = max(0, int(request.query.get("after", "0")))
+        except ValueError:
+            return web.json_response({"error": "after: a line number"}, status=400)
+        log = state.server_log
+        if log is None:   # the streams are not teed (a test's app)
+            return web.json_response({"lines": [], "last": 0, "first": 1, "path": None, "file_error": None})
+        return web.json_response(log.since(after))
+
+    async def notices_dismiss_view(request):
+        """POST /api/notices/dismiss {id}: hide that notice in every window until Outrider restarts (or its text
+        changes). ok False: not shown (dismissed already, or gone)."""
+        body = await json_object(request)
+        nid = body.get("id") if body else None
+        if not isinstance(nid, str) or not nid or len(nid) > 200:
+            return web.json_response({"error": "expected {id}"}, status=400)
+        return web.json_response({"ok": state.notices.dismiss(nid), "notices": state.notices.active()})
+
     async def config_get_view(_):
         """GET /api/config: every config key for the Settings dialog's Server settings (secrets only as set or not)."""
         return web.json_response(state.config_info())
@@ -15180,6 +15216,8 @@ def make_app(state, hosts=None):
     app.router.add_get("/api/rail", rail_view)
     app.router.add_post("/api/ask", ask_view)
     app.router.add_get("/api/config", config_get_view)
+    app.router.add_get("/api/serverlog", serverlog_view)
+    app.router.add_post("/api/notices/dismiss", notices_dismiss_view)
     app.router.add_post("/api/config", config_post_view)
     app.router.add_post("/api/rail/press", pc_only(rail_press_view))
     app.router.add_post("/api/rail/sets", pc_only(rail_sets_view))
@@ -15470,6 +15508,24 @@ def restore_backup(zip_path, db_path, host, port, now=None):
     return lines
 
 
+def startup_notices(st, config_path):
+    """run()'s first notices on a fresh board (outrider.notices.reset): the journal folders not found (said in the
+    terminal too) and the config file's problems (said already while it was read)."""
+    notices = outrider.notices.reset()
+    missing = [d for d in st["live"] + st["legacy"] if not os.path.isdir(d)]
+    for d in missing:
+        print(f"journal folder not found, skipping: {d}", file=sys.stderr)
+    if missing:
+        notices.set("journals_missing", f"Journal folder{'' if len(missing) == 1 else 's'} not found, skipped: "
+                    + "; ".join(missing), action="open:server:journals")
+    _, problems = State._config_settings(None, config_path)
+    shown = [x.removeprefix("config: ").strip() for x in problems if not x[:1].isspace()]   # not a hint's own line
+    if shown:
+        notices.set("config", f"{os.path.basename(config_path)} has {len(shown)} problem{'' if len(shown) == 1 else 's'} "
+                    "(defaults used): " + "; ".join(shown[:3]) + ("; …" if len(shown) > 3 else ""), action="open:server")
+    return notices
+
+
 async def run(args, st):
     global LIVE_DIRS, LEGACY_DIRS, UNSOLD_WARN, UNSOLD_URGENT, BIO_MIN, SOUNDS_DEFAULT, BODY_HIGHLIGHT, BIO_HIGHLIGHT, MAX_INCLUDE_BONUS, RADIUS_CHOICES, VOICE, VOICE_FALLBACK, BACKUP_DIR
     global SPEECH_STYLES, SPEECH_PROFANITY, SPEECH_NAMES, SPEECH_SPEED, SPEAK_BIO_SIGNALS, SPEAK_GEO_SIGNALS, SPEECH_PROFANITY_PCT
@@ -15477,11 +15533,10 @@ async def run(args, st):
     global SPEECH_DANGER_BUSINESS, HIGH_GRAVITY, MODULE_WARN, BACKUP_KEEP, BACKUP_EVERY_DAYS
     global SPANSH_CONCURRENCY, MAP_MAX_RADIUS, MAP_MAX_PAGES
     global SURFACE_ALT, RIG_SPACING, SURFACE_MAP_MIN, SURFACE_MAP_STRIP, RIG_WARN
+    # the notices banner (S5a): what this start finds wrong is said in the terminal as before and shown on every page
+    notices = startup_notices(st, args.config)
     LIVE_DIRS = unique_dirs(d for d in st["live"] if os.path.isdir(d))
     LEGACY_DIRS = [d for d in st["legacy"] if os.path.isdir(d)]
-    for d in st["live"] + st["legacy"]:
-        if not os.path.isdir(d):
-            print(f"journal folder not found, skipping: {d}", file=sys.stderr)
     UNSOLD_WARN, UNSOLD_URGENT, BIO_MIN, SOUNDS_DEFAULT = st["unsold_warn"], st["unsold_urgent"], st["bio_min"], st["sounds"]
     BODY_HIGHLIGHT, BIO_HIGHLIGHT, MAX_INCLUDE_BONUS = st["body_highlight"], st["bio_highlight"], st["max_include_bonus"]
     HIGH_GRAVITY, MODULE_WARN = st["high_gravity"], st["module_warn"]
@@ -15502,19 +15557,21 @@ async def run(args, st):
         outrider.unsold.LIVE_DIRS, outrider.unsold.LEGACY_DIRS = LIVE_DIRS, LEGACY_DIRS
         outrider.unsold.DEFAULT_DIRS = LIVE_DIRS + LEGACY_DIRS
     if not LIVE_DIRS:
-        print("No Elite Dangerous journal folder found. Pass --journals PATH (the folder holding "
-              "Journal.*.log, usually '<Saved Games>/Frontier Developments/Elite Dangerous') or set "
-              "ED_JOURNALS.", file=sys.stderr)
+        outrider.notices.warn("no_journals", "No Elite Dangerous journal folder found. Pass --journals PATH (the folder "
+                              "holding Journal.*.log, usually '<Saved Games>/Frontier Developments/Elite Dangerous') or "
+                              "set ED_JOURNALS.", action="open:server:journals")
     else:
         print("journals: " + ", ".join(LIVE_DIRS) + (f"  (legacy: {', '.join(LEGACY_DIRS)})" if LEGACY_DIRS else ""))
-        for line in nfs_cache_warnings(LIVE_DIRS):
-            print(line, file=sys.stderr)
+        for i, line in enumerate(nfs_cache_warnings(LIVE_DIRS)):
+            outrider.notices.warn(f"nfs{i}", line)
     problem = listen_problem(args.host, args.port)
     if problem:
         print(problem, file=sys.stderr)
         raise SystemExit(1)
     migrate_old_layout(args.db)   # an upgrade from before data/: your database and files come along
     os.makedirs(os.path.dirname(os.path.abspath(args.db)), exist_ok=True)   # data/ on a fresh copy
+    if outrider.serverlog.ACTIVE:   # beside the database, never outrider.DATA_DIR (verify.sh's server would write data/)
+        outrider.serverlog.ACTIVE.open(os.path.join(os.path.dirname(os.path.abspath(args.db)), outrider.serverlog.FILE_NAME))
     db = open_db(args.db, rescan=args.rescan, on_reread=print)   # says why when every journal is read again
     journals = Journals(db)
 
@@ -15563,11 +15620,15 @@ async def run(args, st):
     state = State(db, journals, spansh, float(chosen) if usable else args.radius)
     state.password = st["password"]
     state.assistant = st["assistant"]
+    state.hide_secrets()   # and the EDSM / Inara keys: never in the log
+    state.server_log = outrider.serverlog.ACTIVE
+    state.notices = notices
     state.searcher = Searcher(state)
     state.db_path = args.db
     state.speech_path, state.config_path = st["speech_file"], args.config
     state.pronounce_path = outrider.tts.PRONOUNCE.own
     loop = asyncio.get_running_loop()
+    notices.on_change = lambda: loop.call_soon_threadsafe(state.bump)   # a notice set later, from any thread
     voice = meta_get(db, "voice_choice")   # picked in the alerts dialog: beats the config file once used
     # a Piper name, or any voice installed in piper-voices/ (a self-made one: the dialog lets you pick it, and it was
     # forgotten at every restart)
@@ -15656,8 +15717,14 @@ async def run(args, st):
     state.speech =outrider.speech.SpeechLines(st["speech_file"])
     sp = state.speech.info()
     print(f"spoken alerts: wording from {sp['file']}" if sp["version"] else f"spoken alerts: {sp['error']}")
+    if not sp["version"]:
+        notices.set("speech", f"Spoken alerts: {sp['error']}", action="open:log")
     for msg in sp["problems"]:
         print(f"  {sp['file']}: {msg}", file=sys.stderr)
+    if sp["version"] and sp["problems"]:
+        n = len(sp["problems"])
+        notices.set("speech", f"The spoken lines file {sp['file']} has {n}{'+' if n >= 20 else ''} problem{'' if n == 1 else 's'}: "
+                    f"{sp['problems'][0]}" + (" (the others in the log)" if n > 1 else ""), action="open:log")
     rules_task = asyncio.create_task(check_bio_rules(state)) if outrider.bio else None
     watcher = asyncio.create_task(state.watch())
     state.firsts_watch_on = st["watch_firsts"]
@@ -15693,7 +15760,8 @@ async def run(args, st):
         try:
             await web.TCPSite(runner, "127.0.0.1", args.port).start()
         except OSError as e:
-            print(f"cannot listen on 127.0.0.1:{args.port} for the in-game overlay window: {e.strerror or e}", file=sys.stderr)
+            outrider.notices.warn("overlay_bind", f"cannot listen on 127.0.0.1:{args.port} for the in-game overlay window: "
+                                  f"{e.strerror or e}")
     # a wildcard address is not a place a browser can go (and not a name the Host check answers): loopback is
     shown = "127.0.0.1" if args.host in WILDCARD_HOSTS else _host_name(args.host)
     print(f"serving on http://{shown}:{args.port}/  (Ctrl-C to stop)")
@@ -15707,8 +15775,8 @@ async def run(args, st):
             " (they sign in with [server] password)" if state.password else " (no password set: see below)"))
         print("  it answers to any IP address, and by name only to these (add others to [server] allowed_hosts): "
               + ", ".join(sorted(h for h in hosts if h.endswith(f":{args.port}"))))
-    for line in exposure_warnings(args.host, state.password, st["allowed_hosts"]):
-        print(line, file=sys.stderr)
+    for i, line in enumerate(exposure_warnings(args.host, state.password, st["allowed_hosts"])):
+        outrider.notices.warn(f"network{i}", line, action="open:server")
     # stop as on Ctrl-C when asked to (SIGTERM: docker stop, systemd, verify.sh): the same cleanup below, exit code 0
     stop = asyncio.Event()
     try:
@@ -15739,6 +15807,7 @@ async def run(args, st):
         await runner.cleanup()
         await spansh.close()
         state.drop_leases()   # another Outrider may take the uploads over at once
+        notices.on_change = None   # the loop is about to end
         await state.upload_session.close()
         db.commit()
         db.close()
@@ -15827,12 +15896,32 @@ def main(argv=None):
     p.add_argument("--list-backups", action="store_true",
                    help="List this database's backup zips in backup_dir (name, size, time) and exit.")
     args = p.parse_args(argv)
+    serving = not (args.write_config or args.list_backups or args.restore is not None)
+    # Outrider's own log (S5b): the server's lines from here on, for Show log and <db dir>/outrider.log (opened in
+    # run()); put back when main() ends, so a test calling it leaves nothing behind
+    restore_streams = outrider.serverlog.install() if serving else None
+    try:
+        main_with(args, serving)
+    except Exception:
+        # a crash: Python prints it to the terminal after this, when the log is no longer there; the log gets it here
+        if restore_streams and outrider.serverlog.ACTIVE:
+            import traceback
+            outrider.serverlog.ACTIVE.feed("err", traceback.format_exc())
+        raise
+    finally:
+        if restore_streams:
+            restore_streams()
+
+
+def main_with(args, serving):
     # the log's first line says which Outrider this is (the author, 2026-10-10): before the config is read, so before any
     # of its warnings; not for the commands that print something and exit
-    if not (args.write_config or args.list_backups or args.restore is not None):
+    if serving:
         print(f"ED Outrider {outrider.__version__}")
     detected = (outrider.unsold.LIVE_DIRS, outrider.unsold.LEGACY_DIRS) if outrider.unsold else ([], [])
     st = settings_from(load_config(args.config), args, os.environ.get("ED_JOURNALS"), detected)
+    if serving:   # the config's secrets never appear in the log, whatever prints them
+        outrider.serverlog.hide(st["password"], st["mcp_password"], (st["assistant"] or {}).get("api_key"))
     if args.write_config:
         if os.path.exists(args.config):
             print(f"{args.config} already exists; the effective settings are:\n")

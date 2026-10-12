@@ -135,7 +135,7 @@ turns the automation off inside a container by itself; `false` does the same on 
 server's name to **allowed hosts** if you open it by name, save, and `docker compose restart`. The address and port
 inside the container are fixed (0.0.0.0, 8025): to use another port, set `PORT` in `.env`, not in Settings. If the log says it
 cannot write `/config` or `/app/data`, the folders belong to someone else: `sudo chown -R $(id -u):$(id -g) docker/`
-and `docker compose restart`.
+and `docker compose restart`. Later, ⚙ Settings → Server → **Show log** shows Outrider's log from any device.
 
 **Updating.** The page's **⬆ Update** pill says when a new release is out.
 

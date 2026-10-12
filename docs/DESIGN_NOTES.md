@@ -562,6 +562,14 @@ upstream project's choices, not rules of the game.
   fetched only when the finder opens, at most hourly and conditionally, its last copy kept; the voice and the AI's tool
   never fetch it (`cached=1`). DSSA carriers carry a badge (the author's ask). Reports older than 30 days are hidden by
   default, with the count said: carriers move, and Spansh keeps reports years old.
+- **Start-up problems go on a banner, dismissed until a restart** (S5a, the author, 2026-10-12): what used to be printed
+  only in the terminal is a notice in every window and the tablet. The dismissal is the server's, in memory: every
+  window agrees, a restart shows it again (still wrong, still worth saying), and a notice whose text changed is a new one.
+  One board for every such notice (later the colour tables, outages, a failed backup), never a per-device dismissal.
+- **Outrider's log is its terminal, kept** (S5b): the Python output only (the overlay window's piped in); the players and
+  the clipboard programs still write to the terminal alone. The file lives beside the database, not in `data/`, so a
+  second copy (`--db`) or verify.sh's scratch server keeps its own. Secrets: the code never prints them and the log
+  hides them again (`serverlog.hide`), since an exception's text could carry one.
 
 ## Known limits
 

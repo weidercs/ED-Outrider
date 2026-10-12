@@ -2,6 +2,22 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · Show log, and start-up problems on a banner
+- **Show log** (S5b): Settings → Server's top row says "Outrider <version> · Show log". The log is what Outrider prints
+  in its terminal, kept from the first line (its last 2,000 lines, GET `/api/serverlog`, behind the sign-in), in a
+  dialog that follows along while open, the error stream in amber, with Copy. The same lines go to `outrider.log` beside
+  the database (rotated at 2 MB to `outrider.log.1`). New `outrider/serverlog.py`: a tee on stdout/stderr for the
+  server's run only, put back when it ends. The overlay window's own output is now piped into Outrider's ("overlay
+  window: …"), so its errors are in the log too.
+- **No secrets in it:** the config warning for an unquoted `[server] password` printed the number itself (and GET
+  `/api/config` replayed it): it no longer does. The log also hides the passwords, the AI key and the EDSM / Inara keys
+  wherever they would appear.
+- **The notices banner** (S5a): what Outrider finds wrong at start (a journal folder not found, the config file's
+  problems, the spoken lines file's, no password while listening on the network, NFS caching, the overlay's address
+  taken) is now a line under the header in every window and on the tablet, with a button where one helps (Server
+  settings, Show log), as well as in the terminal. ✕ hides it everywhere until Outrider restarts or the message changes
+  (the author's choice). New `outrider/notices.py`, the payload's `notices`, POST `/api/notices/dismiss`.
+
 ## 2026-10-12 · Less work every second: journals over a share, the carrier, what's left here
 - **Journal files over a network share** (S18): every second Outrider still lists the journal folder (a new journal is
   read at once) but checks the size of only the newest two files and those still changing; a file whose size stayed
