@@ -11,7 +11,8 @@
 is scanned, the main star and whether it scoops, notable bodies, curiosities (🔭: odd orbits, ringed landables, rare
 classes such as water giants, helium giants, Sudarsky class V and green gas giants) and a credit estimate. Sort,
 hide visited and fully scanned systems, or keep only those one jump away. A dashed <i>old data</i> mark flags Spansh
-records from before Odyssey (thin-atmosphere planets there may hold unsampled life). ⛏ N counts planetary mining
+records from before Odyssey (thin-atmosphere planets there may hold unsampled life). Click a row to see that system
+body by body beside the list (click it again to close it); its name copies it, ☆ bookmarks it. ⛏ N counts planetary mining
 locations on ground worth a Rhino. 🌀 N counts the notable stellar phenomena your FSS found there (life in clouds or rings; hover
 for what they are), dimmed once you have been to them. ⭐ marks a rare star (a black hole, a Wolf-Rayet, a carbon,
 MS, S or O-type star, a Herbig Ae/Be star, a supergiant, a rare white dwarf, an exotic star), from Spansh's records
@@ -161,9 +162,12 @@ jump's cost ("38.2 ly · 0.9 t · leaves 5 max jumps"). "scoopable: 9 of last 20
 short for the gaps between scoopable stars. In the SRV or the Nomad it keeps the ship's tank and adds the
 vehicle's own fuel.
 
-Under the Where tile, the **discovery streak** is a dot per arrival for your last 20 (gold: first discovery,
-amber: bodies nobody had reported, blue: known, grey: revisited), and the **unreported horizon**: "nearest
-known unvisited: Xyz 4.8 ly". Any unvisited star closer than that on the galaxy map is one nobody has reported.
+The Where tile names the system you are in and, beside it, the one you jumped from ("from Xyz AB-C d1-2 (75.9 ly)");
+the Commander tile has your jump range under the ship ("max jump 83.0 ly · 75.9 laden", and the boosted reach while a
+jet-cone charge holds). Under the Where tile, the **discovery streak** is a dot per arrival for your last 20 (gold:
+first discovery, amber: bodies nobody had reported, blue: known, grey: revisited). Now and the voice's status report
+give the **unreported horizon**: "nearest known unvisited: Xyz 4.8 ly". Any unvisited star closer than that on the
+galaxy map is one nobody has reported.
 
 ## 🟢 Potential green gas giants
 

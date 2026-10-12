@@ -86,10 +86,15 @@ upstream project's choices, not rules of the game.
 - **The co-pilot button only reads the device,** never grabs it; unbinding it in the game is the player's job.
 - **The co-pilot button's layout** (the author, 2026-10-08): flying the ship, a tap targets the next route system
   (the survey / trade route's first, then the Highway's; "nothing to target" said in the personality when there is
-  none), a double tap is the status report, a hold the hush; out of the ship a tap does nothing; the Rhino keeps rig
+  none, with the last reason found), a double tap is the status report, a hold the hush; out of the ship a tap does nothing; the Rhino keeps rig
   marking. "Say again" left the button (the page keeps it). A tap is only known once `double_ms` (400 ms, was 350)
   passes, then 0.5 s more before any key; a press in that half second cancels the run and counts as the slow double
   tap it was (the status report), so a slow double tap never opens the galaxy map.
+- **The co-pilot tap targets every "next system"** (the author, 2026-10-12, S76), in this order: the survey / trade
+  route's next; the Highway's while you are on it (at a route system, its start included); the boxel being explored
+  (its Next, the same run as 🎯 beside it, so a name the galaxy map cannot find marks the boxel's probable end); the
+  Highway's off the route (its closest system, or its start before you joined it). A route you are on stays first;
+  one you left for a detour into a boxel does not hide the boxel, and comes back once the boxel has no Next.
 - **Listens on 127.0.0.1 by default; a password is optional.** Opening it to the network is an explicit setting; the
   Host and cross-site guards stop other web sites, not people on your network. `[server] password` stops those: a
   device that is not this PC needs a session (the `outrider_session` cookie, or `Authorization: Bearer` for the

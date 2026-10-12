@@ -2032,7 +2032,7 @@ const settle = async maxMs => {
     got.tile = [/scoopable: 6 of last 20 · 3 dry in a row/.test(fl.textContent), !!fl.querySelector(".warnc"), /scoopable here: B \(K\) · 1,240 ls/.test(fl.textContent),
                 /\(484 ly\)/.test(fl.textContent)];
     got.target = /Costed · 38\.2 ly · 2\.9 t · leaves 3 max jumps/.test(d.getElementById("target").textContent);
-    got.laden = /78\.0 laden/.test(d.getElementById("subJump").textContent);
+    got.laden = /78\.0 laden/.test(d.getElementById("cmdrLine").textContent);   // under the ship (S75)
     // R14: a jump the tank can't pay for reads out of range, with what it needs; R15: the jumps still to make
     w.eval(`data.target = Object.assign({}, data.target, {hop: {ly: 75.6, fuel: 4.02, left: 0, reach: false}}); render()`);
     const tt = d.getElementById("target").textContent;
@@ -2484,11 +2484,11 @@ const settle = async maxMs => {
       o.three = worthSaying(L([b8, b5, bb("3", 1000000)]));
       o.run = leavingSaid(L([b8, bb("5", 1680000, {partial: {Stratum: 1}})]));
       if (keep === null) localStorage.removeItem("codexNewCounts"); else localStorage.setItem("codexNewCounts", keep);
-      render(); o.hz = document.getElementById("horizonLn").textContent;
+      render(); o.hz = document.getElementById("tWhere").textContent;   // the horizon left the tile (S75)
       return JSON.stringify(o);
     })()`));
     const want = [/biology on A 3, new to your codex here, up to 5\.0M with first footfall/.test(got.said),
-      /biology on A 3, new to your codex here/.test(got.worth), got.saidOff === "", !got.hz.includes(" — "),
+      /biology on A 3, new to your codex here/.test(got.worth), got.saidOff === "", !got.hz.includes("nearest known unvisited"),
       got.planOff === 0, JSON.stringify(got.cfgOff) === "[false,0]", JSON.stringify(got.cfgOn) === "[true,1]",
       got.two === "biology on 8, up to 38.9M, and on 5, up to 8.4M; both new to your codex here, with first footfall",
       got.twoSaid === "biology on 8, up to 38.9 million, and on 5, up to 8.4 million; both new to your codex here, with first footfall",
@@ -2498,7 +2498,7 @@ const settle = async maxMs => {
       got.three === "biology on 8, up to 38.9M, on 5, up to 8.4M, and on 3, up to 5.0M; all new to your codex here, with first footfall",
       got.run === "biology on 5 (Stratum 1 of 3), up to 8.4M, and on 8, up to 38.9M; both new to your codex here, with first footfall"];
     const good = want.every(Boolean) && errors.length === before;
-    console.log(good ? "OK" : "FAIL", "| codex finds say why |", good ? "leaving and debrief lines name the codex find, biology and shared attributes said once; Where line keeps only the star" : JSON.stringify({want, got}), errors.slice(before));
+    console.log(good ? "OK" : "FAIL", "| codex finds say why |", good ? "leaving and debrief lines name the codex find, biology and shared attributes said once; no horizon in the Where tile" : JSON.stringify({want, got}), errors.slice(before));
   }
 
   // Batch A (review 2026-10-01): R27 the N and the rim tags centred on every frame (a stand-in canvas whose
@@ -5113,6 +5113,66 @@ const settle = async maxMs => {
     const good = JSON.stringify(g) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| codex body types |", good ? "✦ / ✪ in Here's name cell, Nearby's tag, the legend, nothing without a codex" : JSON.stringify({g, want}), errors.slice(before));
+  }
+  // S73 (2026-10-12): a click anywhere on a Nearby row shows the system in Here (again: closes it); the name still
+  // copies, ☆ still opens the bookmark, a drag that selected text opens nothing
+  {
+    const w = dom.window, before = errors.length;
+    const got = w.eval(`(() => {
+      const o = {}, v0 = view, c0 = copyText, b0 = openBookmark;
+      let copied = null, opened = null;
+      copyText = t => { copied = t; }; openBookmark = id => { opened = id; };
+      view = "near"; render();
+      const tr = [...document.querySelectorAll("#rows tr[data-id]")].find(r => r.dataset.id !== posId());
+      const id = tr.dataset.id, cell = sel => document.querySelector('#rows tr[data-id="' + id + '"] ' + sel);
+      o.row = !!tr;
+      cell("td.dist").click(); o.pinned = pinnedSystem === id;
+      cell("td.dist").click(); o.unpinned = pinnedSystem === null;
+      cell("td.name").click(); o.name = [pinnedSystem, copied === cell("td.name").dataset.name];
+      cell("[data-bm]").click(); o.bm = [pinnedSystem, opened === id];
+      const s = getSelection(); s.selectAllChildren(cell("td.dist"));
+      cell("td.dist").click(); o.drag = pinnedSystem; s.removeAllRanges();
+      cell("td.bodies").click(); o.bodies = pinnedSystem === id;
+      unpinSystem(); copyText = c0; openBookmark = b0; view = v0; render();
+      return JSON.stringify(o); })()`);
+    const g = JSON.parse(got);
+    const want = {row: true, pinned: true, unpinned: true, name: [null, true], bm: [null, true], drag: null, bodies: true};
+    const good = JSON.stringify(g) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| nearby row click |", good ? "a row opens the system, again closes it; the name copies, ☆ bookmarks, a drag opens nothing" : JSON.stringify({g, want}), errors.slice(before));
+  }
+  // S75 (2026-10-12): the jump range under the ship in the Commander tile; "from X (Y ly)" beside the system's name
+  // (no "came"); no "nearest known unvisited" in the Where tile, while Now keeps it
+  {
+    const w = dom.window, before = errors.length;
+    const got = w.eval(`(() => {
+      const o = {}, keep = {ship: data.ship, previous: data.previous, jump_range: data.jump_range, jump_range_now: data.jump_range_now, boost: data.boost};
+      const p = data.position;
+      data.ship = data.ship || {name: null, type: "anaconda"};
+      data.previous = {name: "Smojooe YC-D c12-1", x: p.x + 3, y: p.y + 4, z: p.z};
+      Object.assign(data, {jump_range: 83, jump_range_now: 75.94, boost: null}); render();
+      const lines = [...document.querySelectorAll("#cmdrLine .ln")].map(l => l.textContent.trim());
+      const ship = lines.findIndex(l => l.startsWith(shipLabel(data.ship.name, data.ship.type)));
+      o.cmdr = [ship >= 0, lines[ship + 1]];
+      o.from = [document.getElementById("here").textContent.trim().endsWith("from Smojooe YC-D c12-1 (5.0 ly)"),
+                (document.querySelector("#here .from") || {}).title];
+      const where = document.getElementById("tWhere").textContent;
+      o.where = [/came|max jump/.test(where), where.includes("nearest known unvisited")];
+      data.boost = 4; render();
+      o.boosted = (document.querySelector("#cmdrLine .boosted") || {}).textContent;
+      data.boost = null;
+      const sys0 = data.systems, st0 = data.status, cut0 = data.sphere_cut, v0 = view;
+      data.systems = [{id: "990001", id64: 990001, name: "Hz Star", distance: 4.8, visited: false, source: "spansh"}];
+      data.status = "ready"; data.sphere_cut = null; view = "now"; renderNow();
+      o.now = document.getElementById("nowView").textContent.includes("nearest known unvisited: Hz Star 4.8 ly");
+      Object.assign(data, {systems: sys0, status: st0, sphere_cut: cut0}); view = v0; Object.assign(data, keep); render();
+      return JSON.stringify(o); })()`);
+    const g = JSON.parse(got);
+    const want = {cmdr: [true, "max jump 83.0 ly · 75.9 laden"], from: [true, "from Smojooe YC-D c12-1 (5.0 ly)"], where: [false, false],
+                  boosted: "boosted ×4 → 304 ly", now: true};
+    const good = JSON.stringify(g) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| header tiles S75 |", good ? `jump range under the ship, "from" beside the name, no horizon in the tile, Now keeps it` : JSON.stringify({g, want}), errors.slice(before));
   }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",

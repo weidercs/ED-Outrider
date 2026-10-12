@@ -2,6 +2,20 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · Co-pilot targets the boxel, Nearby rows open, header tiles tidied
+- The co-pilot button's tap targets the Next of the boxel being explored too, as 🎯 beside it does (the author's ask
+  while testing boxels; S76). The order: the survey / trade route's next; the Highway's while you are on it (at a route
+  system); the boxel's Next; the Highway's off the route (its closest system). A Highway route you left for a detour into
+  a boxel no longer hides the boxel. The same run as 🎯: a name the galaxy map cannot find marks the boxel's probable
+  end. With nothing to target, the voice gives the last reason found ("Drojau TF-H c13 is complete"). DESIGN_NOTES has
+  the order.
+- Nearby (and the Overview's Nearby pane): a click anywhere on a row shows that system beside the list, not only on its
+  bodies cell; again closes it (S73). The name still copies, ☆ still bookmarks, a drag that selects text opens nothing.
+  The row lights up under the mouse. The tablet is unchanged (a tap opens the row's sheet).
+- Header tiles (S75): the jump range moved to the Commander tile, right under the ship ("max jump 83.0 ly · 75.9
+  laden", and the boosted reach). "from X (Y ly)" sits beside the system's name in the Where tile, in the lines'
+  smaller muted font, without "came". "nearest known unvisited" left the Where tile; Now and the voice keep it.
+
 ## 2026-10-12 · "In-Game Route:"
 - The line with the game's own route (the one plotted in the galaxy map, NavRoute.json: jumps, light years, next scoop
   and the star chips) said only "Route:", easy to take for Outrider's route on the "Next:" line just below it (the

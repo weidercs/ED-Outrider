@@ -2083,6 +2083,55 @@ class HighwayAutoTarget(unittest.TestCase):
         asyncio.run(press())
         self.assertEqual(len(moments()), n)
 
+    def test_copilot_button_targets_the_boxel(self):
+        """S76 (the author, 2026-10-12): the button targets the boxel's next system too, as 🎯 does: after a route you
+        are on, before one you left (a detour into the boxel); a name the galaxy map cannot find marks the boxel's
+        probable end as 🎯's run does; with nothing, the last reason found."""
+        import asyncio
+        self.state.honker, self.state.targeter = self.honker, self.targeter
+        self.status["flags"] |= ed_outrider.FLAG_IN_MAIN_SHIP
+        self.j.status_json = self.status
+        self.state.COPILOT_TARGET_DELAY_S = 0.01
+        self.fake_time()
+        N = self.state.copilot_next
+
+        def boxel_jump(s):   # Drojau TF-H c13-0, real (in-game data)
+            self.j.handle({"event": "FSDJump", "timestamp": self.ts(s), "StarSystem": "Drojau TF-H c13-0",
+                           "SystemAddress": 76873176434, "StarPos": [-4179.0625, -64.25, 3339.21875]})
+
+        async def press():
+            self.state.copilot_gesture("status")
+            if self.state.autotarget_test_task:
+                await self.state.autotarget_test_task
+        boxel_jump(-200)
+        self.state.boxel_set("Drojau TF-H c13-", self.state.boxel_active()["sector_index"])   # 📌 kept
+        self.assertEqual(N(), (("next", ("boxel", None)), None))   # no route: the boxel's next
+        nxt = self.state.boxel_target()[0]
+        self.game.systems[nxt["name"]] = nxt["id64"]
+        asyncio.run(press())
+        self.assertEqual((self.state.autotarget_last["system"], self.state.autotarget_last["done"]), ("Drojau TF-H c13-1", True))
+        # the galaxy map cannot find it: probably the boxel's end, marked as 🎯's run marks it; then nothing to target
+        del self.game.systems[nxt["name"]]
+        self.status["destination"] = None
+        asyncio.run(press())
+        self.assertEqual(self.state.autotarget_last["why"], "Drojau TF-H c13-1 was not found: probably the end of the boxel")
+        self.assertEqual(self.state.boxel_view()["end"], 1)
+        self.assertEqual(N(), (None, "Drojau TF-H c13 is complete"))
+        self.state.boxel_clear_end()
+        # a Highway route you are on (at its start) stays first, the boxel kept or not
+        hwy_plot_exact(self)
+        self.assertEqual(N(), (("next", None), None))
+        # off the route, in the boxel: the boxel's next; the route's closest system once the boxel is done
+        boxel_jump(-50)
+        self.assertTrue(ed_outrider.meta_get(self.db, "highway")["off_route"])
+        self.assertEqual(N(), (("next", ("boxel", None)), None))
+        self.state.boxel_mark_done()
+        self.assertEqual(N(), (("next", None), None))
+        self.assertEqual(self.state.autotarget_target(manual=True)[0]["name"], "Start")
+        # neither: the boxel's reason, the last found
+        self.state.highway_clear()
+        self.assertEqual(N(), (None, "Drojau TF-H c13 is marked done"))
+
     def test_target_next_targets(self):
         T = self.state.autotarget_target
         self.assertEqual(T(manual=True), (None, "no route is plotted"))

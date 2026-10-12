@@ -392,7 +392,7 @@ button.icon.hushbtn.on { border-color: var(--warn); }
 .tile.warn .val { color: var(--warn); } .tile.urgent .val { color: var(--bad); }
 .tile.urgent .lbl::after { content: " ⚠"; color: var(--bad); }
 #tUnsold, #tFuel { cursor: help; }
-#tWhere .val .sol { color: var(--muted); font-size: 12px; font-weight: 400; }
+#tWhere .val .sol, #tWhere .val .from { color: var(--muted); font-size: 12px; font-weight: 400; }
 #tWhere .copy { cursor: copy; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--good); margin-right: 5px; vertical-align: 0; }
 .dot.warn { background: var(--warn); } .dot.bad { background: var(--bad); }
@@ -419,6 +419,9 @@ th[data-sort].on.rev::after { content: " ▴"; }
 #hereHead .unpin:hover { border-color: var(--accent); color: var(--accent); }
 #hereHead .pintag { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; margin-right: 4px; }
 #rows td.bodies { cursor: pointer; }
+/* a click anywhere on a Nearby row but its name and ☆ shows the system (S73); not the tablet (its tap opens the sheet) */
+body:not(.tablet) #rows tr[data-id] { cursor: pointer; } #rows td.bmcell { cursor: auto; }
+body:not(.tablet) #rows tr[data-id]:not(.pinned):hover td { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 /* Nearby with a pinned system: list on the left, panel on the right at 40 % */
 main.nearPinned { display: flex; align-items: flex-start; gap: 16px; }
 main.nearPinned > #nearWrap { flex: 1 1 60%; min-width: 0; }
@@ -870,7 +873,7 @@ body.nowmode header, body.nowmode main { display: none; }
 .streak .sk.visited { background: var(--muted); border-color: var(--muted); opacity: .6; }
 .streak .sk.known { border-color: var(--muted); }                            /* known, Spansh had nothing then */
 .streak .sk.none { border-style: dashed; }
-#horizonLn { cursor: help; } #streakLn:empty, #horizonLn:empty { display: none; }
+#streakLn:empty { display: none; }
 .skipq { font-style: italic; }
 #nowView .now-small { font-size: clamp(16px, 2.2vw, 26px); color: var(--muted); } #nowView .now-small b { color: var(--text); }
 .lastsession { margin: 0 0 10px; padding: 6px 10px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 6px; font-size: 13px; background: var(--panel); }

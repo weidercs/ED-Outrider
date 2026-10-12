@@ -6347,8 +6347,12 @@ class State:
 
     def copilot_next(self):
         """(start_autotarget_run's kind and aim, None) for the co-pilot button's press, or (None, why there is nothing to
-        target). The author's order (2026-10-08): the next system of the survey / trade route (the slot's) first; with
-        none there (no such route, complete, at its end), the Highway's next; with neither, the last reason found."""
+        target). The author's order (2026-10-08; the boxel added 2026-10-12, S76): the next system of the survey / trade
+        route (the slot's) first; with none there (no such route, complete, at its end), the Highway's next while you are
+        on it (at a route system); then the next system of the boxel being explored (boxel_target, 🎯's own path: a name
+        the galaxy map cannot find marks the boxel's probable end the same way); then the Highway's off the route (its
+        closest system, or its start before you joined it: a route you left does not hide the boxel); with none, the last
+        reason found."""
         why = "no route is plotted"
         rc, rows = self.riches_state()
         if rc:
@@ -6361,14 +6365,22 @@ class State:
                 tgt, why = self.route_target("survey", nx)
                 if tgt:
                     return ("next", ("survey", nx)), None
-        if meta_get(self.db, "highway"):
+        off = None   # the Highway's next while you are not on the route: after the boxel's
+        hw = meta_get(self.db, "highway")
+        if hw:
             tgt, why = self.autotarget_target(manual=True)
-            if tgt:
+            if tgt and hw.get("at") is not None:
                 return ("next", None), None
-        return None, why
+            off = ("next", None) if tgt else None
+        if self.boxel_active():
+            tgt, bwhy = self.boxel_target(None)
+            if tgt:
+                return ("next", ("boxel", None)), None
+            why = bwhy
+        return (off, None) if off else (None, why)
 
     def copilot_target(self):
-        """The co-pilot button's single press in the ship: Target next on the route the line shows, after
+        """The co-pilot button's single press in the ship: Target next on the route (or boxel) the line shows, after
         COPILOT_TARGET_DELAY_S. Its result is spoken as Target next's always is; nothing to target, or a run that
         cannot start, is said too (an "autotarget" moment: what "nothing" has the personality lines)."""
         ts = iso_ts(time.time())

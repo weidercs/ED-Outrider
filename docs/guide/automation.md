@@ -40,7 +40,9 @@ Docker), where the HOTAS is plugged in:
 
 - **Tap, flying your ship:** target the next route system in the galaxy map (the same run as 🎯 and Target next,
   half a second after the press, so keep your hands off the controls). It targets the next system of your Road to
-  Riches, Exomastery or trade route first, then the Highway's. Success or failure is said as for auto-target; with
+  Riches, Exomastery or trade route first, then the Highway's while you are on it, then the Next of the boxel you
+  explore (as 🎯 beside it does: a name the galaxy map cannot find is probably the boxel's end), then, off the Highway,
+  its closest system. Success or failure is said as for auto-target; with
   nothing to target, the voice says so in its personality. Out of the ship (the SRV, on foot, a fighter) a tap does
   nothing. A press during that half second cancels it before any key (a double tap that came a little slow) and
   gives the status report instead; so does a press while the run is still waiting with no key pressed (waiting out

@@ -457,24 +457,27 @@ function renderStrip() {
   document.getElementById("cmdrLbl").textContent = cm && cm.name ? `Cmdr ${cm.name}` : "Commander";
   const shipLine = sh ? `<span title="${esc(shipName(sh.type))}${data.jump_range ? ` · ${data.jump_range.toFixed(1)} ly max jump` : ""}">${esc(shipLabel(sh.name, sh.type))}` +
     `${sh.type && shipName(sh.type) !== shipLabel(sh.name, sh.type) ? ` <span class="unk">· ${esc(shipName(sh.type))}</span>` : ""}</span>` : "";
-  cmEl.innerHTML = !cm ? val(`<span class="unk">no login seen</span>`) + ln(shipLine) :
+  // the jump range, right under the ship (S75, 2026-10-12: it was the Where tile's): max, laden, a jet-cone charge's reach
+  const jr = effRange();
+  const jumpLine = jr ? `<span title="Loadout MaxJumpRange: the best case with a near-empty tank">max jump ${(data.jump_range || jr).toFixed(1)} ly</span>` +
+    (data.jump_range_now ? ` <span title="the range with the fuel and cargo aboard now (jumps counted here use it)">· ${data.jump_range_now.toFixed(1)} laden</span>` : "") +
+    (data.boost ? ` <b class="boosted" title="jet-cone charge: your next jump reaches this far">boosted ×${data.boost} → ${jr.toFixed(0)} ly</b>` : "") : "";
+  cmEl.innerHTML = !cm ? val(`<span class="unk">no login seen</span>`) + ln(shipLine) + ln(jumpLine) :
     val(cm.credits != null ? `≈ ${credits(cm.credits)} cr` : `<span class="unk">credits unknown</span>`,
         `Credits at login (${esc((cm.login_ts || "").replace("T", " ").slice(0, 16))} UTC)${cm.credits_login != null ? ": " + cm.credits_login.toLocaleString() : ""}` +
         ` plus exploration and exobiology sales since. Other spending and income (market, repairs, missions) is not tracked.`) +
-    ln(shipLine) + ln(cm.earned ? `+${credits(cm.earned)} cr sold since login` : "") +
+    ln(shipLine) + ln(jumpLine) + ln(cm.earned ? `+${credits(cm.earned)} cr sold since login` : "") +
     ["Explore", "Exobiologist"].filter(k => cm.ranks && cm.ranks[k]).map(k => { const r = cm.ranks[k];
       return ln(`<span title="${k === "Explore" ? "exploration" : "exobiology"} rank${r.progress != null ? `, ${r.progress}% to the next` : ""}">${k === "Explore" ? "Explorer" : "Exobiologist"}: <b>${esc(r.name)}</b>${r.progress != null ? ` <span class="unk">${r.progress}%</span>` : ""}</span>`); }).join("");
-  const ns = data.next_stop, nsEl = document.getElementById("nextStopLn"), jr0 = effRange();
+  const ns = data.next_stop, nsEl = document.getElementById("nextStopLn");
   nsEl.innerHTML = ns ? `<span title="your chosen next stop (clears when you arrive)">next stop:</span> <span class="copy" data-name="${esc(ns.name)}" title="click to copy">${esc(ns.name)}</span>` +
-    (ns.distance != null ? ` · <b>${ns.distance.toLocaleString("en-US", {maximumFractionDigits: 1})} ly</b>${jr0 ? ` ≈ ${jumpsFor(ns.distance)} jump${jumpsFor(ns.distance) === 1 ? "" : "s"}` : ""}` : "") +
+    (ns.distance != null ? ` · <b>${ns.distance.toLocaleString("en-US", {maximumFractionDigits: 1})} ly</b>${jr ? ` ≈ ${jumpsFor(ns.distance)} jump${jumpsFor(ns.distance) === 1 ? "" : "s"}` : ""}` : "") +
     ` <span class="unk" id="nsClear" title="clear the next stop" style="cursor:pointer">✕</span>` : "";
   const p0 = data.position, wl = document.getElementById("whereLn");
   wl.innerHTML = p0 ? `<span title="galactic coordinates (x / y / z)">Coord: ${[p0.x, p0.y, p0.z].map(v => v.toFixed(2)).join(" / ")}</span>` +
     (p0.visits ? ` · <span title="arrivals in this system, from your journals">visit ${p0.visits}</span>` : "") : "";
   document.getElementById("streakLn").innerHTML = streakHtml(data.streak);
-  const hz = horizon();
-  // the line keeps just the star; what "unreported" means is in the tooltip
-  document.getElementById("horizonLn").innerHTML = hz ? `<span title="${esc(hz.text + ".\n" + hz.why)}">${esc(hz.text.split(" — ")[0])}</span>` : "";
+  // the unreported horizon ("nearest known unvisited") left this tile (S75): Now and the voice keep it
   // fuel tile
   const f = data.fuel, tf = document.getElementById("tFuel"), el = document.getElementById("fuelLine");
   tf.className = "tile"; tf.title = "";
@@ -2704,10 +2707,12 @@ function render() {
   document.getElementById("refLn").innerHTML = p ? (rg && rg.name ? `<span${flash ? ` class="regionnew"` : ""} title="galactic region (codex entries are per region)${rg.nebula ? "; inside a nebula zone" : ""}${flash ? "; just entered" : ""}">${esc(rg.name)}${rg.nebula ? " · nebula" : ""}</span> · ` : "") +
     `Sol <b>${lyTo(0, 0, 0)}</b> ly · Colonia <b>${lyTo(-9530.5, -910.28125, 19808.125)}</b> ly` : "";
   const fkHere = focusKey("here");
+  // where you jumped from, beside the name in the lines' smaller font (S75: it had a line of its own, "came from")
+  const prev = data.previous, from = prev && p ? `from ${prev.name} (${Math.hypot(prev.x - p.x, prev.y - p.y, prev.z - p.z).toFixed(1)} ly)` : "";
   document.getElementById("here").innerHTML = !p ? "waiting for your first jump…" :
     `<span class="copy" data-name="${esc(p.name)}" title="click to copy"` +
     (known ? ` data-pop data-id="${esc(here.id)}"` : "") + `>${esc(p.name)}</span>` + (here ? firstsIcon(here.firsts) : "") +
-    (here ? bmIcon(here.id, here.name, bms) : "");
+    (here ? bmIcon(here.id, here.name, bms) : "") + (from ? ` <span class="from" title="${esc(from)}">${esc(from)}</span>` : "");
   refocus("here", fkHere);
   applyAppMode();
   placeOverview();
@@ -2769,7 +2774,6 @@ function render() {
   const fuel = data.fuel, lowFuel = fuel && fuel.live && fuel.pct != null && fuel.pct < 30;
   const scoopNext = lowFuel && data.systems.filter(s => sysId(s) !== sysId(p) && s.main_scoopable && (!jr || s.distance <= jr))
     .sort((a, b) => a.distance - b.distance)[0];
-  const prev = data.previous;
   const unvisited = data.systems.filter(s => !s.visited).length;
   document.getElementById("subKnown").textContent = data.systems.length;
   document.getElementById("subUnvisited").textContent = unvisited;
@@ -2781,10 +2785,6 @@ function render() {
     rs.title = `how far around you Nearby lists systems (radius_choices in ed_outrider.toml sets these; bigger spheres take longer to fill in)`;
   }
   if (document.activeElement !== rs && !rs.dataset.pending) rs.value = String(data.radius);
-  document.getElementById("subJump").innerHTML = (jr ? `<span title="Loadout MaxJumpRange: the best case with a near-empty tank">max jump ${(data.jump_range || jr).toFixed(1)} ly</span>` +
-    (data.jump_range_now ? ` <span title="the range with the fuel and cargo aboard now (jumps counted here use it)">· ${data.jump_range_now.toFixed(1)} laden</span>` : "") +
-    (data.boost ? ` <b class="boosted" title="jet-cone charge: your next jump reaches this far">boosted ×${data.boost} → ${jr.toFixed(0)} ly</b>` : "") : "") +
-    (prev && p ? `${jr ? " · " : ""}came from ${esc(prev.name)} (${Math.hypot(prev.x - p.x, prev.y - p.y, prev.z - p.z).toFixed(1)} ly)` : "");
   document.body.classList.toggle("disconnected", !!disconnected);
   document.querySelectorAll("table th[data-sort]").forEach(b => {   // "-key": that column reversed (Here's table)
     const k = String(sortKeys[SORT_TABLES[b.closest("table").id]] || "");
@@ -2835,7 +2835,7 @@ function render() {
       (s.source === "own" ? statusBadge("s-own", "yours only", "Spansh doesn't have this system; data is from your own scans") : "") +
       (s.source === "edsm" ? `<span class="badge s-edsm" title="Spansh is unreachable; this comes from EDSM (no body data)">EDSM</span>` : "");
     const nb = notable(s);
-    return `<tr class="${cls}">
+    return `<tr class="${cls}" data-id="${esc(s.id)}">
       <td class="bmcell">${bmIcon(s.id, s.name, bms)}</td>
       <td class="name" data-name="${esc(s.name)}" title="click to copy">${isPrev
         ? `<span class="prevmark" title="you just came from here">↩</span>` : ""}${nameWords(s.name)}${firstsIcon(s.firsts)}<div class="sf2 sub2">${status}</div></td>
@@ -6776,6 +6776,11 @@ function toast(msg) {
   const t = document.getElementById("toast"); t.textContent = msg;
   t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 1400);
 }
+// whether a drag has just selected text inside el (its click then opens nothing)
+function selectingIn(el) {
+  const sel = window.getSelection && window.getSelection();
+  return !!(sel && !sel.isCollapsed && sel.toString().trim() && (el.contains(sel.anchorNode) || el.contains(sel.focusNode)));
+}
 function copyText(text, what = text) {   // `what`: the toast's name for it (a long text is not repeated)
   const fallback = () => {
     try {
@@ -6798,8 +6803,12 @@ document.addEventListener("click", e => {
     fWithin.disabled = false;   // as ticking it by hand does (a scripted tick fires no change event: F23)
     return document.querySelector('[data-view="firsts"]').click();
   }
-  const cell = e.target.closest("#rows td.bodies[data-id]");
-  if (cell) return cell.dataset.id === pinnedSystem ? unpinSystem() : pinSystem(cell.dataset.id);  // same system again closes it
+  // a click anywhere on a Nearby row (the Overview's too) but its name (copies), ☆ or a control shows the system in
+  // Here beside the list; the same system again closes it (S73). Not after a drag that selected text. The tablet's
+  // tap opens the row's sheet instead (tabRowTap, which stops this click)
+  const row = e.target.closest("#rows tr[data-id]");
+  if (row && !e.target.closest("td.name, td.bmcell, [data-bm], button, a, input, select, label") && !selectingIn(row))
+    return row.dataset.id === pinnedSystem ? unpinSystem() : pinSystem(row.dataset.id);
   const bm = e.target.closest("[data-bm]");
   if (bm) return openBookmark(bm.dataset.bm, bm.dataset.name);
   // every "click to copy" name outside the views that handle their own (.name spans in Log, Bio, History,
