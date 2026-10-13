@@ -29,9 +29,13 @@ you plot another of its kind or **Clear route**.
   your range the message says so. A destination works the same way when Outrider knows where it is (a system you
   have visited or bookmarked). Road to Riches and Exomastery do the same; a trade route can't, since it starts from a
   station's market as Spansh has it.
-- **Too much fuel.** A long neutron jump may be in range only with the fuel the plotter expected. On arrival, and
-  as you scoop, Outrider checks the next jump against the fuel aboard and warns ("⚠ too much fuel for the next
-  jump: ≤ 36 t, you have 140 t").
+- **Too much fuel, or too little.** A long neutron jump may be in range only with the fuel the plotter expected,
+  and a tank not filled at a refuel stop may not reach the next one. On arrival, and as you scoop, Outrider burns the
+  jumps to the next ⛽ stop one by one with the fuel aboard (the exact plotter's route; the neutron plotter's, only the
+  next jump) and says one of: "⚠ too much fuel for the next jump: ≤ 36 t, you have 140 t", or "⚠ fuel won't reach the
+  refuel stop: Hwy Stop 42 in 4 jumps · scoop to ≥ 24.3 t, at most 36.0 t" (both limits in one line, from the same
+  sum). Spoken once per system. At a ⛽ stop itself it only shows how much to scoop ("⛽ scoop to ≥ 24.3 t to reach
+  Hwy Stop 46 in 3 jumps"), since you scoop there anyway. Not on a route plotted with FSD injections.
 - **The list** shows the next 200 jumps with distance, ⚡ neutron, fuel and ⛽ refuel stops (the exact plotter's: the
   neutron plotter has none, scoop as you go); click a name to copy
   it. The map beside it draws the route on the galactic regions with landmarks and your carrier. You can put your

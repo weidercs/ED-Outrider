@@ -633,7 +633,17 @@ class NowPanel(unittest.TestCase):
         self.assertEqual(join(O.route_parts({"kind": "highway", "summary": dict(hw, off_route=True, nearest={"name": "Stop 12", "distance": 8.04})})),
                          "🛣 Off Route: Detour · nearest Stop 12 8.0 ly")
         self.assertEqual(join(O.route_parts({"kind": "highway", "summary": dict(hw, complete=True)})), "🛣 Highway complete")
-        rc = {"kind": "exo", "index": 2, "at": 1, "total": 9, "left_here": 2, "next": {"name": "Pru Aim", "jumps": 3, "distance": None}}
+        # S1: short of the refuel stop, in red; at a refuel stop, how much to scoop; a later hop's too-heavy jump named
+        short = {"need_t": 24.3, "max_t": 36.0, "have_t": 10.0, "refuel_at": "Stop 42", "jumps": 4, "end": "refuel", "here_refuel": False}
+        p = O.route_parts({"kind": "highway", "summary": dict(hw, short=short)})
+        self.assertEqual(p[-1], (" · ⚠ fuel won't reach the refuel stop: Stop 42 in 4 jumps · scoop to ≥ 24.3 t, at most 36.0 t", "bad"))
+        p = O.route_parts({"kind": "highway", "summary": dict(hw, short=dict(short, here_refuel=True, max_t=None, jumps=1, end="end"))})
+        self.assertEqual(p[-1], (" · ⛽ scoop to ≥ 24.3 t to reach Stop 42 in 1 jump", "warn"))
+        p = O.route_parts({"kind": "highway", "summary": dict(hw, short=dict(short, need_t=None, max_t=None))})
+        self.assertTrue(join(p).endswith("Stop 42 in 4 jumps · no amount of fuel makes it"))
+        p = O.route_parts({"kind": "highway", "summary": dict(hw, heavy={"need_t": 36.07, "have_t": 160, "next": "Far C", "hop": 3})})
+        self.assertEqual(p[-1], (" · ⚠ too much fuel for the jump to Far C: ≤ 36 t, you have 160 t", "bad"))
+        rc ={"kind": "exo", "index": 2, "at": 1, "total": 9, "left_here": 2, "next": {"name": "Pru Aim", "jumps": 3, "distance": None}}
         self.assertEqual(join(O.route_parts({"kind": "riches", "summary": rc})), "🧬 Next: Pru Aim · 3 jumps · 2 of 9 · 2 species to sample here")
         self.assertEqual(O.route_parts(None), [])
         bx = {"label": "Smojooe KL-P d5", "name": "Smojooe KL-P d5-41", "n": 41, "spansh": False}

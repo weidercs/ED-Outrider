@@ -103,7 +103,8 @@ class DumpRetries(unittest.TestCase):
 
 
 class FindSystem(unittest.TestCase):
-    """P12: GET /api/find, a system by name. EDSM is mocked (the Spansh object has no session: a real call fails)."""
+    """P12: GET /api/find, a system by name. EDSM and Spansh's record by name are mocked (the Spansh object has no
+    session: a real call fails)."""
 
     def setUp(self):
         self.db = ed_outrider.open_db(":memory:")
@@ -112,6 +113,8 @@ class FindSystem(unittest.TestCase):
         self.sp = ed_outrider.Spansh(self.db)
         self.edsm = unittest.mock.AsyncMock(return_value=None)
         self.sp.edsm_system = self.edsm
+        self.spansh = unittest.mock.AsyncMock(return_value=None)   # S48: Spansh's record by name, after EDSM
+        self.sp.system_record = self.spansh
         self.state = ed_outrider.State(self.db, self.j, self.sp, 25)
 
     def find(self, name):
@@ -164,9 +167,48 @@ class FindSystem(unittest.TestCase):
         self.assertIn("Nowhere", d["error"])
         self.edsm.return_value = {"name": "Vague", "id64": 3}      # EDSM knows it but has no coordinates
         self.assertEqual(self.find("Vague")[0], 404)
-        self.edsm.side_effect = OSError("down")
+        self.edsm.side_effect = OSError("down")   # EDSM down: Spansh still answers (S48)
+        self.assertEqual(self.find("Nowhere")[0], 404)
+        self.spansh.side_effect = OSError("down")
         self.assertEqual(self.find("Nowhere")[0], 502)
         self.assertEqual(self.db.execute("SELECT count(*) FROM spansh_systems").fetchone()[0], 0)
+
+    def test_spansh_when_edsm_fails(self):   # S48
+        rec = {"name": "Fresh Spansh", "id64": 5151, "x": 10.0, "y": 0.0, "z": 0.0}
+        # EDSM down: Spansh's record, cached stale like EDSM's (opening it fetches the bodies at once)
+        self.edsm.side_effect = OSError("down")
+        self.spansh.return_value = rec
+        st, d = self.find("fresh spansh")
+        self.assertEqual((st, d["id"], d["name"], d["source"]), (200, "5151", "Fresh Spansh", "spansh"))
+        self.spansh.assert_awaited_once_with("fresh spansh")
+        self.assertGreater(self.sp.fetched_age(5151), ed_outrider.ON_DEMAND_MAX_AGE)
+        state2 = ed_outrider.State(self.db, ed_outrider.Journals(self.db), self.sp, 25)   # after a restart
+        self.assertEqual(state2.locate(5151), ("Fresh Spansh", 10.0, 0.0, 0.0))
+        self.assertTrue(state2.set_next_stop(5151))
+        self.assertEqual(ed_outrider.cached_source(self.sp.cached(5151)[1]), "spansh")
+        # EDSM answers but doesn't know it (or has no position): Spansh too
+        self.edsm.side_effect = None
+        self.edsm.return_value = None
+        self.spansh.return_value = dict(rec, name="Other Spansh", id64=5152)
+        self.assertEqual(self.find("Other Spansh")[1]["source"], "spansh")
+        self.edsm.return_value = {"name": "Vague", "id64": 3}
+        self.spansh.return_value = dict(rec, name="Vague", id64=3)
+        self.assertEqual(self.find("Vague")[1]["id"], "3")
+        # neither knows it; one of them failed; both failed
+        self.edsm.return_value = None
+        self.spansh.return_value = None
+        st, d = self.find("Nowhere")
+        self.assertEqual((st, d["error"]), (404, "No system called 'Nowhere' is known here, to EDSM or to Spansh."))
+        self.spansh.side_effect = ed_outrider.HighwayError("Spansh cannot be reached (no network session)")
+        self.assertIn("Spansh could not be reached", self.find("Nowhere")[1]["error"])
+        self.edsm.side_effect = OSError("down")
+        self.assertEqual(self.find("Nowhere")[0], 502)
+        self.spansh.side_effect = None
+        self.assertIn("EDSM could not be reached", self.find("Nowhere")[1]["error"])
+        # a record without a position is no hit
+        self.spansh.return_value = dict(rec, name="Nowhere", id64=77, x=None)
+        self.assertEqual(self.find("Nowhere")[0], 404)
+        self.assertIsNone(self.sp.cached(77)[1])
 
     def test_route(self):
         import asyncio

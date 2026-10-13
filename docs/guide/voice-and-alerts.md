@@ -30,6 +30,8 @@ notification and be spoken (🗣), chosen per alert in **⚙ Settings → Alerts
   - curiosities (the 🔭 marks: rare planet classes, odd orbits, ringed landables...; planets sharing a centre are not one) in the system you are in, once per
     system: one line to check your panels ("You might be interested in some curious things I found here"), not the list
 - low fuel where you cannot scoop, and a top-up worth taking before a dry stretch
+- on a Neutron Highway route from the exact plotter, fuel that won't reach the next refuel stop (its own row, **Short
+  of the refuel stop**; see [Plot Route](plot-route.md))
 - docking where the station buys your data, and what you banked when you sold
 - a sale that left data aboard (Universal Cartographics sells 50 systems a page; at Vista Genomics, the species
   you kept back), said 90 seconds after the last page
@@ -161,7 +163,9 @@ Sound: Allow; Firefox: Autoplay: Allow Audio and Video).
   a plant you tagged where the next sample would count, it says so ("Tagged Tussock, 80 metres").
 - **Approach:** "2.6 g. 480 million aboard, 3.2 rebuys. Land gently." (no rebuys for a ship bought with Arx, whose
   hull has no credit value)
-- **Fuel:** low fuel where you can't scoop, and the **top-up warning** before a likely dry stretch.
+- **Fuel:** low fuel where you can't scoop, and the **top-up warning** before a likely dry stretch; on a Highway
+  route, "Fuel won't reach Hwy Stop 42, 4 jumps out. Scoop to at least 25 tonnes." (a danger line: business wording
+  unless you untick that).
 - **Jumponium** (off by default): the best landable body with a material your FSD injections are short
   of ("B 4 has polonium, 1.3 percent.").
 - **Mapped** (off by default: **Say when a planet is mapped**, or `speak_mapped`): after each DSS mapping,

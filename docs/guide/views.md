@@ -111,8 +111,9 @@ order back.
 unfinished exobiology or planetary mining locations (one mineral, if you like) within a radius, from what
 Outrider knows (<i>Local</i>) or everything reported (<i>Spansh</i>; mining locations are Local only, as Spansh cannot
 filter on them). Planets has <i>Potential green gas giant</i> too (see
-<a href="#-potential-green-gas-giants">below</a>). The name box finds any system and opens
-it in Here, where ☆ bookmarks it or makes it the next stop.
+<a href="#-potential-green-gas-giants">below</a>). The name box finds any system (what Outrider knows,
+then EDSM, then Spansh when EDSM is down or doesn't know it) and opens it in Here, where ☆ bookmarks it or makes it the
+next stop.
 <br><br><img src="../images/search.png" alt="Search">
 </td>
 <td width="50%" valign="top">
@@ -151,7 +152,8 @@ follows your system's light mode. Each browser keeps its own choice, and the tab
 **Now** is the cockpit view for a second monitor or a tablet, in big text: the system, the target, fuel,
 what to do next, the body you have targeted, signals worth a detour ("📍 Titan Cocijo · 2 tourist beacons"), any surface sites ("🏛 Guardian sites on 10 b"), any rare star here ("⭐ A black hole (main star)"), the notable stellar phenomena here ("🌀 Three notable stellar phenomena,
 all in rings · 1 of 3 visited": each drop at one counts, since the journal cannot tell which of a kind's sites it was)
-and the nearest unvisited system. The target says how much of it is
+and the nearest unvisited system. Under the target, the jump's cost ("56.7 ly · 0.9 t · leaves 20 max jumps"); under the
+fuel, "scoopable: 9 of last 20" (amber as on the fuel tile). The target says how much of it is
 known ("3/12 known", Spansh's bodies of its count) and what EDSM has ("EDSM 5/12", or "not logged"): two databases
 with different reporters.
 
@@ -186,7 +188,7 @@ earlier, and it asks again by itself. If Spansh or EDSM stays unavailable for 10
 a card says so at the top of the page (✕ hides it); it goes when they answer. The error itself is in Show log.
 
 The **fuel tile** counts jumps as the ship gets lighter ("≈6 jumps at max range (484 ly), 3,500 at your pace"),
-for any drive, engineered or not, from your own Loadout and jumps. Nearby shows laden range and the targeted
+for any drive, engineered or not, from your own Loadout and jumps. Nearby (and Now) shows laden range and the targeted
 jump's cost ("38.2 ly · 0.9 t · leaves 5 max jumps"). "scoopable: 9 of last 20" turns amber when your fuel is
 short for the gaps between scoopable stars. In the SRV or the Nomad it keeps the ship's tank and adds the
 vehicle's own fuel.

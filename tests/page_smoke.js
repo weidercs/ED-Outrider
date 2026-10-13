@@ -5594,6 +5594,68 @@ const settle = async maxMs => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| firsts scanned by others |", good ? "a card and a notification each time, days from the timestamps, so far today, spoken once" : JSON.stringify({got, want}), errors.slice(before));
   }
+  // Batch 23: S1, one fuel window on an exact-plotter route (the line, its spoken clause, the overlay's copy of the words,
+  // its own alerts row and speech key, said in business as danger, silent at a refuel stop); S19, the target's jump cost
+  // and the scoopable share on Now, the same helpers as the header and the fuel tile
+  {
+    const w = dom.window, before = errors.length;
+    const got = JSON.parse(w.eval(`(() => {
+      const o = {}, said = [], told = [], realSpeak = speak, realNotify = notify, m0 = data.moments, d0 = JSON.stringify(data);
+      const sum = {id: "hw-s1", plotter: "exact", destination: "Colonia", total: 40, index: 5, at: 4, complete: false, off_route: false,
+                   refuel_in: 4, next: {name: "Dry A", id: "1", neutron: false, refuel: false, jumps: 1, distance: 70}};
+      const sh = {need_t: 24.3, max_t: 36.0, have_t: 10.0, refuel_at: "Refuel D", jumps: 4, end: "refuel", here_refuel: false};
+      const plain = h => h.replace(/<[^>]+>/g, "").replace(/\\s+/g, " ");
+      o.line = plain(hwyLineHtml(Object.assign({}, sum, {short: sh})));
+      o.red = /class="hwyheavy"/.test(hwyLineHtml(Object.assign({}, sum, {short: sh})));
+      o.atRefuel = plain(hwyLineHtml(Object.assign({}, sum, {refuel_here: true, short: Object.assign({}, sh, {here_refuel: true, max_t: null})})));
+      o.none = plain(hwyLineHtml(Object.assign({}, sum, {short: Object.assign({}, sh, {need_t: null, max_t: null, end: "end"})})));
+      o.later = plain(hwyLineHtml(Object.assign({}, sum, {heavy: {need_t: 36.07, have_t: 160, distance: 487.9, boost: 6, next: "Far C", hop: 3}})));
+      o.spoken = [hwySpoken(Object.assign({}, sum, {short: sh})), hwySpoken(Object.assign({}, sum, {refuel_here: true, short: Object.assign({}, sh, {here_refuel: true, max_t: null})}))];
+      // the moment: its own row, the fuel_short key, danger (business only by default)
+      const flags = [speechOn, isSpeaker, alertSpeak.refuelshort, lastMomentSeq], lib = speechLib;
+      speechLib = {styles: {business: "B", sarcastic: "S"}, lines: {fuel_short: {business: ["Short of {system}, {jumps}: {need}."], sarcastic: ["never, a danger line"]}}};
+      speak = (t, opt) => said.push([t, opt && opt.tag, opt && opt.log && opt.log.key]); notify = (kind, title, body) => { told.push([kind, title, body]); return true; };
+      speechOn = true; isSpeaker = true; alertSpeak.refuelshort = true;
+      data.moments = [{seq: lastMomentSeq + 1, ts: new Date().toISOString(), kind: "highway", what: "short", system: "Start", index: 0,
+                       refuel_at: "Refuel D", jumps: 4, end: "refuel", need_t: 24.3, max_t: null, have_t: 10.0}];
+      onData();
+      o.key = said.length ? said[0][2] : null; o.told = told; o.said = said.map(x => [x[1], x[0]]);
+      speak = realSpeak; notify = realNotify; data.moments = m0; speechLib = lib;
+      [speechOn, isSpeaker, alertSpeak.refuelshort] = flags; lastMomentSeq = flags[3];
+      o.row = ALERTS.some(a => a[0] === "refuelshort") && alertCfg.refuelshort === true && !!ALERT_SHORT.refuelshort && !!TAB_ALERT_NAMES.refuelshort &&
+        SPEECH_SYS_BOUND.has("refuelshort") && DANGER.has("fuel_short") && speechPrio("refuelshort", "fuel_short") === 0 &&
+        !!document.querySelector('#alertOpts [data-aspeak="refuelshort"]') && !!LINE_SAMPLES.fuel_short;
+      // S19: Now shows the jump's cost and the scoopable share with the header's and the tile's own words
+      data.target = {seq: lastSeq, fresh: false, id64: 7003, id: "7003", name: "Costed", star_class: "K", status: "partial", leaving: null,
+                     hop: {ly: 56.7, fuel: 0.9, left: 20, reach: true}};
+      data.fuel = {live: true, pct: 60, main: 30, capacity: 50, jumps_recent: 2, jumps_max: 2, since_scoop: 5,
+                   scoop_rate: {scoopable: 9, of: 20, dry_run: 0}, here_scoop: null, low_flag: false, in_ship: true};
+      renderNow();
+      const q = sel => { const e = document.querySelector(sel); return e ? e.textContent.replace(/\\s+/g, " ").trim() : null; };
+      o.nowHop = q("#nowBody .now-hop"); o.nowRate = q("#nowBody .now-rate");
+      o.nowWarn = !!document.querySelector("#nowBody .now-rate .warnc");
+      o.same = [hopCostHtml(data.target.hop) === document.querySelector("#nowBody .now-hop").innerHTML,
+                scoopRateWarn(data.fuel) === document.querySelector("#nowBody .now-rate").innerHTML];
+      o.outOfRange = plain(hopCostHtml({ly: 75.6, fuel: 4.02, left: 0, reach: false}));
+      o.noRate = scoopRateWarn({live: true}) === "";
+      data = JSON.parse(d0); renderNow();
+      return JSON.stringify(o); })()`));
+    const want = {
+      line: "🛣 Next: Dry A · 70.0 ly · 5 of 40 · refuel in 4 jumps · ⚠ fuel won't reach the refuel stop: Refuel D in 4 jumps · scoop to ≥ 24.3 t, at most 36.0 t",
+      red: true,
+      atRefuel: "🛣 Next: Dry A · 70.0 ly · 5 of 40 · ⛽ refuel here · ⛽ scoop to ≥ 24.3 t to reach Refuel D in 4 jumps",
+      none: "🛣 Next: Dry A · 70.0 ly · 5 of 40 · refuel in 4 jumps · ⚠ fuel won't reach the destination: Refuel D in 4 jumps · no amount of fuel makes it",
+      later: "🛣 Next: Dry A · 70.0 ly · 5 of 40 · refuel in 4 jumps · ⚠ too much fuel for the jump to Far C: ≤ 36 t, you have 160 t",
+      spoken: ["Highway: fuel won't reach Refuel D, scoop to at least 25 tonnes, at most 36, then Dry A, 70 light-years, refuel in 4 jumps",
+               "Highway: scoop to at least 25 tonnes, then Dry A, 70 light-years, refuel here"],
+      key: "fuel_short", told: [["refuelshort", "Fuel won't reach Refuel D", "fuel won't reach the refuel stop: Refuel D in 4 jumps · scoop to ≥ 24.3 t"]],
+      said: [["fuel_short", "Short of Refuel D, 4 jumps: 25 tonnes."]], row: true,
+      nowHop: "56.7 ly · 0.9 t · leaves 20 max jumps", nowRate: "scoopable: 9 of last 20", nowWarn: true, same: [true, true],
+      outOfRange: "75.6 ly · out of range (needs 4.0 t)", noRate: true};
+    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| batch 23 fuel window and Now's jump cost |", good ? "the one-window line (short, at a refuel stop, no amount, a later hop too heavy), spoken clause, refuelshort row and fuel_short key, Now's cost and scoopable share" : JSON.stringify({got, want}), errors.slice(before));
+  }
   // star and planet types new to your codex (2026-10-12): ✦ not in this region's codex, ✪ in none; Here's name cell,
   // Nearby's tag naming each, the legend; nothing at all without a single body type logged
   {

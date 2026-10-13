@@ -559,15 +559,14 @@ function renderStrip() {
       ln(`<span class="unk">read when you are back aboard</span>`) + hullLine() + moduleLine() + boostLine();
   else {
     tf.className = "tile " + (f.pct == null ? "" : f.pct < 15 ? "urgent" : f.pct < 30 ? "warn" : "");   // null < 15 is true
-    const md = f.model, sr = f.scoop_rate, j = fuelJumps(f), hsc = fuelLow(f) ? hereScoopText(f) : "";
-    const srWarn = sr && j != null && j < 2 * expectedGap(sr);   // amber: fewer jumps aboard than two usual gaps
+    const md = f.model, hsc = fuelLow(f) ? hereScoopText(f) : "";
     el.innerHTML = val(`${f.main.toFixed(1)}${f.capacity ? " / " + f.capacity + " t" : " t"}${f.pct != null ? ` · ${f.pct}%` : ""}`) +
       (f.vehicle ? ln(`Current vehicle: <b>${esc(f.vehicle.label)}</b>${f.vehicle.fuel != null ? ` · ${f.vehicle.fuel.toFixed(2)} t fuel` : ""}` +
                       ` <span class="unk" title="the figures above are your ship's, as last read before you left it">(ship's tank above)</span>`) : "") + hullLine() + moduleLine() +
       ln((f.jumps_max != null ? `≈<b>${f.jumps_max}</b> ${jumpsWord(f.jumps_max)} at max range` : "") + (md && md.ly_max ? ` (${Math.round(md.ly_max).toLocaleString("en-US")} ly)` : "") +
          (f.jumps_recent != null ? (f.jumps_max != null ? ", " : "") + `<b>${f.jumps_recent}</b> at your pace` : "")) +
       ln([f.since_scoop != null ? `${f.since_scoop} jump${f.since_scoop === 1 ? "" : "s"} since the last scoop` : "",
-          sr ? `<span class="${srWarn ? "warnc" : ""}" title="arrival stars of your last ${sr.of} jumps with a known star${srWarn ? `: fewer jumps of fuel aboard than two of your usual gaps between scoopable stars (1 in ${expectedGap(sr).toFixed(1)})` : ""}">scoopable: ${sr.scoopable} of last ${sr.of}${sr.dry_run ? ` · ${sr.dry_run} dry in a row` : ""}</span>` : ""].filter(Boolean).join(" · ")) +
+          scoopRateWarn(f)].filter(Boolean).join(" · ")) +
       (hsc ? ln(hsc) : "") + boostLine();
     tf.title = "From Status.json. " + (md && md.max_fuel
       ? `Jumps are simulated one by one, the ship lightening as it burns: ${md.range_now != null ? `${md.range_now.toFixed(1)} ly range laden now, ` : ""}` +
@@ -988,7 +987,8 @@ function renderNow() {
     const hz = hazardNote(t.star_class);
     lines.push(`<div class="now-line">➜ <b>${esc(t.name)}</b> <span class="t-${t.status.replace(" ", "")}">${esc(label)}</span>${targetCounts(t)}` +
       (t.star_class ? ` <span class="${/^[OBAFGKM](_|$)/.test(t.star_class) ? "ok" : "noscoop"}">${esc(t.star_class)}${/^[OBAFGKM](_|$)/.test(t.star_class) ? " ⛽" : " ✕"}</span>` : "") +
-      (hz ? ` <span class="hazard">⚠ ${esc(hz)}</span>` : "") + `</div>`);
+      (hz ? ` <span class="hazard">⚠ ${esc(hz)}</span>` : "") +
+      (t.hop ? `<div class="now-small now-hop">${hopCostHtml(t.hop)}</div>` : "") + `</div>`);   // S19: the jump's cost
   }
   // where the next jump goes: the route's next stop (as the strip says it), the kept boxel's Next
   const nr = nowRouteHtml(), nb = nowBoxelHtml();
@@ -998,6 +998,7 @@ function renderNow() {
     lines.push(`<div class="now-line ${f.pct < 15 ? "urgent" : f.pct < 30 ? "warn" : ""}">⛽ <b>${f.pct}%</b>` +
       (f.jumps_max != null ? ` · ${f.jumps_max} ${jumpsWord(f.jumps_max)}` : "") + (f.since_scoop != null ? ` · ${f.since_scoop} since scoop` : "") +
       (data.boost ? ` · <span class="boosted">boosted ×${data.boost}</span>` : "") +
+      (f.scoop_rate ? `<div class="now-small now-rate">${scoopRateWarn(f)}</div>` : "") +   // S19: the scoopable share
       (fuelLow(f) && hereScoopText(f) ? `<div class="now-small">${hereScoopText(f)}</div>` : "") + `</div>`);
   const risk = nowRiskLine();
   if (risk) lines.push(`<div class="now-line now-risk ${risk.cls}">${risk.html}</div>`);
@@ -1752,6 +1753,7 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["riches", "Road to Riches (a route plotted in Plot Route): on arriving at a route system, the bodies still worth scanning or mapping there and the next stop, and route complete", null],
   ["trade", "a trade route (plotted in Plot Route): on arriving at a stop, what to sell and buy there; once that is done, the hop's profit and the next stop; and route complete", null],
   ["highway", "the Neutron Highway (a route plotted in Plot Route): the next stop on arriving at a route system (with the boost and refuel stops), off route, back on the highway, and highway complete", null],
+  ["refuelshort", "a Highway route plotted with the exact plotter: the fuel aboard won't reach the next refuel stop (once per system; at a refuel stop itself the route's line only shows how much to scoop)", "alert"],
   ["autotarget", "auto-target (after a supercharge when it is on, a test, Target next, 🎯, the co-pilot button's tap): whether the system was targeted, and nothing to target when the button found none", null],
   ["find", "a valuable body just scanned (over your highlight levels); one someone else mapped is not named, but said once per system (\"already mapped, still worth mapping\")", "find"],
   ["jumponium", "a landable body just scanned has a material your FSD injections are short of (premium or standard at 2 or fewer): said with the FSS debrief, or alone when the FSS never completes", "find"],
@@ -1986,7 +1988,7 @@ const JUMP_LINE_WAIT = 8000;   // ms: the jump line's latest start after the cha
 // ms after Status.json says "in the tunnel" (it says so about 2 s before the countdown ends): the line then starts
 // with the tunnel itself (the author's timing, in game 2026-10-03)
 const JUMP_TUNNEL_DELAY = 2500;
-const SPEECH_SYS_BOUND = new Set(["find", "signals", "jump", "honk", "brief", "fss", "mapped", "approach", "bodybrief", "jumponium", "phenomena", "ggg", "rare_star", "surface_site", "signal_poi", "curious", "highway", "riches", "exo", "trade", "autotarget"]);
+const SPEECH_SYS_BOUND = new Set(["find", "signals", "jump", "honk", "brief", "fss", "mapped", "approach", "bodybrief", "jumponium", "phenomena", "ggg", "rare_star", "surface_site", "signal_poi", "curious", "highway", "refuelshort", "riches", "exo", "trade", "autotarget"]);
 // a rig confirmation answers your own press, like a line asked for
 const speechPrio = (kind, tag) => DANGER.has(tag) || kind === "hull" || kind === "fuel" ? 0 : kind === "manual" || kind === "rigs" ? 1
   : ["find", "signals", "codex", "phenomena", "ggg", "rare_star", "surface_site", "signal_poi", "bodybrief", "supercharge", "jumponium"].includes(kind) ? 3 : 2;
@@ -2274,7 +2276,7 @@ const allFilled = (text, all) => [...text.matchAll(/\{(\w+)\}/g)].every(m => all
 // Danger lines: a joke at 20% hull costs clarity, so with "Danger alerts always down to business" ticked (the
 // default) these come only from the business lists and never swear, whatever personalities are ticked.
 // (ship_lost too: a debrief after a rebuy is no time for a joke; it also jumps the queue like the others)
-const DANGER = new Set(["hull", "heat", "interdicted", "fuel_low", "fuel_star", "fuel_target", "fuel_topup", "carrier_departs", "ship_lost", "rig_leash"]);
+const DANGER = new Set(["hull", "heat", "interdicted", "fuel_low", "fuel_star", "fuel_target", "fuel_topup", "fuel_short", "carrier_departs", "ship_lost", "rig_leash"]);
 const speechDangerBusiness = () => !!(store.get("speechDangerBusiness", null) ?? (data && data.defaults && data.defaults.speech_danger_business) ?? true);
 // "One personality per system": the personality is drawn at game start and at each arrival and says every line
 // until the next one, so a character (and its own voice) holds through a system. In memory only: a reload draws
@@ -2359,6 +2361,7 @@ const LINE_SAMPLES = {
   surface_site: {what: "Guardian sites on B 3"}, signal_poi: {what: "a Guardian beacon"}, curious: {},
   fuel_low: {pct: 18}, fuel_star: {pct: 22, star: "white dwarf"}, fuel_target: {pct: 22, system: "Drojau LL-O b26-3"},
   fuel_topup: {rate: "8 of the last 20 stars were scoopable", jumps: "about 6 jumps"}, hull: {pct: 42}, interdicted: {by: "someone"},
+  fuel_short: {system: "Smojooe AR-E b25-8", jumps: "4 jumps", need: "24 tonnes"},
   docked_sell: {value: "114.1M", station: "Jaques Station"}, undocked_unsold: {value: "260.4M"},
   sold: {sold: "12.6M cr cartographics and 4.1M cr exobiology", still: ""},
   unsold_warn: {value: "52.0M"}, unsold_urgent: {value: "251.3M"},
@@ -2591,7 +2594,11 @@ const spokenTime = sec => sec < 90 ? `about ${Math.max(10, Math.round(sec / 5) *
 function hwySpoken(s) {
   if (!s || s.complete) return "";
   const ly = v => `${Math.round(v * 10) / 10} light-years`, bits = [], hv = s.heavy;
-  if (hv) bits.push(`too much fuel for the next jump, ${Math.floor(hv.need_t)} tonnes at most, you have ${Math.round(hv.have_t)}`);
+  if (hv) bits.push(`too much fuel for ${hv.hop > 1 ? `the jump to ${hv.next}` : "the next jump"}, ${Math.floor(hv.need_t)} tonnes at most, you have ${Math.round(hv.have_t)}`);
+  const sh = s.short;   // S1: too little to reach the refuel stop (at a refuel stop: how much to scoop)
+  if (sh) bits.push(sh.need_t == null ? `fuel won't reach ${sh.refuel_at}, and no amount of fuel makes it`
+    : `${sh.here_refuel ? "scoop to" : `fuel won't reach ${sh.refuel_at}, scoop to`} at least ${Math.ceil(sh.need_t)} tonnes` +
+      (sh.max_t != null ? `, at most ${Math.floor(sh.max_t)}` : ""));
   if (s.off_route) {
     if (s.nearest) bits.push(`off the route, the closest route system is ${s.nearest.name}, ${ly(s.nearest.distance)}`);
     else bits.push("off the route");
@@ -2955,13 +2962,8 @@ function render() {
                                            : ` <span class="noscoop" title="not scoopable">✕</span>`) : "";
     const src = t.source === "edsm" ? " (known to EDSM only)" : "";
     const hz = hazardNote(t.star_class);
-    // the jump's cost from the fuel model: "38.2 ly · 2.9 t · leaves 3 max jumps"
-    // out of range first: a tank under one max jump's fuel can know the cost of a jump it can't pay for
-    const hop = t.hop, cost = !hop ? "" : hop.reach === false
-      ? ` · <span class="noscoop" title="further than one jump with the fuel and cargo aboard">out of range${hop.fuel != null ? ` (needs ${fuelT(hop.fuel)} t)` : ""}</span>`
-      : hop.fuel != null
-      ? ` · <span title="fuel this jump burns, and the max-range jumps the tank holds after it">${fuelT(hop.fuel)} t · leaves ${hop.left} max jump${hop.left === 1 ? "" : "s"}</span>` : "";
-    tEl.innerHTML = `Target: <b>${esc(t.name)}</b>${hop ? ` · ${hop.ly.toFixed(1)} ly` : row ? ` · ${row.distance.toFixed(2)} ly` : ""}${cost}${sc}` +
+    const hop = t.hop;
+    tEl.innerHTML = `Target: <b>${esc(t.name)}</b>${hop ? ` · ${hopCostHtml(hop)}` : row ? ` · ${row.distance.toFixed(2)} ly` : ""}${sc}` +
       ` · <span class="t-${t.status.replace(" ", "")}">${label}${src}</span>${targetCounts(t)}` + (hz ? ` · <span class="hazard">⚠ ${hz}</span>` : "");
   }
   renderLeaving(t && t.leaving);
@@ -5926,12 +5928,26 @@ function hwyLineHtml(s, {short = false, glyph = true} = {}) {
   bits.push(`${s.index} of ${s.total}`);
   if (s.refuel_here) bits.push(`<span class="hwyfuel">⛽ refuel here</span>`);
   else if (s.refuel_in != null) bits.push(`refuel in ${s.refuel_in} jump${s.refuel_in === 1 ? "" : "s"}`);
-  const hv = s.heavy;   // the next jump is out of range with the fuel aboard (the plan expects a lighter ship)
-  if (hv) bits.push(`<span class="hwyheavy" title="the next jump (${Number(hv.distance).toFixed(1)} ly${hv.boost > 1 ? `, ×${hv.boost} supercharged` : ""}) ` +
-    `is in range only with at most ${Number(hv.need_t).toFixed(1)} t in the main tank: jettison or burn some">⚠ too much fuel for the next jump: ` +
+  const hv = s.heavy;   // a jump is out of range with the fuel aboard (the plan expects a lighter ship)
+  if (hv) bits.push(`<span class="hwyheavy" title="${hv.hop > 1 ? `the jump to ${esc(hv.next)}` : "the next jump"} (${Number(hv.distance).toFixed(1)} ly${hv.boost > 1 ? `, ×${hv.boost} supercharged` : ""}) ` +
+    `is in range only with at most ${Number(hv.need_t).toFixed(1)} t in the main tank: jettison or burn some">⚠ too much fuel for ${hv.hop > 1 ? `the jump to ${esc(hv.next)}` : "the next jump"}: ` +
     `≤ ${Math.floor(hv.need_t)} t, you have ${Math.round(hv.have_t)} t</span>`);
+  const sh = s.short;   // S1: the fuel won't reach the next refuel stop (one window with the heavy check: never both)
+  if (sh) bits.push(`<span class="${sh.here_refuel ? "hwyfuel" : "hwyheavy"}" title="${esc(hwyShortTitle(sh))}">${sh.here_refuel ? "⛽" : "⚠"} ${esc(hwyShortText(sh))}</span>`);
   return g + bits.join(" · ");
 }
+// S1's words, shared by the line, the alert and the overlay's copy (route_parts): "fuel won't reach the refuel stop: Hwy
+// Stop 42 in 4 jumps · scoop to ≥ 24.3 t, at most 36.0 t". At a refuel stop the plan scoops anyway: how much, not a warning
+function hwyShortText(sh) {
+  const where = sh.end === "refuel" ? "the refuel stop" : sh.end === "end" ? "the destination" : "the stretch ahead";
+  const fix = sh.need_t == null ? "no amount of fuel makes it"
+    : `scoop to ≥ ${Number(sh.need_t).toFixed(1)} t${sh.max_t != null ? `, at most ${Number(sh.max_t).toFixed(1)} t` : ""}`;
+  return sh.here_refuel && sh.need_t != null ? `${fix} to reach ${sh.refuel_at} in ${sh.jumps} jump${sh.jumps === 1 ? "" : "s"}`
+    : `fuel won't reach ${where}: ${sh.refuel_at} in ${sh.jumps} jump${sh.jumps === 1 ? "" : "s"} · ${fix}`;
+}
+const hwyShortTitle = sh => `${sh.have_t} t aboard. The exact plotter's jumps to ${sh.refuel_at} burned one by one, the ship lightening as it goes` +
+  (sh.need_t == null ? ": no fuel level the tank holds makes them all (more cargo than the plan had?)"
+    : `: they all go with ${Number(sh.need_t).toFixed(1)} t${sh.max_t != null ? ` to ${Number(sh.max_t).toFixed(1)} t (more is too heavy for a jump planned at the limit)` : " or more"} in the main tank`);
 let hwyRun = null;   // the run this page started (test now, Target next, Retry): {seq, kind, system, n, dry, done, msg,
 // front: Outrider brings the game to the front itself (no countdown), note: why it counts down after all (S74)}
 // Target next (review Q4): beside the line's next system; the run's countdown shows on it while this page's run counts
@@ -7637,6 +7653,25 @@ const fuelJumpsCfg = () => { const v = store.get("fuelJumps", null), n = Number(
 const fuelUnderJumps = f => { const n = fuelJumpsCfg(), j = fuelJumps(f); return n != null && j != null && j < n; };
 const fuelLow = f => !!(f && f.live && ((f.pct != null && f.pct < 30) || f.low_flag || fuelUnderJumps(f)));
 const scoopRateText = r => `${r.scoopable} of the last ${r.of} stars ${r.scoopable === 1 ? "was" : "were"} scoopable`;
+// The targeted jump's cost from the fuel model, shared by the header's target line and Now (S19): "38.2 ly · 2.9 t ·
+// leaves 3 max jumps". Out of range first: a tank under one max jump's fuel can know the cost of a jump it can't pay for
+function hopCostHtml(hop) {
+  if (!hop) return "";
+  const ly = `${hop.ly.toFixed(1)} ly`;
+  if (hop.reach === false)
+    return `${ly} · <span class="noscoop" title="further than one jump with the fuel and cargo aboard">out of range${hop.fuel != null ? ` (needs ${fuelT(hop.fuel)} t)` : ""}</span>`;
+  return hop.fuel == null ? ly
+    : `${ly} · <span title="fuel this jump burns, and the max-range jumps the tank holds after it">${fuelT(hop.fuel)} t · leaves ${hop.left} max jump${hop.left === 1 ? "" : "s"}</span>`;
+}
+// The scoopable share of your last arrivals, shared by the fuel tile and Now (S19): "scoopable: 9 of last 20 · 3 dry in
+// a row", amber when the tank holds fewer jumps than two of your usual gaps between scoopable stars; "" without a rate
+function scoopRateWarn(f) {
+  const sr = f && f.scoop_rate;
+  if (!sr) return "";
+  const j = fuelJumps(f), warn = j != null && j < 2 * expectedGap(sr);
+  return `<span class="${warn ? "warnc" : ""}" title="arrival stars of your last ${sr.of} jumps with a known star${warn ? `: fewer jumps of fuel aboard than two of your usual gaps between scoopable stars (1 in ${expectedGap(sr).toFixed(1)})` : ""}">` +
+    `scoopable: ${sr.scoopable} of last ${sr.of}${sr.dry_run ? ` · ${sr.dry_run} dry in a row` : ""}</span>`;
+}
 const expectedGap = r => r.of / Math.max(r.scoopable, 1);   // jumps between scoopable stars, as they have come lately
 // Another star here to scoop at when the arrival star cannot be (the server's here_scoop): "none here" only once every
 // star is known; the travel time only where it is short enough for the rough curve to mean something.
@@ -8010,6 +8045,13 @@ function onData() {
       }
       else if ((m.kind === "riches" || m.kind === "exo" || m.kind === "trade") && m.text)   // the slot's route: what is left where you arrived, and where next
         alertOut(m.kind, m.text.replace(/\.$/, ""), "", {tag: m.kind, say: m.text});
+      else if (m.kind === "highway" && m.what === "short") {   // S1: the fuel aboard won't reach the next refuel stop
+        const t = hwyShortText(m), jumps = `${m.jumps} jump${m.jumps === 1 ? "" : "s"}`;
+        alertOut("refuelshort", `Fuel won't reach ${m.refuel_at}`, t, {tag: "fuel_short",
+                 say: () => m.need_t == null ? `Fuel won't reach ${m.refuel_at}, ${jumps} away, and no amount of fuel makes it.`
+                   : line("fuel_short", {system: m.refuel_at, jumps, need: `${Math.ceil(m.need_t)} tonnes`},
+                          `Fuel won't reach ${m.refuel_at}, ${jumps} away. Scoop to at least ${Math.ceil(m.need_t)} tonnes.`)});
+      }
       else if (m.kind === "highway" && m.text)   // the Neutron Highway's arrival line, detour, back on it, complete: plain words for now
         alertOut("highway", m.text.replace(/\.$/, ""), "", {tag: "highway", say: m.text});
       else if (m.kind === "autotarget" && m.what === "nothing")   // the co-pilot button's press with no route system to target
@@ -8175,7 +8217,7 @@ const ALERT_SHORT = {arrival: "Arrival", game: "Game start and quit", jump: "FSD
   leaving: "Leaving", fuel: "Fuel", scoop: "Tank full", scoopstop: "Scooping stopped", supercharge: "Supercharge", find: "Find",
   jumponium: "Jumponium", sampling: "Sampling", approach: "High-g approach", bodybrief: "Body brief", sell: "Selling", saleleft: "Sale left data",
   unsold: "Unsold", firstsseen: "Firsts scanned by others", hull: "Hull and danger", carrier: "Carrier", codex: "Codex", phenomena: "Stellar phenomena", ggg: "Green gas giant?", rare_star: "Rare star", surface_site: "Surface sites", signal_poi: "Signals worth a detour", curious: "Curiosities", loss: "Ship lost", rigs: "Rigs", rigleash: "Rig leash",
-  rigsout: "Rigs out", mapped: "Mapped", signals: "Signals", highway: "Neutron Highway", autotarget: "Auto-target", manual: "Asked for",
+  rigsout: "Rigs out", mapped: "Mapped", signals: "Signals", highway: "Neutron Highway", refuelshort: "Short of the refuel stop", autotarget: "Auto-target", manual: "Asked for",
   exo: "Exomastery route", riches: "Road to Riches", trade: "Trade route", uploads: "Uploads failing"};
 const speechMuted = new Set();   // kinds turned off from the tally this session (each shows an undo)
 // "This session: Arrival brief 42 🔇 · FSD charge 40 (3 dropped) 🔇 · …": every kind that was said or queued (not the
@@ -10706,7 +10748,7 @@ const TAB_ALERT_NAMES = {discovery: "Targeting a system", arrival: "Arriving som
   exo: "Exomastery route", riches: "Road to Riches route", trade: "Trade route",
   jump: "FSD charging", honk: "Auto honk", brief: "Arrival briefing", fss: "FSS finished", mapped: "Planet mapped",
   leaving: "Leaving work behind", fuel: "Fuel", scoop: "Tank full", scoopstop: "Scooping stopped early",
-  supercharge: "Supercharged", highway: "Highway next stop", autotarget: "Auto-target", find: "Valuable body",
+  supercharge: "Supercharged", highway: "Highway next stop", refuelshort: "Fuel short of the refuel stop", autotarget: "Auto-target", find: "Valuable body",
   jumponium: "Jumponium materials", sampling: "Exobiology unfinished", approach: "High gravity", bodybrief: "Bio signals on approach",
   sell: "Selling", saleleft: "Data left after a sale", unsold: "Unsold data", firstsseen: "Firsts scanned by others", hull: "Hull, heat, interdiction",
   carrier: "Carrier arrived", codex: "New codex entry", phenomena: "Stellar phenomena", ggg: "Green gas giant?", rare_star: "Rare star", surface_site: "Surface sites", signal_poi: "Signals worth a detour", curious: "Curiosities", loss: "Ship lost", rigs: "Mining rigs", rigleash: "Rig too far",

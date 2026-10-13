@@ -4,6 +4,7 @@ Run all: python3 -m unittest discover tests (or scripts/verify.sh).
 """
 import argparse
 import json
+import math
 import os
 import time
 import unittest
@@ -663,14 +664,14 @@ class HighwayH1(unittest.TestCase):
         self.assertIsNone(ed_outrider.max_fuel_for_jump(m, 80, cap=5))
         self.assertEqual(ed_outrider.max_fuel_for_jump(m, 60, cap=5), 5.0)
 
-    def heavy_route(self, rows_at, plotter="exact", ship_id=39, start=-100):
+    def heavy_route(self, rows_at, plotter="exact", ship_id=39, start=-100, options=None):
         """A route through the Caspian's long neutron jump, you at its start (arrived `start` s ago, plotted now):
         Start (neutron) -487.9 ly-> Neu Far (not neutron) -40 ly-> Plain -60 ly-> End."""
         self.j.handle(self.caspian_loadout(self.ts(-1000), ship_id=39))
         self.jump(start, 300, "Start", 0)
-        rows = [dict(system=n, id64=i, x=x, y=0.0, z=0.0, distance=d, fuel_used=None, fuel_left=None, neutron=nu, refuel=0,
-                     jumps=jm, remaining=627.9 - x) for n, i, x, d, nu, jm in rows_at]
-        return self.state.highway_store(rows, {"plotter": plotter, "options": {},
+        rows = [dict(system=n, id64=i, x=x, y=0.0, z=0.0, distance=d, fuel_used=None, fuel_left=None, neutron=nu,
+                     refuel=rest[0] if rest else 0, jumps=jm, remaining=627.9 - x) for n, i, x, d, nu, jm, *rest in rows_at]
+        return self.state.highway_store(rows, {"plotter": plotter, "options": options or {},
                                                "ship": {"ship_id": ship_id, "name": "Wanderer II", "type": "explorer_nx"}})
 
     ROUTE_HEAVY = [("Start", 300, 0.0, 0, 1, 0), ("Neu Far", 301, 487.9, 487.9, 0, 1), ("Plain", 302, 527.9, 40.0, 0, 1),
@@ -778,6 +779,128 @@ class HighwayH1(unittest.TestCase):
             self.state.tick({})
             self.state.tick({})
         self.assertEqual(self.heavy_moments(), ["Too much fuel for the next jump. It needs about 36 tons aboard; you have 160."])
+
+    # S1: four 70 ly hops to a refuel stop (about 5 t each for the Caspian), and the same after its long neutron jump
+    ROUTE_SHORT = [("Start", 300, 0.0, 0, 0, 0), ("Dry A", 301, 70.0, 70.0, 0, 1), ("Dry B", 302, 140.0, 70.0, 0, 1),
+                   ("Dry C", 303, 210.0, 70.0, 0, 1), ("Refuel D", 304, 280.0, 70.0, 0, 1, 1), ("End", 305, 300.0, 20.0, 0, 1)]
+    ROUTE_WINDOW = [("Start", 300, 0.0, 0, 1, 0), ("Neu Far", 301, 487.9, 487.9, 0, 1), ("Dry B", 302, 557.9, 70.0, 0, 1),
+                    ("Dry C", 303, 627.9, 70.0, 0, 1), ("Refuel D", 304, 697.9, 70.0, 0, 1, 1), ("End", 305, 717.9, 20.0, 0, 1)]
+
+    def short_moments(self):
+        return [m for m in self.j.moments if m["kind"] == "highway" and m["what"] == "short"]
+
+    def test_short_of_the_refuel_stop(self):
+        self.heavy_route(self.ROUTE_SHORT)
+        model = ed_outrider.fuel_model(self.j.ship, self.j.fuel_hist)
+        lo, hi = outrider.fsd.fuel_window(model, 1.14, [(70.0, 1)] * 4, 160)
+        self.assertEqual(hi, 160)   # a full tank reaches it: no upper end
+        self.fuel(10)
+        self.assertTrue(self.state.highway_heavy_check(self.now))
+        s = self.state.highway_summary()
+        self.assertIsNone(s["heavy"])
+        self.assertEqual({k: s["short"][k] for k in ("max_t", "have_t", "refuel_at", "jumps", "end", "here_refuel")},
+                         {"max_t": None, "have_t": 10, "refuel_at": "Refuel D", "jumps": 4, "end": "refuel", "here_refuel": False})
+        self.assertAlmostEqual(s["short"]["need_t"], math.ceil(lo * 10) / 10)
+        self.assertGreater(s["short"]["need_t"], 15)
+        m = self.short_moments()
+        self.assertEqual([(x["refuel_at"], x["jumps"], x["need_t"]) for x in m], [("Refuel D", 4, s["short"]["need_t"])])
+        self.assertEqual(self.heavy_moments(), [])
+        # scooping: still short (not said again), then enough: cleared
+        self.fuel(14)
+        self.state.highway_heavy_check(self.now + 5)
+        self.assertEqual(self.state.highway_summary()["short"]["have_t"], 14)
+        self.fuel(lo + 0.2)
+        self.assertTrue(self.state.highway_heavy_check(self.now + 10))
+        self.assertIsNone(self.state.highway_summary()["short"])
+        self.assertEqual(len(self.short_moments()), 1)
+        # the next system (a dry star, three hops to go): short again, said again (a new system)
+        self.fuel(4)
+        self.jump(20, 301, "Dry A", 70.0)
+        self.state.highway_heavy_check(self.now + 30)
+        self.assertEqual(self.state.highway_summary()["short"]["jumps"], 3)
+        self.assertEqual(len(self.short_moments()), 2)
+        # at the refuel stop: how much to scoop is shown, never said (the plan scoops there anyway); the run now goes
+        # to the route's end
+        for k, (n, i, x) in enumerate((("Dry B", 302, 140.0), ("Dry C", 303, 210.0), ("Refuel D", 304, 280.0))):
+            self.jump(40 + 10 * k, i, n, x)
+        self.fuel(0.1)
+        self.state.highway_heavy_check(self.now + 80)
+        s = self.state.highway_summary()["short"]
+        self.assertEqual((s["here_refuel"], s["end"], s["refuel_at"], s["jumps"]), (True, "end", "End", 1))
+        self.assertEqual(len(self.short_moments()), 2)
+
+    def test_one_fuel_window_never_two_lines(self):
+        """The Fable review's case: a neutron jump at the limit, where a full tank fails and a part one passes, then
+        three dry hops. Too much fuel and too little come from one window, so heavy and short never show together."""
+        self.heavy_route(self.ROUTE_WINDOW)
+        model = ed_outrider.fuel_model(self.j.ship, self.j.fuel_hist)
+        hops = [(487.9, 6), (70.0, 1), (70.0, 1), (70.0, 1)]
+        lo, hi = outrider.fsd.fuel_window(model, 1.14, hops, 160)
+        self.assertAlmostEqual(hi, ed_outrider.max_fuel_for_jump(model, 487.9, 1.14, 6, 160), delta=0.01)   # about 36 t
+        self.assertLess(lo, hi)
+        for k, (fuel, heavy, short) in enumerate(((140, True, False), (hi + 0.3, False, False), ((lo + hi) / 2, False, False),
+                                                  (lo - 2, False, True))):
+            self.fuel(fuel)
+            self.state.highway_heavy_check(self.now + 5 * k)
+            s = self.state.highway_summary()
+            self.assertEqual((bool(s["heavy"]), bool(s["short"])), (heavy, short), fuel)
+        self.assertEqual(s["short"]["max_t"], math.floor(hi * 10) / 10)   # too little, and at most the high end: one line
+        self.assertEqual(s["short"]["need_t"], math.ceil(lo * 10) / 10)
+        self.assertEqual(len(self.heavy_moments()), 1)
+        self.assertEqual(len(self.short_moments()), 1)
+
+    def test_heavy_on_a_later_hop_and_no_amount(self):
+        # the dry hops first, then the neutron jump at the limit: a full tank is too heavy for the jump two hops on
+        rows = [("Start", 300, 0.0, 0, 0, 0), ("Dry A", 301, 70.0, 70.0, 0, 1), ("Neu B", 302, 140.0, 70.0, 1, 1),
+                ("Far C", 303, 627.9, 487.9, 0, 1, 1)]
+        self.heavy_route(rows)
+        self.fuel(160)
+        self.state.highway_heavy_check(self.now)
+        h = self.state.highway_summary()["heavy"]
+        self.assertEqual((h["next"], h["hop"], h["boost"], h["distance"]), ("Far C", 3, 6, 487.9))
+        self.assertEqual(self.heavy_moments(), ["Too much fuel for the jump to Far C. It needs about "
+                                                f"{int(h['need_t'])} tons aboard; you have 160."])
+        # a jump no fuel level reaches (cargo since the plot): short with no amount to scoop
+        self.state.highway_clear()
+        self.heavy_route(rows)
+        self.fuel(30, cargo=400)
+        self.state.highway_heavy_check(self.now)
+        s = self.state.highway_summary()
+        self.assertIsNone(s["heavy"])
+        self.assertEqual((s["short"]["need_t"], s["short"]["max_t"], s["short"]["refuel_at"]), (None, None, "Far C"))
+
+    def test_short_only_on_an_exact_route(self):
+        # the neutron plotter has no fuel plan, and a route plotted with injections has boosted jumps the rows don't mark
+        for plotter, options in (("neutron", None), ("exact", {"injections": True})):
+            self.state.highway_clear()
+            self.heavy_route(self.ROUTE_SHORT, plotter=plotter, options=options)
+            self.fuel(5)
+            self.state.highway_heavy_check(self.now)
+            self.assertIsNone(self.state.highway_summary()["short"])
+        self.assertEqual(self.short_moments(), [])
+        # another ship, or the fuel model not complete yet: nothing claimed
+        self.state.highway_clear()
+        self.heavy_route(self.ROUTE_SHORT, ship_id=40)
+        self.fuel(5)
+        self.state.highway_heavy_check(self.now)
+        self.assertIsNone(self.state.highway_summary()["short"])
+
+    def test_spansh_exact_answer_scoopable_is_its_refuel(self):
+        """P1 (2026-10-13): Spansh's exact plotter sends is_scoopable on every jump, but on every jump seen it equals
+        must_refuel (the plan tops up at every scoopable star) and the ends say False for scoopable stars (Sol, Polaris):
+        the refuel flag already says it, so highway_route keeps no scoopable column."""
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "spansh_exact.json"), encoding="utf-8") as f:
+            answers = json.load(f)
+        self.assertEqual(len(answers), 3)
+        for name, a in answers.items():
+            jumps = a["result"]["jumps"]
+            self.assertTrue(all("is_scoopable" in x for x in jumps), name)
+            self.assertEqual([x["is_scoopable"] for x in jumps], [x["must_refuel"] for x in jumps], name)
+            rows = ed_outrider.highway_rows("exact", a["result"])
+            self.assertEqual([r["refuel"] for r in rows], [int(x["must_refuel"]) for x in jumps])
+            self.assertNotIn("scoopable", rows[0])
+        cols = [r[1] for r in self.db.execute("PRAGMA table_info(highway_route)")]
+        self.assertNotIn("scoopable", cols)
 
     def test_plot_from_a_system_spansh_does_not_know(self):
         """A fresh discovery Spansh does not know yet (where you are): the route is plotted from the Spansh system near

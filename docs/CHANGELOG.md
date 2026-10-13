@@ -2,6 +2,35 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-13 · One fuel window for the Highway, Now's jump cost, and Find by name through Spansh
+- **Fuel won't reach the refuel stop** (S1, with the fuel groundwork F1): `outrider/fsd.py` `fuel_run(model, fuel,
+  other, hops)` burns (ly, multiplier) hops one by one, the ship lightening (reach capped as `target_hop` does, the
+  reservoir as mass), and `fuel_window` finds the starting fuel that makes a whole run from a grid of levels every
+  0.25 t (the Fable correction: the range falls with the mass, so a run succeeds on an interval, and a full tank may
+  fail where a part one passes; a bisection of the tank would be fooled), each end refined. `highway_heavy_check` now
+  works through `_highway_fuel_window` on an exact-plotter route: the hops to the next refuel row (or the end, 50 at
+  most), the held charge or this neutron's on the first, Spansh's neutron rows after; over the high end by
+  `HIGHWAY_HEAVY_SLACK` is `heavy` (with `hop`: "too much fuel for the jump to X" when a later one fails), under the low
+  end is the summary's new `short` {need_t, max_t, have_t, refuel_at, jumps, end, here_refuel}: "⚠ fuel won't reach the
+  refuel stop: X in N jumps · scoop to ≥ A t, at most B t", too little and too much in one line from one sum, never two.
+  Said once per system as a `highway` moment `short` under its own alerts row `refuelshort` with the speech key
+  `fuel_short` {system, jumps, need} (danger: 50 business lines, 15 each for the others); at a refuel stop itself only
+  "⛽ scoop to ≥ A t to reach …" on the line, never spoken. In the strip and Now (`hwyShortText`), the spoken status
+  clause (`hwySpoken`) and the overlay's route line (`overlay.short_text`). The neutron plotter, and a route plotted
+  with injections, keep the one-jump heavy check (`_highway_heavy_now`).
+- **Probe P1 (U1):** `scripts/exact_probe.py` asked Spansh's exact plotter for three routes (read-only, saved as
+  `tests/fixtures/spansh_exact.json`): every jump carries `is_scoopable`, but it equals `must_refuel` on all 45 (the
+  plan tops up at every scoopable star) and is False at both ends whatever the star, so no `highway_route.scoopable`
+  column: an exact route's `refuel` flag says the same (for S2).
+- **Now: the targeted jump's cost and the scoopable share** (S19): `hopCostHtml(hop)` ("56.7 ly · 0.9 t · leaves 20
+  max jumps", or out of range) and `scoopRateWarn(f)` ("scoopable: 9 of last 20", amber under two usual gaps), shared
+  by the header's target line, the fuel tile and Now (under the target and the fuel). Page only (the overlay's copy is
+  D1's Target panel, as the review settled).
+- **Find by name asks Spansh when EDSM fails** (S48): `find_system` tries `Spansh.system_record` after an EDSM error,
+  an unknown name or one without a position, and keeps the hit as a minimal stale base (`_find_keep`, shared with
+  EDSM's; no cache change). "No system called … is known here, to EDSM or to Spansh."; one source unreachable says so;
+  both: 502. The FindSystem tests mock the Spansh call.
+
 ## 2026-10-13 · The overlay's Alerts panel, and a steady colour-tables test
 - **An Alerts panel on the overlay** (S26): `[overlay] alerts_panel` (false), the seventh panel (`overlay.PANELS`
   "alerts", "Alerts"), placed top centre under the system strip (`LAYOUT_DEFAULT`; `clean_layout` fills it into an

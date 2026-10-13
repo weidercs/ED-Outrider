@@ -223,7 +223,7 @@ import outrider.health     # what kind of failure a call to an outside service m
 from outrider.core import iso_ts, ts_seconds   # journal timestamps
 from outrider.fsd import (   # the frame shift drive's maths: range, fuel per jump, the fuel model, fleet figures
     FSD_RANGE_MODS, GUARDIAN_BOOST, conservative_optimal_mass, conservative_range, fleet_figures, fleet_range, fsd_range,
-    fsd_supercharge, fuel_model, hop_fuel, jumps_left, max_fuel_for_jump,
+    FUEL_RUN_MAX_HOPS, fsd_supercharge, fuel_model, fuel_run, fuel_window, hop_fuel, jumps_left, max_fuel_for_jump,
 )
 from outrider.highway import (   # the Neutron Highway's route helpers and the desktop clipboard
     HIGHWAY_BG_TYPES, Clipboard, HighwayError, highway_bg_file, highway_match, highway_refuel_in, highway_rows,
@@ -6449,9 +6449,11 @@ class State:
         self.signin_limit = outrider.auth.RateLimit()
         self._suggest = collections.OrderedDict()   # typed name -> Spansh's system names (HIGHWAY_SUGGEST_CACHE kept)
         self._hw_near = (None, None)   # ((route id, position id64), the nearest route row) while off the route
-        # too much fuel for the next jump (highway_heavy_check): {key: (route id, row, arrival), live, said, t, look,
-        # heavy: {need_t, have_t, distance, boost, next} or None}
-        self._hw_heavy = {"key": None, "live": False, "said": False, "t": None, "look": None, "heavy": None}
+        # the fuel against the route ahead (highway_heavy_check): {key: (route id, row, arrival), live, said, said_short,
+        # t, look, heavy: {need_t, have_t, distance, boost, next, hop} or None, short (S1): {need_t, max_t, have_t,
+        # refuel_at, jumps, end, here_refuel} or None}
+        self._hw_heavy = {"key": None, "live": False, "said": False, "said_short": False, "t": None, "look": None,
+                          "heavy": None, "short": None}
         # Road to Riches: the plot under way (as highway_plotting), its task, the arrival whose next system was copied
         self.riches_plotting = None
         self.riches_task = None
@@ -10494,29 +10496,39 @@ class State:
 
     async def find_system(self, name):
         """A system by name, for the page's name box: (status, answer). Known here first; otherwise EDSM (one
-        call gives id64 and coordinates; the bodies come from Spansh by id64 when the system is opened). An
-        EDSM-only hit is cached before answering, so locate() finds it after a restart: bookmarking it, making
-        it the next stop and opening it all go by id64."""
+        call gives id64 and coordinates; the bodies come from Spansh by id64 when the system is opened), and when EDSM
+        fails or does not know it, Spansh's record by exact name (S48). A hit from either is cached before answering,
+        so locate() finds it after a restart: bookmarking it, making it the next stop and opening it all go by id64."""
         hit = self.find_local(name)
         if hit is None:
+            edsm_failed, d = False, None
             try:
                 d = await self.spansh.edsm_system(name)
-            except Exception as e:  # noqa: BLE001 -- network trouble is the answer, not a crash
-                return 502, {"error": f"EDSM lookup failed ({type(e).__name__}); try again"}
-            if d is None:
-                return 404, {"error": f"No system called {name!r} is known here or to EDSM."}
-            c = d.get("coords") or {}
-            if not d.get("id64") or c.get("x") is None:
-                return 404, {"error": f"EDSM knows {d.get('name') or name} but not where it is."}
-            id64 = int(d["id64"])
-            # kept unless a table locate() reads already has it (searcher.found is not one: the next search replaces it)
-            if not any(self.db.execute(f"SELECT 1 FROM {t} WHERE id64 = ?", (id64,)).fetchone()
-                       for t in ("visits", "route_systems", "spansh_systems", "bookmarks")):
-                self.spansh.store(id64, None, base_from_edsm(d))
-                # stale on purpose: opening it fetches Spansh's bodies at once instead of trusting this for a day
-                self.db.execute("UPDATE spansh_systems SET fetched_ts = 1 WHERE id64 = ?", (id64,))
-                self.db.commit()
-            hit = (id64, d["name"], c["x"], c["y"], c["z"], "edsm")
+            except Exception:  # noqa: BLE001 -- network trouble is the answer, not a crash: Spansh is asked instead
+                edsm_failed = True
+            c = (d or {}).get("coords") or {}
+            if d is not None and d.get("id64") and c.get("x") is not None:
+                hit = self._find_keep(int(d["id64"]), base_from_edsm(d), d["name"], c, "edsm")
+            else:
+                spansh_failed, rec = False, None
+                try:
+                    rec = await self.spansh.system_record(name)
+                except (HighwayError, ClientError, asyncio.TimeoutError, OSError, ValueError):
+                    spansh_failed = True   # no session (a test, server mode without network), down, not JSON
+                if rec and isinstance(rec.get("id64"), int) and None not in (rec.get("x"), rec.get("y"), rec.get("z")):
+                    base = {"v": CACHE_VERSION, "name": rec["name"], "x": rec["x"], "y": rec["y"], "z": rec["z"],
+                            "body_count": None, "records": []}
+                    hit = self._find_keep(rec["id64"], base, rec["name"], rec, "spansh")
+                elif edsm_failed and spansh_failed:
+                    return 502, {"error": "EDSM and Spansh lookups failed; try again"}
+                elif d is not None:   # EDSM has the name but no position, and Spansh no record of it
+                    return 404, {"error": f"EDSM knows {d.get('name') or name} but not where it is, and Spansh doesn't know it."}
+                elif edsm_failed:
+                    return 404, {"error": f"No system called {name!r} is known here or to Spansh (EDSM could not be reached; try again)."}
+                elif spansh_failed:
+                    return 404, {"error": f"No system called {name!r} is known here or to EDSM (Spansh could not be reached; try again)."}
+                else:
+                    return 404, {"error": f"No system called {name!r} is known here, to EDSM or to Spansh."}
         id64, sname, x, y, z, source = hit
         v = self.db.execute("SELECT first_ts, last_ts, count FROM visits WHERE id64 = ?", (id64,)).fetchone()
         v = dict(v) if v else outrider.edsmlog.visit(self.db, id64)   # S67: else by your EDSM flight log (edsm: True)
@@ -10526,6 +10538,17 @@ class State:
                      "visited": v,
                      "bookmarked": bool(self.db.execute("SELECT 1 FROM bookmarks WHERE id64 = ?", (id64,)).fetchone()),
                      "next_stop": bool(ns and ns.get("id64") == id64)}
+
+    def _find_keep(self, id64, base, name, c, source):
+        """find_system's hit from EDSM or Spansh, kept unless a table locate() reads already has it (searcher.found is
+        not one: the next search replaces it): the minimal base cached, stale on purpose, so opening it fetches
+        Spansh's bodies at once instead of trusting this for a day. The hit tuple find_local would give."""
+        if not any(self.db.execute(f"SELECT 1 FROM {t} WHERE id64 = ?", (id64,)).fetchone()
+                   for t in ("visits", "route_systems", "spansh_systems", "bookmarks")):
+            self.spansh.store(id64, None, base)
+            self.db.execute("UPDATE spansh_systems SET fetched_ts = 1 WHERE id64 = ?", (id64,))
+            self.db.commit()
+        return (id64, name, c["x"], c["y"], c["z"], source)
 
     def set_bookmark(self, id64, note):
         existing = self.db.execute("SELECT created_ts FROM bookmarks WHERE id64=?", (id64,)).fetchone()
@@ -13349,27 +13372,30 @@ class State:
                              else nxt["distance"]},
             "boost_here": bool(here and here["neutron"]),
             "heavy": self.highway_heavy(hw),
+            "short": self.highway_heavy(hw, "short"),
         }
 
     @staticmethod
     def _hw_heavy_key(hw):
         return (hw.get("id"), hw.get("at"), hw.get("arrival_ts") or hw.get("created_ts"))
 
-    def highway_heavy(self, hw):
-        """The too-heavy warning for where you are on the route now (highway_heavy_check's), or None."""
+    def highway_heavy(self, hw, which="heavy"):
+        """The fuel warning for where you are on the route now (highway_heavy_check's): "heavy" (too much fuel) or
+        "short" (too little to reach the refuel stop, S1), or None. Never both at once."""
         c = self._hw_heavy
-        return c.get("heavy") if hw and c.get("key") == self._hw_heavy_key(hw) else None
+        return c.get(which) if hw and c.get("key") == self._hw_heavy_key(hw) else None
 
     def highway_heavy_check(self, now=None):
-        """Too much fuel for the next jump: Spansh's exact plotter simulates the fuel, so a long neutron jump may be in
-        range only with about the fuel the plan expects aboard (a full tank weighs the ship down). Looked at on a live
-        arrival in a route system (or a plot made where you are) and again while Status.json's fuel changes there (at
-        most every HIGHWAY_HEAVY_EVERY_S), only for the ship the route was plotted for, with the game running. The
-        next jump's distance (one jump: every exact-plotter row, a neutron-plotter waypoint only when one jump away), the
-        current ship's fuel model (fuel_now: the main tank, the cargo; the reservoir counted as mass), its supercharge
-        when this is a neutron system on the route (or a charge you hold): over the most fuel that still reaches it by
-        HIGHWAY_HEAVY_SLACK, the warning ({need_t, have_t, distance, boost, next}) and one spoken moment per system.
-        Cleared when the fuel drops enough, or you leave. True when the warning changed."""
+        """The fuel aboard against the route ahead: too much for a jump planned at the limit, or (S1) too little to
+        reach the next refuel stop. Spansh's exact plotter simulates the fuel, so a long neutron jump may be in range
+        only with about the fuel the plan expects aboard (a full tank weighs the ship down), and a tank not filled at a
+        refuel stop may run dry before the next. Looked at on a live arrival in a route system (or a plot made where you
+        are) and again while Status.json's fuel changes there (at most every HIGHWAY_HEAVY_EVERY_S), only for the ship the
+        route was plotted for, with the game running; the current ship's fuel model (fuel_now: the main tank, the cargo;
+        the reservoir counted as mass). An exact-plotter route: one fuel window (_highway_fuel_window) for the hops to
+        the next refuel row, so too little and too much come from the same sum and are never both said. The neutron
+        plotter (no fuel plan): the next jump alone when one jump away (_highway_heavy_now). One spoken moment per kind
+        per system; cleared when the fuel comes right, or you leave. True when a warning changed."""
         now = time.time() if now is None else now
         j, c = self.journals, self._hw_heavy
         hw, rows = self.highway_state()
@@ -13381,34 +13407,50 @@ class State:
                 live = bool(ts and live_event(ts, now) and now - ts_seconds(ts) <= HIGHWAY_LIVE_S)
             except (TypeError, ValueError):
                 live = False
-            before = c.get("heavy")
+            before = (c.get("heavy"), c.get("short"))
             c.clear()
-            c.update(key=key, live=live, said=False, t=None, look=None, heavy=None)
-            changed = before is not None
+            c.update(key=key, live=live, said=False, said_short=False, t=None, look=None, heavy=None, short=None)
+            changed = before != (None, None)
         else:
             changed = False
         look = (round(st.get("fuel_main") or 0, 1), round(st.get("fuel_reservoir") or 0, 2), st.get("cargo"),
                 (j.boost or {}).get("ts"), (j.ship or {}).get("ship_id"), bool(st.get("live")))
         due = key and c["live"] and look != c["look"] and (c["t"] is None or now - c["t"] >= HIGHWAY_HEAVY_EVERY_S)
-        heavy = c["heavy"]
         if due:
             c.update(look=look, t=now)
-            heavy = self._highway_heavy_now(hw, rows, st)
-            if heavy != c["heavy"]:
-                c["heavy"], changed = heavy, True
+            heavy, short = self._highway_fuel_now(hw, rows, st)
+            if (heavy, short) != (c["heavy"], c["short"]):
+                c["heavy"], c["short"], changed = heavy, short, True
+        heavy, short = c["heavy"], c["short"]
         if heavy and not c["said"]:
             c["said"] = True
             need = int(heavy["need_t"])
+            jump = "the next jump" if (heavy.get("hop") or 1) == 1 else f"the jump to {heavy['next']}"
             j.moment("highway", iso_ts(now), what="heavy", system=rows[hw["at"]]["system"], index=hw["at"],
                      next=heavy["next"], need_t=heavy["need_t"], have_t=heavy["have_t"],
-                     text="Too much fuel for the next jump. " +
+                     text=f"Too much fuel for {jump}. " +
                           (f"It needs about {need} tons aboard" if need >= 1 else "It needs under a ton aboard") +
                           f"; you have {round(heavy['have_t'])}.")
+        if short and not short["here_refuel"] and not c["said_short"]:
+            c["said_short"] = True
+            j.moment("highway", iso_ts(now), what="short", system=rows[hw["at"]]["system"], index=hw["at"],
+                     refuel_at=short["refuel_at"], jumps=short["jumps"], end=short["end"], need_t=short["need_t"],
+                     max_t=short["max_t"], have_t=short["have_t"])
         if changed:
             self.bump()
         return changed
 
-    def _highway_heavy_now(self, hw, rows, st):
+    def _highway_fuel_now(self, hw, rows, st):
+        """(heavy, short) for where you are on the route now: an exact-plotter route's fuel window, else the next jump's
+        heavy check alone (the neutron plotter, or a route plotted with FSD injections, whose boosted jumps the rows do
+        not mark)."""
+        if hw.get("plotter") == "exact" and not (hw.get("options") or {}).get("injections"):
+            return self._highway_fuel_window(hw, rows, st)
+        return self._highway_heavy_now(hw, rows, st), None
+
+    def _highway_on_route(self, hw, rows, st):
+        """(at, here row) when the fuel checks may speak: live, on the route in a route system, not at its end, flying
+        the ship it was plotted for; else None."""
         j = self.journals
         at = hw.get("at")
         if at is None or hw.get("done_ts") or hw.get("off_route") or at + 1 >= len(rows) or not st.get("live"):
@@ -13416,25 +13458,94 @@ class State:
         ship, pos = j.ship or {}, j.pos
         if (hw.get("ship") or {}).get("ship_id") is None or hw["ship"]["ship_id"] != ship.get("ship_id"):
             return None   # plotted for another ship (or from a typed range): its plan says nothing of this one
-        here, nxt = rows[at], rows[at + 1]
+        here = rows[at]
         if not pos or (here["id64"] is not None and here["id64"] != pos["id64"]):
             return None
+        return at, here
+
+    @staticmethod
+    def _hop_ly(a, b):
+        """The jump into row b from row a: the row's own distance, else from their positions (None unknown)."""
+        if b["distance"]:
+            return b["distance"]
+        if None not in (a["x"], a["y"], a["z"], b["x"], b["y"], b["z"]):
+            return dist(a, b)
+        return None
+
+    def _highway_fuel_window(self, hw, rows, st):
+        """S1 and the heavy check in one sum, on an exact-plotter route: the hops from here to the next refuel row (or
+        the route's end, FUEL_RUN_MAX_HOPS at most), each with its multiplier (the held charge or this neutron's on the
+        first, then Spansh's own neutron rows: facts only, no white-dwarf guess), and fuel_window over the tank. Too much
+        fuel (over its high end by HIGHWAY_HEAVY_SLACK) gives heavy {need_t, have_t, distance, boost, next, hop} for the
+        first hop that fuel fails; too little gives short {need_t, max_t, have_t, refuel_at, jumps, end, here_refuel}
+        (need_t None: no amount the tank holds makes it; max_t None: the tank's whole is not too much; here_refuel: this
+        is a refuel row, where the plan has you scoop anyway: shown as how much to scoop, never spoken). (None, None)
+        when the fuel aboard makes the run, or nothing can be said."""
+        j = self.journals
+        on = self._highway_on_route(hw, rows, st)
+        now = self.fuel_now()
+        tank = (j.ship or {}).get("fuel_main")
+        if not on or not now or not tank:
+            return None, None
+        at, here = on
+        model, fuel, cargo = now
+        if not model.get("max_fuel") or not model.get("power"):
+            return None, None   # the fuel model is not complete yet (model["need"] > 0): nothing to claim
+        sc = fsd_supercharge((j.ship or {}).get("fsd"))
+        hops, last = [], at
+        for i in range(at + 1, min(len(rows), at + 1 + FUEL_RUN_MAX_HOPS)):
+            d = self._hop_ly(rows[i - 1], rows[i])
+            if not d:
+                break   # a hop of unknown length ends the look-ahead
+            mult = sc if rows[i - 1]["neutron"] else 1
+            if i == at + 1:
+                mult = max(mult, (j.boost or {}).get("value") or 1)
+            hops.append((d, mult))
+            last = i
+            if rows[i]["refuel"]:
+                break
+        if not hops:
+            return None, None
+        other = cargo + (st.get("fuel_reservoir") or 0)
+        ran = fuel_run(model, fuel, other, hops)
+        if ran is None or ran[0] == len(hops):
+            return None, None
+        win = fuel_window(model, other, hops, tank)
+        if win and fuel > win[1]:
+            if fuel <= win[1] + HIGHWAY_HEAVY_SLACK:
+                return None, None   # a hair over a jump planned at the limit: the model's error, not yours
+            k = ran[0]   # the first hop this fuel fails
+            return {"need_t": math.floor(win[1] * 10) / 10, "have_t": round(fuel, 1), "distance": round(hops[k][0], 1),
+                    "boost": hops[k][1], "next": rows[at + 1 + k]["system"], "hop": k + 1}, None
+        if win and fuel >= win[0]:
+            return None, None   # inside the window yet failing: the levels between are not one interval; say nothing
+        end = "refuel" if rows[last]["refuel"] else "end" if last == len(rows) - 1 else "ahead"
+        return None, {"need_t": math.ceil(win[0] * 10) / 10 if win else None,
+                      "max_t": math.floor(win[1] * 10) / 10 if win and win[1] < tank - 0.05 else None,
+                      "have_t": round(fuel, 1), "refuel_at": rows[last]["system"], "jumps": len(hops), "end": end,
+                      "here_refuel": bool(here["refuel"])}
+
+    def _highway_heavy_now(self, hw, rows, st):
+        on = self._highway_on_route(hw, rows, st)
+        if not on:
+            return None
+        j = self.journals
+        at, here = on
+        nxt = rows[at + 1]
         if (nxt["jumps"] or 1) != 1:
             return None   # a neutron-plotter waypoint several jumps away: the first jump's length is not known
-        d = nxt["distance"]
-        if not d and None not in (here["x"], here["y"], here["z"], nxt["x"], nxt["y"], nxt["z"]):
-            d = dist(here, nxt)
+        d = self._hop_ly(here, nxt)
         now = self.fuel_now()
         if not d or not now:
             return None
         model, fuel, cargo = now
-        mult = max((j.boost or {}).get("value") or 1, fsd_supercharge(ship.get("fsd")) if here["neutron"] else 1)
+        mult = max((j.boost or {}).get("value") or 1, fsd_supercharge((j.ship or {}).get("fsd")) if here["neutron"] else 1)
         other = cargo + (st.get("fuel_reservoir") or 0)
         need = max_fuel_for_jump(model, d, other, mult)
         if need is None or fuel <= need + HIGHWAY_HEAVY_SLACK:
             return None   # light enough (or out of reach whatever the fuel: not a weight problem)
         return {"need_t": math.floor(need * 10) / 10, "have_t": round(fuel, 1), "distance": round(d, 1), "boost": mult,
-                "next": nxt["system"]}
+                "next": nxt["system"], "hop": 1}
 
     @staticmethod
     def highway_row_out(i, r):

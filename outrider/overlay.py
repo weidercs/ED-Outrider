@@ -891,8 +891,24 @@ def route_parts(route):
         parts.append((f" · refuel in {s['refuel_in']} jump{'' if s['refuel_in'] == 1 else 's'}", "muted"))
     hv = s.get("heavy") if hw else None
     if hv and isinstance(hv.get("need_t"), (int, float)) and isinstance(hv.get("have_t"), (int, float)):
-        parts.append((f" · ⚠ too much fuel for the next jump: ≤ {math.floor(hv['need_t'])} t, you have {_half_up(hv['have_t'])} t", "bad"))
+        jump = f"the jump to {hv.get('next')}" if (hv.get("hop") or 1) > 1 else "the next jump"
+        parts.append((f" · ⚠ too much fuel for {jump}: ≤ {math.floor(hv['need_t'])} t, you have {_half_up(hv['have_t'])} t", "bad"))
+    sh = s.get("short") if hw else None
+    if sh and isinstance(sh.get("jumps"), int) and sh.get("refuel_at"):
+        parts.append((f" · {'⛽' if sh.get('here_refuel') else '⚠'} {short_text(sh)}", "warn" if sh.get("here_refuel") else "bad"))
     return parts + here
+
+
+def short_text(sh):
+    """S1's words (page.js hwyShortText): the fuel won't reach the refuel stop, or at one, how much to scoop."""
+    where = {"refuel": "the refuel stop", "end": "the destination"}.get(sh.get("end"), "the stretch ahead")
+    n = sh["jumps"]
+    need, top = sh.get("need_t"), sh.get("max_t")
+    fix = "no amount of fuel makes it" if not isinstance(need, (int, float)) else \
+        f"scoop to ≥ {need:.1f} t" + (f", at most {top:.1f} t" if isinstance(top, (int, float)) else "")
+    if sh.get("here_refuel") and isinstance(need, (int, float)):
+        return f"{fix} to reach {sh['refuel_at']} in {n} jump{'' if n == 1 else 's'}"
+    return f"fuel won't reach {where}: {sh['refuel_at']} in {n} jump{'' if n == 1 else 's'} · {fix}"
 
 
 def boxel_known_words(bx):

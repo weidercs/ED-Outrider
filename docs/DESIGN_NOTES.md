@@ -412,20 +412,39 @@ upstream project's choices, not rules of the game.
   icons the list or schematic shows now, not every icon there is (the author's call, 2026-10-10), and is absent when
   there are none; sticky to the bottom of the scrolling pane so it stays in view. The codex marks write the new
   colour after them ("✪ Cobalt"): their tooltip never shows under the body summary that pops up over a row.
-- **Too much fuel for the next jump.** Spansh's exact plotter simulates the fuel, so a long neutron jump may be in
-  range only with about the fuel it expects aboard (the Caspian's 487.9 ly ×6 jump: at most about 36 t; a full 160 t
-  tank gives 75.3 × 6 = 452 ly). Checked on a live arrival in a route system (or a plot made where you are) and again
-  as Status.json's fuel changes there (every 3 s at most), against the fuel actually aboard (the main tank, with the
-  reservoir and cargo counted as mass), the current ship's fuel model and its supercharge in a neutron route system.
-  The most fuel that still reaches the jump is found by bisection on `fsd_range` past one max jump's fuel (below that
-  the fuel itself limits the jump). Warned past that by more than 0.5 t (Spansh plans at the limit), said once per
-  system, cleared when the fuel drops or you leave. Only for the ship the route was plotted for; the neutron plotter
-  only when the next waypoint is one jump away (the first jump of several has no known length).
+- **Too much fuel, or too little: one fuel window (S1).** Spansh's exact plotter simulates the fuel, so a long neutron
+  jump may be in range only with about the fuel it expects aboard (the Caspian's 487.9 ly ×6 jump: at most about 36 t;
+  a full 160 t tank gives 75.3 × 6 = 452 ly), and a tank not filled at a refuel stop may run dry before the next.
+  Checked on a live arrival in a route system (or a plot made where you are) and again as Status.json's fuel changes
+  there (every 3 s at most), against the fuel actually aboard (the main tank, with the reservoir and cargo counted as
+  mass) and the current ship's fuel model. On an exact-plotter route the hops to the next refuel row (or the end, 50 at
+  most) are burned one by one (`fuel_run`), each with only the multipliers that are facts: a held charge or this
+  neutron's on the first, Spansh's neutron rows after it (no white-dwarf guess). Since the range falls as the mass
+  rises, a run succeeds on an interval of starting fuel, so `fuel_window` tries a grid of levels every 0.25 t (cheap)
+  instead of bisecting the tank, which a failing full tank would fool, and refines each end. Over the high end by more
+  than 0.5 t (Spansh plans at the limit) is too heavy, naming the jump it fails ("the next jump", or "the jump to X");
+  under the low end is short, with both ends in one line ("scoop to ≥ A t, at most B t"); never both, never two lines
+  that disagree. Each said once per system, cleared when the fuel comes right or you leave; silent while the fuel model
+  lacks MaxFuelPerJump or p. Only for the ship the route was plotted for. The neutron plotter has no fuel plan: its
+  next jump alone, when one jump away. A route plotted with FSD injections keeps that one-jump check too (its boosted
+  jumps are not marked in the rows).
+- **Short of the refuel stop is not said at a refuel stop** (the plan scoops there anyway): the line shows how much to
+  scoop instead ("⛽ scoop to ≥ 24.3 t to reach …"), and leaving without it is warned on arrival at the next system.
+  Its spoken line is a `speech.json` key (`fuel_short`, a danger key: business wording by default) under its own
+  alerts row (`refuelshort`), where the Highway's other lines are plain text.
+- **No scoopable column on Highway routes** (P1, 2026-10-13, `scripts/exact_probe.py`): Spansh's exact plotter sends
+  `is_scoopable` on every jump, but on all 45 jumps of three routes it equals `must_refuel` (its plan tops the tank up at
+  every scoopable star), and the ends say False for scoopable stars (Sol, Polaris). An exact route's `refuel` flag
+  already says it.
 - **Conservative range** shortens the plan, not the ship: the neutron plotter gets the range less the margin, the
   exact plotter a smaller optimal mass, scaled so the normal full-tank range is the margin shorter (the range less the
   booster's ly goes as the optimal mass at every mass, so Spansh's fuel simulation stays consistent; the booster is
   untouched). Neither cuts the drive's own range by more than half. The margin is recorded in the route's options.
-- **The Highway's spoken lines are plain text** carried by the moment, not `speech.json` keys yet (personality later).
+- **The Highway's spoken lines are plain text** carried by the moment, not `speech.json` keys yet (personality later),
+  except short of the refuel stop (`fuel_short`, above).
+- **Find by name asks Spansh when EDSM fails** (S48): EDSM first (one call gives the id64, position and main star),
+  then Spansh's record by exact name when EDSM is down, does not know the name or has no position for it. Either hit is
+  cached as a minimal base marked stale, so opening it fetches Spansh's bodies at once; no cache layout change.
 - **The Highway map's regions are drawn by the page,** not rendered to an image on the server: `GET /api/regions`
   sends klightspeed's run-length grid as it is shipped (185 KB, about 40 KB gzipped, an ETag so a reload costs a 304)
   and the page colours it with the theme's colours at the zoom it needs. A server PNG would need one per theme, an
@@ -910,7 +929,8 @@ confirmed while playing. Treat reports about them as likely real.
   not writable.
 - The Highway's plots against live Spansh (both plotters send the requests Spansh's site and Auto_Neutron send;
   tested with a mocked Spansh), following a route in game, and whether a name copied by `wl-copy`/`xclip` pastes
-  into the galaxy map under Proton. The too-heavy warning and a conservative plot against a real route.
+  into the galaxy map under Proton. The too-heavy warning, the short-of-the-refuel-stop warning (S1) and a
+  conservative plot against a real route.
 - Auto-target in game: the first default sequence targeted a system end to end with "test now" (2026-10-02), and the
   current one (a camera yaw before the search, 1.5 s before Enter, a zoom in the plot step) is what worked on
   2026-10-03 (the author's bindings, Linux/Proton). Not yet tried: a run triggered by a real supercharge on a route,

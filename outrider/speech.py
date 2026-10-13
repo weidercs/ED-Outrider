@@ -60,6 +60,9 @@ KEYS = {
     "fuel_target": "targeted a star you cannot scoop with under 30% fuel: {pct}, {system}",
     "fuel_topup": "at a scoopable star, targeting onward, with the tank lowish and scoopable stars scarce locally: "
                   "{rate} (e.g. '8 of the last 20 stars were scoopable'), {jumps} (jumps of fuel left, e.g. 'about 6 jumps')",
+    "fuel_short": "on a Highway route plotted with the exact plotter, the fuel aboard won't reach the next refuel stop (said "
+                  "once per system, not at a refuel stop itself): {system} (the refuel stop, or the destination), {jumps} "
+                  "(how far, e.g. '4 jumps'), {need} (the fuel to scoop to, e.g. '24 tonnes')",
     "hull": "hull fell below half or a quarter: {pct}",
     "heat": "heat damage",
     "interdicted": "interdicted: {by}",
@@ -414,6 +417,7 @@ SAMPLES = {
     "fuel_low": {"pct": 18}, "fuel_star": {"pct": 22, "star": "white dwarf"},
     "fuel_target": {"pct": 22, "system": "Drojau LL-O b26-3"},
     "fuel_topup": {"rate": "8 of the last 20 stars were scoopable", "jumps": "about 6 jumps"}, "hull": {"pct": 42}, "interdicted": {"by": "someone"},
+    "fuel_short": {"system": "Smojooe AR-E b25-8", "jumps": "4 jumps", "need": "24 tonnes"},
     "docked_sell": {"value": "114.1M", "station": "Jaques Station"}, "undocked_unsold": {"value": "260.4M"},
     "sold": {"sold": "12.6M cr cartographics and 4.1M cr exobiology", "still": ""},
     "unsold_warn": {"value": "52.0M"}, "unsold_urgent": {"value": "251.3M"},
