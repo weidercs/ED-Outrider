@@ -17,7 +17,10 @@ own (Sharing exports them or makes them the defaults for new browsers). **Server
 itself, every key of it but the upload switches (`[eddn]`, `[edsm]`, `[inara]`: Settings → Uploads): the network and the client password, the journal folders, paths, backups, Spansh, the
 Highway, the voice's AI layer and more. Saving there writes `ed_outrider.toml` (only the keys you changed; its
 comments stay, and the previous file is kept as `ed_outrider.toml.bak`), and Outrider uses them from its next start:
-**Restart now** beside "Saved" does that at once.
+**Restart now** beside "Saved" does that at once. Two keys take effect at once instead, and Settings → Voice writes
+them too: `[speech] voices_loaded` and `voices_preload` (**Keep loaded** and **Load them at start** under Voices kept
+loaded, shown whenever a voice besides the main one is in use). **Find a setting** finds them by those words, by
+"memory" or by their keys, and the crew by "crew", "xo" or a role's name ("navigator").
 The passwords (`[server]`'s and `[mcp]`'s) and the AI key are never shown, only whether they are set.
 
 **Server**'s top row says which Outrider is running and has **Restart** and **Show log**. **Restart** stops Outrider
@@ -60,7 +63,7 @@ and `resources/speech.json`.
 | `[defaults]` | What a new browser starts with: the thresholds `unsold_warn` (50000000), `unsold_urgent` (250000000), `bio_min` (10000000), `body_highlight_level` (500000), `biology_highlight_value` (10000000), `body_max_value_include_bonus` (true), `high_gravity` (2.0 g), `module_warn` (80 %); `sounds` (true), `voice` ("en_GB-cori-medium"), `voice_fallback` ("en_GB-jenny_dioco-medium"), `speech_styles` (["business"]), `speech_profanity` (false), `speech_profanity_pct` (50), `speech_danger_business` (true), `speak_bio_signals` (true), `speak_geo_signals` (true), `speak_mapped` (false), `codex_interesting` (true), `speech_speed` (1.0), `speech_names` ("Boss, Hefay, Sir"); the surface map's `surface_alt` (1000 m), `rig_spacing` (50 m), `surface_map_min` (500 m), `surface_map_strip` (false), `rig_warn` (3500 m) |
 | `[spansh]` | `concurrency` (4), `map_max_radius` (250 ly), `map_max_pages` (6), `watch_firsts` (true) |
 | `[autohonk]` | `enabled` (false), `key` ("auto": read from your controls preset), `delay` (2.0 s), `hold` (6.0 s), `skip_honked` (true), `announce` (true) |
-| `[speech]` | `server_player` ("auto"), for **Play speech and sounds on this PC**; `sound_dir` (none), your own alert sounds; `voices_loaded` (unset: the voices in use up to 4; a number, or "all"), how many voices besides the main one stay loaded (each about 1.6 times its file's size in memory, about 100 MB for a medium voice; one set aside waits about a second the next time it speaks); `voices_preload` (false), load them when Outrider starts instead of on their first line |
+| `[speech]` | `server_player` ("auto"), for **Play speech and sounds on this PC**; `sound_dir` (none), your own alert sounds; `voices_loaded` (unset: the voices in use up to 4; a number, or "all"), how many voices besides the main one stay loaded (each about 1.6 times its file's size in memory, about 100 MB for a medium voice; one set aside waits about a second the next time it speaks); `voices_preload` (false), load them when Outrider starts instead of on their first line (both also in Settings → Voice → Voices kept loaded, used at once) |
 | `[copilot]` | `enabled` (false), `device` (""), `button` (""), `hold_ms` (600), `double_ms` (400) |
 | `[assistant]` | `enabled` (false), `base_url` (""), `api_key` (""), `model` (""), `timeout` (20 s), `max_rounds` (4): the voice's optional AI layer |
 | `[mcp]` | `url` (this PC at `[server] port`), `max_rows` (25), `password` (""): for the MCP bridge (see Ask an AI about your game) |

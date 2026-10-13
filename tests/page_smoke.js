@@ -7307,6 +7307,154 @@ const releasePayloads = async () => {
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
     await releasePayloads();
   }
+  // Crew batch 2: Settings → Voice's Voices kept loaded and crew table, Settings → Alerts' Crew column. The memory note's
+  // colour bands and numbers from a given voice_memory (plain under 500 MB, amber over, red over 1 GB, "on the server",
+  // hidden with no voice besides the main one); Keep loaded and Load them at start post their config keys and the figures
+  // follow the number picked; the table's nine rows (the XO first, highlighted, no ↺), a member's selects and speaker,
+  // Speaks for (Tactical's danger lines in red), ↺ and a name posting; the Alerts column (a danger row's "spoken by
+  // Tactical") and a moved row posting; all of it hidden with the crew off; Find a setting finds the new rows
+  {
+    holdPayloads();
+    const w = dom.window, d = w.document, before = errors.length, posted = [];
+    const realFetch = w.fetch;
+    const served = await (await fetch(base + "api/speech")).json();
+    const json = v => Promise.resolve(new Response(JSON.stringify(v), {status: 200, headers: {"Content-Type": "application/json"}}));
+    const m0 = () => ({name: null, personality: null, voice: null, speaker: null, fill: null});
+    const crew = {on: true, danger: true, rows: {}, members: {
+      xo: {name: "Vance", personality: null, voice: "en_GB-cori-medium", speaker: null, fill: null},
+      navigator: {name: "Okafor", personality: "business", voice: "en_GB-vctk-medium", speaker: 1, fill: null},
+      science: m0(), exobiologist: m0(), engineer: {name: "Mira", personality: "sarcastic", voice: "en_GB-alan-low", speaker: null, fill: null},
+      quartermaster: m0(), comms: m0(), tactical: {name: "Rook", personality: "business", voice: "en_GB-alan-low", speaker: null, fill: null}, mining: m0()}};
+    w.fetch = (u, o) => {
+      const s = String(u);
+      if (s === "api/config" && o && o.method === "POST") {
+        const b = JSON.parse(o.body); posted.push(b);
+        return json({ok: true, changed: 1, restart: false, live: Object.keys(b.speech || {}).map(k => "speech." + k), path: "/scratch/ed_outrider.toml"});
+      }
+      if (s === "api/voice/crew") {
+        const b = JSON.parse(o.body); posted.push(b);
+        if (b.reset) Object.assign(crew.members[b.role], {personality: null, voice: null, speaker: null});
+        if ("name" in b) crew.members[b.role].name = b.name || null;
+        if ("row" in b) crew.rows[b.row] = b.role;
+        return json({ok: true, crew: JSON.parse(JSON.stringify(crew))});
+      }
+      if (s.startsWith("api/voices/speakers")) return json({voice: "x", speaker: null,
+        speakers: s.includes("vctk") ? [{id: 0, name: "p225"}, {id: 1, name: "p226"}, {id: 2, name: "p227"}] : []});
+      return realFetch(u, o);
+    };
+    w.eval(`window.__c2 = {tts: data.tts, crew: data.crew, vm: data.voice_memory, lib: speechLib};
+      for (const k of Object.keys(speakerLists)) delete speakerLists[k];
+      data.tts = {engine: "piper", available: true, status: "ready", voices: ["en_GB-cori-medium", "en_GB-vctk-medium", "en_GB-alan-low"],
+                  voice: "en_GB-cori-medium", speaker: null, speakers: 0};
+      speechLib = Object.assign({}, speechLib, {crew_roles: ${JSON.stringify(served.crew_roles)},
+        styles: {business: "Down to business", sarcastic: "Sarcastic", sweet: "Sweet"}});
+      data.crew = ${JSON.stringify(crew)};
+      data.voice_memory = {voices: [{voice: "en_GB-alan-low", mb: 80}, {voice: "en_GB-vctk-medium", mb: 120}, {voice: "en_GB-cori-high", mb: 182}],
+        count: 3, mb: 382, loaded: null, default: 4, kept: 3, kept_mb: 382, set_aside: 0, preload: false, on_server: false};
+      drawCrew(true); drawVoiceMemory();`);
+    await sleep(150);
+    const got = {}, txt = id => d.getElementById(id).textContent.replace(/\s+/g, " ").trim();
+    const note = () => [d.getElementById("vmBox").hidden, d.getElementById("vmNote").className,
+      /different voices<\/b> besides (the XO|the main voice)/.exec(d.getElementById("vmNote").innerHTML)?.[1],
+      (txt("vmNote").match(/about ([\d,]+ MB) of memory (on this PC|on the server)/) || []).slice(1).join(" "), (txt("vmNote").match(/More than [^·]+/) || [""])[0].trim()];
+    got.plain = note();
+    got.keep = [d.getElementById("vmKeep").value, [...d.getElementById("vmKeep").options].map(o => o.textContent), txt("vmKeepOf"), txt("vmCost")];
+    w.eval(`data.voice_memory.mb = 640; drawVoiceMemory()`);
+    got.amber = note();
+    w.eval(`data.voice_memory.mb = 1300; data.voice_memory.on_server = true; drawVoiceMemory()`);
+    got.red = note();
+    w.eval(`data.voice_memory.count = 0; drawVoiceMemory()`);
+    got.none = d.getElementById("vmBox").hidden;
+    w.eval(`Object.assign(data.voice_memory, {count: 3, mb: 382, on_server: false}); drawVoiceMemory()`);
+    // Keep loaded and Load them at start: the config keys posted, the figures for the number picked
+    const keep = d.getElementById("vmKeep");
+    keep.value = "2"; keep.dispatchEvent(new w.Event("change")); await sleep(100);
+    got.kept = [keep.value, [...keep.options].map(o => o.value), txt("vmKeepOf"), txt("vmCost"), txt("vmMsg")];
+    const pre = d.getElementById("vmPreload");
+    pre.checked = true; pre.dispatchEvent(new w.Event("change")); await sleep(100);
+    got.posts = posted.splice(0);
+    // the crew table
+    const tr = role => d.querySelector(`#crewTable tr[data-crole="${role}"]`);
+    got.rows = [...d.querySelectorAll("#crewTable tbody tr")].map(r => r.dataset.crole);
+    got.xo = [tr("xo").classList.contains("xo"), !!tr("xo").querySelector("[data-creset]"), /the main voice/.test(tr("xo").textContent),
+      tr("xo").querySelector("[data-cname]").value, tr("xo").querySelector("[data-cvoice]").value, !!tr("xo").querySelector("[data-cpers]")];
+    got.nav = [tr("navigator").querySelector("[data-cpers]").value, tr("navigator").querySelector("[data-cvoice]").value,
+      tr("navigator").querySelector("[data-cspk]").hidden, tr("navigator").querySelector("[data-cspk]").value, /jumps/.test(tr("navigator").querySelector(".cfor").textContent)];
+    got.sci = [tr("science").querySelector("[data-cpers]").value, tr("science").querySelector("[data-cpers]").classList.contains("asxo"),
+      tr("science").querySelector("[data-cvoice]").options[0].textContent, tr("science").querySelector("[data-creset]").disabled,
+      tr("science").querySelector("[data-cname]").placeholder];
+    got.speaks = [(tr("tactical").querySelector(".cfor .badc") || {}).textContent, /their danger lines: Tactical/.test(tr("engineer").querySelector(".cfor").textContent),
+      /answers/.test(tr("xo").querySelector(".cfor").textContent)];
+    got.visible = [d.getElementById("crewTable").hidden, d.getElementById("crewXoNote").hidden, d.getElementById("crewDangerWrap").hidden,
+      d.getElementById("ttsXo").hidden, d.getElementById("crewOn").checked];
+    tr("engineer").querySelector("[data-creset]").click(); await sleep(100);
+    const nm = tr("science").querySelector("[data-cname]");
+    nm.value = "Ada"; nm.dispatchEvent(new w.Event("change", {bubbles: true})); await sleep(100);
+    got.reset = [tr("engineer").querySelector("[data-cpers]").value, tr("engineer").querySelector("[data-cvoice]").value, txt("crewMsg"),
+      tr("science").querySelector("[data-cname]").value];
+    // Settings → Alerts' Crew column
+    const cell = row => d.querySelector(`#alertOpts td[data-acrew="${row}"]`);
+    got.alerts = [d.querySelector("#alertTable th.acrew").hidden, cell("hull").querySelector("select").value, /spoken by Tactical \(danger\)/.test(cell("hull").textContent),
+      /its danger lines by Tactical/.test(cell("carrier").textContent), !!cell("jump").querySelector(".crewdanger"), cell("jump").querySelector("select").value,
+      cell("discovery").textContent.trim()];
+    const sc = cell("scoop").querySelector("select");
+    sc.value = "quartermaster"; sc.dispatchEvent(new w.Event("change", {bubbles: true})); await sleep(100);
+    got.moved = [cell("scoop").querySelector("select").value, /tank full/.test(tr("quartermaster").querySelector(".cfor").textContent)];
+    w.eval(`data.crew.danger = false; drawCrew(true)`);
+    got.dangerOff = [!!cell("hull").querySelector(".crewdanger"), !!tr("tactical").querySelector(".cfor .badc")];
+    got.crewPosts = posted.splice(0);
+    // Find a setting finds the new rows (with the crew on), and none of the hidden table's with it off
+    w.eval(`data.crew.danger = true; drawCrew(true)`);
+    const shows = el => !!el && !el.closest(".sfhide") && !el.closest("[hidden]");
+    const findIt = q => w.eval(`sfSet(${JSON.stringify(q)})`);
+    findIt("navigator"); got.findNav = [shows(tr("navigator")), shows(cell("jump").closest("tr")), shows(cell("hull").closest("tr")), shows(tr("science"))];
+    findIt("xo"); got.findXo = shows(tr("xo"));
+    findIt("keep loaded"); got.findKeep = [shows(keep), shows(d.getElementById("vmNote"))];
+    findIt("load at start"); got.findPre = shows(pre);
+    findIt("memory"); got.findMem = shows(d.getElementById("vmNote"));
+    findIt("voices_preload"); got.findKey = shows(pre);
+    findIt("crew"); got.findCrew = shows(d.getElementById("crewOn"));
+    w.eval(`data.crew.on = false; drawCrew(true); drawVoiceMemory()`);
+    findIt("navigator"); got.findOff = [...d.querySelectorAll("#crewTable tbody tr")].some(shows);
+    w.eval(`sfClear()`);
+    got.off = [d.getElementById("crewTable").hidden, d.getElementById("crewXoNote").hidden, d.getElementById("crewDangerWrap").hidden,
+      d.getElementById("crewAudition").hidden, d.querySelector("#alertTable th.acrew").hidden,
+      [...d.querySelectorAll("#alertOpts td.acrew")].every(td => td.hidden && !td.innerHTML), d.getElementById("ttsXo").hidden, d.getElementById("crewOn").checked,
+      /besides the main voice/.test(d.getElementById("vmNote").innerHTML)];
+    w.fetch = realFetch;
+    w.eval(`const k = window.__c2; data.tts = k.tts; data.crew = k.crew; data.voice_memory = k.vm; speechLib = k.lib; delete window.__c2;
+      for (const k2 of Object.keys(speakerLists)) delete speakerLists[k2]; drawTts(); drawCrew(true); drawVoiceMemory();`);
+    const want = {
+      plain: [false, "vmnote", "the XO", "382 MB on this PC", ""],
+      keep: ["", ["3 (the default)", "1", "2", "3", "all"], "of the 3 voices in use · about 382 MB", "nothing waits: every voice in use stays loaded"],
+      amber: [false, "vmnote warn", "the XO", "640 MB on this PC", "More than 500 MB"],
+      red: [false, "vmnote bad", "the XO", "1,300 MB on the server", "More than 1 GB"],
+      none: true,
+      kept: ["2", ["1", "2", "3", "all"], "of the 3 voices in use · about 302 MB",
+             "1 voice is set aside when not in use: its next line waits about a second while it loads again", "Saved in the config file ([speech] voices_loaded)"],
+      posts: [{speech: {voices_loaded: "2"}}, {speech: {voices_preload: true}}],
+      rows: ["xo", "navigator", "science", "exobiologist", "engineer", "quartermaster", "comms", "tactical", "mining"],
+      xo: [true, false, true, "Vance", "en_GB-cori-medium", false],
+      nav: ["business", "en_GB-vctk-medium", false, "1", true],
+      sci: ["", true, "as the XO", true, "no name"],
+      speaks: ["every danger line", true, true],
+      visible: [false, false, false, false, true],
+      reset: ["", "", "Science Officer (Ada): kept", "Ada"],
+      alerts: [false, "engineer", true, true, false, "navigator", "·"],
+      moved: ["quartermaster", true],
+      dangerOff: [false, false],
+      crewPosts: [{role: "engineer", reset: true}, {role: "science", name: "Ada"}, {row: "scoop", role: "quartermaster"}],
+      findNav: [true, true, false, false], findXo: true, findKeep: [true, false], findPre: true, findMem: true, findKey: true, findCrew: true,
+      findOff: false,
+      off: [true, true, true, true, true, true, true, false, true],
+    };
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    const good = !bad.length && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| crew batch 2 settings |", good ? "the memory note's bands and figures, Keep loaded and Load at start posted, the crew table, ↺ and a name, the Alerts Crew column and its danger hint, hidden when off, Find a setting" :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+    await releasePayloads();
+  }
   // S39: Find a setting. A word leaves only the rows that match it (label, help, the config key a row defaults from, a
   // Server settings key loaded without opening its section), opens their sections and says how many; every section is
   // found by a word of its own rows and by its name; nothing matching says so; clearing puts every section back as it

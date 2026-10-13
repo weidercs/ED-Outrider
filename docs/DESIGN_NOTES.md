@@ -824,6 +824,27 @@ upstream project's choices, not rules of the game.
   model), so a crew made of one many-speaker voice costs no more than one voice. The payload's `voice_memory`
   (`outrider.tts.voice_memory_estimate`) is computed on the server from the installed files, per distinct voice in use,
   never the main voice; the page never guesses it.
+- **The crew's Settings screen** (crew batch 2, 2026-10-13; the author's approved mockup of that day). Settings →
+  Voice, top to bottom: the main voice (labelled "= XO" with its hint while the crew is on; it stays first, above the
+  personalities, as the page had it), Voices kept loaded, the Crew switches and table, the XO note, then Personality
+  voices (S40's table, its heading saying crew members "as the personality" use it). Voices kept loaded shows whenever
+  any voice besides the main one is in use (a personality's too, not only with the crew on), since `voices_loaded` sizes
+  the same LRU either way. Its note is coloured by the whole setup's memory (amber over 500 MB, red over 1 GB); the
+  figure beside Keep loaded is the N largest voices' (the worst case, as the plan says), summed in the page from the
+  server's per-voice figures so it follows the number picked before the server answers. Keep loaded and Load them at
+  start write `[speech] voices_loaded`/`voices_preload` through POST `/api/config` like Server settings, but those two
+  keys are applied at once (`State.LIVE_CONFIG`, `config_live`): a selector that only took effect after a restart would
+  read as broken, and both only size an LRU or say what the next start does. With the crew off only its switch shows;
+  the table, the Danger switch, the audition, the Alerts table's Crew column and the "= XO" label hide, and the Crew
+  column's cells are emptied, so Find a setting finds no role names there. The crew's selects are `data-sfone`: Find a
+  setting reads only their choice, not every role, voice and personality they list (a search for "navigator" would
+  otherwise show every alert row). The mockup was drawn a full screen wide; the dialog's column is about 600 px, so each
+  member's row is a grid (the same columns on every row): its name, personality, voice, speaker, ▶ and ↺ on one line,
+  Speaks for under them, and at phone width two columns. Speaks for is worded from the page's `ROW_WORDS`, at most six then "and N more";
+  a danger row's owner is kept in the Alerts column with "· spoken by Tactical (danger)" beside it (the carrier's row,
+  whose departure warning alone is danger: "its danger lines by Tactical"). "Audition: crew lines" comes with the crew
+  lines (batch 3) and is not on the page yet. ▶ and the by-crew audition play through the voice lab's player, never the
+  alert queue, as S40's ▶ does. The tablet's Settings sheet has none of it: the crew is set on the PC.
 - **Find a setting filters, it does not search a list** (S39, 2026-10-13): the box at the top of Settings hides what
   does not match in place, so a match is the setting itself, ready to change. A row shows when every word is in its
   text, its section's heading or the config key it defaults from (`data-find`), at least one in the row itself; a word

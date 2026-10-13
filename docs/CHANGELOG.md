@@ -2,6 +2,42 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-13 · The crew, batch 2: Settings' crew table, the voices kept loaded, the Alerts Crew column
+The second of three batches of the crew: the screen the author approved (the mockup of 2026-10-13), built with the
+page's own parts so it works in every theme and at phone width. The crew's own lines (and "Audition: crew lines") come
+in batch 3.
+- **Settings → Voice, top to bottom.** The main voice, labelled "= XO" with "the XO's voice: answers, status reports, the
+  co-pilot, and the stand-in for everyone" while the crew is on; **Voices kept loaded**; **Crew**; the crew table; the XO
+  note; then Personality voices, whose heading says crew members "as the personality" use it.
+- **Voices kept loaded** (shown whenever a voice besides the main one is in use, a personality's too): the memory note
+  from the payload's `voice_memory` ("This setup uses 4 different voices besides the XO: about 527 MB of memory on this
+  PC", or "on the server"; amber over 500 MB, red over 1 GB, with the hint that the people of one voice cost no more
+  than one), then **Keep loaded [N] of the M voices in use · about X MB** (the N largest), what fewer costs ("1 voice
+  is set aside when not in use: its next line waits about a second") or "nothing waits", and **Load them at start**.
+  Both write `[speech] voices_loaded` / `voices_preload` through POST `/api/config`, which now applies those two at once
+  (`State.LIVE_CONFIG`, `config_live`: the loaded voices over the new number set aside now; the answer's `live`, and
+  `restart` only when another key waits for a start; Server settings says "in use now" for them).
+- **Crew**: Split the alerts among a crew, Danger lines always in Tactical's voice, ▶ Audition: by crew (each member
+  says one of its own lines in its own voice). With the crew off only the switch shows.
+- **The crew table**: the XO row first and tinted ("the main voice"; its voice select switches the main voice, its
+  personality the ones ticked), then each role: Name ("no name"), Personality and Voice ("as the XO" / "as the
+  personality" in italics), Speaker (a voice of several people only), Speaks for in words (Tactical's "every danger line"
+  in red while that switch is on; a member's danger rows "(their danger lines: Tactical)"), ▶ one of its lines, ↺ back
+  to "as the XO" (none on the XO row); why the XO speaks for a member under its name. Each change is one POST to
+  `/api/voice/crew`.
+- **Settings → Alerts' Crew column** (while the crew is on): a select per row; a danger row keeps its owner with "·
+  spoken by Tactical (danger)" while the switch is on (the carrier's: "its danger lines by Tactical").
+- **The voice lab**: Assign to a crew member beside Use this voice and Give to this personality, ✓ crew members using the
+  voice picked, and ▶ Audition: by crew.
+- **Find a setting** finds the new rows: "crew", "xo", a role's name, "memory", "keep loaded", "load at start" and the two
+  keys; the crew's selects count by their choice alone (`data-sfone`), and rows inside a hidden box (the table with the
+  crew off) are never matches. The tablet's Settings sheet has none of it.
+- Tests: `tests/test_crew.py` (`ROW_WORDS` and `ROW_KEYS` in step with the alert rows, every danger key in the row that
+  says it; the two keys applied at once with no restart, the LRU trimmed, a port change still waiting; no crew on the
+  tablet's sheet); a smoke check of the note's bands and figures, Keep loaded and Load at start posting, the table's
+  rows, a speaker, ↺ and a name, the Alerts column and its danger hint, a moved row, everything hidden with the crew off
+  and Find a setting.
+
 ## 2026-10-13 · The crew, batch 1: who says each line, the XO standing in, the voices kept loaded
 The first of three batches of the crew (the spoken alerts split among crew members, each with its own personality and
 voice). This one is the resolution and storage; Settings' crew table and the new lines come in the next two. Off by

@@ -2412,6 +2412,7 @@ let lineKey = null, lineTemplate = null;   // and its alert and speech.json word
 // lines (DANGER) are Tactical's while the Danger switch is on. The voice lab never goes through it.
 let lineRow = null;   // the alert row whose line line() is picking (alertOut sets it): its crew member chooses
 let lineCrew = null;  // the crew member line() picked the last line for (crewMember), null with the crew off
+let crewUi = false;   // Settings' crew table and memory note are set up (drawCrew may run: crew batch 2, further down)
 const crewRoles = () => Array.isArray(speechLib.crew_roles) ? speechLib.crew_roles : [];
 const crewTitle = id => (crewRoles().find(r => r.id === id) || {}).short || id;
 // the crew member who says a line of alert row `row` with speech key `key`: {role, personality, voice, speaker, fill,
@@ -8827,10 +8828,11 @@ const alertDialog = document.getElementById("alertDialog");
 // a heading over a group of alerts in the list, before its first one: the discoveries together, each still its own row
 const ALERT_GROUPS = {phenomena: "Discoveries: the rare and curious things the FSS finds, said with delight (each has its own switches)"};
 document.getElementById("alertOpts").innerHTML = ALERTS.map(([k, label, snd]) =>
-  (ALERT_GROUPS[k] ? `<tr class="agroup"><th colspan="4">${esc(ALERT_GROUPS[k])}</th></tr>` : "") +
+  (ALERT_GROUPS[k] ? `<tr class="agroup"><th colspan="5">${esc(ALERT_GROUPS[k])}</th></tr>` : "") +
   `<tr><td>${esc(label)}</td><td><input type="checkbox" data-alert="${k}" aria-label="notify"></td>` +
   `<td>${snd || k === "arrival" ? `<input type="checkbox" data-asound="${k}" aria-label="sound">` : `<span class="unk" title="${k === "discovery" ? "the target sound" : "no sound"}">·</span>`}</td>` +
-  `<td>${UNSPOKEN.has(k) ? `<span class="unk" title="not spoken: ${esc(UNSPOKEN_WHY[k])}">·</span>` : `<input type="checkbox" data-aspeak="${k}" aria-label="speak">`}</td></tr>`).join("");
+  `<td>${UNSPOKEN.has(k) ? `<span class="unk" title="not spoken: ${esc(UNSPOKEN_WHY[k])}">·</span>` : `<input type="checkbox" data-aspeak="${k}" aria-label="speak">`}</td>` +
+  `<td class="acrew" data-acrew="${k}" hidden></td></tr>`).join("");
 for (const [attr, cfg, key] of [["asound", alertSound, "alertSound"], ["aspeak", alertSpeak, "alertSpeak"]])
   alertDialog.querySelectorAll(`[data-${attr}]`).forEach(cb => {
     cb.checked = !!cfg[cb.dataset[attr]];
@@ -8918,6 +8920,7 @@ function drawSpeechStyles() {
   document.getElementById("speechDangerBusiness").checked = speechDangerBusiness();
   document.getElementById("speechShift").checked = speechShift();
   drawStyleVoices();
+  if (crewUi) drawCrew();   // the XO's personality is the ones ticked
   const err = speechLib.error || (speechLib.problems || []).slice(0, 3).join("; ");
   document.getElementById("speechHint").innerHTML =
     (err ? `<span class="noscoop">${esc(err)}</span><br>` : "") +
@@ -9058,6 +9061,7 @@ function drawTts() {
     + ((sf.problems || []).length ? ` Not used: ${sf.problems.join("; ")}.` : "");
   drawServerPlay();
   drawStyleVoices();
+  if (crewUi) { drawCrew(); drawVoiceMemory(); }
   drawSpeechBtn();
   drawHonk();
 }
@@ -9159,6 +9163,276 @@ async function styleVoicePlay(style) {
     const tr = e.target.closest("tr[data-svstyle]"); if (!tr) return;
     if (e.target.closest("[data-svplay]")) styleVoicePlay(tr.dataset.svstyle);
     else if (e.target.closest("[data-svreset]")) { e.preventDefault(); styleVoicePost({style: tr.dataset.svstyle, voice: null}); }
+  });
+}
+// ---- Settings > Voice: the voices kept loaded (crew batch 2; the plan's approved screen). The memory note and Keep
+// loaded read the server's data.voice_memory (each voice's memory is the server's figure from the installed files, never
+// guessed here), shown whenever a voice besides the main one is in use (a crew member's or a personality's). Keep loaded
+// and Load them at start are [speech] voices_loaded / voices_preload, written into the config file (POST api/config,
+// which applies these two at once): they are about the machine that speaks, not this browser.
+const VM_WARN_MB = 500, VM_BAD_MB = 1000;   // the note amber above the first, red above the second
+const vmChoice = vm => vm.loaded === "all" ? "all" : Number.isInteger(vm.loaded) ? String(vm.loaded) : "";
+// how many of the voices in use stay loaded for a Keep loaded choice ("": unset, the voices in use up to the default)
+function vmKept(vm, choice) {
+  if (choice === "all") return vm.count;
+  const n = Number(choice);
+  return Math.min(vm.count, choice !== "" && Number.isInteger(n) && n >= 1 ? n : Math.max(1, vm.default || 4));
+}
+// the memory of the `n` largest voices in use: the worst case (which ones are loaded depends on what was said last)
+const vmMb = (vm, n) => (vm.voices || []).map(v => Number(v.mb) || 0).sort((a, b) => b - a).slice(0, n).reduce((a, b) => a + b, 0);
+const mbText = mb => `${Math.round(mb).toLocaleString("en-US")} MB`;
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+function drawVoiceMemory() {
+  const box = document.getElementById("vmBox"), vm = data && data.voice_memory;
+  box.hidden = !(vm && vm.count > 0);
+  if (box.hidden) return;
+  const level = vm.mb > VM_BAD_MB ? "bad" : vm.mb > VM_WARN_MB ? "warn" : "";
+  const note = document.getElementById("vmNote");
+  note.className = "vmnote" + (level ? " " + level : "");
+  note.innerHTML = `This setup uses <b>${plural(vm.count, "different voice", "different voices")}</b> besides ${crewOn() ? "the XO" : "the main voice"}: ` +
+    `about <b>${mbText(vm.mb)}</b> of memory ${vm.on_server ? "on the server" : "on this PC"} (each different voice is loaded on its own: ` +
+    `about 100 MB for a medium voice, 170 MB for a high one; the people of one many-speaker voice share a single load).` +
+    (level ? `<br><span class="vmwhy">More than ${level === "bad" ? "1 GB" : "500 MB"} · Several people of one voice (e.g. vctk's 109) cost no more than one voice.</span>` : "");
+  const sel = document.getElementById("vmKeep"), cur = vmChoice(vm);
+  const top = Math.min(20, Math.max(vm.count, Number(cur) || 0));   // up to the voices in use (20: the config's pick-list)
+  const opts = [...(cur === "" ? [["", `${vmKept(vm, "")} (the default)`]] : []),
+    ...Array.from({length: top}, (_, i) => [String(i + 1), String(i + 1)]), ["all", "all"]];
+  const okey = JSON.stringify(opts);
+  if (sel.dataset.opts !== okey) { sel.innerHTML = opts.map(([v, t]) => `<option value="${v}">${esc(t)}</option>`).join(""); sel.dataset.opts = okey; }
+  sel.value = cur;
+  drawVmKeep();
+  document.getElementById("vmPreload").checked = !!vm.preload;
+}
+// "of the 6 voices in use · about 620 MB" and what fewer costs, for the number picked (before the server has it too)
+function drawVmKeep() {
+  const vm = data && data.voice_memory;
+  if (!vm) return;
+  const n = vmKept(vm, document.getElementById("vmKeep").value), aside = vm.count - n;
+  document.getElementById("vmKeepOf").innerHTML = `of the ${plural(vm.count, "voice", "voices")} in use · about <b>${mbText(vmMb(vm, n))}</b>`;
+  document.getElementById("vmCost").textContent = aside > 0
+    ? `${plural(aside, "voice is", "voices are")} set aside when not in use: ${aside === 1 ? "its" : "their"} next line waits about a second while it loads again`
+    : "nothing waits: every voice in use stays loaded";
+}
+async function vmPost(key, value) {
+  let r;
+  try { r = await apiJson("api/config", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({speech: {[key]: value}})}); }
+  catch { r = {error: "Outrider not reachable"}; }
+  r = r || {error: "?"};
+  const vm = data && data.voice_memory;
+  if (!r.error && vm) {   // the next payload brings the server's own figures; meanwhile what was chosen
+    if (key === "voices_loaded") vm.loaded = value === "all" ? "all" : Number(value);
+    else vm.preload = !!value;
+  }
+  const m = document.getElementById("vmMsg");
+  m.textContent = r.error ? `Not saved: ${r.error}`
+    : `Saved in the config file ([speech] ${key})${(r.live || []).includes("speech." + key) ? "" : ": used from Outrider's next start"}`;
+  m.className = r.error ? "hint warnc" : "hint";
+  drawVoiceMemory();
+  return r;
+}
+document.getElementById("vmKeep").onchange = e => { if (e.target.value) vmPost("voices_loaded", e.target.value); else drawVmKeep(); };
+document.getElementById("vmPreload").onchange = e => vmPost("voices_preload", e.target.checked);
+
+// ---- the crew in Settings (crew batch 2): its switches, the table (Role · Name · Personality · Voice · Speaker · Speaks
+// for · ▶ · ↺, the XO first), the XO note, Settings > Alerts' Crew column and the voice lab's Assign and "by crew"
+// audition. Each change is one POST to api/voice/crew (data.crew comes back), checked by the server against the lines
+// file and the voices installed. The XO row is the main voice (its voice select switches it) and the main personality.
+// an alert row in a few words, for a crew member's "Speaks for" and the messages (test_crew keeps it in step with ALERTS;
+// the Spoken lines tally has its own capitalised names, ALERT_SHORT)
+const ROW_WORDS = {discovery: "target verdicts", arrival: "arrivals", game: "start and exit", jump: "jumps", honk: "the honk",
+  brief: "arrival briefings", fss: "the FSS", mapped: "mapped planets", leaving: "leaving with work left", fuel: "fuel",
+  scoop: "tank full", scoopstop: "scooping stopped", supercharge: "supercharges", exo: "Exomastery routes", riches: "survey routes",
+  trade: "trade routes", highway: "the Highway", refuelshort: "fuel short of a refuel", lastscoop: "last scoop", autotarget: "auto-target",
+  wrongtarget: "wrong target", find: "valuable bodies", jumponium: "jumponium", sampling: "sampling", approach: "high-g approaches",
+  bodybrief: "bio bodies ahead", sell: "sales", saleleft: "data left after a sale", unsold: "unsold data", firstsseen: "someone scanning your firsts",
+  hull: "hull, heat, interdiction", carrier: "your carrier", codex: "codex", phenomena: "phenomena", ggg: "green gas giants",
+  rare_star: "rare stars", surface_site: "surface sites", signal_poi: "signals", curious: "curiosities", loss: "losses",
+  rigs: "rigs", rigleash: "the rig leash", rigsout: "rigs out", uploads: "uploads"};
+// the speech keys each alert row says (a crew member's ▶, the by-crew audition, which rows hold danger lines)
+const ROW_KEYS = {arrival: ["arrival_undiscovered", "arrival_discovered", "region", "streak_new", "streak_known"],
+  game: ["game_start", "welcome_back", "game_exit", "session_recap"], jump: ["fsd_charge"], brief: ["arrival_brief"],
+  fss: ["fss_done", "fss_nothing", "fss_unfinished"], leaving: ["leaving"], fuel: ["fuel_low", "fuel_star", "fuel_target", "fuel_topup"],
+  scoop: ["tank_full"], scoopstop: ["scoop_stopped"], supercharge: ["supercharged"], refuelshort: ["fuel_short"], lastscoop: ["fuel_last_scoop"],
+  autotarget: ["autotarget_nothing"], wrongtarget: ["wrong_target"], find: ["find_body", "find_bio", "mapped_before", "sample_clear"],
+  jumponium: ["jumponium"], sampling: ["bio_done_last", "bio_done_more", "bio_tag_near", "left_body"], approach: ["high_g"],
+  bodybrief: ["body_brief"], sell: ["docked_sell", "sold", "undocked_unsold"], saleleft: ["sale_left"], unsold: ["unsold_warn", "unsold_urgent"],
+  firstsseen: ["firsts_seen"], hull: ["hull", "heat", "interdicted"], carrier: ["carrier_arrived", "carrier_departs"], codex: ["codex"],
+  phenomena: ["phenomena"], ggg: ["ggg"], rare_star: ["rare_star"], surface_site: ["surface_site"], signal_poi: ["signal_poi"],
+  curious: ["curious"], loss: ["ship_lost"], rigleash: ["rig_leash"]};
+const XO_SPEAKS = "voice answers, the status report, the co-pilot, the hush and speech on";
+const crewOn = () => !!(data && data.crew && data.crew.on);
+const crewDangerOn = () => !!(data && data.crew && data.crew.danger !== false);
+// the crew member an alert row is said by: moved in Settings > Alerts, else the table's (a row no role covers: the XO)
+const crewRowRole = row => (data && data.crew && data.crew.rows && data.crew.rows[row]) || (crewRoles().find(r => (r.rows || []).includes(row)) || {}).id || "xo";
+const crewRowsOf = role => ALERTS.map(a => a[0]).filter(k => !UNSPOKEN.has(k) && crewRowRole(k) === role);
+// an alert row's danger lines (DANGER): "all" of its lines, "some" (your carrier's departure warning) or none
+function dangerRow(row) {
+  const ks = ROW_KEYS[row] || [], d = ks.filter(k => DANGER.has(k)).length;
+  return !d ? null : d === ks.length ? "all" : "some";
+}
+// "Chief Engineer (Mira)"
+const crewLabel = (role, short = false) => { const r = crewRoles().find(x => x.id === role), m = data && data.crew && data.crew.members && data.crew.members[role];
+  return `${r ? (short ? r.short : r.title) : role}${m && m.name ? ` (${m.name})` : ""}`; };
+// what a crew member speaks for, in words (HTML): Tactical's danger lines in red while the switch is on
+function crewSpeaksFor(role) {
+  const rows = crewRowsOf(role), words = rows.map(r => ROW_WORDS[r] || r), parts = [];
+  if (role === "xo") parts.push(XO_SPEAKS);
+  if (role === "tactical" && crewDangerOn()) parts.push(`<span class="badc">every danger line</span>`);
+  const shown = words.slice(0, 6), more = words.length - shown.length;
+  if (words.length) parts.push(esc(shown.join(", ")) + (more > 0 ? ` <span class="unk" title="${esc(words.join(", "))}">and ${more} more</span>` : ""));
+  if (role === "xo") parts.push("and any line a crew member cannot say");
+  const tact = role !== "tactical" && crewDangerOn() && rows.some(r => dangerRow(r));
+  return (parts.join(", ") || `<span class="unk">nothing yet: give it an alert in Settings → Alerts</span>`) +
+    (tact ? ` <span class="unk">(their danger lines: Tactical)</span>` : "");
+}
+let crewDrawn = "";   // the crew table as last drawn
+function drawCrew(force = false) {
+  const c = data && data.crew, roles = crewRoles(), on = crewOn() && roles.length > 0;
+  document.getElementById("crewBox").hidden = !c || !roles.length;
+  document.getElementById("crewOn").checked = crewOn();
+  document.getElementById("crewDanger").checked = crewDangerOn();
+  for (const id of ["crewDangerWrap", "crewAudition", "crewTable", "crewXoNote", "ttsXo", "ttsXoHint", "styleVoicesCrew"])
+    document.getElementById(id).hidden = !on;
+  drawAlertCrew(force);
+  if (!on) { crewDrawn = ""; return; }
+  const t = (data && data.tts) || {}, voices = t.voices || [], styles = Object.keys(speechLib.styles || {});
+  const tb = document.querySelector("#crewTable tbody");
+  const key = JSON.stringify([c, roles, voices, t.voice, t.speaker, t.speakers, styles, speechStyles()]);
+  const busy = tb.contains(document.activeElement) && /^(SELECT|INPUT)$/.test(document.activeElement.tagName);
+  if (!force && (key === crewDrawn || busy)) return;
+  crewDrawn = key;
+  const main = speechStyles().filter(st => styles.includes(st)).map(labStyleName).join(", ") || "none ticked";
+  const opt = (v, label, sel) => `<option value="${esc(v)}"${sel ? " selected" : ""}>${esc(label)}</option>`;
+  tb.innerHTML = roles.map(r => {
+    const m = (c.members && c.members[r.id]) || {}, xo = r.id === "xo", nm = `${esc(r.title)}`;
+    const pers = xo ? `<span class="asxo" title="the personalities ticked above">${esc(main)} (main)</span>`
+      : `<select data-cpers data-sfone aria-label="${nm}: personality"${m.personality ? "" : ` class="asxo"`}>${opt("", "as the XO", !m.personality)}` +
+        styles.map(st => opt(st, labStyleName(st), m.personality === st)).join("") +
+        (m.personality && !styles.includes(m.personality) ? opt(m.personality, `${m.personality} (not in the lines file)`, true) : "") + `</select>`;
+    const vs = [...voices, ...(m.voice && !voices.includes(m.voice) ? [m.voice] : [])];
+    const voice = `<select data-cvoice data-sfone aria-label="${nm}: voice"${!xo && !m.voice ? ` class="asxo"` : ""}>` +
+      (xo ? (vs.length ? "" : opt("", "(none installed)", true)) : opt("", m.personality ? "as the personality" : "as the XO", !m.voice)) +
+      vs.map(v => opt(v, v + (voices.includes(v) ? "" : " (not installed)"), m.voice === v || (xo && t.voice === v))).join("") + `</select>`;
+    return `<tr data-crole="${esc(r.id)}"${xo ? ` class="xo"` : ""}><td class="crole"><b>${nm}</b>${xo ? `<small>the main voice</small>` : ""}` +
+      (m.fill ? `<small class="warnc" title="the XO says its lines meanwhile">the XO speaks for it: ${esc(m.fill)}</small>` : "") + `</td>` +
+      `<td><input type="text" data-cname maxlength="40" placeholder="no name" aria-label="${nm}: name" value="${esc(m.name || "")}"></td>` +
+      `<td>${pers}</td><td>${voice}</td>` +
+      `<td><select data-cspk data-sfone aria-label="${nm}: speaker" hidden></select><span data-cnospk class="unk">—</span></td>` +
+      `<td class="cfor">${crewSpeaksFor(r.id)}</td>` +
+      `<td><button type="button" class="try" data-cplay title="one of ${nm}'s lines, in its voice and personality (here, in this browser)">▶</button></td>` +
+      `<td>${xo ? "" : `<button type="button" class="try" data-creset title='back to "as the XO" (its name kept)'${m.personality || m.voice ? "" : " disabled"}>↺</button>`}</td></tr>`;
+  }).join("");
+  for (const tr of tb.querySelectorAll("tr[data-crole]")) {   // a several-person voice: which of its people
+    const xo = tr.dataset.crole === "xo", m = (c.members && c.members[tr.dataset.crole]) || {};
+    const v = xo ? t.voice : m.voice, sel = tr.querySelector("[data-cspk]"), dash = tr.querySelector("[data-cnospk]");
+    if (!v || (xo && !(t.speakers > 1))) continue;
+    fillSpeakers(sel, v, xo ? t.speaker : m.speaker ?? speakerPicked[v] ?? 0).then(list => { sel.hidden = list.length < 2; dash.hidden = !sel.hidden; });
+  }
+}
+// Settings > Alerts' Crew column: who says each row (a select), and a danger row's "spoken by Tactical" while that
+// switch is on; hidden with the crew off (its cells emptied, so Find a setting finds no role names there)
+let alertCrewDrawn = "";
+function drawAlertCrew(force = false) {
+  const on = crewOn() && crewRoles().length > 0, c = data && data.crew, tb = document.getElementById("alertOpts");
+  document.querySelectorAll("#alertTable .acrew").forEach(el => { el.hidden = !on; });
+  const key = on ? JSON.stringify([c.rows, c.danger, crewRoles().map(r => r.id), Object.values(c.members || {}).map(m => m.name)]) : "";
+  if (!force && (key === alertCrewDrawn || (tb.contains(document.activeElement) && document.activeElement.matches("[data-arole]")))) return;
+  alertCrewDrawn = key;
+  for (const td of tb.querySelectorAll("td[data-acrew]")) {
+    const row = td.dataset.acrew;
+    if (!on) { td.innerHTML = ""; continue; }
+    if (UNSPOKEN.has(row)) { td.innerHTML = `<span class="unk" title="not spoken: nobody says it">·</span>`; continue; }
+    const cur = crewRowRole(row), d = crewDangerOn() && cur !== "tactical" && dangerRow(row);
+    td.innerHTML = `<select data-arole="${esc(row)}" data-sfone aria-label="crew member">` + crewRoles().map(r =>
+      `<option value="${esc(r.id)}"${r.id === cur ? " selected" : ""}>${esc(crewLabel(r.id, true))}</option>`).join("") + `</select>` +
+      (d ? ` <span class="badc crewdanger">· ${d === "all" ? "spoken by Tactical (danger)" : "its danger lines by Tactical"}</span>` : "");
+  }
+}
+// what a change said, for the line under the table
+function crewSaid(b) {
+  if ("on" in b) return b.on ? "The crew speaks from now on: every member starts as the XO" : "One voice for everything again";
+  if ("danger" in b) return b.danger ? "Danger lines in Tactical's voice" : "Danger lines in their alert's crew member's voice";
+  if ("row" in b) return `${ROW_WORDS[b.row] || b.row}: said by ${crewLabel(crewRowRole(b.row))}`;
+  return `${crewLabel(b.role)}: ${b.reset ? "as the XO again" : "kept"}`;
+}
+async function crewPost(body) {
+  let r;
+  try { r = await apiJson("api/voice/crew", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}); }
+  catch { r = {error: "Outrider not reachable"}; }
+  r = r || {error: "?"};
+  if (!r.error && data && r.crew) data.crew = r.crew;
+  const m = document.getElementById("crewMsg");
+  m.textContent = r.error ? `Not kept: ${r.error}` : crewSaid(body);
+  m.className = r.error ? "hint warnc" : "hint";
+  drawCrew(true); drawVoiceMemory();
+  return r;
+}
+// one line of a crew member's own, as the alerts would say it: an alert row it speaks for (Tactical: the danger lines
+// while that switch is on; the XO: speech on), in its personality (else the ones ticked: "as the XO") and its voice (else
+// the personality's as heard), the XO standing in for one who cannot speak. {ln, voice, fill}, or null with no line.
+function crewSample(role) {
+  const c = data && data.crew, m = (c && c.members && c.members[role]) || {}, lib = speechLib.styles || {};
+  const keys = [...(role === "tactical" && crewDangerOn() ? [...DANGER] : []), ...crewRowsOf(role).flatMap(r => ROW_KEYS[r] || []),
+    ...(role === "xo" ? ["speech_on"] : [])];
+  const fill = m.fill || (m.personality && !(m.personality in lib) ? `personality ${m.personality} is not in the lines file` : null);
+  const ticked = speechStyles().filter(st => st in lib);
+  const styles = !fill && m.personality ? [m.personality] : ticked.length ? ticked : Object.keys(lib);
+  const lns = keys.flatMap(k => styles.map(st => labLine(k, st))).filter(Boolean);
+  if (!lns.length) return null;
+  const ln = lns[Math.floor(Math.random() * lns.length)], sv = styleVoice(ln.style);
+  const voice = !fill && role !== "xo" && m.voice ? {voice: m.voice, speaker: spkNum(m.speaker), pace: sv.pace} : heardVoice(ln.style);
+  return {ln, voice, fill};
+}
+// ▶: a crew member's sample through the voice lab's player (never the alert queue); `out(text, bad)` shows what is said.
+// true once played to the end, false when stopped or failed, null when it has no line
+async function crewPlay(role, out) {
+  if (!Object.keys(speechLib.lines || {}).length) await loadSpeechLib();
+  const s = crewSample(role);
+  if (!s) { out(`No lines for ${crewLabel(role)} yet`, true); return null; }
+  out(`${crewLabel(role)}${s.fill ? ` (the XO stands in: ${s.fill})` : ""} · ${labStyleName(s.ln.style)} · in ${voiceWords(s.voice)}: “${spokenText(s.ln.text)}”`, false);
+  const ok = await labSay(s.ln.text, {voice: s.voice.voice, speaker: s.voice.speaker, speed: speechSpeed() * (s.voice.pace || 1)});
+  if (!ok && labEl("labMsg").className === "warnc") out(labEl("labMsg").textContent, true);
+  return ok;
+}
+// Audition: by crew: each role (the XO first) says one of its own lines in its own voice, a pause between
+async function crewAudition(out) {
+  labStop();
+  for (const r of crewRoles()) {
+    const ok = await crewPlay(r.id, out);
+    if (ok === null) continue;   // nothing for that member to say
+    if (!ok) return;             // stopped (or failed): the audition ends
+    const token = labToken;
+    await new Promise(res => setTimeout(res, 1500));
+    if (token !== labToken) return;
+  }
+  out("Audition done", false);
+}
+const crewOut = (t, bad) => { const m = document.getElementById("crewMsg"); m.textContent = t; m.className = bad ? "hint warnc" : "hint"; };
+document.getElementById("crewOn").onchange = e => crewPost({on: e.target.checked});
+document.getElementById("crewDanger").onchange = e => crewPost({danger: e.target.checked});
+document.getElementById("crewAudition").onclick = () => crewAudition(crewOut);
+crewUi = true;
+{
+  const tb = document.querySelector("#crewTable tbody");
+  tb.addEventListener("change", e => {
+    const tr = e.target.closest("tr[data-crole]"); if (!tr) return;
+    const role = tr.dataset.crole, xo = role === "xo", m = (data && data.crew && data.crew.members && data.crew.members[role]) || {};
+    if (e.target.matches("[data-cname]")) crewPost({role, name: e.target.value});
+    else if (e.target.matches("[data-cpers]")) crewPost({role, personality: e.target.value || null});
+    else if (e.target.matches("[data-cvoice]")) crewPost({role, voice: e.target.value || null});
+    else if (e.target.matches("[data-cspk]")) {
+      const spk = Number(e.target.value);
+      if (!xo) speakerPicked[m.voice] = spk;
+      crewPost(xo ? {role, speaker: spk} : {role, voice: m.voice, speaker: spk});
+    }
+  });
+  tb.addEventListener("click", e => {
+    const tr = e.target.closest("tr[data-crole]"); if (!tr) return;
+    if (e.target.closest("[data-cplay]")) crewPlay(tr.dataset.crole, crewOut);
+    else if (e.target.closest("[data-creset]")) crewPost({role: tr.dataset.crole, reset: true});
+  });
+  document.getElementById("alertOpts").addEventListener("change", e => {
+    if (e.target.matches("[data-arole]")) crewPost({row: e.target.dataset.arole, role: e.target.value});
   });
 }
 // ---- More voices (Settings > Voice): Piper's catalogue, from the server (GET api/voices/catalogue). Picking one
@@ -9320,9 +9594,14 @@ function labDrawInUse() {
   // the personalities given this voice and person (S40)
   const given = Object.entries((data && data.style_picks) || {}).filter(([, k]) => k.voice === p.voice && (p.speaker == null || k.speaker === p.speaker))
     .map(([st]) => labStyleName(st));
-  labEl("labInUse").textContent = [same ? "✓ the voice in use" : "", given.length ? `✓ ${given.join(", ")}` : ""].filter(Boolean).join(" · ");
+  // and the crew members (crew batch 2)
+  const crew = Object.entries((data && data.crew && data.crew.members) || {}).filter(([r, m]) => r !== "xo" && m.voice === p.voice
+    && (p.speaker == null || m.speaker === p.speaker)).map(([r]) => crewLabel(r));
+  labEl("labInUse").textContent = [same ? "✓ the voice in use" : "", given.length ? `✓ ${given.join(", ")}` : "",
+    crew.length ? `✓ crew: ${crew.join(", ")}` : ""].filter(Boolean).join(" · ");
   labEl("labUse").disabled = !p.voice || (same && Math.abs(p.speed - speechSpeed()) < 0.001);
   labEl("labGive").disabled = !p.voice || !labEl("labGiveStyle").value;
+  labEl("labAssign").disabled = !p.voice || !labEl("labCrewRole").value;
 }
 function labFillVoices() {
   const t = data && data.tts, voices = (t && t.voices) || [], sel = labEl("labVoice"), keep = sel.value;
@@ -9370,6 +9649,7 @@ async function labOpen() {
   const give = labEl("labGiveStyle"), gave = give.value;   // Give to this personality (S40)
   give.innerHTML = styles.map(k => `<option value="${esc(k)}">${esc(labStyleName(k))}</option>`).join("");
   give.value = styles.includes(gave) ? gave : styles[0] || "";
+  labFillCrew();
   labEl("labWords").textContent = ""; labEl("labCut").disabled = true; labLast = null; labMsg("");
   labDrawSpeakers();
   tabShow(labEl("labDlg"));
@@ -9413,6 +9693,25 @@ labEl("labGive").onclick = async () => {
   labDrawInUse();
 };
 labEl("labGiveStyle").onchange = labDrawInUse;
+// Assign to a crew member (crew batch 2): the voice part's voice and person for one crew member from now on (POST
+// api/voice/crew, every browser); the XO is Use this voice. Its names as Settings > Voice > Crew shows them.
+function labFillCrew() {
+  const sel = labEl("labCrewRole"), keep = sel.value, roles = crewRoles().filter(r => r.id !== "xo");
+  sel.innerHTML = roles.map(r => `<option value="${esc(r.id)}">${esc(crewLabel(r.id))}</option>`).join("");
+  sel.value = roles.some(r => r.id === keep) ? keep : roles.length ? roles[0].id : "";
+}
+labEl("labAssign").onclick = async () => {
+  const role = labEl("labCrewRole").value, p = labPick();
+  if (!role || !p.voice) return;
+  const body = {role, voice: p.voice};
+  if (p.speaker != null) body.speaker = p.speaker;
+  const r = await crewPost(body);
+  labMsg(r.error ? `Not assigned: ${r.error}` : `${crewLabel(role)} speaks in ${voiceWords(p)} from now on` +
+    (crewOn() ? "" : " (once the crew is on: Settings → Voice → Crew)"), !!r.error);
+  labDrawInUse();
+};
+labEl("labCrewRole").onchange = labDrawInUse;
+labEl("labCrewAudition").onclick = () => crewAudition((t, bad) => { labEl("labWords").textContent = t; if (bad) labMsg(t, true); });
 labEl("labStyle").addEventListener("change", () => {   // the Lines' personality picked: Give follows it
   const base = labEl("labStyle").value.replace(/_profane$/, "");
   if (base && [...labEl("labGiveStyle").options].some(o => o.value === base)) { labEl("labGiveStyle").value = base; labDrawInUse(); }
@@ -10426,20 +10725,27 @@ drawAlertsBtn();
 // (settingsOpen, the config sections' folds): clearing the box, or closing Settings, puts every section back as it was.
 // A section that redraws while filtering (the payload's Uploads, the overlay, Server settings arriving) is filtered again.
 const SF_CONTENT = new Set(["speechLog", "askLog", "speechTally", "speechBans"]);   // what a section holds, not settings: shown with it
-const sfWordsOf = el => (el.textContent + " " + [el, ...el.querySelectorAll("[data-find]")].map(x => x.dataset.find || "").join(" "))
-  .replace(/\s+/g, " ").toLowerCase();
+// (a select marked data-sfone counts by its choice alone: the crew's selects list every role, voice and personality)
+function sfWordsOf(el) {
+  let text = el.textContent;
+  for (const s of el.querySelectorAll("select[data-sfone]")) {
+    const o = s.options[s.selectedIndex];
+    text = text.replace(s.textContent, " " + (o ? o.textContent : "") + " ");
+  }
+  return (text + " " + [el, ...el.querySelectorAll("[data-find]")].map(x => x.dataset.find || "").join(" ")).replace(/\s+/g, " ").toLowerCase();
+}
 // a section's rows for the filter: {el, own (its words), ctx (the headings above it)}, and the boxes holding rows
 function sfRows(sec) {
   const rows = [], boxes = [], sum = sec.querySelector(":scope > summary");
   const walk = (el, ctx) => {
     for (const c of el.children) {
       if (c.tagName === "SUMMARY" || SF_CONTENT.has(c.id)) continue;
-      const table = c.matches("#alertTable") ? c : c.matches(".ovwrap") ? c.querySelector("table") : null;
+      const table = c.matches("#alertTable, #crewTable") ? c : c.matches(".ovwrap") ? c.querySelector("table") : null;
       if (table) {
         boxes.push(c);
         const head = table.tHead ? " " + table.tHead.textContent.toLowerCase() : "";
         for (const tb of table.tBodies) for (const r of tb.rows) rows.push({el: r, own: sfWordsOf(r), ctx: ctx + head});
-      } else if (c.matches("#uploadsBox, #overlayBox, #serverSettingsBody")) { boxes.push(c); walk(c, ctx); }
+      } else if (c.matches("#uploadsBox, #overlayBox, #serverSettingsBody, #vmBox, #crewBox")) { boxes.push(c); walk(c, ctx); }
       else if (c.matches("details.srvsec")) { boxes.push(c); walk(c, ctx + " " + c.querySelector(":scope > summary").textContent.toLowerCase()); }
       else rows.push({el: c, own: sfWordsOf(c), ctx});
     }
@@ -10447,7 +10753,8 @@ function sfRows(sec) {
   walk(sec, sum ? sum.textContent.toLowerCase() : "");
   return {rows, boxes};
 }
-const sfLaidOut = el => !el.hidden && !(document.body.classList.contains("notgamepc") && el.closest(".pcOnly"));
+// (inside a hidden box counts as hidden: the crew table with the crew off)
+const sfLaidOut = el => !el.closest("[hidden]") && !(document.body.classList.contains("notgamepc") && el.closest(".pcOnly"));
 // filter by `q` now; the number of sections shown
 function sfApply() {
   const words = SF.q.toLowerCase().split(/\s+/).filter(Boolean);
@@ -10598,7 +10905,8 @@ async function saveServerConfig() {
   await loadServerSettings();
   const m = document.getElementById("srvMsg"), rs0 = data && data.restart, them = r.changed === 1 ? "it" : "them";
   // S10: restart from here when Outrider can start itself again; else why not
-  m.innerHTML = `Saved ${r.changed} setting${r.changed === 1 ? "" : "s"}` + (rs0 && rs0.can
+  // a key the server applies at once (its answer's `live`: Keep loaded, Load them at start) needs no restart
+  m.innerHTML = `Saved ${r.changed} setting${r.changed === 1 ? "" : "s"}` + (r.restart === false ? ": in use now." : rs0 && rs0.can
     ? `. <button type="button" class="try" data-restart>Restart now</button> to use ${them}.`
     : `: restart Outrider to use ${them}${rs0 && rs0.why ? ` (${esc(rs0.why)})` : ""}.`);
   m.className = "hint ok";

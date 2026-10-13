@@ -109,6 +109,111 @@ class CrewTable(unittest.TestCase):
             self.assertEqual(outrider.speech.SpeechLines(path).lines()["crew_roles"][0]["id"], "xo")
 
 
+class CrewSettingsPage(unittest.TestCase):
+    """Crew batch 2: Settings' crew table, memory note and Alerts' Crew column (page.js ROW_WORDS, ROW_KEYS)."""
+
+    @classmethod
+    def setUpClass(cls):
+        with open(PAGE_JS, encoding="utf-8") as f:
+            cls.js = f.read()
+        block = cls.js[cls.js.index("const ALERTS = ["):cls.js.index("// never spoken, and why")]
+        cls.rows = re.findall(r'\["(\w+)", "', block)
+
+    def table(self, name):
+        """A page.js object literal of words or lists, {key: value}."""
+        start = self.js.index(f"const {name} = {{")
+        text = self.js[start:self.js.index("};", start)]
+        return {k: (re.findall(r'"(\w+)"', v) if v.startswith("[") else v.strip('"'))
+                for k, v in re.findall(r'(\w+): ("[^"]*"|\[[^\]]*\])', text)}
+
+    def test_row_words_and_keys_in_step(self):
+        """Every alert row has its words for "Speaks for"; every row's speech keys are real keys (outrider.speech.KEYS) of
+        a real row; every danger key (DANGER) is in the row whose alertOut says it, so the Alerts table's "spoken by
+        Tactical (danger)" and Tactical's ▶ follow the lines."""
+        words, keys = self.table("ROW_WORDS"), self.table("ROW_KEYS")
+        self.assertEqual(sorted(words), sorted(self.rows))
+        self.assertTrue(set(keys) <= set(self.rows), set(keys) - set(self.rows))
+        danger = re.findall(r'"(\w+)"', self.js[self.js.index("const DANGER = new Set("):].split(")", 1)[0])
+        # (rig_leash: a danger tag with plain words, no lines of its own)
+        self.assertEqual([k for ks in keys.values() for k in ks if k not in outrider.speech.KEYS and k not in danger], [])
+        self.assertIn("fuel_low", danger)
+        for key in danger:
+            said = set()
+            for m in (list(re.finditer(r'tag: "%s"' % key, self.js)) or re.finditer(r'line\("%s"' % key, self.js)):
+                said.add(re.findall(r'alertOut\("(\w+)"', self.js[:m.start()])[-1])   # the alertOut this tag is part of
+            self.assertTrue(said, key)
+            for row in said:
+                self.assertIn(key, keys.get(row, []), f"{key} is said by the row {row}")
+
+    def test_tablet_settings_have_no_crew(self):
+        """The crew is set on the PC: the tablet's own Settings sheet has none of it."""
+        with open(os.path.join(ed_outrider.STATIC_DIR, "page.html"), encoding="utf-8") as f:
+            html = f.read()
+        start = html.index('<dialog id="tabSettings"')
+        sheet = html[start:html.index("</dialog>", start)]
+        self.assertNotIn("crew", sheet.lower())
+        self.assertNotIn("voices kept loaded", sheet.lower())
+        self.assertIn('id="crewTable"', html)
+        self.assertIn('data-find="speech.voices_loaded"', html)
+        self.assertIn('data-find="speech.voices_preload"', html)
+
+
+class KeepLoadedSaved(unittest.TestCase):
+    """Settings -> Voice's Keep loaded and Load them at start are written into the config file (POST /api/config) and,
+    being about the machine that speaks, applied at once: no restart."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.path = os.path.join(tmp.name, "ed_outrider.toml")
+        with open(os.path.join(os.path.dirname(ed_outrider.STATIC_DIR), "ed_outrider.toml.example"), encoding="utf-8") as f:
+            text = f.read()
+        with open(self.path, "w", encoding="utf-8") as f:
+            f.write(text)
+        self.dir = voices_dir(self, {"en_GB-cori-medium": (64, {"num_speakers": 1}), "en_GB-alan-low": (50, {"num_speakers": 1}),
+                                     "en_US-plain-low": (20, {"num_speakers": 1})})
+        self.sp = fake_speaker(self.dir)
+        self.db = ed_outrider.open_db(":memory:")
+        self.addCleanup(self.db.close)
+        self.state = ed_outrider.State(self.db, ed_outrider.Journals(self.db), types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        self.state.config_path = self.path
+        self.state.speaker = self.sp
+        self.state.speech = types.SimpleNamespace(lines=lambda: {"styles": STYLES}, info=lambda: None)
+
+    def post(self, *bodies):
+        async def go():
+            from aiohttp.test_utils import TestClient, TestServer
+            out = []
+            async with TestClient(TestServer(ed_outrider.make_app(self.state))) as c:
+                for b in bodies:
+                    r = await c.post("/api/config", json=b)
+                    out.append((r.status, await r.json()))
+            return out
+        return asyncio.run(go())
+
+    def test_applied_at_once(self):
+        ed_outrider.meta_set(self.db, "crew", {"on": True, "members": {"navigator": {"voice": "en_GB-alan-low"}}})
+        self.sp.size_extra(self.state.voices_in_use())   # the sarcastic personality's voice and the Navigator's
+        self.sp.extra_voice("en_GB-alan-low"); self.sp.extra_voice("en_US-plain-low")
+        self.assertEqual(len(self.sp._extra), 2)
+        v0 = self.state.version
+        (st1, a1), (st2, a2), (st3, a3) = self.post({"speech": {"voices_loaded": "1"}}, {"speech": {"voices_preload": True}},
+                                                    {"speech": {"voices_loaded": "all"}, "server": {"port": "8931"}})
+        self.assertEqual((st1, a1["live"], a1["restart"]), (200, ["speech.voices_loaded"], False))
+        self.assertEqual((st2, a2["live"], a2["restart"]), (200, ["speech.voices_preload"], False))
+        self.assertEqual((st3, a3["live"], a3["restart"]), (200, ["speech.voices_loaded"], True))   # the port waits for a start
+        self.assertEqual((self.sp.voices_loaded, self.sp.voices_preload), ("all", True))
+        with open(self.path, encoding="utf-8") as f:
+            cfg = __import__("tomllib").loads(f.read())
+        self.assertEqual((cfg["speech"]["voices_loaded"], cfg["speech"]["voices_preload"]), ("all", True))
+        self.assertGreater(self.state.version, v0)   # the pages hear of it at once
+        # the number lowered: the loaded voices over it are set aside at once, and the payload says so
+        self.post({"speech": {"voices_loaded": "1"}})
+        self.assertEqual(len(self.sp._extra), 1)
+        m = self.state.voice_memory()
+        self.assertEqual((m["loaded"], m["kept"], m["set_aside"], m["default"], m["preload"]), (1, 1, 1, 4, True))
+
+
 class CrewState(unittest.TestCase):
     def setUp(self):
         self.dir = voices_dir(self, {"en_GB-cori-medium": (64, {"num_speakers": 1}),

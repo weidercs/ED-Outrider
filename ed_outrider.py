@@ -6873,8 +6873,10 @@ class State:
     def config_save(self, changes, hidden=False):
         """POST /api/config {section: {key: value}}: those keys written into the config file in place (comments kept,
         the old file kept as .bak), only if the result reads back and settings_from finds nothing new wrong with it.
-        (answer, status); the server uses the new values at its next start. hidden: the sections the page's own
-        switches write (config_edit.HIDDEN_SECTIONS: Settings -> Uploads) may be written; the Server list never can."""
+        (answer, status); the server uses the new values at its next start, but for the LIVE_CONFIG keys, which are also
+        applied at once (config_live; the answer's `live`, and `restart` only when another key waits for a start).
+        hidden: the sections the page's own switches write (config_edit.HIDDEN_SECTIONS: Settings -> Uploads) may be
+        written; the Server list never can."""
         if not isinstance(changes, dict) or not changes or not all(isinstance(v, dict) for v in changes.values()):
             return {"error": "expected {section: {key: value}}"}, 400
         if not hidden and set(changes) & outrider.config_edit.HIDDEN_SECTIONS:
@@ -6907,7 +6909,7 @@ class State:
             cfg = outrider.config_edit.tomllib.loads(text)
         except (outrider.config_edit.tomllib.TOMLDecodeError, ValueError) as e:
             return {"error": f"the change would not read back ({e}); nothing written"}, 400
-        _, after = self._config_settings(cfg)
+        saved, after = self._config_settings(cfg)
         new = [x for x in after if x not in before]
         if new:
             return {"error": "nothing written: " + "; ".join(x.removeprefix("config: ") for x in new), "problems": new}, 400
@@ -6927,8 +6929,30 @@ class State:
             os.replace(tmp, real)
         except OSError as e:
             return {"error": f"cannot write {path}: {e}"}, 500
+        live = self.config_live(saved, [(sec, key) for sec, keys in changes.items() for key in keys])
         return {"ok": True, "path": path, "changed": n, "backup": real + ".bak" if existed or os.path.exists(real + ".bak") else None,
-                "restart": True}, 200
+                "restart": n > len(live), "live": live}, 200
+
+    # config keys config_save also applies at once: Settings -> Voice's Keep loaded and Load them at start (crew batch 2)
+    LIVE_CONFIG = {("speech", "voices_loaded"), ("speech", "voices_preload")}
+
+    def config_live(self, st, keys):
+        """The LIVE_CONFIG keys among `keys` ((section, key) just written) set on the running Outrider from the saved
+        settings `st`: the voices kept loaded beside the main one (the loaded ones over the new number set aside now) and
+        whether they load at start (used at the next start; the payload's voice_memory says it at once). The keys
+        applied, as "section.key"."""
+        done = sorted({f"{s}.{k}" for s, k in keys if (s, k) in self.LIVE_CONFIG})
+        sp = self.speaker
+        if done and sp is not None:
+            if "speech.voices_loaded" in done:
+                sp.voices_loaded = st["voices_loaded"]
+                if hasattr(sp, "size_extra"):
+                    sp.size_extra(self.voices_in_use())
+            if "speech.voices_preload" in done:
+                sp.voices_preload = st["voices_preload"]
+        if done:
+            self.bump()
+        return done
 
     SPEAKER_SEEN_S = 60   # a window that speaks asks for the payload at least every 25 s (the long poll)
 
@@ -13255,7 +13279,8 @@ class State:
         kept = len(est) if cap is None else min(cap, len(est))
         sizes = sorted(est.values(), reverse=True)
         return {"voices": [{"voice": v, "mb": mb} for v, mb in sorted(est.items())], "count": len(est), "mb": sum(sizes),
-                "loaded": choice, "kept": kept, "kept_mb": sum(sizes[:kept]), "set_aside": len(est) - kept,
+                "loaded": choice, "default": outrider.tts.VOICES_LOADED_DEFAULT,   # the page's Keep loaded, unset
+                "kept": kept, "kept_mb": sum(sizes[:kept]), "set_aside": len(est) - kept,
                 "preload": bool(getattr(sp, "voices_preload", False)), "on_server": not self.game_pc}
 
     # ---- the crew (crew batch 1; project/PLAN-crew-voices-2026-10-13.md): the spoken alerts split among crew members

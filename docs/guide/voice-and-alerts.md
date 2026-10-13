@@ -86,7 +86,8 @@ as docked. A carrier jump booked just before you quit shows as "not yet confirme
 
 Alerts are spoken when 🗣 in the header is on. **Piper**, a neural voice running on your CPU, sounds far
 better than the browser's own voice. The voice is Cori (`en_GB-cori-medium`) unless you pick another, and it
-downloads into `data/piper-voices/` the first time. ⚙ Settings → Voice switches between installed voices.
+downloads into `data/piper-voices/` the first time. ⚙ Settings → Voice's **Main voice** switches between installed
+voices.
 
 **🎙 Voice lab** (⚙ Settings → Voice) is where you try them out first. It plays in the browser you are using, wherever
 Outrider runs (a Docker server too):
@@ -96,14 +97,16 @@ Outrider runs (a Docker server too):
   about 900). The lab shows a speaker list for those: **‹ ›** step through them and **🎲** picks one at random, each
   played as you go. The speaker you use is kept for that voice, and Settings → Voice shows it beside the voice, where
   you can change it too. **Give to this personality** (beside Use this voice) makes the voice and speaker picked
-  there one personality's own instead (see Personality voices below).
+  there one personality's own instead (see Personality voices below), and **Assign to a crew member** one crew
+  member's (see The crew below).
 - **More voices** lists every Piper voice by language, sorted by name, quality or size. **▶ sample** plays Piper's own
   recording of a voice (from its website) before you download anything. **Download** fetches it without switching:
   when it is ready it is picked above, so you can ▶ Hear it (and its speakers) and press Use this voice if you like it.
   **Select** picks one you already have.
 - **Lines**: pick an alert and a personality for **▶ Random line** (filled with made-up values), or **▶ Audition** for
-  eight key alerts in a row. A personality with a voice or speaker of its own speaks in it. **✂ Cut this line**
-  bans the line just played, like 👎.
+  eight key alerts in a row. A personality with a voice or speaker of its own speaks in it. **▶ Audition: by crew**
+  has each crew member say one of its own lines in its own voice and personality. **✂ Cut this line** bans the line
+  just played, like 👎.
 - **Your own words**: type anything for **▶ Speak**, or **⬇ Save WAV** to keep it.
 - **How is it said**: a word the voice says wrong, said your way. Pick or type the word, write how it sounds as
   syllables joined by "-" with the stressed one in capitals (**fon-TIK-yoo-loo-uh**; "uh", "eh", "ih" are short
@@ -156,7 +159,49 @@ Sound: Allow; Firefox: Autoplay: Allow Audio and Video).
   tablet say each personality the same way. In `speech.json`, a personality can also name its own installed Piper voice,
   speaker and speed: `"sarcastic": {"label": "Sarcastic", "voice": "en_US-ryan-high", "speed": 1.1}`, or
   `"sweet": {"label": "Sweet", "speaker": 12}` for person 12 of the main voice; a pick in Settings wins over the file's
-  voice and speaker. Each extra voice takes 60–100 MB of memory.
+  voice and speaker. Each extra voice takes memory: see Voices kept loaded below.
+- **Voices kept loaded.** Every different voice besides the main one is loaded on its own: about 100 MB of memory for
+  a medium voice, 170 MB for a high one (the people of one many-speaker voice, vctk's 109 say, share a single load).
+  Whenever such a voice is in use (a personality's or a crew member's), ⚙ Settings → Voice says how many and what they
+  cost on the machine that speaks (amber above 500 MB, red above 1 GB). **Keep loaded** picks how many stay loaded
+  beside the main voice (1 up to the voices in use, or all; by default the voices in use, up to 4): a voice set aside
+  waits about a second when it speaks again. **Load them at start** (off by default) loads them when Outrider starts,
+  so even the first line of each has no delay. Both are written into the config file (`[speech] voices_loaded` and
+  `voices_preload`), since they are about that machine, and take effect at once.
+
+**The crew**
+
+Off by default: one voice for everything. Tick **Split the alerts among a crew** in ⚙ Settings → Voice → Crew and each
+alert is said by a crew member in its own personality and voice, so you know who is talking (and what about) before
+the sentence ends:
+
+| Crew member | Speaks for |
+|---|---|
+| XO / Co-pilot | the main voice: voice answers, the status report, the co-pilot, the hush and speech on |
+| Navigator | jumps and every route line (the Highway, survey and trade routes), fuel short of a refuel, last scoop, auto-target, wrong target, supercharges |
+| Science Officer | arrivals, briefings, the FSS, mapped planets, leaving with work left, codex, phenomena, rare stars, signals, curiosities |
+| Exobiologist | valuable bodies, sampling, Exomastery routes |
+| Chief Engineer | fuel, tank full, scooping stopped, jumponium, hull and heat |
+| Quartermaster | sales, unsold data, your carrier, losses |
+| Comms Officer | the game's start and exit, someone scanning your firsts |
+| Tactical | every danger line (while Danger lines always in Tactical's voice is on) |
+| Mining Officer | the Rhino's rigs |
+
+- **The table.** A row per crew member: an optional **Name** (shown in Settings and the voice lab, never spoken), its
+  **Personality** (whose lines it says) and **Voice** (and **Speaker**, for a voice of many people), what it **speaks
+  for**, **▶** to hear one of its lines and **↺** to put it back to "as the XO". The XO row is the main voice and the
+  personalities you ticked: changing its voice changes the main voice.
+- **The XO stands in.** A new crew starts with everyone "as the XO", so switching it on changes nothing you hear until
+  you give a member a voice of its own. A member left "as the personality" speaks in that personality's voice
+  (Personality voices). Whenever a member cannot speak (its voice not installed or failing to load), the XO says the
+  line instead, so no line is ever lost; the table says why under its name, and Show log says it once.
+- **Danger lines always in Tactical's voice** (on by default): hull, heat, interdiction, the fuel warnings, your carrier
+  leaving without you, a ship lost, a rig too far, so a danger line is never mistaken for chatter. Off, they stay with
+  their alert's crew member. Danger still comes first either way.
+- **Who says which alert:** ⚙ Settings → Alerts has a **Crew** column while the crew is on: move any alert to another
+  member there. A danger alert says "spoken by Tactical (danger)" while that switch is on.
+- Outrider keeps the crew, so every browser and the tablet (with Play alerts here) speak with it. The tablet's own
+  Settings has none of this: the crew is set on the PC.
 
 **What it says**
 

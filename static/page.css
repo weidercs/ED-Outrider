@@ -886,6 +886,41 @@ body.nowmode header, body.nowmode main { display: none; }
 .stylevoices th, .stylevoices td { padding: 2px 6px; text-align: left; font-weight: 400; }
 .stylevoices thead th { color: var(--muted); font-size: 12px; }
 .stylevoices select { max-width: 20em; }
+/* Voices kept loaded and the crew (crew batch 2): the memory note amber over 500 MB, red over 1 GB; the XO row tinted */
+.vmbox, .crewbox { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 13px; }
+.vmhead, .crewhead { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.vmnote { padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; margin: 4px 0; }
+.vmnote b { font-weight: 600; }
+.vmnote.warn { border-color: var(--warn); color: var(--warn); background: color-mix(in srgb, var(--warn) 8%, transparent); }
+.vmnote.bad { border-color: var(--bad); color: var(--bad); background: color-mix(in srgb, var(--bad) 8%, transparent); }
+.vmnote .vmwhy { font-size: 12px; opacity: .85; }
+.vmkeep { margin: 4px 0; } .vmkeep select { margin: 0 6px; }
+.vmpre { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 2px 0; } .vmpre .hint { margin: 0 0 0 4px; }
+/* a member per row as a grid, so the table fits the dialog's column: its selects on the first line, Speaks for under them */
+.crewtable { width: 100%; margin: 6px 0 2px; font-size: 13px; border-collapse: collapse; }
+.crewtable tr { display: grid; grid-template-columns: 8.5em 6.5em minmax(0, 1fr) minmax(0, 1.3fr) 6.5em 2.2em 2.2em;
+  column-gap: 6px; align-items: center; padding: 3px 4px; border-bottom: 1px solid var(--line); }
+.crewtable th, .crewtable td { padding: 0; text-align: left; font-weight: 400; min-width: 0; white-space: normal; border: 0; }
+.crewtable thead th { color: var(--muted); font-size: 12px; }
+.crewtable thead th.cfor { display: none; }
+.crewtable td.crole { grid-row: 1 / span 2; align-self: start; padding-top: 3px; }
+.crewtable td.crole small { display: block; font-size: 11px; color: var(--muted); }
+.crewtable td.crole small.warnc { color: var(--warn); }
+.crewtable td.cfor { grid-column: 2 / -1; grid-row: 2; font-size: 12px; color: var(--muted); padding-top: 2px; }
+.crewtable tr.xo { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.crewtable input[type=text] { width: 100%; box-sizing: border-box; background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: 6px; padding: 2px 6px; font: inherit; }
+.crewtable input[type=text]::placeholder { font-style: italic; }
+.crewtable select { width: 100%; max-width: 100%; }
+.crewtable button { padding: 1px 6px; }
+.crewtable .asxo { font-style: italic; color: var(--muted); }
+.crewnote { margin: 6px 0 2px; padding: 5px 10px; border-left: 3px solid var(--info); color: var(--info); font-size: 12px;
+  background: color-mix(in srgb, var(--info) 6%, transparent); }
+#alertDialog .alerttable td.acrew { text-align: left; width: 1%; }
+#alertDialog .alerttable td.acrew select { max-width: 10em; font-size: 12px; }
+.alerttable .crewdanger { display: block; font-weight: 400; font-size: 11px; }
+@media (max-width: 700px) { .crewtable thead { display: none; } .crewtable tr { grid-template-columns: 1fr 1fr; }
+  .crewtable td.crole, .crewtable td.cfor { grid-column: 1 / -1; grid-row: auto; } }
 #alertDialog .chips { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px; }
 #alertDialog .setsec { border: 1px solid var(--line); border-radius: 8px; padding: 0 12px; margin: 0 0 10px; background: var(--bg); }
 #alertDialog .setsec > summary { cursor: pointer; padding: 9px 0; font-size: 14px; font-weight: 600; color: var(--accent); list-style-position: inside; }
