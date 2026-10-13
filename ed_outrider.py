@@ -200,6 +200,7 @@ import outrider.uploads    # EDDN / EDSM uploads (opt-in): the session, the live
 import outrider.eddn       # EDDN's messages from journal events, and what its answers mean
 import outrider.edsm       # EDSM's journal upload: the events with where you were, and what its answers mean
 import outrider.inara      # Inara's commander profile: travel, ranks, ships, inventory..., and what its answers mean
+import outrider.commander  # the Commander view: the commander, inventory, engineering, missions, sessions (journals read on request)
 import outrider.checklist  # the exobiology checklist: every species by region, with your state (pure)
 import outrider.codex_images  # the checklists' pictures: Canonn's links and credits, refreshed once a day
 import outrider.overlay    # the in-game overlay's panels as draw lists (the window: python3 -m outrider.overlay_window)
@@ -15029,6 +15030,7 @@ def make_app(state, hosts=None):
     app.router.add_get("/api/checklist", checklist_view)
     app.router.add_get("/api/log", log_view)
     app.router.add_get("/api/materials", materials_view)
+    outrider.commander.add_routes(app, state, lambda: LIVE_DIRS)   # the Commander view: GET /api/commander/<part>
     app.router.add_post("/api/cargo/recount", cargo_recount_view)
     app.router.add_get("/api/cargo/lookup", cargo_lookup_view)
     app.router.add_get("/api/nearest", nearest_view)

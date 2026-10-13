@@ -337,6 +337,29 @@ for your next visit and listed under Materials' **Mining sites**.
 The map's sizes and the leash distance are in ⚙ Settings → Surface map; the spoken leash warning
 always uses the config file's `rig_warn`.
 
+## 🧑‍🚀 Commander
+
+What you are, what you own and what you have been doing, read from your journals when you open the tab (nothing is
+stored, and nothing is asked of anyone):
+
+- **CMDR**: who you are in the game, as of your last login (the game writes credits, ranks and statistics then):
+  credits, net worth, the value of your fleet and stored modules, your carrier's balance; every rank with a bar
+  to the next one and, for trade, exploration and exobiology, about how many credits it still takes (the
+  community's figures for each rank's step: an estimate); reputation, Powerplay and squadron; your ships; and
+  career figures (time played, systems visited, distance, profits by career).
+- **Inventory**: your ships (where each is, its value, what bringing it here costs), your stored modules with their
+  engineering, the ship locker, and the suit loadouts you have worn. The game writes the list of stored ships when
+  you open a shipyard and of stored modules when you open outfitting: each is shown as of then.
+- **Engineering**: every ship-module blueprint, grade by grade, with the materials one roll takes against what you
+  hold (green: enough), how many rolls you could make now, and the engineers offering it (green: unlocked far
+  enough). Filter by module, blueprint or material, or show only what you can craft now. Experimental effects and
+  suit and weapon upgrades are not listed.
+- **Missions**: the missions you hold, the soonest to expire first: where they go, what they ask (and how much is
+  delivered), the reward, and the time left, marked when under half an hour.
+- **Sessions**: your combat and mining sessions of the last 30 days, each from login to logout. Combat: kills, by
+  ship, bounties and bonds, kills an hour, deaths. Mining: tons refined and of what, tons an hour, asteroids
+  prospected and their content, limpets launched, and what the haul sold for.
+
 ---
 
 [ED Outrider](../../README.md) · [What's new](whats-new.md) · [Install and run](install.md) · **The views** · [Plot Route](plot-route.md) · [Cargo and trading](cargo-and-trading.md) · [Voice and alerts](voice-and-alerts.md) · [Automation](automation.md) · [On a tablet](tablet.md) · [In-game overlay](overlay.md) · [Uploads](uploads.md) · [Settings and good to know](settings.md) · [For the curious](for-developers.md)

@@ -9,6 +9,14 @@ upstream project's choices, not rules of the game.
 - **No keyboard shortcuts.** A deliberate upstream choice, declined more than once; clickable things are reachable with
   Tab and act on Enter/Space instead.
 - **No VoiceAttack integration.** Not used upstream; the co-pilot button and the page cover the same ground.
+- **The Commander view stores nothing** (2026-10-12, `outrider/commander.py`). Everything is read from the journal
+  files when a tab is opened, so it is only as complete as the journal: stored ships and modules as of the last
+  shipyard or outfitting you opened, suit loadouts only once worn, a mission accepted before the journals kept by its
+  name alone. Credits, ranks and statistics are as of the last login (the game writes them then). What a rank still
+  takes is an estimate from the community's credit figures per rank (Frontier publishes none); combat, mercenary,
+  CQC and navy ranks show their percentage only. The blueprint table is a copy of community data (EDCD's
+  coriolis-data), not the game's own: a recipe Frontier changes is wrong until the table is rebuilt. No voice lines:
+  a mission about to expire is marked on the page only.
 - **Green gas giants are a guess, said as one** (2026-10-12, `outrider/ggg.py`). The seven-layer ladder model is a
   community reconstruction (Canonn's issue 222, 2026-10-05), not the game's code: a match is "potential", never a fact,
   and a codex entry replaces it. It needs the journal's own temperature (green windows can be 0.00002 K wide): yours

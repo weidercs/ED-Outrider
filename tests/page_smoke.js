@@ -3018,7 +3018,7 @@ const settle = async maxMs => {
     })()`));
     const want = {pure: [true, true, false, false, false, true], sizes: [true, false, false, true], now: false, back: true, body: "hidden", tabbable: true,
       panes: ["overview:auto:sticky", "near:auto:sticky", "here:auto:sticky", "bio:auto:sticky", "bm:auto:sticky", "search:auto:sticky",
-              "hist:auto:sticky", "log:auto:sticky", "mat:auto:-", "firsts:auto:sticky", "hwy:auto:sticky"],
+              "hist:auto:sticky", "log:auto:sticky", "mat:auto:-", "firsts:auto:sticky", "hwy:auto:sticky", "cmdr:auto:-"],
       ov: {map: true, inline: "", nearPane: "auto", here: "auto"}, ovPage: true, jump: 100 + (930 - 700), keep: 1100, more: [0, 1], pgdn: [360, true], winScrolls: 0,
       fold: {tiles: true, line: true, stored: "true", exported: true, btn: "▾", name: true, urgent: ["⛽ N%", "unsold N"]},
       unfold: {tiles: true, line: true, stored: "false", mode: "\"six\""}};
@@ -5113,6 +5113,121 @@ const settle = async maxMs => {
     const good = JSON.stringify(g) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| codex body types |", good ? "✦ / ✪ in Here's name cell, Nearby's tag, the legend, nothing without a codex" : JSON.stringify({g, want}), errors.slice(before));
+  }
+  // The Commander view: its tabs drawn from the server's answers (made up here),
+  // Last of the page's checks: a check added in the middle shifts the page's long poll into a later batch's window
+  // and Engineering's filter
+  {
+    const w = dom.window, d = w.document, before = errors.length, got = {}, asked = [];
+    w.__cmAsked = asked;
+    w.eval(`window.__cmApi = apiJson;
+      apiJson = async (u, o) => {
+        const s = String(u);
+        if (!s.startsWith("api/commander/")) return __cmApi(u, o);
+        __cmAsked.push(s);
+        return {
+          profile: {profile: {commander: "Tester", ts: "2026-10-12T08:00:00Z", credits: 1234567890, loan: 0, squadron: "Sample Wing",
+            power: {name: "Aisling Duval", rank: 3, merits: 4500},
+            ranks: [{key: "Trade", title: "Trade", rank: 7, name: "Tycoon", progress: 50, next: "Elite", to_next: 330000000, earned_by: "trade profit"},
+                    {key: "Combat", title: "Combat", rank: 4, name: "Expert", progress: 0, next: "Master", to_next: null, earned_by: null},
+                    {key: "Federation", title: "Federal Navy", rank: 14, name: "Admiral", progress: null, next: null, to_next: null, earned_by: null}],
+            reputation: {Federation: -40, Empire: 76.5}, assets: {wealth: 9000000000, ships: 2, fleet: 250000000, modules: 5139353, carrier: 250000000},
+            fleet: [{id: 7, type: "krait_light", name: "Sample Ship", current: true, value: 100000000},
+                    {id: 5, type: "anaconda", type_name: "Anaconda", name: null, current: false, system: "Colonia", station: null, value: 150000000}],
+            carrier: {name: "SAMPLE CARRIER", callsign: "X1X-X1X", balance: 250000000, fuel: 800},
+            career: [{label: "Time played", value: 7200000, kind: "time"}, {label: "Distance jumped", value: 987654, kind: "ly"},
+                     {label: "Spent on ships", value: 500000000, kind: "cr"}, {label: "Systems visited", value: 12345, kind: "n"}]}},
+          inventory: {ships: {ts: "2026-10-12T09:01:00Z", here: {system: "Sol", station: "Old Port"}, ships: [
+              {id: 7, type: "krait_light", name: "Sample Ship", ident: "SP-01", current: true, value: 100000000, hot: false},
+              {id: 5, type: "anaconda", type_name: "Anaconda", name: null, current: false, system: "Colonia", station: null, value: 150000000, hot: true,
+               transfer_cost: 1234567, transfer_s: 7200, in_transit: false}]},
+            modules: {ts: "2026-10-12T09:02:00Z", modules: [{name: "Frame Shift Drive", size: 5, rating: "A", mount: null, system: "Sol", blueprint: "Long Range",
+              level: 5, value: 5103953, transfer_cost: 0, transfer_s: 0, in_transit: false, hot: false}]},
+            locker: {ts: "2026-10-12T09:03:00Z", kinds: [{name: "Goods", items: [{name: "Weapon <Schematic>", count: 3, mission: false}]}, {name: "Data", items: []}]},
+            suits: [{loadout: "Bio", suit: "Artemis Suit", class: 3, mods: ["Increased sprint duration"], weapons: [{name: "TK Aphelion", class: 2, slot: "PrimaryWeapon1", mods: []}]}]},
+          engineering: {engineers: [{name: "Felicity Farseer", progress: "Unlocked", rank: 5}, {name: "Elvira Martuuk", progress: "Known", rank: null}],
+            blueprints: [
+              {id: "FSD_LongRange", module: "Frame shift drive", name: "Increased range", grades: [
+                {grade: 1, rolls: 7, materials: [{id: "a", name: "Atypical Disrupted Wake Echoes", need: 1, have: 7}], engineers: [{name: "Felicity Farseer", progress: "Unlocked", rank: 5, ready: true}]},
+                {grade: 5, rolls: 0, materials: [{id: "b", name: "Arsenic", need: 1, have: 0}, {id: "c", name: "Datamined Wake Exceptions", need: 2, have: 5}],
+                 engineers: [{name: "Elvira Martuuk", progress: "Known", rank: null, ready: false}]}]},
+              {id: "Sensor_Light", module: "Sensors", name: "Lightweight", grades: [
+                {grade: 1, rolls: 0, materials: [{id: "p", name: "Phosphorus", need: 1, have: 0}], engineers: []}]}]},
+          missions: {missions: [
+            {id: 1, name: "Deliver 20 units of Gold", faction: "Sol Workers", system: "Alpha Centauri", station: "Hutton Orbital", target: null, commodity: "Gold",
+             count: 20, delivered: 8, reward: 2500000, expiry: "2026-10-12T12:20:00Z", expires_in: 1200, soon: true, expired: false, wing: false, passengers: false, redirected: false},
+            {id: 2, name: "Massacre", faction: "Sol Workers", system: "Sol", station: "Old Port", target: "Bad Lot", commodity: null, count: 12, delivered: null,
+             reward: 9000000, expiry: null, expires_in: null, soon: false, expired: false, wing: true, passengers: false, redirected: true}]},
+          sessions: {days: 30, totals: {combat: {sessions: 1, kills: 3, bounties: 400000, bonds: 60000, deaths: 1}, mining: {sessions: 1, tons: 6, prospected: 2, sold: 1500000}},
+            sessions: [
+              {start: "2026-10-12T11:00:00Z", end: "2026-10-12T11:51:00Z", ship: "Type-9 Heavy", combat: null, mining: {tons: 6, refined: {Platinum: 5, Osmium: 1},
+                prospected: 2, content: {High: 1, Low: 1}, motherlodes: 1, cracked: 1, prospectors: 1, collectors: 1, sold: 1500000, seconds: 1800, per_hour: 12}},
+              {start: "2026-10-12T08:00:00Z", end: "2026-10-12T09:00:00Z", ship: "Krait Mk II", mining: null, combat: {kills: 3, bounties: 400000, bonds: 60000,
+                deaths: 1, interdicted: 1, redeemed: 400000, by_ship: {Anaconda: 2}, seconds: 1800, per_hour: 6}}]},
+        }[s.slice("api/commander/".length)];
+      };
+      CM.data = {}; CM.at = {}; CM.error = {}; CM.tab = "profile"; CM.q = ""; CM.craft = false;`);
+    const text = el => el ? el.textContent.replace(/\s+/g, " ").trim() : "", body = () => d.getElementById("cmdrBody");
+    const rows = () => [...body().querySelectorAll("table.cmtable tbody tr")].map(t => [...t.cells].map(text).join(" | "));
+    const tab = async name => { d.querySelector(`#cmdrTabs [data-cmtab="${name}"]`).click(); await sleep(120); };
+    try {
+      d.querySelector('[data-view="cmdr"]').click();
+      await sleep(150);
+      got.shown = [d.getElementById("cmdrView").hidden, [...d.querySelectorAll("#cmdrTabs .cmtab")].map(b => b.textContent + (b.classList.contains("on") ? "*" : ""))];
+      got.profile = [text(body().querySelector(".hwyttl")), rows(), [...body().querySelectorAll(".cmfig")].map(text), [...body().querySelectorAll(".cmrep")].map(text),
+                     [...body().querySelectorAll(".cmbar > span")].map(x => x.style.width)];
+      await tab("inventory");
+      got.inventory = rows();
+      got.heads = [...body().querySelectorAll("h3.subhead")].map(text);
+      got.locker = [...body().querySelectorAll(".cmitem")].map(text);
+      await tab("engineering");
+      got.engineering = [[...body().querySelectorAll("details.cmmod")].map(x => text(x.querySelector("summary")) + (x.open ? " open" : "")), text(body().querySelector(".cmfilter .unk"))];
+      const f = d.getElementById("cmFilter");
+      f.focus(); f.value = "wake"; f.dispatchEvent(new w.Event("input", {bubbles: true}));
+      got.filtered = [[...body().querySelectorAll("details.cmmod")].map(x => text(x.querySelector("summary")) + (x.open ? " open" : "")), rows(),
+                      d.activeElement && d.activeElement.id, body().querySelectorAll(".cmmat.ok").length, body().querySelectorAll(".cmmat.noscoop").length];
+      d.getElementById("cmCraft").checked = true; d.getElementById("cmCraft").dispatchEvent(new w.Event("change", {bubbles: true}));
+      got.craft = rows().length;
+      await tab("missions");
+      got.missions = [text(body().querySelector(".hwyttl")), rows(), body().querySelectorAll(".warnc").length];
+      await tab("sessions");
+      got.sessions = [rows(), [...body().querySelectorAll(".cmfig")].map(text)];
+      await tab("missions");                                                   // fresh: not asked again
+      d.getElementById("cmRefresh").click();                                    // asked again when you say so
+      await sleep(120);
+      got.pure = [w.eval(`cmSpan(7200)`), w.eval(`cmSpan(200000)`), w.eval(`cmSpan(540)`)];
+    } finally { w.eval(`apiJson = __cmApi; CM.data = {}; CM.at = {}; CM.q = ""; CM.craft = false;`); d.querySelector('[data-view="overview"]').click(); }
+    await sleep(60);
+    const want = {
+      shown: [false, ["CMDR*", "Inventory", "Engineering", "Missions", "Sessions"]],
+      profile: ["CMDR Tester · Sample Wing · pledged to Aisling Duval, rank 3, 4,500 merits as of 2026-10-12 08:00",
+                ["Trade | Tycoon | 50% | next: Elite · about 330.0M cr of trade profit to go", "Combat | Expert | 0% | next: Master", "Federal Navy | Admiral |  | the top",
+                 "Sample Ship Krait Phantom | you fly it | 100.0M cr", "Anaconda | Colonia | 150.0M cr"],
+                ["Credits1.23B cr", "Net worth9.00B cr", "Fleet250.0M cr · 2 ships", "Stored modules5.1M cr", "Carrier balance250.0M cr",
+                 "Time played2,000 h", "Distance jumped987,654 ly", "Spent on ships500.0M cr", "Systems visited12,345"],
+                ["Reputation: Federation -40% · Empire 77%", "Fleet carrier: SAMPLE CARRIER X1X-X1X · 250.0M cr · 800 t tritium"], ["50%", "0%"]],
+      inventory: ["Sample Ship Krait Phantom SP-01 | you fly it | 100.0M cr | ", "Anaconda hot | Colonia | 150.0M cr | 1.2M cr · 2 h 0 min",
+                  "5A Frame Shift Drive | Long Range G5 | Sol | 5.1M cr | ", "Bio | Artemis Suit G3Increased sprint duration | TK Aphelion G2"],
+      heads: ["Ships 2 as of 2026-10-12 09:01", "Stored modules 1 as of 2026-10-12 09:02", "Ship locker as of 2026-10-12 09:03", "Suit loadouts 1"],
+      locker: ["Weapon <Schematic>3"],
+      engineering: [["Frame shift drive 1 blueprint", "Sensors 1 blueprint"], "1 of 2 engineers unlocked · ship modules only: no experimental effects, suits or weapons"],
+      filtered: [["Frame shift drive 1 blueprint open"], ["G1 | Atypical Disrupted Wake Echoes 7/1 | ×7 | Felicity Farseer",
+                 "G5 | Arsenic 0/1Datamined Wake Exceptions 5/2 | – | Elvira Martuuk"], "cmFilter", 2, 1],
+      craft: 1,
+      missions: ["2 missions · 1 expiring within half an hour", ["Deliver 20 units of Gold | Sol Workers | Alpha Centauri · Hutton Orbital | Gold 8/20 | 2.5M cr | 20 min",
+                 "Massacre wing redirected | Sol Workers | Sol · Old Port | Bad Lot 12 | 9.0M cr | no limit"], 2],
+      sessions: [["2026-10-12 08:00 | Krait Mk II | 3 | Anaconda 2 | 400k cr | 60k cr | 6 | 30 min | 1",
+                  "2026-10-12 11:00 | Type-9 Heavy | 6 t | Platinum 5, Osmium 1 | 12 | 2 High 1, Low 1 · 1 core | 1 / 1 | 30 min | 1.5M cr"],
+                 ["Sessions1", "Kills3", "Bounties400k cr", "Combat bonds60k cr", "Deaths1", "Sessions1", "Refined6 t", "Asteroids prospected2", "Sold1.5M cr"]],
+      pure: ["2 h 0 min", "2 d 7 h", "9 min"],
+    };
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    if (JSON.stringify(asked) !== JSON.stringify(["api/commander/profile", "api/commander/inventory", "api/commander/engineering", "api/commander/missions", "api/commander/sessions",
+                                                 "api/commander/missions"])) bad.push("asked");
+    const goodCM = !bad.length && errors.length === before;
+    allOk = allOk && goodCM;
+    console.log(goodCM ? "OK" : "FAIL", "| commander |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))} asked ${JSON.stringify(asked)}`
+      : "the commander's ranks, money and fleet, inventory, engineering with its filter, missions, sessions; a fresh tab is not asked again", errors.slice(before));
   }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",
