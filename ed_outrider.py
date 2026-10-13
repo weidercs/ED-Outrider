@@ -16,7 +16,7 @@ years (EDSM as a fallback when Spansh is down) and serves http://127.0.0.1:8025/
              bio genera with 0/3..3/3 sampling progress and which species they could be (outrider/bio.py
              spawn rules plus BioScan's colour check, with credit values; "one of these" with a range
              when a body has fewer signals than possible genera), ring hotspots, codex entries,
-             curiosities (ringed landables, close orbits, planet pairs...), your firsts, planetary mining
+             curiosities (ringed landables, close orbits, moons of moons...), your firsts, planetary mining
              locations (⛏, with the EDFM survey's odds per ground and what your SRV mined there); as a
              list, a tree in orbital order, or a schematic of stars, planets, moons and barycentres
   Bio/Geo    My Samples (every exobiology sample run, aboard / sold / lost, with value, and codex entry), the
@@ -5084,10 +5084,11 @@ def ring_stats(rings):
     return out
 
 
-def curiosities(r, parent=None, raw=None, binary=False):
+def curiosities(r, parent=None, raw=None):
     """Observatory-style "interesting body" flags: [(tag, why)]. `parent` is the record this body orbits
-    (if a body), `raw` your own Scan event (rotation, tidal lock), `binary` true when it circles a shared
-    centre with another planet. Only facts that are known are tested: nothing is flagged on a guess."""
+    (if a body), `raw` your own Scan event (rotation, tidal lock). Only facts that are known are tested: nothing is
+    flagged on a guess. Planets circling a shared centre (a barycentre) are not one: such pairs are common, and the
+    author found the alert noise (2026-10-12); Here's tree still names them."""
     out = []
     planet = r.get("type") == "Planet"
     g, landable = r.get("gravity"), r.get("landable")
@@ -5117,8 +5118,6 @@ def curiosities(r, parent=None, raw=None, binary=False):
     pf = [p for p in r.get("parents_full") or [] if p["kind"] != "Ring"]
     if planet and len(pf) >= 2 and pf[0]["kind"] == "Planet" and pf[1]["kind"] == "Planet":
         out.append(("moon of a moon", "a moon orbiting a moon"))
-    if planet and binary:
-        out.append(("planet pair", "circles a shared centre with another planet"))
     rare = RARE_PLANETS.get(r.get("subtype") or "")
     if planet and rare:   # rare classes: a sight, if not a fortune
         out.append(rare)
@@ -5138,26 +5137,15 @@ RARE_PLANETS = {"Water giant": ("water giant", "a water giant: rare"),
 def system_curiosities(system, records, raws=None):
     """{short body name: [(tag, why)]} for a system, the same for Here and Nearby. A body's parent is the
     body it directly orbits (never through a barycentre: an orbit around a shared centre is measured from
-    that centre, so comparing it with a star's radius would be meaningless); planets that share a
-    barycentre with only other planets are a planet pair."""
+    that centre, so comparing it with a star's radius would be meaningless)."""
     raws = raws or {}
     by_id = {x.get("body_id"): x for x in records if x.get("body_id") is not None}
     first = lambda x: next((q for q in x.get("parents_full") or [] if q["kind"] != "Ring"), None)
-    centres = {}
-    for x in records:
-        f = first(x)
-        if f and f["kind"] == "Null":
-            centres.setdefault(f["id"], []).append(x)
     out = {}
     for x in records:
         f = first(x)
         parent = by_id.get(f["id"]) if f and f["kind"] in ("Star", "Planet") else None
-        members = centres.get(f["id"], []) if f and f["kind"] == "Null" else []
-        # planets named after a star pair ("BC 1", "BC 2") circle those stars' shared centre: without the
-        # stars' own scans only the planets are seen at it, which is not a planet pair
-        binary = len(members) >= 2 and all(m.get("type") == "Planet" for m in members) \
-            and not any(re.fullmatch(r"[A-Z]{2,} \d+", m.get("name") or "") for m in members)
-        c = curiosities(x, parent, raws.get(x["name"]), binary)
+        c = curiosities(x, parent, raws.get(x["name"]))
         if c:
             out[x["name"]] = c
     return out

@@ -351,8 +351,9 @@ class Curiosities(unittest.TestCase):
         self.assertEqual(ed_outrider.curiosities({"name": "5", "type": "Planet", "subtype": "Rocky body"}), [])
 
     def test_system_pair_not_close_orbit(self):
-        # two planets round a barycentre that circles the star: a pair, and never a "close orbit" of the star
-        # (their small orbit is around the shared centre, not the star's surface)
+        # two planets round a barycentre that circles the star: no curiosity at all (the author, 2026-10-12: shared
+        # centres are common, a "planet pair" alert was noise), and never a "close orbit" of the star (their small
+        # orbit is around the shared centre, not the star's surface)
         star = {"name": "A", "type": "Star", "radius_km": 700000, "body_id": 1, "parents_full": []}
         via = [{"kind": "Null", "id": 7}, {"kind": "Star", "id": 1}]
         p5 = {"name": "5", "type": "Planet", "body_id": 8, "sma_ls": 1.0, "radius_km": 3000, "parents_full": via}
@@ -360,12 +361,9 @@ class Curiosities(unittest.TestCase):
         moon = {"name": "6 a", "type": "Planet", "body_id": 10, "sma_ls": 0.02,
                 "parents_full": [{"kind": "Planet", "id": 9}] + via}
         got = ed_outrider.system_curiosities("S", [star, p5, p6, moon])
-        self.assertEqual([t for t, _ in got["5"]], ["planet pair"])
-        self.assertEqual([t for t, _ in got["6"]], ["planet pair"])
+        self.assertNotIn("5", got)
+        self.assertNotIn("6", got)
         self.assertEqual([t for t, _ in got["6 a"]], ["close orbit"])   # 6 a really does hug planet 6
-        # a star sharing the centre stops it being a planet pair
-        s2 = {"name": "B", "type": "Star", "body_id": 11, "parents_full": [{"kind": "Null", "id": 7}]}
-        self.assertNotIn("5", ed_outrider.system_curiosities("S", [star, p5, s2]))
 
 
 class BioColours(unittest.TestCase):

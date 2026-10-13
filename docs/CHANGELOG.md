@@ -2,6 +2,12 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · Planets sharing a centre are no curiosity
+- Two planets circling a shared centre (a barycentre: "A 4 and A 5 orbit a shared centre") no longer count as a
+  "planet pair" curiosity (the author: such pairs are common, the 🔭 mark and the curiosity alert were noise). The other
+  curiosities stay (close orbits, moons of moons, ringed or heavy landables, fast spin, rare classes, green gas giants),
+  and Here's tree still names the pairs.
+
 ## 2026-10-12 · Uploads: what each sent lately, Try again on a hold, and a card when one is down
 - **Each service's last rounds, in memory** (G1, `uploads.Recent`): per service the last 50 sending rounds, sends in a
   row merged ("sent 37, 11:58–12:04") and the same failure repeated merged, with each failure's kind

@@ -1352,7 +1352,7 @@ class Batch3Server(unittest.TestCase):
         self.assertEqual(ed_outrider.system_curiosities("S", [p1, p2]), {})   # stars B and C not scanned
         moons = [{"name": f"BC 1 {m}", "type": "Planet", "body_id": 30 + i, "parents_full": [{"kind": "Null", "id": 29}] + via}
                  for i, m in enumerate("ab")]
-        self.assertEqual(set(ed_outrider.system_curiosities("S", moons)), {"BC 1 a", "BC 1 b"})   # a real pair of moons
+        self.assertEqual(ed_outrider.system_curiosities("S", moons), {})   # nor is a pair of moons (2026-10-12: no pairs at all)
 
     def test_bio_left_after_a_finished_genus(self):   # F20b
         self.jump("2026-01-01T00:00:00Z", 1, 0)
