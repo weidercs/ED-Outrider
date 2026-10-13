@@ -127,6 +127,8 @@ targeted neutron jump target Hwy Stop 38" (or "Failed to…") under its own aler
 - **Filters:**
   - stations and/or fleet carriers;
   - what it must have (Universal Cartographics, Vista Genomics, repair, refuel, shipyard);
+  - a **material trader**: any, raw, manufactured or encoded (stations only: fleet carriers never have one). Spansh says
+    each trader's kind; the few it lists with no kind (some Colonia outposts) count only for "any", shown as "⇄ trader";
   - your ship's pad size (from its type);
   - **Data under** N days (30 by default);
   - permit systems, left out unless ticked.
@@ -150,8 +152,11 @@ targeted neutron jump target Hwy Stop 38" (or "Failed to…") under its own aler
     open to all, each marked **🛰 DSSA** with how long it stays. The list is fetched only when you open the finder, at
     most once an hour, and only downloaded when it has changed. The last copy is kept, so the finder works offline.
   - Your own carrier, from your journal.
+- **From the Materials tab:** a material you are short of offers **⇄ nearest raw trader** (or manufactured, encoded):
+  it opens the finder with that trader asked for, and leaves your own saved filters as they were.
 - **By voice** (the Android app): "nearest station", "nearest carrier", "nearest Vista", "nearest cartographics",
-  "nearest repair", "nearest refuel", "nearest shipyard", "where can I dock", "where can I sell". The voice uses the DSSA list Outrider already has; it never fetches it.
+  "nearest repair", "nearest refuel", "nearest shipyard", "nearest material trader", "nearest raw material trader" (or
+  manufactured, encoded), "where can I dock", "where can I sell". The voice uses the DSSA list Outrider already has; it never fetches it.
 
 <p align="center">
   <img src="../images/nearest-dssa.png" alt="A DSSA carrier in the list: its badge, how long it is stationed, and when it was last seen docked" width="900">

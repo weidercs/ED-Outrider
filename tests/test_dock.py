@@ -15,6 +15,8 @@ import unittest
 from support import ed_outrider  # also puts the repository root on sys.path
 import outrider.ask as ask  # noqa: E402
 import outrider.dock as dock  # noqa: E402
+import outrider.materials as materials  # noqa: E402
+import outrider.tools as tools  # noqa: E402
 
 FIX = os.path.join(os.path.dirname(__file__), "fixtures")
 NOW = calendar.timegm(time.strptime("2026-10-08T15:30:00", "%Y-%m-%dT%H:%M:%S"))
@@ -162,6 +164,75 @@ class Nearest(unittest.TestCase):
         self.assertEqual(dock.spoken({"rows": []}, [], "carrier"), "No carrier is known nearby with recent enough reports.")
 
 
+class Traders(unittest.TestCase):
+    """S54: material traders, from Spansh's real answers (scripts/trader_probe.py, tests/fixtures/spansh_traders.json):
+    the kind is the station's `material_trader` field; a few traders (Colonia's outposts) have none."""
+    SOL = {"id64": 10477373803, "name": "Sol", "x": 0.0, "y": 0.0, "z": 0.0}
+    SEEN = calendar.timegm(time.strptime("2026-10-12T23:00:00", "%Y-%m-%dT%H:%M:%S"))
+
+    def rows(self, which):
+        return dock.spansh_rows(fixture("spansh_traders.json")[which]["results"])
+
+    def test_kinds(self):
+        rows = {r["name"]: r for r in self.rows("sol_by_service")}
+        self.assertTrue({"Trader", "Manufactured"} <= rows["Patterson Enterprise"]["services"])
+        self.assertTrue({"Trader", "Raw"} <= rows["Broglie Terminal"]["services"])
+        self.assertNotIn("Raw", rows["Patterson Enterprise"]["services"])
+        col = {r["name"]: r for r in self.rows("colonia_by_service")}
+        self.assertIn("Trader", col["The Divine Apparatus"]["services"])   # the service listed, no kind: never guessed
+        self.assertFalse(set(dock.TRADER_KINDS) & col["The Divine Apparatus"]["services"])
+        self.assertIn("Raw", col["TolaGarf's Junkyard"]["services"])
+        self.assertTrue(all(r["services"] >= {"Trader", "Raw"} for r in self.rows("sol_raw_by_kind")))
+        # a carrier never has one, whatever a report says
+        carrier = dict(fixture("spansh_traders.json")["sol_by_service"]["results"][0], type="Drake-Class Carrier", name="X1X-11X")
+        self.assertFalse({"Trader", "Manufactured"} & dock.spansh_rows([carrier])[0]["services"])
+
+    def test_nearest_of_a_kind(self):
+        rows = self.rows("sol_by_service")
+        out = dock.nearest(rows, self.SOL, need={"Raw"}, age_days=30, now=self.SEEN)
+        self.assertEqual([r["name"] for r in out["rows"]], ["Broglie Terminal"])
+        self.assertEqual(out["rows"][0]["services"][-2:], ["Trader", "Raw"])   # in SERVICES' order
+        self.assertEqual(out["hidden"]["service"], 4)
+        col = self.rows("colonia_by_service")
+        colonia = {"x": -9530.5, "y": -910.28125, "z": 19808.125}
+        anyk = dock.nearest(col, colonia, need={"Trader"}, age_days=30, now=self.SEEN)["rows"]
+        self.assertEqual(anyk[1]["name"], "The Divine Apparatus")   # a trader of no reported kind: still a trader
+        self.assertNotIn("The Divine Apparatus", [r["name"] for r in dock.nearest(col, colonia, need={"Encoded"},
+                                                                                 age_days=30, now=self.SEEN)["rows"]])
+
+    def test_spoken(self):
+        out = dock.nearest(self.rows("sol_by_service"), self.SOL, need={"Raw"}, age_days=30, now=self.SEEN)
+        self.assertEqual(dock.spoken(out, ["Raw"]),
+                         "Nearest raw material trader: Broglie Terminal, an ocellus starport, 11 light years away, in 61 Cygni.")
+        out = dock.nearest(self.rows("sol_by_service"), self.SOL, need={"Trader"}, age_days=30, now=self.SEEN)
+        self.assertEqual(dock.spoken(out, ["Trader"]), "Nearest material trader: Patterson Enterprise, a coriolis starport "
+                                                       "trading manufactured materials, 9 light years away, in Sirius.")
+        col = self.rows("colonia_by_service")
+        out = dock.nearest(col[1:], {"x": -9530.5, "y": -910.28125, "z": 19808.125}, need={"Trader"}, age_days=30, now=self.SEEN)
+        self.assertIn("a planetary outpost whose trader's kind is not reported", dock.spoken(out, ["Trader"]))
+        self.assertEqual(dock.spoken({"rows": []}, ["Encoded"]), "No encoded material trader is known nearby with recent enough reports.")
+        self.assertEqual(dock.spoken({"rows": []}, ["UC", "Trader"], "station"),
+                         "No material trader with Universal Cartographics is known nearby with recent enough reports.")
+
+    def test_short_materials_carry_their_kind(self):
+        """The Materials tab's "⇄ nearest raw trader" needs each recipe material's category (None for a commodity)."""
+        inv = materials.inventory({"counts": {"iron": 10}, "names": {},
+                                   "recipes": {"Odd Basic": {"materials": {"tritium": 1}, "ts": "2026-10-12T00:00:00Z", "n": 1}}})
+        cats = {m["id"]: m["category"] for r in inv["synthesis"] for m in r["materials"]}
+        self.assertEqual((cats["iron"], cats["mechanicalequipment"], cats["tritium"]), ("Raw", "Manufactured", None))
+
+    def test_ai_tool(self):
+        spec = tools.TOOLS["nearest_dock"]["schema"]["properties"]
+        self.assertTrue({"Trader", "Raw", "Manufactured", "Encoded"} <= set(spec["need"]["items"]["enum"]))
+        seen = []
+
+        async def get(path, params=None):
+            seen.append(dict(params or {}))
+            return {"rows": [], "hidden": {}}
+        asyncio.run(tools.call("nearest_dock", {"need": ["Raw"]}, get, 5))
+        self.assertEqual(seen[0]["need"], "Raw")
+
+
 class FakeSpansh:
     """dock_search / permit_ids / get_if_changed without a network: each call recorded."""
 
@@ -246,6 +317,8 @@ class Endpoint(unittest.TestCase):
                                            self.state.dock_cache["search"][2])
         self.ask(need="vista")   # stale: asked again
         self.assertEqual(self.sp.calls.count("search"), 3)
+        out, _ = self.ask(need="raw,uc")   # S54: the trader kinds are needs like the services
+        self.assertEqual((self.sp.needs[-1], out["need"]), (["Raw", "UC"], ["Raw", "UC"]))
 
     def test_dssa_odd_answer_is_a_failed_check(self):
         """Review 2026-10-08 #14: a 200 that is not a list (an error object, a notice) was stamped as a fresh check
@@ -284,6 +357,24 @@ class SpanshRequests(unittest.TestCase):
         asyncio.run(self.sp.dock_search(HERE))
         self.assertNotIn("services", self.sp.session.calls[0][2]["filters"])
 
+    def test_trader_search(self):
+        """S54: a trader of one kind is Spansh's material_trader filter, any kind the Material Trader service; stations
+        only (carriers never have one); two kinds at once can match nothing and are not asked."""
+        def bodies(need):
+            self.sp.session = self.Session([(200, {"results": []})])
+            out = asyncio.run(self.sp.dock_search(HERE, need))
+            return out, [c[2]["filters"] for c in self.sp.session.calls]
+        _, f = bodies(["Raw"])
+        self.assertEqual(len(f), 1)
+        self.assertEqual((f[0]["material_trader"], f[0].get("services")), ({"value": ["Raw"]}, None))
+        self.assertNotIn(ed_outrider.outrider.cargo.CARRIER_TYPE, f[0]["type"]["value"])
+        _, f = bodies(["Trader"])
+        self.assertEqual((len(f), f[0]["services"], "material_trader" in f[0]), (1, [{"name": "Material Trader"}], False))
+        _, f = bodies(["UC", "Trader", "Encoded"])
+        self.assertEqual((f[0]["services"], f[0]["material_trader"]), ([{"name": "Universal Cartographics"}], {"value": ["Encoded"]}))
+        out, f = bodies(["Raw", "Encoded"])
+        self.assertEqual((out, f), ([], []))
+
     def test_sellers_offer_the_service(self):
         uc = {"name": "Has UC", "system_name": "A", "system_id64": 1, "distance": 5, "services": [{"name": "Universal Cartographics"}]}
         none = {"name": "Settlement", "system_name": "B", "system_id64": 2, "distance": 3, "services": [{"name": "Refuel"}]}
@@ -304,6 +395,14 @@ class Voice(unittest.TestCase):
         self.assertEqual(ask.nearest_query("nearest carrier with vista genomics and repair"), (["Vista", "Repair"], "carrier"))
         self.assertEqual(ask.nearest_query("nearest station"), ([], "station"))
         self.assertEqual(ask.nearest_query("nearest UC"), (["UC"], None))
+        # S54: material traders
+        for text in ("nearest raw material trader", "Vespa, nearest material trader", "where's an encoded trader",
+                     "nearest data trader", "nearest manufactured material traders"):
+            self.assertEqual(ask.match(text, phrases), "nearest_dock", text)
+        self.assertEqual(ask.nearest_query("nearest raw material trader"), (["Raw"], None))
+        self.assertEqual(ask.nearest_query("nearest material trader"), (["Trader"], None))
+        self.assertEqual(ask.nearest_query("nearest data trader"), (["Encoded"], None))
+        self.assertEqual(ask.nearest_query("nearest station with raw materials"), ([], "station"))   # no trader asked
 
     def test_answer(self):
         seen = []

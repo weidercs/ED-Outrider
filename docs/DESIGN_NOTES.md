@@ -595,6 +595,12 @@ upstream project's choices, not rules of the game.
   fetched only when the finder opens, at most hourly and conditionally, its last copy kept; the voice and the AI's tool
   never fetch it (`cached=1`). DSSA carriers carry a badge (the author's ask). Reports older than 30 days are hidden by
   default, with the count said: carriers move, and Spansh keeps reports years old.
+- **Material traders are Spansh's word, never a guess** (S54, probed 2026-10-12: `scripts/trader_probe.py`): a station's
+  trader kind is Spansh's `material_trader` field (Raw, Manufactured, Encoded), and its search filters on it, so a raw
+  trader is asked for as one (near the author only 5 of the 50 nearest traders were raw). The economy is not used as a
+  fallback: of the galaxy's 1,639 traders only 7 have no kind (Colonia's outposts with a Colony economy, a megaship),
+  and their economy says nothing. They count for "any material trader" only. Materials' "⇄ nearest raw trader" opens
+  the finder with that need for that opening only: the player's saved filters are not changed by a link.
 - **Start-up problems go on a banner, dismissed until a restart** (S5a, the author, 2026-10-12): what used to be printed
   only in the terminal is a notice in every window and the tablet. The dismissal is the server's, in memory: every
   window agrees, a restart shows it again (still wrong, still worth saying), and a notice whose text changed is a new one.
@@ -729,7 +735,8 @@ confirmed while playing. Treat reports about them as likely real.
 - The co-pilot button on a real device (`python3 -m outrider.button --listen`), including rig marking in a live Rhino,
   and its tap targeting the next route system in a live game (the slow double tap's cancel included).
 - The Nearest finder's Plot here and the "nearest station" voice answer from the app in a live session (checked against
-  live Spansh and DSSA data on a scratch server only).
+  live Spansh and DSSA data on a scratch server only); its material traders (S54) and "nearest raw material trader"
+  against a trader the game shows (built on Spansh's recorded answers only).
 - Rig leash warnings, rigs lost on SRVDestroyed, death or relog, the rigs-still-out warning's timing, and
   `Destination.Body` for a mining location (assumed to be the planet).
 - The rig restock recipe (3 Iron, 2 Nickel, 1 Mechanical Equipment), taken from a community guide.

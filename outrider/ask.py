@@ -26,7 +26,7 @@ COMMANDS = ("unhush", "hush", "nearest_dock", "next_jump", "status_report", "fue
 # command has one, so a new command is never left out of the list)
 LABELS = {"status_report": "a status report", "fuel": "fuel", "unsold": "unsold data", "next_jump": "the next jump",
           "whats_left": "what's left here", "nearest_unvisited": "the nearest unvisited system",
-          "nearest_dock": "the nearest station or carrier", "hush": "hush", "unhush": "unhush"}
+          "nearest_dock": "the nearest station, carrier or material trader", "hush": "hush", "unhush": "unhush"}
 
 
 def known_questions():
@@ -39,6 +39,9 @@ def known_questions():
 # ask.json, never a bare "nearest": the author, 2026-10-08)
 NEAREST_WORDS = {"vista": "Vista", "genomics": "Vista", "cartographics": "UC", "cartographic": "UC", "repair": "Repair",
                  "repairs": "Repair", "refuel": "Refuel", "fuel": "Refuel", "shipyard": "Shipyard", "outfitting": "Outfitting"}
+# a material trader (S54): "trader" asks for one, a kind's word narrows it only beside "trader" ("nearest station
+# with raw..." is no trader question)
+TRADER_WORDS = {"raw": "Raw", "manufactured": "Manufactured", "encoded": "Encoded", "data": "Encoded"}
 WAKE = re.compile(r"^(hey|hi|ok|okay)?\s*vespa\b[\s,]*")
 ASSISTANT = {"enabled": False, "base_url": "", "api_key": "", "model": "", "timeout": 20.0, "max_rounds": 4}
 SYSTEM_PROMPT = ("You are Vespa, the co-pilot voice of ED Outrider, an exploration companion for the game Elite Dangerous. "
@@ -115,6 +118,9 @@ def nearest_query(text):
             need.append(s)
     if "uc" in words and "UC" not in need:
         need.append("UC")
+    if "trader" in words or "traders" in words:
+        kinds = [TRADER_WORDS[w] for w in words if w in TRADER_WORDS]
+        need.append(kinds[0] if kinds else "Trader")
     kind = "station" if any(w in ("station", "stations", "starport", "outpost") for w in words) else \
         "carrier" if any(w in ("carrier", "carriers") for w in words) else None
     return need, kind

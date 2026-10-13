@@ -360,5 +360,7 @@ def _recipe(state, counts, rname, r, own):
     return {"name": rname, "journal": r.get("name"), "group": r.get("group", "other"), "family": r.get("family", rname),
             "grade": r.get("grade"), "craftable": n, "limit": display_name(state, limit) if limit else None,
             "boost": r.get("boost"), "verified": bool(learned) or r["verified"], "learned": learned,
-            "materials": [{"id": m, "name": display_name(state, m), "need": q, "have": counts.get(m, 0)}
+            # category: Raw, Manufactured, Encoded (a trader's kind: S54's "⇄ nearest raw trader"), None for a commodity
+            "materials": [{"id": m, "name": display_name(state, m), "need": q, "have": counts.get(m, 0),
+                           "category": MATERIALS[m][1] if m in MATERIALS else None}
                           for m, q in mats.items()]}

@@ -5514,18 +5514,26 @@ class Spansh:
         """Stations and fleet carriers nearest `pos` (two pages of the station search, each nearest first, out to
         outrider.dock.SEARCH_LY) that offer every service in `need` (outrider.dock's names). Without that filter the
         50 nearest were all there was to choose from: near the bubble a Vista station 40 ly away went unseen (review
-        2026-10-08 #6). outrider.dock.nearest still checks each row's own list."""
+        2026-10-08 #6). outrider.dock.nearest still checks each row's own list. A material trader of one kind (S54) is
+        Spansh's `material_trader` filter (near the author only 5 of the 50 nearest traders were raw ones); any kind is
+        the "Material Trader" service; either way no carriers are asked for (they never have one)."""
         if self.session is None:
             raise ClientError("no network session")
         ref = {"x": pos["x"], "y": pos["y"], "z": pos["z"]}
         types = [t for t in outrider.cargo.STATION_TYPES if "Construction" not in t]
         spansh_names = {short: name for name, short in outrider.dock.SPANSH_SERVICES.items()}
-        services = [{"name": spansh_names[n]} for n in need if n in spansh_names]
+        trader = outrider.dock.trader_need(need)
+        kinds_asked = {n for n in need if n in outrider.dock.TRADER_KINDS}
+        if len(kinds_asked) > 1:
+            return []   # one station has one kind of trader: nothing can have two
+        services = [{"name": spansh_names[n]} for n in need if n in spansh_names and not (n == "Trader" and kinds_asked)]
         out = []
-        for kinds in (types, [outrider.cargo.CARRIER_TYPE]):
+        for kinds in (types,) if trader else (types, [outrider.cargo.CARRIER_TYPE]):
             filters = {"type": {"value": kinds}, "distance": {"min": "0", "max": str(outrider.dock.SEARCH_LY)}}
             if services:
                 filters["services"] = services   # a list of {name}: each one required
+            if kinds_asked:
+                filters["material_trader"] = {"value": sorted(kinds_asked)}
             body = {"filters": filters, "sort": [{"distance": {"direction": "asc"}}], "reference_coords": ref,
                     "size": outrider.dock.SEARCH_SIZE, "page": 0}
             async with self.sem_fast:
@@ -8327,7 +8335,7 @@ class State:
 
     async def nearest_dock(self, q):
         """GET /api/nearest: the nearest places to dock (outrider/dock.py). q: stations, carriers ("0"/"1"), need
-        (uc,vista,repair,refuel,shipyard,outfitting), age (days), permit ("1": keep permit systems), pad (auto, L, M,
+        (uc,vista,repair,refuel,shipyard,outfitting; trader (a material trader), raw, manufactured, encoded), age (days), permit ("1": keep permit systems), pad (auto, L, M,
         any), cached ("1": no new fetch of the DSSA list; the AI's tools and the voice ask that way). Read only but for
         the DSSA copy kept."""
         pos = self.journals.pos

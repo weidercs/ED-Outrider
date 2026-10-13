@@ -78,7 +78,9 @@ search any text, click a row for the raw event.
 then Ship upkeep (AFMU refills, heat sinks, life support, limpets), SRV (refuel, repair, Rhino rig restocks) and Other
 recipes you have made, each folded into one line ("Ship upkeep ▸ AFMU refill B×4 S×1 P×0 · Heat sink B×12 S×0 P×0")
 that opens on a click (remembered on this device). A recipe you have synthesised is ✓, checked against your own
-synthesis and its date; the others are the published recipes. <b>Mining sites</b> lists each body your SRV mined: minerals
+synthesis and its date; the others are the published recipes. A material you are short of offers <b>⇄ nearest raw
+trader</b> (or manufactured, encoded): the <a href="plot-route.md#-nearest-place-to-dock">Nearest finder</a> with that
+trader asked for. <b>Mining sites</b> lists each body your SRV mined: minerals
 and tons, saved spots, the last date and the distance.
 <br><br><img src="../images/materials.png" alt="Materials">
 </td>

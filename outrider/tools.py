@@ -13,6 +13,8 @@ Answers are trimmed to what answers the question, lists capped at max_rows with 
 import re
 import urllib.parse
 
+import outrider.dock as dock
+
 # the GET routes a tool may read (path prefixes); /api/find is left out on purpose: it can store an EDSM hit
 READ_ROUTES = ("/api/status", "/api/nearby", "/api/system/", "/api/body", "/api/firsts", "/api/left", "/api/highway",
                "/api/history", "/api/materials", "/api/nearest")   # /api/nearest only ever with cached=1 (no DSSA fetch)
@@ -162,9 +164,11 @@ async def nearest_unvisited(get, args, rows):
 
 @tool("nearest_dock", "The nearest stations and fleet carriers the commander can dock at (pad size, docking access, "
       "recent reports), from Spansh, the Deep Space Support Array's list and their own carrier; optionally only those "
-      "with given services.",
-      {"need": {"type": "array", "items": {"type": "string", "enum": ["UC", "Vista", "Repair", "Refuel", "Shipyard", "Outfitting"]},
-                "description": "services every place must have (UC: Universal Cartographics, Vista: Vista Genomics)"},
+      "with given services, a material trader among them.",
+      {"need": {"type": "array", "items": {"type": "string", "enum": list(dock.SERVICES)},
+                "description": "services every place must have (UC: Universal Cartographics, Vista: Vista Genomics; "
+                               "Trader: a material trader of any kind, Raw / Manufactured / Encoded: a material trader of "
+                               "that kind, at stations only)"},
        "kind": {"type": "string", "enum": ["any", "station", "carrier"], "description": "stations, carriers or both (default)"},
        "age_days": {"type": "integer", "description": "leave out reports older than this (default 30)"}})
 async def nearest_dock(get, args, rows):

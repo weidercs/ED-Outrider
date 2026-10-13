@@ -4162,7 +4162,7 @@ function renderMat() {
   const have = Object.fromEntries(m.rows.map(r => [r.id, r]));
   document.getElementById("matSources").innerHTML = Object.keys(src).length ? `<h3 class="subhead">Where to find FSD-injection materials <span class="unk">· scanned landable bodies within 300 ly, nearest first</span></h3>` +
     `<table class="srcTable"><tbody>` + Object.entries(src).map(([mat, list]) => { const h = have[mat] || {};
-      return `<tr class="${limits.has(h.name) ? "limiting" : ""}"><td><b>${esc(h.name || mat)}</b>${limits.has(h.name) ? ` <span class="noscoop" title="limits how many injections you can make">limiting</span>` : ""}</td>` +
+      return `<tr class="${limits.has(h.name) ? "limiting" : ""}"><td><b>${esc(h.name || mat)}</b>${limits.has(h.name) ? ` <span class="noscoop" title="limits how many injections you can make">limiting</span> ${traderBtn(h.category)}` : ""}</td>` +
         `<td class="num">${h.count ?? 0}${h.cap ? " / " + h.cap : ""}</td><td>` +
         (list.map(x => `<span class="name" data-name="${esc(x.system)}" title="click to copy the system">${esc(x.body)}</span> <span class="unk">${x.pct}% · ${x.distance} ly</span>`).join(" · ") || `<span class="unk">none scanned nearby</span>`) + `</td></tr>`; }).join("") +
     `</tbody></table>` : "";
@@ -4194,7 +4194,8 @@ const synthTitle = r => r.learned ? `✓ checked against your synthesis on ${(r.
   "published recipe (EDEngineer's and EDDiscovery's tables), not yet checked against a synthesis of yours";
 const synthCard = (r, limiting) => `<div class="synth" title="${esc(synthTitle(r))}">
       <span class="n${r.craftable ? "" : " zero"}">×${r.craftable}</span><b>${esc(r.name)}</b>${r.learned ? ` <span class="learned">✓</span>` : ""}${r.boost ? `<div class="unk boostline">${esc(r.boost)} range</div>` : ""}
-      <div class="mats">${r.materials.map(x => `<span class="${x.have < x.need ? "short" : r.craftable < 10 && limiting(r).includes(x.name) ? "limit" : ""}">${esc(x.name)} ${x.have}/${x.need}</span>`).join(" · ")}</div></div>`;
+      <div class="mats">${r.materials.map(x => `<span class="${x.have < x.need ? "short" : r.craftable < 10 && limiting(r).includes(x.name) ? "limit" : ""}">${esc(x.name)} ${x.have}/${x.need}</span>` +
+        (x.have < x.need ? traderBtn(x.category, true) : "")).join(" · ")}</div></div>`;
 // a folded group's line: each family once, its grades as B×4 S×1 P×0 (a family of one recipe: ×7)
 function synthSummary(list) {
   const fams = [];
@@ -4225,14 +4226,27 @@ document.getElementById("matSynth").addEventListener("toggle", e => {
 // fleet carriers you can land at and use, from Spansh, the DSSA list and your own carrier; "Plot here" fills To and
 // plots with the plotter chosen. The filters are this device's (store "nearest", not a shared setting). ----
 const NEAR_NEEDS = [["UC", "Universal Cartographics"], ["Vista", "Vista Genomics"], ["Repair", "repair"], ["Refuel", "refuel"], ["Shipyard", "shipyard"]];
+// a material trader (S54): "Trader" any kind, else the kind (Spansh's material_trader); stations only, carriers never have one
+const TRADER_KINDS = ["Raw", "Manufactured", "Encoded"];
+const traderWords = k => TRADER_KINDS.includes(k) ? `${k.toLowerCase()} material trader` : "material trader";
+const nearNeedWord = n => n === "Trader" || TRADER_KINDS.includes(n) ? `a ${traderWords(n)}` : (NEAR_NEEDS.find(([k]) => k === n) || [n, n])[1];
 const NR = Object.assign({stations: true, carriers: true, need: [], age: 30, permit: false},
-                         (v => v && typeof v === "object" && !Array.isArray(v) ? v : {})(store.get("nearest", {})), {answer: null, busy: false});
+                         (v => v && typeof v === "object" && !Array.isArray(v) ? v : {})(store.get("nearest", {})), {answer: null, busy: false, over: null});
 const saveNearest = () => store.set("nearest", {stations: NR.stations, carriers: NR.carriers, need: NR.need, age: NR.age, permit: NR.permit});
+// what is asked for: the finder's own filter, or the need a Materials link opened it with (NR.over: never saved)
+const nearNeed = () => NR.over || NR.need;
 const nearAgo = s => s == null ? "" : s < 3600 ? `${Math.max(1, Math.round(s / 60))} min ago` : s < 172800 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} d ago`;
-function openNearest() {
+// opts.need: open with these services asked for instead of the saved filter (Materials' "⇄ nearest raw trader"); the
+// dialog's own changes to them then stay with that opening, the saved filter is left as it was
+function openNearest(opts) {
   const d = document.getElementById("nearDlg");
+  NR.over = opts && Array.isArray(opts.need) ? opts.need.slice() : null;
+  const need = nearNeed(), tr = need.find(n => n === "Trader" || TRADER_KINDS.includes(n)) || "";
   document.getElementById("nearNeeds").innerHTML = NEAR_NEEDS.map(([k, t]) =>
-    `<label><input type="checkbox" data-nneed="${k}"${NR.need.includes(k) ? " checked" : ""}> ${t}</label>`).join("");
+    `<label><input type="checkbox" data-nneed="${k}"${need.includes(k) ? " checked" : ""}> ${t}</label>`).join("") +
+    `<label title="a station with a material trader (Spansh says its kind; fleet carriers never have one)">material trader <select data-ntrader>` +
+    [["", "—"], ["Trader", "any"], ...TRADER_KINDS.map(k => [k, k.toLowerCase()])].map(([v, t]) =>
+      `<option value="${v}"${v === tr ? " selected" : ""}>${t}</option>`).join("") + `</select></label>`;
   d.querySelector('[data-nf="stations"]').checked = NR.stations; d.querySelector('[data-nf="carriers"]').checked = NR.carriers;
   d.querySelector('[data-nf="age"]').value = NR.age; d.querySelector('[data-nf="permit"]').checked = NR.permit;
   tabShow(d);
@@ -4241,7 +4255,7 @@ function openNearest() {
 async function loadNearest() {
   NR.busy = true; renderNearest();
   const g = newRequest("near");
-  const params = new URLSearchParams({stations: NR.stations ? "1" : "0", carriers: NR.carriers ? "1" : "0", need: NR.need.join(","),
+  const params = new URLSearchParams({stations: NR.stations ? "1" : "0", carriers: NR.carriers ? "1" : "0", need: nearNeed().join(","),
                                       age: NR.age, permit: NR.permit ? "1" : "0", pad: "auto"});
   let r;
   try { r = await apiJson(`api/nearest?${params}`); } catch (err) { r = {error: err.message}; }
@@ -4253,7 +4267,9 @@ function nearRowHtml(r) {
   const who = r.kind === "carrier" ? `<b>${esc(r.name || r.callsign)}</b>${r.name ? ` <span class="unk">${esc(r.callsign)}</span>` : ""}` : `<b>${esc(r.name)}</b>`;
   const badge = r.dssa ? ` <span class="dssabadge" title="Deep Space Support Array carrier: stationed for explorers, open to all${r.until ? `, until ${esc(r.until)}` : ""}">🛰 DSSA</span>` : "";
   const kind = r.kind === "carrier" ? `Fleet carrier${r.own ? " · yours" : r.dssa && r.until ? ` · stationed until ${esc(r.until)}` : ""}` : esc(r.station_type || "Station");
-  const has = NEAR_NEEDS.map(([k]) => `<span class="tagx${(r.services || []).includes(k) ? " on" : ""}">${k}</span>`).join(" ");
+  const sv = r.services || [], tk = TRADER_KINDS.find(k => sv.includes(k));
+  const has = NEAR_NEEDS.map(([k]) => `<span class="tagx${sv.includes(k) ? " on" : ""}">${k}</span>`).join(" ") +
+    (sv.includes("Trader") ? ` <span class="tagx on" title="${tk ? `a ${traderWords(tk)}` : "a material trader: Spansh does not say which kind"}">⇄ ${tk ? tk.toLowerCase() : "trader"}</span>` : "");
   const dock = r.own ? `<span class="good">yours</span>` : r.warn && r.warn.length ? `<span class="warnc">⚠ ${esc(r.warn.join(", "))}</span>` : "open to all";
   const src = r.own ? "your journal" : r.dssa ? `<span class="dssa">DSSA</span><br>docked there ${nearAgo(r.age_s)}` : `${esc(r.source)}<br>reported ${nearAgo(r.age_s)}`;
   return `<tr><td>${who}${badge}<div class="unk">${kind} · ${esc(r.system || "")}</div></td>` +
@@ -4275,7 +4291,7 @@ function renderNearest() {
   if (h.old) hid.push(`${h.old} reported more than ${a.age} days ago (carriers move; raise Data under to see them)`);
   if (h.pad) hid.push(`${h.pad} without a pad for your ship`);
   if (h.permit) hid.push(`${h.permit} in permit systems`);
-  if (h.service) hid.push(`${h.service} without ${a.need.join(" and ")}`);
+  if (h.service) hid.push(`${h.service} without ${a.need.map(nearNeedWord).join(" and ")}`);
   const d = a.dssa || {}, checked = d.checked ? nearAgo(Date.now() / 1000 - d.checked) : null;
   foot.innerHTML = (NR.busy ? "asking again… " : "") + (hid.length ? `Hidden: ${esc(hid.join("; "))}. ` : "") +
     `Distances are straight lines${a.laden ? `; jumps at your laden range (${a.laden} ly)` : ""}.` +
@@ -4287,8 +4303,12 @@ function renderNearest() {
 document.getElementById("hwyNearest").onclick = openNearest;
 document.getElementById("nearDlg").addEventListener("change", e => {
   const t = e.target, f = t.dataset && t.dataset.nf;
-  if (t.dataset && t.dataset.nneed) NR.need = [...document.querySelectorAll("#nearNeeds [data-nneed]")].filter(x => x.checked).map(x => x.dataset.nneed);
-  else if (f === "age") { const v = parseInt(t.value, 10); if (!(v >= 1 && v <= 3650)) return; NR.age = v; }
+  if (t.dataset && (t.dataset.nneed || t.dataset.ntrader !== undefined)) {
+    const tr = document.querySelector("#nearNeeds [data-ntrader]");
+    const need = [...document.querySelectorAll("#nearNeeds [data-nneed]")].filter(x => x.checked).map(x => x.dataset.nneed)
+      .concat(tr && tr.value ? [tr.value] : []);
+    if (NR.over) NR.over = need; else NR.need = need;
+  } else if (f === "age") { const v = parseInt(t.value, 10); if (!(v >= 1 && v <= 3650)) return; NR.age = v; }
   else if (f) NR[f] = t.checked;
   else return;
   saveNearest(); loadNearest();
@@ -4298,7 +4318,17 @@ document.getElementById("nearRows").addEventListener("click", e => {
   hEl("hwyTo").value = b.dataset.nplot;
   if (!["exact", "neutron", "riches", "exo"].includes(hwyPlotter())) { const x = hForm.querySelector('[name=hwyPlotter][value="exact"]'); x.checked = true; x.dispatchEvent(new Event("change", {bubbles: true})); }
   tabClose(document.getElementById("nearDlg"));
+  // opened from Materials: Plot Route comes forward to show the plot
+  if (NR.over && view !== "hwy") { const v = document.querySelector('[data-view="hwy"]'); if (v) v.click(); }
+  NR.over = null;
   hForm.dispatchEvent(new Event("submit", {cancelable: true, bubbles: true}));
+});
+document.getElementById("nearDlg").addEventListener("close", () => { NR.over = null; });
+// Materials' "⇄ nearest raw trader" (on a material you are short of): the finder with that trader asked for
+const traderBtn = (cat, short) => TRADER_KINDS.includes(cat) ? `<button type="button" class="mini trbtn" data-trader="${cat}" ` +
+  `title="the nearest station with a ${esc(traderWords(cat))}: opens the Nearest finder (your saved filters are left as they are)">⇄${short ? "" : ` nearest ${cat.toLowerCase()} trader`}</button>` : "";
+document.getElementById("matView").addEventListener("click", e => {
+  const b = e.target.closest("[data-trader]"); if (b) openNearest({need: [b.dataset.trader]});
 });
 
 // ---- Cargo (the Materials tab): the ship's hold (exact) and your carrier's (tracked: outrider/cargo.py) ----

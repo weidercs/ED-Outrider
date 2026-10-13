@@ -481,6 +481,7 @@ h3.subhead { font-size: 13px; font-weight: 600; color: var(--muted); text-transf
 .synth .n.zero { color: var(--bad); }
 .synth .mats { color: var(--muted); margin-top: 2px; } .synth .mats .short { color: var(--bad); font-weight: 600; }
 .synth .mats .limit { color: var(--warn); }
+.synth .mats .trbtn, #matSources .trbtn { margin-left: 3px; vertical-align: 1px; }   /* "⇄ nearest raw trader" (S54) */
 /* S15: the groups past the FSD injections, folded to one line each (a details row across the whole grid) */
 .synth .learned { color: var(--good); }
 .synthGroup { grid-column: 1 / -1; font-size: 12.5px; } .synthGroup > summary { cursor: pointer; padding: 4px 2px; }

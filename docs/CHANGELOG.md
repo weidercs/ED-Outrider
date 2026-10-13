@@ -2,6 +2,23 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · Material traders in the Nearest finder, from Materials and by voice
+- **Spansh probed first** (S54, `scripts/trader_probe.py`, the answers in `tests/fixtures/spansh_traders.json`): a
+  station's trader kind is Spansh's `material_trader` field (Raw, Manufactured, Encoded) and its station search filters
+  on it; 7 of the galaxy's 1,639 traders (Colonia's outposts, a megaship) list the Material Trader service with no kind.
+  No economy-based guess: those count for "any material trader" only.
+- **The Nearest finder's Must have gains a material trader** (any, raw, manufactured, encoded): `dock.SERVICES` gains
+  Trader, Raw, Manufactured, Encoded; `Spansh.dock_search` asks for a kind with the `material_trader` filter (near the
+  author only 5 of the 50 nearest traders were raw), any kind with the service, and skips the carrier search (carriers
+  never have one). Each row's Has says "⇄ raw" (or "⇄ trader" with no kind); the footer's hidden count names the trader.
+- **Materials: "⇄ nearest raw trader"** on a limiting FSD-injection material and "⇄" beside each short material of a
+  recipe (its category now in `/api/materials`' synthesis): the finder opens with that trader asked for, the saved
+  filters untouched (`NR.over`); Plot here from there brings Plot Route forward.
+- **Voice and AI:** "nearest material trader", "nearest raw material trader" (manufactured, encoded, "data trader")
+  in `resources/ask.json`; the answer says the kind ("Nearest raw material trader: Broglie Terminal, an ocellus
+  starport, 11 light years away, in 61 Cygni."; "a"/"an" now by the word). The AI's `nearest_dock` tool takes the
+  four new needs.
+
 ## 2026-10-12 · The carrier's own jumps check the tritium, and the synthesis recipes you have made
 - **A journal re-read (PARSER_VERSION 50)**, the plan's one: your carrier's movements and tritium deposits
   (CarrierJumpRequest, CarrierJumpCancelled, CarrierLocation, CarrierJump by its MarketID, CarrierDepositFuel) are now

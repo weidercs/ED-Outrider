@@ -1863,6 +1863,69 @@ const settle = async maxMs => {
     console.log(goodNR ? "OK" : "FAIL", "| nearest dock |", goodNR ? "the finder's rows, the DSSA badge and warnings, a filter asks again (kept), Plot here plots" :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
   }
+  // S54: material traders. A short material on the Materials tab offers "⇄ nearest raw trader"; it opens the finder
+  // with that trader asked for (the select shows it) without touching the saved filter; the rows say each trader's
+  // kind; a later plain opening asks with the saved filter again; Plot here from there brings Plot Route forward
+  {
+    const w = dom.window, d = w.document, before = errors.length;
+    w.eval(`window.__tAsked = []; window.__tReal = apiJson; window.__tKeep = {need: NR.need, md: matData, v0: view};
+      NR.need = ["UC"]; saveNearest();
+      apiJson = async (u, o) => {
+        const s = String(u);
+        if (s.startsWith("api/highway/plot")) { __tAsked.push(s); return {ok: true, plotting: {state: "running", from: "Here", to: "X", started: new Date().toISOString()}}; }
+        if (!s.startsWith("api/nearest")) return __tReal(u, o);
+        __tAsked.push(s);
+        const need = new URLSearchParams(s.split("?")[1]).get("need").split(",").filter(Boolean);
+        return {where: "Sol", pad: "L", ship: "explorer_nx", age: 30, need, more: 0, hidden: {old: 0, pad: 0, permit: 0, service: 7},
+                errors: [], dssa: {count: 0}, rows: [
+          {kind: "station", name: "Broglie Terminal", station_type: "Ocellus Starport", system: "61 Cygni", ly: 11.4, jumps: 1, ls: 1200,
+           services: ["UC", "Repair", "Trader", "Raw"], pads: "L M S", warn: [], source: "Spansh", age_s: 3600},
+          {kind: "station", name: "The Divine Apparatus", station_type: "Planetary Outpost", system: "Deriso", ly: 22000, jumps: 300, ls: 50,
+           services: ["Trader"], pads: "M S", warn: [], source: "Spansh", age_s: 3600}]};
+      };
+      matData = {rows: [{id: "polonium", name: "Polonium", category: "Raw", grade: 4, count: 0, cap: 150}], snapshot_ts: "2026-01-01T00:00:00Z",
+        ts: "2026-01-01T00:00:00Z", mining_sites: [], sources: {polonium: []}, synthesis: [
+          {name: "FSD injection premium", group: "fsd", craftable: 0, verified: false, learned: null, materials: [
+            {id: "polonium", name: "Polonium", category: "Raw", have: 0, need: 1}, {id: "arsenic", name: "Arsenic", category: "Raw", have: 9, need: 1},
+            {id: "chemicalmanipulators", name: "Chemical Manipulators", category: "Manufactured", have: 0, need: 1}]}]};
+      renderMat();`);
+    const got = {};
+    got.srcBtn = (d.querySelector("#matSources [data-trader]") || {}).textContent;
+    got.cardBtns = [...d.querySelectorAll("#matSynth .synth [data-trader]")].map(b => b.dataset.trader + ":" + b.textContent);
+    d.querySelector("#matSources [data-trader]").click(); await sleep(60);
+    const dlg = d.getElementById("nearDlg");
+    got.open = dlg.open;
+    got.select = dlg.querySelector("[data-ntrader]").value;
+    got.ucTicked = dlg.querySelector('[data-nneed="UC"]').checked;
+    got.has = [...d.querySelectorAll("#nearRows td.has")].map(t => t.textContent.replace(/\s+/g, " ").trim());
+    got.foot = d.getElementById("nearFoot").textContent;
+    const sel = dlg.querySelector("[data-ntrader]"); sel.value = "Encoded"; sel.dispatchEvent(new w.Event("change", {bubbles: true})); await sleep(60);
+    got.stored = w.localStorage.getItem("nearest");
+    d.querySelector('#nearRows [data-nplot="61 Cygni"]').click(); await sleep(80);
+    got.view = w.eval("view");
+    d.getElementById("hwyNearest").click(); await sleep(60);   // a plain opening: the saved filter again
+    got.select2 = dlg.querySelector("[data-ntrader]").value;
+    got.asked = w.eval("__tAsked.slice()");
+    dlg.querySelector("[data-close]").click(); await sleep(20);
+    w.eval(`apiJson = __tReal; NR.need = __tKeep.need; saveNearest(); localStorage.removeItem("nearest");
+      matData = __tKeep.md; matKey = null; document.querySelector('[data-view="' + __tKeep.v0 + '"]').click(); if (matData) renderMat();`);
+    d.getElementById("hwyTo").value = "";
+    const q = got.asked.filter(u => u.startsWith("api/nearest")).map(u => new URLSearchParams(u.split("?")[1]).get("need"));
+    const bad = [];
+    if (got.srcBtn !== "⇄ nearest raw trader") bad.push("sources button");
+    if (JSON.stringify(got.cardBtns) !== JSON.stringify(["Raw:⇄", "Manufactured:⇄"])) bad.push("card buttons");   // the short ones only
+    if (!got.open || got.select !== "Raw" || got.ucTicked) bad.push("opened with the trader");
+    if (!/⇄ raw$/.test(got.has[0] || "") || !/⇄ trader$/.test(got.has[1] || "")) bad.push("kinds shown");
+    if (!/7 without a raw material trader/.test(got.foot)) bad.push("foot");
+    if (JSON.stringify(q) !== JSON.stringify(["Raw", "Encoded", "UC"])) bad.push("asked");
+    if (!/"need":\["UC"\]/.test(got.stored || "")) bad.push("saved filter untouched");
+    if (got.view !== "hwy" || !got.asked.some(u => u.startsWith("api/highway/plot"))) bad.push("plot here");
+    if (got.select2 !== "") bad.push("plain opening");
+    const goodTR = !bad.length && errors.length === before;
+    allOk = allOk && goodTR;
+    console.log(goodTR ? "OK" : "FAIL", "| S54 material traders |", goodTR ? "⇄ on short materials opens the finder with the trader (filter not saved), kinds shown, Plot here shows Plot Route" :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+  }
   // G2.2, F48, F64: a bad server copy (a list that is not a list, a null object, a number for 'saved') does not stop
   // the page: a fresh browser still starts polling
   {

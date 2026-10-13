@@ -210,8 +210,8 @@ puts it on the clipboard.
 The Android app asks Outrider a question out loud, after its wake word or a tap on Ask. The answer is said in your
 Piper voice by the window that speaks (a PC browser, or the tablet with Play alerts here) and shown as a caption on
 every open page. Outrider knows these without any AI: **status report, fuel, unsold, next jump, what's left here,
-nearest unvisited, nearest station** (or carrier, Vista, cartographics, repair, refuel, shipyard, "where can I
-sell": see
+nearest unvisited, nearest station** (or carrier, Vista, cartographics, repair, refuel, shipyard, material trader,
+raw material trader, "where can I sell": see
 [Nearest place to dock](plot-route.md#-nearest-place-to-dock)), **hush** and **unhush**. Their phrases are in `resources/ask.json`; edit them freely.
 
 Anything else goes to an optional AI layer, off by default (`[assistant] enabled = false`, also in ⚙ Settings →
