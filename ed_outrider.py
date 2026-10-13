@@ -352,6 +352,7 @@ BF_CHECK_WEEKS = 12          # S47's Check looks this far back for where EDSM's 
 BF_MAX_DAYS = 366            # ...and a backfill's range is at most this long
 IMPORT_GAP_S = 10            # s between two of S67's import reads (a week of EDSM's flight log each): gentle, one-off
 IMPORT_RATE_WAIT_S = 600     # s the import waits when EDSM asks it to slow down, before asking again
+IMPORT_LOOKUP_GAP_S = 3      # s between two of the import's name lookups (Spansh, then EDSM): up to RESOLVE_MAX of them
 LOOKUP_DOWN_S = 10 * 60      # s: Spansh or EDSM unavailable this long gets a card on the banner (S42; at once for no network)
 BIO_TAGS_SHOWN = 40          # the surface map draws at most this many tagged plants (nearest first)
 SELLER_REFRESH_LY = 100      # look for the nearest places to sell again after moving this far
@@ -6349,10 +6350,11 @@ def journals_gone(db):
 
 
 def backup_before_reread(db, db_path, folder, keep, extras=(), live_dirs=(), board=None, gone=None):
-    """S4, open_db's before_reset in run(): a journal re-read deletes what the journals gave (RESET_JOURNAL_DATA) and
-    reads them again, the one destructive step Outrider takes by itself, so the database is backed up first whatever
-    backup_every_days says (0 turns off the automatic ones only). The zip is tagged "pre-reread" (backup_name) and
-    rotates with the others; last_backup is not touched (the Data tile's line is about the regular backups). A failed
+    """S4, the backup run() takes before reset_journal_data (open_db's before_reset is only the one-step open
+    tests/test_backups.py uses; tests/test_starting.py covers run()'s path): a journal re-read deletes what the
+    journals gave (RESET_JOURNAL_DATA) and reads them again, the one destructive step Outrider takes by itself, so the
+    database is backed up first whatever backup_every_days says (0 turns off the automatic ones only). The zip is
+    tagged "pre-reread" (backup_name) and rotates with the others; last_backup is not touched (the Data tile's line is about the regular backups). A failed
     backup does not stop the re-read: said on stderr and on the banner. When more than half the journal files the
     database was read from are gone (an uninstall under Steam/Proton deletes them), the re-read cannot bring back what
     they held: said too, with the archive to read them from. Synchronous: run() calls it on a worker thread (the
@@ -8718,12 +8720,14 @@ class State:
         trip = None
         if d and not here and not aboard and used is not None and fuel is not None:
             # the tritium for the trip to you (S13 A): what the depot lacks, and whether a confirmed tritium line in the
-            # hold covers it (moved into the depot before the jumps)
+            # hold covers it: moved into the depot before the jumps, or only topped up again on the way (the depot
+            # holds 1,000 t: carrier_jumps)
             trip = outrider.cargo.carrier_trip(d, fuel, used, k=k)
             line = st["lines"].get("tritium")
             hold = line["count"] if line and line["state"] == "confirmed" else None
             if trip:
-                trip.update(hold=hold, covered=bool(trip["short"] and hold and hold >= trip["short"]))
+                top_up = outrider.cargo.trip_top_up(trip, d, hold, used, k=k)
+                trip.update(hold=hold, covered=bool(top_up), top_up=top_up)
         return {"name": c.get("name"), "callsign": c.get("callsign"), "system": c.get("system"),
                 "carrier_id": str(c["id"]) if c.get("id") is not None else None,   # which carrier (a new one: no "arrived")
                 "aboard": aboard,
@@ -9061,8 +9065,8 @@ class State:
     def cargo_recount(self, counts):
         """POST /api/cargo/recount {counts: {commodity: tons}}: your counts for carrier lines Outrider cannot confirm.
         A name not seen yet ("Add a commodity") is matched to a known one, letters only: the journal's names first,
-        then Spansh's commodity list (the copy kept from the last lookup; stored with Spansh's spelling and the journal
-        id its letters give, MINERAL_NAMES' two by theirs). Anything else is refused with up to three names it is
+        then Spansh's commodity list (the copy kept from the last lookup; stored with Spansh's spelling under the journal's
+        id: outrider.cargo.spansh_id, its letters or SPANSH_IDS' where they differ, "Occupied Escape Pod" occupiedcryopod). Anything else is refused with up to three names it is
         close to (S57: a typo made a line of its own that no journal event would ever move); without Spansh's list
         only the journal's names are known. Confirmed lines (a sell order at your carrier) are left as the market
         says."""
@@ -9076,8 +9080,6 @@ class State:
         known = {outrider.cargo.norm(i): i for i in set(st["lines"]) | set(names)}
         known.update({outrider.cargo.norm(n): i for i, n in names.items()})
         spansh = (self.spansh_commodities or {}).get("norm") or {}
-        # Spansh's names whose letters are not the journal's id: the journal's own wins
-        aliases = {outrider.cargo.norm(v): k.lower() for k, v in MINERAL_NAMES.items()}
         rows, skipped = [], []
         for key, n in counts.items():
             if not isinstance(key, str) or not key.strip() or len(key) > 80 or isinstance(n, bool) \
@@ -9085,8 +9087,9 @@ class State:
                 return {"error": f"bad count for {str(key)[:80]!r}: whole tons, 0 to 100,000"}, 400
             k, name = outrider.cargo.norm(key), None
             i = known.get(k)
-            if not i and k in spansh:
-                i = known.get(aliases.get(k)) or aliases.get(k) or k
+            if not i and k in spansh:   # the journal's id (outrider.cargo.SPANSH_IDS where the letters differ)
+                sid = outrider.cargo.spansh_id(k)
+                i = known.get(outrider.cargo.norm(sid)) or sid
                 name = None if i in names else spansh[k]
             if not i:
                 return self.recount_refusal(key, known, names, spansh), 400
@@ -12081,8 +12084,8 @@ class State:
         """S45's Check: does EDSM (get-credits) or Inara (getCommanderProfile) accept this commander's key, the typed one
         or else the one stored? One check per KEY_CHECK_S per service; EDSM's reads paced by edsm_gate, Inara's through
         the gate its sender waits on too. Reads only. The key is never in the answer or the log (it goes in a POST body,
-        and no error's text is repeated: outrider.readclient.reach_words). A success with the stored key clears its
-        hold (clear_key_hold). (answer, status): the answer {ok, text, at, service, commander, link?, cleared?}."""
+        and no error's text is repeated: outrider.readclient.reach_words). A success with the stored key (EDSM: and the
+        stored name) clears its hold (clear_key_hold). (answer, status): the answer {ok, text, at, service, commander, link?, cleared?}."""
         commander = str(commander or "").strip()
         if service not in ("edsm", "inara") or not commander or len(commander) > 64:
             return {"error": "commander: the in-game commander's name"}, 400
@@ -12129,8 +12132,14 @@ class State:
             out.update(ok=False, text=f"{label}'s answer was not understood")
         except Exception as e:   # unreachable, a timeout, a 5xx: the kind only (an error's text can carry the URL)
             out.update(ok=False, text=f"Couldn't reach {label}: {rc.reach_words(e)}")
-        if out["ok"] and (not typed or typed == stored.get("key")) and self.clear_key_hold(service):
-            out["cleared"] = True   # the stored key works: what waited is sent now
+        # the stored pair works (EDSM: the key and the name the sender uses): what waited is sent now. A typed name EDSM
+        # accepts with the stored key is not what the sender sends: it would be refused again
+        same = not typed or typed == stored.get("key")
+        if service == "edsm" and out["ok"] and edsm_name != (stored.get("name") or commander):
+            same = False
+            out["text"] += ": save this name first"
+        if out["ok"] and same and self.clear_key_hold(service):
+            out["cleared"] = True
             self.bump()
         print(f"uploads: {label} key check for CMDR {commander}: {'ok' if out['ok'] else out['text']}")
         return out, 200
@@ -12149,9 +12158,19 @@ class State:
         meta_set(self.db, "edsm_backfill", bf)
         return bf
 
+    def edsm_bf_paused(self):
+        """Why the backfill's sender must not send from here although it runs, or None: never under --simulate (display
+        only, as every sender), nor while another Outrider holds the EDSM uploader lease (the one that talks to EDSM)."""
+        if self.simulate:
+            return "--simulate: nothing is sent"
+        other = (self.lease_hold or {}).get("edsm") \
+            or next((o["host"] for o in (self.lease_others or {}).values() if "edsm" in o["services"]), None)
+        return f"another Outrider ({other}) uploads to EDSM" if other else None
+
     def edsm_bf_on(self, service=None):
-        """Whether the backfill's sender may send (upload_loop's `on`): only while it runs (not held, stopped or done)."""
-        return (self.edsm_backfill() or {}).get("state") == "running"
+        """Whether the backfill's sender may send (upload_loop's `on`): only while it runs (not held, stopped or done)
+        and nothing pauses it (edsm_bf_paused)."""
+        return (self.edsm_backfill() or {}).get("state") == "running" and self.edsm_bf_paused() is None
 
     def edsm_bf_busy(self):
         """Why a Check or Send cannot start now, or None: one at a time, and never while a backfill sends."""
@@ -12167,6 +12186,7 @@ class State:
         pv = self.edsm_bf_preview
         since = meta_get(self.db, "edsm_since")
         return {"progress": self.edsm_backfill(), "job": self.edsm_bf_job, "since": since if isinstance(since, str) else None,
+                "paused": self.edsm_bf_paused(),
                 "preview": {k: pv[k] for k in ("commander", "start", "end", "summary", "files", "at")} if pv else None,
                 "queued": outrider.uploads.counts(self.db, "edsm_bf")["queued"], "gap_s": outrider.backfill.SEND_GAP_S}
 
@@ -12553,16 +12573,7 @@ class State:
                 self.edsm_seq += 1   # the Settings line's count follows; the visited marks once it is done
                 self.bump()
                 await asyncio.sleep(IMPORT_GAP_S)
-            names = el.unlocated(self.db)
-            if names:
-                self.edsm_import_set(why=f"looking up where {len(names):,} system{'' if len(names) == 1 else 's'} EDSM gave no position for are…")
-                self.db.commit()
-                self.bump()
-                for name in names:
-                    hit = await self.edsm_import_locate(name)
-                    if hit:
-                        el.set_location(self.db, name, *hit)
-                self.db.commit()
+            await self.edsm_import_resolve(el.unlocated(self.db))
             self.edsm_import_set(state="done", why=None, finished=time.time())
             self.db.commit()
             self.edsm_visited_changed()
@@ -12580,15 +12591,36 @@ class State:
               f"{p.get('weeks', 0)} weeks, {p.get('entries', 0):,} entries" + (f" ({p['why']})" if p.get("why") else ""))
         self.bump()
 
-    async def edsm_import_locate(self, name):
+    async def edsm_import_resolve(self, names):
+        """The import's last step: where each system EDSM gave no position for is (edsm_import_locate), stored as found.
+        Paced, up to RESOLVE_MAX names: a lookup that asks Spansh or EDSM waits IMPORT_LOOKUP_GAP_S after the last one
+        (back to back they made hundreds of requests a minute, and a refusal raised the 'unavailable' card), EDSM's
+        through edsm_gate too; the Settings line says how far it is."""
+        el, gate = outrider.edsmlog, outrider.uploads.Gate(IMPORT_LOOKUP_GAP_S)
+        for n, name in enumerate(names):
+            if n % 10 == 0:
+                self.edsm_import_set(why=f"looking up where the systems EDSM gave no position for are: {n:,} of {len(names):,}")
+                self.db.commit()
+                self.bump()
+            hit = await self.edsm_import_locate(name, gate)
+            if hit:
+                el.set_location(self.db, name, *hit)
+        self.db.commit()
+
+    async def edsm_import_locate(self, name, gate=None):
         """(id64, x, y, z) of a system by name for an imported entry EDSM gave no position for: known here, else
-        Spansh's record, else EDSM's; None when nobody knows (it still counts by name: the boxel lists, Find)."""
+        Spansh's record, else EDSM's (through edsm_gate); None when nobody knows (it still counts by name: the boxel
+        lists, Find). gate: edsm_import_resolve's pace, waited on before each request."""
         hit = self.find_local(name)
         if hit and hit[0] is not None and hit[5] != "edsm_log":
             return hit[0], hit[2], hit[3], hit[4]
-        for ask in (getattr(self.spansh, "system_record", None), getattr(self.spansh, "edsm_system", None)):
+        for edsm, ask in enumerate((getattr(self.spansh, "system_record", None), getattr(self.spansh, "edsm_system", None))):
             if ask is None:
                 continue
+            if gate:
+                await gate.wait()
+            if edsm:
+                await self.edsm_gate.wait()
             try:
                 d = await ask(name)
             except Exception:   # noqa: BLE001 -- a lookup that fails leaves the entry as it is

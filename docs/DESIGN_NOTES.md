@@ -676,7 +676,9 @@ upstream project's choices, not rules of the game.
   outbox service `edsm_bf`, one request every 10 s, UNIQUE per source so a second Send never doubles, and a line EDSM's
   live stream has is skipped). Its answers are read strictly (`edsm.backfill_answer`): the live `answer()` takes 101-104
   as sent, right for the live stream but not here, where 102 "older than what EDSM has" means EDSM did not take it.
-  A first request taken by none (every event 102) stops it by itself. Installs that switched EDSM on before
+  A first request taken by none (every event 102) stops it by itself. Its state and queue are in the database, so
+  `edsm_bf_on` also asks `edsm_bf_paused`: never under `--simulate` (a run interrupted, then a `--simulate` start on the
+  same data sent it before the Fable sweep of 2026-10-13), nor while another Outrider's lease sends EDSM. Installs that switched EDSM on before
   `edsm_since` existed say "unknown" and the range runs to now. The jumps between are the jumps table's (every
   commander), the events are the commander's.
 - **EDSM's flight log from before your journals counts as visits, nothing else** (S67, `outrider/edsmlog.py`): the import
@@ -693,8 +695,9 @@ upstream project's choices, not rules of the game.
   import refuses another until Remove them; a stopped one goes on from its cursor (meta `edsm_import`). Paced at one
   read every 10 s (`IMPORT_GAP_S`; EDSM limits its API per hour) besides the 2 s gate; a slow-down answer waits
   `IMPORT_RATE_WAIT_S`. Known limits: every imported commander counts as "you"; an entry EDSM gave no position for is
-  looked up by name afterwards (here, then Spansh, then EDSM; at most 500), else counts by name only (the boxel lists,
-  Find).
+  looked up by name afterwards (here, then Spansh, then EDSM; at most 500, `IMPORT_LOOKUP_GAP_S` 3 s between two
+  requests and EDSM's through its gate too, so 500 take up to an hour: back to back they were a burst), else counts
+  by name only (the boxel lists, Find).
 - **Upload marks in the Log** (S68): the Log only (the author's choice), from the outbox joined on its source key (the
   file and the line's byte offset: log.py splits on "\n" as the reader does, never splitlines, so the offsets agree; a
   line's `#1`, `#2` messages count as that line). Per service the worst of a line's messages wins (✗ over ⏸ over ⏳
@@ -840,7 +843,9 @@ upstream project's choices, not rules of the game.
   2026-10-12): `carrier_trip` splits the straight line into equal legs of up to 500 ly, each burned by `carrier_burn`
   with the depot lighter by what the legs before burned (topping up from the hold moves weight, it adds none); its `k`
   is 1 until the carrier's own past jumps give a factor (S13 B). A plain average of past jumps would be worse: the burn
-  depends on the distance and the mass. Red when the depot lacks it; amber when a confirmed tritium line covers it.
+  depends on the distance and the mass. Red when the depot lacks it; amber when a confirmed tritium line covers it
+  (`trip_top_up`: "before" the jumps while the 1,000 t depot can take it all, else "on the way" when `carrier_jumps`,
+  which tops up as the depot runs down, still reaches the trip's jumps; the Fable sweep, 2026-10-13).
 - **The carrier's own jumps scale the formula, never replace it** (S13 B): `carrier_burns` measures each jump booked
   and confirmed (a CarrierJumpRequest, not cancelled, then a CarrierLocation or CarrierJump in that system) that has
   one depot reading on each side (CarrierStats' FuelLevel; a CarrierDepositFuel is a reading too, Total − Amount before
@@ -945,7 +950,10 @@ upstream project's choices, not rules of the game.
   too) writes a systemd user unit running `launch_outrider.sh` with the arguments given (paths absolute) and enables
   it; starting it while this Outrider holds the port would fail, so it starts at the next login (the words say how to
   switch now). It sets `OUTRIDER_SERVICE=systemd`, which makes Restart exit 75 (`RestartForceExitStatus=75`) rather
-  than exec in place: systemd then starts the unit as itself, and `Restart=on-failure` covers a crash.
+  than exec in place: systemd then starts the unit as itself, and `Restart=on-failure` covers a crash. Every start
+  counts toward systemd's start limit, asked-for restarts too: 30 in 600 s (10 in 300 s locked the service out after a
+  run of Settings restarts) still stops a crash loop at `RestartSec=5` in minutes; the page's "not back yet" words for
+  systemd name `systemctl --user reset-failed ed-outrider`.
   `TimeoutStopSec=330` is over the 300 s Outrider waits for a backup at shutdown; `KillMode=mixed` leaves the overlay
   window to Outrider's own stop. A game PC's unit is part of `graphical-session.target` (the overlay, the keys and
   the game's window need the desktop), a server's of `default.target`. Windows: a `.cmd` in the Startup folder
@@ -998,11 +1006,12 @@ upstream project's choices, not rules of the game.
   d", amber after `CONFIRM_STALE_D` 7 days, when the carrier's heading asks for a market read; S58).
 - **Recount takes only commodity names** (S57): the names your journal has given first, then Spansh's commodity list
   (the copy the Sell / Buy lookup keeps, fetched by Recount itself when there is none yet), stored with Spansh's
-  spelling under the id its letters give; for the two whose letters are not the journal's id (`MINERAL_NAMES`: Low
-  Temperature Diamonds, Void Opal) the journal's id. Anything else is refused with up to three close names: a typo
-  used to make a line of its own that no journal event would ever move. With no copy of Spansh's list and no network
-  only your journal's names are known. A name Spansh spells differently from the game beyond those two would make a
-  second line once the journal names it (Recount 0 removes it).
+  spelling under the journal's id: its letters, or for the hundred-odd whose letters are not the id
+  (`outrider.cargo.SPANSH_IDS`, from EDCD's commodity tables: Occupied Escape Pod is `occupiedcryopod`, Agri-Medicines
+  `agriculturalmedicines`, Void Opal `opal`...) the table's. Anything else is refused with up to three close names: a
+  typo used to make a line of its own that no journal event would ever move. With no copy of Spansh's list and no
+  network only your journal's names are known. A commodity added to the game after the table, whose letters are not
+  its id, would still make a second line once the journal names it (Recount 0 removes it): add it to the table.
 - **Market.json is read only when it changes and only kept for your own carrier;** a market opened while Outrider
   was not running is gone (the game overwrites the file at the next market), so the next one confirms instead.
 - **Trade prices are what players last reported** (Spansh, via EDDN): a stop's price or demand can have moved on, and

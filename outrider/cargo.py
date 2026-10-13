@@ -67,6 +67,79 @@ def norm(name):
     return re.sub(r"[^a-z0-9]", "", str(name or "").lower())
 
 
+# Spansh's commodity names (EDCD's, the game market's) whose letters are not the journal's id: "Occupied Escape Pod" is
+# $OccupiedCryoPod_Name;. From EDCD's FDevIDs commodity.csv and rare_commodity.csv, the pairs whose name in Spansh's list
+# (tests/fixtures/spansh_commodities.json, 2026-10-13) does not reduce to the symbol. Every other Spansh name's letters
+# are the journal's id. Recount (S57) stores a name the journal has not given yet under the id this gives.
+SPANSH_IDS = {"Aepyornis Egg": "cetiaepyornisegg", "Agri-Medicines": "agriculturalmedicines",
+              "Albino Quechua Mammoth Meat": "albinoquechuamammoth", "Alya Body Soap": "alyabodilysoap",
+              "Ancient Artefact": "usscargoancientartefact", "Anomaly Particles": "p_particulatesample",
+              "Atmospheric Processors": "atmosphericextractors", "Azure Milk": "bluemilk",
+              "Black Box": "usscargoblackbox", "Bone Fragments": "thargoidbonefragments",
+              "Caustic Tissue Sample": "thargoidgeneratortissuesample", "CD-75 Kitten Brand Coffee": "cd75catcoffee",
+              "Commercial Samples": "comercialsamples", "Crom Silver Fesh": "animaleffigies",
+              "Curated Commodity Package": "curatedcommodity", "Cyst Specimen": "thargoidcystspecimen",
+              "Eden Apples of Aerial": "aerialedenapple", "Encrypted Data Storage": "encripteddatastorage",
+              "Energy Grid Assembly": "powergridassembly", "Experimental Chemicals": "usscargoexperimentalchemicals",
+              "Guardian Casket": "ancientcasket", "Guardian Orb": "ancientorb", "Guardian Relic": "ancientrelic",
+              "Guardian Tablet": "ancienttablet", "Guardian Totem": "ancienttotem", "Guardian Urn": "ancienturn",
+              "H.E. Suits": "hazardousenvironmentsuits", "Haiden Black Brew": "haidneblackbrew",
+              "Hardware Diagnostic Sensor": "diagnosticsensor", "HIP Proto-Squid": "hip41181squid",
+              "Hostages": "hostage", "Impure Spire Mineral": "unknownmineral",
+              "Kachirigin Filter Leeches": "kachiriginleaches", "Kinago Violins": "kinagoinstruments",
+              "Koro Kung Pellets": "korrokungpellets", "Land Enrichment Systems": "terrainenrichmentsystems",
+              "Large Survey Data Cache": "largeexplorationdatacash", "Leathery Eggs": "alieneggs",
+              "Low Temperature Diamonds": "lowtemperaturediamond", "Lucan Onionhead": "transgeniconionhead",
+              "Marine Equipment": "marinesupplies", "Micro-weave Cooling Hoses": "coolinghoses",
+              "Microbial Furnaces": "heliostaticfurnaces", "Military Plans": "usscargomilitaryplans",
+              "Mollusc Brain Tissue": "m_tissuesample_nerves", "Mollusc Fluid": "m_tissuesample_fluid",
+              "Mollusc Membrane": "m3_tissuesample_membrane", "Mollusc Mycelium": "m3_tissuesample_mycelium",
+              "Mollusc Soft Tissue": "m_tissuesample_soft", "Mollusc Spores": "m3_tissuesample_spores",
+              "Muon Imager": "mutomimager", "Narcotics": "basicnarcotics", "Occupied Escape Pod": "occupiedcryopod",
+              "Onionhead Alpha Strain": "onionheada", "Onionhead Beta Strain": "onionheadb",
+              "Onionhead Gamma Strain": "onionheadc", "Ophiuch Exino Artefacts": "ophiuchiexinoartefacts",
+              "Organ Sample": "thargoidorgansample", "Platinum Alloy": "platinumaloy",
+              "Pod Core Tissue": "s_tissuesample_cells", "Pod Dead Tissue": "s_tissuesample_surface",
+              "Pod Mesoglea": "s6_tissuesample_mesoglea", "Pod Outer Tissue": "s6_tissuesample_cells",
+              "Pod Shell Tissue": "s6_tissuesample_coenosarc", "Pod Surface Tissue": "s_tissuesample_core",
+              "Pod Tissue": "s9_tissuesample_shell", "Political Prisoners": "politicalprisoner",
+              "Power Transfer Bus": "powertransferconduits", "Protective Membrane Scrap": "unknownsack",
+              "Prototype Tech": "usscargoprototypetech", "Rajukru Multi-Stoves": "rajukrustoves",
+              "Rare Artwork": "usscargorareartwork", "Rebel Transmissions": "usscargorebeltransmissions",
+              "Sanuma Decorative Meat": "sanumameat", "Semi-Refined Spire Mineral": "unknownrefinedmineral",
+              "Skimmer Components": "skimercomponents", "Small Survey Data Cache": "smallexplorationdatacash",
+              "Tarach Spice": "tarachtorspice", "Technical Blueprints": "usscargotechnicalblueprints",
+              "Thargoid Basilisk Tissue Sample": "thargoidtissuesampletype2",
+              "Thargoid Biological Matter": "unknownbiologicalmatter",
+              "Thargoid Cyclops Tissue Sample": "thargoidtissuesampletype1",
+              "Thargoid Glaive Tissue Sample": "thargoidtissuesampletype6",
+              "Thargoid Hydra Tissue Sample": "thargoidtissuesampletype4", "Thargoid Link": "unknownartifact3",
+              "Thargoid Medusa Tissue Sample": "thargoidtissuesampletype3",
+              "Thargoid Orthrus Tissue Sample": "thargoidtissuesampletype5", "Thargoid Probe": "unknownartifact2",
+              "Thargoid Resin": "unknownresin", "Thargoid Scythe Tissue Sample": "thargoidtissuesampletype7",
+              "Thargoid Sensor": "unknownartifact", "Thargoid Technology Samples": "unknowntechnologysamples",
+              "The Waters of Shintara": "watersofshintara", "Titan Deep Tissue Sample": "thargoidtissuesampletype9a",
+              "Titan Drive Component": "thargoidtitandrivecomponent",
+              "Titan Maw Deep Tissue Sample": "thargoidtissuesampletype10a",
+              "Titan Maw Partial Tissue Sample": "thargoidtissuesampletype10c",
+              "Titan Maw Tissue Sample": "thargoidtissuesampletype10b",
+              "Titan Partial Tissue Sample": "thargoidtissuesampletype9c",
+              "Titan Tissue Sample": "thargoidtissuesampletype9b", "Trade Data": "usscargotradedata",
+              "Trinkets of Hidden Fortune": "trinketsoffortune", "Ultra-Compact Processor Prototypes": "advert1",
+              "Unclassified Relic": "ancientrelictg", "Unoccupied Escape Pod": "unocuppiedescapepod",
+              "Utgaroar Millennial Eggs": "utgaroarmillenialeggs", "Vanayequi Ceratomorpha Fur": "vanayequirhinofur",
+              "Void Extract Coffee": "lftvoidextractcoffee", "Void Opal": "opal", "Wolf Fesh": "wolf1301fesh",
+              "Xenobiological Prison Pod": "thargoidpod", "Xihe Biomorphic Companions": "xihecompanions",
+              "Zeessze Ant Grub Glue": "zeesszeantglue"}
+_SPANSH_BY_NORM = {norm(k): v for k, v in SPANSH_IDS.items()}
+
+
+def spansh_id(name):
+    """The journal's commodity id for a Spansh commodity name: SPANSH_IDS' when its letters differ, else its letters."""
+    k = norm(name)
+    return _SPANSH_BY_NORM.get(k, k)
+
+
 def learn(names, ev):
     """Keep the display names an event gives (Type_Localised, Name_Localised, Commodity_Localised). True if new."""
     new = False
@@ -472,6 +545,20 @@ def carrier_trip(ly, depot, used, jump_ly=CARRIER_JUMP_LY, k=1.0):
         burn += round(k * carrier_burn(leg, used, max(depot - burn, 0)))
     return {"jumps": jumps, "burn": burn, "depot": int(depot), "short": max(0, burn - int(depot)),
             "depot_after": max(0, int(depot) - burn)}
+
+
+def trip_top_up(trip, ly, hold, used, k=1.0):
+    """How the tritium in the hold (`hold` t, part of `used`) covers what carrier_trip's `trip` of `ly` lacks: "before"
+    (moved into the depot before the jumps; the depot holds CARRIER_DEPOT_MAX), "on_the_way" (only by topping the depot
+    up again as it runs down: carrier_jumps), or None (it does not, or nothing is short)."""
+    short = trip["short"]
+    if not short or not hold:
+        return None
+    if short <= min(hold, CARRIER_DEPOT_MAX - trip["depot"]):
+        return "before"
+    if hold >= short and (carrier_jumps(trip["depot"], hold, used, ly=ly / trip["jumps"], k=k) or 0) >= trip["jumps"]:
+        return "on_the_way"
+    return None
 
 
 BURN_SAMPLES = 12          # the factor is the median of the carrier's last this many measured jumps

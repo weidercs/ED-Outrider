@@ -31,7 +31,8 @@ The **Materials** tab starts with your **Cargo**.
   "Decommissioned" and the date (a carrier bought since takes its place).
 - **The trip to you:** while your carrier is elsewhere, the tile says what bringing it to you takes: "it → you ≈ 3
   carrier jumps · ≈ 340 t tritium", and when the depot holds less, "depot 200 t: 140 t short" in red (amber, "enough
-  after topping up", when tritium on a sell order in its hold covers it). Equal jumps of up to 500 ly in a straight
+  after topping up", when tritium on a sell order in its hold covers it; "enough if topped up on the way" when it
+  needs more than the 1,000 t depot takes at once, so you top it up again part way). Equal jumps of up to 500 ly in a straight
   line, each lighter than the last (the real trip is never shorter). A booked jump says its own: "(432 ly jump ≈ 96 t;
   depot after ≈ 572 t)". The game's fuel formula is checked against your carrier's own jumps (what the depot held
   before and after each one, from its stats and your tritium deposits): once three are measured, their median scales

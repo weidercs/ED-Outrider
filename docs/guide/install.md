@@ -69,7 +69,8 @@ Or ⚙ Settings → Server → **Start with this computer**, in the browser on t
 it is a systemd user service (`~/.config/systemd/user/ed-outrider.service`) that starts when you log in to your desktop;
 switch to it now with `systemctl --user start ed-outrider` after stopping the Outrider you started by hand. Its output:
 `journalctl --user -u ed-outrider -f`, and Show log as always. It comes back by itself after a crash, and Settings'
-**Restart** goes through it. If it does not start at login, your desktop does not start `graphical-session.target`
+**Restart** goes through it. systemd stops starting it after 30 starts in 10 minutes (a crash loop); after that,
+`systemctl --user reset-failed ed-outrider` and `systemctl --user start ed-outrider`. If it does not start at login, your desktop does not start `graphical-session.target`
 (GNOME and KDE do). On a Linux server (`[server] game_pc = false`) it starts with your user's systemd instead; `loginctl
 enable-linger` starts it at boot. On Windows it is `ED Outrider.cmd` in your Startup folder (`shell:startup`), which
 starts `launch_outrider.bat` minimised when you sign in. Not in Docker (the container's restart policy already is the

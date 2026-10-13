@@ -203,6 +203,20 @@ class NumberedStops(unittest.TestCase):
         self.assertEqual([(r["name"], r["stops"]) for r in rows if r["stops"]], [("A 3", [1, 2]), ("B 1", [3])])
         self.assertEqual(under, 2)                                                  # B 2 is under your levels now
 
+    def test_mapped_by_others_is_not_under_your_levels(self):
+        """A planet you scanned that someone else had mapped (leaving.unmapped's mapped_before): never a stop, as on the
+        page, and not counted "under your levels" either though its mapping would add 2M (over the 500k level)."""
+        leaving = dict(LEAVING_PLAN, unmapped=LEAVING_PLAN["unmapped"] + [
+            {"body": "E 1", "subtype": "High metal content body", "increment": 2_000_000, "dist_ls": 50, "mapped_before": True}])
+        detail = dict(DETAIL_PLAN, leaving=leaving, bodies=DETAIL_PLAN["bodies"] + [
+            body("E 1", 50, body_id=40, scanned=True, value_parts={"carto_left": 2_000_000})])
+        rows, left, under = O.system_rows(detail, 500_000, 10_000_000)
+        self.assertNotIn("E 1", [r["name"] for r in rows])
+        self.assertEqual(under, 1)                                                  # A 2's 1.7k of mapping only
+        foot = [t for t in texts(O.system_panel(detail, O.palette())) if "under your levels" in t]
+        self.assertEqual(len(foot), 1)
+        self.assertIn(" · 1 under your levels", foot[0])
+
     def test_first_stop(self):
         plan = O.plan_items(LEAVING_PLAN, 500_000, 10_000_000, first="A 3")
         self.assertEqual([(it["body"], it["first"]) for it in plan], [("A 3", True), ("A 3", True), ("B 2", False), ("B 1", False)])

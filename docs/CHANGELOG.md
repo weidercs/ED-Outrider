@@ -2,6 +2,30 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-13 · Review fixes: the service's start limit, Recount's names, the depot cap, the EDSM backfill and import
+From the Fable review sweep of the last 33 commits (areas server, carrier, uploads, exo):
+- **The systemd service's start limit** counted every Settings Restart: ten in five minutes left the unit failed. Now
+  30 starts in 10 minutes (`outrider/service.py` `START_LIMIT_*`: a crash loop at `RestartSec=5` still stops in
+  minutes), and the page's "not back yet" words under systemd name `systemctl --user reset-failed ed-outrider`. An
+  installed unit takes the new limit when installed again. Tests: the unit's limits; the smoke test's words.
+- **Recount's Spansh names** were stored under their letters: "Occupied Escape Pod" made a line `occupiedescapepod`
+  that no journal event (`occupiedcryopod`) would ever move. `outrider.cargo.SPANSH_IDS` (113 names, from EDCD's
+  commodity tables, checked against Spansh's list) gives the journal's id; "Void Opal" is singular in Spansh's list, so
+  its alias was right. The test now uses Spansh's real list (`tests/fixtures/spansh_commodities.json`, fetched once).
+- **"enough after topping up"** ignored the depot's 1,000 t: `trip_top_up` says "before" the jumps only while the depot
+  can take it all, else "on the way" when topping up as it runs down still covers it, and the tile says "enough if
+  topped up on the way". Tests: both cases, the tile and the page.
+- **The EDSM backfill never sends under `--simulate`** (a backfill interrupted, then a `--simulate` start on the same
+  data, sent it) nor while another Outrider's lease sends EDSM: `edsm_bf_paused`, said beside its progress.
+- **A key Check with a typed EDSM name** cleared the hold although the sender sends the stored name: only the stored
+  name and key clear it now; another name EDSM accepts says "save this name first".
+- **The EDSM import's name lookups are paced**: 3 s apart (`IMPORT_LOOKUP_GAP_S`), EDSM's through its gate too, with
+  "N of M" on the Settings line (`edsm_import_resolve`); back to back, up to 500 made a burst.
+- **The overlay's system panel** counted a scanned body someone else mapped as "under your levels": it is neither listed
+  nor counted now, as on the page.
+- The guide and `backup_before_reread`'s docstring said run() backs up through open_db's `before_reset`; they describe
+  run()'s own steps now (that hook is the one-step open the tests use).
+
 ## 2026-10-13 · Bookmarks import
 - **Import…** beside Bookmarks' Export (S53): pick a file and its bookmarks are added to yours, "12 added, 3 already
   there". The author's default, a merge: a system already bookmarked keeps its own name, note and date (INSERT OR

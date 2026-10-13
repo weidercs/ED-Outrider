@@ -89,6 +89,16 @@ class Unit(Base):
         self.assertIn("WantedBy=default.target", server)
         self.assertNotIn("graphical-session", server)
 
+    def test_the_start_limit(self):
+        """Every start counts toward systemd's limit, Settings' Restart too: a player restarting every 30 s for the whole
+        interval stays under it (10 in 300 s locked the service out), and a crash loop (RestartSec, a crash within 1 s
+        of starting) still reaches it inside the interval."""
+        text = self.unit()
+        val = lambda k: int(text.split("\n" + k + "=")[1].split()[0])
+        interval, burst, gap = val("StartLimitIntervalSec"), val("StartLimitBurst"), val("RestartSec")
+        self.assertLess(interval // 30, burst)
+        self.assertGreaterEqual(interval // (gap + 1), burst)
+
     def test_quoting(self):
         self.assertEqual(S.systemd_quote('a "b" $HOME 5% c\\d'), '"a \\"b\\" $$HOME 5%% c\\\\d"')
         self.assertEqual(S.systemd_quote("X=$1 5%", command=False), '"X=$1 5%%"')

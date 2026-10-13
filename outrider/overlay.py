@@ -452,7 +452,8 @@ def stop_glyph(n):
 def system_rows(detail, highlight, bio_min, codex=True, first=None):
     """The system panel's bodies: what is left to do on each body worth it, then the valuable ones already done.
     [{name, what, status, value, key (warn/accent/good), mark, todo, dist, stops}], the credits left in the whole
-    system, and how many bodies have something left that is under your levels (not listed).
+    system, and how many bodies have something left that is under your levels (not listed; a body someone else mapped
+    is neither).
     S30: the bodies you scanned are listed by the suggested order (plan_items, as Now and Here's schematic): `stops`
     their numbers in it (two on a body with both mapping and bio), the rows by their first number. A body you have not
     scanned (Spansh's record only: the order cannot know it yet) is listed by its value as before, unnumbered, after
@@ -462,6 +463,9 @@ def system_rows(detail, highlight, bio_min, codex=True, first=None):
     for n, it in enumerate(plan, 1):
         stops.setdefault(it["body"], {}).setdefault("n", []).append(n)
         stops[it["body"]].setdefault("kinds", set()).add(it["kind"])
+    # mapped by someone else before you scanned it (your Scan's WasMapped): never a stop (the page's rule, plan_items),
+    # and not "under your levels" either, whatever its mapping would add
+    others = {u.get("body") for u in ((detail or {}).get("leaving") or {}).get("unmapped") or [] if u.get("mapped_before")}
     rows, left_all, under = [], 0, 0
     for b in (detail or {}).get("bodies") or []:
         if b.get("type") == "Star":
@@ -493,7 +497,7 @@ def system_rows(detail, highlight, bio_min, codex=True, first=None):
         elif (mapped and (b.get("value_max") or 0) >= highlight) or (organics and all(o.get("done") for o in organics)
                                                                       and (b.get("value_max") or 0) >= bio_min):
             rows.append(dict(base, status="MAPPED" if mapped else "SAMPLED", value=None, key="good", todo=False))
-        if not to_land and not to_map and (bio_left or (map_left and not mapped)):
+        if not to_land and not to_map and (bio_left or (map_left and not mapped and b.get("name") not in others)):
             under += 1
     rows.sort(key=lambda r: (not r["todo"], not r["stops"], r["stops"][0] if r["stops"] else 0, r["dist"]))
     return rows, left_all, under

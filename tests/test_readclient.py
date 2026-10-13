@@ -209,9 +209,17 @@ class KeyChecks(unittest.TestCase):
             j = self.check("edsm", [(200, EX["edsm_credits_ok"])], {"commander": "Sample Pilot", "api_key": other})[1]
             self.assertTrue(j["ok"])
             self.assertTrue(st.upload_status["edsm"]["held"])             # another key works: Save it first
+            # the stored key with a typed name EDSM accepts: the sender sends the stored name, so the hold stays
+            j = self.check("edsm", [(200, EX["edsm_credits_ok"])], {"commander": "Sample Pilot", "name": "Right Name"})[1]
+            self.assertEqual((j["ok"], j.get("cleared"), j["text"]),
+                             (True, None, "EDSM accepts CMDR Right Name with this key: save this name first"))
+            self.assertTrue(st.upload_status["edsm"]["held"])
+            j = self.check("edsm", [(200, EX["edsm_credits_ok"])], {"commander": "Sample Pilot", "name": "Sample Pilot"})[1]
+            self.assertEqual(j.get("cleared"), True)                      # the stored name typed: the same pair
+            hold()
             j = self.check("edsm", [(200, EX["edsm_credits_ok"])], {"commander": "Sample Pilot"})[1]
         self.assertEqual((j["ok"], j.get("cleared")), (True, True))
-        self.assertEqual([c.args[0] for c in helper.call_args_list], ["edsm"])
+        self.assertEqual([c.args[0] for c in helper.call_args_list], ["edsm", "edsm"])
         self.assertNotIn("edsm", st.upload_status)
         self.assertTrue(st.upload_wake["edsm"].is_set())                  # the sender goes now
 

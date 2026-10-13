@@ -177,6 +177,7 @@ that stretch is missing there. Settings → Uploads → **Fill gaps in EDSM's fl
   there, older than its log (not taken). If EDSM takes none of the first request because each event is older than what
   its log has, the backfill stops by itself: EDSM does not take back-dated events then.
 - **Stop** ends it (what still waits is not sent). A key EDSM refuses holds it until you fix the key and press **Go on**.
+  It waits ("paused") under `--simulate` and while another Outrider uploads to EDSM: only one talks to EDSM.
 - What EDSM stores cannot be taken back from here. Try a small range first (a jump or two), and look at your flight
   log on edsm.net before sending a long one.
 

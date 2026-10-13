@@ -308,6 +308,46 @@ class Server(unittest.TestCase):
         self.assertEqual([s for _, _, s in self.queued()], ["dropped", "dropped"])
         self.assertEqual(self.post([(200, {})], {"action": "stop"})[0][0], 409)
 
+    def test_never_sent_under_simulate_or_another_uploader(self):
+        """A backfill left running (its state and queue are in the database) sends nothing from an Outrider started with
+        --simulate on the same data, nor from one while another Outrider holds the EDSM uploader lease; the Settings
+        block says why it waits."""
+        self.start()
+        self.assertTrue(self.state.edsm_bf_on("edsm_bf"))
+        sent = []
+
+        async def send(rows):
+            sent.append(rows)
+            return [(r["id"], "sent", "200", None) for r in rows]
+
+        class Stop(Exception):
+            pass
+
+        async def sleep(secs):
+            raise Stop
+
+        def drain():
+            with self.assertRaises(Stop):
+                asyncio.run(U.upload_loop("edsm_bf", self.db, send, self.state.edsm_bf_on, sleep=sleep))
+
+        self.state.simulate = True
+        self.assertFalse(self.state.edsm_bf_on("edsm_bf"))
+        drain()
+        self.assertEqual(sent, [])
+        self.assertIn("--simulate", self.state.edsm_backfill_summary()["paused"])
+        self.state.simulate = False
+        self.state.lease_others = {"abc123": {"host": "other-pc", "services": ["edsm"], "wanted": ["edsm"], "legacy": False}}
+        self.assertFalse(self.state.edsm_bf_on("edsm_bf"))
+        drain()
+        self.assertEqual(sent, [])
+        self.assertEqual(self.state.edsm_backfill_summary()["paused"], "another Outrider (other-pc) uploads to EDSM")
+        self.state.lease_others = {}
+        self.state.lease_hold = {"edsm": "other-pc"}   # switched on here too, giving way to the other
+        self.assertFalse(self.state.edsm_bf_on("edsm_bf"))
+        self.state.lease_hold = {}
+        self.assertTrue(self.state.edsm_bf_on("edsm_bf"))
+        self.assertIsNone(self.state.edsm_backfill_summary()["paused"])
+
     def test_switching_edsm_on_records_since(self):
         self.assertIsNone(ed_outrider.meta_get(self.db, "edsm_since"))
         self.state.set_upload("edsm", True)

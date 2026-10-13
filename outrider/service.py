@@ -24,6 +24,10 @@ CMD_NAME = "ED Outrider.cmd"
 SERVICE_ENV = "OUTRIDER_SERVICE"   # set by the unit: restart_plan's "systemd" (exit RESTART_EXIT, systemd starts it again)
 RESTART_EXIT = 75                  # ed_outrider.RESTART_EXIT (a test checks they agree)
 STOP_TIMEOUT_S = 330               # over ed_outrider.BACKUP_SHUTDOWN_WAIT (300 s), so systemd never kills a backup part way
+# systemd's start limit: every start counts, Settings' Restart too (exit 75). 30 in 10 minutes leaves room for a
+# player restarting after each change, while a crash loop (RestartSec=5, a crash at start-up) still stops in minutes
+START_LIMIT_INTERVAL_S = 600
+START_LIMIT_BURST = 30
 TARGET_DIR = None                  # None: the real folder (unit_dir / startup_dir); tests set a scratch one
 RUNNER = None                      # None: subprocess.run; tests set a fake (systemctl never runs from a test)
 
@@ -95,8 +99,10 @@ def unit_text(launcher, args=(), graphical=True, env_extra=None, bash="/bin/bash
              "Description=ED Outrider (Elite Dangerous exploration companion)"]
     if graphical:
         lines += [f"After={target}", f"PartOf={target}"]
-    lines += ["StartLimitIntervalSec=300",
-              "StartLimitBurst=10",
+    lines += ["# every start counts, Settings' Restart too: room for many asked-for restarts, and a crash loop",
+              "# (RestartSec=5) still stops; `systemctl --user reset-failed ed-outrider` lets it start again",
+              f"StartLimitIntervalSec={START_LIMIT_INTERVAL_S}",
+              f"StartLimitBurst={START_LIMIT_BURST}",
               "",
               "[Service]",
               "Type=simple",

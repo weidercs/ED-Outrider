@@ -127,6 +127,7 @@ class Server(unittest.TestCase):
         for patch in (unittest.mock.patch("builtins.print", lambda *a, **k: self.printed.append(" ".join(map(str, a)))),
                       unittest.mock.patch.object(EL, "GAME_LAUNCH", at(-21 * DAY)),   # three weeks to read, not 600
                       unittest.mock.patch.object(ed_outrider, "IMPORT_GAP_S", 0),
+                      unittest.mock.patch.object(ed_outrider, "IMPORT_LOOKUP_GAP_S", 0),
                       unittest.mock.patch.object(ed_outrider, "IMPORT_RATE_WAIT_S", 0)):
             patch.start()
             self.addCleanup(patch.stop)
@@ -185,6 +186,33 @@ class Server(unittest.TestCase):
         [(status, j)] = self.start(self.weeks())
         self.assertEqual(status, 409)                                     # once: Remove them first
         self.assertIn("Remove them first", j["error"])
+
+    def test_name_lookups_are_paced(self):
+        """The systems EDSM gave no position for are looked up one at a time, IMPORT_LOOKUP_GAP_S apart (Spansh, then
+        EDSM through edsm_gate): back to back, up to 500 of them made a burst a rate limit refuses."""
+        asked = []
+
+        async def system_record(name):
+            asked.append(("spansh", name, time.monotonic()))
+            return None
+
+        async def edsm_system(name):
+            asked.append(("edsm", name, time.monotonic()))
+            return {"name": name, "id64": 77, "coords": {"x": 1.0, "y": 2.0, "z": 3.0}} if name == "C" else None
+        self.state.spansh = types.SimpleNamespace(cached=lambda i: (None, None), system_record=system_record, edsm_system=edsm_system)
+        EL.store(self.db, "Sample Pilot", [{"system": n, "date": f"2026-09-12T08:0{i}:00Z"} for i, n in enumerate("ABC")])
+        gate = U.Gate(0)
+        self.state.edsm_gate = gate
+        with unittest.mock.patch.object(ed_outrider, "IMPORT_LOOKUP_GAP_S", 0.05), \
+                unittest.mock.patch.object(gate, "wait", wraps=gate.wait) as edsm_waits:
+            asyncio.run(self.state.edsm_import_resolve(EL.unlocated(self.db)))
+        self.assertEqual([(k, n) for k, n, _ in asked], [("spansh", "A"), ("edsm", "A"), ("spansh", "B"), ("edsm", "B"),
+                                                         ("spansh", "C"), ("edsm", "C")])
+        gaps = [b[2] - a[2] for a, b in zip(asked, asked[1:])]
+        self.assertGreaterEqual(min(gaps), 0.04)
+        self.assertEqual(edsm_waits.call_count, 3)                        # each EDSM request through its gate
+        self.assertEqual(EL.unlocated(self.db), ["A", "B"])               # C found by EDSM
+        self.assertIn("of 3", self.state.edsm_import()["why"])
 
     def test_stop_or_failure_then_go_on_and_remove(self):
         [(status, _)] = self.start([self.weeks()[0], ConnectionRefusedError(f"https://www.edsm.net/x?apiKey={KEY}")])

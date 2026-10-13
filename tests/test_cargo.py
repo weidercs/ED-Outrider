@@ -35,6 +35,12 @@ def real():
     return fx, events, [(fx["market"]["timestamp"], fx["market"]["Items"])]
 
 
+def spansh_commodity_names():
+    """Spansh's commodity names as its field_values answered on 2026-10-13 (tests/fixtures/spansh_commodities.json)."""
+    with open(os.path.join(os.path.dirname(__file__), "fixtures", "spansh_commodities.json"), encoding="utf-8") as f:
+        return sorted(json.load(f)["min_max"])
+
+
 def ev(ts, name, **kw):
     return dict({"timestamp": ts, "event": name}, **kw)
 
@@ -462,8 +468,9 @@ class CargoState(unittest.TestCase):
 
     def test_recount_refuses_typos(self):   # S57
         """A name that is no commodity is refused with up to three close names (it made a line of its own, never moved
-        again); Spansh's list (the copy kept) adds the commodities your journal has not named, by Spansh's spelling, and
-        the two whose letters are not the journal's id by the journal's. Without that list only your journal's."""
+        again); Spansh's list (the copy kept: its real names) adds the commodities your journal has not named, by
+        Spansh's spelling under the journal's id (Occupied Escape Pod: occupiedcryopod, not occupiedescapepod, which no
+        journal event would move). Without that list only your journal's."""
         fx, _, _ = real()
         self.feed(self.j, fx)
         out, status = self.state.cargo_recount({"Tritum": 5})
@@ -472,8 +479,7 @@ class CargoState(unittest.TestCase):
         self.assertIn("Did you mean: Tritium", out["error"])
         self.assertIn("only names from your journal", out["error"])   # no Spansh list yet
         self.assertEqual(self.state.cargo_recount({"Grandidierite": 5})[1], 400)   # not in this journal
-        self.state.spansh_commodities = {"ts": time.time(), "norm": {cargo.norm(n): n for n in (
-            "Tritium", "Titanium", "Grandidierite", "Low Temperature Diamonds", "Void Opal", "Meta-Alloys")}}
+        self.state.spansh_commodities = {"ts": time.time(), "norm": {cargo.norm(n): n for n in spansh_commodity_names()}}
         out, status = self.state.cargo_recount({"Titanum": 5, "Grandidierite": 2})
         self.assertEqual(status, 400)   # nothing saved: one bad name refuses the lot
         self.assertEqual(out["name"], "Titanum")
@@ -481,13 +487,27 @@ class CargoState(unittest.TestCase):
         self.assertLessEqual(len(out["suggestions"]), 3)
         self.assertNotIn("only names from your journal", out["error"])
         self.assertEqual(self.db.execute("SELECT count(*) FROM carrier_counts").fetchone()[0], 0)
-        out, status = self.state.cargo_recount({"grandidierite": 2, "Low Temperature Diamonds": 3, "void opal": 4})
+        out, status = self.state.cargo_recount({"grandidierite": 2, "Low Temperature Diamonds": 3, "void opal": 4,
+                                                "Occupied Escape Pod": 1, "Agri-Medicines": 6, "Micro-Weave Cooling Hoses": 7})
         self.assertEqual(status, 200)
         rows = {r[0]: r[1] for r in self.db.execute("SELECT commodity, name FROM carrier_counts")}
+        # Spansh's spelling kept, under the journal's id (outrider.cargo.SPANSH_IDS where the letters differ)
         self.assertEqual(rows, {"grandidierite": "Grandidierite", "lowtemperaturediamond": "Low Temperature Diamonds",
-                                "opal": "Void Opal"})
+                                "opal": "Void Opal", "occupiedcryopod": "Occupied Escape Pod",
+                                "agriculturalmedicines": "Agri-Medicines", "coolinghoses": "Micro-weave Cooling Hoses"})
         lines = {x["id"]: x["name"] for x in self.state.cargo_summary()["carrier"]["lines"]}
         self.assertEqual(lines["lowtemperaturediamond"], "Low Temperature Diamonds")
+
+    def test_spansh_ids_name_real_commodities(self):
+        """SPANSH_IDS' names are Spansh's own (its list, kept as a fixture), each one's letters differ from its id, and
+        spansh_id gives the letters for every other name."""
+        real_names = {cargo.norm(n) for n in spansh_commodity_names()}
+        for name, i in cargo.SPANSH_IDS.items():
+            self.assertIn(cargo.norm(name), real_names, name)
+            self.assertNotEqual(cargo.norm(name), cargo.norm(i), name)
+        self.assertEqual(cargo.spansh_id("Occupied Escape Pod"), "occupiedcryopod")
+        self.assertEqual(cargo.spansh_id("Void Opal"), "opal")
+        self.assertEqual(cargo.spansh_id("Meta-Alloys"), "metaalloys")
 
     def test_recount_route_fetches_spansh_list_once(self):   # S57
         """POST /api/cargo/recount: a name your journal does not know and no copy of Spansh's list yet: the list is
@@ -578,6 +598,18 @@ class CarrierStatsFold(unittest.TestCase):
         self.assertIsNone(cargo.carrier_trip(0, 509, 21504))
         self.assertIsNone(cargo.carrier_trip(100, 509, None))
 
+    def test_trip_top_up(self):
+        """The hold's tritium covers what the depot lacks before the jumps only while the depot (1,000 t) can take it all;
+        past that, only topped up again on the way; with too little in the hold, not at all."""
+        t = cargo.carrier_trip(3000, 300, 20000)   # six 500 ly jumps on a 300 t depot: a few hundred t short
+        self.assertEqual(cargo.trip_top_up(t, 3000, 2000, 22000), "before")
+        self.assertIsNone(cargo.trip_top_up(t, 3000, t["short"] - 1, 22000))
+        self.assertIsNone(cargo.trip_top_up(cargo.carrier_trip(500, 1000, 0), 500, 2000, 2000))   # nothing short
+        t = cargo.carrier_trip(9000, 40, 22000)   # eighteen jumps: short well over the 960 t one top-up gives
+        self.assertGreater(t["short"], cargo.CARRIER_DEPOT_MAX - 40)
+        self.assertEqual(cargo.trip_top_up(t, 9000, 4000, 22000), "on_the_way")
+        self.assertIsNone(cargo.trip_top_up(t, 9000, t["short"] // 2, 22000))
+
 
 class CarrierTile(unittest.TestCase):
     """State.carrier_summary's trip, booked jump, services and finance, and your carrier among the nearest places to
@@ -606,7 +638,7 @@ class CarrierTile(unittest.TestCase):
         (25,000 − 7,645 free, nothing reserved), the depot its FuelLevel."""
         c = self.state.carrier_summary()
         want = cargo.carrier_trip(1200.0, 668, 25000 - 7645)
-        self.assertEqual(c["trip"], dict(want, hold=None, covered=False))
+        self.assertEqual(c["trip"], dict(want, hold=None, covered=False, top_up=None))
         self.assertEqual(c["trip"]["jumps"], 3)
         self.j.pos = dict(self.j.pos, x=4000.0)   # far: the depot runs short, and nothing confirmed in the hold covers it
         t = self.state.carrier_summary()["trip"]
@@ -625,8 +657,15 @@ class CarrierTile(unittest.TestCase):
                        "Items": [item("tritium", stock=5000, buy=50000)]}, f)
         self.assertTrue(self.j.read_market(d))
         t = self.state.carrier_summary()["trip"]
-        self.assertEqual((t["hold"], t["covered"]), (5000, True))
+        self.assertEqual((t["hold"], t["covered"], t["top_up"]), (5000, True, "before"))
         self.assertGreater(t["short"], 0)
+        # the depot holds 1,000 t: a 40 t depot 5,000 ly away lacks more than one top-up gives; the hold still covers it,
+        # topped up again on the way
+        self.j.carrier.update(fuel=40)
+        self.j.pos = dict(self.j.pos, x=5000.0)
+        t = self.state.carrier_summary()["trip"]
+        self.assertGreater(t["short"], cargo.CARRIER_DEPOT_MAX - 40)
+        self.assertEqual((t["covered"], t["top_up"]), (True, "on_the_way"))
 
     def test_booked_jump_burn(self):
         """'(432 ly jump ≈ T t; depot after ≈ D t)': the booked jump's burn from the carrier's place to its destination."""

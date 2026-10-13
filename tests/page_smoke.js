@@ -1619,6 +1619,10 @@ const settle = async maxMs => {
       renderCarrier();
       o.amber = [...line().querySelectorAll(".warnc")].map(x => x.textContent).filter(t => /depot|balance/.test(t));   // not the tank's
       o.asOf = line().textContent;
+      // more than one top-up gives (the depot holds 1,000 t): covered only by topping up again on the way
+      data.carrier = Object.assign({}, data.carrier, {trip: Object.assign({}, data.carrier.trip, {top_up: "on_the_way"})});
+      renderCarrier();
+      o.onTheWay = [...line().querySelectorAll(".warnc")].filter(x => /depot/.test(x.textContent)).map(x => [x.textContent, /again on the way/.test(x.title)]);
       data.sellers = {from: "Here", moved: 0, vista: {nearest: null, fresh: null, station: null},
                       uc: {nearest: {name: "G0X-85Z", system: "Home", distance: 1200, carrier: true, yours: true, carrier_jumps: 3, age_days: null},
                            fresh: null, station: null}};
@@ -1635,6 +1639,7 @@ const settle = async maxMs => {
     if (got.fin[0] !== "balance 1.33B · ~96 weeks of upkeep" || got.fin[1] !== "" || !got.fin[2] || /as of/.test(got.trip)) bad.push("finance " + JSON.stringify(got.fin));
     if (JSON.stringify(got.amber) !== JSON.stringify(["depot 668 t: 632 t short, enough after topping up", "balance 40.0M · ~2.9 weeks of upkeep"])) bad.push("amber " + JSON.stringify(got.amber));
     if (!/\(as of (Sep 27|27 Sep)\)/.test(got.asOf)) bad.push("as of");
+    if (JSON.stringify(got.onTheWay) !== JSON.stringify([["depot 668 t: 632 t short, enough if topped up on the way", true]])) bad.push("on the way " + JSON.stringify(got.onTheWay));
     if (!/G0X-85Z \(your carrier\) · Home · 1,200 ly.* · ≈ 3 carrier jumps to you/.test(got.sell)) bad.push("seller");
     const goodCT = !bad.length && errors.length === before;
     allOk = allOk && goodCT;
@@ -6346,6 +6351,10 @@ const settle = async maxMs => {
     w.fetch = (u, o) => /api\/nearby/.test(String(u)) ? Promise.resolve({ok: true, status: 204, headers: {get: () => ""}}) : realFetch(u, o);
     await w.eval(`poll(true)`);
     got.back = JSON.parse(w.eval(`JSON.stringify([pageStarting, linkState().text.startsWith("starting")])`));
+    // not back long after a Restart under systemd: the start limit may have left the unit failed (reset-failed)
+    got.slowSystemd = w.eval(`(() => { const keep = data.restart; data.restart = Object.assign({}, keep, {how: "systemd"});
+      rst.asked = {run: data.run_id, at: Date.now() - 600000, backup: false};
+      const t = restartText(); rst.asked = null; data.restart = keep; return t; })()`).includes("systemctl --user reset-failed ed-outrider");
     w.fetch = realFetch; w.confirm = realConfirm; w.copyText = realCopy;
     // the starting page, as served while Outrider reads the journals
     const answers = [{status: 200, body: starting}, {status: 200, body: {phase: "ready"}}];
@@ -6367,7 +6376,7 @@ const settle = async maxMs => {
                   installed: [true, true, "Remove the service", "cd /o && ./launch_outrider.sh --uninstall-service"],
                   removeAsked: [1, ["install"]], otherDevice: [false, true],
                   copied: [["cd /o && ./launch_outrider.sh --uninstall-service", "the command"]], refused: "Not here: not on macOS yet",
-                  starting: ["starting · 41%", false, "Restarting… Reading your journals: March 2024, 41%"], back: [null, false],
+                  starting: ["starting · 41%", false, "Restarting… Reading your journals: March 2024, 41%"], back: [null, false], slowSystemd: true,
                   page: ["Reading your journals: March 2024, 41%", "41%", false, 0], reloaded: 1};
     const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
@@ -6445,7 +6454,11 @@ const settle = async maxMs => {
       const box = document.getElementById("uploadsBox"), q = s => box.querySelector(s);
       const o = {progress: [...box.querySelectorAll(".bfill .hint")].map(h => h.textContent).find(t => t.startsWith("Sending")) || "", stop: !!q('[data-bfact="stop"]'),
                  checkOff: q('[data-bfact="check"]').disabled};
-      data.uploads.edsm.backfill = Object.assign({}, data.uploads.edsm.backfill, {progress: {state: "held", commander: "Sample Pilot", start: "2026-10-09T21:14:06Z", end: "2026-10-11T08:00:00Z",
+      // running but paused here (--simulate, or another Outrider holds the EDSM lease): said beside the progress
+      data.uploads.edsm.backfill = Object.assign({}, data.uploads.edsm.backfill, {paused: "--simulate: nothing is sent"});
+      uploadsDrawn = ""; renderUploads();
+      o.paused = /Sending 200 of 312 .*· paused: --simulate: nothing is sent/.test([...box.querySelectorAll(".bfill .hint")].map(h => h.textContent).find(t => t.startsWith("Sending")) || "");
+      data.uploads.edsm.backfill = Object.assign({}, data.uploads.edsm.backfill, {paused: null, progress: {state: "held", commander: "Sample Pilot", start: "2026-10-09T21:14:06Z", end: "2026-10-11T08:00:00Z",
         total: 312, counts: {stored: 200}, why: "203 EDSM refused the commander name or API key"}});
       uploadsDrawn = ""; renderUploads();
       o.held = [!!q('[data-bfact="resume"]'), !!q('[data-bfact="stop"]')];
@@ -6458,7 +6471,7 @@ const settle = async maxMs => {
                   rowsWithMarks: 1, hiddenOff: true, shownOn: true, dim: true, saved: true, unsentAsked: true, undim: false,
                   filled: ["2026-10-09 21:14:06", "2026-10-11 08:00:00"], sendOff: true, jobLine: true, sendOn: true,
                   progress: "Sending 200 of 312 (2026-10-09 21:14:06 to 2026-10-11 08:00:00, CMDR Sample Pilot): 200 stored Stop", stop: true, checkOff: true,
-                  held: [true, true],
+                  paused: true, held: [true, true],
                   posted: [["preview", "Sample Pilot", "2026-10-09 21:14:06", "2026-10-11 08:00:00"], ["send", "Sample Pilot", "2026-10-09 21:14:06", "2026-10-11 08:00:00"]],
                   asks: ["Send 312 events to EDSM for CMDR Sample "]};
     const good = Object.keys(want).every(k => JSON.stringify(got[k]) === JSON.stringify(want[k])) && /^0 not sent/.test(got.status) &&

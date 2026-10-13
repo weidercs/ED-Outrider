@@ -341,7 +341,7 @@ let carrierWarned = null;
 const carrierAim = c => c && !c.aboard && !c.here && c.system && !(c.decommission && c.decommission.done) && data.game_pc !== false
   ? hwyAimBtn(c.system, "carrier", null, true) : "";
 // the tritium for the trip to you (S13 A): red when the depot lacks it, amber when a confirmed tritium line in the hold
-// covers what it lacks (moved into the depot first)
+// covers what it lacks (moved into the depot first, or, past the depot's 1,000 t, topped up again on the way)
 const CARRIER_BURN_TITLE = "the game's fuel formula, checked against real carrier jumps: round(5 + ly × (25000 + capacity used + depot) / 200000) t a jump; a buy order's reserved space weighs nothing";
 // ...scaled by the carrier's own measured jumps (S13 B: the median of its last 12, held to 0.8-1.2), said in the title
 const carrierBurnTitle = f => CARRIER_BURN_TITLE + (!f ? "; your carrier's own jumps check it once 3 are measured (your journals hold none yet)" :
@@ -349,7 +349,10 @@ const carrierBurnTitle = f => CARRIER_BURN_TITLE + (!f ? "; your carrier's own j
   " (tritium other players donate is not in your journal: such a jump reads low)");
 const carrierTripHtml = (t, f) => !t ? "" :
   ` · <span title="equal jumps of up to 500 ly in a straight line (the real trip is never shorter), each lighter than the last; ${esc(carrierBurnTitle(f))}">≈ <b>${t.burn.toLocaleString()} t</b> tritium</span>` +
-  (t.short ? ` · <span class="${t.covered ? "warnc" : "noscoop"}" title="${t.covered ? `the ${t.hold.toLocaleString()} t of tritium on a sell order in its hold covers it: move it into the depot before the jumps` : "the depot and the confirmed tritium in its hold (a sell order) do not cover the trip"}">depot ${t.depot.toLocaleString()} t: ${t.short.toLocaleString()} t short${t.covered ? ", enough after topping up" : ""}</span>` : "");
+  (t.short ? ` · <span class="${t.covered ? "warnc" : "noscoop"}" title="${!t.covered ? "the depot and the confirmed tritium in its hold (a sell order) do not cover the trip"
+    : t.top_up === "on_the_way" ? `the ${t.hold.toLocaleString()} t of tritium on a sell order in its hold covers it, but the depot holds 1,000 t: fill it before the jumps and top it up again on the way`
+    : `the ${t.hold.toLocaleString()} t of tritium on a sell order in its hold covers it: move it into the depot before the jumps`}">depot ${t.depot.toLocaleString()} t: ${t.short.toLocaleString()} t short${
+    !t.covered ? "" : t.top_up === "on_the_way" ? ", enough if topped up on the way" : ", enough after topping up"}</span>` : "");
 // a booked jump's burn and the depot after it (S13 A)
 const carrierPlanBurn = (pl, f) => pl.burn == null ? "" : ` ≈ <span title="${esc(carrierBurnTitle(f))}">${pl.burn} t</span>; ` +
   (pl.depot_after < 0 ? `<span class="noscoop">depot ${-pl.depot_after} t short</span>` : `depot after ≈ ${pl.depot_after.toLocaleString()} t`);
@@ -9677,7 +9680,8 @@ function backfillHtml(u) {
     const btns = (pr.state === "held" ? ` <button type="button" class="try" data-bfact="resume" title="send what waits again (after fixing the key)">Go on</button>` : "") +
       (running ? ` <button type="button" class="try" data-bfact="stop" title="stop: what still waits is not sent">Stop</button>` : "");
     out.push(`<div class="hint">${pr.dry ? "(dry run) " : ""}${head} (${esc(bfShow(pr.start))} to ${esc(bfShow(pr.end))}, CMDR ${esc(pr.commander || "")})` +
-      `${tally ? ": " + tally : ""}${pr.why ? ` · <span class="warnc">${esc(pr.why)}</span>` : ""}${pr.unsent ? ` · ${upN(pr.unsent)} not sent` : ""}${btns}</div>`);
+      `${tally ? ": " + tally : ""}${pr.why ? ` · <span class="warnc">${esc(pr.why)}</span>` : ""}` +
+      `${pr.state === "running" && x.paused ? ` · <span class="warnc">paused: ${esc(x.paused)}</span>` : ""}${pr.unsent ? ` · ${upN(pr.unsent)} not sent` : ""}${btns}</div>`);
   }
   if (BF.note) out.push(`<div class="hint bad">${esc(BF.note)}</div>`);
   return `<details class="bfill"${BF.open ? " open" : ""}><summary>Fill gaps in EDSM's flight log</summary>${out.join("")}</details>`;
@@ -10676,7 +10680,11 @@ function restartText() {
     if (data && data.run_id !== a.run) return "";
     if (pageStarting) return `Restarting… ${pageStarting.text || ""}`.trim();   // back, reading the journals (S9)
     const slow = Date.now() - a.at > RESTART_SLOW_MS + (a.backup ? RESTART_BACKUP_MS : 0);
-    const where = {docker: " (docker compose logs)", systemd: " (journalctl --user -u ed-outrider)"}[r && r.how] || "";
+    // systemd stops starting a unit after StartLimitBurst starts inside StartLimitIntervalSec (outrider/service.py):
+    // many restarts in a row leave it failed until reset-failed
+    const where = {docker: " (docker compose logs)",
+                   systemd: " (journalctl --user -u ed-outrider; if systemd gave up after many restarts in a row: "
+                     + "systemctl --user reset-failed ed-outrider, then systemctl --user start ed-outrider)"}[r && r.how] || "";
     return slow ? `Outrider is not back yet: look at its terminal${where}`
       : `Restarting…${a.backup ? " (finishing a backup first)" : ""}`;
   }
