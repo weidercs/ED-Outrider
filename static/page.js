@@ -4821,7 +4821,7 @@ document.getElementById("findForm").addEventListener("submit", async e => {
   foundSys[d.id] = d;
   const v = d.visited;
   st.textContent = [d.name, d.distance != null ? `${d.distance.toLocaleString("en-US", {maximumFractionDigits: 2})} ly` : null,
-    v ? `visited ${v.count}× (last ${day(v.last_ts)})` : "never visited", d.bookmarked && "bookmarked", d.next_stop && "the next stop",
+    v ? `visited ${v.count}× (last ${day(v.last_ts)})${v.edsm ? " by your EDSM flight log" : ""}` : "never visited", d.bookmarked && "bookmarked", d.next_stop && "the next stop",
     d.source === "edsm" && "found on EDSM"].filter(Boolean).join(" · ");
   showInHere(d.id);
 });
@@ -5281,8 +5281,20 @@ function renderHistory() {
   document.getElementById("topRows").innerHTML = (L.top_finds || []).map(f => `<tr><td><span class="name" data-name="${esc(f.body)}" title="click to copy">${esc(f.body)}</span></td>
       <td>${sfText("body", f.type || "")}${f.first_discovered ? " 🏁" : ""}${f.mapped ? " 🗺" : ""}</td><td class="num">${credits(f.value)}</td>
       <td class="${f.state === "lost" ? "lost" : f.state === "sold" ? "sold" : "unsold"}">${f.state === "unsold" ? "aboard" : f.state}</td><td class="hide-sm c2hide">${esc((f.ts || "").slice(0, 10))}</td></tr>`).join("");
+  // S67: your imported EDSM flight log's line (where you went before your journals: no counts of what you did)
+  if (h.edsm) document.getElementById("histAll").insertAdjacentHTML("beforeend",
+    `<tr class="alltime fromedsm" title="sessions from your EDSM flight log, before your first journal (Settings → Uploads): where you went, not what you did there">
+      <td><b>${dual("From EDSM", "EDSM")}</b> <span class="unk c1hide">${h.edsm.sessions.toLocaleString()} sessions · ${esc(h.edsm.since.slice(0, 10))} to ${esc(h.edsm.until.slice(0, 10))}</span></td>
+      <td class="num">${h.edsm.jumps.toLocaleString()}</td><td class="num">${Math.round(h.edsm.ly).toLocaleString()}</td><td class="num hide-sm c2hide"></td>
+      <td class="num"></td><td class="num hide-sm c2hide"></td><td class="num"></td><td class="num hide-sm"></td><td class="num"></td><td class="num c2hide"></td><td class="num hide-sm c2hide"></td></tr>`);
   document.getElementById("histRows").innerHTML = h.sessions.map((s, i) => {
     const open = openSessions.has(s.start);
+    if (s.edsm) return `<tr class="sess fromedsm${open ? " open" : ""}" data-sess="${esc(s.start)}" title="from your EDSM flight log: where you went, not what you did there">` +
+      `<td>${dual(`${fmt(s.start)} → ${s.end.slice(11, 16)}`, `${fmt(s.start).slice(5)} → ${s.end.slice(11, 16)}`, {s2: esc(fmt(s.start).slice(5))})} <span class="unk">from EDSM</span></td>` +
+      `<td class="num">${s.jumps}</td><td class="num">${s.ly.toLocaleString()}</td><td class="num hide-sm c2hide">${s.max_sol.toLocaleString()}</td>` +
+      `<td class="num"></td><td class="num hide-sm c2hide"></td><td class="num"></td><td class="num hide-sm"></td><td class="num"></td><td class="num c2hide"></td><td class="num hide-sm c2hide"></td></tr>` +
+      (open ? `<tr><td colspan="11" class="systems">${s.systems.map(x => `<span><span class="name" data-name="${esc(x.name)}" title="click to copy">${esc(x.name)}</span>` +
+        ` <span class="unk">${x.ts.slice(11, 16)}</span></span>`).join("")}</td></tr>` : "");
     return `<tr class="sess${open ? " open" : ""}" data-sess="${esc(s.start)}"><td>${dual(`${fmt(s.start)} → ${s.end.slice(11, 16)}`, `${fmt(s.start).slice(5)} → ${s.end.slice(11, 16)}`, {s2: esc(fmt(s.start).slice(5))})}${deathsHtml(s.deaths)}</td>
       <td class="num">${s.jumps}</td><td class="num">${s.ly.toLocaleString()}</td><td class="num hide-sm c2hide">${s.max_sol.toLocaleString()}</td>
       <td class="num">${s.firsts}</td><td class="num hide-sm c2hide">${s.bodies_first}</td><td class="num">${s.mapped}</td>
@@ -5560,7 +5572,7 @@ function mapHit(e) {
 function mapPopHtml(pt) {
   const c = M.data.center, dd = Math.hypot(pt.x - c.x, pt.y - c.y, pt.z - c.z);
   const boost = pt.boost ? (pt.boost === "N" ? "neutron star: jet-cone boost ×4" : "white dwarf: jet-cone boost ×1.5") : "";
-  const what = (c.id ?? String(c.id64)) === pt.id ? "you are here" : pt.first ? "you discovered it" : pt.visited ? "visited"
+  const what = (c.id ?? String(c.id64)) === pt.id ? "you are here" : pt.first ? "you discovered it" : pt.visited ? (pt.edsm ? "visited (your EDSM flight log)" : "visited")
     : pt.kind === "route" ? "only in your route plots" : pt.scanned ? "known, has scanned bodies"
     : pt.kind === undefined ? (pt.carrier ? `your carrier ${esc(pt.carrier)} is here` : boost) : "no scan data";
   const what2 = what + (pt.carrier && !what.includes("carrier") ? ` · your carrier ${esc(pt.carrier)} is here` : "") + (boost && what !== boost ? " · " + boost : "");
@@ -8841,6 +8853,38 @@ function backfillHtml(u) {
   if (BF.note) out.push(`<div class="hint bad">${esc(BF.note)}</div>`);
   return `<details class="bfill"${BF.open ? " open" : ""}><summary>Fill gaps in EDSM's flight log</summary>${out.join("")}</details>`;
 }
+// S67: Import your EDSM flight log from before your journals, once (the CMDR picked and the block's open state live here)
+const IM = {open: false, commander: "", note: ""};
+const imDay = iso => iso ? String(iso).slice(0, 10) : "?";
+function importHtml(u) {
+  const x = (u.edsm || {}).import;
+  if (!x) return "";
+  const cmdrs = ((u.edsm || {}).accounts || []).filter(a => a.set).map(a => a.commander);
+  if (!cmdrs.includes(IM.commander)) IM.commander = cmdrs[0] || "";
+  const pr = x.progress, c = x.counted, running = !!(pr && pr.state === "running");
+  const out = [`<div class="hint">Once: your systems from before your first journal, from EDSM's flight log. They count as visited ` +
+    `(Nearby, Search, the target's verdict, Find, boxels, the Map, History's sessions "from EDSM"), never as first discoveries, sales or scans. ` +
+    `Outrider reads one week of the log every ${x.gap_s || 10} s, so years take a while; nothing is sent.</div>`];
+  if (pr) {
+    const weeks = `week ${upN(pr.weeks_done || 0)} of ${upN(pr.weeks || 0)}`;
+    const head = running ? `Importing: ${weeks}, ${upN(pr.entries || 0)} entr${pr.entries === 1 ? "y" : "ies"} so far`
+      : pr.state === "failed" ? `<span class="bad">✗</span> Stopped at ${weeks}` : pr.state === "stopped" ? `Stopped at ${weeks}`
+      : `<span class="ok">✓</span> Imported${pr.finished ? " " + upTime(pr.finished) : ""}`;
+    const btns = running ? ` <button type="button" class="try" data-imact="stop" title="stop: what was read is kept, Go on carries on from here">Stop</button>`
+      : pr.state !== "done" && cmdrs.includes(pr.commander) ? ` <button type="button" class="try" data-imact="start" title="carry on from where it stopped">Go on</button>` : "";
+    out.push(`<div class="hint">${head} (CMDR ${esc(pr.commander || "")})${pr.why ? ` · <span class="warnc">${esc(pr.why)}</span>` : ""}${btns}</div>`);
+  }
+  if (c && c.visits) out.push(`<div class="hint imafter">${upN(c.visits)} visit${c.visits === 1 ? "" : "s"} from EDSM, ${esc(imDay(c.first))} to ${esc(imDay(c.last))}` +
+    ` <span class="unk">(${upN(c.systems)} system${c.systems === 1 ? "" : "s"})</span> · <a href="#" data-imact="remove">Remove them</a></div>`);
+  else if (x.stored && !running) out.push(`<div class="hint imafter">${upN(x.stored)} entr${x.stored === 1 ? "y" : "ies"} from EDSM, none from before your journals · <a href="#" data-imact="remove">Remove them</a></div>`);
+  if (!pr || (pr.state !== "done" && !running && !cmdrs.includes(pr.commander))) {
+    out.push(cmdrs.length ? `<div class="bfrow">CMDR <select data-im="commander">${cmdrs.map(n => `<option${n === IM.commander ? " selected" : ""}>${esc(n)}</option>`).join("")}</select>` +
+      ` <button type="button" class="try" data-imact="start" title="read EDSM's flight log from before your first journal (get-logs, a week at a time): nothing is sent">Import</button></div>`
+      : `<div class="unk">save an EDSM key above first</div>`);
+  }
+  if (IM.note) out.push(`<div class="hint bad">${esc(IM.note)}</div>`);
+  return `<details class="bfill imlog"${IM.open ? " open" : ""}><summary>Import your EDSM flight log from before your journals</summary>${out.join("")}</details>`;
+}
 function uploadsHtml(u) {
   if (!u) return `<div class="unk">not known yet</div>`;
   const row = s => {
@@ -8881,7 +8925,7 @@ function uploadsHtml(u) {
     keyCheckHtml("inara", a.commander) + `</div>`).join("");
   return row("eddn") + row("edsm") +
     `<div class="hint">EDSM accounts, per in-game commander (your key is at <a href="https://www.edsm.net/en/settings/api" target="_blank" rel="noopener">edsm.net → Settings → API key</a>; it stays on this Outrider):</div>` +
-    (acc || `<div class="unk">no commander seen yet</div>`) + backfillHtml(u) + row("inara") +
+    (acc || `<div class="unk">no commander seen yet</div>`) + backfillHtml(u) + importHtml(u) + row("inara") +
     `<div class="hint">Inara API keys, per in-game commander (yours is at <a href="https://inara.cz/elite/cmdr-settings-api/" target="_blank" rel="noopener">inara.cz → Settings → API key</a>; it stays on this Outrider). ` +
     `Switch Inara off in EDMC, EDDI or EDDiscovery first: two apps sending can get the key revoked (Outrider sees only EDMC's setting).</div>` +
     (inacc || `<div class="unk">no commander seen yet</div>`) + `<div class="hint" id="uploadsMsg">${esc(uploadsNote)}</div>` +
@@ -8987,6 +9031,30 @@ document.getElementById("uploadsBox").addEventListener("click", async e => {
     else if (data.uploads && data.uploads.edsm) data.uploads.edsm.backfill = j;
   } catch (err) {
     BF.note = `could not reach Outrider: ${err.message}`;
+  } finally {
+    uploadsDrawn = ""; renderUploads();
+  }
+});
+// S67's block: Import / Go on, Stop and Remove them, each a POST; the answer redraws it
+document.getElementById("uploadsBox").addEventListener("toggle", e => {
+  if (e.target.classList && e.target.classList.contains("imlog")) IM.open = e.target.open;
+}, true);
+document.getElementById("uploadsBox").addEventListener("click", async e => {
+  const b = e.target.closest("[data-imact]"); if (!b) return;
+  e.preventDefault();
+  const action = b.dataset.imact, sel = document.querySelector("#uploadsBox [data-im=commander]");
+  if (sel) IM.commander = sel.value;
+  const pr = ((((data.uploads || {}).edsm || {}).import) || {}).progress;
+  const commander = action === "start" && pr && pr.state !== "done" && !sel ? pr.commander : IM.commander;
+  if (action === "remove" && !confirm("Forget every visit imported from EDSM? Your journals' visits stay; you can import again.")) return;
+  b.disabled = true; IM.note = "";
+  try {
+    const j = await apiJson("api/uploads/edsm/import", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({action, commander})});
+    if (j.error) IM.note = j.error;
+    else if (data.uploads && data.uploads.edsm) data.uploads.edsm.import = j;
+  } catch (err) {
+    IM.note = `could not reach Outrider: ${err.message}`;
   } finally {
     uploadsDrawn = ""; renderUploads();
   }

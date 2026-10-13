@@ -2,6 +2,24 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · Import your EDSM flight log from before your journals
+- **Import your EDSM flight log from before your journals** (S67, Settings → Uploads, under the EDSM accounts; POST
+  `/api/uploads/edsm/import` {action: start, stop, remove}): once, reading only, get-logs a week at a time back from the
+  oldest journal arrival to the game's launch (`backfill.windows`, `readclient`'s paced POST reads, one every 10 s; EDSM
+  asking to slow down waits 10 min), each week kept as it comes (table `edsm_log`, live-only), **Stop** and **Go on**
+  from where it stopped (meta `edsm_import`; also after a restart), then the systems EDSM gave no position for looked up
+  by name (here, Spansh, EDSM). After: "N visits from EDSM, <from> to <to> · **Remove them**" (your journals' visits
+  untouched; then it can be imported again).
+- **Which entries count is decided at every read** (`outrider/edsmlog.py`, the review's correction: no VIEW over visits,
+  a second small query where visits are shown): before the oldest journal arrival and no journal arrival within 60 s,
+  so a re-read or an older legacy folder moves it and journal data always wins; an index on its x, y, z; a timing test
+  on 20,000 entries.
+- **Where they show**: Nearby's and Search's visited marks, the target's verdict, Find ("visited 3× by your EDSM flight
+  log", and `locate` for a bookmark of it), the route's hops, the boxel lists and sector grid, the Map (its hover says
+  so), History's sessions "from EDSM" (no counts of what you did there) with a From EDSM line beside All time. **Never**
+  firsts, sales, discoveries, the codex or your scans. Tested with fakes in get-logs' documented shape only: the live
+  import is the author's.
+
 ## 2026-10-12 · Upload marks in the Log, and filling gaps in EDSM's flight log
 - **Upload marks in the Log** (S68, the Log only): each line of the last 7 days shows what the uploads made of it,
   "✓ EDDN · ✓ EDSM", "⏳ EDSM" (waiting for the next jump or docking, or trying again), "⏸" (a refused key, an EDDN kind

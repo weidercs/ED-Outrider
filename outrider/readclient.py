@@ -6,7 +6,7 @@ Keys go in a POST body, never in a URL: an aiohttp error's text carries the URL,
 answer anyway (`reach_words` says only what kind of failure it was).
 
 EDSM (www.edsm.net/en/api-commander-v1, api-logs-v1): get-credits (S45's key check: msgnum 100 the name and the key go
-together, 203 they do not), get-position and get-logs (for S47 and S67 later: where EDSM's flight log ends, what it
+together, 203 they do not), get-position and get-logs (S47 and S67: where EDSM's flight log ends, what it
 holds for a window of at most a week). Inara (inara.cz/elite/inara-api-docs): getCommanderProfile (S45's key check: the
 header's 400 refuses the key, the event's 204 finds no such commander, 200 is the profile with its link). The shapes
 are the services' documented ones (tests/fixtures/account_checks.json); their live replies are still to be checked.

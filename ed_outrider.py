@@ -207,6 +207,7 @@ import outrider.edsm       # EDSM's journal upload: the events with where you we
 import outrider.inara      # Inara's commander profile: travel, ranks, ships, inventory..., and what its answers mean
 import outrider.readclient  # EDSM's and Inara's account reads (G3): the key checks, EDSM's flight log
 import outrider.backfill   # filling a gap in EDSM's flight log (S47): the events rebuilt from the journals (pure)
+import outrider.edsmlog    # your EDSM flight log from before your journals (S67): kept entries, which count as visits
 import outrider.checklist  # the exobiology checklist: every species by region, with your state (pure)
 import outrider.codex_images  # the checklists' pictures: Canonn's links and credits, refreshed once a day
 import outrider.overlay    # the in-game overlay's panels as draw lists (the window: python3 -m outrider.overlay_window)
@@ -333,6 +334,8 @@ UPLOAD_DOWN_S = 15 * 60      # s: an upload failing this long with messages wait
 KEY_CHECK_S = 10             # s: one EDSM or Inara key check per this, per service (S45)
 BF_CHECK_WEEKS = 12          # S47's Check looks this far back for where EDSM's flight log ends (a get-logs read a week)
 BF_MAX_DAYS = 366            # ...and a backfill's range is at most this long
+IMPORT_GAP_S = 10            # s between two of S67's import reads (a week of EDSM's flight log each): gentle, one-off
+IMPORT_RATE_WAIT_S = 600     # s the import waits when EDSM asks it to slow down, before asking again
 LOOKUP_DOWN_S = 10 * 60      # s: Spansh or EDSM unavailable this long gets a card on the banner (S42; at once for no network)
 BIO_TAGS_SHOWN = 40          # the surface map draws at most this many tagged plants (nearest first)
 SELLER_REFRESH_LY = 100      # look for the nearest places to sell again after moving this far
@@ -1597,6 +1600,14 @@ CREATE TABLE IF NOT EXISTS trade_stops (
     profit INTEGER, cumulative INTEGER);
 CREATE INDEX IF NOT EXISTS route_xyz ON route_systems (x, y, z);
 CREATE INDEX IF NOT EXISTS visits_xyz ON visits (x, y, z);
+-- S67: your EDSM flight log from before your journals, every entry get-logs gave (outrider/edsmlog.py): EDSM's answer,
+-- not your journals, so live-only (out of RESET_JOURNAL_DATA, carried by backups). Which entries count as visits is
+-- decided when read (before the oldest journal, no journal arrival within lo..hi), never stored.
+CREATE TABLE IF NOT EXISTS edsm_log (
+    ts TEXT NOT NULL, name TEXT NOT NULL, id64 INTEGER, x REAL, y REAL, z REAL, lo TEXT, hi TEXT, commander TEXT,
+    PRIMARY KEY (ts, name));
+CREATE INDEX IF NOT EXISTS edsm_log_xyz ON edsm_log (x, y, z);
+CREATE INDEX IF NOT EXISTS edsm_log_id64 ON edsm_log (id64);
 """
 
 RESET_JOURNAL_DATA = """
@@ -6362,6 +6373,10 @@ class State:
         self.edsm_bf_job = None       # the Check or the guard under way or last done: {kind, state, text, at, result?}
         self.edsm_bf_task = None
         self.edsm_bf_preview = None   # the last Preview: {commander, start, end, rows, summary, files, at} (Send needs it)
+        # S67: the import of your EDSM flight log from before your journals (progress in meta edsm_import)
+        self.edsm_import_task = None
+        self._edsm_counted = (None, None)   # ((cutoff, edsm_seq), outrider.edsmlog.counted): the payload asks often
+        self.edsm_seq = 0                   # bumped by every import write and Remove
         self.journal_archive = None   # the backups' journal archive (run(): BACKUP_DIR/journals), read by the backfill
         self.eddn_hold = outrider.eddn.SchemaHold()
         self.edsm_discard = outrider.edsm.DISCARD   # EDSM's list of unwanted events: the built-in copy until fetched
@@ -9662,12 +9677,17 @@ class State:
             s_["deaths"] = [{"ts": r[0], "option": r[1], "ship": (r[1] or "rebuy") not in SHIP_SURVIVED_OPTIONS}
                             for r in self.db.execute("SELECT ts, option FROM deaths WHERE ts BETWEEN ? AND ? ORDER BY ts",
                                                      (s_["from"], end))]
+        # S67: the sessions of your imported EDSM flight log (before your journals: after every journal session), marked
+        # edsm; where you went only, so the all-time row stays your journals' and they get a line of their own
+        edsm = outrider.edsmlog.sessions(self.db)
+        sessions += [s_ for s_ in edsm if s_["start"] >= since]
         everything = self.sessions("")
         all_time = {"jumps": sum(x["jumps"] for x in everything), "ly": round(sum(x["ly"] for x in everything), 1),
                     "max_sol": max((x["max_sol"] for x in everything), default=0), "sessions": len(everything),
                     "since": everything[-1]["start"] if everything else None}
         all_time.update(self.range_counts("", "~"))
-        return {"days": days, "sessions": sessions, "all_time": all_time, "ledger": self.ledger()}
+        return {"days": days, "sessions": sessions, "all_time": all_time, "ledger": self.ledger(),
+                "edsm": outrider.edsmlog.summary(edsm)}
 
     def sessions(self, since):
         """Jumps since `since` grouped into sessions, newest first (no achievement counts). start/end are the
@@ -10029,7 +10049,7 @@ class State:
         r = self.db.execute("SELECT name, x, y, z FROM bookmarks WHERE id64=?", (id64,)).fetchone()
         if r:
             return tuple(r)
-        return None
+        return outrider.edsmlog.locate(self.db, id64)   # S67: a system Find found in your EDSM flight log
 
     def find_local(self, name):
         """(id64, name, x, y, z, source) of a system known here by name (any case), or None. Checked in the order
@@ -10039,6 +10059,10 @@ class State:
             r = self.db.execute(f"SELECT id64, name, x, y, z FROM {table} WHERE name = ? COLLATE NOCASE", (name,)).fetchone()
             if r and r["x"] is not None:
                 return (r["id64"], r["name"], r["x"], r["y"], r["z"], source)
+            if table == "visits":   # S67: a system your imported EDSM flight log has you visit
+                e = next((e for e in outrider.edsmlog.rows(self.db, name=name) if e["x"] is not None and e["id64"] is not None), None)
+                if e:
+                    return (e["id64"], e["name"], e["x"], e["y"], e["z"], "edsm_log")
         # the cached summaries are JSON: a LIKE on the name as json.dumps writes it narrows them before parsing
         # (it may also hit a body record named like the system, hence the check on the parsed name)
         pat = '%"name": ' + json.dumps(name).replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%"
@@ -10081,10 +10105,11 @@ class State:
             hit = (id64, d["name"], c["x"], c["y"], c["z"], "edsm")
         id64, sname, x, y, z, source = hit
         v = self.db.execute("SELECT first_ts, last_ts, count FROM visits WHERE id64 = ?", (id64,)).fetchone()
+        v = dict(v) if v else outrider.edsmlog.visit(self.db, id64)   # S67: else by your EDSM flight log (edsm: True)
         pos, ns = self.journals.pos, meta_get(self.db, "next_stop")
         return 200, {"id": str(id64), "name": sname, "x": x, "y": y, "z": z, "source": source,
                      "distance": round(dist(pos, {"x": x, "y": y, "z": z}), 2) if pos and pos.get("x") is not None else None,
-                     "visited": {"first_ts": v["first_ts"], "last_ts": v["last_ts"], "count": v["count"]} if v else None,
+                     "visited": v,
                      "bookmarked": bool(self.db.execute("SELECT 1 FROM bookmarks WHERE id64 = ?", (id64,)).fetchone()),
                      "next_stop": bool(ns and ns.get("id64") == id64)}
 
@@ -10256,7 +10281,7 @@ class State:
         id64 = t["id64"]
         source = "spansh"
         known = count = None   # how many of its bodies Spansh knows, of how many (Now's target line: "3/12 known")
-        visited = self.db.execute("SELECT 1 FROM visits WHERE id64=?", (id64,)).fetchone()
+        visited = self.db.execute("SELECT 1 FROM visits WHERE id64=?", (id64,)).fetchone() or outrider.edsmlog.rows(self.db, ids=[id64])
         if id64 in self.systems:
             known, count = self.systems[id64].get("bodies_known"), self.systems[id64].get("body_count")
         if visited:
@@ -10454,7 +10479,8 @@ class State:
 
     async def _refresh(self, pos, retry=False):
         r = self.radius
-        self.visited = {row[0] for row in self.db.execute("SELECT id64 FROM visits")}
+        # S67: the systems your imported EDSM flight log has you visit count too (outrider/edsmlog.py)
+        self.visited = {row[0] for row in self.db.execute("SELECT id64 FROM visits")} | outrider.edsmlog.ids(self.db)
         if retry and self.failed_dumps and self.status.startswith("ok ("):
             return await self.retry_dumps(pos)
         if not retry:
@@ -11132,6 +11158,7 @@ class State:
         out["edsm"]["dry_run"] = outrider.edsm.dry_run()
         out["edsm"]["accounts"] = self.edsm_account_list()
         out["edsm"]["backfill"] = self.edsm_backfill_summary()
+        out["edsm"]["import"] = self.edsm_import_summary()
         out["inara"].update(dry_run=outrider.inara.dry_run(), dev=outrider.inara.dev_mode(), accounts=self.inara_account_list())
         out["readonly"] = bool(self.lease_writable) and not any(self.lease_writable.values())
         out["simulate"] = bool(self.simulate)
@@ -11699,6 +11726,175 @@ class State:
         self.bump()
         return self.edsm_backfill_summary(), 200
 
+    # ---- S67: your EDSM flight log from before your journals (outrider/edsmlog.py) ----
+
+    def edsm_import(self):
+        """The import's progress (meta edsm_import, live-only): {state: running | stopped | done | failed, commander,
+        start (the game's launch), end (the oldest journal when it began), cursor (read back to here), weeks, weeks_done,
+        entries (new entries kept), started, finished?, why?}, or None before the first one and after Remove."""
+        v = meta_get(self.db, "edsm_import")
+        return v if isinstance(v, dict) else None
+
+    def edsm_import_set(self, **changes):
+        p = dict(self.edsm_import() or {}, **changes)
+        meta_set(self.db, "edsm_import", p)
+        return p
+
+    def edsm_import_running(self):
+        return self.edsm_import_task is not None and not self.edsm_import_task.done()
+
+    def edsm_counted(self):
+        """(outrider.edsmlog.counted, entries kept), cached on the oldest journal and the import's writes (the payload
+        carries it on every answer)."""
+        key = (outrider.edsmlog.cutoff(self.db), self.edsm_seq)
+        if self._edsm_counted[0] != key:
+            self._edsm_counted = (key, (outrider.edsmlog.counted(self.db), outrider.edsmlog.stored(self.db)))
+        return self._edsm_counted[1]
+
+    def edsm_import_summary(self):
+        """Settings -> Uploads' import block: the progress (one left "running" by a stopped Outrider says stopped), the
+        visits from EDSM that count now ({visits, systems, first, last}) and the entries kept."""
+        p = self.edsm_import()
+        if p and p.get("state") == "running" and not self.edsm_import_running():
+            p = dict(p, state="stopped", why=p.get("why") or "Outrider stopped before it finished")
+        counted, stored = self.edsm_counted()
+        return {"progress": p, "counted": counted, "stored": stored, "gap_s": IMPORT_GAP_S}
+
+    def edsm_visited_changed(self):
+        """The import wrote or Remove forgot: the visited marks and every view reading them follow."""
+        self.edsm_seq += 1
+        self.visited = {r[0] for r in self.db.execute("SELECT id64 FROM visits")} | outrider.edsmlog.ids(self.db)
+        for id64, row in self.systems.items():
+            row["visited"] = id64 in self.visited
+        self.history_version += 1   # History's sessions from EDSM
+        self.bump()
+
+    def edsm_import_start(self, action, commander=None):
+        """POST /api/uploads/edsm/import: start (a stopped or failed one of the same commander goes on from where it
+        stopped), stop, remove (every imported entry forgotten; your journals' visits untouched). (answer, status)."""
+        el = outrider.edsmlog
+        if action == "stop":
+            if not self.edsm_import_running():
+                return {"error": "no import is under way"}, 409
+            self.edsm_import_set(state="stopped", why="stopped by you", finished=time.time())
+            self.db.commit()
+            self.edsm_import_task.cancel()
+            self.bump()
+            return self.edsm_import_summary(), 200
+        if action == "remove":
+            if self.edsm_import_running():
+                self.edsm_import_task.cancel()
+            n = el.remove(self.db)
+            self.db.execute("DELETE FROM meta WHERE key = 'edsm_import'")
+            self.db.commit()
+            self.edsm_visited_changed()
+            print(f"uploads: EDSM flight log import removed ({n:,} entries)")
+            return self.edsm_import_summary(), 200
+        commander = str(commander or "").strip()
+        if not commander or len(commander) > 64:
+            return {"error": "commander: the in-game commander's name"}, 400
+        account = self._bf_account(commander)
+        if not account:
+            return {"error": f"no EDSM key for CMDR {commander}: save one above first"}, 400
+        if self.edsm_import_running():
+            return {"error": "an import is under way"}, 409
+        if self.upload_session is None:
+            return {"error": "Outrider is still starting"}, 503
+        prev = self.edsm_import()
+        if prev and prev.get("state") == "done":
+            return {"error": "your EDSM flight log is imported already: Remove them first to import it again"}, 409
+        if not (prev and prev.get("commander") == commander and prev.get("cursor") and prev.get("start")):
+            cut = el.cutoff(self.db)
+            end = ts_seconds(cut) if cut else time.time()
+            start = ts_seconds(el.GAME_LAUNCH)
+            prev = {"commander": commander, "start": el.GAME_LAUNCH, "end": iso_ts(end), "cursor": iso_ts(end),
+                    "weeks": len(outrider.backfill.windows(start, end, outrider.readclient.EDSM_LOGS_WINDOW_S)),
+                    "weeks_done": 0, "entries": 0, "started": time.time()}
+        prev.update(state="running", why=None, finished=None)
+        meta_set(self.db, "edsm_import", prev)
+        self.db.commit()
+        self.edsm_import_task = asyncio.get_running_loop().create_task(self._edsm_import_run(commander, account))
+        self.bump()
+        return self.edsm_import_summary(), 202
+
+    async def _edsm_import_run(self, commander, account):
+        """S67's walk: get-logs a week at a time (outrider.backfill.windows), back from where it stopped toward the game's
+        launch, paced (edsm_gate and IMPORT_GAP_S; EDSM asking to slow down waits IMPORT_RATE_WAIT_S), each week's
+        entries kept as they come (a stop or a restart loses nothing read); then the systems EDSM gave no position for,
+        looked up by name. Reads only: nothing is sent to EDSM but the request."""
+        rc, el = outrider.readclient, outrider.edsmlog
+        p = self.edsm_import()
+        try:
+            weeks = outrider.backfill.windows(ts_seconds(p["start"]), ts_seconds(p["cursor"]), rc.EDSM_LOGS_WINDOW_S)
+            for ws, we in reversed(weeks):
+                while True:
+                    try:
+                        got = rc.edsm_logs_answer(await rc.fetch(self.upload_session, rc.EDSM_LOGS_URL, self.edsm_gate,
+                                                                 data=rc.edsm_logs_request(account["name"], account["key"], ws, we)))
+                        break
+                    except Exception as e:   # noqa: BLE001 -- only a request to slow down is waited out here
+                        if outrider.health.classify(e)[0] != "rate":
+                            raise
+                        self.edsm_import_set(why=f"EDSM asked Outrider to slow down: asking again in {IMPORT_RATE_WAIT_S // 60} min")
+                        self.db.commit()
+                        self.bump()
+                        await asyncio.sleep(IMPORT_RATE_WAIT_S)
+                if not got["ok"]:
+                    raise ValueError(f"EDSM: {got['code']} {got['text']}")
+                n = el.store(self.db, commander, [e for e in got["logs"] if ws <= ts_seconds(e["date"]) < we])
+                p = self.edsm_import_set(cursor=iso_ts(ws), weeks_done=(p.get("weeks_done") or 0) + 1,
+                                         entries=(p.get("entries") or 0) + n, why=None)
+                self.db.commit()
+                self.edsm_seq += 1   # the Settings line's count follows; the visited marks once it is done
+                self.bump()
+                await asyncio.sleep(IMPORT_GAP_S)
+            names = el.unlocated(self.db)
+            if names:
+                self.edsm_import_set(why=f"looking up where {len(names):,} system{'' if len(names) == 1 else 's'} EDSM gave no position for are…")
+                self.db.commit()
+                self.bump()
+                for name in names:
+                    hit = await self.edsm_import_locate(name)
+                    if hit:
+                        el.set_location(self.db, name, *hit)
+                self.db.commit()
+            self.edsm_import_set(state="done", why=None, finished=time.time())
+            self.db.commit()
+            self.edsm_visited_changed()
+        except asyncio.CancelledError:
+            raise
+        except ValueError as e:
+            self.edsm_import_set(state="failed", why=str(e) if str(e).startswith("EDSM:") else "EDSM's answer was not understood",
+                                 finished=time.time())
+            self.db.commit()
+        except Exception as e:   # the kind only: an error's text can carry the URL
+            self.edsm_import_set(state="failed", why=f"Couldn't reach EDSM: {rc.reach_words(e)}", finished=time.time())
+            self.db.commit()
+        p = self.edsm_import() or {}
+        print(f"uploads: EDSM flight log import for CMDR {commander}: {p.get('state')}, {p.get('weeks_done', 0)} of "
+              f"{p.get('weeks', 0)} weeks, {p.get('entries', 0):,} entries" + (f" ({p['why']})" if p.get("why") else ""))
+        self.bump()
+
+    async def edsm_import_locate(self, name):
+        """(id64, x, y, z) of a system by name for an imported entry EDSM gave no position for: known here, else
+        Spansh's record, else EDSM's; None when nobody knows (it still counts by name: the boxel lists, Find)."""
+        hit = self.find_local(name)
+        if hit and hit[0] is not None and hit[5] != "edsm_log":
+            return hit[0], hit[2], hit[3], hit[4]
+        for ask in (getattr(self.spansh, "system_record", None), getattr(self.spansh, "edsm_system", None)):
+            if ask is None:
+                continue
+            try:
+                d = await ask(name)
+            except Exception:   # noqa: BLE001 -- a lookup that fails leaves the entry as it is
+                continue
+            if not d:
+                continue
+            c = d.get("coords") or d   # EDSM's record keeps them in coords, Spansh's on itself
+            if isinstance(d.get("id64"), int) and all(isinstance(c.get(k), (int, float)) for k in "xyz"):
+                return d["id64"], c["x"], c["y"], c["z"]
+        return None
+
     def inara_account_list(self):
         """For the page: [{commander, set, hint}], the commander in the journals first if missing. Never the key: hint is
         its first and last four characters and its length (the page may be open to the network without a password)."""
@@ -12071,6 +12267,12 @@ class State:
         for v in self.near("visits", pos, radius):
             points.setdefault(v["id64"], {"name": v["name"], "x": v["x"], "y": v["y"], "z": v["z"],
                                           "kind": "own", "scanned": True})["visited"] = True
+        # S67: the systems your imported EDSM flight log has you visit (where your journals say nothing of it)
+        for v in outrider.edsmlog.rows(self.db, box=(pos["x"] - radius, pos["x"] + radius, pos["y"] - radius, pos["y"] + radius,
+                                                     pos["z"] - radius, pos["z"] + radius)):
+            if v["id64"] is not None and not points.get(v["id64"], {}).get("visited"):
+                points.setdefault(v["id64"], {"name": v["name"], "x": v["x"], "y": v["y"], "z": v["z"], "kind": "own",
+                                              "scanned": False}).update(visited=True, edsm=True)
         for rs in self.near("route_systems", pos, radius):
             points.setdefault(rs["id64"], {"name": rs["name"], "x": rs["x"], "y": rs["y"], "z": rs["z"],
                                            "kind": "route", "scanned": False})
@@ -12166,6 +12368,7 @@ class State:
             return None
         visited = {r[0] for r in self.db.execute(
             f"SELECT id64 FROM visits WHERE id64 IN ({','.join('?' * len(left))})", [h["id64"] for h in left])}
+        visited |= {r["id64"] for r in outrider.edsmlog.rows(self.db, ids=[h["id64"] for h in left])}   # S67
         out, prev, dry, longest, total = [], pos, 0, 0, 0.0
         for h in left:
             d = dist(prev, h)
@@ -12269,6 +12472,10 @@ class State:
             n = outrider.boxel.number_of(prefix, name)
             if n is not None:
                 out[n] = (id64, name, x, y, z)
+        for e in outrider.edsmlog.rows(self.db, like=like):   # S67: your EDSM flight log's, where placed
+            n = outrider.boxel.number_of(prefix, e["name"])
+            if n is not None and n not in out and e["id64"] is not None and e["x"] is not None:
+                out[n] = (e["id64"], e["name"], e["x"], e["y"], e["z"])
         return out
 
     def boxel_known(self, prefix):
@@ -12451,7 +12658,8 @@ class State:
         layer = here[1] if layer is None else max(0, min(n - 1, layer))
         visited, layers = {}, {}
         like = name.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + " %"
-        for (sysname,) in self.db.execute("SELECT name FROM visits WHERE name LIKE ? ESCAPE '\\'", (like,)):
+        names = [r[0] for r in self.db.execute("SELECT name FROM visits WHERE name LIKE ? ESCAPE '\\'", (like,))]
+        for sysname in names + [e["name"] for e in outrider.edsmlog.rows(self.db, like=like)]:   # S67: EDSM's log too
             p = outrider.boxel.parse(sysname)
             if p and p["sector"] == name and p["mc"] == mc:
                 visited.setdefault(p["prefix"], set()).add(p["n2"])
@@ -13781,7 +13989,7 @@ class State:
         return [t for t in (self.refresh_task, self.target_task, self.unsold_task, self.seller_task, self.carrier_task,
                             self.searcher.task, self.honk_test_task, self.honk_run_task, self.highway_task, self.riches_task,
                             self.autotarget_task, self.autotarget_test_task, self.lease_task, self.edsm_discard_task,
-                            self.edsm_bf_task, *self.upload_tasks.values()) if t]
+                            self.edsm_bf_task, self.edsm_import_task, *self.upload_tasks.values()) if t]
 
     def arrival_danger_until(self, now=None):
         """The game sets Status.json's in-danger flag on every use of the FSD, from the charge until some 16-26 s after
@@ -14621,6 +14829,7 @@ class Searcher:
                     f"passed within {self.state.radius:g} ly of — Spansh (online) covers everything reported")
             sparse = bool(sections) and (("hotspots" in sections and n_hot < 5) or ("rings" in sections and n_rings < 10) or n < 20)
         visited = {r[0] for r in db.execute("SELECT id64 FROM visits")}
+        edsm_visited = outrider.edsmlog.ids(db) - visited   # S67: your EDSM flight log's (no firsts of yours there)
         # a mineral you have refined somewhere: those bodies first ("Gold 22 t mined here before"), surveyed for it or
         # not, whatever its share of the ground's locations (review S38)
         mineral, mined = (crit.get("mining") or {}).get("mineral"), {}
@@ -14652,7 +14861,7 @@ class Searcher:
                     m["bio"] = hits
             if all(k in m for k in sections):
                 results.append({"id": str(id64), "name": name, "distance": round(d, 2),
-                                "visited": id64 in visited, "matches": m,
+                                "visited": id64 in visited or id64 in edsm_visited, "matches": m,
                                 "firsts": own_firsts(db, id64, name) if id64 in visited else None})
                 found[id64] = (name, x, y, z)
         return results, coverage, note, sparse, found
@@ -15979,6 +16188,18 @@ def make_app(state, hosts=None):
             return web.json_response({"error": "action: check, preview, send, stop or resume"}, status=400)
         return web.json_response(out, status=status)
 
+    async def edsm_import_view(request):
+        """POST /api/uploads/edsm/import {action: start | stop | remove, commander}: S67's import of your EDSM flight log
+        from before your journals (State.edsm_import_start). Reads EDSM's log only; Remove forgets what it brought."""
+        body = await json_object(request)
+        if body is None:
+            return web.json_response({"error": "expected a JSON object"}, status=400)
+        action = body.get("action")
+        if action not in ("start", "stop", "remove"):
+            return web.json_response({"error": "action: start, stop or remove"}, status=400)
+        out, status = state.edsm_import_start(action, body.get("commander"))
+        return web.json_response(out, status=status)
+
     async def overlay_get(request):
         """GET /api/overlay[?since=version]: the overlay window's panels (State.overlay_view)."""
         return web.json_response(state.overlay_view(request.query.get("since"),
@@ -16339,6 +16560,7 @@ def make_app(state, hosts=None):
     app.router.add_post("/api/uploads/inara", inara_account_view)
     app.router.add_post("/api/uploads/edsm/check", key_check_view("edsm"))
     app.router.add_post("/api/uploads/edsm/backfill", edsm_backfill_view)
+    app.router.add_post("/api/uploads/edsm/import", edsm_import_view)
     app.router.add_post("/api/uploads/inara/check", key_check_view("inara"))
     app.router.add_post("/api/autohonk/test", pc_only(autohonk_test_view))
     app.router.add_post("/api/autohonk/forget", pc_only(autohonk_forget_view))

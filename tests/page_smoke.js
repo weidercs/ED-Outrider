@@ -5972,6 +5972,70 @@ const settle = async maxMs => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| upload marks and EDSM backfill |", good ? "✓ / ✗ marks with their reason, not sent, Check fills the range, Preview then Send, Stop and Go on" : JSON.stringify(got), errors.slice(before));
   }
+  // S67 (batch 15): Settings -> Uploads' Import your EDSM flight log (Import posts the CMDR; while it runs, its week and
+  // Stop; once done, "N visits from EDSM, <from> to <to> · Remove them", a confirm, then remove); History's sessions
+  // "from EDSM" with no counts of what you did and the From EDSM line; the Map's hover says where the visit is from.
+  // The posts are stubbed: nothing reaches EDSM
+  {
+    const w = dom.window, before = errors.length, realFetch = w.fetch, realConfirm = w.confirm, posted = [], asks = [];
+    w.fetch = (u, o) => {
+      const url = String(u);
+      if (o && o.method === "POST" && /uploads\/edsm\/import/.test(url)) {
+        const b = JSON.parse(o.body); posted.push([b.action, b.commander]);
+        const answer = b.action === "remove" ? {progress: null, counted: null, stored: 0, gap_s: 10}
+          : {progress: {state: "running", commander: "Sample Pilot", weeks: 210, weeks_done: 2, entries: 340}, counted: null, stored: 340, gap_s: 10};
+        return Promise.resolve(new Response(JSON.stringify(answer), {status: b.action === "start" ? 202 : 200, headers: {"Content-Type": "application/json"}}));
+      }
+      return realFetch(u, o);
+    };
+    w.confirm = q => { asks.push(q.slice(0, 30)); return true; };
+    const got = JSON.parse(w.eval(`(() => {
+      const o = {}; window.__u3 = data.uploads;
+      data.uploads = Object.assign({}, window.__u3, {edsm: Object.assign({}, (window.__u3 || {}).edsm, {import: {progress: null, counted: null, stored: 0, gap_s: 10},
+        accounts: [{commander: "Sample Pilot", name: "Sample Pilot", set: true, hint: "0123…4567 (40 characters)"}]})});
+      IM.open = true; uploadsDrawn = ""; renderUploads();
+      const q = s => document.getElementById("uploadsBox").querySelector(s);
+      o.offered = !!q('[data-imact="start"]') && q(".imlog summary").textContent;
+      q('[data-imact="start"]').click();
+      return JSON.stringify(o); })()`));
+    await settle(1000);
+    Object.assign(got, JSON.parse(w.eval(`(() => {
+      const box = document.getElementById("uploadsBox"), q = s => box.querySelector(s);
+      const o = {running: [...box.querySelectorAll(".imlog .hint")].map(h => h.textContent).find(t => t.startsWith("Importing")) || "", importGone: !q('[data-imact="start"]')};
+      data.uploads.edsm.import = {progress: {state: "done", commander: "Sample Pilot", weeks: 210, weeks_done: 210, entries: 1290, finished: 0},
+        counted: {visits: 1288, systems: 1100, first: "2016-03-02T10:00:00Z", last: "2019-11-30T22:00:00Z"}, stored: 1290, gap_s: 10};
+      uploadsDrawn = ""; renderUploads();
+      o.after = q(".imafter").textContent; o.noImport = !q('[data-imact="start"]');
+      q('[data-imact="remove"]').click();
+      return JSON.stringify(o); })()`)));
+    await settle(1000);
+    Object.assign(got, JSON.parse(w.eval(`(() => {
+      const box = document.getElementById("uploadsBox"), q = s => box.querySelector(s);
+      const o = {afterRemove: [!q(".imafter"), !!q('[data-imact="start"]')]};
+      IM.open = false; data.uploads = window.__u3; uploadsDrawn = ""; renderUploads();
+      const keep = histData, s0 = {start: "2017-05-01T20:00:00Z", end: "2017-05-01T22:10:00Z", from: "2017-05-01T20:00:00Z", until: null, jumps: 12, ly: 340.5,
+        max_sol: 1200, systems: [{ts: "2017-05-01T20:00:00Z", id: "5", name: "Old Place", kind: "FSDJump"}], deaths: [], edsm: true,
+        firsts: 0, bodies_first: 0, mapped: 0, footfalls: 0, samples: 0, codex_new: 0, sold: 0};
+      histData = {days: 3650, sessions: [s0], all_time: null, ledger: {}, edsm: {sessions: 1, jumps: 12, ly: 340.5, since: s0.start, until: s0.end}};
+      renderHistory();
+      const row = document.querySelector("#histRows tr.fromedsm");
+      o.hist = [!!row && row.cells[0].textContent.includes("from EDSM"), row && row.cells[1].textContent, row && row.cells[4].textContent,
+                !!document.querySelector("#histAll tr.fromedsm")];
+      histData = keep; renderHistory();
+      const km = M.data; M.data = {center: {id: "1", x: 0, y: 0, z: 0}};
+      o.pop = mapPopHtml({id: "9", name: "Old Place", x: 3, y: 4, z: 0, visited: true, edsm: true, kind: "own"}).includes("visited (your EDSM flight log)");
+      M.data = km;
+      return JSON.stringify(o); })()`)));
+    got.posted = posted; got.asks = asks;
+    w.fetch = realFetch; w.confirm = realConfirm;
+    const want = {offered: "Import your EDSM flight log from before your journals", running: "Importing: week 2 of 210, 340 entries so far (CMDR Sample Pilot) Stop",
+                  importGone: true, after: "1,288 visits from EDSM, 2016-03-02 to 2019-11-30 (1,100 systems) · Remove them", noImport: true,
+                  afterRemove: [true, true], hist: [true, "12", "", true], pop: true,
+                  posted: [["start", "Sample Pilot"], ["remove", "Sample Pilot"]], asks: ["Forget every visit imported fr"]};
+    const good = Object.keys(want).every(k => JSON.stringify(got[k]) === JSON.stringify(want[k])) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| EDSM flight log import |", good ? "Import, its week and Stop, the visits from EDSM and Remove them, History's from EDSM, the Map's hover" : JSON.stringify(got), errors.slice(before));
+  }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",
     headers: Object.assign({"Content-Type": "application/json"}, origin ? {Origin: origin} : {})}).then(r => r.status);

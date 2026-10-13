@@ -464,6 +464,22 @@ upstream project's choices, not rules of the game.
   A first request taken by none (every event 102) stops it by itself. Installs that switched EDSM on before
   `edsm_since` existed say "unknown" and the range runs to now. The jumps between are the jumps table's (every
   commander), the events are the commander's.
+- **EDSM's flight log from before your journals counts as visits, nothing else** (S67, `outrider/edsmlog.py`): the import
+  keeps every entry get-logs gives (table `edsm_log`, live-only: EDSM's answer, carried by backups, out of
+  `RESET_JOURNAL_DATA`) and decides at every read which count: before the oldest journal arrival (the first row of
+  `jumps`) and with no journal arrival within 60 s. Both move after a re-read or a legacy folder's import, so nothing is
+  thrown away at the import and journal data always wins. Not a VIEW over visits (the review's correction: visits is read
+  in some 24 places, two of them box queries on its xyz index): the places that show visits ask a second, small query
+  (`edsmlog.rows` with a box on its own x, y, z index, `edsmlog.ids` once per Nearby refresh and per search), and only
+  those: Nearby's and Search's visited marks, the target's verdict, Find and `locate`, the route's hops, the boxel lists
+  and the sector grid, the Map, History's sessions (`edsmlog.sessions`, marked `edsm`, every journal count 0; the
+  all-time row stays the journals'). Never firsts, sales, discoveries, the codex or your scans (EDSM's firstDiscover is
+  not kept), never `visit_count`, the left-behind list or the boxel code stats (your scans' figures). One-off: a done
+  import refuses another until Remove them; a stopped one goes on from its cursor (meta `edsm_import`). Paced at one
+  read every 10 s (`IMPORT_GAP_S`; EDSM limits its API per hour) besides the 2 s gate; a slow-down answer waits
+  `IMPORT_RATE_WAIT_S`. Known limits: every imported commander counts as "you"; an entry EDSM gave no position for is
+  looked up by name afterwards (here, then Spansh, then EDSM; at most 500), else counts by name only (the boxel lists,
+  Find).
 - **Upload marks in the Log** (S68): the Log only (the author's choice), from the outbox joined on its source key (the
   file and the line's byte offset: log.py splits on "\n" as the reader does, never splitlines, so the offsets agree; a
   line's `#1`, `#2` messages count as that line). Per service the worst of a line's messages wins (✗ over ⏸ over ⏳
@@ -821,6 +837,9 @@ confirmed while playing. Treat reports about them as likely real.
   get-position's and get-logs' real answers (their window limit and date format), and above all whether EDSM inserts
   back-dated events or answers 102 "older than stored" (and whether 101/103 dedupe); to be tried on a range of a jump or
   two, after a Preview, with the author's OK.
+- The EDSM flight log import (S67): tested with fakes in get-logs' documented shape only. Not yet seen live: get-logs'
+  real answer for old weeks (whether `showId`/`showCoordinates` give every entry its id64 and position, which would make
+  the lookups by name unnecessary), its rate limit over some 200-600 weeks, and an import of the author's own log.
 - EDDN: ApproachSettlement, CarrierJump and FCMaterials messages have not been seen live on EDDN's relay yet, nor a
   planetary station's Docked with its Body.
 - The in-game overlay's real panels in live play (only the test panels have been seen over the game), Arrange mode

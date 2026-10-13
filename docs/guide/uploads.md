@@ -179,3 +179,22 @@ that stretch is missing there. Settings → Uploads → **Fill gaps in EDSM's fl
 - **Stop** ends it (what still waits is not sent). A key EDSM refuses holds it until you fix the key and press **Go on**.
 - What EDSM stores cannot be taken back from here. Try a small range first (a jump or two), and look at your flight
   log on edsm.net before sending a long one.
+
+## Import your EDSM flight log from before your journals
+
+If EDSM has your travels from before your oldest journal (sent by another app, or journals since deleted), Outrider can
+bring them in once, reading only: Settings → Uploads → **Import your EDSM flight log from before your journals**, pick
+the commander (one with an EDSM key saved) and press **Import**.
+
+- It reads EDSM's flight log one week at a time, back from your first journal to the game's launch, one read every
+  10 seconds: several years take an hour or more. Nothing is sent to EDSM. **Stop** keeps what was read; **Go on**
+  carries on from there (also after Outrider was stopped).
+- Then: "1,288 visits from EDSM, 2016-03-02 to 2019-11-30 · **Remove them**". Remove forgets them all (your journals'
+  visits are not touched) and you can import again.
+- Those systems count as **visited**: Nearby's marks, Search's visited filter, the target's verdict, Find ("visited 3×
+  by your EDSM flight log"), the boxel lists, the Map (its hover says so) and History, whose sessions show "from EDSM"
+  with a From EDSM line beside All time.
+- They never count as first discoveries, sales, scans or anything else you did there: EDSM's log says where you went,
+  your journals say what you did. Your journals always win: an entry within a minute of a journal arrival, or from after
+  your first journal, is left out (and if you add an older journal folder later, what it covers becomes the journal's).
+- Every commander whose log you import counts as you.
