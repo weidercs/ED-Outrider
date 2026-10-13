@@ -79,6 +79,7 @@ tr.main td { font-weight: 500; }
 #histRows td.systems span { display: inline-block; margin: 1px 8px 1px 0; }
 #histRows td.systems .name { cursor: copy; color: var(--text); }
 #bmTools { margin-top: 8px; } #bmTools .exports a { color: var(--info); }
+#bmImportMsg { color: var(--muted); font-size: 0.9em; } #bmImportMsg.err { color: var(--bad); }
 .mapbar .boost { color: #5ce1e6; }
 #arrival .yes { color: var(--good); } #arrival .no { color: var(--warn); }
 tr.far td.name { font-weight: 400; }

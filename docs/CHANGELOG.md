@@ -2,6 +2,18 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-13 · Bookmarks import
+- **Import…** beside Bookmarks' Export (S53): pick a file and its bookmarks are added to yours, "12 added, 3 already
+  there". The author's default, a merge: a system already bookmarked keeps its own name, note and date (INSERT OR
+  IGNORE), so the same file twice adds nothing. POST `/api/bookmarks/import` {text} parses on the server (the pure
+  `parse_bookmarks`; JavaScript would round an id64 above 2^53): Outrider's own export as CSV (a byte-order mark and a
+  spreadsheet's ";" with decimal commas too) or JSON; id64, name and x/y/z needed, a note kept to 2,000 characters, a
+  date it cannot read is today's. Bad rows are left out and counted with their line and reason ("id64 not a whole
+  number (a spreadsheet may have rounded it)"), the first 20 described; more than 10,000 rows, or a request over 8 MB
+  (read with its own limit, past aiohttp's 1 MiB), refuses the file in words. The imported rows get the sweep tick, 🎯
+  and Plot route like any bookmark. Tests: export → import round trips (CSV, JSON) with an id64 over 2^53 exact, the
+  merge, bad rows, the limits, a cross-site POST refused; the smoke test picks a file on the page.
+
 ## 2026-10-13 · Find a setting, and a voice per personality
 - **Find a setting** (S39): a box at the top of Settings. Each word typed leaves only the rows that match it (their
   label, help, a Server settings key, or the config key a browser row defaults from: `data-find="section.key"` on 22

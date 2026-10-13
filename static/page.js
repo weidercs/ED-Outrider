@@ -3365,6 +3365,34 @@ bmDialog.addEventListener("close", async () => {
     poll(true);
   } catch (err) { toast("bookmark failed: " + err.message); }
 });
+// ---- S53: Import… beside Bookmarks' Export: the file goes to the server as text (an id64 above 2^53 survives only
+// there) and is merged into yours, nothing replaced; what came of it is said beside the button
+const BM_IMPORT_MAX = 8 * 1024 * 1024;   // ed_outrider.BOOKMARK_IMPORT_BYTES
+const bmFile = document.getElementById("bmFile");
+function bmImportSay(text, err, problems) {
+  const m = document.getElementById("bmImportMsg");
+  m.textContent = text; m.className = err ? "err" : "";
+  m.title = (problems || []).join("\n");
+}
+async function bmImport(text) {
+  bmImportSay("Importing…");
+  let r;
+  try { r = await apiJson("api/bookmarks/import", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({text})}); }
+  catch (err) { r = {error: err.message}; }   // the server is not answering
+  if (r.error) return bmImportSay(`Not imported: ${r.error}.`, true);
+  const n = v => v.toLocaleString("en-US"), p = r.problems || [];
+  bmImportSay(`${n(r.added)} added, ${n(r.already)} already there` + (r.bad ? `, ${n(r.bad)} left out: ${p.slice(0, 2).join("; ")}${r.bad > 2 ? "…" : ""}` : ""),
+    false, p.concat(r.bad > p.length ? [`and ${n(r.bad - p.length)} more`] : []));
+  if (r.added) { version = -1; poll(true); }   // the new rows at once
+}
+document.getElementById("bmImport").onclick = () => bmFile.click();
+bmFile.onchange = async () => {
+  const f = bmFile.files && bmFile.files[0];
+  bmFile.value = "";
+  if (!f) return;
+  if (f.size > BM_IMPORT_MAX) return bmImportSay("Not imported: the file is over 8 MB.", true);
+  bmImport(await f.text());
+};
 // S37: a ↗ in each tab's corner (shown on hover or focus, the row's width unchanged; Shift+Enter on a focused tab too)
 // opens that view in a window of its own, or brings forward the one already open
 if (!TABLET) document.querySelectorAll(".views [data-view]").forEach(b => {

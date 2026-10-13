@@ -4893,6 +4893,104 @@ def firsts_seen(row):
             "spansh_bodies": row.get("spansh_bodies"), "body_count": row.get("body_count")}
 
 
+BOOKMARK_IMPORT_ROWS = 10000        # S53: bookmarks one import may hold
+BOOKMARK_IMPORT_BYTES = 8 * 2 ** 20  # ...and its request: 10,000 rows with long notes (aiohttp's own limit is 1 MiB)
+BOOKMARK_NOTE_MAX = 2000             # a note's characters, as POST /api/bookmark keeps them
+BOOKMARK_PROBLEMS_SHOWN = 20         # bad rows described one by one; the rest only counted
+
+
+def parse_bookmarks(text):
+    """S53: bookmarks from a file, Outrider's own export (/api/export?what=bookmarks) as CSV or JSON: JSON when it
+    starts with "[", else CSV with a header row (a byte-order mark and a spreadsheet's ";"-separated save with decimal
+    commas are read too; "{" is JSON too, refused as no list). Parsed here, not in the page: JavaScript would round an id64 above 2^53. Returns
+    (rows, bad, problems): rows as (id64, name, x, y, z, note, created_ts) for the bookmarks table, the count of rows
+    left out and the first BOOKMARK_PROBLEMS_SHOWN reasons ("line 4: no x"). A file that cannot be read at all, or holds
+    more than BOOKMARK_IMPORT_ROWS rows, raises ValueError with words for the page."""
+    text = (text or "").strip().lstrip("\ufeff").strip()
+    if not text:
+        raise ValueError("the file is empty")
+    decimal_comma = False
+    if text.startswith(("[", "{")):
+        try:
+            items = json.loads(text)
+        except ValueError as e:
+            raise ValueError(f"not a JSON file Outrider can read ({e})") from None
+        if not isinstance(items, list):
+            raise ValueError("expected a list of bookmarks (Outrider's JSON export)")
+        numbered = [(f"item {i}", r) for i, r in enumerate(items, 1)]
+    else:
+        import csv
+        head = text.split("\n", 1)[0]
+        delim = ";" if ";" in head and "," not in head else ","
+        decimal_comma = delim == ";"
+        reader = csv.reader(io.StringIO(text), delimiter=delim)
+        cols = [c.strip().lower() for c in next(reader)]
+        missing = [c for c in ("id64", "name", "x", "y", "z") if c not in cols]
+        if missing:
+            raise ValueError(f"no {', '.join(missing)} column (Outrider's CSV export starts "
+                             "id64,name,x,y,z,note,created_ts)")
+        numbered = []
+        try:
+            for row in reader:
+                if any(c.strip() for c in row):
+                    numbered.append((f"line {reader.line_num}", dict(zip(cols, row))))
+                if len(numbered) > BOOKMARK_IMPORT_ROWS:
+                    break
+        except csv.Error as e:   # a field over csv's 128 KiB limit, a stray NUL
+            raise ValueError(f"not a CSV file Outrider can read (line {reader.line_num}: {e})") from None
+    if len(numbered) > BOOKMARK_IMPORT_ROWS:
+        raise ValueError(f"more than {BOOKMARK_IMPORT_ROWS:,} bookmarks in one file")
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    rows, bad, problems = [], 0, []
+
+    def number(v):
+        if isinstance(v, str):
+            v = v.strip().replace(",", ".") if decimal_comma else v.strip()
+            v = float(v) if v else None
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+            raise ValueError
+        return float(v)
+
+    for where, r in numbered:
+        why = None
+        if not isinstance(r, dict):
+            why = "not a bookmark (expected {id64, name, x, y, z, note})"
+        else:
+            raw = r.get("id64")
+            raw = raw.strip() if isinstance(raw, str) else raw
+            if raw is None or raw == "":
+                why = "no id64"
+            elif isinstance(raw, bool) or not (isinstance(raw, int) or
+                                               isinstance(raw, str) and re.fullmatch(r"-?[0-9]+", raw)):
+                why = "id64 not a whole number (a spreadsheet may have rounded it)"
+            elif not 0 <= int(raw) < 2 ** 63:
+                why = "id64 out of range"
+            name = r.get("name")
+            name = name.strip() if isinstance(name, str) else ""
+            if not why and not name:
+                why = "no name"
+            if not why:
+                xyz = []
+                for k in ("x", "y", "z"):
+                    try:
+                        xyz.append(number(r.get(k)))
+                    except (ValueError, TypeError):
+                        why = f"no {k}" if r.get(k) in (None, "") else f"{k} is not a number"
+                        break
+        if why:
+            bad += 1
+            if len(problems) < BOOKMARK_PROBLEMS_SHOWN:
+                problems.append(f"{where}: {why}")
+            continue
+        note = r.get("note")
+        note = note.strip()[:BOOKMARK_NOTE_MAX] if isinstance(note, str) else ""
+        created = r.get("created_ts")
+        created = created.strip() if isinstance(created, str) and re.fullmatch(
+            r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", created.strip()) else now
+        rows.append((int(raw), name[:200], *xyz, note, created))
+    return rows, bad, problems
+
+
 # --------------------------------------------------------------------------
 # Summaries: what the page shows for a system, computed from merged records
 # --------------------------------------------------------------------------
@@ -10727,6 +10825,15 @@ class State:
         self.db.execute("DELETE FROM bookmarks WHERE id64=?", (id64,))
         self.db.commit()
         self.bump()
+
+    def import_bookmarks(self, rows):
+        """S53: parse_bookmarks' rows merged into yours: a system already bookmarked keeps its own name, note and date
+        (INSERT OR IGNORE), as does a second row for one system in the same file. (added, already)."""
+        added = self.db.executemany("INSERT OR IGNORE INTO bookmarks VALUES (?, ?, ?, ?, ?, ?, ?)", rows).rowcount
+        self.db.commit()
+        if added:
+            self.bump()
+        return added, len(rows) - added
 
     def system_value(self, id64, name, records, star, ctx=None):
         """Credits from a system: what selling now would pay for data you hold from it, and the
@@ -16820,6 +16927,28 @@ def make_app(state, hosts=None):
             return web.json_response({"error": "unknown system"}, status=404)
         return web.json_response({"ok": True})
 
+    async def bookmarks_import_view(request):
+        """S53: POST {text}: a bookmarks file (Outrider's CSV or JSON export) merged into yours, nothing replaced:
+        {added, already, bad, problems}; a file that cannot be read is a 400 with words. Read here with its own limit
+        (BOOKMARK_IMPORT_BYTES, a 413 above it): 10,000 rows can pass aiohttp's 1 MiB."""
+        raw = bytearray()
+        async for chunk in request.content.iter_chunked(65536):
+            raw += chunk
+            if len(raw) > BOOKMARK_IMPORT_BYTES:
+                return web.json_response({"error": f"the file is over {BOOKMARK_IMPORT_BYTES // 2 ** 20} MB"}, status=413)
+        try:
+            body = json.loads(raw)
+        except ValueError:
+            body = None
+        if not isinstance(body, dict) or not isinstance(body.get("text"), str):
+            return web.json_response({"error": "expected {text: the file's contents}"}, status=400)
+        try:
+            rows, bad, problems = parse_bookmarks(body["text"])
+        except ValueError as e:
+            return web.json_response({"error": str(e)}, status=400)
+        added, already = state.import_bookmarks(rows)
+        return web.json_response({"added": added, "already": already, "bad": bad, "problems": problems})
+
     async def rigs_remove_view(request):
         """{id}: a mining rig still out picked up (its number free, its tons a saved site); a saved rig site forgotten."""
         body = await json_object(request)
@@ -17953,6 +18082,7 @@ def make_app(state, hosts=None):
     app.router.add_post("/api/search", search_start)
     app.router.add_get("/api/search", search_get)
     app.router.add_post("/api/bookmark", bookmark)
+    app.router.add_post("/api/bookmarks/import", bookmarks_import_view)
     app.router.add_post("/api/rigs/remove", rigs_remove_view)
     app.router.add_post("/api/sites/forget", sites_forget_view)
     return app

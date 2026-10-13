@@ -7094,6 +7094,52 @@ const settle = async maxMs => {
     console.log(good ? "OK" : "FAIL", "| S39 find a setting |", good ? `speed, a server key, a config key alone, two words, nothing; all ${got.every.length} sections found by a word and by name; cleared as before` :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
   }
+  // S53: Import… beside Bookmarks' Export: a picked CSV file goes to the scratch server, which merges it ("2 added, 0
+  // already there", a bad row said with its line); the rows arrive with the exact id64 above 2^53, a sweep tick and Plot
+  // route; the same file again adds nothing; a file it cannot read is said in red. The two bookmarks are removed after.
+  {
+    const w = dom.window, d = w.document, before = errors.length, view0 = w.eval("view");
+    w.eval(`document.querySelector('[data-view="bm"]').click()`);
+    await settle(800);
+    const input = d.getElementById("bmFile"), msg = () => d.getElementById("bmImportMsg");
+    let picked = 0;
+    input.click = () => { picked++; };
+    d.getElementById("bmImport").click();
+    const pick = async (text, name) => {
+      Object.defineProperty(input, "files", {value: [new w.File([text], name)], configurable: true});
+      input.dispatchEvent(new w.Event("change"));
+      for (let i = 0; i < 40 && /^(Importing…)?$/.test(msg().textContent); i++) await sleep(100);
+      const said = [msg().textContent, msg().className];
+      msg().textContent = "";
+      return said;
+    };
+    const csv = "id64,name,x,y,z,note,created_ts\r\n9007199254740993,Smoke Import One,10,0,10,from a file,2026-01-01T00:00:00Z\r\n" +
+      "12345,Smoke Import Two,20,0,20,,\r\n13,Smoke Import Bad,,0,0,,\r\n";
+    const got = {picked: 0, visible: !d.getElementById("bmTools").hidden && !d.getElementById("bmImport").hidden};
+    got.picked = picked;
+    got.first = await pick(csv, "bookmarks.csv");
+    for (let i = 0; i < 40 && !w.eval(`data.bookmarks.some(b => b.id === "9007199254740993")`); i++) await sleep(150);
+    w.eval("renderBookmarks(bmMap())");
+    const row = [...d.querySelectorAll("#bmRows tr")].find(r => /Smoke Import One/.test(r.textContent));
+    got.row = row ? [/from a file/.test(row.textContent), !!row.querySelector('.swtick[data-sweep="Smoke Import One"]'),
+      !!row.querySelector('[data-plotto="Smoke Import One"]'), /2026-01-01/.test(row.textContent)] : null;
+    got.again = await pick(csv, "bookmarks.csv");
+    got.unread = await pick("name,x,y,z\nA,1,2,3\n", "other.csv");
+    got.title = d.getElementById("bmImportMsg").title;
+    for (const id of ["9007199254740993", "12345"])
+      await w.fetch("api/bookmark", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({id, remove: true})});
+    delete input.files;
+    w.eval(`document.querySelector('[data-view="${view0}"]').click()`);
+    await settle(800);
+    const want = {picked: 1, visible: true, first: ["2 added, 0 already there, 1 left out: line 4: no x", ""], row: [true, true, true, true],
+      again: ["0 added, 2 already there, 1 left out: line 4: no x", ""],
+      unread: ["Not imported: no id64 column (Outrider's CSV export starts id64,name,x,y,z,note,created_ts).", "err"], title: ""};
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    const good = !bad.length && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| S53 bookmarks import |", good ? "Import… picks a file, merged on the server (2 added, then 2 already there, a bad line said), the exact id64 with its tick and Plot route, an unreadable file in red" :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+  }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",
     headers: Object.assign({"Content-Type": "application/json"}, origin ? {Origin: origin} : {})}).then(r => r.status);

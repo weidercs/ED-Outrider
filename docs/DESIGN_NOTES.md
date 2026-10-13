@@ -237,6 +237,16 @@ upstream project's choices, not rules of the game.
   what was said to the voice is not what those tools are for). Every way out is kept, refusals (400, 426) and the AI's
   failures with their code included, but never the AI's key; `matched` "error" is the log's value only, POST
   `/api/ask`'s `matched` stays fixed, ai or none (the app's contract).
+- **Bookmarks import merges, and the server reads the file** (S53, 2026-10-13; the author's default of 2026-10-12):
+  Import… beside Bookmarks' Export adds what is new and never replaces (INSERT OR IGNORE): a system already bookmarked
+  keeps its own name, note and date, so importing the same file twice, or a friend's list, is safe; to take their
+  note, remove yours first. The file goes to the server as text and is parsed there, because JavaScript rounds an id64
+  above 2^53. It reads Outrider's own export (CSV with its header, or JSON), and a spreadsheet's save of it (a
+  byte-order mark, ";" with decimal commas); other tools' bookmark files are not read. Each row needs id64, name and
+  x/y/z: the position comes from the file, never from a lookup, so 10,000 rows import offline at once. A bad row is
+  left out with its reason (a long id64 a spreadsheet turned into 1.15292E+18 is the likely one; a rounded id64 that
+  still looks whole cannot be caught); a note is kept to 2,000 characters as ☆'s own; more than 10,000 rows or 8 MB
+  refuses the file.
 - **Any view in its own window** (S37, 2026-10-13): `?view=<tab>` shows that view without the tab row and never saves
   the view (the main window keeps its own), so a second monitor can hold Bookmarks or the Map. The ↗ is in the tab's
   corner, shown on hover or focus only and drawn over the padding, so the tab row keeps its width; never on a device

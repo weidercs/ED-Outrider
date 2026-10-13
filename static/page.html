@@ -261,7 +261,8 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
   </div>
 </section>
 <section id="bmView" hidden>
-<div id="bmTools" hidden class="srow"><span class="swbar"><button type="button" class="mini swbtn" hidden></button><button type="button" class="mini swclear" hidden title="untick every system ticked for a sweep">✕ untick all</button><span class="swmsg" role="status"></span></span><span class="grow"></span><span class="exports">Export: <a href="api/export?what=bookmarks&format=csv" download>CSV</a> · <a href="api/export?what=bookmarks&format=json" download>JSON</a></span></div>
+<div id="bmTools" hidden class="srow"><span class="swbar"><button type="button" class="mini swbtn" hidden></button><button type="button" class="mini swclear" hidden title="untick every system ticked for a sweep">✕ untick all</button><span class="swmsg" role="status"></span></span><span class="grow"></span><span class="exports">Export: <a href="api/export?what=bookmarks&format=csv" download>CSV</a> · <a href="api/export?what=bookmarks&format=json" download>JSON</a></span>
+  <button type="button" class="mini" id="bmImport" title="add the bookmarks in a file (Outrider's CSV or JSON export) to yours; a system already bookmarked here keeps its own note">Import…</button><input type="file" id="bmFile" accept=".csv,.json,text/csv,application/json" hidden><span id="bmImportMsg" role="status"></span></div>
 <div class="pane" id="bmPane">
 <table id="bmTable" hidden>
   <thead><tr>
