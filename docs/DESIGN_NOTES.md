@@ -47,7 +47,7 @@ upstream project's choices, not rules of the game.
   search does, with the colour (`variant`). So the system you are in is asked once a day, only when its bodies have life
   (a search out to 1 ly of it: a max of 0 and a system_name filter were ignored), and the answer kept in
   `spansh_reported` (live-only). Here shows them as facts (👥, the reported colour), never mixed into the guess or its
-  value. Not yet: the arrival brief, the FSS debrief and the overlay's body panel naming them.
+  value. Not yet: the arrival brief, the FSS debrief and the overlay's Target panel naming them.
 - **Your runs rank a genus's species in the hover only** (S24, 2026-10-12). The guess still names the likeliest by value;
   its hover adds which species your completed runs found on bodies of the same class, atmosphere and 25 K band, in the
   same region once you have 5 such runs there (fewer: every region's). The backtest replays your runs in time order
@@ -330,7 +330,7 @@ upstream project's choices, not rules of the game.
   tried (X11, and XWayland on a Wayland session, as Modern Overlay runs on GNOME); Windows has the code, untried;
   native Wayland compositors, gamescope and exclusive fullscreen are out of scope.
 - **The overlay uses the config's levels.** The panels are built on the server, which cannot see a browser's levels:
-  the system panel `body_highlight_level` and `bio_min`; the body panel `high_gravity`; Now `body_highlight_level`,
+  the system panel `body_highlight_level` and `bio_min`; the Target panel's body `high_gravity`; Now `body_highlight_level`,
   `bio_min`, `high_gravity`, `codex_interesting`, `unsold_warn` and `unsold_urgent`; Bio signals `bio_min`,
   `high_gravity` and `codex_interesting`. Now leaves out what only the page knows (the skip floor, the high-g approach
   stakes, captions).
@@ -351,13 +351,32 @@ upstream project's choices, not rules of the game.
 - **Time since you sold counts whole days passed** (the author, 2026-10-10): 6.7 days is "6 days", never rounded up,
   on the page (Now's at-risk line, the welcome back) and on the overlay's Now panel (`overlay.unsold_age`: "3 days
   unsold", from a week "2 weeks 2 days since sold", or "2wk2d since sold" when the written-out form would not fit).
-- **The panels hide over the maps, the FSS, the SAA and the codex, and in the hyperspace tunnel; the Now panel also
-  while docked** (the author, 2026-10-10, for docked). GuiFocus 6-11 (`OVERLAY_HIDE_FOCUS`) and the FSD-jump flag hide
-  every panel; the ship's docked flag, or on foot in a station, hangar or social space (`FLAG_DOCKED`,
+- **The panels hide over the system map, the orrery, the FSS, the SAA and the codex, and in the hyperspace tunnel; the
+  Now panel also while docked** (the author, 2026-10-10, for docked). GuiFocus 7-11 (`OVERLAY_HIDE_FOCUS`) and the
+  FSD-jump flag hide every panel; over the galaxy map (6, `OVERLAY_GALAXY_MAP`) only the Target panel shows (D1, below); the ship's docked flag, or on foot in a station, hangar or social space (`FLAG_DOCKED`,
   `ON_FOOT_DOCKED`), hides Now. The test panels and Arrange mode are the exception: they show over the game's window
   whatever is in front. Nothing shows while the game loads (2026-10-11): after a crash the game writes no Shutdown and
   leaves Status.json saying live with the dead session's flags until the new session is in, so from a game launch (a
   journal's first part) or LoadGame to the Location (meta `game_load`, journal-derived) the panels stay off.
+- **One Target panel, and its near-body zone** (D1, the author 2026-10-12). The body panel became the Target panel
+  (same id `body`, config key `body_panel` and layout key, so nobody's arrangement or config needed moving). Inside a
+  body's near-body zone (Status.json names the body and gives an altitude: the point the game writes ApproachBody) it
+  shows that body, even over a target; outside, the body targeted in this system, else the system targeted (FSDTarget:
+  the galaxy map's pick or a route's next jump), else nothing: the old fallback to the body you fly near (BodyName
+  without the zone) is gone. Entering switches at once; leaving switches back only after `TARGET_ZONE_LINGER_S` (5 s)
+  out of the zone, a constant: the zone's edge bounces (148 of the author's 468 LeaveBody re-entered the same body
+  within 2 minutes, 19 within 15 s), and the author preferred a little flicker to waiting longer for the next
+  destination. No altitude setting: the game gives no "within probe range" signal, and a body you probe is the one
+  you targeted anyway. A body with nothing to show (a star, one nothing is known of) gives way to the target. The
+  panel shows over the galaxy map (the one exception to hiding there: you see what you picked before you jump, docked
+  too) with the system targeted, and stays off while docked elsewhere, landed, in the SRV and on foot (the radar's
+  screen). Its system facts come from the target's lookup when it is for this target (`State.target`, matched on id
+  and time: "checking…" until then) and its value from the Nearby row only (`State.target`'s `leaving` is the system
+  you are in); the hazard is the page's `hazardNote` (`overlay.star_hazard`: neutron star, white dwarf, black hole).
+- **Analysis-only panels** (D2a, 2026-10-12): `[overlay] analysis_only` keeps those panels off in your ship while the
+  HUD is in combat mode (Status.json bit 27 clear). The SRV and on foot have no HUD modes, so the mark is ignored
+  there, as over the galaxy map and for the test panels and Arrange mode. The radar stays on wherever it applied
+  before (D2b, an Artemis-suit or Genetic Sampler gate, was dropped by the author).
 - **No rebuy multiple for a ship whose hull has no credit value** (the author, 2026-10-10). An Arx-bought ship's
   Loadout carries ModulesValue but no HullValue, and its rebuy is 5% of the modules alone, so "N× rebuy" said ~110
   on any trip and a rebuy-multiple level would always fire. Such a ship gets no rebuy in the risk figures (`risk_rebuy`,

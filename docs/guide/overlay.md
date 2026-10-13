@@ -2,8 +2,8 @@
 
 # In-game overlay
 
-Outrider can draw a few panels right over the game: what is worth your time in the system, the body you are heading
-to, a radar on a body's surface, and (when you tick them) the system strip, Now (To-Do & Info) and the bio signals. A
+Outrider can draw a few panels right over the game: what is worth your time in the system, your target (the body you
+are at or heading to, or the next system), a radar on a body's surface, and (when you tick them) the system strip, Now (To-Do & Info) and the bio signals. A
 small window on the game PC draws them; it sits over Elite's window and lets every click through, so you play as
 before.
 
@@ -22,10 +22,25 @@ before.
   is left in the whole system, and how many bodies are under your levels. A body you have not scanned yet (known to
   Spansh only) is listed unnumbered after the stops. It uses the levels in your config
   (`body_highlight_level`, `bio_min`), as Here's to-do line does.
-- **The body panel**, flying your ship: the body you have targeted in this system (or the one you are near):
-  landable, gravity (amber at your high-gravity level), atmosphere, temperature, what mapping is still worth, first
-  discovered; its life, each likely species with its codex mark, colony distance and value, the runs under way (what
-  each pays, "1.0M (×5: 5.0M)" with the first-footfall bonus) and the species finished; and whether it is worth landing (with the ×5 first-footfall note).
+- **The Target panel**, flying your ship (it was the body panel: it keeps that panel's place, size and switch). Close
+  to a body (once the game shows its altitude, where the approach begins) it shows **that body**, even when you have
+  targeted something else; once you leave, it goes back to your target after 5 seconds out (the edge of that zone
+  comes and goes, so it may flick back now and then). Elsewhere it shows **the body you have targeted** in this
+  system, or else **the system you have targeted** (in the galaxy map, or the next jump of the route plotted there).
+  Nothing targeted: no panel.
+  - A body: landable, gravity (amber at your high-gravity level), atmosphere, temperature, what mapping is still
+    worth, first discovered; its life, each likely species with its codex mark, colony distance and value, the runs
+    under way (what each pays, "1.0M (×5: 5.0M)" with the first-footfall bonus) and the species finished; and whether
+    it is worth landing (with the ×5 first-footfall note).
+  - A system: "next jump of your route · 5 to go" when a route is plotted; whether anyone reported it (never reported,
+    no scan data, partly or fully scanned, visited; "checking…" while Outrider asks), how many bodies Spansh knows of
+    how many, and EDSM's; the star with ⛽, or ✕ when it cannot be scooped, and "⚠ throttle down" at a neutron star,
+    white dwarf or black hole (⚡ marks a supercharge); the jump: how far, the fuel it burns and the max-range jumps
+    left after it, or "out of range"; and, when it is in your Nearby list, what scanning and mapping it could pay, the
+    bio up to, and its notable bodies (ELW, WW, AW, T).
+
+  It is the one panel that shows **over the galaxy map**, with the system you target there, so you see what you
+  picked before you jump (docked too). Docked, outside the galaxy map, it stays off.
 - **The surface radar**, on a body (landed, in the SRV, on foot) or low over it: heading up, you in the middle, N on
   the rim; the sample points of your run with their colony rings, red while you are inside one and green once you are
   clear; tagged plants, the ship and your rigs. Underneath: how far the next sample must be, or "Clear: sample here".
@@ -53,8 +68,8 @@ before.
   way ("2/3"), lost, or not started with its likeliest species, codex mark and value; signals the DSS has not named yet
   show what they could be. The foot says how many are sampled, what is left and how many bodies are under your level.
 
-No panel covers the galaxy or system map, the orrery, the FSS, the SAA or the codex, and none shows in the hyperspace
-tunnel or while the game is loading (from its launch, the main menu included, until your session is in), even after a
+No panel covers the system map, the orrery, the FSS, the SAA or the codex, and over the galaxy map only the Target
+panel shows. None shows in the hyperspace tunnel or while the game is loading (from its launch, the main menu included, until your session is in), even after a
 crash left the old session's status behind.
 
 ## Starting it
@@ -104,11 +119,15 @@ The arrangement is kept in Outrider's database, not the config file: to take it 
 ## Settings
 
 Each panel has its tick box at the start of its row in Settings → In-game overlay's table (hover its name for what
-it shows; a panel switched off has its row dimmed). The system, body and radar panels start on; the system strip, Now
+it shows; a panel switched off has its row dimmed). **Analysis only**, the next column, keeps a panel off in your
+ship while the HUD is in combat mode: it shows only in analysis mode, so the screen stays clear in a fight. In the
+SRV and on foot (no HUD modes there) and over the galaxy map it shows as the others. The system, Target and radar
+panels start on; the system strip, Now
 and Bio signals start off. The **theme** colours and frames the panels as the page's themes do (Elite's orange with
 cut corners, LCARS's bars, ...); **text** is small, normal or large. In the config file (`[overlay]`):
 `system_seconds` keeps the system panel only that long after arriving (0: while you are in supercruise there), and
-`radar_range` is the radar's edge in metres (it widens to fit a colony ring).
+`radar_range` is the radar's edge in metres (it widens to fit a colony ring); `analysis_only` lists the panels
+ticked Analysis only (`["system", "bio"]`; the Target panel is `body`).
 
 <p align="center">
   <img src="../images/overlay-settings.png" alt="Settings, In-game overlay: the switch, the window's state, the theme and text size, the test panels and Arrange buttons, and each panel's row with its tick box, corner, offsets, size and opacities" width="740">

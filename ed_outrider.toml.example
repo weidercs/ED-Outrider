@@ -227,13 +227,15 @@
 # theme = "default"         # the panels' colours: default, lcars, elite, babylon5, narn, minbari, centauri, vorlon, shadow, sith, alliance, dark
 # text_size = "normal"      # small, normal or large
 # system_panel = true       # the bodies worth your time, in supercruise
-# body_panel = true         # the body you are heading to or near
+# body_panel = true         # the Target panel: the body you are near or have targeted, else the system targeted (also over the galaxy map)
 # radar = true              # on a body's surface: samples, colony rings, the ship
 # strip_panel = false       # the system strip: two short lines across the top (where you are, the star, bodies found, mapped, Spansh)
 # now_panel = false         # Now (To-Do & Info): Now condensed, the target, fuel, data at risk, what to do next, this session
 # bio_panel = false         # every bio signal in the system, the ones over bio_min highlighted, with samples and values
 # system_seconds = 0        # how long the system panel stays after arriving (0: while in supercruise in that system)
 # radar_range = 800         # metres from the radar's centre to its edge (it widens to fit a colony ring)
+# analysis_only = []        # panels shown in your ship only while the HUD is in analysis mode, e.g. ["system", "bio"]
+#                           # (any of system, body, radar, strip, now, bio; not in the SRV, on foot or over the galaxy map)
 
 [mcp]
 # The MCP bridge, for asking an AI client (Claude Code, the Claude desktop app) about your game: the client starts

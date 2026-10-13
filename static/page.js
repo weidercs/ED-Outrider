@@ -9329,7 +9329,9 @@ document.getElementById("uploadsBox").addEventListener("click", async e => {
 // Settings -> In-game overlay (data.overlay: State.overlay_info): the switches, whether a window is drawing, the test
 // panels and Arrange mode, and each panel's place, size and transparency (POST api/overlay, api/overlay/layout)
 const OV_THEMES = ["default", "lcars", "elite", "babylon5", "narn", "minbari", "centauri", "vorlon", "shadow", "sith", "alliance", "dark"];
-const OV_PANELS = [["system", "System", "the bodies worth your time, in supercruise"], ["body", "Body", "the body you are heading to or near"],
+// "body" is the Target panel (D1): its id stayed, so the Body panel's place and size carry over
+const OV_PANELS = [["system", "System", "the bodies worth your time, in supercruise"],
+                   ["body", "Target", "the body you are near or have targeted, else the system targeted (also over the galaxy map)"],
                    ["radar", "Surface radar", "on a body's surface: samples, colony rings, the ship"],
                    ["strip", "System strip", "two short lines across the top: where you are, the star, bodies found, values"],
                    ["now", "Now (To-Do & Info)", "Now, condensed: the target, fuel, data at risk, what to do next, this session"],
@@ -9358,11 +9360,14 @@ function overlayHtml(o) {
   const opt = (vals, cur, label = v => v) => vals.map(v => `<option value="${v}"${v === cur ? " selected" : ""}>${esc(label(v))}</option>`).join("");
   const pct = v => Math.round(v * 100);
   const lay = o.layout || {};
+  const ana = new Set(o.analysis_only || []);
   const rows = OV_PANELS.map(([id, name, what]) => {
     const e = lay[id] || {}, on = !!(o.panels || {})[id];
     const num = (k, v, min, max, title) => `<td><input type="number" data-ovlay="${id}" data-k="${k}" min="${min}" max="${max}" step="1" value="${v}" title="${title}"></td>`;
     // each panel's own row: its on/off box (what it shows on hover), then where it goes; a panel switched off is dimmed
-    return `<tr class="${on ? "" : "ovoff"}"><th><label title="${esc(what)}"><input type="checkbox" data-ovpanel="${id}"${on ? " checked" : ""}> ${esc(name)}</label></th><td><select data-ovlay="${id}" data-k="corner" title="the corner of the game window it is placed from">${opt(Object.keys(OV_CORNERS), e.corner, c => OV_CORNERS[c])}</select></td>` +
+    // then whether it shows in your ship only while the HUD is in analysis mode (D2a)
+    return `<tr class="${on ? "" : "ovoff"}"><th><label title="${esc(what)}"><input type="checkbox" data-ovpanel="${id}"${on ? " checked" : ""}> ${esc(name)}</label></th>` +
+      `<td class="ovana"><input type="checkbox" data-ovanalysis="${id}"${ana.has(id) ? " checked" : ""} title="${esc(name)}: only while the HUD is in analysis mode"></td><td><select data-ovlay="${id}" data-k="corner" title="the corner of the game window it is placed from">${opt(Object.keys(OV_CORNERS), e.corner, c => OV_CORNERS[c])}</select></td>` +
       num("x", pct(e.x || 0), 0, 95, "how far in from that corner's side, in % of the game window's width") +
       num("y", pct(e.y || 0), 0, 95, "how far in from that corner's top or bottom, in % of the game window's height") +
       num("scale", pct(e.scale || 1), 50, 250, "its size, in %") + num("bg", pct(e.bg ?? 0.65), 0, 100, "its background's opacity, in % (0: text only)") +
@@ -9374,7 +9379,7 @@ function overlayHtml(o) {
     `<div class="mod">Theme <select data-ov="theme">${opt(OV_THEMES, o.theme)}</select> · text <select data-ov="text_size">${opt(["small", "normal", "large"], o.text_size)}</select></div>` +
     `<div class="mod"><button type="button" class="try" data-ovact="test">${o.test ? `test panels: ${o.test} s` : "▶ Show test panels"}</button> ` +
     `<button type="button" class="try" data-ovact="arrange">${o.arrange ? `✓ Done arranging (${Math.ceil(o.arrange / 60)} min left)` : "✥ Arrange panels"}</button></div>` +
-    `<div class="ovwrap"><table class="ovlay"><thead><tr><th title="tick a panel to show it; hover its name for what it shows">Panel</th><th>Placed from</th><th>Across %</th><th>Down %</th><th>Size %</th><th>Background %</th><th>Panel %</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` +
+    `<div class="ovwrap"><table class="ovlay"><thead><tr><th title="tick a panel to show it; hover its name for what it shows">Panel</th><th title="ticked: shown in your ship only while the HUD is in analysis mode (in combat mode it stays off); in the SRV, on foot and over the galaxy map it shows as the others">Analysis only</th><th>Placed from</th><th>Across %</th><th>Down %</th><th>Size %</th><th>Background %</th><th>Panel %</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` +
     `<div class="hint" id="overlayMsg">${esc(overlayNote)}</div>`;
 }
 // A popup while Outrider installs PyQt6 for the overlay window (the author, 2026-10-10), then its outcome for a few
@@ -9427,6 +9432,8 @@ document.getElementById("overlayBox").addEventListener("change", e => {
   // a select keeps the focus, which holds renderOverlay off: let go, so the server's answer (its note) is drawn
   else if (t.dataset.ov) { t.blur(); overlayPost("api/overlay", {[t.dataset.ov]: t.value}); }
   else if (t.dataset.ovpanel) overlayPost("api/overlay", {panels: {[t.dataset.ovpanel]: t.checked}});
+  // analysis only: the whole list, as the boxes now say
+  else if (t.dataset.ovanalysis) overlayPost("api/overlay", {analysis_only: [...e.currentTarget.querySelectorAll("[data-ovanalysis]:checked")].map(x => x.dataset.ovanalysis)});
   else if (t.dataset.ovlay) {
     const k = t.dataset.k, v = k === "corner" ? t.value : Number(t.value) / 100;
     if (k !== "corner" && !isFinite(v)) return;

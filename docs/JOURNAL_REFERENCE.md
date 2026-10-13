@@ -24,7 +24,7 @@ the code; the constants named are in `ed_outrider.py` unless another file is giv
 |---|---|
 | `FSDJump`, `CarrierJump`, `Location` | `Population` (`system_population`: no x5 bio bonus where people live). Visits, the jump path (`jumps`), current and previous position, region crossings. `FSDJump` `JumpDist`/`FuelUsed`/`FuelLevel` feed the fuel model (not when `BoostUsed`). `Taxi`/`Multicrew` mark rides that are not your ship's fuel or honk. A `Location` in the system you are already in is a relog, not an arrival (an older line, from a legacy folder read late, is judged against the arrival before it, not today's position). A session that starts docked (a login, a respawn) writes no `Docked`: its `Location` has `Docked: true` with `StationName`, `StationType`, `MarketID` and `StationServices`, and counts as the dock (the docked state, the hold's market for `CargoTransfer`). `FSDJump`/`CarrierJump`, and a `Location` that moves you (a respawn, a login elsewhere; not a relog), also move the Neutron Highway along its route (`highway_arrival`). |
 | `Fileheader` | A game launch (its `part` 1; a later part continues the session): from it, or a `LoadGame`, until the session's `Location` the game is loading (meta `game_load`, `Journals.loading`) and the overlay shows nothing. Never counts as play (`LOGIN_EVENTS`). |
-| `FSDTarget` | The targeted system (sound verdict, "leaving unfinished work" check) and its star class. |
+| `FSDTarget` | The targeted system (sound verdict, "leaving unfinished work" check) and its star class. `RemainingJumpsInRoute`: the route plotted in game's jumps left, this one included (1 for a lone target): the overlay's Target panel says "next jump of your route · N to go" above 1. |
 | `StartJump` | Star class of the destination. `JumpType: Hyperspace` is written as the FSD starts charging, at the start of the countdown (before the game's own countdown call): the jump card and the speech queue clearing happen here, but the jump line's words wait for Status.json's FsdJump flag (bit 30, the tunnel: a "hyperspace" moment) or 8 s. |
 | `Scan` | Bodies (`own_bodies`, the record used everywhere; rare stars and rare planet classes from `StarType`/`PlanetClass`; the green gas giant model from `PlanetClass`, `SurfaceTemperature` at full precision, `MassEM` and `Radius`: `outrider/ggg.py`), the arrival star's `WasDiscovered` (discovery streak verdict), first-scan `WasDiscovered`/`WasMapped`/`WasFootfalled` (`own_firsts`), landable `Materials` (jumponium), valuable finds. Nav-beacon scans (`ScanType` NavBeaconDetail/NavBeacon) never count as your discoveries. The arrival star can be scanned twice (the auto scan, then a Detailed one after the honk, or a nav beacon's): one arrival per visit. |
 | `FSSDiscoveryScan` | The honk: `BodyCount`, `Progress`; triggers the arrival briefing. |
@@ -67,10 +67,11 @@ the code; the constants named are in `ed_outrider.py` unless another file is giv
   `BodyName`, `Latitude`, `Longitude`, `Altitude`, `PlanetRadius`, `Heading`, `Cargo`, `Destination`,
   `GuiFocus`, `FireGroup`, `timestamp`. Flags used: docked (bit 0; the overlay's Now panel hides, `FLAG_DOCKED`),
   landed (1), supercruise (4, `FLAG_SUPERCRUISE`: the overlay's system panel shows only then), scooping (11), FSD
-  charging (17), in your main ship (24, `FLAG_IN_MAIN_SHIP`: the overlay's body panel shows only then), in SRV
-  (26), HUD analysis mode (27), altitude from average radius (29), in the hyperspace tunnel (30, FsdJump: the jump line is said once it
+  charging (17), in your main ship (24, `FLAG_IN_MAIN_SHIP`: the overlay's Target panel shows only then, outside the galaxy map), in SRV
+  (26), HUD analysis mode (27, `FLAG_HUD_ANALYSIS`: the overlay's analysis-only panels show only then), altitude from average radius (29), in the hyperspace tunnel (30, FsdJump: the jump line is said once it
   comes on after a hyperspace StartJump; auto honk waits while it is set; the overlay hides every panel); `GuiFocus`
-  6-11 (galaxy map, system map, orrery, FSS, SAA, codex) hide the overlay too (`OVERLAY_HIDE_FOCUS`); Flags2
+  7-11 (system map, orrery, FSS, SAA, codex) hide the overlay too (`OVERLAY_HIDE_FOCUS`), 6 (the galaxy map) all but
+  its Target panel; `BodyName` with `Altitude` is the Target panel's near-body zone (the point ApproachBody is written); Flags2
   bit 0 on foot, bits 3/13/14 on foot in a station, hangar or social space (counted as docked). In the SRV, the
   Nomad or a fighter (bits 25, 26), `Fuel` and `Cargo` are the vehicle's, not the ship's: the fuel tile keeps the
   ship's last figures and shows the vehicle's separately.

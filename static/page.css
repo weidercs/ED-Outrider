@@ -1246,6 +1246,7 @@ table.ovlay tr.ovoff td { opacity: .55; }   /* a panel switched off: its row dim
    spilling out of it */
 .ovwrap { overflow-x: auto; max-width: 100%; }
 table.ovlay { border-collapse: collapse; margin: 6px 0; font-size: 13px; } table.ovlay th, table.ovlay td { padding: 2px 4px; text-align: left; }
+table.ovlay td.ovana { text-align: center; }   /* the analysis-only box under its heading */
 table.ovlay input[type=number] { width: 3.4em; appearance: textfield; -moz-appearance: textfield; }   /* no spin arrows: room for "100" (typing and the arrow keys still work) */
 table.ovlay input[type=number]::-webkit-inner-spin-button, table.ovlay input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; } table.ovlay th { white-space: nowrap; }
 /* Settings → Alerts: a heading over a group of alerts (the discoveries) */

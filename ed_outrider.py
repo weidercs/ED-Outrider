@@ -294,7 +294,10 @@ HIGHWAY = {"clipboard": True, "autotarget": False, "autotarget_delay": 5.0, "eff
            "autotarget_dry_run": False}
 AUTOTARGET_TEST_COUNTDOWN = 5   # s: the Plot Route tab's "test now": time to click into the game before the sequence
 AUTOTARGET_HONK_WAIT = 60       # s an auto-target waits for an auto honk on the same arrival to finish (honk first)
-OVERLAY_HIDE_FOCUS = {6, 7, 8, 9, 10, 11}   # Status.json GuiFocus: galaxy map, system map, orrery, FSS, SAA, codex (no panels over them)
+OVERLAY_HIDE_FOCUS = {7, 8, 9, 10, 11}   # Status.json GuiFocus: system map, orrery, FSS, SAA, codex (no panels over them)
+OVERLAY_GALAXY_MAP = 6   # GuiFocus: the galaxy map, where only the Target panel shows, with the system targeted (D1)
+TARGET_ZONE_LINGER_S = 5   # s: the Target panel keeps the body you were near this long after leaving its zone (D1: the
+                           # zone's edge bounces; a little flicker beats waiting longer to see the next destination)
 FLAG_SUPERCRUISE = 1 << 4
 OVERLAY_UA = "outrider-overlay"   # the overlay window's User-Agent (outrider/overlay_window.py): only it counts as drawing
 OVERLAY_TICK_S = 2             # s between checks that the overlay window runs while wanted
@@ -1150,13 +1153,14 @@ enabled = {"true" if st["overlay"]["enabled"] else "false"}   # build the panels
 theme = {q(st["overlay"]["theme"])}   # the panels' colours: default, lcars, elite, babylon5, narn, minbari, centauri, vorlon, shadow, sith, alliance or dark
 text_size = {q(st["overlay"]["text_size"])}   # small, normal or large
 system_panel = {"true" if st["overlay"]["system_panel"] else "false"}   # the system panel: the bodies worth your time, in supercruise
-body_panel = {"true" if st["overlay"]["body_panel"] else "false"}   # the body panel: the body you are heading to or near
+body_panel = {"true" if st["overlay"]["body_panel"] else "false"}   # the Target panel: the body you are near or have targeted, else the system targeted (also over the galaxy map)
 radar = {"true" if st["overlay"]["radar"] else "false"}   # the surface radar: samples, colony rings, the ship, on a body's surface
 strip_panel = {"true" if st["overlay"]["strip_panel"] else "false"}   # the system strip: two short lines across the top (where you are, the star, bodies found, values)
 now_panel = {"true" if st["overlay"]["now_panel"] else "false"}   # Now (To-Do & Info): Now condensed, the target, fuel, data at risk, what to do next, this session
 bio_panel = {"true" if st["overlay"]["bio_panel"] else "false"}   # every bio signal in the system, the ones over your bio_min highlighted, with samples and values
 system_seconds = {st["overlay"]["system_seconds"]}   # how long the system panel stays after arriving (0: while in supercruise in that system)
 radar_range = {st["overlay"]["radar_range"]}   # metres from the radar's centre to its edge (it widens to fit a colony ring)
+analysis_only = [{", ".join(q(x) for x in st["overlay"]["analysis_only"])}]   # panels shown in your ship only while the HUD is in analysis mode: any of system, body, radar, strip, now, bio (not in the SRV, on foot or over the galaxy map)
 
 [assistant]
 enabled = {"true" if st["assistant"]["enabled"] else "false"}   # the voice's AI layer for questions the fixed phrases do not match (resources/ask.json); nothing is sent anywhere while false
@@ -3204,8 +3208,11 @@ class Journals:
                 self.moment("fsd_charge", ts, system=ev.get("StarSystem") or "", star_class=ev.get("StarClass") or "")
                 self.last_start_jump = ts
             if name == "FSDTarget" and ev.get("SystemAddress") and self.fresh("target", ts, (self.target or {}).get("ts")):
+                # remaining: RemainingJumpsInRoute, the plotted route's jumps left with this one (1 for a lone target),
+                # the overlay's Target panel says "next jump · N to go" (D1); in memory only, as the target is
                 self.target = {"id64": ev["SystemAddress"], "name": ev.get("Name"),
-                               "star_class": ev.get("StarClass"), "ts": ts}
+                               "star_class": ev.get("StarClass"), "ts": ts,
+                               "remaining": ev.get("RemainingJumpsInRoute") if isinstance(ev.get("RemainingJumpsInRoute"), int) else None}
             return
         if name in SCAN_EVENTS:
             self.handle_scan(name, ev, ts)
@@ -6399,7 +6406,8 @@ class State:
         self.clipboard = None
         # the in-game overlay ([overlay]; run() sets the config's): test panels until, Arrange mode until, the last
         # time the overlay window asked (Settings says whether one is connected), and Here's summary cache for it
-        self.overlay_cfg = dict(outrider.overlay.DEFAULTS)
+        self.overlay_cfg = dict(outrider.overlay.DEFAULTS, analysis_only=[])
+        self.overlay_zone = None   # the Target panel's near-body zone: {system, body, t (last seen in it)}, D1
         self.overlay_test_until = 0.0
         self.overlay_arrange_until = 0.0
         self.overlay_seen = 0.0
@@ -7682,10 +7690,55 @@ class State:
                 "destination_ls": dest.get("dist_ls") if dest else None,
                 "this_session": self.this_session(), "last_session": self.last_session()}
 
+    def overlay_target_info(self, pos):
+        """What the Target panel says about the system targeted in game (outrider.overlay.target_system_panel), or None
+        with no FSD target. The verdict, counts and EDSM's are State.target's once its lookup for THIS target is in
+        (status None until then: "checking…"); the value and notable bodies from the Nearby row when it is in the
+        sphere (State.target's leaving is the system you are in, not the target's)."""
+        jt = self.journals.target
+        if not jt or not jt.get("name"):
+            return None
+        t = self.target if self.target and (self.target.get("id64"), self.target.get("ts")) == (jt["id64"], jt["ts"]) else {}
+        row = self.systems.get(jt["id64"]) or {}
+        vp = row.get("value_parts") or {}
+        return {"name": jt["name"], "star_class": jt.get("star_class"), "remaining": jt.get("remaining"),
+                "status": t.get("status"), "source": t.get("source"), "known": t.get("known"), "count": t.get("count"),
+                "edsm": t.get("edsm"), "hop": self.target_hop(jt) if pos else None, "distance": row.get("distance"),
+                "value": {"carto": (vp.get("carto_now") or 0) + (vp.get("carto_left") or 0), "bio": vp.get("bio_left") or 0},
+                "notable": row.get("notable") or {}}
+
+    def overlay_zone_body(self, st, pos, now):
+        """The body whose near-body zone you are in (D1: Status.json names it and gives an altitude, the point the game
+        writes ApproachBody), or the one you left under TARGET_ZONE_LINGER_S ago in this system; None otherwise."""
+        if st.get("body") and isinstance(st.get("alt"), (int, float)):
+            self.overlay_zone = {"system": pos["id64"], "body": short_name(pos["name"], st["body"]), "t": now}
+            return self.overlay_zone["body"]
+        z = self.overlay_zone
+        if z and z["system"] == pos["id64"] and 0 <= now - z["t"] < TARGET_ZONE_LINGER_S:
+            return z["body"]
+        return None
+
+    def overlay_target_panel(self, st, pos, now, pal, cfg, galaxy):
+        """The Target panel (D1, id "body"): inside a body's near-body zone (and TARGET_ZONE_LINGER_S after leaving it)
+        that body, even over a target; outside it the body targeted in game in this system, else the system targeted.
+        Over the galaxy map always the system targeted. A body with nothing to say gives way to the system."""
+        if not galaxy:
+            bodies = (self.overlay_detail(pos["id64"]) or {}).get("bodies") or []
+            zone, dest = self.overlay_zone_body(st, pos, now), self.destination()
+            # the targeted body by its id (a station targeted is no body; a mining site's is its planet)
+            for b in (next((x for x in bodies if zone and x.get("name") == zone), None),
+                      next((x for x in bodies if dest and x.get("body_id") == dest["body_id"]), None)):
+                p = outrider.overlay.body_panel(b, pal, cfg["text_size"], HIGH_GRAVITY,
+                                                outrider.bio.colony_table() if outrider.bio else None) if b else None
+                if p:
+                    return p
+        return outrider.overlay.target_system_panel(self.overlay_target_info(pos), pal, cfg["text_size"])
+
     def overlay_panels(self, now=None):
         """The panels to draw now: the test panels while they show, else the ones switched on that have something to
-        say (none while [overlay] enabled is off, the game is not live or still loading, a map, the FSS, the SAA or the
-        codex is open, or in the hyperspace tunnel)."""
+        say (none while [overlay] enabled is off, the game is not live or still loading, the system map, the FSS, the
+        SAA or the codex is open, or in the hyperspace tunnel; over the galaxy map only the Target panel, D1). A panel
+        in [overlay] analysis_only shows in your ship only while the HUD is in analysis mode (D2a)."""
         now = time.time() if now is None else now
         cfg, pal = self.overlay_cfg, self.overlay_palette()
         if now < self.overlay_test_until or now < self.overlay_arrange_until:
@@ -7695,7 +7748,11 @@ class State:
                 or (st.get("gui_focus") or 0) in OVERLAY_HIDE_FOCUS \
                 or (st.get("flags") or 0) & FLAG_FSD_JUMP:   # nothing in the hyperspace tunnel: the system is changing
             return []
-        flags, pos, out = st.get("flags") or 0, self.journals.pos, []
+        flags, flags2, pos, out = st.get("flags") or 0, st.get("flags2") or 0, self.journals.pos, []
+        if (st.get("gui_focus") or 0) == OVERLAY_GALAXY_MAP:
+            # the one panel over the galaxy map (D1): the system you target there, docked or not; never analysis-only
+            p = self.overlay_target_panel(st, pos, now, pal, cfg, galaxy=True) if cfg.get("body_panel") and pos else None
+            return [p] if p else []
         # the system panel: in supercruise in the system you are in (for system_seconds after arriving, when set)
         if cfg.get("system_panel") and pos and flags & FLAG_SUPERCRUISE:
             try:
@@ -7707,18 +7764,11 @@ class State:
                                                   codex=CODEX_INTERESTING, first=self.plan_first_body())
                 if p:
                     out.append(p)
-        # the body panel: the body targeted in game in this system, else the one you are flying near; flying your ship
-        # (landed, in the SRV or on foot the radar has the screen)
+        docked = bool(flags & FLAG_DOCKED) or bool(flags2 & ON_FOOT_DOCKED)
+        # the Target panel: flying your ship, not docked (landed, in the SRV or on foot the radar has the screen)
         if cfg.get("body_panel") and pos and flags & FLAG_IN_MAIN_SHIP and not flags & (FLAG_LANDED | FLAG_IN_SRV) \
-                and not (st.get("flags2") or 0) & 1:
-            dest = self.destination()
-            near = short_name(pos["name"], st["body"]) if st.get("body") else None
-            bodies = (self.overlay_detail(pos["id64"]) or {}).get("bodies") or [] if dest or near else []
-            # the targeted body by its id (a station or mining site targeted is no body: the one you are near then)
-            b = next((x for x in bodies if dest and x.get("body_id") == dest["body_id"]), None) \
-                or next((x for x in bodies if near and x.get("name") == near), None)
-            p = outrider.overlay.body_panel(b, pal, cfg["text_size"], HIGH_GRAVITY,
-                                            outrider.bio.colony_table() if outrider.bio else None) if b else None
+                and not flags2 & 1 and not docked:
+            p = self.overlay_target_panel(st, pos, now, pal, cfg, galaxy=False)
             if p:
                 out.append(p)
         # the system strip: where you are, wherever you are (ship, SRV, on foot)
@@ -7728,7 +7778,6 @@ class State:
                 out.append(p)
         # Now, condensed: anywhere in the system but docked (the ship docked, or on foot in a station, hangar or social
         # space: the author, 2026-10-10); every bio signal in the system: anywhere, as the strip
-        docked = bool(flags & FLAG_DOCKED) or bool((st.get("flags2") or 0) & ON_FOOT_DOCKED)
         if cfg.get("now_panel") and pos and not docked:
             p = outrider.overlay.now_panel(self.overlay_now_info(pos, now), pal, cfg["text_size"], BODY_HIGHLIGHT, BIO_MIN,
                                            HIGH_GRAVITY, CODEX_INTERESTING)
@@ -7746,6 +7795,11 @@ class State:
                 p = outrider.overlay.radar_panel(surf, pal, cfg["text_size"], cfg["radar_range"])
                 if p:
                     out.append(p)
+        # analysis only (D2a): in your ship with the HUD in combat mode those panels stay off; in the SRV and on foot
+        # (no HUD modes there) they show as the others
+        only = set(cfg.get("analysis_only") or ())
+        if only and flags & FLAG_IN_MAIN_SHIP and not flags2 & 1 and not flags & FLAG_HUD_ANALYSIS:
+            out = [p for p in out if p["id"] not in only]
         return out
 
     def overlay_view(self, since=None, now=None, window=True):
@@ -7790,14 +7844,15 @@ class State:
         cfg = self.overlay_cfg
         return {"enabled": bool(cfg.get("enabled")), "theme": cfg.get("theme"), "text_size": cfg.get("text_size"),
                 "panels": {p: bool(cfg.get(f"{p}_panel" if p != "radar" else "radar")) for p in outrider.overlay.PANELS},
+                "analysis_only": list(cfg.get("analysis_only") or []),
                 "window": now - self.overlay_seen < OVERLAY_SEEN_S, "layout": self.overlay_layout(),
                 "test": max(0, round(self.overlay_test_until - now)), "arrange": max(0, round(self.overlay_arrange_until - now)),
                 # Outrider runs the window itself on the game PC: its state; None on a server (the window runs elsewhere)
                 "runner": self.overlay_runner.status() if self.overlay_runner else None}
 
     def overlay_set(self, body, now=None):
-        """POST /api/overlay {enabled?, theme?, text_size?, panels?: {system|body|radar|strip|now|bio: bool}, test?: bool, arrange?:
-        bool}: the switches, applied at once and written into [overlay] for the next start; test panels for
+        """POST /api/overlay {enabled?, theme?, text_size?, panels?: {system|body|radar|strip|now|bio: bool}, analysis_only?:
+        [panel ids], test?: bool, arrange?: bool}: the switches, applied at once and written into [overlay] for the next start; test panels for
         TEST_SECONDS; Arrange mode (the window takes the mouse to move and size the panels) until it is switched off or
         ARRANGE_SECONDS pass. (answer, HTTP status)."""
         now = time.time() if now is None else now
@@ -7815,6 +7870,8 @@ class State:
             elif key == "panels" and isinstance(val, dict) and val and all(
                     p in O.PANELS and isinstance(v, bool) for p, v in val.items()):
                 changes.update({(f"{p}_panel" if p != "radar" else "radar"): v for p, v in val.items()})
+            elif key == "analysis_only" and isinstance(val, list) and all(isinstance(p, str) and p in O.PANELS for p in val):
+                changes["analysis_only"] = O.analysis_list(val)   # the whole list, in PANELS' order
             elif key in ("test", "arrange") and isinstance(val, bool):
                 pass
             else:

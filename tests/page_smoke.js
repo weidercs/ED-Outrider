@@ -4732,7 +4732,7 @@ const settle = async maxMs => {
               : Object.assign({}, w.eval("data.overlay"), JSON.parse(o.body), ovNote ? {note: ovNote} : {}))) : real(u, o);
     const saved = w.eval("JSON.stringify(data.overlay || null)");
     w.eval(`data.overlay = {enabled: true, theme: "elite", text_size: "normal", panels: {system: true, body: false, radar: true},
-      window: false, test: 0, arrange: 0, runner: {state: "no_qt", why: null}, layout: {system: {corner: "nw", x: 0.02, y: 0.16, scale: 1, bg: 0.65, alpha: 1},
+      analysis_only: ["bio"], window: false, test: 0, arrange: 0, runner: {state: "no_qt", why: null}, layout: {system: {corner: "nw", x: 0.02, y: 0.16, scale: 1, bg: 0.65, alpha: 1},
       body: {corner: "ne", x: 0.02, y: 0.16, scale: 1.2, bg: 0.5, alpha: 0.8}, radar: {corner: "se", x: 0.02, y: 0.1, scale: 1, bg: 0.5, alpha: 1}}};
       overlayDrawn = ""; renderOverlay();`);
     const d = w.document, box = d.getElementById("overlayBox");
@@ -4744,12 +4744,22 @@ const settle = async maxMs => {
                  // each panel's on/off box in its own row, what it shows as the hover tip, a panel switched off dimmed
                  inRows: [...box.querySelectorAll("table.ovlay tbody tr")].every(tr => tr.querySelectorAll("[data-ovpanel]").length === 1),
                  tip: /every bio signal/.test(box.querySelector('[data-ovpanel="bio"]').closest("label").title),
+                 // D1: the Body panel is the Target panel (its id, so its place, kept); D2a: an Analysis only box per row
+                 target: /^\s*Target$/.test(box.querySelector('[data-ovpanel="body"]').parentNode.textContent) &&
+                   /galaxy map/.test(box.querySelector('[data-ovpanel="body"]').closest("label").title),
+                 analysis: [...box.querySelectorAll("[data-ovanalysis]")].map(x => x.dataset.ovanalysis + (x.checked ? "✓" : "")).join(" ") +
+                   " | " + [...box.querySelectorAll("table.ovlay thead th")][1].textContent,
                  dimmed: box.querySelector('[data-ovpanel="body"]').closest("tr").classList.contains("ovoff"),
                  // the help under it: three short points, no button it no longer has
                  wrapped: !!box.querySelector(".ovwrap > table.ovlay"),   // scrolled inside its section, never spilling out
                  help: d.querySelectorAll("ul.ovhelp li").length === 3 && !/button/.test(d.querySelector("ul.ovhelp").textContent)};
     const x = box.querySelector('[data-ovlay="radar"][data-k="x"]');
     x.value = "30"; x.dispatchEvent(new w.Event("change", {bubbles: true}));
+    await sleep(50);
+    const an = box.querySelector('[data-ovanalysis="system"]');
+    an.checked = true; an.dispatchEvent(new w.Event("change", {bubbles: true}));
+    await sleep(50);
+    got.analysisAfter = [...box.querySelectorAll("[data-ovanalysis]:checked")].map(x => x.dataset.ovanalysis).join(" ");
     box.querySelector('[data-ovact="test"]').click();
     await sleep(100);
     got.note = /cannot run yet/.test(w.eval("overlayNote"));   // nothing can draw yet: the button says why
@@ -4770,8 +4780,11 @@ const settle = async maxMs => {
     got.popup = [step("off"), step("installing"), step("starting"), step("installing"), step("install_failed"), step("off")]
       .map(t => t.replace(/ .*/, "") + (/installed/.test(t) ? " installed" : /failed/.test(t) ? " failed" : ""));
     w.eval(`data.overlay = JSON.parse(${JSON.stringify(saved)}); overlayNote = ""; overlayDrawn = ""; renderOverlay();`);
-    const want = {rows: 6, body: "120", off: true, theme: "elite", nowin: true, nowName: true, inRows: true, tip: true, dimmed: true, wrapped: true, help: true, note: true, themeNote: true,
-                  posted: [["overlay/layout", {radar: {x: 0.3}}], ["overlay", {test: true}], ["overlay", {theme: "default"}]],
+    const want = {rows: 6, body: "120", off: true, theme: "elite", nowin: true, nowName: true, inRows: true, tip: true,
+                  target: true, analysis: "system body radar strip now bio✓ | Analysis only",
+                  dimmed: true, wrapped: true, help: true, analysisAfter: "system bio", note: true, themeNote: true,
+                  posted: [["overlay/layout", {radar: {x: 0.3}}], ["overlay", {analysis_only: ["system", "bio"]}], ["overlay", {test: true}],
+                           ["overlay", {theme: "default"}]],
                   venv: true, popup: ["", "⟳Installing", "✓ installed", "⟳Installing", "Installing failed", ""]};
     const ok = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && ok;
@@ -5838,7 +5851,8 @@ const settle = async maxMs => {
       if (o && o.method === "POST" && /uploads\/(edsm|inara)\/check/.test(String(u))) {
         posted.push([String(u), JSON.parse(o.body)]);
         if (/inara/.test(String(u))) return Promise.resolve(new Response(JSON.stringify({ok: true, text: "Inara: CMDR Sample Pilot",
-          link: "https://inara.cz/elite/cmdr/1/", at: new Date(2026, 9, 12, 12, 4).getTime() / 1000, cleared: true}), {status: 200, headers: {"Content-Type": "application/json"}}));
+          // today at 12:04 (a fixed day read "Oct 12 12:04 PM" from the next day on: the check's time only shows a date then)
+          link: "https://inara.cz/elite/cmdr/1/", at: new Date().setHours(12, 4, 0, 0) / 1000, cleared: true}), {status: 200, headers: {"Content-Type": "application/json"}}));
       }
       return real(u, o);
     };

@@ -30,14 +30,31 @@ class Settings(unittest.TestCase):
         # no url or password: the overlay is a game-PC feature, drawn from this PC's Outrider only (the author, 2026-10-10)
         self.assertNotIn("url", O.overlay_settings({"overlay": {"url": "http://erangel:8025"}})["overlay"])
 
+    def test_analysis_only_list(self):
+        """D2a: [overlay] analysis_only, the overlay's one list: panel ids kept in PANELS' order, unknown ones dropped
+        with a warning, anything but a list of names the default []."""
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            got = O.overlay_settings({"overlay": {"analysis_only": ["Bio", "system", "moon", "system"]}})["overlay"]
+        self.assertEqual(got["analysis_only"], ["system", "bio"])
+        self.assertIn("'moon' not a panel", err.getvalue())
+        for bad in ("system", [1], {"system": True}):
+            with contextlib.redirect_stderr(io.StringIO()) as e:
+                self.assertEqual(O.overlay_settings({"overlay": {"analysis_only": bad}})["overlay"]["analysis_only"], [])
+            self.assertIn("analysis_only", e.getvalue())
+        a = O.overlay_settings({})["overlay"]
+        a["analysis_only"].append("now")                                     # one config's list is never another's
+        self.assertEqual(O.overlay_settings({})["overlay"]["analysis_only"], [])
+
     def test_written_and_read_back(self):
         """--write-config writes [overlay] with every key, and the file reads back to the same settings."""
         import tomllib
         args = types.SimpleNamespace(**{k: None for k in ("journals", "legacy", "host", "port", "db", "radius")})
-        st = ed_outrider.settings_from({"overlay": {"enabled": True, "theme": "lcars", "radar_range": 1200}}, args)
+        st = ed_outrider.settings_from({"overlay": {"enabled": True, "theme": "lcars", "radar_range": 1200,
+                                                    "analysis_only": ["now", "bio"]}}, args)
         text = ed_outrider.config_text(st)
         back = tomllib.loads(text)["overlay"]
-        self.assertEqual((back["enabled"], back["theme"], back["radar_range"]), (True, "lcars", 1200))
+        self.assertEqual((back["enabled"], back["theme"], back["radar_range"], back["analysis_only"]), (True, "lcars", 1200, ["now", "bio"]))
         self.assertEqual(set(back), set(O.DEFAULTS))
 
 
@@ -241,6 +258,37 @@ class BodyPanel(unittest.TestCase):
         self.assertFalse(any(x.startswith("Worth landing") for x in t))
         self.assertIsNone(O.body_panel({"name": "A", "type": "Star"}, O.palette()))
         self.assertIsNone(O.body_panel(None, O.palette()))
+
+
+class TargetPanel(unittest.TestCase):
+    """D1: the Target panel's system (outrider.overlay.target_system_panel)."""
+    def test_system(self):
+        t = {"name": "Ossia", "status": "unreported", "star_class": "K", "hop": {"ly": 21.04, "fuel": 1.234, "left": 1, "reach": True}}
+        p = O.target_system_panel(t, O.palette())
+        self.assertEqual(p["id"], "body")                                    # the Body panel's place and size
+        self.assertEqual(texts(p), ["➜ Ossia", "never reported", "K star ⛽", "21.0 ly · 1.2 t · leaves 1 max jump"])
+        self.assertEqual(colour_of(p, "never reported"), O.palette()["good"])
+        t.update(status="no bodies", source="edsm", edsm={"known": 0, "count": None, "missing": True}, star_class="DA",
+                 hop={"ly": 60.0, "fuel": 0.05, "left": 0, "reach": False}, remaining=7)
+        got = texts(O.target_system_panel(t, O.palette()))
+        self.assertEqual(got, ["➜ Ossia", "next jump of your route · 7 to go", "no scan data (known to EDSM only)", "EDSM: not logged",
+                               "white dwarf ⚡ · ✕ not scoopable", "⚠ throttle down", "60.0 ly · out of range (needs 0.05 t)"])
+        t.update(hop=None, distance=12.345, status="lookup failed", edsm=None, source="spansh", known=4, count=None, star_class=None,
+                 remaining=None)
+        self.assertEqual(texts(O.target_system_panel(t, O.palette()))[1:], ["lookup failed · 4 known", "12.3 ly"])
+        self.assertIsNone(O.target_system_panel({"name": None}, O.palette()))
+        self.assertIsNone(O.target_system_panel(None, O.palette()))
+
+    def test_hazard_as_the_page(self):
+        """page.js hazardNote: a neutron star, a white dwarf, a black hole (the overlay's Now left out the black hole)."""
+        self.assertEqual([O.star_hazard(c) for c in ("N", "DAV", "H", "SupermassiveBlackHole", "K", "", None)],
+                         ["neutron star", "white dwarf", "black hole", "black hole", "", "", ""])
+        now = O.now_panel({"name": "X", "target": {"name": "Ossia", "status": "visited", "star_class": "H"}}, O.palette())
+        self.assertTrue(any(t.startswith("➜ Ossia") and t.endswith("H ✕ ⚠") for t in texts(now)))
+
+    def test_test_panel_is_the_target(self):
+        body = next(p for p in O.test_panels(O.palette()) if p["id"] == "body")
+        self.assertEqual(texts(body)[:2], ["➜ Test Sector AB-C d1-3  test panel", "next jump of your route · 4 to go"])
 
 
 class Radar(unittest.TestCase):
@@ -780,9 +828,9 @@ class Server(unittest.TestCase):
     def test_switches(self):
         out, status = self.state.overlay_set({"enabled": True, "theme": "elite", "panels": {"radar": False}, "test": True}, now=50)
         self.assertEqual(status, 200)
-        self.assertEqual((out["enabled"], out["theme"], out["panels"], out["test"]),
+        self.assertEqual((out["enabled"], out["theme"], out["panels"], out["test"], out["analysis_only"]),
                          (True, "elite", {"system": True, "body": True, "radar": False, "strip": False, "now": False, "bio": False},
-                          O.TEST_SECONDS))
+                          O.TEST_SECONDS, []))
         with open(self.state.config_path, encoding="utf-8") as f:   # written for the next start
             text = f.read()
         for line in ('enabled = true', 'theme = "elite"', 'radar = false'):
@@ -796,8 +844,13 @@ class Server(unittest.TestCase):
         self.state.overlay_set({"arrange": True}, now=200)
         self.state.overlay_set({"arrange": False}, now=201)
         self.assertFalse(self.state.overlay_view(now=202)["arrange"])
+        out, _ = self.state.overlay_set({"analysis_only": ["bio", "system"]}, now=250)   # D2a: the whole list
+        self.assertEqual((out["analysis_only"], self.state.overlay_cfg["analysis_only"]), (["system", "bio"], ["system", "bio"]))
+        with open(self.state.config_path, encoding="utf-8") as f:
+            self.assertIn('analysis_only = ["system", "bio"]', f.read())
+        self.assertEqual(self.state.overlay_set({"analysis_only": []}, now=251)[0]["analysis_only"], [])
         for bad in (None, {}, {"enabled": "yes"}, {"theme": "neon"}, {"panels": {"map": True}}, {"panels": {}}, {"test": 1},
-                    {"volume": 3}):
+                    {"volume": 3}, {"analysis_only": ["map"]}, {"analysis_only": "bio"}, {"analysis_only": [True]}):
             self.assertEqual(self.state.overlay_set(bad, now=300)[1], 400, bad)
 
     def test_system_panel_shows_in_supercruise(self):
@@ -884,26 +937,99 @@ class Server(unittest.TestCase):
                   "SystemAddress": 77, "StarPos": [0, 0, 0]})   # the same second as the LoadGame: loaded
         self.assertEqual(shown(), ["system"])
 
-    def test_body_panel_shows_flying_near_or_heading_to(self):
+    def target_setup(self):
         self.state.journals.handle({"event": "FSDJump", "timestamp": ed_outrider.iso_ts(1000), "StarSystem": "Test Sector AB-C d1-2",
                                     "SystemAddress": 77, "StarPos": [0, 0, 0]})
         self.state.system_detail = lambda id64: DETAIL if id64 == 77 else None
         self.state.overlay_cfg.update(enabled=True, system_panel=False)
-        ship = ed_outrider.FLAG_IN_MAIN_SHIP
-        st = {"live": True, "flags": ship, "gui_focus": 0, "body": "Test Sector AB-C d1-2 B 1"}
+        st = {"live": True, "flags": ed_outrider.FLAG_IN_MAIN_SHIP | ed_outrider.FLAG_SUPERCRUISE, "gui_focus": 0}
         self.state.journals.status_json = st
-        self.assertEqual([p["items"][0]["runs"][0][0] for p in self.state.overlay_panels(now=1010)], ["B 1"])   # near it
+        return st
+
+    def target(self, now=1010):
+        """The Target panel's title, or None when it is not shown."""
+        got = [p for p in self.state.overlay_panels(now=now) if p["id"] == "body"]
+        return got[0]["items"][0]["runs"][0][0] if got else None
+
+    def test_target_panel_body_targeted_else_system(self):
+        """D1: outside a body's zone the Target panel shows the body targeted in this system, else the system targeted,
+        else nothing (no "body you fly near" fallback); its id stays "body", so the Body panel's place and size apply."""
+        st = self.target_setup()
+        self.assertEqual(O.PANEL_NAMES["body"], "Target")
+        self.assertIsNone(self.target())                                            # nothing targeted: hidden
+        st["body"] = "Test Sector AB-C d1-2 B 1"                                   # near a body, no altitude: no zone
+        self.assertIsNone(self.target())
         st.update(destination={"System": 77, "Body": 9, "Name": "Test Sector AB-C d1-2 A 3"})
-        self.assertEqual([p["items"][0]["runs"][0][0] for p in self.state.overlay_panels(now=1010)], ["A 3"])   # targeted wins
-        # a station or a mining site targeted is no body: the one you are near stays (review 2026-10-11)
-        st.update(destination={"System": 77, "Body": 40, "Name": "Harper Dock"})
-        self.assertEqual([p["items"][0]["runs"][0][0] for p in self.state.overlay_panels(now=1010)], ["B 1"])
+        self.assertEqual(self.target(), "A 3")                                      # the body targeted
         st.update(destination={"System": 77, "Body": 13, "Name": "$SAA_Unknown_Signal:#type=$PlanetaryMiningLocation_Name;:#index=3;"})
-        self.assertEqual([p["items"][0]["runs"][0][0] for p in self.state.overlay_panels(now=1010)], ["B 2"])   # its planet
+        self.assertEqual(self.target(), "B 2")                                      # a mining site: its planet
+        self.state.journals.handle({"event": "FSDTarget", "timestamp": ed_outrider.iso_ts(1005), "Name": "Ossia",
+                                    "SystemAddress": 99, "StarClass": "H", "RemainingJumpsInRoute": 4})
+        self.assertEqual(self.state.journals.target["remaining"], 4)                # kept for "next jump · 4 to go"
+        self.assertEqual(self.target(), "B 2")                                      # a body targeted beats the system
+        st.update(destination={"System": 77, "Body": 40, "Name": "Harper Dock"})   # a station is no body: the system
+        p = next(p for p in self.state.overlay_panels(now=1010) if p["id"] == "body")
+        self.assertEqual(texts(p)[:3], ["➜ Ossia", "next jump of your route · 4 to go", "checking…"])   # lookup not in yet
+        self.assertIn("black hole · ✕ not scoopable · ⚠ throttle down", texts(p))
+        # the lookup lands for this target: its verdict, counts and EDSM's; the Nearby row's value and notables
+        self.state.target = dict(self.state.journals.target, status="partial", known=3, count=12, source="spansh",
+                                 edsm={"known": 5, "count": 12})
+        self.state.systems[99] = {"distance": 38.24, "notable": {"WW": 2, "T": 1},
+                                  "value_parts": {"carto_now": 0, "carto_left": 12_300_000, "bio_now": 0, "bio_left": 40_000_000}}
+        t = texts(next(p for p in self.state.overlay_panels(now=1010) if p["id"] == "body"))
+        self.assertEqual(t[2:], ["partly scanned · 3/12 known · EDSM 5/12", "black hole · ✕ not scoopable · ⚠ throttle down",
+                                 "38.2 ly", "~12.3M scan+map · bio up to 40.0M · WW×2 T"])
+        self.state.target = dict(self.state.target, ts="older")                    # a verdict for an older target: checking
+        self.assertIn("checking…", texts(next(p for p in self.state.overlay_panels(now=1010) if p["id"] == "body")))
+        st["flags"] |= ed_outrider.FLAG_DOCKED                                       # docked: hidden (outside the galaxy map)
+        self.assertIsNone(self.target())
+        st["flags"] = ed_outrider.FLAG_IN_MAIN_SHIP | ed_outrider.FLAG_LANDED       # landed: the radar's
+        self.assertIsNone(self.target())
+        st["flags"] = ed_outrider.FLAG_IN_MAIN_SHIP
+        self.state.journals.handle({"event": "FSDJump", "timestamp": ed_outrider.iso_ts(1100), "StarSystem": "Ossia",
+                                    "SystemAddress": 99, "StarPos": [30, 0, 0]})
+        self.assertIsNone(self.target(now=1110))                                    # arrived: the target is gone
+
+    def test_target_panel_near_body_zone(self):
+        """D1 (the author's final rule): inside the near-body zone (Status.json names the body and gives an altitude)
+        the panel shows that body, even over a target; after leaving it the target again, but only once 5 s out of the
+        zone (its edge bounces)."""
+        st = self.target_setup()
         st.update(destination={"System": 77, "Body": 9, "Name": "Test Sector AB-C d1-2 A 3"})
-        st["flags"] = ship | ed_outrider.FLAG_LANDED                                                    # landed: the radar's
+        self.assertEqual(self.target(now=1010), "A 3")
+        st.update(body="Test Sector AB-C d1-2 B 1", alt=480_000)                  # in B 1's zone (ApproachBody's point)
+        self.assertEqual(self.target(now=1011), "B 1")                              # at once, over the target
+        st.update(body=None, alt=None)                                              # out of the zone
+        self.assertEqual(self.target(now=1012), "B 1")                              # kept for a while
+        self.assertEqual(self.target(now=1011 + ed_outrider.TARGET_ZONE_LINGER_S - 0.5), "B 1")
+        self.assertEqual(self.target(now=1011 + ed_outrider.TARGET_ZONE_LINGER_S), "A 3")   # then the target again
+        st.update(body="Test Sector AB-C d1-2 B 1", alt=60_000)                   # back in: at once
+        self.assertEqual(self.target(now=1030), "B 1")
+        st.update(body="Test Sector AB-C d1-2 C 9", alt=1000)                     # a body nothing is known of: the target
+        self.assertEqual(self.target(now=1031), "A 3")
+        st.update(body=None, alt=None, destination=None)
+        self.state.journals.handle({"event": "FSDJump", "timestamp": ed_outrider.iso_ts(1032), "StarSystem": "Elsewhere",
+                                    "SystemAddress": 78, "StarPos": [5, 0, 0]})
+        self.state.overlay_zone = {"system": 77, "body": "B 1", "t": 1032}          # left in another system: never kept
+        self.assertIsNone(self.target(now=1033))
+
+    def test_target_panel_over_the_galaxy_map(self):
+        """D1: the galaxy map is the one screen the overlay does not leave: the Target panel alone, with the system
+        targeted there (even docked, even in a body's zone); the system map and the rest still hide every panel."""
+        st = self.target_setup()
+        self.state.overlay_cfg.update(system_panel=True, strip_panel=True, now_panel=True, bio_panel=True)
+        st.update(body="Test Sector AB-C d1-2 B 1", alt=2000, destination={"System": 77, "Body": 9, "Name": "A 3"},
+                  gui_focus=ed_outrider.OVERLAY_GALAXY_MAP, flags=ed_outrider.FLAG_IN_MAIN_SHIP | ed_outrider.FLAG_DOCKED)
+        self.assertEqual(self.state.overlay_panels(now=1010), [])                  # no system targeted: nothing
+        self.state.journals.handle({"event": "FSDTarget", "timestamp": ed_outrider.iso_ts(1005), "Name": "Ossia",
+                                    "SystemAddress": 99, "StarClass": "K", "RemainingJumpsInRoute": 1})
+        got = self.state.overlay_panels(now=1010)
+        self.assertEqual([(p["id"], p["items"][0]["runs"][0][0]) for p in got], [("body", "➜ Ossia")])
+        self.assertFalse(any("next jump" in x for x in texts(got[0])))              # a lone target: no route words
+        self.state.overlay_cfg.update(body_panel=False)
         self.assertEqual(self.state.overlay_panels(now=1010), [])
-        st.update(flags=ship, destination=None, body=None)                                             # nothing near
+        self.state.overlay_cfg.update(body_panel=True)
+        st["gui_focus"] = 7                                                         # the system map: nothing
         self.assertEqual(self.state.overlay_panels(now=1010), [])
 
     def test_now_heads_only_for_a_body_of_this_system(self):
@@ -921,6 +1047,32 @@ class Server(unittest.TestCase):
         self.assertEqual((info()["destination"], info()["destination_ls"]), ("B 2", 70))   # the site's planet
         st["destination"] = {"System": 77, "Body": 9, "Name": "Test Sector AB-C d1-2 A 3"}
         self.assertEqual((info()["destination"], info()["destination_ls"]), ("A 3", 900))
+
+    def test_analysis_only_panels(self):
+        """D2a: a panel marked analysis only shows in your ship only with the HUD in analysis mode; in the SRV, on foot,
+        over the galaxy map and for the test panels the mark is ignored."""
+        st = self.target_setup()
+        self.state.overlay_cfg.update(system_panel=True, strip_panel=True, analysis_only=["system"])
+        ship, sc, hud = ed_outrider.FLAG_IN_MAIN_SHIP, ed_outrider.FLAG_SUPERCRUISE, ed_outrider.FLAG_HUD_ANALYSIS
+        shown = lambda: [p["id"] for p in self.state.overlay_panels(now=1010)]
+        st["flags"] = ship | sc                                                     # combat mode: the system panel off
+        self.assertEqual(shown(), ["strip"])
+        st["flags"] = ship | sc | hud                                               # analysis mode: on
+        self.assertEqual(shown(), ["system", "strip"])
+        self.state.overlay_cfg.update(analysis_only=["strip"])
+        st.update(flags=ed_outrider.FLAG_IN_SRV, flags2=0)                          # the SRV has no HUD modes: shown
+        self.assertEqual(shown(), ["strip"])
+        st.update(flags=0, flags2=1)                                                # on foot: shown
+        self.assertEqual(shown(), ["strip"])
+        self.state.overlay_cfg.update(analysis_only=["body"])
+        self.state.journals.handle({"event": "FSDTarget", "timestamp": ed_outrider.iso_ts(1005), "Name": "Ossia",
+                                    "SystemAddress": 99, "StarClass": "K"})
+        st.update(flags=ship, flags2=0, gui_focus=ed_outrider.OVERLAY_GALAXY_MAP)  # the galaxy map: the target shows
+        self.assertEqual(shown(), ["body"])
+        st["gui_focus"] = 0
+        self.assertEqual(shown(), ["strip"])
+        self.state.overlay_set({"test": True}, now=1000)                            # the test panels: all of them
+        self.assertEqual(shown(), list(O.PANELS))
 
     def test_radar_on_a_body(self):
         self.state.overlay_cfg.update(enabled=True, system_panel=False, body_panel=False)

@@ -2,6 +2,24 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-13 · The overlay's Target panel, and panels shown only in analysis mode
+- **One Target panel** (D1): the overlay's body panel became the Target panel (same id `body`, `body_panel` switch and
+  layout key: an existing arrangement and config carry over; PANEL_NAMES, Settings' row and help say "Target"). Inside a
+  body's near-body zone (Status.json BodyName with an Altitude, ApproachBody's point) it shows that body, even over a
+  target, and keeps it `TARGET_ZONE_LINGER_S` (5 s) after leaving the zone (`overlay_zone_body`, `State.overlay_zone`);
+  outside, the body targeted in this system, else the system targeted (`overlay.target_system_panel`: the verdict, Spansh's
+  and EDSM's counts, "checking…" until the lookup for THIS target is in, the star with ⛽ / ✕ not scoopable / ⚠ throttle
+  down, the jump from `target_hop`, the Nearby row's value and notables, "next jump of your route · N to go" from
+  FSDTarget's `RemainingJumpsInRoute`, now kept in `Journals.target["remaining"]`), else nothing (the fallback to the
+  body you fly near is gone). It is the one panel over the galaxy map (`OVERLAY_GALAXY_MAP`; `OVERLAY_HIDE_FOCUS` is
+  7-11 now), docked too, and off while docked elsewhere. `overlay.star_hazard` (page.js `hazardNote`) adds the black
+  hole to the Now panel's ⚠ as well. The "body" test panel shows the Target panel's system.
+- **Analysis only** (D2a): `[overlay] analysis_only` (a list of panel ids, `overlay.analysis_list`: unknown ones dropped
+  with a warning) keeps those panels off in your ship while the HUD is in combat mode; ignored in the SRV, on foot,
+  over the galaxy map and for the test panels. POST `/api/overlay` takes the whole list, `overlay_info` returns it,
+  Settings → In-game overlay has an "Analysis only" column. D2b (a radar gate) was dropped by the author.
+- A smoke check that wrote a fixed day (Oct 12) for the Inara key check read a date from the next day on: today now.
+
 ## 2026-10-12 · Numbered stops on Here's schematic and the overlay's system panel
 - **The first stop, kept on the server** (S30, the shared piece): POST `/api/plan/first` {id64, body | null}
   (`State.set_plan_first`: the system you are in only, else 409; meta `plan_first`, live-only, forgotten in another

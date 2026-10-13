@@ -30,7 +30,9 @@ from . import ROOT
 
 CANVAS_W, CANVAS_H = 1280, 960
 PANELS = ("system", "body", "radar", "strip", "now", "bio")
-PANEL_NAMES = {"system": "System", "body": "Body", "radar": "Surface radar", "strip": "System strip",
+# "body" is the Target panel (D1): the body you are at or have targeted, else the system targeted. Its id, config key
+# (body_panel) and layout key stayed, so an arrangement and a config made for the Body panel carry over unchanged.
+PANEL_NAMES = {"system": "System", "body": "Target", "radar": "Surface radar", "strip": "System strip",
                "now": "Now (To-Do & Info)", "bio": "Bio signals"}
 # a panel is placed from a corner of the game window, or centred along its top or bottom edge (n, s: x is not used)
 CORNERS = ("nw", "ne", "sw", "se", "n", "s")
@@ -41,7 +43,7 @@ ARRANGE_SECONDS = 600   # Arrange mode ends by itself after this, so the overlay
 
 DEFAULTS = {"enabled": False, "theme": "default", "text_size": "normal", "system_panel": True, "body_panel": True,
             "radar": True, "strip_panel": False, "now_panel": False, "bio_panel": False, "system_seconds": 0,
-            "radar_range": 800}
+            "radar_range": 800, "analysis_only": []}
 # where each panel starts: a corner of the game window, the offset from it as a share of the window's width (x) and
 # height (y), its size (1 = the canvas's own), its background's opacity (0: text only) and the whole panel's
 LAYOUT_DEFAULT = {"system": {"corner": "nw", "x": 0.02, "y": 0.16, "scale": 1.0, "bg": 0.65, "alpha": 1.0},
@@ -162,7 +164,24 @@ def overlay_settings(cfg):
             out[key] = int(min(hi, max(lo, v)))
         else:
             _warn(f"{key} = {v!r} must be a number; using {DEFAULTS[key]}")
+    out["analysis_only"] = analysis_list(o.get("analysis_only"), _warn)
     return {"overlay": out}
+
+
+def analysis_list(v, warn=None):
+    """[overlay] analysis_only (D2a): the panels shown in your ship only while the HUD is in analysis mode, as panel
+    ids in PANELS' order; an unknown id is dropped (said through `warn`), anything but a list of names is []."""
+    if v is None:
+        return []
+    if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
+        if warn:
+            warn(f"analysis_only = {v!r} must be a list of panel names ({', '.join(PANELS)}); using []")
+        return []
+    unknown = [x for x in v if x.strip().lower() not in PANELS]
+    if unknown and warn:
+        warn(f"analysis_only: {', '.join(repr(x) for x in unknown)} not a panel ({', '.join(PANELS)}); left out")
+    names = {x.strip().lower() for x in v}
+    return [p for p in PANELS if p in names]
 
 
 def _num(v, lo, hi):
@@ -429,7 +448,7 @@ def run_pays(value, factor=1):
     return f"{credits(value)} (×{factor}: {credits(value * factor)})" if factor and factor > 1 else credits(value)
 
 def body_panel(b, pal, size="normal", high_gravity=2.0, colony=None):
-    """The body panel: what the body is, what mapping it is worth, and its life (each likely species with its codex
+    """The Target panel's body (D1; it was the body panel): what the body is, what mapping it is worth, and its life (each likely species with its codex
     mark, colony distance and value, or what it could be before the DSS), and whether it is worth landing. None for
     a star or nothing known."""
     if not b or b.get("type") == "Star":
@@ -644,6 +663,80 @@ def strip_panel(info, pal, size="normal"):
         y += LINE_H["large"] if i == 0 else LINE_H.get(size, 20)
     return {"id": "strip", "w": round(width), "h": round(y + PAD - 4), "bg": pal["panel"], "frame": pal["frame"],
             "style": pal.get("style", "rounded"), "accent": pal["title"], "items": items}
+
+
+def star_hazard(code):
+    """What to mind arriving at this star (page.js hazardNote: throttle down on arrival): "neutron star", "white dwarf",
+    "black hole", or "" for an ordinary star."""
+    c = str(code or "")
+    return "neutron star" if c == "N" else "white dwarf" if c.startswith("D") \
+        else "black hole" if c in ("H", "SupermassiveBlackHole") else ""
+
+
+def fuel_t(x):
+    """Tonnes of fuel as the page writes them (page.js fuelT): a short hop burns a few kilograms."""
+    return f"{x:.1g}" if x < 0.1 else f"{x:.1f}"
+
+
+NOTABLE_WORDS = ("ELW", "WW", "AW", "T")   # Nearby's notable bodies, in its order (page.js notable)
+TARGET_W = 420
+
+
+def target_system_panel(t, pal, size="normal"):
+    """The Target panel's system (D1): the system targeted in game (in the galaxy map, or the next jump of a route
+    plotted there) when no body is. What is known of it (TARGET_WORDS, Spansh's bodies of its count, EDSM's), its star
+    (⛽, or ✕ not scoopable; ⚠ throttle down at a neutron star, white dwarf or black hole), the jump (the distance, its
+    fuel and the max-range jumps left after it, or out of range) and, in the Nearby sphere, what it could pay and its
+    notable bodies. t: {name, status (None while the lookup runs: "checking…"), source, known, count, edsm, star_class,
+    hop: {ly, fuel, left, reach}, distance, value: {carto, bio}, notable, remaining (the route's jumps left, this one
+    included)}. None without a name."""
+    if not t or not t.get("name"):
+        return None
+    room, rows = TARGET_W - 2 * PAD, []
+    left = t.get("remaining")   # with a route plotted in game, the target is its next jump
+    if isinstance(left, int) and not isinstance(left, bool) and left > 1:
+        rows.append([("next jump of your route · ", "muted"), (f"{left} to go", "text")])
+    status = t.get("status")
+    if status is None:
+        rows.append([("checking…", "muted")])
+    else:
+        words, key = TARGET_WORDS.get(status, (status, "muted"))
+        row = [(words + (" (known to EDSM only)" if t.get("source") == "edsm" else ""), key)]
+        if t.get("count"):
+            row.append((f" · {t.get('known') or 0}/{t['count']} known", "muted"))
+        elif t.get("known"):
+            row.append((f" · {t['known']} known", "muted"))
+        e = t.get("edsm")
+        if e:
+            row.append((" · EDSM: not logged" if e.get("missing") else
+                        f" · EDSM {e.get('known') or 0}" + (f"/{e['count']}" if e.get("count") else ""), "muted"))
+        rows += flow(row, room, size)
+    sc = t.get("star_class")
+    if sc:
+        scoop = bool(re.match(r"^[OBAFGKM](_|$)", sc))
+        row = [(star_words(sc), "good" if scoop else "text")] + ([] if scoop else [(" · ✕ not scoopable", "warn")])
+        if star_hazard(sc):
+            row.append((" · ⚠ throttle down", "bad"))
+        rows += flow(row, room, size)
+    hop = t.get("hop") or {}
+    ly = hop.get("ly") if hop.get("ly") is not None else t.get("distance")
+    if isinstance(ly, (int, float)):
+        row = [(f"{ly:.1f} ly", "text")]
+        if hop.get("reach") is False:
+            row.append((" · out of range" + (f" (needs {fuel_t(hop['fuel'])} t)" if hop.get("fuel") is not None else ""), "bad"))
+        elif hop.get("fuel") is not None:
+            left = hop.get("left") or 0
+            row.append((f" · {fuel_t(hop['fuel'])} t · leaves {left} max jump{'' if left == 1 else 's'}", "muted"))
+        rows += flow(row, room, size)
+    v, n = t.get("value") or {}, t.get("notable") or {}
+    row = ([(f"~{credits(v['carto'])} scan+map", "accent")] if v.get("carto") else []) \
+        + ([(" · " if v.get("carto") else "", "muted"), (f"bio up to {credits(v['bio'])}", "accent")] if v.get("bio") else [])
+    marks = [k + (f"×{n[k]}" if n[k] > 1 else "") for k in NOTABLE_WORDS if n.get(k)]
+    if marks:
+        row.append(((" · " if row else "") + " ".join(marks), "good"))
+    if row:
+        rows += flow(row, room, size)
+    return text_panel("body", "➜ " + t["name"], rows, pal, width=TARGET_W, size=size)
 
 
 # ---- the Now panel: the page's Now view, condensed (the author, 2026-10-10) ----
@@ -950,7 +1043,7 @@ def now_panel(info, pal, size="normal", highlight=500_000, bio_min=10_000_000, h
         if sc:
             scoop = bool(re.match(r"^[OBAFGKM](_|$)", sc))
             row.append((f" · {sc}{' ⛽' if scoop else ' ✕'}", "good" if scoop else "warn"))
-            if sc == "N" or sc.startswith("D"):
+            if star_hazard(sc):   # neutron star, white dwarf, black hole: throttle down on arrival
                 row.append((" ⚠", "bad"))
         rows.append(row)
     for parts in (route_parts(info.get("route")), boxel_parts(info.get("boxel"))):   # where the next jump goes
@@ -1159,14 +1252,12 @@ def test_panels(pal, size="normal", radar_range=800):
         "rule",
         [("Left here: ", "muted"), ("21.4M", "accent"), (" · 9 bodies not listed", "muted")],
     ], pal, width=420, size=size, subtitle="test panel")
-    body = text_panel("body", "B 1", [
-        [("Icy body · landable · ", "text"), ("0.42 g", "good"), (" · thin neon", "text")],
-        [("Mapped: ", "muted"), ("1.2M", "text"), (" · first discovered", "muted")],
-        "rule",
-        {"left": [("Stratum Tectonicas ", "text"), ("✪ Lime", "good")], "right": ("19.0M", "accent")},
-        {"left": [("Bacterium Acies ", "text"), ("✦ Cobalt", "accent")], "right": ("1.0M", "text")},
-        [("Worth landing: up to 20.0M (×5 first footfall)", "good")],
-    ], pal, width=400, size=size, subtitle="test panel")
+    # the Target panel's system (a body you are at or have targeted shows as the body panel did)
+    body = target_system_panel({"name": "Test Sector AB-C d1-3", "status": "partial", "known": 3, "count": 12,
+                                "edsm": {"known": 5, "count": 12}, "star_class": "N", "remaining": 4,
+                                "hop": {"ly": 38.2, "fuel": 2.9, "left": 3, "reach": True},
+                                "value": {"carto": 12_300_000, "bio": 40_000_000}, "notable": {"WW": 1, "T": 2}}, pal, size)
+    body["items"][0]["runs"].append(["  test panel", pal["muted"], size, False])
     strip = strip_panel({"name": "Test Sector AB-C d1-2", "region": "Inner Orion Spur", "sol_ly": 5411, "star": "K",
                          "found": 12, "total": 14, "honked": True, "value_now": 2_100_000, "value_max": 35_100_000,
                          "first": True, "firsts": 12, "mapped": 3, "planets": 11, "in_spansh": False}, pal, size)
