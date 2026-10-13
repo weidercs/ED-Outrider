@@ -32,7 +32,9 @@ before.
     worth, first discovered; its life, each likely species with its codex mark, colony distance and value, the runs
     under way (what each pays, "1.0M (×5: 5.0M)" with the first-footfall bonus) and the species finished; and whether
     it is worth landing (with the ×5 first-footfall note).
-  - A system: "next jump of your route · 5 to go" when a route is plotted; whether anyone reported it (never reported,
+  - A system: "next jump of your route · 5 to go" when a route is plotted; with a route you follow in Outrider, whether
+    the target is its next stop ("✓ the next stop of your route", "↷ 2 stops ahead on your route" or "⚠ not the next
+    stop: Pru Aim XY-Z d1", see [Plot Route](plot-route.md)); whether anyone reported it (never reported,
     no scan data, partly or fully scanned, visited; "checking…" while Outrider asks), how many bodies Spansh knows of
     how many, and EDSM's; the star with ⛽, or ✕ when it cannot be scooped, and "⚠ throttle down" at a neutron star,
     white dwarf or black hole (⚡ marks a supercharge); the jump: how far, the fuel it burns and the max-range jumps

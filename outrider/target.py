@@ -189,6 +189,30 @@ def targeted(status, next_id64, route_end=None):
     return end is not None and end == next_id64
 
 
+def game_target(status, here=None, route=None, fsd=None):
+    """The system the game is aiming its jumps at (F3), or None: {id64, name, via}. With the game live, Status.json's
+    Destination decides: none locked, or one in the system you are in (`here`: a body, a station, a signal), is no jump
+    target; a Destination on the route the game plotted (`route`: NavRoute.json's hops, [{id64, name}], the start
+    included) means that route's end ("route": the Destination is then only its first hop, review F2), else the
+    Destination itself ("destination"). A Status.json not live (not read yet, the game at the menu): the journal's last
+    FSDTarget (`fsd`: {id64, name}, "fsd") when it is not where you are. Pure: S11's wrong-jump check reads it, and the
+    Target panel, the voice's "this body" and Search's "around" can."""
+    st = status or {}
+    if st.get("live"):
+        dest = st.get("destination")
+        if not isinstance(dest, dict) or not dest.get("System") or dest["System"] == here:
+            return None
+        hops = [h for h in route or () if isinstance(h, dict) and h.get("id64")]
+        ids = [h["id64"] for h in hops]
+        if hops and ids[-1] != here and dest["System"] in ids:
+            return {"id64": ids[-1], "name": hops[-1].get("name"), "via": "route"}
+        return {"id64": dest["System"], "name": dest.get("Name") or None, "via": "destination"}
+    f = fsd or {}
+    if f.get("id64") and f["id64"] != here:
+        return {"id64": f["id64"], "name": f.get("name"), "via": "fsd"}
+    return None
+
+
 class Abort(Exception):
     def __init__(self, step, why, code=None, **extra):
         super().__init__(why)

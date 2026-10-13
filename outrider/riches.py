@@ -153,16 +153,30 @@ def money(n):
     return str(int(n))
 
 
-def riches_text(rows, i, left):
+def had_work(kind, row):
+    """Whether a survey route row came with work to do (S12): Road to Riches, bodies; Exomastery, a body with species.
+    A row without (a route's real end carries `bodies: []`) is never skipped as finished. Trade routes never skip."""
+    if kind == "exo":
+        return any(b.get("species") for b in row.get("bodies") or [])
+    return kind != "trade" and bool(row.get("bodies"))
+
+
+def next_stop(rows, i, skip=0):
+    """The next stop after row i in words, `skip` finished rows passed over on the way (S12): "Next stop: X." or
+    "Next stop: X, skipping 2 systems you've finished."."""
+    nxt = rows[i + 1 + skip]["system"]
+    return f"Next stop: {nxt}" + (f", skipping {skip} system{'' if skip == 1 else 's'} you've finished." if skip else ".")
+
+
+def riches_text(rows, i, left, skip=0):
     """The line said on arriving at route row i: how many bodies are worth the stop and what they are, then where
-    next. `left` is the system's bodies still to do (todo() output, not done). Plain words (the page's personality
-    lines can replace them later)."""
+    next. `left` is the system's bodies still to do (todo() output, not done); `skip` the finished rows after i the
+    next stop passes over (S12). Plain words (the page's personality lines can replace them later)."""
     here = rows[i]
-    last = i == len(rows) - 1
-    nxt = None if last else rows[i + 1]["system"]
+    last = i + skip >= len(rows) - 1
     if not left:
         return (f"Nothing left to do in {here['system']}. " if here["bodies"] else "") + (
-            "Road to Riches complete." if last else f"Next stop: {nxt}.")
+            "Road to Riches complete." if last else next_stop(rows, i, skip))
     n = len(left)
     best = max(left, key=lambda b: b.get("scan") or 0)
     what = best.get("subtype") or best.get("type") or "body"
@@ -197,16 +211,15 @@ def body_short(name, system):
     return name[len(system) + 1:] if name.lower().startswith(system.lower() + " ") else name
 
 
-def exo_text(rows, i, left):
+def exo_text(rows, i, left, skip=0):
     """The line said on arriving at an Exomastery route row: how many species on how many bodies are left to sample,
     the best of them and its body, then nothing more (the next stop is said once they are sampled). `left` is
-    exo_left()'s. Plain words, as riches_text."""
+    exo_left()'s, `skip` as riches_text's. Plain words, as riches_text."""
     here = rows[i]
-    last = i == len(rows) - 1
-    nxt = None if last else rows[i + 1]["system"]
+    last = i + skip >= len(rows) - 1
     if not left:
         return (f"Every species in {here['system']} is sampled. " if any(b.get("species") for b in here["bodies"]) else "") + (
-            "Exomastery complete." if last else f"Next stop: {nxt}.")
+            "Exomastery complete." if last else next_stop(rows, i, skip))
     n, bodies = len(left), len({b["name"] for b, _x in left})
     b, best = left[0]
     words = lambda k, one, many: f"{number_words(k) if k < 11 else k} {one if k == 1 else many}"

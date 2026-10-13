@@ -1758,6 +1758,7 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["refuelshort", "a Highway route plotted with the exact plotter: the fuel aboard won't reach the next refuel stop (once per system; at a refuel stop itself the route's line only shows how much to scoop)", "alert"],
   ["lastscoop", "any route Outrider follows (the game's plotted route, the Highway, a survey route's legs): at the last scoopable star before stars you can't scoop, when the fuel aboard won't cover them (once per stretch, not while scooping)", "alert"],
   ["autotarget", "auto-target (after a supercharge when it is on, a test, Target next, 🎯, the co-pilot button's tap): whether the system was targeted, and nothing to target when the button found none", null],
+  ["wrongtarget", "a route you follow (the Highway, a survey or trade route): the system targeted in game is not its next stop (once per target, after the galaxy map closes; never off the route, nor for a later stop of the route, which the line shows as stops ahead)", "alert"],
   ["find", "a valuable body just scanned (over your highlight levels); one someone else mapped is not named, but said once per system (\"already mapped, still worth mapping\")", "find"],
   ["jumponium", "a landable body just scanned has a material your FSD injections are short of (premium or standard at 2 or fewer): said with the FSS debrief, or alone when the FSS never completes", "find"],
   ["sampling", "leaving a body with exobiology unfinished (untouched genera only if you landed there); a species completed; within 100 m of a plant you tagged where the next sample would count", "alert"],
@@ -1787,7 +1788,7 @@ const UNSPOKEN = new Set(Object.keys(UNSPOKEN_WHY));
 // the defaults, as functions: another window's import that resets a setting rebuilds from them (ALERT_STORES)
 const alertCfgBase = () => Object.assign({enabled: false}, Object.fromEntries(ALERTS.map(([k]) => [k, true])),
   // a notification on every jump (or scoop, or FSS) would be noise: these are spoken by default, not notified
-  {jump: false, honk: false, brief: false, fss: false, mapped: false, scoop: false, scoopstop: false, supercharge: false, highway: false, autotarget: false,
+  {jump: false, honk: false, brief: false, fss: false, mapped: false, scoop: false, scoopstop: false, supercharge: false, highway: false, autotarget: false, wrongtarget: false,
    sampling: false, approach: false, bodybrief: false, jumponium: false, rigs: false, rigsout: false});
 const alertCfg = Object.assign(alertCfgBase(), store.get("alerts", {}));
 // off until you tick them (the whole row): the jumponium call-out
@@ -1991,7 +1992,7 @@ const JUMP_LINE_WAIT = 8000;   // ms: the jump line's latest start after the cha
 // ms after Status.json says "in the tunnel" (it says so about 2 s before the countdown ends): the line then starts
 // with the tunnel itself (the author's timing, in game 2026-10-03)
 const JUMP_TUNNEL_DELAY = 2500;
-const SPEECH_SYS_BOUND = new Set(["find", "signals", "jump", "honk", "brief", "fss", "mapped", "approach", "bodybrief", "jumponium", "phenomena", "ggg", "rare_star", "surface_site", "signal_poi", "curious", "highway", "refuelshort", "lastscoop", "riches", "exo", "trade", "autotarget"]);
+const SPEECH_SYS_BOUND = new Set(["find", "signals", "jump", "honk", "brief", "fss", "mapped", "approach", "bodybrief", "jumponium", "phenomena", "ggg", "rare_star", "surface_site", "signal_poi", "curious", "highway", "refuelshort", "lastscoop", "riches", "exo", "trade", "autotarget", "wrongtarget"]);
 // a rig confirmation answers your own press, like a line asked for
 const speechPrio = (kind, tag) => DANGER.has(tag) || kind === "hull" || kind === "fuel" ? 0 : kind === "manual" || kind === "rigs" ? 1
   : ["find", "signals", "codex", "phenomena", "ggg", "rare_star", "surface_site", "signal_poi", "bodybrief", "supercharge", "jumponium"].includes(kind) ? 3 : 2;
@@ -2365,7 +2366,7 @@ const LINE_SAMPLES = {
   fuel_low: {pct: 18}, fuel_star: {pct: 22, star: "white dwarf"}, fuel_target: {pct: 22, system: "Drojau LL-O b26-3"},
   fuel_topup: {rate: "8 of the last 20 stars were scoopable", jumps: "about 6 jumps"}, hull: {pct: 42}, interdicted: {by: "someone"},
   fuel_short: {system: "Smojooe AR-E b25-8", jumps: "4 jumps", need: "24 tonnes"},
-  fuel_last_scoop: {count: 3},
+  fuel_last_scoop: {count: 3}, wrong_target: {system: "Smojooe AR-E b25-8", next: "Pru Aim XY-Z d1"},
   docked_sell: {value: "114.1M", station: "Jaques Station"}, undocked_unsold: {value: "260.4M"},
   sold: {sold: "12.6M cr cartographics and 4.1M cr exobiology", still: ""},
   unsold_warn: {value: "52.0M"}, unsold_urgent: {value: "251.3M"},
@@ -5926,6 +5927,7 @@ function hwyLineHtml(s, {short = false, glyph = true} = {}) {
   const n = s.next;
   if (!n) return `${g}To ${hwyName(s.destination)}`;
   const bits = [`${s.index === 0 && s.at == null ? "Start" : "Next"}: ${hwyName(n.name)}${short ? hwyAimBtn(n.name) : ""}`];
+  if (s.target_check) bits.push(targetCheckHtml(s.target_check));   // S11
   if (n.neutron) bits.push(`<span class="hwyn" title="a neutron star: supercharge your FSD there">⚡ neutron</span>`);
   if (n.jumps > 1) bits.push(`${n.jumps} jumps`);
   if (n.distance != null) bits.push(`${Number(n.distance).toFixed(1)} ly`);
@@ -5939,6 +5941,23 @@ function hwyLineHtml(s, {short = false, glyph = true} = {}) {
   const sh = s.short;   // S1: the fuel won't reach the next refuel stop (one window with the heavy check: never both)
   if (sh) bits.push(`<span class="${sh.here_refuel ? "hwyfuel" : "hwyheavy"}" title="${esc(hwyShortTitle(sh))}">${sh.here_refuel ? "⛽" : "⚠"} ${esc(hwyShortText(sh))}</span>`);
   return g + bits.join(" · ");
+}
+// S11, the wrong-jump check on the route's line (every copy: under the tiles, Now, Plot Route): the game's target against
+// the next stop (the summary's target_check). "✓ targeted", "↷ targeted X, 2 stops ahead" (a later stop on purpose: the
+// plan's default, not wrong), "⚠ targeted X, not the next stop Y". The overlay's Target panel words it the same
+// (overlay.py route_check_parts)
+function targetCheckHtml(tc) {
+  if (!tc) return "";
+  if (tc.ok) return `<span class="hwytgt" title="the system targeted in game is this next stop">✓ targeted</span>`;
+  if (tc.ahead > 0) return `<span class="hwytgt ahead" title="the system targeted in game is a later stop of this route">↷ targeted ${esc(tc.name)}, ${tc.ahead} stop${tc.ahead === 1 ? "" : "s"} ahead</span>`;
+  return `<span class="hwytgt wrong" title="the system targeted in game is not on the route ahead: target the next stop (🎯)">⚠ targeted ${esc(tc.name)}, not the next stop ${esc(tc.next)}</span>`;
+}
+// S12: a survey route's next stop passes over the systems after where you are that you have finished (their names in
+// the hover): "skipping 2 done"
+function surveySkipHtml(s) {
+  if (!s || !s.skipped) return "";
+  const names = s.skipped_names || [], more = s.skipped - names.length;
+  return `<span class="unk" title="${esc(`finished already, passed over: ${names.join(", ")}${more > 0 ? ` and ${more} more` : ""}`)}">skipping ${s.skipped} done</span>`;
 }
 // S1's words, shared by the line, the alert and the overlay's copy (route_parts): "fuel won't reach the refuel stop: Hwy
 // Stop 42 in 4 jumps · scoop to ≥ 24.3 t, at most 36.0 t". At a refuel stop the plan scoops anyway: how much, not a warning
@@ -6003,9 +6022,11 @@ function surveyLineHtml(s, {short = false, glyph = true} = {}) {
   const n = s.next;
   if (!n) return `${g}${k.name} to ${hwyName(s.destination)}${left}`;
   const bits = [`${s.index === 0 && s.at == null ? "Start" : "Next"}: ${n.station ? `${esc(n.station)}, ` : ""}${hwyName(n.name)}${short ? hwyAimBtn(n.name, "survey", s.index) : ""}`];
+  if (s.target_check) bits.push(targetCheckHtml(s.target_check));   // S11
   if (n.jumps > 1) bits.push(`${n.jumps} jumps`);
   if (n.distance != null) bits.push(`${Number(n.distance).toFixed(1)} ly`);
   bits.push(`${s.index} of ${s.total}`);
+  if (s.skipped) bits.push(surveySkipHtml(s));   // S12
   return g + bits.join(" · ") + left;
 }
 hEl("hwyLine").addEventListener("click", e => {   // the name copies (the page's copy handler); anywhere else opens the tab
@@ -6487,6 +6508,7 @@ function richHeadHtml(d) {
   const where = rt.at != null ? `you are at system ${rt.at + 1} of ${rt.count}`
     : rt.off_route ? `off the route (last on it: system ${(rt.furthest ?? 0) + 1} of ${rt.count})` : `not on the route yet (${rt.count} systems)`;
   const nx = rt.next != null ? sy.find(s => s.i === rt.next) : null;
+  const live = data && data.survey && data.survey.id === rt.id ? data.survey : null;   // S11 / S12: the live line's facts
   const exo = rt.kind === "exo", what = exo ? "species" : left === 1 ? "body" : "bodies";
   const how = `${exo ? "Exomastery (known life: first footfall unlikely)" : "Road to Riches"} · ${o.range != null ? `${o.range} ly range · ` : ""}` +
     `within ${o.radius ?? "?"} ly · ${exo ? "life" : "bodies"} from ${credits(o.min_value ?? 0)} cr${o.use_mapping_value ? ", mapping counted" : ""}${o.loop ? " · loop" : ""}`;
@@ -6496,6 +6518,7 @@ function richHeadHtml(d) {
     `${rt.count > sy.length ? " (the systems listed)" : ""}</div>` +
     (rt.done_ts ? `<div class="hwystate hwydone">${exo ? "Exomastery" : "Road to Riches"} complete.</div>`
       : nx ? `<div class="hwystate">Next: <b class="copy" data-name="${esc(nx.system)}" title="click to copy">${esc(nx.system)}</b>` +
+             `${live && live.target_check ? ` · ${targetCheckHtml(live.target_check)}` : ""}${live && live.skipped ? ` · ${surveySkipHtml(live)}` : ""}` +
              `${nx.left ? ` · ${nx.left} ${exo ? "species to sample" : "to do"} there` : ""}</div>` : "") +
     `<div class="unk hwyhow">${esc(how)}${rt.created_ts ? ` · plotted ${esc(when(rt.created_ts))}` : ""}</div>`;
 }
@@ -6526,10 +6549,12 @@ function tradeHeadHtml(d) {
   const rt = d.route, sy = rt.systems, o = rt.options || {}, last = sy[sy.length - 1];
   const where = rt.at != null ? `you are at stop ${rt.at} of ${rt.count - 1}` : rt.off_route ? "off the route" : `not on the route yet`;
   const nx = rt.next != null ? sy.find(s => s.i === rt.next) : null;
+  const live = data && data.survey && data.survey.id === rt.id ? data.survey : null;   // S11: the live line's check
   return `<div class="hwyttl">Trade route from ${esc(sy[0] ? sy[0].station : rt.from)} <span class="unk">${esc(rt.from)}</span></div>` +
     `<div class="hwystats">${where} · ${rt.count - 1} hop${rt.count === 2 ? "" : "s"} · <b>≈${credits((last && last.cumulative) || 0)} cr</b> profit in all (Spansh's prices)</div>` +
     (rt.done_ts ? `<div class="hwystate hwydone">Trade route complete.</div>`
       : nx ? `<div class="hwystate">Next: <b>${esc(nx.station || "")}</b>, <b class="copy" data-name="${esc(nx.system)}" title="click to copy">${esc(nx.system)}</b>` +
+             `${live && live.target_check ? ` · ${targetCheckHtml(live.target_check)}` : ""}` +
              `${nx.sell.length ? ` · sell ${esc(nx.sell.map(c => c.name).join(", "))}` : ""}</div>` : "") +
     `<div class="unk hwyhow">${o.max_cargo != null ? `${o.max_cargo} t hold · ` : ""}${o.capital != null ? `${credits(o.capital)} cr capital · ` : ""}` +
     `hops up to ${o.max_hop_distance ?? "?"} ly · stations within ${(o.max_system_distance ?? 0).toLocaleString()} ls · data under ${o.max_price_age_days ?? "?"} d` +
@@ -8079,6 +8104,9 @@ function onData() {
                    : one ? "The next star on your route is not scoopable. This is your last chance to top off before you need to call the Fuel Rats."
                    : line("fuel_last_scoop", {count: m.count}, `The next ${m.count} stars on your route are not scoopable. This is your last chance to top off before you need to call the Fuel Rats.`)});
       }
+      else if (m.kind === "wrong_target" && m.system && m.next)   // S11: the game targets another system than the next stop
+        alertOut("wrongtarget", `Targeted ${m.system}, not the next stop`, `the next stop is ${m.next}`, {tag: "wrong_target",
+                 say: () => line("wrong_target", {system: m.system, next: m.next}, `You've targeted ${m.system}. The next stop is ${m.next}.`)});
       else if (m.kind === "highway" && m.text)   // the Neutron Highway's arrival line, detour, back on it, complete: plain words for now
         alertOut("highway", m.text.replace(/\.$/, ""), "", {tag: "highway", say: m.text});
       else if (m.kind === "autotarget" && m.what === "nothing")   // the co-pilot button's press with no route system to target
@@ -8245,7 +8273,7 @@ const ALERT_SHORT = {arrival: "Arrival", game: "Game start and quit", jump: "FSD
   leaving: "Leaving", fuel: "Fuel", scoop: "Tank full", scoopstop: "Scooping stopped", supercharge: "Supercharge", find: "Find",
   jumponium: "Jumponium", sampling: "Sampling", approach: "High-g approach", bodybrief: "Body brief", sell: "Selling", saleleft: "Sale left data",
   unsold: "Unsold", firstsseen: "Firsts scanned by others", hull: "Hull and danger", carrier: "Carrier", codex: "Codex", phenomena: "Stellar phenomena", ggg: "Green gas giant?", rare_star: "Rare star", surface_site: "Surface sites", signal_poi: "Signals worth a detour", curious: "Curiosities", loss: "Ship lost", rigs: "Rigs", rigleash: "Rig leash",
-  rigsout: "Rigs out", mapped: "Mapped", signals: "Signals", highway: "Neutron Highway", refuelshort: "Short of the refuel stop", lastscoop: "Last scoopable star", autotarget: "Auto-target", manual: "Asked for",
+  rigsout: "Rigs out", mapped: "Mapped", signals: "Signals", highway: "Neutron Highway", refuelshort: "Short of the refuel stop", lastscoop: "Last scoopable star", autotarget: "Auto-target", wrongtarget: "Wrong target", manual: "Asked for",
   exo: "Exomastery route", riches: "Road to Riches", trade: "Trade route", uploads: "Uploads failing"};
 const speechMuted = new Set();   // kinds turned off from the tally this session (each shows an undo)
 // "This session: Arrival brief 42 🔇 · FSD charge 40 (3 dropped) 🔇 · …": every kind that was said or queued (not the
@@ -10776,7 +10804,7 @@ const TAB_ALERT_NAMES = {discovery: "Targeting a system", arrival: "Arriving som
   exo: "Exomastery route", riches: "Road to Riches route", trade: "Trade route",
   jump: "FSD charging", honk: "Auto honk", brief: "Arrival briefing", fss: "FSS finished", mapped: "Planet mapped",
   leaving: "Leaving work behind", fuel: "Fuel", scoop: "Tank full", scoopstop: "Scooping stopped early",
-  supercharge: "Supercharged", highway: "Highway next stop", refuelshort: "Fuel short of the refuel stop", lastscoop: "Last scoopable star", autotarget: "Auto-target", find: "Valuable body",
+  supercharge: "Supercharged", highway: "Highway next stop", refuelshort: "Fuel short of the refuel stop", lastscoop: "Last scoopable star", autotarget: "Auto-target", wrongtarget: "Not the next stop targeted", find: "Valuable body",
   jumponium: "Jumponium materials", sampling: "Exobiology unfinished", approach: "High gravity", bodybrief: "Bio signals on approach",
   sell: "Selling", saleleft: "Data left after a sale", unsold: "Unsold data", firstsseen: "Firsts scanned by others", hull: "Hull, heat, interdiction",
   carrier: "Carrier arrived", codex: "New codex entry", phenomena: "Stellar phenomena", ggg: "Green gas giant?", rare_star: "Rare star", surface_site: "Surface sites", signal_poi: "Signals worth a detour", curious: "Curiosities", loss: "Ship lost", rigs: "Mining rigs", rigleash: "Rig too far",

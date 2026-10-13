@@ -81,6 +81,9 @@ KEYS = {
     "carrier_arrived": "your carrier arrived: {carrier}, {system}",
     "autotarget_nothing": "the co-pilot button asked to target the next route system with none to target: {why} (e.g. "
                           "'no route is plotted', 'the route is complete')",
+    "wrong_target": "on a route you follow (the Highway, a survey or trade route), the system targeted in game is not its "
+                    "next stop (said once per target, not while off the route, nor for a later stop of the route): {system} "
+                    "(the system targeted), {next} (the route's next stop)",
     "fss_done": "you finished the FSS, every body is found, and some are worth your time: {count} (how many bodies), "
                 "{text} (what is worth doing, e.g. 'B 1, Earth-like world, 3.1M to map, and biology on C 2, up to 19M')",
     "fss_nothing": "you finished the FSS, every body is found, and nothing is worth staying for: {count} (how many bodies)",
@@ -428,6 +431,7 @@ SAMPLES = {
     "firsts_seen": {"system": "Drojau LL-O b26-3", "value": "14.2M"},
     "carrier_departs": {"minutes": 4, "carrier": "Out Of The Blue"},
     "autotarget_nothing": {"why": "no route is plotted"},
+    "wrong_target": {"system": "Smojooe AR-E b25-8", "next": "Pru Aim XY-Z d1"},
     "carrier_arrived": {"carrier": "Out Of The Blue", "system": "Smojooe AR-E b25-8"},
     "fss_done": {"count": 14, "text": "B 1, Earth-like world, 3.1M to map, and biology on C 2, up to 19.0M"},
     "fss_nothing": {"count": 14}, "fss_unfinished": {"left": "3 bodies"},

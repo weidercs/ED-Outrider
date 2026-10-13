@@ -279,6 +279,24 @@ class TargetPanel(unittest.TestCase):
         self.assertIsNone(O.target_system_panel({"name": None}, O.palette()))
         self.assertIsNone(O.target_system_panel(None, O.palette()))
 
+    def test_route_check(self):
+        """S11's one overlay place (the plan-wide review): the followed route's next stop against the game's target, on
+        the Target panel under "next jump of your route": the next stop, a later stop of it, or another system."""
+        t = {"name": "Ossia", "status": "unreported", "remaining": 3,
+             "route_check": {"ok": True, "name": "Pru Aim", "id": "5", "next": "Pru Aim", "ahead": 0}}
+        pal = O.palette()
+        p = O.target_system_panel(t, pal)
+        self.assertEqual(texts(p)[1:3], ["next jump of your route · 3 to go", "✓ the next stop of your route"])
+        self.assertEqual(colour_of(p, "✓ the next stop"), pal["good"])
+        t["route_check"] = {"ok": False, "name": "Ossia", "id": "9", "next": "Pru Aim", "ahead": 2}
+        self.assertEqual(texts(O.target_system_panel(t, pal))[2], "↷ 2 stops ahead on your route")
+        t["route_check"] = {"ok": False, "name": "Ossia", "id": "9", "next": "Pru Aim", "ahead": 0}
+        p = O.target_system_panel(t, pal)
+        self.assertEqual(texts(p)[2], "⚠ not the next stop: Pru Aim")
+        self.assertEqual(colour_of(p, "⚠ not the next stop"), pal["bad"])
+        t["route_check"] = None
+        self.assertEqual(texts(O.target_system_panel(t, pal))[1:], ["next jump of your route · 3 to go", "never reported"])
+
     def test_hazard_as_the_page(self):
         """page.js hazardNote: a neutron star, a white dwarf, a black hole (the overlay's Now left out the black hole)."""
         self.assertEqual([O.star_hazard(c) for c in ("N", "DAV", "H", "SupermassiveBlackHole", "K", "", None)],
@@ -645,6 +663,9 @@ class NowPanel(unittest.TestCase):
         self.assertEqual(p[-1], (" · ⚠ too much fuel for the jump to Far C: ≤ 36 t, you have 160 t", "bad"))
         rc ={"kind": "exo", "index": 2, "at": 1, "total": 9, "left_here": 2, "next": {"name": "Pru Aim", "jumps": 3, "distance": None}}
         self.assertEqual(join(O.route_parts({"kind": "riches", "summary": rc})), "🧬 Next: Pru Aim · 3 jumps · 2 of 9 · 2 species to sample here")
+        # S12: finished systems the next stop passes over (a survey route only); S11's mark is the Target panel's alone
+        self.assertEqual(join(O.route_parts({"kind": "riches", "summary": dict(rc, skipped=2, target_check={"ok": True, "next": "Pru Aim"})})),
+                         "🧬 Next: Pru Aim · 3 jumps · 2 of 9 · skipping 2 done · 2 species to sample here")
         self.assertEqual(O.route_parts(None), [])
         bx = {"label": "Smojooe KL-P d5", "name": "Smojooe KL-P d5-41", "n": 41, "spansh": False}
         self.assertEqual(join(O.boxel_parts(bx)), "▦ Boxel: next Smojooe KL-P d5-41 · to try")

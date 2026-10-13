@@ -777,13 +777,16 @@ def target_system_panel(t, pal, size="normal"):
     fuel and the max-range jumps left after it, or out of range) and, in the Nearby sphere, what it could pay and its
     notable bodies. t: {name, status (None while the lookup runs: "checking…"), source, known, count, edsm, star_class,
     hop: {ly, fuel, left, reach}, distance, value: {carto, bio}, notable, remaining (the route's jumps left, this one
-    included)}. None without a name."""
+    included), route_check (S11: the followed route's target_check, its one overlay place)}. None without a name."""
     if not t or not t.get("name"):
         return None
     room, rows = TARGET_W - 2 * PAD, []
     left = t.get("remaining")   # with a route plotted in game, the target is its next jump
     if isinstance(left, int) and not isinstance(left, bool) and left > 1:
         rows.append([("next jump of your route · ", "muted"), (f"{left} to go", "text")])
+    tc = route_check_parts(t.get("route_check"))
+    if tc:
+        rows += flow(tc, room, size)
     status = t.get("status")
     if status is None:
         rows.append([("checking…", "muted")])
@@ -857,6 +860,19 @@ SURVEY_WORDS = {"riches": ("💰", "Road to Riches", lambda n: f"{n} {'body' if 
                 "trade": ("💱", "Trade route", lambda n: f"{n} trade{'' if n == 1 else 's'} to make here")}
 
 
+def route_check_parts(tc):
+    """S11's mark for the Target panel (page.js targetCheckHtml's words): the followed route's next stop targeted, a
+    later stop of it, or another system. [] without a check."""
+    if not tc or not tc.get("next"):
+        return []
+    if tc.get("ok"):
+        return [("✓ the next stop of your route", "good")]
+    n = tc.get("ahead") or 0
+    if n > 0:
+        return [(f"↷ {n} stop{'' if n == 1 else 's'} ahead on your route", "muted")]
+    return [("⚠ not the next stop: ", "bad"), (tc["next"], "text")]
+
+
 def route_parts(route):
     """The route's next stop as Now gives it (page.js hwyLineHtml / surveyLineHtml, short): {kind: "highway" |
     "riches", summary: highway_summary() or survey_summary()} -> (text, colour key) parts, or [] with nothing to say."""
@@ -885,6 +901,8 @@ def route_parts(route):
     if isinstance(n.get("distance"), (int, float)):
         parts.append((f" · {n['distance']:.1f} ly", "muted"))
     parts.append((f" · {s.get('index')} of {s.get('total')}", "muted"))
+    if not hw and s.get("skipped"):   # S12: finished systems the next stop passes over
+        parts.append((f" · skipping {s['skipped']} done", "muted"))
     if hw and s.get("refuel_here"):
         parts.append((" · ⛽ refuel here", "warn"))
     elif hw and s.get("refuel_in") is not None:

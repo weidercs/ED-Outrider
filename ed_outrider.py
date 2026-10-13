@@ -231,8 +231,8 @@ from outrider.highway import (   # the Neutron Highway's route helpers and the d
 )
 from outrider.cargo import trade_counts, trade_done_text, trade_left, trade_rows, trade_text   # the slot's third type: trade routes
 from outrider.riches import (   # Road to Riches / Exomastery: Spansh's survey routes (systems with valuable bodies / life)
-    RichesError, body_value, exo_left, exo_text, exo_todo, norm_name, riches_match, riches_rows, riches_text, splice_survey,
-    todo,
+    RichesError, body_value, exo_left, exo_text, exo_todo, had_work, next_stop, norm_name, riches_match, riches_rows,
+    riches_text, splice_survey, todo,
 )
 try:  # one-line summaries of every journal event, for the Log view
     import outrider.log
@@ -282,6 +282,8 @@ RICHES = {"radius": 25, "max_results": 25, "max_distance": 50000, "min_value": 1
           "use_mapping_value": True, "avoid_thargoids": True, "loop": False}
 RICHES_AHEAD = 100          # route systems GET /api/riches lists from where you are...
 RICHES_DONE = 10            # ...and done systems above them (the most recent)
+RICHES_SKIP_NAMES = 10      # S12: the finished systems the next stop passes over, named in the line's hover at most
+WRONG_TARGET_KEEP = 32      # S11: the wrong targets remembered as said (route, next stop, target)
 SPANSH_SYSTEM_NAMES = "https://spansh.co.uk/api/systems/field_values/system_names"   # system names as you type
 SPANSH_SYSTEM_SEARCH = "https://spansh.co.uk/api/search/systems"   # ?q=name: {results: [{id64, name, x, y, z}]}
 HIGHWAY = {"clipboard": True, "autotarget": False, "autotarget_delay": 5.0, "efficiency": 60,   # [highway] defaults
@@ -2603,6 +2605,19 @@ class Journals:
         mapping = bool((rc.get("options") or {}).get("use_mapping_value"))
         return [b for b in todo(r["bodies"], scanned, mapped, mapping) if not b["done"]]
 
+    def riches_open(self, rc, rows, i):
+        """S12: the next stop from row i on, past the rows you have finished: (index, [skipped indices]), (None, []) when
+        i is past the end. A row is passed over when it came with work (had_work) and none is left (riches_left), so
+        a row without bodies (a route's real end) never is; the last row never is either (arriving there ends the
+        route). Trade routes never skip: their next is always the next stop."""
+        if i is None or i >= len(rows):
+            return None, []
+        kind, skipped = rc.get("kind") or "riches", []
+        while kind != "trade" and i < len(rows) - 1 and had_work(kind, rows[i]) and not self.riches_left(rc, rows, i):
+            skipped.append(i)
+            i += 1
+        return i, skipped
+
     def riches_arrival(self, id64, name, ts):
         """A jump into a system with a Road to Riches route active: progress (the row you are at, the furthest
         reached), the detour when the system is not on the route, back on it, and the end (the last system with nothing
@@ -2633,6 +2648,7 @@ class Journals:
             back = bool(rc.get("off_route"))
             rc.update(at=i, furthest=max(i, furthest if furthest is not None else i), off_route=None)
             left = self.riches_left(rc, rows, i)
+            nx, skipped = self.riches_open(rc, rows, i + 1)   # S12: the next stop past the systems you finished
             if done:
                 pass   # finished: the route stays visible, quietly, until cleared
             elif not left and i == len(rows) - 1:
@@ -2642,10 +2658,11 @@ class Journals:
             else:
                 if not left:
                     rc["said_done"] = i   # nothing to do here: no "all done" to say later
-                say = ("back" if back else "next", ("Back on the route. " if back else "") + text(rows, i, left), len(left))
+                words = text(rows, i, left) if kind == "trade" else text(rows, i, left, len(skipped))
+                say = ("back" if back else "next", ("Back on the route. " if back else "") + words, len(left))
         meta_set(self.db, "riches", rc)
         if say and live_event(ts):
-            nxt = rows[i + 1]["system"] if i is not None and i + 1 < len(rows) else None
+            nxt = rows[nx]["system"] if i is not None and nx is not None else None
             self.moment(kind, ts, what=say[0], text=say[1], system=name, index=i, next=nxt, left=say[2])
 
     def trade_progress(self, ev, ts):
@@ -2739,7 +2756,7 @@ class Journals:
         if i >= len(rows) or rows[i]["id64"] is None or rows[i]["id64"] != id64 or rc.get("said_done") == i:
             return
         exo = rc.get("kind") == "exo"
-        if not (any(b.get("species") for b in rows[i]["bodies"]) if exo else rows[i]["bodies"]) or self.riches_left(rc, rows, i):
+        if not had_work(rc.get("kind") or "riches", rows[i]) or self.riches_left(rc, rows, i):
             return
         rc["said_done"] = i
         last = i == len(rows) - 1
@@ -2747,11 +2764,12 @@ class Journals:
             rc["done_ts"] = ts
         meta_set(self.db, "riches", rc)
         if live_event(ts):
-            nxt = None if last else rows[i + 1]["system"]
+            nx, skipped = (None, []) if last else self.riches_open(rc, rows, i + 1)   # S12: past the systems you finished
+            nxt = None if last else rows[nx]["system"]
             done_text = "Every species here is sampled. " if exo else "Everything here is done. "
             self.moment("exo" if exo else "riches", ts, what="complete" if last else "done", system=rows[i]["system"], index=i,
                         next=nxt, left=0, text=done_text + (("Exomastery complete." if exo else "Road to Riches complete.") if last
-                                                            else f"Next stop: {nxt}."))
+                                                            else next_stop(rows, i, len(skipped))))
 
     def highway_arrival(self, id64, name, ts):
         """A jump into a system with a Highway route active: progress (the row you are at, the furthest reached),
@@ -6511,6 +6529,8 @@ class State:
         self.lease_hold = None
         self.leases, self.lease_task = None, None
         self._rc_copied = (meta_get(db, "riches") or {}).get("arrival_ts")
+        self._rc_open = (None, (None, []))   # riches_next_open's cache (S12)
+        self._tc_said = collections.OrderedDict()   # S11: the wrong targets said, (route kind, id, next index, target)
         # the notices banner (S5a; run() gives it the board its start-up warnings went to) and Outrider's own log
         # (S5b: GET /api/serverlog; None when the streams are not teed, as in tests)
         self.notices = outrider.notices.Board(on_change=self.bump)
@@ -6862,7 +6882,7 @@ class State:
         why = "no route is plotted"
         rc, rows = self.riches_state()
         if rc:
-            nx = self.riches_next(rc, rows)
+            nx = self.survey_jump_next(rc, rows)   # S12: past the systems you finished (a trade stop: elsewhere)
             if rc.get("done_ts"):
                 why = "the route is complete"
             elif nx is None:
@@ -7722,7 +7742,8 @@ class State:
                 "status": t.get("status"), "source": t.get("source"), "known": t.get("known"), "count": t.get("count"),
                 "edsm": t.get("edsm"), "hop": self.target_hop(jt) if pos else None, "distance": row.get("distance"),
                 "value": {"carto": (vp.get("carto_now") or 0) + (vp.get("carto_left") or 0), "bio": vp.get("bio_left") or 0},
-                "notable": row.get("notable") or {}}
+                "notable": row.get("notable") or {},
+                "route_check": ((self.overlay_route() or {}).get("summary") or {}).get("target_check")}   # S11
 
     def overlay_zone_body(self, st, pos, now):
         """The body whose near-body zone you are in (D1: Status.json names it and gives an altitude, the point the game
@@ -13379,6 +13400,7 @@ class State:
             "boost_here": bool(here and here["neutron"]),
             "heavy": self.highway_heavy(hw),
             "short": self.highway_heavy(hw, "short"),
+            "target_check": self.highway_target_check(hw, rows),   # S11
         }
 
     @staticmethod
@@ -14017,6 +14039,17 @@ class State:
         i = at + 1 if at is not None else furthest + 1 if furthest is not None else 0
         return i if i < len(rows) else None
 
+    def riches_next_open(self, rc, rows):
+        """S12: (index, [skipped indices]) of the next stop past the systems after where you are that you have finished
+        (Journals.riches_open: they had work and none is left; trade routes never skip). Every "next" of a survey route
+        is this one: the line, the tab, the clipboard, the co-pilot button, the voice. Cached per route, place on it and
+        journal data (data_seq: a scan, a map or a sample moves it)."""
+        key = (rc.get("id"), rc.get("at"), rc.get("furthest"), len(rows), self.journals.data_seq)
+        c = self._rc_open
+        if c[0] != key:
+            c = self._rc_open = (key, self.journals.riches_open(rc, rows, self.riches_next(rc, rows)))
+        return c[1]
+
     def riches_system_out(self, rc, rows, i):
         """Route row i for the page: the system, and its bodies with what you have scanned and mapped (Road to Riches)
         or its species with what you have sampled and what would be new to your codex there (Exomastery: by species,
@@ -14065,7 +14098,7 @@ class State:
         rc, rows = self.riches_state()
         route = None
         if rc:
-            nx = self.riches_next(rc, rows)
+            nx = self.riches_next_open(rc, rows)[0]   # S12: past the systems you finished
             at = rc.get("at")
             base = at if at is not None else (nx if nx is not None else len(rows))
             first = max(0, base - RICHES_DONE)
@@ -14295,18 +14328,38 @@ class State:
         if not rc:
             return None
         pos, n = self.journals.pos, len(rows)
-        at, nx = rc.get("at"), self.riches_next(rc, rows)
+        at, (nx, skipped) = rc.get("at"), self.riches_next_open(rc, rows)
         nxt = rows[nx] if nx is not None else None
         return {
             "kind": rc.get("kind") or "riches", "id": rc.get("id"), "created_ts": rc.get("created_ts"),
             "destination": rows[-1]["system"], "total": n - 1, "index": nx, "at": at,
             "complete": bool(rc.get("done_ts")), "off_route": bool(rc.get("off_route")),
+            # S12: the finished systems the next stop passes over (their names for the hover, the first RICHES_SKIP_NAMES)
+            "skipped": len(skipped), "skipped_names": [rows[k]["system"] for k in skipped[:RICHES_SKIP_NAMES]],
+            "target_check": self.survey_target_check(rc, rows),
             "left_here": len(self.journals.riches_left(rc, rows, at)) if at is not None else None,
             "next": nxt and {"name": nxt["system"], "id": str(nxt["id64"]) if nxt["id64"] is not None else None,
                              "jumps": nxt["jumps"], "station": nxt.get("station"),
                              "distance": round(dist(pos, nxt), 1) if pos and None not in (nxt["x"], nxt["y"], nxt["z"])
                              else None},
         }
+
+    def survey_jump_next(self, rc, rows):
+        """The survey route's next stop a jump away (riches_next_open, S12), or None: a trade route's next stop in the
+        system you are at (another station) is no jump, so the first stop elsewhere (review 2026-10-11)."""
+        nx = self.riches_next_open(rc, rows)[0]
+        at = rc.get("at")
+        here = rows[at]["system"] if at is not None and at < len(rows) else None
+        while nx is not None and nx < len(rows) and rows[nx]["system"] == here:
+            nx += 1
+        return nx if nx is not None and nx < len(rows) else None
+
+    def survey_target_check(self, rc, rows):
+        """S11 for the survey route (survey_summary's `target_check`): its next stop a jump away against the game's
+        target; None off the route, once it is complete, at its end."""
+        if not rc or rc.get("done_ts") or rc.get("off_route"):
+            return None
+        return self.target_check(rows, self.survey_jump_next(rc, rows))
 
     def route_newest(self):
         """"highway" or "riches": of the two routes, the one plotted last (None without either). With both, only that
@@ -14336,13 +14389,8 @@ class State:
         if not force and not (rc.get("arrival_ts") and live_event(rc["arrival_ts"]) and
                               time.time() - ts_seconds(rc["arrival_ts"]) <= HIGHWAY_LIVE_S):
             return False
-        nx = self.riches_next(rc, rows)
-        # a trade route's next stop in this same system (another station) is no jump: the first stop elsewhere is
-        # what the galaxy map wants, and moving on there by a trade copies nothing again (review 2026-10-11)
-        here = rows[rc["at"]]["system"] if rc["at"] < len(rows) else None
-        while nx is not None and nx < len(rows) and rows[nx]["system"] == here:
-            nx += 1
-        if nx is None or nx >= len(rows):
+        nx = self.survey_jump_next(rc, rows)
+        if nx is None:
             return False
         name = rows[nx]["system"]
         try:
@@ -14428,6 +14476,71 @@ class State:
         if r["id64"] == pos["id64"]:
             return None, f"you are in {r['system']} already"
         return {"name": r["system"], "id64": r["id64"], "here": pos["id64"], "route": meta.get("id"), "index": index}, None
+
+    def game_target(self):
+        """The system the game aims its jumps at (outrider.target.game_target, F3): Status.json's Destination, the end
+        of the route the game plotted through it, or with no live Status.json the journal's FSDTarget; None."""
+        j = self.journals
+        return outrider.target.game_target(j.status_json, (j.pos or {}).get("id64"),
+                                           (meta_get(self.db, "route") or {}).get("hops"), j.target)
+
+    def target_check(self, rows, nx):
+        """S11, the wrong-jump check: route row nx (the next stop) against the game's target. {ok, name (the system
+        targeted), id, next (the next stop's name), ahead}: ok when the game targets it (its Destination, or the end
+        of the route it plotted through its Destination: game_target); ahead N when it targets the route's stop N
+        after it (on purpose, the plan's default: "N stops ahead", not wrong); else wrong. None with no next stop, no
+        id64 to compare, the game not live, nothing targeted, or a target in this system (a body, a station)."""
+        if nx is None or not 0 <= nx < len(rows) or rows[nx]["id64"] is None:
+            return None
+        st = self.journals.status_json or {}
+        tgt = self.game_target() if st.get("live") and self.journals.pos else None
+        if not tgt:
+            return None
+        r = rows[nx]
+        out = {"ok": True, "name": r["system"], "id": str(r["id64"]), "next": r["system"], "ahead": 0}
+        if tgt["id64"] == r["id64"] or outrider.target.targeted(st, r["id64"]):   # its end, or its first hop
+            return out
+        ahead = next((k - nx for k in range(nx + 1, len(rows)) if rows[k]["id64"] == tgt["id64"]), None)
+        name = rows[nx + ahead]["system"] if ahead else tgt.get("name") or (self.systems.get(tgt["id64"]) or {}).get("name")
+        return dict(out, ok=False, name=name or "another system", id=str(tgt["id64"]), ahead=ahead or 0)
+
+    def highway_target_check(self, hw, rows):
+        """S11 for the Highway (highway_summary's `target_check`): its next row against the game's target; None off the
+        route ("Off Route: Detour"), once complete, at its end."""
+        if not hw or hw.get("done_ts") or hw.get("off_route"):
+            return None
+        return self.target_check(rows, self.highway_next(hw, rows))
+
+    def wrong_target_watch(self, now=None):
+        """S11's spoken half, a follow-up: the route the line shows (route_newest, as the overlay's) targeted wrong in
+        game says so once per (route, next stop, target): a `wrong_target` moment {system, next}. Not for a later stop
+        of the route (ahead), not while the galaxy map is open (said once you close it, on what you settled on), not
+        while an auto-target run is choosing the target, and never off the route, once complete or with nothing
+        targeted (target_check's None). True when said."""
+        st = self.journals.status_json or {}
+        if not st.get("live") or not st.get("destination") or st.get("gui_focus") == outrider.target.GUI_GALAXY_MAP:
+            return False
+        kind = self.route_newest()
+        if kind == "highway":
+            hw, rows = self.highway_state()
+            tc, rid, nx = self.highway_target_check(hw, rows), (hw or {}).get("id"), self.highway_next(hw, rows) if hw else None
+        elif kind == "riches":
+            rc, rows = self.riches_state()
+            tc, rid, nx = self.survey_target_check(rc, rows), (rc or {}).get("id"), self.survey_jump_next(rc, rows) if rc else None
+        else:
+            return False
+        if not tc or tc["ok"] or tc["ahead"] or self.autotarget_busy():
+            return False
+        key = (kind, rid, nx, tc["id"])
+        if key in self._tc_said:
+            return False
+        self._tc_said[key] = True
+        while len(self._tc_said) > WRONG_TARGET_KEEP:
+            self._tc_said.popitem(last=False)
+        now = time.time() if now is None else now
+        self.journals.moment("wrong_target", iso_ts(now), system=tc["name"], next=tc["next"], route=kind)
+        self.bump()
+        return True
 
     def autotarget_test_target(self):
         """({name, id64, here}, None) for "test now": the nearest system in the Nearby list within 90% of the range
@@ -15150,7 +15263,7 @@ class State:
                                ("maybe_locate_carrier", self.maybe_locate_carrier), ("maybe_find_sellers", self.maybe_find_sellers),
                                ("maybe_backup_on_quit", self.maybe_backup_on_quit), ("highway_copy_next", self.highway_copy_next), ("riches_copy_next", self.riches_copy_next),
                                ("highway_heavy_check", self.highway_heavy_check), ("last_scoop_check", self.last_scoop_check),
-                               ("maybe_autotarget", self.maybe_autotarget),
+                               ("wrong_target_watch", self.wrong_target_watch), ("maybe_autotarget", self.maybe_autotarget),
                                ("maybe_boxel_autotarget", self.maybe_boxel_autotarget)):
                 try:
                     step()

@@ -2,6 +2,32 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-13 · Survey routes skip finished systems, and a wrong-target check on the route line
+- **Survey routes skip finished systems** (S12): a Road to Riches or Exomastery route's next stop passes over the
+  systems after where you are that came with work and have none left by your journal (`riches.had_work`,
+  `Journals.riches_open`, `State.riches_next_open`, cached on the route, the place on it and `data_seq`). Every "next"
+  follows it: the line ("Next: Pru Aim XY-Z d1 · 3 jumps · 6 of 22 · skipping 2 done", the names in the hover; the
+  summary's `skipped` / `skipped_names`), the tab's next row and heading, the clipboard copy, the co-pilot button, 🎯
+  Target next, the overlay's Now line, and the voice ("Next stop: Pru Aim XY-Z d1, skipping 2 systems you've
+  finished.", from arriving and from finishing a system). A row without bodies and the route's last row are never
+  passed over; a trade route never skips. The co-pilot button now aims a trade route at its first stop in another
+  system, as its clipboard copy does (`survey_jump_next`).
+- **The game's jump target** (F3): `outrider.target.game_target(status, here, route, fsd)`, beside `targeted()`:
+  Status.json's Destination, the end of the NavRoute it is a hop of (a route plotted in the galaxy map), or with no
+  live Status.json the journal's FSDTarget; nothing locked, or a body or station in this system, is none.
+  `State.game_target` feeds it.
+- **Wrong-jump check** (S11): the summaries' `target_check` {ok, name, id, next, ahead} compares the followed route's
+  next stop (the Highway's next row; a survey route's past finished systems; a trade route's first stop elsewhere)
+  with the game's target. On every copy of the route line (under the tiles, Now, the Plot Route tab's heading):
+  "✓ targeted", "⚠ targeted X, not the next stop Y", or for a later stop of the route "↷ targeted X, 2 stops ahead"
+  (the plan's default: on purpose, not wrong). Silent off the route, once complete, with nothing targeted and for a
+  target in this system. On the overlay, the Target panel's own row (its one overlay place): "✓ the next stop of
+  your route" / "↷ 2 stops ahead on your route" / "⚠ not the next stop: Y".
+- **Said once per new wrong target** (`wrong_target_watch`, a follow-up): a `wrong_target` moment {system, next} per
+  (route, next stop, target), for the route the line shows server-side, only once the galaxy map is closed and never
+  during an auto-target run. Its own alerts row `wrongtarget` ("Wrong target", spoken, not notified by default, in
+  `SPEECH_SYS_BOUND`) and speech key `wrong_target` (15 lines in each list).
+
 ## 2026-10-13 · The last scoopable star before a stretch you can't cover
 - **The route ahead, whatever route you follow** (F2, S2's groundwork): `State.route_ahead()` gives the hops from where
   you are: the game's plotted route (NavRoute.json, from where you are on it; a survey route's legs come this way),

@@ -134,7 +134,7 @@ upstream project's choices, not rules of the game.
   passes, then 0.5 s more before any key; a press in that half second cancels the run and counts as the slow double
   tap it was (the status report), so a slow double tap never opens the galaxy map.
 - **The co-pilot tap targets every "next system"** (the author, 2026-10-12, S76), in this order: the survey / trade
-  route's next; the Highway's while you are on it (at a route system, its start included); the boxel being explored
+  route's next (past the systems you finished, S12; a trade route's first stop in another system, as its clipboard copy); the Highway's while you are on it (at a route system, its start included); the boxel being explored
   (its Next, the same run as 🎯 beside it, so a name the galaxy map cannot find marks the boxel's probable end); the
   Highway's off the route (its closest system, or its start before you joined it). A route you are on stays first;
   one you left for a detour into a boxel does not hide the boxel, and comes back once the boxel has no Next.
@@ -255,6 +255,24 @@ upstream project's choices, not rules of the game.
   BodyID and species name. A trade route's stops are the stations (a hop's straight line, not its jumps: 🎯 targets
   the system and the game plots the way), its progress is your MarketSell / MarketBuy at the stop's market, and its
   plot gets 600 s (Spansh's trade planner is slow).
+- **A survey route's next stop skips the systems you finished** (S12): "next" is still the row after where you are,
+  walked past the rows that came with work (Road to Riches: bodies; Exomastery: a body with species, `had_work`) and
+  have none left by your journal. Every "next" uses it (`riches_next_open` / `Journals.riches_open`): the line ("skipping
+  2 done", their names in the hover), the tab, the clipboard, the co-pilot button, 🎯's Target next and the spoken
+  "Next stop: X, skipping 2 systems you've finished." A row without bodies (a route's real end: `bodies: []`) is never
+  passed over, nor the last row (arriving there is what ends the route); a trade route never skips (its next stop may
+  be the same station's neighbour). `at` and `furthest` are unchanged: only what "next" points at moves.
+- **The wrong-jump check (S11)** compares the followed route's next stop (the Highway's next row; a survey route's next
+  past finished systems; a trade route's first stop in another system) with the game's target: `game_target`
+  (`outrider/target.py`, F3) reads Status.json's Destination, and when that is a hop of the route the game plotted
+  (NavRoute.json), that route's end; with no live Status.json the journal's FSDTarget. A Destination in the system you
+  are in (a body, a station) is no jump target, so the check is silent there, as off the route ("Off Route: Detour"),
+  once the route is complete and with nothing targeted. A later stop of the same route is "↷ N stops ahead" (the plan's
+  default for targeting one on purpose), not wrong, and not said. A wrong target is said once per (route, next stop,
+  target), only after the galaxy map closes (so browsing in the map says nothing), never while an auto-target run is
+  choosing the target, for the route the line shows server-side (`route_newest`, the overlay's choice too). Its alerts
+  row `wrongtarget` is spoken and not notified by default (key `wrong_target` {system, next}, 15 lines a list). On the
+  overlay the mark lives on the Target panel alone (the plan-wide review: one overlay place), not on Now's route line.
 - **Auto-target presses keys in the galaxy map** (opt-in, Linux, Windows experimental since 2026-10-05; decided with the author 2026-10-01): open the map,
   the search box (UI_Up highlights "Search the Galaxy", UI_Select puts the cursor in it; found in game 2026-10-02 — UI_Right, Auto_Neutron's older step, moves along the tab column to Trade Routes, and UI_Select alone opens the current system; `autotarget_search` changes it), type the name (US keymap; a name it cannot type is pasted when a
   clipboard tool exists), Enter twice after short waits (the search lists its suggestion a moment after the name goes in, and an Enter before that selects nothing; found in game 2026-10-02; `autotarget_submit`), the plot-route step (configurable: the map's focus after a search varies), close the
@@ -945,7 +963,9 @@ confirmed while playing. Treat reports about them as likely real.
 - The Highway's plots against live Spansh (both plotters send the requests Spansh's site and Auto_Neutron send;
   tested with a mocked Spansh), following a route in game, and whether a name copied by `wl-copy`/`xclip` pastes
   into the galaxy map under Proton. The too-heavy warning, the short-of-the-refuel-stop warning (S1), the last-scoopable-star
-  warning (S2, on the game's route and the Highway) and a conservative plot against a real route.
+  warning (S2, on the game's route and the Highway), the wrong-target check (S11: Status.json's Destination and
+  NavRoute.json as the game writes them when a route is plotted, retargeted from the navigation panel, or reached) and a
+  conservative plot against a real route.
 - Auto-target in game: the first default sequence targeted a system end to end with "test now" (2026-10-02), and the
   current one (a camera yaw before the search, 1.5 s before Enter, a zoom in the plot step) is what worked on
   2026-10-03 (the author's bindings, Linux/Proton). Not yet tried: a run triggered by a real supercharge on a route,

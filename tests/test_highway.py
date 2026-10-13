@@ -19,6 +19,7 @@ import ed_outrider  # noqa: E402
 import outrider.honk  # noqa: E402
 import outrider.fsd  # noqa: E402
 import outrider.highway  # noqa: E402
+import outrider.target  # noqa: E402
 
 
 
@@ -1213,6 +1214,110 @@ class HighwayH1(unittest.TestCase):
             self.assertIn(f"# {key} = ", example[example.index("[highway]"):])
             self.assertIn(f"`{key}`", readme[readme.index("| `[highway]`"):].split("\n")[0])
 
+
+class WrongTarget(unittest.TestCase):
+    """F3 (game_target: the game's jump target) and S11 (the wrong-jump check): the followed route's next stop against
+    what the game targets, on the line (the summaries' target_check), the overlay's Target panel, and said once per
+    new wrong target (the `wrong_target` moment). Fakes only: Status.json and NavRoute.json as Journals holds them."""
+    setUp = HighwayH1.setUp
+    EXACT = HWY_EXACT
+    ts = hwy_ts
+    jump = hwy_jump
+    plot_exact = hwy_plot_exact
+
+    def aim(self, system, name=None, route=None, focus=0, live=True):
+        """The game targets `system` (Status.json's Destination), with NavRoute.json's hops `route` (id64s)."""
+        self.j.status_json = {"live": live, "ts": self.ts(0), "flags": 0, "gui_focus": focus,
+                              "destination": {"System": system, "Name": name or f"Sys {system}"} if system else None}
+        ed_outrider.meta_set(self.db, "route", {"ts": self.ts(0), "hops": [{"id64": h, "name": f"Hop {h}"} for h in route]}
+                             if route else None)
+
+    def said(self):
+        return [(m["system"], m["next"], m["route"]) for m in self.j.moments if m["kind"] == "wrong_target"]
+
+    def test_game_target(self):
+        G = outrider.target.game_target
+        live = lambda d: {"live": True, "destination": d}
+        self.assertIsNone(G(live(None), 1))
+        self.assertIsNone(G(live({"System": 1, "Name": "A 1", "Body": 3}), 1))      # a body here: no jump target
+        self.assertEqual(G(live({"System": 5, "Name": "Five"}), 1), {"id64": 5, "name": "Five", "via": "destination"})
+        hops = [{"id64": 1, "name": "One"}, {"id64": 5, "name": "Five"}, {"id64": 9, "name": "Nine"}]
+        # a route plotted in game: the Destination is its first hop, the target its end (review F2)
+        self.assertEqual(G(live({"System": 5, "Name": "Five"}), 1, hops), {"id64": 9, "name": "Nine", "via": "route"})
+        # a Destination off that route (targeted since): the Destination, the route is stale
+        self.assertEqual(G(live({"System": 7, "Name": "Seven"}), 1, hops)["id64"], 7)
+        self.assertEqual(G(live({"System": 5}), 9, hops)["via"], "destination")   # at the route's end already
+        # no live Status.json: the journal's FSDTarget, unless it is where you are
+        self.assertEqual(G({"live": False}, 1, hops, {"id64": 4, "name": "Four"}), {"id64": 4, "name": "Four", "via": "fsd"})
+        self.assertIsNone(G({"live": False}, 4, None, {"id64": 4}))
+        self.assertIsNone(G(None))
+
+    def test_highway_check(self):
+        self.plot_exact()
+        self.assertIsNone(self.state.highway_summary()["target_check"])                 # nothing targeted
+        self.aim(101, "Neu A")
+        self.assertEqual(self.state.highway_summary()["target_check"],
+                         {"ok": True, "name": "Neu A", "id": "101", "next": "Neu A", "ahead": 0})
+        self.aim(101, "Neu A", route=[100, 101, 103])   # plotted in game through the next stop: its first hop is it
+        self.assertTrue(self.state.highway_summary()["target_check"]["ok"])
+        self.aim(102, "Bridge B", route=[100, 102, 104])  # plotted in game to Neu D, three stops after the next
+        self.assertEqual(self.state.highway_summary()["target_check"],
+                         {"ok": False, "name": "Neu D", "id": "104", "next": "Neu A", "ahead": 3})
+        self.aim(999, "Elsewhere")
+        tc = self.state.highway_summary()["target_check"]
+        self.assertEqual((tc["ok"], tc["name"], tc["ahead"], tc["next"]), (False, "Elsewhere", 0, "Neu A"))
+        self.aim(100, "Start A 1")                                                       # a body in this system
+        self.assertIsNone(self.state.highway_summary()["target_check"])
+        self.aim(999, live=False)                                                        # the game not running
+        self.assertIsNone(self.state.highway_summary()["target_check"])
+        self.aim(999)
+        self.jump(-10, 555, "Somewhere Else", 99)                                        # off the route: silent
+        self.assertTrue(self.state.highway_summary()["off_route"])
+        self.assertIsNone(self.state.highway_summary()["target_check"])
+
+    def test_said_once_per_new_target(self):
+        self.plot_exact()
+        self.aim(999, "Elsewhere", focus=outrider.target.GUI_GALAXY_MAP)
+        self.assertFalse(self.state.wrong_target_watch())        # the galaxy map still open: not yet
+        self.aim(999, "Elsewhere")
+        self.assertTrue(self.state.wrong_target_watch())
+        self.assertFalse(self.state.wrong_target_watch())        # once
+        self.aim(101, "Neu A")
+        self.assertFalse(self.state.wrong_target_watch())        # right: nothing to say
+        self.aim(999, "Elsewhere")
+        self.assertFalse(self.state.wrong_target_watch())        # the same wrong target again: said already
+        self.aim(103, "Scoop C")
+        self.assertFalse(self.state.wrong_target_watch())        # a later stop of the route: on purpose
+        self.aim(998, "Other")
+        self.assertTrue(self.state.wrong_target_watch())         # a new wrong target
+        self.assertEqual(self.said(), [("Elsewhere", "Neu A", "highway"), ("Other", "Neu A", "highway")])
+        # the next stop moves on: the same wrong target is new for it
+        self.jump(-5, 101, "Neu A", 50)
+        self.aim(998, "Other")
+        self.assertTrue(self.state.wrong_target_watch())
+        self.assertEqual(self.said()[-1], ("Other", "Bridge B", "highway"))
+        # off the route: silent
+        self.jump(-4, 555, "Somewhere Else", 99)
+        self.aim(997, "Third")
+        self.assertFalse(self.state.wrong_target_watch())
+
+    def test_survey_route_and_overlay(self):
+        """A survey route has the same check against its next stop (past the systems you finished, S12), and the
+        overlay's Target panel shows the followed route's check."""
+        import outrider.riches as riches
+        from test_riches import RESULT
+        self.jump(-100, 1001, "Alpha Rich", 0)
+        self.state.riches_store(riches.riches_rows(RESULT), {"options": {"use_mapping_value": True}})
+        self.aim(1003, "Gamma Rich")
+        tc = self.state.survey_summary()["target_check"]
+        self.assertEqual((tc["ok"], tc["ahead"], tc["next"]), (False, 1, "Beta Rich"))
+        self.assertFalse(self.state.wrong_target_watch())        # one stop ahead: shown, not said
+        self.aim(42, "Nowhere")
+        self.assertTrue(self.state.wrong_target_watch())
+        self.assertEqual(self.said(), [("Nowhere", "Beta Rich", "riches")])
+        self.j.target = {"id64": 42, "name": "Nowhere", "star_class": "K", "ts": self.ts(0), "remaining": 1}
+        info = self.state.overlay_target_info(self.j.pos)
+        self.assertEqual((info["route_check"]["ok"], info["route_check"]["next"]), (False, "Beta Rich"))
 
 class HighwayMap(unittest.TestCase):
     """The Highway map's background: the region layer (GET /api/regions, from the shipped bio_rules.json, read only)

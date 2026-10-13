@@ -61,6 +61,10 @@ of systems, maximum distance, minimum value, mapping value, avoiding Thargoid sy
 shows each system with what is left to do there, the bodies by name under the one you are at and the next, ✔ scanned
 and ✔✔ mapped from your journal; on arrival the voice says how many bodies are worth the stop and the best of them,
 and once they are done, the next system. It is not auto-targeted on its own: a Road to Riches is for stopping, not hurrying past.
+Systems ahead that you have already finished (an earlier trip, or out of order) are passed over: the next stop is the
+first one with work left, "Next: Pru Aim XY-Z d1 · 3 jumps · 6 of 22 · skipping 2 done" (hover for their names), and
+the voice says "Next stop: Pru Aim XY-Z d1, skipping 2 systems you've finished." The route's last system is never
+passed over (arriving there ends it). Exomastery does the same; a trade route never skips a stop.
 With a Highway route as well, a switch above the heading picks which one the tab shows; only the one plotted last
 copies its next system to the clipboard (once it is finished, the other one copies again). (Road to Riches is thshurka's contribution.)
 
@@ -83,6 +87,14 @@ targets it in the galaxy map for you (game PC only; Outrider brings the game to 
 after a 5 s countdown to click back into the game; on the tablet, the row's sheet has 🎯 Target). The same 🎯 sits beside your carrier's system on the Carrier tile while it is elsewhere,
 and beside a boxel's Next and its rows (see [Boxel exploration](views.md#-boxel-exploration), whose opt-in **auto-target
 the next on arrival** uses the same run).
+
+**Is the right system targeted?** The route line (under the tiles, on Now and in the tab) checks what the game has
+targeted against the next stop: "✓ targeted"; "⚠ targeted Ossia, not the next stop Pru Aim XY-Z d1"; or, for a later
+stop of the same route (on purpose, say to skip one), "↷ targeted Ossia, 2 stops ahead". A route plotted in the galaxy
+map counts by where it ends. A wrong target is said once ("You've targeted Ossia. The next stop is Pru Aim XY-Z d1.")
+under its own alerts row, **Wrong target** (spoken, no notification by default), after you close the galaxy map; never
+while you are off the route, for a later stop, or for a body or station in the system you are in. The overlay's Target
+panel shows the same check.
 
 **Auto-target** (Linux, Windows experimental; on the game PC only, off by default; the tab's **Auto-target the next system** box). After an FSD supercharge
 in a route system it waits 5 s, then presses keys to make the next route system your target: it opens the galaxy

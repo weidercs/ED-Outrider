@@ -5716,6 +5716,64 @@ const settle = async maxMs => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| batch 24 last scoopable star |", good ? "the lastscoop row and fuel_last_scoop key (one star, no amount), the strip's bit, Now, the top-up card quiet" : JSON.stringify({got, want}), errors.slice(before));
   }
+  // Batch 25: S12 (a survey route's next stop past the systems you finished: "skipping 2 done", their names in the
+  // hover) and S11 (the wrong-jump check on every copy of the route's line, its own alerts row, notify off by default,
+  // and the wrong_target key)
+  {
+    const w = dom.window, before = errors.length;
+    const got = JSON.parse(w.eval(`(() => {
+      const o = {}, said = [], told = [], realSpeak = speak, realNotify = notify, m0 = data.moments, d0 = JSON.stringify(data);
+      const flags = [speechOn, isSpeaker, alertSpeak.wrongtarget, lastMomentSeq], lib = speechLib;
+      const plain = h => h.replace(/<[^>]+>/g, "").replace(/\\s+/g, " ").trim();
+      const hw = {id: "hw-s11", plotter: "exact", destination: "Colonia", total: 40, index: 5, at: 4, complete: false, off_route: false,
+                  next: {name: "Neu A", id: "101", neutron: false, refuel: false, jumps: 1, distance: 50}};
+      const tc = (ok, name, ahead) => ({ok, name, id: "9", next: "Neu A", ahead});
+      o.hw = [tc(true, "Neu A", 0), tc(false, "Scoop C", 2), tc(false, "Elsewhere", 0)].map(t => plain(hwyLineHtml(Object.assign({}, hw, {target_check: t}), {short: true})));
+      o.hwTab = plain(hwyLineHtml(Object.assign({}, hw, {target_check: tc(false, "Elsewhere", 0)}), {glyph: false}));
+      o.wrongCls = /class="hwytgt wrong"/.test(hwyLineHtml(Object.assign({}, hw, {target_check: tc(false, "Elsewhere", 0)})));
+      o.none = plain(hwyLineHtml(hw, {short: true}));
+      const sv = {kind: "riches", id: "rc-s12", destination: "Far", total: 22, index: 6, at: 3, complete: false, off_route: false,
+                  left_here: 0, skipped: 2, skipped_names: ["Done One", "Done Two"], target_check: tc(true, "Pru Aim XY-Z d1", 0),
+                  next: {name: "Pru Aim XY-Z d1", id: "7", jumps: 3, distance: null}};
+      o.sv = plain(surveyLineHtml(sv, {short: true}));
+      o.svHover = (surveyLineHtml(sv).match(/title="(finished[^"]*)"/) || [])[1];
+      o.svMore = (surveyLineHtml(Object.assign({}, sv, {skipped: 12})).match(/title="(finished[^"]*)"/) || [])[1];
+      // the Plot Route tab's head: the live line's facts for the route shown
+      data.survey = sv;
+      const rt = {id: "rc-s12", kind: "riches", from: "Here", to: "Far", count: 23, at: 3, next: 6, options: {}, systems: [
+        {i: 6, system: "Pru Aim XY-Z d1", left: 2, value: 10, value_left: 10, bodies: []}]};
+      o.head = plain((richHeadHtml({route: rt}).match(/<div class="hwystate">.*?<\\/div>/) || [""])[0]);
+      o.headOther = /skipping/.test(richHeadHtml({route: Object.assign({}, rt, {id: "other"})}));
+      // the moment: its own row (notify off by default), the wrong_target key
+      speechLib = {styles: {business: "B"}, lines: {wrong_target: {business: ["Targeted {system}; next is {next}."]}}};
+      speak = (t, opt) => said.push([opt && opt.log && opt.log.key, t]); notify = (kind, title, body) => { told.push([kind, title, body]); return true; };
+      speechOn = true; isSpeaker = true; alertSpeak.wrongtarget = true;
+      data.moments = [{seq: lastMomentSeq + 1, ts: new Date().toISOString(), kind: "wrong_target", system: "Elsewhere", next: "Neu A", route: "highway"}];
+      onData();
+      o.told = told; o.said = said;
+      o.row = ALERTS.some(a => a[0] === "wrongtarget") && alertCfgBase().wrongtarget === false && alertSpeakBase().wrongtarget === true &&
+        !!ALERT_SHORT.wrongtarget && !!TAB_ALERT_NAMES.wrongtarget && SPEECH_SYS_BOUND.has("wrongtarget") &&
+        !!document.querySelector('#alertOpts [data-aspeak="wrongtarget"]') && !!LINE_SAMPLES.wrong_target;
+      speak = realSpeak; notify = realNotify; speechLib = lib;
+      [speechOn, isSpeaker, alertSpeak.wrongtarget] = flags; lastMomentSeq = flags[3];
+      data = JSON.parse(d0); data.moments = m0;
+      return JSON.stringify(o); })()`));
+    const want = {
+      hw: ["🛣 Next: Neu A 🎯 target · ✓ targeted · 50.0 ly · 5 of 40",
+           "🛣 Next: Neu A 🎯 target · ↷ targeted Scoop C, 2 stops ahead · 50.0 ly · 5 of 40",
+           "🛣 Next: Neu A 🎯 target · ⚠ targeted Elsewhere, not the next stop Neu A · 50.0 ly · 5 of 40"],
+      hwTab: "Next: Neu A · ⚠ targeted Elsewhere, not the next stop Neu A · 50.0 ly · 5 of 40",
+      wrongCls: true, none: "🛣 Next: Neu A 🎯 target · 50.0 ly · 5 of 40",
+      sv: "💰 Next: Pru Aim XY-Z d1 🎯 target · ✓ targeted · 3 jumps · 6 of 22 · skipping 2 done",
+      svHover: "finished already, passed over: Done One, Done Two",
+      svMore: "finished already, passed over: Done One, Done Two and 10 more",
+      head: "Next: Pru Aim XY-Z d1 · ✓ targeted · skipping 2 done · 2 to do there", headOther: false,
+      told: [["wrongtarget", "Targeted Elsewhere, not the next stop", "the next stop is Neu A"]],
+      said: [["wrong_target", "Targeted Elsewhere; next is Neu A."]], row: true};
+    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| batch 25 wrong target and finished systems skipped |", good ? "✓ / stops ahead / ⚠ on the route line's copies and the tab, skipping N done with names, the wrongtarget row and wrong_target key" : JSON.stringify({got, want}), errors.slice(before));
+  }
   // star and planet types new to your codex (2026-10-12): ✦ not in this region's codex, ✪ in none; Here's name cell,
   // Nearby's tag naming each, the legend; nothing at all without a single body type logged
   {

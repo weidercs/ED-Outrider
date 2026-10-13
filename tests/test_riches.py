@@ -113,6 +113,13 @@ class RichesRows(unittest.TestCase):
         self.assertEqual(riches.riches_text(rows, 2, []), "Nothing left to do in Gamma Rich. Road to Riches complete.")
         self.assertEqual([riches.money(n) for n in (None, 950, 12000, 1000000, 2450000)],
                          [None, "950", "12 thousand", "1 million", "2.5 million"])
+        # S12: the next stop past the systems you finished
+        self.assertEqual(riches.riches_text(rows, 0, [], 1), "Nothing left to do in Alpha Rich. Next stop: Gamma Rich, "
+                                                              "skipping 1 system you've finished.")
+        self.assertEqual(riches.riches_text(rows, 0, [], 2), "Nothing left to do in Alpha Rich. Road to Riches complete.")
+        self.assertEqual(riches.next_stop(rows + rows, 0, 2), "Next stop: Alpha Rich, skipping 2 systems you've finished.")
+        self.assertEqual([riches.had_work(k, r) for k, r in (("riches", rows[0]), ("riches", dict(rows[0], bodies=[])),
+                                                             ("exo", rows[0]), ("trade", rows[0]))], [True, False, False, False])
 
 
 class RichesRoute(unittest.TestCase):
@@ -267,6 +274,46 @@ class RichesRoute(unittest.TestCase):
         s = self.state.survey_summary()
         self.assertEqual((s["at"], s["index"], s["next"]["name"], s["left_here"]), (1, 2, "Gamma Rich", 1))
         self.assertEqual(self.state.payload()["survey"]["at"], 1)   # in the page's payload
+
+    def test_skip_finished_systems(self):
+        """S12: the next stop passes over the systems after where you are that you have finished (they had work, none
+        is left): the line (skipped, with their names), the tab, the clipboard, the co-pilot button and the voice. The
+        last system is never passed over (arriving there ends the route), nor a system that came without bodies."""
+        cb = types_ns(enabled=True, tool="wl-copy", copied=[])
+        cb.copy = lambda text: cb.copied.append(text) or True
+        cb.info = lambda: {"enabled": True, "available": True}
+        self.state.clipboard = cb
+        extra = {"name": "Delta Rich", "id64": 1004, "x": 70, "y": 0, "z": 0, "jumps": 1,
+                 "bodies": [body("Delta Rich 2", "Water world", 900, 700000, 1300000)]}
+        self.jump(-100, 1001, "Alpha Rich", 0)
+        self.state.riches_store(riches.riches_rows(RESULT + [extra]), {"options": {"use_mapping_value": True}})
+        # Beta and Gamma done on an earlier trip (scanned and mapped in your journal)
+        for s, (sysname, addr, bid, name) in enumerate((("Beta Rich", 1002, 4, "Beta Rich 4"), ("Gamma Rich", 1003, 1, "Gamma Rich 1"))):
+            self.scan(-99 + s, sysname, addr, bid, name)
+            self.mapped(-98.5 + s, addr, bid, name)
+        s = self.state.survey_summary()
+        self.assertEqual((s["index"], s["next"]["name"], s["skipped"], s["skipped_names"]), (3, "Delta Rich", 2, ["Beta Rich", "Gamma Rich"]))
+        self.assertEqual(self.state.riches_view()["route"]["next"], 3)
+        self.assertEqual(self.state.copilot_next(), (("next", ("survey", 3)), None))
+        self.assertTrue(self.state.riches_copy_next(force=True))
+        self.assertEqual(cb.copied, ["Delta Rich"])
+        # finishing Alpha says the stop it skips to
+        self.scan(-90, "Alpha Rich", 1001, 1, "Alpha Rich 1")
+        self.mapped(-89, 1001, 1, "Alpha Rich 1")
+        self.scan(-88, "Alpha Rich", 1001, 2, "Alpha Rich 2 a")
+        self.mapped(-87, 1001, 2, "Alpha Rich 2 a")
+        self.assertEqual(self.moments()[-1], ("done", "Everything here is done. Next stop: Delta Rich, skipping 2 systems you've finished."))
+        self.assertEqual([m["next"] for m in self.j.moments if m["kind"] == "riches"][-1], "Delta Rich")
+        # arriving at Beta anyway (finished): the next stop is past Gamma too
+        self.jump(-80, 1002, "Beta Rich", 20)
+        self.assertEqual(self.moments()[-1], ("next", "Nothing left to do in Beta Rich. Next stop: Delta Rich, skipping 1 system you've finished."))
+        # Delta done as well: the last system is still the next stop (arriving there ends the route)
+        self.scan(-70, "Delta Rich", 1004, 2, "Delta Rich 2")
+        self.mapped(-69, 1004, 2, "Delta Rich 2")
+        s = self.state.survey_summary()
+        self.assertEqual((s["index"], s["skipped"]), (3, 1))
+        self.jump(-60, 1004, "Delta Rich", 70)
+        self.assertEqual(self.moments()[-1][0], "complete")
 
     def test_two_routes_one_clipboard(self):
         """A Highway route and a Road to Riches route at once: only the one plotted last copies its next system (one

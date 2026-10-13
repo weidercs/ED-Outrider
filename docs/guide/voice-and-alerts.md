@@ -34,6 +34,8 @@ notification and be spoken (🗣), chosen per alert in **⚙ Settings → Alerts
   of the refuel stop**; see [Plot Route](plot-route.md))
 - on any route Outrider follows, the last scoopable star before stars you can't scoop that the fuel won't cover (its
   own row, **Last scoopable star**)
+- on a route you follow in Outrider, a system targeted in game that is not the next stop (its own row, **Wrong target**;
+  spoken once per target, no notification by default; see [Plot Route](plot-route.md))
 - docking where the station buys your data, and what you banked when you sold
 - a sale that left data aboard (Universal Cartographics sells 50 systems a page; at Vista Genomics, the species
   you kept back), said 90 seconds after the last page
