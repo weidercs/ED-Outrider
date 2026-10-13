@@ -7,6 +7,8 @@ gets its changelog entry, code-map row, design note and settings at the bottom o
 
 ## What the fork adds
 
+- **Commander** tab: inventory, engineering blueprints against your materials, missions, combat and mining
+  sessions (`outrider/commander.py`, `static/fork.js`); discoverer names in the route lists (EDSM).
 - **Ship** tab: the ship you fly, its modules and engineering, with EDSY and Coriolis links (`outrider/shipinfo.py`).
 - **GalNet** tab: Frontier's news, the systems an article mentions marked to copy or plot (`outrider/galnet.py`).
 - **Plot Route**: the game's own route as a list and on the map (`outrider/navroute.py`); a Known column (already
@@ -31,6 +33,9 @@ runs `scripts/verify.sh`; with a PASS, `git push`. What to expect:
   (`git config rerere.enabled true`), so a conflict resolved once is resolved the same way next time.
 - **When upstream builds something the fork has**, upstream's wins and the fork's goes (EDDN, EDSM and Inara uploads
   went this way).
+- **The Commander view is offered upstream** (branch `commander-view`, a pull request). If upstream takes it, its page
+  code arrives in `page.js`: delete the Commander part of `static/fork.js` and the fork's own hooks and styles for it
+  then, or the page declares `CM` twice and does not load.
 - **A new alert upstream** has no Rocky lines: `tests/test_speech.py` fails until `resources/speech.json` has twelve
   for it (no apostrophes, at most 110 characters, his tripled words and ", question?").
 - **A new upstream test that fails on Windows only**: a symlink (`@unittest.skipUnless(can_symlink(), ...)`), a file
@@ -40,10 +45,39 @@ runs `scripts/verify.sh`; with a PASS, `git push`. What to expect:
   resources/bio_rules.json`, merge, then `--skip-worktree` again.
 
 Where the fork still touches upstream's files (each a place a merge can conflict): `ed_outrider.py` (settings, State
-methods, routes), `static/page.html`, `page.js` and `page.css`, `tests/page_smoke.js`, `resources/speech.json`,
+methods, routes), `static/page.html`, `page.js` (new page code: `static/fork.js`) and `page.css`, `tests/page_smoke.js`, `resources/speech.json`,
 `outrider/overlay.py`, `outrider/ask.py`, the guide's pages for the features above and Windows fixes in a few tests.
 New fork code goes in its own module and its own test file wherever it can; in a shared file, add it as its own
 block (a new line, not an edit in the middle of upstream's line).
+
+## The Commander tab
+
+What you own and what you have been doing, read from your journals when you open the tab (nothing is stored, and
+nothing is asked of anyone):
+
+- **CMDR**: who you are in the game, as of your last login (the game writes credits, ranks and statistics then):
+  credits, net worth, the value of your fleet and stored modules, your carrier's balance; every rank with a bar
+  to the next one and, for trade, exploration and exobiology, about how many credits it still takes (the
+  community's figures for each rank's step: an estimate); reputation, Powerplay and squadron; your ships; and
+  career figures (time played, systems visited, distance, profits by career).
+- **Inventory**: your ships (where each is, its value, what bringing it here costs), your stored modules with their
+  engineering, the ship locker, and the suit loadouts you have worn. The game writes the list of stored ships when
+  you open a shipyard and of stored modules when you open outfitting: each is shown as of then.
+- **Engineering**: every ship-module blueprint, grade by grade, with the materials one roll takes against what you
+  hold (green: enough), how many rolls you could make now, and the engineers offering it (green: unlocked far
+  enough). Filter by module, blueprint or material, or show only what you can craft now. Experimental effects and
+  suit and weapon upgrades are not listed.
+- **Missions**: the missions you hold, the soonest to expire first: where they go, what they ask (and how much is
+  delivered), the reward, and the time left, marked when under half an hour.
+- **Sessions**: your combat and mining sessions of the last 30 days, each from login to logout. Combat: kills, by
+  ship, bounties and bonds, kills an hour, deaths. Mining: tons refined and of what, tons an hour, asteroids
+  prospected and their content, limpets launched, and what the haul sold for.
+
+In the route lists:
+
+- **Discoverer**: after the Known mark of a system somebody has been to, the commander EDSM credits with its first
+  discovery (this fork; asked in the background, 40 systems a pass, the main star's discoverer). No name: EDSM
+  credits nobody, or does not know the system.
 
 ## Settings
 
@@ -60,6 +94,9 @@ Beside upstream's ([AGENT_GUIDE.md](AGENT_GUIDE.md)):
 
 | File | What |
 |---|---|
+| `outrider/commander.py` | This fork's Commander view, pure functions over journal events: `profile` (`rank_rows` with `RANKS` and `RANK_CREDITS`, the money, the fleet, `CAREER`), `ships`, `stored_modules`, `locker`, `suits` (`inventory`), `engineers` and `blueprints(counts, known, name)` (`engineering`; `load_blueprints` reads `resources/blueprints.json`, built by `scripts/build_blueprints.py`), `missions(events, now)` (the login's `Missions` line decides what is still held), `sessions(events)` and `totals` (a session: LoadGame to the next or Shutdown; only those with fighting or mining). `add_routes(app, state, dirs)` serves GET `/api/commander/<part>` in an executor (one line in `make_app`). The page: view `cmdr` in `static/fork.js` (`CM`, `loadCmdr`, `cmdr<Tab>Html`), hooked from page.js's `render()`. Tests: `tests/test_commander.py` |
+| `outrider/jscan.py` | This fork's journal reader for the Commander view: `events(dirs, names, days)` (the files that can hold the window, by `outrider.log`'s `journal_files` / `window`; a line is parsed only when it names one of the events; a file that has not grown is read once: `_CACHE` by path, size and names) |
+| `static/fork.js` | This fork's own page code, loaded before page.js (definitions only; page.js's helpers are used when called). New fork page code goes here, with a one-line hook in page.js where upstream's code must call it |
 | `outrider/shipinfo.py` | This fork's Ship view: `summary(loadout event)` (the ship's figures, its modules by group with `module_name` (name, size, rating, mount from the journal symbol: `_NAMES` by prefix, an unknown family tidied), `slot_group`, `engineering` (blueprint, level, the Modifiers as {label, value, original, pct, good})), `links` (the Loadout gzipped and base64'd into EDSY's and Coriolis's import addresses, as EDMC does), `latest_loadout(dirs, ship_id)` (the newest Loadout in the last journals: nothing is stored). `State.ship_summary` and GET `/api/ship` (in an executor: it reads files). The page: view `ship` (`SH`, `loadShip`, `shipModuleHtml`, `shipStatHtml`, `shipFiguresHtml`). Tests: `tests/test_shipinfo.py`. No module database: a stock module's figures and ship totals are EDSY's to show |
 | `outrider/biohunt.py` | This fork's Unscanned (bio) plotter, pure: `mass_code(name)`, `rates(counts)` (`PRIOR` blended with the player's own counts, `PRIOR_WEIGHT`), `odds`, `pick(candidates, here, reach, rate, start, toward, taken)` (the next hop: odds x how much of the range it uses; outward or towards a system; never twice), `rows` (highway_route rows). In ed_outrider.py: `Spansh.unscanned_near` (systems search, `estimated_scan_value` 0, the farthest first), `State.bio_mass_counts` (your own journals), `route_end`, `unscanned_start_plot` (the `unscanned` branch of `highway_start_plot`) and `_unscanned_plot` (one search per hop, `UNSCANNED_GAP_S` apart, `REACH_STEPS` when nothing is in reach; stored with `highway_store`, plotter `unscanned`). `highway_text(rows, i, plotter)` words its arrival line. Favouring one species: `biohunt.species_lean(found names, scanned names)` (each code's lift, the odds scaled to 1; `LEAN_MIN_FOUND` / `LEAN_MIN_SCANNED` or no lean) from `State.species_lean` (`Spansh.body_search` with the species' landmark, `Spansh.sphere` for the scanned systems around; `SPECIES_RADIUS`, `SPECIES_BASE_RADIUS`), kept in the route's options as `species` and `lean`; `State.bio_species_names` fills `/api/highway`'s `bio_species`. The page: the `unscanned` radio, `.hwy-uopt` (`#hwyStops`, `#hwyBioFor`), `unscannedHow`. Tests: `tests/test_biohunt.py` |
 | `outrider/navroute.py` | This fork's game route for Plot Route, pure: `rows(hops, pos)` (each jump's ly and the total). In ed_outrider.py: `State.navroute_ahead` (meta `route`'s hops ahead of you) and `navroute_view` (GET `/api/navroute`: the rows with star, scoopable, visited, `route_known_state` and x / z; `from` and `start` for the map; it also starts `route_known_check`). The payload's `route.known_v` reloads it. The page, inside the Plot Route tab: `GR`, `loadNavRoute` (with `loadHwy`), `gameShown` (the device's `hwyGame` and a route), `gameSwitchHtml` (`#hwyGame`, outside `#hwyHead`), `gameHeadHtml`, `navRowHtml` (`#nrPane`), `gameMapRoute` (what `hwyMapRoute` gives the map). Route information only: nothing is followed, targeted or copied, and there is no fuel or refuel part (removed at the player's wish). The in-game overlay's Route panel (this fork: `overlay.route_panel`, `[overlay] route_panel`, off by default; `State.overlay_panels`) draws `route_summary` and `highway_summary`: a new overlay panel needs its id in `overlay.PANELS`, `PANEL_NAMES`, `DEFAULTS` (`<id>_panel`), `LAYOUT_DEFAULT`, `overlay_settings`' key list, `test_panels`, `config_text`, the example config and page.js's `OV_PANELS`. Tests: `tests/test_navroute.py`, `tests/test_overlay.py` (`RoutePanel`) |
@@ -74,6 +111,11 @@ In `ed_outrider.py`:
 - Auto honk's "then target": a confirmed auto honk calls `State.honk_then_target` (`[autohonk] target_next`,
   `target_delay`; `start_autotarget_run("next", countdown)`), set by `State.set_honk_target` (meta `autohonk_target`);
   `tests/test_honk_target.py` fakes both the honker and the target run.
+- Discoverer names in the route lists: `Spansh.edsm_discoverer(name)` (EDSM's bodies: the main star's discoverer, else
+  the earliest; "" nobody credited, None unknown system), `State.route_discoverer_check(rows)` beside
+  `route_known_check` (only "visited" / "explored" / "partial" systems, `ROUTE_DISCOVERER_MAX` a pass,
+  `ROUTE_DISCOVERER_GAP_S` apart; `route_discoverers`, memory only), the rows' `discoverer`, `hwyDiscovererHtml` in
+  fork.js. Tests: `tests/test_discoverer.py`.
 - The tablet's page groups: the fork's views are added to `TB.groups` on their own line below it in page.js.
 
 Testing on Windows: run `bash scripts/verify.sh` from Git Bash. It uses `.venv/Scripts/python.exe` and stops the
@@ -98,10 +140,36 @@ Beside upstream's ([DESIGN_NOTES.md](DESIGN_NOTES.md)):
 - **GalNet News is this fork's** (`outrider/galnet.py`): one more read-only lookup, Frontier's own feed, asked only
   when the tab is opened. A system is marked in an article only once confirmed (yours, or Spansh's by exact name):
   a marked name is never a guess, but a system the article names without "system" or a catalogue form is missed.
+- **The Commander view stores nothing** (this fork, `outrider/commander.py`). Everything is read from the journal files
+  when a tab is opened, so it is only as complete as the journal: stored ships and modules as of the last shipyard
+  or outfitting you opened, suit loadouts only once worn, a mission accepted before the journals kept by its name
+  alone. Credits, ranks and statistics are as of the last login (the game writes them then); what a rank still
+  takes is an estimate from the community's credit figures per rank (Frontier publishes none), and combat,
+  mercenary, CQC and navy ranks show their percentage only. The blueprint table is a copy of community data (EDCD), not the game's own: a recipe Frontier changes is
+  wrong here until the table is rebuilt. No voice lines: a mission about to expire is marked on the page only.
+- **Discoverer names are EDSM's, and best effort.** Spansh has no discoverer; EDSM credits whoever first uploaded
+  a body there, which is not always who the game credits. Asked only for listed systems somebody has been to,
+  slowly (EDSM limits requests), and kept for this run only.
 
 ## Changelog
 
 Newest first. Upstream's is [CHANGELOG.md](CHANGELOG.md).
+
+## 2026-10-12 · Commander: inventory, engineering, missions, sessions; discoverer names in the route lists
+- A **Commander** tab with five parts, all read from the journals when opened (`outrider/commander.py`,
+  `outrider/jscan.py`; nothing stored): **CMDR** (ranks with the way to the next and, for trade, exploration and
+  exobiology, about how many credits it still takes; credits, net worth, the fleet's value, stored modules, the
+  carrier's balance; reputation, Powerplay, squadron; every ship; career figures), **Inventory** (ships, stored modules, ship locker, suit loadouts worn),
+  **Engineering** (every ship-module blueprint against your materials: what a roll takes, how many rolls you can
+  make, which engineers offer the grade and whether yours are unlocked far enough), **Missions** (those you hold,
+  the soonest to expire first) and **Sessions** (combat and mining, login to logout, the last 30 days).
+- `resources/blueprints.json`: 80 blueprints, built by `scripts/build_blueprints.py` from EDCD's coriolis-data and
+  FDevIDs tables; materials are by the journal's names, so they meet your counts.
+- The route lists (Plot Route's and the game's) name the **first discoverer** after the Known mark, from EDSM's
+  record of the system's bodies (`Spansh.edsm_discoverer`, `State.route_discoverer_check`: only systems somebody
+  has been to, 40 a pass, 2 s apart, this run only).
+- The fork's page code starts its own file, `static/fork.js` (loaded before page.js; verify.sh checks its syntax).
+- GET `/api/commander/profile`, `/inventory`, `/engineering`, `/missions`, `/sessions`; the route rows carry `discoverer`.
 
 ## 2026-10-12 · Overlay: the Route panel lists the Plot Route stops ahead
 - With a Plot Route route followed, the panel showed its systems only as far as the game's own route went:

@@ -40,7 +40,7 @@ const TB = {group: null, beforeMap: null, mapWas: false, bannerTimer: null, bann
             groups: {explore: ["now", "near", "here", "bio"], navigate: ["bm", "search", "map", "hwy"], records: ["hist", "log", "mat", "firsts"]},
             themes: ["lcars", "elite", "babylon5", "narn", "minbari", "centauri", "vorlon", "shadow", "sith", "alliance", "dark"], railPending: {}, railEdit: null};
 // this fork's views, on their own line (upstream's above stays as it is): Ship before First logged, GalNet last
-TB.groups.records.splice(TB.groups.records.indexOf("firsts"), 0, "ship"); TB.groups.records.push("galnet");
+TB.groups.records.splice(TB.groups.records.indexOf("firsts"), 0, "ship", "cmdr"); TB.groups.records.push("galnet");
 // Where you are, as the exact id64 string (position.id). The JSON number position.id64 loses the last digits above
 // 2^53, so string comparisons with the server's exact ids (arrival, Here, moments) must use this.
 const posId = () => data && data.position ? data.position.id ?? String(data.position.id64) : null;
@@ -1493,7 +1493,7 @@ function star(s) {
 }
 
 // the tablet keeps its own page (a desktop browser opening /tablet to try it must not lose its view) and has no Overview
-const TABLET_VIEWS = ["now", "near", "here", "bio", "bm", "search", "map", "hwy", "hist", "log", "mat", "firsts", "galnet", "ship"];
+const TABLET_VIEWS = ["now", "near", "here", "bio", "bm", "search", "map", "hwy", "hist", "log", "mat", "firsts", "galnet", "ship", "cmdr"];
 let view = TABLET ? store.get("tabletView", "now") : store.get("view", "near");
 if (view === "rich" || view === "navroute") view = "hwy";   // Road to Riches had a tab of its own for a day (PR #1): it is a route type of Plot Route now
 if (TABLET && !TABLET_VIEWS.includes(view)) view = "now";
@@ -1563,7 +1563,7 @@ function keepPanes(fn) {
 function paneTop(...ids) { for (const id of ids) { const p = document.getElementById(id); if (p) p.scrollTop = 0; delete paneScroll[id]; } }
 // each view's main pane: Page Up/Down and Home/End scroll it while nothing that scrolls or types has the focus
 const VIEW_PANE = {overview: "nearPane", near: "nearPane", here: "hereMain", bio: "bioPane", bm: "bmPane", search: "searchPane",
-                   hist: "histPane", log: "logPane", mat: "matPane", firsts: "firstsPane", hwy: "hwyPane", galnet: "gnPane", ship: "shipPane"};
+                   hist: "histPane", log: "logPane", mat: "matPane", firsts: "firstsPane", hwy: "hwyPane", galnet: "gnPane", ship: "shipPane", cmdr: "cmdrPane"};
 // ---- Compact tables: a table wider than its box (its pane, the Overview's split, a phone) switches to its short forms
 // (compact: level 1), then to tighter ones that also drop or merge low-value columns (compact2: level 2), and back once
 // there is room again. Decided by fit, not by screen size, so a wide pane looks exactly as it always did.
@@ -2725,6 +2725,8 @@ function render() {
   document.getElementById("galnetView").hidden = view !== "galnet";
   document.getElementById("shipView").hidden = view !== "ship";
   if (view === "ship") loadShip();
+  document.getElementById("cmdrView").hidden = view !== "cmdr";   // this fork's Commander view (static/fork.js)
+  if (view === "cmdr") loadCmdr();
   if (view === "galnet") loadGalnet();
   if (view === "firsts") { loadFirsts(); loadLeft(); }
   document.documentElement.style.setProperty("--head-h", document.querySelector("header").offsetHeight + "px");
@@ -4443,7 +4445,7 @@ function navRowHtml(r) {
   const star = r.star_class ? `${esc(r.star_class)}${r.scoopable ? ` <span class="hwyfuel" title="scoopable">⛽</span>` : r.scoopable === false ? ` <span class="unk" title="not scoopable">✕</span>` : ""}` : "";
   return `<tr><td class="num">${r.i + 1}</td>` +
     `<td class="name" data-name="${esc(r.name || "")}" title="click to copy">${nameWords(r.name || "?")}</td>` +
-    `<td class="hwyc hwyk">${hwyKnownHtml(r.known)}</td><td>${star}</td>` +
+    `<td class="hwyc hwyk">${hwyKnownHtml(r.known)}${hwyDiscovererHtml(r.discoverer)}</td><td>${star}</td>` +
     `<td class="num">${r.ly.toFixed(1)}</td><td class="num">${Math.round(r.total_ly).toLocaleString()}</td></tr>`;
 }
 function renderNavRoute(r) {
@@ -5784,7 +5786,7 @@ function hwyRowHtml(r, cls, retry = false) {
     (/\bat\b/.test(cls) ? "" : hwyAimBtn(r.system, "highway", r.i, true)) +
     (retry ? ` <button type="button" class="mini hwyretry" data-aim="next" title="auto-target failed here: try again, 5 s from now (click back into the game meanwhile)">⟳ Retry</button>` : "") +
     `</td>` +
-    `<td class="hwyc hwyk">${hwyKnownHtml(r.known)}</td>` +
+    `<td class="hwyc hwyk">${hwyKnownHtml(r.known)}${hwyDiscovererHtml(r.discoverer)}</td>` +
     `<td class="num">${r.i > 0 && r.distance != null ? r.distance.toFixed(1) : ""}</td>` +
     `<td class="hwyc">${r.neutron ? `<span class="hwyn" title="a neutron star: supercharge your FSD there">⚡</span>` : ""}</td>` +
     `<td class="num hwy-n">${r.i > 0 && r.jumps != null ? r.jumps : ""}</td>` +

@@ -223,6 +223,25 @@ main > #hereView.detail > #bodyPanel { position: sticky; top: calc(var(--head-h,
 .shtable th { color: var(--muted); font-weight: 600; } .shtable .num { text-align: right; white-space: nowrap; } .shtable tr.shoff td { opacity: 0.6; }
 .shcls { display: inline-block; min-width: 2.2em; color: var(--info); font-variant-numeric: tabular-nums; }
 .shstats { display: flex; flex-wrap: wrap; gap: 2px 14px; } .shstat { white-space: nowrap; }
+/* this fork's Commander view (static/fork.js) and the route lists' discoverer names */
+#cmdrView { margin-top: 12px; } #cmdrTabs { align-items: center; gap: 10px; margin-bottom: 6px; }
+.cmtabs { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.cmtab { background: none; border: 0; border-right: 1px solid var(--line); color: var(--muted); padding: 4px 12px; cursor: pointer; font: inherit; }
+.cmtab:last-child { border-right: 0; } .cmtab.on { color: var(--text); background: var(--panel2, rgba(128, 128, 128, .18)); font-weight: 600; }
+.cmtable { width: 100%; border-collapse: collapse; margin-top: 4px; } .cmtable td, .cmtable th { padding: 4px 10px 4px 0; text-align: left; vertical-align: top; }
+.cmtable th { color: var(--muted); font-weight: 600; } .cmtable .num { text-align: right; white-space: nowrap; } .cmtable td { border-top: 1px solid var(--line); }
+.cmcount { color: var(--muted); font-weight: 400; } .cmcls { color: var(--muted); font-variant-numeric: tabular-nums; }
+.cmfigs { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 8px 0; } .cmfig { display: flex; flex-direction: column; } .cmfig > .unk { font-size: 12px; }
+.cmstats { display: flex; flex-wrap: wrap; gap: 2px 14px; }
+.cmlocker { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 28px; margin-top: 6px; }
+.cmitem { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid var(--line); padding: 2px 0; }
+.cmfilter { align-items: center; gap: 10px; flex-wrap: wrap; margin: 6px 0; }
+.cmmod { border-top: 1px solid var(--line); padding: 5px 0; } .cmmod > summary { cursor: pointer; }
+.cmbp { margin: 10px 0 0; font-size: 13px; } .cmmat { white-space: nowrap; }
+.cmbar { display: inline-block; width: 120px; height: 8px; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; vertical-align: middle; }
+.cmbar > span { display: block; height: 100%; background: var(--info, var(--muted)); } .cmbarcell { white-space: nowrap; } .cmrep { margin-top: 8px; }
+.cmranks { width: auto; } .cmranks td { padding-right: 18px; }
+.hwydisc { color: var(--muted); font-size: 12px; font-weight: 400; display: inline-block; max-width: 11em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 /* the game's own route in Plot Route (this fork): its switch sits above the panes (outside their grid), its list in
    the place of the Highway's own */
 #hwyGame { margin-bottom: 6px; flex: 0 0 auto; } #hwyGame:empty { display: none; }

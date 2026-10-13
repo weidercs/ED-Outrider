@@ -198,6 +198,7 @@ import outrider.config_edit  # the Settings dialog's Server settings: every conf
 import outrider.mcp        # the MCP bridge's [mcp] settings (the bridge itself runs as python3 -m outrider.mcp)
 import outrider.uploads    # EDDN / EDSM uploads (opt-in): the session, the live gate, the outbox
 import outrider.galnet     # the fork's GalNet News: Frontier's feed as articles, and the systems they mention
+import outrider.commander  # the fork's Commander view: inventory, engineering, missions, combat and mining sessions
 import outrider.navroute   # the fork's Game Route list: the game's own route, jump by jump (pure)
 import outrider.shipinfo   # the fork's Ship view: the Loadout as figures and modules with their engineering
 import outrider.biohunt    # the fork's Unscanned (bio) plotter: mass codes, the odds, the pick of each hop (pure)
@@ -311,6 +312,8 @@ HIGHWAY_AHEAD = 200         # route rows GET /api/highway lists ahead of you...
 HIGHWAY_DONE = 20           # ...and done rows above them (the most recent)
 ROUTE_KNOWN_GAP_S = 1.0     # s between two Spansh lookups of the listed route systems' discovery state
 ROUTE_KNOWN_BATCH = 10      # lookups between two page updates
+ROUTE_DISCOVERER_GAP_S = 2.0   # s between two EDSM lookups of a listed route system's first discoverer
+ROUTE_DISCOVERER_MAX = 40      # ...and how many one pass asks for
 HIGHWAY_AHEAD_SHOWN = 12    # the followed route's stops after the next given to the overlay's Route panel
 BOXEL_SPANSH_CHUNK = 300   # names per Spansh request (an exact list of a boxel's names)
 BOXEL_SPANSH_MAX = 3000    # names asked about at most for one boxel
@@ -5584,6 +5587,21 @@ class Spansh:
         bodies = [b for b in d.get("bodies") or [] if isinstance(b, dict) and b.get("type") in ("Star", "Planet")]
         return {"known": len(bodies), "count": d.get("bodyCount") if isinstance(d.get("bodyCount"), int) else None}
 
+    async def edsm_discoverer(self, name):
+        """Who first discovered a system, by EDSM's record of its bodies (this fork): the commander credited with the
+        main star, else with the body discovered first; "" when EDSM has the system but credits nobody (found before
+        it kept the names, or by nobody who uploads), None when EDSM does not know the system."""
+        async with self.sem_fast:
+            async with self.session.get(EDSM_BODIES, params={"systemName": name}) as r:
+                r.raise_for_status()
+                d = await r.json()
+        if not isinstance(d, dict) or not d.get("name"):
+            return None
+        found = [(not b.get("isMainStar"), str(b["discovery"].get("date") or "9"), b["discovery"]["commander"])
+                 for b in d.get("bodies") or [] if isinstance(b, dict) and isinstance(b.get("discovery"), dict)
+                 and isinstance(b["discovery"].get("commander"), str) and b["discovery"]["commander"].strip()]
+        return min(found)[2].strip() if found else ""
+
     async def edsm_sphere(self, pos, radius):
         """EDSM's systems within `radius` (at most EDSM_SPHERE_MAX: its API's documented limit; a larger radius is
         cut to it, and the refresh's status says so: review F48)."""
@@ -6011,6 +6029,8 @@ class State:
         # the route list's Known column: {id64: "explored" | "partial" | "no bodies"} as Spansh answered this run
         # (in memory: asked again after a restart), the task asking, and a counter the page reloads the list on
         self.route_known = {}
+        # this fork: {id64: EDSM's first discoverer of a listed route system ("": nobody credited)}, this run only
+        self.route_discoverers, self.route_discoverer_task, self.route_discoverer_wait = {}, None, 0.0
         self.route_known_task = None
         self.route_known_v = 0
         self.route_known_on = False   # run() switches the lookups on: a State made elsewhere (tests) asks nobody
@@ -11246,12 +11266,14 @@ class State:
             return {"route": None, "position": with_id(pos)}
         rows = outrider.navroute.rows(left, pos)
         self.route_known_check([{"id64": h["id64"]} for h in left[:HIGHWAY_AHEAD]])
+        self.route_discoverer_check([{"id64": h["id64"], "name": h["name"]} for h in left[:HIGHWAY_AHEAD]])
         visited = {r[0] for r in self.db.execute(
             f"SELECT id64 FROM visits WHERE id64 IN ({','.join('?' * len(left))})", [h["id64"] for h in left])}
         for row, h in zip(rows, left):
             scoop = class_scoopable(h["star_class"]) if h.get("star_class") else None
             row.update(id=str(h["id64"]), name=h["name"], star_class=h.get("star_class"), scoopable=scoop,
-                       visited=h["id64"] in visited, known=self.route_known_state(h["id64"]), x=h["x"], z=h["z"])
+                       visited=h["id64"] in visited, known=self.route_known_state(h["id64"]), x=h["x"], z=h["z"],
+                       discoverer=self.route_discoverers.get(h["id64"]))
         # from / start: where you are, the route's first point on the map ([x, z] in the galaxy's plane)
         return {"route": {"ts": (meta_get(self.db, "route") or {}).get("ts"), "count": len(rows), "ly": rows[-1]["total_ly"],
                           "from": pos.get("name"), "start": [pos["x"], pos["z"]],
@@ -11939,7 +11961,8 @@ class State:
         return {"i": i, "system": r["system"], "id": str(r["id64"]) if r["id64"] is not None else None,
                 "x": r["x"], "y": r["y"], "z": r["z"], "distance": r["distance"], "fuel_used": r["fuel_used"],
                 "fuel_left": r["fuel_left"], "neutron": bool(r["neutron"]), "refuel": bool(r["refuel"]),
-                "jumps": r["jumps"], "remaining": r["remaining"], "known": self.route_known_state(r["id64"])}
+                "jumps": r["jumps"], "remaining": r["remaining"], "known": self.route_known_state(r["id64"]),
+                "discoverer": self.route_discoverers.get(r["id64"])}   # EDSM's first discoverer ("": none credited; None: not asked)
 
     def route_known_state(self, id64):
         """What is known of a route system without asking anyone: "visited" (you have been there), else what Spansh
@@ -11961,6 +11984,49 @@ class State:
     def known_state(records, body_count):
         known = sum(1 for r in records or [] if r.get("type") in ("Star", "Planet"))
         return "no bodies" if not known else "explored" if body_count and known >= body_count else "partial"
+
+    def route_discoverer_check(self, rows):
+        """Ask EDSM who discovered the listed route systems (this fork), in the background: only systems somebody is
+        known to have been to (you, or bodies reported to Spansh), ROUTE_DISCOVERER_MAX a pass, ROUTE_DISCOVERER_GAP_S
+        apart. rows: [{id64, name}]. Like route_known_check: started by the list being asked for, nothing runs while
+        nobody looks, and a failure ends it for a minute."""
+        if not self.route_known_on or (self.route_discoverer_task and not self.route_discoverer_task.done()) \
+                or time.monotonic() < self.route_discoverer_wait:
+            return
+        todo = [(r["id64"], r["name"]) for r in rows if r.get("id64") is not None and r.get("name")
+                and r["id64"] not in self.route_discoverers
+                and self.route_known_state(r["id64"]) in ("visited", "explored", "partial")][:ROUTE_DISCOVERER_MAX]
+        if not todo or not getattr(self.spansh, "session", None) or not hasattr(self.spansh, "edsm_discoverer"):
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:   # not in the server's loop (a test reading the view): nothing to ask with
+            return
+        self.route_discoverer_task = loop.create_task(self._route_discoverers(todo))
+
+    async def _route_discoverers(self, todo):
+        asked = 0
+        try:
+            for id64, name in todo:
+                if asked:
+                    await asyncio.sleep(ROUTE_DISCOVERER_GAP_S)
+                self.route_discoverers[id64] = await self.spansh.edsm_discoverer(name) or ""
+                asked += 1
+                if asked % ROUTE_KNOWN_BATCH == 0:
+                    self.route_known_v += 1
+                    self.bump()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:   # EDSM down, slow or limiting: the rest stay unnamed until the list asks again
+            self.route_discoverer_wait = time.monotonic() + 60
+            print(f"route systems: EDSM discoverer lookup failed ({type(e).__name__}: {e}); {asked} of {len(todo)} looked up",
+                  file=sys.stderr)
+        finally:
+            if asked % ROUTE_KNOWN_BATCH:
+                self.route_known_v += 1
+                self.bump()
+            while len(self.route_discoverers) > 5000:
+                self.route_discoverers.pop(next(iter(self.route_discoverers)))
 
     def route_known_check(self, rows):
         """Ask Spansh about the listed route systems not known yet, in the background: one at a time,
@@ -12015,6 +12081,7 @@ class State:
             nx = self.highway_next(hw, rows)
             start = nx if nx is not None else len(rows)
             self.route_known_check(rows[start:start + HIGHWAY_AHEAD])
+            self.route_discoverer_check([{"id64": r["id64"], "name": r["system"]} for r in rows[start:start + HIGHWAY_AHEAD]])
             route = dict({k: hw.get(k) for k in ("id", "plotter", "ship", "options", "created_ts", "at", "furthest",
                                                   "off_route", "arrival_ts", "done_ts", "stand_in")},
                          **{"from": rows[0]["system"], "to": rows[-1]["system"], "count": len(rows),
@@ -13140,7 +13207,7 @@ class State:
         plot can run up to TRADE_PLOT_TIMEOUT: review 2026-10-08 #7, it was left running into the closed session)."""
         return [t for t in (self.refresh_task, self.target_task, self.unsold_task, self.seller_task, self.carrier_task,
                             self.searcher.task, self.honk_test_task, self.honk_run_task, self.highway_task, self.riches_task,
-                            self.route_known_task,
+                            self.route_known_task, self.route_discoverer_task,
                             self.autotarget_task, self.autotarget_test_task, self.lease_task, self.edsm_discard_task,
                             *self.upload_tasks.values()) if t]
 
@@ -14162,7 +14229,7 @@ def load_page(tablet=False):
     if tablet:
         html = html.replace("<body>", '<body class="tablet">', 1)
         html = html.replace('<html lang="en">', f'<html lang="en" data-theme="{TABLET_THEMES[0]}">', 1)
-    for name in ("page.js", "page.css") + styles:
+    for name in ("page.js", "page.css", "fork.js") + styles:   # fork.js: this fork's own page code
         try:
             stamp = int(os.path.getmtime(os.path.join(STATIC_DIR, name)))
         except OSError:
@@ -15514,6 +15581,7 @@ def make_app(state, hosts=None):
     app.router.add_get("/api/cargo/lookup", cargo_lookup_view)
     app.router.add_get("/api/nearest", nearest_view)
     app.router.add_get("/api/ship", ship_view)
+    outrider.commander.add_routes(app, state, lambda: LIVE_DIRS)   # this fork's Commander view: /api/commander/*
     app.router.add_get("/api/navroute", navroute_view)
     app.router.add_get("/api/galnet", galnet_view)
     app.router.add_get("/api/galnet/systems", galnet_systems_view)

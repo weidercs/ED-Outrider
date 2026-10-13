@@ -53,7 +53,7 @@ class View(unittest.TestCase):
                          [(0, "First Hop", "K", True, 40.0, 40.0, False, None), (1, "Dry Stop", "N", False, 40.0, 80.0, False, None),
                           (2, "Third", "M", True, 40.0, 120.0, True, "visited"), (3, "Far End", "DA", False, 40.0, 160.0, False, None)])
         self.assertNotIn("fuel", r)                       # route information only
-        self.assertEqual(set(r["hops"][0]), {"i", "id", "name", "star_class", "scoopable", "ly", "total_ly", "visited", "known", "x", "z"})
+        self.assertEqual(set(r["hops"][0]), {"i", "id", "name", "star_class", "scoopable", "ly", "total_ly", "visited", "known", "x", "z", "discoverer"})
         self.assertEqual((r["from"], r["start"], [(h["x"], h["z"]) for h in r["hops"][:2]]), ("Start", [0.0, 0.0], [(40.0, 0.0), (80.0, 0.0)]))
         self.j.pos = dict(HOPS[1])                        # part way: only what is ahead
         self.assertEqual([h["name"] for h in self.state.navroute_view()["route"]["hops"]], ["Third", "Far End"])

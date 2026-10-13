@@ -64,7 +64,7 @@ fi
 
 step "node --check static/page.js"
 if ! command -v node >/dev/null 2>&1; then echo "node not found (Node.js 22 or newer is needed)"; FAIL=1
-elif node --check static/page.js; then echo "ok"; else FAIL=1; fi
+elif node --check static/page.js && node --check static/fork.js; then echo "ok"; else FAIL=1; fi   # fork.js: this fork's own page code
 
 step "page smoke test on a scratch server"
 if ! command -v node >/dev/null 2>&1; then
