@@ -1586,6 +1586,51 @@ const settle = async maxMs => {
     console.log(goodCG ? "OK" : "FAIL", "| cargo |", goodCG ? "the tile's tritium (and without), the ship's Avg, the carrier's marks, Recount's lines" :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
   }
+  // The Carrier tile's trip to you (S13 A: red short, amber when the hold covers it), a booked jump's burn, a suspended
+  // service in red (S55 B), the balance and weeks of upkeep (S61: amber under 4, "as of" when old); your carrier among
+  // the nearest places to sell with its carrier jumps (S55 A)
+  {
+    const w = dom.window, before = errors.length;
+    const got = w.eval(`(() => {
+      const saved = data.carrier, savedS = data.sellers, o = {}, line = () => document.getElementById("carrierLine");
+      const iso = ms => new Date(ms).toISOString().slice(0, 19) + "Z";
+      data.carrier = {name: "Out Of The Blue", callsign: "G0X-85Z", system: "Home", aboard: false, here: false, distance: 1200,
+                      has_uc: false, has_vista: true, suspended: ["UC", "Redemption office"], fuel: 668, jump_range: 500,
+                      trip: {jumps: 3, burn: 1300, depot: 668, short: 632, depot_after: 0, hold: null, covered: false},
+                      planned: {system: "Far", departure: iso(Date.now() + 3600e3), jump_ly: 432, burn: 96, depot_after: 572},
+                      finance: {balance: 1328648923, reserve: 1000001263, available: 328647660, ts: iso(Date.now() - 3600e3),
+                                upkeep: 13700000, weeks: 96.9, warn: false, rates: "published"}};
+      renderCarrier();
+      o.trip = line().textContent;
+      o.red = [...line().querySelectorAll(".noscoop")].map(x => x.textContent);
+      o.fin = [document.getElementById("carrierFin").textContent, document.getElementById("carrierFin").className, /published rates/.test(document.getElementById("carrierFin").title)];
+      data.carrier = Object.assign({}, data.carrier, {trip: Object.assign({}, data.carrier.trip, {hold: 5000, covered: true}),
+        finance: Object.assign({}, data.carrier.finance, {balance: 40000000, weeks: 2.9, warn: true, ts: "2026-09-27T12:00:00Z"})});
+      renderCarrier();
+      o.amber = [...line().querySelectorAll(".warnc")].map(x => x.textContent).filter(t => /depot|balance/.test(t));   // not the tank's
+      o.asOf = line().textContent;
+      data.sellers = {from: "Here", moved: 0, vista: {nearest: null, fresh: null, station: null},
+                      uc: {nearest: {name: "G0X-85Z", system: "Home", distance: 1200, carrier: true, yours: true, carrier_jumps: 3, age_days: null},
+                           fresh: null, station: null}};
+      o.sell = unsoldHtml({total: 1, carto: {bodies: 1, systems: 1, estimated_value: 1, first_discoveries: 0, mapped: 0},
+                           bio: {samples: 0, estimated_value: 0, unknown_species: []}, species: [], computed: "now"});
+      data.carrier = saved; data.sellers = savedS; renderCarrier();
+      return o;
+    })()`);
+    const bad = [];
+    if (!/it → you ≈ 3 carrier jumps · ≈ 1,300 t tritium · depot 668 t: 632 t short/.test(got.trip)) bad.push("trip " + got.trip);
+    if (!/\(432 ly jump ≈ 96 t; depot after ≈ 572 t\)/.test(got.trip)) bad.push("booked jump");
+    if (JSON.stringify(got.red) !== JSON.stringify(["depot 668 t: 632 t short", "UC suspended", "Redemption office suspended"])) bad.push("red " + JSON.stringify(got.red));
+    if (!/Vista ✓/.test(got.trip)) bad.push("vista");
+    if (got.fin[0] !== "balance 1.33B · ~96 weeks of upkeep" || got.fin[1] !== "" || !got.fin[2] || /as of/.test(got.trip)) bad.push("finance " + JSON.stringify(got.fin));
+    if (JSON.stringify(got.amber) !== JSON.stringify(["depot 668 t: 632 t short, enough after topping up", "balance 40.0M · ~2.9 weeks of upkeep"])) bad.push("amber " + JSON.stringify(got.amber));
+    if (!/\(as of (Sep 27|27 Sep)\)/.test(got.asOf)) bad.push("as of");
+    if (!/G0X-85Z \(your carrier\) · Home · 1,200 ly.* · ≈ 3 carrier jumps to you/.test(got.sell)) bad.push("seller");
+    const goodCT = !bad.length && errors.length === before;
+    allOk = allOk && goodCT;
+    console.log(goodCT ? "OK" : "FAIL", "| carrier trip |", goodCT ? "the trip's tritium (short, covered), a booked jump's burn, suspended services, balance and upkeep, your carrier as a seller" :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+  }
   // The Sell / Buy lookup: a line's Sell asks the server (stubbed here: the scratch server has no Spansh) with that
   // line's commodity, tons and hold; a row opens on a click; Closest and the carriers box ask again
   {

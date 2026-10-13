@@ -274,6 +274,9 @@ LOG_FORMAT = {
                               + (f" · balance {_num((e.get('Finance') or {}).get('CarrierBalance'))} cr" if e.get("Finance") else ""),
     "CarrierLocation": lambda e: f"Carrier at {e.get('StarSystem')}",
     "CarrierDepositFuel": lambda e: f"Deposited {e.get('Amount')} t tritium · {e.get('Total')} t aboard",
+    "CarrierCrewServices": lambda e: f"Carrier service {e.get('CrewRole')}: "
+                                     + {"Activate": "installed", "Deactivate": "removed", "Pause": "suspended",
+                                        "Resume": "resumed", "Replace": "crew replaced"}.get(e.get("Operation"), str(e.get("Operation"))),
 }
 
 

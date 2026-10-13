@@ -2,6 +2,27 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · The carrier's trip to you, its balance in weeks of upkeep, suspended services, and your carrier as a place to sell
+- **The carrier's stats folded whole** (the fold's `finance` and `crew`): CarrierStats' Finance (balance, reserve,
+  available) and Crew (each role on, suspended or not installed), then each `CarrierCrewServices` (a service installed,
+  removed, paused or resumed; now kept in `cargo_events` and worded in the Log) until the next CarrierStats. No re-read:
+  every CarrierStats was already stored whole; a CarrierCrewServices before this update comes with the next re-read.
+- **Balance and weeks of upkeep** (S61): "balance 1.33B · ~96 weeks of upkeep" on the Carrier tile, amber under 4
+  weeks, "as of" the date when the stats are over a day old. The journal has no upkeep figure: the week's upkeep is the
+  core (5M) and each service's rate, active or suspended (`CARRIER_UPKEEP`), the community wiki's **published rates**,
+  not yet checked against the game's Finance screen; the title says so. Weeks are the balance's (upkeep is drawn from
+  it; the reserve stays put).
+- **Suspended services in red** (S55 B): "UC suspended", "Redemption office suspended". UC and Vista on or off come
+  from the newer of the carrier's crew and your last docking there (a suspended service is not in its services).
+- **Your carrier among the nearest places to sell** (S55 A): the journal's carrier (where it is now) instead of
+  Spansh's report of your callsign, in the Universal Cartographics list while UC is on and Vista's while Vista is, with
+  "≈ 3 carrier jumps to you"; not while suspended, never once decommissioned; there even before Spansh answers. The
+  Nearest finder's own row drops a suspended UC or Vista too.
+- **The tritium for the trip to you** (S13 A): "it → you ≈ 3 carrier jumps · ≈ 340 t tritium · depot 200 t: 140 t
+  short" (red; amber with "enough after topping up" when a confirmed tritium line in the hold covers it): equal legs of
+  up to 500 ly, each burned by the fitted formula with the depot lighter each leg (`carrier_trip`; its `k` waits for
+  S13 B's history). A booked jump: "(432 ly jump ≈ 96 t; depot after ≈ 572 t; then … ly from you)".
+
 ## 2026-10-12 · History's sold and ✗, how fresh a confirmed count is, one shipload, Recount refuses typos
 - **History: sold and ✗** (S63): a "sold" column after 🧬 (what Universal Cartographics and Vista Genomics paid in that
   session, every sale; the all-time and "since your last sale" rows too, the career row from the game's exploration

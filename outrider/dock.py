@@ -128,10 +128,9 @@ def own_row(carrier):
     services = {name for sid, name in (("exploration", "UC"), ("vistagenomics", "Vista"), ("repair", "Repair"),
                                         ("refuel", "Refuel"), ("shipyard", "Shipyard"), ("outfitting", "Outfitting"))
                 if sid in ids}
-    if c.get("has_uc"):
-        services.add("UC")
-    if c.get("has_vista"):
-        services.add("Vista")
+    for key, name in (("has_uc", "UC"), ("has_vista", "Vista")):
+        if key in c:   # the carrier summary's word: the newer of its last Docked and its crew (a paused service is off)
+            (services.add if c[key] else services.discard)(name)
     return {"kind": "carrier", "callsign": str(c.get("callsign") or "").upper(), "name": c.get("name") or "",
             "system": c.get("system"), "id64": c.get("id64"), "x": c["x"], "y": c["y"], "z": c["z"], "ls": 0,
             "services": services, "pads": "L M", "large": True, "medium": True, "access": "yours",

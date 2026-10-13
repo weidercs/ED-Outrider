@@ -1,0 +1,110 @@
+{
+ "timestamp": "2026-10-12T20:11:21Z",
+ "event": "CarrierStats",
+ "CarrierID": 3700251648,
+ "CarrierType": "FleetCarrier",
+ "Callsign": "G0X-85Z",
+ "Name": "OUT OF THE BLUE",
+ "DockingAccess": "squadronfriends",
+ "AllowNotorious": true,
+ "FuelLevel": 668,
+ "JumpRangeCurr": 500.0,
+ "JumpRangeMax": 500.0,
+ "PendingDecommission": false,
+ "SpaceUsage": {
+  "TotalCapacity": 25000,
+  "Crew": 1270,
+  "Cargo": 16085,
+  "CargoSpaceReserved": 0,
+  "ShipPacks": 0,
+  "ModulePacks": 0,
+  "FreeSpace": 7645
+ },
+ "Finance": {
+  "CarrierBalance": 1328648923,
+  "ReserveBalance": 1000001263,
+  "AvailableBalance": 328647660,
+  "ReservePercent": 75,
+  "TaxRate_rearm": 0,
+  "TaxRate_refuel": 0,
+  "TaxRate_repair": 0
+ },
+ "Crew": [
+  {
+   "CrewRole": "BlackMarket",
+   "Activated": false
+  },
+  {
+   "CrewRole": "Captain",
+   "Activated": true,
+   "Enabled": true,
+   "CrewName": "Willow Ebner"
+  },
+  {
+   "CrewRole": "Refuel",
+   "Activated": true,
+   "Enabled": true,
+   "CrewName": "Fallon O'Neal-Burton"
+  },
+  {
+   "CrewRole": "Repair",
+   "Activated": true,
+   "Enabled": true,
+   "CrewName": "Agustin Vance"
+  },
+  {
+   "CrewRole": "Rearm",
+   "Activated": true,
+   "Enabled": true,
+   "CrewName": "Stuart Jordan"
+  },
+  {
+   "CrewRole": "Commodities",
+   "Activated": true,
+   "Enabled": true,
+   "CrewName": "Hiram Maynard"
+  },
+  {
+   "CrewRole": "VoucherRedemption",
+   "Activated": true,
+   "Enabled": false,
+   "CrewName": "Garry Greer"
+  },
+  {
+   "CrewRole": "Exploration",
+   "Activated": true,
+   "Enabled": true,
+   "CrewName": "Celina Wooten"
+  },
+  {
+   "CrewRole": "Shipyard",
+   "Activated": false
+  },
+  {
+   "CrewRole": "Outfitting",
+   "Activated": false
+  },
+  {
+   "CrewRole": "CarrierFuel",
+   "Activated": true,
+   "Enabled": true,
+   "CrewName": "Alexis Yang"
+  },
+  {
+   "CrewRole": "VistaGenomics",
+   "Activated": true,
+   "Enabled": true,
+   "CrewName": "Horace Mueller"
+  },
+  {
+   "CrewRole": "PioneerSupplies",
+   "Activated": false
+  },
+  {
+   "CrewRole": "Bartender",
+   "Activated": false
+  }
+ ],
+ "ShipPacks": [],
+ "ModulePacks": []
+}

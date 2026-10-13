@@ -104,6 +104,16 @@ the code; the constants named are in `ed_outrider.py` unless another file is giv
   jumps. **Reserved space is not cargo:** a buy order holds space that weighs nothing. The 27 jumps all had none
   reserved; CarrierStats' own `JumpRangeCurr` (the jump the depot pays for in full) matches the formula on every line
   under 500 ly only with the reserved space left out (4,500 t reserved: 198.6 ly, not 180.7).
+- `CarrierStats.Finance`: `CarrierBalance`, `ReserveBalance`, `AvailableBalance` (balance less reserve: can be
+  negative, seen -1,051,595,783), `ReservePercent` (sometimes missing). No upkeep figure anywhere in the journal. The
+  weekly upkeep comes out of the balance: on the author's carrier the balance fell 13,579,218 cr over a Thursday and the
+  reserve stayed put.
+- `CarrierStats.Crew`: one entry per role (`CrewRole`: Captain, Refuel, Repair, Rearm, Commodities, CarrierFuel,
+  Exploration (Universal Cartographics), VistaGenomics, VoucherRedemption, BlackMarket, Shipyard, Outfitting,
+  PioneerSupplies, Bartender); `Activated` false = not installed (no `Enabled`, no `CrewName`); `Activated` true with
+  `Enabled` false = suspended. A suspended service is also left out of the next `Docked`'s `StationServices`.
+  `CarrierCrewServices` (`CrewRole`, `Operation`: Activate, Deactivate, Pause, Resume, Replace) says a change between two
+  CarrierStats; none in the author's journals yet.
 
 **Status.json**
 - It is rewritten only when something in it changes. A player standing still (a stopped Rhino included)

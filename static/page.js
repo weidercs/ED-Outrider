@@ -328,6 +328,36 @@ let carrierWarned = null;
 // galaxy map, as 🎯 on a route's row does; on the game PC only (it presses keys there)
 const carrierAim = c => c && !c.aboard && !c.here && c.system && !(c.decommission && c.decommission.done) && data.game_pc !== false
   ? hwyAimBtn(c.system, "carrier", null, true) : "";
+// the tritium for the trip to you (S13 A): red when the depot lacks it, amber when a confirmed tritium line in the hold
+// covers what it lacks (moved into the depot first)
+const CARRIER_BURN_TITLE = "the game's fuel formula, checked against real carrier jumps: round(5 + ly × (25000 + capacity used + depot) / 200000) t a jump; a buy order's reserved space weighs nothing";
+const carrierTripHtml = t => !t ? "" :
+  ` · <span title="equal jumps of up to 500 ly in a straight line (the real trip is never shorter), each lighter than the last; ${CARRIER_BURN_TITLE}">≈ <b>${t.burn.toLocaleString()} t</b> tritium</span>` +
+  (t.short ? ` · <span class="${t.covered ? "warnc" : "noscoop"}" title="${t.covered ? `the ${t.hold.toLocaleString()} t of tritium on a sell order in its hold covers it: move it into the depot before the jumps` : "the depot and the confirmed tritium in its hold (a sell order) do not cover the trip"}">depot ${t.depot.toLocaleString()} t: ${t.short.toLocaleString()} t short${t.covered ? ", enough after topping up" : ""}</span>` : "");
+// a booked jump's burn and the depot after it (S13 A)
+const carrierPlanBurn = pl => pl.burn == null ? "" : ` ≈ ${pl.burn} t; ` +
+  (pl.depot_after < 0 ? `<span class="noscoop">depot ${-pl.depot_after} t short</span>` : `depot after ≈ ${pl.depot_after.toLocaleString()} t`);
+// UC and Vista on, off or suspended, and any other service suspended, in red (S55 B: CarrierStats' crew, newer than its
+// last Docked or not)
+function carrierServicesHtml(c) {
+  const sus = c.suspended || [], title = "suspended in the carrier's management: it costs less upkeep, but serves no one";
+  const one = (on, label) => on ? `${label} ✓` : sus.includes(label) ? `<span class="noscoop" title="${title}">${label} suspended</span>` : `no ${label}`;
+  const others = sus.filter(x => x !== "UC" && x !== "Vista");
+  return `${one(c.has_uc, "UC")} · ${one(c.has_vista, "Vista")}` +
+    (others.length ? ` · <span class="noscoop" title="${title}">${esc(others.join(", "))} suspended</span>` : "");
+}
+// the carrier's balance and the weeks of upkeep it pays (S61): amber under UPKEEP_WARN_WEEKS (outrider.cargo); the
+// rates are the published ones until checked against the game's Finance screen, and the title says so
+const crSign = n => n == null ? "?" : (n < 0 ? "−" : "") + credits(Math.abs(n));
+function carrierFinanceHtml(fi) {
+  if (!fi) return "";
+  const old = Date.now() - Date.parse(fi.ts) > 86400e3, w = fi.weeks;
+  const title = `balance ${crSign(fi.balance)} cr · reserve ${crSign(fi.reserve)} cr · available ${crSign(fi.available)} cr, from the carrier's last stats (${(fi.ts || "").slice(0, 10)}: opening its management writes them).` +
+    (fi.upkeep ? ` Upkeep ≈ ${credits(fi.upkeep)} cr a week at the published rates (the core and each service, a suspended one at its lower rate), not yet checked against the game's carrier Finance screen: the journal has no upkeep figure. Upkeep is drawn from the balance each week.` : "");
+  return `<span id="carrierFin" class="${fi.warn ? "warnc" : ""}" title="${esc(title)}">balance <b>${crSign(fi.balance)}</b>` +
+    (w != null ? ` · ~<b>${w < 10 ? w.toFixed(1) : Math.floor(w).toLocaleString()}</b> week${w === 1 ? "" : "s"} of upkeep` : "") + `</span>` +
+    (old ? ` <span class="unk">(as of ${esc(shortDay(fi.ts))})</span>` : "");
+}
 function renderCarrier() {
   const c = data && data.carrier, cl = document.getElementById("carrierLine");
   const val = (v, title) => `<div class="val"${title ? ` title="${title}"` : ""}>${v}</div>`, ln = v => v ? `<div class="ln">${v}</div>` : "";
@@ -353,11 +383,11 @@ function renderCarrier() {
   let meet = "";
   if (!c.here && c.distance) {
     const jr = effRange(), f = data.fuel;
-    const mine = jr ? jumpsFor(c.distance) : null, theirs = Math.ceil(c.distance / (c.jump_range || 500));
+    const mine = jr ? jumpsFor(c.distance) : null, theirs = c.trip ? c.trip.jumps : Math.ceil(c.distance / (c.jump_range || 500));
     const tank = f && f.jumps_max != null ? f.jumps_max : null;
     meet = (mine != null ? `you → it ≈ <b>${mine}</b> jump${mine === 1 ? "" : "s"}` +
              (tank != null ? ` <span class="${tank < mine ? "warnc" : "unk"}" title="jumps at max range your tank covers now">(tank ${tank})</span>` : "") : "") +
-           ` · it → you ≈ <b>${theirs}</b> carrier jump${theirs === 1 ? "" : "s"}`;
+           ` · it → you ≈ <b>${theirs}</b> carrier jump${theirs === 1 ? "" : "s"}` + carrierTripHtml(c.trip);
   }
   let plan = "";
   const pl = c.planned;
@@ -366,7 +396,7 @@ function renderCarrier() {
     const mmss = t => t >= 3600 ? `${Math.floor(t / 3600)} h ${Math.floor(t % 3600 / 60)} min` : `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
     const urgent = left > 0 && left < 300 && !c.aboard;
     plan = `<span class="${urgent ? "noscoop" : ""}">${left > 0 ? `departs for <b>${esc(pl.system)}</b> in <b>${mmss(left)}</b>` : `jumping to <b>${esc(pl.system)}</b>`}</span>` +
-      (pl.jump_ly ? ` <span class="unk">(${fmtLy(pl.jump_ly)} ly jump${pl.distance_from_you != null ? `, then ${fmtLy(pl.distance_from_you)} ly from you` : ""})</span>` : "");
+      (pl.jump_ly ? ` <span class="unk">(${fmtLy(pl.jump_ly)} ly jump${carrierPlanBurn(pl)}${pl.distance_from_you != null ? `${pl.burn != null ? ";" : ","} then ${fmtLy(pl.distance_from_you)} ly from you` : ""})</span>` : "");
     if (urgent && carrierWarned !== pl.departure) {   // once per booking, only if you are not aboard
       carrierWarned = pl.departure;
       // the last minute: one plain line (speech.json's lines say "{minutes} minutes", which cannot be singular: F37)
@@ -382,8 +412,9 @@ function renderCarrier() {
   const dcLine = dc ? `<span class="noscoop" title="cancel it in the carrier's management until then">Decommissioning: scrapped ${esc(shortDay(dc.scrap_ts || ""))}` +
     `${dc.refund ? ` · ${credits(dc.refund)} cr back` : ""}</span>` : "";
   cl.innerHTML = val(esc(c.name), esc(c.callsign || "")) + ln(dcLine) + ln(where) + ln(meet) + ln(plan) +
-    ln(`${c.has_uc ? "UC ✓" : "no UC"} · ${c.has_vista ? "Vista ✓" : "no Vista"}` +
+    ln(carrierServicesHtml(c) +
        (tr ? ` · Tritium in Depot: <b>${tr.depot.toLocaleString()} t</b>` : c.fuel != null ? ` · ${c.fuel} t tritium` : "")) +
+    ln(carrierFinanceHtml(c.finance)) +
     (tr ? `<div class="ln" id="carrierTrit" title="Total 500 ly Jumps Available: the jumps all your tritium gives at 500 ly, if the depot is topped up from the hold as it runs low">` +
           `Total Tritium: <b>${tr.total.toLocaleString()} t</b>${tr.jumps != null ? ` (<b>${tr.jumps.toLocaleString()}</b> jumps)` : ""}</div>` : "");
 }
@@ -2651,8 +2682,10 @@ function firstsSeenLine(w) {
   return ` · <span class="seen" title="Someone else has scanned ${w.seen === 1 ? "one system" : w.seen + " systems"} holding your unsold first discoveries since you were there (their scans reached Spansh). Sell to keep your name on what you found first. See My firsts.${w.on ? ` Checked ${w.checked} of ${w.of}; each is looked at once a day.` : " (the firsts watch is off: this is from before)"}">👁 <b>${w.seen}</b> scanned by someone else</span>`;
 }
 // The nearest places to sell (Spansh station search): the nearest trustworthy one of each kind.
+// Your own carrier is the journal's (where it is now, S55): with how many carrier jumps would bring it to you
 const sellerTxt = x => !x ? "" : `${esc(x.name)}${x.yours ? " (your carrier)" : x.carrier ? " (carrier)" : ""} · ${esc(x.system)} · ${x.distance.toLocaleString("en-US", {maximumFractionDigits: 0})} ly` +
-  (effRange() ? ` ≈ ${jumpsFor(x.distance)} jump${jumpsFor(x.distance) > 1 ? "s" : ""}` : "") +
+  (effRange() && x.distance ? ` ≈ ${jumpsFor(x.distance)} jump${jumpsFor(x.distance) > 1 ? "s" : ""}` : "") +
+  (x.yours && x.carrier_jumps ? ` · ≈ ${x.carrier_jumps} carrier jump${x.carrier_jumps === 1 ? "" : "s"} to you` : "") +
   (x.carrier && !x.yours && x.age_days != null ? ` <span class="unk">(seen ${x.age_days < 1 ? "today" : Math.round(x.age_days) + " d ago"})</span>` : "");
 function sellersLine() {
   const s = data.sellers; if (!s || !s.uc) return "";

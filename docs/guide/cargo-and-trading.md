@@ -29,6 +29,20 @@ The **Materials** tab starts with your **Cargo**.
   fuel formula: the carrier's cargo weighs, the space a buy order only reserves does not). Without one the tile is as
   before. No carrier, no tile; a carrier being decommissioned says so in red with the scrap date, and once it is gone,
   "Decommissioned" and the date (a carrier bought since takes its place).
+- **The trip to you:** while your carrier is elsewhere, the tile says what bringing it to you takes: "it → you ≈ 3
+  carrier jumps · ≈ 340 t tritium", and when the depot holds less, "depot 200 t: 140 t short" in red (amber, "enough
+  after topping up", when tritium on a sell order in its hold covers it). Equal jumps of up to 500 ly in a straight
+  line, each lighter than the last (the real trip is never shorter). A booked jump says its own: "(432 ly jump ≈ 96 t;
+  depot after ≈ 572 t)".
+- **Services and upkeep:** a service suspended in the carrier's management shows in red ("UC suspended",
+  "Redemption office suspended"), from its last stats or the newer of them and your last docking there. Under them,
+  "balance 1.33B · ~96 weeks of upkeep" (amber under 4 weeks; "as of" a date when the stats are over a day old). The
+  journal has no upkeep figure: the week's upkeep is worked out from the services installed at the **published rates**
+  (the core and each service, a suspended one at its lower rate), not yet checked against the game's Finance screen;
+  hover for the figure. Opening the carrier's management refreshes the stats.
+- **Your carrier among the nearest places to sell** (the Unsold tile's "sell:" line and its details): while it has
+  Universal Cartographics (or Vista Genomics) on, where it is now from your journal, never an old report of it, with
+  "≈ 3 carrier jumps to you"; not while the service is suspended, nor once it is decommissioned.
 - **🎯 beside your carrier's system** on the Carrier tile, when it is elsewhere: auto-target puts that system in the
   galaxy map, as 🎯 on a route's row does (see [the Neutron Highway](plot-route.md#-the-neutron-highway)). On the
   game PC only; none while you are aboard or in its system.

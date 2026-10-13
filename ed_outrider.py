@@ -1218,9 +1218,11 @@ MATERIAL_EVENTS = ("Materials", "MaterialCollected", "MaterialDiscarded", "Synth
 # Cargo (outrider/cargo.py): the ship's hold and your carrier's. Cargo, Docked, Undocked, CarrierStats (SHIP_EVENTS)
 # and MiningRefined (SRV_EVENTS) are read here too; these are only for cargo.
 CARGO_ONLY = ("MarketBuy", "MarketSell", "CargoTransfer", "CarrierTradeOrder", "CarrierDepositFuel", "CollectCargo",
-              "EjectCargo")
+              "EjectCargo", "CarrierCrewServices")
 CARGO_EVENTS = frozenset(CARGO_ONLY) | {"Cargo", "Docked", "Undocked", "CarrierStats", "MiningRefined"}
-CARRIER_CARGO_EVENTS = ("CarrierStats", "CarrierTradeOrder", "CargoTransfer", "MarketBuy", "MarketSell")
+# your carrier's history (cargo_events); CarrierCrewServices (a service switched on, off, paused or resumed) for the
+# services the tile and the nearest places to sell use between two CarrierStats (S55)
+CARRIER_CARGO_EVENTS = ("CarrierStats", "CarrierTradeOrder", "CargoTransfer", "MarketBuy", "MarketSell", "CarrierCrewServices")
 WANTED = tuple(f'"event":"{e}"'.encode()
                for e in POSITION_EVENTS + STAR_CLASS_EVENTS + SCAN_EVENTS + DATA_EVENTS + SHIP_EVENTS
                + CMDR_EVENTS + MATERIAL_EVENTS + BODY_EVENTS + SRV_EVENTS + CARGO_ONLY + ("Loadout", "Shutdown", "Fileheader"))
@@ -4070,7 +4072,8 @@ class Journals:
             if ev.get("StationType") != "FleetCarrier" or ev.get("MarketID") != c.get("id") or stale():
                 return
             carrier_seen(c, ev.get("StarSystem"), ev.get("SystemAddress"), ts)
-            c.update(services=ev.get("StationServices") or c.get("services"))
+            if ev.get("StationServices"):   # when they were listed: the crew's word (CarrierStats) may be newer (S55)
+                c.update(services=ev["StationServices"], services_ts=ts)
         elif name == "CarrierJumpRequest":
             if ev.get("CarrierID") != c.get("id") or stale():
                 return
@@ -8045,22 +8048,42 @@ class State:
                 c.update(x=where[1], y=where[2], z=where[3])
         pos = self.journals.pos
         d = dist(pos, c) if pos and c.get("x") is not None else None
-        services = c.get("services") or []
+        st = self.carrier_cargo() if c.get("id") is not None else None
+        stats = (st or {}).get("stats") or {}
+        # the capacity in use now (carrier_burn's: the last CarrierStats and your journaled moves since)
+        used = stats["used"] + st["after_stats"] if isinstance(stats.get("used"), int) else None
+        fuel = c.get("fuel") if isinstance(c.get("fuel"), int) else None
         planned = dict(c["planned"]) if c.get("planned") else None
         if planned and planned.get("id64") and pos:   # how far the booked jump takes it from you
             where = self.locate(int(planned["id64"])) if str(planned["id64"]).isdigit() else None
             if where:
                 planned["distance_from_you"] = round(dist(pos, {"x": where[1], "y": where[2], "z": where[3]}), 1)
                 planned["jump_ly"] = round(dist(c, {"x": where[1], "y": where[2], "z": where[3]}), 1) if c.get("x") is not None else None
+            if planned.get("jump_ly") and used is not None and fuel is not None:   # what it burns, what is left (S13)
+                planned["burn"] = outrider.cargo.carrier_burn(planned["jump_ly"], used, fuel)
+                planned["depot_after"] = fuel - planned["burn"]
         docked = self.journals.docked
+        aboard = bool(docked and c.get("id") and docked.get("market_id") == c.get("id"))
+        here = bool(pos and pos["id64"] == c["id64"])
+        has_uc, has_vista, suspended = self.carrier_services(c, st)
+        trip = None
+        if d and not here and not aboard and used is not None and fuel is not None:
+            # the tritium for the trip to you (S13 A): what the depot lacks, and whether a confirmed tritium line in the
+            # hold covers it (moved into the depot before the jumps)
+            trip = outrider.cargo.carrier_trip(d, fuel, used)
+            line = st["lines"].get("tritium")
+            hold = line["count"] if line and line["state"] == "confirmed" else None
+            if trip:
+                trip.update(hold=hold, covered=bool(trip["short"] and hold and hold >= trip["short"]))
         return {"name": c.get("name"), "callsign": c.get("callsign"), "system": c.get("system"),
                 "carrier_id": str(c["id"]) if c.get("id") is not None else None,   # which carrier (a new one: no "arrived")
-                "aboard": bool(docked and c.get("id") and docked.get("market_id") == c.get("id")),
+                "aboard": aboard,
                 "id64": str(c["id64"]), "distance": round(d, 1) if d is not None else None,
-                "fuel": c.get("fuel"), "jump_range": c.get("jump_range"), "planned": planned,
-                "has_uc": "exploration" in services, "has_vista": "vistagenomics" in services,
+                "fuel": c.get("fuel"), "jump_range": c.get("jump_range"), "planned": planned, "trip": trip,
+                "has_uc": has_uc, "has_vista": has_vista, "suspended": suspended,
+                "finance": self.carrier_finance(st),
                 "x": c.get("x"), "y": c.get("y"), "z": c.get("z"),
-                "ts": c.get("ts"), "here": bool(pos and pos["id64"] == c["id64"]),
+                "ts": c.get("ts"), "here": here,
                 # when it last arrived somewhere new (the page's arrival alert), and whether that is only
                 # the booked jump's destination, not yet confirmed by the journal
                 "moved_ts": c.get("moved_ts"), "assumed": bool(c.get("assumed")),
@@ -8068,6 +8091,36 @@ class State:
                 "decommission": self.carrier_decommission(),
                 # only while tritium is on a sell order at your carrier (confirmed): else the tile is as before
                 "tritium": None if (self.carrier_decommission() or {}).get("done") else self.carrier_tritium()}
+
+    def carrier_services(self, c, st):
+        """Your carrier's services (S55 B): (has_uc, has_vista, suspended: the tile's names of those paused). From the
+        newer of two words: its last Docked's StationServices (a suspended service is not listed there) and its crew
+        (CarrierStats' Crew, then each CarrierCrewServices: carrier_fold), which also says which are suspended."""
+        services = [str(x).lower() for x in c.get("services") or []]
+        crew = (st or {}).get("crew")
+        roles = (crew or {}).get("roles") or {}
+        if crew and (crew.get("ts") or "") >= (c.get("services_ts") or ""):
+            on = {r.lower() for r, v in roles.items() if v == "on"}
+        else:
+            on = set(services)
+        paused = [r for r, v in roles.items() if v == "suspended" and r.lower() not in on]
+        order = list(outrider.cargo.CREW_LABELS)
+        paused.sort(key=lambda r: order.index(r) if r in order else len(order))
+        return ("exploration" in on, "vistagenomics" in on,
+                [outrider.cargo.CREW_LABELS.get(r, r) for r in paused])
+
+    def carrier_finance(self, st):
+        """The Carrier tile's balance and weeks of upkeep (S61), from the last CarrierStats: the balance (upkeep is
+        drawn from it: the reserve stays put), the week's upkeep at the published rates (outrider.cargo.CARRIER_UPKEEP,
+        not checked against the game's Finance screen yet), the weeks it pays; None before a CarrierStats with Finance."""
+        fin = (st or {}).get("finance")
+        if not fin:
+            return None
+        crew = st.get("crew")
+        upkeep = outrider.cargo.carrier_upkeep(crew["roles"]) if crew else None
+        weeks = outrider.cargo.upkeep_weeks(fin["balance"], upkeep)
+        return dict(fin, upkeep=upkeep, weeks=weeks, rates="published",
+                    warn=weeks is not None and weeks < outrider.cargo.UPKEEP_WARN_WEEKS)
 
     def carrier_decommission(self):
         """Your carrier's decommissioning, if requested and not cancelled: {ts, refund, scrap_ts, done}."""
@@ -13309,11 +13362,28 @@ class State:
 
     def sellers_summary(self):
         """Nearest places to sell from here: the nearest of each kind, preferring fresh entries (a carrier
-        seen by Spansh weeks ago may be long gone), and the nearest permanent station."""
+        seen by Spansh weeks ago may be long gone), and the nearest permanent station. Your own carrier (S55 A) is
+        never Spansh's (possibly stale) report of it but the journal's: where it is now, in the Universal Cartographics
+        list while UC is on (not suspended), in Vista's while Vista is, never once decommissioned; with how many
+        carrier jumps would bring it to you."""
         cur, pos = meta_get(self.db, "sellers"), self.journals.pos
-        if not cur or not pos:
+        if not pos:
             return None
         c = self.journals.carrier or {}
+        cs = self.carrier_summary() or {}
+        own = None
+        if cs.get("x") is not None and cs.get("callsign") and not (cs.get("decommission") or {}).get("done"):
+            own = {"name": cs["callsign"], "system": cs.get("system"), "id64": cs.get("id64"),
+                   "type": outrider.cargo.CARRIER_TYPE, "updated_at": None, "x": cs["x"], "y": cs["y"], "z": cs["z"],
+                   "distance": 0, "carrier_jumps": math.ceil((cs.get("distance") or 0) / outrider.cargo.CARRIER_JUMP_LY - 1e-9)}
+        if not cur and not own:
+            return None
+        cur = cur or {"pos": dict(pos), "uc": [], "vista": []}
+
+        def mine(lst, on):
+            lst = [x for x in lst if not (c.get("callsign") and x.get("name") == c.get("callsign"))]
+            return lst + [own] if own and on else lst
+
         def pick(lst):
             now = time.time()
             out = []
@@ -13332,7 +13402,7 @@ class State:
             station = next((x for x in out if not x["carrier"]), None)
             return {"nearest": out[0] if out else None, "fresh": fresh, "station": station}
         return {"from": cur["pos"].get("name"), "moved": round(dist(pos, cur["pos"]), 1),
-                "uc": pick(cur["uc"]), "vista": pick(cur["vista"])}
+                "uc": pick(mine(cur["uc"], cs.get("has_uc"))), "vista": pick(mine(cur["vista"], cs.get("has_vista")))}
 
     def maybe_unsold(self):
         """Re-estimate unsold data in a worker thread once the journal has settled a little."""

@@ -544,6 +544,21 @@ upstream project's choices, not rules of the game.
   / 200000)`, fitted to the author's 27 recorded carrier jumps (exact on 26; without the depot's own weight it reads
   1 to 2 t low; `used` leaves out a buy order's reserved space, which weighs nothing), jump by jump at 500 ly with
   the hold topping the depot up.
+- **The trip to you is the fitted formula, scaled by history later** (S13 A; the author accepted the proposal,
+  2026-10-12): `carrier_trip` splits the straight line into equal legs of up to 500 ly, each burned by `carrier_burn`
+  with the depot lighter by what the legs before burned (topping up from the hold moves weight, it adds none); its `k`
+  is 1 until the carrier's own past jumps give a factor (S13 B). A plain average of past jumps would be worse: the burn
+  depends on the distance and the mass. Red when the depot lacks it; amber when a confirmed tritium line covers it.
+- **Upkeep at the published rates, said so** (S61): the journal has no upkeep figure, so `CARRIER_UPKEEP` (the core
+  5M a week, each service active or suspended) is the community wiki's, not checked against the game's Finance
+  screen; the tile's title says "published rates" until the author confirms them. Weeks = the balance ÷ the week's
+  upkeep (upkeep is drawn from the balance: the reserve stayed put while the balance fell); amber under 4 weeks (the
+  author's default). On the author's carrier the table gives 13.70M a week against a 13.58M fall in the balance over
+  an upkeep day: close, not proof (the market moves the balance too).
+- **A carrier's services: the newer word wins** (S55 B): the last Docked's StationServices (a suspended service is not
+  listed) or the crew (CarrierStats' Crew, then each CarrierCrewServices), whichever is newer; only the crew says
+  "suspended". Your carrier among the nearest places to sell (S55 A) is the journal's, never Spansh's report of your
+  callsign (it can be weeks old), in a list only while that service is on, never once decommissioned.
 - **The Sell / Buy lookup asks Spansh's station search, never its own market data:** best price (the same price
   nearer first) or closest, within a distance (best price needs one), fleet carriers out unless ticked (their orders
   are often years old and top every list), the pad from the ship's type (`SHIP_PAD`; an unknown ship gets no pad

@@ -218,6 +218,13 @@ def avg_text(line):
 # What a carrier line's moves are called (the page's hover text)
 MOVE_WORDS = {"to_carrier": "moved from your ship", "to_ship": "moved to your ship", "bought": "you bought it there",
               "sold": "you sold it there", "others": "sold to your carrier by other players"}
+# CarrierCrewServices' Operation -> the role's state after it ("Replace" hires another crew member: no change)
+CREW_OPERATIONS = {"Activate": "on", "Resume": "on", "Pause": "suspended", "Deactivate": "off"}
+# the carrier's services by CarrierStats' CrewRole, as the tile says them (Exploration is Universal Cartographics)
+CREW_LABELS = {"Exploration": "UC", "VistaGenomics": "Vista", "Refuel": "Refuel", "Repair": "Repair", "Rearm": "Rearm",
+               "Shipyard": "Shipyard", "Outfitting": "Outfitting", "Commodities": "Market", "CarrierFuel": "Tritium depot",
+               "VoucherRedemption": "Redemption office", "BlackMarket": "Secure warehouse",
+               "PioneerSupplies": "Pioneer supplies", "Bartender": "Bar", "Captain": "Captain"}
 
 
 def carrier_fold(carrier_id, events, markets=(), counts=()):
@@ -230,8 +237,10 @@ def carrier_fold(carrier_id, events, markets=(), counts=()):
     Returns {lines: id -> {count, state: confirmed | seen | entered, ts (that state's time), moves: [[ts, delta,
     why]]}, orders: id -> {kind: sell | buy, amount, price}, stats: {cargo, used, depot, ts} (the latest CarrierStats),
     after_stats (the tons your own journaled moves added since it: its total now is cargo + after_stats), market_ts,
-    names (learned from the events)}."""
-    st = {"lines": {}, "orders": {}, "stats": None, "after_stats": 0, "market_ts": None, "names": {}}
+    names (learned from the events), finance: {balance, reserve, available, ts} (the latest CarrierStats' Finance),
+    crew: {roles: role -> on | suspended | off, ts} (its Crew, then each CarrierCrewServices since)}."""
+    st = {"lines": {}, "orders": {}, "stats": None, "after_stats": 0, "market_ts": None, "names": {}, "finance": None,
+          "crew": None}
     if carrier_id is None:
         return st
     feed = [(ts, 0, "ev", ev) for ts, ev in events] + [(ts, 1, "market", items) for ts, items in markets] + \
@@ -280,6 +289,25 @@ def _carrier_event(st, carrier_id, ev, ts):
             if su.get("TotalCapacity") else None
         st["stats"] = {"cargo": su.get("Cargo"), "used": used, "depot": ev.get("FuelLevel"), "ts": ts}
         st["after_stats"] = 0
+        fin = ev.get("Finance")
+        if isinstance(fin, dict) and isinstance(fin.get("CarrierBalance"), int):
+            # AvailableBalance is the balance less the reserve, and can be negative (seen: -1,051,595,783)
+            st["finance"] = {"balance": fin["CarrierBalance"], "reserve": fin.get("ReserveBalance"),
+                             "available": fin.get("AvailableBalance"), "ts": ts}
+        if isinstance(ev.get("Crew"), list):
+            roles = {}
+            for c in ev["Crew"]:
+                if isinstance(c, dict) and isinstance(c.get("CrewRole"), str):
+                    # an inactive role has no Enabled; Activated with Enabled false is a suspended service
+                    roles[c["CrewRole"]] = "off" if not c.get("Activated") else "on" if c.get("Enabled", True) else "suspended"
+            st["crew"] = {"roles": roles, "ts": ts}
+    elif name == "CarrierCrewServices":
+        # a service switched on or off, paused or resumed in the carrier's management, between two CarrierStats
+        state = CREW_OPERATIONS.get(ev.get("Operation"))
+        if ev.get("CarrierID") != carrier_id or not state or not isinstance(ev.get("CrewRole"), str):
+            return
+        crew = st["crew"] or {"roles": {}}
+        st["crew"] = {"roles": dict(crew["roles"], **{ev["CrewRole"]: state}), "ts": ts}
     elif name == "CarrierTradeOrder":
         if ev.get("CarrierID") != carrier_id or ev.get("BlackMarket"):
             return
@@ -429,6 +457,53 @@ def carrier_jumps(depot, hold, used, ly=CARRIER_JUMP_LY):
         depot -= burn
         n += 1
     return n
+
+
+def carrier_trip(ly, depot, used, jump_ly=CARRIER_JUMP_LY, k=1.0):
+    """The tritium a trip of `ly` takes (S13): equal legs of at most `jump_ly`, each burned by carrier_burn (scaled by
+    `k`, the carrier's own history when there is one), each lighter than the last by what the legs before burned
+    (topping the depot up from the hold moves weight, it adds none). depot: the tritium in its tank; used: the capacity
+    in use (carrier_burn's). Returns {jumps, burn, depot, short (what the depot lacks), depot_after}, or None."""
+    if not ly or ly <= 0 or not isinstance(depot, (int, float)) or not isinstance(used, (int, float)):
+        return None
+    jumps = max(1, math.ceil(ly / jump_ly - 1e-9))
+    leg, burn = ly / jumps, 0
+    for _ in range(jumps):
+        burn += round(k * carrier_burn(leg, used, max(depot - burn, 0)))
+    return {"jumps": jumps, "burn": burn, "depot": int(depot), "short": max(0, burn - int(depot)),
+            "depot_after": max(0, int(depot) - burn)}
+
+
+# ---- the carrier's upkeep ----
+
+# Weekly upkeep in credits: the core (the captain, the market, the tritium depot) and each optional service by its
+# CarrierStats CrewRole, (active, suspended). PUBLISHED figures (the community wiki's), NOT yet checked against the
+# game's carrier Finance screen: the page says "published rates" until they are (the journal has no upkeep figure)
+CARRIER_CORE_UPKEEP = 5_000_000
+CARRIER_UPKEEP = {"Refuel": (1_500_000, 750_000), "Repair": (1_500_000, 750_000), "Rearm": (1_500_000, 750_000),
+                  "Shipyard": (6_500_000, 1_800_000), "Outfitting": (5_000_000, 1_500_000),
+                  "BlackMarket": (2_000_000, 1_250_000), "Exploration": (1_850_000, 700_000),
+                  "VistaGenomics": (1_500_000, 700_000), "Bartender": (1_750_000, 1_250_000),
+                  "VoucherRedemption": (1_850_000, 850_000), "PioneerSupplies": (5_000_000, 1_500_000)}
+UPKEEP_WARN_WEEKS = 4   # the tile's balance line is amber under this many weeks of upkeep (the author's default)
+
+
+def carrier_upkeep(roles):
+    """A week's upkeep from the carrier's crew (carrier_fold's crew roles: role -> on | suspended | off): the core plus
+    each service at its active or suspended rate. A role not in CARRIER_UPKEEP costs nothing extra (the core's own)."""
+    total = CARRIER_CORE_UPKEEP
+    for role, state in (roles or {}).items():
+        rates = CARRIER_UPKEEP.get(role)
+        if rates and state in ("on", "suspended"):
+            total += rates[0 if state == "on" else 1]
+    return total
+
+
+def upkeep_weeks(balance, upkeep):
+    """How many weeks of upkeep the carrier's balance pays (one decimal), None without either."""
+    if not isinstance(balance, (int, float)) or not upkeep:
+        return None
+    return max(0.0, math.floor(balance / upkeep * 10) / 10)
 
 
 def jumps_estimate(ly, laden_range):

@@ -155,7 +155,9 @@ with different reporters.
 The **header** shows the galactic region, ranks, fuel, hull, any core module under your level (`module_warn`,
 80%; as of the last Loadout or repair, since the journal logs nothing in between), your carrier's jump countdown
 (and its tritium while it is on a sell order: see [Cargo and trading](cargo-and-trading.md); on the game PC 🎯 beside
-its system, when it is elsewhere, puts it in the galaxy map), the nearest places to sell, and the last backup.
+its system, when it is elsewhere, puts it in the galaxy map; the tritium for its trip to you, suspended services in red
+and its balance in weeks of upkeep), the nearest places to sell (your carrier among them while its UC or Vista is on),
+and the last backup.
 
 The **fuel tile** counts jumps as the ship gets lighter ("≈6 jumps at max range (484 ly), 3,500 at your pace"),
 for any drive, engineered or not, from your own Loadout and jumps. Nearby shows laden range and the targeted

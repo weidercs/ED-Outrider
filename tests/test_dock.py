@@ -74,6 +74,10 @@ class Rows(unittest.TestCase):
         own = dock.own_row({"id": 1, "callsign": "g0x-85z", "name": "OUT OF THE BLUE", "system": "Here", "x": 1, "y": 2, "z": 3,
                             "services": ["dock", "exploration", "vistagenomics", "refuel"]})
         self.assertEqual(own["services"], {"UC", "Vista", "Refuel"})   # what its last Docked listed
+        # UC paused since (the carrier summary's word, from its crew: S55 B): not offered, though its last Docked listed it
+        paused = dock.own_row({"id": 1, "callsign": "g0x-85z", "x": 1, "y": 2, "z": 3, "has_uc": False, "has_vista": True,
+                               "services": ["dock", "exploration", "vistagenomics"]})
+        self.assertEqual(paused["services"], {"Vista"})
         rows = dock.merge(spansh(), [], own)
         self.assertEqual([r["access"] for r in rows if r["callsign"] == "G0X-85Z"], ["yours"])   # not Spansh's copy
         self.assertIsNone(dock.own_row({"id": 1, "x": 1, "y": 2, "z": 3, "decommission": {"done": True}}))
