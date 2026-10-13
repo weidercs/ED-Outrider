@@ -122,18 +122,20 @@ CAPS = {1: 300, 2: 250, 3: 200, 4: 150, 5: 100}
 
 # Synthesis recipes an explorer reaches for, by the name the page shows. `name` is the journal's Synthesis Name (matched
 # without regard to case), `group` where the Materials tab puts it: "fsd" (the three injections, always open), "ship"
-# (Ship upkeep), "srv" (the SRV and its rigs); `family` and `grade` make a group's one-line summary. `verified`: checked
+# (Ship upkeep), "srv" (the SRV and its rigs); `family` and `grade` make a group's one-line summary (the injections' grade
+# is how the voice's "FSD injections" names them, S14). `verified`: checked
 # against a real Synthesis line (another commander's journal); the rest are PUBLISHED recipes, from EDEngineer's
 # blueprints.json (MIT) and EDDiscovery's RecipesSynthesis.cs (Apache-2.0), which agree on every one here and give the
 # journal names (EDDiscovery's), until a Synthesis of your own checks them (inventory(): `learned`).
 SYNTH = {
     "FSD injection basic": {"materials": {"carbon": 1, "vanadium": 1, "germanium": 1}, "boost": "+25%",
-                            "verified": False, "name": "FSD Basic", "group": "fsd"},
+                            "verified": False, "name": "FSD Basic", "group": "fsd", "grade": "basic"},
     "FSD injection standard": {"materials": {"carbon": 1, "vanadium": 1, "germanium": 1, "cadmium": 1, "niobium": 1},
-                               "boost": "+50%", "verified": False, "name": "FSD Standard", "group": "fsd"},
+                               "boost": "+50%", "verified": False, "name": "FSD Standard", "group": "fsd",
+                               "grade": "standard"},
     "FSD injection premium": {"materials": {"carbon": 1, "germanium": 1, "arsenic": 1, "niobium": 1, "yttrium": 1,
                                             "polonium": 1}, "boost": "+100%", "verified": False, "name": "FSD Premium",
-                              "group": "fsd"},
+                              "group": "fsd", "grade": "premium"},
     # the AFMU's ammunition: the only synthesis that repairs the ship's modules (not its hull)
     "AFMU refill basic": {"materials": {"nickel": 2, "zinc": 2, "chromium": 2, "vanadium": 3}, "verified": False,
                           "name": "Module Repair Basic", "group": "ship", "family": "AFMU refill", "grade": "basic"},

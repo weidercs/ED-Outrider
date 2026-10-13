@@ -17,6 +17,7 @@ from test_mcp import fake_get   # the same fixture payloads as the MCP tools
 
 import outrider.ask as ask  # noqa: E402
 import outrider.auth  # noqa: E402
+from outrider.core import ts_seconds  # noqa: E402
 
 
 class Phrases(unittest.TestCase):
@@ -28,9 +29,38 @@ class Phrases(unittest.TestCase):
                  "nearest unvisited system": "nearest_unvisited", "hush": "hush", "Vespa, be quiet!": "hush",
                  "any green gas giants near here": "nearest_ggg",
                  "unhush": "unhush", "voice back please": "unhush", "jumps left": "fuel",
-                 "what's the weather like": None, "": None, "hushpuppies": None}
+                 "what's the weather like": None, "": None, "hushpuppies": None,
+                 # S14, and the phrases around them still where they were
+                 "Can I still make an FSD injection?": "fsd_injection", "how much jumponium have I got": "fsd_injection",
+                 "how far have I gone today": "travel_today", "how far this session": "travel_today",
+                 "how many jumps today": "travel_today", "how far can I go": "fuel",
+                 "anything left behind nearby": "left_behind", "what's left behind": "left_behind",
+                 "what's left here": "whats_left", "anything else in this system": "whats_left",
+                 "status of this body": "this_body", "is this planet worth landing on": "this_body",
+                 "tell me about the targeted body": "this_body", "status": "status_report",
+                 # S32: a time in the hush, and the batches before (S54 traders, S27, D4) unchanged
+                 "hush for ten minutes": "hush", "be quiet until the next jump": "hush", "stop talking": "hush",
+                 "nearest raw trader": "nearest_dock", "nearest station with a shipyard": "nearest_dock",
+                 "nearest green gas giant": "nearest_ggg"}
         for text, want in cases.items():
             self.assertEqual(ask.match(text, ph), want, text)
+
+    def test_hush_mode(self):
+        """S32: the hush a question asks for, only ever one of the server's three (set_hush reads any other as "jump"):
+        a time it does not offer gets the nearest, and the answer names the three."""
+        table = {"hush": "30m", "hush for ten minutes": "10m", "quiet for 10 min": "10m", "mute for 30 minutes": "30m",
+                 "be quiet for half an hour": "30m", "hush for five minutes": "10m", "quiet for a quarter of an hour": "10m",
+                 "hush for twenty five minutes": "30m", "shut up for an hour": "30m", "hush for 2 hours": "30m",
+                 "hush until the next jump": "jump", "quiet until we leave": "jump", "hush until we arrive": "jump",
+                 "silence till the next system": "jump", "hush for ten minutes or until I jump": "jump"}
+        for text, want in table.items():
+            self.assertEqual(ask.hush_mode(text), want, text)
+        self.assertTrue(set(ask.HUSH_SAID) == set(ed_outrider.HUSH_MODES))   # the page's words for each mode the server has
+        self.assertEqual(ask.hush_words("hush for ten minutes"), ("10m", "Quiet for 10 minutes."))
+        self.assertEqual(ask.hush_words("hush until the next jump"), ("jump", "Quiet until the next jump."))
+        self.assertEqual(ask.hush_words("hush for five minutes"),
+                         ("10m", "I can hush for 10 or 30 minutes, or until the next jump. Quiet for 10 minutes."))
+        self.assertEqual(ask.hush_words("hush")[1], "Quiet for 30 minutes.")   # no time said: no list of choices
 
     def test_broken_phrase_file(self):
         with tempfile.TemporaryDirectory() as d:
@@ -63,6 +93,110 @@ class Phrases(unittest.TestCase):
             self.assertEqual(go("next_jump"), "Next highway stop: Neu, 40.0 light years. 1 jump left.")
         self.assertEqual([ask.words_cr(x) for x in (0, 950, 12_400, 1_000_000, 2_350_000_000)],
                          ["0", "950", "12 thousand", "1 million", "2.4 billion"])
+
+    def test_fsd_injection(self):
+        """S14: the three injections picked by group and grade (never by a recipe's name: S15's learned recipes), the
+        material that runs out first for one you can make at most twice, and stale counts said."""
+        go = lambda get: asyncio.run(ask.fixed_answer("fsd_injection", get))   # noqa: E731
+        self.assertEqual(go(fake_get()), "Premium injections: 2, short of polonium. Standard: 5. Basic: 31.")
+
+        def with_materials(**change):
+            async def get(path, params):
+                d = await fake_get()(path, params)
+                return dict(d, **change) if path == "/api/materials" else d
+            return get
+        renamed = [{"name": "Jump boost " + g, "group": "fsd", "grade": g, "craftable": n, "limit": "Arsenic"}
+                   for g, n in (("basic", 4), ("standard", 0), ("premium", 1))] + \
+                  [{"name": "FSD injection premium", "group": "other", "grade": None, "craftable": 99, "limit": None}]
+        self.assertEqual(go(with_materials(synthesis=renamed)),
+                         "Premium injections: 1, short of arsenic. Standard: none, short of arsenic. Basic: 4.")
+        self.assertEqual(go(with_materials(stale=True)),
+                         "Premium injections: 2, short of polonium. Standard: 5. Basic: 31. Counts from before this login.")
+        self.assertIn("no materials reading", go(with_materials(snapshot_ts=None)))
+
+    def test_travel_today(self):
+        """S14: the sessions that ended since local midnight (a session that began before it counted whole); "this
+        session" the latest one alone."""
+        now = ts_seconds("2026-10-13T15:00:00Z")
+        sessions = [{"start": "2026-10-13T12:00:00Z", "end": "2026-10-13T14:30:00Z", "jumps": 20, "ly": 900.4, "firsts": 3,
+                     "mapped": 1, "samples": 0},
+                    {"start": "2026-10-13T02:00:00Z", "end": "2026-10-13T05:00:00Z", "jumps": 1, "ly": 40.0, "firsts": 0,
+                     "mapped": 0, "samples": 6},
+                    {"start": "2026-10-12T20:00:00Z", "end": "2026-10-12T23:00:00Z", "jumps": 50, "ly": 3000.0}]
+
+        async def get(path, params):
+            self.assertEqual((path, params), ("/api/history", {"days": "2"}))
+            return {"sessions": sessions, "all_time": {}}
+        go = lambda text, t=now: asyncio.run(ask.travel_today(get, 10, text, now=t))   # noqa: E731
+        with unittest.mock.patch.object(ask, "local_midnight", lambda now=None: "2026-10-13T04:00:00Z"):
+            self.assertEqual(go("how far today"), "Today: 21 jumps, 940 light years, 3 first discoveries, 1 body mapped, 6 samples.")
+            self.assertEqual(go("how far this session"), "This session: 20 jumps, 900 light years, 3 first discoveries, 1 body mapped.")
+            self.assertEqual(go("this session", now + 3 * 3600), "Your last session: 20 jumps, 900 light years, 3 first discoveries, "
+                                                                 "1 body mapped.")
+            self.assertEqual(go("how far today", ts_seconds("2026-10-14T15:00:00Z")), "Today: 21 jumps, 940 light years, "
+                                                                                       "3 first discoveries, 1 body mapped, 6 samples.")
+        with unittest.mock.patch.object(ask, "local_midnight", lambda now=None: "2026-10-14T04:00:00Z"):
+            self.assertEqual(go("how far today"), "No jumps yet today.")
+        # local midnight on this computer's clock, as a UTC timestamp
+        old = os.environ.get("TZ")
+        try:
+            os.environ["TZ"] = "America/New_York"
+            time.tzset()
+            self.assertEqual(ask.local_midnight(now), "2026-10-13T04:00:00Z")
+            self.assertEqual(ask.local_midnight(ts_seconds("2026-10-13T03:00:00Z")), "2026-10-12T04:00:00Z")
+        finally:
+            if old is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = old
+            time.tzset()
+
+    def test_this_body(self):
+        """S14: the body you are on, else the one you fly near, else the one targeted here; from body_detail."""
+        def with_status(**change):
+            async def get(path, params):
+                d = await fake_get()(path, params)
+                if path == "/api/body":
+                    d["row"].update(value_now=30, value_if_mapped=40_000, geo=1, terraformable=True)
+                return dict(d, **change) if path == "/api/status" else d
+            return get
+        go = lambda **c: asyncio.run(ask.fixed_answer("this_body", with_status(**c)))   # noqa: E731
+        full = ("A 1, a rocky body, landable at 0.12 g, terraformable. Worth 30 credits now, 40 thousand if mapped. "
+                "2 biological signals: likeliest Bacterium Volu, up to 19 million. 1 geological signal.")
+        self.assertEqual(go(on_body="A 1", near_body="B 2", target_body="C 3"), full)
+        self.assertEqual(go(near_body="A 1", target_body="C 3"), full)
+        self.assertEqual(go(target_body="A 1"), "Targeted: " + full)
+        self.assertEqual(go(), "You're not on or near a body, and no body is targeted.")
+
+        async def unknown(path, params):
+            if path == "/api/body":
+                return {"system": "Start", "row": None}
+            return dict(await fake_get()(path, params), target_body="Jameson Memorial")
+        self.assertEqual(asyncio.run(ask.fixed_answer("this_body", unknown)), "Targeted: Jameson Memorial: nothing known about it yet.")
+
+    def test_left_behind(self):
+        """S14: the nearest one or two systems with work over the server's thresholds (body, bio), worth "up to"."""
+        left = {"systems": [
+            {"name": "Small Fry", "distance": 2.0, "unfound": 0, "bio": [{"body": "1", "value": 1_000_000}],
+             "maps": [{"body": "2", "increment": 9_000}], "maps_total": 1},
+            {"name": "Back There", "distance": 4.04, "unfound": 2, "bio": [{"body": "B 1", "value": 19_000_000}],
+             "maps": [{"body": "B 3", "increment": 700_000}, {"body": "B 4", "increment": 1_200}], "maps_total": 2},
+            {"name": "Lost Bodies", "distance": 9.5, "unfound": 1, "bio": [], "maps": [], "maps_total": 0},
+            {"name": "Too Far Down", "distance": 12.0, "unfound": 3, "bio": [], "maps": [], "maps_total": 0}]}
+        calls = []
+
+        async def get(path, params):
+            calls.append((path, params))
+            return left
+        go = lambda limits: asyncio.run(ask.fixed_answer("left_behind", get, limits=limits))   # noqa: E731
+        self.assertEqual(go((500_000, 10_000_000)),
+                         "Left behind nearby: Back There, 4.0 light years: 2 bodies not found; map B 3; biology on B 1, "
+                         "worth up to 19.7 million. Then Lost Bodies, 9.5 light years: 1 body not found.")
+        self.assertEqual(calls[0], ("/api/left", {"radius": "100"}))
+        self.assertTrue(go(None).startswith("Left behind nearby: Small Fry, 2.0 light years: map 2; biology on 1, worth up to "
+                                            "1 million. Then Back There"))
+        left["systems"] = left["systems"][:1]
+        self.assertEqual(go((500_000, 10_000_000)), "Nothing worth going back for within 100 light years.")
 
     def test_settings(self):
         with contextlib.redirect_stderr(io.StringIO()) as err:
@@ -105,6 +239,13 @@ class Endpoint(unittest.TestCase):
             out["none"] = await r.json()
             r = await c.post("/api/ask", json={"text": "hush"})
             out["hush"] = (await r.json(), self.state.hush and self.state.hush["mode"], self.state.copilot["action"])
+            # S32: a hush for a set time
+            timed = []
+            for text in ("Vespa, hush for ten minutes", "be quiet until the next jump", "hush for five minutes"):
+                r = await c.post("/api/ask", json={"text": text})
+                h = dict(self.state.hush)
+                timed.append(((await r.json())["answer"], h["mode"], h["until"] and round(h["until"] - time.time())))
+            out["timed"] = timed
             await c.post("/api/ask", json={"text": "voice back"})
             out["unhush"] = self.state.hush
             out["bad"] = [(r.status, (await r.json())["code"]) for r in
@@ -125,9 +266,33 @@ class Endpoint(unittest.TestCase):
         self.assertEqual((out["none"]["matched"], out["none"]["command"], out["none"]["spoken"]), ("none", None, True))
         self.assertIn("status report", out["none"]["answer"])
         self.assertEqual((out["hush"][0]["command"], out["hush"][1], out["hush"][2]), ("hush", "30m", "caption"))
+        self.assertEqual(out["timed"], [("Quiet for 10 minutes.", "10m", 600), ("Quiet until the next jump.", "jump", None),
+                                        ("I can hush for 10 or 30 minutes, or until the next jump. Quiet for 10 minutes.", "10m", 600)])
         self.assertIsNone(out["unhush"])
         self.assertEqual(out["bad"], [(400, "bad_request")] * 4)
         self.assertEqual((out["old"], out["lan"]), ((426, "app_too_old"), (401, "signin_required")))
+
+    def test_this_body_from_the_status(self):
+        """S14: /api/status says the body whose near-body zone you are in and the body targeted in this system (game
+        facts, like on_body); the voice's "this body" reads them."""
+        import types
+        self.state.spansh = types.SimpleNamespace(cached=lambda i: (None, None))   # nothing known of the system
+        self.state.journals.handle({"event": "FSDJump", "timestamp": "2026-10-13T10:00:00Z", "StarSystem": "Sys",
+                                    "SystemAddress": 1, "StarPos": [0, 0, 0]})
+        self.state.journals.status_json = {"live": True, "ts": "2026-10-13T10:05:00Z", "flags": ed_outrider.FLAG_IN_MAIN_SHIP,
+                                           "flags2": 0, "body": "Sys 4", "lat": 1.0, "lon": 2.0, "alt": 48_000,
+                                           "destination": {"System": 1, "Body": 7, "Name": "Sys 7 a"}}
+
+        async def go(c):
+            st = await (await c.get("/api/status")).json()
+            r = await c.post("/api/ask", json={"text": "tell me about this planet"})
+            self.state.journals.status_json.update(body=None, alt=None)
+            st2 = await (await c.get("/api/status")).json()
+            return st, await r.json(), st2
+        st, said, st2 = self.client(go)
+        self.assertEqual((st["on_body"], st["near_body"], st["target_body"]), (None, "4", "7 a"))
+        self.assertEqual((said["command"], said["answer"]), ("this_body", "4: nothing known about it yet."))
+        self.assertEqual((st2["near_body"], st2["target_body"]), (None, "7 a"))
 
     def test_speaker_seen_expires(self):
         self.state.speaker_seen = time.monotonic() - 61

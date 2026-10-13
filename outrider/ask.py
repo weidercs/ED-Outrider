@@ -3,7 +3,8 @@ question into text and sends it to POST /api/ask; the answer is said on the PC a
 
 First the fixed commands, matched without any AI (resources/ask.json: editable phrases): status report, fuel,
 unsold, next jump, what's left here, nearest unvisited, nearest station (or carrier, Vista, repair...), nearest
-green gas giant, hush, unhush. Their answers come from the same read-only tools
+green gas giant, FSD injections, how far today, this body, left behind nearby, hush (for a set time: S32), unhush.
+Their answers come from the same read-only tools
 the MCP bridge serves (outrider/tools.py), called in-process. Then, only when [assistant] enabled is true, an optional
 AI layer for anything else: an OpenAI-compatible chat-completions endpoint (Ollama, Venice.ai, OpenAI...) given those
 same tools. It runs on the PC; the key never leaves it. Nothing is sent anywhere unless it is configured.
@@ -13,23 +14,29 @@ import json
 import os
 import re
 import sys
+import time
 
 import outrider
 import outrider.dock as dock
+from outrider.core import iso_ts, ts_seconds
+import outrider.materials as materials
 import outrider.tools as tools
 
 ASK_FILE = os.path.join(outrider.RESOURCES_DIR, "ask.json")
 TEXT_MAX = 500
 # in the order questions are matched: nearest_dock before fuel, unsold, next_jump and whats_left, whose single words
 # ("fuel") are in its questions too ("nearest station with fuel" asked for the fuel gauge: the sweep of 2026-10-09)
-COMMANDS = ("unhush", "hush", "nearest_ggg", "nearest_dock", "next_jump", "status_report", "fuel", "unsold", "whats_left",
-            "nearest_unvisited")
+# S14's four before next_jump and status_report ("status of this body" is this_body; "what's left behind" is not whats_left)
+COMMANDS = ("unhush", "hush", "nearest_ggg", "nearest_dock", "fsd_injection", "travel_today", "left_behind", "this_body",
+            "next_jump", "status_report", "fuel", "unsold", "whats_left", "nearest_unvisited")
 # what the voice says it knows when nothing matched: one label per command, in the order said (a test checks every
 # command has one, so a new command is never left out of the list)
 LABELS = {"status_report": "a status report", "fuel": "fuel", "unsold": "unsold data", "next_jump": "the next jump",
           "whats_left": "what's left here", "nearest_unvisited": "the nearest unvisited system",
           "nearest_dock": "the nearest station, carrier or material trader",
-          "nearest_ggg": "the nearest potential green gas giant", "hush": "hush", "unhush": "unhush"}
+          "nearest_ggg": "the nearest potential green gas giant", "fsd_injection": "FSD injections",
+          "travel_today": "how far today", "this_body": "this body", "left_behind": "what's left behind nearby",
+          "hush": "hush", "unhush": "unhush"}
 
 
 def known_questions():
@@ -86,6 +93,62 @@ def match(text, phrases):
         if any(f" {p} " in padded for p in ps):
             return name
     return None
+
+
+# ---- hush for a set time (S32) ----
+
+# what the page says for each hush (page.js HUSH_SAID): the server's HUSH_MODES are the only lengths there are
+HUSH_SAID = {"10m": "Quiet for 10 minutes.", "30m": "Quiet for 30 minutes.", "jump": "Quiet until the next jump."}
+HUSH_MINUTES = {"10m": 10, "30m": 30}
+HUSH_JUMP = re.compile(r"\b(jump|jumps|jumping|next system|leave|leaving|arrive|arriving|arrival)\b")
+NUMBER_WORDS = {w: n for n, w in enumerate("zero one two three four five six seven eight nine ten eleven twelve thirteen "
+                                           "fourteen fifteen sixteen seventeen eighteen nineteen".split())}
+TENS_WORDS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90}
+TIME_UNITS = {"minute": 1, "minutes": 1, "min": 1, "mins": 1, "hour": 60, "hours": 60, "hr": 60, "hrs": 60}
+
+
+def hush_minutes(text):
+    """The minutes a hush is asked for ("ten minutes", "10 min", "twenty five minutes", "half an hour", "an hour"), or
+    None when the question names no time."""
+    w = norm(text).split()
+    for i, unit in enumerate(w):
+        if unit not in TIME_UNITS or i == 0:
+            continue
+        before, n = w[i - 1], None
+        if before.isdigit():
+            n = int(before)
+        elif before in NUMBER_WORDS:
+            n = NUMBER_WORDS[before] + (TENS_WORDS.get(w[i - 2], 0) if i >= 2 else 0)
+        elif before in TENS_WORDS:
+            n = TENS_WORDS[before]
+        elif before == "quarter":
+            n = 0.25
+        elif before in ("a", "an"):
+            lead = w[i - 3:i - 1] if i >= 3 else w[:i - 1]
+            n = 0.5 if w[i - 2:i - 1] == ["half"] else 0.25 if "quarter" in lead else 1
+        if n is not None:
+            return n * TIME_UNITS[unit]
+    return None
+
+
+def hush_mode(text):
+    """The hush a question asks for: "jump" (until the next jump: jump, next system, leave, arrive), "10m" or "30m"
+    (the nearest of the two to the time asked for, 30 minutes when none is), never anything else: set_hush reads any
+    other mode as "jump" (review)."""
+    if HUSH_JUMP.search(norm(text)):
+        return "jump"
+    m = hush_minutes(text)
+    return "30m" if m is None or m > 20 else "10m"
+
+
+def hush_words(text):
+    """(mode, the answer): the page's words for the hush set, and for a time it does not offer ("five minutes", "an
+    hour") the three it does first, so the nearest one is no surprise (the author's default, 2026-10-12)."""
+    mode, m = hush_mode(text), hush_minutes(text)
+    said = HUSH_SAID[mode]
+    if mode != "jump" and m is not None and m != HUSH_MINUTES[mode]:
+        said = "I can hush for 10 or 30 minutes, or until the next jump. " + said
+    return mode, said
 
 
 # ---- the fixed answers, from the read-only tools ----
@@ -146,8 +209,166 @@ async def nearest_dock(get, text, rows=10):
     return said, place
 
 
-async def fixed_answer(command, get, rows=10, text=""):
-    """The words for a fixed command (hush and unhush are the caller's: they change state, the tools cannot)."""
+# ---- S14: FSD injections, how far today, this body, left behind nearby ----
+
+GRADES = ("premium", "standard", "basic")
+
+
+async def fsd_injection(get, rows):
+    """"Premium injections: 2, short of polonium. Standard: 5. Basic: 31.": the materials tool's FSD recipes, picked
+    by group and grade (a learned recipe keeps them: S15), the material that runs out first named for a grade you can
+    make at most materials.JUMPONIUM_MAX times (the Materials tab's jumponium call-out)."""
+    m = await tools.call("materials", {}, get, rows)
+    if m.get("error"):
+        return m["error"]
+    if not m.get("counts_from"):
+        return "I have no materials reading yet: the game writes one at login."
+    fsd = {x.get("grade"): x for x in m.get("synthesis") or [] if x.get("group") == "fsd"}
+    parts = []
+    for g in GRADES:
+        x = fsd.get(g)
+        if not x:
+            continue
+        n = x.get("can_make") or 0
+        part = f"{g.capitalize()}{' injections' if not parts else ''}: {n or 'none'}"
+        if x.get("limited_by") and n <= materials.JUMPONIUM_MAX:
+            part += f", short of {x['limited_by'].lower()}"
+        parts.append(part + ".")
+    if not parts:
+        return "I don't know the FSD injection recipes."
+    # counts from before this login: the game wrote no Materials line since (review)
+    return " ".join(parts) + (" Counts from before this login." if m.get("stale") else "")
+
+
+def local_midnight(now=None):
+    """The start of today on this computer's clock, as the journals' UTC timestamp ("today" = local midnight: the
+    author's default, 2026-10-12)."""
+    lt = time.localtime(time.time() if now is None else now)
+    midnight = time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 0, 0, 0, 0, 0, -1))
+    return iso_ts(midnight)
+
+
+def plural(n, one, many=None):
+    return f"{n:,} {one if n == 1 else many or one + 's'}"
+
+
+async def travel_today(get, rows, text="", now=None):
+    """How far today: the sessions (travel_history, 2 days) that ended since local midnight, a session that began
+    before it counted whole; with "session" in the question the latest session alone ("this session", or "your last
+    session" when it ended over 2 h ago, History's split)."""
+    h = await tools.call("travel_history", {"days": 2}, get, max(rows, 20))
+    if h.get("error"):
+        return h["error"]
+    sessions = h.get("sessions") or []
+    now = time.time() if now is None else now
+    if "session" in norm(text).split():
+        if not sessions:
+            return "No session in the last two days."
+        x = sessions[0]
+        old = bool(x.get("end")) and now - ts_seconds(x["end"]) > 7200
+        lead, picked = ("Your last session" if old else "This session"), [x]
+    else:
+        midnight = local_midnight(now)
+        lead, picked = "Today", [x for x in sessions if (x.get("end") or "") >= midnight]
+        if not picked:
+            return "No jumps yet today."
+    total = {k: sum(x.get(k) or 0 for x in picked) for k in ("jumps", "ly", "first_discoveries", "mapped", "samples")}
+    out = [plural(total["jumps"], "jump") if total["jumps"] else "no jumps"]
+    if total["jumps"]:
+        out[0] += f", {ly(total['ly'])} light years"
+    if total["first_discoveries"]:
+        out.append(plural(total["first_discoveries"], "first discovery", "first discoveries"))
+    if total["mapped"]:
+        out.append(plural(total["mapped"], "body", "bodies") + " mapped")
+    if total["samples"]:
+        out.append(plural(total["samples"], "sample"))
+    return f"{lead}: {', '.join(out)}."
+
+
+def a_or_an(word):
+    return "an" if word[:1].lower() in "aeiou" else "a"
+
+
+async def this_body(get, rows):
+    """The body you are on, else the one whose near-body zone you are in, else the one targeted in this system
+    (/api/status: on_body, near_body, target_body), from body_detail: its type, landable and gravity, terraformable,
+    its value now and if mapped, the biology (the likeliest, "up to") and geology signals."""
+    s = await tools.call("current_status", {}, get, rows)
+    if s.get("error"):
+        return s["error"]
+    name, lead = next(((s[k], lead) for k, lead in (("on_body", ""), ("near_body", ""), ("target_body", "Targeted: "))
+                       if s.get(k)), (None, ""))
+    if not name:
+        return "You're not on or near a body, and no body is targeted."
+    b = await tools.call("body_detail", {"name": name}, get, rows)
+    if b.get("error"):
+        return f"{lead}{name}: nothing known about it yet."
+    kind = b.get("type") or "body"
+    if kind[1:2].islower():   # "Rocky body" -> "rocky body"; "K (Yellow-Orange) Star", "Class I gas giant" kept
+        kind = kind[0].lower() + kind[1:]
+    first = f"{lead}{name}, {a_or_an(kind)} {kind}"
+    if b.get("landable"):
+        first += f", landable at {b['gravity_g']:.2f} g" if b.get("gravity_g") is not None else ", landable"
+    if b.get("terraformable"):
+        first += ", terraformable"
+    out = [first + "."]
+    worth = [f"{words_cr(b['value_now'])} credits now" if b.get("value_now") else "",
+             f"{words_cr(b['value_if_mapped'])} if mapped" if b.get("value_if_mapped") else ""]
+    if any(worth):
+        out.append("Worth " + ", ".join(w for w in worth if w) + ".")
+    if b.get("bio_signals"):
+        bio = plural(b["bio_signals"], "biological signal")
+        top = (b.get("bio_predicted") or [None])[0]
+        if top and (top.get("likeliest") or top.get("genus")):
+            bio += f": likeliest {top.get('likeliest') or top['genus']}" + (f", up to {words_cr(top['up_to'])}" if top.get("up_to") else "")
+        out.append(bio + ".")
+    if b.get("geo_signals"):
+        out.append(plural(b["geo_signals"], "geological signal") + ".")
+    return " ".join(out)
+
+
+LEFT_RADIUS = 100
+
+
+async def left_behind(get, limits=None):
+    """The nearest one or two systems within LEFT_RADIUS ly with work worth going back for: bodies not found, planets
+    worth mapping and biology over `limits` (body, bio: the server's body_highlight_level and bio_min, never a
+    browser's: the page's Left behind keeps its own), what it is worth "up to"."""
+    d = await tools.call("left_behind", {"radius_ly": LEFT_RADIUS}, get, 500)
+    if d.get("error"):
+        return d["error"]
+    body_min, bio_min = limits or (0, 0)
+    said = []
+    for x in d.get("systems") or []:
+        maps = [m for m in x.get("map") or [] if (m.get("adds") or 0) >= body_min]
+        bio = [b for b in x.get("bio") or [] if (b.get("up_to") or 0) >= bio_min]
+        unfound = x.get("bodies_not_found") or 0
+        if not (maps or bio or unfound):
+            continue
+        bits = [plural(unfound, "body", "bodies") + " not found" if unfound else "",
+                "map " + ", ".join(m["body"] for m in maps[:3]) if maps else "",
+                "biology on " + ", ".join(b["body"] for b in bio[:3]) if bio else ""]
+        worth = sum(m.get("adds") or 0 for m in maps) + sum(b.get("up_to") or 0 for b in bio)
+        said.append(f"{x['name']}, {ly(x.get('distance_ly'))} light years: " + "; ".join(b for b in bits if b)
+                    + (f", worth up to {words_cr(worth)}" if worth else "") + ".")
+        if len(said) == 2:
+            break
+    if not said:
+        return f"Nothing worth going back for within {LEFT_RADIUS} light years."
+    return "Left behind nearby: " + said[0] + (" Then " + said[1] if len(said) > 1 else "")
+
+
+async def fixed_answer(command, get, rows=10, text="", limits=None):
+    """The words for a fixed command (hush and unhush are the caller's: they change state, the tools cannot).
+    `limits`: (body, bio) credits, the server's thresholds for left_behind."""
+    if command == "fsd_injection":
+        return await fsd_injection(get, rows)
+    if command == "travel_today":
+        return await travel_today(get, rows, text)
+    if command == "this_body":
+        return await this_body(get, rows)
+    if command == "left_behind":
+        return await left_behind(get, limits)
     if command == "fuel":
         s = await tools.call("current_status", {}, get, rows)
         if s.get("error"):

@@ -187,8 +187,8 @@ Sound: Allow; Firefox: Autoplay: Allow Audio and Video).
 - **No repeats too soon.** Each alert goes through every line in your personalities before any comes round
   again. The browser remembers what you have heard across reloads.
 - **Hush.** The **▾** beside 🗣 hushes for 10 minutes, 30 minutes or until the next jump. Danger and anything
-  you ask for still speak. The hush is kept by Outrider, so a hush from a tablet or the co-pilot button
-  quiets the PC too.
+  you ask for still speak. The hush is kept by Outrider, so a hush from a tablet, the co-pilot button or a
+  [question by voice](#-ask-outrider-by-voice) ("hush for ten minutes") quiets the PC too.
 - **One window speaks.** With the page open in several windows, only one speaks and plays sounds, so nothing
   is said twice. **Speak from this window** takes over; **This screen speaks: auto / always / never** sets it
   per browser. A tablet with **Play alerts here** speaks as well, whatever the PC does (see On a tablet).
@@ -231,7 +231,14 @@ nearest unvisited, nearest station** (or carrier, Vista, cartographics, repair, 
 raw material trader, "where can I sell": see
 [Nearest place to dock](plot-route.md#-nearest-place-to-dock); a place further than 500 ly also gets a neutron route
 plotted there while you follow none), **nearest green gas giant** (a guess from what
-Outrider has cached: see [Potential green gas giants](views.md#-potential-green-gas-giants)), **hush** and **unhush**. Their phrases are in `resources/ask.json`; edit them freely.
+Outrider has cached: see [Potential green gas giants](views.md#-potential-green-gas-giants)), **FSD injections**
+("can I still make an FSD injection?": how many of each grade, and what runs out first when it is two or fewer),
+**how far today** (jumps, light years, first discoveries, maps and samples since midnight; "how far this session"
+for the latest session), **this body** (the body you are on, fly near or have targeted: its type, gravity, value,
+biology and geology), **left behind** (the nearest one or two systems within 100 ly with work over your
+`body_highlight_level` and `bio_min`), **hush** and **unhush**. A hush can take a time: "hush for ten minutes",
+"quiet until the next jump" (30 minutes when you say none; another time gets the nearest of 10, 30 minutes or the
+next jump). Their phrases are in `resources/ask.json`; edit them freely.
 
 Anything else goes to an optional AI layer, off by default (`[assistant] enabled = false`, also in ⚙ Settings →
 Server). It sends nothing anywhere until you set it up: an OpenAI-compatible endpoint (`base_url`: Ollama on your PC,

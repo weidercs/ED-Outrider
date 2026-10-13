@@ -220,6 +220,16 @@ upstream project's choices, not rules of the game.
   Vespa's "status report" is composed on the server (system, fuel, unsold, the Highway's next stop), not the page's
   report: that one depends on each browser's thresholds (S23). The AI layer is off by default and sees only the
   read-only tools; hush and unhush are fixed commands, never AI tools.
+- **The voice's own questions follow the server's settings** (S14, S32, 2026-10-13). "Left behind nearby" keeps what
+  is over `body_highlight_level` and `bio_min` from ed_outrider.toml, not a browser's (the page's Left behind keeps
+  its own); the AI's left_behind tool filters nothing and gives the values. "How far today" counts the sessions that
+  ended since midnight on the server's clock (a Docker server's TZ, so set it there), one that began the evening
+  before counted whole: History's sessions are the unit. "FSD injections" picks the three recipes by group and grade,
+  so a learned recipe (S15) still answers; the material that runs out first is said only for a grade you can make at
+  most twice (the Materials tab's jumponium call-out). "This body": the body you are on, else the one whose near-body
+  zone you are in (D1's rule), else the one targeted in this system; `/api/status` says those two (game facts, like
+  `on_body`, on an open route knowingly). A hush by voice takes a time, but the hush has only three lengths (10, 30
+  minutes, the next jump): another time gets the nearest, and the answer names the three first.
 - **Outrider presses keys for three things now:** auto honk, auto-target and the tablet's rail. The rail is one key
   per tap, only for signed-in devices (or this PC), only while the game is live, never while one of the other two is
   pressing, and only the binding the game itself has for that control; there are no macros or sequences on it (Board
@@ -983,6 +993,9 @@ confirmed while playing. Treat reports about them as likely real.
 - The Nearest finder's Plot here and the "nearest station" voice answer from the app in a live session (checked against
   live Spansh and DSSA data on a scratch server only); its material traders (S54) and "nearest raw material trader"
   against a trader the game shows (built on Spansh's recorded answers only).
+- The voice's S14 questions ("FSD injections", "how far today", "this body", "left behind") and a timed hush (S32) from
+  the app in a live session: Status.json's body zone and a targeted body read for "this body", and the speech-to-text's
+  wording of times ("10 minutes", "ten minutes") checked against fixed phrases only.
 - Rig leash warnings, rigs lost on SRVDestroyed, death or relog, the rigs-still-out warning's timing, and
   `Destination.Body` for a mining location (assumed to be the planet).
 - The rig restock recipe (3 Iron, 2 Nickel, 1 Mechanical Equipment), taken from a community guide.

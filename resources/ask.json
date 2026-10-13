@@ -1,10 +1,14 @@
 {
-  "_note": "What a question to Outrider (POST /api/ask: the tablet app's voice) is matched to, without any AI. Each command lists phrases; a question matches the first command, in this order, that has one of its phrases as whole words in it (case and punctuation ignored; a leading \"hey vespa\" or \"vespa\" is dropped). Edit freely: a command's phrases can change, but its name stays (it picks the answer). Unmatched questions go to the AI layer when [assistant] enabled is true.",
+  "_note": "What a question to Outrider (POST /api/ask: the tablet app's voice) is matched to, without any AI. Each command lists phrases; a question matches the first command, in this order, that has one of its phrases as whole words in it (case and punctuation ignored; a leading \"hey vespa\" or \"vespa\" is dropped). Hush takes a time from the question (\"hush for ten minutes\", \"quiet until the next jump\"). Edit freely: a command's phrases can change, but its name stays (it picks the answer). Unmatched questions go to the AI layer when [assistant] enabled is true.",
   "commands": {
     "unhush": ["unhush", "un hush", "voice back", "unmute", "speak again", "you can talk", "end the hush", "cancel the hush", "stop the hush"],
-    "hush": ["hush", "be quiet", "quiet", "shut up", "mute", "silence"],
+    "hush": ["hush", "be quiet", "quiet", "shut up", "mute", "silence", "stop talking"],
     "nearest_ggg": ["nearest green gas giant", "green gas giant", "green gas giants", "green giant", "nearest green giant"],
     "nearest_dock": ["nearest station", "nearest stations", "nearest carrier", "nearest fleet carrier", "nearest vista", "nearest vista genomics", "nearest genomics", "nearest cartographics", "nearest universal cartographics", "nearest uc", "nearest repair", "nearest refuel", "nearest shipyard", "nearest place to dock", "where can i dock", "where can i sell", "closest station", "closest carrier", "material trader", "material traders", "materials trader", "nearest trader", "raw trader", "manufactured trader", "encoded trader", "data trader"],
+    "fsd_injection": ["fsd injection", "fsd injections", "injection", "injections", "jumponium", "fsd synthesis"],
+    "travel_today": ["how far today", "how far have i gone today", "how far have i come today", "how far did i go today", "how far have i travelled", "how far have i traveled", "travelled today", "traveled today", "jumps today", "light years today", "distance today", "today so far", "how far this session", "this session", "my session"],
+    "left_behind": ["left behind", "go back for", "worth going back", "worth going back to", "unfinished systems", "unfinished nearby"],
+    "this_body": ["this body", "this planet", "this moon", "this world", "this rock", "the body below", "the planet below", "body below me", "planet below me", "body im on", "planet im on", "targeted body", "target body", "targeted planet"],
     "next_jump": ["next jump", "next stop", "next system", "next waypoint", "highway", "route", "where am i going"],
     "status_report": ["status report", "status", "report", "sitrep", "how are we doing"],
     "fuel": ["fuel", "tank", "how far can i go", "jumps left"],

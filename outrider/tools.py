@@ -87,11 +87,12 @@ def _int(args, key, default, lo, hi):
 # ---- the tools ----
 
 @tool("current_status", "Where the commander is now: system, region, fuel and jumps left, jump range, the target, "
-      "unsold data value, the body they are on and any exobiology sample under way, and their carrier.")
+      "unsold data value, the body they are on (or flying near, or have targeted in this system) and any exobiology "
+      "sample under way, and their carrier.")
 async def current_status(get, args, rows):
     s = await get("/api/status")
     return {k: s.get(k) for k in ("system", "region", "fuel_pct", "fuel_jumps", "jump_range", "boost", "target", "unsold",
-                                  "on_body", "sampling", "carrier")}
+                                  "on_body", "near_body", "target_body", "sampling", "carrier")}
 
 
 def _body_brief(b):
@@ -262,15 +263,23 @@ async def unsold_data(get, args, rows):
                      rows, "unsold_firsts")}
 
 
-@tool("left_behind", "Visited systems within a radius that still have work worth going back for: bodies never found, "
-      "biology never sampled, planets worth mapping.",
+@tool("left_behind", "Visited systems within a radius that still have work worth going back for, nearest first: bodies "
+      "never found, biology never sampled (with what it could pay, an upper bound), planets worth mapping (with what "
+      "mapping adds), and each system's worth (those values added up).",
       {"radius_ly": {"type": "integer", "minimum": 10, "maximum": 500, "description": "how far around (default 100)"}})
 async def left_behind(get, args, rows):
     r = _int(args, "radius_ly", 100, 10, 500)
     d = await get("/api/left", {"radius": str(r)})
-    xs = [{"name": x.get("name"), "distance_ly": rnd(x.get("distance"), 1), "bodies_not_found": x.get("unfound") or None,
-           "bio": [b.get("body") if isinstance(b, dict) else b for b in x.get("bio") or []] or None,
-           "worth_mapping": x.get("maps_total") or None} for x in d.get("systems") or []]
+    xs = []
+    for x in d.get("systems") or []:
+        # S14: the values /api/left carries per item, passed on (the voice filters them at the server's thresholds)
+        bio = [{"body": b.get("body"), "up_to": b.get("value") or 0} if isinstance(b, dict) else {"body": b, "up_to": 0}
+               for b in x.get("bio") or []]
+        maps = [{"body": m.get("body"), "type": m.get("subtype"), "adds": m.get("increment") or 0}
+                for m in x.get("maps") or [] if isinstance(m, dict)]
+        xs.append({"name": x.get("name"), "distance_ly": rnd(x.get("distance"), 1), "bodies_not_found": x.get("unfound") or None,
+                   "bio": bio or None, "map": maps or None, "worth_mapping": x.get("maps_total") or None,
+                   "worth": sum(b["up_to"] for b in bio) + sum(m["adds"] for m in maps)})
     return {"radius_ly": r, **capped(({k: v for k, v in x.items() if v is not None} for x in xs), rows, "systems")}
 
 
@@ -317,9 +326,10 @@ async def materials(get, args, rows):
     if want:
         held = [r for r in held if want in (r.get("name") or "").lower()]
     held.sort(key=lambda r: -((r.get("count") or 0) / (r.get("cap") or 1)))
-    return {"synthesis": [{"name": s.get("name"), "can_make": s.get("craftable"), "limited_by": s.get("limit") or None}
-                          for s in d.get("synthesis") or []],
-            "stale": d.get("stale") or None,
+    # group and grade: the voice's "FSD injections" picks the three by group (S14), never by a recipe's name
+    return {"synthesis": [{"name": s.get("name"), "group": s.get("group"), "grade": s.get("grade"), "can_make": s.get("craftable"),
+                           "limited_by": s.get("limit") or None} for s in d.get("synthesis") or []],
+            "counts_from": d.get("snapshot_ts"), "stale": d.get("stale") or None,
             **capped(({"name": r.get("name"), "grade": r.get("grade"), "category": r.get("category"), "count": r.get("count"),
                        "cap": r.get("cap")} for r in held), rows, "held")}
 

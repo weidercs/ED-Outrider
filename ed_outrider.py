@@ -6803,15 +6803,19 @@ class State:
         get: the in-process GET for the read-only tools."""
         cmd = outrider.ask.match(text, self.ask_phrases)
         matched, action = "fixed", "say"
-        if cmd in ("hush", "unhush"):
-            self.set_hush("30m" if cmd == "hush" else "off")
-            words, action = ("Quiet for 30 minutes." if cmd == "hush" else "Voice back on."), "caption"   # the page says these
+        if cmd == "hush":   # S32: "hush for ten minutes", "quiet until the next jump"; 30 minutes when no time is said
+            mode, words = outrider.ask.hush_words(text)
+            self.set_hush(mode)
+            action = "caption"   # the page says its own hush news
+        elif cmd == "unhush":
+            self.set_hush("off")
+            words, action = "Voice back on.", "caption"
         elif cmd == "nearest_dock":   # D4: a place further than [highway] voice_plot_ly gets a neutron route plotted there
             words, place = await outrider.ask.nearest_dock(get, text)
             plot = self.voice_plot(place)
             words = f"{words} {plot}" if plot else words
-        elif cmd:
-            words = await outrider.ask.fixed_answer(cmd, get, text=text)
+        elif cmd:   # left_behind filters at the server's thresholds (never a browser's: DESIGN_NOTES)
+            words = await outrider.ask.fixed_answer(cmd, get, text=text, limits=(BODY_HIGHLIGHT, BIO_MIN))
         elif self.assistant.get("enabled"):
             matched = "ai"
             try:
@@ -7702,6 +7706,14 @@ class State:
         self.db.commit()
         self.bump()
         return True
+
+    def zone_body(self):
+        """The body whose near-body zone you are in, by its short name (Status.json names it and gives an altitude: the
+        point the game writes ApproachBody, D1's rule), else None. The voice's "this body" (S14) after on_body."""
+        st, pos = self.journals.status_json or {}, self.journals.pos
+        if not st.get("live") or not st.get("body") or not pos or not isinstance(st.get("alt"), (int, float)):
+            return None
+        return short_name(pos["name"], st["body"])
 
     def destination(self):
         """The in-game destination when it is a body in the system you are in (Status.json), else None."""
@@ -16833,6 +16845,8 @@ def make_app(state, hosts=None):
                 "fuel_pct": f.get("pct"), "fuel_jumps": f.get("jumps_max"), "jump_range": p["jump_range"], "boost": p["boost"],
                 "target": t and {"name": t.get("name"), "status": t.get("status"), "star_class": t.get("star_class")},
                 "unsold": u.get("total"), "on_body": ob and ob["body"],
+                # S14 (the voice's "this body"): game facts like on_body, on this open route knowingly (review)
+                "near_body": None if ob else state.zone_body(), "target_body": (p["destination"] or {}).get("name") or None,
                 "sampling": sm and "elsewhere" not in sm and {k: sm.get(k) for k in ("genus", "samples", "to_go", "clear")} or None,
                 "carrier": c and {"name": c.get("name"), "system": c.get("system"), "distance": c.get("distance")},
                 "commander": (p["commander"] or {}).get("name")}

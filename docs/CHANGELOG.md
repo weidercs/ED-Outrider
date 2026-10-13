@@ -2,6 +2,24 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-13 · Hush by voice for a set time, and four more questions without AI
+- **A hush by voice takes a time** (S32, the server half): "hush for ten minutes", "quiet for half an hour", "hush until
+  the next jump" (or next system, leave, arrive); no time is 30 minutes as before. `outrider.ask.hush_mode` gives only
+  the server's three ("10m", "30m", "jump"): another time gets the nearest, and the answer names the three first ("I
+  can hush for 10 or 30 minutes, or until the next jump. Quiet for 10 minutes."). "stop talking" hushes too. The
+  tablet's hush buttons wait for the new tablet layout.
+- **Four more questions without AI** (S14), matched before next jump and status report: **FSD injections** ("can I
+  still make an FSD injection": "Premium injections: 2, short of polonium. Standard: 5. Basic: 31.", the recipes picked
+  by group and grade, which the three FSD recipes in `materials.SYNTH` now carry; "Counts from before this login." when
+  stale), **how far today** (the sessions ended since local midnight; "this session" the latest), **this body** (on it,
+  else in its near-body zone, else targeted in this system: type, gravity, terraformable, value now and if mapped, the
+  likeliest biology "up to", geology) and **left behind** (the nearest one or two systems within 100 ly with work over
+  the server's `body_highlight_level` / `bio_min`, worth "up to"). Their phrases are in `resources/ask.json`.
+- `/api/status` (and the AI's `current_status`) has `near_body` (`State.zone_body`) and `target_body`; the AI's
+  `left_behind` gives each item's value (`up_to`, `adds`, the maps listed) and a system's `worth`; its `materials` gives
+  each recipe's `group` and `grade` and `counts_from`. POST `/api/ask`'s shape is unchanged; its `command` can now be
+  `fsd_injection`, `travel_today`, `this_body` or `left_behind`.
+
 ## 2026-10-13 · One table of survey route kinds, Earth-like and ammonia world routes, and a sweep
 - **The survey slot's kinds are one table** (G4 / F4): `outrider.riches.SURVEY_KINDS` (a `SurveyKind` per kind: name,
   glyph, words, the Spansh URL by its constant's name, parser, what a stop asks of you, alert row, the plot's fields and
