@@ -1486,6 +1486,92 @@ class HighwayMap(unittest.TestCase):
             self.assertIn(f"`{key}`", readme[readme.index("| `[highway]`"):].split("\n")[0])
 
 
+class MapRoute(unittest.TestCase):
+    """S50: the Map draws the route ahead (State.map_route, api/map's `route`): the game's plotted route after you, the
+    followed route's rows from where you are with its next stop, else the header's next stop; at most MAP_ROUTE_MAX
+    points; never cached with the map's systems."""
+
+    def setUp(self):
+        import types
+        self.db = ed_outrider.open_db(":memory:")
+        self.addCleanup(self.db.close)
+        self.j = ed_outrider.Journals(self.db)
+        self.state = ed_outrider.State(self.db, self.j, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        self.now = time.time()
+
+    ts = hwy_ts
+    jump = hwy_jump
+    EXACT = HWY_EXACT
+    plot_exact = hwy_plot_exact
+
+    def names(self, pts):
+        return [p["name"] for p in pts]
+
+    def test_route_ahead_on_the_map(self):
+        self.jump(-200, 100, "Start", 0)
+        self.assertIsNone(self.state.map_route())   # nothing to draw
+        # the game's plotted route: its hops after you, ids as exact strings
+        ed_outrider.meta_set(self.db, "route", {"ts": self.ts(-150), "hops": [
+            {"id64": 100, "name": "Start", "x": 0.0, "y": 0.0, "z": 0.0}, {"id64": 101, "name": "Neu A", "x": 50.0, "y": 0.0, "z": 0.0},
+            {"id64": 9007199254740993, "name": "Big Id", "x": 70.0, "y": 0.0, "z": 0.0}, {"id64": 103, "name": "No Place"}]})
+        r = self.state.map_route()
+        self.assertEqual(self.names(r["navroute"]), ["Neu A", "Big Id"])   # a hop without a position is left out
+        self.assertEqual(r["navroute"][1]["id"], "9007199254740993")
+        self.assertEqual((r["rows"], r["kind"], r["next"]), ([], None, None))
+        ed_outrider.meta_set(self.db, "route", None)
+        # a Highway route: its rows from where you are, the next stop
+        self.plot_exact(start=-100)
+        r = self.state.map_route()
+        self.assertEqual(self.names(r["rows"]), ["Start", "Neu A", "Bridge B", "Scoop C", "Neu D", "End"])
+        self.assertEqual((r["kind"], r["next"]["name"], r["next"]["id"], r["next"]["via"]), ("highway", "Neu A", "101", "route"))
+        self.jump(-90, 101, "Neu A", 50)
+        r = self.state.map_route()
+        self.assertEqual((self.names(r["rows"])[0], r["next"]["name"]), ("Neu A", "Bridge B"))
+        # off the route: from its next stop on
+        self.jump(-80, 999, "Elsewhere", 60)
+        self.assertTrue(ed_outrider.meta_get(self.db, "highway")["off_route"])
+        r = self.state.map_route()
+        self.assertEqual((self.names(r["rows"]), r["next"]["name"]), (["Bridge B", "Scoop C", "Neu D", "End"], "Bridge B"))
+        # at most MAP_ROUTE_MAX points, the game's route first; the next stop kept
+        ed_outrider.meta_set(self.db, "route", {"ts": self.ts(-70), "hops": [
+            {"id64": 999, "name": "Elsewhere", "x": 60.0, "y": 0.0, "z": 0.0}, {"id64": 102, "name": "Bridge B", "x": 80.0, "y": 0.0, "z": 0.0}]})
+        with unittest.mock.patch.object(ed_outrider, "MAP_ROUTE_MAX", 2):
+            r = self.state.map_route()
+        self.assertEqual((self.names(r["navroute"]), self.names(r["rows"]), r["next"]["name"]), (["Bridge B"], ["Bridge B"], "Bridge B"))
+        # a finished route draws nothing of its own: the header's next stop instead
+        ed_outrider.meta_set(self.db, "route", None)
+        self.state.highway_clear()
+        self.assertIsNone(self.state.map_route())
+        self.assertTrue(self.state.set_next_stop(101))
+        r = self.state.map_route()
+        self.assertEqual((r["rows"], r["kind"], r["next"]["name"], r["next"]["via"]), ([], None, "Neu A", "next_stop"))
+
+    def test_survey_route_and_the_payload(self):
+        """A survey route plotted after the Highway is the one drawn (route_newest), its next stop past the systems you
+        finished (S12); api/map carries it outside the cached systems, so a new plot shows at the next fetch."""
+        import asyncio
+        import outrider.riches as riches
+        self.plot_exact(start=-100)
+        hw = ed_outrider.meta_get(self.db, "highway")
+        ed_outrider.meta_set(self.db, "highway", dict(hw, created_ts=self.ts(-100)))   # plotted before the survey route
+        spheres = []
+
+        async def sphere(pos, radius, pages):
+            spheres.append(radius)
+            return []
+        self.state.spansh = types_ns(cached=lambda i: (None, None), sphere=sphere)
+        m = asyncio.run(self.state.map_payload(50, 10))
+        self.assertEqual(m["route"]["kind"], "highway")
+        rows = riches.riches_rows([{"name": "Start", "id64": 100, "x": 0, "y": 0, "z": 0, "jumps": 0, "bodies": []},
+                                   {"name": "Rich One", "id64": 301, "x": 20, "y": 0, "z": 0, "jumps": 1, "bodies": []},
+                                   {"name": "Rich Two", "id64": 302, "x": 40, "y": 0, "z": 0, "jumps": 1, "bodies": []}])
+        self.state.riches_store(rows, {"options": {}, "kind": "exo"})
+        m = asyncio.run(self.state.map_payload(50, 10))
+        self.assertEqual(len(spheres), 1)   # the systems from the cache, the route fresh
+        self.assertEqual((m["route"]["kind"], self.names(m["route"]["rows"]), m["route"]["next"]["name"]),
+                         ("exo", ["Start", "Rich One", "Rich Two"], "Rich One"))
+
+
 class HighwayAutoTarget(unittest.TestCase):
     """The Neutron Highway's auto-target (outrider/target.py): the steps from the author's bindings, the typing keymap,
     the guards, the runner against a simulated game on a FAKE virtual keyboard (never a uinput device, never a real

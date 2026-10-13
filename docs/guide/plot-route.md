@@ -160,7 +160,9 @@ targeted neutron jump target Hwy Stop 38" (or "Failed to…") under its own aler
     each trader's kind; the few it lists with no kind (some Colonia outposts) count only for "any", shown as "⇄ trader";
   - your ship's pad size (from its type);
   - **Data under** N days (30 by default);
-  - permit systems, left out unless ticked.
+  - permit systems, left out unless ticked;
+  - **Around**: you, your destination in game, your carrier, your next stop or a system you name. The distances are
+    from there (a row's hover says how far from you) and there is no jump count.
 
   They are remembered on this device.
 - **Each row shows** how far it is (and a rough jump count), how far from its star (far ones marked), what it has, its

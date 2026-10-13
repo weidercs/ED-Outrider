@@ -54,7 +54,9 @@ and values as a spreadsheet.
 <td width="50%" valign="top">
 <b>Map</b> — a 3D view: left-drag to rotate, right-drag to move, scroll to zoom. Your path in orange,
 your first discoveries in gold, visited systems in blue (or colour them by star class; by touch: one finger rotates, two move,
-pinch zooms); tick <i>boost stars</i> for neutron stars and white dwarfs. A click on a system targets it in the galaxy
+pinch zooms); tick <i>boost stars</i> for neutron stars and white dwarfs. The route ahead is dashed: the one plotted in
+game, and the route Outrider follows (Plot Route's) from where you are, with ◎ on its next stop (else your next stop);
+hover a stop for which it is. A click on a system targets it in the galaxy
 map when auto-target can work on this PC, else copies its name (the card says which; a tap shows the card with 🎯 Target
 and Copy name).
 <br><br><img src="../images/map.png" alt="The 3D map">
@@ -115,7 +117,9 @@ Outrider knows (<i>Local</i>) or everything reported (<i>Spansh</i>; mining loca
 filter on them). Planets has <i>Potential green gas giant</i> too (see
 <a href="#-potential-green-gas-giants">below</a>). The name box finds any system (what Outrider knows,
 then EDSM, then Spansh when EDSM is down or doesn't know it) and opens it in Here, where ☆ bookmarks it or makes it the
-next stop.
+next stop. <i>Within N ly of</i> searches around you, your destination in game, your carrier, your next stop or a
+system you name: the distances are from there, and a result's hover says how far it is from you (remembered on this
+device).
 <br><br><img src="../images/search.png" alt="Search">
 </td>
 <td width="50%" valign="top">

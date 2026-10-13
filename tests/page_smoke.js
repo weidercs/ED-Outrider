@@ -6681,6 +6681,98 @@ const settle = async maxMs => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| S31 aim and plot anywhere, S72 map click |", good ? "🎯 on bookmarks, the next stop, Nearest and a find by the exact id64, Plot route plots only with no route followed, the Map's click targets or copies as its card and hint say" : JSON.stringify(got), errors.slice(before));
   }
+  // S49: Search and the Nearest finder around another system: the Around select (kept on this device), a typed name
+  // found by api/find first and sent as its exact id64, a name not found said without searching, the "from you" hover.
+  // S50: the Map draws the route (mapRouteMarks: dashed legs from you, ◎ the next stop, the legend's entries, the card's
+  // line) and asks again on a new plot. Every request is stubbed
+  {
+    const w = dom.window, d = w.document, realFetch = w.fetch, before = errors.length, asked = [], big = "9007199254740993";
+    const json = (body, status = 200) => Promise.resolve(new Response(JSON.stringify(body), {status, headers: {"Content-Type": "application/json"}}));
+    const route = {navroute: [{id: "2", name: "Hop One", x: 10, y: 0, z: 0}], kind: "highway",
+                   rows: [{id: "2", name: "Hop One", x: 10, y: 0, z: 0}, {id: big, name: "Far Row", x: 30, y: 0, z: 0}],
+                   next: {id: "2", name: "Hop One", x: 10, y: 0, z: 0, via: "route"}};
+    w.fetch = (u, o) => {
+      const s = String(u);
+      if (!/^api\/(find|search|nearest|map)\b/.test(s)) return realFetch(u, o);
+      asked.push([s, o && o.method === "POST" ? JSON.parse(o.body) : null]);
+      if (s.startsWith("api/find")) return /Nowhere/.test(s) ? json({error: "No system called 'Nowhere' is known here"}, 404) : json({id: big, name: "Far Out"});
+      if (s === "api/search") return json(o && o.method === "POST" ? {seq: 777} : {seq: 777, running: false, status: "1 system within 100 ly of Far Out",
+        origin: "Far Out", around: "system", results: [{id: "5", name: "Near Far", distance: 3, from_you: 1234.5, visited: false, matches: {}, firsts: null}]});
+      if (s.startsWith("api/nearest")) return json({where: "Far Out", around: "system", pad: null, age: 30, need: [], more: 0, hidden: {}, errors: [],
+        dssa: {}, laden: null, rows: [{kind: "station", name: "Far Dock", station_type: "Coriolis Starport", system: "Far Out", id64: big, ly: 2,
+        from_you: 1234.4, here: false, jumps: null, ls: 10, services: [], warn: [], source: "Spansh", age_s: 60}]});
+      return json({center: {id: "1", x: 0, y: 0, z: 0}, radius: 50, points: [], path: [], route});
+    };
+    const got = {};
+    const keep = w.eval(`window.__s49 = {search: store.get("search", null), near: store.get("nearest", null), around: NR.around, name: NR.aroundName,
+      view, md: M.data, mk: M.key, hw: data.highway}; 1`);
+    const sAr = d.getElementById("sAround"), sNm = d.getElementById("sAroundName");
+    const submit = () => d.getElementById("searchForm").dispatchEvent(new w.Event("submit", {cancelable: true}));
+    got.options = [...sAr.options].map(o => o.value);
+    sAr.value = "carrier"; sAr.dispatchEvent(new w.Event("change", {bubbles: true}));
+    got.nameHidden = sNm.hidden;
+    submit(); await sleep(300);
+    sAr.value = "system"; sAr.dispatchEvent(new w.Event("change", {bubbles: true}));
+    got.nameShown = !sNm.hidden;
+    sNm.value = "Nowhere"; submit(); await sleep(300);
+    got.notFound = w.eval("search.status");
+    sNm.value = "Far Out"; sNm.dispatchEvent(new w.Event("change", {bubbles: true})); submit(); await sleep(400);
+    got.searchTitle = (d.querySelector("#sRows td.dist") || {title: null}).title;
+    got.searchStored = JSON.parse(w.localStorage.getItem("search") || "{}");
+    // the Nearest finder: a system by name waits for its name, then is found and asked around
+    d.getElementById("hwyNearest").click(); await sleep(100);
+    const dlg = d.getElementById("nearDlg"), nSel = dlg.querySelector('[data-nf="around"]'), nNm = dlg.querySelector('[data-nf="aroundName"]');
+    w.eval("NR.aroundName = ''");
+    const nearAsks = () => asked.filter(([u]) => u.startsWith("api/nearest")).length;
+    const n0 = nearAsks();
+    nSel.value = "system"; nSel.dispatchEvent(new w.Event("change", {bubbles: true})); await sleep(100);
+    got.nearWaits = nearAsks() === n0 && !nNm.hidden;
+    nNm.value = "Far Out"; nNm.dispatchEvent(new w.Event("change", {bubbles: true})); await sleep(200);
+    const lastNear = asked.filter(([u]) => u.startsWith("api/nearest")).pop();
+    got.nearAround = lastNear && new URLSearchParams(lastNear[0].split("?")[1]).get("around");
+    got.nearTitle = (d.querySelector("#nearRows td.num") || {title: null}).title;
+    got.nearFoot = /straight lines from Far Out/.test(d.getElementById("nearFoot").textContent);
+    got.nearStored = JSON.parse(w.localStorage.getItem("nearest") || "{}");
+    dlg.querySelector("[data-close]").click(); await sleep(20);
+    // the Map: the route's marks (pure), the legend, the card, a new plot asks again
+    Object.assign(got, JSON.parse(w.eval(`(() => {
+      const o = {}, rm = mapRouteMarks({center: {id: "1", x: 0, y: 0, z: 0}, route: ${JSON.stringify(route)}});
+      o.legs = rm.legs.map(([a, b, k]) => [a.id, b.id, k]);
+      o.points = rm.points.map(p => p.what);
+      o.next = rm.next.what;
+      o.none = mapRouteMarks({center: {id: "1"}, route: null});
+      return JSON.stringify(o); })()`)));
+    d.querySelector('[data-view="map"]').click(); await sleep(300);
+    got.legend = d.getElementById("mLegend").textContent;
+    got.card = /on your Neutron Highway route/.test(w.eval(`mapPopHtml({id: "${big}", name: "Far Row", x: 30, y: 0, z: 0, onroute: "on your Neutron Highway route"})`));
+    const mapAsks = () => asked.filter(([u]) => u.startsWith("api/map")).length;
+    const m0 = mapAsks();
+    await w.eval(`(async () => { await loadMap(); data.highway = {id: "new plot", index: 1, complete: false, off_route: false}; await loadMap(); await loadMap();
+      data.highway = window.__s49.hw; })()`);
+    got.mapAsked = mapAsks() - m0;
+    w.fetch = realFetch;
+    w.eval(`(() => { const k = window.__s49; store.set("search", k.search); if (k.near) store.set("nearest", k.near); else localStorage.removeItem("nearest");
+      NR.around = k.around; NR.aroundName = k.name; loadForm(k.search || {radius: 100, source: "local", around: "here"}); search = null; searchWant = 0;
+      M.data = k.md; M.key = null; document.querySelector('[data-view="' + k.view + '"]').click(); })()`);
+    await settle(1000);
+    const posts = asked.filter(([u, b]) => u === "api/search" && b).map(([, b]) => b.around);
+    const finds = asked.filter(([u]) => u.startsWith("api/find")).map(([u]) => decodeURIComponent(u.split("name=")[1]));
+    const want = {options: ["here", "destination", "carrier", "next_stop", "system"], nameHidden: true, nameShown: true,
+                  notFound: "search failed: No system called 'Nowhere' is known here", searchTitle: "1234.50 ly from you",
+                  nearWaits: true, nearAround: big, nearTitle: "1,234 ly from you", nearFoot: true,
+                  legs: [["1", "2", "navroute"], ["2", big, "route"]],
+                  points: ["hop 1 of the route plotted in game", "on your Neutron Highway route", "on your Neutron Highway route"],
+                  next: "next stop of your Neutron Highway route", none: null, card: true, mapAsked: 1};
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    if (JSON.stringify(posts) !== JSON.stringify(["carrier", big]) || JSON.stringify(finds) !== JSON.stringify(["Nowhere", "Far Out", "Far Out"])) bad.push("requests");
+    if (got.searchStored.around !== "system" || got.searchStored.around_name !== "Far Out") bad.push("search kept");
+    if (got.nearStored.around !== "system" || got.nearStored.aroundName !== "Far Out") bad.push("nearest kept");
+    if (!/┄ route plotted in game/.test(got.legend) || !/┄ Neutron Highway route/.test(got.legend) || !/◎ next stop/.test(got.legend)) bad.push("legend");
+    const good = !bad.length && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| S49 around another system, S50 route on the map |", good ? "Search and Nearest around your carrier or a system found by name (its id64), from you in the hover; the Map's dashed route, ◎ next stop, legend, asked again on a new plot" :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)} ${JSON.stringify(posts)} ${JSON.stringify(finds)}`, errors.slice(before));
+  }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",
     headers: Object.assign({"Content-Type": "application/json"}, origin ? {Origin: origin} : {})}).then(r => r.status);

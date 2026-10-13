@@ -2,6 +2,23 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-13 · Search and Nearest around another system, and the route on the Map
+- **Search and the Nearest finder around another system** (S49): an Around select (you, your destination in game, your
+  carrier, your next stop, a system by name) in Search's "Within N ly of" and in the Nearest dialog, kept on this
+  device with each one's other choices (stores `search` and `nearest`). POST `/api/search` and GET `/api/nearest` take
+  `around` = destination / carrier / next_stop or an id64, resolved read-only by `State.search_origin` (`locate`, then
+  `listed_system`; the destination is `game_target`'s); a typed name is found by GET `/api/find` first, so
+  `/api/nearest` stays read-only for the AI's tools. Distances are from the origin; each row's `from_you` is the
+  hover's "N ly from you"; the finder's search cache keys on the origin, "here" stays where you are and no jump count
+  is given from elsewhere.
+- **The Map draws the route** (S50): `map_payload`'s `route` (`State.map_route`): the game's plotted route after you
+  (`navroute_ahead`, shared with `route_ahead`) and the followed route's rows from where you are (the survey / trade
+  route's or the Highway's, `route_newest` with both; from its next stop while off it), at most `MAP_ROUTE_MAX` (300)
+  points, with its next stop (S12's for a survey route), else the header's next stop; worked out at each fetch outside
+  the cached systems. The page draws the legs dashed (the game's in the path's colour, the route's green), ◎ on the
+  next stop, the legend's entries and a card line for each stop (`mapRouteMarks`); a new plot or next stop refetches
+  (`mapRouteKey` in the map's key). Map clicks on route stops target them as any point (S72).
+
 ## 2026-10-13 · 🎯 and Plot route anywhere, a click on the Map targets, and the voice plots far places
 - **🎯 anywhere** (S31): POST `/api/highway/target` takes {route: "system", id} (the id64 as a string: over 2^53 a JSON
   number rounds), `State.system_target` (route_target's "system"): any system Outrider can name by id64 (`locate`, else

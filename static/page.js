@@ -2912,7 +2912,7 @@ function render() {
   document.getElementById("searchView").hidden = view !== "search";
   document.querySelectorAll("[data-view]").forEach(b => b.classList.toggle("on", b.dataset.view === view));
   document.getElementById("bmViewBtn").textContent = `Bookmarks${(data.bookmarks || []).length ? ` (${data.bookmarks.length})` : ""}`;
-  document.getElementById("sFrom").textContent = p ? p.name : "—";
+  aroundOptions(document.getElementById("sAround"));   // S49: "you (where you are)", your carrier's and the next stop's names
   renderBookmarks(bms);
   renderSearch(bms);
   document.getElementById("mapView").hidden = view !== "map";
@@ -4444,9 +4444,37 @@ const NEAR_NEEDS = [["UC", "Universal Cartographics"], ["Vista", "Vista Genomics
 const TRADER_KINDS = ["Raw", "Manufactured", "Encoded"];
 const traderWords = k => TRADER_KINDS.includes(k) ? `${k.toLowerCase()} material trader` : "material trader";
 const nearNeedWord = n => n === "Trader" || TRADER_KINDS.includes(n) ? `a ${traderWords(n)}` : (NEAR_NEEDS.find(([k]) => k === n) || [n, n])[1];
-const NR = Object.assign({stations: true, carriers: true, need: [], age: 30, permit: false},
+const NR = Object.assign({stations: true, carriers: true, need: [], age: 30, permit: false, around: "here", aroundName: ""},
                          (v => v && typeof v === "object" && !Array.isArray(v) ? v : {})(store.get("nearest", {})), {answer: null, busy: false, over: null});
-const saveNearest = () => store.set("nearest", {stations: NR.stations, carriers: NR.carriers, need: NR.need, age: NR.age, permit: NR.permit});
+const saveNearest = () => store.set("nearest", {stations: NR.stations, carriers: NR.carriers, need: NR.need, age: NR.age, permit: NR.permit,
+                                                around: NR.around, aroundName: NR.aroundName});
+// ---- S49: Search and the Nearest finder around another system: where you are, the game's destination (the end of its
+// plotted route), your carrier, the header's next stop, or a system by name (found by GET api/find first, so
+// api/nearest stays read-only for the AI's tools). The distances are from there, a row's hover says how far from you.
+// The choice is this device's: Search's in store "search", the finder's in "nearest" ----
+const AROUND_KINDS = [["here", "you"], ["destination", "your destination"], ["carrier", "your carrier"], ["next_stop", "your next stop"],
+                      ["system", "a system…"]];
+// an Around select's options, named from the payload; your carrier and the next stop greyed out while there is none
+function aroundOptions(sel) {
+  if (!sel) return;
+  const p = data && data.position, cr = data && data.carrier, ns = data && data.next_stop;
+  const named = {here: p && p.name, carrier: cr && cr.system, next_stop: ns && ns.name}, none = {carrier: !cr, next_stop: !ns};
+  if (!sel.options.length) sel.innerHTML = AROUND_KINDS.map(([v, t]) => `<option value="${v}">${t}</option>`).join("");
+  for (const o of sel.options) {
+    const base = (AROUND_KINDS.find(([v]) => v === o.value) || [])[1], t = named[o.value] ? `${base} (${named[o.value]})` : base;
+    if (o.textContent !== t) o.textContent = t;
+    o.disabled = !!none[o.value] && sel.value !== o.value;
+  }
+}
+// what a request sends as `around`: the kind, or for a typed name its id64 from GET api/find; {error} when there is none
+async function aroundParam(kind, name) {
+  if (kind !== "system") return {around: AROUND_KINDS.some(([v]) => v === kind) ? kind : "here"};
+  name = String(name || "").trim();
+  if (!name) return {error: "type the name of the system to look around"};
+  let d;
+  try { d = await apiJson(`api/find?name=${encodeURIComponent(name)}`); } catch (err) { d = {error: err.message}; }
+  return d && !d.error && d.id ? {around: String(d.id), name: d.name} : {error: (d && d.error) || "no answer"};
+}
 // what is asked for: the finder's own filter, or the need a Materials link opened it with (NR.over: never saved)
 const nearNeed = () => NR.over || NR.need;
 const nearAgo = s => s == null ? "" : s < 3600 ? `${Math.max(1, Math.round(s / 60))} min ago` : s < 172800 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} d ago`;
@@ -4463,6 +4491,9 @@ function openNearest(opts) {
       `<option value="${v}"${v === tr ? " selected" : ""}>${t}</option>`).join("") + `</select></label>`;
   d.querySelector('[data-nf="stations"]').checked = NR.stations; d.querySelector('[data-nf="carriers"]').checked = NR.carriers;
   d.querySelector('[data-nf="age"]').value = NR.age; d.querySelector('[data-nf="permit"]').checked = NR.permit;
+  const sel = d.querySelector('[data-nf="around"]'), nm = d.querySelector('[data-nf="aroundName"]');
+  aroundOptions(sel); sel.value = NR.around; if (sel.selectedIndex < 0) sel.value = NR.around = "here";
+  aroundOptions(sel); nm.value = NR.aroundName || ""; nm.hidden = NR.around !== "system";
   tabShow(d);
   loadNearest();
 }
@@ -4471,8 +4502,12 @@ async function loadNearest() {
   const g = newRequest("near");
   const params = new URLSearchParams({stations: NR.stations ? "1" : "0", carriers: NR.carriers ? "1" : "0", need: nearNeed().join(","),
                                       age: NR.age, permit: NR.permit ? "1" : "0", pad: "auto"});
+  const a = await aroundParam(NR.around, NR.aroundName);   // S49: a typed name is found first
+  if (!isNewest("near", g)) return;
+  if (a.around && a.around !== "here") params.set("around", a.around);
   let r;
-  try { r = await apiJson(`api/nearest?${params}`); } catch (err) { r = {error: err.message}; }
+  if (a.error) r = {error: a.error};
+  else try { r = await apiJson(`api/nearest?${params}`); } catch (err) { r = {error: err.message}; }
   if (!isNewest("near", g)) return;
   NR.busy = false; NR.answer = r;
   renderNearest();
@@ -4487,7 +4522,7 @@ function nearRowHtml(r) {
   const dock = r.own ? `<span class="good">yours</span>` : r.warn && r.warn.length ? `<span class="warnc">⚠ ${esc(r.warn.join(", "))}</span>` : "open to all";
   const src = r.own ? "your journal" : r.dssa ? `<span class="dssa">DSSA</span><br>docked there ${nearAgo(r.age_s)}` : `${esc(r.source)}<br>reported ${nearAgo(r.age_s)}`;
   return `<tr><td>${who}${badge}<div class="unk">${kind} · ${esc(r.system || "")}</div></td>` +
-    `<td class="num">${r.here ? "here" : `${Math.round(r.ly).toLocaleString()} ly`}${r.jumps ? `<div class="unk">≈ ${r.jumps} jump${r.jumps === 1 ? "" : "s"}</div>` : ""}</td>` +
+    `<td class="num"${r.from_you != null ? ` title="${Math.round(r.from_you).toLocaleString()} ly from you"` : ""}>${r.here ? "here" : `${Math.round(r.ly).toLocaleString()} ly`}${r.jumps ? `<div class="unk">≈ ${r.jumps} jump${r.jumps === 1 ? "" : "s"}</div>` : ""}</td>` +
     `<td class="num${r.far ? " warnc" : ""}">${r.ls == null ? `<span class="unk">?</span>` : `${r.ls.toLocaleString()} ls`}${r.far ? `<div class="small">⚠ far from the star</div>` : ""}</td>` +
     `<td class="has">${has}</td><td class="num">${esc(r.pads || "")}</td><td class="dk">${dock}</td><td class="src unk">${src}</td>` +
     `<td class="num">${r.here ? `<span class="unk">${r.own ? "aboard" : "here"}</span>` : `<button type="button" class="mini go" data-nplot="${esc(r.system || "")}">Plot here</button>` +
@@ -4509,7 +4544,8 @@ function renderNearest() {
   if (h.service) hid.push(`${h.service} without ${a.need.map(nearNeedWord).join(" and ")}`);
   const d = a.dssa || {}, checked = d.checked ? nearAgo(Date.now() / 1000 - d.checked) : null;
   foot.innerHTML = (NR.busy ? "asking again… " : "") + (hid.length ? `Hidden: ${esc(hid.join("; "))}. ` : "") +
-    `Distances are straight lines${a.laden ? `; jumps at your laden range (${a.laden} ly)` : ""}.` +
+    `Distances are straight lines${a.around && a.around !== "here" ? ` from ${esc(a.where || "")} (hover one for how far it is from you)` : ""}` +
+    `${a.laden ? `; jumps at your laden range (${a.laden} ly)` : ""}.` +
     (a.more ? ` ${a.more} more further away.` : "") + `<br>Sources: Spansh (stations and carriers, as players last reported them) · ` +
     `the DSSA carrier list from EDAstro${d.count ? ` (${d.count} carriers${checked ? `, checked ${checked}` : ""})` : ""} · your own carrier from your journal.` +
     ((a.errors || []).length ? `<br><span class="warnc">${esc(a.errors.join("; "))}</span>` : "") +
@@ -4524,6 +4560,12 @@ document.getElementById("nearDlg").addEventListener("change", e => {
       .concat(tr && tr.value ? [tr.value] : []);
     if (NR.over) NR.over = need; else NR.need = need;
   } else if (f === "age") { const v = parseInt(t.value, 10); if (!(v >= 1 && v <= 3650)) return; NR.age = v; }
+  else if (f === "around") {   // S49: a system by name waits for its name
+    NR.around = t.value;
+    const nm = document.querySelector('#nearDlg [data-nf="aroundName"]'); nm.hidden = NR.around !== "system";
+    aroundOptions(t);
+    if (NR.around === "system" && !NR.aroundName.trim()) { saveNearest(); nm.focus(); return; }
+  } else if (f === "aroundName") { NR.aroundName = t.value.trim(); if (NR.around !== "system") return; }
   else if (f) NR[f] = t.checked;
   else return;
   saveNearest(); loadNearest();
@@ -4539,6 +4581,10 @@ document.getElementById("nearRows").addEventListener("click", e => {
   hForm.dispatchEvent(new Event("submit", {cancelable: true, bubbles: true}));
 });
 document.getElementById("nearDlg").addEventListener("close", () => { NR.over = null; });
+// Enter in the Around name box looks there (the dialog's form would close on it)
+document.getElementById("nearDlg").addEventListener("keydown", e => {
+  if (e.key === "Enter" && e.target.dataset && e.target.dataset.nf === "aroundName") { e.preventDefault(); e.target.dispatchEvent(new Event("change", {bubbles: true})); }
+});
 // Materials' "⇄ nearest raw trader" (on a material you are short of): the finder with that trader asked for
 const traderBtn = (cat, short) => TRADER_KINDS.includes(cat) ? `<button type="button" class="mini trbtn" data-trader="${cat}" ` +
   `title="the nearest station with a ${esc(traderWords(cat))}: opens the Nearest finder (your saved filters are left as they are)">⇄${short ? "" : ` nearest ${cat.toLowerCase()} trader`}</button>` : "";
@@ -5572,9 +5618,17 @@ for (const [id, key, prop] of [["mRadius", "radius", "value"], ["mPath", "path",
 mEl("mTop").onclick = () => { M.yaw = 0; M.pitch = Math.PI / 2; M.panX = M.panY = 0; drawMap(); };
 mEl("mReset").onclick = () => { M.yaw = -0.5; M.pitch = 0.45; M.zoom = 1; M.panX = M.panY = 0; drawMap(); };
 
+// S50: what the map's route depends on: a new plot (the game's, the Highway's, a survey route's), the next stop, or the
+// header's next stop asks again (where you are is in the key already)
+function mapRouteKey() {
+  const hw = data && data.highway, sv = data && data.survey, rt = data && data.route, ns = data && data.next_stop;
+  return [hw && `${hw.id}:${hw.index}:${hw.complete ? 1 : 0}:${hw.off_route ? 1 : 0}`, sv && `${sv.id}:${sv.index}:${sv.complete ? 1 : 0}:${sv.off_route ? 1 : 0}`,
+          rt && rt.ts, ns && ns.id].map(x => x || "").join(",");
+}
 async function loadMap() {
   const p = data && data.position; if (!p) return;
-  const key = `${posId()}|${mSettings.radius}|${mSettings.path}|${mSettings.boost ? 1 : 0}`;   // the exact id, not a rounded number
+  // the exact id, not a rounded number
+  const key = `${posId()}|${mSettings.radius}|${mSettings.path}|${mSettings.boost ? 1 : 0}|${mapRouteKey()}`;
   if (key === M.key) return;
   M.key = key; M.loading = true;
   // a request of its own: the map reopened while one was on its way asks again with the same key, and the older one's
@@ -5618,6 +5672,22 @@ const STAR_NAMES = {O: "O", B: "B", A: "A", F: "F", G: "G", K: "K", M: "M", L: "
   Y: "Y dwarf", D: "White dwarf", N: "Neutron", BH: "Black hole", W: "Wolf-Rayet", C: "Carbon",
   S: "MS/S-type", TTS: "T Tauri", AeBe: "Herbig Ae/Be"};
 
+// S50: the route the map draws (pure, from api/map's `route`): dashed legs [a, b, kind], kind "navroute" (the game's
+// plotted route, from you) or "route" (the followed route's rows: from you to its first while you are off it or before
+// it, with no route plotted in game), the points along it with what to say of them, and the next stop
+const MAP_ROUTE_WORDS = {highway: "Neutron Highway route", riches: "Road to Riches", exo: "Exomastery route", trade: "trade route"};
+function mapRouteMarks(d) {
+  const r = d && d.route; if (!r) return null;
+  const nav = r.navroute || [], rows = r.rows || [], c = d.center, cid = c && (c.id ?? String(c.id64)), legs = [], points = [];
+  let prev = c;
+  nav.forEach((p, i) => { legs.push([prev, p, "navroute"]); prev = p;
+    points.push({pt: p, what: `hop ${i + 1} of the route plotted in game`}); });
+  const kind = MAP_ROUTE_WORDS[r.kind] || "your route";
+  if (rows.length && !nav.length && rows[0].id !== cid) legs.push([c, rows[0], "route"]);
+  rows.forEach((p, i) => { if (i) legs.push([rows[i - 1], p, "route"]); if (p.id !== cid) points.push({pt: p, what: `on your ${kind}`}); });
+  const next = r.next ? {pt: r.next, what: r.next.via === "next_stop" ? "your next stop" : `next stop of your ${kind}`} : null;
+  return {legs, points, next, kind, rows: rows.length, nav: nav.length};
+}
 function drawMap() {
   if (view !== "map" || !M.data || M.data.error) return;
   const cs = getComputedStyle(document.documentElement), col = v => cs.getPropertyValue(v).trim();
@@ -5635,7 +5705,10 @@ function drawMap() {
        dot(C.text, "your route plots only", true), `<span style="color:${C.accent}">— your path</span>`,
        `<span style="color:${C.accent}">◌ previous / target</span>`, `<span style="color:${C.gold}">★ bookmark</span>`]
        .concat(M.data.boost ? [`<span style="color:#5ce1e6">▵ neutron · □ white dwarf · ┄ boosted range</span>`] : []).join("");
-  if (M.legend !== legend) { M.legend = legend; mEl("mLegend").innerHTML = legend; }   // not on every drag frame
+  const rm = mapRouteMarks(M.data);   // S50: the route's entries, whichever the colouring
+  const routeLegend = !rm ? "" : (rm.nav ? `<span style="color:${C.accent}">┄ route plotted in game</span>` : "") +
+    (rm.rows ? `<span style="color:${C.good}">┄ ${esc(rm.kind)}</span>` : "") + (rm.next ? `<span style="color:${C.good}">◎ next stop</span>` : "");
+  if (M.legend !== legend + routeLegend) { M.legend = legend + routeLegend; mEl("mLegend").innerHTML = M.legend; }   // not on every drag frame
   const dpr = window.devicePixelRatio || 1;
   const w = mEl("mapWrap").clientWidth;
   if (appOn()) {
@@ -5739,6 +5812,35 @@ function drawMap() {
     }
   }
 
+  // S50: the route ahead, dashed (the game's plotted route in the path's colour, the followed route's rows in green), its
+  // points that are no system dot of their own carry the card, and ◎ on the next stop
+  const routeOf = {};
+  if (rm) {
+    for (const [kind, colour] of [["navroute", C.accent], ["route", C.good]]) {
+      g.strokeStyle = colour; g.lineWidth = 1.5; g.globalAlpha = .85; g.setLineDash([6, 4]); g.beginPath();
+      for (const [a, b, k] of rm.legs) if (k === kind) line(proj(...rel(a)), proj(...rel(b)));
+      g.stroke(); g.setLineDash([]); g.globalAlpha = 1;
+    }
+    const inView = new Set(d.points.map(pt => pt.id));
+    for (const {pt, what} of rm.points) {
+      if (pt.id) routeOf[pt.id] = routeOf[pt.id] || what;
+      const q = proj(...rel(pt)); if (!q.ok || (pt.id && inView.has(pt.id))) continue;
+      g.fillStyle = C.good; g.beginPath(); g.arc(q.sx, q.sy, 2, 0, 2 * Math.PI); g.fill();
+      M.proj.push({sx: q.sx, sy: q.sy, pt: {name: pt.name, id: pt.id, x: pt.x, y: pt.y, z: pt.z, onroute: what}});
+    }
+    if (rm.next) {
+      const n = rm.next.pt, q = proj(...rel(n));
+      if (n.id) routeOf[n.id] = rm.next.what;
+      if (q.ok) {
+        g.strokeStyle = C.good; g.lineWidth = 1.5;
+        for (const rr of [5, 9]) { g.beginPath(); g.arc(q.sx, q.sy, rr, 0, 2 * Math.PI); g.stroke(); }
+        if (!n.id || !d.points.some(pt => pt.id === n.id))
+          M.proj.push({sx: q.sx, sy: q.sy, pt: {name: n.name, id: n.id, x: n.x, y: n.y, z: n.z, onroute: rm.next.what}});
+        if (mSettings.labels) labels.push([q, `${n.name} (next stop)`]);
+      }
+    }
+  }
+
   // Boost stars (neutron / white dwarf arrival stars) and your carrier.
   const boostOf = {};
   if (d.boost) for (const b of d.boost.points) boostOf[b.id] = b.boost;
@@ -5789,7 +5891,8 @@ function drawMap() {
       g.beginPath(); g.arc(q.sx, q.sy, r + 4, 0, 2 * Math.PI); g.stroke(); g.setLineDash([]);
     }
     if (bms[id]) { g.fillStyle = C.gold; g.font = "12px system-ui"; g.fillText("★", q.sx + r + 1, q.sy - r); }
-    M.proj.push({sx: q.sx, sy: q.sy, pt: boostOf[id] || id === carrierAt ? {...pt, boost: boostOf[id], carrier: id === carrierAt ? carrierName(cr) : undefined} : pt});
+    M.proj.push({sx: q.sx, sy: q.sy, pt: boostOf[id] || id === carrierAt || routeOf[id]
+      ? {...pt, boost: boostOf[id], carrier: id === carrierAt ? carrierName(cr) : undefined, onroute: routeOf[id]} : pt});
     if (mSettings.labels && (id === hereId || id === prevId || id === targetId || bms[id]))
       labels.push([q, pt.name + (id === prevId ? " (previous)" : id === targetId ? " (target)" : "")]);
   }
@@ -5834,9 +5937,10 @@ function mapPopHtml(pt, touch = false) {
     : pt.kind === undefined ? (pt.carrier ? `your carrier ${esc(pt.carrier)} is here` : boost) : "no scan data";
   const what2 = what + (pt.carrier && !what.includes("carrier") ? ` · your carrier ${esc(pt.carrier)} is here` : "") + (boost && what !== boost ? " · " + boost : "");
   const b = bmMap()[pt.id];
-  return `<h3>${esc(pt.name)}</h3><div>${dd.toFixed(2)} ly away · ${what2}</div>` +
+  return `<h3>${esc(pt.name)}</h3><div>${dd.toFixed(2)} ly away${what2 ? ` · ${what2}` : ""}</div>` +
     (pt.star ? `<div>main star: <span class="mono">${esc(pt.star)}</span></div>` : "") +
     (pt.arrived ? `<div class="unk">on your path: arrived ${esc(pt.arrived.replace("T", " ").replace("Z", ""))}</div>` : "") +
+    (pt.onroute ? `<div class="unk">${esc(pt.onroute)}</div>` : "") +
     (b ? `<div class="sec">★ ${esc(b.note) || "bookmarked"}</div>` : "") +
     (!touch ? `<div class="sec unk">${mapClickWords(pt)}</div>` : `<div class="sec mapacts">` +
       (mapAimable(pt) && mapCanTarget() ? `<button type="button" class="mini" data-aim="next" data-route="system" data-aimid="${esc(String(pt.id))}">🎯 Target</button> ` : "") +
@@ -7218,6 +7322,7 @@ function formParams() {
     main_only: document.getElementById("sMainOnly").checked,
     stars: ticked("stars"), planets: ticked("planets"), rings: ticked("rings"), hotspots: ticked("hotspots"), bio: ticked("bio"),
     mining: document.getElementById("sMining").checked, mining_mineral: document.getElementById("sMineral").value || null,
+    around: sAround.value || "here", around_name: document.getElementById("sAroundName").value.trim(),   // S49
   };
 }
 function loadForm(p) {
@@ -7229,8 +7334,16 @@ function loadForm(p) {
     sForm.querySelectorAll(`input[data-group="${g}"]`).forEach(b => b.checked = (p[g] || []).includes(b.value));
   document.getElementById("sMining").checked = p.mining === true;
   const mn = document.getElementById("sMineral"); mn.value = p.mining_mineral || ""; if (mn.selectedIndex < 0) mn.value = "";
+  sAround.value = p.around || "here"; if (sAround.selectedIndex < 0) sAround.value = "here";
+  document.getElementById("sAroundName").value = p.around_name || "";
+  syncAround();
   syncScoop();
 }
+// S49: the system Search looks around (AROUND_KINDS); a name box for "a system…"
+const sAround = document.getElementById("sAround");
+function syncAround() { aroundOptions(sAround); document.getElementById("sAroundName").hidden = sAround.value !== "system"; }
+sAround.addEventListener("change", () => { syncAround(); if (sAround.value === "system") document.getElementById("sAroundName").focus(); });
+aroundOptions(sAround);
 function saveForm() { store.set("search", formParams()); }
 sForm.addEventListener("change", saveForm);
 document.getElementById("sClear").onclick = () => {
@@ -7305,7 +7418,7 @@ function renderSearch(bms) {
       <td class="bmcell">${bmIcon(r.id, r.name, bms || bmMap())}</td>
       <td class="name" data-name="${esc(r.name)}" title="click to copy">${nameWords(r.name)}${firstsIcon(r.firsts)}${r.visited
         ? `<span class="badge s-visited">visited</span>` : ""}</td>
-      <td class="num dist">${r.distance.toFixed(2)}</td>
+      <td class="num dist"${r.from_you != null ? ` title="${r.from_you.toFixed(2)} ly from you"` : ""}>${r.distance.toFixed(2)}</td>
       <td class="matches">${Object.entries(r.matches).map(([k, hits]) =>
         `<div><span class="mlbl">${sLabels[k] || k}</span>${hits.map(h => hitHtml(h, r.id)).join("; ")}</div>`).join("")}</td></tr>`).join("");
 }
@@ -7345,10 +7458,15 @@ sForm.addEventListener("submit", async e => {
   e.preventDefault(); saveForm();
   search = {running: true, status: "searching…", results: []}; render();
   for (const id of Object.keys(sysDetail)) if (!(sysDetail[id] instanceof Promise)) delete sysDetail[id];   // bodies may have been scanned since
+  const body = formParams(), want = newRequest("searchAround");
+  const a = await aroundParam(body.around, body.around_name);   // S49: a typed name is found first (api/find)
+  if (!isNewest("searchAround", want)) return;   // submitted again meanwhile
+  delete body.around_name;
   let r;
-  try {
+  if (a.error) r = {error: a.error};
+  else try {
     r = await apiJson("api/search", {method: "POST", headers: {"Content-Type": "application/json"},
-                                     body: JSON.stringify(formParams())});
+                                     body: JSON.stringify(Object.assign(body, {around: a.around}))});
   } catch (err) { r = {error: err.message}; }
   // A refused search (403 through a proxy, 400, 500) must say so, not fall back to showing the previous results.
   if (!r || r.error) { searchRefused = true; search = {running: false, status: "search failed: " + ((r && r.error) || "no answer"), results: []}; render(); return; }

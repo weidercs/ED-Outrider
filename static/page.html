@@ -420,8 +420,9 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
   </form>
   <form id="searchForm">
     <div class="srow">
-      <label>Within <input type="number" id="sRadius" value="100" min="1" max="5000" step="any"> ly of
-        <b id="sFrom">—</b></label>
+      <label>Within <input type="number" id="sRadius" value="100" min="1" max="5000" step="any"> ly of</label>
+      <select id="sAround" aria-label="Search around" title="the system the search looks around: the distances are from there (a result's hover says how far it is from you)"></select>
+      <input type="text" id="sAroundName" placeholder="system name" size="18" aria-label="The system to search around" hidden>
       <span class="seg" role="radiogroup" aria-label="Search source">
         <label><input type="radio" name="sSource" value="local" checked> Local database</label>
         <label><input type="radio" name="sSource" value="spansh"> Spansh (online)</label>
@@ -799,6 +800,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     <div class="nearbar">
       <span class="grp"><span class="lbl">Show</span><label><input type="checkbox" data-nf="stations"> stations</label><label><input type="checkbox" data-nf="carriers"> fleet carriers</label></span>
       <span class="grp"><span class="lbl">Must have</span><span id="nearNeeds"></span></span>
+      <span class="grp"><span class="lbl">Around</span><select data-nf="around" aria-label="Around" title="the system to look around: the distances are from there (a row's hover says how far it is from you)"></select><input type="text" data-nf="aroundName" placeholder="system name" size="16" aria-label="The system to look around" hidden></span>
       <span class="grp"><span class="lbl">Pad</span><span id="nearPad"></span></span>
       <span class="grp"><span class="lbl">Data under</span><input type="number" min="1" max="3650" step="1" data-nf="age"> days</span>
       <span class="grp"><label title="systems that need a permit (left out unless ticked)"><input type="checkbox" data-nf="permit"> permit systems</label></span>

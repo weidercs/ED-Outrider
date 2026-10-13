@@ -148,6 +148,18 @@ upstream project's choices, not rules of the game.
 - **A click on the Map targets the system** (S72, the author) when auto-target can work on this PC (the virtual
   keyboard and its bindings, on the game PC: not the "target automatically" switch), else copies its name; the card
   and the hint say which. Your own system is copied; a touch shows the card, with 🎯 Target and Copy name.
+- **Search and the Nearest finder around another system** (S49): Around is where you are, the game's destination (the
+  end of its plotted route, else its target), your carrier, the header's next stop or a system by name. GET
+  `/api/search` and `/api/nearest` take only a kind or an id64 (`State.search_origin`: `locate`, else what the page
+  lists; read only), and a typed name is found by GET `/api/find` first, which may ask EDSM or Spansh and cache it:
+  `/api/nearest` stays read-only for the AI's tools. The distances are from there, each row's hover says how far from
+  you; "here" is still where you are, and the finder gives no jump count from elsewhere (your laden range says nothing
+  of jumps from a place you are not in). The choice is per device, with the rest of each one's filters.
+- **The Map draws the route ahead** (S50): the game's plotted route after you, then the rows of the route Outrider
+  follows (the survey / trade route's or the Highway's; with both, the one plotted last, as for the clipboard), from
+  where you are on it, dashed, with ◎ on its next stop (else the header's next stop). At most 300 points
+  (`MAP_ROUTE_MAX`, the game's route first); the map's systems stay cached per place and radius while the route is
+  worked out at each fetch, which a new plot or a new next stop asks for.
 - **The voice plots far places** (D4, option A, the author): "nearest station" (or carrier, Vista, a trader...) also
   plots a neutron route to the place it names when it is further than `[highway] voice_plot_ly` (on, 500 ly), to its
   system, never the station; never while a route you have not finished is followed or a plot runs ("You're following
@@ -988,6 +1000,8 @@ confirmed while playing. Treat reports about them as likely real.
   bookmark, the next stop, a Nearest row, a checklist find and a Map click (S31, S72), and the co-pilot button falling
   back to the next stop.
 - The voice plotting a far "nearest ..." (D4): a neutron route to the place's system, tested with the plot faked.
+- Search and the Nearest finder around your destination (S49) with a target set in a live game, and the Map's route
+  (S50) against a real NavRoute.json and a long Highway route (tested on made-up routes and stubbed answers).
 - Inara uploads: not yet tried live (a refusal shows in Settings in Inara's words). Built from Inara's API
   documentation, tested with fakes (`tests/test_inara.py`).
 - The EDSM and Inara key Checks (S45): built from the APIs' documentation with their documented example answers

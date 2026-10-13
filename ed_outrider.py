@@ -262,6 +262,7 @@ SPANSH_DUMP = "https://spansh.co.uk/api/dump/{id64}"
 SPANSH_BODY_SEARCH = "https://spansh.co.uk/api/bodies/search"
 SPANSH_STATION_SEARCH = "https://spansh.co.uk/api/stations/search"
 DOCK_CACHE_S = 120   # s: the Nearest finder reuses its last search this long (a filter change re-filters it)
+AROUND_BAD = "around: here, destination, carrier, next_stop or a system's id64"   # S49: State.search_origin's refusal
 NEAREST_FOUND_KEEP = 500   # S31: the Nearest finder's systems kept for 🎯 on its rows (locate)
 # Spansh's commodity names (its min_max keys): the Sell / Buy lookup asks by them; cached a week (meta spansh_commodities)
 SPANSH_COMMODITIES = "https://spansh.co.uk/api/stations/field_values/commodities"
@@ -381,6 +382,7 @@ STARTED = time.monotonic() # when this process started: a restart in Docker wait
 # 3D map: how far out it can look, and how many Spansh pages (of 500 systems) it will fetch.
 # Spansh returns at most 10,000 systems per search; near the bubble each page is several MB.
 MAP_MAX_RADIUS = 250
+MAP_ROUTE_MAX = 300   # S50: the route points the Map draws at most (the game's plotted route and the followed route's rows)
 MAP_MAX_PAGES = 6
 
 # The firsts watch: a background check of your unsold first discoveries on Spansh, to see whether someone else has
@@ -8799,11 +8801,17 @@ class State:
     async def nearest_dock(self, q):
         """GET /api/nearest: the nearest places to dock (outrider/dock.py). q: stations, carriers ("0"/"1"), need
         (uc,vista,repair,refuel,shipyard,outfitting; trader (a material trader), raw, manufactured, encoded), age (days), permit ("1": keep permit systems), pad (auto, L, M,
-        any), cached ("1": no new fetch of the DSSA list; the AI's tools and the voice ask that way). Read only but for
-        the DSSA copy kept."""
-        pos = self.journals.pos
-        if not pos or pos.get("x") is None:
+        any), cached ("1": no new fetch of the DSSA list; the AI's tools and the voice ask that way), around (S49: another
+        system to look around, search_origin's: destination, carrier, next_stop or an id64; a typed name is found by GET
+        /api/find first, so this stays read-only; the distances are from there, each row's `from_you` from you, and no
+        jump count: your laden range says nothing of jumps from elsewhere). Read only but for the DSSA copy kept."""
+        you = self.journals.pos
+        if not you or you.get("x") is None:
             return {"error": "your position is not known yet"}, 409
+        pos, why = self.search_origin(q.get("around"))
+        if not pos:
+            return {"error": why}, 400 if why == AROUND_BAD else 409
+        away = pos["around"] != "here"
         names = {s.lower(): s for s in outrider.dock.SERVICES}
         need = [names[n] for n in str(q.get("need") or "").lower().replace(" ", "").split(",") if n in names]
         try:
@@ -8818,7 +8826,7 @@ class State:
         errors = []
         # the same place and services asked again within DOCK_CACHE_S (each tick of the finder's other filters) is
         # answered from the last search instead of two more requests (review 2026-10-08 #13)
-        key = (pos.get("id64"), pos.get("x"), pos.get("y"), pos.get("z"), tuple(sorted(need)))
+        key = (pos["around"], pos.get("id64"), pos.get("x"), pos.get("y"), pos.get("z"), tuple(sorted(need)))
         hit = self.dock_cache.get("search")
         try:
             if hit and hit[0] == key and time.time() - hit[1] < DOCK_CACHE_S:
@@ -8849,7 +8857,7 @@ class State:
                     self.dock_cache["permits"] = (ids, time.time(), permits)
             except (ClientError, asyncio.TimeoutError, ValueError) as e:
                 errors.append(f"permit systems could not be checked ({e})")
-        laden = self.range_now() or ship.get("max_range")
+        laden = None if away else self.range_now() or ship.get("max_range")
         out = outrider.dock.nearest(rows, pos, need=need, stations=q.get("stations") != "0", carriers=q.get("carriers") != "0",
                                     pad=pad, age_days=age, permit=q.get("permit") == "1", permits=permits, laden=laden)
         for r in out["rows"]:
@@ -8857,11 +8865,14 @@ class State:
                 self.nearest_found.pop(r["id64"], None)
                 self.nearest_found[r["id64"]] = (r["system"], r["x"], r["y"], r["z"])
             r.update(id64=str(r["id64"]) if r.get("id64") is not None else None, seen=None)
+            if away:   # S49: "here" is where you are, never the origin; the hover says how far from you
+                r["from_you"] = round(dist(you, r), 1)
+                r["here"] = r["from_you"] < 0.5
         while len(self.nearest_found) > NEAREST_FOUND_KEEP:   # the oldest listed first
             self.nearest_found.pop(next(iter(self.nearest_found)))
         return dict(out, need=need, age=age, pad=pad, pad_known=bool(outrider.cargo.SHIP_PAD.get((ship.get("type") or "").lower())),
                     ship=ship.get("type"), laden=round(laden, 1) if laden else None, where=pos.get("name"), dssa=dinfo,
-                    errors=errors), 200
+                    around=pos["around"], errors=errors), 200
 
     def carrier_tritium(self):
         """The Carrier tile's tritium, only while tritium is on a sell order at your carrier (a confirmed line): the
@@ -12809,6 +12820,7 @@ class State:
             j["id"] = str(j.pop("id64"))
         boosts = await self.boost_points(pos, radius) if boost else None
         return {"center": with_id(pos), "radius": radius, "points": out, "note": note, "path": path,
+                "route": self.map_route(),   # S50: the route ahead, drawn dashed with its next stop
                 # a failed lookup is not cached: the page asks again after a while instead of keeping the gap
                 "partial": failed or bool(boosts and boosts.get("error")),
                 "boost": boosts, "here_star": self.here_star(),
@@ -13642,6 +13654,59 @@ class State:
         main = next((r for r in base.get("records") or [] if r.get("type") == "Star" and r.get("main")), None)
         return bool(main["scoopable"]) if main and main.get("scoopable") is not None else None
 
+    def navroute_ahead(self):
+        """The game's plotted route (NavRoute.json, meta route) after where you are on it: its hops [{id64, name, x, y, z,
+        star_class}], [] when you are not on it (route_ahead's look-ahead, the Map's route: map_route)."""
+        pos = self.journals.pos
+        hops = (meta_get(self.db, "route") or {}).get("hops") or []
+        i = next((k for k, h in enumerate(hops) if pos and h.get("id64") == pos.get("id64")), None)
+        return hops[i + 1:] if i is not None else []
+
+    def map_route(self):
+        """S50: the route the Map draws from where you are, or None with nothing to draw. `navroute`: the game's plotted
+        route after you (navroute_ahead); `rows`: the rows of the route Outrider follows (the survey / trade slot's or
+        the Highway's; with both, the one plotted last, route_newest; a complete one is none) from where you are on it,
+        from its next stop while you are off it or before it; MAP_ROUTE_MAX points in all, the game's route first;
+        `next`: that route's next stop (a survey route's past the systems you finished, S12), else the header's next
+        stop, kept even past the cap; `kind`: "highway", "riches", "exo", "trade" or None. Each point {id, name, x, y,
+        z} (id the exact id64 as a string, or None); a row without a position is left out. Not cached with the map's
+        systems (map_cache): a new plot shows at the page's next fetch."""
+        pos = self.journals.pos
+        if not pos or pos.get("x") is None:
+            return None
+
+        def point(id64, name, p):
+            return {"id": str(id64) if id64 is not None else None, "name": name, "x": p["x"], "y": p["y"], "z": p["z"]}
+
+        def placed(p):
+            return None not in (p.get("x"), p.get("y"), p.get("z"))
+        navroute = [point(h.get("id64"), h.get("name"), h) for h in self.navroute_ahead() if placed(h)][:MAP_ROUTE_MAX]
+        rows, kind, nxt = [], None, None
+        which = self.route_newest()
+        meta, rr = self.riches_state() if which == "riches" else self.highway_state() if which == "highway" else (None, [])
+        if meta:
+            if which == "riches":
+                kind, nx = meta.get("kind") or "riches", self.riches_next_open(meta, rr)[0]
+            else:
+                kind, nx = "highway", self.highway_next(meta, rr)
+            at = None if meta.get("off_route") else meta.get("at")
+            start = at if at is not None else nx
+            for r in rr[start:] if start is not None else []:
+                if len(navroute) + len(rows) >= MAP_ROUTE_MAX:
+                    break
+                p = point(r["id64"], r["system"], r)
+                if placed(r) and not (rows and rows[-1]["id"] == p["id"] and p["id"] is not None):   # a trade route's stations
+                    rows.append(p)
+            if nx is not None and placed(rr[nx]):
+                nxt = dict(point(rr[nx]["id64"], rr[nx]["system"], rr[nx]), via="route")
+        if nxt is None and not meta:
+            ns = meta_get(self.db, "next_stop")
+            if ns and placed(ns):
+                nxt = dict(point(ns.get("id64"), ns.get("name"), ns), via="next_stop")
+        if not (navroute or rows or nxt):
+            return None
+        return {"navroute": navroute, "rows": rows, "kind": kind, "next": nxt}
+
     def route_ahead(self):
         """F2, S2's groundwork: the hops ahead from where you are on whatever route is followed. The game's plotted route
         (NavRoute.json, from where you are on it: a survey route's legs come this way, the game plotting to its next
@@ -13669,10 +13734,8 @@ class State:
             out.append({"id64": id64, "name": name, "ly": ly, "mult": mult if out else max(mult, boost),
                         "scoopable": scoop, "source": source})
 
-        hops = (meta_get(self.db, "route") or {}).get("hops") or []
-        i = next((k for k, h in enumerate(hops) if h.get("id64") == pos["id64"]), None)
         prev, whole = pos, True
-        for h in hops[i + 1:] if i is not None else []:
+        for h in self.navroute_ahead():
             if len(out) >= FUEL_RUN_MAX_HOPS or None in (h.get("x"), h.get("y"), h.get("z")):
                 whole = False
                 break
@@ -14516,6 +14579,41 @@ class State:
         if c.get("id64") == id64 and c.get("system"):
             return c["system"], c.get("x"), c.get("y"), c.get("z")
         return None
+
+    def search_origin(self, around=None):
+        """S49: the place Search and the Nearest finder look around, ({id64, name, x, y, z, around}, None) or (None, why
+        not). around: None, "" or "here": where you are; "destination": the system the game aims its jumps at
+        (game_target: the end of its plotted route, its Destination, else the FSDTarget); "carrier": your carrier's
+        system; "next_stop": the header's next stop; else a system's id64 (a typed name goes through GET /api/find first,
+        which keeps what it finds where locate() reads it). Read only: locate(), then listed_system(); never Spansh or
+        EDSM, so GET /api/nearest stays read-only for the AI's tools."""
+        pos = self.journals.pos
+        if around in (None, "", "here"):
+            if not pos or pos.get("x") is None:
+                return None, "your position is not known yet"
+            return {"id64": pos.get("id64"), "name": pos.get("name"), "x": pos["x"], "y": pos["y"], "z": pos["z"],
+                    "around": "here"}, None
+        if around == "destination":
+            t = self.game_target()
+            if not t:
+                return None, "no system is targeted in game"
+            id64 = t["id64"]
+        elif around == "carrier":
+            id64 = (self.journals.carrier or {}).get("id64")
+            if not id64:
+                return None, "you have no fleet carrier"
+        elif around == "next_stop":
+            id64 = (meta_get(self.db, "next_stop") or {}).get("id64")
+            if id64 is None:
+                return None, "no next stop is set"
+        elif isinstance(around, str) and around.isdigit() and int(around) < 2 ** 63:
+            id64, around = int(around), "system"
+        else:
+            return None, AROUND_BAD
+        where = self.locate(id64) or self.listed_system(id64)
+        if not where or not where[0] or None in where[1:4]:
+            return None, f"Outrider doesn't know where {where[0] if where and where[0] else 'that system'} is"
+        return {"id64": id64, "name": where[0], "x": where[1], "y": where[2], "z": where[3], "around": around}, None
 
     def system_target(self, id64):
         """({name, id64, here, route: None}, None) for 🎯 on any system the page lists (S31: a bookmark, the header's next
@@ -15775,9 +15873,15 @@ class Searcher:
             self.update(seq, running=False, status=f"search failed: {e}")
 
     async def _run(self, seq, params):
-        pos = self.state.journals.pos
-        if not pos:
+        # S49: around another system (params' "around": destination, carrier, next_stop or an id64; State.search_origin),
+        # the distances from there; `you` keeps where you are for each result's distance from you
+        you = self.state.journals.pos
+        if not you:
             return self.update(seq, running=False, status="no current position yet")
+        pos, why = self.state.search_origin(params.get("around"))
+        if not pos:
+            return self.update(seq, running=False, status=f"search failed: {why}")
+        you = None if pos["around"] == "here" else you
         source = "spansh" if params.get("source") == "spansh" else "local"
         radius = max(1.0, min(float(params.get("radius") or 100), SEARCH_MAX_RADIUS[source]))
         crit = {
@@ -15805,7 +15909,7 @@ class Searcher:
         # over a big radius: a worker thread with its own read-only connection, so tailing, long polls and
         # the auto honk carry on meanwhile
         results, coverage, note, sparse, found = await self.off_loop(
-            lambda db: self.match(db, pos, source, radius, crit, sections, systems, coverage, note))
+            lambda db: self.match(db, pos, source, radius, crit, sections, systems, coverage, note, you))
         self.found.update(found)
         results.sort(key=lambda r: r["distance"])
         total = len(results)
@@ -15817,7 +15921,7 @@ class Searcher:
         if note:
             status += " · " + note
         self.update(seq, running=False, status=status, results=results[:SEARCH_MAX_RESULTS],
-                    radius=coverage, source=source, origin=pos["name"], sparse=sparse)
+                    radius=coverage, source=source, origin=pos["name"], around=pos["around"], sparse=sparse)
 
     async def off_loop(self, fn):
         """fn(db) on a worker thread with its own read-only connection to the database (a connection is
@@ -15835,9 +15939,11 @@ class Searcher:
                 db.close()
         return await asyncio.get_running_loop().run_in_executor(None, work)
 
-    def match(self, db, pos, source, radius, crit, sections, systems, coverage, note):
+    def match(self, db, pos, source, radius, crit, sections, systems, coverage, note, you=None):
         """The systems meeting every ticked section: (results, coverage, note, sparse, found). A local
-        search reads its systems from `db` first. Runs on a worker thread: only `db`, no shared state."""
+        search reads its systems from `db` first. Runs on a worker thread: only `db`, no shared state. pos: the place
+        searched around (S49: yours or another system's); you: where you are when that is elsewhere (each result's
+        `from_you`), else None."""
         sparse = False
         if source == "local":
             systems = self.local(pos, radius, db)
@@ -15882,6 +15988,7 @@ class Searcher:
                     m["bio"] = hits
             if all(k in m for k in sections):
                 results.append({"id": str(id64), "name": name, "distance": round(d, 2),
+                                "from_you": round(dist(you, {"x": x, "y": y, "z": z}), 2) if you else None,
                                 "visited": id64 in visited or id64 in edsm_visited, "matches": m,
                                 "firsts": own_firsts(db, id64, name) if id64 in visited else None})
                 found[id64] = (name, x, y, z)
