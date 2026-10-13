@@ -217,6 +217,7 @@ import outrider.serverlog  # Outrider's own log: the terminal's lines kept for S
 import outrider.notices    # the notices banner: start-up problems shown on every page until fixed or dismissed
 import outrider.boxel      # boxel exploration: the cube a procedural name places a system in, its systems, its id64s (pure)
 import outrider.codex_bodies  # star and planet types as codex entries: what a body would log (pure)
+import outrider.codex_geo  # geology as codex entries: what a body's volcanism could log (pure)
 import outrider.service    # Install as a service (S70): a systemd user unit on Linux, a Startup .cmd on Windows
 import outrider.health     # what kind of failure a call to an outside service met (dns, offline, timeout, http5xx...)
 from outrider.core import iso_ts, ts_seconds   # journal timestamps
@@ -355,6 +356,8 @@ ON_DEMAND_MAX_AGE = 86400  # s: a system fetched for Search/bookmarks/pins is fe
 UNSOLD_LOG = 3             # recent unsold estimates kept to stamp a sale with the one made before it
 NO_DUMP_RETRY = 3600       # s: a dump 404 for a system whose search lists bodies is asked again after this
 DUMP_MAX_TRIES = 5         # body-detail fetches for one system before we stop asking (this stay)
+REPORTED_MAX_AGE = 86400   # s: the species reported on your system's bodies (S23) are asked for again after a day
+REPORTED_RETRY_S = 600     # s: ...and after a failed ask, not before this
 USER_AGENT = "ED Outrider (personal exploration helper)"
 
 POLL_SECONDS = 1.0
@@ -1431,6 +1434,10 @@ CREATE TABLE IF NOT EXISTS star_classes (
     id64 INTEGER PRIMARY KEY, star_class TEXT);
 CREATE TABLE IF NOT EXISTS spansh_systems (
     id64 INTEGER PRIMARY KEY, updated_at TEXT, summary TEXT, fetched_ts REAL);
+-- S23: the species commanders' uploads reported on a system's bodies (Spansh's body search: its dumps carry none), as
+-- {body_id: [{genus, species, variant, value}]}. Live-only, like the Spansh cache (never in RESET_JOURNAL_DATA).
+CREATE TABLE IF NOT EXISTS spansh_reported (
+    id64 INTEGER PRIMARY KEY, fetched_ts REAL, bodies TEXT);
 -- Your own scans, straight from the journal.
 CREATE TABLE IF NOT EXISTS own_systems (
     id64 INTEGER PRIMARY KEY, name TEXT, body_count INTEGER, all_found INTEGER);
@@ -4881,6 +4888,12 @@ def codex_type(r):
     return {"id": i, "name": outrider.codex_bodies.NAMES.get(i, "")} if i else None
 
 
+def codex_geo(r):
+    """The geology codex entries a body could log ([{id, name}], from its volcanism; outrider.codex_geo), or None."""
+    ids = outrider.codex_geo.entries_for(r)
+    return [{"id": i, "name": outrider.codex_geo.NAMES.get(i, "")} for i in ids] or None
+
+
 def codex_types_scanned(db, after=0, into=None, regions=None):
     """The star and planet types you have scanned, per region: ({region: {entry id}}, the last own_bodies rowid read).
     Only rows after `after` are read, added to `into` (an incremental update); `regions` caches each system's region.
@@ -4911,12 +4924,14 @@ def codex_types_scanned(db, after=0, into=None, regions=None):
 
 
 def codex_types_logged(db, scanned=None):
-    """Your codex's star and planet types per region: {region: [entry id]} (the page's ✦ / ✪ on bodies). The codex
-    lines in your journals, and every type you have scanned in a region (`scanned`: codex_types_scanned's map): the
-    game logs a type only the first time you scan one there, and a commander's codex is often older than the journals
-    kept (the author's go back to 2023, their codex further), so a type scanned without a line was logged before."""
+    """Your codex's star and planet types and geology per region: {region: [entry id]} (the page's ✦ / ✪ on bodies).
+    The codex lines in your journals, and every type you have scanned in a region (`scanned`: codex_types_scanned's
+    map): the game logs a type only the first time you scan one there, and a commander's codex is often older than the
+    journals kept (the author's go back to 2023, their codex further), so a type scanned without a line was logged
+    before. Geology (S22: 1400000-1400499, not the anomalies above it) only from its codex lines: a scan logs none."""
     out = {k: set(v) for k, v in (scanned if scanned is not None else codex_types_scanned(db)[0]).items()}
-    for region, i in db.execute("SELECT DISTINCT region, entry_id FROM codex WHERE entry_id BETWEEN 1100000 AND 1399999"):
+    for region, i in db.execute("SELECT DISTINCT region, entry_id FROM codex WHERE entry_id BETWEEN 1100000 AND 1399999"
+                                " OR entry_id BETWEEN ? AND ?", (outrider.codex_geo.LOW, outrider.codex_geo.HIGH)):
         out.setdefault(region or "", set()).add(i)
     return {k: sorted(v) for k, v in out.items()}
 
@@ -5512,6 +5527,20 @@ class Spansh:
                 return results, None
             page += 1
         return results, results[-1]["distance"]
+
+    async def reported_search(self, x, y, z):
+        """The bodies with biological signals of the system at (x, y, z), with their `landmarks` (S23: the species
+        reported there; Spansh's dumps carry none). Spansh's search out to 1 ly of it (a max of "0" and a system_name
+        filter were ignored: scripts/landmarks_probe.py, 2026-10-12); the caller keeps that system's bodies only."""
+        body = {"filters": {"signals": [{"name": "Biological", "value": [1, 999], "comparison": "<=>"}],
+                            "distance": {"min": "0", "max": "1"}},
+                "reference_coords": {"x": x, "y": y, "z": z},
+                "sort": [{"distance": {"direction": "asc"}}], "size": SPANSH_PAGE, "page": 0}
+        async with self.sem_fast:
+            async with self.session.post(SPANSH_BODY_SEARCH, json=body) as r:
+                r.raise_for_status()
+                d = await r.json()
+        return d.get("results") or [] if isinstance(d, dict) else []
 
     def fetched_age(self, id64):
         """Seconds since a system's cached record was fetched, or None if it is not cached."""
@@ -6172,6 +6201,9 @@ class State:
         self.target_key = None
         self.target_seq = 0
         self.target_task = None
+        self.reported_task = None  # S23: the ask for the species reported in your system (one at a time)
+        self.reported_tried = {}   # id64 -> when last asked (or found fresh): not asked again before REPORTED_RETRY_S
+        self.reported_seen = None  # the overlay_detail key of the last look that found no life
         self.searcher = None       # set once the Searcher exists
         self.speaker = None        # outrider.tts.Speaker, set at start (None in tests)
         self.player = None         # outrider.tts.LinePlayer: the tick that plays speech and sounds here (None in tests)
@@ -8462,6 +8494,18 @@ class State:
         return outrider.dock.dssa_rows(d.get("data")), {"checked": d.get("checked"), "modified": d.get("modified"),
                                                         "count": len(d.get("data") or []), "error": err}
 
+    async def nearest_ggg(self, radius=None):
+        """GET /api/ggg (S27, the voice's "nearest green gas giant" and the AI's nearest_ggg): the potential green gas
+        giants nearest you in what Outrider has cached, on a worker thread. Never asks Spansh: Search's Spansh option
+        does (a guess from the ladder model either way)."""
+        pos = self.journals.pos
+        if not pos:
+            return {"error": "no position yet"}
+        radius = GGG_NEAR_LY if radius is None else max(1.0, min(float(radius), GGG_NEAR_MAX_LY))
+        rows, searched = await (self.searcher or Searcher(self)).off_loop(lambda db: ggg_nearest(db, pos, radius))
+        return {"origin": pos["name"], "radius": radius, "searched": searched, "bodies": rows[:GGG_NEAR_ROWS],
+                "more": max(0, len(rows) - GGG_NEAR_ROWS)}
+
     async def nearest_dock(self, q):
         """GET /api/nearest: the nearest places to dock (outrider/dock.py). q: stations, carriers ("0"/"1"), need
         (uc,vista,repair,refuel,shipyard,outfitting; trader (a material trader), raw, manufactured, encoded), age (days), permit ("1": keep permit systems), pad (auto, L, M,
@@ -9131,6 +9175,7 @@ class State:
         genera = {}
         for r in self.db.execute("SELECT body_id, genus_name FROM own_genera WHERE system=?", (id64,)):
             genera.setdefault(r["body_id"], []).append(r["genus_name"])
+        reported = self.reported_bodies(id64)   # S23: the species commanders' uploads reported, by body
         mined = {}   # what the SRV's refinery collected on each body, most first
         for r in self.db.execute("SELECT body_id, name, tons, last_ts FROM own_mined WHERE system=?"
                                  " ORDER BY tons DESC, name", (id64,)):
@@ -9203,6 +9248,8 @@ class State:
                 # "Mined previously": [{name, tons, last}] from your SRV's refinery here
                 "mined": mined.get(bid if bid is not None else r.get("body_id"), []),
                 "genera": known_genera,
+                # S23: species commanders' uploads reported to Spansh on it ([{genus, species, variant, value}]): facts
+                "reported": reported.get(r.get("body_id")) if r.get("body_id") is not None else None,
                 "bio_guess": [{"genus": g["genus"], "best": g["best"], "value": g["value"], "min_value": g["min_value"],
                                "species": [outrider.bio.short_species(x["name"], g["genus"]) for x in g["species"]],
                                "unruled": bool(g.get("unruled")),
@@ -9226,6 +9273,8 @@ class State:
                 "ggg": ggg_state(r, [c["name"] for c in (codex.get(bid, []) if bid is not None else [])]),
                 # the codex entry its type logs (the page marks one not in your codex for the region: ✦ / ✪)
                 "codex_type": codex_type(r),
+                # the geology entries its volcanism could log (S22: ✦ / ✪ when one is not in your codex for the region)
+                "codex_geo": codex_geo(r),
                 "sites": r.get("sites") or None,
                 "scanned": bid is not None, "first_discovered": first_disc, "mapped": is_mapped,
                 "first_mapped": first_map, "map_state": map_state, "footfall": bool(f and f["foot_ts"]),
@@ -14076,7 +14125,7 @@ class State:
         return [t for t in (self.refresh_task, self.target_task, self.unsold_task, self.seller_task, self.carrier_task,
                             self.searcher.task, self.honk_test_task, self.honk_run_task, self.highway_task, self.riches_task,
                             self.autotarget_task, self.autotarget_test_task, self.lease_task, self.edsm_discard_task,
-                            self.edsm_bf_task, self.edsm_import_task, *self.upload_tasks.values()) if t]
+                            self.edsm_bf_task, self.edsm_import_task, self.reported_task, *self.upload_tasks.values()) if t]
 
     def arrival_danger_until(self, now=None):
         """The game sets Status.json's in-danger flag on every use of the FSD, from the charge until some 16-26 s after
@@ -14378,6 +14427,58 @@ class State:
             self.bump()
         self.unsold_task = asyncio.create_task(run())
 
+    def reported_bodies(self, id64):
+        """{body_id: [{genus, species, variant, value}]}: the species reported on a system's bodies (S23), {} when not
+        asked yet."""
+        row = self.db.execute("SELECT bodies FROM spansh_reported WHERE id64=?", (id64,)).fetchone()
+        try:
+            return {int(k): v for k, v in json.loads(row[0]).items()} if row and row[0] else {}
+        except (ValueError, TypeError, AttributeError):
+            return {}
+
+    def maybe_reported(self, now=None):
+        """S23: in a system whose bodies have biological signals (Spansh's count or your FSS), ask Spansh once a day
+        which species commanders' uploads reported there (its dumps carry none: one body search). Here then shows them
+        beside the guess (👥)."""
+        pos = self.journals.pos
+        if not pos or not hasattr(self.spansh, "reported_search"):
+            return
+        if self.reported_task and not self.reported_task.done():
+            return
+        now = time.time() if now is None else now
+        id64 = pos["id64"]
+        if now - self.reported_tried.get(id64, -REPORTED_RETRY_S) < REPORTED_RETRY_S:
+            return
+        # what overlay_detail is cached on: nothing new to look at since the last "no life here" (every tick otherwise)
+        key = (id64, self.scan_version, id64 in self.bases, (self.systems.get(id64) or {}).get("status"))
+        if key == self.reported_seen:
+            return
+        row = self.db.execute("SELECT fetched_ts FROM spansh_reported WHERE id64=?", (id64,)).fetchone()
+        if row and row[0] and now - row[0] < REPORTED_MAX_AGE:
+            self.reported_tried[id64] = now
+            return
+        where = self.locate(id64)
+        # no life known here (yet: Spansh's bodies or your FSS may still come)
+        if not where or None in where[1:] or not any(b.get("bio") for b in (self.overlay_detail(id64) or {}).get("bodies") or []):
+            self.reported_seen = key
+            return
+        self.reported_tried[id64] = now
+        self.reported_task = asyncio.create_task(self.fetch_reported(id64, *where[1:]))
+
+    async def fetch_reported(self, id64, x, y, z):
+        try:
+            results = await self.spansh.reported_search(x, y, z)
+        except Exception as e:   # Spansh down or slow: asked again after REPORTED_RETRY_S
+            print(f"reported species: {type(e).__name__}: {e}", file=sys.stderr)
+            return
+        bodies = reported_life(results, id64)
+        self.db.execute("INSERT OR REPLACE INTO spansh_reported (id64, fetched_ts, bodies) VALUES (?, ?, ?)",
+                        (id64, time.time(), json.dumps(bodies)))
+        self.db.commit()
+        if bodies:
+            self.scan_version += 1   # Here, the overlay's detail and the rest keyed on it ask again
+            self.bump()
+
     def maybe_curious(self):
         """Once per system ever (meta curious_said, live-only): the first time the system you are in shows curiosities
         (🔭: rare classes, odd orbits, ringed landables...) while the game is live, a "curious" moment: one line that
@@ -14502,7 +14603,7 @@ class State:
             for name, step in (("watch_status", lambda: self.watch_status(time.time())), ("maybe_refresh", self.maybe_refresh),
                                ("apply_own_changes", self.apply_own_changes), ("maybe_classify_target", self.maybe_classify_target),
                                ("maybe_unsold", self.maybe_unsold), ("maybe_sale_left", self.maybe_sale_left),
-                               ("maybe_curious", self.maybe_curious),
+                               ("maybe_curious", self.maybe_curious), ("maybe_reported", self.maybe_reported),
                                ("maybe_locate_carrier", self.maybe_locate_carrier), ("maybe_find_sellers", self.maybe_find_sellers),
                                ("maybe_backup_on_quit", self.maybe_backup_on_quit), ("highway_copy_next", self.highway_copy_next), ("riches_copy_next", self.riches_copy_next),
                                ("highway_heavy_check", self.highway_heavy_check), ("maybe_autotarget", self.maybe_autotarget),
@@ -14672,6 +14773,14 @@ PLANET_TYPES = [
     "Class IV gas giant", "Class V gas giant", "Helium-rich gas giant", "Helium gas giant",
 ]
 RING_TYPES = ["Icy", "Rocky", "Metal Rich", "Metallic"]
+# S27: "Potential green gas giant", a Planets option of its own: the ladder model (outrider.ggg) over each giant's record.
+# Spansh is asked for the classes the model can say something about (GGG_SPANSH: the rule table's class -> Spansh's
+# subtype), and its answer is checked by the model, as a Local search checks your cache (its search results carry the
+# mass, the radius and the journal's own temperature: scripts/landmarks_probe.py, 2026-10-12)
+GGG_OPTION = ("ggg", "Potential green gas giant")
+GGG_SPANSH = {"class1": "Class I gas giant", "class3": "Class III gas giant", "class4": "Class IV gas giant",
+              "water_life": "Gas giant with water-based life", "ammonia_life": "Gas giant with ammonia-based life",
+              "water_giant": "Water giant"}
 
 # Exobiology you have not finished sampling, by what the rest could pay (plain Vista Genomics prices,
 # no first-footfall x5): key -> (label, credits threshold).
@@ -14681,7 +14790,7 @@ BIO_SEARCH = {"any": ("Unscanned bio signals", 0), "1m": ("Unscanned bio signals
 SEARCH_OPTIONS = {
     "scoopable": [k for k, _ in _SCOOP],
     "other_stars": [[k, label] for k, label, _ in _OTHER_STARS],
-    "planets": PLANET_TYPES, "rings": RING_TYPES, "hotspots": HOTSPOT_MINERALS,
+    "planets": PLANET_TYPES, "ggg": list(GGG_OPTION), "rings": RING_TYPES, "hotspots": HOTSPOT_MINERALS,
     "bio": [[k, label] for k, (label, _) in BIO_SEARCH.items()],
     "mining": mining_minerals(),
 }
@@ -14705,6 +14814,8 @@ def record_from_body_search(b):
             "rings": rings, "full": True,
             "bio": signals.get("Biological", 0), "geo": signals.get("Geological", 0),
             "body_id": b.get("body_id"), "landable": bool(b.get("is_landable")),
+            # what the green gas giant model needs besides the temperature (S27; a dump's record has them in ed)
+            "radius_km": b.get("radius"), "mass_em": b.get("earth_masses"),
             "gravity": b.get("gravity"), "atmosphere": b.get("atmosphere"), "temperature": b.get("surface_temperature"),
             "pressure": b.get("surface_pressure"), "dist_ls": b.get("distance_to_arrival"),
             # the search names parent stars directly ([{type, subtype, id64}]) rather than by body id
@@ -14713,6 +14824,31 @@ def record_from_body_search(b):
             "atmo_comp": ({a.get("name"): a.get("share") for a in b["atmosphere_composition"]}
                           if isinstance(b.get("atmosphere_composition"), list) else b.get("atmosphere_composition")),
             "materials": surface_materials(b.get("materials"))}
+
+
+def reported_life(results, id64):
+    """Spansh's body search answer -> {body_id: [{genus, species, variant, value}]}: the species commanders' uploads
+    reported on the bodies of system `id64` (S23; each body's `landmarks`, one entry per place sampled, kept once per
+    species and colour; biology only: a species Outrider has a price for), the best paid first. The colour is the
+    reported one (`variant`), a fact like the species, never a guess."""
+    out = {}
+    for b in results if isinstance(results, list) else []:
+        if not isinstance(b, dict) or b.get("system_id64") != id64 or not isinstance(b.get("body_id"), int):
+            continue
+        seen = {}
+        for x in b.get("landmarks") if isinstance(b.get("landmarks"), list) else []:
+            if not isinstance(x, dict) or not isinstance(x.get("subtype"), str) or not x["subtype"].strip():
+                continue
+            sp = " ".join(x["subtype"].split())
+            value = outrider.bio.species_value(sp) if outrider.bio else None
+            if not value:
+                continue
+            var = " ".join(x["variant"].split()) if isinstance(x.get("variant"), str) and x["variant"].strip() else None
+            genus = " ".join(x["type"].split()) if isinstance(x.get("type"), str) and x["type"].strip() else None
+            seen.setdefault((sp, var), {"genus": genus, "species": sp, "variant": var, "value": value})
+        if seen:
+            out[b["body_id"]] = sorted(seen.values(), key=lambda r: (-r["value"], r["species"], r["variant"] or ""))
+    return out
 
 
 def bio_hits(db, id64, system, x, y, z, records, threshold):
@@ -14768,6 +14904,9 @@ def match_system(system, records, crit):
     if crit["planets"]:
         hits = [{"t": f"{r['name']} · {r['subtype']}", "body": r["name"]} for r in records
                 if r["type"] == "Planet" and r["subtype"] in crit["planets"]]
+        if GGG_OPTION[0] in crit["planets"]:   # S27: the model's guess, never a fact ("potential")
+            hits += [{"t": f"{r['name']} · potential green gas giant ({p['chance']})", "body": r["name"]} for r in records
+                     for p in [outrider.ggg.predict_record(r)] if p]
         if hits:
             out["planets"] = hits
     if crit["rings"]:
@@ -14807,6 +14946,25 @@ def match_system(system, records, crit):
         if hits:
             out["mining"] = [h for _, h in sorted(hits, key=lambda t: -t[0])]
     return out
+
+
+GGG_NEAR_LY = 500        # S27: how far "nearest green gas giant" looks by default (GET /api/ggg, the voice)
+GGG_NEAR_MAX_LY = 1000   # at most (a Local search reads every cached system in the sphere)
+GGG_NEAR_ROWS = 10
+
+
+def ggg_nearest(db, pos, radius):
+    """The potential green gas giants within `radius` of `pos` in what Outrider has cached (Spansh's records and your
+    scans: Searcher.local), nearest first: ([{system, id, body, chance, distance}], systems searched). A body your codex
+    already confirms green is left out (ggg_bodies): you have been there. Runs on a worker thread: only `db`."""
+    systems = Searcher.local(pos, radius, db)
+    rows = []
+    for id64, (name, x, y, z, records) in systems.items():
+        for g in ggg_bodies(db, id64, name, records)[0]:
+            rows.append({"system": name, "id": str(id64), "body": g["body"], "chance": g["chance"],
+                         "distance": round(dist(pos, {"x": x, "y": y, "z": z}), 1)})
+    rows.sort(key=lambda r: (r["distance"], natural(r["body"] or "")))
+    return rows, sum(1 for *_, recs in systems.values() if recs)
 
 
 class Searcher:
@@ -14849,7 +15007,7 @@ class Searcher:
         crit = {
             "stars": {st for k in params.get("stars") or [] for st in STAR_GROUPS.get(k, [])},
             "main_only": bool(params.get("main_only", True)),
-            "planets": set(params.get("planets") or []) & set(PLANET_TYPES),
+            "planets": set(params.get("planets") or []) & (set(PLANET_TYPES) | {GGG_OPTION[0]}),
             "rings": set(params.get("rings") or []) & set(RING_TYPES),
             "hotspots": set(params.get("hotspots") or []) & set(HOTSPOT_MINERALS),
             # ticked bio thresholds are OR'd like any other section: the lowest one decides
@@ -14953,7 +15111,8 @@ class Searcher:
                 found[id64] = (name, x, y, z)
         return results, coverage, note, sparse, found
 
-    def local(self, pos, r, db):
+    @staticmethod
+    def local(pos, r, db):
         """Every system in the database within r: cached Spansh data merged with your own scans."""
         box = (pos["x"] - r, pos["x"] + r, pos["y"] - r, pos["y"] + r, pos["z"] - r, pos["z"] + r)
         found = {}
@@ -14994,8 +15153,10 @@ class Searcher:
             if crit["main_only"]:
                 f["is_main_star"] = {"value": True}
             queries.append(("stars", f))
-        if crit["planets"]:
-            queries.append(("planets", {"subtype": {"value": sorted(crit["planets"])}}))
+        if crit["planets"] - {GGG_OPTION[0]}:
+            queries.append(("planets", {"subtype": {"value": sorted(crit["planets"] - {GGG_OPTION[0]})}}))
+        if GGG_OPTION[0] in crit["planets"]:   # every giant the model can judge: match_system keeps its guesses only
+            queries.append(("planets", {"subtype": {"value": sorted(GGG_SPANSH[c] for c in outrider.ggg.searchable_classes())}}))
         for t in sorted(crit["rings"]):
             queries.append(("rings", {"rings": [{"type": t}]}))
         for m in sorted(crit["hotspots"]):
@@ -16507,6 +16668,17 @@ def make_app(state, hosts=None):
         out, status = await state.cargo_lookup(dict(request.query))
         return web.json_response(out, status=status)
 
+    async def ggg_view(request):
+        """GET /api/ggg?radius=: the potential green gas giants nearest you in what Outrider has cached (S27)."""
+        try:
+            radius = float(request.query["radius"]) if request.query.get("radius") else None
+        except ValueError:
+            return web.json_response({"error": "bad radius"}, status=400)
+        if radius is not None and not math.isfinite(radius):
+            return web.json_response({"error": "bad radius"}, status=400)
+        out = await state.nearest_ggg(radius)
+        return web.json_response(out, status=409 if out.get("error") else 200)
+
     async def nearest_view(request):
         """GET /api/nearest?stations=&carriers=&need=&age=&permit=&pad=&cached=: the nearest places to dock."""
         out, status = await state.nearest_dock(dict(request.query))
@@ -16589,6 +16761,7 @@ def make_app(state, hosts=None):
     app.router.add_post("/api/cargo/recount", cargo_recount_view)
     app.router.add_get("/api/cargo/lookup", cargo_lookup_view)
     app.router.add_get("/api/nearest", nearest_view)
+    app.router.add_get("/api/ggg", ggg_view)
     app.router.add_post("/api/radius", radius_view)
     app.router.add_get("/api/say", say_view)
     app.router.add_post("/api/say/play", pc_only(say_play_view))

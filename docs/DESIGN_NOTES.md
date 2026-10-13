@@ -35,6 +35,24 @@ upstream project's choices, not rules of the game.
   wrong one. Shown on the page, never spoken. Your codex is your journals' codex lines plus every type you have
   scanned in a region (not off a nav beacon): the game logs a type only the first time you scan one there, and a
   commander's codex is often older than the journals kept, so a type scanned without a line was logged before.
+- **Geology ✦ marks a set, and only what EDDN showed** (S22, 2026-10-12, `outrider/codex_geo.py`). A volcanism does not
+  name one feature: of 284 geology entries EDDN carried on 81 scanned bodies, each volcanism logged one of two to four
+  (rocky magma: the sulphur dioxide fumarole or gas vent, the silicate magma lava spout, on 2 of 6 bodies the silicate
+  vapour gas vent). So a body's candidates are a set and ✦ means "any of them would be new here". Combinations never
+  seen (non-Ice water and CO2 entries, the Ice forms of SO2 and silicate vapour, rocky ice bodies) get no mark rather
+  than a wrong one. Your codex's geology is its journal lines only (a scan logs none), so geology logged before your
+  journals can show ✦: a known limit, as for biology. The codex range is 1400000-1400499: the anomalies share 14xxxxx.
+- **Species reported on a body cost one Spansh search per system a day** (S23, 2026-10-12). The plan hoped Spansh's
+  dumps carried each body's `landmarks`: the probe (`scripts/landmarks_probe.py`) found they do not, while its body
+  search does, with the colour (`variant`). So the system you are in is asked once a day, only when its bodies have life
+  (a search out to 1 ly of it: a max of 0 and a system_name filter were ignored), and the answer kept in
+  `spansh_reported` (live-only). Here shows them as facts (👥, the reported colour), never mixed into the guess or its
+  value. Not yet: the arrival brief, the FSS debrief and the overlay's body panel naming them.
+- **Search's green gas giant option asks Spansh for every giant it can judge** (S27). Spansh cannot filter on the model,
+  so one query lists the classes with a usable rule (Class I, III, IV, the life-bearing giants, water giants) and the
+  model checks each answer (search results carry the mass, radius and the journal's temperature). Over a big radius that
+  is many giants: the usual "only complete out to" note applies. The voice's "nearest green gas giant" reads only
+  Outrider's cache (GET `/api/ggg`, also an AI tool): no Spansh request from a question.
 - **Discoveries are said once, and only the rare ones** (2026-10-11; Settings → Alerts groups them under
   Discoveries, each with its own switches). Rare stars (black holes, Wolf-Rayet, carbon, O, Herbig Ae/Be,
   supergiants, the rarer white dwarfs; neutron stars and ordinary giants are too common), FSS signals worth a detour

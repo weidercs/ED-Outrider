@@ -26,6 +26,7 @@ class Phrases(unittest.TestCase):
         cases = {"Hey Vespa, status report.": "status_report", "vespa what's my fuel": "fuel", "How much am I carrying?": "unsold",
                  "next jump": "next_jump", "how many jumps left on the highway": "next_jump", "What's left here?": "whats_left",
                  "nearest unvisited system": "nearest_unvisited", "hush": "hush", "Vespa, be quiet!": "hush",
+                 "any green gas giants near here": "nearest_ggg",
                  "unhush": "unhush", "voice back please": "unhush", "jumps left": "fuel",
                  "what's the weather like": None, "": None, "hushpuppies": None}
         for text, want in cases.items():
@@ -47,6 +48,8 @@ class Phrases(unittest.TestCase):
         self.assertEqual(go("unsold"), "About 900 credits unsold: 600 cartographic and 300 exobiology.")
         self.assertEqual(go("next_jump"), "Next highway stop: Neu, 400 light years, a neutron star. 42 jumps left, refuel in 3.")
         self.assertEqual(go("nearest_unvisited"), "Nearest unvisited: Near New, 7.0 light years.")
+        self.assertEqual(go("nearest_ggg"), "Nearest potential green gas giant: B 3 in Far Green, 30.0 light years. "
+                                            "A guess from the ladder model: check it in the system map.")   # S27
         self.assertEqual(go("whats_left"), "Still to do here: find 1 more body in the FSS; biology on A 1; map A 2.")
         self.assertEqual(go("status_report"), "Start. Fuel 41 percent, 6 jumps. 1.2 million credits unsold. Highway: next Neu, 42 jumps left.")
         self.assertEqual(asyncio.run(ask.fixed_answer("fuel", fake_get(down=True))), "Outrider isn't running (start it, then ask again)")

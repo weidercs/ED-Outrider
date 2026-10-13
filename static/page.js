@@ -189,6 +189,18 @@ function codexTypeMark(t, region) {
   const st = codexTypeState(t, region);
   return !st ? "" : ` <span class="cxnew cxtype${st === "galaxy" ? " cxgal" : ""}" title="${esc(t.name)}: new to your codex ${st === "galaxy" ? "anywhere" : "in this region"} (logged when you scan it)">${st === "galaxy" ? "✪" : "✦"}</span>`;
 }
+// geology a body's volcanism could log (S22: a set per volcanism, outrider/codex_geo.py): ✦ when any of them is not in
+// your codex for the region, ✪ when one is in it nowhere; each new one named in the title
+function codexGeoNew(list, region) {
+  return (list || []).map(t => ({t, st: codexTypeState(t, region)})).filter(x => x.st);
+}
+function codexGeoMark(list, region) {
+  const fresh = codexGeoNew(list, region);
+  if (!fresh.length) return "";
+  const gal = fresh.some(x => x.st === "galaxy");
+  return ` <span class="cxnew cxgeo${gal ? " cxgal" : ""}" title="its volcanism could show geology new to your codex: ${fresh.map(x =>
+    esc(x.t.name) + (x.st === "galaxy" ? " (anywhere)" : "")).join(", ")} (logged when you scan one)">${gal ? "✪" : "✦"}</span>`;
+}
 // Nearby: the types here new to your codex, one tag ("✦2"), each named in its title
 function codexTypesTag(s) {
   const fresh = (s.codex_types || []).map(t => ({t, st: codexTypeState(t, s.region)})).filter(x => x.st);
@@ -2453,6 +2465,14 @@ function bodyBriefText(m) {
     `${credits(m.bio_options.low)} to ${credits(m.bio_options.high)}${x}`;
   return n + (m.bio_value ? `, up to ${credits(m.bio_value)}` : "") + x;
 }
+// S22: the geology the approached body's volcanism could show that is new to your codex (from Here's answer for that
+// system), for the approach card: "could show geology new to your codex: Water Ice Geyser, Water Ice Fumarole"
+function approachGeoText(m) {
+  const h = hereData && !hereData.error && String(hereData.id64) === String(m.system) ? hereData : null;
+  const b = h && (h.bodies || []).find(x => x.body_id != null && x.body_id === m.body_id);
+  const fresh = b ? codexGeoNew(b.codex_geo, h.region) : [];
+  return fresh.length ? `could show geology new to your codex: ${fresh.map(x => x.t.name).join(", ")}` : "";
+}
 // the approach's stakes: a landable body at or over the high-g level while the data aboard is over the amber
 // level or the rebuy multiple; null when it is not worth a word
 const highGravity = () => { const v = Number(store.get("highG", null) ?? (data && data.defaults && data.defaults.high_gravity) ?? 2); return isFinite(v) && v > 0 ? v : 2; };
@@ -3385,12 +3405,18 @@ function renderHere() {
     const guessOf = g => (b.bio_guess || []).find(x => x.genus === g), hb = hereBio();
     if (hb.minSig && b.bio && b.bio < hb.minSig) bio.push(`<span class="unk" title="fewer than ${hb.minSig} signals: left out (Settings, Display)">${b.bio} sig</span>`);
     const guessTxt = x => !x || !x.best ? "" : ` <span class="unk" title="likeliest by value: ${esc(x.species.join(" / "))}">(${esc(x.best.split(" ").slice(1).join(" "))}? ${credits(x.value * f)})</span>` + codexMark(x, h.region);
+    // S23: the species commanders' uploads reported to Spansh here, with the colour they reported: facts, beside the guess
+    const rep = b.reported || [], repShown = new Set();
+    const repTxt = g => rep.filter(x => g === null ? !repShown.has(x) : x.genus === g).map(x => { repShown.add(x);
+      return ` <span class="sp rep" title="reported to Spansh by commanders' uploads">👥 ${dual(colourName(x.species + (x.variant ? " - " + x.variant : "")),
+        esc(x.species.split(" ").slice(1).join(" ") || x.species), {title: false})} <span class="unk">${credits(x.value * f)}</span></span>`; }).join("");
     // a finished species is one line: its codex entry with what it pays ("📖 Bacterium Alcyoneum - Red ✦ 8.3M"), not
     // "Bacterium 3/3 ✓ 8.3M" and the codex line again (the author, 2026-10-11)
     const codexOf = o => b.codex.find(c => c.name === o.variant) || (o.species ? b.codex.find(c => c.name.startsWith(o.species + " - ")) : null);
     const merged = new Set();
     for (const g of hb.minSig && b.bio && b.bio < hb.minSig ? [] : bioGenera(b)) {
       const o = b.organics.find(o => o.genus === g);
+      if (o && o.done && !o.lost) rep.forEach(x => { if (x.genus === g) repShown.add(x); });   // analysed: yours says it
       if (hb.hideDone && o && o.done && !o.lost) continue;
       if (o && o.done && !o.lost) {
         const c = codexOf(o), name = c ? c.name : o.variant || o.species || g;
@@ -3403,9 +3429,12 @@ function renderHere() {
       bio.push(o ? `<span class="sp ${o.lost ? "lost" : o.done ? "done" : "part"}" title="${esc(o.species || "")}${o.variant ? " · " + esc(o.variant) : ""}${o.lost ? " · lost with the ship, sample again" : ""}${colonyM(g) ? ` · samples ${colonyM(g)} m apart` : ""}">${esc(g)} ${o.lost ? "lost ✗" : `${o.samples}/3${o.done ? " ✓" : ""}`}${!o.lost && o.value ? ` <span class="unk">${credits(o.value * f)}</span>` : ""}</span>` +
                    // a run under way prices the species you logged (known from its first sample), like the pop-up and
                    // the panel; the predictor's guess is only for a lost run or one whose species has no price
-                   (o.lost || (!o.done && !o.value) ? guessTxt(guessOf(g)) : "")
-                 : `<span class="sp"${ct(g)}>${esc(g)} 0/3</span>` + guessTxt(guessOf(g)));
+                   (o.lost || (!o.done && !o.value) ? guessTxt(guessOf(g)) : "") + repTxt(g)
+                 : `<span class="sp"${ct(g)}>${esc(g)} 0/3</span>` + guessTxt(guessOf(g)) + repTxt(g));
     }
+    // reported species of a genus not named here yet (before the DSS): a line of their own
+    const repRest = hb.minSig && b.bio && b.bio < hb.minSig ? "" : repTxt(null);
+    if (repRest) bio.push((bio.length ? "<br>" : "") + repRest.trim());
     // signals no genus accounts for: before a DSS, and after a sample taken without one (that genus is listed above)
     const unk = hb.minSig && b.bio && b.bio < hb.minSig ? null : bioUnknown(b);
     if (unk) {
@@ -3423,7 +3452,7 @@ function renderHere() {
     const firsts = [b.first_discovered && `<span class="fl" title="first discovered">🏁</span>`, b.first_mapped && `<span class="fl" title="first mapped">🗺</span>`,
                     !b.first_mapped && b.mapped && `<span class="fl unk" title="mapped (not first)">🗺</span>`,
                     b.first_footfall && `<span class="fl" title="first footfall">👣</span>`, !b.scanned && `<span class="unk" title="known to Spansh, not scanned by you">—</span>`].filter(Boolean).join("");
-    return `<tr class="${b.main ? "main" : ""}${selectedBody === b.name ? " sel" : ""}${destBody === b ? " dest" : ""}${hotClasses(b)}" data-body="${esc(b.name)}" data-bodypop="${esc(b.name)}"><td class="name" data-name="${esc(b.name)}">${ind}${esc(b.name)}${codexTypeMark(b.codex_type, h.region)}${b.ggg ? " " + gggIcon(!!b.ggg.confirmed, gggTitle(b.ggg)) : ""}${(b.curiosities || []).length ? ` <span class="cur" title="${b.curiosities.map(c => esc(c.tag + ": " + c.why)).join("&#10;")}">🔭</span>` : ""}${b.notable ? ` <span class="nb ${b.notable}">${b.notable}</span>` : ""}${b.terraformable ? ` <span class="nb T">T</span>` : ""}${firsts ? `<div class="sf2 sub2">${firsts}</div>` : ""}</td>
+    return `<tr class="${b.main ? "main" : ""}${selectedBody === b.name ? " sel" : ""}${destBody === b ? " dest" : ""}${hotClasses(b)}" data-body="${esc(b.name)}" data-bodypop="${esc(b.name)}"><td class="name" data-name="${esc(b.name)}">${ind}${esc(b.name)}${codexTypeMark(b.codex_type, h.region)}${codexGeoMark(b.codex_geo, h.region)}${b.ggg ? " " + gggIcon(!!b.ggg.confirmed, gggTitle(b.ggg)) : ""}${(b.curiosities || []).length ? ` <span class="cur" title="${b.curiosities.map(c => esc(c.tag + ": " + c.why)).join("&#10;")}">🔭</span>` : ""}${b.notable ? ` <span class="nb ${b.notable}">${b.notable}</span>` : ""}${b.terraformable ? ` <span class="nb T">T</span>` : ""}${firsts ? `<div class="sf2 sub2">${firsts}</div>` : ""}</td>
       <td>${sfText(b.type === "Star" ? "star" : "planet", b.subtype || "")}${b.type === "Star" ? (b.scoopable ? ` <span class="scoop">⛽</span>` : "") : ""}${b.rings ? `<span class="sf2"> ${icon("ring", "i-ring", b.rings, ringsText(b))}</span>` : ""}${b.dist_ls != null ? `<div class="sf2 sub2 unk">${Math.round(b.dist_ls).toLocaleString()} ls</div>` : ""}</td>
       <td class="num c2hide">${b.dist_ls != null ? Math.round(b.dist_ls).toLocaleString() : ""}</td>
       <td class="num${b.gravity >= highGravity() ? " noscoop" : ""}">${b.gravity != null && b.type === "Planet" ? b.gravity.toFixed(2) : ""}${atm ? `<div class="sf2 atm2" title="${esc(atm)}">${esc(shortForm("atmosphere", atm))}</div>` : ""}</td>
@@ -3490,11 +3519,13 @@ const HERE_LEGEND = [
   [(q, s, has) => has(".sp.done", "✓"), "✓", "species analysed"],
   [q => q(".sp.lost"), "✗", "samples lost with the ship: sample again"],
   [q => q('span.unk[title^="likeliest by value"]'), "?", "the likeliest species, not yet known"],
+  [q => q(".sp.rep"), "👥", "species reported to Spansh by other commanders"],
   [(q, s, has) => has("td.bio .sp", "≤"), "≤", "the most the likely species could pay"],
-  [q => q(".cxgal:not(.cxtype)"), `<span class="cxnew cxgal">✪</span>`, "new to your codex anywhere"],
-  [(q, s, has) => q(".cxnew:not(.cxgal):not(.cxtype)") || has('.sp[title^="codex:"]', "✦"),
+  [q => q(".cxgal:not(.cxtype):not(.cxgeo)"), `<span class="cxnew cxgal">✪</span>`, "new to your codex anywhere"],
+  [(q, s, has) => q(".cxnew:not(.cxgal):not(.cxtype):not(.cxgeo)") || has('.sp[title^="codex:"]', "✦"),
    `<span class="cxnew">✦</span>`, "new to your codex in this region"],
   [q => q(".cxtype"), `<span class="cxnew cxtype">✦</span>`, "a star or planet type new to your codex (✪: anywhere)"],
+  [q => q(".cxgeo"), `<span class="cxnew cxgeo">✦</span>`, "geology its volcanism could show, new to your codex (✪: anywhere)"],
   [q => q('.sp[title^="codex:"]'), "📖", "a codex entry you logged here"],
   [(q, s, has) => has('.sp[title^="codex:"]', "💰"), "💰", "the codex paid for it"],
   [(q, s) => q(".sp.geo") || s("🪨"), "🪨", "geological signals"],
@@ -6888,7 +6919,9 @@ const box = (group, value, label) =>
   `<label><input type="checkbox" data-group="${group}" value="${esc(value)}"> ${esc(label)}</label>`;
 document.getElementById("sScoopOpts").innerHTML = OPTS.scoopable.map(k => box("stars", k, k)).join("");
 document.getElementById("sOtherStars").innerHTML = OPTS.other_stars.map(([k, l]) => box("stars", k, l)).join("");
-document.getElementById("sPlanets").innerHTML = OPTS.planets.map(t => box("planets", t, t)).join("");
+// S27: a potential green gas giant, the ladder model's guess over each giant (Local: your cache; Spansh: its giants checked)
+document.getElementById("sPlanets").innerHTML = OPTS.planets.map(t => box("planets", t, t)).join("") + (OPTS.ggg
+  ? box("planets", OPTS.ggg[0], OPTS.ggg[1]).replace("<label>", `<label class="gggopt" title="the community's ladder model on each giant's temperature, mass and radius: a guess, check it in the system map">`) : "");
 document.getElementById("sRings").innerHTML = OPTS.rings.map(t => box("rings", t, t)).join("");
 document.getElementById("sHotspots").innerHTML = OPTS.hotspots.map(t => box("hotspots", t, t)).join("");
 document.getElementById("sBio").innerHTML = (OPTS.bio || []).map(([k, l]) => box("bio", k, l)).join("");
@@ -7775,13 +7808,15 @@ function onData() {
                  {sound: null, quiet: "a card only: never spoken"});
       }
       else if (m.kind === "approach") {   // orbital cruise at a body: the stakes of a high-g landing, and (if ticked) its bio
-        const hg = highGStakes(m), bt = bodyBriefText(m);
+        const hg = highGStakes(m), bt = bodyBriefText(m), geo = approachGeoText(m);
         nowStakes = hg ? {sys: String(m.system), body_id: m.body_id, hg, landed: false} : null;   // Now's at-risk line
         const brief = () => line("body_brief", {body: m.body, text: bt}, `${m.body}: ${bt}.`);
         // with both spoken, one utterance: the bio briefing leads into the high-g warning. Otherwise each alert
         // follows its own ticks (the approach alert off must not swallow the body briefing).
         const merge = !!(hg && bt && alertSpeak.approach && alertSpeak.bodybrief);
-        if (bt) alertOut("bodybrief", `Approaching ${m.body}`, bt, {tag: "body_brief", say: brief, quiet: merge});
+        // S22: geology new to your codex rides on the card only, never spoken
+        if (bt || geo) alertOut("bodybrief", `Approaching ${m.body}`, [bt, geo].filter(Boolean).join(" · "),
+                                {tag: "body_brief", say: brief, quiet: merge || (!bt && "geology on the card only: never spoken")});
         if (hg)
           alertOut("approach", `${m.body}: ${hg.gravity} g with ${hg.value} cr aboard`, hg.rebuys ? `${hg.rebuys}× your rebuy · land gently` : "land gently",
                    {tag: "high_g", say: () => [merge ? brief() : "", line("high_g", hg, `${hg.gravity} g. ${hg.value} credits aboard. Land gently.`)].filter(Boolean).join(" ")});

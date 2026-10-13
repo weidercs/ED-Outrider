@@ -2,6 +2,33 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · Geology new to your codex, finding green gas giants, and species other commanders reported
+- **Geology ✦** (S22): new pure `outrider/codex_geo.py`, `entries_for(record)`: the SET of geology entries a landable
+  body with geological signals could log, keyed on its volcanism's material and icy or not, verified on EDDN's codex
+  traffic joined to the scans of the same bodies (284 entries on 81 bodies, every one inside the sets; rocky magma
+  also logged the silicate vapour gas vent on 2 of its 6 bodies, so it is in that set). Unseen combinations (non-Ice
+  water and CO2 entries, rocky ice bodies, SO2/silicate vapour Ice forms) give no mark. `codex_types_logged` takes the
+  geology lines 1400000-1400499 (not the anomalies); Here's bodies gain `codex_geo`; the page's ✦ / ✪ (class `cxgeo`)
+  in the name cell when any candidate is new in the region / anywhere, the new ones named in the title, its own legend
+  row (the other codex rows now exclude `.cxgeo`), and the approach card names them (never spoken).
+- **The Spansh landmarks probe** (P5): `scripts/landmarks_probe.py`, run on 2026-10-12, the answers trimmed into
+  `tests/fixtures/spansh_landmarks.json`. Search results carry `landmarks` with the colour (`variant`), `earth_masses`,
+  `radius` and the journal's temperature; dumps carry no landmarks; the landmark filter is `{landmarks: [{subtype}]}`;
+  `surface_temperature` needs `{value, comparison: "<=>"}` ({min, max} is silently ignored); one system's bodies are the
+  search out to 1 ly of it (a max of 0 and a system_name filter are ignored).
+- **Find potential green gas giants** (S27): Search's Planets gains "Potential green gas giant" (`GGG_OPTION`): Local
+  runs the ladder model over the cache, Spansh is asked for every giant of the classes the model can judge
+  (`GGG_SPANSH`) and its answer checked by the model (`record_from_body_search` keeps `mass_em` and `radius_km`). GET
+  `/api/ggg` (`State.nearest_ggg`, `ggg_nearest`: the cache only, on a worker, 500 ly by default), the AI tool
+  `nearest_ggg` (in READ_ROUTES) and the voice's "nearest green gas giant" ("Nearest potential green gas giant: B 3 in
+  …, 42 light years. A guess from the ladder model: check it in the system map.").
+- **Species reported on a body** (S23): dumps lack landmarks, so the system you are in is asked once a day, only when
+  its bodies have life (`State.maybe_reported`, a follow-up; `Spansh.reported_search`; `reported_life`), kept in the
+  live-only table `spansh_reported`; Here's bodies gain `reported` and the bio cell shows "👥 Bacterium Vesicula -
+  Mulberry 1.0M" beside the guess (titled "reported to Spansh by commanders' uploads"; a genus not named yet gets a line
+  of its own, an analysed one none), with a legend row. Not built yet: the arrival brief, the FSS debrief and the
+  overlay's body panel naming them.
+
 ## 2026-10-12 · What a sample run pays from sample 1, a Retry for the colour tables, and someone else scanning your unsold firsts
 - **What a sample run pays, from sample 1** (S62): `sampling_summary` gains `value` (the species') and `factor` (×5 where
   nobody had set foot, `own_firsts.bio_x5`), apart, so nothing multiplies twice (the run elsewhere's `value` keeps its

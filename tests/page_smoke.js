@@ -5526,6 +5526,64 @@ const settle = async maxMs => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| codex body types |", good ? "✦ / ✪ in Here's name cell, Nearby's tag, the legend, nothing without a codex" : JSON.stringify({g, want}), errors.slice(before));
   }
+  // S22 (2026-10-12): geology a body's volcanism could log, ✦ when any of its set is new to your codex here, ✪ when one
+  // is in it nowhere; its own legend row (the bio ✪ / ✦ rows are not lit by it); the approach card names them
+  {
+    const w = dom.window, before = errors.length;
+    const got = w.eval(`(() => {
+      const o = {}, hd0 = hereData, v0 = view, ct0 = data.codex_types;
+      const body = (name, geo, id) => ({name, body_id: id, type: "Planet", subtype: "Icy body", genera: [], bio: 0, geo: 2, organics: [],
+        codex: [], curiosities: [], bio_guess: [], value_parts: {bio_factor: 1}, mining: 0, codex_type: null, codex_geo: geo});
+      const fum = {id: 1400158, name: "Water Ice Fumarole"}, gey = {id: 1400258, name: "Water Ice Geyser"}, sv = {id: 1400414, name: "Silicate Vapour Gas Vent"};
+      data.codex_types = {"Inner Orion Spur": [1400158, 1400258], "Norma Expanse": [1400414]};
+      view = "here";
+      hereData = {id64: posId(), name: "Gx", region: "Inner Orion Spur", leaving: null, phenomena: [], tree: null,
+                  bodies: [body("A 1", [fum, gey], 1), body("A 2", [sv], 2), body("A 3", [fum, {id: 1400160, name: "Ammonia Ice Fumarole"}], 3), body("A 4", null, 4)]};
+      renderHere();
+      o.here = [...document.querySelectorAll("#hereRows tr[data-body]")].map(r => { const m = r.querySelector(".cxgeo"); return m ? m.textContent : "-"; });
+      o.title = (document.querySelector('#hereRows tr[data-body="A 3"] .cxgeo') || {}).title;
+      const lg = [...document.querySelectorAll("#hereLegend .lg")].map(e => e.textContent);
+      o.legend = lg.some(t => t.includes("geology its volcanism could show")) && !lg.some(t => t.includes("new to your codex anywhere"));
+      o.card = approachGeoText({system: posId(), body_id: 2});
+      o.none = approachGeoText({system: posId(), body_id: 1}) + approachGeoText({system: "1", body_id: 2});
+      data.codex_types = ct0; hereData = hd0; view = v0; render();
+      return JSON.stringify(o); })()`);
+    const g = JSON.parse(got);
+    const want = {here: ["-", "✦", "✪", "-"], title: "its volcanism could show geology new to your codex: Ammonia Ice Fumarole (anywhere) (logged when you scan one)",
+                  legend: true, card: "could show geology new to your codex: Silicate Vapour Gas Vent", none: ""};
+    const good = JSON.stringify(g) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| codex geology |", good ? "✦ / ✪ from each body's set, its legend row, the approach card" : JSON.stringify({g, want}), errors.slice(before));
+  }
+  // S23 (2026-10-12): species other commanders reported to Spansh, 👥 beside the guess (a fact, with its colour), a line
+  // of their own for a genus not named yet, none for a genus you analysed; the legend's row. S27: Search's planet option
+  {
+    const w = dom.window, before = errors.length;
+    const got = w.eval(`(() => {
+      const o = {}, hd0 = hereData, v0 = view;
+      const body = (name, id, extra) => Object.assign({name, body_id: id, type: "Planet", subtype: "Icy body", genera: ["Bacterium"], bio: 3, geo: 0,
+        organics: [], codex: [], curiosities: [], bio_guess: [], value_parts: {bio_factor: 1}, mining: 0, codex_type: null, codex_geo: null}, extra);
+      const ves = {genus: "Bacterium", species: "Bacterium Vesicula", variant: "Mulberry", value: 1000000};
+      const str = {genus: "Stratum", species: "Stratum Tectonicas", variant: null, value: 19010800};
+      view = "here";
+      hereData = {id64: posId(), name: "Rx", region: "Inner Orion Spur", leaving: null, phenomena: [], tree: null,
+                  bodies: [body("A 1", 1, {reported: [ves, str]}), body("A 2", 2, {reported: [ves], organics: [{genus: "Bacterium", species: "Bacterium Vesicula", variant: "Bacterium Vesicula - Mulberry", samples: 3, done: true, lost: false, value: 1000000}]}), body("A 3", 3, {})]};
+      renderHere();
+      const cell = n => { const td = document.querySelector('#hereRows tr[data-body="' + n + '"] td.bio'); return td ? [...td.querySelectorAll(".sp.rep")].map(e => e.textContent.replace(/\\s+/g, " ").trim()) : null; };
+      o.a1 = cell("A 1"); o.a2 = cell("A 2"); o.a3 = cell("A 3");
+      o.title = (document.querySelector("#hereRows .sp.rep") || {}).title;
+      o.legend = [...document.querySelectorAll("#hereLegend .lg")].some(e => e.textContent.includes("species reported to Spansh by other commanders"));
+      const g = document.querySelector('#sPlanets input[data-group="planets"][value="ggg"]');
+      o.ggg = !!g && g.closest("label").textContent.trim() === "Potential green gas giant";
+      hereData = hd0; view = v0; render();
+      return JSON.stringify(o); })()`);
+    const g = JSON.parse(got);
+    const want = {a1: ["👥 Bacterium Vesicula - MulberryVesicula 1.0M", "👥 Stratum TectonicasTectonicas 19.0M"], a2: [], a3: [],
+                  title: "reported to Spansh by commanders' uploads", legend: true, ggg: true};
+    const good = JSON.stringify(g) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| reported species |", good ? "👥 beside the guess, a line for an unnamed genus, none once analysed, the legend; Search's green gas giant box" : JSON.stringify({g, want}), errors.slice(before));
+  }
   // S73 (2026-10-12): a click anywhere on a Nearby row shows the system in Here (again: closes it); the name still
   // copies, ☆ still opens the bookmark, a drag that selected text opens nothing
   {

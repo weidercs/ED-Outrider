@@ -61,6 +61,9 @@ FIX = {
     "/api/nearest": {"rows": [{"kind": "carrier", "name": "", "callsign": "KBT-B8Z", "system": "Smojooe QI-T d3-37", "ly": 711.5,
                                "ls": 235, "services": ["UC", "Vista"], "pads": "L M", "dssa": False, "own": False, "warn": [],
                                "age_s": 1000000}], "hidden": {"old": 6}, "pad": "L"},
+    "/api/ggg": {"origin": "Start", "radius": 500.0, "searched": 40, "more": 0,
+                 "bodies": [{"system": "Far Green", "id": "77", "body": "B 3", "chance": "likely", "distance": 30.04},
+                            {"system": "Further", "id": "78", "body": "1", "chance": "possible", "distance": 120.0}]},
 }
 ARGS = {"body_detail": {"name": "Start A 1"}, "left_behind": {"radius_ly": 50}, "travel_history": {"days": 2},
         "materials": {"name": "polo"}, "nearby_systems": {"sort": "value"}}
@@ -153,6 +156,9 @@ class Registry(unittest.TestCase):
                          ("Neu", 42, 3, 3, 5))   # leads with the next system (Vespa's "next jump")
         th = run("travel_history")
         self.assertEqual((th["days"], th["sessions"][0]["systems"], th["sessions"][0]["ly"]), (2, ["Start", "Next One"], 120.0))
+        gg = run("nearest_ggg", rows=1)   # S27
+        self.assertEqual((gg["giants"], gg["more"], gg["radius_ly"]),
+                         ([{"system": "Far Green", "body": "B 3", "distance_ly": 30.0, "chance": "likely"}], 1, 500.0))
         mt = run("materials")
         self.assertEqual(([r["name"] for r in mt["held"]], mt["synthesis"][0]["limited_by"]), (["Polonium"], "Polonium"))
         self.assertEqual([r["name"] for r in run("materials", {})["held"]], ["Carbon", "Polonium"])   # held only, fullest first

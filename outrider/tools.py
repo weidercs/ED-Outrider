@@ -17,7 +17,8 @@ import outrider.dock as dock
 
 # the GET routes a tool may read (path prefixes); /api/find is left out on purpose: it can store an EDSM hit
 READ_ROUTES = ("/api/status", "/api/nearby", "/api/system/", "/api/body", "/api/firsts", "/api/left", "/api/highway",
-               "/api/history", "/api/materials", "/api/nearest")   # /api/nearest only ever with cached=1 (no DSSA fetch)
+               "/api/history", "/api/materials", "/api/nearest",   # /api/nearest only ever with cached=1 (no DSSA fetch)
+               "/api/ggg")   # S27: Outrider's cache only, never Spansh
 DEFAULT_ROWS = 25
 NOT_RUNNING = "Outrider isn't running (start it, then ask again)"
 
@@ -192,6 +193,22 @@ async def nearest_dock(get, args, rows):
     # so the answer can say so rather than call a far carrier the nearest place
     return {"hidden": d.get("hidden"), "pad": d.get("pad"), "errors": d.get("errors") or None,
             **capped(map(brief, d.get("rows") or []), min(rows, 10), "places")}
+
+
+@tool("nearest_ggg", "The nearest potential green gas giants in what Outrider has cached (Spansh's records and the "
+      "commander's scans): the community's ladder model on each giant's temperature, mass and radius, a guess to check "
+      "in the system map, never a fact.",
+      {"radius_ly": {"type": "integer", "description": "how far to look in light years (default 500, at most 1000)"}})
+async def nearest_ggg(get, args, rows):
+    d = await get("/api/ggg", {"radius": str(_int(args, "radius_ly", 500, 1, 1000))})
+    if d.get("error"):
+        return {"error": d["error"]}
+    giants = [{"system": b.get("system"), "body": b.get("body"), "distance_ly": rnd(b.get("distance")), "chance": b.get("chance")}
+              for b in d.get("bodies") or []]
+    out = {"radius_ly": d.get("radius"), "systems_searched": d.get("searched"), **capped(giants, min(rows, 10), "giants")}
+    if d.get("more"):
+        out["more"] = out.get("more", 0) + d["more"]
+    return out
 
 
 @tool("body_detail", "One body in the current system (or another system by its id64): its values, signals, biology "

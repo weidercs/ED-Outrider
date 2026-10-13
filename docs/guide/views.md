@@ -35,7 +35,9 @@ stays in view while the list scrolls.
 "🧬? check in the FSS" marks a landable body you have only from an AutoScan or a nav beacon, whose signals nobody
 counted, where life is possible. A finished species is one line, its codex entry with what it pays ("📖 Bacterium
 Alcyoneum - Red ✦ 8.3M"), the colour's word in that colour (Settings → Display can turn that off). The body panel lists
-why each other genus is not expected ("pressure too low"). Flying low over a body in your ship (under 5 km), the
+why each other genus is not expected ("pressure too low"). **👥** beside a genus is a species other commanders reported
+to Spansh on that body, with the colour they reported ("👥 Bacterium Vesicula - Mulberry 1.0M"): a fact, not a guess
+(asked once a day for the system you are in when its bodies have life; a genus you have analysed shows yours instead). Flying low over a body in your ship (under 5 km), the
 on-body strip already shows its bio card. While you sample, the strip says what the run pays from the first sample on
 ("🧬 Bacterium Aurasus · 1.0M (×5: 5.0M) · sample 1/3 · 500 m to go": the species' value, and with the first-footfall
 bonus). A star's panel says its kind in words ("main sequence", "white dwarf (hydrogen-rich)"), a biology codex entry links to
@@ -100,7 +102,8 @@ default) keeps the schematic under the list or tree.
 <b>Search</b> — systems with particular stars (or just <i>scoopable</i>), planets, rings, hotspots,
 unfinished exobiology or planetary mining locations (one mineral, if you like) within a radius, from what
 Outrider knows (<i>Local</i>) or everything reported (<i>Spansh</i>; mining locations are Local only, as Spansh cannot
-filter on them). The name box finds any system and opens
+filter on them). Planets has <i>Potential green gas giant</i> too (see
+<a href="#-potential-green-gas-giants">below</a>). The name box finds any system and opens
 it in Here, where ☆ bookmarks it or makes it the next stop.
 <br><br><img src="../images/search.png" alt="Search">
 </td>
@@ -200,8 +203,14 @@ journal's own figures for: your scans, and Spansh's records of other people's.
 - **"Potential green gas giant"** is said when one of your own scans fits (its own switch under Discoveries).
 - "likely" is a confirmed rule of the model, "possible" a derived one. It is a guess about where to look: some kinds
   (Class II, V, helium giants) and some temperatures cannot be predicted at all, and nothing is said for them.
+- **Finding one:** Search's *Potential green gas giant* (under Planets) runs the model over every giant in reach:
+  *Local* over what Outrider has cached, *Spansh* over every giant Spansh knows of the kinds it can judge. By voice
+  (the Android app): "nearest green gas giant" (Outrider's cache, within 500 ly). Expect few: the model calls very few
+  giants green.
 
-## ✦ Star and planet types new to your codex
+<a id="-star-and-planet-types-new-to-your-codex"></a>
+
+## ✦ Star and planet types and geology new to your codex
 
 The codex logs every star and planet type once per region, the first time you scan one there (a K-type giant, a
 terraformable water world, a rocky body with an atmosphere...). Outrider knows which entry each body would log and which
@@ -213,6 +222,13 @@ not count).
   tooltip names the type ("K-type giant: new to your codex in this region").
 - **On a Nearby row**, one tag for the system ("✦2"), each type and its bodies in the tooltip: Spansh's bodies count
   too, so a system can be picked for it before you go.
+
+**Geology** too: a landable body with geological signals and volcanism gets **✦** (✪: anywhere) when its volcanism
+could show a geological feature not in your codex for the region. One volcanism can show one of a few features (rocky
+magma: a sulphur dioxide fumarole or gas vent, a silicate magma lava spout, now and then a silicate vapour gas vent), so
+the tooltip names the new ones; the approach card says them too. Your codex's geology is its lines in your journals (a
+scan logs none), and combinations never seen on EDDN (water or CO2 features on a rocky body, anything on a rocky ice
+body) get no mark.
 
 Shown only, never spoken. A type the journals give no codex entry for (a class II giant star, a helium gas giant) gets
 no mark, nor does a body Spansh lists without its luminosity or atmosphere. With no body type in your journals at all

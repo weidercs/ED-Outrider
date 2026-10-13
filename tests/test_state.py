@@ -1896,7 +1896,7 @@ class BatchAIntegrity(unittest.TestCase):
         cancelled at shutdown, so it ran on into the closed Spansh session and database."""
         import types
         names = ("refresh_task", "target_task", "unsold_task", "seller_task", "carrier_task", "honk_test_task",
-                 "highway_task", "riches_task", "autotarget_task", "autotarget_test_task")
+                 "highway_task", "riches_task", "autotarget_task", "autotarget_test_task", "reported_task")
         for n in names:
             setattr(self.state, n, n)
         self.state.searcher = types.SimpleNamespace(task="searcher")

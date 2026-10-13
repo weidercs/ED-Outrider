@@ -1,0 +1,3226 @@
+{
+ "_note": "Trimmed from one run of scripts/landmarks_probe.py (2026-10-12): a search near Colonia, each answer's count and its first results. Findings: search results carry landmarks (species, variant, place), earth_masses, radius and the journal's surface_temperature; system dumps carry no landmarks; the landmark filter is {landmarks: [{subtype}]} (landmark_subtype {value} too; {landmarks: {value}} finds nothing); surface_temperature needs {value: [lo, hi], comparison: '<=>'} ({min, max} is ignored); one system's bodies: distance max 1 ly from it (a max of 0 and a system_name filter are ignored). Each body's landmarks cut to one per species and variant; materials left out.",
+ "bio_search": {
+  "count": 10000,
+  "results": [
+   {
+    "atmosphere": "Thin Argon",
+    "atmosphere_composition": [
+     {
+      "name": "Argon",
+      "share": 99.935738
+     },
+     {
+      "name": "Carbon dioxide",
+      "share": 0.064254
+     }
+    ],
+    "body_id": 32,
+    "distance": 7.17131329499695,
+    "distance_to_arrival": 1195.997142,
+    "earth_masses": 0.22498,
+    "genuses": [
+     {
+      "name": "Bacterial"
+     }
+    ],
+    "gravity": 0.33824778219639,
+    "id": "1153010632928567882",
+    "id64": 1153010632928567882,
+    "is_landable": true,
+    "is_main_star": null,
+    "landmark_value": 1000000,
+    "landmarks": [
+     {
+      "id": 2320504,
+      "latitude": 23.59966,
+      "longitude": -173.95868,
+      "subtype": "Bacterium Vesicula",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "Mulberry"
+     }
+    ],
+    "name": "Eol Prou LW-L c8-324 4 b",
+    "orbital_period": 14.7197499043403,
+    "parents": [
+     {
+      "id64": 1008895444852712010,
+      "subtype": "Class III gas giant",
+      "type": "Planet"
+     }
+    ],
+    "radius": 5199.26,
+    "rings": [
+     {
+      "inner_radius": 8578800.0,
+      "mass": 1167900.0,
+      "name": "Eol Prou LW-L c8-324 4 b A Ring",
+      "outer_radius": 22094000.0,
+      "signal_count": 4,
+      "signals": [
+       {
+        "count": 1,
+        "name": "Painite"
+       },
+       {
+        "count": 2,
+        "name": "Platinum"
+       },
+       {
+        "count": 1,
+        "name": "Rhodplumsite"
+       }
+      ],
+      "signals_updated_at": "2026-10-11T00:22:11Z",
+      "type": "Metal Rich"
+     }
+    ],
+    "semi_major_axis": 0.0240614295340144,
+    "signal_count": 13,
+    "signals": [
+     {
+      "count": 12,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 1,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-10-11T00:22:11Z",
+    "subtype": "Icy body",
+    "surface_pressure": 0.0235500902146558,
+    "surface_temperature": 179.243484,
+    "system_id64": 89128321720906,
+    "system_name": "Eol Prou LW-L c8-324",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9535.8125,
+    "system_y": -905.5625,
+    "system_z": 19809.09375,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-10T22:32:17Z",
+    "volcanism_type": "No volcanism"
+   },
+   {
+    "atmosphere": "Thin Neon",
+    "atmosphere_composition": [
+     {
+      "name": "Neon",
+      "share": 100.0
+     }
+    ],
+    "body_id": 6,
+    "distance": 7.50266879600186,
+    "distance_to_arrival": 1168.879438,
+    "earth_masses": 0.516469,
+    "genuses": [
+     {
+      "name": "Bacterial"
+     }
+    ],
+    "gravity": 0.517716834913837,
+    "id": "216173325021562009",
+    "id64": 216173325021562009,
+    "is_landable": true,
+    "is_main_star": null,
+    "landmark_value": 1000000,
+    "landmarks": [
+     {
+      "id": 2320402,
+      "latitude": -22.91579,
+      "longitude": -20.75917,
+      "subtype": "Bacterium Acies",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "White"
+     }
+    ],
+    "name": "Eol Prou YD-W b17-0 4",
+    "orbital_period": 2578.60386261234,
+    "parents": [
+     {
+      "id64": 542907778201,
+      "subtype": "M (Red dwarf) Star",
+      "type": "Star"
+     }
+    ],
+    "radius": 6367.4065,
+    "semi_major_axis": 2.34240153229117,
+    "signal_count": 15,
+    "signals": [
+     {
+      "count": 14,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 1,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-10-09T00:00:48Z",
+    "subtype": "Icy body",
+    "surface_pressure": 0.00310880889217863,
+    "surface_temperature": 41.402664,
+    "system_id64": 542907778201,
+    "system_name": "Eol Prou YD-W b17-0",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9525.0625,
+    "system_y": -911.8125,
+    "system_z": 19803.1875,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-08T23:31:38Z",
+    "volcanism_type": "No volcanism"
+   },
+   {
+    "atmosphere": "Thin Neon",
+    "atmosphere_composition": [
+     {
+      "name": "Neon",
+      "share": 100.0
+     }
+    ],
+    "body_id": 7,
+    "distance": 7.50266879600186,
+    "distance_to_arrival": 1625.510749,
+    "earth_masses": 0.286046,
+    "genuses": [
+     {
+      "name": "Bacterial"
+     }
+    ],
+    "gravity": 0.413982359539105,
+    "id": "252202122040525977",
+    "id64": 252202122040525977,
+    "is_landable": true,
+    "is_main_star": null,
+    "landmark_value": 1000000,
+    "landmarks": [
+     {
+      "id": 2320404,
+      "latitude": -33.07207,
+      "longitude": 67.25928,
+      "subtype": "Bacterium Acies",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "Cobalt"
+     }
+    ],
+    "name": "Eol Prou YD-W b17-0 5",
+    "orbital_period": 4228.60206001335,
+    "parents": [
+     {
+      "id64": 542907778201,
+      "subtype": "M (Red dwarf) Star",
+      "type": "Star"
+     }
+    ],
+    "radius": 5299.2445,
+    "semi_major_axis": 3.25738736892047,
+    "signal_count": 16,
+    "signals": [
+     {
+      "count": 15,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 1,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-10-08T23:21:51Z",
+    "subtype": "Icy body",
+    "surface_pressure": 0.0019862690648902,
+    "surface_temperature": 35.100651,
+    "system_id64": 542907778201,
+    "system_name": "Eol Prou YD-W b17-0",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9525.0625,
+    "system_y": -911.8125,
+    "system_z": 19803.1875,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-08T23:21:51Z",
+    "volcanism_type": "No volcanism"
+   }
+  ]
+ },
+ "dump": {
+  "system": "Eol Prou LW-L c8-324",
+  "id64": 89128321720906,
+  "http_error": null,
+  "bodies": [
+   {
+    "argOfPeriapsis": 126.227049,
+    "ascendingNode": -106.517797,
+    "atmosphereComposition": {
+     "Silicates": 99.999985
+    },
+    "atmosphereType": "Hot thick Silicate vapour",
+    "axialTilt": -0.084826,
+    "bodyId": 7,
+    "distanceToArrival": 12.996382,
+    "earthMasses": 0.518548,
+    "gravity": 1.32553777913735,
+    "id64": 252290707454468682,
+    "isLandable": false,
+    "meanAnomaly": 189.822188,
+    "name": "Eol Prou LW-L c8-324 1",
+    "orbitalEccentricity": 4e-06,
+    "orbitalInclination": -0.000154,
+    "orbitalPeriod": 1.59130128168981,
+    "parents": [
+     {
+      "Star": 0
+     }
+    ],
+    "radius": 3987.35475,
+    "rotationalPeriod": 1.51240292976852,
+    "rotationalPeriodTidallyLocked": true,
+    "semiMajorAxis": 0.0260444887525021,
+    "solidComposition": {
+     "Ice": 0.0,
+     "Metal": 100.0,
+     "Rock": 0.0
+    },
+    "stations": [],
+    "subType": "Metal-rich body",
+    "surfacePressure": 2089.1521736985,
+    "surfaceTemperature": 2139.319092,
+    "terraformingState": "Not terraformable",
+    "timestamps": {
+     "distanceToArrival": "2026-10-12T05:26:52Z",
+     "meanAnomaly": "2026-10-12T05:26:52Z"
+    },
+    "type": "Planet",
+    "updateTime": "2026-10-12T05:26:52Z",
+    "volcanismType": "Major Metallic Magma"
+   },
+   {
+    "argOfPeriapsis": 219.633472,
+    "ascendingNode": 37.234701,
+    "atmosphereType": null,
+    "axialTilt": 0.264444,
+    "bodyId": 8,
+    "distanceToArrival": 22.501491,
+    "earthMasses": 3.369891,
+    "gravity": 1.83979912307535,
+    "id64": 288319504473432650,
+    "isLandable": false,
+    "meanAnomaly": 112.848976,
+    "name": "Eol Prou LW-L c8-324 2",
+    "orbitalEccentricity": 1e-06,
+    "orbitalInclination": 0.001211,
+    "orbitalPeriod": 3.6252512837963,
+    "parents": [
+     {
+      "Star": 0
+     }
+    ],
+    "radius": 8627.984,
+    "rotationalPeriod": 3.55463136649306,
+    "rotationalPeriodTidallyLocked": true,
+    "semiMajorAxis": 0.0450927110277932,
+    "solidComposition": {
+     "Ice": 0.0,
+     "Metal": 33.1176,
+     "Rock": 66.8824
+    },
+    "stations": [],
+    "subType": "High metal content world",
+    "surfacePressure": 2.26577843572662e-07,
+    "surfaceTemperature": 1069.603271,
+    "terraformingState": "Not terraformable",
+    "timestamps": {
+     "distanceToArrival": "2026-10-12T05:26:52Z",
+     "meanAnomaly": "2026-10-12T05:26:52Z"
+    },
+    "type": "Planet",
+    "updateTime": "2026-10-12T05:26:52Z",
+    "volcanismType": "Major Silicate Vapour Geysers"
+   },
+   {
+    "argOfPeriapsis": 321.664313,
+    "ascendingNode": -146.273156,
+    "atmosphereComposition": {
+     "Helium": 27.085634,
+     "Hydrogen": 72.91436
+    },
+    "atmosphereType": null,
+    "axialTilt": -0.258261,
+    "bodyId": 20,
+    "distanceToArrival": 649.862743,
+    "earthMasses": 403.600494,
+    "gravity": 2.96206525950851,
+    "id64": 720665068701000266,
+    "isLandable": false,
+    "meanAnomaly": 20.022308,
+    "name": "Eol Prou LW-L c8-324 3",
+    "orbitalEccentricity": 0.000797,
+    "orbitalInclination": -0.001775,
+    "orbitalPeriod": 563.303284623009,
+    "parents": [
+     {
+      "Star": 0
+     }
+    ],
+    "radius": 74415.8,
+    "reserveLevel": "Pristine",
+    "rings": [
+     {
+      "id64": 756693865719964234,
+      "innerRadius": 112550000.0,
+      "mass": 165010000000.0,
+      "name": "Eol Prou LW-L c8-324 3 A Ring",
+      "outerRadius": 138320000.0,
+      "signals": {
+       "signals": {
+        "Painite": 1
+       },
+       "updateTime": "2026-10-10T20:56:40Z"
+      },
+      "type": "Metallic"
+     },
+     {
+      "id64": 792722662738928202,
+      "innerRadius": 138420000.0,
+      "mass": 1201100000000.0,
+      "name": "Eol Prou LW-L c8-324 3 B Ring",
+      "outerRadius": 257270000.0,
+      "signals": {
+       "signals": {
+        "Monazite": 2,
+        "Painite": 4,
+        "Platinum": 1
+       },
+       "updateTime": "2026-10-10T22:29:07Z"
+      },
+      "type": "Metal Rich"
+     }
+    ],
+    "rotationalPeriod": 0.741964091944444,
+    "rotationalPeriodTidallyLocked": false,
+    "semiMajorAxis": 1.30329402951268,
+    "signals": {
+     "signals": {
+      "$SAA_SignalType_Human;": 1
+     },
+     "updateTime": "2022-02-26T00:01:46Z"
+    },
+    "stations": [],
+    "subType": "Class II gas giant",
+    "surfacePressure": 0.0,
+    "surfaceTemperature": 246.406479,
+    "terraformingState": "Not terraformable",
+    "timestamps": {
+     "distanceToArrival": "2026-10-10T20:54:01Z",
+     "meanAnomaly": "2026-10-10T20:54:01Z"
+    },
+    "type": "Planet",
+    "updateTime": "2026-10-10T20:54:01Z",
+    "volcanismType": "No volcanism"
+   },
+   {
+    "argOfPeriapsis": 181.264522,
+    "ascendingNode": -2.921412,
+    "atmosphereType": null,
+    "axialTilt": 0.191034,
+    "bodyId": 23,
+    "distanceToArrival": 648.165468,
+    "earthMasses": 0.00176,
+    "gravity": 0.0994134801672275,
+    "id64": 828751459757892170,
+    "isLandable": true,
+    "materials": {
+     "Carbon": 16.751913,
+     "Germanium": 5.890591,
+     "Iron": 20.453686,
+     "Mercury": 0.893179,
+     "Nickel": 15.470311,
+     "Phosphorus": 10.724863,
+     "Polonium": 0.529398,
+     "Selenium": 3.117883,
+     "Sulphur": 19.921497,
+     "Tin": 1.223956,
+     "Vanadium": 5.022714
+    },
+    "meanAnomaly": 50.329838,
+    "name": "Eol Prou LW-L c8-324 3 a",
+    "orbitalEccentricity": 0.000497,
+    "orbitalInclination": 0.043033,
+    "orbitalPeriod": 2.70977064415509,
+    "parents": [
+     {
+      "Planet": 20
+     },
+     {
+      "Star": 0
+     }
+    ],
+    "radius": 848.3400625,
+    "rotationalPeriod": 2.70981450763889,
+    "rotationalPeriodTidallyLocked": true,
+    "semiMajorAxis": 0.00405583546185352,
+    "signals": {
+     "signals": {
+      "$PlanetaryMiningLocation_Name;": 25
+     },
+     "updateTime": "2026-10-09T12:17:03Z"
+    },
+    "solidComposition": {
+     "Ice": 0.0,
+     "Metal": 9.0109,
+     "Rock": 90.9892
+    },
+    "stations": [],
+    "subType": "Rocky body",
+    "surfacePressure": 0.0,
+    "surfaceTemperature": 208.310303,
+    "terraformingState": "Not terraformable",
+    "timestamps": {
+     "distanceToArrival": "2026-10-10T20:55:48Z",
+     "meanAnomaly": "2026-10-10T20:55:48Z"
+    },
+    "type": "Planet",
+    "updateTime": "2026-10-10T20:55:48Z",
+    "volcanismType": "No volcanism"
+   }
+  ]
+ },
+ "filter_landmarks_list": {
+  "count": 741,
+  "results": [
+   {
+    "atmosphere": "Thin Argon",
+    "atmosphere_composition": [
+     {
+      "name": "Argon",
+      "share": 99.935738
+     },
+     {
+      "name": "Carbon dioxide",
+      "share": 0.064254
+     }
+    ],
+    "body_id": 32,
+    "distance": 7.17131329499695,
+    "distance_to_arrival": 1195.997142,
+    "earth_masses": 0.22498,
+    "genuses": [
+     {
+      "name": "Bacterial"
+     }
+    ],
+    "gravity": 0.33824778219639,
+    "id": "1153010632928567882",
+    "id64": 1153010632928567882,
+    "is_landable": true,
+    "is_main_star": null,
+    "landmark_value": 1000000,
+    "landmarks": [
+     {
+      "id": 2320504,
+      "latitude": 23.59966,
+      "longitude": -173.95868,
+      "subtype": "Bacterium Vesicula",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "Mulberry"
+     }
+    ],
+    "name": "Eol Prou LW-L c8-324 4 b",
+    "orbital_period": 14.7197499043403,
+    "parents": [
+     {
+      "id64": 1008895444852712010,
+      "subtype": "Class III gas giant",
+      "type": "Planet"
+     }
+    ],
+    "radius": 5199.26,
+    "rings": [
+     {
+      "inner_radius": 8578800.0,
+      "mass": 1167900.0,
+      "name": "Eol Prou LW-L c8-324 4 b A Ring",
+      "outer_radius": 22094000.0,
+      "signal_count": 4,
+      "signals": [
+       {
+        "count": 1,
+        "name": "Painite"
+       },
+       {
+        "count": 2,
+        "name": "Platinum"
+       },
+       {
+        "count": 1,
+        "name": "Rhodplumsite"
+       }
+      ],
+      "signals_updated_at": "2026-10-11T00:22:11Z",
+      "type": "Metal Rich"
+     }
+    ],
+    "semi_major_axis": 0.0240614295340144,
+    "signal_count": 13,
+    "signals": [
+     {
+      "count": 12,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 1,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-10-11T00:22:11Z",
+    "subtype": "Icy body",
+    "surface_pressure": 0.0235500902146558,
+    "surface_temperature": 179.243484,
+    "system_id64": 89128321720906,
+    "system_name": "Eol Prou LW-L c8-324",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9535.8125,
+    "system_y": -905.5625,
+    "system_z": 19809.09375,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-10T22:32:17Z",
+    "volcanism_type": "No volcanism"
+   },
+   {
+    "atmosphere": "Thin Argon",
+    "atmosphere_composition": [
+     {
+      "name": "Argon",
+      "share": 100.0
+     }
+    ],
+    "body_id": 42,
+    "distance": 8.62460370466377,
+    "distance_to_arrival": 85992.566711,
+    "earth_masses": 0.055224,
+    "genuses": [
+     {
+      "name": "Fonticulus"
+     },
+     {
+      "name": "Bacterial"
+     },
+     {
+      "name": "Electricae"
+     }
+    ],
+    "gravity": 0.219952278984399,
+    "id": "1513293655315882570",
+    "id64": 1513293655315882570,
+    "is_landable": true,
+    "is_main_star": null,
+    "landmark_value": 8284600,
+    "landmarks": [
+     {
+      "id": 42553,
+      "latitude": -18.735506,
+      "longitude": 174.344116,
+      "subtype": "Settlement",
+      "type": "Surface Station",
+      "value": 0
+     },
+     {
+      "id": 2370207,
+      "latitude": -53.21252,
+      "longitude": -74.76411,
+      "subtype": "Fonticulua Campestris",
+      "type": "Fonticulua",
+      "value": 1000000,
+      "variant": "Amethyst"
+     },
+     {
+      "id": 2320502,
+      "latitude": -53.20918,
+      "longitude": -74.75959,
+      "subtype": "Bacterium Vesicula",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "Red"
+     },
+     {
+      "id": 2360202,
+      "latitude": -23.1241,
+      "longitude": -80.36574,
+      "subtype": "Electricae Radialem",
+      "type": "Electricae",
+      "value": 6284600,
+      "variant": "Magenta"
+     }
+    ],
+    "name": "Ogmar B 1 a",
+    "orbital_period": 19.2013217343171,
+    "parents": [
+     {
+      "id64": 1477264858296918602,
+      "subtype": "Rocky Ice world",
+      "type": "Planet"
+     }
+    ],
+    "radius": 3194.37775,
+    "semi_major_axis": 0.00213916560663501,
+    "signal_count": 30,
+    "signals": [
+     {
+      "count": 27,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 3,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-10-12T20:56:26Z",
+    "stations": [
+     {
+      "controlling_minor_faction": "Jaques",
+      "controlling_minor_faction_state": "Election",
+      "distance_to_arrival": 86000.604224,
+      "has_large_pad": true,
+      "has_market": true,
+      "large_pads": 1,
+      "market_id": 3921007360,
+      "medium_pads": 0,
+      "name": "Boulaid Command Facility",
+      "services": [
+       "Dock",
+       "Autodock",
+       "Black Market",
+       "Market",
+       "Contacts",
+       "Missions",
+       "Restock",
+       "Refuel",
+       "Repair",
+       "Workshop",
+       "Missions Generated",
+       "Flight Controller",
+       "Station Operations",
+       "Search and Rescue",
+       "Station Menu"
+      ],
+      "small_pads": 2,
+      "type": "Settlement"
+     },
+     {
+      "controlling_minor_faction": "Colonia Citizens Network",
+      "controlling_minor_faction_state": "Expansion",
+      "distance_to_arrival": 86001.810006,
+      "has_large_pad": true,
+      "has_market": true,
+      "large_pads": 1,
+      "market_id": 3921007616,
+      "medium_pads": 0,
+      "name": "Poulin Military Garrison",
+      "services": [
+       "Dock",
+       "Autodock",
+       "Black Market",
+       "Market",
+       "Contacts",
+       "Missions",
+       "Restock",
+       "Refuel",
+       "Repair",
+       "Workshop",
+       "Missions Generated",
+       "Flight Controller",
+       "Station Operations",
+       "Search and Rescue",
+       "Station Menu"
+      ],
+      "small_pads": 2,
+      "type": "Settlement"
+     },
+     {
+      "controlling_minor_faction": "Likedeeler of Colonia",
+      "controlling_minor_faction_state": "Boom",
+      "distance_to_arrival": 85991.851258,
+      "has_large_pad": true,
+      "has_market": true,
+      "large_pads": 1,
+      "market_id": 3921007872,
+      "medium_pads": 0,
+      "name": "Faucher Biochemical Complex",
+      "services": [
+       "Dock",
+       "Autodock",
+       "Black Market",
+       "Market",
+       "Contacts",
+       "Universal Cartographics",
+       "Missions",
+       "Refuel",
+       "Repair",
+       "Workshop",
+       "Missions Generated",
+       "Flight Controller",
+       "Station Operations",
+       "Search and Rescue",
+       "Station Menu"
+      ],
+      "small_pads": 1,
+      "type": "Settlement"
+     }
+    ],
+    "subtype": "Icy body",
+    "surface_pressure": 0.0199395919072292,
+    "surface_temperature": 75.585136,
+    "system_id64": 84180519395914,
+    "system_name": "Ogmar",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9534.0,
+    "system_y": -905.28125,
+    "system_z": 19802.03125,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-12T20:56:27Z"
+   },
+   {
+    "atmosphere": "Thin Argon",
+    "atmosphere_composition": [
+     {
+      "name": "Argon",
+      "share": 100.0
+     }
+    ],
+    "body_id": 24,
+    "distance": 8.98338309741937,
+    "distance_to_arrival": 2053.263439,
+    "earth_masses": 0.074371,
+    "genuses": [
+     {
+      "name": "Bacterial"
+     },
+     {
+      "name": "Fonticulus"
+     },
+     {
+      "name": "Electricae"
+     }
+    ],
+    "gravity": 0.224137656775772,
+    "id": "864775034096624202",
+    "id64": 864775034096624202,
+    "is_landable": true,
+    "is_main_star": null,
+    "landmark_value": 8284600,
+    "landmarks": [
+     {
+      "id": 2370205,
+      "latitude": 42.33835,
+      "longitude": 178.64604,
+      "subtype": "Fonticulua Campestris",
+      "type": "Fonticulua",
+      "value": 1000000,
+      "variant": "Teal"
+     },
+     {
+      "id": 2360205,
+      "latitude": -12.40897,
+      "longitude": 45.80238,
+      "subtype": "Electricae Radialem",
+      "type": "Electricae",
+      "value": 6284600,
+      "variant": "Cyan"
+     },
+     {
+      "id": 2320505,
+      "latitude": 42.21908,
+      "longitude": 178.91293,
+      "subtype": "Bacterium Vesicula",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "Cyan"
+     }
+    ],
+    "name": "Eol Prou LW-L c8-305 2 c",
+    "orbital_period": 107.918007092338,
+    "parents": [
+     {
+      "id64": 648602251982840394,
+      "subtype": "Class I gas giant",
+      "type": "Planet"
+     }
+    ],
+    "radius": 3672.24175,
+    "semi_major_axis": 0.0388518437713793,
+    "signal_count": 15,
+    "signals": [
+     {
+      "count": 12,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 3,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-10-12T12:19:08Z",
+    "subtype": "Icy body",
+    "surface_pressure": 0.0215495659116704,
+    "surface_temperature": 102.666809,
+    "system_id64": 83905641488970,
+    "system_name": "Eol Prou LW-L c8-305",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9522.21875,
+    "system_y": -907.21875,
+    "system_z": 19806.46875,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-12T12:19:08Z",
+    "volcanism_type": "No volcanism"
+   }
+  ]
+ },
+ "filter_landmarks_subtype_list": {
+  "count": 741,
+  "results": [
+   {
+    "atmosphere": "Thin Argon",
+    "atmosphere_composition": [
+     {
+      "name": "Argon",
+      "share": 99.935738
+     },
+     {
+      "name": "Carbon dioxide",
+      "share": 0.064254
+     }
+    ],
+    "body_id": 32,
+    "distance": 7.17131329499695,
+    "distance_to_arrival": 1195.997142,
+    "earth_masses": 0.22498,
+    "genuses": [
+     {
+      "name": "Bacterial"
+     }
+    ],
+    "gravity": 0.33824778219639,
+    "id": "1153010632928567882",
+    "id64": 1153010632928567882,
+    "is_landable": true,
+    "is_main_star": null,
+    "landmark_value": 1000000,
+    "landmarks": [
+     {
+      "id": 2320504,
+      "latitude": 23.59966,
+      "longitude": -173.95868,
+      "subtype": "Bacterium Vesicula",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "Mulberry"
+     }
+    ],
+    "name": "Eol Prou LW-L c8-324 4 b",
+    "orbital_period": 14.7197499043403,
+    "parents": [
+     {
+      "id64": 1008895444852712010,
+      "subtype": "Class III gas giant",
+      "type": "Planet"
+     }
+    ],
+    "radius": 5199.26,
+    "rings": [
+     {
+      "inner_radius": 8578800.0,
+      "mass": 1167900.0,
+      "name": "Eol Prou LW-L c8-324 4 b A Ring",
+      "outer_radius": 22094000.0,
+      "signal_count": 4,
+      "signals": [
+       {
+        "count": 1,
+        "name": "Painite"
+       },
+       {
+        "count": 2,
+        "name": "Platinum"
+       },
+       {
+        "count": 1,
+        "name": "Rhodplumsite"
+       }
+      ],
+      "signals_updated_at": "2026-10-11T00:22:11Z",
+      "type": "Metal Rich"
+     }
+    ],
+    "semi_major_axis": 0.0240614295340144,
+    "signal_count": 13,
+    "signals": [
+     {
+      "count": 12,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 1,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-10-11T00:22:11Z",
+    "subtype": "Icy body",
+    "surface_pressure": 0.0235500902146558,
+    "surface_temperature": 179.243484,
+    "system_id64": 89128321720906,
+    "system_name": "Eol Prou LW-L c8-324",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9535.8125,
+    "system_y": -905.5625,
+    "system_z": 19809.09375,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-10T22:32:17Z",
+    "volcanism_type": "No volcanism"
+   },
+   {
+    "atmosphere": "Thin Argon",
+    "atmosphere_composition": [
+     {
+      "name": "Argon",
+      "share": 100.0
+     }
+    ],
+    "body_id": 42,
+    "distance": 8.62460370466377,
+    "distance_to_arrival": 85992.566711,
+    "earth_masses": 0.055224,
+    "genuses": [
+     {
+      "name": "Fonticulus"
+     },
+     {
+      "name": "Bacterial"
+     },
+     {
+      "name": "Electricae"
+     }
+    ],
+    "gravity": 0.219952278984399,
+    "id": "1513293655315882570",
+    "id64": 1513293655315882570,
+    "is_landable": true,
+    "is_main_star": null,
+    "landmark_value": 8284600,
+    "landmarks": [
+     {
+      "id": 42553,
+      "latitude": -18.735506,
+      "longitude": 174.344116,
+      "subtype": "Settlement",
+      "type": "Surface Station",
+      "value": 0
+     },
+     {
+      "id": 2370207,
+      "latitude": -53.21252,
+      "longitude": -74.76411,
+      "subtype": "Fonticulua Campestris",
+      "type": "Fonticulua",
+      "value": 1000000,
+      "variant": "Amethyst"
+     },
+     {
+      "id": 2320502,
+      "latitude": -53.20918,
+      "longitude": -74.75959,
+      "subtype": "Bacterium Vesicula",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "Red"
+     },
+     {
+      "id": 2360202,
+      "latitude": -23.1241,
+      "longitude": -80.36574,
+      "subtype": "Electricae Radialem",
+      "type": "Electricae",
+      "value": 6284600,
+      "variant": "Magenta"
+     }
+    ],
+    "name": "Ogmar B 1 a",
+    "orbital_period": 19.2013217343171,
+    "parents": [
+     {
+      "id64": 1477264858296918602,
+      "subtype": "Rocky Ice world",
+      "type": "Planet"
+     }
+    ],
+    "radius": 3194.37775,
+    "semi_major_axis": 0.00213916560663501,
+    "signal_count": 30,
+    "signals": [
+     {
+      "count": 27,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 3,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-10-12T20:56:26Z",
+    "stations": [
+     {
+      "controlling_minor_faction": "Jaques",
+      "controlling_minor_faction_state": "Election",
+      "distance_to_arrival": 86000.604224,
+      "has_large_pad": true,
+      "has_market": true,
+      "large_pads": 1,
+      "market_id": 3921007360,
+      "medium_pads": 0,
+      "name": "Boulaid Command Facility",
+      "services": [
+       "Dock",
+       "Autodock",
+       "Black Market",
+       "Market",
+       "Contacts",
+       "Missions",
+       "Restock",
+       "Refuel",
+       "Repair",
+       "Workshop",
+       "Missions Generated",
+       "Flight Controller",
+       "Station Operations",
+       "Search and Rescue",
+       "Station Menu"
+      ],
+      "small_pads": 2,
+      "type": "Settlement"
+     },
+     {
+      "controlling_minor_faction": "Colonia Citizens Network",
+      "controlling_minor_faction_state": "Expansion",
+      "distance_to_arrival": 86001.810006,
+      "has_large_pad": true,
+      "has_market": true,
+      "large_pads": 1,
+      "market_id": 3921007616,
+      "medium_pads": 0,
+      "name": "Poulin Military Garrison",
+      "services": [
+       "Dock",
+       "Autodock",
+       "Black Market",
+       "Market",
+       "Contacts",
+       "Missions",
+       "Restock",
+       "Refuel",
+       "Repair",
+       "Workshop",
+       "Missions Generated",
+       "Flight Controller",
+       "Station Operations",
+       "Search and Rescue",
+       "Station Menu"
+      ],
+      "small_pads": 2,
+      "type": "Settlement"
+     },
+     {
+      "controlling_minor_faction": "Likedeeler of Colonia",
+      "controlling_minor_faction_state": "Boom",
+      "distance_to_arrival": 85991.851258,
+      "has_large_pad": true,
+      "has_market": true,
+      "large_pads": 1,
+      "market_id": 3921007872,
+      "medium_pads": 0,
+      "name": "Faucher Biochemical Complex",
+      "services": [
+       "Dock",
+       "Autodock",
+       "Black Market",
+       "Market",
+       "Contacts",
+       "Universal Cartographics",
+       "Missions",
+       "Refuel",
+       "Repair",
+       "Workshop",
+       "Missions Generated",
+       "Flight Controller",
+       "Station Operations",
+       "Search and Rescue",
+       "Station Menu"
+      ],
+      "small_pads": 1,
+      "type": "Settlement"
+     }
+    ],
+    "subtype": "Icy body",
+    "surface_pressure": 0.0199395919072292,
+    "surface_temperature": 75.585136,
+    "system_id64": 84180519395914,
+    "system_name": "Ogmar",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9534.0,
+    "system_y": -905.28125,
+    "system_z": 19802.03125,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-12T20:56:27Z"
+   },
+   {
+    "atmosphere": "Thin Argon",
+    "atmosphere_composition": [
+     {
+      "name": "Argon",
+      "share": 100.0
+     }
+    ],
+    "body_id": 24,
+    "distance": 8.98338309741937,
+    "distance_to_arrival": 2053.263439,
+    "earth_masses": 0.074371,
+    "genuses": [
+     {
+      "name": "Bacterial"
+     },
+     {
+      "name": "Fonticulus"
+     },
+     {
+      "name": "Electricae"
+     }
+    ],
+    "gravity": 0.224137656775772,
+    "id": "864775034096624202",
+    "id64": 864775034096624202,
+    "is_landable": true,
+    "is_main_star": null,
+    "landmark_value": 8284600,
+    "landmarks": [
+     {
+      "id": 2370205,
+      "latitude": 42.33835,
+      "longitude": 178.64604,
+      "subtype": "Fonticulua Campestris",
+      "type": "Fonticulua",
+      "value": 1000000,
+      "variant": "Teal"
+     },
+     {
+      "id": 2360205,
+      "latitude": -12.40897,
+      "longitude": 45.80238,
+      "subtype": "Electricae Radialem",
+      "type": "Electricae",
+      "value": 6284600,
+      "variant": "Cyan"
+     },
+     {
+      "id": 2320505,
+      "latitude": 42.21908,
+      "longitude": 178.91293,
+      "subtype": "Bacterium Vesicula",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "Cyan"
+     }
+    ],
+    "name": "Eol Prou LW-L c8-305 2 c",
+    "orbital_period": 107.918007092338,
+    "parents": [
+     {
+      "id64": 648602251982840394,
+      "subtype": "Class I gas giant",
+      "type": "Planet"
+     }
+    ],
+    "radius": 3672.24175,
+    "semi_major_axis": 0.0388518437713793,
+    "signal_count": 15,
+    "signals": [
+     {
+      "count": 12,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 3,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-10-12T12:19:08Z",
+    "subtype": "Icy body",
+    "surface_pressure": 0.0215495659116704,
+    "surface_temperature": 102.666809,
+    "system_id64": 83905641488970,
+    "system_name": "Eol Prou LW-L c8-305",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9522.21875,
+    "system_y": -907.21875,
+    "system_z": 19806.46875,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-12T12:19:08Z",
+    "volcanism_type": "No volcanism"
+   }
+  ]
+ },
+ "filter_landmark_subtype_value": {
+  "count": 741,
+  "results": [
+   {
+    "atmosphere": "Thin Argon",
+    "atmosphere_composition": [
+     {
+      "name": "Argon",
+      "share": 99.935738
+     },
+     {
+      "name": "Carbon dioxide",
+      "share": 0.064254
+     }
+    ],
+    "body_id": 32,
+    "distance": 7.17131329499695,
+    "distance_to_arrival": 1195.997142,
+    "earth_masses": 0.22498,
+    "genuses": [
+     {
+      "name": "Bacterial"
+     }
+    ],
+    "gravity": 0.33824778219639,
+    "id": "1153010632928567882",
+    "id64": 1153010632928567882,
+    "is_landable": true,
+    "is_main_star": null,
+    "landmark_value": 1000000,
+    "landmarks": [
+     {
+      "id": 2320504,
+      "latitude": 23.59966,
+      "longitude": -173.95868,
+      "subtype": "Bacterium Vesicula",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "Mulberry"
+     }
+    ],
+    "name": "Eol Prou LW-L c8-324 4 b",
+    "orbital_period": 14.7197499043403,
+    "parents": [
+     {
+      "id64": 1008895444852712010,
+      "subtype": "Class III gas giant",
+      "type": "Planet"
+     }
+    ],
+    "radius": 5199.26,
+    "rings": [
+     {
+      "inner_radius": 8578800.0,
+      "mass": 1167900.0,
+      "name": "Eol Prou LW-L c8-324 4 b A Ring",
+      "outer_radius": 22094000.0,
+      "signal_count": 4,
+      "signals": [
+       {
+        "count": 1,
+        "name": "Painite"
+       },
+       {
+        "count": 2,
+        "name": "Platinum"
+       },
+       {
+        "count": 1,
+        "name": "Rhodplumsite"
+       }
+      ],
+      "signals_updated_at": "2026-10-11T00:22:11Z",
+      "type": "Metal Rich"
+     }
+    ],
+    "semi_major_axis": 0.0240614295340144,
+    "signal_count": 13,
+    "signals": [
+     {
+      "count": 12,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 1,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-10-11T00:22:11Z",
+    "subtype": "Icy body",
+    "surface_pressure": 0.0235500902146558,
+    "surface_temperature": 179.243484,
+    "system_id64": 89128321720906,
+    "system_name": "Eol Prou LW-L c8-324",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9535.8125,
+    "system_y": -905.5625,
+    "system_z": 19809.09375,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-10T22:32:17Z",
+    "volcanism_type": "No volcanism"
+   },
+   {
+    "atmosphere": "Thin Argon",
+    "atmosphere_composition": [
+     {
+      "name": "Argon",
+      "share": 100.0
+     }
+    ],
+    "body_id": 42,
+    "distance": 8.62460370466377,
+    "distance_to_arrival": 85992.566711,
+    "earth_masses": 0.055224,
+    "genuses": [
+     {
+      "name": "Fonticulus"
+     },
+     {
+      "name": "Bacterial"
+     },
+     {
+      "name": "Electricae"
+     }
+    ],
+    "gravity": 0.219952278984399,
+    "id": "1513293655315882570",
+    "id64": 1513293655315882570,
+    "is_landable": true,
+    "is_main_star": null,
+    "landmark_value": 8284600,
+    "landmarks": [
+     {
+      "id": 42553,
+      "latitude": -18.735506,
+      "longitude": 174.344116,
+      "subtype": "Settlement",
+      "type": "Surface Station",
+      "value": 0
+     },
+     {
+      "id": 2370207,
+      "latitude": -53.21252,
+      "longitude": -74.76411,
+      "subtype": "Fonticulua Campestris",
+      "type": "Fonticulua",
+      "value": 1000000,
+      "variant": "Amethyst"
+     },
+     {
+      "id": 2320502,
+      "latitude": -53.20918,
+      "longitude": -74.75959,
+      "subtype": "Bacterium Vesicula",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "Red"
+     },
+     {
+      "id": 2360202,
+      "latitude": -23.1241,
+      "longitude": -80.36574,
+      "subtype": "Electricae Radialem",
+      "type": "Electricae",
+      "value": 6284600,
+      "variant": "Magenta"
+     }
+    ],
+    "name": "Ogmar B 1 a",
+    "orbital_period": 19.2013217343171,
+    "parents": [
+     {
+      "id64": 1477264858296918602,
+      "subtype": "Rocky Ice world",
+      "type": "Planet"
+     }
+    ],
+    "radius": 3194.37775,
+    "semi_major_axis": 0.00213916560663501,
+    "signal_count": 30,
+    "signals": [
+     {
+      "count": 27,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 3,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-10-12T20:56:26Z",
+    "stations": [
+     {
+      "controlling_minor_faction": "Jaques",
+      "controlling_minor_faction_state": "Election",
+      "distance_to_arrival": 86000.604224,
+      "has_large_pad": true,
+      "has_market": true,
+      "large_pads": 1,
+      "market_id": 3921007360,
+      "medium_pads": 0,
+      "name": "Boulaid Command Facility",
+      "services": [
+       "Dock",
+       "Autodock",
+       "Black Market",
+       "Market",
+       "Contacts",
+       "Missions",
+       "Restock",
+       "Refuel",
+       "Repair",
+       "Workshop",
+       "Missions Generated",
+       "Flight Controller",
+       "Station Operations",
+       "Search and Rescue",
+       "Station Menu"
+      ],
+      "small_pads": 2,
+      "type": "Settlement"
+     },
+     {
+      "controlling_minor_faction": "Colonia Citizens Network",
+      "controlling_minor_faction_state": "Expansion",
+      "distance_to_arrival": 86001.810006,
+      "has_large_pad": true,
+      "has_market": true,
+      "large_pads": 1,
+      "market_id": 3921007616,
+      "medium_pads": 0,
+      "name": "Poulin Military Garrison",
+      "services": [
+       "Dock",
+       "Autodock",
+       "Black Market",
+       "Market",
+       "Contacts",
+       "Missions",
+       "Restock",
+       "Refuel",
+       "Repair",
+       "Workshop",
+       "Missions Generated",
+       "Flight Controller",
+       "Station Operations",
+       "Search and Rescue",
+       "Station Menu"
+      ],
+      "small_pads": 2,
+      "type": "Settlement"
+     },
+     {
+      "controlling_minor_faction": "Likedeeler of Colonia",
+      "controlling_minor_faction_state": "Boom",
+      "distance_to_arrival": 85991.851258,
+      "has_large_pad": true,
+      "has_market": true,
+      "large_pads": 1,
+      "market_id": 3921007872,
+      "medium_pads": 0,
+      "name": "Faucher Biochemical Complex",
+      "services": [
+       "Dock",
+       "Autodock",
+       "Black Market",
+       "Market",
+       "Contacts",
+       "Universal Cartographics",
+       "Missions",
+       "Refuel",
+       "Repair",
+       "Workshop",
+       "Missions Generated",
+       "Flight Controller",
+       "Station Operations",
+       "Search and Rescue",
+       "Station Menu"
+      ],
+      "small_pads": 1,
+      "type": "Settlement"
+     }
+    ],
+    "subtype": "Icy body",
+    "surface_pressure": 0.0199395919072292,
+    "surface_temperature": 75.585136,
+    "system_id64": 84180519395914,
+    "system_name": "Ogmar",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9534.0,
+    "system_y": -905.28125,
+    "system_z": 19802.03125,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-12T20:56:27Z"
+   },
+   {
+    "atmosphere": "Thin Argon",
+    "atmosphere_composition": [
+     {
+      "name": "Argon",
+      "share": 100.0
+     }
+    ],
+    "body_id": 24,
+    "distance": 8.98338309741937,
+    "distance_to_arrival": 2053.263439,
+    "earth_masses": 0.074371,
+    "genuses": [
+     {
+      "name": "Bacterial"
+     },
+     {
+      "name": "Fonticulus"
+     },
+     {
+      "name": "Electricae"
+     }
+    ],
+    "gravity": 0.224137656775772,
+    "id": "864775034096624202",
+    "id64": 864775034096624202,
+    "is_landable": true,
+    "is_main_star": null,
+    "landmark_value": 8284600,
+    "landmarks": [
+     {
+      "id": 2370205,
+      "latitude": 42.33835,
+      "longitude": 178.64604,
+      "subtype": "Fonticulua Campestris",
+      "type": "Fonticulua",
+      "value": 1000000,
+      "variant": "Teal"
+     },
+     {
+      "id": 2360205,
+      "latitude": -12.40897,
+      "longitude": 45.80238,
+      "subtype": "Electricae Radialem",
+      "type": "Electricae",
+      "value": 6284600,
+      "variant": "Cyan"
+     },
+     {
+      "id": 2320505,
+      "latitude": 42.21908,
+      "longitude": 178.91293,
+      "subtype": "Bacterium Vesicula",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "Cyan"
+     }
+    ],
+    "name": "Eol Prou LW-L c8-305 2 c",
+    "orbital_period": 107.918007092338,
+    "parents": [
+     {
+      "id64": 648602251982840394,
+      "subtype": "Class I gas giant",
+      "type": "Planet"
+     }
+    ],
+    "radius": 3672.24175,
+    "semi_major_axis": 0.0388518437713793,
+    "signal_count": 15,
+    "signals": [
+     {
+      "count": 12,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 3,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-10-12T12:19:08Z",
+    "subtype": "Icy body",
+    "surface_pressure": 0.0215495659116704,
+    "surface_temperature": 102.666809,
+    "system_id64": 83905641488970,
+    "system_name": "Eol Prou LW-L c8-305",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9522.21875,
+    "system_y": -907.21875,
+    "system_z": 19806.46875,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-12T12:19:08Z",
+    "volcanism_type": "No volcanism"
+   }
+  ]
+ },
+ "filter_landmarks_value": {
+  "count": 0,
+  "results": []
+ },
+ "temperature_numbers": {
+  "count": 10000,
+  "results": [
+   {
+    "atmosphere": "Thin Argon",
+    "atmosphere_composition": [
+     {
+      "name": "Argon",
+      "share": 99.935738
+     },
+     {
+      "name": "Carbon dioxide",
+      "share": 0.064254
+     }
+    ],
+    "body_id": 32,
+    "distance": 7.17131329499695,
+    "distance_to_arrival": 1195.997142,
+    "earth_masses": 0.22498,
+    "genuses": [
+     {
+      "name": "Bacterial"
+     }
+    ],
+    "gravity": 0.33824778219639,
+    "id": "1153010632928567882",
+    "id64": 1153010632928567882,
+    "is_landable": true,
+    "is_main_star": null,
+    "landmark_value": 1000000,
+    "landmarks": [
+     {
+      "id": 2320504,
+      "latitude": 23.59966,
+      "longitude": -173.95868,
+      "subtype": "Bacterium Vesicula",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "Mulberry"
+     }
+    ],
+    "name": "Eol Prou LW-L c8-324 4 b",
+    "orbital_period": 14.7197499043403,
+    "parents": [
+     {
+      "id64": 1008895444852712010,
+      "subtype": "Class III gas giant",
+      "type": "Planet"
+     }
+    ],
+    "radius": 5199.26,
+    "rings": [
+     {
+      "inner_radius": 8578800.0,
+      "mass": 1167900.0,
+      "name": "Eol Prou LW-L c8-324 4 b A Ring",
+      "outer_radius": 22094000.0,
+      "signal_count": 4,
+      "signals": [
+       {
+        "count": 1,
+        "name": "Painite"
+       },
+       {
+        "count": 2,
+        "name": "Platinum"
+       },
+       {
+        "count": 1,
+        "name": "Rhodplumsite"
+       }
+      ],
+      "signals_updated_at": "2026-10-11T00:22:11Z",
+      "type": "Metal Rich"
+     }
+    ],
+    "semi_major_axis": 0.0240614295340144,
+    "signal_count": 13,
+    "signals": [
+     {
+      "count": 12,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 1,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-10-11T00:22:11Z",
+    "subtype": "Icy body",
+    "surface_pressure": 0.0235500902146558,
+    "surface_temperature": 179.243484,
+    "system_id64": 89128321720906,
+    "system_name": "Eol Prou LW-L c8-324",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9535.8125,
+    "system_y": -905.5625,
+    "system_z": 19809.09375,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-10T22:32:17Z",
+    "volcanism_type": "No volcanism"
+   },
+   {
+    "atmosphere": "Thin Neon",
+    "atmosphere_composition": [
+     {
+      "name": "Neon",
+      "share": 100.0
+     }
+    ],
+    "body_id": 6,
+    "distance": 7.50266879600186,
+    "distance_to_arrival": 1168.879438,
+    "earth_masses": 0.516469,
+    "genuses": [
+     {
+      "name": "Bacterial"
+     }
+    ],
+    "gravity": 0.517716834913837,
+    "id": "216173325021562009",
+    "id64": 216173325021562009,
+    "is_landable": true,
+    "is_main_star": null,
+    "landmark_value": 1000000,
+    "landmarks": [
+     {
+      "id": 2320402,
+      "latitude": -22.91579,
+      "longitude": -20.75917,
+      "subtype": "Bacterium Acies",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "White"
+     }
+    ],
+    "name": "Eol Prou YD-W b17-0 4",
+    "orbital_period": 2578.60386261234,
+    "parents": [
+     {
+      "id64": 542907778201,
+      "subtype": "M (Red dwarf) Star",
+      "type": "Star"
+     }
+    ],
+    "radius": 6367.4065,
+    "semi_major_axis": 2.34240153229117,
+    "signal_count": 15,
+    "signals": [
+     {
+      "count": 14,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 1,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-10-09T00:00:48Z",
+    "subtype": "Icy body",
+    "surface_pressure": 0.00310880889217863,
+    "surface_temperature": 41.402664,
+    "system_id64": 542907778201,
+    "system_name": "Eol Prou YD-W b17-0",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9525.0625,
+    "system_y": -911.8125,
+    "system_z": 19803.1875,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-08T23:31:38Z",
+    "volcanism_type": "No volcanism"
+   },
+   {
+    "atmosphere": "Thin Neon",
+    "atmosphere_composition": [
+     {
+      "name": "Neon",
+      "share": 100.0
+     }
+    ],
+    "body_id": 7,
+    "distance": 7.50266879600186,
+    "distance_to_arrival": 1625.510749,
+    "earth_masses": 0.286046,
+    "genuses": [
+     {
+      "name": "Bacterial"
+     }
+    ],
+    "gravity": 0.413982359539105,
+    "id": "252202122040525977",
+    "id64": 252202122040525977,
+    "is_landable": true,
+    "is_main_star": null,
+    "landmark_value": 1000000,
+    "landmarks": [
+     {
+      "id": 2320404,
+      "latitude": -33.07207,
+      "longitude": 67.25928,
+      "subtype": "Bacterium Acies",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "Cobalt"
+     }
+    ],
+    "name": "Eol Prou YD-W b17-0 5",
+    "orbital_period": 4228.60206001335,
+    "parents": [
+     {
+      "id64": 542907778201,
+      "subtype": "M (Red dwarf) Star",
+      "type": "Star"
+     }
+    ],
+    "radius": 5299.2445,
+    "semi_major_axis": 3.25738736892047,
+    "signal_count": 16,
+    "signals": [
+     {
+      "count": 15,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 1,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-10-08T23:21:51Z",
+    "subtype": "Icy body",
+    "surface_pressure": 0.0019862690648902,
+    "surface_temperature": 35.100651,
+    "system_id64": 542907778201,
+    "system_name": "Eol Prou YD-W b17-0",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9525.0625,
+    "system_y": -911.8125,
+    "system_z": 19803.1875,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-08T23:21:51Z",
+    "volcanism_type": "No volcanism"
+   }
+  ],
+  "temperatures": [
+   179.243484,
+   41.402664,
+   35.100651,
+   175.567444,
+   75.585136,
+   163.844681,
+   156.919922,
+   102.666809,
+   175.007813,
+   156.007187
+  ]
+ },
+ "temperature_strings": {
+  "count": 10000,
+  "results": [
+   {
+    "atmosphere": "Thin Argon",
+    "atmosphere_composition": [
+     {
+      "name": "Argon",
+      "share": 99.935738
+     },
+     {
+      "name": "Carbon dioxide",
+      "share": 0.064254
+     }
+    ],
+    "body_id": 32,
+    "distance": 7.17131329499695,
+    "distance_to_arrival": 1195.997142,
+    "earth_masses": 0.22498,
+    "genuses": [
+     {
+      "name": "Bacterial"
+     }
+    ],
+    "gravity": 0.33824778219639,
+    "id": "1153010632928567882",
+    "id64": 1153010632928567882,
+    "is_landable": true,
+    "is_main_star": null,
+    "landmark_value": 1000000,
+    "landmarks": [
+     {
+      "id": 2320504,
+      "latitude": 23.59966,
+      "longitude": -173.95868,
+      "subtype": "Bacterium Vesicula",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "Mulberry"
+     }
+    ],
+    "name": "Eol Prou LW-L c8-324 4 b",
+    "orbital_period": 14.7197499043403,
+    "parents": [
+     {
+      "id64": 1008895444852712010,
+      "subtype": "Class III gas giant",
+      "type": "Planet"
+     }
+    ],
+    "radius": 5199.26,
+    "rings": [
+     {
+      "inner_radius": 8578800.0,
+      "mass": 1167900.0,
+      "name": "Eol Prou LW-L c8-324 4 b A Ring",
+      "outer_radius": 22094000.0,
+      "signal_count": 4,
+      "signals": [
+       {
+        "count": 1,
+        "name": "Painite"
+       },
+       {
+        "count": 2,
+        "name": "Platinum"
+       },
+       {
+        "count": 1,
+        "name": "Rhodplumsite"
+       }
+      ],
+      "signals_updated_at": "2026-10-11T00:22:11Z",
+      "type": "Metal Rich"
+     }
+    ],
+    "semi_major_axis": 0.0240614295340144,
+    "signal_count": 13,
+    "signals": [
+     {
+      "count": 12,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 1,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-10-11T00:22:11Z",
+    "subtype": "Icy body",
+    "surface_pressure": 0.0235500902146558,
+    "surface_temperature": 179.243484,
+    "system_id64": 89128321720906,
+    "system_name": "Eol Prou LW-L c8-324",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9535.8125,
+    "system_y": -905.5625,
+    "system_z": 19809.09375,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-10T22:32:17Z",
+    "volcanism_type": "No volcanism"
+   },
+   {
+    "atmosphere": "Thin Neon",
+    "atmosphere_composition": [
+     {
+      "name": "Neon",
+      "share": 100.0
+     }
+    ],
+    "body_id": 6,
+    "distance": 7.50266879600186,
+    "distance_to_arrival": 1168.879438,
+    "earth_masses": 0.516469,
+    "genuses": [
+     {
+      "name": "Bacterial"
+     }
+    ],
+    "gravity": 0.517716834913837,
+    "id": "216173325021562009",
+    "id64": 216173325021562009,
+    "is_landable": true,
+    "is_main_star": null,
+    "landmark_value": 1000000,
+    "landmarks": [
+     {
+      "id": 2320402,
+      "latitude": -22.91579,
+      "longitude": -20.75917,
+      "subtype": "Bacterium Acies",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "White"
+     }
+    ],
+    "name": "Eol Prou YD-W b17-0 4",
+    "orbital_period": 2578.60386261234,
+    "parents": [
+     {
+      "id64": 542907778201,
+      "subtype": "M (Red dwarf) Star",
+      "type": "Star"
+     }
+    ],
+    "radius": 6367.4065,
+    "semi_major_axis": 2.34240153229117,
+    "signal_count": 15,
+    "signals": [
+     {
+      "count": 14,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 1,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-10-09T00:00:48Z",
+    "subtype": "Icy body",
+    "surface_pressure": 0.00310880889217863,
+    "surface_temperature": 41.402664,
+    "system_id64": 542907778201,
+    "system_name": "Eol Prou YD-W b17-0",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9525.0625,
+    "system_y": -911.8125,
+    "system_z": 19803.1875,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-08T23:31:38Z",
+    "volcanism_type": "No volcanism"
+   },
+   {
+    "atmosphere": "Thin Neon",
+    "atmosphere_composition": [
+     {
+      "name": "Neon",
+      "share": 100.0
+     }
+    ],
+    "body_id": 7,
+    "distance": 7.50266879600186,
+    "distance_to_arrival": 1625.510749,
+    "earth_masses": 0.286046,
+    "genuses": [
+     {
+      "name": "Bacterial"
+     }
+    ],
+    "gravity": 0.413982359539105,
+    "id": "252202122040525977",
+    "id64": 252202122040525977,
+    "is_landable": true,
+    "is_main_star": null,
+    "landmark_value": 1000000,
+    "landmarks": [
+     {
+      "id": 2320404,
+      "latitude": -33.07207,
+      "longitude": 67.25928,
+      "subtype": "Bacterium Acies",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "Cobalt"
+     }
+    ],
+    "name": "Eol Prou YD-W b17-0 5",
+    "orbital_period": 4228.60206001335,
+    "parents": [
+     {
+      "id64": 542907778201,
+      "subtype": "M (Red dwarf) Star",
+      "type": "Star"
+     }
+    ],
+    "radius": 5299.2445,
+    "semi_major_axis": 3.25738736892047,
+    "signal_count": 16,
+    "signals": [
+     {
+      "count": 15,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 1,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-10-08T23:21:51Z",
+    "subtype": "Icy body",
+    "surface_pressure": 0.0019862690648902,
+    "surface_temperature": 35.100651,
+    "system_id64": 542907778201,
+    "system_name": "Eol Prou YD-W b17-0",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9525.0625,
+    "system_y": -911.8125,
+    "system_z": 19803.1875,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-08T23:21:51Z",
+    "volcanism_type": "No volcanism"
+   }
+  ],
+  "temperatures": [
+   179.243484,
+   41.402664,
+   35.100651,
+   175.567444,
+   75.585136,
+   163.844681,
+   156.919922,
+   102.666809,
+   175.007813,
+   156.007187
+  ]
+ },
+ "temperature_comparison": {
+  "count": 2333,
+  "results": [
+   {
+    "atmosphere": "Thin Carbon dioxide",
+    "atmosphere_composition": [
+     {
+      "name": "Carbon dioxide",
+      "share": 99.009911
+     },
+     {
+      "name": "Sulphur dioxide",
+      "share": 0.990099
+     }
+    ],
+    "body_id": 39,
+    "distance": 8.88143472714291,
+    "distance_to_arrival": 1288.138814,
+    "earth_masses": 0.00119,
+    "genuses": [
+     {
+      "name": "Bacterial"
+     },
+     {
+      "name": "Tussocks"
+     }
+    ],
+    "gravity": 0.0870224329560518,
+    "id": "1405144042340393546",
+    "id64": 1405144042340393546,
+    "is_landable": true,
+    "is_main_star": null,
+    "landmark_value": 4352400,
+    "landmarks": [
+     {
+      "id": 48326,
+      "latitude": 37.703941,
+      "longitude": 73.282845,
+      "subtype": "Settlement",
+      "type": "Surface Station",
+      "value": 0
+     },
+     {
+      "id": 2320106,
+      "latitude": -19.59192,
+      "longitude": -67.03961,
+      "subtype": "Bacterium Aurasus",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "Green"
+     },
+     {
+      "id": 2350305,
+      "latitude": 25.127626,
+      "longitude": 108.122154,
+      "subtype": "Concha Labiata",
+      "type": "Concha",
+      "value": 2352400,
+      "variant": "Red"
+     },
+     {
+      "id": 2450903,
+      "latitude": 37.74009,
+      "longitude": 73.30391,
+      "subtype": "Tussock Propagito",
+      "type": "Tussock",
+      "value": 1000000,
+      "variant": "Green"
+     }
+    ],
+    "name": "Ratraii AB 3 g",
+    "orbital_period": 15.3537232566782,
+    "parents": [
+     {
+      "id64": 1080884869169717834,
+      "subtype": "Class III gas giant",
+      "type": "Planet"
+     }
+    ],
+    "radius": 745.4945,
+    "semi_major_axis": 0.0175790126103092,
+    "signal_count": 13,
+    "signals": [
+     {
+      "count": 11,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 2,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-10-12T21:38:39Z",
+    "stations": [
+     {
+      "controlling_minor_faction": "Colonia Co-operative",
+      "controlling_minor_faction_state": "Boom",
+      "distance_to_arrival": 1288.242991,
+      "has_large_pad": true,
+      "has_market": true,
+      "large_pads": 1,
+      "market_id": 3920539904,
+      "medium_pads": 0,
+      "name": "Navarrete's Analytics",
+      "services": [
+       "Dock",
+       "Autodock",
+       "Black Market",
+       "Market",
+       "Contacts",
+       "Universal Cartographics",
+       "Missions",
+       "Refuel",
+       "Repair",
+       "Workshop",
+       "Missions Generated",
+       "Flight Controller",
+       "Station Operations",
+       "Search and Rescue",
+       "Station Menu"
+      ],
+      "small_pads": 1,
+      "type": "Settlement"
+     },
+     {
+      "controlling_minor_faction": "Colonia Co-operative",
+      "controlling_minor_faction_state": "Boom",
+      "distance_to_arrival": 1285.766139,
+      "has_large_pad": false,
+      "has_market": true,
+      "large_pads": 0,
+      "market_id": 3920540160,
+      "medium_pads": 0,
+      "name": "Lorenz's Installation",
+      "services": [
+       "Dock",
+       "Autodock",
+       "Black Market",
+       "Market",
+       "Contacts",
+       "Missions",
+       "Refuel",
+       "Repair",
+       "Workshop",
+       "Missions Generated",
+       "Flight Controller",
+       "Station Operations",
+       "Search and Rescue",
+       "Station Menu"
+      ],
+      "small_pads": 1,
+      "type": "Settlement"
+     },
+     {
+      "controlling_minor_faction": "Colonia Co-operative",
+      "controlling_minor_faction_state": "Boom",
+      "distance_to_arrival": 1297.440738,
+      "has_large_pad": true,
+      "has_market": true,
+      "large_pads": 1,
+      "market_id": 3920540416,
+      "medium_pads": 0,
+      "name": "Engel Fort",
+      "services": [
+       "Dock",
+       "Autodock",
+       "Black Market",
+       "Market",
+       "Contacts",
+       "Missions",
+       "Restock",
+       "Refuel",
+       "Repair",
+       "Workshop",
+       "Missions Generated",
+       "Flight Controller",
+       "Station Operations",
+       "Search and Rescue",
+       "Station Menu"
+      ],
+      "small_pads": 2,
+      "type": "Settlement"
+     },
+     {
+      "controlling_minor_faction": "Colonia Co-operative",
+      "controlling_minor_faction_state": "Boom",
+      "distance_to_arrival": 1287.496347,
+      "has_large_pad": true,
+      "has_market": true,
+      "large_pads": 1,
+      "market_id": 3920540672,
+      "medium_pads": 0,
+      "name": "Ozarkevich Defence Outpost",
+      "services": [
+       "Dock",
+       "Autodock",
+       "Black Market",
+       "Market",
+       "Contacts",
+       "Missions",
+       "Restock",
+       "Refuel",
+       "Repair",
+       "Workshop",
+       "Missions Generated",
+       "Flight Controller",
+       "Station Operations",
+       "Search and Rescue",
+       "Station Menu"
+      ],
+      "small_pads": 2,
+      "type": "Settlement"
+     },
+     {
+      "controlling_minor_faction": "Colonia Co-operative",
+      "controlling_minor_faction_state": "Boom",
+      "distance_to_arrival": 1296.2977,
+      "has_large_pad": true,
+      "has_market": true,
+      "large_pads": 1,
+      "market_id": 3920540928,
+      "medium_pads": 0,
+      "name": "Uniyal Extraction Prospect",
+      "services": [
+       "Dock",
+       "Autodock",
+       "Black Market",
+       "Market",
+       "Contacts",
+       "Missions",
+       "Refuel",
+       "Repair",
+       "Workshop",
+       "Missions Generated",
+       "Flight Controller",
+       "Station Operations",
+       "Search and Rescue",
+       "Station Menu"
+      ],
+      "small_pads": 1,
+      "type": "Settlement"
+     }
+    ],
+    "subtype": "Rocky body",
+    "surface_pressure": 0.0141181517789292,
+    "surface_temperature": 156.919922,
+    "system_id64": 20958600798794,
+    "system_name": "Ratraii",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9530.96875,
+    "system_y": -918.03125,
+    "system_z": 19803.8125,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-12T21:38:40Z"
+   },
+   {
+    "atmosphere": "Thin Ammonia",
+    "atmosphere_composition": [
+     {
+      "name": "Ammonia",
+      "share": 100.0
+     }
+    ],
+    "body_id": 24,
+    "distance": 9.07063212722796,
+    "distance_to_arrival": 4029.060958,
+    "earth_masses": 0.004115,
+    "genuses": [
+     {
+      "name": "Aleoids"
+     },
+     {
+      "name": "Conchas"
+     },
+     {
+      "name": "Tussocks"
+     },
+     {
+      "name": "Bacterial"
+     },
+     {
+      "name": "Fungoids"
+     },
+     {
+      "name": "Shrubs"
+     }
+    ],
+    "gravity": 0.132618231875191,
+    "id": "864693679556464931",
+    "id64": 864693679556464931,
+    "is_landable": true,
+    "is_main_star": null,
+    "landmark_value": 26581100,
+    "landmarks": [
+     {
+      "id": 2320604,
+      "latitude": -28.79669,
+      "longitude": -86.31883,
+      "subtype": "Bacterium Alcyoneum",
+      "type": "Bacterium",
+      "value": 1658500,
+      "variant": "Lime"
+     },
+     {
+      "id": 2450501,
+      "latitude": 69.58756,
+      "longitude": 172.8997,
+      "subtype": "Tussock Catena",
+      "type": "Tussock",
+      "value": 1766600,
+      "variant": "Yellow"
+     },
+     {
+      "id": 2440403,
+      "latitude": -51.03243,
+      "longitude": -88.49846,
+      "subtype": "Frutexa Flammasis",
+      "type": "Frutexa",
+      "value": 10326000,
+      "variant": "Green"
+     },
+     {
+      "id": 2310403,
+      "latitude": -51.00024,
+      "longitude": -88.48815,
+      "subtype": "Aleoida Laminiae",
+      "type": "Aleoida",
+      "value": 3385200,
+      "variant": "Teal"
+     },
+     {
+      "id": 2390102,
+      "latitude": -50.99662,
+      "longitude": -88.52435,
+      "subtype": "Fungoida Setisis",
+      "type": "Fungoida",
+      "value": 1670100,
+      "variant": "Yellow"
+     },
+     {
+      "id": 2350203,
+      "latitude": -28.78193,
+      "longitude": -86.53996,
+      "subtype": "Concha Aureolas",
+      "type": "Concha",
+      "value": 7774700,
+      "variant": "Grey"
+     }
+    ],
+    "name": "Eol Prou RS-T d3-74 A 1 c",
+    "orbital_period": 4.72711944193287,
+    "parents": [
+     {
+      "id64": 684549694461645091,
+      "subtype": "Class III gas giant",
+      "type": "Planet"
+     }
+    ],
+    "radius": 1123.042625,
+    "semi_major_axis": 0.00811878852083116,
+    "signal_count": 23,
+    "signals": [
+     {
+      "count": 17,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 6,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-09-27T22:35:37Z",
+    "subtype": "Rocky body",
+    "surface_pressure": 0.00108137400444115,
+    "surface_temperature": 156.007187,
+    "system_id64": 2551101329699,
+    "system_name": "Eol Prou RS-T d3-74",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9533.65625,
+    "system_y": -914.875,
+    "system_z": 19800.96875,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-08T10:10:19Z",
+    "volcanism_type": "No volcanism"
+   },
+   {
+    "atmosphere": "Thin Carbon dioxide",
+    "atmosphere_composition": [
+     {
+      "name": "Carbon dioxide",
+      "share": 99.009911
+     },
+     {
+      "name": "Sulphur dioxide",
+      "share": 0.990099
+     }
+    ],
+    "body_id": 22,
+    "distance": 11.0944542030016,
+    "distance_to_arrival": 2222.302326,
+    "earth_masses": 0.001281,
+    "genuses": [
+     {
+      "name": "Bacterial"
+     },
+     {
+      "name": "Tussocks"
+     }
+    ],
+    "gravity": 0.0893253798307331,
+    "id": "792635801320333898",
+    "id64": 792635801320333898,
+    "is_landable": true,
+    "is_main_star": null,
+    "landmark_value": 1000000,
+    "landmarks": [
+     {
+      "id": 2450902,
+      "latitude": -16.082525,
+      "longitude": 115.842194,
+      "subtype": "Tussock Propagito",
+      "type": "Tussock",
+      "value": 1000000,
+      "variant": "Lime"
+     }
+    ],
+    "name": "Eol Prou LW-L c8-8 AB 1 d",
+    "orbital_period": 45.102941631169,
+    "parents": [
+     {
+      "id64": 648520613244478026,
+      "subtype": "Class III gas giant",
+      "type": "Planet"
+     }
+    ],
+    "radius": 763.5393125,
+    "semi_major_axis": 0.0446441765043228,
+    "signal_count": 12,
+    "signals": [
+     {
+      "count": 10,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 2,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-10-03T22:35:12Z",
+    "subtype": "Rocky body",
+    "surface_pressure": 0.0148406393584999,
+    "surface_temperature": 157.437622,
+    "system_id64": 2266903126602,
+    "system_name": "Eol Prou LW-L c8-8",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9521.78125,
+    "system_y": -911.09375,
+    "system_z": 19801.3125,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-03T22:35:12Z",
+    "volcanism_type": "No volcanism"
+   }
+  ],
+  "temperatures": [
+   156.919922,
+   156.007187,
+   157.437622,
+   157.54071,
+   155.661316,
+   159.646698,
+   158.943069,
+   156.490463,
+   159.361267,
+   156.405899
+  ]
+ },
+ "one_system_by_name": {
+  "count": 10000,
+  "systems": [
+   "Eol Prou AP-U b18-23",
+   "Eol Prou AP-U b18-24",
+   "Eol Prou AP-U b18-32",
+   "Eol Prou CK-U b18-6",
+   "Eol Prou IW-W e1-6",
+   "Eol Prou JB-M c8-11",
+   "Eol Prou LW-L c8-103",
+   "Eol Prou LW-L c8-16",
+   "Eol Prou LW-L c8-17",
+   "Eol Prou LW-L c8-249",
+   "Eol Prou LW-L c8-305",
+   "Eol Prou LW-L c8-307",
+   "Eol Prou LW-L c8-324",
+   "Eol Prou LW-L c8-74",
+   "Eol Prou MH-K c9-135",
+   "Eol Prou PC-K c9-61",
+   "Eol Prou PX-T d3-292",
+   "Eol Prou PX-T d3-908",
+   "Eol Prou RS-T d3-74",
+   "Eol Prou TD-S d4-380",
+   "Eol Prou VY-R d4-561",
+   "Eol Prou WI-W b17-1",
+   "Eol Prou YD-W b17-0",
+   "Eol Prou YD-W b17-2"
+  ],
+  "results": []
+ },
+ "one_system_within_1ly": {
+  "count": 1,
+  "results": [
+   {
+    "atmosphere": "Thin Argon",
+    "atmosphere_composition": [
+     {
+      "name": "Argon",
+      "share": 99.935738
+     },
+     {
+      "name": "Carbon dioxide",
+      "share": 0.064254
+     }
+    ],
+    "body_id": 32,
+    "distance": 0.0,
+    "distance_to_arrival": 1195.997142,
+    "earth_masses": 0.22498,
+    "genuses": [
+     {
+      "name": "Bacterial"
+     }
+    ],
+    "gravity": 0.33824778219639,
+    "id": "1153010632928567882",
+    "id64": 1153010632928567882,
+    "is_landable": true,
+    "is_main_star": null,
+    "landmark_value": 1000000,
+    "landmarks": [
+     {
+      "id": 2320504,
+      "latitude": 23.59966,
+      "longitude": -173.95868,
+      "subtype": "Bacterium Vesicula",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "Mulberry"
+     }
+    ],
+    "name": "Eol Prou LW-L c8-324 4 b",
+    "orbital_period": 14.7197499043403,
+    "parents": [
+     {
+      "id64": 1008895444852712010,
+      "subtype": "Class III gas giant",
+      "type": "Planet"
+     }
+    ],
+    "radius": 5199.26,
+    "rings": [
+     {
+      "inner_radius": 8578800.0,
+      "mass": 1167900.0,
+      "name": "Eol Prou LW-L c8-324 4 b A Ring",
+      "outer_radius": 22094000.0,
+      "signal_count": 4,
+      "signals": [
+       {
+        "count": 1,
+        "name": "Painite"
+       },
+       {
+        "count": 2,
+        "name": "Platinum"
+       },
+       {
+        "count": 1,
+        "name": "Rhodplumsite"
+       }
+      ],
+      "signals_updated_at": "2026-10-11T00:22:11Z",
+      "type": "Metal Rich"
+     }
+    ],
+    "semi_major_axis": 0.0240614295340144,
+    "signal_count": 13,
+    "signals": [
+     {
+      "count": 12,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 1,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-10-11T00:22:11Z",
+    "subtype": "Icy body",
+    "surface_pressure": 0.0235500902146558,
+    "surface_temperature": 179.243484,
+    "system_id64": 89128321720906,
+    "system_name": "Eol Prou LW-L c8-324",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9535.8125,
+    "system_y": -905.5625,
+    "system_z": 19809.09375,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-10T22:32:17Z",
+    "volcanism_type": "No volcanism"
+   }
+  ]
+ },
+ "gas_giant": {
+  "count": 10000,
+  "results": [
+   {
+    "atmosphere": "No atmosphere",
+    "atmosphere_composition": [
+     {
+      "name": "Helium",
+      "share": 27.142313
+     },
+     {
+      "name": "Hydrogen",
+      "share": 72.857697
+     }
+    ],
+    "body_id": 30,
+    "distance": 0.0,
+    "distance_to_arrival": 1469.251186,
+    "earth_masses": 2010.460327,
+    "gravity": 199.297716630978,
+    "id": "1080867148865016099",
+    "id64": 1080867148865016099,
+    "is_landable": false,
+    "is_main_star": null,
+    "name": "Colonia 4",
+    "orbital_period": 177.134428587222,
+    "parents": [
+     {
+      "id64": 792636772713304355,
+      "type": "Null"
+     }
+    ],
+    "radius": 20248.052,
+    "rings": [
+     {
+      "inner_radius": 55669000.0,
+      "mass": 8072300000.0,
+      "name": "Colonia 4 A Ring",
+      "outer_radius": 57981000.0,
+      "type": "Metallic"
+     },
+     {
+      "inner_radius": 58081000.0,
+      "mass": 82884000000.0,
+      "name": "Colonia 4 B Ring",
+      "outer_radius": 77840000.0,
+      "signal_count": 3,
+      "signals": [
+       {
+        "count": 1,
+        "name": "Alexandrite"
+       },
+       {
+        "count": 2,
+        "name": "Serendibite"
+       }
+      ],
+      "signals_updated_at": "2026-10-12T23:31:48Z",
+      "type": "Rocky"
+     }
+    ],
+    "semi_major_axis": 0.124124877514653,
+    "signal_count": 12,
+    "signals": [
+     {
+      "count": 9,
+      "name": "Human"
+     },
+     {
+      "count": 3,
+      "name": "Other"
+     }
+    ],
+    "signals_updated_at": "2022-11-03T20:05:35Z",
+    "subtype": "Class III gas giant",
+    "surface_pressure": 0.0,
+    "surface_temperature": 611.385803,
+    "system_id64": 3238296097059,
+    "system_name": "Colonia",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9530.5,
+    "system_y": -910.28125,
+    "system_z": 19808.125,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-13T02:19:04Z"
+   },
+   {
+    "atmosphere": "No atmosphere",
+    "atmosphere_composition": [
+     {
+      "name": "Helium",
+      "share": 27.142307
+     },
+     {
+      "name": "Hydrogen",
+      "share": 72.857689
+     }
+    ],
+    "body_id": 34,
+    "distance": 0.0,
+    "distance_to_arrival": 2545.586034,
+    "earth_masses": 3334.705811,
+    "gravity": 31.0943887019476,
+    "id": "1224982336940871971",
+    "id64": 1224982336940871971,
+    "is_landable": false,
+    "is_main_star": null,
+    "name": "Colonia 5",
+    "orbital_period": 349.378530625949,
+    "parents": [
+     {
+      "id64": 1188953539921908003,
+      "type": "Null"
+     }
+    ],
+    "radius": 66019.828,
+    "rings": [
+     {
+      "inner_radius": 120050000.0,
+      "mass": 82442000000.0,
+      "name": "Colonia 5 A Ring",
+      "outer_radius": 150770000.0,
+      "type": "Metal Rich"
+     },
+     {
+      "inner_radius": 150870000.0,
+      "mass": 2454600000000.0,
+      "name": "Colonia 5 B Ring",
+      "outer_radius": 520080000.0,
+      "type": "Metal Rich"
+     }
+    ],
+    "semi_major_axis": 0.000885080772599686,
+    "signal_count": 3,
+    "signals": [
+     {
+      "count": 3,
+      "name": "Human"
+     }
+    ],
+    "signals_updated_at": "2022-08-22T22:47:04Z",
+    "subtype": "Class IV gas giant",
+    "surface_pressure": 0.0,
+    "surface_temperature": 915.216248,
+    "system_id64": 3238296097059,
+    "system_name": "Colonia",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9530.5,
+    "system_y": -910.28125,
+    "system_z": 19808.125,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-13T02:19:04Z"
+   },
+   {
+    "atmosphere": "No atmosphere",
+    "atmosphere_composition": [
+     {
+      "name": "Helium",
+      "share": 27.142311
+     },
+     {
+      "name": "Hydrogen",
+      "share": 72.857697
+     }
+    ],
+    "body_id": 13,
+    "distance": 0.0,
+    "distance_to_arrival": 1010.68127,
+    "earth_masses": 913.946655,
+    "gravity": 6.32532109717549,
+    "id": "468377599542628643",
+    "id64": 468377599542628643,
+    "is_landable": false,
+    "is_main_star": null,
+    "landmark_value": 0,
+    "landmarks": [
+     {
+      "id": 1401101,
+      "latitude": 0.0,
+      "longitude": 0.0,
+      "subtype": "Croceum Lagrange Cloud",
+      "type": "Lagrange Cloud",
+      "value": 0
+     },
+     {
+      "id": 2100801,
+      "latitude": 0.0,
+      "longitude": 0.0,
+      "subtype": "Prasinum Metallic Crystals",
+      "type": "Metallic Crystals",
+      "value": 0
+     },
+     {
+      "id": 2301803,
+      "latitude": 0.0,
+      "longitude": 0.0,
+      "subtype": "Viride Umbrella Mollusc",
+      "type": "Mollusc",
+      "value": 0
+     }
+    ],
+    "name": "Colonia 2",
+    "orbital_period": 859.917845163079,
+    "parents": [
+     {
+      "id64": 3238296097059,
+      "subtype": "F (White) Star",
+      "type": "Star"
+     }
+    ],
+    "radius": 76631.216,
+    "rings": [
+     {
+      "inner_radius": 115770000.0,
+      "mass": 220970000000.0,
+      "name": "Colonia 2 A Ring",
+      "outer_radius": 145680000.0,
+      "type": "Metal Rich"
+     },
+     {
+      "inner_radius": 145780000.0,
+      "mass": 2651700000000.0,
+      "name": "Colonia 2 B Ring",
+      "outer_radius": 337840000.0,
+      "signal_count": 7,
+      "signals": [
+       {
+        "count": 2,
+        "name": "Alexandrite"
+       },
+       {
+        "count": 1,
+        "name": "Benitoite"
+       },
+       {
+        "count": 3,
+        "name": "Monazite"
+       },
+       {
+        "count": 1,
+        "name": "Musgravite"
+       }
+      ],
+      "signals_updated_at": "2026-10-12T04:30:49Z",
+      "type": "Rocky"
+     }
+    ],
+    "semi_major_axis": 2.02456547974206,
+    "signal_count": 6,
+    "signals": [
+     {
+      "count": 6,
+      "name": "Human"
+     }
+    ],
+    "signals_updated_at": "2022-09-22T19:28:09Z",
+    "subtype": "Class III gas giant",
+    "surface_pressure": 0.0,
+    "surface_temperature": 390.281189,
+    "system_id64": 3238296097059,
+    "system_name": "Colonia",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9530.5,
+    "system_y": -910.28125,
+    "system_z": 19808.125,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-13T02:19:04Z"
+   },
+   {
+    "atmosphere": "No atmosphere",
+    "atmosphere_composition": [
+     {
+      "name": "Helium",
+      "share": 26.808214
+     },
+     {
+      "name": "Hydrogen",
+      "share": 73.133835
+     }
+    ],
+    "body_id": 23,
+    "distance": 4.4983721013829,
+    "distance_to_arrival": 1045.227338,
+    "earth_masses": 493.065582,
+    "gravity": 3.55818660140716,
+    "id": "828683015159063114",
+    "id64": 828683015159063114,
+    "is_landable": false,
+    "is_main_star": null,
+    "name": "Eol Prou LW-L c8-75 6",
+    "orbital_period": 1516.7172446295,
+    "parents": [
+     {
+      "id64": 20683722891850,
+      "subtype": "M (Red dwarf) Star",
+      "type": "Star"
+     }
+    ],
+    "radius": 75045.488,
+    "rings": [
+     {
+      "inner_radius": 118590000.0,
+      "mass": 129150000000.0,
+      "name": "Eol Prou LW-L c8-75 6 A Ring",
+      "outer_radius": 135140000.0,
+      "type": "Rocky"
+     },
+     {
+      "inner_radius": 135240000.0,
+      "mass": 1764200000000.0,
+      "name": "Eol Prou LW-L c8-75 6 B Ring",
+      "outer_radius": 275030000.0,
+      "signal_count": 11,
+      "signals": [
+       {
+        "count": 2,
+        "name": "Alexandrite"
+       },
+       {
+        "count": 2,
+        "name": "Bromellite"
+       },
+       {
+        "count": 2,
+        "name": "Grandidierite"
+       },
+       {
+        "count": 2,
+        "name": "Low Temperature Diamonds"
+       },
+       {
+        "count": 1,
+        "name": "Void Opal"
+       },
+       {
+        "count": 2,
+        "name": "Tritium"
+       }
+      ],
+      "signals_updated_at": "2026-10-10T10:38:36Z",
+      "type": "Icy"
+     }
+    ],
+    "semi_major_axis": 2.09453543582784,
+    "signal_count": 2,
+    "signals": [
+     {
+      "count": 2,
+      "name": "Human"
+     }
+    ],
+    "signals_updated_at": "2022-02-12T17:33:52Z",
+    "subtype": "Gas giant with water-based life",
+    "surface_pressure": 0.0,
+    "surface_temperature": 157.660049,
+    "system_id64": 20683722891850,
+    "system_name": "Eol Prou LW-L c8-75",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9526.875,
+    "system_y": -909.28125,
+    "system_z": 19810.59375,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-11T08:12:40Z"
+   },
+   {
+    "atmosphere": "No atmosphere",
+    "atmosphere_composition": [
+     {
+      "name": "Helium",
+      "share": 26.731201
+     },
+     {
+      "name": "Hydrogen",
+      "share": 73.268806
+     }
+    ],
+    "body_id": 1,
+    "distance": 5.68552506919985,
+    "distance_to_arrival": 8813.090935,
+    "earth_masses": 278.16626,
+    "gravity": 2.56147394718058,
+    "id": "36047556596507210",
+    "id64": 36047556596507210,
+    "is_landable": false,
+    "is_main_star": null,
+    "name": "Eol Prou LW-L c8-68 1",
+    "orbital_period": 28895.4177112491,
+    "parents": [
+     {
+      "id64": 18759577543242,
+      "subtype": "K (Yellow-Orange) Star",
+      "type": "Star"
+     }
+    ],
+    "radius": 66434.528,
+    "semi_major_axis": 16.0222868612529,
+    "subtype": "Class I gas giant",
+    "surface_pressure": 0.0,
+    "surface_temperature": 77.267845,
+    "system_id64": 18759577543242,
+    "system_name": "Eol Prou LW-L c8-68",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9534.4375,
+    "system_y": -906.9375,
+    "system_z": 19805.75,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-11T20:50:00Z",
+    "volcanism_type": "No volcanism"
+   }
+  ]
+ }
+}

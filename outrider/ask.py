@@ -2,7 +2,8 @@
 question into text and sends it to POST /api/ask; the answer is said on the PC and shown as a caption everywhere.
 
 First the fixed commands, matched without any AI (resources/ask.json: editable phrases): status report, fuel,
-unsold, next jump, what's left here, nearest unvisited, nearest station (or carrier, Vista, repair...), hush, unhush. Their answers come from the same read-only tools
+unsold, next jump, what's left here, nearest unvisited, nearest station (or carrier, Vista, repair...), nearest
+green gas giant, hush, unhush. Their answers come from the same read-only tools
 the MCP bridge serves (outrider/tools.py), called in-process. Then, only when [assistant] enabled is true, an optional
 AI layer for anything else: an OpenAI-compatible chat-completions endpoint (Ollama, Venice.ai, OpenAI...) given those
 same tools. It runs on the PC; the key never leaves it. Nothing is sent anywhere unless it is configured.
@@ -21,12 +22,14 @@ ASK_FILE = os.path.join(outrider.RESOURCES_DIR, "ask.json")
 TEXT_MAX = 500
 # in the order questions are matched: nearest_dock before fuel, unsold, next_jump and whats_left, whose single words
 # ("fuel") are in its questions too ("nearest station with fuel" asked for the fuel gauge: the sweep of 2026-10-09)
-COMMANDS = ("unhush", "hush", "nearest_dock", "next_jump", "status_report", "fuel", "unsold", "whats_left", "nearest_unvisited")
+COMMANDS = ("unhush", "hush", "nearest_ggg", "nearest_dock", "next_jump", "status_report", "fuel", "unsold", "whats_left",
+            "nearest_unvisited")
 # what the voice says it knows when nothing matched: one label per command, in the order said (a test checks every
 # command has one, so a new command is never left out of the list)
 LABELS = {"status_report": "a status report", "fuel": "fuel", "unsold": "unsold data", "next_jump": "the next jump",
           "whats_left": "what's left here", "nearest_unvisited": "the nearest unvisited system",
-          "nearest_dock": "the nearest station, carrier or material trader", "hush": "hush", "unhush": "unhush"}
+          "nearest_dock": "the nearest station, carrier or material trader",
+          "nearest_ggg": "the nearest potential green gas giant", "hush": "hush", "unhush": "unhush"}
 
 
 def known_questions():
@@ -169,6 +172,15 @@ async def fixed_answer(command, get, rows=10, text=""):
         if any("spansh" in str(e).lower() for e in d.get("errors") or []):
             return "Spansh could not be reached, so stations are missing. " + said
         return said
+    if command == "nearest_ggg":   # S27: Outrider's cache only, a guess from the ladder model (said so)
+        g = await tools.call("nearest_ggg", {}, get, rows)
+        if g.get("error"):
+            return g["error"]
+        x = (g.get("giants") or [None])[0]
+        if not x:
+            return f"None within {ly(g.get('radius_ly'))} light years in what Outrider has cached."
+        return (f"Nearest potential green gas giant: {x['body']} in {x['system']}, {ly(x.get('distance_ly'))} light years. "
+                "A guess from the ladder model: check it in the system map.")
     if command == "nearest_unvisited":
         n = await tools.call("nearest_unvisited", {}, get, rows)
         if n.get("error"):
