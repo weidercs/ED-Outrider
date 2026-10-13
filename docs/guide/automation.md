@@ -44,8 +44,8 @@ Docker), where the HOTAS is plugged in:
 
 - **Tap, flying your ship:** target the next route system in the galaxy map (the same run as 🎯 and Target next,
   half a second after the press, so keep your hands off the controls; it brings the game to the front first where it can, and with
-  Elite not the active window it says so and presses nothing). It targets the next system of your Road to
-  Riches, Exomastery or trade route first, then the Highway's while you are on it, then the Next of the boxel you
+  Elite not the active window it says so and presses nothing). It targets the next system of your survey
+  route (Road to Riches, Exomastery, a world route, a sweep) or trade route first, then the Highway's while you are on it, then the Next of the boxel you
   explore (as 🎯 beside it does: a name the galaxy map cannot find is probably the boxel's end), then, off the Highway,
   its closest system, and last your chosen next stop (the header's, from a bookmark; a finished route counts as none).
   Success or failure is said as for auto-target; with

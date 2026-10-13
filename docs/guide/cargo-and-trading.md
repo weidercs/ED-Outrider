@@ -73,8 +73,8 @@ players last reported, so the newer the data, the safer the trip.
 - **Trade routes.** Plot Route's **Trade** plotter asks Spansh's [trade planner](https://spansh.co.uk/trade) for
   station-to-station hops from the station you are docked at, with your credits and hold (from the journal), and its
   options: hops, hop distance, distance from the star, data age, pad, planetary and player-owned stations,
-  prohibited goods, permit systems, unique stops (no station twice). It can take a few minutes to plot. It shares a place with Road to Riches and
-  Exomastery (one of the three at a time).
+  prohibited goods, permit systems, unique stops (no station twice). It can take a few minutes to plot. It shares a
+  place with the survey routes (Road to Riches, Exomastery, the world routes, a sweep: one of them at a time).
 
 <p align="center">
   <img src="../images/trade.png" alt="Plot Route with a trade route: each stop with what to sell and buy there, and the route on the map" width="900">

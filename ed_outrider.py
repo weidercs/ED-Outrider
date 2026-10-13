@@ -229,10 +229,10 @@ from outrider.highway import (   # the Neutron Highway's route helpers and the d
     HIGHWAY_BG_TYPES, Clipboard, HighwayError, highway_bg_file, highway_match, highway_refuel_in, highway_rows,
     highway_text, splice_route, stand_in,
 )
-from outrider.cargo import trade_counts, trade_done_text, trade_left, trade_rows, trade_text   # the slot's third type: trade routes
-from outrider.riches import (   # Road to Riches / Exomastery: Spansh's survey routes (systems with valuable bodies / life)
-    RichesError, body_value, exo_left, exo_text, exo_todo, had_work, next_stop, norm_name, riches_match, riches_rows,
-    riches_text, splice_survey, todo,
+from outrider.cargo import trade_counts, trade_done_text, trade_left   # the survey slot's trade routes (outrider.riches has the rest)
+from outrider.riches import (   # the survey slot's routes (Road to Riches, Exomastery, the worlds, sweeps; trade's too)
+    SURVEY_KINDS, SWEEP_MAX, RichesError, arrival_text, body_value, done_text, exo_left, exo_todo, had_work, kind_of,
+    norm_name, riches_match, splice_survey, survey_kind, survey_mapping, survey_rows, todo, unknown_systems,
 )
 try:  # one-line summaries of every journal event, for the Log view
     import outrider.log
@@ -278,10 +278,14 @@ SPANSH_RESULTS = "https://spansh.co.uk/api/results/{job}"
 SPANSH_RICHES = "https://spansh.co.uk/api/riches/route"
 SPANSH_EXO = "https://spansh.co.uk/api/exobiology/route"   # Expressway to Exomastery: the same job, bodies with species
 SPANSH_TRADE = "https://spansh.co.uk/api/trade/route"      # the trade planner: the same job, station-to-station hops
+SPANSH_TOURIST = "https://spansh.co.uk/api/tourist/route"  # the tourist router (S51's sweep): the same job, a visiting order
 TRADE_PLOT_TIMEOUT = 600    # s: the trade planner is slow (4 hops from Sol took 136 s on 2026-10-07)
 RICHES_METHOD = "POST"      # form fields (checked against the live API 2026-10-06; scripts/riches_probe.py checks it again)
 RICHES = {"radius": 25, "max_results": 25, "max_distance": 50000, "min_value": 100000,   # defaults of the plot form
           "use_mapping_value": True, "avoid_thargoids": True, "loop": False}
+# the plot's numbers as POST /api/riches/plot takes them: (lowest, highest, type); the rest of a kind's fields are flags
+RICHES_LIMITS = {"radius": (1, 1000, float), "max_results": (1, 500, int), "max_distance": (1, 1000000, float),
+                 "min_value": (0, 1000000000, int)}
 RICHES_AHEAD = 100          # route systems GET /api/riches lists from where you are...
 RICHES_DONE = 10            # ...and done systems above them (the most recent)
 RICHES_SKIP_NAMES = 10      # S12: the finished systems the next stop passes over, named in the line's hover at most
@@ -2582,7 +2586,7 @@ class Journals:
                 if (x["idx"], x["n"]) in bodies:
                     bodies[(x["idx"], x["n"])]["species"].append(
                         {"genus": x["genus"], "species": x["species"], "value": x["value"], "count": x["count"]})
-            for t in self.db.execute("SELECT * FROM trade_stops ORDER BY idx") if rc.get("kind") == "trade" else ():
+            for t in self.db.execute("SELECT * FROM trade_stops ORDER BY idx") if survey_kind(kind_of(rc)).work == "trade" else ():
                 if t["idx"] in by:
                     by[t["idx"]].update(station=t["station"], market_id=t["market_id"], ls=t["ls"], updated=t["updated"],
                                         distance=t["distance"], sell=json.loads(t["sell"] or "[]"),
@@ -2605,15 +2609,19 @@ class Journals:
             "SELECT body_id, species_name FROM own_organic WHERE system=? AND done_ts IS NOT NULL", (id64,))}
 
     def riches_left(self, rc, rows, i):
-        """What route row i still has to do, from the journal: Road to Riches, its bodies (scan, and the map when the
-        route counts mapping); Exomastery, its (body, species) pairs not yet sampled, best first."""
-        r = rows[i]
-        if rc.get("kind") == "trade":   # the sales and purchases still to make at that stop (your MarketSell / MarketBuy)
+        """What route row i still has to do, from the journal, by its kind's work (outrider.riches.SURVEY_KINDS): bodies
+        (Road to Riches, the worlds' routes: scan, and the map when the route counts mapping); species (Exomastery: the
+        (body, species) pairs not yet sampled, best first); trade; nothing for a sweep (arriving is all)."""
+        r, kind = rows[i], kind_of(rc)
+        work = survey_kind(kind).work
+        if work == "trade":   # the sales and purchases still to make at that stop (your MarketSell / MarketBuy)
             return trade_left(r, (rc.get("trade") or {}).get(str(i)))
-        if rc.get("kind") == "exo":
+        if work == "species":
             return exo_left(r["bodies"], self.exo_sampled(r["id64"]) if r["id64"] is not None else set())
+        if work != "bodies":
+            return []
         scanned, mapped = self.riches_marks(r["id64"]) if r["id64"] is not None else (set(), set())
-        mapping = bool((rc.get("options") or {}).get("use_mapping_value"))
+        mapping = survey_mapping(kind, rc.get("options"))
         return [b for b in todo(r["bodies"], scanned, mapped, mapping) if not b["done"]]
 
     def riches_open(self, rc, rows, i):
@@ -2623,8 +2631,8 @@ class Journals:
         route). Trade routes never skip: their next is always the next stop."""
         if i is None or i >= len(rows):
             return None, []
-        kind, skipped = rc.get("kind") or "riches", []
-        while kind != "trade" and i < len(rows) - 1 and had_work(kind, rows[i]) and not self.riches_left(rc, rows, i):
+        kind, skipped = kind_of(rc), []
+        while i < len(rows) - 1 and had_work(kind, rows[i]) and not self.riches_left(rc, rows, i):
             skipped.append(i)
             i += 1
         return i, skipped
@@ -2644,8 +2652,8 @@ class Journals:
         rows = self.riches_route(rc)
         if not rows:
             return
-        exo, kind = rc.get("kind") == "exo", rc.get("kind") or "riches"
-        text = trade_text if kind == "trade" else exo_text if exo else riches_text
+        kind = kind_of(rc)
+        trade = survey_kind(kind).work == "trade"
         at, furthest, done = rc.get("at"), rc.get("furthest"), bool(rc.get("done_ts"))
         i = riches_match(rows, id64, name, at if at is not None else furthest or 0)
         rc["arrival_ts"] = ts
@@ -2664,24 +2672,27 @@ class Journals:
                 pass   # finished: the route stays visible, quietly, until cleared
             elif not left and i == len(rows) - 1:
                 rc.update(done_ts=ts, said_done=i)
-                say = ("complete", trade_done_text(rows, i, (rc.get("trade") or {}).get(str(i))) if kind == "trade"
-                       else text(rows, i, left), 0)
+                say = ("complete", trade_done_text(rows, i, (rc.get("trade") or {}).get(str(i))) if trade
+                       else arrival_text(kind, rows, i, left), 0)
             else:
                 if not left:
                     rc["said_done"] = i   # nothing to do here: no "all done" to say later
-                words = text(rows, i, left) if kind == "trade" else text(rows, i, left, len(skipped))
+                words = arrival_text(kind, rows, i, left, len(skipped))
                 say = ("back" if back else "next", ("Back on the route. " if back else "") + words, len(left))
         meta_set(self.db, "riches", rc)
         if say and live_event(ts):
             nxt = rows[nx]["system"] if i is not None and nx is not None else None
-            self.moment(kind, ts, what=say[0], text=say[1], system=name, index=i, next=nxt, left=say[2])
+            # the moment's kind is the kind's alerts row (the worlds' routes and a sweep share Road to Riches'); `route`
+            # says which route it was
+            self.moment(survey_kind(kind).alert, ts, what=say[0], text=say[1], system=name, index=i, next=nxt,
+                        left=say[2], route=kind)
 
     def trade_progress(self, ev, ts):
         """A MarketSell or MarketBuy at the trade route's stop you are at: the trades made there, and once they are all
         made the hop's profit and the next stop, or the route's end (once; marked in meta whether or not it is spoken,
         so a re-read says nothing later)."""
         rc = meta_get(self.db, "riches")
-        if not rc or rc.get("kind") != "trade" or rc.get("at") is None or rc.get("done_ts"):
+        if not rc or survey_kind(kind_of(rc)).work != "trade" or rc.get("at") is None or rc.get("done_ts"):
             return
         since = rc.get("since_ts") or rc.get("created_ts") or ""
         if ts < since:
@@ -2725,7 +2736,7 @@ class Journals:
         """Undocked from the trade route's stop you are at with part of its trades made: you moved on (the station had
         less than Spansh said, or you chose to), so the stop is done, said with what fell short."""
         rc = meta_get(self.db, "riches")
-        if not rc or rc.get("kind") != "trade" or rc.get("at") is None or rc.get("done_ts"):
+        if not rc or survey_kind(kind_of(rc)).work != "trade" or rc.get("at") is None or rc.get("done_ts"):
             return
         if ts < (rc.get("since_ts") or rc.get("created_ts") or ""):
             return
@@ -2752,8 +2763,9 @@ class Journals:
             rc["done_ts"] = ts
         meta_set(self.db, "riches", rc)
         if live_event(ts):
-            self.moment("trade", ts, what="complete" if last else "done", system=rows[i]["system"], index=i,
-                        next=None if last else rows[i + 1]["system"], left=0, text=trade_done_text(rows, i, done))
+            self.moment(SURVEY_KINDS["trade"].alert, ts, what="complete" if last else "done", system=rows[i]["system"],
+                        index=i, next=None if last else rows[i + 1]["system"], left=0, text=trade_done_text(rows, i, done),
+                        route="trade")
 
     def riches_progress(self, id64, ts):
         """After a Scan or a mapping in the system you are at on a Road to Riches route: when that was the last body
@@ -2766,8 +2778,8 @@ class Journals:
         i = rc["at"]
         if i >= len(rows) or rows[i]["id64"] is None or rows[i]["id64"] != id64 or rc.get("said_done") == i:
             return
-        exo = rc.get("kind") == "exo"
-        if not had_work(rc.get("kind") or "riches", rows[i]) or self.riches_left(rc, rows, i):
+        kind = kind_of(rc)
+        if not had_work(kind, rows[i]) or self.riches_left(rc, rows, i):
             return
         rc["said_done"] = i
         last = i == len(rows) - 1
@@ -2777,10 +2789,8 @@ class Journals:
         if live_event(ts):
             nx, skipped = (None, []) if last else self.riches_open(rc, rows, i + 1)   # S12: past the systems you finished
             nxt = None if last else rows[nx]["system"]
-            done_text = "Every species here is sampled. " if exo else "Everything here is done. "
-            self.moment("exo" if exo else "riches", ts, what="complete" if last else "done", system=rows[i]["system"], index=i,
-                        next=nxt, left=0, text=done_text + (("Exomastery complete." if exo else "Road to Riches complete.") if last
-                                                            else next_stop(rows, i, len(skipped))))
+            self.moment(survey_kind(kind).alert, ts, what="complete" if last else "done", system=rows[i]["system"], index=i,
+                        next=nxt, left=0, text=done_text(kind, rows, i, len(skipped)), route=kind)
 
     def highway_arrival(self, id64, name, ts):
         """A jump into a system with a Highway route active: progress (the row you are at, the furthest reached),
@@ -5519,7 +5529,7 @@ def highway_not_yet(name):
 # (outrider.health.HOSTS).
 LOOKUP_URLS = (("spansh", ("SPANSH_SEARCH", "SPANSH_BODY_SEARCH", "SPANSH_STATION_SEARCH", "SPANSH_DUMP", "SPANSH_COMMODITIES",
                            "SPANSH_ROUTE", "SPANSH_GENERIC_ROUTE", "SPANSH_RESULTS", "SPANSH_RICHES", "SPANSH_EXO",
-                           "SPANSH_TRADE", "SPANSH_SYSTEM_NAMES", "SPANSH_SYSTEM_SEARCH")),
+                           "SPANSH_TRADE", "SPANSH_TOURIST", "SPANSH_SYSTEM_NAMES", "SPANSH_SYSTEM_SEARCH")),
                ("edsm", ("EDSM_SYSTEM", "EDSM_SPHERE", "EDSM_BODIES")),
                ("github", ("RELEASES_LATEST",)), ("edastro", ("DSSA_URL",)))
 
@@ -5763,10 +5773,13 @@ class Spansh:
             return d["result"]
 
     async def _plot_get(self, url, params, method="GET"):
-        """One request of a plot: Spansh's JSON answer (queued, or the result), or HighwayError."""
+        """One request of a plot: Spansh's JSON answer (queued, or the result), or HighwayError. A POST's value that is
+        a list or tuple is a repeated form field (a sweep's systems, the worlds' body_types), as Spansh's own pages send
+        them."""
         try:
-            call = (self.session.post(url, data={k: str(v) for k, v in (params or {}).items()}) if method == "POST"
-                    else self.session.get(url, params=params))
+            call = (self.session.post(url, data=[(k, str(x)) for k, v in (params or {}).items()
+                                                 for x in (v if isinstance(v, (list, tuple)) else (v,))])
+                    if method == "POST" else self.session.get(url, params=params))
             async with call as r:
                 try:
                     d = await r.json(content_type=None)
@@ -13668,9 +13681,9 @@ class State:
         the Highway's; with both, the one plotted last, route_newest; a complete one is none) from where you are on it,
         from its next stop while you are off it or before it; MAP_ROUTE_MAX points in all, the game's route first;
         `next`: that route's next stop (a survey route's past the systems you finished, S12), else the header's next
-        stop, kept even past the cap; `kind`: "highway", "riches", "exo", "trade" or None. Each point {id, name, x, y,
-        z} (id the exact id64 as a string, or None); a row without a position is left out. Not cached with the map's
-        systems (map_cache): a new plot shows at the page's next fetch."""
+        stop, kept even past the cap; `kind`: "highway", a survey kind (outrider.riches.SURVEY_KINDS) or None. Each
+        point {id, name, x, y, z} (id the exact id64 as a string, or None); a row without a position is left out. Not
+        cached with the map's systems (map_cache): a new plot shows at the page's next fetch."""
         pos = self.journals.pos
         if not pos or pos.get("x") is None:
             return None
@@ -13686,7 +13699,7 @@ class State:
         meta, rr = self.riches_state() if which == "riches" else self.highway_state() if which == "highway" else (None, [])
         if meta:
             if which == "riches":
-                kind, nx = meta.get("kind") or "riches", self.riches_next_open(meta, rr)[0]
+                kind, nx = kind_of(meta), self.riches_next_open(meta, rr)[0]
             else:
                 kind, nx = "highway", self.highway_next(meta, rr)
             at = None if meta.get("off_route") else meta.get("at")
@@ -14166,11 +14179,13 @@ class State:
         return c[1]
 
     def riches_system_out(self, rc, rows, i):
-        """Route row i for the page: the system, and its bodies with what you have scanned and mapped (Road to Riches)
-        or its species with what you have sampled and what would be new to your codex there (Exomastery: by species,
-        in the system's region, which never over-flags), from the journal."""
-        r = rows[i]
-        if rc.get("kind") == "trade":   # a stop: its station, what to sell and buy there, with what your journal shows done
+        """Route row i for the page: the system, and its bodies with what you have scanned and mapped (Road to Riches,
+        the worlds' routes; a sweep's stops have none) or its species with what you have sampled and what would be new
+        to your codex there (Exomastery: by species, in the system's region, which never over-flags), or a trade stop,
+        from the journal."""
+        r, kind = rows[i], kind_of(rc)
+        work = survey_kind(kind).work
+        if work == "trade":   # a stop: its station, what to sell and buy there, with what your journal shows done
             done = (rc.get("trade") or {}).get(str(i)) or {}
             left = trade_left(r, done)
             still = {"sell": {c["name"] for k, c in left if k == "sell"}, "buy": {c["name"] for k, c in left if k == "buy"}}
@@ -14183,7 +14198,7 @@ class State:
                     **{kind: [dict(c, traded=got.get(c["name"], 0), done=c["name"] not in still[kind] and (
                         not done.get("left") or got.get(c["name"], 0) >= (c.get("amount") or 1))) for c in r.get(kind) or []]
                        for kind, got in (("sell", trade_counts(r, done, "sold")), ("buy", trade_counts(r, done, "bought")))}}
-        if rc.get("kind") == "exo":
+        if work == "species":
             region = (outrider.bio.region_name(r["x"], r["y"], r["z"])
                       if outrider.bio and None not in (r["x"], r["y"], r["z"]) else None)
             known = codex_species(self.db, region)[1] if region else None
@@ -14196,7 +14211,7 @@ class State:
                                 "left": b["left"], "species": [dict(x, new=known is not None and x["species"].lower() not in known)
                                                                for x in b["species"]]}
                                for b in bodies if b["species"]]}
-        mapping = bool((rc.get("options") or {}).get("use_mapping_value"))
+        mapping = survey_mapping(kind, rc.get("options"))
         scanned, mapped = self.journals.riches_marks(r["id64"]) if r["id64"] is not None else (set(), set())
         bodies = todo(r["bodies"], scanned, mapped, mapping)
         left = [b for b in bodies if not b["done"]]
@@ -14219,8 +14234,8 @@ class State:
             first = max(0, base - RICHES_DONE)
             route = dict({k: rc.get(k) for k in ("id", "options", "created_ts", "at", "furthest", "off_route",
                                                   "arrival_ts", "done_ts")},
-                         **{"kind": rc.get("kind") or "riches", "from": rows[0]["system"], "to": rows[-1]["system"],
-                            "count": len(rows), "first": first,
+                         **{"kind": kind_of(rc), "from": rows[0]["system"], "to": rows[-1]["system"],
+                            "mapping": survey_mapping(kind_of(rc), rc.get("options")), "count": len(rows), "first": first,
                             "next": nx, "points": [[r["x"], r["z"]] for r in rows], "systems": [self.riches_system_out(rc, rows, i)
                                                     for i in range(first, min(len(rows), first + RICHES_DONE + RICHES_AHEAD))]})
         cb = self.clipboard.info() if self.clipboard else {"enabled": self.highway_cfg["clipboard"], "available": False,
@@ -14244,18 +14259,21 @@ class State:
 
     def riches_start_plot(self, body):
         """POST /api/riches/plot: check the request, start the Spansh job in the background, (answer, HTTP status).
-        {from (default: where you are), to (optional), range (default: the current ship's), radius, max_results,
-        max_distance, min_value, use_mapping_value, avoid_thargoids, loop}."""
+        {kind (outrider.riches.SURVEY_KINDS, default "riches"), from (default: where you are), to (optional), range
+        (default: the current ship's), and the kind's own `fields`: radius, max_results, max_distance, min_value,
+        use_mapping_value, avoid_thargoids, loop}. A sweep (S51) takes `systems` (names) and no `to`; a trade route its
+        own (trade_start_plot)."""
         if self.riches_task and not self.riches_task.done():
             return {"error": "a route is being plotted already"}, 409
-        kind = body.get("kind", "riches")   # the slot's route type: Road to Riches, Expressway to Exomastery, or trade
-        if kind not in ("riches", "exo", "trade"):
-            return {"error": "kind must be riches, exo or trade"}, 400
+        kind = body.get("kind", "riches")   # the slot's route type: one of SURVEY_KINDS
+        if not isinstance(kind, str) or kind not in SURVEY_KINDS:
+            return {"error": f"kind must be one of {', '.join(SURVEY_KINDS)}"}, 400
         if kind == "trade":
             return self.trade_start_plot(body)
+        k_ = survey_kind(kind)
         name = lambda v: " ".join(v.split()) if isinstance(v, str) else ""
         frm = name(body.get("from")) or (self.journals.pos or {}).get("name") or ""
-        to = name(body.get("to"))
+        to = name(body.get("to")) if k_.parser != "tourist" else ""   # a sweep's order is Spansh's to choose
         if not frm or len(frm) > FIND_NAME_MAX or len(to) > FIND_NAME_MAX:
             return {"error": f"give the start system's name (up to {FIND_NAME_MAX} characters)"}, 400
 
@@ -14284,25 +14302,45 @@ class State:
             rng = number("range", 1, 1000, float, fleet_range((ship or {}).get("figures") or {}, cargo) if ship else None)
             if not rng:
                 return {"error": "give the jump range (ly), or fly a ship Outrider has seen a Loadout of"}, 400
-            opts = {"range": round(rng, 2), "radius": number("radius", 1, 1000, float, RICHES["radius"]),
-                    "max_results": number("max_results", 1, 500, int, RICHES["max_results"]),
-                    "max_distance": number("max_distance", 1, 1000000, float, RICHES["max_distance"]),
-                    "min_value": number("min_value", 0, 1000000000, int, RICHES["min_value"]),
-                    "use_mapping_value": flag("use_mapping_value"), "avoid_thargoids": flag("avoid_thargoids"),
-                    "loop": flag("loop")}
+            # the kind's own options, each checked as its own (RICHES_LIMITS: the numbers' ranges; the rest are flags)
+            opts = {"range": round(rng, 2), **{k: flag(k) if k not in RICHES_LIMITS else number(k, *RICHES_LIMITS[k], RICHES[k])
+                                                for k in k_.fields}}
+            systems = self.sweep_systems(body.get("systems"), frm) if k_.parser == "tourist" else None
         except ValueError as e:
             return {"error": str(e)}, 400
-        if kind == "exo":   # Exomastery has no mapping value; its life is what counts
-            opts.pop("use_mapping_value")
-        params = dict(opts, **{"from": frm}, **({"to": to} if to else {}))
+        params = dict(opts, **{"from": frm}, **({"to": to} if to else {}), **dict(k_.send))
         for k in ("use_mapping_value", "avoid_thargoids", "loop"):
             if k in params:
                 params[k] = int(params[k])
+        if systems is not None:
+            params["destination"] = tuple(systems)
+            opts["systems"] = len(systems)
         self.riches_plotting = {"state": "running", "kind": kind, "from": frm, "to": to or None, "started": iso_ts(time.time()),
                                 "error": None}
         self.riches_task = asyncio.get_running_loop().create_task(self._riches_plot(params, {"options": opts, "kind": kind}))
         self.bump()
         return {"ok": True, "plotting": self.riches_plotting}, 202
+
+    @staticmethod
+    def sweep_systems(systems, frm):
+        """S51: a sweep's systems from the request (names, each once, not the start), or ValueError in words."""
+        if not isinstance(systems, list) or not systems:
+            raise ValueError("tick the systems to sweep")
+        if len(systems) > 2 * SWEEP_MAX:
+            raise ValueError(f"a sweep takes up to {SWEEP_MAX} systems")
+        out, seen = [], {norm_name(frm)}
+        for v in systems:
+            n = " ".join(v.split()) if isinstance(v, str) else ""
+            if not n or len(n) > FIND_NAME_MAX:
+                raise ValueError(f"each system is a name (up to {FIND_NAME_MAX} characters)")
+            if norm_name(n) not in seen:
+                seen.add(norm_name(n))
+                out.append(n)
+        if not out:
+            raise ValueError("the only system ticked is where the sweep starts")
+        if len(out) > SWEEP_MAX:
+            raise ValueError(f"a sweep takes up to {SWEEP_MAX} systems")
+        return out
 
     def trade_start_plot(self, body):
         """POST /api/riches/plot {kind: "trade"}: Spansh's trade planner from a station (default: the one you are docked
@@ -14362,19 +14400,43 @@ class State:
 
     async def _riches_plot(self, params, meta):
         p = self.riches_plotting
-        kind = meta.get("kind")
+        kind = meta.get("kind") or "riches"
+        k_ = survey_kind(kind)
+        trade = k_.work == "trade"
         try:
             start = end = note = None
-            if kind != "trade":
+            if not trade:
                 # an end Spansh does not know yet is stood in for, as the Highway's are (State.highway_ends). Not a
                 # trade route: it starts at a station's market as Spansh has it, which no stand-in replaces
                 src, dst, start, end, note = await self.highway_ends(params["from"], params.get("to"), params["range"])
                 params = dict(params, **{"from": src["name"]}, **({"to": dst["name"]} if dst else {}))
-            result = await self.spansh.plot(SPANSH_TRADE if kind == "trade" else SPANSH_EXO if kind == "exo" else SPANSH_RICHES,
-                                            params, method=RICHES_METHOD, timeout=TRADE_PLOT_TIMEOUT if kind == "trade" else None)
-            rows = trade_rows(result) if kind == "trade" else splice_survey(riches_rows(result), params["range"], start, end)
-            if kind == "trade" and not rows:
+            if k_.parser == "tourist":   # the tourist router's own names for them (probe P2)
+                params = {"source": params["from"], "range": params["range"], "loop": params["loop"],
+                          "destination": params["destination"]}
+            url = globals()[k_.url]   # looked up now: verify.sh and the tests point these elsewhere
+            timeout = TRADE_PLOT_TIMEOUT if trade else None
+            try:
+                result = await self.spansh.plot(url, params, method=RICHES_METHOD, timeout=timeout)
+            except HighwayError as e:
+                # a sweep's system Spansh does not know yet (a fresh discovery among your lost firsts): refused as a
+                # whole, so plotted again without it, said in the note
+                asked = list(params.get("destination") or ()) if k_.parser == "tourist" else []
+                gone = unknown_systems(str(e), asked)
+                if not gone:
+                    raise
+                if len(gone) == len(asked):
+                    raise HighwayError("Spansh doesn't know any of these systems yet") from e
+                params = dict(params, destination=tuple(n for n in asked if n not in gone))
+                result = await self.spansh.plot(url, params, method=RICHES_METHOD, timeout=timeout)
+                left_out = (f"Spansh doesn't know {len(gone)} of the systems yet, left out: {', '.join(gone)}." if len(gone) > 1
+                            else f"Spansh doesn't know {gone[0]} yet: left out.")
+                note = f"{note} {left_out}" if note else left_out
+                meta = dict(meta, options=dict(meta.get("options") or {}, systems=len(asked) - len(gone), unknown=gone))
+            rows = survey_rows(kind, result)
+            if trade and not rows:
                 raise RichesError("Spansh found no trade route from there with these limits")
+            if not trade:
+                rows = splice_survey(rows, params["range"], start, end)
             self.riches_store(rows, dict(meta, stand_in=note) if note else meta)
             p.update(state="done", note=note)
             self.riches_copy_next(force=True)   # you are usually at its start: the first hop is ready to paste
@@ -14437,8 +14499,9 @@ class State:
         self.bump()
 
     def survey_summary(self):
-        """The survey route's (Road to Riches, Exomastery) facts for the line under the tiles, or None with no route:
-        as highway_summary, the next system (jumps, ly from here), where you are on it, and what is left where you are."""
+        """The survey slot's route's facts (any kind of outrider.riches.SURVEY_KINDS) for the line under the tiles, or
+        None with no route: as highway_summary, the next system (jumps, ly from here), where you are on it, and what is
+        left where you are."""
         rc, rows = self.riches_state()
         if not rc:
             return None
@@ -14446,7 +14509,7 @@ class State:
         at, (nx, skipped) = rc.get("at"), self.riches_next_open(rc, rows)
         nxt = rows[nx] if nx is not None else None
         return {
-            "kind": rc.get("kind") or "riches", "id": rc.get("id"), "created_ts": rc.get("created_ts"),
+            "kind": kind_of(rc), "id": rc.get("id"), "created_ts": rc.get("created_ts"),
             "destination": rows[-1]["system"], "total": n - 1, "index": nx, "at": at,
             "complete": bool(rc.get("done_ts")), "off_route": bool(rc.get("off_route")),
             # S12: the finished systems the next stop passes over (their names for the hover, the first RICHES_SKIP_NAMES)

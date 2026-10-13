@@ -248,8 +248,11 @@ class _HwSession:
 
     def post(self, url, data=None, json=None):
         """A job submitted with form fields (Road to Riches), or a JSON search: recorded as ("POST", url, fields or
-        the JSON body), answered like get()."""
-        self.calls.append(("POST", url, json if json is not None else dict(data or {})))
+        the JSON body), answered like get(). A repeated form field (data as a list of pairs) is recorded as a list."""
+        fields = {}
+        for k, v in (data.items() if isinstance(data, dict) else data or []):
+            fields[k] = (fields[k] if isinstance(fields[k], list) else [fields[k]]) + [v] if k in fields else v
+        self.calls.append(("POST", url, json if json is not None else fields))
         item = self.script.pop(0) if len(self.script) > 1 else self.script[0]
         if isinstance(item, Exception):
             raise item

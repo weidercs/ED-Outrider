@@ -5,9 +5,9 @@
 ## 🛣 The Neutron Highway
 
 The **Plot Route** tab plots a route with [Spansh](https://spansh.co.uk), using neutron stars as boosts (or a
-Road to Riches, an Exomastery or a trade route, below), and follows it as you fly. Two routes are kept (following them
-needs no network): one Highway route (Exact or Neutron) and one Road to Riches, Exomastery or trade route, each until
-you plot another of its kind or **Clear route**.
+Road to Riches, an Exomastery, an Earth-like or ammonia world route, a sweep or a trade route, below), and follows it as
+you fly. Two routes are kept (following them needs no network): one Highway route (Exact or Neutron) and one survey
+route (any of the others), each until you plot another of its kind or **Clear route**.
 
 <p align="center">
   <img src="../images/highway.png" alt="The Plot Route tab: the jump list, and the route on a map of the galaxy's regions" width="900">
@@ -64,23 +64,38 @@ and once they are done, the next system. It is not auto-targeted on its own: a R
 Systems ahead that you have already finished (an earlier trip, or out of order) are passed over: the next stop is the
 first one with work left, "Next: Pru Aim XY-Z d1 · 3 jumps · 6 of 22 · skipping 2 done" (hover for their names), and
 the voice says "Next stop: Pru Aim XY-Z d1, skipping 2 systems you've finished." The route's last system is never
-passed over (arriving there ends it). Exomastery does the same; a trade route never skips a stop.
+passed over (arriving there ends it). Exomastery and the world routes do the same; a sweep or a trade route never
+skips a stop.
 With a Highway route as well, a switch above the heading picks which one the tab shows; only the one plotted last
 copies its next system to the clipboard (once it is finished, the other one copies again). (Road to Riches is thshurka's contribution.)
 
 **Exomastery.** The fourth plotter, Spansh's **Expressway to Exomastery**, plots systems whose bodies carry valuable
 life already reported by other commanders, with the same options as Road to Riches but for the mapping value and
 avoiding Thargoid-hit systems. It shares Road
-to Riches' place (and a trade route's): one of them at a time, a new plot replaces it. Each body lists its species with their
+to Riches' place (and the other survey routes'): one of them at a time, a new plot replaces it. Each body lists its species with their
 value, ✓ once you have sampled them and ✦ when one would be new to your codex in that region; the voice says on
 arrival how many species are left on how many bodies and the best of them, and the next stop once they are sampled.
 It is known life, so first footfall (×5) is unlikely: the values shown are the base ones.
 
-**Trade.** The fifth plotter: Spansh's trade planner, station-to-station hops from where you are docked, in the
-same place as Road to Riches and Exomastery (one of the three at a time). See [Trading](cargo-and-trading.md#-trading).
+**Earth-like and Ammonia.** Two more plotters ask Spansh for a chain of systems with Earth-like worlds (🌍) or ammonia
+worlds (🧪) nobody has mapped yet: Road to Riches limited to that one kind of planet, as Spansh's own Earth-like and
+ammonia pages plot it, with the same options but for the minimum value and the mapping value. These worlds are worth
+mapping, so a body is done once it is scanned and mapped. Followed like Road to Riches; the end is "Earth-like route
+complete." (or "Ammonia route complete.").
+
+**A sweep.** Tick systems in **Left behind**, **My firsts** (with show lost: the systems whose data was lost) or
+**Bookmarks**, then **🧹 Plot a sweep (N)** beside any of the three lists (the ticks are one set across them, kept until
+the page reloads). Spansh's tourist router puts them in the order to fly them, from where you are with your ship's range,
+and Plot Route shows the route: on each arrival the voice says the next stop, and "Sweep complete." at the last. A system
+Spansh doesn't know yet (a fresh discovery among your lost firsts, say) is left out, and the plot's message and the
+route's heading name it. A sweep takes up to 100 systems and replaces the survey route there is.
+
+**Trade.** The last plotter: Spansh's trade planner, station-to-station hops from where you are docked, in the
+same place as the survey routes (one of them at a time). See [Trading](cargo-and-trading.md#-trading).
 
 **The route line and 🎯.** The line under the tiles shows the next stop of whichever route the tab shows (🛣 the
-Highway, 💰 Road to Riches, 🧬 Exomastery, 💱 a trade route). The **In-Game Route:** line above it is the game's own
+Highway, 💰 Road to Riches, 🧬 Exomastery, 🌍 Earth-like worlds, 🧪 ammonia worlds, 🧹 a sweep, 💱 a trade route). The
+**In-Game Route:** line above it is the game's own
 route, the one plotted in the galaxy map: it can differ from Outrider's until 🎯 targets the next stop, which has the
 game plot its route there. A 🎯 beside that next system, and beside every system in the tab's lists,
 targets it in the galaxy map for you (game PC only; Outrider brings the game to the front itself where it can, else

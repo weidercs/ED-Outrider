@@ -114,7 +114,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
 <section id="firstsView" hidden>
   <div class="srow"><span id="fStatus"></span>
     <label><input type="checkbox" id="fShowLost"> show lost</label>
-    <label title="with show lost: only the systems with lost data to rescan within this many ly of you, nearest first (empty: no limit)">within <input type="number" id="fWithin" min="1" step="any" placeholder="any" inputmode="decimal"> ly</label><span class="grow"></span>
+    <label title="with show lost: only the systems with lost data to rescan within this many ly of you, nearest first (empty: no limit)">within <input type="number" id="fWithin" min="1" step="any" placeholder="any" inputmode="decimal"> ly</label><span class="swbar"><button type="button" class="mini swbtn" hidden></button><button type="button" class="mini swclear" hidden title="untick every system ticked for a sweep">✕ untick all</button><span class="swmsg" role="status"></span></span><span class="grow"></span>
     <span class="exports">Export: <a href="api/export?what=firsts&format=csv" download>CSV</a> · <a href="api/export?what=firsts&format=json" download>JSON</a></span></div>
   <div class="pane" id="firstsPane">
   <table id="firstsTable">
@@ -129,7 +129,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     to scan and to map again (with the bonuses you earned, no efficiency bonus; a map counts what it adds on top of the scan), so the two add up.
     Seen by others: someone else has scanned this since you (checked on Spansh once a day per system, most valuable first; <code>[spansh] watch_firsts</code> turns it off).</div>
   <h3 class="subhead">Left behind <span class="unk">· visited systems within
-    <select id="lbRadius"><option>50</option><option selected>100</option><option>200</option></select> ly with work worth going back for</span></h3>
+    <select id="lbRadius"><option>50</option><option selected>100</option><option>200</option></select> ly with work worth going back for</span> <span class="swbar"><button type="button" class="mini swbtn" hidden></button><button type="button" class="mini swclear" hidden title="untick every system ticked for a sweep">✕ untick all</button><span class="swmsg" role="status"></span></span></h3>
   <div class="hint">Bodies the honk counted that you never found, genera the DSS found that you never sampled, bio signals on bodies you never
     probed (priced before the DSS, so an upper bound), and planets worth mapping; by your bio threshold and highlight level.</div>
   <table id="leftTable">
@@ -261,7 +261,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
   </div>
 </section>
 <section id="bmView" hidden>
-<div id="bmTools" hidden class="srow"><span class="grow"></span><span class="exports">Export: <a href="api/export?what=bookmarks&format=csv" download>CSV</a> · <a href="api/export?what=bookmarks&format=json" download>JSON</a></span></div>
+<div id="bmTools" hidden class="srow"><span class="swbar"><button type="button" class="mini swbtn" hidden></button><button type="button" class="mini swclear" hidden title="untick every system ticked for a sweep">✕ untick all</button><span class="swmsg" role="status"></span></span><span class="grow"></span><span class="exports">Export: <a href="api/export?what=bookmarks&format=csv" download>CSV</a> · <a href="api/export?what=bookmarks&format=json" download>JSON</a></span></div>
 <div class="pane" id="bmPane">
 <table id="bmTable" hidden>
   <thead><tr>
@@ -318,7 +318,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       <summary>Plot a route</summary>
       <form id="hwyForm" autocomplete="off">
         <div class="srow">
-          <span class="seg" role="radiogroup" aria-label="plotter"><label title="every jump with its fuel, from your ship's own figures (Spansh's galaxy plotter)"><input type="radio" name="hwyPlotter" value="exact" checked>Exact</label><label title="neutron stars as boosts, waypoints only (Spansh's neutron plotter): any ship, from its range"><input type="radio" name="hwyPlotter" value="neutron">Neutron</label><label title="a chain of systems whose planets are worth scanning (and mapping), from where you are (Spansh's Road to Riches): stop, scan, move on"><input type="radio" name="hwyPlotter" value="riches">Road to Riches</label><label title="a chain of systems with valuable life already reported on their bodies (Spansh's Expressway to Exomastery): land, sample, move on. Known life: first footfall is unlikely"><input type="radio" name="hwyPlotter" value="exo">Exomastery</label><label title="station to station: what to buy at each and where to sell it (Spansh's trade planner), from the station you start at"><input type="radio" name="hwyPlotter" value="trade">Trade</label></span>
+          <span class="seg" role="radiogroup" aria-label="plotter"><label title="every jump with its fuel, from your ship's own figures (Spansh's galaxy plotter)"><input type="radio" name="hwyPlotter" value="exact" checked>Exact</label><label title="neutron stars as boosts, waypoints only (Spansh's neutron plotter): any ship, from its range"><input type="radio" name="hwyPlotter" value="neutron">Neutron</label><label title="a chain of systems whose planets are worth scanning (and mapping), from where you are (Spansh's Road to Riches): stop, scan, move on"><input type="radio" name="hwyPlotter" value="riches">Road to Riches</label><label title="a chain of systems with valuable life already reported on their bodies (Spansh's Expressway to Exomastery): land, sample, move on. Known life: first footfall is unlikely"><input type="radio" name="hwyPlotter" value="exo">Exomastery</label><label title="a chain of systems with Earth-like worlds nobody has mapped yet, from where you are (Spansh's Road to Riches, Earth-like worlds only): scan and map each one"><input type="radio" name="hwyPlotter" value="elw">Earth-like</label><label title="a chain of systems with ammonia worlds nobody has mapped yet, from where you are (Spansh's Road to Riches, ammonia worlds only): scan and map each one"><input type="radio" name="hwyPlotter" value="aw">Ammonia</label><label title="station to station: what to buy at each and where to sell it (Spansh's trade planner), from the station you start at"><input type="radio" name="hwyPlotter" value="trade">Trade</label></span>
           <label>From <input type="text" id="hwyFrom" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100" placeholder="where you are" list="hwyFromNames"></label>
           <label class="hwyto">To <input type="text" id="hwyTo" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100" placeholder="destination system" list="hwyNames"><button type="button" id="hwyNearest" class="mini nearbtn" title="the nearest station or fleet carrier you can dock at and use: pick one to plot there">📍 Nearest…</button></label>
           <datalist id="hwyNames"></datalist><datalist id="hwyFromNames"></datalist>
@@ -364,15 +364,15 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
           <label title="plot with regular jumps only: no neutron star boosts on the way"><input type="checkbox" id="hwyNoNeu"> no neutron boosts</label>
         </div>
         <div class="srow hwy-ropt" hidden>
-          <label title="how far from the route a system may be to be included (ly)">Radius <input type="number" id="richRadius" min="1" max="1000" step="any" inputmode="decimal"> ly</label>
-          <label title="how many systems the route has">Systems <input type="number" id="richMax" min="1" max="500" step="1" inputmode="numeric"></label>
-          <label title="ignore bodies farther than this from the arrival star (ls)">Max distance <input type="number" id="richDist" min="1" max="1000000" step="any" inputmode="decimal"> ls</label>
-          <label title="the least a body must be worth to count (credits)">Min value <input type="number" id="richMin" min="0" max="1000000000" step="1" inputmode="numeric"> cr</label>
+          <label data-field="radius" title="how far from the route a system may be to be included (ly)">Radius <input type="number" id="richRadius" min="1" max="1000" step="any" inputmode="decimal"> ly</label>
+          <label data-field="max_results" title="how many systems the route has">Systems <input type="number" id="richMax" min="1" max="500" step="1" inputmode="numeric"></label>
+          <label data-field="max_distance" title="ignore bodies farther than this from the arrival star (ls)">Max distance <input type="number" id="richDist" min="1" max="1000000" step="any" inputmode="decimal"> ls</label>
+          <label data-field="min_value" title="the least a body must be worth to count (credits)">Min value <input type="number" id="richMin" min="0" max="1000000000" step="1" inputmode="numeric"> cr</label>
         </div>
         <div class="srow hwy-ropt" hidden>
-          <label class="rich-only" title="count the detailed-surface-scan bonus as well as the scan"><input type="checkbox" id="richMapping"> include mapping value</label>
-          <label class="rich-only"><input type="checkbox" id="richThargoid"> avoid Thargoid-hit systems</label>
-          <label title="end the route where it began"><input type="checkbox" id="richLoop"> loop back to the start</label>
+          <label data-field="use_mapping_value" title="count the detailed-surface-scan bonus as well as the scan"><input type="checkbox" id="richMapping"> include mapping value</label>
+          <label data-field="avoid_thargoids"><input type="checkbox" id="richThargoid"> avoid Thargoid-hit systems</label>
+          <label data-field="loop" title="end the route where it began"><input type="checkbox" id="richLoop"> loop back to the start</label>
         </div>
         <div class="srow">
           <button type="submit" id="hwyGo" class="go">Plot</button>

@@ -28,6 +28,7 @@ import sys
 import time
 
 from . import ROOT
+from .riches import left_words, survey_kind
 
 CANVAS_W, CANVAS_H = 1280, 960
 PANELS = ("system", "body", "radar", "strip", "now", "bio", "alerts")
@@ -855,11 +856,6 @@ def sc_text(sec):
     return f"~{max(10, _half_up(sec / 5) * 5)} s" if sec < 90 else f"~{_half_up(sec / 60)} min"
 
 
-SURVEY_WORDS = {"riches": ("💰", "Road to Riches", lambda n: f"{n} {'body' if n == 1 else 'bodies'} to do here"),
-                "exo": ("🧬", "Exomastery", lambda n: f"{n} species to sample here"),
-                "trade": ("💱", "Trade route", lambda n: f"{n} trade{'' if n == 1 else 's'} to make here")}
-
-
 def route_check_parts(tc):
     """S11's mark for the Target panel (page.js targetCheckHtml's words): the followed route's next stop targeted, a
     later stop of it, or another system. [] without a check."""
@@ -875,12 +871,15 @@ def route_check_parts(tc):
 
 def route_parts(route):
     """The route's next stop as Now gives it (page.js hwyLineHtml / surveyLineHtml, short): {kind: "highway" |
-    "riches", summary: highway_summary() or survey_summary()} -> (text, colour key) parts, or [] with nothing to say."""
+    "riches" (the survey slot), summary: highway_summary() or survey_summary()} -> (text, colour key) parts, or []
+    with nothing to say."""
     s = (route or {}).get("summary")
     if not s:
         return []
     hw = route.get("kind") == "highway"
-    glyph, name, left = ("🛣", "Highway", None) if hw else SURVEY_WORDS.get(s.get("kind"), SURVEY_WORDS["riches"])
+    k = None if hw else survey_kind(s.get("kind"))   # the survey slot's kinds: outrider.riches.SURVEY_KINDS
+    glyph, name = ("🛣", "Highway") if hw else (k.glyph, k.name)
+    left = None if hw else (lambda n: left_words(s.get("kind"), n))
     head = [(glyph + " ", "accent")]
     if s.get("complete"):
         return head + [(f"{name} complete", "good")]

@@ -44,7 +44,7 @@ Changing Outrider yourself, or with a coding agent? Start with [`docs/AGENT_GUID
 | `outrider/codex_bodies.py` | Which codex entry a star or planet type logs, for the ✦ / ✪ on types new to your codex |
 | `outrider/codex_geo.py` | Which geology codex entries a body's volcanism could log, for the ✦ / ✪ on geology new to your codex |
 | `outrider/boxel.py` | Boxels: a procedural name's boxel, its place and its systems' addresses, for Boxel mode and the sector map |
-| `outrider/riches.py` | Road to Riches and Exomastery: Spansh's answer as route rows, what is still to do in a system, the arrival lines |
+| `outrider/riches.py` | The survey routes (Road to Riches, Exomastery, Earth-like and ammonia worlds, sweeps), one table of their kinds: Spansh's answer as route rows, what is still to do in a system, the arrival lines |
 | `outrider/uploads.py` | Uploads (opt-in, off by default): the session each journal line belongs to, the outbox, what may be sent |
 | `outrider/eddn.py` | EDDN: the messages a journal event becomes, and what EDDN's answer means |
 | `outrider/edsm.py` | EDSM's journal upload: what a line sends to your own EDSM account, and what EDSM's answer means |
@@ -63,6 +63,7 @@ Changing Outrider yourself, or with a coding agent? Start with [`docs/AGENT_GUID
 | `scripts/docker_bundle.sh` | A Docker release bundle in `dist/` (git-ignored): the built image saved with a compose file that runs it (no checkout or build on the server) |
 | `scripts/build_codex_images.py`, `scripts/build_geo_codex.py` | Rebuild `resources/codex_images.json` and `resources/geo_codex.json` from Canonn's codex reference (read only) |
 | `scripts/riches_probe.py` | A one-off probe of Spansh's Road to Riches API that saves a real answer; not part of the tests |
+| `scripts/route_probe.py` | A one-off probe of Spansh's Earth-like / ammonia world routes and its tourist router (a sweep's), as Spansh's own pages ask them; saves the answers; not part of the tests |
 | `scripts/landmarks_probe.py` | A one-off probe of what Spansh reports about the life on a body (dumps, body search, its filters); saves the answers; not part of the tests |
 | `scripts/dark_icons.py` | Writes the tablet's Dark theme icons (Lucide, ISC) into `static/themes/dark.css` |
 | `data/` | Your own files, git-ignored: the database, `browser_defaults.json`, `speech_banned.json`, `pronounce.json`, `backups/`, `piper-voices/`, `fonts/` |

@@ -1754,7 +1754,7 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["scoopstop", "fuel scooping stopped early (not above 90%, nor when you jump)", null],
   ["supercharge", "the frame shift drive supercharged in a neutron star or white dwarf cone", null],
   ["exo", "Expressway to Exomastery (a route plotted in Plot Route): on arriving at a route system, the species still to sample there and the best of them, and once they are sampled the next stop, and route complete", null],
-  ["riches", "Road to Riches (a route plotted in Plot Route): on arriving at a route system, the bodies still worth scanning or mapping there and the next stop, and route complete", null],
+  ["riches", "Road to Riches and the Earth-like and ammonia world routes (plotted in Plot Route), and a sweep (plotted from ticks in Left behind, My firsts or Bookmarks): on arriving at a route system, the bodies still worth scanning or mapping there (a sweep: none) and the next stop, and route complete", null],
   ["trade", "a trade route (plotted in Plot Route): on arriving at a stop, what to sell and buy there; once that is done, the hop's profit and the next stop; and route complete", null],
   ["highway", "the Neutron Highway (a route plotted in Plot Route): the next stop on arriving at a route system (with the boost and refuel stops), off route, back on the highway, and highway complete", null],
   ["refuelshort", "a Highway route plotted with the exact plotter: the fuel aboard won't reach the next refuel stop (once per system; at a refuel stop itself the route's line only shows how much to scoop)", "alert"],
@@ -3220,6 +3220,48 @@ function emptyMessage(rows) {
   return "Nothing known nearby — everything here is undiscovered.";
 }
 
+// ---- S51: a sweep: the systems ticked in Left behind, My firsts (lost ones) and Bookmarks, in the order Spansh's tourist
+// router flies them (POST api/riches/plot {kind: "sweep", systems}: the survey slot's route, so it replaces the one
+// there). One set of ticks across the three lists, kept by this page only; a successful plot unticks them.
+const SW = {names: new Set(), busy: false};
+const sweepTick = name => `<input type="checkbox" class="swtick" data-sweep="${esc(name)}"${SW.names.has(name) ? " checked" : ""} ` +
+  `title="tick to plot a sweep through it" aria-label="sweep ${esc(name)}">`;
+function drawSweep(msg) {
+  const n = SW.names.size, sv = data && data.survey, slot = sv && !sv.complete ? ` It replaces your ${surveyOf(sv.kind).what}.` : "";
+  document.querySelectorAll(".swbtn").forEach(b => {
+    b.hidden = !n; b.disabled = SW.busy; b.textContent = `🧹 Plot a sweep (${n})`;
+    b.title = `a route through the ${n} system${n === 1 ? "" : "s"} ticked, in the order Spansh's tourist router flies them, from where you are.${slot}`;
+  });
+  document.querySelectorAll(".swclear").forEach(b => { b.hidden = !n; });
+  if (msg !== undefined) document.querySelectorAll(".swmsg").forEach(e => { e.textContent = msg.text || ""; e.className = `swmsg ${msg.cls || ""}`; });
+  document.querySelectorAll(".swtick").forEach(c => { c.checked = SW.names.has(c.dataset.sweep); });
+}
+document.addEventListener("change", e => {
+  const t = e.target.closest && e.target.closest(".swtick");
+  if (!t) return;
+  if (t.checked) SW.names.add(t.dataset.sweep); else SW.names.delete(t.dataset.sweep);
+  drawSweep({});
+});
+document.addEventListener("click", e => {
+  if (e.target.closest(".swclear")) { SW.names.clear(); drawSweep({}); return; }
+  if (e.target.closest(".swbtn")) plotSweep();
+});
+async function plotSweep() {
+  if (SW.busy || !SW.names.size) return;
+  SW.busy = true; drawSweep({text: "Asking Spansh…", cls: "busy"});
+  let r;
+  try { r = await apiJson("api/riches/plot", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({kind: "sweep", systems: [...SW.names]})}); }
+  catch (err) { r = {error: err.message}; }
+  SW.busy = false;
+  if (r.error) return drawSweep({text: `Could not plot the sweep: ${hwyErr(r.error)}.`, cls: "err"});
+  SW.names.clear(); drawSweep({});
+  // Plot Route shows it once Spansh has answered (as a plot from its own form does)
+  store.set("hwyShow", "rich"); H.status = null; R.watch = true;
+  if (R.data) R.data.plotting = r.plotting;
+  const v = document.querySelector('[data-view="hwy"]'); if (v && view !== "hwy") v.click();
+  drawHwyStatus();
+  richPoll();
+}
 function renderBookmarks(bms) {
   const list = Object.values(bms);
   list.sort(sortWith("bm", sortKey("bm") === "name"
@@ -3227,13 +3269,14 @@ function renderBookmarks(bms) {
     : (a, b) => (a.distance ?? 1e9) - (b.distance ?? 1e9)));
   const fk = focusKey("bmRows");
   document.getElementById("bmRows").innerHTML = list.map(b => `<tr>
-      <td class="bmcell">${bmIcon(b.id, b.name, bms)}</td>
+      <td class="bmcell">${bmIcon(b.id, b.name, bms)}${sweepTick(b.name)}</td>
       <td class="name" data-name="${esc(b.name)}" title="click to copy">${nameWords(b.name)}${sysAimBtn(b.name, b.id)}${plotBtn(b.name)}</td>
       <td class="num dist">${b.distance == null ? "?" : b.distance.toLocaleString("en-US", {maximumFractionDigits: 2})}</td>
       <td class="note">${esc(b.note) || `<span class="unk">no note</span>`}</td>
       <td class="hide-sm unk c2hide">${esc((b.created || "").slice(0, 10))}</td></tr>`).join("") ||
     `<tr><td colspan="5" class="unk">No bookmarks yet. Click ☆ beside any system to add one.</td></tr>`;
   refocus("bmRows", fk);
+  drawSweep();
 }
 
 // ---- Bookmark dialog ----
@@ -4231,7 +4274,7 @@ function renderFirsts() {
   const by = b => dual(byKeys(b).map(k => `<span class="${k}">${b[k]} ${k}</span>`).join(" · "), byShort(b),
                        {title: byKeys(b).map(k => `${b[k]} ${k}`).join(" · ")});
   document.getElementById("firstsRows").innerHTML = list.map(x => { const rs = rescanNote(x); return `<tr${rs ? ` class="${rs.cls}"` : ""}>
-      <td class="bmcell">${bmIcon(x.id, x.name, bms)}</td>
+      <td class="bmcell">${bmIcon(x.id, x.name, bms)}${x.state === "lost" ? sweepTick(x.name) : ""}</td>
       <td class="name" data-name="${esc(x.name)}" title="click to copy">${nameWords(x.name)}${rs ? `<div class="rescan"${rs.pop ? ` data-rescanpop="${esc(rs.pop)}"` : ` title="${esc(rs.title)}"`}>${esc(rs.text)}</div>` : ""}${x.seen ? `<div class="seen seen-sub${lostCols ? "" : " sf2"}">${seenCell(x.seen)}</div>` : ""}</td>
       <td class="num dist">${x.distance == null ? "?" : x.distance.toLocaleString("en-US", {maximumFractionDigits: 1})}</td>
       <td class="f-unsold">${x.system ? `<span class="${x.system_state}">${dual(`🏁 ${x.system_state}`, "🏁", {title: `system tag ${x.system_state}`})}</span>` : ""}</td>
@@ -4242,6 +4285,7 @@ function renderFirsts() {
     `<tr><td colspan="11" class="unk">${within != null ? `Nothing lost to rescan within ${within} ly.`
       : lost.length && !fShowLost.checked ? `Nothing unsold. ${lost.length} systems with lost data are hidden — tick "show lost" to see them.`
       : "Nothing unsold or lost: every first you have found is banked."}</td></tr>`;
+  drawSweep();
 }
 // the rescan checklist's progress for a system that lost data with a ship: green once every lost body and map is
 // scanned again ("rescanned"), amber part-way ("rescanned 5 of 12 · 2 maps to redo"), whose hover (tap) pop-up names
@@ -4319,9 +4363,10 @@ function renderLeft() {
       r.old_data ? `<span class="unk old" title="${oldDataTitle(r.old_data)}">old data: ${r.old_data.bodies} bod${r.old_data.bodies === 1 ? "y" : "ies"}</span>` : ""].filter(Boolean);
     return {r, bits, worth, keep: maps.length || bio.length || r.unfound || r.old_data};
   }).filter(x => x.keep && x.bits.length);
-  el.innerHTML = rows.map(({r, bits, worth}) => `<tr><td><span class="name" data-name="${esc(r.name)}" title="click to copy">${esc(r.name)}</span><span class="goto" data-goto="${esc(r.id)}" title="open in Here">⌖</span></td>
+  el.innerHTML = rows.map(({r, bits, worth}) => `<tr><td>${sweepTick(r.name)}<span class="name" data-name="${esc(r.name)}" title="click to copy">${esc(r.name)}</span><span class="goto" data-goto="${esc(r.id)}" title="open in Here">⌖</span></td>
       <td class="num">${r.distance.toFixed(1)}</td><td class="left-what">${bits.join(" · ")}</td><td class="num">${worth ? credits(worth) : ""}</td></tr>`).join("")
     || `<tr><td colspan="4" class="unk">Nothing worth going back for within ${d.radius} ly.</td></tr>`;
+  drawSweep();
 }
 document.getElementById("leftRows").addEventListener("click", e => {
   const g = e.target.closest("[data-goto]"); if (g) return showInHere(g.dataset.goto);
@@ -4573,7 +4618,7 @@ document.getElementById("nearDlg").addEventListener("change", e => {
 document.getElementById("nearRows").addEventListener("click", e => {
   const b = e.target.closest("[data-nplot]"); if (!b) return;
   hEl("hwyTo").value = b.dataset.nplot;
-  if (!["exact", "neutron", "riches", "exo"].includes(hwyPlotter())) { const x = hForm.querySelector('[name=hwyPlotter][value="exact"]'); x.checked = true; x.dispatchEvent(new Event("change", {bubbles: true})); }
+  if (!["exact", "neutron"].includes(hwyPlotter()) && !(SURVEY[hwyPlotter()] && SURVEY[hwyPlotter()].form)) { const x = hForm.querySelector('[name=hwyPlotter][value="exact"]'); x.checked = true; x.dispatchEvent(new Event("change", {bubbles: true})); }
   tabClose(document.getElementById("nearDlg"));
   // opened from Materials: Plot Route comes forward to show the plot
   if (NR.over && view !== "hwy") { const v = document.querySelector('[data-view="hwy"]'); if (v) v.click(); }
@@ -5675,14 +5720,14 @@ const STAR_NAMES = {O: "O", B: "B", A: "A", F: "F", G: "G", K: "K", M: "M", L: "
 // S50: the route the map draws (pure, from api/map's `route`): dashed legs [a, b, kind], kind "navroute" (the game's
 // plotted route, from you) or "route" (the followed route's rows: from you to its first while you are off it or before
 // it, with no route plotted in game), the points along it with what to say of them, and the next stop
-const MAP_ROUTE_WORDS = {highway: "Neutron Highway route", riches: "Road to Riches", exo: "Exomastery route", trade: "trade route"};
+const mapRouteWords = k => k === "highway" ? "Neutron Highway route" : SURVEY[k] ? SURVEY[k].what : null;
 function mapRouteMarks(d) {
   const r = d && d.route; if (!r) return null;
   const nav = r.navroute || [], rows = r.rows || [], c = d.center, cid = c && (c.id ?? String(c.id64)), legs = [], points = [];
   let prev = c;
   nav.forEach((p, i) => { legs.push([prev, p, "navroute"]); prev = p;
     points.push({pt: p, what: `hop ${i + 1} of the route plotted in game`}); });
-  const kind = MAP_ROUTE_WORDS[r.kind] || "your route";
+  const kind = mapRouteWords(r.kind) || "your route";
   if (rows.length && !nav.length && rows[0].id !== cid) legs.push([c, rows[0], "route"]);
   rows.forEach((p, i) => { if (i) legs.push([rows[i - 1], p, "route"]); if (p.id !== cid) points.push({pt: p, what: `on your ${kind}`}); });
   const next = r.next ? {pt: r.next, what: r.next.via === "next_stop" ? "your next stop" : `next stop of your ${kind}`} : null;
@@ -6174,17 +6219,33 @@ function lineKind(hw, sv) {
   }
   return sv ? "rich" : "hwy";
 }
-// a survey route's line (Road to Riches 💰, Exomastery 🧬): the next system, how far, where you are on it, and what is
+// The survey slot's route kinds (G4): outrider.riches.SURVEY_KINDS' page half, each kind on one line and kept in step
+// with it by a test (glyph, name, what, a, work, left). what: the route as "Plot (replaces your …)" and the Map name it;
+// a: as "Asking Spansh for …" and "Plotted: …" say it; work: what a stop asks of you (bodies, species, trade, null: only
+// arriving); left: [one, many, what] for "2 bodies to do here"; form: the plot form's fields it shows (RICH_FIELDS),
+// null for one plotted elsewhere (a sweep, from the lists' ticks) or with a form of its own (trade)
+const SURVEY = {
+  riches: {glyph: "💰", name: "Road to Riches", what: "Road to Riches route", a: "a Road to Riches route", work: "bodies", left: ["body", "bodies", "to do here"],
+           form: ["radius", "max_results", "max_distance", "min_value", "use_mapping_value", "avoid_thargoids", "loop"]},
+  exo: {glyph: "🧬", name: "Exomastery", what: "Exomastery route", a: "an Exomastery route", work: "species", left: ["species", "species", "to sample here"],
+        form: ["radius", "max_results", "max_distance", "min_value", "loop"]},
+  elw: {glyph: "🌍", name: "Earth-like worlds", what: "Earth-like route", a: "an Earth-like world route", work: "bodies", left: ["body", "bodies", "to do here"],
+        form: ["radius", "max_results", "max_distance", "avoid_thargoids", "loop"]},
+  aw: {glyph: "🧪", name: "Ammonia worlds", what: "ammonia route", a: "an ammonia world route", work: "bodies", left: ["body", "bodies", "to do here"],
+       form: ["radius", "max_results", "max_distance", "avoid_thargoids", "loop"]},
+  sweep: {glyph: "🧹", name: "Sweep", what: "sweep", a: "a sweep", work: null, left: ["stop", "stops", "here"], form: null},
+  trade: {glyph: "💱", name: "Trade route", what: "trade route", a: "a trade route", work: "trade", left: ["trade", "trades", "to make here"], form: null},
+};
+const surveyOf = kind => SURVEY[kind] || SURVEY.riches;
+const surveyLeft = (kind, n) => { const [one, many, what] = surveyOf(kind).left; return `${n} ${n === 1 ? one : many} ${what}`; };
+// a survey route's line (Road to Riches 💰, Exomastery 🧬, …): the next system, how far, where you are on it, and what is
 // left to do where you are
-const SURVEY = {riches: {glyph: "💰", name: "Road to Riches", what: "Road to Riches route", left: n => `${n} ${n === 1 ? "body" : "bodies"} to do here`},
-                exo: {glyph: "🧬", name: "Exomastery", what: "Exomastery route", left: n => `${n} species to sample here`},
-                trade: {glyph: "💱", name: "Trade route", what: "trade route", left: n => `${n} trade${n === 1 ? "" : "s"} to make here`}};
 function surveyLineHtml(s, {short = false, glyph = true} = {}) {
   if (!s) return "";
-  const k = SURVEY[s.kind] || SURVEY.riches;
+  const k = surveyOf(s.kind);
   const g = glyph ? `<span class="hwyg" aria-hidden="true" title="${k.name}">${k.glyph}</span> ` : "";
   if (s.complete) return `${g}<span class="hwydone">${k.name} complete</span>`;
-  const left = s.left_here ? ` · ${k.left(s.left_here)}` : "";
+  const left = s.left_here ? ` · ${surveyLeft(s.kind, s.left_here)}` : "";
   if (s.off_route) return `${g}<span class="hwyoff">Off Route: Detour</span>${short ? "" : ` · ${k.name}`}`;
   const n = s.next;
   if (!n) return `${g}${k.name} to ${hwyName(s.destination)}${left}`;
@@ -6337,9 +6398,9 @@ function hwyFormShow() {
   hForm.querySelector(".hwy-nopt").hidden = p === "exact";
   hForm.querySelectorAll(".hwy-nonly").forEach(e => { e.hidden = p !== "neutron"; });
   hForm.querySelector(".hwy-xopt").hidden = p !== "exact";
-  const trade = p === "trade", survey = p === "riches" || p === "exo", slot = survey || trade;
+  const k = SURVEY[p], trade = p === "trade", survey = !!(k && k.form), slot = !!k;
   hForm.querySelectorAll(".hwy-ropt").forEach(e => { e.hidden = !survey; });
-  hForm.querySelectorAll(".rich-only").forEach(e => { e.hidden = p !== "riches"; });
+  hForm.querySelectorAll(".hwy-ropt [data-field]").forEach(e => { e.hidden = !survey || !k.form.includes(e.dataset.field); });
   // a trade route starts at a station with your capital and hold: no destination, ship, cargo or range
   hForm.querySelectorAll(".trade-opt").forEach(e => { e.hidden = !trade; });
   hForm.querySelector(".hwyto").hidden = trade;
@@ -6347,9 +6408,9 @@ function hwyFormShow() {
   if (trade) hForm.querySelector(".hwy-nopt").hidden = true;
   hForm.querySelector(".hwy-cons").hidden = slot;   // Spansh's survey and trade routes take the range as it is
   hEl("hwyTo").placeholder = survey ? "optional: where to end" : "destination system";
-  // one slot: a Road to Riches, an Exomastery or a trade plot replaces the route there is
+  // one slot: a survey or a trade plot replaces the route there is
   const rr = R.data && R.data.route;
-  hEl("hwyGo").textContent = slot && rr ? `Plot (replaces your ${(SURVEY[rr.kind] || SURVEY.riches).what})` : "Plot";
+  hEl("hwyGo").textContent = slot && rr ? `Plot (replaces your ${surveyOf(rr.kind).what})` : "Plot";
   // the neutron plotter can do without a ship (type the range); the exact one needs a Loadout
   const none = hEl("hwyShip").querySelector('option[value=""]');
   if (none) { none.disabled = p === "exact"; none.hidden = p === "exact"; }
@@ -6379,7 +6440,8 @@ function fillHwyForm(hd) {
   hwyFormShow();
 }
 {
-  const p = hForm.querySelector(`[name=hwyPlotter][value="${["neutron", "riches", "exo", "trade"].includes(hwyCfg.plotter) ? hwyCfg.plotter : "exact"}"]`); if (p) p.checked = true;
+  const radios = [...hForm.querySelectorAll("[name=hwyPlotter]")], p = radios.find(r => r.value === hwyCfg.plotter) || radios.find(r => r.value === "exact");
+  if (p) p.checked = true;
   hEl("hwyInject").checked = !!hwyCfg.injections; hEl("hwyNoSec").checked = !!hwyCfg.exclude_secondary; hEl("hwySuper").checked = !!hwyCfg.supercharged;
   hEl("hwyNoNeu").checked = !!hwyCfg.no_neutrons;
   hForm.querySelectorAll("[name=hwyPlotter]").forEach(r => r.onchange = () => { hwyCfg.plotter = hwyPlotter(); saveHwyCfg(); hwyFormShow(); });
@@ -6439,7 +6501,7 @@ function drawHwyStatus() {
   let text = "", cls = "";
   if (rp && rp.state === "running") {
     const secs = rp.started ? Math.max(0, Math.round((Date.now() - new Date(rp.started)) / 1000)) : null;
-    text = `Asking Spansh for ${rp.kind === "exo" ? "an Exomastery route" : rp.kind === "trade" ? "a trade route" : "a Road to Riches route"} from ${rp.from}…${secs != null ? ` ${secs} s` : ""}`; cls = "busy";
+    text = `Asking Spansh for ${surveyOf(rp.kind).a} from ${rp.from}…${secs != null ? ` ${secs} s` : ""}`; cls = "busy";
   } else if (p && p.state === "running") {
     const secs = p.started ? Math.max(0, Math.round((Date.now() - new Date(p.started)) / 1000)) : null;
     text = `Plotting ${p.from} → ${p.to} with Spansh (${p.plotter} plotter)…${secs != null ? ` ${secs} s` : ""}`; cls = "busy";
@@ -6450,7 +6512,7 @@ function drawHwyStatus() {
 }
 hForm.addEventListener("submit", async e => {
   e.preventDefault();
-  if (["riches", "exo", "trade"].includes(hwyPlotter())) return richSubmit(hwyPlotter());
+  if (SURVEY[hwyPlotter()]) return richSubmit(hwyPlotter());
   const b = hwyBody();
   if (!b.to) return setHwyStatus("Type the destination system.", "err");
   if (b.plotter === "neutron" && b.range == null) return setHwyStatus("Give the jump range (ly) for the neutron plotter.", "err");
@@ -6638,7 +6700,7 @@ async function loadRich(force = false) {
     R.watch = false;
     const rt = R.data.route;
     setHwyStatus(p.state === "done" && rt ? (rt.kind === "trade" ? `Plotted: a trade route of ${rt.count - 1} hop${rt.count === 2 ? "" : "s"}.`
-      : `Plotted: ${rt.kind === "exo" ? "an Exomastery route" : "a Road to Riches"} of ${rt.count} systems.`) + (p.note ? " " + p.note : "")
+      : `Plotted: ${surveyOf(rt.kind).a} of ${rt.count} systems.`) + (p.note ? " " + p.note : "")
       : `Could not plot the route: ${p.error || "?"}.`, p.state !== "done" ? "err" : p.note ? "warnc" : "ok");
   }
   renderHwy();
@@ -6664,7 +6726,7 @@ function routeKind() {
 }
 // with both routes: a switch above the heading
 const routeKindHtml = kind => `<div class="seg hwykind" role="radiogroup" aria-label="the route shown">` +
-  [["hwy", "Highway"], ["rich", (SURVEY[(R.data && R.data.route && R.data.route.kind) || "riches"] || SURVEY.riches).name]].map(([k, t]) =>
+  [["hwy", "Highway"], ["rich", surveyOf(R.data && R.data.route && R.data.route.kind).name]].map(([k, t]) =>
     `<label><input type="radio" name="hwyKind" value="${k}"${k === kind ? " checked" : ""}>${t}</label>`).join("") + `</div>`;
 hEl("hwyHead").addEventListener("change", e => {
   if (e.target.name !== "hwyKind") return;
@@ -6677,14 +6739,18 @@ function richHeadHtml(d) {
     : rt.off_route ? `off the route (last on it: system ${(rt.furthest ?? 0) + 1} of ${rt.count})` : `not on the route yet (${rt.count} systems)`;
   const nx = rt.next != null ? sy.find(s => s.i === rt.next) : null;
   const live = data && data.survey && data.survey.id === rt.id ? data.survey : null;   // S11 / S12: the live line's facts
-  const exo = rt.kind === "exo", what = exo ? "species" : left === 1 ? "body" : "bodies";
-  const how = `${exo ? "Exomastery (known life: first footfall unlikely)" : "Road to Riches"} · ${o.range != null ? `${o.range} ly range · ` : ""}` +
-    `within ${o.radius ?? "?"} ly · ${exo ? "life" : "bodies"} from ${credits(o.min_value ?? 0)} cr${o.use_mapping_value ? ", mapping counted" : ""}${o.loop ? " · loop" : ""}`;
+  const k = surveyOf(rt.kind), exo = k.work === "species", what = exo ? "species" : left === 1 ? "body" : "bodies";
+  // the kind's options as plotted: a sweep's are its systems (and those Spansh did not know yet, left out)
+  const opts = !k.work ? [`${o.systems ?? rt.count - 1} systems ticked`, o.unknown && o.unknown.length ? `left out (not known to Spansh yet): ${o.unknown.join(", ")}` : ""]
+    : [`within ${o.radius ?? "?"} ly`, `${exo ? "life" : "bodies"}${(k.form || []).includes("min_value") ? ` from ${credits(o.min_value ?? 0)} cr` : ""}` +
+       `${rt.mapping ?? o.use_mapping_value ? ", mapping counted" : ""}`];
+  const how = [exo ? "Exomastery (known life: first footfall unlikely)" : k.name, o.range != null ? `${o.range} ly range` : "", ...opts, o.loop ? "loop" : ""]
+    .filter(Boolean).join(" · ");
   return `<div class="hwyttl">To ${esc(rt.to)} <span class="unk">from ${esc(rt.from)}</span></div>` +
-    `<div class="hwystats">${where} · <b>${left}</b> ${what} left, <b>≈${credits(sum("value_left"))} cr</b>` +
-    ` · done <b>${credits(Math.max(0, sum("value") - sum("value_left")))} cr</b> of <b>${credits(sum("value"))} cr</b>` +
-    `${rt.count > sy.length ? " (the systems listed)" : ""}</div>` +
-    (rt.done_ts ? `<div class="hwystate hwydone">${exo ? "Exomastery" : "Road to Riches"} complete.</div>`
+    (k.work ? `<div class="hwystats">${where} · <b>${left}</b> ${what} left, <b>≈${credits(sum("value_left"))} cr</b>` +
+      ` · done <b>${credits(Math.max(0, sum("value") - sum("value_left")))} cr</b> of <b>${credits(sum("value"))} cr</b>` +
+      `${rt.count > sy.length ? " (the systems listed)" : ""}</div>` : `<div class="hwystats">${where}</div>`) +
+    (rt.done_ts ? `<div class="hwystate hwydone">${k.name} complete.</div>`
       : nx ? `<div class="hwystate">Next: <b class="copy" data-name="${esc(nx.system)}" title="click to copy">${esc(nx.system)}</b>` +
              `${live && live.target_check ? ` · ${targetCheckHtml(live.target_check)}` : ""}${live && live.skipped ? ` · ${surveySkipHtml(live)}` : ""}` +
              `${nx.left ? ` · ${nx.left} ${exo ? "species to sample" : "to do"} there` : ""}</div>` : "") +
@@ -6789,12 +6855,15 @@ function fillRichForm(d) {
   for (const [id, k] of Object.entries(flags)) hEl(id).checked = !!(to[k] ?? t[k]);
   R.filled = true;
 }
-// the request a Road to Riches plot makes (from, to, ship and range are the form's shared fields; the server checks it all)
-function richBody() {
+// the survey form's fields (SURVEY[kind].form) by the option each one is
+const RICH_FIELDS = {radius: "richRadius", max_results: "richMax", max_distance: "richDist", min_value: "richMin",
+                     use_mapping_value: "richMapping", avoid_thargoids: "richThargoid", loop: "richLoop"};
+// the request a survey plot makes (from, to, ship and range are the form's shared fields, then the kind's own; the
+// server checks it all)
+function richBody(kind = "riches") {
   const num = id => hEl(id).value.trim() === "" ? undefined : Number(hEl(id).value);
-  const b = {from: hEl("hwyFrom").value.trim() || undefined, to: hEl("hwyTo").value.trim() || undefined, range: num("hwyRange"),
-             radius: num("richRadius"), max_results: num("richMax"), max_distance: num("richDist"), min_value: num("richMin"),
-             use_mapping_value: hEl("richMapping").checked, avoid_thargoids: hEl("richThargoid").checked, loop: hEl("richLoop").checked};
+  const b = {from: hEl("hwyFrom").value.trim() || undefined, to: hEl("hwyTo").value.trim() || undefined, range: num("hwyRange")};
+  for (const f of surveyOf(kind).form || []) { const e = hEl(RICH_FIELDS[f]); b[f] = e.type === "checkbox" ? e.checked : num(RICH_FIELDS[f]); }
   for (const k of Object.keys(b)) if (b[k] === undefined) delete b[k];
   return b;
 }
@@ -6810,8 +6879,7 @@ function tradeBody() {
   return b;
 }
 async function richSubmit(kind = "riches") {
-  const b = kind === "trade" ? tradeBody() : Object.assign(richBody(), {kind});
-  if (kind === "exo") { delete b.use_mapping_value; delete b.avoid_thargoids; }
+  const b = kind === "trade" ? tradeBody() : Object.assign(richBody(kind), {kind});
   H.status = null;
   setHwyStatus("Asking Spansh…", "busy");
   let r;
@@ -8461,7 +8529,7 @@ const ALERT_SHORT = {arrival: "Arrival", game: "Game start and quit", jump: "FSD
   jumponium: "Jumponium", sampling: "Sampling", approach: "High-g approach", bodybrief: "Body brief", sell: "Selling", saleleft: "Sale left data",
   unsold: "Unsold", firstsseen: "Firsts scanned by others", hull: "Hull and danger", carrier: "Carrier", codex: "Codex", phenomena: "Stellar phenomena", ggg: "Green gas giant?", rare_star: "Rare star", surface_site: "Surface sites", signal_poi: "Signals worth a detour", curious: "Curiosities", loss: "Ship lost", rigs: "Rigs", rigleash: "Rig leash",
   rigsout: "Rigs out", mapped: "Mapped", signals: "Signals", highway: "Neutron Highway", refuelshort: "Short of the refuel stop", lastscoop: "Last scoopable star", autotarget: "Auto-target", wrongtarget: "Wrong target", manual: "Asked for",
-  exo: "Exomastery route", riches: "Road to Riches", trade: "Trade route", uploads: "Uploads failing"};
+  exo: "Exomastery route", riches: "Survey routes", trade: "Trade route", uploads: "Uploads failing"};
 const speechMuted = new Set();   // kinds turned off from the tally this session (each shows an undo)
 // "This session: Arrival brief 42 🔇 · FSD charge 40 (3 dropped) 🔇 · …": every kind that was said or queued (not the
 // silent ones: a kind already off would only inflate), noisiest first. 🔇 turns that alert's speech off (its 🗣 tick
@@ -10941,7 +11009,7 @@ function tabRowFacts(table, tr) {
     const th = heads[i], lf = th && th.querySelector(".lf");
     const label = ((lf || th || {}).textContent || "").trim().replace(/[▴▾]/g, "").trim();
     const c = td.cloneNode(true);
-    c.querySelectorAll(".sf, .sf1, .sf2, [data-bm]").forEach(x => x.remove());
+    c.querySelectorAll(".sf, .sf1, .sf2, [data-bm], .swtick").forEach(x => x.remove());
     const html = c.innerHTML.trim();
     if (html && c.textContent.trim()) out.push([label, html]);
   });
@@ -10989,7 +11057,7 @@ function tabSetAudio(on) {
 // Settings table (alertSpeak / alertSound, in this tablet's own storage; until changed here they come from the PC's
 // saved defaults, then Outrider's), as big toggles with a short name per alert
 const TAB_ALERT_NAMES = {discovery: "Targeting a system", arrival: "Arriving somewhere new", game: "Game start and quit",
-  exo: "Exomastery route", riches: "Road to Riches route", trade: "Trade route",
+  exo: "Exomastery route", riches: "Road to Riches, worlds, sweeps", trade: "Trade route",
   jump: "FSD charging", honk: "Auto honk", brief: "Arrival briefing", fss: "FSS finished", mapped: "Planet mapped",
   leaving: "Leaving work behind", fuel: "Fuel", scoop: "Tank full", scoopstop: "Scooping stopped early",
   supercharge: "Supercharged", highway: "Highway next stop", refuelshort: "Fuel short of the refuel stop", lastscoop: "Last scoopable star", autotarget: "Auto-target", wrongtarget: "Not the next stop targeted", find: "Valuable body",

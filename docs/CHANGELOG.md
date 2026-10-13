@@ -2,6 +2,30 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-13 · One table of survey route kinds, Earth-like and ammonia world routes, and a sweep
+- **The survey slot's kinds are one table** (G4 / F4): `outrider.riches.SURVEY_KINDS` (a `SurveyKind` per kind: name,
+  glyph, words, the Spansh URL by its constant's name, parser, what a stop asks of you, alert row, the plot's fields and
+  fixed parameters, whether the map counts) replaces the "riches" / "exo" / "trade" checks in the server (the plot and
+  its validation, the rows, what is left, the arrival and done lines, the moments), the overlay's route line
+  (`SURVEY_WORDS` gone) and the page (`SURVEY` with each kind on one line, a test keeping it in step; the plot form's
+  fields shown per kind by `data-field`, `RICH_FIELDS`; the status, "Plotted: …", the Map's route words). Every
+  existing kind behaves as before. A Spansh POST's list value is sent as a repeated form field.
+- **Earth-like and ammonia world routes** (S52): two more plotters, kinds "elw" and "aw". Probe P3 (U3,
+  `scripts/route_probe.py`, answers in `tests/fixtures/spansh_body_types.json`): Spansh has no `/api/earth/route` or
+  `/api/ammonia/route`; its own pages POST `/api/riches/route` with `body_types` and min_value 1, and the answer is Road
+  to Riches', so they are parsed and followed as Road to Riches with the map always counted (no minimum value or mapping
+  box), "Earth-like route complete." / "Ammonia route complete." at the end. Their moments use Road to Riches' alerts
+  row (now "Survey routes"), the moment's `route` naming the kind.
+- **A sweep** (S51): ticks in Left behind, My firsts (lost systems) and Bookmarks, one set across the three, and
+  "🧹 Plot a sweep (N)" beside each list: POST `/api/riches/plot` {kind: "sweep", systems} plots them with Spansh's
+  tourist router (probe P2 / U2: `/api/tourist/route`, `source`, `range`, `loop`, `destination` repeated; answers in
+  `tests/fixtures/spansh_tourist.json`; `riches.tourist_rows`), from where you are with your ship's range, up to
+  `SWEEP_MAX` (100) systems, in the survey slot. A system Spansh doesn't know yet is refused by name: plotted again
+  without it, the note and the route's heading name it (`unknown_systems`). Followed by arrival alone: the next stop on
+  each arrival, "Sweep complete." at the last.
+- The smoke test's S31 check puts its bookmark back before its second Plot route (a payload arriving meanwhile replaced
+  it and the check failed, at HEAD too).
+
 ## 2026-10-13 · Search and Nearest around another system, and the route on the Map
 - **Search and the Nearest finder around another system** (S49): an Around select (you, your destination in game, your
   carrier, your next stop, a system by name) in Search's "Within N ly of" and in the Nearest dialog, kept on this

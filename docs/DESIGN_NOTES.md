@@ -282,6 +282,21 @@ upstream project's choices, not rules of the game.
   BodyID and species name. A trade route's stops are the stations (a hop's straight line, not its jumps: 🎯 targets
   the system and the game plots the way), its progress is your MarketSell / MarketBuy at the stop's market, and its
   plot gets 600 s (Spansh's trade planner is slow).
+- **The slot's kinds are one table** (G4, 2026-10-13: `outrider.riches.SURVEY_KINDS`, page.js `SURVEY` its copy, a test
+  keeps them in step): what differed by kind at some sixty places (the URL, the parser, the lines, the alert, the glyph,
+  the form's fields, what a stop asks of you) is read from it, so a new kind is a row, not a hunt. Earth-like and ammonia
+  world routes (S52) are not endpoints of their own (the plan's `/api/earth/route` and `/api/ammonia/route` answer 404):
+  Spansh's own pages ask the Road to Riches router for one body type with min_value 1 (probe P3, 2026-10-13), so they
+  are Road to Riches rows whose map always counts (their worth is the map). Their moments and a sweep's use Road to
+  Riches' alerts row ("Survey routes"), the moment's `route` naming the kind: one switch for the routes you stop and scan
+  on, not three more rows.
+- **A sweep** (S51) is the slot's route through systems ticked in Left behind, My firsts (lost ones: the rescan trip) and
+  Bookmarks, in the order Spansh's tourist router picks (probe P2): one set of ticks across the three lists, in that page
+  only (a reload forgets them; they are a trip being put together, not a setting). Its stops ask nothing but arriving:
+  the next stop on each arrival, "Sweep complete." at the last row, never a stop passed over. Spansh refuses a sweep
+  naming any system it does not know (a fresh discovery among lost firsts is likely): it is plotted again without them
+  and the note and the heading name them, rather than a stand-in, since the system is the point of the trip. Known limit:
+  as for every survey route, arriving at the last row with nothing left ends it, even with stops skipped on the way.
 - **A survey route's next stop skips the systems you finished** (S12): "next" is still the row after where you are,
   walked past the rows that came with work (Road to Riches: bodies; Exomastery: a body with species, `had_work`) and
   have none left by your journal. Every "next" uses it (`riches_next_open` / `Journals.riches_open`): the line ("skipping
@@ -1002,6 +1017,9 @@ confirmed while playing. Treat reports about them as likely real.
 - The voice plotting a far "nearest ..." (D4): a neutron route to the place's system, tested with the plot faked.
 - Search and the Nearest finder around your destination (S49) with a target set in a live game, and the Map's route
   (S50) against a real NavRoute.json and a long Highway route (tested on made-up routes and stubbed answers).
+- Earth-like and ammonia world routes (S52) and a sweep (S51) flown in game: the plots were probed against Spansh
+  (2026-10-13, the answers in tests/fixtures), the following tested on them and on made-up routes; a sweep through more
+  than a handful of systems, and Spansh's answer when more than one is unknown, only as probed.
 - Inara uploads: not yet tried live (a refusal shows in Settings in Inara's words). Built from Inara's API
   documentation, tested with fakes (`tests/test_inara.py`).
 - The EDSM and Inara key Checks (S45): built from the APIs' documentation with their documented example answers

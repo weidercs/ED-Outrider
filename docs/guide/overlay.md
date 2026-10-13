@@ -56,7 +56,7 @@ before.
   or on foot inside one). The system (and for 20 s after the jump whether it was
   undiscovered), the system you have targeted next (never reported, no scan data, partly or fully scanned, or visited;
   how many bodies are known; the star with ⛽ or ✕, and ⚠ for a neutron star or white dwarf), where the next jump goes
-  (the next stop of the unfinished route you plotted last: the Highway, a Road to Riches, Exomastery or trade route;
+  (the next stop of the unfinished route you plotted last: the Highway, a survey or trade route;
   and a kept boxel's Next), fuel, and what the data
   aboard stands to lose once it passes your `unsold_warn` level: 🗺 and 🧬, how many times your rebuy it is ("× rebuy";
   none for a ship bought with Arx, whose hull has no credit value) and how long since you sold ("3 days unsold"; from a

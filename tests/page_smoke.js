@@ -1348,7 +1348,15 @@ const settle = async maxMs => {
     got.form = [vis(".hwy-ropt").join(), vis(".hwy-nonly").join(), vis(".hwy-xopt").join(), vis(".hwy-cons").join(), d.getElementById("hwyTo").placeholder];
     // Exomastery: the same options but Road to Riches' own; the Plot button says it replaces the slot's route
     pick("exo");
-    got.exoForm = [vis(".hwy-ropt").join(), vis(".rich-only").join(), d.getElementById("hwyGo").textContent];
+    got.exoForm = [vis(".hwy-ropt").join(), vis('[data-field="use_mapping_value"], [data-field="avoid_thargoids"]').join(), d.getElementById("hwyGo").textContent];
+    // S52: Earth-like worlds: Spansh's own fields for it (no minimum value, no mapping box: the map always counts), the
+    // request the form makes, and the words while Spansh works on it
+    pick("elw");
+    got.elwForm = [vis(".hwy-ropt").join(), vis(".hwy-ropt [data-field]").join(), d.getElementById("hwyTo").placeholder,
+      w.eval(`Object.keys(richBody("elw")).filter(k => !["from", "to", "range"].includes(k)).join()`)];
+    w.eval(`R.data.plotting = {state: "running", kind: "aw", from: "Rich B"}; drawHwyStatus()`);
+    got.awAsking = d.getElementById("hwyStatus").textContent.replace(/ \d+ s$/, "");
+    w.eval(`R.data.plotting = null; drawHwyStatus()`);
     // an Exomastery route in the list: each body's species, ✓ sampled, ✦ new to your codex
     w.eval(`R.data = Object.assign({}, R.data, {route: Object.assign({}, R.data.route, {kind: "exo", systems: R.data.route.systems.map(s =>
       Object.assign({}, s, {bodies: s.i === 1 ? [{name: "Rich B 2", ls: 900, done: false, left: 1, species: [
@@ -1394,6 +1402,8 @@ const settle = async maxMs => {
     d.querySelector('[data-view="overview"]').click(); await sleep(200);
     const want = {noTab: "Plot Route", shown: [true, true, true], systems: "done:0,at:1,next:2", bodies: 3, marks: "✔||",
       exoForm: ["true,true", "false,false", "Plot (replaces your Road to Riches route)"],
+      elwForm: ["true,true", "true,true,true,false,false,true,true", "optional: where to end", "radius,max_results,max_distance,avoid_thargoids,loop"],
+      awAsking: "Asking Spansh for an ammonia world route from Rich B…",
       exoRows: "✓ Frutexa Flammasis 10.3M · Tubus Rosarium 2.6M ✦", exoHead: true,
       aims: "survey:0,survey:2", formFolded: true, form: ["true,true", "false,false", "false", "false", "optional: where to end"],
       plotBody: {to: "Far Away", range: 61.5, radius: 25, max_results: 25, max_distance: 50000, min_value: 100000,
@@ -1403,7 +1413,7 @@ const settle = async maxMs => {
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
     if (!(/To Rich C/.test(got.head) && /you are at system 2 of 3/.test(got.head) && /Next: Rich C/.test(got.head))) bad.push("head");
     if (!/^Asking Spansh/.test(got.running)) bad.push("running");
-    if (!(got.done[0] && /Plotted: a Road to Riches of 3 systems/.test(got.done[1]))) bad.push("done");
+    if (!(got.done[0] && /Plotted: a Road to Riches route of 3 systems/.test(got.done[1]))) bad.push("done");
     const goodRC = !bad.length && errors.length === before;
     allOk = allOk && goodRC;
     console.log(goodRC ? "OK" : "FAIL", "| riches in plot route |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
@@ -6631,7 +6641,9 @@ const settle = async maxMs => {
     d.querySelector('#nextStopLn [data-plotto="Chosen"]').click();
     await settle(1000);
     got.plotView = w.eval("view"); got.plotTo = d.getElementById("hwyTo").value;
-    w.eval(`data.highway = {complete: false, destination: "Somewhere", index: 1, total: 3}; renderBookmarks(bmMap());`);
+    // the bookmark again: a payload that came in meanwhile (the server's own changes) replaced the injected one
+    w.eval(`data.bookmarks = [{id: "9007199254740993", name: "Far Out", distance: 12, note: "", created: ""}];
+      data.highway = {complete: false, destination: "Somewhere", index: 1, total: 3}; renderBookmarks(bmMap());`);
     d.querySelector('#bmRows [data-plotto="Far Out"]').click();
     await settle(1000);
     got.followTo = d.getElementById("hwyTo").value;
@@ -6772,6 +6784,76 @@ const settle = async maxMs => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| S49 around another system, S50 route on the map |", good ? "Search and Nearest around your carrier or a system found by name (its id64), from you in the hover; the Map's dashed route, ◎ next stop, legend, asked again on a new plot" :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)} ${JSON.stringify(posts)} ${JSON.stringify(finds)}`, errors.slice(before));
+  }
+  // S51: a sweep: ticks in Bookmarks, Left behind and My firsts (lost systems only), one set across the three; "Plot a
+  // sweep (N)" posts them to api/riches/plot {kind: "sweep"} and Plot Route shows the route (its head: the systems ticked
+  // and those Spansh did not know); a refusal is said beside the button. G4: the line's glyph and words per kind. Stubbed
+  {
+    const w = dom.window, d = w.document, before = errors.length, realFetch = w.fetch, posts = [];
+    let plotAnswer = {ok: true, plotting: {state: "running", kind: "sweep", from: "Home", started: new Date().toISOString()}}, plotStatus = 202;
+    const route = {id: "sw1", kind: "sweep", from: "Home", to: "Left One", count: 3, first: 0, next: 1, at: 0, furthest: 0, off_route: null,
+      created_ts: "2999-01-01T00:00:00Z", options: {range: 30, loop: false, systems: 2, unknown: ["Fresh"]}, mapping: false, points: [[0, 0], [1, 1], [2, 2]],
+      systems: ["Home", "Book One", "Left One"].map((n, i) => ({i, system: n, id: String(20 + i), x: i, y: 0, z: i, jumps: i ? 1 : 0, left: 0, value: 0, value_left: 0, bodies: []}))};
+    w.fetch = (u, o) => {
+      const s = String(u);
+      if (s === "api/riches/plot") { posts.push(JSON.parse(o.body)); return Promise.resolve(new Response(JSON.stringify(plotAnswer), {status: plotStatus, headers: {"Content-Type": "application/json"}})); }
+      if (s === "api/riches") return Promise.resolve(new Response(JSON.stringify({route, plotting: {state: "done", kind: "sweep", from: "Home"}, position: null,
+        range: 30, defaults: {}, clipboard: {enabled: false, available: false}}), {status: 200, headers: {"Content-Type": "application/json"}}));
+      return realFetch(u, o);
+    };
+    const got = JSON.parse(w.eval(`(() => {
+      const o = {};
+      window.__s51 = {bm: data.bookmarks, left: leftData, firsts: firstsData, lost: fShowLost.checked, view, sv: data.survey};
+      data.survey = {kind: "riches", complete: false};
+      data.bookmarks = [{id: "21", name: "Book One", distance: 12, note: "", created: ""}];
+      renderBookmarks(bmMap());
+      leftData = {radius: 100, systems: [{name: "Left One", id: "22", distance: 5, unfound: 0, bio: [],
+        maps: [{body: "Left One 1", subtype: "Water world", increment: 1e9, terraformable: false}]}]};
+      renderLeft();
+      firstsData = {firsts: [{name: "Lost One", id: "23", state: "lost", distance: 3, value: 0},
+                             {name: "Unsold One", id: "24", state: "unsold", sale: "unsold", distance: 4, value: 5e5}]};
+      fShowLost.checked = true; renderFirsts();
+      o.ticks = ["bmRows", "leftRows", "firstsRows"].map(id => [...document.querySelectorAll("#" + id + " .swtick")].map(c => c.dataset.sweep).join());
+      o.hiddenFirst = [...document.querySelectorAll(".swbtn")].every(b => b.hidden);
+      return JSON.stringify(o); })()`));
+    const tick = (list, name) => { const c = d.querySelector(`#${list} .swtick[data-sweep="${name}"]`); c.checked = !c.checked; c.dispatchEvent(new w.Event("change", {bubbles: true})); };
+    tick("bmRows", "Book One"); tick("leftRows", "Left One"); tick("firstsRows", "Lost One"); tick("firstsRows", "Lost One");
+    got.buttons = [...d.querySelectorAll(".swbtn")].map(b => (b.hidden ? "hidden:" : "") + b.textContent);
+    got.slotTitle = /It replaces your Road to Riches route/.test(d.querySelector("#bmTools .swbtn").title);
+    w.eval(`renderBookmarks(bmMap())`);   // a redraw keeps the ticks
+    got.kept = d.querySelector('#bmRows .swtick[data-sweep="Book One"]').checked;
+    d.querySelector("#bmTools .swbtn").click();
+    await settle(3000); await sleep(1700); await settle(2000);
+    got.posted = posts.slice();
+    got.after = [w.eval("view"), w.eval("SW.names.size"), [...d.querySelectorAll(".swbtn")].every(b => b.hidden)];
+    got.head = d.getElementById("hwyHead").textContent.replace(/\s+/g, " ");
+    got.status = d.getElementById("hwyStatus").textContent;
+    // the line under the tiles: the sweep's glyph and name; an Earth-like route's
+    got.line = w.eval(`[surveyLineHtml({kind: "sweep", complete: true}), surveyLineHtml({kind: "elw", destination: "Far", left_here: 1})].map(h => { const e = document.createElement("div"); e.innerHTML = h; return e.textContent; })`);
+    // a refusal is said beside the button, the ticks kept
+    plotAnswer = {error: "smoke"}; plotStatus = 400;
+    w.eval(`document.querySelector('[data-view="bm"]').click()`); await settle(1000);
+    // the bookmark again (a payload may have come in since)
+    w.eval(`data.bookmarks = [{id: "21", name: "Book One", distance: 12, note: "", created: ""}]; renderBookmarks(bmMap())`);
+    tick("bmRows", "Book One");
+    d.querySelector("#bmTools .swbtn").click(); await settle(1000);
+    got.refused = [d.querySelector("#bmTools .swmsg").textContent, w.eval("SW.names.size")];
+    d.querySelector("#bmTools .swclear").click();
+    got.untick = [w.eval("SW.names.size"), d.querySelector('#bmRows .swtick[data-sweep="Book One"]').checked];
+    w.fetch = realFetch;
+    w.eval(`(() => { const k = window.__s51; data.bookmarks = k.bm; leftData = k.left; firstsData = k.firsts; fShowLost.checked = k.lost;
+      data.survey = k.sv; drawSweep({}); store.set("hwyShow", ""); document.querySelector('[data-view="' + k.view + '"]').click(); })()`);
+    await w.eval("loadRich(true)"); await settle(1000);
+    const want = {ticks: ["Book One", "Left One", "Lost One"], hiddenFirst: true, buttons: ["🧹 Plot a sweep (2)", "🧹 Plot a sweep (2)", "🧹 Plot a sweep (2)"],
+      slotTitle: true, kept: true, posted: [{kind: "sweep", systems: ["Book One", "Left One"]}], after: ["hwy", 0, true],
+      line: ["🧹 Sweep complete", "🌍 Earth-like worlds to Far · 1 body to do here"], refused: ["Could not plot the sweep: smoke.", 1], untick: [0, false]};
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    if (!/Sweep · 30 ly range · 2 systems ticked · left out \(not known to Spansh yet\): Fresh/.test(got.head) || !/you are at system 1 of 3/.test(got.head)) bad.push("head");
+    if (!/^Plotted: a sweep of 3 systems\./.test(got.status)) bad.push("status");
+    const good = !bad.length && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| S51 sweep, S52 kinds |", good ? "ticks in Bookmarks, Left behind and lost firsts, Plot a sweep (N) posts them and Plot Route shows it, a refusal said, the kinds' lines" :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
   }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",
