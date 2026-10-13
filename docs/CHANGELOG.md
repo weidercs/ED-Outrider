@@ -2,6 +2,26 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · Upload marks in the Log, and filling gaps in EDSM's flight log
+- **Upload marks in the Log** (S68, the Log only): each line of the last 7 days shows what the uploads made of it,
+  "✓ EDDN · ✓ EDSM", "⏳ EDSM" (waiting for the next jump or docking, or trying again), "⏸" (a refused key, an EDDN kind
+  on hold, the upload switched off), "✗" (not taken), the reason in each mark's hover; per service the worst of the
+  line's messages wins, the backfill's rows count as EDSM's, a line with no outbox row has no mark. log.py now splits
+  lines on "\n" as the journal reader does (splitlines also broke on a bare "\r") and gives each row its byte offset,
+  the outbox's source key (`uploads.line_marks`, a new index on the outbox's source).
+- **"not sent"** beside "show noise" (while an upload is in use; kept in the Log's own filters): only the lines with a
+  message waiting or refused, whatever the category boxes say (some "noise" goes to EDDN), GET `/api/log?unsent=1`.
+- **Fill gaps in EDSM's flight log** (S47, Settings → Uploads; POST `/api/uploads/edsm/backfill`, `outrider/backfill.py`):
+  **Check EDSM's log** (get-position, then get-logs a week at a time back from when EDSM was switched on here, meta
+  `edsm_since`, "unknown" before this version) says where EDSM's log ends and fills From / To; **Preview** rebuilds the
+  range's EDSM events from the live, legacy and archived journals, nothing sent (events by name, jumps, requests, time);
+  **Send**, only for the previewed range and after a confirm, first checks EDSM's log is empty over the range (else
+  nothing is queued), then queues the events as service `edsm_bf` (once per line) and sends one request every 10 s;
+  **Stop**, and **Go on** after a refused key. EDSM's answers are read strictly (`edsm.backfill_answer`: 102 "older than
+  what EDSM has" is not taken, counted apart from stored, already there, duplicates); a first request taken by none
+  stops it. The one exception to the 7-day cap (DESIGN_NOTES). Tested with fakes only: the first live send, on a range
+  of a jump or two, is the author's.
+
 ## 2026-10-12 · "Spansh unavailable", and Check buttons for the EDSM and Inara keys
 - **The lookups' health** (G2, `outrider/health.py`'s `Health`): every request of the lookups' session (Spansh, EDSM,
   GitHub, EDAstro, Canonn) reports through an aiohttp TraceConfig, no call site touched; a failure counts only when

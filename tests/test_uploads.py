@@ -879,12 +879,15 @@ class CoreFixes(MarksAndCatchUp):
         U.enqueue(db, "eddn", "x/1", "J:2", now_ts(5), s, {})
         db.execute("UPDATE upload_queue SET state='sent' WHERE source='J:2'")
         ed_outrider.meta_set(db, "upload_marks", {"eddn": ["J.log", 1, None]})
+        ed_outrider.meta_set(db, "edsm_backfill", {"state": "running", "total": 3})   # S47's, under way in the backup
         db.commit()
         db.close()
         ed_outrider.forget_upload_position(path)
         db = ed_outrider.open_db(path)
         self.addCleanup(db.close)
         self.assertIsNone(ed_outrider.meta_get(db, "upload_marks"))
+        bf = ed_outrider.meta_get(db, "edsm_backfill")
+        self.assertEqual((bf["state"], bf["total"]), ("stopped", 3))   # its queued rows are gone: it ends, said so
         self.assertEqual([r[0] for r in db.execute("SELECT state FROM upload_queue")], ["sent"])
 
 
@@ -1375,3 +1378,114 @@ class UploadOutageAlert(unittest.TestCase):
             st.check_upload_outages(self.t0 + 15 * 60)
         [m] = self.moments("upload_down")
         self.assertEqual(m["text"], "Inara asked Outrider to slow down 15 min ago: 5 messages waiting, kept until it answers")
+
+
+class LogMarks(unittest.TestCase):
+    """S68: the Log's upload marks (✓ EDDN · ✓ EDSM, ⏳, ⏸, ✗ with the reason) and its "not sent" filter."""
+
+    def setUp(self):
+        import types
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir)
+        p = unittest.mock.patch.object(ed_outrider, "LIVE_DIRS", [self.dir])
+        p.start()
+        self.addCleanup(p.stop)
+        self.db = ed_outrider.open_db(":memory:")
+        self.addCleanup(self.db.close)
+        self.state = ed_outrider.State(self.db, ed_outrider.Journals(self.db), types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        self.name = "Journal.2026-10-08T100000.01.log"
+        self.who = types.SimpleNamespace(cmdr="Sample Pilot", gameversion="4.2", gamebuild="r1")
+
+    def queue(self, service, source, state="queued", status=None, attempts=0, next_try=0, created=None, schema="s"):
+        U.enqueue(self.db, service, schema, source, created or now_ts(60), self.who, {"x": 1}, next_try)
+        self.db.execute("UPDATE upload_queue SET state=?, last_status=?, attempts=? WHERE service=? AND source=?",
+                        (state, status, attempts, service, source))
+
+    def test_offsets_are_the_readers_byte_offsets(self):
+        import outrider.log
+        lines = [json.dumps({"timestamp": now_ts(30), "event": "FSDJump", "StarSystem": "A", "SystemAddress": 1}),
+                 # a bare carriage return between two keys: JSON whitespace, one line for the journal reader
+                 '{"timestamp":"%s", "event":"Location",\r "StarSystem":"B", "SystemAddress":2}' % now_ts(20),
+                 json.dumps({"timestamp": now_ts(10), "event": "Docked", "StationName": "C"})]
+        data = "\r\n".join(lines).encode() + b"\r\n"
+        with open(os.path.join(self.dir, self.name), "wb") as f:
+            f.write(data)
+        rows = outrider.log.read_log([self.dir], days=1)["rows"]
+        self.assertEqual([r["event"] for r in rows], ["Docked", "Location", "FSDJump"])
+        starts = [0]
+        for line in data.split(b"\n")[:-2]:
+            starts.append(starts[-1] + len(line) + 1)
+        self.assertEqual([r["at"] for r in rows], starts[::-1])   # what Journals.read_file hands the uploader
+        only = outrider.log.read_log([self.dir], days=1, cats=set(), only={self.name: {starts[1]}})["rows"]
+        self.assertEqual([r["event"] for r in only], ["Location"])   # "not sent" overrides the category boxes
+
+    def test_worst_state_wins_per_service_and_the_backfill_is_edsm(self):
+        n = self.name
+        self.queue("eddn", f"{n}:100", "sent", "200 OK")
+        self.queue("eddn", f"{n}:100#1", "dropped", "400 schema refused")      # the same line's second message
+        self.queue("edsm", f"{n}:100", next_try=time.time() + 300)              # waits for the next jump
+        self.queue("inara", f"{n}:100", "sent", "200")
+        self.queue("edsm_bf", f"{n}:200", "dropped", "102 Message older than the stored one")
+        self.queue("eddn", f"{n}:2000", "queued", "HTTP 503", attempts=2)
+        self.queue("eddn", "other.log:100", "dropped", "x")                    # another file's line at the same offset
+        m = U.line_marks(self.db, {(n, 100), (n, 200), (n, 300), (n, 2000)})
+        self.assertEqual(m[(n, 100)], {"eddn": {"state": "dropped", "why": "400 schema refused"},
+                                       "edsm": {"state": "queued", "why": "waiting for the next jump or docking"},
+                                       "inara": {"state": "sent", "why": "200"}})
+        self.assertEqual(m[(n, 200)], {"edsm": {"state": "dropped", "why": "flight log backfill: 102 Message older than the stored one"}})
+        self.assertNotIn((n, 300), m)                                           # nothing to send: no mark at all
+        self.assertEqual(m[(n, 2000)]["eddn"], {"state": "queued", "why": "trying again: HTTP 503"})
+        held = U.line_marks(self.db, {(n, 100)}, held=lambda s, schema: "203 EDSM refused the key" if s == "edsm" else None)
+        self.assertEqual(held[(n, 100)]["edsm"], {"state": "held", "why": "203 EDSM refused the key"})
+
+    def test_state_marks_the_last_week_only_and_holds(self):
+        st, n = self.state, self.name
+        st.upload_cfg["edsm"]["enabled"] = True
+        self.queue("edsm", f"{n}:10")
+        self.queue("eddn", f"{n}:20", "sent", "200 OK")
+        rows = [{"id": f"{n}|0", "at": 10, "ts": now_ts(60)}, {"id": f"{n}|1", "at": 20, "ts": now_ts(8 * 86400)},
+                {"id": f"{n}|2", "at": 30, "ts": now_ts(30)}]
+        st.log_marks(rows)
+        self.assertEqual(rows[0]["up"], [{"service": "edsm", "state": "queued", "why": "waiting to be sent"}])
+        self.assertNotIn("up", rows[1])                     # over a week old: the outbox has forgotten, no mark
+        self.assertEqual(rows[2]["up"], [])                 # nothing of that line was for an upload
+        st.upload_report("edsm", {"error": None, "at": 1.0, "raised": None, "wait": 30,
+                                  "results": [(1, "held", "203 EDSM refused the commander name or API key", None)]})
+        rows = [{"id": f"{n}|0", "at": 10, "ts": now_ts(60)}]
+        st.log_marks(rows)
+        self.assertEqual(rows[0]["up"][0]["state"], "held")
+        st.upload_cfg["edsm"]["enabled"] = False
+        st.upload_status.pop("edsm")
+        st.log_marks(rows)
+        self.assertEqual(rows[0]["up"][0]["why"], "EDSM is switched off")
+
+    def test_the_route_marks_rows_and_filters_not_sent(self):
+        from aiohttp.test_utils import TestClient, TestServer
+        lines = [{"timestamp": now_ts(300), "event": "Music", "MusicTrack": "Exploration"},          # noise, waiting for EDDN
+                 {"timestamp": now_ts(200), "event": "FSDJump", "StarSystem": "A", "SystemAddress": 1},  # sent
+                 {"timestamp": now_ts(100), "event": "Docked", "StationName": "C"}]                      # nothing to send
+        data, offs = b"", []
+        for e in lines:
+            offs.append(len(data))
+            data += (json.dumps(e) + "\n").encode()
+        with open(os.path.join(self.dir, self.name), "wb") as f:
+            f.write(data)
+        self.queue("eddn", f"{self.name}:{offs[0]}", created=lines[0]["timestamp"])
+        self.queue("eddn", f"{self.name}:{offs[1]}", "sent", "200 OK", created=lines[1]["timestamp"])
+        self.state.upload_cfg["eddn"]["enabled"] = True
+
+        async def go():
+            async with TestClient(TestServer(ed_outrider.make_app(self.state))) as c:
+                a = await (await c.get("/api/log?days=7&cat=travel,other")).json()
+                b = await (await c.get("/api/log?days=7&cat=travel&unsent=1")).json()
+                return a, b
+        a, b = asyncio_run(go())
+        self.assertEqual(a["marks_days"], 7)
+        self.assertEqual([(r["event"], [m["state"] for m in r["up"]]) for r in a["rows"]], [("Docked", []), ("FSDJump", ["sent"])])
+        self.assertEqual([r["event"] for r in b["rows"]], ["Music"])           # noise too: "not sent" overrides the boxes
+        self.assertEqual(b["rows"][0]["up"], [{"service": "eddn", "state": "queued", "why": "waiting to be sent"}])
+
+
+def asyncio_run(coro):
+    import asyncio
+    return asyncio.run(coro)

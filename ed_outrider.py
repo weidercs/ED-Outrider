@@ -172,6 +172,7 @@ import sqlite3
 import sys
 import threading
 import time
+import types
 import urllib.parse
 from glob import glob, escape as glob_escape
 
@@ -205,6 +206,7 @@ import outrider.eddn       # EDDN's messages from journal events, and what its a
 import outrider.edsm       # EDSM's journal upload: the events with where you were, and what its answers mean
 import outrider.inara      # Inara's commander profile: travel, ranks, ships, inventory..., and what its answers mean
 import outrider.readclient  # EDSM's and Inara's account reads (G3): the key checks, EDSM's flight log
+import outrider.backfill   # filling a gap in EDSM's flight log (S47): the events rebuilt from the journals (pure)
 import outrider.checklist  # the exobiology checklist: every species by region, with your state (pure)
 import outrider.codex_images  # the checklists' pictures: Canonn's links and credits, refreshed once a day
 import outrider.overlay    # the in-game overlay's panels as draw lists (the window: python3 -m outrider.overlay_window)
@@ -329,6 +331,8 @@ NEAR_BODY_ALT = 5000         # m: below this over a body in your ship, the on-bo
 LEASE_EVERY_S = 60           # s: this instance's upload lease rewritten, the others' read, EDMC's switches checked
 UPLOAD_DOWN_S = 15 * 60      # s: an upload failing this long with messages waiting gets its card and notification (S3)
 KEY_CHECK_S = 10             # s: one EDSM or Inara key check per this, per service (S45)
+BF_CHECK_WEEKS = 12          # S47's Check looks this far back for where EDSM's flight log ends (a get-logs read a week)
+BF_MAX_DAYS = 366            # ...and a backfill's range is at most this long
 LOOKUP_DOWN_S = 10 * 60      # s: Spansh or EDSM unavailable this long gets a card on the banner (S42; at once for no network)
 BIO_TAGS_SHOWN = 40          # the surface map draws at most this many tagged plants (nearest first)
 SELLER_REFRESH_LY = 100      # look for the nearest places to sell again after moving this far
@@ -6353,6 +6357,12 @@ class State:
         self.upload_senders["eddn"] = self.eddn_send
         self.upload_senders["edsm"] = self.edsm_send
         self.upload_senders["inara"] = self.inara_send
+        # S47: the backfill of EDSM's flight log, its own outbox service and gentle loop (edsm_bf_on: only while running)
+        self.upload_senders["edsm_bf"] = self.edsm_bf_send
+        self.edsm_bf_job = None       # the Check or the guard under way or last done: {kind, state, text, at, result?}
+        self.edsm_bf_task = None
+        self.edsm_bf_preview = None   # the last Preview: {commander, start, end, rows, summary, files, at} (Send needs it)
+        self.journal_archive = None   # the backups' journal archive (run(): BACKUP_DIR/journals), read by the backfill
         self.eddn_hold = outrider.eddn.SchemaHold()
         self.edsm_discard = outrider.edsm.DISCARD   # EDSM's list of unwanted events: the built-in copy until fetched
         self.edsm_discard_task = None
@@ -10955,6 +10965,8 @@ class State:
             # switch-on does, never catching up what was played while it was off (review 2026-10-11)
             self.uploads_hub.marks_dirty = True
             self.uploads_hub.flush()
+        if on and not was and service == "edsm":   # S47's Check: Outrider has sent EDSM what was played since then
+            meta_set(self.db, "edsm_since", iso_ts(time.time()))
         if on and not was:
             pos, ts = self.upload_start_mark(service)
             if pos:
@@ -10997,6 +11009,35 @@ class State:
             print(f"uploads: {outrider.uploads.NAMES[service]}: the stored key tried again (Try again)")
         self.bump()
         return self.uploads_summary(), 200
+
+    def upload_mark_held(self, service, schema):
+        """Why a queued outbox row is not going now (the Log's ⏸, S68), or None when it is just waiting its turn."""
+        if service == "edsm_bf":
+            st = (self.edsm_backfill() or {}).get("state")
+            return None if st == "running" else f"the backfill is {st or 'not running'}"
+        if service == "eddn" and schema and self.eddn_hold.is_held(schema):
+            return f"{schema} is on hold: refused repeatedly"
+        held = (self.upload_status.get(service) or {}).get("held")
+        if held:
+            return held
+        if not self.upload_wanted(service):
+            return f"{outrider.uploads.NAMES.get(service, service)} is switched off"
+        return self.upload_conflict(service)
+
+    def log_marks(self, rows, now=None):
+        """S68: each Log row of the last MARK_DAYS gets `up`, [{service, state, why}] in EDDN, EDSM, Inara order (empty:
+        nothing of that line was for an upload); an older row gets none (the outbox has forgotten it)."""
+        now = time.time() if now is None else now
+        since = iso_ts(now - outrider.uploads.MARK_DAYS * 86400)
+        recent = [r for r in rows if r.get("ts") and r["ts"] >= since and isinstance(r.get("at"), int)]
+        if not recent:
+            return rows
+        marks = outrider.uploads.line_marks(self.db, {(r["id"].rsplit("|", 1)[0], r["at"]) for r in recent},
+                                            held=self.upload_mark_held, now=now)
+        for r in recent:
+            m = marks.get((r["id"].rsplit("|", 1)[0], r["at"]), {})
+            r["up"] = [dict(m[s], service=s) for s in outrider.uploads.SERVICES if s in m]
+        return rows
 
     def upload_waiting(self, service):
         """(rows waiting, the oldest one's journal time in epoch seconds or None) in `service`'s outbox."""
@@ -11090,6 +11131,7 @@ class State:
         out["eddn"]["test"] = outrider.uploads.eddn_test_mode()
         out["edsm"]["dry_run"] = outrider.edsm.dry_run()
         out["edsm"]["accounts"] = self.edsm_account_list()
+        out["edsm"]["backfill"] = self.edsm_backfill_summary()
         out["inara"].update(dry_run=outrider.inara.dry_run(), dev=outrider.inara.dev_mode(), accounts=self.inara_account_list())
         out["readonly"] = bool(self.lease_writable) and not any(self.lease_writable.values())
         out["simulate"] = bool(self.simulate)
@@ -11361,6 +11403,302 @@ class State:
         print(f"uploads: {label} key check for CMDR {commander}: {'ok' if out['ok'] else out['text']}")
         return out, 200
 
+    # ---- S47: filling a gap in EDSM's flight log (Check, Preview, Send; outrider/backfill.py) ----
+
+    def edsm_backfill(self):
+        """The backfill's progress (meta edsm_backfill, live-only): {state: running | held | done | stopped, commander,
+        start, end, total, counts {stored, already, older, duplicate, crew, refused, dry}, started, finished?, why?}, or
+        None before the first one."""
+        v = meta_get(self.db, "edsm_backfill")
+        return v if isinstance(v, dict) else None
+
+    def edsm_backfill_set(self, **changes):
+        bf = dict(self.edsm_backfill() or {}, **changes)
+        meta_set(self.db, "edsm_backfill", bf)
+        return bf
+
+    def edsm_bf_on(self, service=None):
+        """Whether the backfill's sender may send (upload_loop's `on`): only while it runs (not held, stopped or done)."""
+        return (self.edsm_backfill() or {}).get("state") == "running"
+
+    def edsm_bf_busy(self):
+        """Why a Check or Send cannot start now, or None: one at a time, and never while a backfill sends."""
+        if self.edsm_bf_task is not None and not self.edsm_bf_task.done():
+            return "a check of EDSM's flight log is under way"
+        if (self.edsm_backfill() or {}).get("state") in ("running", "held"):
+            return "a backfill is under way: stop it first"
+        return None
+
+    def edsm_backfill_summary(self):
+        """Settings -> Uploads' backfill block: the progress, the Check or guard (job), the last Preview's figures (never
+        its rows), what waits, when EDSM was switched on (None: unknown)."""
+        pv = self.edsm_bf_preview
+        since = meta_get(self.db, "edsm_since")
+        return {"progress": self.edsm_backfill(), "job": self.edsm_bf_job, "since": since if isinstance(since, str) else None,
+                "preview": {k: pv[k] for k in ("commander", "start", "end", "summary", "files", "at")} if pv else None,
+                "queued": outrider.uploads.counts(self.db, "edsm_bf")["queued"], "gap_s": outrider.backfill.SEND_GAP_S}
+
+    def backfill_dirs(self):
+        """Where the backfill finds journals: the live folders, the legacy ones and the backups' journal archive."""
+        return list(LIVE_DIRS) + list(LEGACY_DIRS) + ([self.journal_archive] if self.journal_archive else [])
+
+    @staticmethod
+    def _bf_when(t):
+        return time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(t))
+
+    def _bf_job(self, **changes):
+        self.edsm_bf_job = dict(self.edsm_bf_job or {}, **changes, at=time.time())
+        self.bump()
+
+    async def _bf_logs(self, account, start, end):
+        """EDSM's flight log over [start, end) (get-logs, a week per read, paced by edsm_gate): its entries, oldest first.
+        A refusal raises ValueError with EDSM's words."""
+        rc, out = outrider.readclient, []
+        for ws, we in outrider.backfill.windows(start, end, rc.EDSM_LOGS_WINDOW_S):
+            got = rc.edsm_logs_answer(await rc.fetch(self.upload_session, rc.EDSM_LOGS_URL, self.edsm_gate,
+                                                     data=rc.edsm_logs_request(account["name"], account["key"], ws, we)))
+            if not got["ok"]:
+                raise ValueError(f"EDSM: {got['code']} {got['text']}")
+            out += [e for e in got["logs"] if start <= ts_seconds(e["date"]) < end]
+        return sorted(out, key=lambda e: e["date"])
+
+    def _bf_account(self, commander):
+        a = self.edsm_accounts().get(commander) or {}
+        return {"name": a.get("name") or commander, "key": a["key"]} if a.get("key") else None
+
+    def edsm_backfill_start(self, action, commander, start=None, end=None):
+        """POST /api/uploads/edsm/backfill: check (where EDSM's flight log ends: a background read, 202), preview (the
+        events of the range rebuilt from the journals: awaited by the route, see edsm_backfill_preview), send (after a
+        Preview of the same range: the guard, then the queue; 202), stop, resume (a held one). (answer, status)."""
+        commander = str(commander or "").strip()
+        if action == "stop":
+            return self.edsm_backfill_stop("stopped by you")
+        if action == "resume":
+            bf = self.edsm_backfill()
+            if not bf or bf.get("state") != "held":
+                return {"error": "no backfill is on hold"}, 409
+            self.edsm_backfill_set(state="running", why=None)
+            self.db.commit()
+            if "edsm_bf" in self.upload_wake:
+                self.upload_wake["edsm_bf"].set()
+            self.bump()
+            return self.edsm_backfill_summary(), 200
+        if not commander or len(commander) > 64:
+            return {"error": "commander: the in-game commander's name"}, 400
+        account = self._bf_account(commander)
+        if not account:
+            return {"error": f"no EDSM key for CMDR {commander}: save one above first"}, 400
+        busy = self.edsm_bf_busy()
+        if busy:
+            return {"error": busy}, 409
+        if self.upload_session is None:
+            return {"error": "Outrider is still starting"}, 503
+        if action == "check":
+            self.edsm_bf_job = {"kind": "check", "state": "running", "commander": commander, "at": time.time(),
+                                "text": "asking EDSM where its flight log ends…"}
+            self.edsm_bf_task = asyncio.get_running_loop().create_task(self._edsm_bf_check(commander, account))
+        else:   # send
+            pv, s, e = self.edsm_bf_preview, outrider.backfill.parse_when(start), outrider.backfill.parse_when(end)
+            if not pv or s is None or e is None or (pv["commander"], pv["start"], pv["end"]) != (commander, iso_ts(s), iso_ts(e)):
+                return {"error": "Preview this range first"}, 409
+            if not pv["rows"]:
+                return {"error": "nothing to send in this range"}, 400
+            self.edsm_bf_job = {"kind": "send", "state": "running", "commander": commander, "at": time.time(),
+                                "text": "checking EDSM's flight log over the range first…"}
+            self.edsm_bf_task = asyncio.get_running_loop().create_task(self._edsm_bf_send(pv, account, s, e))
+        self.bump()
+        return self.edsm_backfill_summary(), 202
+
+    async def _edsm_bf_check(self, commander, account):
+        """S47a: where EDSM's flight log ends before Outrider took over (meta edsm_since, else now): get-position, and
+        when that is later, get-logs a week at a time going back (BF_CHECK_WEEKS at most). Reads only."""
+        rc = outrider.readclient
+        since = meta_get(self.db, "edsm_since")
+        try:
+            b = ts_seconds(since) if isinstance(since, str) else time.time()
+        except (TypeError, ValueError):
+            since, b = None, time.time()
+        since = since if isinstance(since, str) else None
+        try:
+            pos = rc.edsm_position_answer(await rc.fetch(self.upload_session, rc.EDSM_POSITION_URL, self.edsm_gate,
+                                                         data=rc.edsm_position_request(account["name"], account["key"])))
+            if not pos["ok"]:
+                raise ValueError(f"EDSM: {pos['code']} {pos['text']}")
+            last = None
+            if pos.get("date") and ts_seconds(pos["date"]) < b:
+                last = {"date": pos["date"], "system": pos.get("system")}
+            else:   # EDSM has later entries (Outrider's own): go back from where Outrider began
+                week = rc.EDSM_LOGS_WINDOW_S
+                for k in range(BF_CHECK_WEEKS):
+                    self._bf_job(text=f"looking back through EDSM's flight log: week {k + 1} of up to {BF_CHECK_WEEKS}…")
+                    got = await self._bf_logs(account, b - (k + 1) * week, b - k * week)
+                    if got:
+                        last = {"date": got[-1]["date"], "system": got[-1]["system"]}
+                        break
+            a = ts_seconds(last["date"]) + 1 if last else None
+            jumps = self.db.execute("SELECT count(*) FROM jumps WHERE ts >= ? AND ts < ?",
+                                    (iso_ts(a if a is not None else b - BF_CHECK_WEEKS * rc.EDSM_LOGS_WINDOW_S), iso_ts(b))).fetchone()[0]
+            parts = [f"EDSM's flight log ends {self._bf_when(a - 1)}" + (f" at {last['system']}" if last.get("system") else "")
+                     if last else f"EDSM's flight log has nothing in the {BF_CHECK_WEEKS} weeks before {self._bf_when(b)}",
+                     f"Outrider has sent since {self._bf_when(b)}" if since
+                     else "since when Outrider has sent: unknown" if self.upload_wanted("edsm") else "Outrider is not sending to EDSM",
+                     f"your journals have {jumps:,} jump{'' if jumps == 1 else 's'} between"]
+            self._bf_job(state="done", text="; ".join(parts) + ".",
+                         result={"log_end": last, "since": since, "jumps": jumps, "start": iso_ts(a) if a else None, "end": iso_ts(b)})
+        except asyncio.CancelledError:
+            raise
+        except ValueError as e:
+            self._bf_job(state="failed", text=str(e) if str(e).startswith("EDSM:") else "EDSM's answer was not understood")
+        except Exception as e:   # the kind only: an error's text can carry the URL
+            self._bf_job(state="failed", text=f"Couldn't reach EDSM: {rc.reach_words(e)}")
+        print(f"uploads: EDSM flight log check for CMDR {commander}: {self.edsm_bf_job['text']}")
+
+    async def edsm_backfill_preview(self, commander, start, end):
+        """S47b's Preview (a dry run, nothing sent): the EDSM events of [start, end) for `commander` rebuilt from the
+        journals (outrider.backfill.rebuild, on a worker), counted: events, requests, time. Kept for Send. (answer,
+        status)."""
+        commander = str(commander or "").strip()
+        s, e = outrider.backfill.parse_when(start), outrider.backfill.parse_when(end)
+        if not commander or len(commander) > 64:
+            return {"error": "commander: the in-game commander's name"}, 400
+        if s is None or e is None or s >= e:
+            return {"error": "from / to: UTC times as 2026-10-09 21:14, the first before the second"}, 400
+        if e > time.time() + 60:
+            return {"error": "to: not in the future"}, 400
+        if e - s > BF_MAX_DAYS * 86400:
+            return {"error": f"at most {BF_MAX_DAYS} days at a time"}, 400
+        busy = self.edsm_bf_busy()
+        if busy:
+            return {"error": busy}, 409
+        # what EDSM's live stream has (or had queued) is never sent again
+        skip = {r[0] for r in self.db.execute("SELECT source FROM upload_queue WHERE service = 'edsm' AND created >= ? "
+                                              "AND created < ?", (iso_ts(s), iso_ts(e)))}
+        dirs, discard = self.backfill_dirs(), self.edsm_discard
+        try:
+            rows, files = await asyncio.get_running_loop().run_in_executor(
+                None, lambda: outrider.backfill.rebuild(dirs, s, e, commander, discard, skip))
+        except ValueError as err:
+            return {"error": str(err)}, 400
+        summary = outrider.backfill.summary(rows)
+        guard = len(outrider.backfill.windows(s, e, outrider.readclient.EDSM_LOGS_WINDOW_S))
+        summary["seconds"] += guard * outrider.readclient.EDSM_GAP_S   # the guard's reads come first
+        summary["by_event"] = summary["by_event"][:12]
+        self.edsm_bf_preview = {"commander": commander, "start": iso_ts(s), "end": iso_ts(e), "rows": rows,
+                                "summary": summary, "files": files, "at": time.time()}
+        self.bump()
+        return self.edsm_backfill_summary(), 200
+
+    async def _edsm_bf_send(self, pv, account, start, end):
+        """S47b's Send: the guard (EDSM's flight log must have nothing in the range: never resend what EDSM has), then
+        the Preview's rows queued as service edsm_bf (UNIQUE per source: a second start never doubles) and the progress
+        in meta edsm_backfill; the sender (upload_loop) goes one request every SEND_GAP_S."""
+        rc = outrider.readclient
+        try:
+            found = await self._bf_logs(account, start, end)
+            if found:
+                n = len(found)
+                self._bf_job(state="failed", text=f"EDSM's flight log already has {n} jump{'' if n == 1 else 's'} in this range "
+                             f"({found[0]['date']} to {found[-1]['date']}): nothing sent. Choose a range that ends before the "
+                             f"first or starts after the last.")
+                return
+            n = 0
+            for r in pv["rows"]:
+                who = types.SimpleNamespace(cmdr=r["cmdr"], gameversion=r["gameversion"], gamebuild=r["gamebuild"])
+                n += outrider.uploads.enqueue(self.db, "edsm_bf", r["event"], r["source"], r["ts"], who, r["message"])
+            if not n:
+                self.db.commit()
+                self._bf_job(state="failed", text="every event of this range was queued before: nothing new to send")
+                return
+            self.edsm_backfill_set(state="running", commander=pv["commander"], start=pv["start"], end=pv["end"], total=n,
+                                   counts={}, started=time.time(), finished=None, why=None, dry=outrider.edsm.dry_run())
+            self.db.commit()
+            self.edsm_bf_preview = None
+            self._bf_job(state="done", text=f"{n:,} event{'' if n == 1 else 's'} queued: one request every "
+                         f"{outrider.backfill.SEND_GAP_S} s" + (" (dry run: nothing sent)" if outrider.edsm.dry_run() else ""))
+            if "edsm_bf" in self.upload_wake:
+                self.upload_wake["edsm_bf"].set()
+        except asyncio.CancelledError:
+            raise
+        except ValueError as e:
+            self._bf_job(state="failed", text=str(e) if str(e).startswith("EDSM:") else "EDSM's answer was not understood")
+        except Exception as e:
+            self._bf_job(state="failed", text=f"Couldn't reach EDSM: {rc.reach_words(e)}")
+        print(f"uploads: EDSM flight log backfill for CMDR {pv['commander']}: {self.edsm_bf_job['text']}")
+
+    async def edsm_bf_send(self, rows):
+        """The backfill's sender: the leading rows of one commander and game version to EDSM's journal API, as edsm_send
+        does, but answered strictly (outrider.edsm.backfill_answer: 102 "older than what EDSM has" is not taken) and
+        counted in meta edsm_backfill. No key: held (the player can add one and go on). OUTRIDER_EDSM_DRYRUN: dry."""
+        batch = outrider.edsm.same_batch(rows)
+        cmdr = batch[0]["cmdr"]
+        account = self._bf_account(cmdr or "")
+        if not account:
+            return [(r["id"], "held", f"no EDSM key for CMDR {cmdr} (Settings -> Uploads)", None) for r in batch]
+        body = outrider.edsm.request(batch, account, outrider.__version__)
+        if outrider.edsm.dry_run():
+            self.edsm_dry_log(body)
+            self._bf_tally({"dry": len(batch)})
+            return [(r["id"], "dry", "dry run: not sent", None) for r in batch]
+        async with self.upload_session.post(outrider.edsm.UPLOAD_URL, json=body) as resp:
+            if resp.status != 200:
+                raise outrider.health.HttpError(resp.status, f"EDSM answered HTTP {resp.status}")
+            reply = await resp.json(content_type=None)
+        results, tally = outrider.edsm.backfill_answer(batch, reply)
+        self._bf_tally(tally)
+        return results
+
+    def _bf_tally(self, tally):
+        bf = self.edsm_backfill() or {}
+        counts = dict(bf.get("counts") or {})
+        for k, v in tally.items():
+            counts[k] = counts.get(k, 0) + v
+        self.edsm_backfill_set(counts=counts)
+
+    def edsm_bf_report(self, service, outcome):
+        """A backfill round's outcome (upload_loop's report): a hold (a refused key) waits for Go on; a failure says so and
+        the loop tries again; the first request taken by none (every event 102: EDSM keeps no back-dated events) stops
+        it; nothing left: done."""
+        bf = self.edsm_backfill()
+        if not bf or bf.get("state") != "running":
+            return
+        held = next((status for _, st, status, _ in outcome["results"] if st == "held"), None)
+        counts = bf.get("counts") or {}
+        taken = sum(counts.get(k, 0) for k in ("stored", "already", "duplicate"))
+        if held:
+            self.edsm_backfill_set(state="held", why=held)
+        elif outcome.get("raised") is not None:
+            self.edsm_backfill_set(why=f"EDSM not reached ({outrider.readclient.reach_words(outcome['raised'])}): trying again")
+        elif outcome.get("error"):
+            self.edsm_backfill_set(why=f"EDSM said later: {outcome['error']}")
+        elif counts.get("older") and not taken and counts.get("older") == sum(counts.values()):
+            n = counts["older"]
+            self.db.commit()
+            self.edsm_backfill_stop(f"EDSM took none of the first {n} event{'' if n == 1 else 's'}: each was older than what "
+                                    "its flight log has (102), so it does not take back-dated events")
+            return
+        else:
+            self.edsm_backfill_set(why=None)
+        left = self.db.execute("SELECT count(*) FROM upload_queue WHERE service = 'edsm_bf' AND state = 'queued'").fetchone()[0]
+        if not left and (self.edsm_backfill() or {}).get("state") == "running":
+            self.edsm_backfill_set(state="done", finished=time.time())
+            print(f"uploads: EDSM flight log backfill done: {json.dumps(counts, sort_keys=True)}")
+        self.db.commit()
+        self.bump()
+
+    def edsm_backfill_stop(self, why):
+        """Stop a backfill (Stop, or the first request's 102s): what still waits is dropped, never sent. (answer, status)."""
+        bf = self.edsm_backfill()
+        if not bf or bf.get("state") not in ("running", "held"):
+            return {"error": "no backfill is under way"}, 409
+        now = time.time()
+        n = self.db.execute("UPDATE upload_queue SET state = 'dropped', last_status = ?, done_at = ? WHERE service = 'edsm_bf' "
+                            "AND state = 'queued'", (f"not sent: {why}", now)).rowcount
+        self.edsm_backfill_set(state="stopped", why=why, finished=now, unsent=n)
+        self.db.commit()
+        print(f"uploads: EDSM flight log backfill stopped ({why}); {n} not sent")
+        self.bump()
+        return self.edsm_backfill_summary(), 200
+
     def inara_account_list(self):
         """For the page: [{commander, set, hint}], the commander in the journals first if missing. Never the key: hint is
         its first and last four characters and its length (the page may be open to the network without a password)."""
@@ -11433,8 +11771,11 @@ class State:
             if service not in self.upload_tasks:
                 batch = {"eddn": 1, "inara": outrider.inara.BATCH}.get(service, outrider.edsm.BATCH)   # EDDN: one per request
                 self.upload_wake[service] = asyncio.Event()
+                bf = service == "edsm_bf"   # the backfill: only while it runs, one request every SEND_GAP_S, its own report
                 self.upload_tasks[service] = asyncio.get_running_loop().create_task(outrider.uploads.upload_loop(
-                    service, self.db, send, self.upload_on, report=self.upload_report, batch=batch,
+                    service, self.db, send, self.edsm_bf_on if bf else self.upload_on,
+                    report=self.edsm_bf_report if bf else self.upload_report, batch=batch,
+                    min_gap=outrider.backfill.SEND_GAP_S if bf else 0,
                     gate=self.inara_gate if service == "inara" else None, wake=self.upload_wake[service]))
 
     def set_autohonk(self, enabled):
@@ -13440,7 +13781,7 @@ class State:
         return [t for t in (self.refresh_task, self.target_task, self.unsold_task, self.seller_task, self.carrier_task,
                             self.searcher.task, self.honk_test_task, self.honk_run_task, self.highway_task, self.riches_task,
                             self.autotarget_task, self.autotarget_test_task, self.lease_task, self.edsm_discard_task,
-                            *self.upload_tasks.values()) if t]
+                            self.edsm_bf_task, *self.upload_tasks.values()) if t]
 
     def arrival_danger_until(self, now=None):
         """The game sets Status.json's in-danger flag on every use of the FSD, from the charge until some 16-26 s after
@@ -15622,6 +15963,22 @@ def make_app(state, hosts=None):
             return web.json_response(out, status=status)
         return view
 
+    async def edsm_backfill_view(request):
+        """POST /api/uploads/edsm/backfill {action: check | preview | send | stop | resume, commander, start?, end?}: S47's
+        filling of a gap in EDSM's flight log (State.edsm_backfill_start / edsm_backfill_preview). Check reads EDSM's log;
+        Preview sends nothing; Send needs a Preview of the same range and EDSM's log empty over it."""
+        body = await json_object(request)
+        if body is None:
+            return web.json_response({"error": "expected a JSON object"}, status=400)
+        action = body.get("action")
+        if action == "preview":
+            out, status = await state.edsm_backfill_preview(body.get("commander"), body.get("start"), body.get("end"))
+        elif action in ("check", "send", "stop", "resume"):
+            out, status = state.edsm_backfill_start(action, body.get("commander"), body.get("start"), body.get("end"))
+        else:
+            return web.json_response({"error": "action: check, preview, send, stop or resume"}, status=400)
+        return web.json_response(out, status=status)
+
     async def overlay_get(request):
         """GET /api/overlay[?since=version]: the overlay window's panels (State.overlay_view)."""
         return web.json_response(state.overlay_view(request.query.get("since"),
@@ -15865,8 +16222,13 @@ def make_app(state, hosts=None):
         cats = {c for c in qs["cat"].split(",") if c in outrider.log.CATEGORIES} if "cat" in qs else None  # empty: nothing
         kw = dict(days=days, limit=limit, cats=cats, q=(qs.get("q") or "").strip()[:200] or None,
                   noise=qs.get("noise") in ("1", "true"), before=qs.get("before"), after=qs.get("after"))
+        if qs.get("unsent") in ("1", "true"):   # S68's "not sent": the lines with a message waiting or refused, any category
+            kw["days"] = min(days, outrider.uploads.MARK_DAYS)
+            kw["only"] = outrider.uploads.unsent_lines(state.db, iso_ts(time.time() - kw["days"] * 86400))
         dirs = LIVE_DIRS + LEGACY_DIRS
         out = await asyncio.get_running_loop().run_in_executor(None, lambda: outrider.log.read_log(dirs, **kw))
+        state.log_marks(out["rows"])   # S68: ✓ EDDN · ✓ EDSM... on the last week's lines
+        out["marks_days"] = outrider.uploads.MARK_DAYS
         return web.json_response(out)
 
     async def export_view(request):
@@ -15976,6 +16338,7 @@ def make_app(state, hosts=None):
     app.router.add_post("/api/uploads/retry", uploads_retry_view)
     app.router.add_post("/api/uploads/inara", inara_account_view)
     app.router.add_post("/api/uploads/edsm/check", key_check_view("edsm"))
+    app.router.add_post("/api/uploads/edsm/backfill", edsm_backfill_view)
     app.router.add_post("/api/uploads/inara/check", key_check_view("inara"))
     app.router.add_post("/api/autohonk/test", pc_only(autohonk_test_view))
     app.router.add_post("/api/autohonk/forget", pc_only(autohonk_forget_view))
@@ -16446,6 +16809,15 @@ def forget_upload_position(path):
         con.execute("DELETE FROM meta WHERE key = 'upload_marks'")
         if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='upload_queue'").fetchone():
             con.execute("DELETE FROM upload_queue WHERE state = 'queued'")
+        # a backfill under way in the backup (S47) has nothing left to send now: it ends, said so
+        row = con.execute("SELECT value FROM meta WHERE key = 'edsm_backfill'").fetchone()
+        try:
+            bf = json.loads(row[0]) if row else None
+        except (TypeError, ValueError):
+            bf = None
+        if isinstance(bf, dict) and bf.get("state") in ("running", "held"):
+            bf.update(state="stopped", why="a restored database: what waited was not sent", finished=time.time())
+            con.execute("UPDATE meta SET value = ? WHERE key = 'edsm_backfill'", (json.dumps(bf),))
         con.commit()
     except sqlite3.Error:   # an older backup without these tables: nothing to forget
         pass
@@ -16725,6 +17097,7 @@ async def run(args, st):
     state.searcher = Searcher(state)
     state.restart = restart_plan()   # S10: how Settings' Restart starts this Outrider again, or why it cannot
     state.db_path = args.db
+    state.journal_archive = os.path.join(BACKUP_DIR, "journals")   # S47's backfill reads it beside the live folders
     state.restore_extra = tuple(restore_extra)
     state.service_args = service
     state.speech_path, state.config_path = st["speech_file"], args.config

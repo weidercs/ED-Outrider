@@ -469,6 +469,10 @@ h3.subhead { font-size: 13px; font-weight: 600; color: var(--muted); text-transf
 #logRows tr.raw td { background: var(--panel); }
 #logRows pre { margin: 0; font-size: 11.5px; white-space: pre-wrap; word-break: break-all; max-height: 360px; overflow: auto; }
 #logRows .name { cursor: copy; } #logRows .fresh td { animation: fresh 2s ease-out; }
+/* S68: what the uploads made of a line (✓ EDDN · ⏳ EDSM...), the reason in each mark's hover */
+#logRows .upm { margin-left: 8px; font-size: 11px; white-space: nowrap; color: var(--muted); }
+#logRows .upm .sent { color: var(--good); } #logRows .upm .held { color: var(--warn); } #logRows .upm .dropped { color: var(--bad); }
+#lCats.dim { opacity: .45; }
 @keyframes fresh { from { background: color-mix(in srgb, var(--accent) 25%, transparent); } to { background: transparent; } }
 .btns { display: flex; gap: 8px; margin-top: 8px; }
 .btns button, #lMore { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 3px 12px; cursor: pointer; font: inherit; }
@@ -1233,3 +1237,6 @@ table.ovlay input[type=number]::-webkit-inner-spin-button, table.ovlay input[typ
 .uprecent .uprow.fail, .uprecent .upraw { color: var(--text); }
 .uprecent .upraw { font-family: ui-monospace, monospace; font-size: 11px; }
 .uprecent button.try { margin-left: 4px; }
+/* S47: Fill gaps in EDSM's flight log (Settings -> Uploads) */
+.bfill { margin: 4px 0 10px; } .bfill > summary { cursor: pointer; font-weight: 600; }
+.bfill .bfrow { margin: 4px 0; } .bfill .bfrow input { width: 11.5em; } .bfill button.try { margin-left: 4px; }

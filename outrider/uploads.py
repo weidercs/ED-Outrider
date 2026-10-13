@@ -63,6 +63,8 @@ CREATE TABLE IF NOT EXISTS upload_queue (
     attempts INTEGER NOT NULL DEFAULT 0, next_try REAL NOT NULL DEFAULT 0, last_status TEXT, done_at REAL,
     UNIQUE (service, source));
 CREATE INDEX IF NOT EXISTS upload_queue_state ON upload_queue (service, state, id);
+-- the Log's upload marks look a journal file's rows up by source (S68)
+CREATE INDEX IF NOT EXISTS upload_queue_source ON upload_queue (source);
 -- The "New to EDSM" badge's table, gone (EDDN's copy of a jump usually reaches EDSM first, so EDSM's systemCreated
 -- seldom names your upload): dropped from databases that had it.
 DROP TABLE IF EXISTS edsm_new_systems;
@@ -324,6 +326,72 @@ def counts(db, service):
                              now - 86400),
             "dry_24h": q("SELECT count(*) FROM upload_queue WHERE service=? AND state='dry' AND done_at > ?", now - 86400),
             "last_sent": last[0] if last else None}
+
+
+# ---- the Log's upload marks (S68) ----
+
+MARK_DAYS = 7    # the Log marks lines of the last week only: the outbox keeps what was sent about that long (prune)
+MARK_RANK = {"sent": 0, "dry": 1, "queued": 2, "held": 3, "dropped": 4}   # a line's worst message is its mark
+MARK_SERVICE = {"eddn": "eddn", "edsm": "edsm", "inara": "inara", "edsm_bf": "edsm"}   # the backfill's rows are EDSM's
+
+
+def _source_line(source, name):
+    """The byte offset in an outbox source ("<file>:<offset>", "#<i>" for a line's later messages), or None."""
+    try:
+        return int(source[len(name) + 1:].split("#", 1)[0])
+    except ValueError:
+        return None
+
+
+def line_marks(db, keys, held=None, now=None):
+    """What the uploads made of journal lines (the Log's marks): keys, an iterable of (file name, byte offset) ->
+    {(file name, offset): {service: {"state", "why"}}} for the lines with outbox rows (a line with none had nothing to
+    send). Per service the worst of the line's messages wins (MARK_RANK); the backfill's rows count as EDSM's. held(service,
+    schema) -> the reason a queued row's service is on hold, or None: such a row shows "held"."""
+    now = time.time() if now is None else now
+    by_file = {}
+    for name, off in keys:
+        by_file.setdefault(name, set()).add(off)
+    out = {}
+    for name, offs in by_file.items():
+        # every row of that file (the source index): "<file>:" up to "<file>;" (";" follows ":")
+        for service, schema, source, state, status, attempts, next_try in db.execute(
+                "SELECT service, schema, source, state, last_status, attempts, next_try FROM upload_queue "
+                "WHERE source >= ? AND source < ?", (name + ":", name + ";")):
+            off = _source_line(source, name)
+            shown = MARK_SERVICE.get(service)
+            if off not in offs or not shown:
+                continue
+            why = status or ""
+            if state == "queued":
+                reason = held(service, schema) if held else None
+                if reason:
+                    state, why = "held", reason
+                elif attempts:
+                    why = f"trying again: {status}" if status else "trying again"
+                else:
+                    why = "waiting for the next jump or docking" if next_try > now else "waiting to be sent"
+            elif state == "dry":
+                why = "dry run: built, not sent"
+            if service == "edsm_bf":
+                why = "flight log backfill: " + why
+            line = out.setdefault((name, off), {})
+            if shown not in line or MARK_RANK.get(state, 0) > MARK_RANK.get(line[shown]["state"], 0):
+                line[shown] = {"state": state, "why": why[:200]}
+    return out
+
+
+def unsent_lines(db, since):
+    """The Log's "not sent": {file name: {byte offsets}} of the lines with a message waiting or refused (rows queued or
+    dropped), from journal time `since` (an ISO timestamp) on."""
+    out = {}
+    for source, in db.execute("SELECT source FROM upload_queue WHERE state IN ('queued', 'dropped') AND created >= ?",
+                              (since,)):
+        name = source.rsplit(":", 1)[0] if ":" in source else None
+        off = _source_line(source, name) if name else None
+        if off is not None:
+            out.setdefault(name, set()).add(off)
+    return out
 
 
 def position(path_or_name, offset):

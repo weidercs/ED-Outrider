@@ -68,7 +68,8 @@ checklists</a>.
 </td>
 <td width="50%" valign="top">
 <b>Log</b> — every journal event, newest first, one readable line each. Filter by category and time,
-search any text, click a row for the raw event.
+search any text, click a row for the raw event. With uploads on, each line shows what they made of it (✓ EDDN · ⏳ EDSM,
+<a href="uploads.md#upload-marks-in-the-log">upload marks</a>), and <b>not sent</b> lists what is waiting or was refused.
 <br><br><img src="../images/log.png" alt="The log">
 </td>
 </tr>

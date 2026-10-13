@@ -73,7 +73,8 @@ Status.json.
 
 Never sent:
 
-- Anything older than a week (an hour for EDDN), or from a legacy folder (journals imported once).
+- Anything older than a week (an hour for EDDN), or from a legacy folder (journals imported once). The one exception
+  is a range you send to EDSM yourself ([Fill gaps in EDSM's flight log](#fill-gaps-in-edsms-flight-log)).
 - Anything from the game's beta, or from the Legacy game (3.8): Settings says so ("unavailable: the Legacy game").
 - Anything while you are crew in another commander's ship.
 - Anything under `--simulate`.
@@ -146,3 +147,35 @@ is (Inara's `isBeingDeveloped`: for a test account).
 ---
 
 [ED Outrider](../../README.md) · [What's new](whats-new.md) · [Install and run](install.md) · [The views](views.md) · [Plot Route](plot-route.md) · [Cargo and trading](cargo-and-trading.md) · [Voice and alerts](voice-and-alerts.md) · [Automation](automation.md) · [On a tablet](tablet.md) · [In-game overlay](overlay.md) · **Uploads** · [Settings and good to know](settings.md) · [For the curious](for-developers.md)
+
+## Upload marks in the Log
+
+With an upload on, each line of the **Log** says what the uploads made of it, beside its summary: **✓ EDDN · ✓ EDSM**
+(sent), **⏳** (waiting: for the next jump or docking, or to try again), **⏸** (on hold: a key refused, a kind of
+message EDDN keeps refusing, the upload switched off) and **✗** (not taken, or dropped). Hover a mark for why, in the
+service's own words. A line with no mark had nothing to send; a line sent as several messages shows the worst of them.
+
+- Marks cover the last 7 days: Outrider forgets what it sent after a week.
+- **not sent** (beside "show noise", while an upload is in use) shows only the lines with a message waiting, on hold or
+  not taken, whatever the category boxes say: some "noise" (a signal source, a market) goes to EDDN too.
+
+## Fill gaps in EDSM's flight log
+
+EDSM's flight log has what was sent to it. If you played before you switched EDSM on in Outrider, or while it was off,
+that stretch is missing there. Settings → Uploads → **Fill gaps in EDSM's flight log** sends it, once you have looked:
+
+- **Check EDSM's log** asks EDSM (reading only) where its flight log ends before Outrider took over: "EDSM's flight log
+  ends 2026-10-09 21:14 UTC at …; Outrider has sent since 2026-10-11 08:00 UTC; your journals have 412 jumps between".
+  It fills **From** and **To** with that stretch. If EDSM was switched on in Outrider before this version, when it
+  started sending is not known ("unknown"): then the range runs to now, and you set the end yourself.
+- **Preview** rebuilds, from your journals (the live folders, the legacy ones and the backups' journal archive), what
+  Outrider would send EDSM for that range, sending nothing: "312 events (41 jumps) in 2 requests, about 1 min". Times
+  are UTC.
+- **Send** (only for the range just previewed, after you confirm) first asks EDSM for its flight log over the range:
+  if EDSM has anything there, nothing is sent (never twice what EDSM has); pick a range around it. Then it sends one
+  request every 10 seconds. Its line counts what EDSM did with each event: stored, already
+  there, older than its log (not taken). If EDSM takes none of the first request because each event is older than what
+  its log has, the backfill stops by itself: EDSM does not take back-dated events then.
+- **Stop** ends it (what still waits is not sent). A key EDSM refuses holds it until you fix the key and press **Go on**.
+- What EDSM stores cannot be taken back from here. Try a small range first (a jump or two), and look at your flight
+  log on edsm.net before sending a long one.

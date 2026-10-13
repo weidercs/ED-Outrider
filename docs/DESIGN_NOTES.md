@@ -453,6 +453,23 @@ upstream project's choices, not rules of the game.
   (aiohttp's carries the URL): only its kind ("Couldn't reach Inara: timeout"). One check per 10 s per service; EDSM's
   account reads at least 2 s apart; Inara's check waits on the same `uploads.Gate` as its sender (35 s), because
   Inara's two-a-minute rule counts every request with the key and whether a read counts is not documented.
+- **The EDSM backfill is the one exception to the 7-day cap** (S47): uploads never send a line over a week old
+  (`uploads.MAX_AGE_S`), except a range the player picks in Settings → Uploads → Fill gaps in EDSM's flight log. It is
+  explicit (a range, from a Check of where EDSM's log ends before `edsm_since`, kept when EDSM is switched on), previewed
+  (the events rebuilt from the live, legacy and archived journals through a Session of its own: nothing sent), guarded
+  (get-logs over the whole range must be empty, else nothing is queued: never resend what EDSM has) and gentle (its own
+  outbox service `edsm_bf`, one request every 10 s, UNIQUE per source so a second Send never doubles, and a line EDSM's
+  live stream has is skipped). Its answers are read strictly (`edsm.backfill_answer`): the live `answer()` takes 101-104
+  as sent, right for the live stream but not here, where 102 "older than what EDSM has" means EDSM did not take it.
+  A first request taken by none (every event 102) stops it by itself. Installs that switched EDSM on before
+  `edsm_since` existed say "unknown" and the range runs to now. The jumps between are the jumps table's (every
+  commander), the events are the commander's.
+- **Upload marks in the Log** (S68): the Log only (the author's choice), from the outbox joined on its source key (the
+  file and the line's byte offset: log.py splits on "\n" as the reader does, never splitlines, so the offsets agree; a
+  line's `#1`, `#2` messages count as that line). Per service the worst of a line's messages wins (✗ over ⏸ over ⏳
+  over ✓); a line with no outbox row had nothing to send (no mark), and a line over 7 days old gets none (the outbox
+  prunes after a week). "not sent" (rows queued or dropped) overrides the category boxes, since some "noise" events go
+  to EDDN; it lives in the Log's own stored filters.
 - **EDDN station data goes once per visit**, not once per change: the sites date a station's data by what arrives, so
   each docking sends it again; only the same screen reopened in one docking is skipped (`VISIT_ENDS`).
 - **EDDN sends what EDMC, EDDiscovery and EDDLite send, field for field** (compared on EDDN's relay, the author,
@@ -800,6 +817,10 @@ confirmed while playing. Treat reports about them as likely real.
   (`tests/fixtures/account_checks.json`), never sent with a real key: get-credits' 203 for a wrong name or key, the
   fields of getCommanderProfile's answer (its `inaraURL`), and whether a read counts against Inara's limit are still to
   be seen live. Also whether EDSM's account APIs take the key in a POST body as they do in a GET query.
+- The EDSM flight log backfill (S47): built from EDSM's API documentation, tested with fakes only. Not yet seen live:
+  get-position's and get-logs' real answers (their window limit and date format), and above all whether EDSM inserts
+  back-dated events or answers 102 "older than stored" (and whether 101/103 dedupe); to be tried on a range of a jump or
+  two, after a Preview, with the author's OK.
 - EDDN: ApproachSettlement, CarrierJump and FCMaterials messages have not been seen live on EDDN's relay yet, nor a
   planetary station's Docked with its Body.
 - The in-game overlay's real panels in live play (only the test panels have been seen over the game), Arrange mode

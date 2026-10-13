@@ -5879,6 +5879,99 @@ const settle = async maxMs => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| service and starting S70 S9 |", good ? "Start with this computer (install, remove asks, another device, refused); 503 starting is starting; the starting page reloads when ready" : JSON.stringify({got, want}), errors.slice(before));
   }
+  // S68 / S47 (batch 14): the Log's upload marks (✓ EDDN · ⏳ EDSM..., the reason in the hover) and "not sent" (offered
+  // while an upload is in use; ticked, the query asks the server for unsent lines and the category boxes dim); Settings ->
+  // Uploads' Fill gaps in EDSM's flight log (a Check fills from / to, Send only for the previewed range and after a
+  // confirm, Stop / Go on by the progress; the posts stubbed: nothing reaches EDSM)
+  {
+    const w = dom.window, before = errors.length, realFetch = w.fetch, realConfirm = w.confirm, posted = [], asked = [];
+    w.fetch = (u, o) => {
+      const url = String(u);
+      if (url.startsWith("api/log")) asked.push(url);
+      if (o && o.method === "POST" && /uploads\/edsm\/backfill/.test(url)) {
+        const b = JSON.parse(o.body); posted.push(b);
+        const pv = {commander: "Sample Pilot", start: "2026-10-09T21:14:06Z", end: "2026-10-11T08:00:00Z", files: 3, at: 1,
+                    summary: {events: 312, jumps: 41, requests: 2, seconds: 30, by_event: [["FSDJump", 41], ["Scan", 120]]}};
+        const answer = b.action === "preview" ? {progress: null, job: null, preview: pv, queued: 0, gap_s: 10}
+          : {progress: {state: "running", commander: "Sample Pilot", start: pv.start, end: pv.end, total: 312, counts: {stored: 200}}, job: null, preview: null, queued: 112, gap_s: 10};
+        return Promise.resolve(new Response(JSON.stringify(answer), {status: b.action === "send" ? 202 : 200, headers: {"Content-Type": "application/json"}}));
+      }
+      return realFetch(u, o);
+    };
+    const asks = [];
+    w.confirm = q => { asks.push(q); return true; };
+    const got = JSON.parse(w.eval(`(() => {
+      const o = {}, keep = {rows: L.rows, uploads: data.uploads};
+      L.rows = [{id: "J.log|0", at: 0, ts: new Date().toISOString(), event: "FSDJump", cat: "travel", summary: "Jumped to A", raw: {},
+                 up: [{service: "eddn", state: "sent", why: "200 OK"}, {service: "edsm", state: "dropped", why: "102 Message older than the stored one"}]},
+                {id: "J.log|1", at: 90, ts: new Date().toISOString(), event: "Music", cat: "noise", summary: "Music", raw: {}, up: []}];
+      renderLog();
+      const marks = [...document.querySelectorAll("#logRows .upm > span")];
+      o.marks = marks.map(m => [m.className, m.textContent, m.title]);
+      o.rowsWithMarks = document.querySelectorAll("#logRows .upm").length;
+      data.uploads = Object.assign({}, keep.uploads, {eddn: Object.assign({}, (keep.uploads || {}).eddn, {wanted: false, queued: 0}),
+        edsm: Object.assign({}, (keep.uploads || {}).edsm, {wanted: false, queued: 0}), inara: Object.assign({}, (keep.uploads || {}).inara, {wanted: false, queued: 0})});
+      logUnsentShow(); o.hiddenOff = document.getElementById("lUnsentBox").hidden;
+      data.uploads.edsm = Object.assign({}, data.uploads.edsm, {wanted: true});
+      logUnsentShow(); o.shownOn = !document.getElementById("lUnsentBox").hidden;
+      L.rows = keep.rows; data.uploads = keep.uploads;
+      return JSON.stringify(o); })()`));
+    // "not sent" ticked: the server's answer (the scratch server's outbox is empty) and the boxes dimmed
+    w.eval(`lUnsent.checked = true; lUnsent.onchange();`);
+    await settle(1500);
+    Object.assign(got, JSON.parse(w.eval(`JSON.stringify({dim: document.getElementById("lCats").classList.contains("dim"),
+      status: document.getElementById("lStatus").textContent, saved: store.get("log", {}).unsent})`)));
+    got.unsentAsked = asked.some(u => /unsent=1/.test(u));
+    w.eval(`lUnsent.checked = false; lUnsent.onchange();`);
+    await settle(1500);
+    got.undim = w.eval(`document.getElementById("lCats").classList.contains("dim")`);
+    // the backfill block
+    Object.assign(got, JSON.parse(w.eval(`(() => {
+      const o = {}, keep = data.uploads;
+      window.__u2 = keep;
+      const bf = {progress: null, preview: null, queued: 0, gap_s: 10, since: null,
+                  job: {kind: "check", state: "done", at: 2, text: "EDSM's flight log ends 2026-10-09 21:14 UTC at Sample Reach; since when Outrider has sent: unknown; your journals have 41 jumps between.",
+                        result: {start: "2026-10-09T21:14:06Z", end: "2026-10-11T08:00:00Z", jumps: 41}}};
+      data.uploads = Object.assign({}, keep, {edsm: Object.assign({}, (keep || {}).edsm, {backfill: bf, accounts: [{commander: "Sample Pilot", name: "Sample Pilot", set: true, hint: "0123…4567 (40 characters)"}]})});
+      BF.open = true; uploadsDrawn = ""; renderUploads();
+      const box = document.getElementById("uploadsBox"), q = s => box.querySelector(s);
+      o.filled = [q('[data-bf="start"]').value, q('[data-bf="end"]').value];
+      o.sendOff = q('[data-bfact="send"]').disabled;
+      o.jobLine = /^✓ .*your journals have 41 jumps between\\.$/.test([...box.querySelectorAll(".bfill .hint")].map(h => h.textContent.trim()).find(t => t.startsWith("✓")) || "");
+      q('[data-bfact="preview"]').click();
+      return JSON.stringify(o); })()`)));
+    await settle(1000);
+    Object.assign(got, JSON.parse(w.eval(`(() => {
+      const box = document.getElementById("uploadsBox"), q = s => box.querySelector(s);
+      const o = {sendOn: !q('[data-bfact="send"]').disabled, preview: [...box.querySelectorAll(".bfill .hint")].map(h => h.textContent).find(t => t.startsWith("Preview")) || ""};
+      q('[data-bfact="send"]').click();
+      return JSON.stringify(o); })()`)));
+    await settle(1000);
+    Object.assign(got, JSON.parse(w.eval(`(() => {
+      const box = document.getElementById("uploadsBox"), q = s => box.querySelector(s);
+      const o = {progress: [...box.querySelectorAll(".bfill .hint")].map(h => h.textContent).find(t => t.startsWith("Sending")) || "", stop: !!q('[data-bfact="stop"]'),
+                 checkOff: q('[data-bfact="check"]').disabled};
+      data.uploads.edsm.backfill = Object.assign({}, data.uploads.edsm.backfill, {progress: {state: "held", commander: "Sample Pilot", start: "2026-10-09T21:14:06Z", end: "2026-10-11T08:00:00Z",
+        total: 312, counts: {stored: 200}, why: "203 EDSM refused the commander name or API key"}});
+      uploadsDrawn = ""; renderUploads();
+      o.held = [!!q('[data-bfact="resume"]'), !!q('[data-bfact="stop"]')];
+      BF.open = false; data.uploads = window.__u2; uploadsDrawn = ""; renderUploads();
+      return JSON.stringify(o); })()`)));
+    got.posted = posted.map(b => [b.action, b.commander, b.start, b.end]);
+    got.asks = asks.map(a => a.slice(0, 40));
+    w.fetch = realFetch; w.confirm = realConfirm;
+    const want = {marks: [["sent", "✓ EDDN", "EDDN: sent · 200 OK"], ["dropped", "✗ EDSM", "EDSM: not taken · 102 Message older than the stored one"]],
+                  rowsWithMarks: 1, hiddenOff: true, shownOn: true, dim: true, saved: true, unsentAsked: true, undim: false,
+                  filled: ["2026-10-09 21:14:06", "2026-10-11 08:00:00"], sendOff: true, jobLine: true, sendOn: true,
+                  progress: "Sending 200 of 312 (2026-10-09 21:14:06 to 2026-10-11 08:00:00, CMDR Sample Pilot): 200 stored Stop", stop: true, checkOff: true,
+                  held: [true, true],
+                  posted: [["preview", "Sample Pilot", "2026-10-09 21:14:06", "2026-10-11 08:00:00"], ["send", "Sample Pilot", "2026-10-09 21:14:06", "2026-10-11 08:00:00"]],
+                  asks: ["Send 312 events to EDSM for CMDR Sample "]};
+    const good = Object.keys(want).every(k => JSON.stringify(got[k]) === JSON.stringify(want[k])) && /^0 not sent/.test(got.status) &&
+      got.preview.startsWith("Preview 2026-10-09 21:14:06 to 2026-10-11 08:00:00 UTC: 312 events (41 jumps) in 2 requests, about 30 s") && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| upload marks and EDSM backfill |", good ? "✓ / ✗ marks with their reason, not sent, Check fills the range, Preview then Send, Stop and Go on" : JSON.stringify(got), errors.slice(before));
+  }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",
     headers: Object.assign({"Content-Type": "application/json"}, origin ? {Origin: origin} : {})}).then(r => r.status);

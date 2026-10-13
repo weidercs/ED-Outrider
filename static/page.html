@@ -185,6 +185,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       <label><input type="checkbox" value="other" checked> • other</label>
     </span>
     <label><input type="checkbox" id="lNoise"> show noise</label>
+    <label id="lUnsentBox" hidden title="only the lines an upload has not sent: waiting, on hold or refused (the last 7 days, whatever the category boxes say)"><input type="checkbox" id="lUnsent"> not sent</label>
     <label>Last <select id="lDays"><option value="1">day</option><option value="7" selected>7 days</option><option value="30">30 days</option>
       <option value="90">90 days</option><option value="365">year</option><option value="3650">everything</option></select></label>
     <input type="search" id="lFilter" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="search events" class="filter">
@@ -198,7 +199,8 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
   <div class="btns"><button type="button" id="lMore" hidden>More</button></div>
   <div class="hint">Every journal event, newest first, read straight from your journal files; new events appear as they happen.
     Click a row for the raw event. <b>Noise</b> is chatter, music, inventory snapshots and signal-source pings.
-    Click a system to copy it, ⌖ to open it in Here, 🔍 to open that body.</div>
+    Click a system to copy it, ⌖ to open it in Here, 🔍 to open that body.
+    With uploads on, a line shows what each made of it: ✓ sent, ⏳ waiting, ⏸ on hold, ✗ not taken (hover for why); upload marks cover the last 7 days.</div>
   </div>
 </section>
 <section id="matView" hidden>

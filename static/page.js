@@ -2805,7 +2805,7 @@ function render() {
   document.getElementById("matView").hidden = view !== "mat";
   if (view === "mat") loadMat();
   document.getElementById("logView").hidden = view !== "log";
-  if (view === "log") { if (L.key === null) loadLog(); else tailLog(); }
+  if (view === "log") { logUnsentShow(); if (L.key === null) loadLog(); else tailLog(); }
   document.getElementById("bioView").hidden = view !== "bio";
   if (view === "bio") { if (bioMode !== "runs") loadChecklist(); else loadBio(); }
   if (view === "here" || nearPinned || (view === "overview" && !ovState.collapsed) || view === "now") {   // Now reads Here's data
@@ -4651,10 +4651,12 @@ const LOG_MAX_ROWS = 1000;   // tailing keeps the newest this many; "more" conti
 // what the tail keys on: freshness.read moves with every journal line consumed (the journal time is to the second)
 const logMark = () => data && data.freshness ? data.freshness.read ?? data.freshness.journal : null;
 const lDays = document.getElementById("lDays"), lNoise = document.getElementById("lNoise"), lFilter = document.getElementById("lFilter");
+const lUnsent = document.getElementById("lUnsent");
 const lCatBoxes = [...document.querySelectorAll("#lCats input")];
 const lSaved = store.get("log", {});
 if (lSaved.days && (typeof lSaved.days === "string" || typeof lSaved.days === "number")) lDays.value = lSaved.days;
 lNoise.checked = !!lSaved.noise;
+lUnsent.checked = !!lSaved.unsent;
 // a category added since the filters were saved starts ticked
 // (a hand-edited import or server copy may hold anything there: a list that is not a list reads as unset)
 const lKnown = Array.isArray(lSaved.known) ? lSaved.known : ["travel", "exploration", "bio", "ship", "carrier", "other"];   // saves from before "known"
@@ -4663,11 +4665,31 @@ const CAT_GLYPH = {travel: "🚀", exploration: "🔭", phenomena: "🌀", bio: 
 function logQuery() {
   const cats = lCatBoxes.filter(b => b.checked).map(b => b.value);
   if (lNoise.checked) cats.push("noise");
-  return `days=${lDays.value}&cat=${cats.join(",") || "none"}&q=${encodeURIComponent(lFilter.value.trim())}&noise=${lNoise.checked ? 1 : 0}`;
+  return `days=${lDays.value}&cat=${cats.join(",") || "none"}&q=${encodeURIComponent(lFilter.value.trim())}&noise=${lNoise.checked ? 1 : 0}` +
+    (lUnsent.checked ? "&unsent=1" : "");
 }
 function saveLog() {
   store.set("log", {days: lDays.value, noise: lNoise.checked, cats: lCatBoxes.filter(b => b.checked).map(b => b.value),
-                    known: lCatBoxes.map(b => b.value)});
+                    known: lCatBoxes.map(b => b.value), unsent: lUnsent.checked});
+}
+// S68: "not sent" is offered while an upload is in use (switched on, or rows still waiting), and kept while ticked;
+// ticked, it shows every category (some "noise" goes to EDDN), so the category boxes are dimmed
+function logUnsentShow() {
+  const u = data && data.uploads;
+  const inUse = !!u && ["eddn", "edsm", "inara"].some(s => u[s] && (u[s].wanted || u[s].queued));
+  document.getElementById("lUnsentBox").hidden = !(inUse || lUnsent.checked);
+  document.getElementById("lCats").classList.toggle("dim", lUnsent.checked);
+}
+// the Log's upload marks (S68): each service's worst state for the line, the reason in its hover
+const UP_MARK = {sent: "✓", dry: "◌", queued: "⏳", held: "⏸", dropped: "✗"};
+const UP_WORD = {sent: "sent", dry: "dry run", queued: "waiting", held: "on hold", dropped: "not taken"};
+const UP_LABEL = {eddn: "EDDN", edsm: "EDSM", inara: "Inara"};
+function logMarksHtml(up) {
+  if (!Array.isArray(up) || !up.length) return "";
+  return ` <span class="upm">` + up.map(m => {
+    const name = UP_LABEL[m.service] || m.service;
+    return `<span class="${esc(m.state)}" title="${esc(`${name}: ${UP_WORD[m.state] || m.state}${m.why ? ` · ${m.why}` : ""}`)}">${UP_MARK[m.state] || "?"} ${esc(name)}</span>`;
+  }).join(" · ") + `</span>`;
 }
 async function loadLog(force = false) {
   const key = logQuery();
@@ -4738,7 +4760,8 @@ const localTime = ts => { const d = new Date(ts); return isNaN(d) ? ts : d.toLoc
 const localDay = ts => { const d = new Date(ts); return isNaN(d) ? "" : d.toLocaleDateString([], {weekday: "short", year: "numeric", month: "short", day: "numeric"}); };
 function renderLog() {
   const st = document.getElementById("lStatus");
-  st.textContent = L.error ? L.error : L.loading ? "loading…" : `${L.rows.length} events${L.next ? " (more below)" : ""}`;
+  st.textContent = L.error ? L.error : L.loading ? "loading…" : `${L.rows.length} ${lUnsent.checked ? "not sent" : "events"}${L.next ? " (more below)" : ""}`;
+  logUnsentShow();
   let day = null, h = "";
   for (const r of L.rows) {
     const d = localDay(r.ts);
@@ -4747,7 +4770,7 @@ function renderLog() {
       (r.id64 ? `<span class="goto" data-goto="${esc(r.id64)}" title="open in Here">⌖</span>` : "") : "";
     const body = r.body && r.id64 ? ` <span class="goto" data-body="${esc(r.body)}" data-bsys="${esc(r.id64)}" title="open ${esc(r.body)} in Here">🔍</span>` : "";
     h += `<tr class="ln ${r.cat}${L.fresh.has(r.id) ? " fresh" : ""}" data-id="${esc(r.id)}"><td class="t" title="${esc(r.ts)}">${localTime(r.ts)}</td>` +
-      `<td title="${r.cat} · ${esc(r.event)}">${CAT_GLYPH[r.cat] || ""}</td><td class="ev hide-sm c2hide">${esc(r.event)}</td><td class="sum">${esc(r.summary)}${body}</td><td>${sys}</td></tr>`;
+      `<td title="${r.cat} · ${esc(r.event)}">${CAT_GLYPH[r.cat] || ""}</td><td class="ev hide-sm c2hide">${esc(r.event)}</td><td class="sum">${esc(r.summary)}${body}${logMarksHtml(r.up)}</td><td>${sys}</td></tr>`;
     if (L.open.has(r.id)) h += `<tr class="raw"><td colspan="5"><pre>${esc(JSON.stringify(r.raw, null, 2))}</pre></td></tr>`;
   }
   document.getElementById("logRows").innerHTML = h || `<tr><td colspan="5" class="unk">${L.loading ? "" : "No events match."}</td></tr>`;
@@ -4755,6 +4778,7 @@ function renderLog() {
 }
 lCatBoxes.forEach(b => b.onchange = () => { saveLog(); loadLog(); });
 lNoise.onchange = () => { saveLog(); loadLog(); };
+lUnsent.onchange = () => { saveLog(); logUnsentShow(); loadLog(); };
 lDays.onchange = () => { saveLog(); loadLog(); };
 let lTimer = null;
 lFilter.oninput = () => { clearTimeout(lTimer); lTimer = setTimeout(() => loadLog(), 350); };
@@ -8764,6 +8788,59 @@ function uploadRecentHtml(s, x) {
   const lines = uploadHoldsHtml(s, x) + rec.map((e, i) => uploadRecentLine(e, i === 0)).join("") + uploadCatchupLine(x.catchup, name);
   return lines ? `<div class="uprecent">${lines}</div>` : "";
 }
+// S47: Fill gaps in EDSM's flight log. What is typed (the commander, from, to) and whether the block is open live here,
+// so a redraw of the counts never wipes them; a finished Check fills from / to once (BF.jobAt)
+const BF = {open: false, commander: "", start: "", end: "", jobAt: null, note: ""};
+const BF_WORDS = {stored: "stored", already: "already there", duplicate: "duplicates", older: "older than EDSM's log (not taken)",
+  crew: "crew (not taken)", refused: "refused", dry: "in a dry run"};
+const bfShow = iso => iso ? String(iso).replace("T", " ").replace(/Z$/, "") : "";
+const bfNorm = t => String(t || "").trim().replace("T", " ").replace(/Z$/, "").replace(/^(\d{4}-\d\d-\d\d \d\d:\d\d)$/, "$1:00");
+const bfMins = s => s < 90 ? `${Math.max(1, Math.round(s))} s` : `${Math.round(s / 60)} min`;
+function backfillHtml(u) {
+  const x = (u.edsm || {}).backfill;
+  if (!x) return "";
+  const cmdrs = ((u.edsm || {}).accounts || []).filter(a => a.set).map(a => a.commander);
+  if (!cmdrs.includes(BF.commander)) BF.commander = cmdrs[0] || "";
+  const job = x.job, pv = x.preview, pr = x.progress;
+  if (job && job.kind === "check" && job.state === "done" && job.result && job.at !== BF.jobAt) {
+    BF.jobAt = job.at;
+    if (job.result.start) BF.start = bfShow(job.result.start);
+    if (job.result.end) BF.end = bfShow(job.result.end);
+  }
+  const busy = !!(job && job.state === "running"), running = !!(pr && ["running", "held"].includes(pr.state));
+  const same = pv && pv.commander === BF.commander && bfNorm(pv.start) === bfNorm(BF.start) && bfNorm(pv.end) === bfNorm(BF.end);
+  const out = [`<div class="hint">For a stretch Outrider never sent to EDSM (before you switched EDSM on here, or while it was off). ` +
+    `<b>Check</b> asks EDSM where its flight log ends; <b>Preview</b> counts what your journals hold for the range, sending nothing; ` +
+    `<b>Send</b> first makes sure EDSM's log has nothing in the range, then sends one request every ${x.gap_s || 10} s.</div>`];
+  if (!cmdrs.length) return `<details class="bfill"${BF.open ? " open" : ""}><summary>Fill gaps in EDSM's flight log</summary>${out[0]}` +
+    `<div class="unk">save an EDSM key above first</div></details>`;
+  out.push(`<div class="bfrow">CMDR <select data-bf="commander">${cmdrs.map(c => `<option${c === BF.commander ? " selected" : ""}>${esc(c)}</option>`).join("")}</select>` +
+    ` <button type="button" class="try" data-bfact="check"${busy || running ? " disabled" : ""} title="reads EDSM's flight log (get-position, get-logs): nothing is sent">Check EDSM's log</button></div>`);
+  if (job) out.push(`<div class="hint">${job.state === "running" ? "…" : job.state === "failed" ? `<span class="bad">✗</span>` : `<span class="ok">✓</span>`} ` +
+    `${job.at ? upTime(job.at) + " " : ""}${esc(job.text || "")}</div>`);
+  out.push(`<div class="bfrow">From <input type="text" data-bf="start" value="${esc(BF.start)}" placeholder="2026-10-09 21:14" spellcheck="false">` +
+    ` to <input type="text" data-bf="end" value="${esc(BF.end)}" placeholder="2026-10-11 08:00" spellcheck="false"> UTC` +
+    ` <button type="button" class="try" data-bfact="preview"${busy || running ? " disabled" : ""} title="rebuild what Outrider would send for this range from your journals: nothing is sent">Preview</button>` +
+    ` <button type="button" class="try" data-bfact="send"${same && pv.summary.events && !busy && !running ? "" : " disabled"} title="${same ? "send the previewed events to EDSM (its flight log is checked over the range first)" : "Preview this range first"}">Send</button></div>`);
+  if (pv) {
+    const sm = pv.summary, kinds = (sm.by_event || []).map(([n, c]) => `${esc(n)} ${upN(c)}`).join(" · ");
+    out.push(`<div class="hint">Preview ${esc(bfShow(pv.start))} to ${esc(bfShow(pv.end))} UTC: ` + (sm.events
+      ? `${upN(sm.events)} event${sm.events === 1 ? "" : "s"} (${upN(sm.jumps)} jump${sm.jumps === 1 ? "" : "s"}) in ${upN(sm.requests)} request${sm.requests === 1 ? "" : "s"}, about ${bfMins(sm.seconds)}` +
+        `${kinds ? `<br>${kinds}` : ""}` : "nothing EDSM would take in this range") + (same ? "" : ` <span class="unk">(another range than the one above)</span>`) + `</div>`);
+  }
+  if (pr) {
+    const c = pr.counts || {}, done = Object.values(c).reduce((a, b) => a + b, 0);
+    const tally = Object.keys(BF_WORDS).filter(k => c[k]).map(k => `${upN(c[k])} ${BF_WORDS[k]}`).join(" · ");
+    const head = pr.state === "running" ? `Sending ${upN(done)} of ${upN(pr.total)}` : pr.state === "held" ? `<span class="bad">On hold</span> after ${upN(done)} of ${upN(pr.total)}`
+      : pr.state === "done" ? `<span class="ok">Done</span>${pr.finished ? " " + upTime(pr.finished) : ""}: ${upN(pr.total)} event${pr.total === 1 ? "" : "s"}` : `Stopped after ${upN(done)} of ${upN(pr.total)}`;
+    const btns = (pr.state === "held" ? ` <button type="button" class="try" data-bfact="resume" title="send what waits again (after fixing the key)">Go on</button>` : "") +
+      (running ? ` <button type="button" class="try" data-bfact="stop" title="stop: what still waits is not sent">Stop</button>` : "");
+    out.push(`<div class="hint">${pr.dry ? "(dry run) " : ""}${head} (${esc(bfShow(pr.start))} to ${esc(bfShow(pr.end))}, CMDR ${esc(pr.commander || "")})` +
+      `${tally ? ": " + tally : ""}${pr.why ? ` · <span class="warnc">${esc(pr.why)}</span>` : ""}${pr.unsent ? ` · ${upN(pr.unsent)} not sent` : ""}${btns}</div>`);
+  }
+  if (BF.note) out.push(`<div class="hint bad">${esc(BF.note)}</div>`);
+  return `<details class="bfill"${BF.open ? " open" : ""}><summary>Fill gaps in EDSM's flight log</summary>${out.join("")}</details>`;
+}
 function uploadsHtml(u) {
   if (!u) return `<div class="unk">not known yet</div>`;
   const row = s => {
@@ -8804,7 +8881,7 @@ function uploadsHtml(u) {
     keyCheckHtml("inara", a.commander) + `</div>`).join("");
   return row("eddn") + row("edsm") +
     `<div class="hint">EDSM accounts, per in-game commander (your key is at <a href="https://www.edsm.net/en/settings/api" target="_blank" rel="noopener">edsm.net → Settings → API key</a>; it stays on this Outrider):</div>` +
-    (acc || `<div class="unk">no commander seen yet</div>`) + row("inara") +
+    (acc || `<div class="unk">no commander seen yet</div>`) + backfillHtml(u) + row("inara") +
     `<div class="hint">Inara API keys, per in-game commander (yours is at <a href="https://inara.cz/elite/cmdr-settings-api/" target="_blank" rel="noopener">inara.cz → Settings → API key</a>; it stays on this Outrider). ` +
     `Switch Inara off in EDMC, EDDI or EDDiscovery first: two apps sending can get the key revoked (Outrider sees only EDMC's setting).</div>` +
     (inacc || `<div class="unk">no commander seen yet</div>`) + `<div class="hint" id="uploadsMsg">${esc(uploadsNote)}</div>` +
@@ -8886,6 +8963,33 @@ document.getElementById("uploadsBox").addEventListener("click", async e => {
 document.getElementById("uploadsBox").addEventListener("change", e => {
   const box = e.target.closest("[data-upload]");
   if (box) setUpload(box.dataset.upload, box.checked);
+});
+// S47's block: what is typed is kept in BF (a redraw draws it back), its open state too; each button posts its action
+document.getElementById("uploadsBox").addEventListener("input", e => {
+  const f = e.target.closest("[data-bf]"); if (f) BF[f.dataset.bf] = f.value;
+});
+document.getElementById("uploadsBox").addEventListener("toggle", e => {
+  if (e.target.classList && e.target.classList.contains("bfill")) BF.open = e.target.open;
+}, true);   // toggle does not bubble: caught on its way down
+document.getElementById("uploadsBox").addEventListener("click", async e => {
+  const b = e.target.closest("[data-bfact]"); if (!b) return;
+  const action = b.dataset.bfact, sel = document.querySelector("#uploadsBox [data-bf=commander]");
+  if (sel) BF.commander = sel.value;
+  const pv = (((data.uploads || {}).edsm || {}).backfill || {}).preview;
+  if (action === "send" && !confirm(`Send ${pv ? upN(pv.summary.events) + " events" : "the previewed events"} to EDSM for CMDR ${BF.commander}, ` +
+      `${BF.start} to ${BF.end} UTC? EDSM's flight log is checked over the range first; what EDSM stores cannot be taken back.`)) return;
+  if (action === "stop" && !confirm("Stop the backfill? What still waits is not sent.")) return;
+  b.disabled = true; BF.note = "";
+  try {
+    const j = await apiJson("api/uploads/edsm/backfill", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({action, commander: BF.commander, start: bfNorm(BF.start), end: bfNorm(BF.end)})});
+    if (j.error) BF.note = j.error;
+    else if (data.uploads && data.uploads.edsm) data.uploads.edsm.backfill = j;
+  } catch (err) {
+    BF.note = `could not reach Outrider: ${err.message}`;
+  } finally {
+    uploadsDrawn = ""; renderUploads();
+  }
 });
 document.getElementById("uploadsBox").addEventListener("click", async e => {
   const row = e.target.closest(".inaraacc"); if (!row) return;
