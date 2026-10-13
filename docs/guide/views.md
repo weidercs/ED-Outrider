@@ -37,7 +37,11 @@ counted, where life is possible. A finished species is one line, its codex entry
 Alcyoneum - Red ✦ 8.3M"), the colour's word in that colour (Settings → Display can turn that off). The body panel lists
 why each other genus is not expected ("pressure too low"). **👥** beside a genus is a species other commanders reported
 to Spansh on that body, with the colour they reported ("👥 Bacterium Vesicula - Mulberry 1.0M"): a fact, not a guess
-(asked once a day for the system you are in when its bodies have life; a genus you have analysed shows yours instead). Flying low over a body in your ship (under 5 km), the
+(asked once a day for the system you are in when its bodies have life; a genus you have analysed shows yours instead).
+Hover a genus's guess for its candidates and, once you have finished runs of that genus on bodies like it (the same
+class and atmosphere, within the same 25 K, in the same region once you have 5 such runs there), which species yours
+were: "yours on bodies like this (Icy body, thin N2, 75–100 K, Inner Orion Spur): Informem 11 of 14, Acies 3 of 14".
+The guess itself stays the likeliest by value. Flying low over a body in your ship (under 5 km), the
 on-body strip already shows its bio card. While you sample, the strip says what the run pays from the first sample on
 ("🧬 Bacterium Aurasus · 1.0M (×5: 5.0M) · sample 1/3 · 500 m to go": the species' value, and with the first-footfall
 bonus). A star's panel says its kind in words ("main sequence", "white dwarf (hydrogen-rich)"), a biology codex entry links to
@@ -299,6 +303,12 @@ body for some bacteria) and your state; click it again to fold them up. The colu
 picture and a map of the galaxy with the regions it can grow in lit and your samples as dots; hover a lit region
 for its name and your completion there. The line above the boxes counts it up: "Inner Orion Spur: 45 of 101 possible species found ·
 11.70% complete for the species in this region · 43 sold · …".
+
+**🔍** beside a species you have not found (and **🔍 nearby** beside a colour of it you have not found, and in its
+column) asks Spansh for the nearest bodies where commanders reported it, in that colour when you picked one: up to 25,
+nearest first, each with its distance, gravity, the colours reported there, ✓ if you have been to the system, ☆ to
+bookmark it and **Copy** for the name to paste into the galaxy map. It needs the internet, and lists only what
+commanders' uploads reported to Spansh.
 
 **Completion** counts what you have done, not only what is finished: each species that can grow in the region scores
 the share of its colours you have found there (sold, aboard, lost or logged), averaged over those species, so half of

@@ -358,6 +358,9 @@ NO_DUMP_RETRY = 3600       # s: a dump 404 for a system whose search lists bodie
 DUMP_MAX_TRIES = 5         # body-detail fetches for one system before we stop asking (this stay)
 REPORTED_MAX_AGE = 86400   # s: the species reported on your system's bodies (S23) are asked for again after a day
 REPORTED_RETRY_S = 600     # s: ...and after a failed ask, not before this
+CHECKLIST_FIND_LY = 20000  # ly: S29's search for the nearest reported bodies of a species (sorted nearest first)
+CHECKLIST_FIND_ROWS = 25   # bodies asked for (one page)
+CHECKLIST_FIND_KEEP_S = 600   # s: the same species, colour and place answered from memory, not asked again
 USER_AGENT = "ED Outrider (personal exploration helper)"
 
 POLL_SECONDS = 1.0
@@ -5250,6 +5253,36 @@ def bio_guess(r, star=None, genera=None, ctx=None):
     return (val if any(g.get("value") for g in groups) else None), groups
 
 
+def species_history(db):
+    """S24: your completed runs (own_organic with a done_ts) counted by genus, the body's class, atmosphere and 25 K
+    temperature band (your scan of it, own_bodies) and the region of its system (your visit): an
+    outrider.bio.SpeciesHistory. A run whose body you never scanned or whose system has no position is left out."""
+    hist = outrider.bio.SpeciesHistory()
+    for r in db.execute("""SELECT o.genus_name, o.species_name, b.record, v.x, v.y, v.z FROM own_organic o
+                           JOIN own_bodies b ON b.system = o.system AND b.body_id = o.body_id
+                           LEFT JOIN visits v ON v.id64 = o.system
+                           WHERE o.done_ts IS NOT NULL AND o.species_name IS NOT NULL"""):
+        try:
+            rec = json.loads(r["record"]) if r["record"] else None
+        except ValueError:
+            continue
+        if not isinstance(rec, dict):
+            continue
+        shape = outrider.bio.history_shape(rec.get("subtype"), rec.get("atmosphere"), rec.get("temperature"))
+        region = outrider.bio.region_name(r["x"], r["y"], r["z"]) if r["x"] is not None else None
+        hist.add(r["genus_name"], r["species_name"], shape, region)
+    return hist
+
+
+def bio_pick(group, history, shape, region):
+    """The species a genus guess names: the likeliest by value, or with outrider.bio.HISTORY_PICK on (off: the
+    backtest found it no better) the one your runs found most often on bodies like this. The value stays the
+    group's maximum either way ("up to")."""
+    if outrider.bio.HISTORY_PICK and history and shape and group.get("best"):
+        return history.pick(group["genus"], shape, region, [x["name"] for x in group["species"]]) or group["best"]
+    return group.get("best")
+
+
 def bio_left_groups(r, star, known, ctx, done):
     """The genus groups still to sample on a body. With the DSS's genera: those not analysed yet. Before
     the DSS: every genus the rules allow less the ones analysed, and the most valuable of the rest, one
@@ -5541,6 +5574,24 @@ class Spansh:
                 r.raise_for_status()
                 d = await r.json()
         return d.get("results") or [] if isinstance(d, dict) else []
+
+    async def species_search(self, species, colour, pos, radius=CHECKLIST_FIND_LY, size=CHECKLIST_FIND_ROWS):
+        """S29: the bodies nearest `pos` where commanders' uploads reported `species` (and `colour`, the landmark's
+        `variant`), as (results, count). The filter shape {landmarks: [{subtype, variant}]} was checked against what
+        came back (scripts/landmarks_probe.py, 2026-10-12): Spansh ignores a shape it does not know, so the caller
+        checks every result too."""
+        lm = dict({"subtype": species}, **({"variant": colour} if colour else {}))
+        body = {"filters": {"landmarks": [lm], "distance": {"min": "0", "max": str(radius)}},
+                "reference_coords": {"x": pos["x"], "y": pos["y"], "z": pos["z"]},
+                "sort": [{"distance": {"direction": "asc"}}], "size": size, "page": 0}
+        async with self.sem_search:
+            async with self.session.post(SPANSH_BODY_SEARCH, json=body) as r:
+                r.raise_for_status()
+                d = await r.json()
+        if not isinstance(d, dict):
+            return [], 0
+        results = d.get("results") if isinstance(d.get("results"), list) else []
+        return results, d.get("count") if isinstance(d.get("count"), int) else len(results)
 
     def fetched_age(self, id64):
         """Seconds since a system's cached record was fetched, or None if it is not cached."""
@@ -6269,6 +6320,9 @@ class State:
         self.unsold_task = None
         self.map_cache = {}        # (id64, radius) -> Spansh systems, so reopening the map is instant
         self.dump_cache = {}       # id64 -> (time, Spansh dump) for the body detail panel
+        self.history_cache = None  # S24: (key, species_history) -- your completed runs, counted again when they change
+        self.checklist_finds = {}  # S29: (species, colour, where you are) -> (time.time(), answer): Spansh asked again after a while
+        self.checklist_found = {}  # S29: id64 -> (name, x, y, z) of the systems a find listed, for locate (☆ on its rows)
         self.carrier_task = None
         self.carrier_retry = {}    # carrier system id64 -> time.time() before which Spansh is not asked again
         self.value_dirty = set()   # systems whose unsold value changed: rows rebuilt, scan_version left alone
@@ -9139,6 +9193,15 @@ class State:
                 "bio_pending": bio_pending, "unmapped_valuable": unmapped, "unmapped": unmapped_all,
                 "clean": not unscanned and not bio_pending and not unmapped}
 
+    def species_history(self):
+        """S24: species_history over your completed runs, counted again only when they change (a run finished, a
+        re-read) or new rules arrive."""
+        r = self.db.execute("SELECT count(*), max(done_ts) FROM own_organic WHERE done_ts IS NOT NULL").fetchone()
+        key = (r[0], r[1], self.bio_rules_gen)
+        if not self.history_cache or self.history_cache[0] != key:
+            self.history_cache = (key, species_history(self.db))
+        return self.history_cache[1]
+
     def system_detail(self, id64):
         """Every body known in a system, valued, with your firsts, mapping, bio and codex."""
         where = self.locate(id64)
@@ -9193,6 +9256,7 @@ class State:
         ctx = bio_context(name, records, where[1], where[2], where[3], star, body_count)
         region = outrider.bio.region_name(where[1], where[2], where[3]) if outrider.bio and where[1] is not None else None
         known_codex, known_all = codex_species(self.db, region), codex_species_all(self.db)
+        history = self.species_history() if outrider.bio else None   # S24: your runs on bodies like each one
         judge = pickup_judge(self.db, name)
         # your latest scan of each body: data re-collected after a loss or a sale counts again
         latest = {r["body_id"]: r["ts"] for r in self.db.execute("SELECT body_id, ts FROM own_bodies WHERE system=?", (id64,))}
@@ -9203,6 +9267,7 @@ class State:
             bio_val, bio_groups = bio_guess(r, star, known_genera or None, ctx) if (r.get("bio") or known_genera) else (None, [])
             # a genus you have sampled here shows the colour the journal logged, not the guess
             bio_groups = with_logged_variants(bio_groups, {o["genus"]: o["variant"] for o in organics.get(bid, []) if o["variant"]})
+            shape = outrider.bio.history_shape(r.get("subtype"), r.get("atmosphere"), r.get("temperature")) if history and bio_groups else None
             f = firsts.get(bid) if bid is not None else None
             first_disc = bool(f and f["was_discovered"] == 0)
             scan_state = judge(latest[bid], f and f["first_ts"])[0] if bid in latest else None
@@ -9250,8 +9315,11 @@ class State:
                 "genera": known_genera,
                 # S23: species commanders' uploads reported to Spansh on it ([{genus, species, variant, value}]): facts
                 "reported": reported.get(r.get("body_id")) if r.get("body_id") is not None else None,
-                "bio_guess": [{"genus": g["genus"], "best": g["best"], "value": g["value"], "min_value": g["min_value"],
+                "bio_guess": [{"genus": g["genus"], "best": bio_pick(g, history, shape, region), "value": g["value"],
+                               "min_value": g["min_value"],
                                "species": [outrider.bio.short_species(x["name"], g["genus"]) for x in g["species"]],
+                               # S24: which of its species your completed runs found on bodies like this (the hover)
+                               "history": history.rank(g["genus"], shape, region) if shape else None,
                                "unruled": bool(g.get("unruled")),
                                # the colour candidates of the likeliest species ([] when it cannot be told)
                                "variants": g.get("variants") or [], "variant": g.get("variant"),
@@ -10049,6 +10117,51 @@ class State:
         return {"id": species_id, "name": sp["name"], "regions": {str(k): v for k, v in regions.items()}, "runs": runs,
                 "images": imgs}, 200
 
+    async def checklist_find(self, species_id, colour=None, now=None):
+        """GET /api/checklist/find?species=<checklist id>&colour=: S29, the bodies nearest you where commanders'
+        uploads reported a species (and that colour) to Spansh, nearest first, each with whether you visited the system
+        and bookmarked it. The same question from the same place is answered from memory for CHECKLIST_FIND_KEEP_S.
+        Not an AI tool (it asks Spansh). (answer, HTTP status)."""
+        R = outrider.bio.load_rules() if outrider.bio else None
+        if not R:
+            return {"error": "the exobiology rules are not loaded"}, 503
+        merged, _ = outrider.checklist.merge_species(R["species"])
+        sp = next((s for s in merged if (s.get("id") or s["name"]) == species_id), None)
+        if sp is None:
+            return {"error": "no such species"}, 404
+        colour = " ".join((colour or "").split()) or None
+        if colour:
+            known = {c.lower(): c for c, _ in outrider.checklist.colours(sp)}
+            if colour.lower() not in known:
+                return {"error": f"{sp['name']} has no colour {colour}"}, 400
+            colour = known[colour.lower()]
+        pos = self.journals.pos
+        if not pos or pos.get("x") is None:
+            return {"error": "your position is not known yet"}, 409
+        now = time.time() if now is None else now
+        key = (sp["name"], colour, pos.get("id64"))
+        kept = self.checklist_finds.get(key)
+        if kept and now - kept[0] < CHECKLIST_FIND_KEEP_S:
+            rows, count = kept[1]
+        else:
+            try:
+                results, count = await self.spansh.species_search(sp["name"], colour, pos)
+            except Exception as e:  # noqa: BLE001 -- Spansh down or slow: said, nothing kept
+                print(f"checklist find: {type(e).__name__}: {e}", file=sys.stderr)
+                return {"error": f"Spansh could not be asked ({type(e).__name__}); try again later"}, 502
+            rows = species_find_rows(results, sp["name"], colour)
+            self.checklist_finds = {k: v for k, v in self.checklist_finds.items() if now - v[0] < CHECKLIST_FIND_KEEP_S}
+            self.checklist_finds[key] = (now, (rows, count))
+        for r in rows:   # bookmarking a row (☆) locates its system by id64
+            self.checklist_found[int(r["id"])] = (r["system"], r["x"], r["y"], r["z"])
+        marks = [int(r["id"]) for r in rows]
+        bookmarked = {b[0] for b in self.db.execute(
+            f"SELECT id64 FROM bookmarks WHERE id64 IN ({','.join('?' * len(marks))})", marks)} if marks else set()
+        visited = self.visited or {v[0] for v in self.db.execute("SELECT id64 FROM visits")} | outrider.edsmlog.ids(self.db)
+        return {"species": sp["name"], "colour": colour, "where": pos.get("name"), "count": count,
+                "radius": CHECKLIST_FIND_LY,
+                "rows": [dict(r, visited=int(r["id"]) in visited, bookmarked=int(r["id"]) in bookmarked) for r in rows]}, 200
+
     def organics(self, days):
         """Every exobiology sample run (newest first) with what it is worth and whether it was banked,
         plus your codex entries over the same period."""
@@ -10172,6 +10285,8 @@ class State:
             return b["name"], b["x"], b["y"], b["z"]
         if self.searcher and id64 in self.searcher.found:
             return self.searcher.found[id64]
+        if id64 in self.checklist_found:   # S29: a system the checklist's find listed (its ☆)
+            return self.checklist_found[id64]
         for table in ("visits", "route_systems"):
             r = self.db.execute(f"SELECT name, x, y, z FROM {table} WHERE id64=?", (id64,)).fetchone()
             if r:
@@ -14851,6 +14966,38 @@ def reported_life(results, id64):
     return out
 
 
+def species_find_rows(results, species, colour=None):
+    """Spansh's answer to S29's species search -> [{id, system, x, y, z, body, body_id, ly, gravity, dist_ls,
+    colours}], nearest first: only the bodies whose `landmarks` really name the species (and the colour, when one was
+    asked for: the landmark's `variant`), the colours reported there of that species in `colours`."""
+    norm = lambda t: " ".join(t.split()).lower() if isinstance(t, str) else None   # noqa: E731
+    want, want_colour, rows = norm(species), norm(colour), []
+    for b in results if isinstance(results, list) else []:
+        if not isinstance(b, dict) or not isinstance(b.get("system_id64"), int) or not isinstance(b.get("system_name"), str):
+            continue
+        if any(not isinstance(b.get(f"system_{k}"), (int, float)) for k in "xyz"):
+            continue
+        cols = []
+        for x in b.get("landmarks") if isinstance(b.get("landmarks"), list) else []:
+            if isinstance(x, dict) and norm(x.get("subtype")) == want:
+                v = " ".join(x["variant"].split()) if isinstance(x.get("variant"), str) and x["variant"].strip() else None
+                if v not in cols:
+                    cols.append(v)
+        if not cols or (want_colour and want_colour not in [norm(c) for c in cols if c]):
+            continue
+        dist = b.get("distance")
+        rows.append({"id": str(b["system_id64"]), "system": b["system_name"],
+                     "x": b["system_x"], "y": b["system_y"], "z": b["system_z"],
+                     "body": short_name(b["system_name"], b.get("name")) if isinstance(b.get("name"), str) else None,
+                     "body_id": b.get("body_id") if isinstance(b.get("body_id"), int) else None,
+                     "ly": round(dist, 2) if isinstance(dist, (int, float)) else None,
+                     "gravity": round(b["gravity"], 2) if isinstance(b.get("gravity"), (int, float)) else None,
+                     "dist_ls": round(b["distance_to_arrival"]) if isinstance(b.get("distance_to_arrival"), (int, float)) else None,
+                     "colours": sorted(c for c in cols if c)})
+    rows.sort(key=lambda r: (r["ly"] is None, r["ly"] or 0))
+    return rows
+
+
 def bio_hits(db, id64, system, x, y, z, records, threshold):
     """Bodies in a system with exobiology you have not finished, worth at least `threshold` for what is
     left (plain prices, no x5). A body the rules cannot price only counts when threshold is 0."""
@@ -15862,6 +16009,14 @@ def make_app(state, hosts=None):
         out, status = state.checklist(request.query.get("region", "here"), kind)
         return web.json_response(out, status=status)
 
+    async def checklist_find_view(request):
+        """GET /api/checklist/find?species=<checklist id>&colour=: the nearest bodies where commanders reported it (S29)."""
+        species = request.query.get("species", "")[:200]
+        if not species:
+            return web.json_response({"error": "species is required"}, status=400)
+        out, status = await state.checklist_find(species, request.query.get("colour", "")[:60] or None)
+        return web.json_response(out, status=status)
+
     async def organics_view(request):
         try:
             days = max(1, min(int(request.query.get("days", 30)), 3650))
@@ -16756,6 +16911,7 @@ def make_app(state, hosts=None):
     app.router.add_get("/api/history", history_view)
     app.router.add_get("/api/organics", organics_view)
     app.router.add_get("/api/checklist", checklist_view)
+    app.router.add_get("/api/checklist/find", checklist_find_view)   # S29: asks Spansh, so not among the AI's READ_ROUTES
     app.router.add_get("/api/log", log_view)
     app.router.add_get("/api/materials", materials_view)
     app.router.add_post("/api/cargo/recount", cargo_recount_view)

@@ -8,16 +8,17 @@ shapes the body search really applies. Saves the real answers.
 Spansh silently ignores a filter shape it does not know (the answer is then simply the nearest bodies), so every filter
 tried here is checked against what comes back, and its count compared with the same search without it. A handful of
 read-only requests, a second apart: a search near Colonia for landable bodies with biological signals, the dump of the
-first system found, the same search with each candidate landmark filter shape, a temperature range in three shapes,
+first system found, the same search with each candidate landmark filter shape and with a colour, a temperature range in three shapes,
 that one system's bodies with life alone (by its name, and out to 1 ly from it) and one gas giant search.
 
 Its answer on 2026-10-12 (tests/fixtures/spansh_landmarks.json is a trimmed copy, so it is not overwritten by default):
 search results carry `landmarks` (species, its colour as `variant`, the place), `earth_masses`, `radius` and the
 journal's own temperature; dumps carry no landmarks; {landmarks: [{subtype}]} (and landmark_subtype {value}) filters,
 {landmarks: {value}} finds nothing; surface_temperature takes {value: [lo, hi], comparison: "<=>"}, not {min, max};
-one system alone is the search out to 1 ly of it (a system_name filter and a max of "0" are ignored). Compare what it
-prints with reported_life / Spansh.reported_search / record_from_body_search in ed_outrider.py. Not part of the tests or
-of Outrider."""
+one system alone is the search out to 1 ly of it (a system_name filter and a max of "0" are ignored); (f), added for
+S29 the same day: {landmarks: [{subtype, variant}]} keeps only that colour (the fixture's filter_landmarks_variant_*).
+Compare what it prints with reported_life / Spansh.reported_search / Spansh.species_search / species_find_rows /
+record_from_body_search in ed_outrider.py. Not part of the tests or of Outrider."""
 import json
 import sys
 import time
@@ -93,6 +94,13 @@ def main():
             ok = sum(1 for b in got if target in species_of(b))
             print(f"    {name}: count {d.get('count')} (without it {base.get('count')}), {ok} of {len(got)} carry {target}",
                   d.get("http_error") or "")
+        # (f) a colour too (S29): the landmark's `variant` beside its subtype
+        colour = next((x.get("variant") for b in with_lm for x in b.get("landmarks") or [] if x.get("subtype") == target and x.get("variant")), None)
+        if colour:
+            d = answers["filter_landmarks_variant"] = search({"landmarks": [{"subtype": target, "variant": colour}]})
+            got = d.get("results") or []
+            ok = sum(1 for b in got if any(x.get("subtype") == target and x.get("variant") == colour for x in b.get("landmarks") or []))
+            print(f"(f) {target} - {colour}: count {d.get('count')}, {ok} of {len(got)} carry that colour", d.get("http_error") or "")
     for name, rng in (("numbers", {"min": 150, "max": 160}), ("strings", {"min": "150", "max": "160"}),
                       ("comparison", {"value": [150, 160], "comparison": "<=>"})):
         d = answers[f"temperature_{name}"] = search({"signals": BIO, "surface_temperature": rng})

@@ -1108,6 +1108,73 @@ def by_genus(candidates, genera=None):
     return sorted(groups.values(), key=lambda gr: -(gr["value"] or 0))
 
 
+# --------------------------------------------------------------------------
+# Your own runs on bodies like this one (S24)
+# --------------------------------------------------------------------------
+
+# Which species of a genus your completed runs found on bodies of the same class, atmosphere and temperature band, in
+# the same region once it holds HISTORY_REGION_MIN runs of that genus there (else in every region). Shown in the guess's
+# hover only: the pick stays the likeliest by value. HISTORY_PICK (off) would make it the pick: `--backtest` prints how
+# often each pick was right, replaying your runs in time order (each run ranked only by the runs before it).
+HISTORY_BAND_K = 25
+HISTORY_REGION_MIN = 5
+HISTORY_PICK = False
+ATMOSPHERE_SHORT = {"carbondioxide": "CO2", "carbondioxiderich": "CO2-rich", "nitrogen": "N2", "ammonia": "NH3",
+                    "methane": "CH4", "methanerich": "CH4-rich", "sulphurdioxide": "SO2", "water": "H2O",
+                    "waterrich": "H2O-rich", "argon": "Ar", "argonrich": "Ar-rich", "neon": "Ne", "neonrich": "Ne-rich",
+                    "helium": "He", "oxygen": "O2"}
+
+
+def history_shape(body_class, atmosphere, temperature):
+    """(class, atmosphere, temperature band) a body's runs are grouped by, or None (not a landable class, or no
+    temperature known). The journal's and Spansh's spellings give the same shape."""
+    cls = landable_class(body_class)
+    if not cls or not isinstance(temperature, (int, float)) or isinstance(temperature, bool) or not math.isfinite(temperature):
+        return None
+    return cls, norm_atmosphere(atmosphere), int(temperature // HISTORY_BAND_K)
+
+
+def history_label(shape, region=None):
+    """"Icy body, thin N2, 75–100 K, Inner Orion Spur" (the region left out when the counts are every region's)."""
+    cls, atmo, band = shape
+    words = "no atmosphere" if atmo == "none" else f"thin {ATMOSPHERE_SHORT.get(atmo, atmo)}"
+    return ", ".join([cls, words, f"{band * HISTORY_BAND_K}–{(band + 1) * HISTORY_BAND_K} K"] + ([region] if region else []))
+
+
+class SpeciesHistory:
+    """Your completed runs counted by (genus, class, atmosphere, band, region) and by the same without the region."""
+
+    def __init__(self):
+        self.counts = {}
+
+    def add(self, genus, species, shape, region=None):
+        if not genus or not species or not shape:
+            return
+        for reg in ((region, None) if region else (None,)):
+            self.counts.setdefault((genus, *shape, reg), collections.Counter())[species] += 1
+
+    def rank(self, genus, shape, region=None):
+        """{label, total, species: [[short name, runs], ...] most runs first, region (None: every region's)} for a
+        genus on a body of `shape` in `region`, or None when none of your runs is like it."""
+        if not genus or not shape:
+            return None
+        c = self.counts.get((genus, *shape, region)) if region else None
+        if not c or sum(c.values()) < HISTORY_REGION_MIN:
+            c, region = self.counts.get((genus, *shape, None)), None
+        if not c:
+            return None
+        return {"label": history_label(shape, region), "total": sum(c.values()), "region": region,
+                "species": [[short_species(s, genus), n] for s, n in sorted(c.items(), key=lambda kv: (-kv[1], kv[0]))]}
+
+    def pick(self, genus, shape, region, names):
+        """The candidate (full name) your runs found most often on bodies like this, or None (none of them found)."""
+        r = self.rank(genus, shape, region)
+        if not r:
+            return None
+        by_short = {short_species(n, genus): n for n in names}
+        return next((by_short[s] for s, _ in r["species"] if s in by_short), None)
+
+
 def body_from_scan(ev, star=None, star_types=None):
     """Journal Scan event -> predict() body. `star_types`: {BodyID: StarType} to resolve Parents."""
     g = ev.get("SurfaceGravity")
@@ -1177,8 +1244,7 @@ def backtest(dirs, verbose=False, since=None):
                         ev = _json_line(line)
                         if ev is None:
                             continue
-                        if not since or ev.get("timestamp", "") >= since:
-                            analysed.append(ev)
+                        analysed.append(ev)   # every one: the runs before `since` still rank the species (S24)
                     elif '"event":"SAASignalsFound"' in line and "Genuses" in line:
                         ev = _json_line(line)
                         if ev is None:
@@ -1208,6 +1274,10 @@ def backtest(dirs, verbose=False, since=None):
     v_total = v_set = v_hit = v_size = 0   # colour variants: logged, predicted (a candidate set), right
     misses = collections.Counter()
     ranks = []
+    # S24: your runs replayed in time order (the folders were read one after another), each ranked by the runs before
+    # it: how often the likeliest by value and your runs' favourite were right where the genus had several candidates
+    history, picks = SpeciesHistory(), {"value": 0, "history": 0, "asked": 0, "total": 0}
+    analysed.sort(key=lambda o: o.get("timestamp") or "")
     for o in analysed:
         key = (o["SystemAddress"], o["Body"], o["Species_Localised"])
         if key in seen:
@@ -1219,6 +1289,19 @@ def backtest(dirs, verbose=False, since=None):
         system, star_types = context(o["SystemAddress"])
         cands = predict(body_from_scan(sc, star_types=star_types), system)
         names = [c["name"] for c in cands]
+        shape = history_shape(sc.get("PlanetClass"), sc.get("AtmosphereType"), sc.get("SurfaceTemperature"))
+        region = region_name(system.get("x"), system.get("y"), system.get("z"))
+        same = [c["name"] for c in cands if c["genus"] == o.get("Genus_Localised")]
+        scored = not since or o.get("timestamp", "") >= since
+        if scored and len(same) > 1 and o.get("Species_Localised") in same:
+            by_runs = history.pick(o.get("Genus_Localised"), shape, region, same)
+            picks["total"] += 1
+            picks["asked"] += by_runs is not None
+            picks["value"] += same[0] == o["Species_Localised"]
+            picks["history"] += (by_runs or same[0]) == o["Species_Localised"]
+        history.add(o.get("Genus_Localised"), o.get("Species_Localised"), shape, region)
+        if not scored:
+            continue
         sp_total += 1
         if o["Species_Localised"] in names:
             sp_hit += 1
@@ -1256,6 +1339,10 @@ def backtest(dirs, verbose=False, since=None):
         top = sum(1 for r in ranks if r == 1)
         print(f"         when the genus was right, the actual species was the top-valued candidate of that genus "
               f"{top}/{len(ranks)} times; candidates per genus: {sum(ranks) / len(ranks):.1f} avg rank")
+    if picks["total"]:
+        print(f"picks:   where the genus had several candidates, the likeliest by value was right {picks['value']}/{picks['total']} "
+              f"times, your runs' favourite on bodies like it (by value when you had none, {picks['total'] - picks['asked']} "
+              f"times) {picks['history']}/{picks['total']}; HISTORY_PICK is {'on' if HISTORY_PICK else 'off'}")
     if v_total:
         print(f"variants: a colour was predicted for {v_set}/{v_total} of those samples; the logged variant was in the "
               f"set {v_hit}/{v_set} times ({100 * v_hit / max(v_set, 1):.0f}%), {v_size / max(v_set, 1):.2f} per set; "

@@ -2856,7 +2856,7 @@ function render() {
   document.getElementById("logView").hidden = view !== "log";
   if (view === "log") { logUnsentShow(); if (L.key === null) loadLog(); else tailLog(); }
   document.getElementById("bioView").hidden = view !== "bio";
-  if (view === "bio") { if (bioMode !== "runs") loadChecklist(); else loadBio(); }
+  if (view === "bio") { if (bioMode !== "runs") { loadChecklist(); if (CL.find) clDrawSide(); } else loadBio(); }   // a ☆ set from the find's list
   if (view === "here" || nearPinned || (view === "overview" && !ovState.collapsed) || view === "now") {   // Now reads Here's data
     loadHere();
     // tab and pane keep different modes; and the in-game target moves without a scan (review F4): redraw, no refetch
@@ -3404,7 +3404,7 @@ function renderHere() {
     const bio = [], f = bioFactor(b), atm = b.type === "Planet" && b.atmosphere && b.atmosphere !== "None" ? b.atmosphere : "";
     const guessOf = g => (b.bio_guess || []).find(x => x.genus === g), hb = hereBio();
     if (hb.minSig && b.bio && b.bio < hb.minSig) bio.push(`<span class="unk" title="fewer than ${hb.minSig} signals: left out (Settings, Display)">${b.bio} sig</span>`);
-    const guessTxt = x => !x || !x.best ? "" : ` <span class="unk" title="likeliest by value: ${esc(x.species.join(" / "))}">(${esc(x.best.split(" ").slice(1).join(" "))}? ${credits(x.value * f)})</span>` + codexMark(x, h.region);
+    const guessTxt = x => !x || !x.best ? "" : ` <span class="unk" title="likeliest by value: ${esc(x.species.join(" / ") + historyTip(x))}">(${esc(x.best.split(" ").slice(1).join(" "))}? ${credits(x.value * f)})</span>` + codexMark(x, h.region);
     // S23: the species commanders' uploads reported to Spansh here, with the colour they reported: facts, beside the guess
     const rep = b.reported || [], repShown = new Set();
     const repTxt = g => rep.filter(x => g === null ? !repShown.has(x) : x.genus === g).map(x => { repShown.add(x);
@@ -3444,7 +3444,7 @@ function renderHere() {
       const range = opt ? ` · ${credits(opt.low * f)}–${credits(opt.high * f)}` : "", colon = gl.length ? ":" : "";
       const unkShort = (bioGenera(b).length ? `+${unk.n} sig` : `${unk.n} sig, no DSS`) + range + colon;
       bio.push((bio.length ? "<br>" : "") + `<span class="unk">${dual(unk.label + range + colon, unkShort)}</span>` + (gl.length
-        ? `<br>${opt ? "" : `<span class="unk">${dual("likely: ", "", {title: false})}</span>`}${gl.map(x => `<span class="sp" title="${esc(x.species.join(" / "))}">${esc(x.genus)} <span class="unk">≤${credits((x.value || 0) * f)}</span>${codexMark(x, h.region)}</span>`).join("")}` : ""));
+        ? `<br>${opt ? "" : `<span class="unk">${dual("likely: ", "", {title: false})}</span>`}${gl.map(x => `<span class="sp" title="${esc(x.species.join(" / ") + historyTip(x))}">${esc(x.genus)} <span class="unk">≤${credits((x.value || 0) * f)}</span>${codexMark(x, h.region)}</span>`).join("")}` : ""));
     }
     // the codex name ("Bacterium Volu - Gold") repeats the run's species: a compact table shows only 📖 and its mark
     const codex = b.codex.filter(c => !merged.has(c)).map(c =>
@@ -3556,6 +3556,12 @@ function drawHereLegend() {
     (cn ? `<span class="lg">${cn}</span>` : "");
   el.hidden = !html;
   if (el.innerHTML !== html) el.innerHTML = html;
+}
+// S24: which species of a genus your own completed runs found on bodies like this one (class, atmosphere, 25 K band,
+// the region once it holds 5 such runs), for the guess's hover only: the pick stays the likeliest by value
+function historyTip(x) {
+  return x && x.history ? `\nyours on bodies like this (${x.history.label}): ` +
+    x.history.species.map(([s, n]) => `${s} ${n} of ${x.history.total}`).join(", ") : "";
 }
 // what the body targeted in-game is (plain text bits): Here's heading-to line and Now's
 function destBits(b) {
@@ -3766,7 +3772,7 @@ function bodyPopHtml(b, region) {
       // a logged species pays its own price (a lost one again once resampled); the best guess only bounds the rest
       const price = o ? (o.value ? (o.lost ? `<span class="unk">${credits(o.value * f)}</span>` : credits(o.value * f)) : "")
                       : x && x.value ? "≤" + credits(x.value * f) : "";
-      lines.push(`<li><span>${esc(g)}${colonyTxt(g)}${o ? ` · ${esc(o.species || "")} ${o.lost ? "lost ✗" : `${o.samples}/3${o.done ? " ✓" : ""}`}` : x && x.best ? ` · likely ${esc(x.best.split(" ").slice(1).join(" "))}${variantTxt(x)}` : ""}</span><b>${price}</b></li>`);
+      lines.push(`<li><span>${esc(g)}${colonyTxt(g)}${o ? ` · ${esc(o.species || "")} ${o.lost ? "lost ✗" : `${o.samples}/3${o.done ? " ✓" : ""}`}` : x && x.best ? ` · <span${x.history ? ` title="${esc(historyTip(x).trim())}"` : ""}>likely ${esc(x.best.split(" ").slice(1).join(" "))}</span>${variantTxt(x)}` : ""}</span><b>${price}</b></li>`);
     }
     const unk = bioUnknown(b);   // signals no genus above accounts for, and what they could be
     if (unk) {
@@ -4941,7 +4947,7 @@ function renderBio() {
 // ---- the exobiology checklist (Bio/Geo -> Exo-Biology; GET api/checklist, outrider/checklist.py): every species the
 // rules know, by galactic region, with your best there and its colours found / possible; a species' panel with its
 // colours, what gives each, and a galaxy map of where it can grow with your samples as dots ----
-const CL = {data: null, key: null, open: null, species: null, map: null, colour: null};
+const CL = {data: null, key: null, open: null, species: null, map: null, colour: null, find: null};
 // an entry's picture: Canonn's screenshot (linked, never copied), credited to the commander who took it
 function clFigure(img, alt, colour) {
   if (!img || !img.url) return "";
@@ -4964,7 +4970,7 @@ function setBioMode(m) {
   bv.classList.toggle("check", bioMode !== "runs");
   bv.classList.toggle("geo", bioMode === "geo");
   document.querySelectorAll("[name=bioMode]").forEach(x => { x.checked = x.value === bioMode; });
-  if (clKind() !== was) { CL.data = null; CL.key = null; CL.open = null; CL.species = null; }   // the other list
+  if (clKind() !== was) { CL.data = null; CL.key = null; CL.open = null; CL.species = null; CL.find = null; }   // the other list
   if (view === "bio") { if (bioMode !== "runs") loadChecklist(true); else loadBio(); }
 }
 document.querySelectorAll("[name=bioMode]").forEach(x => x.addEventListener("change", () => setBioMode(x.value)));
@@ -5060,7 +5066,8 @@ function renderChecklist() {
         (r.elsewhere ? ` · found in another region: ${CL_WORD[r.elsewhere]}` : "");
       return `<tr class="${cls}${CL.open === r.id ? " on" : ""}" data-cl="${esc(r.id)}" title="${esc(tip)}"><td>${esc(r.short)}` +
         `${r.possible === "parts" ? ' <span class="clparts">◐</span>' : ""}</td><td>${r.state ? CL_WORD[r.state]
-          : r.elsewhere ? `<span class="clelse" title="${esc(`found in another region: ${CL_WORD[r.elsewhere]}`)}">elsewhere</span>` : ""}</td>` +
+          : r.elsewhere ? `<span class="clelse" title="${esc(`found in another region: ${CL_WORD[r.elsewhere]}`)}">elsewhere</span>`
+          : geo ? "" : clFindBtn(r, null, "🔍")}</td>` +
         `<td class="num">${geo ? (r.sites ? r.sites.toLocaleString() : "—") : `${r.variants.found} / ${r.variants.total}`}</td></tr>` +
         (!geo && CL.open === r.id ? clVariantRows(r) : "");
     }).join("") + "</table></div>";
@@ -5076,10 +5083,12 @@ function clVariantRows(r) {
     const k = (v.colour || "").toLowerCase(), img = v.colour && imgs[k];
     return `<tr class="clvar${v.state ? ` cl-${v.state}` : ""}${img ? " climgrow" : ""}${img && k === pick ? " on" : ""}" data-colour="${esc(k)}"` +
       `${img ? ' title="show its picture"' : ""}><td colspan="3"><div class="cvrow"><span class="cvc">${v.colour ? esc(v.colour) : "its one variant"}</span>` +
-      `<span class="cvw">${esc(v.where || "")}</span><span class="cvs">${v.state ? CL_WORD[v.state] : ""}</span></div></td></tr>`;
+      `<span class="cvw">${esc(v.where || "")}</span><span class="cvs">${v.state ? CL_WORD[v.state] : v.colour ? clFindBtn(r, v.colour, "🔍 nearby") : ""}</span></div></td></tr>`;
   }).join("");
 }
 document.getElementById("clGrid").addEventListener("click", e => {
+  const fb = e.target.closest("[data-clfind]");
+  if (fb) return clFind(fb.dataset.clfind, fb.dataset.clcolour || null);
   const vr = e.target.closest("tr.clvar");
   if (vr) {   // a colour: its picture
     if (vr.classList.contains("climgrow")) { CL.colour = vr.dataset.colour; renderChecklist(); }
@@ -5101,6 +5110,50 @@ async function clLoadSpecies(id) {
   CL.species = d;
   renderChecklist();   // the dropped-down colours learn which have a picture
 }
+// ---- S29: "🔍 nearby" on a species (or a colour of one) you have not found: the nearest bodies where commanders'
+// uploads reported it to Spansh (GET api/checklist/find), in the side panel with ly, gravity, visited, ☆ and Copy.
+// 🎯 on its rows waits for S31's route "system" ----
+function clFindBtn(r, colour, label) {
+  const what = r.name + (colour ? ` - ${colour}` : "");
+  return `<button type="button" class="clfindb" data-clfind="${esc(r.id)}" data-clcolour="${esc(colour || "")}"` +
+    ` title="${esc(`nearby: the nearest bodies where commanders reported ${what} to Spansh`)}">${label}</button>`;
+}
+async function clFind(id, colour) {
+  if (CL.open !== id) { CL.open = id; CL.colour = null; renderChecklist(); clLoadSpecies(id); }
+  const f = CL.find = {id, colour, busy: true, answer: null};
+  clDrawSide();
+  let a;
+  try { a = await apiJson(`api/checklist/find?species=${encodeURIComponent(id)}${colour ? `&colour=${encodeURIComponent(colour)}` : ""}`); }
+  catch (err) { a = {error: err.message}; }
+  if (CL.find !== f) return;   // another find (or ✕) meanwhile
+  f.busy = false; f.answer = a;
+  clDrawSide();
+}
+function clFindHtml(r) {
+  const f = CL.find && CL.find.id === r.id ? CL.find : null;
+  if (!f) return r.state ? "" : `<p>${clFindBtn(r, null, "🔍 nearby")}</p>`;
+  const a = f.answer, bms = bmMap();
+  const head = `<div class="clfind"><div class="clfindh"><span>Nearest reported: <b>${esc(r.name + (f.colour ? ` - ${f.colour}` : ""))}</b></span>` +
+    `<button type="button" class="mini" data-clfindclose title="close the list">✕</button></div>`;
+  if (f.busy) return head + `<div class="unk">asking Spansh…</div></div>`;
+  if (!a || a.error) return head + `<div class="noscoop">${esc(a ? a.error : "")}</div></div>`;
+  if (!a.rows.length) return head + `<div class="unk">No body within ${a.radius.toLocaleString()} ly has it reported to Spansh.</div></div>`;
+  const rows = a.rows.map(x => `<tr><td title="${esc(x.system)}">${esc(x.system)}</td><td>${esc(x.body || "")}</td>` +
+    `<td class="num">${x.ly == null ? "" : `${x.ly.toLocaleString(undefined, {maximumFractionDigits: 1})} ly`}</td>` +
+    `<td class="num">${x.gravity == null ? "" : `${x.gravity.toFixed(2)} g`}</td>` +
+    `<td>${f.colour ? "" : esc(x.colours.join(", "))}</td><td>${x.visited ? '<span class="good" title="you have been to this system">✓</span>' : ""}</td>` +
+    `<td>${bmIcon(x.id, x.system, bms)}</td>` +
+    `<td><button type="button" class="mini" data-clcopy="${esc(x.system)}" title="copy the system's name">Copy</button></td></tr>`).join("");
+  const more = a.count > a.rows.length ? `${(a.count - a.rows.length).toLocaleString()} more further away · ` : "";
+  return head + `<table class="clfindt">${rows}</table><div class="unk">${more}reported to Spansh by commanders' uploads; distances from ${esc(a.where || "you")}</div></div>`;
+}
+document.getElementById("clSide").addEventListener("click", e => {
+  const fb = e.target.closest("[data-clfind]");
+  if (fb) return clFind(fb.dataset.clfind, fb.dataset.clcolour || null);
+  if (e.target.closest("[data-clfindclose]")) { CL.find = null; return clDrawSide(); }
+  const c = e.target.closest("[data-clcopy]");
+  if (c) copyText(c.dataset.clcopy);
+});
 function clDrawSide() {
   const side = document.getElementById("clSide"), r = clRow(CL.open);
   let html;
@@ -5126,6 +5179,7 @@ function clDrawSide() {
     const {imgs, pick, shown} = clPick(r);   // its colours are dropped down under its row in the box
     html = `<h4>${esc(r.name)}</h4><div class="unk">${r.value ? `${credits(r.value)} cr` : ""}` +
       `${CL.data.region != null ? ` · ${esc(where)}` : ""}${r.runs ? ` · ${r.runs} run${r.runs === 1 ? "" : "s"}` : ""}</div>` +
+      clFindHtml(r) +   // S29: 🔍 nearby, and its list
       (pick != null ? clFigure(imgs[pick], `${r.name}${shown && shown.colour ? ` - ${shown.colour}` : ""}`, shown && shown.colour) : "") +
       `<div class="clmapbox"><canvas id="clMap" width="880" height="880" aria-label="${esc(`the galaxy: where ${r.name} can grow`)}"></canvas>` +
       `<div id="clMapTip" class="cltip" hidden></div></div>` +

@@ -48,6 +48,19 @@ upstream project's choices, not rules of the game.
   (a search out to 1 ly of it: a max of 0 and a system_name filter were ignored), and the answer kept in
   `spansh_reported` (live-only). Here shows them as facts (👥, the reported colour), never mixed into the guess or its
   value. Not yet: the arrival brief, the FSS debrief and the overlay's body panel naming them.
+- **Your runs rank a genus's species in the hover only** (S24, 2026-10-12). The guess still names the likeliest by value;
+  its hover adds which species your completed runs found on bodies of the same class, atmosphere and 25 K band, in the
+  same region once you have 5 such runs there (fewer: every region's). The backtest replays your runs in time order
+  (the journal folders are read one after another), each ranked only by the runs before it: on the author's journals
+  (643 runs, 2026-10-12) the likeliest by value was right 20 of the 32 times a genus had several candidates, your
+  runs' favourite also 20 of 32, so `HISTORY_PICK` stays off and the value pick stays (the value is the maximum
+  either way, "up to").
+- **🔍 nearby on the checklist asks Spansh, nearest first** (S29, 2026-10-12). The body search's
+  `{landmarks: [{subtype, variant}]}` filters by species and colour (checked against what came back: 144 Mulberry and
+  149 Lime of 741 Bacterium Vesicula near Colonia), and every hit is checked again, since Spansh ignores a filter shape
+  it does not know. Reported only: a species nobody uploaded shows "No body within 20,000 ly". Not yet: 🎯 on its rows
+  (it waits for S31's route "system") and the Geology checklist's half (Canonn's per-entry site dumps, which
+  geo_codex.json does not link).
 - **Search's green gas giant option asks Spansh for every giant it can judge** (S27). Spansh cannot filter on the model,
   so one query lists the classes with a usable rule (Class I, III, IV, the life-bearing giants, water giants) and the
   model checks each answer (search results carry the mass, radius and the journal's temperature). Over a big radius that

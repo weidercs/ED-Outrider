@@ -2,6 +2,23 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · Your own runs in the guess's hover, and finding a missing species nearby
+- **Your runs rank a genus's species** (S24, the hover only): `species_history(db)` counts your completed runs by genus,
+  the body's class, atmosphere and 25 K band (your scan) and region (your visit), the region dropped under 5 such runs
+  (`outrider.bio.SpeciesHistory`, `history_shape`, `history_label`; `State.species_history` cached on your completed
+  runs). Here's bodies gain `bio_guess[].history`; the guess's hover (Here's, its "likely:" list, the body panel's
+  "likely") adds "yours on bodies like this (Icy body, thin N2, 75–100 K, Inner Orion Spur): Informem 11 of 14, Acies
+  3 of 14", the "likeliest by value" prefix kept. `--backtest` replays runs in time order across the journal folders
+  and compares the two picks: on the author's journals both were right 20 of 32 times, so `HISTORY_PICK` stays off
+  (`bio_pick`: the pick and the "up to" value unchanged).
+- **The Exo-Biology checklist finds a missing species nearby** (S29): 🔍 on a species not found, 🔍 nearby on a colour
+  not found and in the species' column; GET `/api/checklist/find?species=&colour=` (`State.checklist_find`,
+  `Spansh.species_search`: the body search's landmark filter, by colour too, nearest first, 25 bodies, kept 10 minutes
+  per place; `species_find_rows` checks every hit) lists them in the side panel with ly, gravity, the colours reported,
+  ✓ visited, ☆ (its systems are located through `checklist_found`) and Copy. Not an AI tool. The colour filter was
+  checked live (2 requests, saved in `tests/fixtures/spansh_landmarks.json`; `scripts/landmarks_probe.py` gains the
+  case). Not built: 🎯 on its rows (S31's route "system" comes later) and the Geology checklist's half.
+
 ## 2026-10-12 · Geology new to your codex, finding green gas giants, and species other commanders reported
 - **Geology ✦** (S22): new pure `outrider/codex_geo.py`, `entries_for(record)`: the SET of geology entries a landable
   body with geological signals could log, keyed on its volcanism's material and icy or not, verified on EDDN's codex

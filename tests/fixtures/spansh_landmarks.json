@@ -1,5 +1,5 @@
 {
- "_note": "Trimmed from one run of scripts/landmarks_probe.py (2026-10-12): a search near Colonia, each answer's count and its first results. Findings: search results carry landmarks (species, variant, place), earth_masses, radius and the journal's surface_temperature; system dumps carry no landmarks; the landmark filter is {landmarks: [{subtype}]} (landmark_subtype {value} too; {landmarks: {value}} finds nothing); surface_temperature needs {value: [lo, hi], comparison: '<=>'} ({min, max} is ignored); one system's bodies: distance max 1 ly from it (a max of 0 and a system_name filter are ignored). Each body's landmarks cut to one per species and variant; materials left out.",
+ "_note": "Trimmed from one run of scripts/landmarks_probe.py (2026-10-12): a search near Colonia, each answer's count and its first results. Findings: search results carry landmarks (species, variant, place), earth_masses, radius and the journal's surface_temperature; system dumps carry no landmarks; the landmark filter is {landmarks: [{subtype}]} (landmark_subtype {value} too; {landmarks: {value}} finds nothing); surface_temperature needs {value: [lo, hi], comparison: '<=>'} ({min, max} is ignored); one system's bodies: distance max 1 ly from it (a max of 0 and a system_name filter are ignored). Each body's landmarks cut to one per species and variant; materials left out. Added later the same day (S29): {landmarks: [{subtype, variant}]} filters by colour too (Bacterium Vesicula near Colonia: 741 bodies, 144 with Mulberry, 149 with Lime, every result of that colour).",
  "bio_search": {
   "count": 10000,
   "results": [
@@ -3220,6 +3220,1039 @@
     "type": "Planet",
     "updated_at": "2026-10-11T20:50:00Z",
     "volcanism_type": "No volcanism"
+   }
+  ]
+ },
+ "filter_landmarks_variant_mulberry": {
+  "count": 144,
+  "results": [
+   {
+    "arg_of_periapsis": 292.438169,
+    "atmosphere": "Thin Argon",
+    "atmosphere_composition": [
+     {
+      "name": "Argon",
+      "share": 99.935738
+     },
+     {
+      "name": "Carbon dioxide",
+      "share": 0.064254
+     }
+    ],
+    "axis_tilt": -0.119139,
+    "body_id": 32,
+    "distance": 7.17131329499695,
+    "distance_to_arrival": 1195.997142,
+    "earth_masses": 0.22498,
+    "estimated_mapping_value": 2221,
+    "estimated_scan_value": 500,
+    "genuses": [
+     {
+      "name": "Bacterial"
+     }
+    ],
+    "gravity": 0.33824778219639,
+    "id": "1153010632928567882",
+    "id64": 1153010632928567882,
+    "is_landable": true,
+    "is_main_star": null,
+    "is_rotational_period_tidally_locked": true,
+    "landmark_value": 1000000,
+    "landmarks": [
+     {
+      "id": 2320504,
+      "latitude": 23.59966,
+      "longitude": -173.95868,
+      "subtype": "Bacterium Vesicula",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "Mulberry"
+     }
+    ],
+    "name": "Eol Prou LW-L c8-324 4 b",
+    "orbital_eccentricity": 0.0,
+    "orbital_inclination": -41.939786,
+    "orbital_period": 14.7197499043403,
+    "orbital_synchronicity": 0.000588994849499258,
+    "parents": [
+     {
+      "id64": 1008895444852712010,
+      "subtype": "Class III gas giant",
+      "type": "Planet"
+     }
+    ],
+    "radius": 5199.26,
+    "reserve_level": "Pristine",
+    "rings": [
+     {
+      "inner_radius": 8578800.0,
+      "mass": 1167900.0,
+      "name": "Eol Prou LW-L c8-324 4 b A Ring",
+      "outer_radius": 22094000.0,
+      "signal_count": 4,
+      "signals": [
+       {
+        "count": 1,
+        "name": "Painite"
+       },
+       {
+        "count": 2,
+        "name": "Platinum"
+       },
+       {
+        "count": 1,
+        "name": "Rhodplumsite"
+       }
+      ],
+      "signals_updated_at": "2026-10-11T00:22:11Z",
+      "type": "Metal Rich"
+     }
+    ],
+    "rotational_period": 14.7203388991898,
+    "semi_major_axis": 0.0240614295340144,
+    "signal_count": 13,
+    "signals": [
+     {
+      "count": 12,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 1,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-10-11T00:22:11Z",
+    "solid_composition": [
+     {
+      "name": "Ice",
+      "share": 86.3718
+     },
+     {
+      "name": "Metal",
+      "share": 1.9149
+     },
+     {
+      "name": "Rock",
+      "share": 11.7118
+     }
+    ],
+    "subtype": "Icy body",
+    "surface_pressure": 0.0235500902146558,
+    "surface_temperature": 179.243484,
+    "synthesis_recipes": [
+     {
+      "level": "Basic",
+      "name": "AX Remote Flak Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Configurable Explosive Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Configurable Small Calibre Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Explosive Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "High Velocity Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Large Calibre Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Life Support"
+     },
+     {
+      "level": "Basic",
+      "name": "Limpets"
+     },
+     {
+      "level": "Basic",
+      "name": "Seismic Charge Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Small Calibre Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "SRV Ammo"
+     },
+     {
+      "level": "Basic",
+      "name": "SRV Refuel"
+     },
+     {
+      "level": "Basic",
+      "name": "SRV Repair"
+     }
+    ],
+    "system_id64": 89128321720906,
+    "system_name": "Eol Prou LW-L c8-324",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9535.8125,
+    "system_y": -905.5625,
+    "system_z": 19809.09375,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-10T22:32:17Z",
+    "volcanism_type": "No volcanism"
+   },
+   {
+    "arg_of_periapsis": 290.906636,
+    "atmosphere": "Thin Argon",
+    "atmosphere_composition": [
+     {
+      "name": "Argon",
+      "share": 100.0
+     }
+    ],
+    "axis_tilt": 0.375455,
+    "body_id": 44,
+    "distance": 12.9528140041074,
+    "distance_to_arrival": 172324.142001,
+    "earth_masses": 0.00258,
+    "estimated_mapping_value": 2221,
+    "estimated_scan_value": 500,
+    "genuses": [
+     {
+      "name": "Bacterial"
+     },
+     {
+      "name": "Fumerolas"
+     },
+     {
+      "name": "Electricae"
+     },
+     {
+      "name": "Fonticulus"
+     }
+    ],
+    "gravity": 0.071868869175079,
+    "id": "1585287477679399498",
+    "id64": 1585287477679399498,
+    "is_landable": true,
+    "is_main_star": null,
+    "is_rotational_period_tidally_locked": true,
+    "landmark_value": 15785500,
+    "landmarks": [
+     {
+      "id": 1400162,
+      "latitude": 21.79452,
+      "longitude": -36.04569,
+      "subtype": "Nitrogen Ice Fumarole",
+      "type": "Fumarole",
+      "value": 0
+     },
+     {
+      "id": 1400262,
+      "latitude": 21.7857,
+      "longitude": -36.05235,
+      "subtype": "Nitrogen Ice Geyser",
+      "type": "Geyser",
+      "value": 0
+     },
+     {
+      "id": 2370207,
+      "latitude": 12.61855,
+      "longitude": 168.71936,
+      "subtype": "Fonticulua Campestris",
+      "type": "Fonticulua",
+      "value": 1000000,
+      "variant": "Amethyst"
+     },
+     {
+      "id": 2360204,
+      "latitude": -71.298859,
+      "longitude": 111.743828,
+      "subtype": "Electricae Radialem",
+      "type": "Electricae",
+      "value": 6284600,
+      "variant": "Blue"
+     },
+     {
+      "id": 2320504,
+      "latitude": 12.6315,
+      "longitude": 168.72464,
+      "subtype": "Bacterium Vesicula",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "Mulberry"
+     },
+     {
+      "id": 2380304,
+      "latitude": 21.74815,
+      "longitude": -36.07225,
+      "subtype": "Fumerola Nitris",
+      "type": "Fumerola",
+      "value": 7500900,
+      "variant": "Aquamarine"
+     }
+    ],
+    "name": "Eol Prou LW-L c8-74 BC 3 a",
+    "orbital_eccentricity": 0.000336,
+    "orbital_inclination": 0.208023,
+    "orbital_period": 7.9028292524537,
+    "orbital_synchronicity": 0.17563019471064,
+    "parents": [
+     {
+      "id64": 1513229883641471562,
+      "subtype": "Class I gas giant",
+      "type": "Planet"
+     }
+    ],
+    "radius": 1207.828125,
+    "rotational_period": 7.72719905774306,
+    "semi_major_axis": 0.00437464556219087,
+    "signal_count": 6,
+    "signals": [
+     {
+      "count": 4,
+      "name": "Biological"
+     },
+     {
+      "count": 2,
+      "name": "Geological"
+     }
+    ],
+    "signals_updated_at": "2026-08-26T21:35:52Z",
+    "solid_composition": [
+     {
+      "name": "Ice",
+      "share": 82.5768
+     },
+     {
+      "name": "Metal",
+      "share": 1.5439
+     },
+     {
+      "name": "Rock",
+      "share": 15.8793
+     }
+    ],
+    "subtype": "Icy body",
+    "surface_pressure": 0.00246929071798668,
+    "surface_temperature": 54.264717,
+    "synthesis_recipes": [
+     {
+      "level": "Basic",
+      "name": "AX Remote Flak Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Configurable Explosive Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Configurable Small Calibre Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Explosive Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Large Calibre Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Life Support"
+     },
+     {
+      "level": "Basic",
+      "name": "Limpets"
+     },
+     {
+      "level": "Basic",
+      "name": "Plasma Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Small Calibre Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "SRV Ammo"
+     },
+     {
+      "level": "Basic",
+      "name": "SRV Refuel"
+     },
+     {
+      "level": "Basic",
+      "name": "SRV Repair"
+     },
+     {
+      "level": "Basic",
+      "name": "Sub-Surface Displacement Munitions"
+     }
+    ],
+    "system_id64": 20408844984906,
+    "system_name": "Eol Prou LW-L c8-74",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9539.59375,
+    "system_y": -912.15625,
+    "system_z": 19799.09375,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-08-26T21:25:13Z",
+    "volcanism_type": "Minor Nitrogen Magma"
+   },
+   {
+    "arg_of_periapsis": 40.101707,
+    "atmosphere": "Thin Argon",
+    "atmosphere_composition": [
+     {
+      "name": "Argon",
+      "share": 100.0
+     }
+    ],
+    "axis_tilt": -0.477118,
+    "body_id": 32,
+    "distance": 13.4171721242779,
+    "distance_to_arrival": 1333.556237,
+    "earth_masses": 0.078885,
+    "estimated_mapping_value": 2221,
+    "estimated_scan_value": 500,
+    "genuses": [
+     {
+      "name": "Fonticulus"
+     },
+     {
+      "name": "Bacterial"
+     }
+    ],
+    "gravity": 0.229666258794738,
+    "id": "1152935041504158290",
+    "id64": 1152935041504158290,
+    "is_landable": true,
+    "is_main_star": null,
+    "is_rotational_period_tidally_locked": true,
+    "landmark_value": 2000000,
+    "landmarks": [
+     {
+      "id": 2370206,
+      "latitude": -7.32603,
+      "longitude": -127.49455,
+      "subtype": "Fonticulua Campestris",
+      "type": "Fonticulua",
+      "value": 1000000,
+      "variant": "Emerald"
+     },
+     {
+      "id": 2320504,
+      "latitude": -7.32828,
+      "longitude": -127.49682,
+      "subtype": "Bacterium Vesicula",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "Mulberry"
+     }
+    ],
+    "name": "Eol Prou PC-K c9-49 A 2 e",
+    "orbital_eccentricity": 0.0,
+    "orbital_inclination": 41.862919,
+    "orbital_period": 59.1277179342708,
+    "orbital_synchronicity": 0.229286924768495,
+    "parents": [
+     {
+      "id64": 936762259390374482,
+      "subtype": "Gas giant with water-based life",
+      "type": "Planet"
+     }
+    ],
+    "radius": 3736.24775,
+    "rotational_period": 58.8984310095023,
+    "semi_major_axis": 0.0360919197843412,
+    "signal_count": 11,
+    "signals": [
+     {
+      "count": 9,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 2,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-09-16T21:26:51Z",
+    "solid_composition": [
+     {
+      "name": "Ice",
+      "share": 87.8203
+     },
+     {
+      "name": "Metal",
+      "share": 1.6914
+     },
+     {
+      "name": "Rock",
+      "share": 10.4884
+     }
+    ],
+    "subtype": "Icy body",
+    "surface_pressure": 0.0268176953269183,
+    "surface_temperature": 90.785919,
+    "synthesis_recipes": [
+     {
+      "level": "Basic",
+      "name": "AX Remote Flak Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Configurable Explosive Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Configurable Small Calibre Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Explosive Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "High Velocity Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Large Calibre Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Life Support"
+     },
+     {
+      "level": "Basic",
+      "name": "Limpets"
+     },
+     {
+      "level": "Basic",
+      "name": "Plasma Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Small Calibre Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "SRV Ammo"
+     },
+     {
+      "level": "Basic",
+      "name": "SRV Refuel"
+     },
+     {
+      "level": "Basic",
+      "name": "SRV Repair"
+     }
+    ],
+    "system_id64": 13536897311314,
+    "system_name": "Eol Prou PC-K c9-49",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9536.0,
+    "system_y": -917.71875,
+    "system_z": 19817.84375,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-09-16T21:26:51Z",
+    "volcanism_type": "No volcanism"
+   }
+  ]
+ },
+ "filter_landmarks_variant_lime": {
+  "count": 149,
+  "results": [
+   {
+    "arg_of_periapsis": 329.019822,
+    "atmosphere": "Thin Argon",
+    "atmosphere_composition": [
+     {
+      "name": "Argon",
+      "share": 100.0
+     }
+    ],
+    "axis_tilt": 0.211323,
+    "body_id": 10,
+    "distance": 9.37015499805099,
+    "distance_to_arrival": 3719.000477,
+    "earth_masses": 0.065646,
+    "estimated_mapping_value": 2221,
+    "estimated_scan_value": 500,
+    "genuses": [
+     {
+      "name": "Electricae"
+     },
+     {
+      "name": "Fonticulus"
+     },
+     {
+      "name": "Bacterial"
+     }
+    ],
+    "gravity": 0.23393892117875,
+    "id": "360307254483554603",
+    "id64": 360307254483554603,
+    "is_landable": true,
+    "is_main_star": null,
+    "is_rotational_period_tidally_locked": false,
+    "landmark_value": 8284600,
+    "landmarks": [
+     {
+      "id": 2320506,
+      "latitude": -10.7698,
+      "longitude": 135.54559,
+      "subtype": "Bacterium Vesicula",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "Lime"
+     },
+     {
+      "id": 2370204,
+      "latitude": -20.52752,
+      "longitude": -119.6556,
+      "subtype": "Fonticulua Campestris",
+      "type": "Fonticulua",
+      "value": 1000000,
+      "variant": "Yellow"
+     },
+     {
+      "id": 2360206,
+      "latitude": -10.28147,
+      "longitude": 134.4557,
+      "subtype": "Electricae Radialem",
+      "type": "Electricae",
+      "value": 6284600,
+      "variant": "Green"
+     }
+    ],
+    "name": "Eol Prou VY-R d4-561 6 a",
+    "orbital_eccentricity": 0.0,
+    "orbital_inclination": -27.28874,
+    "orbital_period": 379.845431005509,
+    "orbital_synchronicity": 378.668736529097,
+    "parents": [
+     {
+      "id64": 324278457464590635,
+      "subtype": "Rocky Ice world",
+      "type": "Planet"
+     }
+    ],
+    "radius": 3377.06775,
+    "rotational_period": 1.17669447641204,
+    "semi_major_axis": 0.0209789960014252,
+    "signal_count": 12,
+    "signals": [
+     {
+      "count": 9,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 3,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-10-05T12:46:30Z",
+    "solid_composition": [
+     {
+      "name": "Ice",
+      "share": 71.1023
+     },
+     {
+      "name": "Metal",
+      "share": 3.9683
+     },
+     {
+      "name": "Rock",
+      "share": 24.9294
+     }
+    ],
+    "subtype": "Icy body",
+    "surface_pressure": 0.00471681012583272,
+    "surface_temperature": 108.983154,
+    "synthesis_recipes": [
+     {
+      "level": "Basic",
+      "name": "AX Remote Flak Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Configurable Explosive Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Configurable Small Calibre Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Explosive Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Large Calibre Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Life Support"
+     },
+     {
+      "level": "Basic",
+      "name": "Limpets"
+     },
+     {
+      "level": "Basic",
+      "name": "Plasma Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Small Calibre Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "SRV Ammo"
+     },
+     {
+      "level": "Basic",
+      "name": "SRV Refuel"
+     },
+     {
+      "level": "Basic",
+      "name": "SRV Repair"
+     }
+    ],
+    "system_id64": 19284293914923,
+    "system_name": "Eol Prou VY-R d4-561",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9534.21875,
+    "system_y": -910.625,
+    "system_z": 19816.71875,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-05T12:47:03Z",
+    "volcanism_type": "No volcanism"
+   },
+   {
+    "arg_of_periapsis": 170.706863,
+    "atmosphere": "Thin Argon",
+    "atmosphere_composition": [
+     {
+      "name": "Argon",
+      "share": 100.0
+     }
+    ],
+    "axis_tilt": 0.04407,
+    "body_id": 65,
+    "distance": 11.7025721665154,
+    "distance_to_arrival": 3388.631148,
+    "earth_masses": 0.043299,
+    "estimated_mapping_value": 2221,
+    "estimated_scan_value": 500,
+    "genuses": [
+     {
+      "name": "Fonticulus"
+     },
+     {
+      "name": "Bacterial"
+     },
+     {
+      "name": "Electricae"
+     }
+    ],
+    "gravity": 0.190023962475783,
+    "id": "2341888641664852562",
+    "id64": 2341888641664852562,
+    "is_landable": true,
+    "is_main_star": null,
+    "is_rotational_period_tidally_locked": true,
+    "landmark_value": 8284600,
+    "landmarks": [
+     {
+      "id": 2320506,
+      "latitude": 8.95415,
+      "longitude": -161.28146,
+      "subtype": "Bacterium Vesicula",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "Lime"
+     },
+     {
+      "id": 2370206,
+      "latitude": 8.95436,
+      "longitude": -161.28316,
+      "subtype": "Fonticulua Campestris",
+      "type": "Fonticulua",
+      "value": 1000000,
+      "variant": "Emerald"
+     },
+     {
+      "id": 2360206,
+      "latitude": 8.95476,
+      "longitude": -161.27998,
+      "subtype": "Electricae Radialem",
+      "type": "Electricae",
+      "value": 6284600,
+      "variant": "Green"
+     }
+    ],
+    "name": "Eol Prou PC-K c9-61 14 g",
+    "orbital_eccentricity": 0.046694,
+    "orbital_inclination": 2.813486,
+    "orbital_period": 11.5502775405324,
+    "orbital_synchronicity": 3.5620728770833,
+    "parents": [
+     {
+      "id64": 2269831047626924626,
+      "type": "Null"
+     }
+    ],
+    "radius": 3043.1315,
+    "rotational_period": 15.1123504176157,
+    "semi_major_axis": 0.000396488648386818,
+    "signal_count": 22,
+    "signals": [
+     {
+      "count": 19,
+      "name": "Planetary Mining Location"
+     },
+     {
+      "count": 3,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-10-01T21:44:13Z",
+    "solid_composition": [
+     {
+      "name": "Ice",
+      "share": 82.5138
+     },
+     {
+      "name": "Metal",
+      "share": 1.5637
+     },
+     {
+      "name": "Rock",
+      "share": 15.9225
+     }
+    ],
+    "subtype": "Icy body",
+    "surface_pressure": 0.00153689911670368,
+    "surface_temperature": 73.867073,
+    "synthesis_recipes": [
+     {
+      "level": "Basic",
+      "name": "AX Remote Flak Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Configurable Explosive Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Configurable Small Calibre Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Explosive Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Large Calibre Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Life Support"
+     },
+     {
+      "level": "Basic",
+      "name": "Limpets"
+     },
+     {
+      "level": "Basic",
+      "name": "Plasma Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Small Calibre Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "SRV Ammo"
+     },
+     {
+      "level": "Basic",
+      "name": "SRV Refuel"
+     },
+     {
+      "level": "Basic",
+      "name": "SRV Repair"
+     }
+    ],
+    "system_id64": 16835432194642,
+    "system_name": "Eol Prou PC-K c9-61",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9532.90625,
+    "system_y": -913.46875,
+    "system_z": 19819.125,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-10-01T21:44:14Z"
+   },
+   {
+    "arg_of_periapsis": 270.081738,
+    "atmosphere": "Thin Argon",
+    "atmosphere_composition": [
+     {
+      "name": "Argon",
+      "share": 100.0
+     }
+    ],
+    "axis_tilt": 0.50549,
+    "body_id": 45,
+    "distance": 12.9528140041074,
+    "distance_to_arrival": 172324.211235,
+    "earth_masses": 0.004927,
+    "estimated_mapping_value": 2221,
+    "estimated_scan_value": 500,
+    "genuses": [
+     {
+      "name": "Bacterial"
+     },
+     {
+      "name": "Fonticulus"
+     }
+    ],
+    "gravity": 0.0895730600591414,
+    "id": "1621316274698363466",
+    "id64": 1621316274698363466,
+    "is_landable": true,
+    "is_main_star": null,
+    "is_rotational_period_tidally_locked": true,
+    "landmark_value": 2000000,
+    "landmarks": [
+     {
+      "id": 2320506,
+      "latitude": -44.81323,
+      "longitude": 40.66845,
+      "subtype": "Bacterium Vesicula",
+      "type": "Bacterium",
+      "value": 1000000,
+      "variant": "Lime"
+     },
+     {
+      "id": 2370207,
+      "latitude": -44.84546,
+      "longitude": 40.45763,
+      "subtype": "Fonticulua Campestris",
+      "type": "Fonticulua",
+      "value": 1000000,
+      "variant": "Amethyst"
+     }
+    ],
+    "name": "Eol Prou LW-L c8-74 BC 3 b",
+    "orbital_eccentricity": 0.000157,
+    "orbital_inclination": 0.015858,
+    "orbital_period": 16.1250232270486,
+    "orbital_synchronicity": 0.218413162430501,
+    "parents": [
+     {
+      "id64": 1513229883641471562,
+      "subtype": "Class I gas giant",
+      "type": "Planet"
+     }
+    ],
+    "radius": 1495.16475,
+    "rotational_period": 15.9066100646181,
+    "semi_major_axis": 0.00703754806241205,
+    "signal_count": 2,
+    "signals": [
+     {
+      "count": 2,
+      "name": "Biological"
+     }
+    ],
+    "signals_updated_at": "2026-08-26T21:35:52Z",
+    "solid_composition": [
+     {
+      "name": "Ice",
+      "share": 82.5768
+     },
+     {
+      "name": "Metal",
+      "share": 1.5439
+     },
+     {
+      "name": "Rock",
+      "share": 15.8793
+     }
+    ],
+    "subtype": "Icy body",
+    "surface_pressure": 0.00383570311374291,
+    "surface_temperature": 54.111359,
+    "synthesis_recipes": [
+     {
+      "level": "Basic",
+      "name": "AX Remote Flak Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Configurable Explosive Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Configurable Small Calibre Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Explosive Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "High Velocity Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Large Calibre Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "Life Support"
+     },
+     {
+      "level": "Basic",
+      "name": "Limpets"
+     },
+     {
+      "level": "Basic",
+      "name": "Small Calibre Munitions"
+     },
+     {
+      "level": "Basic",
+      "name": "SRV Ammo"
+     },
+     {
+      "level": "Basic",
+      "name": "SRV Refuel"
+     },
+     {
+      "level": "Basic",
+      "name": "SRV Repair"
+     }
+    ],
+    "system_id64": 20408844984906,
+    "system_name": "Eol Prou LW-L c8-74",
+    "system_region": "Inner Scutum-Centaurus Arm",
+    "system_x": -9539.59375,
+    "system_y": -912.15625,
+    "system_z": 19799.09375,
+    "terraforming_state": "Not terraformable",
+    "type": "Planet",
+    "updated_at": "2026-08-26T10:47:38Z"
    }
   ]
  }

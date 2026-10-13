@@ -5584,6 +5584,76 @@ const settle = async maxMs => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| reported species |", good ? "👥 beside the guess, a line for an unnamed genus, none once analysed, the legend; Search's green gas giant box" : JSON.stringify({g, want}), errors.slice(before));
   }
+  // S24 / S29 (batch 18): your runs on bodies like this in the guess's hover only (Here's, the body panel's "likely"), and
+  // the Exo-Biology checklist's 🔍 on a species and a colour not found: the nearest reported bodies in the side panel
+  // (api/checklist/find answered here), with ✓ visited, ☆ (opens the bookmark), Copy and ✕; none on a species found
+  {
+    const w = dom.window, before = errors.length;
+    const got = JSON.parse(await w.eval(`(async () => {
+      const o = {}, hd0 = hereData, v0 = view, real = apiJson, c0 = copyText, b0 = openBookmark, cl0 = Object.assign({}, CL);
+      const hist = {label: "Icy body, thin N2, 75–100 K, Inner Orion Spur", total: 14, region: "Inner Orion Spur",
+                    species: [["Informem", 11], ["Acies", 3]]};
+      const guess = {genus: "Bacterium", best: "Bacterium Acies", value: 1000000, min_value: 1000000, species: ["Acies", "Informem"],
+                     variants: [], variant: null, history: hist};
+      view = "here";
+      hereData = {id64: posId(), name: "Rx", region: "Inner Orion Spur", leaving: null, phenomena: [], tree: null,
+        bodies: [{name: "A 1", body_id: 1, type: "Planet", subtype: "Icy body", genera: ["Bacterium"], bio: 1, geo: 0, organics: [],
+                  codex: [], curiosities: [], bio_guess: [guess], value_parts: {bio_factor: 1}, mining: 0, codex_type: null, codex_geo: null}]};
+      renderHere();
+      o.here = (document.querySelector('#hereRows span.unk[title^="likeliest by value"]') || {}).title;
+      hereData = hd0; view = v0; render();
+      let copied = null, opened = null, asked = [];
+      copyText = t => { copied = t; }; openBookmark = (id, name) => { opened = [id, name]; };
+      apiJson = async url => {
+        if (!url.includes("api/checklist/find")) return real(url);
+        asked.push(url);
+        return {species: "Bacterium Vesicula", colour: url.includes("colour=") ? "Mulberry" : null, where: "Colonia", count: 144, radius: 20000,
+          rows: [{id: "89128321720906", system: "Eol Prou LW-L c8-324", body: "4 b", body_id: 32, ly: 7.17, gravity: 0.34,
+                  dist_ls: 1196, colours: ["Mulberry"], visited: true, bookmarked: false}]};
+      };
+      try {
+        const sp = (id, name, state, list) => ({id, name, short: name.split(" ")[1], possible: "yes", state, value: 1000000,
+                                               variants: {found: list.filter(v => v.state).length, total: list.length, list}});
+        CL.data = Object.assign({}, CL.data || {}, {kind: "bio", region: 18, region_name: "Inner Orion Spur", here: 18, regions: [],
+          summary: {possible: 2, sold: 1, aboard: 0, lost: 0, logged: 0, colours: 3, colours_found: 1, completion: 33, elsewhere: 0},
+          genera: [{genus: "Bacterium", species: [sp("ves", "Bacterium Vesicula", null, [{colour: "Mulberry", where: "K star", state: null}]),
+                                                  sp("acies", "Bacterium Acies", "sold", [{colour: "Teal", where: "F star", state: "sold"}])]}]});
+        CL.open = null; CL.find = null;
+        renderChecklist();
+        const btn = id => document.querySelector('#clGrid tr[data-cl="' + id + '"] [data-clfind]');
+        o.grid = [!!btn("ves") && btn("ves").textContent, !!btn("acies")];
+        btn("ves").click();
+        await new Promise(r => setTimeout(r, 50));
+        const side = document.getElementById("clSide");
+        o.open = CL.open;
+        o.rows = [...side.querySelectorAll(".clfindt tr")].map(tr => [...tr.cells].map(c => c.textContent.trim()));
+        o.head = side.querySelector(".clfindh span").textContent;
+        o.foot = (side.querySelector(".clfind > .unk") || {}).textContent;
+        side.querySelector("[data-bm]").click(); o.bm = opened;
+        side.querySelector("[data-clcopy]").click(); o.copied = copied;
+        // a colour not found: its row's 🔍 nearby asks for that colour
+        const cv = document.querySelector('#clGrid tr.clvar [data-clfind]');
+        o.colourBtn = cv && cv.textContent;
+        cv.click();
+        await new Promise(r => setTimeout(r, 50));
+        o.asked = asked.map(u => u.replace(/^.*\\?/, ""));
+        o.head2 = side.querySelector(".clfindh span").textContent;
+        side.querySelector("[data-clfindclose]").click();
+        o.closed = !side.querySelector(".clfind") && !!side.querySelector("[data-clfind]");
+      } finally {
+        apiJson = real; copyText = c0; openBookmark = b0; Object.assign(CL, cl0); CL.key = null;
+      }
+      return JSON.stringify(o); })()`));
+    const want = {here: "likeliest by value: Acies / Informem\nyours on bodies like this (Icy body, thin N2, 75–100 K, Inner Orion Spur): Informem 11 of 14, Acies 3 of 14",
+                  grid: ["🔍", false], open: "ves",
+                  rows: [["Eol Prou LW-L c8-324", "4 b", "7.2 ly", "0.34 g", "Mulberry", "✓", "☆", "Copy"]],
+                  head: "Nearest reported: Bacterium Vesicula", foot: "143 more further away · reported to Spansh by commanders' uploads; distances from Colonia",
+                  bm: ["89128321720906", "Eol Prou LW-L c8-324"], copied: "Eol Prou LW-L c8-324", colourBtn: "🔍 nearby",
+                  asked: ["species=ves", "species=ves&colour=Mulberry"], head2: "Nearest reported: Bacterium Vesicula - Mulberry", closed: true};
+    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| own runs, find nearby |", good ? "your runs in the guess's hover; 🔍 on a species and a colour not found, the nearest reported with ✓, ☆, Copy, ✕" : JSON.stringify({got, want}), errors.slice(before));
+  }
   // S73 (2026-10-12): a click anywhere on a Nearby row shows the system in Here (again: closes it); the name still
   // copies, ☆ still opens the bookmark, a drag that selected text opens nothing
   {

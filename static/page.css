@@ -1207,6 +1207,15 @@ body.app #richPane { grid-column: 1; grid-row: 2; }
 .clbox tr.clvar .cvs { flex: 0 0 auto; }
 .clbox tr.clvar { cursor: default; } .clbox tr.clvar.climgrow { cursor: pointer; }
 .clbox tr.clvar.on { background: rgba(127, 127, 127, .24); }
+/* S29: 🔍 on a species or colour not found (a link-like button), and the nearest reported bodies in the side panel */
+.clfindb { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: var(--info); cursor: pointer; }
+.clfindb:hover { text-decoration: underline; }
+.clfind { margin: 8px 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }
+.clfindh { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
+.clfindt { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+.clfindt td { padding: 1px 4px; white-space: nowrap; }
+.clfindt td:first-child { max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+.clfindt td.num { text-align: right; }
 .clmapbox { position: relative; }
 .cltip { position: absolute; pointer-events: none; z-index: 5; padding: 3px 7px; border-radius: 4px; font-size: 12px; white-space: nowrap;
   background: var(--bg); color: var(--text); border: 1px solid var(--line); box-shadow: 0 2px 6px rgba(0, 0, 0, .35); }
