@@ -428,6 +428,21 @@ upstream project's choices, not rules of the game.
   lacks MaxFuelPerJump or p. Only for the ship the route was plotted for. The neutron plotter has no fuel plan: its
   next jump alone, when one jump away. A route plotted with FSD injections keeps that one-jump check too (its boosted
   jumps are not marked in the rows).
+- **The last scoopable star before a stretch you can't cover (S2)** works on any route Outrider follows: the hops ahead
+  (`route_ahead`) are the game's own plotted route from where you are (a survey route's legs come this way), then the
+  Highway's rows after its end. A star counts as not scoopable only when that is KNOWN: the game's star class (NavRoute,
+  FSDTarget), else the row's facts (a neutron row; an exact route's refuel row is scoopable, P1), else Spansh's record;
+  an unknown star ends the stretch, so the claim "the next N stars are not scoopable" is never a guess. Warned at a
+  scoopable star when the fuel aboard won't carry the ship over those stars to the next that is (or may be) scoopable,
+  by the same `fuel_window` as S1 (the ship lightening hop by hop); "even a full tank won't" when no level does. Silent
+  when a hop is beyond the ship's best jump at any fuel (the game's route alone promises no supercharge: not a fuel
+  matter), when the fuel is too much rather than too little, while scooping (Status.json's flag) and while the fuel
+  model is incomplete. Said once per stretch (the route it comes from and its first dry star), so stopping a scoop a
+  little short is not said twice. On an exact-plotter Highway route S1's line already says the same stretch, so S2 stays
+  quiet where S1 has a `short` (the plan's default, "S1 suppresses S2"); the page's top-up card stays quiet where S2
+  speaks. The spoken line is the author's ("The next 3 stars on your route are not scoopable. This is your last chance
+  to top off before you need to call the Fuel Rats."), key `fuel_last_scoop` {count}, a danger key under its own alerts
+  row `lastscoop`; one star, and the no-amount case, are plain sentences (the lines are plural).
 - **Short of the refuel stop is not said at a refuel stop** (the plan scoops there anyway): the line shows how much to
   scoop instead ("⛽ scoop to ≥ 24.3 t to reach …"), and leaving without it is warned on arrival at the next system.
   Its spoken line is a `speech.json` key (`fuel_short`, a danger key: business wording by default) under its own
@@ -929,8 +944,8 @@ confirmed while playing. Treat reports about them as likely real.
   not writable.
 - The Highway's plots against live Spansh (both plotters send the requests Spansh's site and Auto_Neutron send;
   tested with a mocked Spansh), following a route in game, and whether a name copied by `wl-copy`/`xclip` pastes
-  into the galaxy map under Proton. The too-heavy warning, the short-of-the-refuel-stop warning (S1) and a
-  conservative plot against a real route.
+  into the galaxy map under Proton. The too-heavy warning, the short-of-the-refuel-stop warning (S1), the last-scoopable-star
+  warning (S2, on the game's route and the Highway) and a conservative plot against a real route.
 - Auto-target in game: the first default sequence targeted a system end to end with "test now" (2026-10-02), and the
   current one (a camera yaw before the search, 1.5 s before Enter, a zoom in the plot step) is what worked on
   2026-10-03 (the author's bindings, Linux/Proton). Not yet tried: a run triggered by a real supercharge on a route,

@@ -2,6 +2,30 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-13 · The last scoopable star before a stretch you can't cover
+- **The route ahead, whatever route you follow** (F2, S2's groundwork): `State.route_ahead()` gives the hops from where
+  you are: the game's plotted route (NavRoute.json, from where you are on it; a survey route's legs come this way),
+  then, when it ends on a row of the Highway route you follow, that route's one-jump rows after it, or the Highway's rows
+  from where you are with no plotted route; a neutron-plotter waypoint several jumps away, a hop of unknown length or 50
+  hops end it. Each hop's star is scoopable True / False / None from what is known (`_star_scoopable`: the game's star
+  class, else the row's facts, a neutron False and an exact route's refuel row True as P1 showed, else the cached Spansh
+  record); None stops any claim. Multipliers only for facts (the Fable review): the charge you hold on the first hop,
+  and a hop leaving a neutron row of an exact-plotter route.
+- **Last scoopable star** (S2): `State.last_scoop_check`, a follow-up after the heavy check, on arriving and as the
+  fuel, cargo, charge, route or target change (every 3 s at most in one system), never while scooping (Status.json's
+  flag), with the game running. At a scoopable star, when the stars ahead are known not to scoop up to the next that is
+  (or may be) and the fuel aboard won't carry the ship over them (`fuel_window` over those hops: under its low end, or no
+  level the tank holds: `full`), the payload's `dry_stretch` {count, system, next, need_t, full, have_t, source, first}
+  and a `last_scoop` moment once per stretch (its route source and first dry star). Silent when a hop is beyond the
+  ship's best jump at any fuel (not a fuel matter), when the fuel is too much rather than too little, while the fuel
+  model is incomplete, and where S1's `short` stands on an exact-plotter route (the plan's default: S1 suppresses S2).
+- **The page:** its own alerts row `lastscoop` ("Last scoopable star", in `SPEECH_SYS_BOUND`) and the speech key
+  `fuel_last_scoop` {count} (danger: business by default) with the author's line first: "The next 3 stars on your route
+  are not scoopable. This is your last chance to top off before you need to call the Fuel Rats." (50 business lines, 15
+  each for the others); one star and the no-amount case are plain sentences. The bit "⛽ last scoop before 3 dry" on the
+  In-Game Route line (else the route line under the tiles) and under Now's fuel, with how much to scoop
+  (`dryStretchText`/`dryStretchHtml`); the top-up card (`fuel_topup`) stays quiet in a system where S2 speaks.
+
 ## 2026-10-13 · One fuel window for the Highway, Now's jump cost, and Find by name through Spansh
 - **Fuel won't reach the refuel stop** (S1, with the fuel groundwork F1): `outrider/fsd.py` `fuel_run(model, fuel,
   other, hops)` burns (ly, multiplier) hops one by one, the ship lightening (reach capped as `target_hop` does, the

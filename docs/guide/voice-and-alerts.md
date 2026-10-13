@@ -32,6 +32,8 @@ notification and be spoken (🗣), chosen per alert in **⚙ Settings → Alerts
 - low fuel where you cannot scoop, and a top-up worth taking before a dry stretch
 - on a Neutron Highway route from the exact plotter, fuel that won't reach the next refuel stop (its own row, **Short
   of the refuel stop**; see [Plot Route](plot-route.md))
+- on any route Outrider follows, the last scoopable star before stars you can't scoop that the fuel won't cover (its
+  own row, **Last scoopable star**)
 - docking where the station buys your data, and what you banked when you sold
 - a sale that left data aboard (Universal Cartographics sells 50 systems a page; at Vista Genomics, the species
   you kept back), said 90 seconds after the last page
@@ -165,7 +167,8 @@ Sound: Allow; Firefox: Autoplay: Allow Audio and Video).
   hull has no credit value)
 - **Fuel:** low fuel where you can't scoop, and the **top-up warning** before a likely dry stretch; on a Highway
   route, "Fuel won't reach Hwy Stop 42, 4 jumps out. Scoop to at least 25 tonnes." (a danger line: business wording
-  unless you untick that).
+  unless you untick that); at the last scoopable star before a dry stretch, "The next 3 stars on your route are not
+  scoopable. This is your last chance to top off before you need to call the Fuel Rats." (a danger line too).
 - **Jumponium** (off by default): the best landable body with a material your FSD injections are short
   of ("B 4 has polonium, 1.3 percent.").
 - **Mapped** (off by default: **Say when a planet is mapped**, or `speak_mapped`): after each DSS mapping,

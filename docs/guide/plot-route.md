@@ -36,6 +36,13 @@ you plot another of its kind or **Clear route**.
   refuel stop: Hwy Stop 42 in 4 jumps · scoop to ≥ 24.3 t, at most 36.0 t" (both limits in one line, from the same
   sum). Spoken once per system. At a ⛽ stop itself it only shows how much to scoop ("⛽ scoop to ≥ 24.3 t to reach
   Hwy Stop 46 in 3 jumps"), since you scoop there anyway. Not on a route plotted with FSD injections.
+- **Last scoopable star.** On any route Outrider follows (the game's plotted route too, and a survey route's legs), at a
+  scoopable star with stars ahead you can't scoop and not enough fuel to get past them, it warns once: "The next 3
+  stars on your route are not scoopable. This is your last chance to top off before you need to call the Fuel Rats."
+  The In-Game Route line (else the route line under the tiles) and Now show "⛽ last scoop before 3 dry" with how much
+  to scoop. Only stars known not to scoop count
+  (the game's star class, a neutron on the route, Spansh's record); not while you are scooping. On an exact-plotter
+  route the refuel-stop warning above says it instead.
 - **The list** shows the next 200 jumps with distance, ⚡ neutron, fuel and ⛽ refuel stops (the exact plotter's: the
   neutron plotter has none, scoop as you go); click a name to copy
   it. The map beside it draws the route on the galactic regions with landmarks and your carrier. You can put your

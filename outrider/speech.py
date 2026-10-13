@@ -63,6 +63,9 @@ KEYS = {
     "fuel_short": "on a Highway route plotted with the exact plotter, the fuel aboard won't reach the next refuel stop (said "
                   "once per system, not at a refuel stop itself): {system} (the refuel stop, or the destination), {jumps} "
                   "(how far, e.g. '4 jumps'), {need} (the fuel to scoop to, e.g. '24 tonnes')",
+    "fuel_last_scoop": "at the last scoopable star before stars on your route you can't scoop, which the fuel aboard won't "
+                       "cover (any route Outrider follows; said once per stretch, with two or more such stars): {count} (how "
+                       "many, a number, e.g. 3)",
     "hull": "hull fell below half or a quarter: {pct}",
     "heat": "heat damage",
     "interdicted": "interdicted: {by}",
@@ -418,6 +421,7 @@ SAMPLES = {
     "fuel_target": {"pct": 22, "system": "Drojau LL-O b26-3"},
     "fuel_topup": {"rate": "8 of the last 20 stars were scoopable", "jumps": "about 6 jumps"}, "hull": {"pct": 42}, "interdicted": {"by": "someone"},
     "fuel_short": {"system": "Smojooe AR-E b25-8", "jumps": "4 jumps", "need": "24 tonnes"},
+    "fuel_last_scoop": {"count": 3},
     "docked_sell": {"value": "114.1M", "station": "Jaques Station"}, "undocked_unsold": {"value": "260.4M"},
     "sold": {"sold": "12.6M cr cartographics and 4.1M cr exobiology", "still": ""},
     "unsold_warn": {"value": "52.0M"}, "unsold_urgent": {"value": "251.3M"},

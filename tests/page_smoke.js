@@ -5656,6 +5656,66 @@ const settle = async maxMs => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| batch 23 fuel window and Now's jump cost |", good ? "the one-window line (short, at a refuel stop, no amount, a later hop too heavy), spoken clause, refuelshort row and fuel_short key, Now's cost and scoopable share" : JSON.stringify({got, want}), errors.slice(before));
   }
+  // Batch 24: S2, the last scoopable star before a stretch the fuel won't cover: its own alerts row and speech key (the
+  // author's line, said in business as danger; one star and no amount in plain words), the bit on the In-Game Route
+  // strip (else on the route line under the header) and Now, and the top-up card quiet where it is said
+  {
+    const w = dom.window, before = errors.length;
+    const got = JSON.parse(w.eval(`(() => {
+      const o = {}, said = [], told = [], realSpeak = speak, realNotify = notify, m0 = data.moments, d0 = JSON.stringify(data), v0 = view;
+      const flags = [speechOn, isSpeaker, alertSpeak.lastscoop, alertSpeak.fuel, lastMomentSeq, lastSeq, fuelTargetSys], lib = speechLib;
+      speechLib = {styles: {business: "B", sarcastic: "S"}, lines: {fuel_last_scoop: {business: ["The next {count} stars on your route are not scoopable."], sarcastic: ["never, a danger line"]}}};
+      speak = (t, opt) => said.push([opt && opt.log && opt.log.key, t]); notify = (kind, title, body) => { told.push([kind, title, body]); return true; };
+      speechOn = true; isSpeaker = true; alertSpeak.lastscoop = true; alertSpeak.fuel = true;
+      const ws = {count: 3, system: "Start", next: "Kay D", need_t: 18.0, full: false, have_t: 10.0, source: "navroute", first: "401"};
+      const at = (i, m) => Object.assign({seq: lastMomentSeq + i, ts: new Date().toISOString(), kind: "last_scoop"}, ws, m);
+      data.moments = [at(1, {}), at(2, {count: 1, next: null}), at(3, {count: 40, full: true, need_t: null})];
+      onData();
+      o.key = said.length ? said[0][0] : null; o.told = told.slice(); o.said = said.map(x => x[1]);
+      o.row = ALERTS.some(a => a[0] === "lastscoop") && alertCfg.lastscoop === true && !!ALERT_SHORT.lastscoop && !!TAB_ALERT_NAMES.lastscoop &&
+        SPEECH_SYS_BOUND.has("lastscoop") && DANGER.has("fuel_last_scoop") && speechPrio("lastscoop", "fuel_last_scoop") === 0 &&
+        !!document.querySelector('#alertOpts [data-aspeak="lastscoop"]') && !!LINE_SAMPLES.fuel_last_scoop;
+      // the strip's bit: on the In-Game Route strip, else on the route line; Now under the fuel
+      const q = sel => { const e = document.querySelector(sel); return e ? e.textContent.replace(/\\s+/g, " ").trim() : null; };
+      data.dry_stretch = ws;
+      data.route = {hops: [{id: "401", name: "Dwarf A", star_class: "DA", scoopable: false, ly: 70, visited: false, known: true}], ly: 70, longest_dry: 1, next_scoop: null};
+      data.highway = {id: "hw-s2", plotter: "neutron", destination: "Colonia", total: 40, index: 5, at: 4, complete: false, off_route: false,
+                      next: {name: "Dwarf A", id: "401", neutron: false, refuel: false, jumps: 1, distance: 70}};
+      view = "near"; renderRoute(); renderHwyLine();
+      o.strip = /⛽ last scoop before 3 dry/.test(q("#routeStrip")); o.lineWith = /last scoop/.test(q("#hwyLine"));
+      data.route = null; renderRoute(); renderHwyLine();
+      o.line = q("#hwyLine").replace(/^.*· (⛽)/, "$1");
+      data.fuel = {live: true, pct: 50, main: 10, capacity: 160, jumps_recent: 2, jumps_max: 2, since_scoop: 3, scoop_rate: null, here_scoop: null, low_flag: false, in_ship: true};
+      renderNow();
+      o.now = q("#nowBody .now-dry");
+      // the top-up card stays quiet where S2 says it, and comes back without it
+      data.moments = []; data.here_star = "K"; fuelTargetSys = null;
+      data.fuel.scoop_rate = {scoopable: 5, of: 20, dry_run: 2};
+      data.target = {seq: "s2-1", fresh: true, id64: 401, id: "401", name: "Dwarf A", star_class: "DA", status: "partial", leaving: null};
+      told.length = 0; onData();
+      o.topupQuiet = !told.some(t => t[0] === "fuel");
+      data.dry_stretch = null; data.target = Object.assign({}, data.target, {seq: "s2-2"}); fuelTargetSys = null;
+      onData();
+      o.topupBack = told.some(t => t[0] === "fuel" && /^Top up here/.test(t[1]));
+      speak = realSpeak; notify = realNotify; speechLib = lib;
+      [speechOn, isSpeaker, alertSpeak.lastscoop, alertSpeak.fuel] = flags; lastMomentSeq = flags[4]; lastSeq = flags[5]; fuelTargetSys = flags[6];
+      data = JSON.parse(d0); data.moments = m0; view = v0; renderRoute(); renderHwyLine(); renderNow();
+      return JSON.stringify(o); })()`));
+    const want = {
+      key: "fuel_last_scoop",
+      told: [["lastscoop", "Last scoopable star: 3 unscoopable ahead", "the fuel aboard (10.0 t) won't cover them · scoop to ≥ 18.0 t to reach Kay D"],
+             ["lastscoop", "Last scoopable star: 1 unscoopable ahead", "the fuel aboard (10.0 t) won't cover it · scoop to ≥ 18.0 t"],
+             ["lastscoop", "Last scoopable star: 40 unscoopable ahead", "even a full tank won't cover them"]],
+      said: ["The next 3 stars on your route are not scoopable.",
+             "The next star on your route is not scoopable. This is your last chance to top off before you need to call the Fuel Rats.",
+             "The next 40 stars on your route are not scoopable, and even a full tank won't cover them."],
+      row: true, strip: true, lineWith: false, line: "⛽ last scoop before 3 dry",
+      now: "⛽ last scoop before 3 dry: the fuel aboard (10.0 t) won't cover them · scoop to ≥ 18.0 t to reach Kay D",
+      topupQuiet: true, topupBack: true};
+    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| batch 24 last scoopable star |", good ? "the lastscoop row and fuel_last_scoop key (one star, no amount), the strip's bit, Now, the top-up card quiet" : JSON.stringify({got, want}), errors.slice(before));
+  }
   // star and planet types new to your codex (2026-10-12): ✦ not in this region's codex, ✪ in none; Here's name cell,
   // Nearby's tag naming each, the legend; nothing at all without a single body type logged
   {

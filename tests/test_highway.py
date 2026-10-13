@@ -902,6 +902,154 @@ class HighwayH1(unittest.TestCase):
         cols = [r[1] for r in self.db.execute("PRAGMA table_info(highway_route)")]
         self.assertNotIn("scoopable", cols)
 
+    # ---- S2: the last scoopable star before a stretch the fuel won't cover (route_ahead, F2) ----
+
+    def classes(self, **by_id):
+        for i, c in by_id.items():
+            self.db.execute("INSERT OR REPLACE INTO star_classes VALUES (?, ?)", (int(i[1:]), c))
+
+    def navroute(self, hops, ts=-50):
+        """The game's plotted route: [(id64, name, star class, x)], the first where it was plotted from."""
+        ed_outrider.meta_set(self.db, "route", {"ts": self.ts(ts), "hops": [
+            {"id64": i, "name": n, "star_class": c, "x": x, "y": 0.0, "z": 0.0} for i, n, c, x in hops]})
+        self.j.navroute_end = hops[-1][0]
+
+    def last_scoops(self):
+        return [m for m in self.j.moments if m["kind"] == "last_scoop"]
+
+    # from Start (a K star): a white dwarf, a neutron star and a black hole 70 ly apart, then two scoopable stars
+    DRY_NAV = [(300, "Start", "K", 0.0), (401, "Dwarf A", "DA", 70.0), (402, "Neutron B", "N", 140.0),
+               (403, "Hole C", "H", 210.0), (404, "Kay D", "K", 280.0), (405, "Em E", "M", 350.0)]
+
+    def test_route_ahead(self):
+        """F2: the game's route from where you are, then the Highway's rows after its end; scoopable from the game's star
+        class, else the row's facts; a multiplier only for facts (the held charge, an exact route's neutron rows)."""
+        self.classes(s300="K")
+        self.heavy_route(self.ROUTE_HEAVY)   # Start (neutron) -487.9-> Neu Far -40-> Plain -60-> End, exact
+        self.state.highway_clear()
+        self.assertEqual(self.state.route_ahead(), [])   # no route followed
+        self.navroute(self.DRY_NAV)
+        ahead = self.state.route_ahead()
+        self.assertEqual([(h["name"], h["scoopable"], h["mult"], h["source"], round(h["ly"], 1)) for h in ahead],
+                         [("Dwarf A", False, 1, "navroute", 70.0), ("Neutron B", False, 1, "navroute", 70.0),
+                          ("Hole C", False, 1, "navroute", 70.0), ("Kay D", True, 1, "navroute", 70.0),
+                          ("Em E", True, 1, "navroute", 70.0)])
+        self.j.boost = {"value": 4.0, "ts": self.ts(-5)}   # a charge held: the first hop only
+        self.assertEqual([h["mult"] for h in self.state.route_ahead()], [4.0, 1, 1, 1, 1])
+        self.j.boost = None
+        self.jump(-40, 402, "Neutron B", 140.0)   # further along: from where you are on it
+        self.assertEqual([h["name"] for h in self.state.route_ahead()], ["Hole C", "Kay D", "Em E"])
+        # an exact Highway route: the game plotted to its next row, the route's rows follow; a neutron row False, a
+        # refuel row True (Spansh's plan scoops there), the game's own class first; a hop leaving a neutron row x6
+        self.jump(-30, 300, "Start", 0.0)
+        rows = [("Start", 300, 0.0, 0, 1, 0), ("Ay", 301, 300.0, 300.0, 0, 1), ("Neu B", 302, 340.0, 40.0, 1, 1),
+                ("Fuel C", 303, 580.0, 240.0, 0, 1, 1), ("Dee", 304, 620.0, 40.0, 0, 1, 1), ("Plain E", 305, 660.0, 40.0, 0, 1)]
+        self.heavy_route(rows, start=-30)
+        self.navroute([(300, "Start", "K", 0.0), (301, "Ay", "F", 300.0)])
+        self.classes(s304="DA")
+        ahead = self.state.route_ahead()
+        self.assertEqual([(h["name"], h["scoopable"], h["mult"], h["source"]) for h in ahead],
+                         [("Ay", True, 6, "navroute"), ("Neu B", False, 1, "highway"), ("Fuel C", True, 6, "highway"),
+                          ("Dee", False, 1, "highway"), ("Plain E", None, 1, "highway")])
+        self.assertEqual([round(h["ly"], 1) for h in ahead], [300.0, 40.0, 240.0, 40.0, 40.0])
+        # no plotted route: the Highway's rows from where you are; off the route: nothing
+        ed_outrider.meta_set(self.db, "route", None)
+        self.assertEqual([h["name"] for h in self.state.route_ahead()], ["Ay", "Neu B", "Fuel C", "Dee", "Plain E"])
+        self.jump(-20, 999, "Elsewhere", 5.0)
+        self.assertEqual(self.state.route_ahead(), [])
+        # the neutron plotter: no refuel or neutron multiplier from its rows, and a waypoint several jumps away ends it
+        self.state.highway_clear()
+        self.jump(-10, 300, "Start", 0.0)
+        self.heavy_route([("Start", 300, 0.0, 0, 1, 0), ("Ay", 301, 60.0, 60.0, 0, 1, 1), ("Far", 302, 400.0, 340.0, 1, 5)],
+                         plotter="neutron", start=-10)
+        self.assertEqual([(h["name"], h["scoopable"], h["mult"]) for h in self.state.route_ahead()], [("Ay", None, 1)])
+
+    def test_last_scoopable_star(self):
+        """S2 on the game's own route: here a K star, three stars after it known not to scoop, and too little fuel for
+        the four hops to the next one that does: warned once per stretch, with how much to scoop."""
+        self.classes(s300="K")
+        self.j.handle(self.caspian_loadout(self.ts(-1000)))
+        self.jump(-100, 300, "Start", 0)
+        self.navroute(self.DRY_NAV)
+        model = ed_outrider.fuel_model(self.j.ship, self.j.fuel_hist)
+        lo, hi = outrider.fsd.fuel_window(model, 1.14, [(70.0, 1)] * 4, 160)
+        self.fuel(10)
+        self.assertTrue(self.state.last_scoop_check(self.now))
+        w = self.state.payload()["dry_stretch"]
+        self.assertEqual({k: w[k] for k in ("count", "system", "next", "full", "have_t", "source")},
+                         {"count": 3, "system": "Start", "next": "Kay D", "full": False, "have_t": 10, "source": "navroute"})
+        self.assertEqual(w["need_t"], math.ceil(lo * 10) / 10)
+        self.assertEqual([(m["count"], m["system"], m["next"], m["need_t"], m["full"]) for m in self.last_scoops()],
+                         [(3, "Start", "Kay D", w["need_t"], False)])
+        # scooping: nothing looked at or said; it stops a little short: still warned, not said again
+        self.j.status_json = dict(self.j.status_json, fuel_main=12, flags=ed_outrider.FLAG_SCOOPING)
+        self.assertFalse(self.state.last_scoop_check(self.now + 5))
+        self.assertEqual(self.state.dry_stretch_summary()["have_t"], 10)
+        self.fuel(12)
+        self.assertTrue(self.state.last_scoop_check(self.now + 10))
+        self.assertEqual(self.state.dry_stretch_summary()["have_t"], 12)
+        self.assertEqual(len(self.last_scoops()), 1)
+        # enough fuel: cleared; the fuel changes again within HIGHWAY_HEAVY_EVERY_S: not looked at yet
+        self.fuel(lo + 0.3)
+        self.assertTrue(self.state.last_scoop_check(self.now + 15))
+        self.assertIsNone(self.state.dry_stretch_summary())
+        self.fuel(5)
+        self.assertFalse(self.state.last_scoop_check(self.now + 16))
+        self.assertTrue(self.state.last_scoop_check(self.now + 20))
+        self.assertEqual(len(self.last_scoops()), 1)   # the same stretch: said once
+        # the next star unknown (no class from the game or Spansh): no claim; nor at a star you can't scoop
+        self.navroute([(300, "Start", "K", 0.0), (401, "Dwarf A", None, 70.0), (402, "Neutron B", "N", 140.0)])
+        self.state.last_scoop_check(self.now + 25)
+        self.assertIsNone(self.state.dry_stretch_summary())
+        self.navroute(self.DRY_NAV)
+        self.classes(s300="DA")
+        self.jump(-5, 300, "Start", 0)   # here_star is the arrival's class
+        self.state.last_scoop_check(self.now + 30)
+        self.assertIsNone(self.state.dry_stretch_summary())
+        # a hop out of reach whatever the fuel (a neutron jump the game's route alone does not promise): not a fuel matter
+        self.classes(s300="K")
+        self.jump(-4, 300, "Start", 0)
+        self.navroute([(300, "Start", "K", 0.0), (401, "Dwarf A", "DA", 70.0), (402, "Far B", "N", 470.0),
+                       (403, "Kay C", "K", 540.0)])
+        self.state.last_scoop_check(self.now + 35)
+        self.assertIsNone(self.state.dry_stretch_summary())
+        # a stretch no tank-full covers: said, with no amount (a new stretch: its first dry star is another)
+        far = [(300, "Start", "K", 0.0)] + [(500 + k, f"Dry {k}", "DA", 75.0 * (k + 1)) for k in range(40)]
+        self.navroute(far + [(600, "Kay Z", "K", 75.0 * 41)])
+        self.fuel(160)
+        self.assertIsNone(outrider.fsd.fuel_window(model, 1.14, [(75.0, 1)] * 41, 160))
+        self.state.last_scoop_check(self.now + 40)
+        w = self.state.dry_stretch_summary()
+        self.assertEqual((w["count"], w["full"], w["need_t"], w["first"]), (40, True, None, "500"))
+        self.assertEqual([m["full"] for m in self.last_scoops()], [False, True])
+        # you away from the ship, or the game not running: nothing
+        self.j.status_json = dict(self.j.status_json, away="SRV")
+        self.state.last_scoop_check(self.now + 45)
+        self.assertIsNone(self.state.dry_stretch_summary())
+        self.fuel(160, live=False)
+        self.state.last_scoop_check(self.now + 50)
+        self.assertIsNone(self.state.dry_stretch_summary())
+
+    def test_last_scoop_on_the_highway_and_s1_first(self):
+        """S2 follows the Highway too. On an exact-plotter route S1 already says the same stretch (the plan's default:
+        S1 suppresses S2 there); on a neutron-plotter route, which has no fuel plan, S2 says it."""
+        self.classes(s300="K", s301="DA", s302="N", s303="H", s304="K")
+        self.heavy_route(self.ROUTE_SHORT)
+        self.fuel(10)
+        self.state.highway_heavy_check(self.now)
+        self.state.last_scoop_check(self.now)
+        self.assertTrue(self.state.highway_summary()["short"])
+        self.assertIsNone(self.state.dry_stretch_summary())
+        self.assertEqual(self.last_scoops(), [])
+        self.state.highway_clear()
+        self.heavy_route(self.ROUTE_SHORT, plotter="neutron")
+        self.state.highway_heavy_check(self.now + 5)
+        self.state.last_scoop_check(self.now + 5)
+        self.assertIsNone(self.state.highway_summary()["short"])
+        w = self.state.dry_stretch_summary()
+        self.assertEqual((w["count"], w["next"], w["source"]), (3, "Refuel D", "highway"))
+        self.assertEqual(len(self.last_scoops()), 1)
+
     def test_plot_from_a_system_spansh_does_not_know(self):
         """A fresh discovery Spansh does not know yet (where you are): the route is plotted from the Spansh system near
         it that is nearest the destination, out of what Spansh already sent about the neighbourhood, and starts with

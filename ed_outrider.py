@@ -327,6 +327,7 @@ HIGHWAY_SUGGEST_CACHE = 200  # system-name suggestions kept (per typed prefix)
 HIGHWAY_HEAVY_SLACK = 0.5    # t: fuel over the most the next jump allows by more than this is "too heavy" (Spansh plans
 #                              some jumps right at the limit, so a hair over is the model's error, not yours)
 HIGHWAY_HEAVY_EVERY_S = 3.0  # s between two looks at it while the fuel changes in a route system (scooping)
+LAST_SCOOP_KEEP = 200        # dry stretches remembered as said (S2: one warning per stretch)
 HIGHWAY_CONSERVATIVE_MAX = 50.0   # ly: the largest conservative margin taken
 GEO_CODEX_FILE = os.path.join(outrider.RESOURCES_DIR, "geo_codex.json")
 CODEX_IMAGES_START = 120     # s after the server starts before the picture list is first refreshed
@@ -6454,6 +6455,10 @@ class State:
         # refuel_at, jumps, end, here_refuel} or None}
         self._hw_heavy = {"key": None, "live": False, "said": False, "said_short": False, "t": None, "look": None,
                           "heavy": None, "short": None}
+        # the last scoopable star before a dry stretch the fuel won't cover (S2, last_scoop_check): {at (the system it
+        # is about), t, look, warn: {count, system, next, need_t, full, source, have_t} or None, said: the stretches
+        # said, (source, first dry id64), the last LAST_SCOOP_KEEP}
+        self._dry = {"at": None, "t": None, "look": None, "warn": None, "said": collections.OrderedDict()}
         # Road to Riches: the plot under way (as highway_plotting), its task, the arrival whose next system was copied
         self.riches_plotting = None
         self.riches_task = None
@@ -6576,6 +6581,7 @@ class State:
             "next_stop": self.next_stop_summary(),
             "route": self.route_summary(),
             "highway": self.highway_summary(),
+            "dry_stretch": self.dry_stretch_summary(),   # S2: the last scoopable star before a stretch the fuel won't cover
             "survey": self.survey_summary(),   # Road to Riches / Exomastery: the line under the tiles, as the Highway's
             "backup": dict(meta_get(self.db, "last_backup") or {}, running=bool(self.backup_task and not self.backup_task.done()),
                            every_days=BACKUP_EVERY_DAYS, keep=BACKUP_KEEP, restore=self.restore_command(None)),
@@ -13547,6 +13553,154 @@ class State:
         return {"need_t": math.floor(need * 10) / 10, "have_t": round(fuel, 1), "distance": round(d, 1), "boost": mult,
                 "next": nxt["system"], "hop": 1}
 
+    def _star_scoopable(self, id64, hint=None):
+        """Whether a system's main star can be scooped: the class the game told (star_classes: FSDTarget, StartJump,
+        NavRoute.json), else `hint` (what the route itself says), else the cached Spansh record's main star; None when
+        nothing knows."""
+        if id64 is None:
+            return hint
+        row = self.db.execute("SELECT star_class FROM star_classes WHERE id64=?", (id64,)).fetchone()
+        if row and row["star_class"]:
+            return class_scoopable(row["star_class"])
+        if hint is not None:
+            return hint
+        base = (self.bases.get(id64) or (None, cached_base(self.db, id64)[1]))[1] or {}
+        main = next((r for r in base.get("records") or [] if r.get("type") == "Star" and r.get("main")), None)
+        return bool(main["scoopable"]) if main and main.get("scoopable") is not None else None
+
+    def route_ahead(self):
+        """F2, S2's groundwork: the hops ahead from where you are on whatever route is followed. The game's plotted route
+        (NavRoute.json, from where you are on it: a survey route's legs come this way, the game plotting to its next
+        stop), then, when it ends on a row of the Highway route you follow, that route's rows after it; with no plotted
+        route to follow, the Highway's rows from where you are. A multi-jump waypoint (the neutron plotter's), a hop of
+        unknown length or FUEL_RUN_MAX_HOPS end the look-ahead. Each hop {id64, name, ly, mult, scoopable, source}:
+        scoopable True / False / None (not known: it stops any claim), from the game's star class, else on a Highway row
+        a neutron False and an exact-plotter refuel row True (P1: Spansh's plan scoops there), else the cached Spansh
+        record; mult only for facts (the Fable review): the charge you hold on the first hop, and a hop leaving a neutron
+        row of an exact-plotter route (Spansh's plan supercharges there); no white-dwarf guess, nothing for the game's
+        route alone. [] with no route followed, or off it."""
+        j, pos = self.journals, self.journals.pos
+        if not pos or pos.get("x") is None:
+            return []
+        hw, rows = self.highway_state()
+        follow = bool(hw) and not hw.get("done_ts") and not hw.get("off_route")
+        on_hw = {r["id64"]: i for i, r in enumerate(rows) if r["id64"] is not None} if follow else {}
+        exact = follow and hw.get("plotter") == "exact" and not (hw.get("options") or {}).get("injections")
+        sc, boost = fsd_supercharge((j.ship or {}).get("fsd")), (j.boost or {}).get("value") or 1
+        out = []
+
+        def add(prev, id64, name, ly, scoop, source):
+            k = on_hw.get(prev.get("id64"))
+            mult = sc if exact and k is not None and rows[k]["neutron"] else 1
+            out.append({"id64": id64, "name": name, "ly": ly, "mult": mult if out else max(mult, boost),
+                        "scoopable": scoop, "source": source})
+
+        hops = (meta_get(self.db, "route") or {}).get("hops") or []
+        i = next((k for k, h in enumerate(hops) if h.get("id64") == pos["id64"]), None)
+        prev, whole = pos, True
+        for h in hops[i + 1:] if i is not None else []:
+            if len(out) >= FUEL_RUN_MAX_HOPS or None in (h.get("x"), h.get("y"), h.get("z")):
+                whole = False
+                break
+            scoop = class_scoopable(h["star_class"]) if h.get("star_class") else self._star_scoopable(h["id64"])
+            add(prev, h["id64"], h.get("name"), dist(prev, h), scoop, "navroute")
+            prev = h
+        k = on_hw.get(prev.get("id64")) if whole else None
+        for n in range(k + 1, len(rows)) if k is not None else []:
+            r = rows[n]
+            ly = self._hop_ly(rows[n - 1], r)
+            if (r["jumps"] or 1) != 1 or not ly or len(out) >= FUEL_RUN_MAX_HOPS:
+                break
+            hint = False if r["neutron"] else True if exact and r["refuel"] else None
+            add(rows[n - 1], r["id64"], r["system"], ly, self._star_scoopable(r["id64"], hint), "highway")
+        return out
+
+    def last_scoop_check(self, now=None):
+        """S2: the last scoopable star before a stretch the fuel aboard won't cover, on any route Outrider follows
+        (route_ahead). Looked at on arriving somewhere and again while the fuel, the cargo, the charge, the route or the
+        target change (at most every HIGHWAY_HEAVY_EVERY_S in one system), never while scooping (Status.json's flag: you
+        are topping up already; looked at again once it stops), only with the game running. The warning (_dry_stretch)
+        shows while it holds; a moment `last_scoop` says it once per stretch (the route it comes from and its first dry
+        star), so scooping a little and staying short, or the same stretch plotted again, is not said twice. True when
+        the warning changed."""
+        now = time.time() if now is None else now
+        j, c = self.journals, self._dry
+        st, at = j.status_json or {}, (j.pos or {}).get("id64")
+        changed = False
+        if at != c["at"]:
+            changed = c["warn"] is not None
+            c.update(at=at, t=None, look=None, warn=None)
+        if at and not (st.get("flags") or 0) & FLAG_SCOOPING:
+            hw = meta_get(self.db, "highway") or {}
+            look = (round(st.get("fuel_main") or 0, 1), round(st.get("fuel_reservoir") or 0, 2), st.get("cargo"),
+                    (j.boost or {}).get("ts"), (j.ship or {}).get("ship_id"), bool(st.get("live")), st.get("away"),
+                    j.navroute_end, (j.target or {}).get("id64"), hw.get("id"), hw.get("at"), bool(hw.get("off_route")),
+                    bool(hw.get("done_ts")), bool(self.highway_heavy(hw or None, "short")))
+            if look != c["look"] and (c["t"] is None or now - c["t"] >= HIGHWAY_HEAVY_EVERY_S):
+                c.update(look=look, t=now)
+                warn = self._dry_stretch(st)
+                if warn != c["warn"]:
+                    c["warn"], changed = warn, True
+        w = c["warn"]
+        if w and (w["source"], w["first"]) not in c["said"]:
+            c["said"][(w["source"], w["first"])] = True
+            while len(c["said"]) > LAST_SCOOP_KEEP:
+                c["said"].popitem(last=False)
+            j.moment("last_scoop", iso_ts(now), count=w["count"], system=w["system"], next=w["next"], need_t=w["need_t"],
+                     full=w["full"], have_t=w["have_t"], source=w["source"])
+        if changed:
+            self.bump()
+        return changed
+
+    def _dry_stretch(self, st):
+        """S2's warning for where you are, or None: here a scoopable star, the stars ahead (route_ahead) KNOWN not
+        scoopable up to the next one that is or may be, and the fuel aboard won't cover the hops to it: under the low end
+        of their fuel window, or no level the tank holds makes them (full). {count (the dry stars), system (here), next
+        (the next scoopable star, None when not known or none), need_t, full, have_t, source ("navroute" | "highway"),
+        first (the first dry star's id64)}. Silent when a hop is out of reach at any fuel (a boost the route counts on
+        that is not a fact here: not a fuel matter), when the fuel is too much rather than too little (the heavy check's),
+        while the fuel model is incomplete, and where S1 warns of the same stretch on an exact-plotter route (the plan's
+        default: S1 suppresses S2 there)."""
+        j, pos = self.journals, self.journals.pos
+        if not st.get("live") or st.get("away") or not pos or not class_scoopable(self.here_star()):
+            return None
+        hw, _ = self.highway_state()
+        if self.highway_heavy(hw, "short"):
+            return None
+        now, tank = self.fuel_now(), (j.ship or {}).get("fuel_main")
+        if not now or not tank:
+            return None
+        model, fuel, cargo = now
+        if not model.get("max_fuel") or not model.get("power"):
+            return None   # the fuel model is not complete yet (model["need"] > 0): nothing to claim
+        hops = self.route_ahead()
+        m = next((k for k, h in enumerate(hops) if h["scoopable"] is not False), len(hops))
+        if not m:
+            return None   # the next star scoops, or may: no dry stretch starts here
+        stretch = [(h["ly"], h["mult"]) for h in hops[:m + 1]]   # the dry stars, then on to the next that may scoop
+        other = cargo + (st.get("fuel_reservoir") or 0)
+        mf = min(model["max_fuel"], tank)
+        reach = fsd_range(model, model["unladen"] + other + mf, mf)   # the longest jump at any fuel level
+        if any(d / mult > reach + 1e-6 for d, mult in stretch):
+            return None
+        ran = fuel_run(model, fuel, other, stretch)
+        if ran is None or ran[0] == len(stretch):
+            return None
+        win = fuel_window(model, other, stretch, tank)
+        if win and fuel >= win[0]:
+            return None   # too heavy rather than short, or between levels that are not one interval: not a scoop matter
+        nxt = hops[m] if m < len(hops) and hops[m]["scoopable"] else None
+        return {"count": m, "system": pos.get("name"), "next": nxt and nxt["name"],
+                "need_t": math.ceil(win[0] * 10) / 10 if win else None, "full": win is None, "have_t": round(fuel, 1),
+                "source": hops[0]["source"], "first": hops[0]["id64"]}
+
+    def dry_stretch_summary(self):
+        """The payload's `dry_stretch`: S2's warning while you are in the system it is about, else None."""
+        c = self._dry
+        if not c["warn"] or c["at"] != (self.journals.pos or {}).get("id64"):
+            return None
+        return dict(c["warn"], first=str(c["warn"]["first"]))   # an id64 as a string, as every id the page gets
+
     @staticmethod
     def highway_row_out(i, r):
         return {"i": i, "system": r["system"], "id": str(r["id64"]) if r["id64"] is not None else None,
@@ -14995,7 +15149,8 @@ class State:
                                ("maybe_curious", self.maybe_curious), ("maybe_reported", self.maybe_reported),
                                ("maybe_locate_carrier", self.maybe_locate_carrier), ("maybe_find_sellers", self.maybe_find_sellers),
                                ("maybe_backup_on_quit", self.maybe_backup_on_quit), ("highway_copy_next", self.highway_copy_next), ("riches_copy_next", self.riches_copy_next),
-                               ("highway_heavy_check", self.highway_heavy_check), ("maybe_autotarget", self.maybe_autotarget),
+                               ("highway_heavy_check", self.highway_heavy_check), ("last_scoop_check", self.last_scoop_check),
+                               ("maybe_autotarget", self.maybe_autotarget),
                                ("maybe_boxel_autotarget", self.maybe_boxel_autotarget)):
                 try:
                     step()
