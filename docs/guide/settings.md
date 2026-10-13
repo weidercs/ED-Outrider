@@ -9,7 +9,10 @@
 <br>
 
 **⚙ Settings** (top right) holds everything, in folding sections: Alerts, Voice, What is said, Sounds, Values, Risk
-& warnings, Surface map, Auto honk, Uploads, In-game overlay, Display, Sharing, **Server**, Spoken lines and Questions asked. Most are this browser's
+& warnings, Surface map, Auto honk, Uploads, In-game overlay, Display, Sharing, **Server**, Spoken lines and Questions asked.
+**Find a setting…** at the top leaves only what matches the words typed (a setting's name, its help or its config key,
+`speech_speed` finds the Speed slider too), in every section at once, Server's keys included; clear it and every
+section is back as it was. Most are this browser's
 own (Sharing exports them or makes them the defaults for new browsers). **Server** is the config file
 itself, every key of it but the upload switches (`[eddn]`, `[edsm]`, `[inara]`: Settings → Uploads): the network and the client password, the journal folders, paths, backups, Spansh, the
 Highway, the voice's AI layer and more. Saving there writes `ed_outrider.toml` (only the keys you changed; its

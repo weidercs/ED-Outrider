@@ -753,6 +753,19 @@ upstream project's choices, not rules of the game.
   PC". More voices downloads a voice without switching to it: you hear it first, then Use this voice. A voice trained
   on many people speaks as the speaker picked for it, kept per voice (meta `voice_speakers`, live-only); before, the
   first speaker always spoke.
+- **A voice per personality is kept by the server** (S40, 2026-10-13; the author's default of 2026-10-12): Settings →
+  Voice → Personality voices and the voice lab's Give to this personality store {style: {voice, speaker}} in meta
+  `style_picks` (live-only, like the voice itself), so every browser and the tablet say a personality the same way.
+  A pick wins over speech.json's own `voice` / `speaker`, which win over the main voice; the pace stays speech.json's.
+  The page still sends the voice and speaker with each line (the server never downloads one for it): a picked voice
+  deleted later is said in the main voice by that voice's own person, never by the pick's number of another voice.
+  Worth having mainly where personalities share one several-person voice; each other voice picked is another loaded
+  model (up to `EXTRA_VOICES_MAX`, the least used reloaded).
+- **Find a setting filters, it does not search a list** (S39, 2026-10-13): the box at the top of Settings hides what
+  does not match in place, so a match is the setting itself, ready to change. A row shows when every word is in its
+  text, its section's heading or the config key it defaults from (`data-find`), at least one in the row itself; a word
+  naming a section shows all of it. What it opens or hides is never remembered: clearing it (or closing Settings) puts
+  each section back as it was.
 - **Hard words are given as respellings** (2026-10-12, `outrider/pronounce.py`). Piper's English voices read the
   exobiology Latin by espeak's English rules; `resources/pronounce.json` gives each genus and species word as a
   respelling ("fon-TIK-yoo-loo-uh", the stressed syllable in capitals, or raw `[[phonemes]]`), and each syllable goes

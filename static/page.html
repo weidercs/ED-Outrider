@@ -579,6 +579,8 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
 <dialog id="alertDialog" class="settingsdlg" aria-labelledby="settingsTitle">
   <form method="dialog">
     <div class="sethead"><h3 id="settingsTitle">Settings</h3>
+      <span class="setfind"><input type="search" id="setFind" placeholder="Find a setting…" aria-label="find a setting" autocomplete="off"
+        title="a word of a setting's name, its help or its config key: only what matches shows"> <span id="setFindMsg" class="hint" role="status"></span></span>
       <span class="setlinks"><a href="https://github.com/weslocke/ED-Outrider" target="_blank" rel="noopener" title="ED Outrider on GitHub: the source, releases, the README and issues">GitHub ↗</a> <span id="setVersion" class="unk"></span></span>
       <span class="setfold"><button type="button" id="setOpenAll" title="open every section">open all</button><button type="button" id="setCloseAll" title="close every section">close all</button></span>
       <button type="button" data-close class="primary">Done</button>
@@ -591,39 +593,43 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       <div class="hint">Alerts only fire for something out of the ordinary. The tab title also carries the current state, so a background tab still tells you something.</div>
     </details>
     <details class="setsec" data-sec-key="voice" data-chip="Voice"><summary>Voice <span id="ttsEngine" class="unk"></span> <span class="sum-note">the voice, its personality, pace and volume, which screen speaks</span></summary>
-      <label class="mod">Voice <select id="ttsVoice"></select>
+      <label data-find="defaults.voice defaults.voice_fallback" class="mod">Voice <select id="ttsVoice"></select>
         <span id="ttsSpkWrap" hidden>speaker <select id="ttsSpk" aria-label="speaker"></select></span>
         <span id="ttsStatus" class="hint"></span></label>
       <div class="hint" id="ttsHint"></div>
       <div class="mod"><button type="button" class="try" id="labOpen">🎙 Voice lab…</button>
         <span class="hint">hear voices, their speakers and every alert's lines before you choose; download more voices</span></div>
-      <div class="mod inlineopts">Personality: <span id="speechStyles" class="sstyles"></span>
+      <div data-find="defaults.speech_styles defaults.speech_profanity defaults.speech_profanity_pct" class="mod inlineopts">Personality: <span id="speechStyles" class="sstyles"></span>
         <span class="profrow"><label><input type="checkbox" id="speechProfanity"> with profanity <span id="speechProfanityWho" class="unk"></span></label>
         <label title="how often a line comes from the swearing versions instead of the clean ones"><input type="number" id="speechProfanityPct" min="0" max="100" step="5" style="width:4.5em">% of the time</label></span></div>
+      <div class="mod" id="styleVoicesRow" hidden>Personality voices
+        <span class="hint">each personality in a voice of its own, or as another person of a several-person voice (the voice lab's Give to this personality does the same); Outrider keeps them for every browser and the tablet</span>
+        <table id="styleVoices" class="stylevoices"><thead><tr><th>Personality</th><th>Voice</th><th>Speaker</th><th></th><th></th></tr></thead><tbody></tbody></table>
+        <span id="styleVoicesMsg" class="hint" role="status"></span></div>
       <label class="mod"><input type="checkbox" id="speechShift"> One personality per system
         <span class="hint">the personality (and its own voice) changes at each arrival and at game start, not at every line; with one personality ticked it changes nothing</span></label>
-      <label class="mod"><input type="checkbox" id="speechDangerBusiness"> Danger alerts always down to business
+      <label data-find="defaults.speech_danger_business" class="mod"><input type="checkbox" id="speechDangerBusiness"> Danger alerts always down to business
         <span class="hint">hull, heat, interdiction, low fuel or an unscoopable star, your carrier leaving without you, the ship-loss debrief: only the business lines, never swearing</span></label>
       <div class="mod inlineopts">This screen speaks: <select id="speakMode">
           <option value="auto">auto: one window at a time</option><option value="always">always</option><option value="never">never</option></select>
         <span id="speakerStatus" class="hint"></span> <button type="button" class="try" id="speakerClaim" hidden>speak from this window</button>
         <div class="hint">With the page open in several windows (a second screen at ?mode=now), auto lets only one of them speak and play the alert sounds; every window still shows the alerts. Remembered per browser: always makes every window of it speak, never keeps this browser quiet. The ▶ try buttons always work.</div></div>
-      <label class="mod pcOnly"><input type="checkbox" id="serverPlay"> Play speech and sounds on this PC <span id="serverPlayStatus" class="unk"></span>
+      <label data-find="speech.server_player" class="mod pcOnly"><input type="checkbox" id="serverPlay"> Play speech and sounds on this PC <span id="serverPlayStatus" class="unk"></span>
         <span class="hint">the PC running Outrider plays the spoken lines (Piper) and the alert sounds through its own player, so the page needs no click to allow audio; a page must still be open, since it chooses what to say. Whatever the PC cannot play, this browser plays instead. Per browser; Linux only</span></label>
-      <label class="mod">Speed <input type="range" id="speechSpeed" min="0.5" max="2" step="0.05" style="width:12em;vertical-align:middle">
+      <label data-find="defaults.speech_speed" class="mod">Speed <input type="range" id="speechSpeed" min="0.5" max="2" step="0.05" style="width:12em;vertical-align:middle">
         <span id="speechSpeedOut"></span><span class="reset" data-reset="speechSpeed">reset</span>
         <span class="hint">1× is the voice's own pace; reset goes back to the config file's speech_speed</span></label>
-      <div class="hint" id="soundFiles"></div>
+      <div data-find="speech.sound_dir" class="hint" id="soundFiles"></div>
       <label class="mod">Volume <input type="range" id="speechVolume" min="0" max="100" step="5" style="width:12em;vertical-align:middle">
         <span id="speechVolumeOut"></span>
         <span class="hint">Outrider's own voice and alert sounds, on this device (or on the PC when it plays them); the game's sound is its own</span></label>
-      <label class="mod">Call me <input type="text" id="speechNames" style="width:18em" placeholder="Boss, Hefay, Sir">
+      <label data-find="defaults.speech_names" class="mod">Call me <input type="text" id="speechNames" style="width:18em" placeholder="Boss, Hefay, Sir">
         <span class="hint">comma separated; each line uses one at random, in place of your commander name (which a voice often cannot say); empty goes back to the default</span></label>
       <div class="hint" id="speechHint"></div>
       <div class="hint" id="speechTried"></div>
     </details>
     <details class="setsec" data-sec-key="said" data-chip="What is said"><summary>What is said <span class="sum-note">signals, routine systems, hazards, mapping</span></summary>
-      <div class="mod inlineopts">Say signals as the FSS finds them:
+      <div data-find="defaults.speak_bio_signals defaults.speak_geo_signals" class="mod inlineopts">Say signals as the FSS finds them:
         <label><input type="checkbox" id="sayBio"> biological</label>
         <label><input type="checkbox" id="sayGeo"> geological</label>
         <span class="hint">"2 Biological and 1 Geological Signals found on body A 3" (when 🗣 is on)</span></div>
@@ -631,11 +637,11 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         <span class="hint">arriving somewhere known with every body already found, a scoopable star, and nothing over your body or bio levels: a soft two-note sound instead of the arrival briefing (and of "nothing worth staying for" after the FSS); the card stays</span></label>
       <label class="mod"><input type="checkbox" id="sayHazard"> Say the hazard when the FSD charges for a neutron star, white dwarf or black hole
         <span class="hint">"… Neutron star ahead: throttle down on arrival, mind the jet cone" (part of the jump line)</span></label>
-      <label class="mod"><input type="checkbox" id="sayMapped"> Say when a planet is mapped
+      <label data-find="defaults.speak_mapped" class="mod"><input type="checkbox" id="sayMapped"> Say when a planet is mapped
         <span class="hint">"A 2 mapped efficiently, 3.4M. Next: biology on C 2, up to 19M." after each DSS mapping (or "2 probes over target, no efficiency bonus"; or "Nothing else here over your levels"); its row in the table above chooses the card, notification and voice. Off by default ([defaults] speak_mapped)</span></label>
     </details>
     <details class="setsec" data-sec-key="sounds" data-chip="Sounds"><summary>Sounds <span class="sum-note">try each alert sound</span></summary>
-      <div class="opts inline">Try them:
+      <div data-find="defaults.sounds" class="opts inline">Try them:
         <button type="button" class="try" data-try="fanfare" title="a brand-new discovery">▶ new</button>
         <button type="button" class="try" data-try="upbeat" title="known but not fully scanned">▶ unscanned</button>
         <button type="button" class="try" data-try="thud" title="visited or fully scanned">▶ known</button>
@@ -649,19 +655,19 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       </div>
     </details>
     <details class="setsec" data-sec-key="values" data-chip="Values"><summary>What is worth stopping for <span class="sum-note">these also drive the header colours and the leaving warning</span></summary>
-      <label class="mod">Exobiology: only count a body as unfinished if it could pay over
+      <label data-find="defaults.bio_min" class="mod">Exobiology: only count a body as unfinished if it could pay over
         <input type="number" id="bioMin" min="0" step="1000000" style="width:9em"> cr<span class="reset" data-reset="bioMin">reset</span>
         <span class="hint">straight Vista Genomics payout, no first-log bonus; sampling you have already started always counts; a body the rules cannot price always counts</span></label>
       <div class="hint" id="bioRules"></div>
-      <label class="mod"><input type="checkbox" id="codexNewCounts"> Codex finds count: a body whose likeliest species is new to your codex in this region (✦) is worth stopping for whatever its value (Now's next stops, the leaving warnings; [defaults] codex_interesting)
+      <label data-find="defaults.codex_interesting" class="mod"><input type="checkbox" id="codexNewCounts"> Codex finds count: a body whose likeliest species is new to your codex in this region (✦) is worth stopping for whatever its value (Now's next stops, the leaving warnings; [defaults] codex_interesting)
         <span class="hint">codex entries earn vouchers and are per region and per colour variant; where the colour can be told (the surface materials, or the parent star once every star in the system is known and agrees) a new colour of a logged species is flagged too, otherwise only a new species is</span></label>
-      <label class="mod">Highlight a body in Here when its scan + map data pays over
+      <label data-find="defaults.body_highlight_level" class="mod">Highlight a body in Here when its scan + map data pays over
         <input type="number" id="hlBody" min="0" step="100000" style="width:9em"> cr<span class="reset" data-reset="hlBody">reset</span>
         <span class="hint">the row turns green; straight Universal Cartographics value, no first-discovery, first-mapped or efficiency bonus</span></label>
-      <label class="mod">Highlight a body's bio when its species could pay over
+      <label data-find="defaults.biology_highlight_value" class="mod">Highlight a body's bio when its species could pay over
         <input type="number" id="hlBio" min="0" step="1000000" style="width:9em"> cr<span class="reset" data-reset="hlBio">reset</span>
         <span class="hint">the Bio cell and the body name turn violet; straight Vista Genomics value, no first-footfall ×5</span></label>
-      <label class="mod"><input type="checkbox" id="maxBonus"> Here's <b>Max</b> column counts first-discovery, first-mapped and first-footfall bonuses<span class="reset" data-reset="maxBonus">reset</span>
+      <label data-find="defaults.body_max_value_include_bonus" class="mod"><input type="checkbox" id="maxBonus"> Here's <b>Max</b> column counts first-discovery, first-mapped and first-footfall bonuses<span class="reset" data-reset="maxBonus">reset</span>
         <span class="hint">off shows plain payouts, for comparing bodies on their own merits; <b>Now</b> always includes the bonuses you have earned, since that is what a sale pays</span></label>
       <label class="mod">Here's suggested order: mark an item "skip?" under
         <input type="number" id="skipFloor" min="0" step="10000" style="width:8em"> cr per minute of supercruise<span class="reset" data-reset="skipFloor">reset</span>
@@ -672,17 +678,17 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         <input type="number" id="rebuyWarn" min="0" step="1" style="width:5em">× , red at
         <input type="number" id="rebuyUrgent" min="0" step="1" style="width:5em">× your rebuy <span class="reset" data-reset="rebuy">reset</span>
         <span class="hint">blank = off; either rule can turn the header amber or red (a cheap ship carrying a fortune is the risk). Not for a ship whose hull has no credit value (bought with Arx): its rebuy covers the modules only, so no "× rebuy" is shown for it</span></label>
-      <label class="mod">Approach warning: a landable body of
+      <label data-find="defaults.high_gravity" class="mod">Approach warning: a landable body of
         <input type="number" id="highG" min="0" step="0.1" style="width:5em"> g or more<span class="reset" data-reset="highG">reset</span>
         <span class="hint">said when you drop into orbital cruise there with unsold data over the amber level or the rebuy multiple below ("2.6 g, 480 million aboard, 3.2 rebuys"); the approach alert above switches it off</span></label>
-      <label class="mod">Core modules: show them next to hull under
+      <label data-find="defaults.module_warn" class="mod">Core modules: show them next to hull under
         <input type="number" id="moduleWarn" min="1" max="100" step="1" style="width:4.5em"> % health<span class="reset" data-reset="moduleWarn">reset</span>
         <span class="hint">FSD, power plant, thrusters, life support, sensors, fuel scoop and the AFMU, as of their last reading in the journal (a Loadout, an AFMU repair or a repair at a station),
           with the jet-cone boosts since; also in the welcome back and the co-pilot's status report. Nothing shows while all are over it. Blank = the config file's <code>module_warn</code> (80).</span></label>
       <label class="mod">Fuel alerts: also warn under
         <input type="number" id="fuelJumps" min="0" max="99" step="1" style="width:4.5em"> jumps of fuel left<span class="reset" data-reset="fuelJumps">reset</span>
         <span class="hint">blank = off (the default). Once when the jumps left at your pace fall under it (said like the game's low fuel warning), and the low-fuel warnings for an unscoopable arrival star or target then count it as well as under 30%; it also becomes the level for the "top up here" warning, which otherwise asks for two of your usual gaps between scoopable stars (at least 4 jumps)</span></label>
-      <label class="mod">Unsold data on board: amber "worth selling soon" at
+      <label data-find="defaults.unsold_warn defaults.unsold_urgent" class="mod">Unsold data on board: amber "worth selling soon" at
         <input type="number" id="unsoldWarn" min="0" step="10000000" style="width:10em"> cr<span class="reset" data-reset="unsoldWarn">reset</span>, red "go sell" at
         <input type="number" id="unsoldUrgent" min="0" step="10000000" style="width:10em"> cr<span class="reset" data-reset="unsoldUrgent">reset</span>
         <span class="hint">compared with the header total: cartographics after any NPC crew cut plus the exobiology estimate; crossing a level also sends a notification. Blank = default.</span></label>
@@ -692,7 +698,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         <span class="hint">once per streak, as part of the arrival alert ("10 known systems in a row, maybe change heading"; the new-streak line replaces "undiscovered"); a system with unreported bodies or one you visited before ends a known run; 0 = off, and the smallest streak is 2</span></label>
     </details>
     <details class="setsec" data-sec-key="surface" data-chip="Surface map"><summary>Surface map</summary>
-      <label class="mod">Surface map (Now): show it below
+      <label data-find="defaults.surface_alt defaults.rig_spacing defaults.surface_map_min defaults.rig_warn" class="mod">Surface map (Now): show it below
         <input type="number" id="surfAlt" min="10" step="100" style="width:6em"> m, never narrower than
         <input type="number" id="surfMin" min="50" step="100" style="width:6em"> m across, rig spacing ring
         <input type="number" id="surfSpacing" min="0" step="1" style="width:5em"> m, a rig far away at
@@ -700,13 +706,13 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         <span class="hint">the map shows while you are on the ground, or flying below the altitude (it hides again 100 m higher). The rig ring is an estimate
           (rigs closer than about 50 m may not deploy; 0 = no ring). A rig past the far distance turns red on the map and in the legend; the spoken
           warning for it uses the config file's <code>rig_warn</code>, since the server says it for every window. Blank = the config file's value.</span></label>
-      <label class="mod"><input type="checkbox" id="surfStrip"> Also a small copy of the surface map in the on-body strip (under the header), with a one-line legend</label>
+      <label data-find="defaults.surface_map_strip" class="mod"><input type="checkbox" id="surfStrip"> Also a small copy of the surface map in the on-body strip (under the header), with a one-line legend</label>
     </details>
     <details class="setsec pcOnly" data-sec-key="honk" data-chip="Auto honk" id="honkSettings"><summary>Auto honk and the co-pilot button</summary>
       <div id="autoHonkReady" class="honkready" role="status"><span class="hint">checking whether auto honk can work here…</span></div>
-      <label class="mod"><input type="checkbox" id="autoHonk"> Honk automatically on arriving in a system by hyperspace
+      <label data-find="autohonk.enabled" class="mod"><input type="checkbox" id="autoHonk"> Honk automatically on arriving in a system by hyperspace
         <span id="autoHonkStatus" class="hint"></span></label>
-      <label class="mod"><input type="checkbox" id="autoHonkSay"> When it completes, say how many bodies it found
+      <label data-find="autohonk.announce" class="mod"><input type="checkbox" id="autoHonkSay"> When it completes, say how many bodies it found
         <span class="hint">"System Scan Completed, 12 Bodies discovered", or "System scan complete, and all bodies were found" when the honk found everything</span></label>
       <div class="hint"><b>The Discovery Scanner must be on primary fire</b> in the fire group that is active when you jump.
         Outrider presses Primary Fire's keyboard binding from your controls preset (<b id="autoHonkKey"></b>); give Primary
@@ -762,7 +768,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       </div>
       <div class="hint" id="settingsHint">Thresholds, alert choices, personalities, "Call me" names, speed, sorts and filters live in this browser.
         Export them to a file (Import on another browser or after clearing the cache), or save them on the server so a new browser (a tablet running Now) starts with them.
-        The view, layouts, the search form and which screen speaks stay per device. The voice is kept by the server already.</div>
+        The view, layouts, the search form and which screen speaks stay per device. The voice (and each personality's) is kept by the server already.</div>
     </details>
     <details class="setsec" data-sec-key="server" data-chip="Server" id="serverSettings"><summary>Server settings <span class="sum-note">the config file: network, password, paths, backups, Spansh, the Highway, the voice's AI and more</span></summary>
       <div class="srvtop"><b>Outrider <span id="srvVersion"></span></b> · <button type="button" id="srvLogBtn" title="what Outrider has printed in its terminal since it started (and saved beside its database)">Show log</button>
@@ -828,6 +834,8 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       <button type="button" id="labHear">▶ Hear it</button>
       <button type="button" id="labUse" class="primary" title="Outrider speaks in this voice (and speaker, and speed) from now on">Use this voice</button>
       <span id="labInUse" class="hint"></span></div>
+    <div class="mod inlineopts"><select id="labGiveStyle" aria-label="personality"></select>
+      <button type="button" id="labGive" title="this personality speaks in this voice (and speaker) from now on, in every browser; its pace stays the lines file's">Give to this personality</button></div>
       <details id="moreVoices" class="morevoices"><summary>More voices <span class="sum-note">any of Piper's, downloaded where Outrider runs when you pick one</span></summary>
         <div class="mod inlineopts">Language <select id="mvLang" aria-label="language"></select>
           sorted by <select id="mvSort" aria-label="sort the voices"><option value="name">name</option><option value="quality">quality, best first</option>

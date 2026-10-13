@@ -1467,7 +1467,7 @@ function drawLastSaid() {
 document.getElementById("lastSaidBtn").onclick = () => {
   const c = captions[captions.length - 1];
   const same = c && lastSaid && lastSaid.words === c.said;
-  if (c) speak(same ? lastSaid.words : c.words, {kind: "manual", voice: same ? lastSaid.voice : null, pace: same ? lastSaid.pace || 1 : 1});
+  if (c) speak(same ? lastSaid.words : c.words, {kind: "manual", voice: same ? lastSaid.voice : null, speaker: same ? lastSaid.speaker : null, pace: same ? lastSaid.pace || 1 : 1});
 };
 const agoText = at => { const s = Math.max(0, Math.round((Date.now() - at) / 1000));
   return s < 10 ? "just now" : s < 90 ? `${s} s ago` : s < 5400 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`; };
@@ -2063,17 +2063,17 @@ async function runningAudio() {
 // play first); `kind` is the alert kind ("manual" for a click in this window), `tag` its speech.json key.
 // `log` is the transcript entry alertOut made for it (a line spoken some other way gets its own). `piperOnly`: said in
 // Piper or not at all, never the browser's own voice (the co-pilot channel's lines: the author's choice).
-function speak(text, {delay = 0, kind = "manual", tag = null, still = null, voice = null, pace = 1, log = null, piperOnly = false} = {}) {
+function speak(text, {delay = 0, kind = "manual", tag = null, still = null, voice = null, speaker = null, pace = 1, log = null, piperOnly = false} = {}) {
   const words = spokenText(text);
   const entry = log || logSpeech({kind, tag});
   if (words) entry.words = words;
-  if (voice) entry.voice = voice;
+  if (voice || speaker != null) entry.voice = (voice || "the main voice") + (speaker != null ? ` #${speaker}` : "");
   if (!words) return setFate(entry, "nothing to say");
   const now = Date.now();
   if (tag && !speechCooled(speechLast, tag, now)) return setFate(entry, `refused: said under ${SPEECH_COOLDOWN[tag] / 1000} s ago`);
   const prevLast = tag ? speechLast[tag] : undefined;
   if (tag) speechLast[tag] = now;
-  const item = {words, kind, tag, still, voice, pace, piperOnly, prio: speechPrio(kind, tag), at: now, notBefore: now + delay, prevLast,
+  const item = {words, kind, tag, still, voice, speaker, pace, piperOnly, prio: speechPrio(kind, tag), at: now, notBefore: now + delay, prevLast,
                 sys: SPEECH_SYS_BOUND.has(kind) && data && data.position ? posId() : null, log: entry};
   const before = speechItems;
   speechItems = speechAdd(speechItems, item);
@@ -2148,7 +2148,7 @@ async function speechWorker() {
         e.took = Date.now() - t0; e.engine = item.engine || null;
         setFate(e, item.unsaid ? `not said: ${item.unsaid}` : item.timedOut ? "timed out (the browser voice hung)"
           : item.capped ? "cut short: the PC's player ran past the line's length" : "said");
-        if (e.fate === "said") lastSaid = {words: item.words, voice: item.voice, pace: item.pace};   // "say again"
+        if (e.fate === "said") lastSaid = {words: item.words, voice: item.voice, speaker: item.speaker ?? null, pace: item.pace};   // "say again"
       }
       if (item.unsaid || item.timedOut) uncool(item);
     }
@@ -2167,7 +2167,7 @@ addEventListener("pagehide", () => {
 const lineSpeed = it => Math.min(2, Math.max(0.5, speechSpeed() * (it.pace || 1)));
 function nextLine() {
   const i = speechPick(speechItems), it = i < 0 ? null : speechItems[i];
-  return it ? {text: it.words, voice: it.voice || null, speed: lineSpeed(it)} : null;
+  return it ? {text: it.words, voice: it.voice || null, speaker: it.speaker ?? null, speed: lineSpeed(it)} : null;
 }
 async function sayNow(item) {
   const cur = speechNow = {prio: item.prio, kind: item.kind, stopped: false, halt: null, stop() { this.stopped = true; if (this.halt) this.halt(); }};
@@ -2180,7 +2180,7 @@ async function sayNow(item) {
       try {
         const speed = Math.min(2, Math.max(0.5, speechSpeed() * (item.pace || 1)));
         const r = await fetch("api/say/play", {method: "POST", headers: {"Content-Type": "application/json"},
-                                               body: JSON.stringify({text: item.words, voice: item.voice || null, speed, id, next: nextLine(),
+                                               body: JSON.stringify({text: item.words, voice: item.voice || null, speaker: item.speaker ?? null, speed, id, next: nextLine(),
                                                                      volume: outVolume()})});
         if (r.ok) {
           item.engine = "Piper on the PC";
@@ -2209,7 +2209,8 @@ async function sayNow(item) {
     if (ctx) {
       try {
         const speed = Math.min(2, Math.max(0.5, speechSpeed() * (item.pace || 1)));
-        const r = await fetch(`api/say?text=${encodeURIComponent(item.words)}&speed=${speed}${item.voice ? `&voice=${encodeURIComponent(item.voice)}` : ""}`);
+        const r = await fetch(`api/say?text=${encodeURIComponent(item.words)}&speed=${speed}${item.voice ? `&voice=${encodeURIComponent(item.voice)}` : ""}`
+                              + (item.speaker != null ? `&speaker=${item.speaker}` : ""));
         if (r.ok) {
           const buf = await ctx.decodeAudioData(await r.arrayBuffer());
           if (cur.stopped) return;
@@ -2366,14 +2367,29 @@ function line(key, vars = {}, plain = "") {
   return fillLine(pick, all);
 }
 // The personality of the line line() picked last, and the voice it asks for: a style in speech.json may be
-// {label, voice, speed}, a Piper voice of its own (only if installed; it wins over the dialog's voice) and a
-// pace multiplying yours. The browser's own speech ignores the voice.
+// {label, voice, speed, speaker}, a Piper voice of its own (only if installed; it wins over the dialog's voice), one
+// person of a several-person voice (its own, else the main voice's) and a pace multiplying yours. A pick in Settings →
+// Voice → Personality voices (the server's data.style_picks, S40: every browser's) wins over the file's voice and
+// speaker; the pace stays the file's. The browser's own speech ignores the voice.
 let lineStyle = null;
 let lineKey = null, lineTemplate = null;   // and its alert and speech.json wording (the 👎 bans that wording)
+const spkNum = v => Number.isInteger(v) && v >= 0 ? v : null;
 function styleVoice(style) {
-  const st = style && speechLib.styles && speechLib.styles[style];
-  return st && typeof st === "object" ? {voice: typeof st.voice === "string" ? st.voice : null,
-                                         pace: Number(st.speed) >= 0.5 && Number(st.speed) <= 2 ? Number(st.speed) : 1} : {voice: null, pace: 1};
+  const base = String(style || "").replace(/_profane$/, ""), st = base && speechLib.styles && speechLib.styles[base];
+  const own = st && typeof st === "object" ? st : {}, pick = base && data && data.style_picks && data.style_picks[base];
+  const pace = Number(own.speed) >= 0.5 && Number(own.speed) <= 2 ? Number(own.speed) : 1;
+  if (pick && typeof pick.voice === "string") return {voice: pick.voice, speaker: spkNum(pick.speaker), pace, picked: true};
+  return {voice: typeof own.voice === "string" ? own.voice : null, speaker: spkNum(own.speaker), pace, picked: false};
+}
+// a voice and person in words: "en_GB-vctk-medium #12", "the main voice #3"
+const voiceWords = v => `${v.voice || "the main voice"}${v.speaker != null ? ` #${v.speaker}` : ""}`;
+let styleVoicesDrawn = "";   // Settings > Voice > Personality voices as last drawn (drawStyleVoices)
+// the voice and person a personality is really heard in: its own (picked or speech.json's) when installed, else the
+// main voice (a speech.json speaker with no voice of its own is the main voice's person; an uninstalled voice's is not)
+function heardVoice(style) {
+  const sv = styleVoice(style), t = data && data.tts, inst = (t && t.voices) || [];
+  if (sv.voice && inst.includes(sv.voice)) return sv;
+  return Object.assign({}, sv, {voice: (t && t.voice) || null, speaker: sv.voice ? null : sv.speaker, fallback: !!sv.voice});
 }
 // a star class as words, for {star}
 const spokenStar = c => !c ? "star" : /^D/.test(c) ? "white dwarf" : c === "N" ? "neutron star"
@@ -8085,7 +8101,7 @@ function copilotDo(cp) {
     speak(text, {kind: "manual", piperOnly: true}); addCaption(text);
   } else if (cp.action === "again") {
     const text = lastSaid ? lastSaid.words : "Nothing said yet.";
-    speak(text, {kind: "manual", voice: lastSaid && lastSaid.voice, pace: lastSaid ? lastSaid.pace || 1 : 1, piperOnly: true}); addCaption(text);
+    speak(text, {kind: "manual", voice: lastSaid && lastSaid.voice, speaker: lastSaid ? lastSaid.speaker : null, pace: lastSaid ? lastSaid.pace || 1 : 1, piperOnly: true}); addCaption(text);
   } else if (cp.action === "replay" && cp.words) { speak(cp.words, {kind: "manual", piperOnly: true}); addCaption(cp.words); }
   // an answer to a question by voice (POST api/ask): said here, as a line you asked for; "caption": shown only (a hush's
   // answer: the hush itself is announced)
@@ -8768,7 +8784,7 @@ document.getElementById("trySpeak").onclick = () => {
     text = line(key, LINE_SAMPLES[key], "Leaving with unfinished work: A 2, a class two gas giant, plus 1.4M to map.");
   } finally { lineNoRecord = false; }
   const sv = styleVoice(lineStyle);
-  document.getElementById("speechTried").textContent = `${key}: “${spokenText(text)}”${sv.voice ? ` (${sv.voice})` : ""}`;
+  document.getElementById("speechTried").textContent = `${key}: “${spokenText(text)}”${sv.voice || sv.speaker != null ? ` (${voiceWords(sv)})` : ""}`;
   // in Spoken lines with its wording, so a line you dislike can be banned straight from trying it
   speak(text, {...sv, log: logSpeech({kind: "manual", style: lineStyle, key: lineKey, template: lineTemplate})});
 };
@@ -8776,8 +8792,10 @@ document.getElementById("trySpeak").onclick = () => {
 function drawSpeechStyles() {
   const box = document.getElementById("speechStyles"), on = speechStyles();
   const styles = Object.entries(speechLib.styles || {});
-  box.innerHTML = styles.map(([k, v]) => `<label${v && v.voice ? ` title="this personality speaks in its own voice when it is installed (set in speech.json)"` : ""}><input type="checkbox" data-sstyle="${esc(k)}"${on.includes(k) ? " checked" : ""}> ${esc(typeof v === "string" ? v : (v && v.label) || k)}` +
-    `${v && typeof v.voice === "string" ? ` <span class="unk">(${esc(v.voice)}${data && data.tts && data.tts.voices && !data.tts.voices.includes(v.voice) ? ", not installed" : ""})</span>` : ""}</label>`).join(" ");
+  const inst = data && data.tts && data.tts.voices;
+  box.innerHTML = styles.map(([k, v]) => { const sv = styleVoice(k), own = sv.voice || sv.speaker != null;
+    return `<label${own ? ` title="this personality speaks in its own voice when it is installed (${sv.picked ? "picked in Personality voices below" : "set in speech.json"})"` : ""}><input type="checkbox" data-sstyle="${esc(k)}"${on.includes(k) ? " checked" : ""}> ${esc(typeof v === "string" ? v : (v && v.label) || k)}` +
+    `${own ? ` <span class="unk">(${esc(voiceWords(sv))}${sv.voice && inst && !inst.includes(sv.voice) ? ", not installed" : ""})</span>` : ""}</label>`; }).join(" ");
   box.querySelectorAll("[data-sstyle]").forEach(cb => cb.onchange = () => {
     store.set("speechStyles", [...box.querySelectorAll("[data-sstyle]:checked")].map(x => x.dataset.sstyle)); shiftStyle = null; drawSpeechStyles();
   });
@@ -8798,6 +8816,7 @@ function drawSpeechStyles() {
   document.getElementById("speechProfanityWho").textContent = swear.length ? `(${swear.join(", ")})` : "";
   document.getElementById("speechDangerBusiness").checked = speechDangerBusiness();
   document.getElementById("speechShift").checked = speechShift();
+  drawStyleVoices();
   const err = speechLib.error || (speechLib.problems || []).slice(0, 3).join("; ");
   document.getElementById("speechHint").innerHTML =
     (err ? `<span class="noscoop">${esc(err)}</span><br>` : "") +
@@ -8937,6 +8956,7 @@ function drawTts() {
   document.getElementById("soundFiles").textContent = !sf ? "" : (own.length ? `Your own sounds: ${own.join(", ")}.` : "No sound files of your own found.")
     + ((sf.problems || []).length ? ` Not used: ${sf.problems.join("; ")}.` : "");
   drawServerPlay();
+  drawStyleVoices();
   drawSpeechBtn();
   drawHonk();
 }
@@ -8972,6 +8992,74 @@ document.getElementById("ttsSpk").onchange = e => {
   const t = data && data.tts; if (t && t.voice) speakerPicked[t.voice] = Number(e.target.value);
   apiJson("api/voice", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({speaker: Number(e.target.value)})});
 };
+// ---- Personality voices (Settings > Voice, S40): each personality's voice and person, kept by the server (POST
+// api/voice/style -> data.style_picks) for every browser and the tablet. "as the lines file says" is speech.json's own
+// voice and speaker (else the main voice); a several-person voice picked gets its people; ▶ plays one of that
+// personality's lines as it is heard, through the voice lab's player (here, whatever the speech settings).
+function drawStyleVoices(force = false) {
+  const row = document.getElementById("styleVoicesRow"), tb = document.querySelector("#styleVoices tbody");
+  const t = data && data.tts, styles = Object.entries(speechLib.styles || {}), picks = (data && data.style_picks) || {};
+  row.hidden = !(t && t.available) || !styles.length;
+  if (row.hidden) return;
+  const key = JSON.stringify([styles, picks, t.voices, t.voice]);
+  if (!force && (key === styleVoicesDrawn || (tb.contains(document.activeElement) && document.activeElement.tagName === "SELECT"))) return;
+  styleVoicesDrawn = key;
+  const voices = t.voices || [];
+  tb.innerHTML = styles.map(([k, v]) => {
+    const own = v && typeof v === "object" ? v : {}, p = picks[k], file = typeof own.voice === "string" ? own.voice : null, name = labStyleName(k);
+    const asFile = `as the lines file says: ${file ? file + (voices.includes(file) ? "" : " (not installed: the main voice)") : "the main voice"}`
+      + (spkNum(own.speaker) != null ? ` #${own.speaker}` : "");
+    const opts = [...voices, ...(p && !voices.includes(p.voice) ? [p.voice] : [])];
+    return `<tr data-svstyle="${esc(k)}"><th>${esc(name)}</th><td><select data-svvoice aria-label="${esc(name)}: voice"><option value="">${esc(asFile)}</option>` +
+      opts.map(n => `<option value="${esc(n)}"${p && p.voice === n ? " selected" : ""}>${esc(n)}${voices.includes(n) ? "" : " (not installed)"}</option>`).join("") +
+      `</select></td><td><select data-svspk aria-label="${esc(name)}: speaker" hidden></select></td>` +
+      `<td><button type="button" class="try" data-svplay title="one of ${esc(name)}'s lines as it is heard (here, in this browser)">▶</button></td>` +
+      `<td>${p ? `<a href="#" data-svreset title="as the lines file says again">reset</a>` : ""}</td></tr>`;
+  }).join("");
+  for (const tr of tb.querySelectorAll("tr[data-svstyle]")) {   // a several-person voice picked: which of its people
+    const p = picks[tr.dataset.svstyle], sel = tr.querySelector("[data-svspk]");
+    if (!p) continue;
+    const cur = p.speaker ?? (p.voice === t.voice ? t.speaker : speakerPicked[p.voice]) ?? 0;
+    fillSpeakers(sel, p.voice, cur).then(list => { sel.hidden = list.length < 2; });
+  }
+}
+async function styleVoicePost(body) {
+  let r;
+  try { r = await apiJson("api/voice/style", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}); }
+  catch { r = {error: "Outrider not reachable"}; }
+  r = r || {error: "?"};
+  const m = document.getElementById("styleVoicesMsg");
+  if (!r.error && data) data.style_picks = r.style_picks || {};
+  m.textContent = r.error ? `Not kept: ${r.error}` : `${labStyleName(body.style)}: ${body.voice ? voiceWords(body) : "as the lines file says"}`;
+  m.className = r.error ? "hint warnc" : "hint";
+  drawSpeechStyles(); drawStyleVoices(true);
+  return r;
+}
+async function styleVoicePlay(style) {
+  if (!Object.keys(speechLib.lines || {}).length) await loadSpeechLib();
+  const keys = AUDITION_KEYS.filter(k => labLine(k, style)), ln = keys.length ? labLine(keys[Math.floor(Math.random() * keys.length)], style) : null;
+  const m = document.getElementById("styleVoicesMsg");
+  if (!ln) { m.textContent = `No lines for ${labStyleName(style)}`; m.className = "hint warnc"; return false; }
+  const hv = heardVoice(style);
+  m.textContent = `${labStyleName(style)} in ${voiceWords(hv)}: “${spokenText(ln.text)}”`; m.className = "hint";
+  const ok = await labSay(ln.text, {voice: hv.voice, speaker: hv.speaker, speed: speechSpeed() * hv.pace});
+  if (!ok && labEl("labMsg").className === "warnc") { m.textContent = labEl("labMsg").textContent; m.className = "hint warnc"; }
+  return ok;
+}
+{
+  const tb = document.querySelector("#styleVoices tbody");
+  tb.addEventListener("change", e => {
+    const tr = e.target.closest("tr[data-svstyle]"); if (!tr) return;
+    const voice = tr.querySelector("[data-svvoice]").value || null, body = {style: tr.dataset.svstyle, voice};
+    if (voice && e.target.matches("[data-svspk]")) body.speaker = Number(e.target.value);
+    styleVoicePost(body);
+  });
+  tb.addEventListener("click", e => {
+    const tr = e.target.closest("tr[data-svstyle]"); if (!tr) return;
+    if (e.target.closest("[data-svplay]")) styleVoicePlay(tr.dataset.svstyle);
+    else if (e.target.closest("[data-svreset]")) { e.preventDefault(); styleVoicePost({style: tr.dataset.svstyle, voice: null}); }
+  });
+}
 // ---- More voices (Settings > Voice): Piper's catalogue, from the server (GET api/voices/catalogue). Picking one
 // downloads it where Outrider runs and switches to it (POST api/voice, as the voice list does), so a Docker install has
 // every voice too. It sits in the voice lab's dialog. The download's progress shows in the status beside Voice.
@@ -9104,15 +9192,16 @@ function labLine(key, style) {
   const [st, template] = pool[Math.floor(Math.random() * pool.length)];
   return {key, style: st, template, text: fillLine(template, lineVars(LINE_SAMPLES[key] || {}))};
 }
-// play a line: in its personality's own voice and pace when speech.json gives it one (and it is installed), else
-// the voice part's voice and speaker
+// play a line: as its personality is heard (S40) when it has a voice or speaker of its own (picked in Personality voices,
+// else speech.json's; an uninstalled voice is the main voice, as in the alerts), else in the voice part's voice and
+// speaker; its pace either way. The Audition goes through here, so each personality is heard in its own.
 async function labPlayLine(ln) {
-  const pick = labPick(), sv = styleVoice(ln.style.replace(/_profane$/, ""));
-  const own = sv.voice && ((data && data.tts && data.tts.voices) || []).includes(sv.voice) ? sv.voice : null;
+  const pick = labPick(), base = ln.style.replace(/_profane$/, ""), sv = styleVoice(base);
+  const hv = sv.voice || sv.speaker != null ? heardVoice(base) : null;
   labLast = {key: ln.key, template: ln.template};
   labEl("labCut").disabled = false;
-  labEl("labWords").textContent = `${ln.key} · ${labStyleName(ln.style)}${own ? ` · in ${own}` : ""}: “${spokenText(ln.text)}”`;
-  return labSay(ln.text, own ? {voice: own, speaker: null, speed: pick.speed * sv.pace} : {...pick, speed: pick.speed * sv.pace});
+  labEl("labWords").textContent = `${ln.key} · ${labStyleName(ln.style)}${hv ? ` · in ${voiceWords(hv)}` : ""}: “${spokenText(ln.text)}”`;
+  return labSay(ln.text, hv ? {voice: hv.voice, speaker: hv.speaker, speed: pick.speed * sv.pace} : {...pick, speed: pick.speed * sv.pace});
 }
 async function labDrawSpeakers() {
   const voice = labEl("labVoice").value, t = data && data.tts;
@@ -9127,8 +9216,12 @@ async function labDrawSpeakers() {
 function labDrawInUse() {
   const t = data && data.tts, p = labPick();
   const same = t && p.voice === t.voice && (p.speaker == null || p.speaker === (t.speaker ?? 0));
-  labEl("labInUse").textContent = same ? "✓ the voice in use" : "";
+  // the personalities given this voice and person (S40)
+  const given = Object.entries((data && data.style_picks) || {}).filter(([, k]) => k.voice === p.voice && (p.speaker == null || k.speaker === p.speaker))
+    .map(([st]) => labStyleName(st));
+  labEl("labInUse").textContent = [same ? "✓ the voice in use" : "", given.length ? `✓ ${given.join(", ")}` : ""].filter(Boolean).join(" · ");
   labEl("labUse").disabled = !p.voice || (same && Math.abs(p.speed - speechSpeed()) < 0.001);
+  labEl("labGive").disabled = !p.voice || !labEl("labGiveStyle").value;
 }
 function labFillVoices() {
   const t = data && data.tts, voices = (t && t.voices) || [], sel = labEl("labVoice"), keep = sel.value;
@@ -9173,6 +9266,9 @@ async function labOpen() {
   const swear = styles.filter(k => lines.some(e => e && Array.isArray(e[k + "_profane"]) && e[k + "_profane"].length));
   labEl("labStyle").innerHTML = `<option value="">any personality</option>` +
     [...styles, ...swear.map(k => k + "_profane")].map(k => `<option value="${esc(k)}">${esc(labStyleName(k))}</option>`).join("");
+  const give = labEl("labGiveStyle"), gave = give.value;   // Give to this personality (S40)
+  give.innerHTML = styles.map(k => `<option value="${esc(k)}">${esc(labStyleName(k))}</option>`).join("");
+  give.value = styles.includes(gave) ? gave : styles[0] || "";
   labEl("labWords").textContent = ""; labEl("labCut").disabled = true; labLast = null; labMsg("");
   labDrawSpeakers();
   tabShow(labEl("labDlg"));
@@ -9204,6 +9300,22 @@ labEl("labUse").onclick = async () => {
   labMsg(`Outrider speaks in ${p.voice}${p.speaker != null ? `, speaker #${p.speaker}` : ""} at ${p.speed.toFixed(2)}× from now on`);
   labEl("labUse").disabled = true;
 };
+// S40: the voice part's voice and person for one personality from now on (POST api/voice/style, every browser); the
+// lab's speed is not part of it (the personality's pace is speech.json's)
+labEl("labGive").onclick = async () => {
+  const style = labEl("labGiveStyle").value, p = labPick();
+  if (!style || !p.voice) return;
+  const body = {style, voice: p.voice};
+  if (p.speaker != null) body.speaker = p.speaker;
+  const r = await styleVoicePost(body);
+  labMsg(r.error ? `Not given: ${r.error}` : `${labStyleName(style)} speaks in ${voiceWords(p)} from now on`, !!r.error);
+  labDrawInUse();
+};
+labEl("labGiveStyle").onchange = labDrawInUse;
+labEl("labStyle").addEventListener("change", () => {   // the Lines' personality picked: Give follows it
+  const base = labEl("labStyle").value.replace(/_profane$/, "");
+  if (base && [...labEl("labGiveStyle").options].some(o => o.value === base)) { labEl("labGiveStyle").value = base; labDrawInUse(); }
+});
 labEl("labLine").onclick = () => {
   const ln = labLine(labEl("labAlert").value, labEl("labStyle").value || null);
   if (!ln) { labMsg("No lines for that alert in that personality", true); return; }
@@ -10164,6 +10276,7 @@ function drawAlertsBtn() { document.getElementById("alertsBtn").classList.toggle
 // Settings (the dialog the 🔔 used to open): collapsible sections, each remembered open or closed on this device
 // (store "settingsOpen"; Alerts is open the first time), with chips that open one and scroll to it (review S43)
 const alertChips = document.getElementById("alertChips");
+const SF = {active: false, q: "", opened: null, srvLoaded: false, timer: 0};   // Find a setting (S39, below)
 const setSecs = [...alertDialog.querySelectorAll("details.setsec")];
 function setSecsRestore() {
   const open = store.get("settingsOpen", null);
@@ -10171,7 +10284,7 @@ function setSecsRestore() {
 }
 setSecs.forEach(d => d.addEventListener("toggle", () => {
   const open = Object.fromEntries(setSecs.map(x => [x.dataset.secKey, x.open]));
-  store.set("settingsOpen", open);
+  if (!SF.active) store.set("settingsOpen", open);   // what Find a setting opens is not remembered (S39)
   if (d.id === "serverSettings" && d.open) {
     loadServerSettings();
     if (document.getElementById("srvBackups").open) loadBackups();
@@ -10195,12 +10308,105 @@ function showAlertSection(i, remember = true) {
 }
 alertChips.addEventListener("click", e => { const b = e.target.closest("[data-sec]"); if (b) showAlertSection(Number(b.dataset.sec)); });
 document.getElementById("alertsBtn").onclick = () => {
+  sfClear();
   setSecsRestore();
   drawSpeechStyles(); fillThresholds(); alertDialog.showModal(); drawSpeechLog(); loadAskLog();
   const last = Number(store.get("alertSection", 0));
   if (last > 0) showAlertSection(last, false);
 };
 drawAlertsBtn();
+// ---- Find a setting (S39): a word typed at the top of Settings leaves only what matches it, in every section: a row
+// shows when each word is in its label, its help or the config key it defaults from (data-find="section.key" on a
+// browser row; a Server settings row has its key) or in its section's heading, at least one in the row itself; a word
+// naming a section (its chip) shows all of it. Rows are a section's children, a table's rows (Alerts, the overlay's
+// panels), the Uploads and overlay boxes' parts and the Server settings' keys (loaded on the first word, so its
+// section need not be open). Matching sections open, the rest hide (.sfhide), and none of it is remembered
+// (settingsOpen, the config sections' folds): clearing the box, or closing Settings, puts every section back as it was.
+// A section that redraws while filtering (the payload's Uploads, the overlay, Server settings arriving) is filtered again.
+const SF_CONTENT = new Set(["speechLog", "askLog", "speechTally", "speechBans"]);   // what a section holds, not settings: shown with it
+const sfWordsOf = el => (el.textContent + " " + [el, ...el.querySelectorAll("[data-find]")].map(x => x.dataset.find || "").join(" "))
+  .replace(/\s+/g, " ").toLowerCase();
+// a section's rows for the filter: {el, own (its words), ctx (the headings above it)}, and the boxes holding rows
+function sfRows(sec) {
+  const rows = [], boxes = [], sum = sec.querySelector(":scope > summary");
+  const walk = (el, ctx) => {
+    for (const c of el.children) {
+      if (c.tagName === "SUMMARY" || SF_CONTENT.has(c.id)) continue;
+      const table = c.matches("#alertTable") ? c : c.matches(".ovwrap") ? c.querySelector("table") : null;
+      if (table) {
+        boxes.push(c);
+        const head = table.tHead ? " " + table.tHead.textContent.toLowerCase() : "";
+        for (const tb of table.tBodies) for (const r of tb.rows) rows.push({el: r, own: sfWordsOf(r), ctx: ctx + head});
+      } else if (c.matches("#uploadsBox, #overlayBox, #serverSettingsBody")) { boxes.push(c); walk(c, ctx); }
+      else if (c.matches("details.srvsec")) { boxes.push(c); walk(c, ctx + " " + c.querySelector(":scope > summary").textContent.toLowerCase()); }
+      else rows.push({el: c, own: sfWordsOf(c), ctx});
+    }
+  };
+  walk(sec, sum ? sum.textContent.toLowerCase() : "");
+  return {rows, boxes};
+}
+const sfLaidOut = el => !el.hidden && !(document.body.classList.contains("notgamepc") && el.closest(".pcOnly"));
+// filter by `q` now; the number of sections shown
+function sfApply() {
+  const words = SF.q.toLowerCase().split(/\s+/).filter(Boolean);
+  let shown = 0;
+  for (const sec of setSecs) {
+    const {rows, boxes} = sfRows(sec), sum = sec.querySelector(":scope > summary");
+    const name = ((sec.dataset.chip || "") + " " + (sum && sum.firstChild ? sum.firstChild.textContent : "")).toLowerCase();
+    const all = (text, ws = words) => ws.every(w => text.includes(w));
+    let hits = all(name) ? rows : rows.filter(r => all(r.own + " " + r.ctx) && words.some(w => r.own.includes(w)));
+    if (!hits.length && all(sum ? sum.textContent.toLowerCase() : "")) hits = rows;   // its heading alone says it
+    hits = hits.filter(r => sfLaidOut(r.el));
+    const hit = new Set(hits.map(r => r.el)), on = hits.length > 0 && sfLaidOut(sec);
+    for (const r of rows) r.el.classList.toggle("sfhide", !hit.has(r.el));
+    for (const b of boxes) {
+      const any = hits.some(r => b.contains(r.el));
+      b.classList.toggle("sfhide", !any);
+      if (any && b.tagName === "DETAILS") b.open = true;
+    }
+    sec.classList.toggle("sfhide", !on);
+    if (on) { sec.open = true; shown++; }
+  }
+  alertChips.querySelectorAll("[data-sec]").forEach(b => b.classList.toggle("sfhide", alertSections[Number(b.dataset.sec)].classList.contains("sfhide")));
+  const msg = document.getElementById("setFindMsg");
+  msg.textContent = shown ? `${shown} section${shown === 1 ? "" : "s"} match` : "Nothing matches";
+  msg.className = shown ? "hint" : "hint warnc";
+  return shown;
+}
+function sfSet(q) {
+  q = String(q || "").trim();
+  if (!q) { sfClear(); return 0; }
+  if (!SF.active) {   // the sections as they were, put back when the box is cleared
+    SF.opened = Object.fromEntries(setSecs.map(d => [d.dataset.secKey, d.open]));
+    SF.active = true;
+    sfObserver.observe(alertDialog.querySelector(".setbody"), {childList: true, subtree: true});
+  }
+  SF.q = q;
+  if (!SF.srvLoaded) { SF.srvLoaded = true; loadServerSettings(); }   // its keys, without opening its section
+  return sfApply();
+}
+function sfClear() {
+  const box = document.getElementById("setFind");
+  if (box && box.value) box.value = "";
+  if (!SF.active) return;
+  SF.active = false; SF.q = ""; clearTimeout(SF.timer);
+  sfObserver.disconnect();
+  alertDialog.querySelectorAll(".sfhide").forEach(el => el.classList.remove("sfhide"));
+  setSecs.forEach(d => { d.open = !!(SF.opened || {})[d.dataset.secKey]; });
+  document.querySelectorAll("#serverSettingsBody details.srvsec").forEach(d => { d.open = !!SRV_SET_OPEN[d.dataset.srvsec]; });
+  document.getElementById("setFindMsg").textContent = "";
+}
+const sfObserver = new MutationObserver(() => {
+  if (!SF.active) return;
+  clearTimeout(SF.timer);
+  SF.timer = setTimeout(() => { if (SF.active) sfApply(); }, 120);
+});
+document.getElementById("setFind").addEventListener("input", e => sfSet(e.target.value));
+document.getElementById("setFind").addEventListener("keydown", e => {
+  if (e.key === "Enter") e.preventDefault();   // never the form's submit (it closes the dialog)
+  else if (e.key === "Escape" && e.target.value) { e.preventDefault(); e.stopPropagation(); sfClear(); }   // clears first, closes next
+});
+alertDialog.addEventListener("close", () => { sfClear(); SF.srvLoaded = false; });
 // ---- the desktop theme (Settings > Display; the author, 2026-10-04): the tablet's themes for this page too, per browser
 // ("desktopTheme", not shared), set on <html data-theme> (page.html's head sets it before the first paint). "" is
 // Default - Outrider, which alone keeps the light mode. The tablet chooses its own (tabTheme).
@@ -10255,7 +10461,7 @@ async function loadServerSettings() {
         `${k.help ? `<div class="hint">${esc(k.help)}</div>` : ""}</div></div>`).join("") + `</details>`).join("") +
     `<div class="btns"><button type="button" id="srvSave" class="primary">Save server settings</button><span id="srvMsg" class="hint"></span></div>`;
   box.querySelectorAll("[data-key]").forEach(el => { el.dataset.orig = srvValue(el); });
-  box.querySelectorAll("details.srvsec").forEach(d => d.addEventListener("toggle", () => { SRV_SET_OPEN[d.dataset.srvsec] = d.open; }));
+  box.querySelectorAll("details.srvsec").forEach(d => d.addEventListener("toggle", () => { if (!SF.active) SRV_SET_OPEN[d.dataset.srvsec] = d.open; }));
   document.getElementById("srvSave").onclick = saveServerConfig;
   const focus = srvFocus && document.getElementById(srvFocus);
   srvFocus = null;

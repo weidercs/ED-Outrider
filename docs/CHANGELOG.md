@@ -2,6 +2,27 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-13 · Find a setting, and a voice per personality
+- **Find a setting** (S39): a box at the top of Settings. Each word typed leaves only the rows that match it (their
+  label, help, a Server settings key, or the config key a browser row defaults from: `data-find="section.key"` on 22
+  rows, `test_settings.FindASetting` checks each is a real key), with their sections opened and "N sections match" (or
+  "Nothing matches"); the other sections and their chips hide (`.sfhide`, so a game-PC-only part stays hidden on a
+  server). A word naming a section shows all of it. It covers the Alerts table's rows, the Uploads and overlay boxes'
+  parts, the overlay's panels, Backups, Start with this computer, Show log / Restart and Server settings' keys (loaded
+  on the first word without opening the section), and filters again what redraws meanwhile. Nothing is remembered:
+  `settingsOpen` and the config sections' folds are untouched, and clearing the box (Esc clears it first) or closing
+  Settings puts every section back as it was. The smoke test finds every section by a word of its own rows and by name.
+- **A voice per personality** (S40, both halves): speech.json's styles may name `"speaker": N` (checked;
+  `outrider.speech.style_speaker`), one person of the personality's own voice or of the main voice. Settings → Voice →
+  **Personality voices** gives each personality a voice and, for a several-person voice, a speaker (▶ plays one of its
+  lines as it is heard, reset goes back to the file); the voice lab's **Give to this personality** does it from the
+  lab's voice and person. Kept by the server for every browser and the tablet: POST `/api/voice/style` {style, voice,
+  speaker?} (voice null resets), meta `style_picks` (live-only), the payload's `style_picks`; a pick wins over the
+  file's voice and speaker, the pace stays the file's. The page carries the speaker with every line (the PC's player,
+  `/api/say`, the next line, "say again"); the lab's lines and Audition speak each personality in its own. A line whose
+  voice is not installed is said in the main voice by its own person, no longer by that number of the main voice; the
+  voices kept loaded count the picks.
+
 ## 2026-10-13 · Questions asked, and any view in its own window
 - **Questions asked** (S35): Settings' new last section shows what the voice heard, newest first: the words, where they
   came from, the ask.json phrase they matched and what it asks for ("matched “status report” → a status report", a

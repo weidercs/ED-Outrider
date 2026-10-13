@@ -164,6 +164,19 @@ def style_voices(styles):
     return {v for v in (style_voice(styles, k)[0] for k in (styles or {})) if v}
 
 
+def speaker_number(v):
+    """A speaker of a several-person voice (S40): a whole number from 0, never true/false; anything else None."""
+    return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else None
+
+
+def style_speaker(styles, style):
+    """The person of a several-person voice a personality asks for in "styles" ({"speaker": 12}, S40), or None: of
+    its own voice when it names one, else of the main voice. A number the voice does not have is the voice's own pick
+    (outrider.tts.Speaker.say checks it). style_voice's (voice, speed) is unchanged."""
+    st = (styles or {}).get((style or "").removesuffix("_profane"))
+    return speaker_number(st.get("speaker")) if isinstance(st, dict) else None
+
+
 def fills(key):
     return set(PLACEHOLDER.findall(KEYS.get(key, ""))) | set(ALWAYS)
 
@@ -177,17 +190,19 @@ def check(doc):
     if not isinstance(styles, dict) or not styles:
         problems.append('"styles" must map each personality to its label')
         styles = {}
-    for name, st in styles.items():   # a label, or {label, voice, speed}: a Piper voice of its own (see style_voice)
+    for name, st in styles.items():   # a label, or {label, voice, speed, speaker}: a Piper voice of its own (see style_voice)
         if isinstance(st, str):
             continue
         if not isinstance(st, dict):
-            problems.append(f'"styles" / "{name}" must be a label or an object {{"label", "voice", "speed"}}')
+            problems.append(f'"styles" / "{name}" must be a label or an object {{"label", "voice", "speed", "speaker"}}')
             continue
         if "voice" in st and not (isinstance(st["voice"], str) and VOICE_NAME.fullmatch(st["voice"])):
             problems.append(f'"styles" / "{name}": "voice" must be a Piper voice name such as "en_US-ryan-high"')
         if "speed" in st and not (isinstance(st["speed"], (int, float)) and not isinstance(st["speed"], bool)
                                   and 0.5 <= st["speed"] <= 2):
             problems.append(f'"styles" / "{name}": "speed" must be a number from 0.5 to 2')
+        if "speaker" in st and speaker_number(st["speaker"]) is None:
+            problems.append(f'"styles" / "{name}": "speaker" must be a whole number from 0 (one person of a several-person voice)')
     if not isinstance(lines, dict):
         return problems + ['"lines" must map each alert to its versions']
     known_lists = set(styles) | {s + "_profane" for s in styles}

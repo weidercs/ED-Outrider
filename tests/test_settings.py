@@ -72,6 +72,22 @@ class ConfigEdit(unittest.TestCase):
                 ce.coerce(kind, bad)
 
 
+class FindASetting(unittest.TestCase):
+    def test_data_find_names_real_keys(self):
+        """S39: a browser row whose default comes from the config file names that key (data-find="section.key"), so
+        Find a setting finds it by the key too: every one named is a key the config file has, and the Voice row's
+        speech_speed is among them."""
+        import re
+        with open(os.path.join(ed_outrider.STATIC_DIR, "page.html"), encoding="utf-8") as f:
+            html = f.read()
+        named = [k for v in re.findall(r'data-find="([^"]*)"', html) for k in v.split()]
+        keys = {f"{s['section']}.{k['key']}" for s in ce.entries(ed_outrider.config_text(settings({}))) for k in s["keys"]}
+        self.assertGreaterEqual(len(named), 20)
+        self.assertEqual([k for k in named if k not in keys], [])
+        self.assertIn("defaults.speech_speed", named)
+        self.assertIn('id="setFind"', html)
+
+
 class TempConfig(unittest.TestCase):
     """A State whose config file is a temporary copy of the example (with a password set)."""
 

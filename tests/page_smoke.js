@@ -6933,6 +6933,167 @@ const settle = async maxMs => {
     console.log(good ? "OK" : "FAIL", "| S37 view windows |", good ? "↗ opens ?view=bm (once), the window has no tabs and saves no view, ⌖ goes to the main window, else ↩ back; a bad view falls back" :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
   }
+  // S40: a speaker per personality. speech.json's voice and speaker, a speaker alone being the main voice's person, a pick
+  // in Settings winning over both (data.style_picks); a line queued with a speaker carries it to the PC's player, as the
+  // next line and "say again" do; Settings → Voice → Personality voices draws each personality's voice and speaker,
+  // posts a change, a speaker and a reset (api/voice/style, answered here), ▶ plays a line as it is heard; the voice
+  // lab's Give to this personality posts the lab's voice and person, and a line played there is in the personality's
+  {
+    const w = dom.window, d = w.document, realFetch = w.fetch, before = errors.length, said = [], posted = [], played = [];
+    const people = [{id: 0, name: "p225"}, {id: 1, name: "p226"}, {id: 2, name: "p227"}, {id: 3, name: "p228"}];
+    const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), {status, headers: {"Content-Type": "application/json"}}));
+    let picks = {};
+    w.fetch = (u, o) => {
+      const s = String(u);
+      if (s.startsWith("api/voices/speakers")) return json({voice: "x", speakers: s.includes("vctk") ? people : [], speaker: null});
+      if (s.startsWith("api/say?")) { said.push(Object.fromEntries(new URLSearchParams(s.slice(8)))); return Promise.resolve(new Response(new w.Blob(["RIFF"]), {status: 200, headers: {"Content-Type": "audio/wav"}})); }
+      if (s === "api/say/play") { played.push(JSON.parse(o.body)); return json({ok: true, stopped: false}); }
+      if (s === "api/voice/style") {
+        const b = JSON.parse(o.body); posted.push(b);
+        if (b.voice) picks[b.style] = {voice: b.voice, speaker: b.speaker ?? null}; else delete picks[b.style];
+        return json({ok: true, style_picks: JSON.parse(JSON.stringify(picks))});
+      }
+      return realFetch(u, o);
+    };
+    const savedServer = w.localStorage.getItem("speakOnServer");
+    w.eval(`window.__s40 = {tts: data.tts, picks: data.style_picks, lib: speechLib, sound: labSound, cu: URL.createObjectURL, ru: URL.revokeObjectURL,
+      flags: [speechOn, isSpeaker], lastSaid};
+      URL.createObjectURL = () => "blob:s40"; URL.revokeObjectURL = () => {};
+      labSound = () => ({done: Promise.resolve(), stop() {}});
+      data.tts = {engine: "piper", available: true, status: "ready", voices: ["en_GB-cori-medium", "en_GB-vctk-medium"], voice: "en_GB-cori-medium",
+                  speaker: null, speakers: 0};
+      speechLib = {version: "s40", banned: {}, styles: {business: "Down to business",
+          sarcastic: {label: "Sarcastic", voice: "en_GB-vctk-medium", speaker: 4, speed: 1.2}, sweet: {label: "Sweet", speaker: 7}},
+        lines: {game_start: {business: ["Hi."], sarcastic: ["Oh, you."], sweet: ["Hello, love."]}}};
+      for (const k of Object.keys(speakerLists)) delete speakerLists[k];
+      data.style_picks = {};`);
+    const got = {};
+    got.file = JSON.parse(w.eval(`JSON.stringify([styleVoice("sarcastic_profane"), heardVoice("sweet"), styleVoice("business")].map(v => [v.voice, v.speaker, v.pace]))`));
+    w.eval(`data.style_picks = {sarcastic: {voice: "en_GB-cori-medium", speaker: null}, business: {voice: "en_GB-vctk-medium", speaker: 2}}`);
+    picks = JSON.parse(w.eval("JSON.stringify(data.style_picks)"));
+    got.picked = JSON.parse(w.eval(`JSON.stringify([styleVoice("sarcastic"), styleVoice("business")].map(v => [v.voice, v.speaker, v.pace, v.picked]))`));
+    // the queue: said on the PC with the speaker, the next line riding along with its own; "say again" keeps it
+    w.localStorage.setItem("speakOnServer", "true");
+    w.eval(`speechOn = true; isSpeaker = true; speechItems = []; speechLast = {}; hushState = null;
+      speak("Second line.", {delay: 300, speaker: 5}); speak("First line.", {voice: "en_GB-vctk-medium", speaker: 2})`);
+    for (let i = 0; i < 40 && played.length < 2; i++) await sleep(50);
+    got.played = played.map(b => [b.text, b.voice, b.speaker, b.next ? [b.next.text, b.next.speaker] : null]);
+    got.again = JSON.parse(w.eval("JSON.stringify(lastSaid && [lastSaid.words, lastSaid.speaker])"));
+    // Settings → Voice → Personality voices
+    w.eval(`drawStyleVoices(true)`); await sleep(100);
+    const row = st => d.querySelector(`#styleVoices tr[data-svstyle="${st}"]`);
+    got.table = [!d.getElementById("styleVoicesRow").hidden, d.querySelectorAll("#styleVoices tbody tr").length,
+      row("business").querySelector("[data-svvoice]").value, row("business").querySelector("[data-svspk]").hidden, row("business").querySelector("[data-svspk]").value,
+      row("sarcastic").querySelector("[data-svvoice]").value, row("sarcastic").querySelector("[data-svspk]").hidden,
+      row("sweet").querySelector("[data-svvoice]").options[0].textContent, !!row("sweet").querySelector("[data-svreset]")];
+    const sel = row("sweet").querySelector("[data-svvoice]");
+    sel.value = "en_GB-vctk-medium"; sel.dispatchEvent(new w.Event("change", {bubbles: true})); await sleep(150);
+    const spk = row("sweet").querySelector("[data-svspk]");
+    got.sweet = [spk.hidden, spk.options.length];
+    spk.value = "1"; spk.dispatchEvent(new w.Event("change", {bubbles: true})); await sleep(100);
+    row("business").querySelector("[data-svreset]").click(); await sleep(100);
+    got.posted = posted.slice();
+    got.after = [w.eval("JSON.stringify(data.style_picks)"), d.getElementById("styleVoicesMsg").textContent, !!row("business").querySelector("[data-svreset]")];
+    said.length = 0;
+    row("sarcastic").querySelector("[data-svplay]").click(); await sleep(150);
+    got.play = said.map(x => [x.voice, x.speaker || null, x.speed, x.text]);
+    // the voice lab: Give to this personality, and a line in the personality's own voice and person
+    said.length = 0; posted.length = 0;
+    await w.eval(`(async () => { await labOpen();
+      labEl("labVoice").value = "en_GB-vctk-medium"; await labDrawSpeakers(); labEl("labSpk").value = "3";
+      labEl("labStyle").value = "sweet"; labEl("labStyle").dispatchEvent(new Event("change")); })()`);
+    await sleep(100);
+    got.giveStyle = d.getElementById("labGiveStyle").value;
+    d.getElementById("labGive").click(); await sleep(150);
+    got.give = [posted.slice(), d.getElementById("labMsg").textContent, d.getElementById("labInUse").textContent];
+    await w.eval(`labPlayLine(labLine("game_start", "sweet"))`);
+    await w.eval(`labPlayLine(labLine("game_start", "business"))`);   // no voice of its own: the lab's voice and person
+    got.lab = said.map(x => [x.voice, x.speaker || null]);
+    got.words = d.getElementById("labWords").textContent;
+    w.eval(`tabClose(document.getElementById("labDlg")); hushSpeech(true);
+      const k = window.__s40; data.tts = k.tts; data.style_picks = k.picks; speechLib = k.lib; labSound = k.sound; URL.createObjectURL = k.cu;
+      URL.revokeObjectURL = k.ru || (() => {}); [speechOn, isSpeaker] = k.flags; lastSaid = k.lastSaid; delete window.__s40;
+      for (const k2 of Object.keys(speakerLists)) delete speakerLists[k2]; drawTts(); drawSpeechStyles();`);
+    w.fetch = realFetch;
+    if (savedServer === null) w.localStorage.removeItem("speakOnServer"); else w.localStorage.setItem("speakOnServer", savedServer);
+    const want = {
+      file: [["en_GB-vctk-medium", 4, 1.2], ["en_GB-cori-medium", 7, 1], [null, null, 1]],
+      picked: [["en_GB-cori-medium", null, 1.2, true], ["en_GB-vctk-medium", 2, 1, true]],
+      played: [["Second line.", null, 5, ["First line.", 2]], ["First line.", "en_GB-vctk-medium", 2, null]],   // the older first
+      again: ["First line.", 2],
+      table: [true, 3, "en_GB-vctk-medium", false, "2", "en_GB-cori-medium", true, "as the lines file says: the main voice #7", false],
+      sweet: [false, 4],
+      posted: [{style: "sweet", voice: "en_GB-vctk-medium"}, {style: "sweet", voice: "en_GB-vctk-medium", speaker: 1}, {style: "business", voice: null}],
+      after: [JSON.stringify({sarcastic: {voice: "en_GB-cori-medium", speaker: null}, sweet: {voice: "en_GB-vctk-medium", speaker: 1}}),
+              "Down to business: as the lines file says", false],
+      play: [["en_GB-cori-medium", null, String(Math.round(w.eval("speechSpeed()") * 1.2 * 100) / 100), "Oh, you."]],
+      giveStyle: "sweet",
+      give: [[{style: "sweet", voice: "en_GB-vctk-medium", speaker: 3}], "Sweet speaks in en_GB-vctk-medium #3 from now on", "✓ Sweet"],
+      lab: [["en_GB-vctk-medium", "3"], ["en_GB-vctk-medium", "3"]],
+    };
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    if (!/^game_start · Down to business: /.test(got.words)) bad.push("words");
+    const good = !bad.length && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| S40 personality voices |", good ? "the file's voice and speaker, a pick wins, the speaker rides to the PC and the next line; the table, ▶, Give, the lab's lines" :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+  }
+  // S39: Find a setting. A word leaves only the rows that match it (label, help, the config key a row defaults from, a
+  // Server settings key loaded without opening its section), opens their sections and says how many; every section is
+  // found by a word of its own rows and by its name; nothing matching says so; clearing puts every section back as it
+  // was, and settingsOpen is never written meanwhile
+  {
+    const w = dom.window, d = w.document, before = errors.length;
+    if (!w.HTMLDialogElement.prototype.showModal) w.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
+    w.localStorage.setItem("settingsOpen", JSON.stringify({alerts: false, voice: true}));
+    w.eval(`document.getElementById("alertsBtn").click()`);
+    await settle(1500);
+    const stored0 = w.localStorage.getItem("settingsOpen"), open0 = w.eval(`JSON.stringify(setSecs.map(s => s.open))`);
+    const find = async q => {
+      w.eval(`(() => { const b = document.getElementById("setFind"); b.value = ${JSON.stringify(q)}; b.dispatchEvent(new Event("input")); })()`);
+      await settle(2500); await sleep(250);   // Server settings arriving, then the observer's pass
+    };
+    const vis = sel => w.eval(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); return !!el && !el.closest(".sfhide"); })()`);
+    const secs = () => JSON.parse(w.eval(`JSON.stringify(setSecs.filter(s => !s.classList.contains("sfhide") && sfLaidOut(s)).map(s => s.dataset.secKey + (s.open ? "" : " (closed)")))`));
+    const msg = () => d.getElementById("setFindMsg").textContent;
+    const got = {};
+    await find("speed");
+    got.speed = [vis("#speechSpeed"), vis("#bioMin"), vis("#labOpen"), secs().includes("voice"), msg() === `${secs().length} sections match` || msg() === "1 section match"];
+    await find("password");
+    got.password = [vis('#serverSettingsBody [data-sec="server"][data-key="password"]'), vis('#serverSettingsBody [data-sec="server"][data-key="port"]'),
+      w.eval(`document.querySelector('#serverSettingsBody details[data-srvsec="server"]').open`), vis("#speechSpeed"), secs().includes("server")];
+    await find("body_highlight_level");   // the key alone: the Values row by its data-find, and the server's own row
+    got.key = [vis("#hlBody"), vis("#hlBio"), vis('#serverSettingsBody [data-key="body_highlight_level"]'), secs().sort().join()];
+    await find("speak voice");   // two words, one in the section's heading
+    got.two = [vis("#speechSpeed"), vis("#sayMapped")];
+    await find("zzqxw");
+    got.none = [msg(), secs().length, w.eval(`[...document.querySelectorAll("#alertChips [data-sec]")].every(b => b.classList.contains("sfhide"))`)];
+    got.every = JSON.parse(w.eval(`(() => {
+      const out = [];
+      for (const sec of setSecs) {
+        if (!sfLaidOut(sec)) continue;
+        const {rows} = sfRows(sec), row = rows.find(r => sfLaidOut(r.el) && /[a-z]{5,}/.test(r.own));
+        const word = row ? row.own.match(/[a-z]{5,}/g).sort((a, b) => b.length - a.length)[0] : "zzqxw";
+        sfSet(word);
+        const byWord = !!row && !row.el.closest(".sfhide") && sec.open;
+        sfSet(sec.dataset.chip);
+        out.push([sec.dataset.secKey, byWord, !sec.classList.contains("sfhide") && sec.open && sfRows(sec).rows.filter(r => sfLaidOut(r.el)).every(r => !r.el.closest(".sfhide"))]);
+      }
+      return JSON.stringify(out); })()`));
+    await find("");
+    got.cleared = [d.querySelectorAll("#alertDialog .sfhide").length, w.eval(`JSON.stringify(setSecs.map(s => s.open))`) === open0, msg(),
+      w.localStorage.getItem("settingsOpen") === stored0];
+    w.eval(`const dls = document.getElementById("alertDialog"); if (dls.close) dls.close(); else dls.removeAttribute("open")`);
+    const want = {speed: [true, false, false, true, true], password: [true, false, true, false, true],
+      key: [true, false, true, w.eval(`[...new Set(["server", "values"])].sort().join()`)], two: [true, true],
+      none: ["Nothing matches", 0, true], cleared: [0, true, "", true]};
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    if (got.every.length < 12 || !got.every.every(e => e[1] && e[2])) bad.push("every");
+    const good = !bad.length && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| S39 find a setting |", good ? `speed, a server key, a config key alone, two words, nothing; all ${got.every.length} sections found by a word and by name; cleared as before` :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+  }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",
     headers: Object.assign({"Content-Type": "application/json"}, origin ? {Origin: origin} : {})}).then(r => r.status);

@@ -6604,6 +6604,7 @@ class State:
             "radius_choices": sorted({float(x) for x in RADIUS_CHOICES} | {self.radius}),
             "sphere_cut": self.sphere_cut,
             "tts": self.speaker.info() if self.speaker else None,
+            "style_picks": self.style_picks(),   # S40: each personality's voice and speaker picked in Settings
             "sound_files": self.sounds.info() if self.sounds and self.sounds.own_dir else None,   # your own sounds (S16)
             "player": self.player.info() if self.player else None,
             "speech": self.speech.info() if self.speech else None,
@@ -12992,6 +12993,46 @@ class State:
         meta_set(self.db, "voice_speakers", chosen)
         self.db.commit()
 
+    # S40: a voice per personality, picked in Settings -> Voice (Personality voices) or the voice lab (Give to this
+    # personality): {style: {voice, speaker}} in meta style_picks (live-only, like voice_speakers: backups carry it, a
+    # re-read leaves it). Every browser and the tablet speak each personality so: a pick wins over speech.json's own
+    # voice and speaker, which win over the main voice. The page sends the voice and speaker with each line; the server
+    # never downloads a voice for it (a pick whose voice was deleted is spoken in the main voice).
+    def style_picks(self):
+        """{style: {voice, speaker}} as kept, the malformed left out (speaker None: the voice's own pick)."""
+        raw = meta_get(self.db, "style_picks")
+        return {k: {"voice": v["voice"], "speaker": outrider.speech.speaker_number(v.get("speaker"))}
+                for k, v in (raw.items() if isinstance(raw, dict) else ())
+                if isinstance(k, str) and isinstance(v, dict) and isinstance(v.get("voice"), str)
+                and outrider.speech.VOICE_NAME.fullmatch(v["voice"])}
+
+    def set_style_pick(self, style, voice, speaker=None):
+        """A personality's voice (and speaker) from now on; voice None: speech.json's or the main voice again. The
+        reason it cannot, as words, or None once kept."""
+        styles = self.speech.lines()["styles"] if self.speech else {}
+        if not isinstance(style, str) or style not in styles:
+            return f"no personality {style!r} in the lines file"
+        picks = self.style_picks()
+        if voice is None:
+            picks.pop(style, None)
+        else:
+            sp = self.speaker
+            if not isinstance(voice, str) or not sp or voice not in sp.installed():
+                return f"{voice} is not installed"
+            people = len(sp.voice_speakers(voice))
+            if speaker is not None and (outrider.speech.speaker_number(speaker) is None or speaker >= people):
+                return f"{voice} has no speaker {speaker}"
+            picks[style] = {"voice": voice, "speaker": speaker}
+        meta_set(self.db, "style_picks", picks)
+        self.db.commit()
+        self.bump()
+        return None
+
+    def personality_voices(self):
+        """Every voice a personality may speak in (speech.json's and the picks): the room Speaker.size_extra keeps."""
+        styles = self.speech.lines()["styles"] if self.speech else {}
+        return outrider.speech.style_voices(styles) | {p["voice"] for p in self.style_picks().values()}
+
     def remember_voice(self, name):
         """The voice picked in the alerts dialog, once it has loaded: preferred at the next start (a choice that
         never loaded is not saved, so a broken voice does not replace the working one after a restart)."""
@@ -17102,16 +17143,17 @@ def make_app(state, hosts=None):
     async def synth(sp, text, speed, voice, speaker=None):
         """A line as WAV from Piper, or None (the page then uses browser speech for it). `speed` and `voice` as
         the page sent them: a personality's own voice only if installed, so a name from the page never downloads.
-        `speaker`: one of that voice's people (the voice lab's try); None: the one picked for the voice."""
+        `speaker`: one of that voice's people (the voice lab's try, a personality's, S40); None: the one picked for it."""
         try:
             speed = float(speed or SPEECH_SPEED)
         except (TypeError, ValueError):
             speed = SPEECH_SPEED
         voice = str(voice) if voice else None
-        if voice and voice not in sp.installed():
-            voice = None
-        if voice and state.speech:   # room for every personality voice, so none is reloaded before each line
-            sp.size_extra(outrider.speech.style_voices(state.speech.lines()["styles"]))
+        if voice and voice not in sp.installed():   # its speaker is that voice's person: not the main voice's (S40)
+            voice = speaker = None
+        own = state.personality_voices() if voice else ()
+        if own:   # room for every personality voice (speech.json's and the picks, S40), so none is reloaded before each line
+            sp.size_extra(own)
         try:
             speaker = speaker_arg(speaker)
             return await asyncio.get_running_loop().run_in_executor(
@@ -17556,6 +17598,21 @@ def make_app(state, hosts=None):
         # remembered (over restarts, like the radius and auto honk) once it loads: see remember_voice
         return web.json_response({"ok": True})
 
+    async def voice_style_view(request):
+        """POST /api/voice/style {style, voice, speaker?} (S40): that personality speaks in this installed voice (and
+        this person of it; none or null: the voice's own pick) from now on, in every browser; voice null: as the lines
+        file says again. Answers {ok, style_picks}."""
+        body = await json_object(request)
+        if body is None or "voice" not in body or ("speaker" in body and body["speaker"] is not None
+                                                     and outrider.speech.speaker_number(body["speaker"]) is None):
+            return web.json_response({"error": "expected {style, voice, speaker?}"}, status=400)
+        if body["voice"] is not None and (not state.speaker or not state.speaker.available):
+            return web.json_response({"error": "Piper is not installed"}, status=503)
+        why = state.set_style_pick(body.get("style"), body["voice"], body.get("speaker"))
+        if why:
+            return web.json_response({"error": why}, status=400)
+        return web.json_response({"ok": True, "style_picks": state.style_picks()})
+
     async def speaker_audio_view(request):
         """POST /api/speaker/audio {blocked}: the speaking window's browser holds audio back until a click (true) or
         plays again (false). The payload's speaker_audio_blocked tells the tablet, which asks for that click."""
@@ -17865,6 +17922,7 @@ def make_app(state, hosts=None):
     app.router.add_get("/api/status", status_view)
     app.router.add_get("/api/status.txt", status_txt_view)
     app.router.add_post("/api/voice", voice_view)
+    app.router.add_post("/api/voice/style", voice_style_view)
     app.router.add_get("/api/voices/catalogue", voice_catalogue_view)
     app.router.add_get("/api/voices/speakers", voice_speakers_view)
     app.router.add_post("/api/voices/download", voice_download_view)

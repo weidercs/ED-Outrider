@@ -95,13 +95,14 @@ Outrider runs (a Docker server too):
 - **Speakers**: some Piper voices are many people in one download (`en_GB-vctk-medium` has 109, `en_US-libritts_r-medium`
   about 900). The lab shows a speaker list for those: **‹ ›** step through them and **🎲** picks one at random, each
   played as you go. The speaker you use is kept for that voice, and Settings → Voice shows it beside the voice, where
-  you can change it too.
+  you can change it too. **Give to this personality** (beside Use this voice) makes the voice and speaker picked
+  there one personality's own instead (see Personality voices below).
 - **More voices** lists every Piper voice by language, sorted by name, quality or size. **▶ sample** plays Piper's own
   recording of a voice (from its website) before you download anything. **Download** fetches it without switching:
   when it is ready it is picked above, so you can ▶ Hear it (and its speakers) and press Use this voice if you like it.
   **Select** picks one you already have.
 - **Lines**: pick an alert and a personality for **▶ Random line** (filled with made-up values), or **▶ Audition** for
-  eight key alerts in a row. A personality with a voice of its own (speech.json) speaks in it. **✂ Cut this line**
+  eight key alerts in a row. A personality with a voice or speaker of its own speaks in it. **✂ Cut this line**
   bans the line just played, like 👎.
 - **Your own words**: type anything for **▶ Speak**, or **⬇ Save WAV** to keep it.
 - **How is it said**: a word the voice says wrong, said your way. Pick or type the word, write how it sounds as
@@ -149,9 +150,13 @@ Sound: Allow; Firefox: Autoplay: Allow Audio and Video).
   **Call me** (default "Boss, Hefay, Sir").
 - **Speed.** 1× is the voice's own pace. Some Piper voices respond to it less than others.
 - **Your own lines.** Edit `resources/speech.json` (or a copy named by `speech_file`) to change lines or add a personality; no restart needed.
-- **A voice per personality.** In `speech.json`, a personality can name its own installed Piper voice and
-  speed: `"sarcastic": {"label": "Sarcastic", "voice": "en_US-ryan-high", "speed": 1.1}`. Each extra voice
-  takes 60–100 MB of memory.
+- **A voice per personality.** ⚙ Settings → Voice → **Personality voices** gives each personality a voice of its own,
+  or another person of a several-person voice: pick the voice (and the speaker, for a voice of many people), **▶** to
+  hear one of its lines, **reset** for what the lines file says again. Outrider keeps them, so every browser and the
+  tablet say each personality the same way. In `speech.json`, a personality can also name its own installed Piper voice,
+  speaker and speed: `"sarcastic": {"label": "Sarcastic", "voice": "en_US-ryan-high", "speed": 1.1}`, or
+  `"sweet": {"label": "Sweet", "speaker": 12}` for person 12 of the main voice; a pick in Settings wins over the file's
+  voice and speaker. Each extra voice takes 60–100 MB of memory.
 
 **What it says**
 
