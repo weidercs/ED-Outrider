@@ -5,8 +5,9 @@ add under "styles"). A list named "<style>_profane" holds that style's swearing 
 line at random from every personality you ticked, not one of the last few heard; with the profanity box
 ticked it first rolls whether this line comes from the swearing versions (the percentage beside the box,
 50% by default) or the clean ones. It fills in the {placeholders}: each alert's own (see KEYS) plus {name}
-(one of the names in "Call me", picked afresh for every {name}), {cmdr}, {ship} and {here}. Numbers are
-spoken to a tenth at most ("52.0M" is "52 million"). If the file is missing or broken it falls back to
+(one of the names in "Call me", picked afresh for every {name}), {cmdr}, {ship} and {here}, and the crew's
+({engineer} and the like: CREW_WORDS), which name another crew member and are said only while the crew is on. Numbers
+are spoken to a tenth at most ("52.0M" is "52 million"). If the file is missing or broken it falls back to
 plain wording.
 
 The file is re-read whenever it changes, so an edit takes effect without restarting Outrider.
@@ -14,7 +15,8 @@ The file is re-read whenever it changes, so an edit takes effect without restart
 Lines you never want to hear again go in data/speech_banned.json, or next to a speech file of your own
 ({alert: [line, ...]}, written by the 👎 in the page's "Spoken lines" list and the voice lab's "✂ Cut this line").
 They are left out here, so the page (and its voice lab) gets the trimmed lists; a ban never empties a list (the last line of one cannot be banned, and a
-list whose every line is banned by hand is used whole).
+list whose every line is banned by hand is used whole), nor leaves it only lines that name a crew member (said only
+while the crew is on): its last plain line cannot be banned either.
 """
 import json
 import os
@@ -178,7 +180,8 @@ def style_speaker(styles, style):
 
 
 def fills(key):
-    return set(PLACEHOLDER.findall(KEYS.get(key, ""))) | set(ALWAYS)
+    """The placeholders a line of alert `key` may hold: its own (KEYS), the ones always there and the crew's."""
+    return set(PLACEHOLDER.findall(KEYS.get(key, ""))) | set(ALWAYS) | set(CREW_WORDS)
 
 
 def check(doc):
@@ -213,7 +216,7 @@ def check(doc):
         if not isinstance(entry, dict):
             problems.append(f'"{key}" must be an object of personality lists')
             continue
-        allowed = fills(key)
+        allowed, speakers = fills(key), crew_speakers(key)
         for style, versions in entry.items():
             if style.startswith("_") or style in ("when",):
                 continue
@@ -227,6 +230,12 @@ def check(doc):
                 bad = set(PLACEHOLDER.findall(v)) - allowed
                 if bad:
                     problems.append(f'"{key}" / "{style}": {{{"}, {".join(sorted(bad))}}} is not filled for this alert in "{v}"')
+                own = [r for r in crew_named(v) if r in speakers]   # a crew member never names itself
+                if own:
+                    problems.append(f'"{key}" / "{style}": {{{own[0]}}} names the crew member who says this alert in "{v}"')
+            if versions and all(crew_named(v) for v in versions):
+                problems.append(f'"{key}" / "{style}": every line names a crew member, so with the crew off this alert has '
+                                f'none: keep lines without one too')
     return problems
 
 
@@ -290,7 +299,8 @@ def apply_bans(lines, bans):
         for style, versions in entry.items():
             if _is_list(style, versions):
                 kept = [v for v in versions if v not in cut]
-                if versions and not kept:
+                # every line banned, or every plain one (the crew's lines alone would leave the alert nothing with it off)
+                if versions and (not kept or (not all(map(crew_named, versions)) and all(map(crew_named, kept)))):
                     whole.append(f"{key}/{style}")
                     kept = versions
                 new[style] = kept
@@ -391,6 +401,9 @@ class SpeechLines:
             for vs in homes:
                 if all(v == template or v in cut for v in vs):
                     return 409, {"error": "that is the last line left in its list: an alert never goes quiet"}
+                if not crew_named(template) and all(v == template or v in cut for v in vs if not crew_named(v)):
+                    return 409, {"error": "that is the last line in its list that names no crew member: with the crew off "
+                                          "the alert would have nothing to say"}
             cut.append(template)
         elif not ban:
             cut = [t for t in cut if t != template]
@@ -493,11 +506,76 @@ CREW_ROLES = (
 CREW_IDS = tuple(r[0] for r in CREW_ROLES)
 CREW_SHORT = {r[0]: r[2] for r in CREW_ROLES}
 CREW_ROW_ROLE = {row: r[0] for r in CREW_ROLES for row in r[3]}   # an alert row -> its role by default
+# The speech keys each alert row says (page.js ROW_KEYS) and the danger keys (page.js DANGER: Tactical's while the
+# Danger switch is on), so the checks know who says a line on the default table; tests/test_crew.py keeps both in step
+# with the page. (rig_leash: a danger tag with plain words, no lines of its own.)
+ROW_KEYS = {
+    "arrival": ("arrival_undiscovered", "arrival_discovered", "region", "streak_new", "streak_known"),
+    "game": ("game_start", "welcome_back", "game_exit", "session_recap"), "jump": ("fsd_charge",), "brief": ("arrival_brief",),
+    "fss": ("fss_done", "fss_nothing", "fss_unfinished"), "leaving": ("leaving",),
+    "fuel": ("fuel_low", "fuel_star", "fuel_target", "fuel_topup"), "scoop": ("tank_full",), "scoopstop": ("scoop_stopped",),
+    "supercharge": ("supercharged",), "refuelshort": ("fuel_short",), "lastscoop": ("fuel_last_scoop",),
+    "autotarget": ("autotarget_nothing",), "wrongtarget": ("wrong_target",),
+    "find": ("find_body", "find_bio", "mapped_before", "sample_clear"), "jumponium": ("jumponium",),
+    "sampling": ("bio_done_last", "bio_done_more", "bio_tag_near", "left_body"), "approach": ("high_g",),
+    "bodybrief": ("body_brief",), "sell": ("docked_sell", "sold", "undocked_unsold"), "saleleft": ("sale_left",),
+    "unsold": ("unsold_warn", "unsold_urgent"), "firstsseen": ("firsts_seen",), "hull": ("hull", "heat", "interdicted"),
+    "carrier": ("carrier_arrived", "carrier_departs"), "codex": ("codex",), "phenomena": ("phenomena",), "ggg": ("ggg",),
+    "rare_star": ("rare_star",), "surface_site": ("surface_site",), "signal_poi": ("signal_poi",), "curious": ("curious",),
+    "loss": ("ship_lost",), "rigleash": ("rig_leash",),
+}
+DANGER = ("hull", "heat", "interdicted", "fuel_low", "fuel_star", "fuel_target", "fuel_topup", "fuel_short", "fuel_last_scoop",
+          "carrier_departs", "ship_lost", "rig_leash")
+# The crew placeholders (crew batch 3, the author's idea of 2026-10-13): a line may name another crew member, one
+# placeholder per role ("...ask {engineer} whether the tank can take that stretch"). Filled with the member's name when
+# Settings gives it one (the name in every position: "Mira", never "the Mira"), else these words, with a capital at a
+# sentence's start (the line's start, or after ". ", "! ", "? ", "... ", as filled: "{text} {engineer}" after a {text}
+# ending in a full stop starts one). "the Engineer", not "the Chief Engineer";
+# Comms and Tactical take no article, as crews say them. Optional in every alert's lines. A line holding any of them is
+# said only while the crew is on, and never by the member it names: check() rejects that on the default table
+# (crew_speakers), and the page skips it at pick time for a row moved to another member.
+CREW_WORDS = {"xo": "the XO", "navigator": "the Navigator", "science": "the Science Officer",
+              "exobiologist": "the Exobiologist", "engineer": "the Engineer", "quartermaster": "the Quartermaster",
+              "comms": "Comms", "tactical": "Tactical", "mining": "the Mining Officer"}
+CREW_PLACEHOLDER = re.compile(r"\{(" + "|".join(CREW_WORDS) + r")\}")
+# made-up names for trying the crew's lines (the voice lab's Audition: crew lines, for a member with no name of its own)
+CREW_SAMPLES = {"xo": "Kade", "navigator": "Rook", "science": "Ada", "exobiologist": "Ines", "engineer": "Mira",
+                "quartermaster": "Bram", "comms": "Tess", "tactical": "Vance", "mining": "Dov"}
 
 
 def crew_roles_info():
-    """CREW_ROLES for the page: [{id, title, short, rows}], the XO first."""
-    return [{"id": i, "title": t, "short": s, "rows": list(rows)} for i, t, s, rows in CREW_ROLES]
+    """CREW_ROLES for the page: [{id, title, short, rows, words, sample}], the XO first (`words`: its placeholder's
+    words without a name, `sample`: a made-up name for trying lines)."""
+    return [{"id": i, "title": t, "short": s, "rows": list(rows), "words": CREW_WORDS[i], "sample": CREW_SAMPLES[i]}
+            for i, t, s, rows in CREW_ROLES]
+
+
+def crew_speakers(key):
+    """The crew members who say alert `key` on the default table: its rows' roles, Tactical for a danger key (the
+    Danger switch is on by default, and off the row's member says it), the XO for a key no row says (speech on)."""
+    roles = {CREW_ROW_ROLE[row] for row, keys in ROW_KEYS.items() if key in keys and row in CREW_ROW_ROLE}
+    if key in DANGER:
+        roles.add("tactical")
+    return roles or {"xo"}
+
+
+def crew_named(text):
+    """The crew members a line names ({engineer}...), in order, each once; [] for a plain line."""
+    return list(dict.fromkeys(CREW_PLACEHOLDER.findall(text)))
+
+
+def sentence_start(before):
+    """Whether a placeholder after `before` (the line up to it, as filled) opens a sentence: the line's start, or after
+    ". ", "! ", "? " or "... " (and "… ")."""
+    return not before.strip() or before.endswith((". ", "! ", "? ", "… "))
+
+
+def crew_says(role, names=None, start=False):
+    """What a crew placeholder says: the member's name from `names` ({role: name}) when it has one, else its words
+    ("the Engineer"), with a capital at a sentence's start ("The Engineer")."""
+    name = (names or {}).get(role)
+    w = name.strip() if isinstance(name, str) and name.strip() else CREW_WORDS[role]
+    return w[:1].upper() + w[1:] if start else w
 
 
 # the voice lab's Audition (page.js AUDITION_KEYS): one personality across the alerts that matter, in a session's order
@@ -509,19 +587,25 @@ def names_list(text):
     return [x.strip() for x in str(text or "").split(",") if x.strip()]
 
 
-def fill(text, values, names=DEFAULT_NAMES, rng=None):
-    """A line with its {placeholders} filled: every {name} is its own random pick from `names`."""
+def fill(text, values, names=DEFAULT_NAMES, rng=None, crew=None):
+    """A line with its {placeholders} filled: every {name} is its own random pick from `names`; a crew placeholder
+    ({engineer}) is the member's name from `crew` ({role: name}) or its words (crew_says, page.js fillLine)."""
     import random
     rng = rng or random
     pool = names_list(names) or ["Commander"]
 
-    def one(m):
-        k = m.group(1)
+    out, last = [], 0
+    for m in PLACEHOLDER.finditer(text):   # in order: a crew placeholder looks at the line as filled so far
+        out.append(text[last:m.start()])
+        last, k = m.end(), m.group(1)
         if k == "name":
-            return rng.choice(pool)
-        v = values.get(k)
-        return "" if v is None else str(v)
-    return PLACEHOLDER.sub(one, text)
+            out.append(rng.choice(pool))
+        elif k in CREW_WORDS:
+            out.append(crew_says(k, crew, sentence_start("".join(out))))
+        else:
+            v = values.get(k)
+            out.append("" if v is None else str(v))
+    return "".join(out) + text[last:]
 
 
 _PROC_NAME = re.compile(r"\b([A-Z])([A-Z])-([A-Z]) ([a-h])(\d+)(?:-(\d+))?\b")

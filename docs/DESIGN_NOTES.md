@@ -842,9 +842,29 @@ upstream project's choices, not rules of the game.
   member's row is a grid (the same columns on every row): its name, personality, voice, speaker, ▶ and ↺ on one line,
   Speaks for under them, and at phone width two columns. Speaks for is worded from the page's `ROW_WORDS`, at most six then "and N more";
   a danger row's owner is kept in the Alerts column with "· spoken by Tactical (danger)" beside it (the carrier's row,
-  whose departure warning alone is danger: "its danger lines by Tactical"). "Audition: crew lines" comes with the crew
-  lines (batch 3) and is not on the page yet. ▶ and the by-crew audition play through the voice lab's player, never the
-  alert queue, as S40's ▶ does. The tablet's Settings sheet has none of it: the crew is set on the PC.
+  whose departure warning alone is danger: "its danger lines by Tactical"). ▶, the by-crew audition and (batch 3) the
+  crew-lines audition play through the voice lab's player, never the alert queue, as S40's ▶ does. The tablet's Settings
+  sheet has none of it: the crew is set on the PC.
+- **Crew members mention each other** (crew batch 3, 2026-10-13; the author's idea of that day). One placeholder per role,
+  named by the role's id (`{engineer}`, `{xo}`...; `outrider.speech.CREW_WORDS`, served as `crew_roles`' `words`):
+  the member's name when Settings gives it one (the name in every position: "Mira", never "the Mira"), else the role
+  as a crew says it ("the Engineer", not "the Chief Engineer", which stays Settings' title; Comms and Tactical without
+  an article), capitalised at a sentence's start. A sentence's start is judged on the line as filled so far, not on the
+  template, so "{text} {engineer} agrees." after a briefing ending in a full stop says "The Engineer". Such a line is
+  picked only while the crew is on: with it off every alert sounds exactly as before, which is why every list keeps at
+  least its old plain lines (the checks report a list of crew lines only, and a 👎 that would leave a list none is
+  refused, 409). A member never mentions itself: `check()` rejects a line naming whoever says its alert on the default
+  table (`crew_speakers`: the rows' member, Tactical for a danger key since the Danger switch is on by default, the XO
+  for speech on), which needs page.js `ROW_KEYS` and `DANGER` in Python too (`outrider.speech.ROW_KEYS`/`DANGER`, kept
+  in step by a test); a row moved in Settings → Alerts, a danger line with the switch off, and the XO standing in are
+  covered at pick time instead (`crewLineOk` against the member `crewMember` resolved). The placeholders are optional for
+  every alert rather than listed per key in `KEYS`, so a player can add them anywhere. The shipped lines (78 per
+  personality list, 3 per alert for 26 alerts where one member mentioning another is natural: arrivals, briefings,
+  bodies, biology, fuel, the hull, sales, the carrier, the session's end; never the one-word acknowledgements) talk
+  about the member, never to it, since a vocative would read "The Navigator, plot a course"; and they claim nothing a
+  crew member could not know (opinions and advice, no invented ship faults). "XO" has a shipped respelling, "ex-OH"
+  (resources/pronounce.json), since espeak reads it "zo". Audition: crew lines plays one such line per alert in each
+  personality with made-up names (`CREW_SAMPLES`) for a member without one, so the author can judge them by ear.
 - **Find a setting filters, it does not search a list** (S39, 2026-10-13): the box at the top of Settings hides what
   does not match in place, so a match is the setting itself, ready to change. A row shows when every word is in its
   text, its section's heading or the config key it defaults from (`data-find`), at least one in the row itself; a word

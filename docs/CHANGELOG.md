@@ -2,6 +2,40 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-13 · The crew, batch 3: crew members mention each other, "XO" said right, Audition: crew lines
+The last of three batches of the crew: lines where one crew member mentions another ("Fuel 18 percent. Ask the
+Navigator for the nearest scoopable star."). With the crew off nothing changes: you hear exactly the lines you did.
+- **The placeholders**: `{navigator}`, `{science}`, `{exobiologist}`, `{engineer}`, `{quartermaster}`, `{comms}`,
+  `{tactical}`, `{mining}`, `{xo}`, optional in every alert's lines. Each says the member's name when Settings gives it
+  one ("Mira", in every position), else its role as a crew says it ("the Engineer", not "the Chief Engineer"; "Comms"
+  and "Tactical" without an article), with a capital at a sentence's start (the line's start, or after ". ", "! ",
+  "? ", "... ", judged on the line as filled, so a briefing's full stop counts). Filled the same way on the page
+  (`lineVars`, `fillLine`) and in `outrider.speech.fill`; the page reads the words from GET `/api/speech`'s `crew_roles`.
+- **The rules**: such a line is picked only while the crew is on, and never by the member it names. The checks reject a
+  line naming whoever says its alert on the default table (the row's member, Tactical for a danger line, the XO for
+  speech on: `crew_speakers`, from Python copies of page.js `ROW_KEYS` and `DANGER` that a test keeps in step) and a list
+  holding only crew lines; at pick time a row moved to another member, a danger line with its switch off and the XO
+  standing in skip the lines naming themselves. A 👎 that would leave a list no plain line is refused (409), and a list
+  whose plain lines are all banned by hand is used whole.
+- **The new lines**: 390, 78 in each personality list (business, sarcastic, sarcastic_profane, sweet, sweet_profane):
+  3 per list for 26 alerts where one member mentioning another is natural (the undiscovered arrival, the briefing, the
+  FSS done, leaving, a bio body ahead, a new region, codex, rare stars, high-g approaches, valuable bodies, biology
+  found, a body's last species, a body left unfinished, low fuel, an unscoopable star, tank full, jumponium, hull,
+  supercharged, docked to sell, sold, unsold at the red level, the carrier arrived, someone scanning your firsts, the
+  session recap, welcome back), each in its list's tone and about another member, never to it. Every list keeps all
+  its old plain lines.
+- **"XO"** is said "ex-OH" (resources/pronounce.json): espeak alone reads it "zo".
+- **Audition: crew lines** (Settings → Voice → Crew and the voice lab): one crew line per alert that has them, in each
+  personality (the lab's picked one, if any), with your crew's names and made-up ones for a member without. The XO note
+  now says names are spoken when another member mentions them; the lab's lines take crew lines as the alerts would.
+- Docs: the voice guide's crew section (crew lines, the placeholder table for writing your own), DESIGN_NOTES,
+  AGENT_GUIDE, and speech.json's own readme.
+- Tests: `tests/test_crew.py` (the placeholders and words, the fill in both positions and after a filled {text}, who says
+  a key, `ROW_KEYS`/`DANGER` against the page, the own-role and crew-only checks, the ban guard, the shipped lines: every
+  list's plain lines kept, crew lines for 25+ alerts in each list, none a vocative; "XO" through the respelling path); a
+  smoke check that a crew line is never picked with the crew off, that `{engineer}` says "the Engineer" and "Mira" when
+  named, a moved row never names its new member, and the lab's crew lines and their audition.
+
 ## 2026-10-13 · The crew, batch 2: Settings' crew table, the voices kept loaded, the Alerts Crew column
 The second of three batches of the crew: the screen the author approved (the mockup of 2026-10-13), built with the
 page's own parts so it works in every theme and at phone width. The crew's own lines (and "Audition: crew lines") come

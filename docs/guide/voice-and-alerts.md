@@ -105,8 +105,9 @@ Outrider runs (a Docker server too):
   **Select** picks one you already have.
 - **Lines**: pick an alert and a personality for **▶ Random line** (filled with made-up values), or **▶ Audition** for
   eight key alerts in a row. A personality with a voice or speaker of its own speaks in it. **▶ Audition: by crew**
-  has each crew member say one of its own lines in its own voice and personality. **✂ Cut this line** bans the line
-  just played, like 👎.
+  has each crew member say one of its own lines in its own voice and personality. **▶ Audition: crew lines** plays one
+  line where a crew member mentions another for each alert that has them, in each personality (or the one picked),
+  with your crew's names and made-up ones for a member without. **✂ Cut this line** bans the line just played, like 👎.
 - **Your own words**: type anything for **▶ Speak**, or **⬇ Save WAV** to keep it.
 - **How is it said**: a word the voice says wrong, said your way. Pick or type the word, write how it sounds as
   syllables joined by "-" with the stressed one in capitals (**fon-TIK-yoo-loo-uh**; "uh", "eh", "ih" are short
@@ -187,7 +188,8 @@ the sentence ends:
 | Tactical | every danger line (while Danger lines always in Tactical's voice is on) |
 | Mining Officer | the Rhino's rigs |
 
-- **The table.** A row per crew member: an optional **Name** (shown in Settings and the voice lab, never spoken), its
+- **The table.** A row per crew member: an optional **Name** (shown in Settings and the voice lab, and said when another
+  crew member mentions it: see Crew lines below), its
   **Personality** (whose lines it says) and **Voice** (and **Speaker**, for a voice of many people), what it **speaks
   for**, **▶** to hear one of its lines and **↺** to put it back to "as the XO". The XO row is the main voice and the
   personalities you ticked: changing its voice changes the main voice.
@@ -202,6 +204,32 @@ the sentence ends:
   member there. A danger alert says "spoken by Tactical (danger)" while that switch is on.
 - Outrider keeps the crew, so every browser and the tablet (with Play alerts here) speak with it. The tablet's own
   Settings has none of this: the crew is set on the PC.
+- **Crew lines.** With the crew on, some lines have one crew member mention another: "Fuel 18 percent. Ask the Navigator
+  for the nearest scoopable star." (about 3 per alert in each personality, for 26 alerts: arrivals, briefings, bodies,
+  biology, fuel, the hull, sales, your carrier, the session's end). A member with a name is called by it ("Ask Mira");
+  without one, by its role. They are said only while the crew is on (with it off you hear exactly the lines you heard
+  before), and never by the member they mention: move the fuel alerts to the Navigator and the lines that mention the
+  Navigator are left out for them. **▶ Audition: crew lines** (here and in the voice lab) plays them.
+- **Writing your own** (in `speech.json`): any line may name a crew member with these placeholders. Each says the
+  member's name when it has one, else its role, with a capital when it starts a sentence (the line's start, or after
+  ". ", "! ", "? " or "... "):
+
+  | Placeholder | Says (mid-sentence) | At a sentence's start |
+  |---|---|---|
+  | `{navigator}` | the Navigator | The Navigator |
+  | `{science}` | the Science Officer | The Science Officer |
+  | `{exobiologist}` | the Exobiologist | The Exobiologist |
+  | `{engineer}` | the Engineer | The Engineer |
+  | `{quartermaster}` | the Quartermaster | The Quartermaster |
+  | `{comms}` | Comms | Comms |
+  | `{tactical}` | Tactical | Tactical |
+  | `{mining}` | the Mining Officer | The Mining Officer |
+  | `{xo}` | the XO (said "ex-OH") | The XO |
+
+  Talk about the member, never to it ("ask {navigator}", not "{navigator}, plot a course": that would be "the
+  Navigator, plot a course"). A line may not mention the member who says its alert (the Engineer never says
+  `{engineer}`; danger lines, Tactical's, never `{tactical}`), and every alert keeps lines that mention nobody, for when
+  the crew is off: Settings → Voice reports either mistake, and a 👎 that would leave an alert only crew lines is refused.
 
 **What it says**
 

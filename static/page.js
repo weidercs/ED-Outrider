@@ -2329,10 +2329,25 @@ function lineVars(vars) {
   const all = {name: () => names.length ? names[Math.floor(Math.random() * names.length)] : "Commander",
                cmdr: data && data.commander && data.commander.name, ship: data && data.ship ? shipLabel(data.ship.name, data.ship.type) : null,
                here: data && data.position && data.position.name};
+  // the crew's ({engineer}...): a member's name when Settings gives it one, else its words ("the Engineer")
+  for (const r of crewRoles()) all[r.id] = crewName(r.id) || r.words;
   for (const [k, v] of Object.entries(vars)) if (v != null && v !== "") all[k] = v;
   return all;
 }
-const fillLine = (text, all) => text.replace(/\{(\w+)\}/g, (_, k) => all[k] == null ? "" : String(typeof all[k] === "function" ? all[k]() : all[k]));
+// A crew placeholder that opens a sentence (the line's start, or after ". ", "! ", "? ", "... ", as filled so far: a
+// {text} ending in a full stop counts) starts with a capital: "The Engineer" (outrider.speech.fill, the same rule)
+const CREW_START = /(?:^\s*|[.!?…] )$/;
+function fillLine(text, all) {
+  let out = "", last = 0;
+  for (const m of text.matchAll(/\{(\w+)\}/g)) {
+    out += text.slice(last, m.index); last = m.index + m[0].length;
+    const k = m[1];
+    if (all[k] == null) continue;
+    const v = String(typeof all[k] === "function" ? all[k]() : all[k]);
+    out += isCrewKey(k) && CREW_START.test(out) ? v.charAt(0).toUpperCase() + v.slice(1) : v;
+  }
+  return out + text.slice(last);
+}
 const allFilled = (text, all) => [...text.matchAll(/\{(\w+)\}/g)].every(m => all[m[1]] != null);
 // Danger lines: a joke at 20% hull costs clarity, so with "Danger alerts always down to business" ticked (the
 // default) these come only from the business lists and never swear, whatever personalities are ticked.
@@ -2356,17 +2371,18 @@ let linePlain = false;   // set while a window that is not speaking words a capt
 function line(key, vars = {}, plain = "") {
   if (linePlain) return plain;
   const entry = speechLib.lines && speechLib.lines[key];
+  // the crew (when on): the row's crew member speaks in its own personality, when it has lines for this alert (else
+  // as the XO: the ticked ones); "as the XO" is the ticked ones too, the shift included. A line naming a crew member
+  // ({engineer}) only while the crew is on, and never by the member it names (crewLineOk)
+  const crew = lineCrew = crewMember(lineRow, key), mine = crew && crew.personality;
   const listOf = name => !entry || typeof entry !== "object" || !Array.isArray(entry[name]) ? []
-    : entry[name].filter(x => typeof x === "string" && x.trim());
+    : entry[name].filter(x => typeof x === "string" && x.trim() && crewLineOk(x, crew));
   // a danger line: business alone (a custom speech.json without business lines falls back to the ticked ones)
   const serious = DANGER.has(key) && speechDangerBusiness();
   const ticked = speechStyles(), shift = speechShift();
   if (shift && !(shiftStyle && ticked.includes(shiftStyle))) pickShift();   // first line, or its personality unticked
   // the personality on shift, unless it has nothing for this alert (then every ticked one, as without the tick)
   const onShift = shift && shiftStyle && (listOf(shiftStyle).length || (speechProfane() && listOf(shiftStyle + "_profane").length));
-  // the crew (when on): the row's crew member speaks in its own personality, when it has lines for this alert (else
-  // as the XO: the ticked ones); "as the XO" is the ticked ones too, the shift included
-  const crew = lineCrew = crewMember(lineRow, key), mine = crew && crew.personality;
   const own = mine && (listOf(mine).length || (speechProfane() && listOf(mine + "_profane").length)) ? mine : null;
   const styles = serious && listOf("business").length ? ["business"] : own ? [own] : onShift ? [shiftStyle] : ticked;
   const lists = suffix => styles.flatMap(st => listOf(st + suffix).map(x => [st, x]));   // [personality, line]
@@ -2415,6 +2431,15 @@ let lineCrew = null;  // the crew member line() picked the last line for (crewMe
 let crewUi = false;   // Settings' crew table and memory note are set up (drawCrew may run: crew batch 2, further down)
 const crewRoles = () => Array.isArray(speechLib.crew_roles) ? speechLib.crew_roles : [];
 const crewTitle = id => (crewRoles().find(r => r.id === id) || {}).short || id;
+// The crew's placeholders (crew batch 3): one per role, {engineer} and the like (a role's id), naming another crew
+// member in a line. Filled with its name when Settings gives it one, else crew_roles' words ("the Engineer"; lineVars,
+// fillLine). Such a line is said only while the crew is on, and never by a member it names (a row moved to it, a danger
+// line in Tactical's voice, the XO standing in): outrider.speech's checks reject that on the default table.
+const isCrewKey = k => crewRoles().some(r => r.id === k);
+const crewName = role => { const m = data && data.crew && data.crew.members && data.crew.members[role];
+  return m && typeof m.name === "string" && m.name.trim() ? m.name.trim() : null; };
+const crewNamed = t => [...String(t).matchAll(/\{(\w+)\}/g)].map(m => m[1]).filter(isCrewKey);
+const crewLineOk = (t, crew) => { const n = crewNamed(t); return !n.length || !!(crew && !n.includes(crew.role)); };
 // the crew member who says a line of alert row `row` with speech key `key`: {role, personality, voice, speaker, fill,
 // for}; null with the crew off. `row` null (a line that is no alert's: speech on, the ▶ try) is the XO's.
 function crewMember(row, key) {
@@ -9291,7 +9316,7 @@ function drawCrew(force = false) {
   document.getElementById("crewBox").hidden = !c || !roles.length;
   document.getElementById("crewOn").checked = crewOn();
   document.getElementById("crewDanger").checked = crewDangerOn();
-  for (const id of ["crewDangerWrap", "crewAudition", "crewTable", "crewXoNote", "ttsXo", "ttsXoHint", "styleVoicesCrew"])
+  for (const id of ["crewDangerWrap", "crewAudition", "crewLinesAudition", "crewTable", "crewXoNote", "ttsXo", "ttsXoHint", "styleVoicesCrew"])
     document.getElementById(id).hidden = !on;
   drawAlertCrew(force);
   if (!on) { crewDrawn = ""; return; }
@@ -9407,10 +9432,32 @@ async function crewAudition(out) {
   }
   out("Audition done", false);
 }
+// Audition: crew lines (crew batch 3): one line naming another crew member for each alert that has them, in each
+// personality (or the one picked in the lab), with the names Settings gives and made-up ones (crew_roles' sample) for
+// a member without, so the author hears how they sound; through the voice lab's player, as Audition does
+async function crewLinesAudition(out, chosen = null) {
+  if (!Object.keys(speechLib.lines || {}).length) await loadSpeechLib();
+  labStop();
+  const names = Object.fromEntries(crewRoles().map(r => [r.id, crewName(r.id) || r.sample]));
+  const styles = chosen ? [chosen] : Object.keys(speechLib.styles || {});
+  let n = 0;
+  for (const k of Object.keys(speechLib.lines || {})) for (const st of styles) {
+    const ln = labLine(k, st, {crew: "only", names});
+    if (!ln) continue;   // no crew lines for this alert in that personality
+    n++;
+    out(`${k} · ${labStyleName(st)}: “${spokenText(ln.text)}”`, false);
+    if (!(await labPlayLine(ln))) return;   // stopped (or failed): the audition ends
+    const token = labToken;
+    await new Promise(res => setTimeout(res, 1500));
+    if (token !== labToken) return;
+  }
+  out(n ? "Audition done" : "No lines naming a crew member in the lines file", !n);
+}
 const crewOut = (t, bad) => { const m = document.getElementById("crewMsg"); m.textContent = t; m.className = bad ? "hint warnc" : "hint"; };
 document.getElementById("crewOn").onchange = e => crewPost({on: e.target.checked});
 document.getElementById("crewDanger").onchange = e => crewPost({danger: e.target.checked});
 document.getElementById("crewAudition").onclick = () => crewAudition(crewOut);
+document.getElementById("crewLinesAudition").onclick = () => crewLinesAudition(crewOut);
 crewUi = true;
 {
   const tb = document.querySelector("#crewTable tbody");
@@ -9557,15 +9604,21 @@ async function labPlayUrl(url, failed) {
 }
 const labStyleName = st => { const base = st.replace(/_profane$/, ""), v = (speechLib.styles || {})[base];
   return (typeof v === "string" ? v : (v && v.label) || base) + (st.endsWith("_profane") ? ", swearing" : ""); };
-// a random line of alert `key` in personality `style` (null: any, clean lines only), filled with sample values
-function labLine(key, style) {
+// a random line of alert `key` in personality `style` (null: any, clean lines only), filled with sample values. The
+// lines naming a crew member ({engineer}) as the alerts take them: only while the crew is on, never one naming the
+// member who says this alert now (`opts.crew` "only": those lines alone, whatever the switch; `opts.names`: {role: name}
+// over the crew's own)
+function labLine(key, style, opts = {}) {
   const e = speechLib.lines && speechLib.lines[key];
   if (!e || typeof e !== "object") return null;
   const styles = style ? [style] : Object.keys(speechLib.styles || {});
-  const pool = styles.flatMap(st => (Array.isArray(e[st]) ? e[st] : []).filter(x => typeof x === "string" && x.trim()).map(x => [st, x]));
+  const row = Object.keys(ROW_KEYS).find(r => ROW_KEYS[r].includes(key)) ?? null, who = crewOn() ? crewMember(row, key) : null;
+  const keep = x => { const n = crewNamed(x);
+    return opts.crew === "only" ? n.length > 0 && !(who && n.includes(who.role)) : crewLineOk(x, who); };
+  const pool = styles.flatMap(st => (Array.isArray(e[st]) ? e[st] : []).filter(x => typeof x === "string" && x.trim() && keep(x)).map(x => [st, x]));
   if (!pool.length) return null;
   const [st, template] = pool[Math.floor(Math.random() * pool.length)];
-  return {key, style: st, template, text: fillLine(template, lineVars(LINE_SAMPLES[key] || {}))};
+  return {key, style: st, template, text: fillLine(template, lineVars({...(opts.names || {}), ...(LINE_SAMPLES[key] || {})}))};
 }
 // play a line: as its personality is heard (S40) when it has a voice or speaker of its own (picked in Personality voices,
 // else speech.json's; an uninstalled voice is the main voice, as in the alerts), else in the voice part's voice and
@@ -9712,6 +9765,8 @@ labEl("labAssign").onclick = async () => {
 };
 labEl("labCrewRole").onchange = labDrawInUse;
 labEl("labCrewAudition").onclick = () => crewAudition((t, bad) => { labEl("labWords").textContent = t; if (bad) labMsg(t, true); });
+labEl("labCrewLines").onclick = () => crewLinesAudition((t, bad) => { labEl("labWords").textContent = t; if (bad) labMsg(t, true); },
+  labEl("labStyle").value || null);
 labEl("labStyle").addEventListener("change", () => {   // the Lines' personality picked: Give follows it
   const base = labEl("labStyle").value.replace(/_profane$/, "");
   if (base && [...labEl("labGiveStyle").options].some(o => o.value === base)) { labEl("labGiveStyle").value = base; labDrawInUse(); }

@@ -478,5 +478,129 @@ class VoicesLoaded(unittest.TestCase):
             self.assertIn("voices_preload", text, doc)
 
 
+class CrewLines(unittest.TestCase):
+    """Crew batch 3: lines naming another crew member ({engineer}...): the placeholders and their words, said only with the
+    crew on and never by the member they name (the checks on the default table), the ban guard, the shipped lines, "XO"."""
+
+    def test_placeholders(self):
+        """One per role, the role's id; the plan's words (Comms and Tactical without an article, "the Engineer" not "the
+        Chief Engineer"); optional in every alert; none clashes with an alert's own; served with the roles."""
+        S = outrider.speech
+        self.assertEqual(set(S.CREW_WORDS), set(S.CREW_IDS))
+        self.assertEqual(set(S.CREW_SAMPLES), set(S.CREW_IDS))
+        self.assertEqual([S.CREW_WORDS[r] for r in ("engineer", "comms", "tactical", "xo", "science", "mining")],
+                         ["the Engineer", "Comms", "Tactical", "the XO", "the Science Officer", "the Mining Officer"])
+        for key in S.KEYS:
+            self.assertEqual(set(S.PLACEHOLDER.findall(S.KEYS[key])) & set(S.CREW_IDS), set(), key)
+            self.assertLessEqual(set(S.CREW_IDS), S.fills(key), key)
+        info = {r["id"]: r for r in S.crew_roles_info()}
+        self.assertEqual((info["engineer"]["words"], info["engineer"]["sample"]), ("the Engineer", "Mira"))
+
+    def test_fill(self):
+        """The name when one is set, in every position; else the words, capitalised at a sentence's start (the line's,
+        or after ". ", "! ", "? ", "... " as filled: a {text} ending in a full stop counts)."""
+        fill = outrider.speech.fill
+        line = "{engineer} wants a star. Ask {engineer}! {navigator}? Fine... {comms} and {tactical}, then {xo}."
+        self.assertEqual(fill(line, {}), "The Engineer wants a star. Ask the Engineer! The Navigator? Fine... Comms and "
+                                         "Tactical, then the XO.")
+        self.assertEqual(fill(line, {}, crew={"engineer": "Mira", "navigator": " ", "xo": "Kade"}),
+                         "Mira wants a star. Ask Mira! The Navigator? Fine... Comms and Tactical, then Kade.")
+        self.assertEqual(fill("{text} {engineer} agrees.", {"text": "Known. 4 bodies."}), "Known. 4 bodies. The Engineer agrees.")
+        self.assertEqual(fill("{text} {engineer} agrees.", {"text": "4 bodies"}), "4 bodies the Engineer agrees.")
+        self.assertEqual(fill("{name}, {exobiologist}'s turn.", {}, "Boss"), "Boss, the Exobiologist's turn.")
+
+    def test_who_says_a_key(self):
+        """The default table: a key's rows' member, Tactical for a danger key, the XO for speech on."""
+        sp = outrider.speech.crew_speakers
+        self.assertEqual([sp("fuel_low"), sp("tank_full"), sp("speech_on"), sp("game_start"), sp("find_body"),
+                          sp("carrier_departs"), sp("carrier_arrived")],
+                         [{"engineer", "tactical"}, {"engineer"}, {"xo"}, {"comms"}, {"exobiologist"},
+                          {"quartermaster", "tactical"}, {"quartermaster"}])
+
+    def test_row_keys_and_danger_in_step_with_the_page(self):
+        """outrider.speech.ROW_KEYS and DANGER (who says a key, for the checks) are page.js ROW_KEYS and DANGER."""
+        with open(PAGE_JS, encoding="utf-8") as f:
+            js = f.read()
+        start = js.index("const ROW_KEYS = {")
+        text = js[start:js.index("};", start)]
+        page = {k: tuple(re.findall(r'"(\w+)"', v)) for k, v in re.findall(r'(\w+): (\[[^\]]*\])', text)}
+        self.assertEqual(page, outrider.speech.ROW_KEYS)
+        danger = tuple(re.findall(r'"(\w+)"', js[js.index("const DANGER = new Set("):].split(")", 1)[0]))
+        self.assertEqual(danger, outrider.speech.DANGER)
+
+    def test_checks(self):
+        """A line naming the member who says its alert (the row's, Tactical for a danger line, the XO for speech on) is a
+        problem; naming another is fine; a list whose every line names a crew member is a problem (nothing with it off)."""
+        doc = {"styles": {"business": "B"}, "lines": {
+            "fuel_low": {"business": ["Fuel low.", "Ask {engineer}.", "Tell {tactical}.", "Ask {navigator}."]},
+            "tank_full": {"business": ["Full.", "Tell {tactical}.", "Tell {engineer}."]},
+            "speech_on": {"business": ["On.", "{xo} here."]},
+            "sold": {"business": ["{science} says hi. {still}"]}}}
+        probs = outrider.speech.check(doc)
+        self.assertEqual(len(probs), 5, probs)
+        for want in ('"fuel_low" / "business": {engineer} names the crew member', '"fuel_low" / "business": {tactical} names',
+                     '"tank_full" / "business": {engineer} names', '"speech_on" / "business": {xo} names',
+                     '"sold" / "business": every line names a crew member'):
+            self.assertTrue(any(p.startswith(want) for p in probs), want)
+
+    def test_a_ban_leaves_a_plain_line(self):
+        """The last line naming no crew member cannot be banned (with the crew off the alert would have none); a list
+        whose plain lines are all banned by hand is used whole."""
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "speech.json")
+            with open(path, "w") as f:
+                json.dump({"styles": {"business": "B"}, "lines": {"hull": {"business": [
+                    "Hull {pct}.", "Hull {pct}, ask {navigator}.", "Hull {pct}, ask {quartermaster}."]}}}, f)
+            sl = outrider.speech.SpeechLines(path)
+            self.assertEqual(sl.set_ban("hull", "Hull {pct}.")[0], 409)
+            self.assertEqual(sl.set_ban("hull", "Hull {pct}, ask {navigator}.")[0], 200)
+            with open(os.path.join(d, "speech_banned.json"), "w") as f:
+                json.dump({"hull": ["Hull {pct}."]}, f)
+            got = sl.lines()
+            self.assertEqual(len(got["lines"]["hull"]["business"]), 3)
+            self.assertEqual(got["banned_whole"], ["hull/business"])
+
+    def test_shipped_lines(self):
+        """resources/speech.json: every list keeps its plain lines (the shorter alerts' as many as before), and every
+        personality list has crew lines for at least 25 alerts, none a vocative ("The Navigator, plot...")."""
+        root = os.path.dirname(ed_outrider.STATIC_DIR)
+        with open(os.path.join(root, "resources", "speech.json"), encoding="utf-8") as f:
+            doc = json.load(f)
+        S = outrider.speech
+        self.assertEqual(S.check(doc), [])
+        short = {"mapped_before": 12, "bio_tag_near": 15, "autotarget_nothing": 15, "wrong_target": 15}
+        crew_keys, said = {}, []
+        for key, entry in doc["lines"].items():
+            for lst, vs in entry.items():
+                if lst == "when":
+                    continue
+                plain = [v for v in vs if not S.crew_named(v)]
+                want = 12 if key == "autotarget_nothing" and lst.endswith("_profane") else short.get(key, 50)
+                if key in ("fuel_short", "fuel_last_scoop") and lst != "business":
+                    want = 15
+                self.assertGreaterEqual(len(plain), want, f"{key}/{lst}")
+                crew = [v for v in vs if S.crew_named(v)]
+                if crew:
+                    crew_keys.setdefault(lst, set()).add(key)
+                said += crew
+        self.assertEqual(set(crew_keys), {"business", "sarcastic", "sarcastic_profane", "sweet", "sweet_profane"})
+        for lst, keys in crew_keys.items():
+            self.assertGreaterEqual(len(keys), 25, lst)
+        self.assertEqual(len(said), len(set(said)))
+        vocative = re.compile(r"(^|[.!?] )\{(%s)\}," % "|".join(S.CREW_IDS))
+        self.assertEqual([v for v in said if vocative.search(v)], [])
+
+    def test_xo_said_ex_oh(self):
+        """"XO" has a shipped respelling ("ex-OH"): espeak alone reads it "zo"."""
+        import outrider.pronounce as P
+        with tempfile.TemporaryDirectory() as d:
+            t = P.Table(P.SHIPPED, os.path.join(d, "none.json"))
+            self.assertEqual(t.words()["xo"], "ex-OH")
+            P._cache.clear()
+            self.addCleanup(P._cache.clear)
+            fake = lambda v, text: {"ex": "ɛks", "oh": "oʊ"}.get(text, text)   # noqa: E731
+            self.assertEqual(P.apply("Ask the XO.", "en-us", t, fake), "Ask the [[ɛksˈoʊ.]]")
+
+
 if __name__ == "__main__":
     unittest.main()

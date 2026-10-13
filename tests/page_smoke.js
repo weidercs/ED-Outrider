@@ -7455,6 +7455,73 @@ const releasePayloads = async () => {
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
     await releasePayloads();
   }
+  // Crew batch 3: lines naming another crew member ({engineer}...). With the crew off one is never picked (the plain
+  // line, or the plain wording when an alert has only those); with it on {engineer} says "the Engineer" (a capital at a
+  // sentence's start, also after a filled {text}) or the member's name, "Mira"; a member never says a line naming itself (a
+  // row moved to the Engineer, the XO standing in); the voice lab's crew lines take made-up names for a member without,
+  // and Audition: crew lines plays one per alert in each personality
+  {
+    holdPayloads();
+    const w = dom.window, before = errors.length;
+    const served = await (await fetch(base + "api/speech")).json();
+    w.eval(`window.__c3 = {crew: data.crew, lib: speechLib, play: labPlayLine, styles: localStorage.getItem("speechStyles"), noRec: lineNoRecord,
+        heard: JSON.stringify(recentLines)};
+      lineNoRecord = true; for (const k of Object.keys(recentLines)) delete recentLines[k];   // every line fresh: the picks are at random
+      speechLib = {version: "crew3", banned: {}, crew_roles: ${JSON.stringify(served.crew_roles)}, styles: {business: "Down to business"},
+        lines: {tank_full: {business: ["Tank full.", "{navigator} can plot."]},
+                fsd_charge: {business: ["Jumping. Ask {engineer} about the drive."]},
+                arrival_brief: {business: ["{text} {engineer} agrees."]},
+                speech_on: {business: ["{xo} here."]}}};
+      store.set("speechStyles", ["business"]);
+      const m = name => ({name, personality: null, voice: null, speaker: null, fill: null});
+      data.crew = {on: false, danger: true, rows: {}, members: {xo: m(null), navigator: m(null), engineer: m(null), science: m(null)}};
+      window.__pick = (row, key, vars, plain, n = 1) => { const out = new Set();
+        for (let i = 0; i < n; i++) { lineRow = row; try { out.add(line(key, vars, plain)); } finally { lineRow = null; } }
+        return [...out].sort(); };`);
+    const pick = (row, key, vars, plain, n = 1) => JSON.parse(w.eval(`JSON.stringify(__pick(${JSON.stringify(row)}, "${key}", ${JSON.stringify(vars)}, ${JSON.stringify(plain)}, ${n}))`));
+    const got = {};
+    got.off = [pick("scoop", "tank_full", {}, "Tank.", 20), pick("jump", "fsd_charge", {system: "X"}, "Jumping.")];
+    w.eval(`data.crew.on = true`);
+    got.on = [pick("scoop", "tank_full", {}, "Tank.", 30), pick("jump", "fsd_charge", {system: "X"}, "Jumping."),
+              pick("brief", "arrival_brief", {text: "Known. 4 bodies."}, "Brief.")];
+    w.eval(`data.crew.members.engineer.name = "Mira"`);
+    got.named = [pick("jump", "fsd_charge", {system: "X"}, "Jumping."), pick("brief", "arrival_brief", {text: "Known. 4 bodies."}, "Brief.")];
+    w.eval(`data.crew.rows = {jump: "engineer"}`);   // moved to the Engineer: never its own name
+    got.moved = pick("jump", "fsd_charge", {system: "X"}, "Jumping.");
+    w.eval(`data.crew.rows = {}`);
+    got.xoFor = pick(null, "speech_on", {}, "On.");   // the XO's own line: never {xo}
+    // the voice lab: as the alerts (none with the crew off), "only" with made-up names, and the audition
+    got.lab = JSON.parse(w.eval(`data.crew.members.engineer.name = null;
+      const a = labLine("fsd_charge", "business"), b = labLine("fsd_charge", "business", {crew: "only", names: {engineer: "Mira"}});
+      data.crew.on = false; const c = labLine("fsd_charge", "business"), e = labLine("tank_full", "business", {crew: "only"});
+      JSON.stringify([a && a.text, b && b.text, c, e && e.text])`));
+    w.eval(`window.__aud = []; labPlayLine = async ln => (window.__aud.push([ln.key, ln.style, ln.text]), true);
+      speechLib.lines = {fsd_charge: speechLib.lines.fsd_charge, tank_full: {business: ["Tank full."]}};
+      data.crew.members.engineer.name = null; window.__audSaid = [];`);
+    await w.eval(`crewLinesAudition((t, bad) => window.__audSaid.push([t, bad]))`);
+    got.audition = JSON.parse(w.eval(`JSON.stringify([window.__aud, window.__audSaid.slice(-1)])`));
+    got.buttons = [!!w.document.getElementById("labCrewLines"), !!w.document.getElementById("crewLinesAudition")];
+    w.eval(`const k = window.__c3; data.crew = k.crew; speechLib = k.lib; labPlayLine = k.play; lineNoRecord = k.noRec;
+      Object.assign(recentLines, JSON.parse(k.heard));
+      if (k.styles === null) localStorage.removeItem("speechStyles"); else localStorage.setItem("speechStyles", k.styles);
+      delete window.__c3; delete window.__pick; delete window.__aud; delete window.__audSaid;`);
+    const want = {
+      off: [["Tank full."], ["Jumping."]],
+      on: [["Tank full.", "The Navigator can plot."], ["Jumping. Ask the Engineer about the drive."], ["Known. 4 bodies. The Engineer agrees."]],
+      named: [["Jumping. Ask Mira about the drive."], ["Known. 4 bodies. Mira agrees."]],
+      moved: ["Jumping."],
+      xoFor: ["On."],
+      lab: ["Jumping. Ask the Engineer about the drive.", "Jumping. Ask Mira about the drive.", null, "The Navigator can plot."],
+      audition: [[["fsd_charge", "business", "Jumping. Ask Mira about the drive."]], [["Audition done", false]]],
+      buttons: [true, true],
+    };
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    const good = !bad.length && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| crew batch 3 lines |", good ? "no crew line with the crew off, {engineer} as the Engineer or Mira, never a member's own name, the lab's crew lines and their audition" :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+    await releasePayloads();
+  }
   // S39: Find a setting. A word leaves only the rows that match it (label, help, the config key a row defaults from, a
   // Server settings key loaded without opening its section), opens their sections and says how many; every section is
   // found by a word of its own rows and by its name; nothing matching says so; clearing puts every section back as it

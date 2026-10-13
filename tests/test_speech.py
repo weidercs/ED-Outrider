@@ -255,8 +255,9 @@ class Speech(unittest.TestCase):
                          "Sold 12.6 million credits, 3 thousand left now")
         self.assertEqual(outrider.speech.spoken_text("52.0M unsold, 12.64B banked, 1.96M left, 0.04M, 7.25 ly, 1.4M to map"),
                          "52 million unsold, 12.6 billion banked, 2 million left, 0 million, 7.2 ly, 1.4 million to map")
-        for key in outrider.speech.KEYS:   # the voice lab's sample values fill every placeholder an alert has
-            self.assertLessEqual(outrider.speech.fills(key) - set(outrider.speech.ALWAYS), set(outrider.speech.SAMPLES.get(key, {})), key)
+        for key in outrider.speech.KEYS:   # the voice lab's sample values fill every placeholder an alert has (the crew's: names)
+            self.assertLessEqual(outrider.speech.fills(key) - set(outrider.speech.ALWAYS),
+                                 set(outrider.speech.SAMPLES.get(key, {})) | set(outrider.speech.CREW_SAMPLES), key)
 
     def test_shipped_lines(self):
         # speech.json covers every alert in every personality, and the page asks for exactly those alerts
@@ -711,8 +712,9 @@ class BatchS2Voice(unittest.TestCase):
     def test_audition_alerts_exist(self):   # P19
         self.assertEqual(len(outrider.speech.AUDITION), 8)
         self.assertLessEqual(set(outrider.speech.AUDITION), set(outrider.speech.KEYS))
-        for key in outrider.speech.AUDITION:   # every one has sample values for its placeholders
-            self.assertLessEqual(outrider.speech.fills(key) - set(outrider.speech.ALWAYS), set(outrider.speech.SAMPLES.get(key, {})), key)
+        for key in outrider.speech.AUDITION:   # every one has sample values for its placeholders (the crew's: names)
+            self.assertLessEqual(outrider.speech.fills(key) - set(outrider.speech.ALWAYS),
+                                 set(outrider.speech.SAMPLES.get(key, {})) | set(outrider.speech.CREW_SAMPLES), key)
 
 
 class BatchAAudio(unittest.TestCase):

@@ -619,9 +619,10 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         <div class="mod inlineopts crewsw"><label><input type="checkbox" id="crewOn"> <b>Split the alerts among a crew</b></label>
           <label id="crewDangerWrap" hidden><input type="checkbox" id="crewDanger"> Danger lines always in Tactical's voice</label>
           <button type="button" class="try" id="crewAudition" hidden title="each crew member says one of its own lines in its own voice and personality (here, in this browser)">▶ Audition: by crew</button>
+          <button type="button" class="try" id="crewLinesAudition" hidden title="one line naming another crew member for each alert that has them, in each personality, with the names given here (made-up ones for a member without); here, in this browser">▶ Audition: crew lines</button>
           <span class="hint">each alert said by a crew member in its own personality and voice, so you know who is talking (and what about) before the sentence ends; who says which alert is in Settings → Alerts; off: one voice for everything</span></div>
         <table id="crewTable" class="crewtable" hidden><thead><tr><th>Role</th><th>Name</th><th>Personality</th><th>Voice</th><th>Speaker</th><th class="cfor">Speaks for</th><th></th><th></th></tr></thead><tbody></tbody></table>
-        <div id="crewXoNote" class="crewnote" hidden>The XO is your main voice: every crew member left "as the XO" speaks in it, and the XO steps in for any crew member whose voice cannot speak (not installed, failed to load), so no line is ever lost. Names are shown here and in the voice lab.</div>
+        <div id="crewXoNote" class="crewnote" hidden>The XO is your main voice: every crew member left "as the XO" speaks in it, and the XO steps in for any crew member whose voice cannot speak (not installed, failed to load), so no line is ever lost. A name is said when another crew member mentions that member ("ask Mira"); without one, its role ("ask the Engineer").</div>
         <span id="crewMsg" class="hint" role="status"></span>
       </div>
       <div class="mod" id="styleVoicesRow" hidden>Personality voices <span id="styleVoicesCrew" class="hint" hidden>(used by crew members whose voice is "as the personality")</span>
@@ -872,6 +873,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     <div class="mod inlineopts"><button type="button" id="labLine">▶ Random line</button>
       <button type="button" id="labAudition" title="eight key alerts in a row, in each personality (or the one picked)">▶ Audition</button>
       <button type="button" id="labCrewAudition" title="each crew member says one of its own lines in its own voice and personality">▶ Audition: by crew</button>
+      <button type="button" id="labCrewLines" title="one line naming another crew member for each alert that has them, in each personality (or the one picked), with the crew's names (made-up ones for a member without)">▶ Audition: crew lines</button>
       <button type="button" id="labCut" disabled title="never say the line just played again (every browser)">✂ Cut this line</button></div>
     <div id="labWords" class="labwords hint"></div>
     <h4>Your own words</h4>
