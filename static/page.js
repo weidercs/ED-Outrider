@@ -8506,7 +8506,7 @@ function cmdrProfileHtml(d) {
   const rank = r => `<tr><td class="unk">${esc(r.title)}</td><td><b>${esc(r.name)}</b></td>` +
     `<td class="cmbarcell">${r.progress == null ? "" : `<span class="cmbar" title="${r.progress}% of the way to ${esc(r.next || "")}"><span style="width:${Math.round(r.progress)}%"></span></span> <span class="unk">${Math.round(r.progress)}%</span>`}</td>` +
     `<td>${r.next ? `<span class="unk">next:</span> ${esc(r.next)}` : `<span class="ok">the top</span>`}` +
-    `${r.to_next != null ? ` <span class="unk" title="what that rank's step takes in ${esc(r.earned_by)}, by the community's figures, times the share still to go: an estimate">· about ${credits(r.to_next)} cr of ${esc(r.earned_by)} to go</span>` : ""}</td></tr>`;
+    `${r.to_next != null ? ` <span title="an estimate: about this much more ${esc(r.earned_by)} (what that rank's step takes, by the community's figures, times the share still to go)">in <b>${credits(r.to_next)} cr</b></span>` : ""}</td></tr>`;
   const rep = Object.entries(p.reputation || {}).map(([k, v]) => `${esc(k)} <b class="${v >= 35 ? "ok" : v <= -35 ? "noscoop" : ""}">${Math.round(v)}%</b>`).join(" · ");
   const ship = x => { const label = shipLabel(x.name, x.type), type = x.type_name || shipLabel(null, x.type);
     return `<tr><td><b>${esc(label)}</b>${type !== label ? ` <span class="unk">${esc(type)}</span>` : ""}</td>` +
