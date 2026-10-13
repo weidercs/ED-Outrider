@@ -2,6 +2,28 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · What a sample run pays from sample 1, a Retry for the colour tables, and someone else scanning your unsold firsts
+- **What a sample run pays, from sample 1** (S62): `sampling_summary` gains `value` (the species') and `factor` (×5 where
+  nobody had set foot, `own_firsts.bio_x5`), apart, so nothing multiplies twice (the run elsewhere's `value` keeps its
+  ×5 folded in). The on-body strip and Now's card: "🧬 Bacterium Aurasus · 1.0M (×5: 5.0M) · sample 1/3 · 500 m to go"
+  (page `runPays`); the overlay's Now on-body rows and the body panel's runs under way the same (`overlay.run_pays`).
+- **The colour tables missing** (S7): a failed first download no longer writes a bio_colours.json with no colours
+  (judged by `colours_available()`, never by the file); `bio.update_colours` fetches only ExploData's table (one
+  request; the colour builder shared with the rules update) and reloads the rules; POST `/api/bio/colours` (one at a
+  time, not pc_only) runs it on a worker, then bumps `bio_rules_gen` and dirties the bases, so variant guesses show
+  at once, not after a restart. A banner card while they are missing ("not downloaded", "Downloading…", "could not be
+  downloaded (<why>)") with **Retry** (`retry:bio_colours`), and "colours unavailable: tables not downloaded · Retry" /
+  "downloading…" / "failed: <why> · Retry" on the Exo-Biology checklist's line, the body panel's Bio section and Here's
+  legend. The payload's `bio_rules` gains `colours` and `colours_job`. verify.sh points ExploData offline.
+- **Someone else scanned your unsold firsts** (S6): the firsts watch's first sighting in a system (once per system: a
+  report never goes away) is a `firsts_seen` moment {system, bodies, first_ts, reported_ts, value, today, speak}: a card
+  and a notification each time, "👁 Someone else scanned your unsold Drojau LL-O b26-3 · 3 bodies reached Spansh 12
+  days after you (your scan 15 days ago) · 14.2M cr at stake · see My firsts" (the notification opens My firsts),
+  "N systems so far today" on a run of them; its own alerts row (Firsts scanned by others). Spoken at most once in 30
+  minutes (`FIRSTS_SEEN_SAY_S`, decided on the server): speech key `firsts_seen` {system, value}, 50 lines in each list,
+  the author's own among the business ones ("Heads up, someone else is scanning your unsold systems…"). The watch's
+  INSERT now names its columns. Its real sighting in game is for the author to see.
+
 ## 2026-10-12 · Import your EDSM flight log from before your journals
 - **Import your EDSM flight log from before your journals** (S67, Settings → Uploads, under the EDSM accounts; POST
   `/api/uploads/edsm/import` {action: start, stop, remove}): once, reading only, get-logs a week at a time back from the

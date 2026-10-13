@@ -68,6 +68,9 @@ KEYS = {
     "sold": "you sold data: {sold} (what was sold), {still} (what is still aboard, may be empty)",
     "unsold_warn": "unsold data reached the amber level: {value}",
     "unsold_urgent": "unsold data reached the red level: {value}",
+    "firsts_seen": "the firsts watch found, for the first time, that someone else's scans of a system holding your unsold "
+                   "first discoveries reached Spansh (said at most once in 30 minutes; never 'stolen'): {system} (its name), "
+                   "{value} (its unsold cartographic value, e.g. '14.2M')",
     "carrier_departs": "your carrier leaves in under five minutes without you: {minutes}, {carrier}",
     "carrier_arrived": "your carrier arrived: {carrier}, {system}",
     "autotarget_nothing": "the co-pilot button asked to target the next route system with none to target: {why} (e.g. "
@@ -414,6 +417,7 @@ SAMPLES = {
     "docked_sell": {"value": "114.1M", "station": "Jaques Station"}, "undocked_unsold": {"value": "260.4M"},
     "sold": {"sold": "12.6M cr cartographics and 4.1M cr exobiology", "still": ""},
     "unsold_warn": {"value": "52.0M"}, "unsold_urgent": {"value": "251.3M"},
+    "firsts_seen": {"system": "Drojau LL-O b26-3", "value": "14.2M"},
     "carrier_departs": {"minutes": 4, "carrier": "Out Of The Blue"},
     "autotarget_nothing": {"why": "no route is plotted"},
     "carrier_arrived": {"carrier": "Out Of The Blue", "system": "Smojooe AR-E b25-8"},

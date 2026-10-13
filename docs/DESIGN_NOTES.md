@@ -183,7 +183,10 @@ upstream project's choices, not rules of the game.
 - **The journal archive in backups is never pruned;** database zips rotate. `--restore` leaves `speech.json`,
   bans and the config alone.
 - **The firsts watch is gentle to Spansh:** each system daily for a month, then weekly, at most 150 checks a day,
-  and it can be switched off.
+  and it can be switched off. Its first sighting in a system (S6) is a card and a notification every time but spoken
+  at most once in 30 minutes (`FIRSTS_SEEN_SAY_S`, decided on the server so every window and a reload agree): a first
+  run through hundreds of never-checked systems can find several in a row. The words say their scans reached Spansh,
+  never "stolen": someone else's scans do not take a first discovery until they sell before you.
 - **The suggested order is not a route planner:** a fixed supercruise time curve; its first stop is said ("Next: …") only
   in the mapped call-out and the status report.
 - **Discovery streak lines are limited to two kinds,** no records or milestones.
@@ -272,8 +275,10 @@ upstream project's choices, not rules of the game.
 - **ExploData's colour tables are downloaded, never shipped** (the author, 2026-10-10). EDMC-ExploData's repository
   carries the GPL v2 text without "or later", so its tables are kept out of the repository and the Docker image, and
   Outrider's own licence does not depend on them: `resources/bio_colours.json` is fetched on the first start (and refreshed with the
-  rules) and merged in at load. A first start offline has no colour check, which costs nothing: the game cannot be
-  played offline either. BioScan's rules (GPL v2 or later) and the region map (MIT) still ship. The colony distances
+  rules) and merged in at load. A first start offline has no colour check until the next start or the Retry (S7:
+  the banner's card and a note where colours would show; `bio.update_colours` fetches only ExploData's table, then the
+  rules are reloaded and the bases' guesses worked out again). Whether they are there is judged by
+  `colours_available()`, never by the file, and a failed fetch no longer writes one with no colours in it. BioScan's rules (GPL v2 or later) and the region map (MIT) still ship. The colony distances
   are the game's (the Genetic Sampler shows them), kept in `outrider/bio.py`.
 - **The in-game overlay is our own window** (the author, 2026-10-08 and 2026-10-10; the author's plan,
   project/PLAN-overlay-build-2026-10-10.md, is private and git-ignored).
@@ -809,7 +814,7 @@ confirmed while playing. Treat reports about them as likely real.
 - Many spoken call-outs (FSS debrief, leaving a body, approach, welcome back, ship-loss debrief, session recap).
 - The fuel model against a live Status.json and a laden ship; EngineerCraft at a real engineer.
 - Colour-variant prediction against a fresh in-game codex entry (backtested only).
-- The firsts watch's rotation against live Spansh; an OBS source on `/api/status` after the guard change.
+- The firsts watch's rotation against live Spansh, and its first-sighting card and line (S6) on a real sighting; an OBS source on `/api/status` after the guard change.
 - `--restore` and `--list-backups` against a real database (temp files only); the Backups list's restore command run
   as given, for Docker (stop, a one-off `run --rm`, up) and Windows (the .bat); the database's lock on a Docker bind
   mount and on Windows; the backup before a re-read on a real update.

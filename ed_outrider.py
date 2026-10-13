@@ -382,6 +382,10 @@ FIRSTS_WATCH_YOUNG = 30 * 86400   # s after your first scan there
 FIRSTS_WATCH_DAY_CAP = 150        # checks in any 24 h, however many unsold firsts there are
 FIRSTS_WATCH_START = 120          # s after the server starts before the first check
 FIRSTS_WATCH_BACKOFF = 600        # s to wait after a failed request (Spansh down, a timeout)
+# S6: the first sighting of someone else's scans in a system of yours is a moment (firsts_seen: a card and a
+# notification every time); its spoken line at most once in this many s (a first big run through never-checked systems
+# can find several in a row: "3 systems so far today" on the cards instead)
+FIRSTS_SEEN_SAY_S = 30 * 60
 # The update check ([server] update_check): GitHub's latest release against the running version
 RELEASES_LATEST = "https://api.github.com/repos/weslocke/ED-Outrider/releases/latest"
 RELEASES_PAGE = "https://github.com/weslocke/ED-Outrider/releases/latest"
@@ -6184,6 +6188,8 @@ class State:
         self.update_available = None   # a newer release on GitHub ({version, url, published}): watch_updates sets it
         self.firsts_watch_seq = 0      # bumps with each check (firsts_cached keys on it)
         self.firsts_watch_failed = {}  # {id64: time of its last failed check}: skipped for a day (in memory only)
+        self.firsts_seen_said = None   # S6: when a firsts_seen moment was last left to be spoken (FIRSTS_SEEN_SAY_S)
+        self.firsts_seen_day = (None, 0)   # S6: (local date, first sightings found that day): the cards' "so far today"
         self._firsts_cache = None
         # the co-pilot channel ({seq, action, words}): the button and the Now bar ask the speaking window for a
         # status report, the last line again or a replay. Kept out of Journals.moments, whose checkpoint and
@@ -6256,6 +6262,10 @@ class State:
         # bio_rules_gen). The payload asks for it on every poll with a target set (S17)
         self._leaving = {}
         self.bio_rules_gen = 0      # bumps when check_bio_rules installs new spawn rules (bio estimates change)
+        # S7: the colour tables' download asked for by Retry (POST /api/bio/colours): state idle | running | failed |
+        # done, why (the failure in words), its task
+        self.bio_colours_job = {"state": "idle", "why": None}
+        self.bio_colours_task = None
         # Spansh's commodity names ({ts, norm: {letters-only: name}}): the lookup asks by these; cached a week (meta,
         # live-only)
         self.spansh_commodities = meta_get(db, "spansh_commodities")
@@ -6508,7 +6518,7 @@ class State:
                          "speak_mapped": SPEAK_MAPPED, "codex_interesting": CODEX_INTERESTING,
                          "surface_alt": SURFACE_ALT, "rig_spacing": RIG_SPACING, "surface_map_min": SURFACE_MAP_MIN,
                          "surface_map_strip": SURFACE_MAP_STRIP, "rig_warn": RIG_WARN},
-            "bio_rules": outrider.bio.rules_info() if outrider.bio else None,
+            "bio_rules": self.bio_colours_info(),   # with `colours` and the Retry's `colours_job` (S7)
             "fuel": self.fuel_summary(),
             "ship": self.journals.ship,
             "carrier": self.carrier_summary(),
@@ -7286,6 +7296,60 @@ class State:
         self.backup_done_at = time.monotonic()
         self.bump()
 
+    def bio_colours_check(self):
+        """S7: the banner's card while ExploData's colour tables are missing (the first start's download failed, or
+        gave none): its Retry posts /api/bio/colours. Judged by colours_available(), never by the file. Gone once they
+        are loaded; nothing without spawn rules at all (no species guesses: the colours do not matter then)."""
+        if not outrider.bio or not outrider.bio.available():
+            return
+        job = self.bio_colours_job
+        if outrider.bio.colours_available():
+            self.notices.clear("bio_colours")
+        elif job["state"] == "running":
+            self.notices.set("bio_colours", "Downloading the exobiology colour tables…", "info")
+        elif job["state"] == "failed":
+            self.notices.set("bio_colours", f"The exobiology colour tables could not be downloaded ({job['why']}): "
+                             "colour variants are not predicted.", "warn", "retry:bio_colours")
+        else:
+            self.notices.set("bio_colours", "The exobiology colour tables are not downloaded: colour variants are not "
+                             "predicted.", "warn", "retry:bio_colours")
+
+    def bio_colours_info(self):
+        """The payload's bio_rules (outrider.bio.rules_info with `colours`) plus the Retry's `colours_job` {state, why},
+        or None without rules."""
+        info = outrider.bio.rules_info() if outrider.bio else None
+        return dict(info, colours_job=dict(self.bio_colours_job)) if info else None
+
+    def start_bio_colours(self):
+        """POST /api/bio/colours (S7's Retry): download only ExploData's colour tables, on a worker thread.
+        (response, HTTP status): one at a time (409 while one runs), 409 without spawn rules (nothing to colour)."""
+        if not outrider.bio or not outrider.bio.available():
+            return {"error": "no exobiology spawn rules here", "code": "no_rules"}, 409
+        if self.bio_colours_task and not self.bio_colours_task.done():
+            return {"error": "already downloading", "code": "running"}, 409
+        self.bio_colours_job = {"state": "running", "why": None}
+        self.bio_colours_check()
+        self.bio_colours_task = asyncio.create_task(self._bio_colours_run())
+        self.bump()
+        return {"ok": True, "colours_job": dict(self.bio_colours_job)}, 202
+
+    async def _bio_colours_run(self):
+        try:
+            n = await asyncio.get_running_loop().run_in_executor(None, lambda: outrider.bio.update_colours(log=print))
+        except Exception as e:  # noqa: BLE001 -- offline, GitHub down, upstream changed its form: said, Retry again
+            why = f"{type(e).__name__}: {e}" if not isinstance(e, ValueError) else str(e)
+            print(f"exobiology colour tables: download failed ({why})", file=sys.stderr)
+            self.bio_colours_job = {"state": "failed", "why": why[:200]}
+        else:
+            print(f"exobiology colour tables: downloaded ({n} species)")
+            self.bio_colours_job = {"state": "done", "why": None}
+            # the rules came back with their colours (update_colours reloads them): the bases' variant guesses are
+            # worked out again, as check_bio_rules does after an update (the Fable review: else colourless until a restart)
+            self.journals.dirty |= set(self.bases)
+            self.bio_rules_gen += 1
+        self.bio_colours_check()
+        self.bump()
+
     def start_backup(self, auto=False):
         """The header's "back up now", and the automatic ones: (response, HTTP status). One at a time, and not
         again within BACKUP_MIN_GAP of the last, so a stuck key or a looping script cannot fill the disk with
@@ -7361,8 +7425,12 @@ class State:
         pts = [dict(r) for r in self.db.execute("SELECT genus, lat, lon, n FROM sample_points WHERE system=? AND body_id=? AND species=?",
                                                 (run["system"], run["body_id"], run["species"]))]
         need = outrider.bio.colony_distance(pts[0]["genus"] if pts else None, run["genus_name"])
+        # what the run pays, known from the first sample (S62): the species' value and the x5 first footfall apart,
+        # so the page and the overlay can say "1.0M (x5: 5.0M)"; run_elsewhere's value has the x5 folded in instead
+        f = self.db.execute("SELECT bio_x5 FROM own_firsts WHERE system=? AND body_id=?", (run["system"], run["body_id"])).fetchone()
         out = {"genus": run["genus_name"], "species": run["species_name"], "samples": run["samples"], "need": need,
-               "points": len(pts), "nearest": None, "to_go": None, "clear": None, "tag": None}
+               "points": len(pts), "nearest": None, "to_go": None, "clear": None, "tag": None,
+               "value": outrider.bio.species_value(run["species_name"]), "factor": 5 if f and f["bio_x5"] == 1 else 1}
         if pts and need:
             nearest = min(outrider.bio.surface_distance(st["lat"], st["lon"], p["lat"], p["lon"], st["planet_radius"]) for p in pts)
             out.update(nearest=round(nearest), to_go=max(0, round(need - nearest)), clear=nearest >= need)
@@ -8832,12 +8900,31 @@ class State:
             row = (old_seen, old["bodies"], old["spansh_bodies"], old["body_count"])
         else:
             row = (None, 0, sum(1 for r in records if r.get("type") in ("Star", "Planet")), (own["body_count"] if own else None) or count)
-        self.db.execute("INSERT OR REPLACE INTO firsts_watch VALUES (?, ?, ?, ?, ?, ?, ?)", (id64, now) + row + (first,))
+        # the columns named: a column added one day must not shift these (the plan's trap, S6)
+        self.db.execute("INSERT OR REPLACE INTO firsts_watch (id64, checked_ts, reported_ts, bodies, spansh_bodies, body_count, "
+                        "first_ts) VALUES (?, ?, ?, ?, ?, ?, ?)", (id64, now) + row + (first,))
         self.db.commit()
         self.firsts_watch_seq += 1
+        if got and not old_seen:   # the first sighting: once per system by construction (a report never goes away)
+            self.firsts_seen_moment(id64, name, row, first, now)
         if row[0] != old_seen:
             self.bump()   # the Unsold tile's count
         return got
+
+    def firsts_seen_moment(self, id64, name, row, first, now):
+        """S6: someone else's scans of a system holding your unsold first discoveries reached Spansh. The moment
+        firsts_seen {system (its name), id64, bodies (yours they reported), first_ts (your first scan there),
+        reported_ts (their first report), value (the system's unsold cartographic value), today (first sightings found
+        so far today, this one included), speak (False within FIRSTS_SEEN_SAY_S of the last one left to be spoken)}.
+        Times as timestamps: the page words "12 days after you" itself."""
+        day = time.strftime("%Y-%m-%d", time.localtime(now))
+        today = self.firsts_seen_day[1] + 1 if self.firsts_seen_day[0] == day else 1
+        self.firsts_seen_day = (day, today)
+        speak = self.firsts_seen_said is None or now - self.firsts_seen_said >= FIRSTS_SEEN_SAY_S
+        if speak:
+            self.firsts_seen_said = now
+        self.journals.moment("firsts_seen", iso_ts(now), system=name, id64=str(id64), bodies=row[1], first_ts=first,
+                             reported_ts=row[0], value=self.system_values.get(name), today=today, speak=speak)
 
     async def watch_updates(self):
         """[server] update_check: GitHub's latest release, at start and once a day; a newer one goes in the payload
@@ -15675,6 +15762,12 @@ def make_app(state, hosts=None):
         body, status = state.start_backup()
         return web.json_response(body, status=status)
 
+    async def bio_colours_view(_):
+        """POST /api/bio/colours (S7): download ExploData's colour tables again (the banner's and the notes' Retry). Not
+        pc_only: a server in Docker downloads them too."""
+        body, status = state.start_bio_colours()
+        return web.json_response(body, status=status)
+
     async def backups_view(_):
         """GET /api/backups: Settings -> Server's Backups list (State.backup_list). Behind the sign-in; not an AI tool."""
         return web.json_response(state.backup_list())   # a folder listing: quick (and the database is this thread's)
@@ -16509,6 +16602,7 @@ def make_app(state, hosts=None):
     app.router.add_post("/api/hush", hush_view)
     app.router.add_post("/api/copilot", copilot_view)
     app.router.add_post("/api/backup", backup_view)
+    app.router.add_post("/api/bio/colours", bio_colours_view)
     app.router.add_get("/api/backups", backups_view)
     app.router.add_get("/api/highway", highway_view)
     app.router.add_get("/api/overlay", overlay_get)
@@ -16878,6 +16972,10 @@ async def check_bio_rules(state):
         print(f"exobiology rules: {info['species']} species from BioScan (copy from {(info.get('generated') or '')[:10]})")
     else:
         print(f"exobiology rules: {info['species']} species from BioScan, up to date")
+    if info and not info.get("colours"):
+        print("exobiology rules: no colour tables (ExploData's were not downloaded): colour variants are not predicted",
+              file=sys.stderr)
+    state.bio_colours_check()   # S7: the banner's card with Retry while the colour tables are missing
 
 
 def speech_file_path(name, root=None, resources=None):

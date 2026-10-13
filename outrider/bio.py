@@ -377,17 +377,11 @@ def update_rules(path=None, log=print, versions=None):
     grid = tables(REGIONMAP, "regions", "regionmap")
     kept = None   # (genus id, species id) -> colours from the current file, when ExploData did not arrive
     try:
-        # its table as code (data = build_colours()) fails like a failed fetch: the colours already there are kept and
-        # its version is not recorded, so the next start tries again (Codex, 2026-10-09)
-        got = tables(EXPLODATA, "data")
-        # and with no table called data at all (renamed or moved upstream): not "no colours" either (the Fable review
-        # of 2026-10-10, #9)
-        if "data" not in got:
-            raise ValueError("bio rules: genus.py has no data table any more")
-        genus_data = got["data"] or {}
+        genus_data = _explodata_table()
+        arrived = True
         log("bio rules: colour variants")
     except Exception as e:  # noqa: BLE001 -- without them species are simply not ruled out by colour
-        genus_data = {}
+        genus_data, arrived = {}, False
         versions["explodata"] = ""   # still retried at the next start
         # Keep the colour tables already downloaded rather than turning the colour check off until then.
         kept = _read_colours(colours_path(path))
@@ -395,15 +389,9 @@ def update_rules(path=None, log=print, versions=None):
             + (f"; keeping the {len(kept)} colour tables already there" if kept else ""))
 
     def colours(genus_id, species_id):
-        """{"star": {class: colour}} or {"element": {material: colour}} for a species, or None (no check)."""
         if kept is not None:
             return kept.get((genus_id, species_id))
-        c = (genus_data.get(genus_id) or {}).get("colors")
-        if not c:
-            return None
-        if "species" in c:
-            return c["species"].get(species_id)
-        return {"star": c["star"]} if "star" in c else None
+        return _species_colours(genus_data, genus_id, species_id)
 
     species = []
     for genus_id, members in catalog.items():
@@ -411,16 +399,11 @@ def update_rules(path=None, log=print, versions=None):
             species.append({"id": species_id, "genus_id": genus_id, "genus": _genus_name(genus_id, d["name"]),
                             "name": d["name"], "value": d.get("value"), "rulesets": d.get("rulesets") or [],
                             "colors": colours(genus_id, species_id)})
-    # the colours apart (never shipped: see COLOURS_NAME); written only when ExploData's arrived, else the file stays
-    if kept is None:
-        cfile = colours_path(path)
-        cdoc = {"generated": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-                "source": {"name": "EDMC-ExploData", "url": "https://github.com/Silarn/EDMC-ExploData",
-                           "commit": versions.get("explodata", ""), "licence": "GPL-2.0"},
-                "colors": {f"{sp['genus_id']}|{sp['id']}": sp["colors"] for sp in species if sp.get("colors")}}
-        with open(cfile + ".tmp", "w", encoding="utf-8") as fh:
-            json.dump(cdoc, fh, separators=(",", ":"))
-        os.replace(cfile + ".tmp", cfile)
+    # the colours apart (never shipped: see COLOURS_NAME); written only when ExploData's arrived, else the file there
+    # stays (a failed first fetch used to write one with no colours at all: S7)
+    if arrived:
+        _write_colours(path, {(sp["genus_id"], sp["id"]): sp["colors"] for sp in species if sp.get("colors")},
+                       versions.get("explodata", ""))
     species = [dict(sp, colors=None) for sp in species]
     data = {
         "generated": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
@@ -451,6 +434,66 @@ def update_rules(path=None, log=print, versions=None):
     os.replace(tmp, path)
     log(f"bio rules: {len(species)} species written to {path}")
     return load_rules(path, force=True)
+
+
+def _explodata_table():
+    """ExploData's colour table (genus.py's `data`), fetched. Its table written as code (data = build_colours()) fails
+    like a failed fetch, so the colours already there are kept and its version is not recorded (the next start tries
+    again: Codex, 2026-10-09); so does no table called data at all (renamed or moved upstream: the Fable review of
+    2026-10-10, #9)."""
+    failed = []
+    got = _literals(_get(EXPLODATA), failed)
+    if "data" in failed:
+        raise ValueError("bio rules: genus.py's data no longer a plain literal")
+    if "data" not in got:
+        raise ValueError("bio rules: genus.py has no data table any more")
+    return got["data"] or {}
+
+
+def _species_colours(genus_data, genus_id, species_id):
+    """{"star": {class: colour}} or {"element": {material: colour}} for a species from ExploData's table, or None (no
+    check)."""
+    c = (genus_data.get(genus_id) or {}).get("colors")
+    if not c:
+        return None
+    if "species" in c:
+        return c["species"].get(species_id)
+    return {"star": c["star"]} if "star" in c else None
+
+
+def _write_colours(path, colours, commit):
+    """bio_colours.json beside the rules file `path`: {(genus id, species id): colours}, atomically."""
+    cfile = colours_path(path)
+    cdoc = {"generated": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+            "source": {"name": "EDMC-ExploData", "url": "https://github.com/Silarn/EDMC-ExploData",
+                       "commit": commit, "licence": "GPL-2.0"},
+            "colors": {f"{g}|{s}": c for (g, s), c in colours.items()}}
+    with open(cfile + ".tmp", "w", encoding="utf-8") as fh:
+        json.dump(cdoc, fh, separators=(",", ":"))
+    os.replace(cfile + ".tmp", cfile)
+
+
+def update_colours(path=None, log=print):
+    """Only ExploData's colour tables (S7: the Retry when the first start's download failed): one request, not the
+    whole rules update. The species are the rules file's; the tables go beside it and the rules are loaded again with
+    them. -> how many species have a colour table. Raises when they did not arrive or gave no colours at all (a file
+    there is left as it is). The rules file's ExploData version is not touched: the next start's check still sees
+    whether ExploData changed."""
+    path = path or _rules_path or RULES_FILE
+    with open(path, encoding="utf-8") as fh:
+        species = json.load(fh).get("species") or []
+    genus_data = _explodata_table()
+    colours = {}
+    for sp in species:
+        c = _species_colours(genus_data, sp.get("genus_id"), sp.get("id"))
+        if c:
+            colours[(sp["genus_id"], sp["id"])] = c
+    if not colours:
+        raise ValueError("ExploData's table has no colours")
+    _write_colours(path, colours, "")
+    log(f"bio rules: colour variants for {len(colours)} species written beside {path}")
+    load_rules(path, force=True)
+    return len(colours)
 
 
 # --------------------------------------------------------------------------
@@ -539,12 +582,13 @@ def available():
 
 
 def rules_info():
-    """{"generated", "species", "sources"} for the page and the log, or None."""
+    """{"generated", "species", "sources", "path", "colours"} for the page and the log, or None. `colours`: whether
+    ExploData's colour tables are loaded (False: the page's "colours unavailable" note and the banner's Retry, S7)."""
     r = load_rules()
     if not r:
         return None
     return {"generated": r.get("generated"), "species": len(r["species"]), "sources": r.get("sources"),
-            "path": _rules_path}
+            "path": _rules_path, "colours": bool(r.get("colours"))}
 
 
 # --------------------------------------------------------------------------

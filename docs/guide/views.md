@@ -36,7 +36,9 @@ stays in view while the list scrolls.
 counted, where life is possible. A finished species is one line, its codex entry with what it pays ("📖 Bacterium
 Alcyoneum - Red ✦ 8.3M"), the colour's word in that colour (Settings → Display can turn that off). The body panel lists
 why each other genus is not expected ("pressure too low"). Flying low over a body in your ship (under 5 km), the
-on-body strip already shows its bio card. A star's panel says its kind in words ("main sequence", "white dwarf (hydrogen-rich)"), a biology codex entry links to
+on-body strip already shows its bio card. While you sample, the strip says what the run pays from the first sample on
+("🧬 Bacterium Aurasus · 1.0M (×5: 5.0M) · sample 1/3 · 500 m to go": the species' value, and with the first-footfall
+bonus). A star's panel says its kind in words ("main sequence", "white dwarf (hydrogen-rich)"), a biology codex entry links to
 Canonn's Bioforge (where it grows, and in what conditions), and **⬇ CSV** in the heading saves the system's bodies
 and values as a spreadsheet.
 <br><br><img src="../images/here.png" alt="The current system">
@@ -105,7 +107,8 @@ it in Here, where ☆ bookmarks it or makes it the next stop.
 <td width="50%" valign="top">
 <b>My firsts</b> — visited systems with first-discovery data you haven't sold. The <b>firsts watch</b>
 checks them on Spansh in the background and marks any someone else has scanned since you ("👁 8 d after you");
-selling first still keeps your name if nobody sold before you. <b>Show lost</b> with <b>within N ly</b> is a
+the first time it finds someone in one, a card and a notification say so (see
+[Voice and alerts](voice-and-alerts.md#-alerts)); selling first still keeps your name if nobody sold before you. <b>Show lost</b> with <b>within N ly</b> is a
 rescan checklist for data lost with a ship, nearest first, priced by what is left to scan and map. <b>Left
 behind</b> lists nearby systems with work over your thresholds.
 <br><br><img src="../images/firsts.png" alt="My firsts">
@@ -304,6 +307,11 @@ list once a day, so new pictures appear as they are added.
 
 Journals from before a 2023 game update don't name a sample's colour, so those samples count the species but not a
 colour.
+
+The colour tables (which colours a species comes in, and what gives each) are downloaded on Outrider's first start. If
+that failed (offline at the time), the checklist's line, the body panel's Bio section and Here's footer say "colours
+unavailable: tables not downloaded · **Retry**", and a card at the top of the page has Retry too: it downloads only
+those tables, and the colours show at once.
 
 ## 🗺️ The surface map
 

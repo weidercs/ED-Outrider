@@ -420,6 +420,40 @@ class BatchFSpansh(unittest.TestCase):
         self.state.firsts_watch_on = False
         self.assertEqual(self.state.firsts_watch_info()["seen"], 1)   # off: what was found still shows
 
+    def test_first_sighting_is_a_moment_spoken_at_most_every_half_hour(self):
+        """S6: someone else's scans first seen in a system of yours: a firsts_seen moment (once per system: a report never
+        goes away), its facts as timestamps; the spoken line at most once in FIRSTS_SEEN_SAY_S, "so far today" counted."""
+        import asyncio
+        for i, (id64, name) in enumerate(((9, "Sys"), (8, "Two"), (7, "Three"))):
+            self.discover(id64, name, "2026-01-01T00:00:00Z", x=i * 5)
+        self.state.system_values = {"Sys": 14_200_000, "Two": 3_000_000, "Three": 1_000_000}
+        dumps = {}
+        for id64, name in ((9, "Sys"), (8, "Two"), (7, "Three")):
+            d = self.dump("2026-01-09T12:00:00Z")
+            for b in d["system"]["bodies"]:
+                b["name"] = b["name"].replace("Sys", name)
+            dumps[id64] = d
+        sp, _ = self.fake(dumps)
+        self.state.spansh = sp
+        now = ed_outrider.ts_seconds("2026-01-10T00:00:00Z")
+        seq = self.j.moment_seq
+        asyncio.run(self.state.firsts_watch_step(now))
+        [m] = [x for x in self.j.moments if x["seq"] > seq]
+        self.assertEqual({k: m[k] for k in ("kind", "system", "id64", "bodies", "first_ts", "reported_ts", "value", "today", "speak")},
+                         {"kind": "firsts_seen", "system": "Sys", "id64": "9", "bodies": 1, "first_ts": "2026-01-01T00:00:10Z",
+                          "reported_ts": "2026-01-09T12:00:00Z", "value": 14_200_000, "today": 1, "speak": True})
+        asyncio.run(self.state.firsts_watch_step(now + 20))                      # the next one within half an hour
+        m2 = self.j.moments[-1]
+        self.assertEqual((m2["system"], m2["today"], m2["speak"]), ("Two", 2, False))   # a card, not said again
+        # the same system checked again (a week on) is no new sighting
+        seq = self.j.moment_seq
+        self.db.execute("UPDATE firsts_watch SET checked_ts = 0 WHERE id64 = 9")
+        asyncio.run(self.state.firsts_watch_step(now + ed_outrider.FIRSTS_SEEN_SAY_S + 30))
+        new = [x for x in self.j.moments if x["seq"] > seq]
+        self.assertEqual([(x["system"], x["speak"]) for x in new], [("Three", True)])   # half an hour on: said again
+        asyncio.run(self.state.firsts_watch_step(now + ed_outrider.FIRSTS_SEEN_SAY_S + 60))
+        self.assertEqual([x["system"] for x in self.j.moments if x["seq"] > seq], ["Three"])
+
     def test_watch_gap_slows_for_old_or_seen_firsts(self):
         gap, day = ed_outrider.firsts_watch_gap, 86400
         t0 = ed_outrider.ts_seconds("2026-01-01T00:00:10Z")

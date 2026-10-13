@@ -2329,6 +2329,9 @@ const settle = async maxMs => {
                      w.eval(`elsewhereText({species: "Fungoida Setisis", samples: 1, body: "B 2", value: 1e6})`),
                      w.eval(`elsewhereText({species: "Stratum Tectonicas", samples: 1, body: "C 1", system: "Far Away", value: 95e6})`)];
     got.strip = w.eval(`data.sampling = {elsewhere: {species: "Fungoida Setisis", samples: 2, body: "B 2", value: 1e6}}; samplingHtml().replace(/<[^>]+>/g, "")`);
+    // S62: what the run pays from sample 1, the x5 apart; without the bonus the value alone
+    got.pays = [w.eval(`data.sampling = {genus: "Bacterium", species: "Bacterium Aurasus", samples: 1, need: 500, points: 1, nearest: 0, to_go: 500, clear: false, value: 1e6, factor: 5}; samplingHtml().replace(/<[^>]+>/g, "")`),
+                w.eval(`data.sampling.factor = 1; samplingHtml().replace(/<[^>]+>/g, "")`)];
     got.dropped = run({kind: "bio_dropped", system: 1, body: "B 2", species: "Fungoida Setisis", genus: "Fungoida", elsewhere: false});
     // the region: with the briefing spoken, it waits for the briefing, which opens with it
     const sys = w.eval("posId()");
@@ -2369,6 +2372,8 @@ const settle = async maxMs => {
       elsewhere: ["In progress elsewhere: Fungoida Setisis 2/3 on B 2. A new species discards it.", "",
                   "In progress elsewhere: Stratum Tectonicas 1/3 on C 1 (Far Away). A new species discards it."],
       strip: "In progress elsewhere: Fungoida Setisis 2/3 on B 2. A new species discards it.",
+      pays: ["🧬 Bacterium Aurasus · 1.0M (×5: 5.0M) · sample 1/3 · 500 m to go (0 of 500 m)",
+             "🧬 Bacterium Aurasus · 1.0M · sample 1/3 · 500 m to go (0 of 500 m)"],
       dropped: [["sampling", "Fungoida Setisis 2/3 discarded", null, null, "a card only: never spoken"]],
       regionWait: [], regionToast: ["Entering Norma Arm"],
       briefOpens: [["brief", "Entering the Norma Arm. Undiscovered. 5 bodies. Scoopable K star."]], pendingCleared: true,
@@ -2381,7 +2386,7 @@ const settle = async maxMs => {
     for (const k of Object.keys(want)) if (JSON.stringify(got[k]) !== JSON.stringify(want[k])) bad.push(k);
     const goodE = !bad.length && errors.length === before;
     allOk = allOk && goodE;
-    console.log(goodE ? "OK" : "FAIL", "| batch E exobio |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}` : "x5 runs line, sale check line, elsewhere strip + discard card, region folded or alone, jumponium off by default / folded / alone", errors.slice(before));
+    console.log(goodE ? "OK" : "FAIL", "| batch E exobio |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}` : "x5 runs line, sale check line, elsewhere strip + discard card, a run's pay from sample 1, region folded or alone, jumponium off by default / folded / alone", errors.slice(before));
   }
   {   // batch F: the pre-Odyssey mark (Nearby, Left behind, Here) and the firsts watch (My firsts, the Unsold tile)
     const w = dom.window, d = w.document, before = errors.length, bad = [], got = {};
@@ -5418,6 +5423,79 @@ const settle = async maxMs => {
     const good = JSON.stringify(g) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| green gas giants |", good ? "the guess with ?, the confirmed one, Now's line, Nearby's tag, the legend, the alert switch" : JSON.stringify({g, want}), errors.slice(before));
+  }
+  // S7 (batch 16): ExploData's colour tables missing: "colours unavailable · Retry" in Here's legend (with bio shown) and
+  // the Exo-Biology checklist's line, "downloading…" / "failed: <why>" while it runs or after, nothing once they are in;
+  // the banner's card has Retry, which posts api/bio/colours (the scratch server's ExploData is offline: it fails there)
+  {
+    const w = dom.window, before = errors.length;
+    const real = w.fetch, posted = [];
+    w.fetch = (u, o) => { if (o && o.method === "POST" && /bio\/colours/.test(String(u))) posted.push(String(u)); return real(u, o); };
+    const got = JSON.parse(w.eval(`(() => {
+      const o = {}, hd0 = hereData, v0 = view, br0 = data.bio_rules, cl0 = CL.data, n0 = data.notices;
+      const plain = () => bioColoursNote().replace(/<[^>]+>/g, "");
+      data.bio_rules = Object.assign({}, br0 || {species: 1, generated: ""}, {colours: false, colours_job: {state: "idle", why: null}});
+      o.idle = plain();
+      data.bio_rules.colours_job = {state: "running", why: null}; o.running = plain();
+      data.bio_rules.colours_job = {state: "failed", why: "OSError: timed out"}; o.failed = plain();
+      data.bio_rules.colours_job = {state: "idle", why: null};
+      hereData = {id64: posId(), name: "Bio", leaving: null, phenomena: [], tree: null,
+                  bodies: [{name: "B 1", body_id: 4, type: "Planet", subtype: "Rocky body", genera: ["Bacterium"], bio: 1, geo: 0, codex: [], curiosities: [],
+                            organics: [{genus: "Bacterium", species: "Bacterium Aurasus", samples: 1, value: 1e6}], bio_guess: [], value_parts: {bio_factor: 1}, mining: 0}]};
+      view = "here"; renderHere();
+      o.legend = /colours unavailable: tables not downloaded · Retry/.test(document.getElementById("hereLegend").textContent) &&
+        !!document.querySelector("#hereLegend [data-biocolours]");
+      CL.data = Object.assign({}, cl0 || {}, {kind: "bio", region: 1, region_name: "Galactic Centre", regions: (cl0 && cl0.regions) || [], genera: [],
+        summary: {possible: 0, sold: 0, aboard: 0, lost: 0, logged: 0, colours_found: 0, colours: 0, completion: 0, elsewhere: 0}});
+      renderChecklist();
+      o.checklist = /colours unavailable: tables not downloaded · Retry$/.test(document.getElementById("clStatus").textContent);
+      data.bio_rules.colours = true;
+      o.loaded = plain(); renderHere();
+      o.legendGone = !/colours unavailable/.test(document.getElementById("hereLegend").textContent);
+      data.bio_rules.colours = false;
+      data.notices = [{id: "bio_colours:1", key: "bio_colours", text: "The exobiology colour tables are not downloaded", level: "warn", action: "retry:bio_colours"}];
+      render();
+      const b = document.querySelector('#noticeBar [data-naction="retry:bio_colours"]');
+      o.button = b && b.textContent; if (b) b.click();
+      window.__s7 = {hd0, v0, br0, cl0, n0};
+      return JSON.stringify(o); })()`));
+    await settle(1500);
+    got.posted = posted.length;
+    w.eval(`(() => { const r = window.__s7; hereData = r.hd0; view = r.v0; data.bio_rules = r.br0; CL.data = r.cl0; data.notices = r.n0; render(); })()`);
+    w.fetch = real;
+    const want = {idle: "colours unavailable: tables not downloaded · Retry", running: "colours unavailable: downloading…",
+                  failed: "colours unavailable: failed: OSError: timed out · Retry", legend: true, checklist: true, loaded: "", legendGone: true,
+                  button: "Retry", posted: 1};
+    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| colour tables missing |", good ? "the note and Retry in Here's legend and the checklist, downloading / failed, the banner's Retry posts" : JSON.stringify({got, want}), errors.slice(before));
+  }
+  // S6 (batch 16): someone else's scans of your unsold firsts: a card and a notification each time under its own alerts
+  // row, the days worded from the timestamps, "so far today", spoken only when the server says (at most once in 30 min)
+  {
+    const w = dom.window, before = errors.length;
+    const got = JSON.parse(w.eval(`(() => {
+      const o = {}, said = [], told = [], realSpeak = speak, realNotify = notify, m0 = data.moments;
+      const flags = [speechOn, isSpeaker, alertSpeak.firstsseen, alertCfg.firstsseen, lastMomentSeq];
+      speak = t => said.push(t); notify = (kind, title, body) => { told.push([kind, title, body]); return true; };
+      speechOn = true; isSpeaker = true; alertSpeak.firstsseen = true;
+      const day = 86400000, now = Date.now(), iso = t => new Date(t).toISOString(), s0 = lastMomentSeq;
+      const mk = (i, m) => Object.assign({seq: s0 + i, ts: iso(now), kind: "firsts_seen", id64: "9", bodies: 3, first_ts: iso(now - 15 * day),
+                                         reported_ts: iso(now - 3 * day), value: 14.2e6}, m);
+      data.moments = [mk(1, {system: "Drojau LL-O b26-3", today: 1, speak: true}), mk(2, {system: "Other", bodies: 1, today: 2, speak: false})];
+      onData();
+      speak = realSpeak; notify = realNotify; data.moments = m0;
+      [speechOn, isSpeaker, alertSpeak.firstsseen] = flags; lastMomentSeq = flags[4];
+      o.told = told; o.said = said.length;
+      o.row = ALERTS.some(a => a[0] === "firstsseen") && alertCfg.firstsseen === true && !!ALERT_SHORT.firstsseen && !!TAB_ALERT_NAMES.firstsseen &&
+        !UNSPOKEN.has("firstsseen") && !SPEECH_SYS_BOUND.has("firstsseen") && !!document.querySelector('#alertOpts [data-aspeak="firstsseen"]');
+      return JSON.stringify(o); })()`));
+    const want = {told: [["firstsseen", "👁 Someone else scanned your unsold Drojau LL-O b26-3", "3 bodies reached Spansh 12 days after you (your scan 15 days ago) · 14.2M cr at stake · see My firsts"],
+                         ["firstsseen", "👁 Someone else scanned your unsold Other", "1 body reached Spansh 12 days after you (your scan 15 days ago) · 14.2M cr at stake · 2 systems so far today · see My firsts"]],
+                  said: 1, row: true};
+    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| firsts scanned by others |", good ? "a card and a notification each time, days from the timestamps, so far today, spoken once" : JSON.stringify({got, want}), errors.slice(before));
   }
   // star and planet types new to your codex (2026-10-12): ✦ not in this region's codex, ✪ in none; Here's name cell,
   // Nearby's tag naming each, the legend; nothing at all without a single body type logged

@@ -399,6 +399,13 @@ def system_panel(detail, pal, size="normal", highlight=500_000, bio_min=10_000_0
                       subtitle=f"{n} bod{'y' if n == 1 else 'ies'}")
 
 
+def run_pays(value, factor=1):
+    """What a sample run pays, known from sample 1 (S62; page.js `runPays`): "1.0M (×5: 5.0M)" with the first footfall
+    bonus, else "1.0M"; "" when unknown. `value` is the species' own, never one with the ×5 already in."""
+    if not value:
+        return ""
+    return f"{credits(value)} (×{factor}: {credits(value * factor)})" if factor and factor > 1 else credits(value)
+
 def body_panel(b, pal, size="normal", high_gravity=2.0, colony=None):
     """The body panel: what the body is, what mapping it is worth, and its life (each likely species with its codex
     mark, colony distance and value, or what it could be before the DSS), and whether it is worth landing. None for
@@ -443,7 +450,7 @@ def body_panel(b, pal, size="normal", high_gravity=2.0, colony=None):
         else:
             bio_rows.append({"left": [(o.get("species") or o.get("genus") or "?", "text"), (f"  {o.get('samples', 0)}/3", "accent")]
                              + ([(f" · {colony[o['genus'].lower()]} m", "muted")] if o.get("genus") and colony.get(o["genus"].lower()) else []),
-                             "right": (credits((o.get("value") or 0) * factor), "accent")})
+                             "right": (run_pays(o.get("value"), factor) or credits(0), "accent")})
     for g in b.get("bio_guess") or []:
         if g.get("genus") in running:
             continue
@@ -857,13 +864,16 @@ def on_body_parts(ob, b, sampling, room=500, size="normal"):
         rows += wrap(bits, room, size, "  ·  ") or [[("no bio or geo signals known", "muted")]]
     sm = sampling or {}
     if sm.get("samples") and sm["samples"] < 3 and not sm.get("elsewhere"):
-        head = (f"{sm.get('genus') or ''} {sm['samples']}/3 · ", "text")
+        head = [(f"{sm.get('genus') or ''} {sm['samples']}/3 · ", "text")]
+        pays = run_pays(sm.get("value"), sm.get("factor") or 1)   # from sample 1 (S62)
+        if pays:
+            head.append((pays + " · ", "accent"))
         if sm.get("to_go") is None:
-            rows.append([head, (f"need {sm['need']} m from the last sample" if sm.get("need") else "spacing unknown", "muted")])
+            rows.append([*head, (f"need {sm['need']} m from the last sample" if sm.get("need") else "spacing unknown", "muted")])
         elif sm.get("clear"):
-            rows.append([head, ("✓ clear to sample", "good"), (f" ({sm.get('nearest')} of {sm.get('need')} m)", "muted")])
+            rows.append([*head, ("✓ clear to sample", "good"), (f" ({sm.get('nearest')} of {sm.get('need')} m)", "muted")])
         else:
-            rows.append([head, (f"{sm['to_go']} m to go", "warn"), (f" ({sm.get('nearest')} of {sm.get('need')} m)", "muted")])
+            rows.append([*head, (f"{sm['to_go']} m to go", "warn"), (f" ({sm.get('nearest')} of {sm.get('need')} m)", "muted")])
     elif (sm.get("elsewhere") or {}).get("species") and sm["elsewhere"].get("samples") == 2:
         e = sm["elsewhere"]
         rows.append([("In progress elsewhere: ", "warn"), (f"{e['species']} 2/3 on {e.get('body') or 'another body'}", "text")])

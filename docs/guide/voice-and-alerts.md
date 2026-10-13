@@ -33,6 +33,11 @@ notification and be spoken (🗣), chosen per alert in **⚙ Settings → Alerts
 - a sale that left data aboard (Universal Cartographics sells 50 systems a page; at Vista Genomics, the species
   you kept back), said 90 seconds after the last page
 - hull damage, heat damage, interdiction, and unsold data past a threshold
+- someone else's scans of a system holding your unsold first discoveries reached Spansh (the firsts watch, see
+  [My firsts](views.md)): a card and a notification each time, "👁 Someone else scanned your unsold Drojau LL-O
+  b26-3: 3 bodies reached Spansh 12 days after you (your scan 15 days ago) · 14.2M cr at stake", and spoken at most
+  once in 30 minutes ("Heads up, someone else is scanning your unsold systems. Time to head back to sell before they
+  poach your discoveries!"); a first look through many systems adds "3 systems so far today"
 - your carrier arriving somewhere new or leaving without you
 - a Rhino mining rig nearing the 5 km leash (see The surface map)
 - an upload (EDDN, EDSM, Inara) failing for 15 minutes with messages waiting, and sending again: a card at the top of

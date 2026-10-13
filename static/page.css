@@ -637,6 +637,7 @@ table .sub2 { margin-top: 2px; font-weight: 400; font-size: 12px; }
 .alerttable td:not(:first-child), .alerttable th:not(:first-child) { text-align: center; }
 #sell.ok { color: var(--good); }
 .warnc { color: var(--warn); }
+.colnote { color: var(--warn); }   /* S7: the colour tables missing, with its Retry */
 
 .cxnew { color: var(--accent); font-weight: 700; cursor: help; }
 .cxnew.cxgal { color: var(--good); }   /* ✪: new to your codex anywhere */

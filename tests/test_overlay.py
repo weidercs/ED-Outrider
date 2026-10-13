@@ -160,6 +160,7 @@ class BodyPanel(unittest.TestCase):
         self.assertTrue(any(x.startswith("Bacterium Acies") and "2/3" in x and "500 m" in x for x in t))     # the run under way
         self.assertTrue(any(x.startswith("Stratum Tectonicas") and "✪ Lime" in x for x in t))
         self.assertIn("≤19.0M", t)                                                                       # x5: nobody's foot here
+        self.assertIn("1.0M (×5: 5.0M)", t)                                       # the run under way pays, the x5 apart (S62)
         self.assertTrue(any(x.startswith("Worth landing: up to") and "20.0M" in x and "×5" in x for x in t))
 
     def test_heavy_and_undecided(self):
@@ -589,6 +590,10 @@ class NowPanel(unittest.TestCase):
         self.assertFalse(any(t.startswith("Next") for t in lines))             # the body's card instead of Next
         clear = texts(O.now_panel(dict(info, sampling=dict(info["sampling"], clear=True, to_go=0, nearest=540)), pal))
         self.assertIn("Bacterium 2/3 · ✓ clear to sample (540 of 500 m)", clear)
+        # S62: what the run pays from sample 1, the x5 first footfall apart
+        pays = texts(O.now_panel(dict(info, sampling=dict(info["sampling"], samples=1, value=1_000_000, factor=5)), pal))
+        self.assertIn("Bacterium 1/3 · 1.0M (×5: 5.0M) · 180 m to go (320 of 500 m)", pays)
+        self.assertEqual((O.run_pays(1_000_000, 5), O.run_pays(1_000_000, 1), O.run_pays(None, 5)), ("1.0M (×5: 5.0M)", "1.0M", ""))
 
 
 BIO_DETAIL = {"name": "Drojau BJ-A a41-3", "bodies": [

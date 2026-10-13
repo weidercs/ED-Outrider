@@ -22,8 +22,8 @@ before.
   (`body_highlight_level`, `bio_min`), as Here's to-do line does.
 - **The body panel**, flying your ship: the body you have targeted in this system (or the one you are near):
   landable, gravity (amber at your high-gravity level), atmosphere, temperature, what mapping is still worth, first
-  discovered; its life, each likely species with its codex mark, colony distance and value, the runs under way and
-  the species finished; and whether it is worth landing (with the ×5 first-footfall note).
+  discovered; its life, each likely species with its codex mark, colony distance and value, the runs under way (what
+  each pays, "1.0M (×5: 5.0M)" with the first-footfall bonus) and the species finished; and whether it is worth landing (with the ×5 first-footfall note).
 - **The surface radar**, on a body (landed, in the SRV, on foot) or low over it: heading up, you in the middle, N on
   the rim; the sample points of your run with their colony rings, red while you are inside one and green once you are
   clear; tagged plants, the ship and your rigs. Underneath: how far the next sample must be, or "Clear: sample here".

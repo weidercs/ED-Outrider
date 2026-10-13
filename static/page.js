@@ -877,11 +877,21 @@ function elsewhereText(e) {
   if (!e || !e.species || !(e.samples === 2 || (e.value || 0) >= bioMinNow())) return "";
   return `In progress elsewhere: ${e.species} ${e.samples}/3 on ${e.body || "another body"}${e.system ? ` (${e.system})` : ""}. A new species discards it.`;
 }
+// what a sample run pays, known from sample 1 (S62): "1.0M (×5: 5.0M)" with the first footfall bonus, else "1.0M"; `value`
+// is the species' own (the sampling summary's), never one with the ×5 already in (the run elsewhere's): no double ×5.
+// The overlay's run_pays says the same.
+function runPays(value, factor) {
+  if (!value) return "";
+  return factor > 1 ? `${credits(value)} (×${factor}: ${credits(value * factor)})` : credits(value);
+}
 function samplingHtml() {
   const sm = data.sampling;
   if (sm && sm.elsewhere) { const t = elsewhereText(sm.elsewhere); return t ? `<div class="spacing elsewhere">${esc(t)}</div>` : ""; }
   if (!sm || !sm.samples || sm.samples >= 3) return "";
-  const head = `<b>${esc(sm.genus || "")}</b> <span class="unk">${esc((sm.species || "").split(" ").slice(1).join(" "))}</span> · sample ${sm.samples}/3`;
+  const pays = runPays(sm.value, sm.factor);
+  const head = `🧬 <b>${esc(sm.genus || "")}</b> <span class="unk">${esc((sm.species || "").split(" ").slice(1).join(" "))}</span>` +
+    (pays ? ` · <span class="pays" title="what the run pays once its three samples are analysed${sm.factor > 1 ? ", with the ×5 first footfall bonus" : ""}">${esc(pays)}</span>` : "") +
+    ` · sample ${sm.samples}/3`;
   // no colony distance for this genus (one outrider.bio does not know): the positions may well be recorded
   if (sm.need == null && sm.points > 0) return `<div class="spacing unk">${head} · spacing unknown for this genus${tagText(sm)}</div>`;
   if (sm.to_go == null) return `<div class="spacing unk">${head} · ${sm.need ? `need ${sm.need} m from the last sample` : "spacing unknown"}` +
@@ -1727,7 +1737,9 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["bodybrief", "approaching a body with biological signals: what they could be (the FSS already said so, so off by default)", null],
   ["sell", "docked where you can sell, and what you banked", "cash"],
   ["saleleft", "a sale left data aboard: Universal Cartographics sells 50 systems a page, so a sale that stops after one page leaves the rest unsold (said once the pages stop and the estimate has caught up); likewise completed samples still unsold after a Vista Genomics sale", "alert"],
-  ["unsold", "unsold data crosses a threshold", "cash"], ["hull", "hull damage, heat damage, interdiction", "danger"],
+  ["unsold", "unsold data crosses a threshold", "cash"],
+  ["firstsseen", "someone else's scans of a system holding your unsold first discoveries reached Spansh (the firsts watch): a card and a notification each time, spoken at most once in 30 minutes", "alert"],
+  ["hull", "hull damage, heat damage, interdiction", "danger"],
   ["carrier", "your carrier arrives somewhere", "chime"], ["codex", "a new codex entry", "chime"],
   ["phenomena", "notable stellar phenomena (life in clouds or rings) the FSS finds in a system where you have none on record: how many", "find"],
   ["ggg", "a potential green gas giant: one of your own scans fits the community's seven-layer ladder model (a guess: check it in the system map)", "find"],
@@ -1769,8 +1781,24 @@ function notify(kind, title, body) {
     const n = new Notification(title, {body, tag: "ed-" + kind});
     // the jumponium call-out opens the Materials tab at its "where to find" list
     if (kind === "jumponium") n.onclick = () => { try { window.focus(); } catch {} openMatSources(); };
+    // someone else scanned your unsold firsts (S6): My firsts, where the system is marked 👁
+    if (kind === "firstsseen") n.onclick = () => { try { window.focus(); } catch {} const t = document.querySelector('[data-view="firsts"]'); if (t) t.click(); };
     return true;
   } catch { return false; }
+}
+// S6's card: "👁 Someone else scanned your unsold Drojau LL-O b26-3" over "3 bodies reached Spansh 12 days after you (your
+// scan 15 days ago) · 14.2M cr at stake · see My firsts", "· 3 systems so far today" when a first run through finds more.
+// Their scans reached Spansh: never "stolen". The days from the moment's timestamps (nothing ticking in the payload)
+function firstsSeenText(m, now = Date.now()) {
+  const day = 86400000, first = m.first_ts ? Date.parse(m.first_ts) : NaN, rep = m.reported_ts ? Date.parse(m.reported_ts) : NaN;
+  const days = n => `${n} day${n === 1 ? "" : "s"}`, n = m.bodies || 0;
+  const after = isFinite(first) && isFinite(rep) ? ` ${days(Math.max(0, Math.round((rep - first) / day)))} after you` : "";
+  const ago = isFinite(first) ? ` (your scan ${days(Math.max(0, Math.round((now - first) / day)))} ago)` : "";
+  const bits = [`${n} ${n === 1 ? "body" : "bodies"} reached Spansh${after}${ago}`];
+  if (m.value) bits.push(`${credits(m.value)} cr at stake`);
+  if (m.today > 1) bits.push(`${m.today} systems so far today`);
+  bits.push("see My firsts");
+  return {title: `👁 Someone else scanned your unsold ${m.system}`, body: bits.join(" · ")};
 }
 // The "mapped" call-out's words, from the facts alone (no personality lines): "A 2 mapped efficiently, 3.4M. Next:
 // biology on C 2, up to 19.0M." The efficiency is ProbesUsed against EfficiencyTarget; the value is the body's data
@@ -2285,6 +2313,7 @@ const LINE_SAMPLES = {
   find_bio: {body: "B 7", value: "19.0M"}, sample_clear: {genus: "Stratum"},
   codex: {entry: "Stratum Tectonicas", what: "new to your codex for this region"},
   phenomena: {what: "three notable stellar phenomena, all in rings"}, ggg: {body: "B 3"}, rare_star: {what: "a black hole at B"},
+  firsts_seen: {system: "Drojau LL-O b26-3", value: "14.2M"},
   surface_site: {what: "Guardian sites on B 3"}, signal_poi: {what: "a Guardian beacon"}, curious: {},
   fuel_low: {pct: 18}, fuel_star: {pct: 22, star: "white dwarf"}, fuel_target: {pct: 22, system: "Drojau LL-O b26-3"},
   fuel_topup: {rate: "8 of the last 20 stars were scoopable", jumps: "about 6 jumps"}, hull: {pct: 42}, interdicted: {by: "someone"},
@@ -3489,8 +3518,11 @@ function drawHereLegend() {
   // a glyph in a badge's own text (not inside a span: the dim map, the volcano's title)
   const s = g => badges.some(b => [...b.childNodes].some(n => n.nodeType === 3 && n.textContent.includes(g)));
   const has = (sel, text) => roots.some(r => [...r.querySelectorAll(sel)].some(e => e.textContent.includes(text)));
-  const html = roots.length ? HERE_LEGEND.filter(([t]) => t(q, s, has))
-    .map(([, icon, what]) => `<span class="lg"><span class="lgi badges">${icon}</span> ${what}</span>`).join("") : "";
+  const shown = roots.length ? HERE_LEGEND.filter(([t]) => t(q, s, has)) : [];
+  // S7: with bio on show and the colour tables missing, the note (and its Retry) closes the legend
+  const cn = shown.length && (q(".sp") || s("🧬")) ? bioColoursNote() : "";
+  const html = shown.map(([, icon, what]) => `<span class="lg"><span class="lgi badges">${icon}</span> ${what}</span>`).join("") +
+    (cn ? `<span class="lg">${cn}</span>` : "");
   el.hidden = !html;
   if (el.innerHTML !== html) el.innerHTML = html;
 }
@@ -3845,7 +3877,9 @@ function renderBodyInto(panel, d, bodyName, closeJs) {
     const ro = row.ruled_out || [];
     const why = ro.length ? `<details class="ruledout"><summary class="unk">Why not the other ${ro.length} genera</summary><ul>` +
       ro.map(r => `<li><span>${esc(r.genus)}</span><span class="unk">${esc(r.why)}</span></li>`).join("") + `</ul></details>` : "";
-    bioSec = sec("bio", `🧬 Exobiology${row.bio ? ` · ${row.bio} signal${row.bio === 1 ? "" : "s"}` : ""}${bioRange(row)}`, `<ul>${lines.join("")}</ul>${why}`);
+    const cn = bioColoursNote();   // S7: no colour variants without the tables: said, with Retry
+    bioSec = sec("bio", `🧬 Exobiology${row.bio ? ` · ${row.bio} signal${row.bio === 1 ? "" : "s"}` : ""}${bioRange(row)}`,
+                 `<ul>${lines.join("")}</ul>${cn ? `<div class="unk">${cn}</div>` : ""}${why}`);
   }
   const curSec = (row.curiosities || []).length ? sec("curiosities", "🔭 Curiosities", row.curiosities.map(c => `<div><b>${esc(c.tag)}</b> · ${esc(c.why)}</div>`).join("")) : "";
   const mineSec = row.mining || (row.mined || []).length ? sec("mining", row.mining ? `⛏ ${mineCount(row.mining)}` : "⛏ Mining",
@@ -4908,7 +4942,9 @@ clRegionEl.addEventListener("change", () => { store.set("clRegion", clRegionEl.v
 async function loadChecklist(force = false) {
   const want = clRegionEl.value || store.get("clRegion", "here") || "here";
   const kind = clKind();
-  const key = `${kind}|${want}|${data && data.scan_version}|${want === "here" ? posId() : ""}`;
+  // the colour tables' state too (S7): the note's "downloading…" / "failed", and the colours once they are in
+  const br = data && data.bio_rules, colKey = br ? `${br.colours}|${(br.colours_job || {}).state}` : "";
+  const key = `${kind}|${want}|${data && data.scan_version}|${want === "here" ? posId() : ""}|${colKey}`;
   if (!force && key === CL.key) return;
   // every change (region, list, a scan) asks, and only the newest answer is drawn: a region picked while an answer
   // was on its way was dropped (the Fable review of 2026-10-10, #6); a list switched meanwhile asks anew (setBioMode)
@@ -4974,7 +5010,8 @@ function renderChecklist() {
     ` · <span class="cl-sold">${s.sold} sold</span>` +
     ` · <span class="cl-aboard" title="species you carry unsold samples of (a colour of one may be sold already)">${s.aboard} aboard</span>` + (s.lost ? ` · <span class="cl-lost">${s.lost} lost</span>` : "") +
     (s.logged ? ` · <span class="cl-logged">${s.logged} logged</span>` : "") + ` · colours ${s.colours_found} of ${s.colours}` +
-    (s.elsewhere ? ` · <span class="clelse">${s.elsewhere} more found in other regions</span>` : "");
+    (s.elsewhere ? ` · <span class="clelse">${s.elsewhere} more found in other regions</span>` : "") +
+    (bioColoursNote() ? ` · ${bioColoursNote()}` : "");   // S7: the colour tables missing, with Retry
   const html = d.genera.map(g => {
     const found = g.species.filter(r => r.state && r.possible).length, poss = g.species.filter(r => r.possible).length;
     // complete (the author, 2026-10-10): every species that can grow here has all its colours found (one with no colour
@@ -7487,6 +7524,7 @@ function onData() {
   if (brEl) brEl.textContent = br
     ? `Species guesses use the BioScan spawn rules (${br.species} species, updated ${(br.generated || "").slice(0, 10)}); each start fetches newer rules from GitHub when there are any.`
     : "Spawn rules missing (bio_rules.json) and could not be downloaded: bodies get no species guesses. Run python3 -m outrider.bio --update-rules once online.";
+  { const cn = bioColoursNote(); if (cn !== bioColoursDrawn) { bioColoursDrawn = cn; drawHereLegend(); } }   // S7's note in Here's legend
   // first payload, the server was restarted, or this window slept (see poll): no sounds for old state
   const firstNews = data.run_id !== runId || woke;
   onHush(firstNews); takeCopilot(data.copilot, firstNews); nowStakesTick();
@@ -7785,6 +7823,13 @@ function onData() {
         alertOut("autotarget", m.text, m.ok ? "" : `step ${m.phase ?? "?"}: ${m.why || "?"}`, {tag: m.ok ? "ok" : "failed", say: m.text});
       else if (m.kind === "rig" && m.text)   // the co-pilot's rig marking and a rig's collection: plain words, no personality
         alertOut("rigs", m.text.replace(/\.$/, ""), "", {tag: m.what === "collected" ? "rig_collected" : "rig", say: m.text});
+      else if (m.kind === "firsts_seen" && m.system) {   // S6: someone else's scans of your unsold firsts reached Spansh
+        const t = firstsSeenText(m);
+        alertOut("firstsseen", t.title, t.body, {tag: "firsts_seen",
+                 quiet: m.speak === false ? "said at most once in 30 minutes (a card and a notification this time)" : false,
+                 say: () => m.value ? line("firsts_seen", {system: m.system, value: credits(m.value)}, `Someone else has scanned your unsold ${m.system}. Time to sell.`)
+                                    : `Someone else has scanned your unsold ${m.system}. Time to sell.`});
+      }
       else if ((m.kind === "upload_down" || m.kind === "upload_back") && m.text)   // S3: the banner has the card; this notifies
         alertOut("uploads", m.text, m.kind === "upload_down" ? "Settings → Uploads has the detail" : "", {tag: m.kind});
       else if (m.kind === "rig_leash" && m.text)   // a rig past the leash warning, or lost at 5 km: danger
@@ -7930,7 +7975,7 @@ const speechLogFacts = e => [e.kind + (e.tag ? "/" + e.tag : ""), e.style, e.voi
 const ALERT_SHORT = {arrival: "Arrival", game: "Game start and quit", jump: "FSD charge", honk: "Honk", brief: "Arrival brief", fss: "FSS",
   leaving: "Leaving", fuel: "Fuel", scoop: "Tank full", scoopstop: "Scooping stopped", supercharge: "Supercharge", find: "Find",
   jumponium: "Jumponium", sampling: "Sampling", approach: "High-g approach", bodybrief: "Body brief", sell: "Selling", saleleft: "Sale left data",
-  unsold: "Unsold", hull: "Hull and danger", carrier: "Carrier", codex: "Codex", phenomena: "Stellar phenomena", ggg: "Green gas giant?", rare_star: "Rare star", surface_site: "Surface sites", signal_poi: "Signals worth a detour", curious: "Curiosities", loss: "Ship lost", rigs: "Rigs", rigleash: "Rig leash",
+  unsold: "Unsold", firstsseen: "Firsts scanned by others", hull: "Hull and danger", carrier: "Carrier", codex: "Codex", phenomena: "Stellar phenomena", ggg: "Green gas giant?", rare_star: "Rare star", surface_site: "Surface sites", signal_poi: "Signals worth a detour", curious: "Curiosities", loss: "Ship lost", rigs: "Rigs", rigleash: "Rig leash",
   rigsout: "Rigs out", mapped: "Mapped", signals: "Signals", highway: "Neutron Highway", autotarget: "Auto-target", manual: "Asked for",
   exo: "Exomastery route", riches: "Road to Riches", trade: "Trade route", uploads: "Uploads failing"};
 const speechMuted = new Set();   // kinds turned off from the tally this session (each shows an undo)
@@ -9868,7 +9913,30 @@ const NOTICE_ACTIONS = {
   "open:server:journals": ["Journal folders", () => openServerSettings("journals", "live")],
   "open:log": ["Show log", () => openServerLog()],
   "open:uploads": ["Uploads", () => openSettingsSection("uploads")],
+  "retry:bio_colours": ["Retry", () => bioColoursRetry()],
 };
+// S7: ExploData's colour tables missing (the first start's download failed): a note where colour variants would show
+// (the Exo-Biology checklist, the body pop's Bio section, Here's legend) beside the banner's card, each with Retry
+// (POST api/bio/colours: the tables only). "" while they are loaded, or with no spawn rules at all.
+function bioColoursNote() {
+  const br = data && data.bio_rules;
+  if (!br || br.colours !== false) return "";
+  const job = br.colours_job || {};
+  const retry = `<button type="button" class="mini" data-biocolours>Retry</button>`;
+  const what = job.state === "running" ? "colours unavailable: downloading…"
+    : job.state === "failed" ? `colours unavailable: failed: ${esc(job.why || "?")} · ${retry}`
+    : `colours unavailable: tables not downloaded · ${retry}`;
+  return `<span class="colnote" title="ExploData's colour tables tell each species' colour variants; without them no colour is predicted">${what}</span>`;
+}
+let bioColoursDrawn = "";
+async function bioColoursRetry() {
+  let r;
+  try { r = await apiJson("api/bio/colours", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"}); }
+  catch { r = {error: "Outrider not reachable"}; }
+  if (r.error && r.code !== "running") toast(`Could not download the colour tables: ${r.error}`);
+  else if (data && data.bio_rules && r.colours_job) { data.bio_rules.colours_job = r.colours_job; render(); }   // "downloading…" at once
+}
+document.addEventListener("click", e => { if (e.target.closest("[data-biocolours]")) bioColoursRetry(); });
 const NOTICE_MARK = {info: "ⓘ", warn: "⚠", bad: "⛔"};
 const noticeGone = new Set();   // dismissed in this window, until the server's answer leaves them out
 let noticeDrawn = null;
@@ -10400,7 +10468,7 @@ const TAB_ALERT_NAMES = {discovery: "Targeting a system", arrival: "Arriving som
   leaving: "Leaving work behind", fuel: "Fuel", scoop: "Tank full", scoopstop: "Scooping stopped early",
   supercharge: "Supercharged", highway: "Highway next stop", autotarget: "Auto-target", find: "Valuable body",
   jumponium: "Jumponium materials", sampling: "Exobiology unfinished", approach: "High gravity", bodybrief: "Bio signals on approach",
-  sell: "Selling", saleleft: "Data left after a sale", unsold: "Unsold data", hull: "Hull, heat, interdiction",
+  sell: "Selling", saleleft: "Data left after a sale", unsold: "Unsold data", firstsseen: "Firsts scanned by others", hull: "Hull, heat, interdiction",
   carrier: "Carrier arrived", codex: "New codex entry", phenomena: "Stellar phenomena", ggg: "Green gas giant?", rare_star: "Rare star", surface_site: "Surface sites", signal_poi: "Signals worth a detour", curious: "Curiosities", loss: "Ship lost", rigs: "Mining rigs", rigleash: "Rig too far",
   rigsout: "Rigs still out", uploads: "Uploads failing"};
 function tabDrawAlerts() {

@@ -135,6 +135,7 @@ def _no_systemctl(cmd, **kw):
 outrider.service.RUNNER = _no_systemctl
 if outrider.bio:
     outrider.bio.update_if_newer = lambda path=None, log=print: None
+    outrider.bio.EXPLODATA = OFF   # S7's Retry fails here, never writing resources/bio_colours.json
 outrider.tts.Speaker._download = lambda self, name, status=None: False
 # your own pronunciations (data/pronounce.json) are never read or written from here: a scratch file beside the database
 outrider.tts.PRONOUNCE.own = os.path.join(os.path.dirname(sys.argv[sys.argv.index("--db") + 1]), "pronounce.json")
