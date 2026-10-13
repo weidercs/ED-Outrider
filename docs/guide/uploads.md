@@ -22,8 +22,8 @@ switch them (they are not among the Server settings).
     per in-game commander, set in Settings → Uploads. The key stays on this Outrider: the page shows only its first
     and last four characters, to compare with edsm.net.
   - A commander with no key sends nothing, and Settings says so.
-  - A key EDSM refuses stops the sending (not the recording) until you change the key or switch EDSM off and on:
-    what you played meanwhile then goes.
+  - A key EDSM refuses stops the sending (not the recording) until you change the key, press **Try again** in
+    Settings → Uploads, or switch EDSM off and on: what you played meanwhile then goes.
   - If EDSM keeps refusing a key you know is right, make a new key on edsm.net and paste that one.
 - **Inara**: keeps your commander profile there current, as EDMC's Inara upload does, so a player who uses Outrider
   alone loses nothing on it:
@@ -48,7 +48,7 @@ switch them (they are not among the Server settings).
   - **Switch Inara off in any other app first** (EDMC, EDDI, EDDiscovery, EDDLite): two apps sending can get your key
     revoked. Outrider sees EDMC's setting on this PC and holds its own while EDMC sends; it cannot see the others.
   - A key or app Inara refuses stops the sending (not the recording) with Inara's words in Settings, until you change
-    the key or switch Inara off and on. A refusal for sending too often waits an hour by itself.
+    the key, press **Try again** or switch Inara off and on. A refusal for sending too often waits an hour by itself.
 
 ## Catching up, and what is never sent
 
@@ -110,11 +110,27 @@ twice: EDDN has no way to tell. So:
 
 The header's Data tile shows, live, a line per upload in use: what it sent, has waiting and had refused in the last
 day. Settings → Uploads shows the same per service, with why nothing can be sent now (held by another uploader, a key
-EDSM or Inara refused, the beta or Legacy game) and the last message (a refusal, "saved").
+EDSM or Inara refused, the beta or Legacy game) and the last message (a refusal, "saved"). Under each service:
+
+- **Recent**: its last sends, newest first. Sends in a row are one line ("12:04 sent 37 (11:58–12:04)"); a failure says
+  what kind and the service's or the network's own words, and when it tries again ("11:58 ✗ no network: Cannot connect
+  to host … · trying again at 12:00"). Kept until Outrider stops.
+- **At start**: what it did when Outrider started: "12 messages from while Outrider was off", "nothing missed", "EDMC
+  was sending EDSM" (then nothing of that stretch is sent), or "nothing from before" (no earlier mark: it starts from
+  your journals' end).
+- **On hold**, with **Try again**: a key EDSM or Inara refused (Try again sends with the stored key now), or a kind of
+  EDDN message (below).
 
 If EDDN refuses one kind of message (markets, say) three times within an hour, or once with 426 (a version it no
-longer takes), Outrider stops sending that kind until it restarts: usually a game update EDDN does not take yet.
-The other kinds still go.
+longer takes), Outrider stops sending that kind until it restarts or you press Try again: usually a game update EDDN
+does not take yet. The other kinds still go. The refused ones are gone; Try again lets new ones go.
+
+**When a service is down.** If an upload that is on has failed for 15 minutes with messages waiting, a card says so at
+the top of the page ("EDDN unreachable for 15 min: 42 messages waiting, they drop after an hour (the oldest in 38
+min)"; for EDSM and Inara "kept until it answers") and, with notifications on, a desktop notification. It is never
+spoken. ✕ hides the card; it goes by itself when the service takes messages again, with a notification ("EDDN sending
+again after 37 min: sending the 40 waiting (2 were over an hour old and dropped)"). Its row in Settings → Alerts
+switches the notification. Inara asking Outrider to slow down (its hour's pause) is said that way.
 
 A developer's switch shows next to the service in Settings → Uploads: "(test schemas only)" when `OUTRIDER_EDDN_TEST`
 is set, "(dry run: nothing sent)" when `OUTRIDER_EDSM_DRYRUN` or `OUTRIDER_INARA_DRYRUN` is (the requests go to

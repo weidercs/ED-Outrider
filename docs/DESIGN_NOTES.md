@@ -422,6 +422,19 @@ upstream project's choices, not rules of the game.
   that stretch (the author lost twelve events before this).
 - **The upload switches live only in Settings → Uploads**, written to `[eddn]`/`[edsm] enabled` (hidden from the Server
   settings).
+- **An upload outage gets a card and a notification, never speech** (S3, the author's default, 2026-10-12): an upload
+  that is on, has messages waiting and has failed for 15 minutes (`UPLOAD_DOWN_S`; checked each minute by
+  `watch_leases`) puts a card on the notices banner and a moment the page notifies under its own alerts row
+  (`uploads`, never spoken: no speech.json key, plain words as the Highway's). Once per outage; the first round the
+  service answers clears the card and says "sending again after N min", not "reachable again": after a long backoff
+  (up to 30 minutes) the service may have been back for a while. An outage starts with a raised round or one the
+  service only asked to retry; a held key and a row settled here (no key, an hour old) neither start nor end one
+  (`uploads.Recent`). Inara's own hour-long pause after "too many requests" is worded "asked Outrider to slow down".
+- **Settings → Uploads' Recent list lives in memory** (`uploads.Recent`, the last 50 rounds per service; a restart
+  empties it): the outbox keeps every row a week, but not the rounds, the errors or the backoff. Try again clears a
+  refused EDSM or Inara key at once (the hold otherwise lasts until a new key or the switch; `State.clear_key_hold`, the
+  one helper a new key also goes through) and releases an EDDN kind on hold with its refusals (else the next refusal
+  holds it again); that kind's refused messages were dropped, so only new ones go.
 - **EDDN station data goes once per visit**, not once per change: the sites date a station's data by what arrives, so
   each docking sends it again; only the same screen reopened in one docking is skipped (`VISIT_ENDS`).
 - **EDDN sends what EDMC, EDDiscovery and EDDLite send, field for field** (compared on EDDN's relay, the author,

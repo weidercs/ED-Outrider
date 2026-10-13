@@ -1027,3 +1027,351 @@ class StatusForEddn(unittest.TestCase):
         hub.status({"live": False, "body": "X 1", "lat": 1.5, "lon": -2.5})   # not live: nothing
         self.assertEqual((hub.session.status_body, hub.session.status_pos), (None, None))
 
+
+
+def rnd(at, *states, raised=None, error=None, wait=0):
+    """An upload_loop report: one row per (state, status text)."""
+    return {"at": at, "results": [(i, st, text, None) for i, (st, text) in enumerate(states)], "raised": raised,
+            "error": error, "wait": wait}
+
+
+class RecentRounds(unittest.TestCase):
+    """G1 (UP1): uploads.Recent, each service's last rounds in memory, and the outage it tracks (S3, S16)."""
+
+    def test_merges_and_keeps_the_last(self):
+        r = U.Recent(keep=3)
+        r.add("eddn", rnd(100, ("sent", "200 OK")))
+        r.add("eddn", rnd(160, ("sent", "200 OK"), ("dropped", "400 FAIL")))
+        [e] = r.recent("eddn")
+        self.assertEqual((e["state"], e["sent"], e["dropped"], e["first"], e["at"], e["rounds"], e["note"]),
+                         ("ok", 2, 1, 100, 160, 2, "400 FAIL"))           # back to back: one entry, "sent 2 (first-at)"
+        r.add("eddn", rnd(160 + U.MERGE_GAP_S + 1, ("sent", "200 OK")))   # a long gap: a new entry
+        self.assertEqual(len(r.recent("eddn")), 2)
+        boom = ConnectionError("unreachable")
+        r.add("eddn", rnd(2000, ("queued", "x"), raised=boom, error="ConnectionError: unreachable", wait=60))
+        r.add("eddn", rnd(2060, ("queued", "x"), raised=boom, error="ConnectionError: unreachable", wait=120))
+        f = r.recent("eddn")[0]                                         # the same failure again: merged, newest first
+        self.assertEqual((f["state"], f["rounds"], f["first"], f["next"], f["kind"]), ("fail", 2, 2000, 2180, "refused"))
+        r.add("eddn", rnd(2200, ("held", "203 refused")))
+        r.add("eddn", rnd(2300, ("sent", "200 OK")))
+        self.assertEqual([e["state"] for e in r.recent("eddn")], ["ok", "held", "fail"])   # only the last 3 kept
+        self.assertEqual(r.recent("edsm"), [])
+
+    def test_outage_state_table(self):
+        r = U.Recent()
+        boom = OSError(101, "Network is unreachable")
+        self.assertIsNone(r.add("edsm", rnd(10, ("queued", "x"), raised=boom, error="OSError")))
+        o = r.outage("edsm")
+        self.assertEqual((o["since"], o["kind"], o["user_fix"]), (10, "offline", True))   # a raised round starts it
+        r.add("edsm", rnd(20, ("queued", "503 busy")))                                     # retry only: goes on
+        self.assertEqual((r.outage("edsm")["since"], r.outage("edsm")["last"], r.outage("edsm")["kind"]), (10, 20, "http5xx"))
+        r.add("edsm", rnd(30, ("held", "203 EDSM refused the commander name or API key")))   # held: neither
+        r.add("edsm", rnd(40, ("dropped", "not sent: no EDSM account for CMDR X")))         # settled here: neither
+        r.add("edsm", rnd(45, ("dry", "dry run: not sent")))
+        self.assertEqual(r.outage("edsm")["since"], 10)
+        ended = r.add("edsm", rnd(50, ("sent", "100 OK"), ("queued", "503")))                # answered: ends it
+        self.assertEqual((ended["since"], ended["until"]), (10, 50))
+        self.assertIsNone(r.outage("edsm"))
+        r.add("eddn", rnd(60, ("queued", "503 x"), raised=None, error="503 x"))
+        self.assertEqual(r.add("eddn", rnd(70, ("dropped", "400 FAIL")))["until"], 70)        # refused by EDDN itself: answered
+        r.add("inara", rnd(80, ("queued", "400 Too much requests, slow down, cowboy."), error="400 Too much requests"))
+        self.assertEqual(r.outage("inara")["kind"], "rate")
+        r.end("inara")                                                                        # switched off: forgotten
+        self.assertIsNone(r.outage("inara"))
+
+    def test_catchup_record(self):
+        r = U.Recent()
+        r.note_catchup("eddn", 100, "caught_up", count=12, since="2026-10-11T21:14:00Z")
+        r.note_catchup("edsm", 100, "other", who="EDMC")
+        self.assertEqual(r.catchup["eddn"], {"at": 100, "why": "caught_up", "count": 12, "since": "2026-10-11T21:14:00Z", "who": None})
+        self.assertEqual(r.catchup["edsm"]["who"], "EDMC")
+
+
+class Classify(unittest.TestCase):
+    """outrider.health.classify: what kind of failure (the Recent list's words, the outage card's)."""
+
+    def test_kinds(self):
+        import asyncio
+        import errno
+        import socket
+        import aiohttp
+        from aiohttp.client_reqrep import ConnectionKey
+        from outrider.health import HttpError, classify
+        key = ConnectionKey("eddn.edcd.io", 4430, True, True, None, None, None)
+        cases = [(socket.gaierror(-2, "Name or service not known"), ("dns", True)),
+                 (aiohttp.ClientConnectorError(key, OSError(errno.ENETUNREACH, "Network is unreachable")), ("offline", True)),
+                 (aiohttp.ClientConnectorError(key, ConnectionRefusedError(errno.ECONNREFUSED, "refused")), ("refused", False)),
+                 (asyncio.TimeoutError(), ("timeout", False)),
+                 (HttpError(503, "EDSM answered HTTP 503"), ("http5xx", False)),
+                 (HttpError(429, "Inara answered HTTP 429"), ("rate", False)),
+                 (ValueError("EDSM's answer has no msgnum"), ("bad_answer", False)),
+                 (RuntimeError("?"), ("other", False))]
+        for exc, want in cases:
+            self.assertEqual(classify(exc), want, exc)
+        self.assertEqual(classify(text="503 Service Unavailable"), ("http5xx", False))
+        self.assertEqual(classify(text="408 timeout"), ("http4xx", False))
+        self.assertEqual(classify(text="400 Too much requests, slow down, cowboy."), ("rate", False))
+        self.assertEqual(classify(text="503 temporarily unavailable"), ("http5xx", False))   # rate words count on a 4xx only
+
+
+class SchemaHoldRelease(unittest.TestCase):
+    """S16: EDDN's kind on hold, listed with when, and released by Try again with its refusals."""
+
+    def test_release(self):
+        import outrider.eddn as E
+        h = E.SchemaHold()
+        for t in (100, 110, 120):
+            h.refused("commodity", t, "400 FAIL: Schema Validation")
+        self.assertEqual(h.held_list(), [{"schema": "commodity", "why": "400 FAIL: Schema Validation", "since": 120, "refusals": 3}])
+        self.assertTrue(h.release("commodity"))
+        self.assertFalse(h.release("commodity"))
+        self.assertEqual(h.held_list(), [])
+        h.refused("commodity", 130, "400 FAIL")                  # its old refusals went too: one more does not hold it
+        self.assertIsNone(h.is_held("commodity"))
+
+
+class LoopReportsAndWakes(unittest.TestCase):
+    """upload_loop's report carries the exception and the wait (Recent), and a wake ends a held key's wait at once."""
+    setUp = LoopFixes.setUp
+
+    def test_report_has_the_exception_and_the_wait(self):
+        reports = []
+        boom = ConnectionError("unreachable")
+
+        async def send(rows):
+            raise boom
+        import asyncio
+        clock = [1000.0]
+
+        async def sleep(secs):
+            clock[0] += secs
+            raise asyncio.CancelledError
+
+        async def go():
+            try:
+                await U.upload_loop("eddn", self.db, send, lambda s: True, clock=lambda: clock[0], sleep=sleep,
+                                    report=lambda s, o: reports.append(o))
+            except asyncio.CancelledError:
+                pass
+        asyncio.run(go())
+        self.assertIs(reports[0]["raised"], boom)
+        self.assertEqual(reports[0]["wait"], U.BACKOFF_S[0])
+
+    def test_wake_ends_a_held_wait(self):
+        import asyncio
+        sent, held = [], [True]
+
+        async def send(rows):
+            sent.append(asyncio.get_running_loop().time())
+            return [(rows[0]["id"], "held" if held else "sent", "203 refused" if held else "100 OK", None)]
+
+        async def go():
+            wake = asyncio.Event()
+            on = lambda s: True
+            task = asyncio.ensure_future(U.upload_loop("eddn", self.db, send, on, batch=1, wake=wake))   # the rows' service
+            while not sent:
+                await asyncio.sleep(0.01)
+            held.clear()
+            wake.set()                                         # Try again: no 30 s wait
+            t0 = asyncio.get_running_loop().time()
+            while len(sent) < 2:
+                await asyncio.sleep(0.01)
+                self.assertLess(asyncio.get_running_loop().time() - t0, 3)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        asyncio.run(asyncio.wait_for(go(), 10))
+        self.assertEqual(len(sent), 2)
+
+    def test_woken_early_the_pace_still_holds(self):
+        import asyncio
+        clock, slept, sent = [1000.0], [], []
+
+        async def send(rows):
+            sent.append(clock[0])
+            return [(rows[0]["id"], "held", "Inara refused: bad key", None)]
+
+        async def sleep(secs):
+            slept.append(secs)
+            clock[0] += secs
+            if len(sent) >= 2:
+                raise asyncio.CancelledError
+
+        async def go():
+            wake = asyncio.Event()
+            wake.set()   # pressed already: the held round's wait ends at once, but 35 s apart all the same
+            try:
+                await U.upload_loop("eddn", self.db, send, lambda s: True, clock=lambda: clock[0], sleep=sleep, batch=1,
+                                    min_gap=35, wake=wake)
+            except asyncio.CancelledError:
+                pass
+        asyncio.run(go())
+        self.assertGreaterEqual(sent[1] - sent[0], 35)
+
+
+class UploadsS16(unittest.TestCase):
+    """S16: Settings -> Uploads' Recent list, the start-up catch-up, holds with Try again (one helper for a key hold)."""
+    setUp, write, jump = MarksAndCatchUp.setUp, MarksAndCatchUp.write, MarksAndCatchUp.jump
+
+    def test_catch_up_is_recorded(self):
+        self.write(header(now_ts(7200)), loadgame(now_ts(7199)))
+        self.j.scan_dir(self.dir, commit_each=True, upload="catchup")
+        self.state.set_upload("eddn", True)
+        self.state.uploads_hub.marks.pop("eddn")                   # no mark yet (a first start with it on)
+        self.state.catch_up_uploads()
+        self.assertEqual(self.state.uploads_summary()["eddn"]["catchup"]["why"], "fresh")
+        self.write(self.jump(300, "WhileDown1"), self.jump(200, "WhileDown2"))
+        self.j.scan_dir(self.dir, commit_each=True, upload="catchup")
+        mark = self.state.uploads_hub.marks["eddn"]
+        self.state.catch_up_uploads()
+        c = self.state.uploads_summary()["eddn"]["catchup"]
+        self.assertEqual((c["why"], c["count"], c["since"]), ("caught_up", 2, mark[2] if len(mark) > 2 else None))
+        self.state.catch_up_uploads()
+        self.assertEqual(self.state.uploads_summary()["eddn"]["catchup"]["count"], 0)    # "nothing missed"
+        self.state.edmc = {"running": True, "eddn": True}
+        self.state.catch_up_uploads()
+        self.assertEqual(self.state.uploads_summary()["eddn"]["catchup"], dict(self.state.upload_recent.catchup["eddn"],
+                                                                              why="other", who="EDMC"))
+
+    def test_summary_lists_recent_rounds_and_holds(self):
+        st = self.state
+        st.set_upload("eddn", True)
+        st.upload_report("eddn", rnd(time.time() - 60, ("queued", "x"), raised=ConnectionError("unreachable"),
+                                     error="ConnectionError: unreachable", wait=60))
+        st.upload_report("eddn", rnd(time.time(), ("sent", "200 OK")))
+        for t in (1, 2, 3):
+            st.eddn_hold.refused("commodity", time.time() + t, "400 FAIL")
+        u = st.uploads_summary()["eddn"]
+        self.assertEqual([e["state"] for e in u["recent"]], ["ok", "fail"])
+        self.assertEqual(u["recent"][1]["error"], "ConnectionError: unreachable")   # the raw text kept
+        self.assertEqual([h["schema"] for h in u["holds"]], ["commodity"])
+        self.assertIsNone(u["key_held"])
+
+    def test_try_again(self):
+        import asyncio
+        from aiohttp.test_utils import TestClient, TestServer
+        st = self.state
+        st.set_upload("edsm", True)
+        st.upload_wake["edsm"] = asyncio.Event()
+        st.upload_report("edsm", rnd(1, ("held", "203 EDSM refused the commander name or API key")))
+        self.assertFalse(st.upload_on("edsm"))
+        self.assertEqual(st.uploads_summary()["edsm"]["key_held"], "203 EDSM refused the commander name or API key")
+        for t in (1, 2, 3):
+            st.eddn_hold.refused("commodity", t, "400 FAIL")
+
+        async def go():
+            async with TestClient(TestServer(ed_outrider.make_app(st))) as c:
+                post = lambda body, **kw: c.post("/api/uploads/retry", json=body, **kw)
+                out = [(await post({"service": "edsm"}, headers={"Origin": "http://evil.example"})).status]   # another site's page
+                out.append(st.upload_on("edsm"))
+                for bad in ({"service": "spansh"}, {"service": "eddn"}, {"service": "edsm", "schema": "x"}, ["edsm"]):
+                    out.append((await post(bad)).status)
+                r = await post({"service": "edsm"})
+                out += [r.status, (await r.json())["edsm"]["key_held"], st.upload_wake["edsm"].is_set()]
+                out.append((await post({"service": "edsm"})).status)          # not held now
+                out.append((await post({"service": "eddn", "schema": "commodity"})).status)
+                out.append((await post({"service": "eddn", "schema": "commodity"})).status)   # released already
+                return out
+        with unittest.mock.patch("builtins.print"):
+            got = asyncio.run(go())
+        self.assertEqual(got, [403, False, 400, 400, 400, 400, 200, None, True, 409, 200, 404])
+        self.assertTrue(st.upload_on("edsm"))                     # sending again
+        self.assertIsNone(st.eddn_hold.is_held("commodity"))
+        st.eddn_hold.refused("commodity", 10, "400 FAIL")         # its refusals were cleared: one more holds nothing
+        self.assertIsNone(st.eddn_hold.is_held("commodity"))
+
+    def test_a_new_key_clears_the_hold_through_the_same_helper(self):
+        st = self.state
+        st.set_upload("inara", True)
+        with unittest.mock.patch.object(st, "clear_key_hold", wraps=st.clear_key_hold) as helper:
+            st.set_inara_account("Briadin", "abcdefghijklmnop1234")
+            st.set_edsm_account("Briadin", "Briadin", "0123456789abcdef0123456789abcdef01234567")
+        self.assertEqual([c.args[0] for c in helper.call_args_list], ["inara", "edsm"])
+
+
+class UploadOutageAlert(unittest.TestCase):
+    """S3: an upload failing for 15 minutes with messages waiting: a card on the banner and a moment (a notification,
+    never spoken), once per outage; the first answered round after it says it is sending again."""
+
+    def setUp(self):
+        MarksAndCatchUp.setUp(self)
+        self.state.set_upload("eddn", True)
+        self.state.set_upload("edsm", True)
+        self.t0 = time.time()
+        s = U.Session()
+        s.feed(header(now_ts(9)), "J.log")
+        s.feed(loadgame(now_ts(8)))
+        self.session = s
+
+    def queue(self, service, n, ago=60):
+        for i in range(n):
+            U.enqueue(self.db, service, "journal", f"J{service}{ago}:{i}", now_ts(ago), self.session, {"i": i})
+        self.db.commit()
+
+    def down(self, service, at):
+        self.state.upload_report(service, rnd(at, ("queued", "x"), raised=OSError(101, "Network is unreachable"),
+                                              error="ClientConnectorError: Cannot connect to host", wait=60))
+
+    def moments(self, kind):
+        return [m for m in self.j.moments if m["kind"] == kind]
+
+    def test_once_per_outage_and_back(self):
+        st = self.state
+        self.queue("eddn", 42, ago=22 * 60 - 30)                               # the oldest 37.5 min from its hour
+        self.down("eddn", self.t0)
+        st.check_upload_outages(self.t0 + 14 * 60)
+        self.assertEqual(self.moments("upload_down"), [])                       # not 15 minutes yet
+        with unittest.mock.patch("sys.stderr"):
+            st.check_upload_outages(self.t0 + 15 * 60)
+            st.check_upload_outages(self.t0 + 16 * 60)
+        [m] = self.moments("upload_down")                                       # once
+        self.assertEqual(m["text"], "EDDN unreachable (no network) for 15 min: 42 messages waiting, they drop after an "
+                                    "hour (the oldest in 23 min)")
+        self.assertEqual((m["service"], m["failure"], m["waiting"], m["stake"]), ("eddn", "offline", 42, 23))
+        [n] = [n for n in st.notices.active() if n["key"] == "upload_down:eddn"]
+        self.assertEqual((n["text"], n["action"]), (m["text"], "open:uploads"))
+        # two were dropped as over an hour old meanwhile, then EDDN answers
+        self.db.execute("UPDATE upload_queue SET state='dropped', last_status='not sent: over an hour old', done_at=? "
+                        "WHERE id IN (SELECT id FROM upload_queue WHERE service='eddn' LIMIT 2)", (self.t0 + 30 * 60,))
+        self.db.commit()
+        with unittest.mock.patch("builtins.print"):
+            st.upload_report("eddn", rnd(self.t0 + 37 * 60, ("dropped", "not sent: over an hour old")))   # settled here: not back
+            self.assertEqual(self.moments("upload_back"), [])
+            st.upload_report("eddn", rnd(self.t0 + 37 * 60, ("sent", "200 OK")))
+        [b] = self.moments("upload_back")
+        self.assertEqual(b["text"], "EDDN sending again after 37 min: sending the 40 waiting (2 were over an hour old and dropped)")
+        self.assertEqual([n for n in st.notices.active() if n["key"] == "upload_down:eddn"], [])   # the card goes
+        self.down("eddn", self.t0 + 40 * 60)                                     # a new outage: said again later
+        with unittest.mock.patch("sys.stderr"):
+            st.check_upload_outages(self.t0 + 56 * 60)
+        self.assertEqual(len(self.moments("upload_down")), 2)
+
+    def test_only_with_messages_waiting_and_while_on(self):
+        st = self.state
+        self.down("edsm", self.t0)
+        st.check_upload_outages(self.t0 + 20 * 60)
+        self.assertEqual(self.moments("upload_down"), [])                       # nothing waiting: nothing at stake
+        self.queue("edsm", 3)
+        with unittest.mock.patch("sys.stderr"):
+            st.check_upload_outages(self.t0 + 20 * 60)
+        [m] = self.moments("upload_down")
+        self.assertEqual(m["text"], "EDSM unreachable (no network) for 20 min: 3 messages waiting, kept until it answers")
+        st.set_upload("edsm", False)                                             # switched off: the card goes
+        self.assertEqual([n for n in st.notices.active() if n["key"].startswith("upload_down")], [])
+        st.set_upload("edsm", True)
+        self.down("edsm", self.t0 + 21 * 60)
+        st.check_upload_outages(self.t0 + 30 * 60)                               # a new outage, 9 minutes old
+        self.assertEqual(len(self.moments("upload_down")), 1)
+
+    def test_inara_asked_to_slow_down(self):
+        st = self.state
+        st.set_upload("inara", True)
+        self.queue("inara", 5)
+        st.upload_report("inara", rnd(self.t0, ("queued", "400 Too much requests, slow down, cowboy."),
+                                      error="400 Too much requests, slow down, cowboy.", wait=3600))
+        with unittest.mock.patch("sys.stderr"):
+            st.check_upload_outages(self.t0 + 15 * 60)
+        [m] = self.moments("upload_down")
+        self.assertEqual(m["text"], "Inara asked Outrider to slow down 15 min ago: 5 messages waiting, kept until it answers")

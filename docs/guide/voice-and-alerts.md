@@ -35,6 +35,8 @@ notification and be spoken (🗣), chosen per alert in **⚙ Settings → Alerts
 - hull damage, heat damage, interdiction, and unsold data past a threshold
 - your carrier arriving somewhere new or leaving without you
 - a Rhino mining rig nearing the 5 km leash (see The surface map)
+- an upload (EDDN, EDSM, Inara) failing for 15 minutes with messages waiting, and sending again: a card at the top of
+  the page and a notification, never spoken (see [Uploads](uploads.md#status))
 
 Spoken but not notified unless you tick it: the arrival briefing, the FSS debrief, leaving a body with
 sampling unfinished, each species completed, tank full, a high-gravity approach with a lot aboard, the

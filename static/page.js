@@ -1723,8 +1723,12 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["loss", "your ship was destroyed with data aboard (or samples died with you): what was lost, and the nearest system to rescan", "danger"],
   ["rigs", "Rhino mining rigs: the co-pilot button's confirmation (rig placed, picked up, six out) and what a rig collected", null],
   ["rigleash", "a Rhino mining rig too far from you (over the rig warning distance, again at 4.5 km; the game destroys it at 5 km)", "danger"],
-  ["rigsout", "docking the Rhino with rigs still marked out on the body, and which are probably full (Outrider's own record: a rig picked up without a tap still counts until you mark it on the surface map)", null]];
-const UNSPOKEN = new Set(["discovery"]);   // a target's verdict: the arrival is what gets spoken
+  ["rigsout", "docking the Rhino with rigs still marked out on the body, and which are probably full (Outrider's own record: a rig picked up without a tap still counts until you mark it on the surface map)", null],
+  ["uploads", "an upload (EDDN, EDSM, Inara) failing for 15 minutes with messages waiting, and sending again after it: a card at the top of the page too, never spoken", null]];
+// never spoken, and why: a target's verdict (the arrival is what gets spoken); an upload outage (the card and the
+// notification say it: the author's choice, S3)
+const UNSPOKEN_WHY = {discovery: "the arrival is", uploads: "a card and a notification only"};
+const UNSPOKEN = new Set(Object.keys(UNSPOKEN_WHY));
 // the defaults, as functions: another window's import that resets a setting rebuilds from them (ALERT_STORES)
 const alertCfgBase = () => Object.assign({enabled: false}, Object.fromEntries(ALERTS.map(([k]) => [k, true])),
   // a notification on every jump (or scoop, or FSS) would be noise: these are spoken by default, not notified
@@ -1879,7 +1883,7 @@ function alertOut(kind, title, body, {sound, say, delay = 0, tag = null, still =
     linePlain = true;
     try { addCaption((typeof say === "function" ? say() : say) || title); } catch { addCaption(title); } finally { linePlain = false; }
   }
-  setFate(entry, !loud ? `silent: ${hushReason()}` : !speechOn ? "silent: speech off" : UNSPOKEN.has(kind) ? "not spoken (the arrival is)"
+  setFate(entry, !loud ? `silent: ${hushReason()}` : !speechOn ? "silent: speech off" : UNSPOKEN.has(kind) ? `not spoken (${UNSPOKEN_WHY[kind]})`
     : quiet ? (typeof quiet === "string" ? quiet : "merged into another line (quiet)")
     : hush && alertSpeak[kind] ? "silent: hushed" : "silent: not ticked to speak");
   return notified;
@@ -7730,6 +7734,8 @@ function onData() {
         alertOut("autotarget", m.text, m.ok ? "" : `step ${m.phase ?? "?"}: ${m.why || "?"}`, {tag: m.ok ? "ok" : "failed", say: m.text});
       else if (m.kind === "rig" && m.text)   // the co-pilot's rig marking and a rig's collection: plain words, no personality
         alertOut("rigs", m.text.replace(/\.$/, ""), "", {tag: m.what === "collected" ? "rig_collected" : "rig", say: m.text});
+      else if ((m.kind === "upload_down" || m.kind === "upload_back") && m.text)   // S3: the banner has the card; this notifies
+        alertOut("uploads", m.text, m.kind === "upload_down" ? "Settings → Uploads has the detail" : "", {tag: m.kind});
       else if (m.kind === "rig_leash" && m.text)   // a rig past the leash warning, or lost at 5 km: danger
         alertOut("rigleash", m.text.replace(/\.$/, ""), "", {tag: "rig_leash", say: m.text});
       else if (m.kind === "rigs_out" && m.text) {   // the Rhino docked with rigs still marked out: spoken, and a card
@@ -7875,7 +7881,7 @@ const ALERT_SHORT = {arrival: "Arrival", game: "Game start and quit", jump: "FSD
   jumponium: "Jumponium", sampling: "Sampling", approach: "High-g approach", bodybrief: "Body brief", sell: "Selling", saleleft: "Sale left data",
   unsold: "Unsold", hull: "Hull and danger", carrier: "Carrier", codex: "Codex", phenomena: "Stellar phenomena", ggg: "Green gas giant?", rare_star: "Rare star", surface_site: "Surface sites", signal_poi: "Signals worth a detour", curious: "Curiosities", loss: "Ship lost", rigs: "Rigs", rigleash: "Rig leash",
   rigsout: "Rigs out", mapped: "Mapped", signals: "Signals", highway: "Neutron Highway", autotarget: "Auto-target", manual: "Asked for",
-  exo: "Exomastery route", riches: "Road to Riches", trade: "Trade route"};
+  exo: "Exomastery route", riches: "Road to Riches", trade: "Trade route", uploads: "Uploads failing"};
 const speechMuted = new Set();   // kinds turned off from the tally this session (each shows an undo)
 // "This session: Arrival brief 42 🔇 · FSD charge 40 (3 dropped) 🔇 · …": every kind that was said or queued (not the
 // silent ones: a kind already off would only inflate), noisiest first. 🔇 turns that alert's speech off (its 🗣 tick
@@ -7967,7 +7973,7 @@ document.getElementById("alertOpts").innerHTML = ALERTS.map(([k, label, snd]) =>
   (ALERT_GROUPS[k] ? `<tr class="agroup"><th colspan="4">${esc(ALERT_GROUPS[k])}</th></tr>` : "") +
   `<tr><td>${esc(label)}</td><td><input type="checkbox" data-alert="${k}" aria-label="notify"></td>` +
   `<td>${snd || k === "arrival" ? `<input type="checkbox" data-asound="${k}" aria-label="sound">` : `<span class="unk" title="${k === "discovery" ? "the target sound" : "no sound"}">·</span>`}</td>` +
-  `<td>${UNSPOKEN.has(k) ? `<span class="unk" title="not spoken: arriving there is">·</span>` : `<input type="checkbox" data-aspeak="${k}" aria-label="speak">`}</td></tr>`).join("");
+  `<td>${UNSPOKEN.has(k) ? `<span class="unk" title="not spoken: ${esc(UNSPOKEN_WHY[k])}">·</span>` : `<input type="checkbox" data-aspeak="${k}" aria-label="speak">`}</td></tr>`).join("");
 for (const [attr, cfg, key] of [["asound", alertSound, "alertSound"], ["aspeak", alertSpeak, "alertSpeak"]])
   alertDialog.querySelectorAll(`[data-${attr}]`).forEach(cb => {
     cb.checked = !!cfg[cb.dataset[attr]];
@@ -8679,6 +8685,59 @@ function uploadLineHtml(u) {
   }).filter(Boolean);
   return parts.join("");   // a line per service: the numbers can get long
 }
+// Settings -> Uploads' Recent list (S16): each service's last rounds from the server (uploads.Recent; times are epoch
+// seconds, never ticking text), newest first: "12:04 sent 37 (11:58–12:04)", "11:58 ✗ unreachable: <the raw error> ·
+// trying again at 12:00"; what it did at start; and what is on hold, with Try again
+const UPLOAD_KIND_WORDS = {dns: "address not found", offline: "no network", refused: "unreachable", timeout: "no answer in time",
+  tls: "secure connection failed", http5xx: "failing", rate: "asked to slow down", http4xx: "refused", bad_answer: "an odd answer", other: "failed"};
+const upTime = t => {
+  const d = new Date(t * 1000);
+  if (isNaN(d)) return "?";
+  const hm = d.toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+  return d.toDateString() === new Date().toDateString() ? hm : `${d.toLocaleDateString([], {day: "numeric", month: "short"})} ${hm}`;
+};
+const upN = n => Number(n || 0).toLocaleString("en-US");
+function uploadRecentLine(e, newest) {
+  const span = e.rounds > 1 && e.first !== e.at ? ` (${upTime(e.first)}–${upTime(e.at)})` : "";
+  if (e.state === "fail") {
+    const tries = e.rounds > 1 ? ` · ${e.rounds} tries since ${upTime(e.first)}` : "";
+    return `<div class="uprow fail">${upTime(e.at)} <span class="bad">✗ ${esc(UPLOAD_KIND_WORDS[e.kind] || "failed")}</span>: ` +
+      `<span class="upraw">${esc(e.error || "")}</span>${tries}${newest && e.next ? ` · trying again at ${upTime(e.next)}` : ""}</div>`;
+  }
+  if (e.state === "held") return `<div class="uprow">${upTime(e.at)} <span class="bad">⏸ held</span>: ${esc(e.held || "")}</div>`;
+  const bits = [];
+  if (e.sent) bits.push(`sent ${upN(e.sent)}${span}`);
+  if (e.dry) bits.push(`${upN(e.dry)} in a dry run${e.sent ? "" : span}`);
+  if (e.dropped) bits.push(`<span class="warnc">${upN(e.dropped)} not taken</span>${e.note ? `: <span class="upraw">${esc(e.note)}</span>` : ""}${e.sent || e.dry ? "" : span}`);
+  if (e.error) bits.push(`<span class="warnc">${esc(e.error)}</span>`);
+  return bits.length ? `<div class="uprow">${upTime(e.at)} ${bits.join(" · ")}</div>` : "";
+}
+function uploadCatchupLine(c, name) {
+  if (!c) return "";
+  const at = `At start ${upTime(c.at)}: `;
+  const text = c.why === "other" ? `${c.who === "EDMC" ? "EDMC" : c.who ? `the Outrider on ${c.who}` : "another uploader"} was sending ${name}`
+    : c.why === "fresh" ? "nothing from before (it starts from where your journals are)"
+    : c.count ? `${upN(c.count)} message${c.count === 1 ? "" : "s"} from while Outrider was off${c.since ? ` (since ${upTime(Date.parse(c.since) / 1000)})` : ""}`
+    : "nothing missed";
+  return `<div class="uprow unk">${esc(at + text)}</div>`;
+}
+function uploadHoldsHtml(s, x) {
+  const out = [];
+  // a key EDSM or Inara refused: nothing is tried until a new key or this (the recording goes on meanwhile)
+  if (x.key_held) out.push(`<div class="uprow">On hold: <span class="bad">${esc(x.key_held)}</span> ` +
+    `<button type="button" class="try" data-uretry="${s}" title="send again now with the stored key (what you played meanwhile is waiting)">Try again</button></div>`);
+  for (const h of (s === "eddn" && x.holds) || []) {
+    const n = h.refusals > 1 ? `refused ${h.refusals} times in an hour` : "refused";
+    out.push(`<div class="uprow">On hold: <b>${esc(h.schema)}</b>, ${n} (<span class="upraw">${esc(h.why || "")}</span>) ` +
+      `<button type="button" class="try" data-uretry="eddn" data-schema="${esc(h.schema)}" title="send this kind again: the ones refused are gone, so it affects new messages only">Try again</button></div>`);
+  }
+  return out.join("");
+}
+function uploadRecentHtml(s, x) {
+  const name = UPLOAD_NAMES[s][0], rec = Array.isArray(x.recent) ? x.recent : [];
+  const lines = uploadHoldsHtml(s, x) + rec.map((e, i) => uploadRecentLine(e, i === 0)).join("") + uploadCatchupLine(x.catchup, name);
+  return lines ? `<div class="uprecent">${lines}</div>` : "";
+}
 function uploadsHtml(u) {
   if (!u) return `<div class="unk">not known yet</div>`;
   const row = s => {
@@ -8696,8 +8755,8 @@ function uploadsHtml(u) {
     // ticked by what the player switched (wanted), whatever holds or blocks it now
     const ticked = x.wanted ?? (x.on || !!x.held);
     return `<label class="mod"><input type="checkbox" data-upload="${s}"${ticked ? " checked" : ""}${x.available && !u.simulate ? "" : " disabled"}> ` +
-      `<b>${name}</b> <span class="hint">${esc(what)}</span></label><div class="hint">${state}${test}${nums ? " · " + esc(nums) : ""}` +
-      `${x.error && !x.held ? ` · <span class="bad" title="${esc(x.error)}">last error</span>` : ""}</div>`;
+      `<b>${name}</b> <span class="hint">${esc(what)}</span></label><div class="hint">${state}${test}${nums ? " · " + esc(nums) : ""}</div>` +
+      uploadRecentHtml(s, x);
   };
   const acc = ((u.edsm || {}).accounts || []).map(a =>
     `<div class="edsmacc" data-cmdr="${esc(a.commander)}"><b>${esc(a.commander)}</b> → EDSM <input type="text" class="edsmName" value="${esc(a.name)}" maxlength="64" size="14" title="your commander name on EDSM">` +
@@ -8759,6 +8818,22 @@ async function setUpload(service, on, confirmed) {
     uploadsDrawn = ""; renderUploads();   // the box shows the server's state again, whatever happened
   }
 }
+// Try again (S16): EDDN's kind on hold, or a refused EDSM / Inara key tried again now
+document.getElementById("uploadsBox").addEventListener("click", async e => {
+  const b = e.target.closest("[data-uretry]"); if (!b) return;
+  const body = {service: b.dataset.uretry};
+  if (b.dataset.schema) body.schema = b.dataset.schema;
+  b.disabled = true;
+  try {
+    const j = await apiJson("api/uploads/retry", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+    uploadsNote = j.error || (body.schema ? `${body.schema}: sending again` : `${UPLOAD_NAMES[body.service][0]}: trying again now`);
+    if (!j.error) data.uploads = j;
+  } catch (err) {
+    uploadsNote = `could not reach Outrider: ${err.message}`;
+  } finally {
+    uploadsDrawn = ""; renderUploads();
+  }
+});
 document.getElementById("uploadsBox").addEventListener("change", e => {
   const box = e.target.closest("[data-upload]");
   if (box) setUpload(box.dataset.upload, box.checked);
@@ -9297,6 +9372,12 @@ async function saveServerConfig() {
   m.className = "hint ok";
 }
 // Settings opened on Server settings (a notice's button): `section`, a config section to unfold ("journals")
+// Settings at one of its sections (data-sec-key), opened
+function openSettingsSection(key) {
+  if (!alertDialog.open) document.getElementById("alertsBtn").click();
+  const i = alertSections.findIndex(s => s.dataset.secKey === key);
+  if (i >= 0) showAlertSection(i);
+}
 function openServerSettings(section, key) {
   if (section) SRV_SET_OPEN[section] = true;
   srvFocus = section && key ? `srv-${section}-${key}` : null;   // that key's field gets the focus once drawn (S43)
@@ -9565,13 +9646,15 @@ const NOTICE_ACTIONS = {
   "open:server": ["Server settings", () => openServerSettings()],
   "open:server:journals": ["Journal folders", () => openServerSettings("journals", "live")],
   "open:log": ["Show log", () => openServerLog()],
+  "open:uploads": ["Uploads", () => openSettingsSection("uploads")],
 };
 const NOTICE_MARK = {info: "ⓘ", warn: "⚠", bad: "⛔"};
 const noticeGone = new Set();   // dismissed in this window, until the server's answer leaves them out
 let noticeDrawn = null;
 function noticeAction(a) {
   if (!a || !Object.prototype.hasOwnProperty.call(NOTICE_ACTIONS, a)) return null;
-  return TABLET && a.startsWith("open:server") ? null : NOTICE_ACTIONS[a];   // the tablet has no Server settings
+  // the tablet has no Server settings, nor Uploads
+  return TABLET && (a.startsWith("open:server") || a === "open:uploads") ? null : NOTICE_ACTIONS[a];
 }
 function renderNotices() {
   const bar = document.getElementById("noticeBar");
@@ -10098,7 +10181,7 @@ const TAB_ALERT_NAMES = {discovery: "Targeting a system", arrival: "Arriving som
   jumponium: "Jumponium materials", sampling: "Exobiology unfinished", approach: "High gravity", bodybrief: "Bio signals on approach",
   sell: "Selling", saleleft: "Data left after a sale", unsold: "Unsold data", hull: "Hull, heat, interdiction",
   carrier: "Carrier arrived", codex: "New codex entry", phenomena: "Stellar phenomena", ggg: "Green gas giant?", rare_star: "Rare star", surface_site: "Surface sites", signal_poi: "Signals worth a detour", curious: "Curiosities", loss: "Ship lost", rigs: "Mining rigs", rigleash: "Rig too far",
-  rigsout: "Rigs still out"};
+  rigsout: "Rigs still out", uploads: "Uploads failing"};
 function tabDrawAlerts() {
   const tog = (attr, k, on, what) => `<label class="tb-tog"><input type="checkbox" data-${attr}="${esc(k)}"${on ? " checked" : ""}> ${what}</label>`;
   document.getElementById("tabAlertList").innerHTML = ALERTS.map(([k, label, snd]) =>

@@ -214,6 +214,7 @@ import outrider.notices    # the notices banner: start-up problems shown on ever
 import outrider.boxel      # boxel exploration: the cube a procedural name places a system in, its systems, its id64s (pure)
 import outrider.codex_bodies  # star and planet types as codex entries: what a body would log (pure)
 import outrider.service    # Install as a service (S70): a systemd user unit on Linux, a Startup .cmd on Windows
+import outrider.health     # what kind of failure a call to an outside service met (dns, offline, timeout, http5xx...)
 from outrider.core import iso_ts, ts_seconds   # journal timestamps
 from outrider.fsd import (   # the frame shift drive's maths: range, fuel per jump, the fuel model, fleet figures
     FSD_RANGE_MODS, GUARDIAN_BOOST, conservative_optimal_mass, conservative_range, fleet_figures, fleet_range, fsd_range,
@@ -325,6 +326,7 @@ CODEX_IMAGES_RETRY = 3600    # s to wait after a failed refresh   # the geology 
 HIGHWAY_STAND_IN_LY = 150.0   # ly: how far around an end Spansh does not know yet its stand-in is looked for
 NEAR_BODY_ALT = 5000         # m: below this over a body in your ship, the on-body strip shows its bio card
 LEASE_EVERY_S = 60           # s: this instance's upload lease rewritten, the others' read, EDMC's switches checked
+UPLOAD_DOWN_S = 15 * 60      # s: an upload failing this long with messages waiting gets its card and notification (S3)
 BIO_TAGS_SHOWN = 40          # the surface map draws at most this many tagged plants (nearest first)
 SELLER_REFRESH_LY = 100      # look for the nearest places to sell again after moving this far
 SELLER_REFRESH_S = 6 * 3600  # ...or this long (carriers move)
@@ -6313,6 +6315,10 @@ class State:
         self.upload_cfg = json.loads(json.dumps(outrider.uploads.DEFAULTS))
         self.upload_senders, self.upload_tasks, self.upload_session = {}, {}, None
         self.upload_status = {}   # service -> {error, at, held}: the last round's outcome for the status view
+        # each service's last rounds and the outage under way (Settings -> Uploads' Recent, S16; the outage alert, S3),
+        # the outages already said (service -> its start), and each sender's wake (Try again on a held key)
+        self.upload_recent = outrider.uploads.Recent()
+        self.upload_down_said, self.upload_wake = {}, {}
         # what each commander's Inara profile already has (meta inara_sent, live-only: a re-read must not send it again)
         self.inara_sent = outrider.inara.Sent(meta_get(db, "inara_sent") if isinstance(meta_get(db, "inara_sent"), dict) else {},
                                               save=lambda data: meta_set(self.db, "inara_sent", data))
@@ -10800,13 +10806,15 @@ class State:
                 outrider.uploads.write_lease(d, self.leases.instance, info)
 
     async def watch_leases(self):
-        """The leases every LEASE_EVERY_S, and once an hour the outbox's old rows (sent or dropped a week ago) pruned."""
+        """The leases every LEASE_EVERY_S, an upload down too long (check_upload_outages), and once an hour the outbox's
+        old rows (sent or dropped a week ago) pruned."""
         pruned = 0.0
         while True:
             try:
                 edmc = await asyncio.get_running_loop().run_in_executor(None, outrider.uploads.edmc_uploads) \
                     if self.game_pc else None
                 self.refresh_leases(edmc)
+                self.check_upload_outages()
                 if time.time() - pruned > 3600:
                     outrider.uploads.prune(self.db, time.time())
                     self.db.commit()
@@ -10861,6 +10869,8 @@ class State:
                     f"keep it: {out.get('error')}")
             print(f"uploads: {note}", file=sys.stderr)
         self.upload_status.pop(service, None)
+        self.upload_recent.end(service)   # a failure after this starts a new outage
+        self.upload_down_clear(service)
         if was and not on and self.uploads_hub.marks.pop(service, None) is not None:
             # its mark goes: a next start that finds it on in the file (a write that failed) begins from then, as a
             # switch-on does, never catching up what was played while it was off (review 2026-10-11)
@@ -10878,11 +10888,107 @@ class State:
 
     def upload_report(self, service, outcome):
         """A sending round's outcome (outrider.uploads.upload_loop): the last error, and a hold (stop until the player
-        acts: a refused key) when one of its rows says so."""
+        acts: a refused key) when one of its rows says so; Recent's list, and the end of an outage that was said (S3)."""
         held = next((status for _, state, status, _ in outcome["results"] if state == "held"), None)
         dropped = next((status for _, state, status, _ in outcome["results"] if state == "dropped"), None)
         self.upload_status[service] = {"error": outcome["error"] or held or dropped, "at": outcome["at"], "held": held}
+        ended = self.upload_recent.add(service, outcome)
+        if ended and self.upload_down_said.get(service) == ended["since"]:
+            self.upload_back(service, ended)
         self.bump()
+
+    def clear_key_hold(self, service):
+        """A key EDSM or Inara refused: send again now (a new key, Settings' Try again; S16, S45 later). The hold stops
+        the sending only (what is played meanwhile waits in the outbox), and it lasts until this. True when it held."""
+        held = bool((self.upload_status.pop(service, None) or {}).get("held"))
+        if service in self.upload_wake:
+            self.upload_wake[service].set()   # the sender's wait ends at once
+        return held
+
+    def retry_upload(self, service, schema=None):
+        """POST /api/uploads/retry: EDDN's schema on hold sent again (new messages only: its refused ones were dropped),
+        or a key EDSM or Inara refused tried again now. (answer, status)."""
+        if service == "eddn":
+            if not isinstance(schema, str) or not self.eddn_hold.release(schema):
+                return {"error": "schema: an EDDN message kind on hold (Settings -> Uploads lists them)"}, 404
+            print(f"uploads: EDDN's {schema} sent again (Try again)")
+        elif not self.clear_key_hold(service):
+            return {"error": f"{outrider.uploads.NAMES[service]} is not on hold"}, 409
+        else:
+            print(f"uploads: {outrider.uploads.NAMES[service]}: the stored key tried again (Try again)")
+        self.bump()
+        return self.uploads_summary(), 200
+
+    def upload_waiting(self, service):
+        """(rows waiting, the oldest one's journal time in epoch seconds or None) in `service`'s outbox."""
+        n, oldest = self.db.execute("SELECT count(*), MIN(created) FROM upload_queue WHERE service=? AND state='queued'",
+                                    (service,)).fetchone()
+        try:
+            return n, ts_seconds(oldest) if oldest else None
+        except (TypeError, ValueError):
+            return n, None
+
+    # the outage card's verb per failure kind (outrider.health.classify)
+    DOWN_WORDS = {"dns": "unreachable (its address not found)", "offline": "unreachable (no network)",
+                  "refused": "unreachable", "timeout": "not answering", "tls": "unreachable (the secure connection failed)",
+                  "http5xx": "failing", "http4xx": "refusing", "bad_answer": "answering oddly", "other": "failing"}
+
+    def check_upload_outages(self, now=None):
+        """S3, every LEASE_EVERY_S (watch_leases): an upload that is on, has messages waiting and has failed for
+        UPLOAD_DOWN_S gets a card on the banner and a moment (a desktop notification; never spoken: the author's
+        choice), once per outage. Plain words, no personality lines. The card goes when it sends again (upload_back),
+        or when the upload is switched off or held."""
+        now = time.time() if now is None else now
+        for service in outrider.uploads.SERVICES:
+            o = self.upload_recent.outage(service)
+            if not o or not self.upload_on(service):
+                if not self.upload_on(service):
+                    self.upload_down_clear(service)
+                continue
+            waiting, oldest = self.upload_waiting(service)
+            if self.upload_down_said.get(service) == o["since"] or not waiting or now - o["since"] < UPLOAD_DOWN_S:
+                continue
+            name, minutes = outrider.uploads.NAMES[service], int((now - o["since"]) // 60)
+            msgs = f"{waiting:,} message{'' if waiting == 1 else 's'} waiting"
+            stake = None
+            if service == "eddn":   # EDDN's are dropped an hour after the line (eddn_send): say when the first goes
+                stake = max(0, int((oldest + outrider.eddn.CATCHUP_MAX_S - now) // 60)) if oldest else None
+                keep = f"{'they drop' if waiting > 1 else 'it drops'} after an hour" + \
+                    (f" (the oldest in {stake} min)" if stake is not None else "")
+            else:
+                keep = "kept until it answers"
+            if o["kind"] == "rate":   # Inara's own pause after "too many requests": an hour, then it goes again
+                text = f"{name} asked Outrider to slow down {minutes} min ago: {msgs}, {keep}"
+            else:
+                text = f"{name} {self.DOWN_WORDS.get(o['kind'], 'failing')} for {minutes} min: {msgs}, {keep}"
+            self.upload_down_said[service] = o["since"]
+            self.notices.set(f"upload_down:{service}", text, "warn", "open:uploads")
+            self.journals.moment("upload_down", iso_ts(now), service=service, name=name, minutes=minutes, waiting=waiting,
+                                 failure=o["kind"], stake=stake, text=text)
+            print(f"uploads: {text} ({o['error']})", file=sys.stderr)
+            self.bump()
+
+    def upload_back(self, service, ended):
+        """The first round a service answered after an outage that was said: the card goes, and a moment says so
+        ("sending again after N min": after a long backoff the service may have been back for a while)."""
+        self.upload_down_said.pop(service, None)
+        name = outrider.uploads.NAMES[service]
+        minutes = max(1, int((ended["until"] - ended["since"]) // 60))
+        waiting, _ = self.upload_waiting(service)
+        dropped = self.db.execute("SELECT count(*) FROM upload_queue WHERE service=? AND state='dropped' AND last_status=?"
+                                  " AND done_at >= ?", (service, "not sent: over an hour old", ended["since"])).fetchone()[0]
+        text = f"{name} sending again after {minutes} min" + (f": sending the {waiting:,} waiting" if waiting else "")
+        if dropped:
+            text += f" ({dropped:,} {'were' if dropped > 1 else 'was'} over an hour old and dropped)"
+        self.notices.clear(f"upload_down:{service}")
+        self.journals.moment("upload_back", iso_ts(ended["until"]), service=service, name=name, minutes=minutes,
+                             waiting=waiting, dropped=dropped, text=text)
+        print(f"uploads: {text}")
+
+    def upload_down_clear(self, service):
+        """The outage card goes without a word (the upload switched off, held, or given to another uploader)."""
+        self.upload_down_said.pop(service, None)
+        self.notices.clear(f"upload_down:{service}")
 
     BLOCKED_WORDS = {"beta": "the game's beta: nothing is uploaded from it", "legacy": "the Legacy game (3.8): nobody takes its data",
                      "crew": "crew in another commander's ship", "version": "the game version is not known yet",
@@ -10898,7 +11004,10 @@ class State:
                                 wanted=self.upload_wanted(service),   # the page's box: what the player switched
                                 available=service in self.upload_senders, error=st.get("error"),
                                 held=st.get("held") or (self.upload_conflict(service) if self.upload_wanted(service) else None),
-                                blocked=self.BLOCKED_WORDS.get(blocked) if blocked in ("beta", "legacy", "crew") else None)
+                                key_held=st.get("held"),   # a refused key: Try again (a conflict is not the player's to retry)
+                                blocked=self.BLOCKED_WORDS.get(blocked) if blocked in ("beta", "legacy", "crew") else None,
+                                recent=self.upload_recent.recent(service), catchup=self.upload_recent.catchup.get(service))
+        out["eddn"]["holds"] = self.eddn_hold.held_list()
         out["eddn"]["test"] = outrider.uploads.eddn_test_mode()
         out["edsm"]["dry_run"] = outrider.edsm.dry_run()
         out["edsm"]["accounts"] = self.edsm_account_list()
@@ -10962,7 +11071,7 @@ class State:
             return [(r["id"], "dry", "dry run: not sent", None) for r in batch]
         async with self.upload_session.post(outrider.edsm.UPLOAD_URL, json=body) as resp:
             if resp.status != 200:
-                raise ConnectionError(f"EDSM answered HTTP {resp.status}")
+                raise outrider.health.HttpError(resp.status, f"EDSM answered HTTP {resp.status}")
             reply = await resp.json(content_type=None)
         results = outrider.edsm.answer(batch, reply)
         bad = next((status for _, state, status, _ in results if state in ("held", "dropped")), None)
@@ -11024,7 +11133,7 @@ class State:
             accounts[commander] = {"name": name, "key": key}
             outrider.serverlog.hide(key)
         meta_set(self.db, "edsm_accounts", accounts)
-        self.upload_status.pop("edsm", None)   # a new key: try again
+        self.clear_key_hold("edsm")   # a new key: try again
         self.db.commit()
         self.bump()
         return {"ok": True, "accounts": self.edsm_account_list()}, 200
@@ -11064,7 +11173,7 @@ class State:
             return [(r["id"], "dry", "dry run: not sent", None) for r in batch]
         async with self.upload_session.post(outrider.inara.URL, json=body) as resp:
             if resp.status != 200:
-                raise ConnectionError(f"Inara answered HTTP {resp.status}")
+                raise outrider.health.HttpError(resp.status, f"Inara answered HTTP {resp.status}")
             reply = await resp.json(content_type=None)
         results = outrider.inara.answer(batch, reply)
         bad = next((status for _, state, status, _ in results if state in ("held", "dropped")), None)
@@ -11110,7 +11219,7 @@ class State:
         if remove or key != had:   # maybe another Inara profile: it has none of what the old one was sent
             self.inara_sent.forget(commander)
         meta_set(self.db, "inara_accounts", accounts)
-        self.upload_status.pop("inara", None)   # a new key: try again
+        self.clear_key_hold("inara")   # a new key: try again
         self.db.commit()
         self.bump()
         return {"ok": True, "accounts": self.inara_account_list()}, 200
@@ -11129,11 +11238,14 @@ class State:
     def catch_up_uploads(self):
         """At start: each service that is on queues what was played while Outrider was not running (from its mark to
         where the start-up scan got to, at most a week back); one with no mark yet starts where the reader is."""
-        n = 0
+        n, now = 0, time.time()
         for service in self.uploads_hub.builders:
             if not self.upload_wanted(service):
                 continue
             if self.upload_conflict(service):
+                e = self.edmc or {}
+                self.upload_recent.note_catchup(service, now, "other",
+                                                who="EDMC" if e.get("running") and e.get(service) else (self.lease_hold or {}).get(service))
                 # another uploader has it (EDMC, another Outrider): what was played meanwhile is theirs to send. The
                 # mark moves to where they are (their lease's mark) or to the end of what was read
                 theirs = outrider.uploads.lease_marks(LIVE_DIRS, self.leases.instance if self.leases else "").get(service)
@@ -11146,8 +11258,12 @@ class State:
                 pos, ts = self.upload_start_mark(service)
                 if pos:
                     self.uploads_hub.set_mark(service, pos, ts)
+                self.upload_recent.note_catchup(service, now, "fresh")
                 continue
-            n += self.uploads_hub.catch_up(service, LIVE_DIRS, dict(self.journals.offsets))
+            mark = self.uploads_hub.marks[service]
+            k = self.uploads_hub.catch_up(service, LIVE_DIRS, dict(self.journals.offsets))
+            n += k
+            self.upload_recent.note_catchup(service, now, "caught_up", count=k, since=mark[2] if len(mark) > 2 else None)
         self.uploads_hub.flush()
         self.db.commit()
         if n:
@@ -11179,9 +11295,10 @@ class State:
         for service, send in self.upload_senders.items():
             if service not in self.upload_tasks:
                 batch = {"eddn": 1, "inara": outrider.inara.BATCH}.get(service, outrider.edsm.BATCH)   # EDDN: one per request
+                self.upload_wake[service] = asyncio.Event()
                 self.upload_tasks[service] = asyncio.get_running_loop().create_task(outrider.uploads.upload_loop(
                     service, self.db, send, self.upload_on, report=self.upload_report, batch=batch,
-                    min_gap=outrider.inara.MIN_GAP_S if service == "inara" else 0))
+                    min_gap=outrider.inara.MIN_GAP_S if service == "inara" else 0, wake=self.upload_wake[service]))
 
     def set_autohonk(self, enabled):
         """Switch auto honk on or off (the page's toggle; remembered over restarts)."""
@@ -15327,6 +15444,17 @@ def make_app(state, hosts=None):
         state.refresh_leases()   # the lease says so at once
         return web.json_response(dict(state.uploads_summary(), **({"note": note} if note else {})))
 
+    async def uploads_retry_view(request):
+        """POST /api/uploads/retry {service, schema?}: Settings -> Uploads' Try again: EDDN's message kind on hold sent
+        again (schema), or a key EDSM or Inara refused tried again now."""
+        body = await json_object(request)
+        if body is None or body.get("service") not in outrider.uploads.SERVICES or \
+                (body["service"] == "eddn") != isinstance(body.get("schema"), str) or len(str(body.get("schema") or "")) > 64:
+            return web.json_response({"error": "expected {service: \"eddn\", schema} or {service: \"edsm\" or \"inara\"}"},
+                                     status=400)
+        out, status = state.retry_upload(body["service"], body.get("schema"))
+        return web.json_response(out, status=status)
+
     async def inara_account_view(request):
         """POST /api/uploads/inara {commander, api_key?, remove?}: an in-game commander's Inara API key (it stays here;
         nothing answers with it)."""
@@ -15697,6 +15825,7 @@ def make_app(state, hosts=None):
     app.router.add_post("/api/autohonk", pc_only(autohonk_view))
     app.router.add_post("/api/uploads", uploads_view)
     app.router.add_post("/api/uploads/edsm", edsm_account_view)
+    app.router.add_post("/api/uploads/retry", uploads_retry_view)
     app.router.add_post("/api/uploads/inara", inara_account_view)
     app.router.add_post("/api/autohonk/test", pc_only(autohonk_test_view))
     app.router.add_post("/api/autohonk/forget", pc_only(autohonk_forget_view))

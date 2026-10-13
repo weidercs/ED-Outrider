@@ -5286,7 +5286,9 @@ const settle = async maxMs => {
       labEl("pronBox").open = false;
       tabClose(document.getElementById("labDlg"));
       speechLib = lib0;
-      labSound = sound0; URL.createObjectURL = cu; URL.revokeObjectURL = ru; data.tts = t0;
+      labSound = sound0; URL.createObjectURL = cu; data.tts = t0;
+      // jsdom has no revokeObjectURL: Save's revoke runs 10 s later, inside whichever block is running then (batch 12)
+      URL.revokeObjectURL = ru || (() => {});
       if (sp0 === null) store.set("speechSpeed", null); else store.set("speechSpeed", sp0);
       drawTts();
       return o; })()`);
@@ -5549,6 +5551,75 @@ const settle = async maxMs => {
     const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| notices and the log |", good ? "the banner (escaped, its action, ✕ in every window), Show log with the server's lines and its file" : JSON.stringify({got, want}), errors.slice(before));
+  }
+  // S16 / S3 (batch 12): Settings -> Uploads' Recent list (merged successes, a failure's raw text and its next try, what
+  // it did at start), holds with Try again (POST api/uploads/retry; the scratch server answers "not on hold"), no hover-only
+  // "last error"; the outage moments notify under their own alerts row, never spoken; the card's Uploads button opens
+  // Settings at Uploads
+  {
+    const w = dom.window, before = errors.length;
+    if (!w.HTMLDialogElement.prototype.showModal) w.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
+    if (!w.Element.prototype.scrollIntoView) w.Element.prototype.scrollIntoView = function () {};
+    const real = w.fetch, posted = [];
+    w.fetch = (u, o) => { if (o && o.method === "POST" && /uploads\/retry/.test(String(u))) posted.push(JSON.parse(o.body)); return real(u, o); };
+    const got = JSON.parse(w.eval(`(() => {
+      const o = {}, t0 = new Date(2026, 9, 12, 12, 4).getTime() / 1000, hm = t => upTime(t);
+      window.__u0 = data.uploads;
+      const u = {eddn: {on: true, available: true, wanted: true, error: "ClientConnectorError: x", holds: [{schema: "commodity", why: "400 FAIL: Schema", since: t0, refusals: 3}],
+                        recent: [{state: "fail", first: t0 - 360, at: t0 - 120, rounds: 3, kind: "offline", error: "ClientConnectorError: Cannot connect to host eddn.edcd.io:4430", next: t0 + 60},
+                                 {state: "ok", first: t0 - 3600, at: t0 - 3240, rounds: 9, sent: 37, dropped: 2, dry: 0, note: "not sent: over an hour old"}],
+                        catchup: {at: t0 - 7200, why: "caught_up", count: 12, since: null}},
+                 edsm: {on: false, available: true, wanted: true, held: "203 EDSM refused the commander name or API key", key_held: "203 EDSM refused the commander name or API key",
+                        recent: [], catchup: {at: t0 - 7200, why: "other", who: "EDMC"}},
+                 inara: {on: true, available: true, wanted: true, recent: [], catchup: {at: t0 - 7200, why: "caught_up", count: 0}}};
+      const box = document.createElement("div"); box.innerHTML = uploadsHtml(u);
+      o.lines = [...box.querySelectorAll(".uprow")].map(r => r.textContent.replace(/\\s+/g, " ").trim());
+      o.want = ["On hold: commodity, refused 3 times in an hour (400 FAIL: Schema) Try again",
+                hm(t0 - 120) + " ✗ no network: ClientConnectorError: Cannot connect to host eddn.edcd.io:4430 · 3 tries since " + hm(t0 - 360) + " · trying again at " + hm(t0 + 60),
+                hm(t0 - 3240) + " sent 37 (" + hm(t0 - 3600) + "–" + hm(t0 - 3240) + ") · 2 not taken: not sent: over an hour old",
+                "At start " + hm(t0 - 7200) + ": 12 messages from while Outrider was off",
+                "On hold: 203 EDSM refused the commander name or API key Try again",
+                "At start " + hm(t0 - 7200) + ": EDMC was sending EDSM",
+                "At start " + hm(t0 - 7200) + ": nothing missed"];
+      o.buttons = [...box.querySelectorAll("[data-uretry]")].map(b => b.dataset.uretry + (b.dataset.schema ? ":" + b.dataset.schema : ""));
+      o.noLastError = !/last error/.test(box.textContent);
+      o.row = ALERTS.some(a => a[0] === "uploads") && alertCfg.uploads === true && UNSPOKEN.has("uploads") && !!ALERT_SHORT.uploads && !!TAB_ALERT_NAMES.uploads
+        && !document.querySelector('#alertOpts [data-aspeak="uploads"]') && !!document.querySelector('#alertOpts [data-alert="uploads"]');
+      // the moments: notified, never said (speech on, this window the speaker)
+      const said = [], told = [], realSpeak = speak, realNotify = notify, flags = [speechOn, isSpeaker, alertSpeak.uploads, lastMomentSeq], m0 = data.moments;
+      speak = (t, k) => said.push(t); notify = (kind, title, body) => { told.push([kind, title, body]); return true; };
+      speechOn = true; isSpeaker = true; alertSpeak.uploads = true;
+      const s0 = lastMomentSeq, mk = (i, m) => Object.assign({seq: s0 + i, ts: new Date().toISOString()}, m);
+      data.moments = [mk(1, {kind: "upload_down", service: "eddn", text: "EDDN unreachable for 15 min: 42 messages waiting, they drop after an hour (the oldest in 38 min)"}),
+                      mk(2, {kind: "upload_back", service: "eddn", text: "EDDN sending again after 37 min: sending the 40 waiting"})];
+      onData();
+      speak = realSpeak; notify = realNotify; data.moments = m0; [speechOn, isSpeaker, alertSpeak.uploads] = flags; lastMomentSeq = flags[3];
+      o.told = told; o.said = said.length;
+      // Try again in the real box: the scratch server's EDSM is not held
+      data.uploads = u; uploadsDrawn = ""; renderUploads();
+      document.querySelector('#uploadsBox [data-uretry="edsm"]').click();
+      return JSON.stringify(o); })()`));
+    await settle(1500);
+    got.note = w.eval(`document.getElementById("uploadsMsg").textContent`);
+    got.posted = posted.slice();
+    // the card's action opens Settings at Uploads
+    got.open = JSON.parse(w.eval(`(() => {
+      data.notices = [{id: "upload_down:eddn:1", key: "upload_down:eddn", text: "EDDN unreachable for 15 min", level: "warn", action: "open:uploads"}];
+      render();
+      const b = document.querySelector('#noticeBar [data-naction="open:uploads"]');
+      const label = b && b.textContent; if (b) b.click();
+      const sec = document.querySelector('#alertDialog [data-sec-key="uploads"]');
+      const out = [label, document.getElementById("alertDialog").open, !!(sec && sec.open)];
+      tabClose(document.getElementById("alertDialog")); data.notices = []; data.uploads = window.__u0; uploadsDrawn = ""; render();
+      return JSON.stringify(out); })()`));
+    w.fetch = real;
+    const good = JSON.stringify(got.lines) === JSON.stringify(got.want) && JSON.stringify(got.buttons) === JSON.stringify(["eddn:commodity", "edsm"]) &&
+      got.noLastError && got.row && got.said === 0 && JSON.stringify(got.told.map(t => t[0])) === JSON.stringify(["uploads", "uploads"]) &&
+      got.told[0][1].startsWith("EDDN unreachable for 15 min") && got.told[1][1].startsWith("EDDN sending again") &&
+      JSON.stringify(got.posted) === JSON.stringify([{service: "edsm"}]) && got.note === "EDSM is not on hold" &&
+      JSON.stringify(got.open) === JSON.stringify(["Uploads", true, true]) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| uploads recent and outage |", good ? "Recent, catch-up, Try again, the outage notified not spoken, the card opens Uploads" : JSON.stringify(got), errors.slice(before));
   }
   // S43 / S44 (2026-10-12): a first run with no journals (the Data tile says where to set the folder and opens Settings ->
   // Server with [journals] live focused; Docker's words instead; no position yet: "No FSD jump yet"), and Settings ->

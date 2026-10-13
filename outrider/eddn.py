@@ -522,10 +522,11 @@ def schema_of(ref):
 
 class SchemaHold:
     """EDMC's killswitch, ours: a schema EDDN refused three times within an hour is not sent again until Outrider
-    restarts (a game update EDDN does not take yet; its new release must catch up first). Rows of it are dropped."""
+    restarts or the player says Try again (Settings -> Uploads: `release`; a game update EDDN does not take yet, its new
+    release must catch up first). Rows of it are dropped, so a release affects new messages only."""
 
     def __init__(self, limit=3, window=3600):
-        self.limit, self.window, self.refusals, self.held = limit, window, {}, {}
+        self.limit, self.window, self.refusals, self.held, self.since = limit, window, {}, {}, {}
 
     def refused(self, schema, now, why, status=None):
         """A refusal of `schema`. 426 (EDDN no longer takes that schema version) holds it at once: every message of
@@ -533,8 +534,21 @@ class SchemaHold:
         times = [t for t in self.refusals.get(schema, []) if now - t < self.window] + [now]
         self.refusals[schema] = times
         if len(times) >= self.limit or status == 426:
+            self.since.setdefault(schema, now)
             self.held[schema] = why
 
     def is_held(self, schema):
         return self.held.get(schema)
+
+    def release(self, schema):
+        """Send `schema` again (Try again). Its refusals go too, or the next one would hold it again at once. False
+        when it was not held."""
+        self.refusals.pop(schema, None)
+        self.since.pop(schema, None)
+        return self.held.pop(schema, None) is not None
+
+    def held_list(self):
+        """[{schema, why, since, refusals}] for Settings -> Uploads, oldest hold first."""
+        return [{"schema": k, "why": self.held[k], "since": self.since.get(k), "refusals": len(self.refusals.get(k, []))}
+                for k in sorted(self.held, key=lambda k: self.since.get(k) or 0)]
 

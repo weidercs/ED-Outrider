@@ -2,6 +2,32 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · Uploads: what each sent lately, Try again on a hold, and a card when one is down
+- **Each service's last rounds, in memory** (G1, `uploads.Recent`): per service the last 50 sending rounds, sends in a
+  row merged ("sent 37, 11:58–12:04") and the same failure repeated merged, with each failure's kind
+  (`outrider/health.py`'s `classify`: dns, offline, refused, timeout, tls, http5xx, rate, http4xx, bad_answer) and its
+  raw text; the outage under way (a raised or retry-only round starts it, a round the service answered ends it, a held
+  key or a row settled here neither); what each did at start. `upload_loop`'s report carries the exception and the
+  wait; EDSM's and Inara's non-200 raise `health.HttpError` (still a ConnectionError). `SchemaHold` gains `since`,
+  `release` and `held_list`.
+- **Settings → Uploads: Recent, holds, catch-up** (S16): under each service, always shown, its last 10 entries ("12:04
+  sent 37 (11:58–12:04)", "11:58 ✗ no network: <the error> · trying again at 12:00"), "At start 09:14: 12 messages from
+  while Outrider was off" / "nothing missed" / "EDMC was sending EDSM", and what is on hold with **Try again** (POST
+  `/api/uploads/retry` {service, schema?}): a key EDSM or Inara refused is tried again now (a key hold is never
+  retried by itself: a new key or the switch cleared it, and the sender saw that within 30 s; a wake now ends the
+  sender's wait at once, Inara's 35 s still kept), and an EDDN kind on hold is released with its
+  refusals (new messages only: the refused ones were dropped). A new key and Try again clear a hold through one helper,
+  `State.clear_key_hold` (S45 will use it too). The hover-only "last error" is gone.
+- **Upload outage alert** (S3, the author's default: a card and a notification only): an upload that is on, has
+  messages waiting and has failed for 15 minutes puts a card on the notices banner (✕ or its recovery closes it; its
+  Uploads button opens Settings → Uploads) and a desktop notification, once per outage: "EDDN unreachable (no network)
+  for 15 min: 42 messages waiting, they drop after an hour (the oldest in 38 min)", "EDSM … kept until it answers",
+  "Inara asked Outrider to slow down …". The first round the service answers: "EDDN sending again after 37 min: sending
+  the 40 waiting (2 were over an hour old and dropped)". Never spoken: plain text, no speech.json key, a new alerts row
+  `uploads` (notify only).
+- The smoke test's voice lab leaves a stand-in `URL.revokeObjectURL` (jsdom has none): Save's revoke 10 s later failed
+  whichever block was running then.
+
 ## 2026-10-12 · Material traders in the Nearest finder, from Materials and by voice
 - **Spansh probed first** (S54, `scripts/trader_probe.py`, the answers in `tests/fixtures/spansh_traders.json`): a
   station's trader kind is Spansh's `material_trader` field (Raw, Manufactured, Encoded) and its station search filters
