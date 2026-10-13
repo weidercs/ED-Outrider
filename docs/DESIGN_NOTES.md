@@ -869,7 +869,11 @@ upstream project's choices, not rules of the game.
   does not match in place, so a match is the setting itself, ready to change. A row shows when every word is in its
   text, its section's heading or the config key it defaults from (`data-find`), at least one in the row itself; a word
   naming a section shows all of it. What it opens or hides is never remembered: clearing it (or closing Settings) puts
-  each section back as it was.
+  each section back as it was. Context over precision (the author, 2026-10-13, after "crew" showed only the XO's row):
+  a word naming a titled block (`data-find-block`, marked explicitly rather than guessed from the markup) shows the whole
+  block, and a table with a row matching shows whole, the matching rows marked (`.sfmark`; those named in their first
+  cell when there are such, so "tactical" marks Tactical, not every member whose danger lines Tactical says). Server's
+  config sections stay context, not blocks: their titles list their keys ("network, password, paths, backups").
 - **Hard words are given as respellings** (2026-10-12, `outrider/pronounce.py`). Piper's English voices read the
   exobiology Latin by espeak's English rules; `resources/pronounce.json` gives each genus and species word as a
   respelling ("fon-TIK-yoo-loo-uh", the stressed syllable in capitals, or raw `[[phonemes]]`), and each syllable goes

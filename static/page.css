@@ -881,6 +881,9 @@ body.nowmode header, body.nowmode main { display: none; }
   background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; }
 #alertDialog .sethead .setfind .hint { white-space: nowrap; }
 #alertDialog .sfhide { display: none !important; }
+/* a table shown whole for the rows that matched: those rows marked, in the theme's accent (its cells, so a grid row too) */
+#alertDialog tr.sfmark > th, #alertDialog tr.sfmark > td { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+#alertDialog tr.sfmark > :first-child { box-shadow: inset 3px 0 0 var(--accent); }
 /* Personality voices (S40): a row per personality */
 .stylevoices { margin: 4px 0 2px; font-size: 13px; border-collapse: collapse; }
 .stylevoices th, .stylevoices td { padding: 2px 6px; text-align: left; font-weight: 400; }

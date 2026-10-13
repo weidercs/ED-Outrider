@@ -605,7 +605,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       <div data-find="defaults.speech_styles defaults.speech_profanity defaults.speech_profanity_pct" class="mod inlineopts">Personality: <span id="speechStyles" class="sstyles"></span>
         <span class="profrow"><label><input type="checkbox" id="speechProfanity"> with profanity <span id="speechProfanityWho" class="unk"></span></label>
         <label title="how often a line comes from the swearing versions instead of the clean ones"><input type="number" id="speechProfanityPct" min="0" max="100" step="5" style="width:4.5em">% of the time</label></span></div>
-      <div id="vmBox" class="vmbox" hidden>
+      <div id="vmBox" class="vmbox" data-find-block="voices kept loaded" hidden>
         <h4 class="vmhead">Voices kept loaded</h4>
         <div id="vmNote" class="vmnote" role="status"></div>
         <div data-find="speech.voices_loaded" class="mod inlineopts vmkeep">Keep loaded <select id="vmKeep" aria-label="voices kept loaded"></select>
@@ -614,7 +614,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
           <span class="hint">(off: each loads the first time it speaks, about a second)</span></label>
         <span id="vmMsg" class="hint" role="status"></span>
       </div>
-      <div id="crewBox" class="crewbox">
+      <div id="crewBox" class="crewbox" data-find-block="crew">
         <h4 class="crewhead">Crew</h4>
         <div class="mod inlineopts crewsw"><label><input type="checkbox" id="crewOn"> <b>Split the alerts among a crew</b></label>
           <label id="crewDangerWrap" hidden><input type="checkbox" id="crewDanger"> Danger lines always in Tactical's voice</label>
@@ -625,7 +625,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         <div id="crewXoNote" class="crewnote" hidden>The XO is your main voice: every crew member left "as the XO" speaks in it, and the XO steps in for any crew member whose voice cannot speak (not installed, failed to load), so no line is ever lost. A name is said when another crew member mentions that member ("ask Mira"); without one, its role ("ask the Engineer").</div>
         <span id="crewMsg" class="hint" role="status"></span>
       </div>
-      <div class="mod" id="styleVoicesRow" hidden>Personality voices <span id="styleVoicesCrew" class="hint" hidden>(used by crew members whose voice is "as the personality")</span>
+      <div class="mod" id="styleVoicesRow" data-find-block="personality voices" hidden>Personality voices <span id="styleVoicesCrew" class="hint" hidden>(used by crew members whose voice is "as the personality")</span>
         <span class="hint">each personality in a voice of its own, or as another person of a several-person voice (the voice lab's Give to this personality does the same); Outrider keeps them for every browser and the tablet</span>
         <table id="styleVoices" class="stylevoices"><thead><tr><th>Personality</th><th>Voice</th><th>Speaker</th><th></th><th></th></tr></thead><tbody></tbody></table>
         <span id="styleVoicesMsg" class="hint" role="status"></span></div>
@@ -796,10 +796,10 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     <details class="setsec" data-sec-key="server" data-chip="Server" id="serverSettings"><summary>Server settings <span class="sum-note">the config file: network, password, paths, backups, Spansh, the Highway, the voice's AI and more</span></summary>
       <div class="srvtop"><b>Outrider <span id="srvVersion"></span></b> · <button type="button" id="srvLogBtn" title="what Outrider has printed in its terminal since it started (and saved beside its database)">Show log</button>
         · <button type="button" id="srvRestartBtn" data-restart>Restart</button> <span id="srvRestartMsg" class="hint" role="status"></span></div>
-      <details class="srvbk" id="srvBackups"><summary>Backups <span class="sum-note">the zips Outrider made, and the command that puts one back</span></summary>
+      <details class="srvbk" id="srvBackups" data-find-block="backups"><summary>Backups <span class="sum-note">the zips Outrider made, and the command that puts one back</span></summary>
         <div id="srvBackupsBody"><div class="hint">loading…</div></div>
       </details>
-      <details class="srvbk" id="srvService"><summary>Start with this computer <span class="sum-note">Outrider as a service: no terminal to keep open</span></summary>
+      <details class="srvbk" id="srvService" data-find-block="start with this computer service"><summary>Start with this computer <span class="sum-note">Outrider as a service: no terminal to keep open</span></summary>
         <div id="srvServiceBody"><div class="hint">loading…</div></div>
       </details>
       <div id="serverSettingsBody" class="srvset"><div class="hint">loading…</div></div>

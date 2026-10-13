@@ -7407,7 +7407,17 @@ const releasePayloads = async () => {
     w.eval(`data.crew.danger = true; drawCrew(true)`);
     const shows = el => !!el && !el.closest(".sfhide") && !el.closest("[hidden]");
     const findIt = q => w.eval(`sfSet(${JSON.stringify(q)})`);
-    findIt("navigator"); got.findNav = [shows(tr("navigator")), shows(cell("jump").closest("tr")), shows(cell("hull").closest("tr")), shows(tr("science"))];
+    // a row matching shows its whole table, the matching rows marked: the Navigator's in the crew table, the jump
+    // alert's (its crew member) in the Alerts table, the rest of both shown unmarked
+    const marked = el => !!el && el.classList.contains("sfmark");
+    findIt("navigator"); got.findNav = [shows(tr("navigator")), shows(cell("jump").closest("tr")), shows(cell("hull").closest("tr")), shows(tr("science")),
+      marked(tr("navigator")), marked(cell("jump").closest("tr")), marked(cell("hull").closest("tr")), marked(tr("science"))];
+    // the block's heading word: the whole crew block (every member, the switches, the XO note), nothing marked
+    const crewRows = () => [...d.querySelectorAll("#crewTable tbody tr")];
+    findIt("crew"); got.findCrewAll = [crewRows().length, crewRows().filter(shows).length, shows(d.getElementById("crewOn")), shows(d.getElementById("crewXoNote")),
+      shows(d.getElementById("crewAudition")), crewRows().some(marked)];
+    findIt("tactical"); got.findTactical = [crewRows().filter(shows).length, crewRows().filter(marked).map(r => r.dataset.crole),
+      shows(d.getElementById("crewXoNote"))];
     findIt("xo"); got.findXo = shows(tr("xo"));
     findIt("keep loaded"); got.findKeep = [shows(keep), shows(d.getElementById("vmNote"))];
     findIt("load at start"); got.findPre = shows(pre);
@@ -7444,7 +7454,7 @@ const releasePayloads = async () => {
       moved: ["quartermaster", true],
       dangerOff: [false, false],
       crewPosts: [{role: "engineer", reset: true}, {role: "science", name: "Ada"}, {row: "scoop", role: "quartermaster"}],
-      findNav: [true, true, false, false], findXo: true, findKeep: [true, false], findPre: true, findMem: true, findKey: true, findCrew: true,
+      findNav: [true, true, true, true, true, true, false, false], findCrewAll: [9, 9, true, true, true, false], findTactical: [9, ["tactical"], false], findXo: true, findKeep: [true, false], findPre: true, findMem: true, findKey: true, findCrew: true,
       findOff: false,
       off: [true, true, true, true, true, true, true, false, true],
     };
@@ -7550,6 +7560,16 @@ const releasePayloads = async () => {
     got.key = [vis("#hlBody"), vis("#hlBio"), vis('#serverSettingsBody [data-key="body_highlight_level"]'), secs().sort().join()];
     await find("speak voice");   // two words, one in the section's heading
     got.two = [vis("#speechSpeed"), vis("#sayMapped")];
+    // a block's heading word in another section: the whole Backups fold, opened, its summary's words too; Start with
+    // this computer stays out; an upload service by its name: all of its block, its "no commander" line included
+    const fold = id => w.eval(`document.getElementById("${id}").open`), backups0 = fold("srvBackups");
+    await find("backups");
+    got.backups = [vis("#srvBackups"), fold("srvBackups"), vis("#srvBackupsBody"), vis("#srvService"), secs().includes("server")];
+    await find("zips");
+    got.zips = [vis("#srvBackupsBody"), fold("srvBackups")];
+    await find("inara");
+    got.inara = JSON.parse(w.eval(`(() => { const b = document.querySelector('#uploadsBox [data-find-block="Inara"]');
+      return JSON.stringify(!!b && !b.closest(".sfhide") && [...b.children].every(c => !c.classList.contains("sfhide"))); })()`));
     await find("zzqxw");
     got.none = [msg(), secs().length, w.eval(`[...document.querySelectorAll("#alertChips [data-sec]")].every(b => b.classList.contains("sfhide"))`)];
     got.every = JSON.parse(w.eval(`(() => {
@@ -7566,16 +7586,17 @@ const releasePayloads = async () => {
       return JSON.stringify(out); })()`));
     await find("");
     got.cleared = [d.querySelectorAll("#alertDialog .sfhide").length, w.eval(`JSON.stringify(setSecs.map(s => s.open))`) === open0, msg(),
-      w.localStorage.getItem("settingsOpen") === stored0];
+      w.localStorage.getItem("settingsOpen") === stored0, fold("srvBackups") === backups0, d.querySelectorAll("#alertDialog .sfmark").length];
     w.eval(`const dls = document.getElementById("alertDialog"); if (dls.close) dls.close(); else dls.removeAttribute("open")`);
     const want = {speed: [true, false, false, true, true], password: [true, false, true, false, true],
       key: [true, false, true, w.eval(`[...new Set(["server", "values"])].sort().join()`)], two: [true, true],
-      none: ["Nothing matches", 0, true], cleared: [0, true, "", true]};
+      backups: [true, true, true, false, true], zips: [true, true], inara: true,
+      none: ["Nothing matches", 0, true], cleared: [0, true, "", true, true, 0]};
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
     if (got.every.length < 12 || !got.every.every(e => e[1] && e[2])) bad.push("every");
     const good = !bad.length && errors.length === before;
     allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| S39 find a setting |", good ? `speed, a server key, a config key alone, two words, nothing; all ${got.every.length} sections found by a word and by name; cleared as before` :
+    console.log(good ? "OK" : "FAIL", "| S39 find a setting |", good ? `speed, a server key, a config key alone, two words, a block's heading (Backups, Inara), nothing; all ${got.every.length} sections found by a word and by name; cleared as before` :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
   }
   // S53: Import… beside Bookmarks' Export: a picked CSV file goes to the scratch server, which merges it ("2 added, 0

@@ -2,6 +2,23 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-13 · Find a setting keeps the context: whole blocks and whole tables
+The author's report: "crew" showed only the XO's row of the crew table (its description says "crew member"), hiding
+the rest of the table, the switches and the note on the XO.
+- **Blocks**: a word of a titled block's heading shows the whole block, as a section's name shows the whole section.
+  Such blocks are marked `data-find-block="its words"` (a folding block's summary counts too): Voices kept loaded, Crew,
+  Personality voices, Server's Backups and Start with this computer, each upload service (EDDN, EDSM, Inara, now each
+  in its own `div.upsvc`) and the overlay's panels table. A block's `<h4>` stays shown with any part of it.
+- **Tables**: any table in a section (Alerts, the crew, Personality voices, the overlay's panels) shows whole when one
+  of its rows matches, the matching rows marked (`tr.sfmark`, the theme's accent on its cells); when a word names rows
+  in their first cell only those are marked ("tactical" marks Tactical, not the members whose danger lines it says).
+  Personality voices' selects count by their choice alone (`data-sfone`), as the crew's do.
+- Unchanged: the "N sections match" count, Server's config sections as context (not blocks), and nothing the filter
+  opens is remembered; clearing also closes Backups / Start with this computer again if they were closed (`SF.folds`).
+- Smoke: "navigator" shows both tables whole, the Navigator's and the jump alert's rows marked; "crew" all nine members,
+  the switches and the XO note, none marked; "tactical" all nine, only Tactical marked; "backups" and "zips" the Backups
+  fold, opened, and not Start with this computer; "inara" all of Inara's block; cleared, the fold is back as it was.
+
 ## 2026-10-13 · The crew, batch 3: crew members mention each other, "XO" said right, Audition: crew lines
 The last of three batches of the crew: lines where one crew member mentions another ("Fuel 18 percent. Ask the
 Navigator for the nearest scoopable star."). With the crew off nothing changes: you hear exactly the lines you did.

@@ -12,7 +12,10 @@
 & warnings, Surface map, Auto honk, Uploads, In-game overlay, Display, Sharing, **Server**, Spoken lines and Questions asked.
 **Find a setting…** at the top leaves only what matches the words typed (a setting's name, its help or its config key,
 `speech_speed` finds the Speed slider too), in every section at once, Server's keys included; clear it and every
-section is back as it was. Most are this browser's
+section is back as it was. A section's name shows all of it, and so does a block's heading inside one: "crew" shows the
+whole Crew block (every member, the switches, the note on the XO), "backups" the whole Backups fold, "inara" all of
+Inara's part of Uploads. A table is never cut down to one row: when a row of it matches, the whole table shows with the
+matching rows marked ("tactical" shows every crew member, Tactical's row marked). Most are this browser's
 own (Sharing exports them or makes them the defaults for new browsers). **Server** is the config file
 itself, every key of it but the upload switches (`[eddn]`, `[edsm]`, `[inara]`: Settings → Uploads): the network and the client password, the journal folders, paths, backups, Spansh, the
 Highway, the voice's AI layer and more. Saving there writes `ed_outrider.toml` (only the keys you changed; its
@@ -20,7 +23,7 @@ comments stay, and the previous file is kept as `ed_outrider.toml.bak`), and Out
 **Restart now** beside "Saved" does that at once. Two keys take effect at once instead, and Settings → Voice writes
 them too: `[speech] voices_loaded` and `voices_preload` (**Keep loaded** and **Load them at start** under Voices kept
 loaded, shown whenever a voice besides the main one is in use). **Find a setting** finds them by those words, by
-"memory" or by their keys, and the crew by "crew", "xo" or a role's name ("navigator").
+"memory" or by their keys, and the crew by "crew" (all of it), "xo" or a role's name ("navigator").
 The passwords (`[server]`'s and `[mcp]`'s) and the AI key are never shown, only whether they are set.
 
 **Server**'s top row says which Outrider is running and has **Restart** and **Show log**. **Restart** stops Outrider

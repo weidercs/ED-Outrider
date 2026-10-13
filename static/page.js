@@ -9140,9 +9140,9 @@ function drawStyleVoices(force = false) {
     const asFile = `as the lines file says: ${file ? file + (voices.includes(file) ? "" : " (not installed: the main voice)") : "the main voice"}`
       + (spkNum(own.speaker) != null ? ` #${own.speaker}` : "");
     const opts = [...voices, ...(p && !voices.includes(p.voice) ? [p.voice] : [])];
-    return `<tr data-svstyle="${esc(k)}"><th>${esc(name)}</th><td><select data-svvoice aria-label="${esc(name)}: voice"><option value="">${esc(asFile)}</option>` +
+    return `<tr data-svstyle="${esc(k)}"><th>${esc(name)}</th><td><select data-svvoice data-sfone aria-label="${esc(name)}: voice"><option value="">${esc(asFile)}</option>` +
       opts.map(n => `<option value="${esc(n)}"${p && p.voice === n ? " selected" : ""}>${esc(n)}${voices.includes(n) ? "" : " (not installed)"}</option>`).join("") +
-      `</select></td><td><select data-svspk aria-label="${esc(name)}: speaker" hidden></select></td>` +
+      `</select></td><td><select data-svspk data-sfone aria-label="${esc(name)}: speaker" hidden></select></td>` +
       `<td><button type="button" class="try" data-svplay title="one of ${esc(name)}'s lines as it is heard (here, in this browser)">▶</button></td>` +
       `<td>${p ? `<a href="#" data-svreset title="as the lines file says again">reset</a>` : ""}</td></tr>`;
   }).join("");
@@ -10180,12 +10180,14 @@ function uploadsHtml(u) {
     `${a.set ? ` <a href="#" class="inaraRemove">remove</a>` : ""}` +
     (a.hint ? `<div class="hint">stored key: <code title="its first and last four characters: compare them with your key on inara.cz">${esc(a.hint)}</code></div>` : "") +
     keyCheckHtml("inara", a.commander) + `</div>`).join("");
-  return row("eddn") + row("edsm") +
+  // each service a block of its own: Find a setting shows all of it for its name (S39)
+  const block = (s, html) => `<div class="upsvc" data-find-block="${esc(UPLOAD_NAMES[s][0])}">${html}</div>`;
+  return block("eddn", row("eddn")) + block("edsm", row("edsm") +
     `<div class="hint">EDSM accounts, per in-game commander (your key is at <a href="https://www.edsm.net/en/settings/api" target="_blank" rel="noopener">edsm.net → Settings → API key</a>; it stays on this Outrider):</div>` +
-    (acc || `<div class="unk">no commander seen yet</div>`) + backfillHtml(u) + importHtml(u) + row("inara") +
+    (acc || `<div class="unk">no commander seen yet</div>`) + backfillHtml(u) + importHtml(u)) + block("inara", row("inara") +
     `<div class="hint">Inara API keys, per in-game commander (yours is at <a href="https://inara.cz/elite/cmdr-settings-api/" target="_blank" rel="noopener">inara.cz → Settings → API key</a>; it stays on this Outrider). ` +
     `Switch Inara off in EDMC, EDDI or EDDiscovery first: two apps sending can get the key revoked (Outrider sees only EDMC's setting).</div>` +
-    (inacc || `<div class="unk">no commander seen yet</div>`) + `<div class="hint" id="uploadsMsg">${esc(uploadsNote)}</div>` +
+    (inacc || `<div class="unk">no commander seen yet</div>`)) + `<div class="hint" id="uploadsMsg">${esc(uploadsNote)}</div>` +
     (u.simulate ? `<div class="unk">--simulate: nothing is uploaded</div>` : "");
 }
 function renderUploads() {
@@ -10418,7 +10420,7 @@ function overlayHtml(o) {
     `<div class="mod">Theme <select data-ov="theme">${opt(OV_THEMES, o.theme)}</select> · text <select data-ov="text_size">${opt(["small", "normal", "large"], o.text_size)}</select></div>` +
     `<div class="mod"><button type="button" class="try" data-ovact="test">${o.test ? `test panels: ${o.test} s` : "▶ Show test panels"}</button> ` +
     `<button type="button" class="try" data-ovact="arrange">${o.arrange ? `✓ Done arranging (${Math.ceil(o.arrange / 60)} min left)` : "✥ Arrange panels"}</button></div>` +
-    `<div class="ovwrap"><table class="ovlay"><thead><tr><th title="tick a panel to show it; hover its name for what it shows">Panel</th><th title="ticked: shown in your ship only while the HUD is in analysis mode (in combat mode it stays off); in the SRV, on foot and over the galaxy map it shows as the others">Analysis only</th><th>Placed from</th><th>Across %</th><th>Down %</th><th>Size %</th><th>Background %</th><th>Panel %</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` +
+    `<div class="ovwrap" data-find-block="panels"><table class="ovlay"><thead><tr><th title="tick a panel to show it; hover its name for what it shows">Panel</th><th title="ticked: shown in your ship only while the HUD is in analysis mode (in combat mode it stays off); in the SRV, on foot and over the galaxy map it shows as the others">Analysis only</th><th>Placed from</th><th>Across %</th><th>Down %</th><th>Size %</th><th>Background %</th><th>Panel %</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` +
     `<div class="hint" id="overlayMsg">${esc(overlayNote)}</div>`;
 }
 // A popup while Outrider installs PyQt6 for the overlay window (the author, 2026-10-10), then its outcome for a few
@@ -10732,7 +10734,7 @@ function drawAlertsBtn() { document.getElementById("alertsBtn").classList.toggle
 // Settings (the dialog the 🔔 used to open): collapsible sections, each remembered open or closed on this device
 // (store "settingsOpen"; Alerts is open the first time), with chips that open one and scroll to it (review S43)
 const alertChips = document.getElementById("alertChips");
-const SF = {active: false, q: "", opened: null, srvLoaded: false, timer: 0};   // Find a setting (S39, below)
+const SF = {active: false, q: "", opened: null, folds: null, srvLoaded: false, timer: 0};   // Find a setting (S39, below)
 const setSecs = [...alertDialog.querySelectorAll("details.setsec")];
 function setSecsRestore() {
   const open = store.get("settingsOpen", null);
@@ -10774,10 +10776,13 @@ drawAlertsBtn();
 // ---- Find a setting (S39): a word typed at the top of Settings leaves only what matches it, in every section: a row
 // shows when each word is in its label, its help or the config key it defaults from (data-find="section.key" on a
 // browser row; a Server settings row has its key) or in its section's heading, at least one in the row itself; a word
-// naming a section (its chip) shows all of it. Rows are a section's children, a table's rows (Alerts, the overlay's
-// panels), the Uploads and overlay boxes' parts and the Server settings' keys (loaded on the first word, so its
-// section need not be open). Matching sections open, the rest hide (.sfhide), and none of it is remembered
-// (settingsOpen, the config sections' folds): clearing the box, or closing Settings, puts every section back as it was.
+// naming a section (its chip) shows all of it, and a word naming a titled block in it (data-find-block="its words",
+// a folding block's summary too: Crew, Voices kept loaded, Personality voices, Backups, an upload service, the overlay's
+// panels) all of that block. A table is shown whole when any of its rows matches, the matching rows marked (.sfmark;
+// only those named in their first cell when there are such), so they keep their context. Rows are a section's children, a table's rows, the parts of a block or of the Uploads /
+// overlay / Server settings boxes and the Server settings' keys (loaded on the first word, so its section need not be
+// open). Matching sections open, the rest hide (.sfhide), and none of it is remembered (settingsOpen, the config
+// sections' and blocks' folds): clearing the box, or closing Settings, puts every section back as it was.
 // A section that redraws while filtering (the payload's Uploads, the overlay, Server settings arriving) is filtered again.
 const SF_CONTENT = new Set(["speechLog", "askLog", "speechTally", "speechBans"]);   // what a section holds, not settings: shown with it
 // (a select marked data-sfone counts by its choice alone: the crew's selects list every role, voice and personality)
@@ -10789,24 +10794,30 @@ function sfWordsOf(el) {
   }
   return (text + " " + [el, ...el.querySelectorAll("[data-find]")].map(x => x.dataset.find || "").join(" ")).replace(/\s+/g, " ").toLowerCase();
 }
-// a section's rows for the filter: {el, own (its words), ctx (the headings above it)}, and the boxes holding rows
+const sfLower = t => String(t || "").replace(/\s+/g, " ").trim().toLowerCase();
+// a section's rows for the filter: {el, own (its words), ctx (the headings above it), table (the table it is a row of)},
+// its titled blocks {el, words (its heading's), ctx} and the boxes holding rows (shown when one of their rows is)
 function sfRows(sec) {
-  const rows = [], boxes = [], sum = sec.querySelector(":scope > summary");
+  const rows = [], boxes = [], blocks = [], sum = sec.querySelector(":scope > summary");
   const walk = (el, ctx) => {
     for (const c of el.children) {
       if (c.tagName === "SUMMARY" || SF_CONTENT.has(c.id)) continue;
-      const table = c.matches("#alertTable, #crewTable") ? c : c.matches(".ovwrap") ? c.querySelector("table") : null;
-      if (table) {
+      if (c.tagName === "H4" && el.dataset.findBlock != null) continue;   // a block's own heading: shown with any of it
+      if (c.tagName === "TABLE") {
         boxes.push(c);
-        const head = table.tHead ? " " + table.tHead.textContent.toLowerCase() : "";
-        for (const tb of table.tBodies) for (const r of tb.rows) rows.push({el: r, own: sfWordsOf(r), ctx: ctx + head});
-      } else if (c.matches("#uploadsBox, #overlayBox, #serverSettingsBody, #vmBox, #crewBox")) { boxes.push(c); walk(c, ctx); }
+        const head = c.tHead ? " " + c.tHead.textContent.toLowerCase() : "";
+        for (const tb of c.tBodies) for (const r of tb.rows) rows.push({el: r, own: sfWordsOf(r), ctx: ctx + head, table: c});
+      } else if (c.dataset.findBlock != null) {
+        const s = c.tagName === "DETAILS" ? c.querySelector(":scope > summary") : null;
+        const words = sfLower(c.dataset.findBlock + " " + (s ? s.textContent : ""));
+        boxes.push(c); blocks.push({el: c, words, ctx}); walk(c, ctx + " " + words);
+      } else if (c.matches("#uploadsBox, #overlayBox, #serverSettingsBody")) { boxes.push(c); walk(c, ctx); }
       else if (c.matches("details.srvsec")) { boxes.push(c); walk(c, ctx + " " + c.querySelector(":scope > summary").textContent.toLowerCase()); }
-      else rows.push({el: c, own: sfWordsOf(c), ctx});
+      else rows.push({el: c, own: sfWordsOf(c), ctx, table: null});
     }
   };
   walk(sec, sum ? sum.textContent.toLowerCase() : "");
-  return {rows, boxes};
+  return {rows, boxes, blocks};
 }
 // (inside a hidden box counts as hidden: the crew table with the crew off)
 const sfLaidOut = el => !el.closest("[hidden]") && !(document.body.classList.contains("notgamepc") && el.closest(".pcOnly"));
@@ -10815,14 +10826,30 @@ function sfApply() {
   const words = SF.q.toLowerCase().split(/\s+/).filter(Boolean);
   let shown = 0;
   for (const sec of setSecs) {
-    const {rows, boxes} = sfRows(sec), sum = sec.querySelector(":scope > summary");
+    const {rows, boxes, blocks} = sfRows(sec), sum = sec.querySelector(":scope > summary");
     const name = ((sec.dataset.chip || "") + " " + (sum && sum.firstChild ? sum.firstChild.textContent : "")).toLowerCase();
     const all = (text, ws = words) => ws.every(w => text.includes(w));
-    let hits = all(name) ? rows : rows.filter(r => all(r.own + " " + r.ctx) && words.some(w => r.own.includes(w)));
+    const says = (own, ctx) => all(own + " " + ctx) && words.some(w => own.includes(w));   // every word, one of its own
+    let hits = rows, marked = [];
+    if (!all(name)) {
+      const titled = blocks.filter(b => says(b.words, b.ctx)).map(b => b.el);
+      const whole = new Set(rows.filter(r => titled.some(b => b.contains(r.el))).map(r => r.el));
+      marked = rows.filter(r => !whole.has(r.el) && says(r.own, r.ctx));
+      const tables = new Set(marked.map(r => r.table).filter(Boolean));   // a table with a row matching: all of it
+      hits = rows.filter(r => whole.has(r.el) || marked.includes(r) || tables.has(r.table));
+      // marked: the rows a word names (in their first cell, "Tactical") when a table has any, else every row matching
+      // (the other members' "their danger lines: Tactical" stays unmarked)
+      const named = r => r.el.cells && r.el.cells[0] && words.some(w => sfWordsOf(r.el.cells[0]).includes(w));
+      const byName = new Set(marked.filter(named).map(r => r.table));
+      marked = marked.filter(r => r.table && (!byName.has(r.table) || named(r)));
+    }
     if (!hits.length && all(sum ? sum.textContent.toLowerCase() : "")) hits = rows;   // its heading alone says it
     hits = hits.filter(r => sfLaidOut(r.el));
-    const hit = new Set(hits.map(r => r.el)), on = hits.length > 0 && sfLaidOut(sec);
-    for (const r of rows) r.el.classList.toggle("sfhide", !hit.has(r.el));
+    const hit = new Set(hits.map(r => r.el)), mark = new Set(marked.map(r => r.el)), on = hits.length > 0 && sfLaidOut(sec);
+    for (const r of rows) {
+      r.el.classList.toggle("sfhide", !hit.has(r.el));
+      r.el.classList.toggle("sfmark", hit.has(r.el) && mark.has(r.el));
+    }
     for (const b of boxes) {
       const any = hits.some(r => b.contains(r.el));
       b.classList.toggle("sfhide", !any);
@@ -10842,6 +10869,7 @@ function sfSet(q) {
   if (!q) { sfClear(); return 0; }
   if (!SF.active) {   // the sections as they were, put back when the box is cleared
     SF.opened = Object.fromEntries(setSecs.map(d => [d.dataset.secKey, d.open]));
+    SF.folds = [...alertDialog.querySelectorAll("details[data-find-block]")].map(d => [d, d.open]);   // Backups, Start with this computer
     SF.active = true;
     sfObserver.observe(alertDialog.querySelector(".setbody"), {childList: true, subtree: true});
   }
@@ -10855,8 +10883,9 @@ function sfClear() {
   if (!SF.active) return;
   SF.active = false; SF.q = ""; clearTimeout(SF.timer);
   sfObserver.disconnect();
-  alertDialog.querySelectorAll(".sfhide").forEach(el => el.classList.remove("sfhide"));
+  alertDialog.querySelectorAll(".sfhide, .sfmark").forEach(el => el.classList.remove("sfhide", "sfmark"));
   setSecs.forEach(d => { d.open = !!(SF.opened || {})[d.dataset.secKey]; });
+  for (const [d, open] of SF.folds || []) d.open = open;
   document.querySelectorAll("#serverSettingsBody details.srvsec").forEach(d => { d.open = !!SRV_SET_OPEN[d.dataset.srvsec]; });
   document.getElementById("setFindMsg").textContent = "";
 }
