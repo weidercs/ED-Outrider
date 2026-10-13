@@ -37,7 +37,8 @@ route (any of the others), each until you plot another of its kind or **Clear ro
   sum). Spoken once per system. At a ⛽ stop itself it only shows how much to scoop ("⛽ scoop to ≥ 24.3 t to reach
   Hwy Stop 46 in 3 jumps"), since you scoop there anyway. Not on a route plotted with FSD injections.
 - **Last scoopable star.** On any route Outrider follows (the game's plotted route too, and a survey route's legs), at a
-  scoopable star with stars ahead you can't scoop and not enough fuel to get past them, it warns once: "The next 3
+  scoopable star with stars ahead you can't scoop and not enough fuel to get past them, it warns once each time you
+arrive there: "The next 3
   stars on your route are not scoopable. This is your last chance to top off before you need to call the Fuel Rats."
   The In-Game Route line (else the route line under the tiles) and Now show "⛽ last scoop before 3 dry" with how much
   to scoop. Only stars known not to scoop count
@@ -62,7 +63,8 @@ shows each system with what is left to do there, the bodies by name under the on
 and ✔✔ mapped from your journal; on arrival the voice says how many bodies are worth the stop and the best of them,
 and once they are done, the next system. It is not auto-targeted on its own: a Road to Riches is for stopping, not hurrying past.
 Systems ahead that you have already finished (an earlier trip, or out of order) are passed over: the next stop is the
-first one with work left, "Next: Pru Aim XY-Z d1 · 3 jumps · 6 of 22 · skipping 2 done" (hover for their names), and
+first one with work left, "Next: Pru Aim XY-Z d1 · 3 jumps · 6 of 22 · skipping 2 done" (hover for their names; the jumps count from where you are, through the systems passed
+over), and
 the voice says "Next stop: Pru Aim XY-Z d1, skipping 2 systems you've finished." The route's last system is never
 passed over (arriving there ends it). Exomastery and the world routes do the same; a sweep or a trade route never
 skips a stop.

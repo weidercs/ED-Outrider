@@ -36,7 +36,9 @@
 
 [server]
 # host = "127.0.0.1"   # "0.0.0.0" makes the page reachable from other devices on your network
-                       # (without a password below, anyone on it can read your journals' contents and edit bookmarks)
+                       # (without a password below, anyone on it can read your journals' contents and do whatever
+                       # the page does: change these settings, restart Outrider, use your EDSM and Inara keys, and
+                       # on the game PC press keys in the game)
 # port = 8025
 # password = ""        # devices on your network (a tablet, the Android app) sign in with it once; this PC itself
 #                      # never needs it. "" = no sign-in. It crosses your network unencrypted (plain http), so use

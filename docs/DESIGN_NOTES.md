@@ -229,7 +229,9 @@ upstream project's choices, not rules of the game.
   most twice (the Materials tab's jumponium call-out). "This body": the body you are on, else the one whose near-body
   zone you are in (D1's rule), else the one targeted in this system; `/api/status` says those two (game facts, like
   `on_body`, on an open route knowingly). A hush by voice takes a time, but the hush has only three lengths (10, 30
-  minutes, the next jump): another time gets the nearest, and the answer names the three first.
+  minutes, the next jump): another time gets the nearest, and the answer names the three first. That answer is what the
+  speaking window says for the hush (the co-pilot channel's `hush`: its own "Quiet for 10 minutes." news stays quiet),
+  so the three lengths are heard, not only captioned.
 - **"Questions asked" is kept in memory, never in the database** (S35, 2026-10-13). What the voice heard is the
   player's own words, sometimes not meant for Outrider at all (the wake word misfires): the last 50, every device's,
   are kept while Outrider runs, so a misheard word or two phrases that clash can be checked, and a restart clears them.
@@ -253,7 +255,9 @@ upstream project's choices, not rules of the game.
   that cannot hover (a hover-only reveal eats a phone's first tap). A jump to Here from such a window (⌖, a body) goes to
   the main window while it is open (the author's default, 2026-10-12): the view window keeps showing what it was opened
   for; with no main window it shows Here itself, unsaved, with ↩ back. The main window speaks: a view window joins the
-  one-speaker queue a second late, as the Now window does. Now keeps its own ↗ and `?mode=now` (`?view=now` is not a
+  one-speaker queue a second late, as the Now window does, and either of them given the voice while the main window that
+  opened it waits in line (it reloaded: F5, an update) hands it back within a second (`SPEAKER_YIELD_MS`: the opener's
+  `speakerQueued`) and queues again; "Speak from this window" there keeps it. Now keeps its own ↗ and `?mode=now` (`?view=now` is not a
   view window); the tablet has its own shell and no view windows.
 - **Outrider presses keys for three things now:** auto honk, auto-target and the tablet's rail. The rail is one key
   per tap, only for signed-in devices (or this PC), only while the game is live, never while one of the other two is
@@ -284,7 +288,8 @@ upstream project's choices, not rules of the game.
   in the mapped call-out and the status report. Here's schematic numbers its stops and draws a path between them (S30):
   each leg's time is the curve over the difference of the two bodies' distances to the arrival star, which is what the
   journal gives, not the distance between them. The first stop you pick there (one body, meta `plan_first`, live-only)
-  applies only in the system you are in and is forgotten after a jump.
+  applies only in the system you are in and is forgotten after a jump (the arrival elsewhere drops it, so a return to
+  that system later does not bring it back; a re-read's older arrivals do not drop it).
 - **Discovery streak lines are limited to two kinds,** no records or milestones.
 - **The approach warning fires on ApproachBody only** and reuses the unsold amber level rather than a new setting.
 - **"Leaving a body unfinished" only nags** if you landed or sampled there this visit.
@@ -483,7 +488,10 @@ upstream project's choices, not rules of the game.
   found from each live journal folder's user folder (Windows and a Proton prefix alike).
 - **Keep showing when Elite is not the active window** (S25 with S25b, the author, 2026-10-12): `[overlay]
   show_inactive`, off by default. With it on the overlay still hides when the game's window is out of sight (minimised,
-  on another desktop: X11 `_NET_WM_STATE_HIDDEN` and `_NET_CURRENT_DESKTOP`, Windows cloaked) or covered by other
+  on another desktop: X11 `_NET_WM_STATE_HIDDEN`, and `_NET_CURRENT_DESKTOP` only with xwininfo's map state not
+  IsViewable, since a window manager with a workspace per monitor (i3 and the like) calls the focused monitor's workspace
+  the current one while the game's stays in sight on its own (GNOME and KDE unmap a window on a workspace not shown; the
+  desktop alone decides when the map state cannot be read); Windows cloaked) or covered by other
   windows over more than a quarter of it (`overlay_tracking.COVERED_SHARE`: X11 from `_NET_CLIENT_LIST_STACKING` and
   wmctrl's geometries, Windows by walking the z-order above the game, click-through and tool windows ignored). These
   checks run only while the setting is on and the game is not in front, kept a second (`INACTIVE_EVERY_S`). A native
@@ -532,10 +540,11 @@ upstream project's choices, not rules of the game.
   by the same `fuel_window` as S1 (the ship lightening hop by hop); "even a full tank won't" when no level does. Silent
   when a hop is beyond the ship's best jump at any fuel (the game's route alone promises no supercharge: not a fuel
   matter), when the fuel is too much rather than too little, while scooping (Status.json's flag) and while the fuel
-  model is incomplete. Said once per stretch (the route it comes from and its first dry star), so stopping a scoop a
-  little short is not said twice. On an exact-plotter Highway route S1's line already says the same stretch, so S2 stays
-  quiet where S1 has a `short` (the plan's default, "S1 suppresses S2"); the page's top-up card stays quiet where S2
-  speaks. The spoken line is the author's ("The next 3 stars on your route are not scoopable. This is your last chance
+  model is incomplete. Said once per stretch and stay (the route it comes from and its first dry star, forgotten on
+  leaving), so stopping a scoop a little short is not said twice, and a later arrival at that star (a detour and back,
+  days later) says it again. On an exact-plotter Highway route S1's line already says the same stretch, so S2 stays
+  quiet where S1 has a `short` (the plan's default, "S1 suppresses S2"); the page's top-up card stays quiet only where
+  S2 spoke on this stay (`dry_stretch.said`) and its row speaks: never a stretch shown and nothing said. The spoken line is the author's ("The next 3 stars on your route are not scoopable. This is your last chance
   to top off before you need to call the Fuel Rats."), key `fuel_last_scoop` {count}, a danger key under its own alerts
   row `lastscoop`; one star, and the no-amount case, are plain sentences (the lines are plural).
 - **Short of the refuel stop is not said at a refuel stop** (the plan scoops there anyway): the line shows how much to

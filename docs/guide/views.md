@@ -141,7 +141,8 @@ Standard / Boxel switch sits on its bar, left of ▾ This system.
 tab); it opens that view alone in a new window, to drag to another monitor (pressed again, it brings that window
 forward). Such a window has no tab row and leaves the main window's view as it was; ⌖ or a body opened from it shows
 in Here in the main window while that is open (otherwise the window shows Here itself, with ↩ back). The main window
-speaks; Now has its own ↗ (below). The address is `http://127.0.0.1:8025/?view=bm` (bm, near, here, bio, search,
+speaks, also after it reloads (**Speak from this window** makes such a window speak instead); Now has its own ↗
+(below). The address is `http://127.0.0.1:8025/?view=bm` (bm, near, here, bio, search,
 map, hwy, hist, log, mat, firsts, overview).
 
 **Bookmarks** is its own tab: the systems you have bookmarked (☆ beside any system), each with its note and distance.

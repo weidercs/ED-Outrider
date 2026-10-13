@@ -6,6 +6,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import tempfile
 import time
 import tomllib
@@ -56,6 +57,10 @@ class Phrases(unittest.TestCase):
         for text, want in table.items():
             self.assertEqual(ask.hush_mode(text), want, text)
         self.assertTrue(set(ask.HUSH_SAID) == set(ed_outrider.HUSH_MODES))   # the page's words for each mode the server has
+        # ask.py's copy of page.js's HUSH_SAID: the same words, so the voice, a caption and Questions asked agree
+        with open(os.path.join(os.path.dirname(ed_outrider.__file__), "static", "page.js"), encoding="utf-8") as f:
+            obj = re.search(r"^const HUSH_SAID = (\{.*?\});", f.read(), re.M)[1]
+        self.assertEqual(json.loads(re.sub(r"([{,]\s*)(\w+):", r'\1"\2":', obj)), ask.HUSH_SAID)
         self.assertEqual(ask.hush_words("hush for ten minutes"), ("10m", "Quiet for 10 minutes."))
         self.assertEqual(ask.hush_words("hush until the next jump"), ("jump", "Quiet until the next jump."))
         self.assertEqual(ask.hush_words("hush for five minutes"),
@@ -238,7 +243,7 @@ class Endpoint(unittest.TestCase):
             r = await c.post("/api/ask", json={"text": "what is the meaning of life"})
             out["none"] = await r.json()
             r = await c.post("/api/ask", json={"text": "hush"})
-            out["hush"] = (await r.json(), self.state.hush and self.state.hush["mode"], self.state.copilot["action"])
+            out["hush"] = (await r.json(), self.state.hush and self.state.hush["mode"], self.state.copilot["action"], self.state.copilot["hush"])
             # S32: a hush for a set time
             timed = []
             for text in ("Vespa, hush for ten minutes", "be quiet until the next jump", "hush for five minutes"):
@@ -265,7 +270,8 @@ class Endpoint(unittest.TestCase):
         self.assertEqual((out["copilot"]["action"], out["copilot"]["words"]), ("say", body["answer"]))   # every window's caption
         self.assertEqual((out["none"]["matched"], out["none"]["command"], out["none"]["spoken"]), ("none", None, True))
         self.assertIn("status report", out["none"]["answer"])
-        self.assertEqual((out["hush"][0]["command"], out["hush"][1], out["hush"][2]), ("hush", "30m", "caption"))
+        # said by the speaking window in place of its own news of the hush (the copilot's hush), not only captioned
+        self.assertEqual((out["hush"][0]["command"], out["hush"][1], out["hush"][2], out["hush"][3]), ("hush", "30m", "say", "30m"))
         self.assertEqual(out["timed"], [("Quiet for 10 minutes.", "10m", 600), ("Quiet until the next jump.", "jump", None),
                                         ("I can hush for 10 or 30 minutes, or until the next jump. Quiet for 10 minutes.", "10m", 600)])
         self.assertIsNone(out["unhush"])

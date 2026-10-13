@@ -337,7 +337,7 @@ HIGHWAY_SUGGEST_CACHE = 200  # system-name suggestions kept (per typed prefix)
 HIGHWAY_HEAVY_SLACK = 0.5    # t: fuel over the most the next jump allows by more than this is "too heavy" (Spansh plans
 #                              some jumps right at the limit, so a hair over is the model's error, not yours)
 HIGHWAY_HEAVY_EVERY_S = 3.0  # s between two looks at it while the fuel changes in a route system (scooping)
-LAST_SCOOP_KEEP = 200        # dry stretches remembered as said (S2: one warning per stretch)
+LAST_SCOOP_KEEP = 200        # dry stretches remembered as said in one stay (S2: one warning per stretch and arrival)
 HIGHWAY_CONSERVATIVE_MAX = 50.0   # ly: the largest conservative margin taken
 GEO_CODEX_FILE = os.path.join(outrider.RESOURCES_DIR, "geo_codex.json")
 CODEX_IMAGES_START = 120     # s after the server starts before the picture list is first refreshed
@@ -1767,12 +1767,14 @@ def not_a_ship(kind):
 
 
 def stamp_next_stop(db):
-    """A next stop chosen before set_ts was stored: stamp it with the last arrival before the reset deletes 'pos',
-    so the re-read that follows does not clear it on an earlier visit to that system."""
-    ns = meta_get(db, "next_stop")
-    if ns and not ns.get("set_ts"):
-        ns["set_ts"] = (meta_get(db, "pos") or {}).get("ts") or iso_ts(time.time())
-        meta_set(db, "next_stop", ns)
+    """A next stop chosen (or a first stop picked, S30's plan_first) before set_ts was stored: stamp it with the last
+    arrival before the reset deletes 'pos', so the re-read that follows does not clear it on an earlier visit to that
+    system (or an earlier arrival elsewhere)."""
+    for key in ("next_stop", "plan_first"):
+        ns = meta_get(db, key)
+        if ns and not ns.get("set_ts"):
+            ns["set_ts"] = (meta_get(db, "pos") or {}).get("ts") or iso_ts(time.time())
+            meta_set(db, key, ns)
 
 
 def unique_dirs(dirs):
@@ -3393,6 +3395,11 @@ class Journals:
         # arrived at the chosen next stop: an arrival after it was chosen, not an earlier visit being re-read
         if ns and ns.get("id64") == id64 and not relog and current and ts > (ns.get("set_ts") or ""):
             meta_set(self.db, "next_stop", None)
+        # the first stop picked in the system you were in (S30) is forgotten by a jump: it does not come back on a
+        # return days later
+        pf = meta_get(self.db, "plan_first")
+        if pf and pf.get("id64") != str(id64) and current and ts > (pf.get("set_ts") or ""):
+            meta_set(self.db, "plan_first", None)
         if current:
             if name in ("FSDJump", "CarrierJump") and self.pos and self.pos["id64"] != id64:
                 self.note_region(self.pos, id64, x, y, z, ts)
@@ -6430,7 +6437,7 @@ class State:
         # the co-pilot channel ({seq, action, words}): the button and the Now bar ask the speaking window for a
         # status report, the last line again or a replay. Kept out of Journals.moments, whose checkpoint and
         # rollback during a journal re-read could replay or drop it
-        self.copilot = {"seq": 0, "action": None, "words": None}
+        self.copilot = {"seq": 0, "action": None, "words": None, "hush": None}
         # the voice (POST /api/ask): its phrases, the AI layer's settings (set by run()), and when a window that speaks
         # last asked for the payload (S24: whether an answer will be said on the PC)
         self.ask_phrases = outrider.ask.load_phrases()
@@ -6604,7 +6611,7 @@ class State:
                           "heavy": None, "short": None}
         # the last scoopable star before a dry stretch the fuel won't cover (S2, last_scoop_check): {at (the system it
         # is about), t, look, warn: {count, system, next, need_t, full, source, have_t} or None, said: the stretches
-        # said, (source, first dry id64), the last LAST_SCOOP_KEEP}
+        # said since arriving there, (source, first dry id64), the last LAST_SCOOP_KEEP}
         self._dry = {"at": None, "t": None, "look": None, "warn": None, "said": collections.OrderedDict()}
         # Road to Riches: the plot under way (as highway_plotting), its task, the arrival whose next system was copied
         self.riches_plotting = None
@@ -6947,7 +6954,9 @@ class State:
             mode, words = outrider.ask.hush_words(text)
             hush = mode
             self.set_hush(mode)
-            action = "caption"   # the page says its own hush news
+            # said by the speaking window in place of its own hush news (the copilot's `hush`), so a time not offered
+            # is heard with the three there are, not only captioned
+            action = "say"
         elif cmd == "unhush":
             self.set_hush("off")
             words, action = "Voice back on.", "caption"
@@ -6976,7 +6985,7 @@ class State:
             matched = "none"
             words = outrider.ask.known_questions()
         words = outrider.tts.clip_text(words)
-        self.copilot_action(action, words)
+        self.copilot_action(action, words, hush=hush)
         spoken = self.speaker_present()
         log(matched, answer=words, spoken=spoken, hush=hush, ai=trace)
         return {"answer": words, "spoken": spoken, "matched": matched, "command": cmd}, 200
@@ -7027,12 +7036,13 @@ class State:
         return {"mode": h["mode"], "until": h["until"], "left": round(h["until"] - time.time(), 1) if h["until"] else None,
                 "sys": str(h["sys"]) if h["sys"] is not None else None}
 
-    def copilot_action(self, action, words=None):
+    def copilot_action(self, action, words=None, hush=None):
         """A co-pilot request for the speaking window. "hush" is done here: a hold starts a hush until the next jump,
-        and another hold (while any hush runs) ends it."""
+        and another hold (while any hush runs) ends it. `hush`: the mode a voice question set (S32), whose answer the
+        page says in place of its own news of that hush."""
         if action == "hush":
             self.set_hush("off" if self.hush_info() else "jump")
-        self.copilot = {"seq": self.copilot["seq"] + 1, "action": action, "words": words}
+        self.copilot = {"seq": self.copilot["seq"] + 1, "action": action, "words": words, "hush": hush}
         self.bump()
 
     COPILOT_TARGET_DELAY_S = 0.5   # after a single press is known to be one, before the keys (your hands off the controls)
@@ -7834,10 +7844,13 @@ class State:
 
     def plan_first(self):
         """S30: the body you made the first stop of the suggested order in the system you are in, {id64, body}, or None
-        (meta plan_first, live-only: one at a time, and forgotten in any other system). The page's planItems and the
-        overlay's plan_items move it to the front, so Here, Now, the voice and the overlay give one order."""
+        (meta plan_first, live-only: one at a time; an arrival in another system after it was picked
+        drops it (Journals.handle), so a return later does not bring it back). The page's planItems and the overlay's plan_items move it to the front, so Here, Now,
+        the voice and the overlay give one order."""
         pf, pos = meta_get(self.db, "plan_first"), self.journals.pos
-        return pf if isinstance(pf, dict) and pos and pf.get("id64") == str(pos["id64"]) and pf.get("body") else None
+        if isinstance(pf, dict) and pos and pf.get("id64") == str(pos["id64"]) and pf.get("body"):
+            return {"id64": pf["id64"], "body": pf["body"]}
+        return None
 
     def plan_first_body(self):
         return (self.plan_first() or {}).get("body")
@@ -7848,7 +7861,9 @@ class State:
         pos = self.journals.pos
         if not pos or pos["id64"] != id64:
             return False
-        meta_set(self.db, "plan_first", {"id64": str(id64), "body": body} if body else None)
+        # set_ts, the arrival here (as next_stop's): a later arrival elsewhere forgets it, a re-read's older ones do not
+        meta_set(self.db, "plan_first", {"id64": str(id64), "body": body, "set_ts": pos.get("ts") or iso_ts(time.time())}
+                 if body else None)
         self.db.commit()
         self.bump()
         return True
@@ -10783,6 +10798,8 @@ class State:
                     hit = self._find_keep(rec["id64"], base, rec["name"], rec, "spansh")
                 elif edsm_failed and spansh_failed:
                     return 502, {"error": "EDSM and Spansh lookups failed; try again"}
+                elif d is not None and spansh_failed:   # Spansh may know it: never "doesn't know" for a failed lookup
+                    return 502, {"error": f"EDSM knows {d.get('name') or name} but not where it is, and Spansh could not be reached; try again."}
                 elif d is not None:   # EDSM has the name but no position, and Spansh no record of it
                     return 404, {"error": f"EDSM knows {d.get('name') or name} but not where it is, and Spansh doesn't know it."}
                 elif edsm_failed:
@@ -14008,8 +14025,9 @@ class State:
         target change (at most every HIGHWAY_HEAVY_EVERY_S in one system), never while scooping (Status.json's flag: you
         are topping up already; looked at again once it stops), only with the game running. The warning (_dry_stretch)
         shows while it holds; a moment `last_scoop` says it once per stretch (the route it comes from and its first dry
-        star), so scooping a little and staying short, or the same stretch plotted again, is not said twice. True when
-        the warning changed."""
+        star) and arrival, so scooping a little and staying short, or the same stretch plotted again, is not said twice
+        in one stay; a later arrival there (a detour and back, a return days later) says it again. True when the
+        warning changed."""
         now = time.time() if now is None else now
         j, c = self.journals, self._dry
         st, at = j.status_json or {}, (j.pos or {}).get("id64")
@@ -14017,6 +14035,7 @@ class State:
         if at != c["at"]:
             changed = c["warn"] is not None
             c.update(at=at, t=None, look=None, warn=None)
+            c["said"].clear()   # a new arrival is a new chance to say it (the page's top-up card waits on it)
         if at and not (st.get("flags") or 0) & FLAG_SCOOPING:
             hw = meta_get(self.db, "highway") or {}
             look = (round(st.get("fuel_main") or 0, 1), round(st.get("fuel_reservoir") or 0, 2), st.get("cargo"),
@@ -14082,11 +14101,13 @@ class State:
                 "source": hops[0]["source"], "first": hops[0]["id64"]}
 
     def dry_stretch_summary(self):
-        """The payload's `dry_stretch`: S2's warning while you are in the system it is about, else None."""
+        """The payload's `dry_stretch`: S2's warning while you are in the system it is about, else None. `said`: its
+        `last_scoop` moment was given on this stay (the page's top-up card stays quiet only then)."""
         c = self._dry
         if not c["warn"] or c["at"] != (self.journals.pos or {}).get("id64"):
             return None
-        return dict(c["warn"], first=str(c["warn"]["first"]))   # an id64 as a string, as every id the page gets
+        w = c["warn"]
+        return dict(w, first=str(w["first"]), said=(w["source"], w["first"]) in c["said"])   # an id64 as a string, as every id the page gets
 
     @staticmethod
     def highway_row_out(i, r):
@@ -14745,6 +14766,8 @@ class State:
         pos, n = self.journals.pos, len(rows)
         at, (nx, skipped) = rc.get("at"), self.riches_next_open(rc, rows)
         nxt = rows[nx] if nx is not None else None
+        # each row's jumps is its leg from the row before: past finished systems (S12) the trip is their legs too
+        legs = [rows[k]["jumps"] for k in skipped + [nx]] if nxt else []
         return {
             "kind": kind_of(rc), "id": rc.get("id"), "created_ts": rc.get("created_ts"),
             "destination": rows[-1]["system"], "total": n - 1, "index": nx, "at": at,
@@ -14754,7 +14777,7 @@ class State:
             "target_check": self.survey_target_check(rc, rows),
             "left_here": len(self.journals.riches_left(rc, rows, at)) if at is not None else None,
             "next": nxt and {"name": nxt["system"], "id": str(nxt["id64"]) if nxt["id64"] is not None else None,
-                             "jumps": nxt["jumps"], "station": nxt.get("station"),
+                             "jumps": sum(legs) if None not in legs else None, "station": nxt.get("station"),
                              "distance": round(dist(pos, nxt), 1) if pos and None not in (nxt["x"], nxt["y"], nxt["z"])
                              else None},
         }
@@ -16632,7 +16655,9 @@ def exposure_warnings(host, password, extra):
                    "own network, and it gets no security updates (see docs/guide/install.md).")
     if host not in ("127.0.0.1", "localhost", "::1") and not password:
         out.append("warning: listening on your network with no [server] password: anyone who can reach this computer can "
-                   "read your journals' contents and edit bookmarks. Set one, and never forward this port to the internet.")
+                   "read your journals' contents and do whatever the page does: edit bookmarks, change the settings (the "
+                   "password and journal folders included), restart Outrider, use your stored EDSM and Inara keys, and on "
+                   "the game PC press keys in the game. Set one, and never forward this port to the internet.")
     return out
 SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
 # The only reads under /api/ another site may make (request_guard): the small read-only status an OBS browser

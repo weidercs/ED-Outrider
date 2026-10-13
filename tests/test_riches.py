@@ -293,6 +293,7 @@ class RichesRoute(unittest.TestCase):
             self.mapped(-98.5 + s, addr, bid, name)
         s = self.state.survey_summary()
         self.assertEqual((s["index"], s["next"]["name"], s["skipped"], s["skipped_names"]), (3, "Delta Rich", 2, ["Beta Rich", "Gamma Rich"]))
+        self.assertEqual(s["next"]["jumps"], 4)   # Beta's leg 1, Gamma's 2 and Delta's 1: the jumps from where you are
         self.assertEqual(self.state.riches_view()["route"]["next"], 3)
         self.assertEqual(self.state.copilot_next(), (("next", ("survey", 3)), None))
         self.assertTrue(self.state.riches_copy_next(force=True))
@@ -307,6 +308,7 @@ class RichesRoute(unittest.TestCase):
         # arriving at Beta anyway (finished): the next stop is past Gamma too
         self.jump(-80, 1002, "Beta Rich", 20)
         self.assertEqual(self.moments()[-1], ("next", "Nothing left to do in Beta Rich. Next stop: Delta Rich, skipping 1 system you've finished."))
+        self.assertEqual(self.state.survey_summary()["next"]["jumps"], 3)
         # Delta done as well: the last system is still the next stop (arriving there ends the route)
         self.scan(-70, "Delta Rich", 1004, 2, "Delta Rich 2")
         self.mapped(-69, 1004, 2, "Delta Rich 2")

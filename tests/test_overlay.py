@@ -1019,6 +1019,16 @@ class Server(unittest.TestCase):
         self.state.journals.handle({"event": "FSDJump", "timestamp": ed_outrider.iso_ts(2000), "StarSystem": "Elsewhere",
                                     "SystemAddress": 78, "StarPos": [5, 0, 0]})
         self.assertIsNone(self.state.plan_first())                                   # another system: forgotten
+        self.state.journals.handle({"event": "FSDJump", "timestamp": ed_outrider.iso_ts(3000), "StarSystem": "Test Sector AB-C d1-2",
+                                    "SystemAddress": 77, "StarPos": [0, 0, 0]})
+        self.assertIsNone(self.state.plan_first())                                   # and back again: still forgotten
+        self.state.set_plan_first(77, "B 1")
+        self.state.journals.handle({"event": "Location", "timestamp": ed_outrider.iso_ts(3100), "StarSystem": "Test Sector AB-C d1-2",
+                                    "SystemAddress": 77, "StarPos": [0, 0, 0]})
+        self.assertEqual(self.state.plan_first_body(), "B 1")                        # a relog here keeps it
+        self.state.journals.handle({"event": "FSDJump", "timestamp": ed_outrider.iso_ts(1500), "StarSystem": "Elsewhere",
+                                    "SystemAddress": 78, "StarPos": [5, 0, 0]})
+        self.assertEqual(self.state.plan_first_body(), "B 1")                        # an older arrival read late: kept
         self.assertNotIn("plan_first", ed_outrider.RESET_JOURNAL_DATA)              # live-only: a re-read keeps it
 
     def test_nothing_while_the_game_loads(self):

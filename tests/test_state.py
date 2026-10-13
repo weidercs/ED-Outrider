@@ -2145,6 +2145,7 @@ class BatchBState(unittest.TestCase):
             db = ed_outrider.open_db(path)
             ed_outrider.meta_set(db, "pos", {"id64": 3, "ts": "2026-01-01T02:00:00Z"})
             ed_outrider.meta_set(db, "next_stop", {"id64": 2, "name": "S2", "x": 10, "y": 0, "z": 0})   # from before set_ts
+            ed_outrider.meta_set(db, "plan_first", {"id64": "3", "body": "S3 1"})   # S30's first stop, from before set_ts too
             db.commit()
             db.close()
             db = ed_outrider.open_db(path, rescan=True)
@@ -2152,9 +2153,11 @@ class BatchBState(unittest.TestCase):
             for ts, i in (("2026-01-01T00:00:00Z", 1), ("2026-01-01T01:00:00Z", 2), ("2026-01-01T02:00:00Z", 3)):
                 j.handle({"event": "FSDJump", "timestamp": ts, "StarSystem": f"S{i}", "SystemAddress": i, "StarPos": [i, 0, 0]})
             self.assertEqual(ed_outrider.meta_get(db, "next_stop")["id64"], 2)
+            self.assertEqual(ed_outrider.meta_get(db, "plan_first")["body"], "S3 1")   # the re-read's older arrivals keep it
             j.handle({"event": "FSDJump", "timestamp": "2026-01-01T03:00:00Z", "StarSystem": "S2", "SystemAddress": 2,
                       "StarPos": [10, 0, 0]})
             self.assertIsNone(ed_outrider.meta_get(db, "next_stop"))   # arriving after it was chosen clears it
+            self.assertIsNone(ed_outrider.meta_get(db, "plan_first"))   # and leaving S3 forgets its first stop
             db.close()
 
     # ---- G3.3 / F8: the Nearby refresh ----
@@ -3033,6 +3036,8 @@ class JournalsRegistry(unittest.TestCase):
         "highway": "live-only: the Highway route (DESIGN_NOTES), cannot be rebuilt from journals",
         "riches": "live-only: the Road to Riches route (Spansh's plot), cannot be rebuilt from journals",
         "next_stop": "live-only: the player's chosen next stop (stamp_next_stop keeps it through the re-read)",
+        "plan_first": "live-only: the first stop picked where you are (S30); an arrival elsewhere after it clears it, "
+                      "the re-read's older ones do not (stamp_next_stop)",
         "docked": "kept so the docked state is not blank while the re-read runs: older Docked/Undocked lines leave it "
                   "(fresh()), but an older Docked at your carrier still sets the carrier's services",
         "last_event_ts": "only ever raised (written when a line is newer), so replayed older lines leave it right",

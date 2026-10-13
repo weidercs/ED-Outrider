@@ -245,12 +245,14 @@ class Tracking(unittest.TestCase):
 class Desktop:
     """An X desktop's answers to wmctrl and xprop for the out-of-sight and covered checks (S25, S25b): windows
     [(id, desktop, x, y, w, h, title)], the active one, the stacking order (bottom to top), minimised ids, the current
-    desktop. Records every command."""
+    desktop, and xwininfo's map state for every window (None: no Map State line, as when it cannot be read). Records
+    every command."""
     GAME, BROWSER, CHAT = 0x04400003, 0x03000007, 0x02a00001
 
-    def __init__(self, windows, active, stacking, minimised=(), current=0):
+    def __init__(self, windows, active, stacking, minimised=(), current=0, map_state=None):
         self.windows, self.active, self.stacking = windows, active, stacking
         self.minimised, self.current, self.calls = set(minimised), current, []
+        self.map_state = map_state
 
     def run(self, cmd, **kw):
         self.calls.append(list(cmd))
@@ -264,6 +266,8 @@ class Desktop:
         elif cmd[:2] == ["xprop", "-id"]:
             hidden = int(cmd[2], 16) in self.minimised
             out = "_NET_WM_STATE(ATOM) = " + ("_NET_WM_STATE_HIDDEN" if hidden else "_NET_WM_STATE_MAXIMIZED_VERT") + "\n"
+        elif cmd[0] == "xwininfo" and self.map_state:
+            out = f"  Width: 2560\n  Height: 1440\n  Map State: {self.map_state}\n"
         else:
             out = ""
         return subprocess.CompletedProcess(cmd, 0, stdout=out, stderr="")
@@ -309,6 +313,23 @@ class OutOfSight(unittest.TestCase):
         self.assertFalse(d.poll().is_visible)                         # on another desktop
         d.current = 1
         self.assertTrue(d.poll().is_visible)
+
+    def test_one_workspace_per_monitor(self):
+        """A window manager with a workspace per monitor (i3 and the like): the browser clicked on the second monitor
+        makes its workspace the current desktop while the game stays in sight on the first. The map state decides:
+        viewable stays shown; unmapped (a workspace not on any monitor, as GNOME and KDE unmap) is hidden."""
+        d = self.D([(self.D.GAME, 1, 0, 0, 2560, 1440, "Elite - Dangerous (CLIENT)"),
+                    (self.D.BROWSER, 2, 2560, 0, 1920, 1080, "Mozilla Firefox")], self.D.BROWSER,
+                   [self.D.GAME, self.D.BROWSER], current=2, map_state="IsViewable")
+        self.assertTrue(d.poll().is_visible)
+        d.map_state = "IsUnMapped"
+        self.assertFalse(d.poll().is_visible)
+        d.map_state = "IsUnviewable"
+        self.assertFalse(d.poll().is_visible)
+        d.map_state, d.current = "IsUnMapped", 1   # the desktop's own: the map state is not asked
+        d.calls.clear()
+        self.assertTrue(d.poll().is_visible)
+        self.assertNotIn("xwininfo", [c[0] for c in d.calls if c[1:2] == ["-id"]])
 
     def test_only_when_asked(self):
         """The extra xprop calls run only with inactive_checks on and the game not in front."""

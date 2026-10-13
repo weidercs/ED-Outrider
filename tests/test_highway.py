@@ -998,6 +998,13 @@ class HighwayH1(unittest.TestCase):
         self.assertFalse(self.state.last_scoop_check(self.now + 16))
         self.assertTrue(self.state.last_scoop_check(self.now + 20))
         self.assertEqual(len(self.last_scoops()), 1)   # the same stretch: said once
+        self.assertTrue(self.state.dry_stretch_summary()["said"])   # said on this stay: the page's top-up card stays quiet
+        # a later arrival (a detour and back): the same stretch is said again, not left to a silenced top-up card
+        self.jump(-9, 999, "Elsewhere", 5.0)
+        self.state.last_scoop_check(self.now + 20.5)
+        self.jump(-8, 300, "Start", 0)
+        self.state.last_scoop_check(self.now + 21)
+        self.assertEqual((len(self.last_scoops()), self.state.dry_stretch_summary()["said"]), (2, True))
         # the next star unknown (no class from the game or Spansh): no claim; nor at a star you can't scoop
         self.navroute([(300, "Start", "K", 0.0), (401, "Dwarf A", None, 70.0), (402, "Neutron B", "N", 140.0)])
         self.state.last_scoop_check(self.now + 25)
@@ -1022,7 +1029,7 @@ class HighwayH1(unittest.TestCase):
         self.state.last_scoop_check(self.now + 40)
         w = self.state.dry_stretch_summary()
         self.assertEqual((w["count"], w["full"], w["need_t"], w["first"]), (40, True, None, "500"))
-        self.assertEqual([m["full"] for m in self.last_scoops()], [False, True])
+        self.assertEqual([m["full"] for m in self.last_scoops()], [False, False, True])
         # you away from the ship, or the game not running: nothing
         self.j.status_json = dict(self.j.status_json, away="SRV")
         self.state.last_scoop_check(self.now + 45)

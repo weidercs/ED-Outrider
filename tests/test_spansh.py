@@ -205,6 +205,13 @@ class FindSystem(unittest.TestCase):
         self.assertEqual(self.find("Nowhere")[0], 502)
         self.spansh.side_effect = None
         self.assertIn("EDSM could not be reached", self.find("Nowhere")[1]["error"])
+        # EDSM knows the name but not where, and Spansh could not be asked: not "Spansh doesn't know it"
+        self.edsm.side_effect = None
+        self.edsm.return_value = {"name": "Vague Two", "id64": 4}
+        self.spansh.side_effect = ed_outrider.HighwayError("Spansh cannot be reached (no network session)")
+        self.assertEqual(self.find("Vague Two"), (502, {"error": "EDSM knows Vague Two but not where it is, and Spansh could not be reached; try again."}))
+        self.spansh.side_effect = None
+        self.edsm.return_value = None
         # a record without a position is no hit
         self.spansh.return_value = dict(rec, name="Nowhere", id64=77, x=None)
         self.assertEqual(self.find("Nowhere")[0], 404)

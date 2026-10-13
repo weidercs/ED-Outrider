@@ -1886,15 +1886,33 @@ function mappedText(m) {
 // can make this browser always speak or never.
 let isSpeaker = !TABLET && !(typeof navigator !== "undefined" && navigator.locks && navigator.locks.request);
 let speakerWait = null;   // this window's place in the queue for the lock (an AbortController)
+// A Now or view window (S37) given the voice while the main window that opened it is waiting in line (that window
+// reloaded: F5, or an update's reload, let the voice pass here) hands it back within SPEAKER_YIELD_MS and queues again,
+// so the main window keeps the voice; unless the voice was taken here on purpose (Speak from this window).
+const SPEAKER_YIELD_MS = 1000;
+const sideWindow = () => nowWindow || !!viewWindow;
+// this window waits in line for the voice: what a Now or view window it opened asks before keeping the voice
+function speakerQueued() { return !sideWindow() && !isSpeaker && !!speakerWait; }
+function openerQueued() {
+  try { const o = window.opener; return !!(o && !o.closed && typeof o.speakerQueued === "function" && o.speakerQueued()); }
+  catch { return false; }   // the opener is another site now
+}
 function claimSpeaker(steal = false) {
   if (TABLET || !(typeof navigator !== "undefined" && navigator.locks && navigator.locks.request)) return;   // never in line
   if (speakerWait) { const w = speakerWait; speakerWait = null; w.abort(); }   // stealing: leave the queue first
   const ac = steal ? null : new AbortController();
   speakerWait = ac;
+  let yielded = false;
   navigator.locks.request("ed-speaker", steal ? {steal: true} : {signal: ac.signal}, () => {
     if (speakerWait === ac) speakerWait = null;
     isSpeaker = true; drawSpeaker();
-    return new Promise(() => {});   // held for the life of the window (or until another window takes it)
+    if (steal || !sideWindow()) return new Promise(() => {});   // held for the life of the window (or until another window takes it)
+    return new Promise(resolve => {   // a side window: held until the main window that opened it is in line for it
+      const t = setInterval(() => { if (openerQueued()) { clearInterval(t); yielded = true; resolve(); } }, SPEAKER_YIELD_MS);
+    });
+  }).then(() => {
+    if (!yielded) return;
+    isSpeaker = false; drawSpeaker(); claimSpeaker();   // handed back: in line again, behind the main window
   }).catch(() => {
     if (ac && ac.signal.aborted) return;   // we left the queue ourselves, to steal it
     isSpeaker = false; drawSpeaker(); claimSpeaker();   // another window took it: wait in line again
@@ -8085,8 +8103,11 @@ function onHush(first) {
   const before = hushKey;
   takeHush(data.hush);
   hushKey = hushState ? `${hushState.mode}|${hushState.until}|${hushState.sys}` : null;
+  // a hush asked by voice (S32): its answer, in the same payload's co-pilot channel, says it (copilotDo), with the
+  // three lengths first when another time was asked for
+  const cp = data.copilot, asked = !!(cp && hushState && cp.hush === hushState.mode && cp.seq > lastCopilotSeq);
   if (!first && hushKey !== before) {
-    if (hushState && hushed()) { cutForHush(); hushNews(HUSH_SAID[hushState.mode] || "Quiet."); }
+    if (hushState && hushed()) { cutForHush(); if (!asked) hushNews(HUSH_SAID[hushState.mode] || "Quiet."); }
     else if (!hushState && before !== null) hushNews("Voice back on.");
   }
   drawHush();
@@ -8134,8 +8155,8 @@ function copilotDo(cp) {
     const text = lastSaid ? lastSaid.words : "Nothing said yet.";
     speak(text, {kind: "manual", voice: lastSaid && lastSaid.voice, speaker: lastSaid ? lastSaid.speaker : null, pace: lastSaid ? lastSaid.pace || 1 : 1, piperOnly: true}); addCaption(text);
   } else if (cp.action === "replay" && cp.words) { speak(cp.words, {kind: "manual", piperOnly: true}); addCaption(cp.words); }
-  // an answer to a question by voice (POST api/ask): said here, as a line you asked for; "caption": shown only (a hush's
-  // answer: the hush itself is announced)
+  // an answer to a question by voice (POST api/ask): said here, as a line you asked for (a hush's answer too, onHush
+  // leaving it the news); "caption": shown only (unhush's: the end of the hush is announced)
   else if (cp.action === "say" && cp.words) { speak(cp.words, {kind: "manual", piperOnly: true}); addCaption(cp.words); }
   else if (cp.action === "caption" && cp.words) addCaption(cp.words);
 }
@@ -8549,7 +8570,9 @@ function onData() {
       const topup = !!data.here_star && /^[OBAFGKM](_|$)/.test(data.here_star) && f.pct < 90 && j != null && j < need
         && (unscoop || !!(sr && sr.scoopable / sr.of < 0.5));
       if (low || topup) fuelTargetSys = fsys;
-      if (topup && dryStretchHere()) { /* S2 says it here: the last scoopable star before a dry stretch */ }
+      // S2 says it here (the last scoopable star before a dry stretch): only when the server gave its moment on this
+      // stay (`said`) and its row speaks, else the top-up card is all the player gets
+      if (topup && dryStretchHere() && dryStretchHere().said && alertSpeak.lastscoop) { /* said by S2 */ }
       else if (topup) {
         const jt = `about ${j} jump${j === 1 ? "" : "s"}`, rt = sr ? scoopRateText(sr) : "";
         const rate = unscoop ? `the target cannot be scooped${rt ? `, and ${rt}` : ""}` : rt;

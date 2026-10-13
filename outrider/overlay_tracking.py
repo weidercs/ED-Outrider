@@ -15,7 +15,9 @@ X11 tracker a `min_interval` (0: every poll asks afresh) and `create_tracker` th
 Changed on 2026-10-13 for the overlay's status pill and "keep showing when Elite is not the active window" (S8, S25,
 S25b): the X11 tracker notes a missing xprop (`xprop_missing`: the game could never be "in front"); with
 `inactive_checks` on and the game not in front, both trackers say whether its window is out of sight (X11: minimised,
-_NET_WM_STATE_HIDDEN, or on another desktop than the current one; Windows: cloaked, as on another virtual desktop) and
+_NET_WM_STATE_HIDDEN, or on another desktop than the current one and not viewable by xwininfo's map state, since a
+window manager with a workspace per monitor calls the focused monitor's workspace the current one; Windows: cloaked, as
+on another virtual desktop) and
 whether other windows cover it (`WindowState.covered`, `covered_share` over COVERED_SHARE: X11 from the stacking order,
 _NET_CLIENT_LIST_STACKING, and wmctrl's geometries; Windows by walking the z-order above it, `win_rects_above`). A native
 Wayland window is in neither list: it is never seen covering the game.
@@ -258,15 +260,19 @@ class X11Tracker:
 
     def _out_of_sight(self, win_id_hex: str, listed, now: float) -> Tuple[bool, bool]:
         """(hidden, covered) for the game's window, not in front (S25, S25b): hidden when minimised
-        (_NET_WM_STATE_HIDDEN) or on another desktop than the current one; covered when the windows above it in the
-        stacking order (on its desktop, not minimised) hide more than COVERED_SHARE of it."""
+        (_NET_WM_STATE_HIDDEN) or on another desktop than the current one and not viewable (a window manager with one
+        workspace per monitor, i3 and the like, reports the focused monitor's workspace as the current one while the
+        game's stays in sight on its own monitor: xwininfo's map state decides, the desktop alone when it cannot be
+        read); covered when the windows above it in the stacking order (on its desktop, not minimised) hide more than
+        COVERED_SHARE of it."""
         kept = self._inactive
         if kept and kept[0] == win_id_hex and now - kept[1] < INACTIVE_EVERY_S:
             return kept[2], kept[3]
         win_id = int(win_id_hex, 16)
         desktop, rect = listed.get(win_id, (-1, (0, 0, 0, 0)))
         current = self._root_cardinal("_NET_CURRENT_DESKTOP")
-        hidden = self._minimised(win_id_hex) or (desktop >= 0 and current is not None and desktop != current)
+        elsewhere = desktop >= 0 and current is not None and desktop != current
+        hidden = self._minimised(win_id_hex) or (elsewhere and self._viewable(win_id_hex) is not True)
         covered = False
         if not hidden:
             stack = self._root_windows("_NET_CLIENT_LIST_STACKING")   # bottom to top
@@ -295,6 +301,15 @@ class X11Tracker:
     def _minimised(self, win_id_hex: str) -> bool:
         out = self._xprop(["-id", win_id_hex, "_NET_WM_STATE"])
         return bool(out) and "_NET_WM_STATE_HIDDEN" in out
+
+    def _viewable(self, win_id_hex: str) -> Optional[bool]:
+        """Whether the window is mapped and on screen (xwininfo's Map State IsViewable); None when xwininfo cannot say."""
+        try:
+            result = self._run(["xwininfo", "-id", win_id_hex], check=False, capture_output=True, text=True, timeout=0.5)
+        except (FileNotFoundError, subprocess.SubprocessError):
+            return None
+        match = re.search(r"Map State:\s*(\w+)", result.stdout or "") if result.returncode == 0 else None
+        return match.group(1) == "IsViewable" if match else None
 
     def _root_cardinal(self, prop: str) -> Optional[int]:
         out = self._xprop(["-root", prop])

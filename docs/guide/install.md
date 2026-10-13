@@ -199,8 +199,10 @@ sent by other web sites, stops a malicious page from reading your journals or pr
 It does not stop people on your network, so set **`[server] password`** as well: a tablet or phone then shows a
 sign-in page once (the Android app its own) and stays signed in, also across Outrider restarts, until you change the
 password. The PC Outrider runs on never asks. The page is plain http, so the password crosses your network
-unencrypted: pick one you use nowhere else. Without one, anything on your network can read the page and change
-bookmarks, and Outrider says so at start.
+unencrypted: pick one you use nowhere else. Without one, anything on your network can do whatever the page does: read
+it, change bookmarks and the settings (the password and journal folders included), restart Outrider, use your stored
+EDSM and Inara keys and, on the game PC, press keys in the game (the control rail, the tests of auto honk and
+auto-target). Outrider says so at start.
 
 An HTTPS reverse proxy on your own network (Caddy, nginx, a NAS's) works too: put its name in
 `[server] allowed_hosts` (say `outrider.lan`); Outrider answers it with or without a port and accepts its `https://`

@@ -103,7 +103,8 @@ def match_phrase(text, phrases):
 
 # ---- hush for a set time (S32) ----
 
-# what the page says for each hush (page.js HUSH_SAID): the server's HUSH_MODES are the only lengths there are
+# what the page says for each hush: a copy of page.js's HUSH_SAID, the words the voice's answer gives (test_hush_mode keeps
+# the two the same); the server's HUSH_MODES are the only lengths there are
 HUSH_SAID = {"10m": "Quiet for 10 minutes.", "30m": "Quiet for 30 minutes.", "jump": "Quiet until the next jump."}
 HUSH_MINUTES = {"10m": 10, "30m": 30}
 HUSH_JUMP = re.compile(r"\b(jump|jumps|jumping|next system|leave|leaving|arrive|arriving|arrival)\b")

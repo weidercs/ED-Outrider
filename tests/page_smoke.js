@@ -5682,7 +5682,7 @@ const settle = async maxMs => {
       speechLib = {styles: {business: "B", sarcastic: "S"}, lines: {fuel_last_scoop: {business: ["The next {count} stars on your route are not scoopable."], sarcastic: ["never, a danger line"]}}};
       speak = (t, opt) => said.push([opt && opt.log && opt.log.key, t]); notify = (kind, title, body) => { told.push([kind, title, body]); return true; };
       speechOn = true; isSpeaker = true; alertSpeak.lastscoop = true; alertSpeak.fuel = true;
-      const ws = {count: 3, system: "Start", next: "Kay D", need_t: 18.0, full: false, have_t: 10.0, source: "navroute", first: "401"};
+      const ws = {count: 3, system: "Start", next: "Kay D", need_t: 18.0, full: false, have_t: 10.0, source: "navroute", first: "401", said: true};
       const at = (i, m) => Object.assign({seq: lastMomentSeq + i, ts: new Date().toISOString(), kind: "last_scoop"}, ws, m);
       data.moments = [at(1, {}), at(2, {count: 1, next: null}), at(3, {count: 40, full: true, need_t: null})];
       onData();
@@ -5709,6 +5709,13 @@ const settle = async maxMs => {
       data.target = {seq: "s2-1", fresh: true, id64: 401, id: "401", name: "Dwarf A", star_class: "DA", status: "partial", leaving: null};
       told.length = 0; onData();
       o.topupQuiet = !told.some(t => t[0] === "fuel");
+      // the warning standing but not said on this stay (an earlier stay said it), or its row not speaking: the card
+      const topupWith = (dry, speaks) => {
+        data.dry_stretch = dry; alertSpeak.lastscoop = speaks; data.target = Object.assign({}, data.target, {seq: data.target.seq + "x"});
+        fuelTargetSys = null; told.length = 0; onData(); alertSpeak.lastscoop = true;
+        return told.some(t => t[0] === "fuel" && /^Top up here/.test(t[1]));
+      };
+      o.topupUnsaid = [topupWith(Object.assign({}, ws, {said: false}), true), topupWith(ws, false), topupWith(ws, true)];
       data.dry_stretch = null; data.target = Object.assign({}, data.target, {seq: "s2-2"}); fuelTargetSys = null;
       onData();
       o.topupBack = told.some(t => t[0] === "fuel" && /^Top up here/.test(t[1]));
@@ -5726,7 +5733,7 @@ const settle = async maxMs => {
              "The next 40 stars on your route are not scoopable, and even a full tank won't cover them."],
       row: true, strip: true, lineWith: false, line: "⛽ last scoop before 3 dry",
       now: "⛽ last scoop before 3 dry: the fuel aboard (10.0 t) won't cover them · scoop to ≥ 18.0 t to reach Kay D",
-      topupQuiet: true, topupBack: true};
+      topupQuiet: true, topupUnsaid: [true, true, false], topupBack: true};
     const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| batch 24 last scoopable star |", good ? "the lastscoop row and fuel_last_scoop key (one star, no amount), the strip's bit, Now, the top-up card quiet" : JSON.stringify({got, want}), errors.slice(before));
@@ -6650,7 +6657,10 @@ const settle = async maxMs => {
       data.game_pc = true;
       return JSON.stringify(o); })()`));
     await settle(1000);
-    // Plot route: no route followed, so it plots; then with one followed, To only (and the form open)
+    // Plot route: no route followed, so it plots; then with one followed, To only (and the form open). The next stop
+    // again first: a payload that came in meanwhile (the server's own changes: a Spansh retry) replaced the injected one
+    w.eval(`data.game_pc = true; data.highway = null; data.survey = null;
+      data.next_stop = {id: "4242", id64: 4242, name: "Chosen", distance: 40}; renderStrip();`);
     d.querySelector('#nextStopLn [data-plotto="Chosen"]').click();
     await settle(1000);
     got.plotView = w.eval("view"); got.plotTo = d.getElementById("hwyTo").value;
@@ -6945,6 +6955,72 @@ const settle = async maxMs => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| S37 view windows |", good ? "↗ opens ?view=bm (once), the window has no tabs and saves no view, ⌖ goes to the main window, else ↩ back; a bad view falls back" :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+  }
+  // Review fixes: a hush asked by voice is said by its answer (the three lengths first when another time was asked),
+  // once, in place of the page's own news of the hush; a hush from the button still says the page's words
+  {
+    const w = dom.window, before = errors.length;
+    const got = JSON.parse(w.eval(`(() => {
+      const said = [], realSpeak = speak, flags = [speechOn, isSpeaker, lastCopilotSeq, hushState, hushKey], d0 = JSON.stringify(data);
+      speak = t => said.push(t); speechOn = true; isSpeaker = true;
+      const answer = "I can hush for 10 or 30 minutes, or until the next jump. Quiet for 10 minutes.", o = {};
+      data.hush = {mode: "10m", until: Date.now() / 1000 + 600, left: 600, sys: null};
+      data.copilot = Object.assign({}, data.copilot, {seq: lastCopilotSeq + 1, action: "say", words: answer, hush: "10m"});
+      onData(); o.asked = said.splice(0);
+      data.hush = {mode: "30m", until: Date.now() / 1000 + 1800, left: 1800, sys: null};   // the ▾ or the button: no answer
+      onData(); o.button = said.splice(0);
+      speak = realSpeak; [speechOn, isSpeaker, lastCopilotSeq, hushState, hushKey] = flags;
+      data = JSON.parse(d0); drawHush();
+      return JSON.stringify(o); })()`));
+    const want = {asked: ["I can hush for 10 or 30 minutes, or until the next jump. Quiet for 10 minutes."], button: ["Quiet for 30 minutes."]};
+    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| review hush answer |", good ? "a voice hush says its answer once, the button's hush the page's words" : JSON.stringify({got, want}), errors.slice(before));
+  }
+  // Review fixes: a view window (S37) given the voice while the main window that opened it waits in line (the main window
+  // reloaded) hands it back and queues again; taken on purpose (Speak from this window) it keeps it. Web Locks faked
+  {
+    const before = errors.length, errs = [];
+    // one lock, its queue in order; a steal rejects the holder's request; an aborted wait leaves the queue
+    const locks = {holder: null, queue: [],
+      request(name, opts, cb) {
+        return new Promise((resolve, reject) => {
+          const req = {cb, resolve, reject, opts};
+          if (opts.signal) opts.signal.addEventListener("abort", () => { const i = locks.queue.indexOf(req); if (i >= 0) { locks.queue.splice(i, 1); reject(new Error("AbortError")); } });
+          if (opts.steal) { const h = locks.holder; locks.holder = null; if (h) h.reject(new Error("AbortError")); locks.grant(req); }
+          else if (!locks.holder) locks.grant(req); else locks.queue.push(req);
+        });
+      },
+      grant(req) {
+        locks.holder = req;
+        Promise.resolve(req.cb()).then(v => { if (locks.holder !== req) return; locks.holder = null; req.resolve(v); const n = locks.queue.shift(); if (n) locks.grant(n); });
+      }};
+    // the main window that opened the view window, as its opener: in line while its request waits
+    const main = {waiting: false, holds: false, closed: false, speakerQueued() { return main.waiting; },
+      claim() { main.waiting = true; locks.request("ed-speaker", {}, () => { main.waiting = false; main.holds = true; return new Promise(() => {}); })
+        .catch(() => { main.holds = false; main.claim(); }); }};
+    const html2 = await (await fetch(base + "?view=bm")).text();
+    const dom2 = new JSDOM(html2, {url: base + "?view=bm", runScripts: "dangerously", resources: "usable", pretendToBeVisual: true,
+      beforeParse(w2) { w2.AbortController = AbortController; w2.fetch = (u, o) => fetch(new URL(u, base), o); w2.addEventListener("error", e => errs.push(e.message));
+        w2.localStorage.clear(); w2.scrollBy = () => {}; w2.HTMLCanvasElement.prototype.getContext = () => null;
+        Object.defineProperty(w2.navigator, "locks", {value: locks, configurable: true});
+        Object.defineProperty(w2, "opener", {value: main, configurable: true, writable: true}); }});
+    const wv = dom2.window, isSp = () => wv.eval("typeof isSpeaker !== 'undefined' && isSpeaker");
+    for (let i = 0; i < 60 && !isSp(); i++) await sleep(150);   // page.js loaded, then a second late, the voice free: this window has it
+    const got = {first: isSp()};
+    main.claim();   // the main window reloaded: in line behind the view window
+    for (let i = 0; i < 20 && isSp(); i++) await sleep(150);
+    got.handed = [isSp(), main.holds, locks.queue.length];   // handed back, and in line again behind it
+    wv.document.getElementById("speakerClaim").click();   // Speak from this window: taken on purpose
+    await sleep(50);
+    got.taken = [isSp(), main.holds, main.waiting];
+    await sleep(1600);
+    got.kept = [isSp(), main.holds];   // the main window in line does not get it back
+    dom2.window.close();
+    const want = {first: true, handed: [false, true, 1], taken: [true, false, true], kept: [true, false]};
+    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before && !errs.length;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| review view window voice |", good ? "a view window hands the voice back to its main window in line, keeps it when taken here" : JSON.stringify({got, want, errs}), errors.slice(before));
   }
   // S40: a speaker per personality. speech.json's voice and speaker, a speaker alone being the main voice's person, a pick
   // in Settings winning over both (data.style_picks); a line queued with a speaker carries it to the PC's player, as the

@@ -151,7 +151,8 @@ ticked Analysis only (`["system", "bio"]`; the Target panel is `body`).
 overlay normally hides as soon as another window is in front, Outrider's page included. With this on it stays over the
 game while you use a window beside it (a browser on another screen, a chat), and still hides when the game is
 minimised, on another desktop, or when other windows cover more than a quarter of it (then the pill says "another
-window covers Elite's"). On Linux that is judged from the X11 windows' stacking and sizes; on Windows from the
+window covers Elite's"). On Linux that is judged from the X11 windows' stacking and sizes; a desktop with a workspace
+per screen (i3 and the like) counts the game's workspace as in sight while its screen shows it; on Windows from the
 windows above the game (not yet tried). **A native Wayland window cannot be seen:** on a Wayland desktop, a program
 running as a Wayland window (Firefox and most GNOME and KDE apps do) can sit over the game without the overlay
 knowing, so it draws over that window too; an XWayland window (most games, Steam, Discord) is seen.

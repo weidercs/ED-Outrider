@@ -2,6 +2,34 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-13 · Review fixes: the overlay on a workspace per monitor, the first stop, S12's jumps, S2's top-up, the hush answer, the voice's window, the exposure warning
+From the Fable review sweep of the last 33 commits (areas overlay, routes, voice, security):
+- **Keep showing when Elite is not the active window** hid the overlay on window managers with a workspace per monitor
+  (i3 and the like): the browser clicked on the other screen made its workspace the "current desktop". Another desktop
+  counts only when xwininfo says the game's window is not viewable (GNOME and KDE unmap a window on a workspace not
+  shown; the desktop alone when the map state cannot be read). Test: a fake desktop with a workspace per monitor.
+- **The first stop picked on Here's schematic** (S30) was only ignored elsewhere, never forgotten: it came back on a
+  return to that system. An arrival elsewhere after it was picked drops it now (stamped like the next stop, so a
+  journal re-read's older arrivals keep it).
+- **A survey route's next stop past finished systems** (S12) showed the last skipped row's leg as its jumps: now the
+  legs from where you are, through the systems passed over.
+- **The fuel top-up card was silenced where the last-scoop line would never be said again** (S2 remembered a stretch
+  as said for the life of the process): a stretch is said once per arrival now, the payload's `dry_stretch.said` says
+  it was said on this stay, and the page keeps the top-up card quiet only then and with that alert row speaking.
+- **Find a system** said "Spansh doesn't know it" when EDSM had the name without a position and Spansh could not be
+  reached: a 502 saying Spansh could not be reached, try again.
+- **"Hush for five minutes"** said only "Quiet for 10 minutes.": the answer naming the three lengths was only captioned.
+  It is the spoken news of that hush now (a `say` with the copilot's `hush`; `onHush` leaves it the news), once.
+  `outrider.ask.HUSH_SAID` is checked word for word against page.js's (the guide said it was page.js's alone).
+- **A view window (S37) or the Now window kept the voice for good** after the main window reloaded: given the voice
+  while the main window that opened it waits in line, it hands it back within a second and queues again; "Speak from
+  this window" there still keeps it.
+- **The no-password warning** (start-up, the example config, the install guide) said a device on your network could
+  read journals and edit bookmarks; it can do whatever the page does: change the settings (the password and journal
+  folders too), restart Outrider, use the stored EDSM and Inara keys and, on the game PC, press keys. The words say so.
+- The smoke test's next-stop step puts its injected next stop back before clicking (a payload from a Spansh retry could
+  replace it).
+
 ## 2026-10-13 · Review fixes: the service's start limit, Recount's names, the depot cap, the EDSM backfill and import
 From the Fable review sweep of the last 33 commits (areas server, carrier, uploads, exo):
 - **The systemd service's start limit** counted every Settings Restart: ten in five minutes left the unit failed. Now
