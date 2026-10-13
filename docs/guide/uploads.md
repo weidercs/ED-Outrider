@@ -24,6 +24,9 @@ switch them (they are not among the Server settings).
   - A commander with no key sends nothing, and Settings says so.
   - A key EDSM refuses stops the sending (not the recording) until you change the key, press **Try again** in
     Settings → Uploads, or switch EDSM off and on: what you played meanwhile then goes.
+  - **Check** beside the key asks EDSM whether it takes that name and key (the one typed, else the one saved), without
+    sending anything: "✓ EDSM accepts CMDR … with this key", or "✗ EDSM: 203 commander name or API key not found". A
+    check that works with the saved key ends a hold at once. One check every 10 seconds.
   - If EDSM keeps refusing a key you know is right, make a new key on edsm.net and paste that one.
 - **Inara**: keeps your commander profile there current, as EDMC's Inara upload does, so a player who uses Outrider
   alone loses nothing on it:
@@ -49,6 +52,9 @@ switch them (they are not among the Server settings).
     revoked. Outrider sees EDMC's setting on this PC and holds its own while EDMC sends; it cannot see the others.
   - A key or app Inara refuses stops the sending (not the recording) with Inara's words in Settings, until you change
     the key, press **Try again** or switch Inara off and on. A refusal for sending too often waits an hour by itself.
+  - **Check** beside the key asks Inara for that commander's profile with the key (the one typed, else the one saved),
+    without sending anything: "✓ Inara: CMDR …" with a link to the profile, "✗ Inara refused the key: …", or "Couldn't
+    reach Inara: timeout". It keeps to the same 35-second pace as the sending, so it can take a moment.
 
 ## Catching up, and what is never sent
 

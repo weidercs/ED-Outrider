@@ -652,15 +652,44 @@ IDLE_S = 2.0             # how often an empty or switched-off queue is looked at
 BACKOFF_S = (60, 120, 300, 600, 1800)   # after a network failure or a 5xx: at least a minute (EDDN's rule), growing
 
 
-async def upload_loop(service, db, send, on, clock=time.time, sleep=None, report=None, batch=50, min_gap=0, wake=None):
+class Gate:
+    """At least `min_gap` seconds from one request to the next, for every caller that waits on it: Inara's sender and
+    its key Check share one (G3: Inara's limit is about two requests a minute, whoever makes them), EDSM's account reads
+    another. `await gate.wait()` returns when the next request may go, and counts it as made then."""
+
+    def __init__(self, min_gap, clock=time.time, sleep=None):
+        import asyncio
+        self.min_gap, self.clock, self.sleep = min_gap, clock, sleep
+        self.last = None
+        self.lock = asyncio.Lock()
+
+    def due_in(self):
+        """Seconds until the next request may go (0: now)."""
+        return 0 if self.last is None else max(0, self.min_gap - (self.clock() - self.last))
+
+    async def wait(self):
+        import asyncio
+        async with self.lock:
+            gap = self.due_in()
+            if gap > 0:
+                await (self.sleep or asyncio.sleep)(gap)
+            self.last = self.clock()
+
+
+async def upload_loop(service, db, send, on, clock=time.time, sleep=None, report=None, batch=50, min_gap=0, wake=None,
+                      gate=None):
     """Drain `service`'s outbox while it is on: send(rows) -> [(row id, state, status text, retry_in or None)] for
     each row it settled (state: sent, dropped, queued (retry after retry_in), held (stop until the player acts)); a raised
     exception is a network failure: those rows wait BACKOFF_S. report(service, outcome dict) after each round (the
     status view and Recent: {error, results, at, raised (the exception, or None), wait (s until the next round)}).
-    min_gap: at least this many seconds from one request to the next (Inara's rate). wake: an asyncio.Event that ends
-    any wait at once (Settings' Try again on a held key: S16). Runs until cancelled."""
+    min_gap: at least this many seconds from one request to the next (Inara's rate); gate: a Gate shared with other
+    callers (Inara's key Check, G3) instead, its min_gap the pace. wake: an asyncio.Event that ends any wait at once
+    (Settings' Try again on a held key: S16). Runs until cancelled."""
     import asyncio
     sleep = sleep or asyncio.sleep
+    if gate is None and min_gap:
+        gate = Gate(min_gap, clock, sleep)
+    min_gap = gate.min_gap if gate else 0
 
     async def nap(secs):
         if wake is None:
@@ -678,7 +707,7 @@ async def upload_loop(service, db, send, on, clock=time.time, sleep=None, report
         wake.clear()
         if sleeper in done:
             sleeper.result()   # a test's sleep may end the loop by raising
-    fails, last_send = 0, None
+    fails = 0
     while True:
         try:
             if not on(service):
@@ -692,9 +721,9 @@ async def upload_loop(service, db, send, on, clock=time.time, sleep=None, report
         if not rows:
             await nap(IDLE_S)
             continue
-        if min_gap and last_send is not None and clock() - last_send < min_gap:
-            await sleep(min_gap - (clock() - last_send))   # woken early (Try again): the service's pace still holds
-        now = last_send = clock()
+        if gate:
+            await gate.wait()   # woken early (Try again), or a key Check just asked: the service's pace still holds
+        now = clock()
         wait, raised = 0, None
         try:
             results = await send(rows)

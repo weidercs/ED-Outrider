@@ -204,6 +204,7 @@ import outrider.uploads    # EDDN / EDSM uploads (opt-in): the session, the live
 import outrider.eddn       # EDDN's messages from journal events, and what its answers mean
 import outrider.edsm       # EDSM's journal upload: the events with where you were, and what its answers mean
 import outrider.inara      # Inara's commander profile: travel, ranks, ships, inventory..., and what its answers mean
+import outrider.readclient  # EDSM's and Inara's account reads (G3): the key checks, EDSM's flight log
 import outrider.checklist  # the exobiology checklist: every species by region, with your state (pure)
 import outrider.codex_images  # the checklists' pictures: Canonn's links and credits, refreshed once a day
 import outrider.overlay    # the in-game overlay's panels as draw lists (the window: python3 -m outrider.overlay_window)
@@ -327,6 +328,8 @@ HIGHWAY_STAND_IN_LY = 150.0   # ly: how far around an end Spansh does not know y
 NEAR_BODY_ALT = 5000         # m: below this over a body in your ship, the on-body strip shows its bio card
 LEASE_EVERY_S = 60           # s: this instance's upload lease rewritten, the others' read, EDMC's switches checked
 UPLOAD_DOWN_S = 15 * 60      # s: an upload failing this long with messages waiting gets its card and notification (S3)
+KEY_CHECK_S = 10             # s: one EDSM or Inara key check per this, per service (S45)
+LOOKUP_DOWN_S = 10 * 60      # s: Spansh or EDSM unavailable this long gets a card on the banner (S42; at once for no network)
 BIO_TAGS_SHOWN = 40          # the surface map draws at most this many tagged plants (nearest first)
 SELLER_REFRESH_LY = 100      # look for the nearest places to sell again after moving this far
 SELLER_REFRESH_S = 6 * 3600  # ...or this long (carriers move)
@@ -5404,18 +5407,45 @@ def highway_not_yet(name):
     return f"Spansh doesn't know {name} yet, and Outrider doesn't know where it is: check the name, or plot from where you are"
 
 
+# The read-only lookups' sources by the module constants their URLs come from (S42's health): looked up when a request
+# ends, so a URL patched by verify.sh or a test still names its source. A real host name is matched first
+# (outrider.health.HOSTS).
+LOOKUP_URLS = (("spansh", ("SPANSH_SEARCH", "SPANSH_BODY_SEARCH", "SPANSH_STATION_SEARCH", "SPANSH_DUMP", "SPANSH_COMMODITIES",
+                           "SPANSH_ROUTE", "SPANSH_GENERIC_ROUTE", "SPANSH_RESULTS", "SPANSH_RICHES", "SPANSH_EXO",
+                           "SPANSH_TRADE", "SPANSH_SYSTEM_NAMES", "SPANSH_SYSTEM_SEARCH")),
+               ("edsm", ("EDSM_SYSTEM", "EDSM_SPHERE", "EDSM_BODIES")),
+               ("github", ("RELEASES_LATEST",)), ("edastro", ("DSSA_URL",)))
+
+
+def lookup_source(url):
+    """The lookup source of a request's URL (spansh, edsm, github, edastro, canonn), or None (not a lookup)."""
+    url = str(url)
+    src = outrider.health.source_of_host(url)
+    if src:
+        return src
+    for name, consts in LOOKUP_URLS:
+        for c in consts:
+            prefix = str(globals().get(c) or "").split("{")[0]
+            if prefix and url.startswith(prefix):
+                return name
+    ref = str(outrider.codex_images.REF)
+    return "canonn" if ref and url.startswith(ref) else None
+
+
 class Spansh:
-    def __init__(self, db):
+    def __init__(self, db, health=None):
         self.db = db
         self.session = None
+        # the lookups' health (S42): every request of the session reports to it (an aiohttp TraceConfig)
+        self.health = health or outrider.health.Health()
         self.sem = asyncio.Semaphore(SPANSH_CONCURRENCY)
         self.sem_fast = asyncio.Semaphore(SPANSH_INTERACTIVE)
         self.sem_search = asyncio.Semaphore(SPANSH_INTERACTIVE)   # online Search: never queues behind a refresh
         self.sem_plot = asyncio.Semaphore(1)   # the Highway's plots: one at a time
 
     async def start(self):
-        self.session = ClientSession(timeout=ClientTimeout(total=60),
-                                     headers={"User-Agent": USER_AGENT})
+        self.session = ClientSession(timeout=ClientTimeout(total=60), headers={"User-Agent": USER_AGENT},
+                                     trace_configs=[self.health.trace_config(lookup_source)])
 
     async def close(self):
         await self.session.close()
@@ -6340,6 +6370,17 @@ class State:
         # (S5b: GET /api/serverlog; None when the streams are not teed, as in tests)
         self.notices = outrider.notices.Board(on_change=self.bump)
         self.server_log = None
+        # the read-only lookups' health (S42: Spansh, EDSM, GitHub, EDAstro, Canonn; the Spansh session's trace feeds it):
+        # the Data tile's "Spansh unavailable", and a card on the banner when it lasts (check_lookup_outages)
+        h = getattr(spansh, "health", None)
+        self.health = h if isinstance(h, outrider.health.Health) else outrider.health.Health()
+        self.health.on_change = self.health_changed
+        self.lookup_down_said = set()   # the banner keys up now
+        # the account read client's pace (G3): EDSM's reads at least EDSM_GAP_S apart; Inara's one gate, which its
+        # sender (upload_loop) waits on too, so a Check never breaks its two-a-minute rule
+        self.edsm_gate = outrider.uploads.Gate(outrider.readclient.EDSM_GAP_S)
+        self.inara_gate = outrider.uploads.Gate(outrider.inara.MIN_GAP_S)
+        self.key_checked = {}   # service -> when its last key check began (one per KEY_CHECK_S)
 
     def hide_secrets(self):
         """Keep the passwords and keys out of Outrider's log (outrider.serverlog.hide), the EDSM and Inara keys too."""
@@ -6365,6 +6406,7 @@ class State:
             # the speaking window waits for a click before it can make a sound (it lapses with the window itself)
             "speaker_audio_blocked": bool(self.speaker_audio_blocked and self.speaker_present()),
             "status": self.status, "radius": self.radius,
+            "health": self.health.summary(),   # the lookups down (S42): the Data tile's "Spansh unavailable"
             "radius_choices": sorted({float(x) for x in RADIUS_CHOICES} | {self.radius}),
             "sphere_cut": self.sphere_cut,
             "tts": self.speaker.info() if self.speaker else None,
@@ -10292,6 +10334,48 @@ class State:
         self.maybe_refresh()
         self.bump()
 
+    def health_changed(self):
+        """A lookup source went down or came back (outrider.health.Health's on_change): the banner, then the page."""
+        self.check_lookup_outages()
+        self.bump()
+
+    # what a source being down means for the player, on its card (S42)
+    LOOKUP_DOWN_WORDS = {"spansh": "Nearby and Search show what was kept from earlier",
+                         "edsm": "the EDSM fallbacks (Find by name, EDSM's list when Spansh fails) wait",
+                         "github": "the update check waits", "edastro": "the Nearest finder's DSSA carrier list waits",
+                         "canonn": "the checklists' pictures use the copy kept"}
+
+    def check_lookup_outages(self, now=None):
+        """S42: a card on the banner for a lookup that stays down: no network at all (two sources failing by DNS or no
+        route) at once, a source whose address is not found at once, Spansh or EDSM down LOOKUP_DOWN_S. The card goes
+        when it answers again (or nothing has asked it for outrider.health.DOWN_FRESH_S). The Data tile says only
+        "Spansh unavailable" (the payload's health); the card's words stay the same for the whole outage."""
+        now = time.time() if now is None else now
+        if self.health.expire(now):
+            return   # expire's on_change came back here already
+        want = {}
+        if self.health.offline():
+            want["lookup_down:internet"] = (f"{outrider.health.OFFLINE}: Outrider's lookups (Spansh, EDSM, GitHub) "
+                                            "are failing. Check this PC's network; what Outrider has kept still shows.")
+        else:
+            for d in self.health.down():
+                src, name = d["source"], d["name"]
+                then = self.LOOKUP_DOWN_WORDS.get(src, "it asks again by itself")
+                if d["user_fix"]:
+                    want[f"lookup_down:{src}"] = (f"{name} unavailable: its address is not found (this PC's network or "
+                                                  f"DNS?). Meanwhile {then}.")
+                elif src in ("spansh", "edsm") and now - d["since"] >= LOOKUP_DOWN_S:
+                    want[f"lookup_down:{src}"] = (f"{name} has been unavailable for over {LOOKUP_DOWN_S // 60} minutes "
+                                                  f"({self.DOWN_WORDS.get(d['kind'], 'failing')}). Meanwhile {then}; "
+                                                  "Outrider asks again by itself.")
+        for key in self.lookup_down_said - set(want):
+            self.notices.clear(key)
+        for key, text in want.items():
+            if key not in self.lookup_down_said:
+                print(f"lookups: {text}", file=sys.stderr)
+            self.notices.set(key, text, "warn")   # the same text again changes nothing
+        self.lookup_down_said = set(want)
+
     def schedule_retry(self):
         delay = self.retry_backoff
         self.retry_at = time.time() + delay
@@ -10312,7 +10396,11 @@ class State:
             import traceback
             traceback.print_exc()
             delay = self.schedule_retry()
-            self.status = f"refresh failed: {type(e).__name__}: {e} — retrying in {delay}s"
+            # S42: a network failure is the short form ("Spansh unavailable"); anything else says only that it failed
+            # (no raw text on the page: the traceback above is in the log)
+            kind, _ = outrider.health.classify(e)
+            self.status = self.health.text("spansh") if kind not in ("other", "bad_answer") else \
+                f"refresh failed — retrying in {delay}s"
             self.bump()
 
     def dump_failed(self, id64, e):
@@ -10399,9 +10487,11 @@ class State:
                     self.bases[row["id64"]] = (cached_source(b), b)
                     cached_n += 1
             delay = self.schedule_retry()
-            self.status = (f"Spansh search failed ({spansh_failed}); showing {cached_n} cached systems"
-                           f"{(' plus EDSM’s list' + (f' (to {EDSM_SPHERE_MAX} ly, its limit)' if r > EDSM_SPHERE_MAX else '')) if edsm else ''}"
-                           f" — retrying in {delay}s")
+            # S42: the page says only "Spansh unavailable" (or "No internet connection"); the detail goes to the log
+            self.status = self.health.text("spansh")
+            print(f"Spansh search failed ({type(spansh_failed).__name__}: {spansh_failed}); showing {cached_n} cached "
+                  f"systems{(' plus EDSM’s list' + (f' (to {EDSM_SPHERE_MAX} ly, its limit)' if r > EDSM_SPHERE_MAX else '')) if edsm else ''}"
+                  f", retrying in {delay}s", file=sys.stderr)
         for d in edsm:
             if d.get("id64") and d.get("coords") and d["id64"] not in self.bases:
                 self.bases[d["id64"]] = ("edsm", base_from_edsm(d))
@@ -10803,6 +10893,7 @@ class State:
                     if self.game_pc else None
                 self.refresh_leases(edmc)
                 self.check_upload_outages()
+                self.check_lookup_outages()   # S42: a lookup down long enough for a card, and its end
                 if time.time() - pruned > 3600:
                     outrider.uploads.prune(self.db, time.time())
                     self.db.commit()
@@ -11212,6 +11303,64 @@ class State:
         self.bump()
         return {"ok": True, "accounts": self.inara_account_list()}, 200
 
+    async def check_key(self, service, commander, key=None, name=None):
+        """S45's Check: does EDSM (get-credits) or Inara (getCommanderProfile) accept this commander's key, the typed one
+        or else the one stored? One check per KEY_CHECK_S per service; EDSM's reads paced by edsm_gate, Inara's through
+        the gate its sender waits on too. Reads only. The key is never in the answer or the log (it goes in a POST body,
+        and no error's text is repeated: outrider.readclient.reach_words). A success with the stored key clears its
+        hold (clear_key_hold). (answer, status): the answer {ok, text, at, service, commander, link?, cleared?}."""
+        commander = str(commander or "").strip()
+        if service not in ("edsm", "inara") or not commander or len(commander) > 64:
+            return {"error": "commander: the in-game commander's name"}, 400
+        label = outrider.uploads.NAMES[service]
+        stored = (self.edsm_accounts() if service == "edsm" else self.inara_accounts()).get(commander) or {}
+        typed = str(key or "").strip()
+        key = typed or stored.get("key")
+        if not key:
+            return {"error": f"api_key: type the key from {label}, or save one first"}, 400
+        if service == "edsm" and not re.fullmatch(r"[0-9a-fA-F]{20,64}", key):
+            return {"error": "api_key: the key from www.edsm.net/settings/api (40 hexadecimal characters)"}, 400
+        if service == "inara" and not outrider.inara.key_ok(key):
+            return {"error": "api_key: the key from inara.cz -> Settings -> API key (letters and digits)"}, 400
+        now = time.time()
+        wait = KEY_CHECK_S - (now - self.key_checked.get(service, -KEY_CHECK_S))
+        if wait > 0:
+            return {"error": f"one check every {KEY_CHECK_S} s: try again in {math.ceil(wait)} s", "retry_in": math.ceil(wait)}, 429
+        if self.upload_session is None:
+            return {"error": "Outrider is still starting"}, 503
+        self.key_checked[service] = now
+        outrider.serverlog.hide(key)   # a typed key too: never in the log
+        rc = outrider.readclient
+        out = {"service": service, "commander": commander, "at": now}
+        try:
+            if service == "edsm":
+                edsm_name = str(name or "").strip()[:64] or stored.get("name") or commander
+                got = rc.edsm_credits_answer(await rc.fetch(self.upload_session, rc.EDSM_CREDITS_URL, self.edsm_gate,
+                                                            data=rc.edsm_form(edsm_name, key)))
+                out.update(ok=got["ok"], text=f"EDSM accepts CMDR {edsm_name} with this key" if got["ok"]
+                           else f"EDSM: {got['code']} {got['text']}")
+            else:
+                body = rc.inara_profile_request(key, commander, outrider.__version__, outrider.inara.SOFTWARE,
+                                                developing=outrider.inara.dev_mode())
+                got = rc.inara_profile_answer(await rc.fetch(self.upload_session, outrider.inara.URL, self.inara_gate, body=body),
+                                              outrider.inara.RATE_WORDS)
+                out.update(ok=got["ok"], link=got["url"],
+                           text=f"Inara: CMDR {got['name'] or commander}" if got["ok"]
+                           else "Inara asked Outrider to slow down: try again later" if got["rate"]
+                           else f"Inara: no commander {commander} for this key" if got["code"] == 204
+                           else f"Inara refused the key: {got['text']}")
+        except asyncio.CancelledError:
+            raise
+        except ValueError:   # an answer that is not the service's
+            out.update(ok=False, text=f"{label}'s answer was not understood")
+        except Exception as e:   # unreachable, a timeout, a 5xx: the kind only (an error's text can carry the URL)
+            out.update(ok=False, text=f"Couldn't reach {label}: {rc.reach_words(e)}")
+        if out["ok"] and (not typed or typed == stored.get("key")) and self.clear_key_hold(service):
+            out["cleared"] = True   # the stored key works: what waited is sent now
+            self.bump()
+        print(f"uploads: {label} key check for CMDR {commander}: {'ok' if out['ok'] else out['text']}")
+        return out, 200
+
     def inara_account_list(self):
         """For the page: [{commander, set, hint}], the commander in the journals first if missing. Never the key: hint is
         its first and last four characters and its length (the page may be open to the network without a password)."""
@@ -11286,7 +11435,7 @@ class State:
                 self.upload_wake[service] = asyncio.Event()
                 self.upload_tasks[service] = asyncio.get_running_loop().create_task(outrider.uploads.upload_loop(
                     service, self.db, send, self.upload_on, report=self.upload_report, batch=batch,
-                    min_gap=outrider.inara.MIN_GAP_S if service == "inara" else 0, wake=self.upload_wake[service]))
+                    gate=self.inara_gate if service == "inara" else None, wake=self.upload_wake[service]))
 
     def set_autohonk(self, enabled):
         """Switch auto honk on or off (the page's toggle; remembered over restarts)."""
@@ -15462,6 +15611,17 @@ def make_app(state, hosts=None):
                                              remove=body.get("remove") is True)
         return web.json_response(out, status=status)
 
+    def key_check_view(service):
+        async def view(request):
+            """POST /api/uploads/{edsm|inara}/check {commander, name?, api_key?}: asks EDSM or Inara whether the typed
+            key (else the stored one) is accepted (S45). Reads only; never answers with the key."""
+            body = await json_object(request)
+            if body is None:
+                return web.json_response({"error": "expected a JSON object"}, status=400)
+            out, status = await state.check_key(service, body.get("commander"), body.get("api_key"), body.get("name"))
+            return web.json_response(out, status=status)
+        return view
+
     async def overlay_get(request):
         """GET /api/overlay[?since=version]: the overlay window's panels (State.overlay_view)."""
         return web.json_response(state.overlay_view(request.query.get("since"),
@@ -15815,6 +15975,8 @@ def make_app(state, hosts=None):
     app.router.add_post("/api/uploads/edsm", edsm_account_view)
     app.router.add_post("/api/uploads/retry", uploads_retry_view)
     app.router.add_post("/api/uploads/inara", inara_account_view)
+    app.router.add_post("/api/uploads/edsm/check", key_check_view("edsm"))
+    app.router.add_post("/api/uploads/inara/check", key_check_view("inara"))
     app.router.add_post("/api/autohonk/test", pc_only(autohonk_test_view))
     app.router.add_post("/api/autohonk/forget", pc_only(autohonk_forget_view))
     app.router.add_get("/api/autohonk/check", pc_only(autohonk_check_view))   # S69: looks, never presses

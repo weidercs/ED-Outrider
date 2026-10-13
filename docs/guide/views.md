@@ -164,6 +164,12 @@ its system, when it is elsewhere, puts it in the galaxy map; the tritium for its
 and its balance in weeks of upkeep), the nearest places to sell (your carrier among them while its UC or Vista is on),
 and the last backup.
 
+The **Data tile** says how fresh your journal is, the last backup, the uploads in use, and whether the outside lookups
+answer: "Spansh ok", or just "Spansh unavailable" (EDSM, GitHub... the same) while one does not, and "No internet
+connection" when two or more fail because this PC has no network. Meanwhile the lists show what Outrider kept from
+earlier, and it asks again by itself. If Spansh or EDSM stays unavailable for 10 minutes, or this PC has no network,
+a card says so at the top of the page (✕ hides it); it goes when they answer. The error itself is in Show log.
+
 The **fuel tile** counts jumps as the ship gets lighter ("≈6 jumps at max range (484 ly), 3,500 at your pace"),
 for any drive, engineered or not, from your own Loadout and jumps. Nearby shows laden range and the targeted
 jump's cost ("38.2 ly · 0.9 t · leaves 5 max jumps"). "scoopable: 9 of last 20" turns amber when your fuel is

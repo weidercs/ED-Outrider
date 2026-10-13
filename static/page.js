@@ -480,9 +480,22 @@ function streakHtml(sk) {
 // on the galaxy map closer than that is one nobody has reported. Never "undiscovered": the game may know it.
 // Only once the sphere search has come back (while it runs the list is empty or partial); honours sphere_cut
 // (the list is complete only to there, so the claim stops there).
+// The server's status while the sphere search has not come back whole: starting, asking, or failed (S42's short forms,
+// "Spansh unavailable" / "No internet connection", or "refresh failed")
+const SPHERE_INCOMPLETE = /^(starting|asking|Spansh unavailable|No internet connection|refresh failed)/;
+// S42: the lookups down (data.health, the Spansh session's trace) in the Data tile's words: "No internet connection",
+// else "Spansh unavailable" per source; a failed search's own status too (the list stays incomplete until it answers)
+function lookupsDown(d) {
+  const h = (d && d.health) || {}, out = [];
+  if (h.offline) out.push("No internet connection");
+  else for (const x of h.down || []) out.push(`${x.name} unavailable`);
+  if (/^(Spansh unavailable|No internet connection)$/.test((d && d.status) || "") && !out.includes(d.status)
+      && !out.includes("No internet connection")) out.unshift(d.status);
+  return out;
+}
 function horizon() {
   const p = data && data.position;
-  if (!p || /^(starting|asking|Spansh search failed|refresh failed)/.test(data.status || "")) return null;
+  if (!p || SPHERE_INCOMPLETE.test(data.status || "")) return null;
   const cut = data.sphere_cut, r = cut != null ? Math.min(cut, data.radius) : data.radius;
   const n = (Array.isArray(data.systems) ? data.systems : []).filter(s => sysId(s) !== sysId(p) && !s.visited && s.source !== "route")
     .sort((a, b) => a.distance - b.distance)[0];
@@ -568,17 +581,19 @@ function renderStrip() {
     text = fr.install === "docker" ? esc(DOCKER_NO_JOURNALS) : TABLET ? "no journals found: set the journal folder in Server settings on the PC"
       : `no journals found · <a href="#" data-openjournals title="Settings → Server → [journals] live">set the journal folder</a>`;
   } else text = "waiting for a journal";
-  const failed = /failed|error/.test(data.status || "");
+  // S42: an outside lookup down says only "Spansh unavailable" (the author's choice: no detail; the log has the error);
+  // "refresh failed" is Outrider's own trouble, said as a server error
+  const down = lookupsDown(data), failed = /^refresh failed/.test(data.status || "");
   const problems = [disconnected && `NOT CONNECTED since ${disconnected}`, data.tail_error && "journal tailing error — see the terminal",
                     pageError && `page error (${esc(pageError)}) — see the browser console`,
-                    failed && esc(data.status)].filter(Boolean);
+                    ...down.map(esc), failed && esc(data.status)].filter(Boolean);
   if (problems.length) { dot = disconnected || data.tail_error || pageError ? "bad" : "warn"; tcls = dot === "bad" ? "urgent" : "warn"; }
-  td.className = "tile " + tcls; td.title = data.tail_error || data.status || "";
+  td.className = "tile " + tcls; td.title = data.tail_error || (down.length ? "" : data.status) || "";
   // the folded tiles' line names it, in a few words, when the tile is coloured (the tile has the detail)
   dataBit = disconnected ? `not connected since ${disconnected}` : data.tail_error ? "journal tailing error" : pageError ? "page error"
-    : failed ? (/spansh/i.test(data.status || "") ? "Spansh failed" : "server error") : fr && !fr.journal && fr.missing ? "no journals found" : text;
+    : down.length ? down[0] : failed ? "server error" : fr && !fr.journal && fr.missing ? "no journals found" : text;
   fl.innerHTML = val(`<span class="dot ${dot}"></span>${text}`);
-  sl.innerHTML = problems.length ? problems.join(" · ") : /^asking|^fetching/.test(data.status || "") ? esc(data.status) : "Spansh ok";
+  sl.innerHTML = problems.length ? problems.join(" · ") : /^asking|^fetching|^ok \(/.test(data.status || "") ? esc(data.status) : "Spansh ok";
   document.getElementById("backupLine").innerHTML = backupHtml(data.backup || {});
   backupsFollow(data.backup || {});
   document.getElementById("uploadLine").innerHTML = uploadLineHtml(data.uploads);
@@ -3107,7 +3122,7 @@ document.getElementById("boxelPane").addEventListener("change", e => {
 function emptyMessage(rows) {
   const others = data.systems.filter(s => sysId(s) !== posId()).length;
   if (/^asking|^fetching/.test(data.status)) return "loading…";
-  if (/failed/.test(data.status)) return "Spansh lookup failed — the list is incomplete, so no conclusions about undiscovered systems yet.";
+  if (/^(Spansh unavailable|No internet connection|refresh failed)/.test(data.status)) return `${/^refresh/.test(data.status) ? "The lookup failed" : esc(data.status)} — the list is incomplete, so no conclusions about undiscovered systems yet.`;
   if (others > rows.length) return `${others - rows.length} system${others - rows.length === 1 ? "" : "s"} hidden by the filters above.`;
   return "Nothing known nearby — everything here is undiscovered.";
 }
@@ -8668,6 +8683,17 @@ let uploadsDrawn = "";
 // the Uploads section's last message (a refusal, a saved key, "could not reach Outrider"): part of what is drawn, so the
 // redraw right after an answer keeps it (the bug check of 2026-10-09: it was wiped as soon as it was written)
 let uploadsNote = "";
+// S45: each account row's last Check ("edsm:CMDR" -> {ok, text, at, link}), kept over redraws until the page reloads;
+// a check under way shows "checking…" (Inara's may wait for its sender's pace)
+const keyChecks = {};
+function keyCheckHtml(service, cmdr) {
+  const c = keyChecks[`${service}:${cmdr}`];
+  if (!c) return "";
+  if (c.busy) return `<div class="hint keycheck">checking…</div>`;
+  const link = c.link ? ` · <a href="${esc(c.link)}" target="_blank" rel="noopener">profile</a>` : "";
+  return `<div class="hint keycheck"><span class="${c.ok ? "ok" : "bad"}">${c.ok ? "✓" : "✗"}</span> ${c.at ? upTime(c.at) + " " : ""}${esc(c.text)}${link}` +
+    `${c.cleared ? " · on hold no more: sending what waited" : ""}</div>`;
+}
 // the Data tile's line: per upload that is on (or sent anything in the last day), what it sent, what waits and what
 // was refused, live with each payload; nothing when no upload is in use
 function uploadLineHtml(u) {
@@ -8761,15 +8787,21 @@ function uploadsHtml(u) {
   const acc = ((u.edsm || {}).accounts || []).map(a =>
     `<div class="edsmacc" data-cmdr="${esc(a.commander)}"><b>${esc(a.commander)}</b> → EDSM <input type="text" class="edsmName" value="${esc(a.name)}" maxlength="64" size="14" title="your commander name on EDSM">` +
     ` key <input type="password" class="edsmKey" autocomplete="new-password" placeholder="${a.set ? "set (type to change)" : "API key"}" size="22">` +
-    ` <button type="button" class="try edsmSave">Save</button>${a.set ? ` <a href="#" class="edsmRemove">remove</a>` : ""}` +
+    ` <button type="button" class="try edsmSave">Save</button>` +
+    ` <button type="button" class="try" data-kcheck="edsm" title="ask EDSM whether it accepts this name and key (the typed key, else the stored one): nothing is uploaded">Check</button>` +
+    `${a.set ? ` <a href="#" class="edsmRemove">remove</a>` : ""}` +
     // never the key itself: its ends, to compare with edsm.net → Settings → API key
-    (a.hint ? `<div class="hint">stored key: <code title="its first and last four characters: compare them with your key on edsm.net">${esc(a.hint)}</code></div>` : "") + `</div>`).join("");
+    (a.hint ? `<div class="hint">stored key: <code title="its first and last four characters: compare them with your key on edsm.net">${esc(a.hint)}</code></div>` : "") +
+    keyCheckHtml("edsm", a.commander) + `</div>`).join("");
   // Inara: one API key per in-game commander (never served back: its ends only)
   const inacc = ((u.inara || {}).accounts || []).map(a =>
     `<div class="inaraacc" data-cmdr="${esc(a.commander)}"><b>${esc(a.commander)}</b> → Inara` +
     ` key <input type="password" class="inaraKey" autocomplete="new-password" placeholder="${a.set ? "set (type to change)" : "API key"}" size="22">` +
-    ` <button type="button" class="try inaraSave">Save</button>${a.set ? ` <a href="#" class="inaraRemove">remove</a>` : ""}` +
-    (a.hint ? `<div class="hint">stored key: <code title="its first and last four characters: compare them with your key on inara.cz">${esc(a.hint)}</code></div>` : "") + `</div>`).join("");
+    ` <button type="button" class="try inaraSave">Save</button>` +
+    ` <button type="button" class="try" data-kcheck="inara" title="ask Inara whether it accepts this key for this commander (the typed key, else the stored one): nothing is uploaded">Check</button>` +
+    `${a.set ? ` <a href="#" class="inaraRemove">remove</a>` : ""}` +
+    (a.hint ? `<div class="hint">stored key: <code title="its first and last four characters: compare them with your key on inara.cz">${esc(a.hint)}</code></div>` : "") +
+    keyCheckHtml("inara", a.commander) + `</div>`).join("");
   return row("eddn") + row("edsm") +
     `<div class="hint">EDSM accounts, per in-game commander (your key is at <a href="https://www.edsm.net/en/settings/api" target="_blank" rel="noopener">edsm.net → Settings → API key</a>; it stays on this Outrider):</div>` +
     (acc || `<div class="unk">no commander seen yet</div>`) + row("inara") +
@@ -8830,6 +8862,23 @@ document.getElementById("uploadsBox").addEventListener("click", async e => {
     if (!j.error) data.uploads = j;
   } catch (err) {
     uploadsNote = `could not reach Outrider: ${err.message}`;
+  } finally {
+    uploadsDrawn = ""; renderUploads();
+  }
+});
+// Check (S45): EDSM's get-credits or Inara's profile with the typed key (else the stored one); the result stays under the row
+document.getElementById("uploadsBox").addEventListener("click", async e => {
+  const b = e.target.closest("[data-kcheck]"); if (!b) return;
+  const service = b.dataset.kcheck, row = b.closest("[data-cmdr]"), cmdr = row.dataset.cmdr, k = `${service}:${cmdr}`;
+  const body = {commander: cmdr, api_key: row.querySelector(service === "edsm" ? ".edsmKey" : ".inaraKey").value};
+  if (service === "edsm") body.name = row.querySelector(".edsmName").value;
+  keyChecks[k] = {busy: true};
+  uploadsDrawn = ""; renderUploads();
+  try {
+    const j = await apiJson(`api/uploads/${service}/check`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+    keyChecks[k] = j.error ? {ok: false, text: j.error} : j;
+  } catch (err) {
+    keyChecks[k] = {ok: false, text: `could not reach Outrider: ${err.message}`};
   } finally {
     uploadsDrawn = ""; renderUploads();
   }

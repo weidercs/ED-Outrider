@@ -2180,10 +2180,15 @@ class BatchBState(unittest.TestCase):
     def test_failed_search_drops_the_old_sphere_cut(self):   # G3.3
         async def down(pos, r):
             raise OSError("Spansh down")
+        import contextlib, io
         self.state.sphere_cut = 11.8
-        self.refresh(down)
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.refresh(down)
         self.assertIsNone(self.state.sphere_cut)
-        self.assertIn("Spansh search failed", self.state.status)
+        # S42: the page's status is the short form, the error itself goes to the log
+        self.assertEqual(self.state.status, "Spansh unavailable")
+        self.assertIn("Spansh search failed (OSError: Spansh down)", err.getvalue())
 
     def test_one_bad_row_does_not_stop_the_refresh(self):   # F8
         import contextlib, io
@@ -2828,14 +2833,15 @@ class FableServer(unittest.TestCase):
                                                    {"name": "S7 2", "type": "Planet", "subType": "Icy body", "bodyId": 2}]}}
 
     def test_spansh_down_keeps_cached_spansh_records_as_spansh(self):   # F27
-        import asyncio
+        import asyncio, contextlib, io
         sp, calls, fail = self.spansh2(self.DUMP2)
         asyncio.run(self.state._refresh(self.j.pos))
         sp.store(8, None, ed_outrider.base_from_edsm({"name": "S8", "coords": {"x": 2, "y": 0, "z": 0},
                                                        "primaryStar": {"type": "K", "isScoopable": True}}))
         self.db.commit()
         fail["sphere"] = True
-        asyncio.run(self.state._refresh(self.j.pos))
+        with contextlib.redirect_stderr(io.StringIO()):   # "Spansh search failed (...)": the log's line
+            asyncio.run(self.state._refresh(self.j.pos))
         self.assertEqual((self.state.bases[7][0], self.state.systems[7]["in_spansh"]), ("spansh", True))
         self.assertEqual(self.state.bases[8][0], "edsm")   # an EDSM record stays EDSM's
 

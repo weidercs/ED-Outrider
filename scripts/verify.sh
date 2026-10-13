@@ -13,7 +13,7 @@
 # Safe by construction: it never reads or writes your own data/ (ed_outrider.sqlite, ...) or ed_outrider.toml, never uses
 # port 8025, never plays audio, never presses keys (auto honk off) or opens input devices (co-pilot off), makes
 # no backups, never writes a service (systemd user unit, Startup entry) where yours would go, and stays offline (Spansh,
-# EDSM, GitHub and voice downloads are pointed at a closed local port).
+# EDSM, Inara, GitHub, EDAstro, Canonn and voice downloads are pointed at a closed local port).
 # Everything it makes goes in a mktemp folder that is deleted at the end; the server is stopped by its PID.
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -121,6 +121,11 @@ ed_outrider.RELEASES_LATEST = OFF   # the update check never asks GitHub from he
 import outrider.eddn
 outrider.eddn.UPLOAD_URL = OFF        # nor EDDN (uploads are off there anyway)
 outrider.edsm.UPLOAD_URL = outrider.edsm.DISCARD_URL = OFF   # nor EDSM's journal upload
+import outrider.inara, outrider.readclient, outrider.codex_images
+outrider.inara.URL = OFF             # nor Inara (its upload and the key Check)
+for k in outrider.readclient.URLS:   # nor EDSM's account reads (the key Check, its flight log)
+    setattr(outrider.readclient, k, OFF)
+outrider.codex_images.REF = OFF      # nor Canonn for the checklists' pictures (the shipped list stays)
 ed_outrider.DSSA_URL = OFF          # nor EDAstro for the DSSA list
 ed_outrider.Clipboard.TOOLS = ()   # the desktop clipboard is never touched by the smoke test
 import outrider.service   # nor your own ~/.config/systemd/user or Startup folder, nor systemctl (S70's service)

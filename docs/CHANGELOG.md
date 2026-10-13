@@ -2,6 +2,27 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · "Spansh unavailable", and Check buttons for the EDSM and Inara keys
+- **The lookups' health** (G2, `outrider/health.py`'s `Health`): every request of the lookups' session (Spansh, EDSM,
+  GitHub, EDAstro, Canonn) reports through an aiohttp TraceConfig, no call site touched; a failure counts only when
+  that source answered nothing since the request began; "No internet connection" when two or more fail by DNS or no
+  route with no answer between; forgotten after 30 minutes with nothing asked. The payload's `health` {down, offline}.
+- **The Data tile says only "Spansh unavailable"** (S42, the author's answer: no secondary text), "EDSM unavailable",
+  "No internet connection"; a failed search's status is that short form too, its error in the log (Show log). The page
+  keys the tile off `health` (it matched "failed" in the status before: "Spansh unavailable" matched nothing, so the
+  tile stayed green and the horizon claimed a complete list); "ok (3 Spansh body lookups failed …)" is shown plainly,
+  not as a fault. A card on the banner when it lasts: Spansh or EDSM 10 minutes, no network or an address not found at
+  once; it goes when they answer.
+- **The EDSM and Inara read client** (G3, `outrider/readclient.py`): requests and parsers for EDSM's get-credits,
+  get-position and get-logs and Inara's getCommanderProfile, keys in POST bodies only; EDSM's reads paced 2 s apart;
+  `uploads.Gate`, an awaitable pace that Inara's sender (upload_loop's `gate`, its `min_gap` was a sleep) and its key
+  Check share. verify.sh's offline server now also points Inara, these reads and Canonn at a closed port.
+- **Check beside each EDSM and Inara key** (S45, Settings → Uploads; POST `/api/uploads/{edsm,inara}/check`): the typed
+  key, else the stored one; "✓ 12:04 EDSM accepts CMDR … with this key", "✗ EDSM: 203 commander name or API key not
+  found", "✓ Inara: CMDR … · profile", "Couldn't reach Inara: timeout". Reads only, one check per 10 s; a success with
+  the stored key ends its hold through `clear_key_hold`. Never the key in an answer or the log. Built on the APIs'
+  documented answers (`tests/fixtures/account_checks.json`): the live replies are for the author to check.
+
 ## 2026-10-12 · Planets sharing a centre are no curiosity
 - Two planets circling a shared centre (a barycentre: "A 4 and A 5 orbit a shared centre") no longer count as a
   "planet pair" curiosity (the author: such pairs are common, the 🔭 mark and the curiosity alert were noise). The other

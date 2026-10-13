@@ -435,6 +435,24 @@ upstream project's choices, not rules of the game.
   refused EDSM or Inara key at once (the hold otherwise lasts until a new key or the switch; `State.clear_key_hold`, the
   one helper a new key also goes through) and releases an EDDN kind on hold with its refusals (else the next refusal
   holds it again); that kind's refused messages were dropped, so only new ones go.
+- **A lookup that fails says only "Spansh unavailable"** (S42, the author's answer, 2026-10-12): the Data tile names the
+  source and nothing more ("EDSM unavailable", "GitHub unavailable"), or "No internet connection" when two or more
+  sources failed by DNS or no route with no answer from anywhere between (one source's DNS failure can be that
+  service's own trouble). The error itself goes to Show log. Whether a source is down comes from every request of the
+  lookups' session (an aiohttp TraceConfig: `outrider.health.Health`), not from the call sites, and a failure counts
+  only when that source answered nothing since the request began: fifty body lookups at once with one timing out is
+  not an outage. A source nothing has asked for 30 minutes is no longer called down (a daily check that failed once
+  would otherwise say so all day). The page keys the tile off the payload's `health`; a failed sphere search's own
+  status ("Spansh unavailable") still keeps the unreported horizon quiet until a search answers. A card on the banner
+  (the one notices board) only when it lasts: Spansh or EDSM down 10 minutes, or no network / an address not found at
+  once; GitHub, EDAstro and Canonn are background checks and get none. bio.py's rules check (urllib) is not counted.
+- **The key Check only reads, and one Inara gate paces everything** (S45, G3): EDSM's get-credits (100: the name and key
+  go together; 203: they do not) and Inara's getCommanderProfile (the header's 400: the key refused; the event's 204: no
+  such commander). The typed key, else the stored one; a success with the stored key ends its hold
+  (`clear_key_hold`, the one helper). Keys go in a POST body, and no error's text reaches the answer or the log
+  (aiohttp's carries the URL): only its kind ("Couldn't reach Inara: timeout"). One check per 10 s per service; EDSM's
+  account reads at least 2 s apart; Inara's check waits on the same `uploads.Gate` as its sender (35 s), because
+  Inara's two-a-minute rule counts every request with the key and whether a read counts is not documented.
 - **EDDN station data goes once per visit**, not once per change: the sites date a station's data by what arrives, so
   each docking sends it again; only the same screen reopened in one docking is skipped (`VISIT_ENDS`).
 - **EDDN sends what EDMC, EDDiscovery and EDDLite send, field for field** (compared on EDDN's relay, the author,
@@ -778,6 +796,10 @@ confirmed while playing. Treat reports about them as likely real.
   Target next and Retry from the page, other keyboard layouts and presets, and both entry modes side by side.
 - Inara uploads: not yet tried live (a refusal shows in Settings in Inara's words). Built from Inara's API
   documentation, tested with fakes (`tests/test_inara.py`).
+- The EDSM and Inara key Checks (S45): built from the APIs' documentation with their documented example answers
+  (`tests/fixtures/account_checks.json`), never sent with a real key: get-credits' 203 for a wrong name or key, the
+  fields of getCommanderProfile's answer (its `inaraURL`), and whether a read counts against Inara's limit are still to
+  be seen live. Also whether EDSM's account APIs take the key in a POST body as they do in a GET query.
 - EDDN: ApproachSettlement, CarrierJump and FCMaterials messages have not been seen live on EDDN's relay yet, nor a
   planetary station's Docked with its Body.
 - The in-game overlay's real panels in live play (only the test panels have been seen over the game), Arrange mode

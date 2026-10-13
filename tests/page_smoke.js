@@ -927,13 +927,13 @@ const settle = async maxMs => {
       o.region = bodyPopHtml({name: "B 1", type: "Planet", bio: 1, genera: [], organics: [], bio_guess: [],
         bio_options: {low: 1, high: 2, genera: [{genus: "Bacterium", value: 2, species: ["Aurasus"], codex_new: true}]}}, "Norma Arm").includes("new to your codex in Norma Arm");
       // --simulate: the game reads as running with an hours-old journal, which is no fault (no red Data tile)
-      const fz = data.freshness, fst = data.status, oldJ = new Date(Date.now() - 5 * 3600000).toISOString();
-      data.status = "";   // offline here: "Spansh failed" would colour the tile whatever the journal's age
+      const fz = data.freshness, fst = data.status, fh = data.health, oldJ = new Date(Date.now() - 5 * 3600000).toISOString();
+      data.status = ""; data.health = null;   // offline here: "Spansh unavailable" would colour the tile whatever the journal's age
       data.freshness = Object.assign({}, fz, {journal: oldJ, live: true, simulated: true}); renderStrip();
       const simCls = document.getElementById("tData").className;
       data.freshness = Object.assign({}, fz, {journal: oldJ, live: true, simulated: false}); renderStrip();
       o.simFresh = !/urgent/.test(simCls) && /urgent/.test(document.getElementById("tData").className);
-      data.freshness = fz; data.status = fst; renderStrip();
+      data.freshness = fz; data.status = fst; data.health = fh; renderStrip();
       // F30, F33: a run under way prices the logged species; gravity reds at your high-g level
       const hd = hereData, hk = hereKey, hg = localStorage.getItem("highG");
       if (hd && !hd.error) {
@@ -5620,6 +5620,67 @@ const settle = async maxMs => {
       JSON.stringify(got.open) === JSON.stringify(["Uploads", true, true]) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| uploads recent and outage |", good ? "Recent, catch-up, Try again, the outage notified not spoken, the card opens Uploads" : JSON.stringify(got), errors.slice(before));
+  }
+  // S42 / S45 (batch 13): the Data tile keyed off the payload's health (the short form only: "Spansh unavailable", or "No
+  // internet connection"; a failed search's own status keeps the horizon quiet); the Check buttons beside the EDSM and
+  // Inara keys (EDSM's on the scratch server itself: offline, so "Couldn't reach EDSM", the typed key in the POST body;
+  // Inara's answer stubbed: ✓ with the profile link)
+  {
+    const w = dom.window, before = errors.length;
+    const real = w.fetch, posted = [];
+    w.fetch = (u, o) => {
+      if (o && o.method === "POST" && /uploads\/(edsm|inara)\/check/.test(String(u))) {
+        posted.push([String(u), JSON.parse(o.body)]);
+        if (/inara/.test(String(u))) return Promise.resolve(new Response(JSON.stringify({ok: true, text: "Inara: CMDR Sample Pilot",
+          link: "https://inara.cz/elite/cmdr/1/", at: new Date(2026, 9, 12, 12, 4).getTime() / 1000, cleared: true}), {status: 200, headers: {"Content-Type": "application/json"}}));
+      }
+      return real(u, o);
+    };
+    const got = JSON.parse(w.eval(`(() => {
+      const o = {}, keep = {health: data.health, status: data.status, systems: data.systems, sphere_cut: data.sphere_cut, uploads: data.uploads};
+      const sl = () => document.getElementById("statusLine").textContent, cls = () => document.getElementById("tData").className;
+      data.health = {down: [{source: "spansh", name: "Spansh", since: 1, kind: "timeout", user_fix: false}], offline: false}; data.status = "ok";
+      renderStrip(); o.down = [sl(), /warn/.test(cls()), dataBit];
+      data.health = {down: [{source: "spansh", name: "Spansh", since: 1, kind: "dns", user_fix: true}, {source: "edsm", name: "EDSM", since: 1, kind: "dns", user_fix: true}], offline: true};
+      renderStrip(); o.offline = sl();
+      data.health = {down: [], offline: false}; data.status = "Spansh unavailable"; data.sphere_cut = null;
+      renderStrip(); o.failedSearch = [sl(), horizon(), emptyMessage([]).startsWith("Spansh unavailable — the list is incomplete")];
+      data.status = "ok (3 Spansh body lookups failed, retrying in 60s)"; renderStrip(); o.partial = [sl(), /warn/.test(cls())];
+      data.status = "ok"; renderStrip(); o.ok = [sl(), /warn/.test(cls())];
+      data.health = keep.health; data.status = keep.status; data.sphere_cut = keep.sphere_cut; renderStrip();
+      // the Check buttons
+      window.__u1 = keep.uploads;
+      data.uploads = Object.assign({}, keep.uploads, {edsm: Object.assign({}, (keep.uploads || {}).edsm, {accounts: [{commander: "Sample Pilot", name: "Sample Pilot", set: false, hint: null}]}),
+                                                     inara: Object.assign({}, (keep.uploads || {}).inara, {accounts: [{commander: "Sample Pilot", set: true, hint: "a1B2…k1L2 (24 characters)"}]})});
+      uploadsDrawn = ""; renderUploads();
+      const box = document.getElementById("uploadsBox");
+      o.buttons = [...box.querySelectorAll("[data-kcheck]")].map(b => b.dataset.kcheck + ":" + b.textContent);
+      box.querySelector(".edsmacc .edsmKey").value = "0123456789abcdef0123456789abcdef01234567";
+      box.querySelector('.edsmacc [data-kcheck="edsm"]').click();
+      o.busy = box.querySelector(".edsmacc .keycheck").textContent;
+      box.querySelector('.inaraacc [data-kcheck="inara"]').click();
+      return JSON.stringify(o); })()`));
+    await settle(3000);
+    Object.assign(got, JSON.parse(w.eval(`(() => {
+      const box = document.getElementById("uploadsBox");
+      const e = box.querySelector(".edsmacc .keycheck"), i = box.querySelector(".inaraacc .keycheck");
+      const out = {edsm: e && e.textContent, inara: i && i.textContent, link: i && i.querySelector("a") && i.querySelector("a").href,
+                   typedKept: box.querySelector(".edsmacc .edsmKey").value.length};
+      data.uploads = window.__u1; uploadsDrawn = ""; renderUploads();
+      return JSON.stringify(out); })()`)));
+    got.posted = posted.map(([u, b]) => [u.replace(/^.*api\//, ""), b.commander, b.api_key, b.name]);
+    w.fetch = real;
+    const want = {down: ["Spansh unavailable", true, "Spansh unavailable"], offline: "No internet connection",
+                  failedSearch: ["Spansh unavailable", null, true], partial: ["ok (3 Spansh body lookups failed, retrying in 60s)", false],
+                  ok: ["Spansh ok", false], buttons: ["edsm:Check", "inara:Check"], busy: "checking…"};
+    const good = Object.keys(want).every(k => JSON.stringify(got[k]) === JSON.stringify(want[k])) &&
+      /^✗ \d\d?:\d\d( [AP]M)? Couldn't reach EDSM: the connection was refused$/.test(got.edsm || "") &&
+      /^✓ \d\d?:\d\d( [AP]M)? Inara: CMDR Sample Pilot · profile · on hold no more/.test(got.inara || "") && got.link === "https://inara.cz/elite/cmdr/1/" &&
+      got.typedKept === 40 &&
+      JSON.stringify(got.posted) === JSON.stringify([["uploads/edsm/check", "Sample Pilot", "0123456789abcdef0123456789abcdef01234567", "Sample Pilot"],
+                                                    ["uploads/inara/check", "Sample Pilot", "", null]]) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| lookups down and key checks |", good ? "the Data tile says only \"Spansh unavailable\" / \"No internet connection\", the horizon waits, Check for EDSM and Inara keys" : JSON.stringify(got), errors.slice(before));
   }
   // S43 / S44 (2026-10-12): a first run with no journals (the Data tile says where to set the folder and opens Settings ->
   // Server with [journals] live focused; Docker's words instead; no position yet: "No FSD jump yet"), and Settings ->
