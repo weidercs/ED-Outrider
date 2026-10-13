@@ -49,7 +49,8 @@ years (EDSM as a fallback when Spansh is down) and serves http://127.0.0.1:8025/
   Materials  Cargo: your ship's hold with what you paid and your fleet carrier's hold, tracked from sell orders and
              the journal (outrider/cargo.py), with Sell / Buy from Spansh's markets; then
              engineering materials against their caps, and how many FSD injections and other
-             syntheses (limpets, SRV refuel and repair, Rhino rig restocks) you can make (outrider/materials.py);
+             syntheses (AFMU refills, heat sinks, limpets, the SRV's, Rhino rig restocks; and any recipe you
+             have made) you can make (outrider/materials.py);
              Mining sites: each body your SRV mined, with minerals and tons, saved rig spots, mining locations
   My firsts  unsold first discoveries, and visited systems nearby with work worth going back for
              (Left behind, including bio signals never probed); a daily Spansh check flags unsold
@@ -1219,10 +1220,15 @@ MATERIAL_EVENTS = ("Materials", "MaterialCollected", "MaterialDiscarded", "Synth
 # and MiningRefined (SRV_EVENTS) are read here too; these are only for cargo.
 CARGO_ONLY = ("MarketBuy", "MarketSell", "CargoTransfer", "CarrierTradeOrder", "CarrierDepositFuel", "CollectCargo",
               "EjectCargo", "CarrierCrewServices")
-CARGO_EVENTS = frozenset(CARGO_ONLY) | {"Cargo", "Docked", "Undocked", "CarrierStats", "MiningRefined"}
+# the carrier's movements (SHIP_EVENTS, and CarrierJump a position event too) are stored here as well: S13 B
+CARRIER_MOVE_EVENTS = ("CarrierJumpRequest", "CarrierJumpCancelled", "CarrierLocation", "CarrierJump")
+CARGO_EVENTS = frozenset(CARGO_ONLY) | {"Cargo", "Docked", "Undocked", "CarrierStats", "MiningRefined"} \
+    | frozenset(CARRIER_MOVE_EVENTS)
 # your carrier's history (cargo_events); CarrierCrewServices (a service switched on, off, paused or resumed) for the
-# services the tile and the nearest places to sell use between two CarrierStats (S55)
-CARRIER_CARGO_EVENTS = ("CarrierStats", "CarrierTradeOrder", "CargoTransfer", "MarketBuy", "MarketSell", "CarrierCrewServices")
+# services the tile and the nearest places to sell use between two CarrierStats (S55); its movements and the tritium
+# you deposit for the jumps it measured (outrider.cargo.carrier_burns, S13 B)
+CARRIER_CARGO_EVENTS = ("CarrierStats", "CarrierTradeOrder", "CargoTransfer", "MarketBuy", "MarketSell",
+                        "CarrierCrewServices", "CarrierDepositFuel") + CARRIER_MOVE_EVENTS
 WANTED = tuple(f'"event":"{e}"'.encode()
                for e in POSITION_EVENTS + STAR_CLASS_EVENTS + SCAN_EVENTS + DATA_EVENTS + SHIP_EVENTS
                + CMDR_EVENTS + MATERIAL_EVENTS + BODY_EVENTS + SRV_EVENTS + CARGO_ONLY + ("Loadout", "Shutdown", "Fileheader"))
@@ -1247,7 +1253,10 @@ WANTED = tuple(f'"event":"{e}"'.encode()
 #     were dropped; the SRV's refinery and scoop stay out of the ship's hold; an older Location's relog is judged
 #     against the arrival before it (a legacy folder read late counted every login as a visit).
 # 43: a system's population (system_population) and own_firsts.bio_x5: no x5 bio bonus in populated systems.
-PARSER_VERSION = 49
+PARSER_VERSION = 50
+# 50: your carrier's movements and tritium deposits are kept (cargo_events: its measured jumps scale the tritium
+#     formula, S13 B); each Synthesis's recipe is kept (materials' recipes, S15); CarrierCrewServices, stored since the
+#     last version without a re-read, comes back from the older journals too
 # 49: named listening posts ("Listening Post Pollux D568") are kept, and two indexed ones in a system are two rows
 # 48: FSS signals worth a detour are kept (poi: Titans, Guardian beacons, generation ships, listening posts...)
 # 47: body signals keep Guardian, Thargoid, planetary anomaly and other counts (own_signals.sites)
@@ -1257,6 +1266,8 @@ PARSER_VERSION = 49
 # Why each version reads the journals again, in the player's words: said at the start that re-reads (reread_message).
 # Every bump adds its line here too (a test checks PARSER_VERSION has one).
 PARSER_CHANGES = {
+    50: "your carrier's jumps and tritium deposits are kept (its own jumps check the tritium formula), the recipes you "
+        "have synthesised, and the carrier's services switched on, off or suspended",
     49: "named listening posts are kept, and two in one system count as two",
     48: "FSS signals worth a detour are kept (Titans, Guardian beacons, generation ships, listening posts...)",
     47: "Guardian, Thargoid and planetary anomaly sites on bodies are kept",
@@ -1558,8 +1569,10 @@ CREATE TABLE IF NOT EXISTS riches_bodies (
 CREATE TABLE IF NOT EXISTS riches_species (
     idx INTEGER, n INTEGER, k INTEGER, genus TEXT, species TEXT, value INTEGER, count INTEGER, PRIMARY KEY (idx, n, k));
 -- Cargo (outrider/cargo.py). Your carrier's history, one row per journal line (src "file:offset"): CarrierStats,
--- CarrierTradeOrder, CargoTransfer (with "_at", the market you were docked at), MarketBuy and MarketSell; market is
--- the carrier or market it concerns. Journal-derived: cleared by RESET_JOURNAL_DATA.
+-- CarrierTradeOrder, CargoTransfer (with "_at", the market you were docked at), MarketBuy and MarketSell,
+-- CarrierCrewServices, and its movements and tritium (CarrierJumpRequest, CarrierJumpCancelled, CarrierLocation,
+-- CarrierJump, CarrierDepositFuel: the measured jumps, S13 B); market is the carrier or market it concerns.
+-- Journal-derived: cleared by RESET_JOURNAL_DATA.
 CREATE TABLE IF NOT EXISTS cargo_events (src TEXT PRIMARY KEY, ts TEXT, event TEXT, market INTEGER, data TEXT);
 -- Your carrier's Market.json, each one read (the game overwrites the file at the next market). Live only: a journal
 -- re-read keeps them (not in RESET_JOURNAL_DATA); backups carry them.
@@ -3861,7 +3874,9 @@ class Journals:
         if name in CARRIER_CARGO_EVENTS:
             market = ev.get("MarketID") if name in ("MarketBuy", "MarketSell") else \
                 self.cargo_dock if name == "CargoTransfer" else ev.get("CarrierID")
-            if name in ("CarrierStats", "CarrierTradeOrder") and ev.get("CarrierType", "FleetCarrier") != "FleetCarrier":
+            if name == "CarrierJump":   # no CarrierID: written aboard, the carrier is the station you are docked at
+                market = ev.get("MarketID") if ev.get("StationType") == "FleetCarrier" else None
+            elif ev.get("CarrierType", "FleetCarrier") != "FleetCarrier":
                 market = None   # a squadron's carrier: not yours to track
             if market is not None:
                 data = dict(ev, _at=self.cargo_dock) if name == "CargoTransfer" else ev
@@ -6193,6 +6208,7 @@ class State:
         self._copilot_cancelled = False    # that press's own gesture is the double press it meant
         self.counts_version = 0     # bumps with every Recount (the carrier's fold is cached on it and carrier_version)
         self._carrier_fold = (None, None)   # (key, outrider.cargo.carrier_fold's answer)
+        self._carrier_k = (None, None)      # (key, carrier_burn_factor's answer)
         # leaving_summary per system: id64 -> (key, answer); the key is (Journals.data_seq, where the system is,
         # bio_rules_gen). The payload asks for it on every poll with a target set (S17)
         self._leaving = {}
@@ -8053,6 +8069,9 @@ class State:
         # the capacity in use now (carrier_burn's: the last CarrierStats and your journaled moves since)
         used = stats["used"] + st["after_stats"] if isinstance(stats.get("used"), int) else None
         fuel = c.get("fuel") if isinstance(c.get("fuel"), int) else None
+        # the formula scaled by the carrier's own measured jumps (S13 B), 1 until it has BURN_MIN_SAMPLES of them
+        factor = self.carrier_burn_factor() if c.get("id") is not None else None
+        k = factor["k"] if factor else 1.0
         planned = dict(c["planned"]) if c.get("planned") else None
         if planned and planned.get("id64") and pos:   # how far the booked jump takes it from you
             where = self.locate(int(planned["id64"])) if str(planned["id64"]).isdigit() else None
@@ -8060,7 +8079,7 @@ class State:
                 planned["distance_from_you"] = round(dist(pos, {"x": where[1], "y": where[2], "z": where[3]}), 1)
                 planned["jump_ly"] = round(dist(c, {"x": where[1], "y": where[2], "z": where[3]}), 1) if c.get("x") is not None else None
             if planned.get("jump_ly") and used is not None and fuel is not None:   # what it burns, what is left (S13)
-                planned["burn"] = outrider.cargo.carrier_burn(planned["jump_ly"], used, fuel)
+                planned["burn"] = round(k * outrider.cargo.carrier_burn(planned["jump_ly"], used, fuel))
                 planned["depot_after"] = fuel - planned["burn"]
         docked = self.journals.docked
         aboard = bool(docked and c.get("id") and docked.get("market_id") == c.get("id"))
@@ -8070,7 +8089,7 @@ class State:
         if d and not here and not aboard and used is not None and fuel is not None:
             # the tritium for the trip to you (S13 A): what the depot lacks, and whether a confirmed tritium line in the
             # hold covers it (moved into the depot before the jumps)
-            trip = outrider.cargo.carrier_trip(d, fuel, used)
+            trip = outrider.cargo.carrier_trip(d, fuel, used, k=k)
             line = st["lines"].get("tritium")
             hold = line["count"] if line and line["state"] == "confirmed" else None
             if trip:
@@ -8080,6 +8099,7 @@ class State:
                 "aboard": aboard,
                 "id64": str(c["id64"]), "distance": round(d, 1) if d is not None else None,
                 "fuel": c.get("fuel"), "jump_range": c.get("jump_range"), "planned": planned, "trip": trip,
+                "burn_factor": factor,   # {k, n, raw}: the tritium figures' scale from its own jumps (S13 B), or None
                 "has_uc": has_uc, "has_vista": has_vista, "suspended": suspended,
                 "finance": self.carrier_finance(st),
                 "x": c.get("x"), "y": c.get("y"), "z": c.get("z"),
@@ -8151,6 +8171,26 @@ class State:
         st = outrider.cargo.carrier_fold(cid, events, markets, counts)
         self._carrier_fold = (key, st)
         return st
+
+    def carrier_burn_factor(self):
+        """Your carrier's own factor on the tritium formula (S13 B): its measured jumps (outrider.cargo.carrier_burns,
+        distances from the CarrierJumps' StarPos, else wherever `locate` knows the system), the median of the last
+        BURN_SAMPLES held to BURN_K_RANGE: {k, n, raw} or None. Cached until the carrier's history changes."""
+        cid = (self.journals.carrier or {}).get("id")
+        key = (cid, self.journals.carrier_version)
+        if self._carrier_k[0] == key:
+            return self._carrier_k[1]
+        out = None
+        if cid is not None:
+            events = [(r["ts"], json.loads(r["data"])) for r in
+                      self.db.execute("SELECT ts, data FROM cargo_events WHERE market = ? ORDER BY ts", (cid,))]
+
+            def where(id64):
+                w = self.locate(id64) if isinstance(id64, int) else None
+                return (w[1], w[2], w[3]) if w and None not in w[1:] else None
+            out = outrider.cargo.burn_factor(outrider.cargo.carrier_burns(cid, events, where))
+        self._carrier_k = (key, out)
+        return out
 
     def commodity_name(self, i, extra=None):
         """A commodity's display name: the journal's, else Spansh's list (the lookup's names), else the id's."""
@@ -8359,7 +8399,8 @@ class State:
             return None
         used = stats["used"] + st["after_stats"] if isinstance(stats.get("used"), int) else None
         return {"depot": c["fuel"], "total": c["fuel"] + line["count"],
-                "jumps": outrider.cargo.carrier_jumps(c["fuel"], line["count"], used)}
+                "jumps": outrider.cargo.carrier_jumps(c["fuel"], line["count"], used,
+                                                      k=(self.carrier_burn_factor() or {}).get("k", 1.0))}
 
     def cargo_recount(self, counts):
         """POST /api/cargo/recount {counts: {commodity: tons}}: your counts for carrier lines Outrider cannot confirm.

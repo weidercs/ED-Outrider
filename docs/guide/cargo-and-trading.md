@@ -33,7 +33,10 @@ The **Materials** tab starts with your **Cargo**.
   carrier jumps · ≈ 340 t tritium", and when the depot holds less, "depot 200 t: 140 t short" in red (amber, "enough
   after topping up", when tritium on a sell order in its hold covers it). Equal jumps of up to 500 ly in a straight
   line, each lighter than the last (the real trip is never shorter). A booked jump says its own: "(432 ly jump ≈ 96 t;
-  depot after ≈ 572 t)".
+  depot after ≈ 572 t)". The game's fuel formula is checked against your carrier's own jumps (what the depot held
+  before and after each one, from its stats and your tritium deposits): once three are measured, their median scales
+  the figures (at most ±20%), and the hover says so ("checked against your carrier's last 12 jumps: no correction
+  needed"). Tritium other players donate is not in your journal, so such a jump reads low; the median rides over it.
 - **Services and upkeep:** a service suspended in the carrier's management shows in red ("UC suspended",
   "Redemption office suspended"), from its last stats or the newer of them and your last docking there. Under them,
   "balance 1.33B · ~96 weeks of upkeep" (amber under 4 weeks; "as of" a date when the stats are over a day old). The

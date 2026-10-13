@@ -441,14 +441,14 @@ def carrier_burn(ly, used, depot):
     return round(5 + ly * (25000 + used + depot) / 200000)
 
 
-def carrier_jumps(depot, hold, used, ly=CARRIER_JUMP_LY):
+def carrier_jumps(depot, hold, used, ly=CARRIER_JUMP_LY, k=1.0):
     """How many jumps of `ly` all the carrier's tritium gives: its depot, topped up from `hold` (the tritium in its
-    cargo, part of `used`) whenever the next jump needs more. Each burn lightens the next jump."""
+    cargo, part of `used`) whenever the next jump needs more. Each burn lightens the next jump. k: carrier_trip's."""
     if not isinstance(depot, (int, float)) or not isinstance(used, (int, float)):
         return None
     depot, hold, used, n = int(depot), int(hold or 0), int(used), 0
     while n < 100000:
-        burn = carrier_burn(ly, used, depot)
+        burn = round(k * carrier_burn(ly, used, depot))
         if depot < burn:
             top = min(CARRIER_DEPOT_MAX - depot, hold)
             depot, hold, used = depot + top, hold - top, used - top   # cargo into the tank: the mass stays
@@ -472,6 +472,106 @@ def carrier_trip(ly, depot, used, jump_ly=CARRIER_JUMP_LY, k=1.0):
         burn += round(k * carrier_burn(leg, used, max(depot - burn, 0)))
     return {"jumps": jumps, "burn": burn, "depot": int(depot), "short": max(0, burn - int(depot)),
             "depot_after": max(0, int(depot) - burn)}
+
+
+BURN_SAMPLES = 12          # the factor is the median of the carrier's last this many measured jumps
+BURN_MIN_SAMPLES = 3       # fewer measured jumps than this: no factor (the formula alone, k 1)
+BURN_K_RANGE = (0.8, 1.2)  # the factor is held to this: history scales the formula, it never replaces it
+
+
+def carrier_burns(carrier_id, events, where=None):
+    """Your carrier's measured jumps (S13 B): what each burned against what carrier_burn says, from its history in time
+    order (cargo_events: [(ts, event dict)]). A move is a CarrierJumpRequest not cancelled before a CarrierLocation or
+    CarrierJump in the system it booked (CarrierJump is written only when you are aboard, CarrierLocation at the
+    departure and every login). The depot is read by CarrierStats (FuelLevel) and CarrierDepositFuel (Total - Amount
+    before it, Total after); a jump with exactly one depot reading on each side and no other move between them is a
+    sample: burned = the reading before - the reading after. The mass is the capacity in use when it left: the last
+    CarrierStats' plus your own journaled moves since (carrier_fold's). Distances from the CarrierJumps' StarPos, else `where(id64)` ->
+    (x, y, z) or None. Tritium others donate writes nothing in your journal: such a jump reads low (the median helps).
+    Returns [{ts, ly, burned, formula, k}] oldest first."""
+    pos, readings, moves, mass = {}, [], [], []   # mass: [(ts, capacity in use from then on)]
+    used, system, pending = None, None, None
+    for ts, ev in events:
+        name = ev.get("event")
+        if name == "CarrierJump":
+            if ev.get("MarketID") != carrier_id:
+                continue
+            sp = ev.get("StarPos")
+            if isinstance(sp, list) and len(sp) == 3 and ev.get("SystemAddress") is not None:
+                pos[ev["SystemAddress"]] = tuple(sp)
+        elif name in ("CargoTransfer", "MarketBuy", "MarketSell"):
+            if used is None or (ev.get("_at") if name == "CargoTransfer" else ev.get("MarketID")) != carrier_id:
+                continue
+            if name == "CargoTransfer":
+                for t in ev.get("Transfers") or []:
+                    if isinstance(t, dict):
+                        n = _n(t.get("Count"))
+                        used += n if t.get("Direction") == "tocarrier" else -n if t.get("Direction") == "toship" else 0
+            else:
+                used += _n(ev.get("Count")) * (-1 if name == "MarketBuy" else 1)
+            mass.append((ts, used))
+            continue
+        elif ev.get("CarrierID") != carrier_id:
+            continue
+        if name == "CarrierStats":
+            su = ev.get("SpaceUsage") or {}
+            if su.get("TotalCapacity"):
+                used = su["TotalCapacity"] - (su.get("FreeSpace") or 0) - (su.get("CargoSpaceReserved") or 0)
+                mass.append((ts, used))
+            if isinstance(ev.get("FuelLevel"), int):
+                readings.append((ts, ev["FuelLevel"], ev["FuelLevel"]))
+        elif name == "CarrierDepositFuel":
+            total, amount = ev.get("Total"), ev.get("Amount")
+            if isinstance(total, int) and isinstance(amount, int):
+                readings.append((ts, total - amount, total))
+        elif name == "CarrierJumpRequest":
+            dep = ev.get("DepartureTime")
+            pending = {"id64": ev.get("SystemAddress"), "ts": dep if isinstance(dep, str) and dep >= ts else ts}
+            continue
+        elif name == "CarrierJumpCancelled":
+            pending = None
+            continue
+        if name in ("CarrierLocation", "CarrierJump") and ev.get("SystemAddress") is not None:
+            here = ev["SystemAddress"]
+            if pending and pending["id64"] == here and system is not None and system != here:
+                moves.append((min(pending["ts"], ts), system, here))
+            if pending and pending["id64"] == here:
+                pending = None
+            system = here
+    out = []
+    readings.sort(key=lambda r: r[0])
+    move_ts = sorted(m[0] for m in moves)
+    for ts, a, b in moves:
+        before = [r for r in readings if r[0] <= ts]
+        after = [r for r in readings if r[0] > ts]
+        if not before or not after:
+            continue
+        r1, r2 = before[-1], after[0]
+        if sum(1 for t in move_ts if r1[0] < t <= r2[0]) != 1:
+            continue   # another jump between the two readings
+        pa, pb = pos.get(a) or (where(a) if where else None), pos.get(b) or (where(b) if where else None)
+        used = next((u for t, u in reversed(mass) if t <= ts), None)   # the mass when it left
+        if not pa or not pb or used is None:
+            continue
+        ly = math.dist(pa, pb)
+        burned, formula = r1[2] - r2[1], carrier_burn(ly, used, r1[2])
+        if not 0 < ly <= CARRIER_JUMP_LY + 1 or burned <= 0 or formula <= 0:
+            continue   # longer than a carrier can jump: a move between the two was missed
+        out.append({"ts": ts, "ly": round(ly, 2), "burned": burned, "formula": formula, "k": burned / formula})
+    return out
+
+
+def burn_factor(samples):
+    """The carrier's own factor on carrier_burn (S13 B): the median of its last BURN_SAMPLES measured jumps' burned ÷
+    formula, held to BURN_K_RANGE; {k, n (the jumps it is from), raw (the median before the hold)} or None with fewer
+    than BURN_MIN_SAMPLES."""
+    ks = sorted(s["k"] for s in samples[-BURN_SAMPLES:])
+    if len(ks) < BURN_MIN_SAMPLES:
+        return None
+    mid = len(ks) // 2
+    raw = ks[mid] if len(ks) % 2 else (ks[mid - 1] + ks[mid]) / 2
+    lo, hi = BURN_K_RANGE
+    return {"k": round(min(hi, max(lo, raw)), 3), "n": len(ks), "raw": round(raw, 3)}
 
 
 # ---- the carrier's upkeep ----

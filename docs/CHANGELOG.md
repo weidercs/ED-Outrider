@@ -2,6 +2,27 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · The carrier's own jumps check the tritium, and the synthesis recipes you have made
+- **A journal re-read (PARSER_VERSION 50)**, the plan's one: your carrier's movements and tritium deposits
+  (CarrierJumpRequest, CarrierJumpCancelled, CarrierLocation, CarrierJump by its MarketID, CarrierDepositFuel) are now
+  kept in `cargo_events`, each Synthesis's recipe in the materials state, and the CarrierCrewServices lines stored
+  since the last update without a re-read come back from the older journals too. A squadron's carrier is never kept.
+- **The tritium formula checked by your carrier's own jumps** (S13 B): `carrier_burns` measures each jump booked and
+  confirmed with one depot reading on each side (CarrierStats' FuelLevel, or a deposit's Total − Amount before it and
+  Total after) and no other jump between, the mass as it left (the stats plus your own moves since), distances from
+  the CarrierJumps' StarPos else wherever Outrider knows the system; `burn_factor` is the median of the last 12
+  burned ÷ formula, from 3 on, held to 0.8–1.2. It scales the trip to you, a booked jump's burn and the tile's jumps
+  of all your tritium; the hover says "checked against your carrier's last 12 jumps: no correction needed" (or the
+  scale, and what it measured when held). On the author's journals 193 of 214 measured jumps are exact and the last
+  12 all are. Jumps over 500 ly (a move missed between) are dropped; tritium others donate reads low (said too).
+- **Synthesis recipes learned, and folded into groups** (S15): the Materials tab keeps the FSD injections' three
+  cards open and folds the rest into one line each, "Ship upkeep ▸ AFMU refill B×4 S×1 P×0 · Heat sink B×12 S×0 P×0
+  · Life support ×7 · Limpets ×3", "SRV ▸ …" and "Other recipes you have made ▸ Ammo Basic ×2", opened on a click and
+  remembered per device (`synthOpen`). New recipes: AFMU refill and heat sink (three grades each) and life support,
+  from EDEngineer's and EDDiscovery's tables (they agree), each with its journal name. A recipe you have made is ✓
+  "checked against your synthesis on <date> (made 3×)", your materials winning where the published recipe differs;
+  one the table lacks is listed under Other instead of dropped. The oldest journals' `{name: count}` Materials read too.
+
 ## 2026-10-12 · The carrier's trip to you, its balance in weeks of upkeep, suspended services, and your carrier as a place to sell
 - **The carrier's stats folded whole** (the fold's `finance` and `crew`): CarrierStats' Finance (balance, reserve,
   available) and Crew (each role on, suspended or not installed), then each `CarrierCrewServices` (a service installed,

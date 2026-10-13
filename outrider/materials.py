@@ -120,23 +120,54 @@ for _cat, _table in (("Manufactured", _MANUFACTURED), ("Encoded", _ENCODED)):
 # Storage caps per grade (the same for every category since the 2020 material-storage change).
 CAPS = {1: 300, 2: 250, 3: 200, 4: 150, 5: 100}
 
-# Synthesis recipes an explorer reaches for. `verified` recipes were checked against the materials
-# a real Synthesis journal event consumed; the rest are the published in-game recipes.
+# Synthesis recipes an explorer reaches for, by the name the page shows. `name` is the journal's Synthesis Name (matched
+# without regard to case), `group` where the Materials tab puts it: "fsd" (the three injections, always open), "ship"
+# (Ship upkeep), "srv" (the SRV and its rigs); `family` and `grade` make a group's one-line summary. `verified`: checked
+# against a real Synthesis line (another commander's journal); the rest are PUBLISHED recipes, from EDEngineer's
+# blueprints.json (MIT) and EDDiscovery's RecipesSynthesis.cs (Apache-2.0), which agree on every one here and give the
+# journal names (EDDiscovery's), until a Synthesis of your own checks them (inventory(): `learned`).
 SYNTH = {
     "FSD injection basic": {"materials": {"carbon": 1, "vanadium": 1, "germanium": 1}, "boost": "+25%",
-                            "verified": False},
+                            "verified": False, "name": "FSD Basic", "group": "fsd"},
     "FSD injection standard": {"materials": {"carbon": 1, "vanadium": 1, "germanium": 1, "cadmium": 1, "niobium": 1},
-                               "boost": "+50%", "verified": False},
+                               "boost": "+50%", "verified": False, "name": "FSD Standard", "group": "fsd"},
     "FSD injection premium": {"materials": {"carbon": 1, "germanium": 1, "arsenic": 1, "niobium": 1, "yttrium": 1,
-                                            "polonium": 1}, "boost": "+100%", "verified": False},
+                                            "polonium": 1}, "boost": "+100%", "verified": False, "name": "FSD Premium",
+                              "group": "fsd"},
+    # the AFMU's ammunition: the only synthesis that repairs the ship's modules (not its hull)
+    "AFMU refill basic": {"materials": {"nickel": 2, "zinc": 2, "chromium": 2, "vanadium": 3}, "verified": False,
+                          "name": "Module Repair Basic", "group": "ship", "family": "AFMU refill", "grade": "basic"},
+    "AFMU refill standard": {"materials": {"tin": 1, "manganese": 2, "vanadium": 6, "molybdenum": 1, "zirconium": 1},
+                             "verified": False, "name": "Module Repair Standard", "group": "ship",
+                             "family": "AFMU refill", "grade": "standard"},
+    "AFMU refill premium": {"materials": {"zinc": 2, "chromium": 4, "vanadium": 6, "zirconium": 2, "tellurium": 1,
+                                          "ruthenium": 1}, "verified": False, "name": "Module Repair Premium",
+                            "group": "ship", "family": "AFMU refill", "grade": "premium"},
+    "Heat sink basic": {"materials": {"basicconductors": 2, "heatconductionwiring": 2}, "verified": False,
+                        "name": "Heat Sink Basic", "group": "ship", "family": "Heat sink", "grade": "basic"},
+    "Heat sink standard": {"materials": {"basicconductors": 2, "heatconductionwiring": 2, "heatexchangers": 2},
+                           "verified": False, "name": "Heat Sink Standard", "group": "ship", "family": "Heat sink",
+                           "grade": "standard"},
+    "Heat sink premium": {"materials": {"basicconductors": 2, "heatconductionwiring": 2, "heatexchangers": 2,
+                                        "protoheatradiators": 1}, "verified": False, "name": "Heat Sink Premium",
+                          "group": "ship", "family": "Heat sink", "grade": "premium"},
+    # the ship's life support refill (the same materials as the SRV's repair, another recipe)
+    "Life support": {"materials": {"iron": 2, "nickel": 1}, "verified": False, "name": "Life Support Basic",
+                     "group": "ship", "family": "Life support"},
+    "Limpet basic": {"materials": {"iron": 10, "nickel": 10}, "verified": True, "name": "Limpet Basic", "group": "ship",
+                     "family": "Limpets"},
     # the SRV's refuel and repair ("Fuel Basic" / "Repair Basic" in the journal): no synthesis refuels or
     # repairs the ship itself
-    "SRV refuel basic": {"materials": {"phosphorus": 1, "sulphur": 1}, "verified": True},
-    "SRV repair basic": {"materials": {"iron": 2, "nickel": 1}, "verified": True},
-    "Limpet basic": {"materials": {"iron": 10, "nickel": 10}, "verified": True},
+    "SRV refuel basic": {"materials": {"phosphorus": 1, "sulphur": 1}, "verified": True, "name": "Fuel Basic",
+                         "group": "srv", "family": "SRV refuel"},
+    "SRV repair basic": {"materials": {"iron": 2, "nickel": 1}, "verified": True, "name": "Repair Basic",
+                         "group": "srv", "family": "SRV repair"},
     # the Rhino's mining rigs (CMDR Dunn Actual's Rhino Planetary Mining guide, v0.6)
-    "Mining rig restock": {"materials": {"iron": 3, "nickel": 2, "mechanicalequipment": 1}, "verified": False},
+    "Mining rig restock": {"materials": {"iron": 3, "nickel": 2, "mechanicalequipment": 1}, "verified": False,
+                           "name": "Mining Rig Basic", "group": "srv", "family": "Mining rig restock"},
 }
+# the Materials tab's groups in order, and their headings ("other": recipes you have made that are not in SYNTH)
+SYNTH_GROUPS = {"fsd": "FSD injections", "ship": "Ship upkeep", "srv": "SRV", "other": "Other recipes you have made"}
 BOOSTS = ("basic", "standard", "premium")
 # The jumponium call-out: the scarce FSD-injection materials worth a landing, with the least share of a body's
 # surface worth one (roughly 1% for grade 4, 1.5% for the others); a boost you can still make more often than
@@ -146,7 +177,40 @@ JUMPONIUM_MAX = 2
 
 
 def new_state():
-    return {"counts": {}, "names": {}, "snapshot_ts": None, "ts": None}
+    # recipes: the journal's Synthesis Name -> {materials: {id: count}, ts (the latest), n (made so many times)}: S15
+    return {"counts": {}, "names": {}, "snapshot_ts": None, "ts": None, "recipes": {}}
+
+
+def synthesis_materials(ev):
+    """A Synthesis line's materials as {id: count}: a list of {Name, Count} (the game since 2017) or, in the oldest
+    journals, a {name: count} object."""
+    mats = ev.get("Materials")
+    if isinstance(mats, dict):
+        items = mats.items()
+    else:
+        items = [(m.get("Name"), m.get("Count", 1)) for m in mats or [] if isinstance(m, dict)]
+    out = {}
+    for name, n in items:
+        if isinstance(name, str) and name and isinstance(n, int) and not isinstance(n, bool) and n > 0:
+            out[name.lower()] = out.get(name.lower(), 0) + n
+    return out
+
+
+def learn_recipe(state, ev):
+    """Keep what a Synthesis consumed as that recipe (S15): the latest line's materials, how many times it was made.
+    True if the state changed."""
+    name, ts = ev.get("Name"), ev.get("timestamp", "")
+    mats = synthesis_materials(ev)
+    if not isinstance(name, str) or not name.strip() or not mats:
+        return False
+    recipes = state.setdefault("recipes", {})
+    key = next((k for k in recipes if k.lower() == name.strip().lower()), name.strip())   # one recipe whatever the case
+    old = recipes.get(key)
+    if old and ts < (old.get("ts") or ""):
+        recipes[key] = dict(old, n=old.get("n", 0) + 1)   # an older line read late: counted, not newer
+    else:
+        recipes[key] = {"materials": mats, "ts": ts, "n": (old or {}).get("n", 0) + 1}
+    return True
 
 
 def _add(state, name, n, localised=None):
@@ -168,6 +232,7 @@ def _add(state, name, n, localised=None):
 def apply(state, ev):
     """Fold one journal event into `state`. Returns True if it changed anything."""
     name, ts = ev.get("event"), ev.get("timestamp", "")
+    learned = name == "Synthesis" and learn_recipe(state, ev)   # whatever the counts' snapshot says about its time
     if name == "Materials":
         if state.get("snapshot_ts") and ts < state["snapshot_ts"]:
             return False       # an older snapshot read out of order
@@ -177,15 +242,15 @@ def apply(state, ev):
                 _add(state, m.get("Name"), m.get("Count"), m.get("Name_Localised"))
         return True
     if state.get("snapshot_ts") and ts < state["snapshot_ts"]:
-        return False           # already counted in the snapshot that followed it
+        return learned         # already counted in the snapshot that followed it
     before = dict(state["counts"])
     if name == "MaterialCollected":
         _add(state, ev.get("Name"), ev.get("Count", 1), ev.get("Name_Localised"))
     elif name == "MaterialDiscarded":
         _add(state, ev.get("Name"), -ev.get("Count", 1))
     elif name == "Synthesis":
-        for m in ev.get("Materials") or []:
-            _add(state, m.get("Name"), -m.get("Count", 1))
+        for m, n in synthesis_materials(ev).items():
+            _add(state, m, -n)
     elif name == "EngineerCraft":
         for m in ev.get("Ingredients") or []:
             if (m.get("Name") or "").lower() in state["counts"] or (m.get("Name") or "").lower() in MATERIALS:
@@ -210,7 +275,7 @@ def apply(state, ev):
     if state["counts"] != before:
         state["ts"] = ts
         return True
-    return False
+    return learned
 
 
 def craftable(counts, recipe):
@@ -271,10 +336,29 @@ def inventory(state):
         rows.append({"id": mid, "name": display_name(state, mid), "category": cat, "grade": grade,
                      "count": counts.get(mid, 0), "cap": CAPS.get(grade)})
     synth = []
+    learned = {k.lower(): (k, v) for k, v in (state.get("recipes") or {}).items()
+               if isinstance(v, dict) and v.get("materials")}
     for rname, r in SYNTH.items():
-        n, limit = craftable(counts, r["materials"])
-        synth.append({"name": rname, "craftable": n, "limit": display_name(state, limit) if limit else None,
-                      "boost": r.get("boost"), "verified": r["verified"],
-                      "materials": [{"id": m, "name": display_name(state, m), "need": q, "have": counts.get(m, 0)}
-                                    for m, q in r["materials"].items()]})
+        own = learned.pop(r["name"].lower(), None)
+        synth.append(_recipe(state, counts, rname, r, own))
+    for own in sorted(learned.values(), key=lambda x: x[0].lower()):   # made, and not in the table: "Other recipes you have made"
+        synth.append(_recipe(state, counts, own[0], {"materials": {}, "verified": False, "name": own[0], "group": "other",
+                                                     "family": own[0]}, own))
     return {"rows": rows, "synthesis": synth, "snapshot_ts": state.get("snapshot_ts"), "ts": state.get("ts")}
+
+
+def _recipe(state, counts, rname, r, own):
+    """One recipe for the Materials tab: a learned one (your own Synthesis, `own`: (journal name, {materials, ts, n}))
+    overrides the table's materials and checks it (`learned`: {ts, n, differs: the table said otherwise})."""
+    mats = r["materials"]
+    learned = None
+    if own:
+        mine = own[1]["materials"]
+        learned = {"ts": own[1].get("ts"), "n": own[1].get("n", 1), "differs": bool(mats) and mine != mats}
+        mats = mine
+    n, limit = craftable(counts, mats)
+    return {"name": rname, "journal": r.get("name"), "group": r.get("group", "other"), "family": r.get("family", rname),
+            "grade": r.get("grade"), "craftable": n, "limit": display_name(state, limit) if limit else None,
+            "boost": r.get("boost"), "verified": bool(learned) or r["verified"], "learned": learned,
+            "materials": [{"id": m, "name": display_name(state, m), "need": q, "have": counts.get(m, 0)}
+                          for m, q in mats.items()]}

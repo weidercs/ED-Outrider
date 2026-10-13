@@ -74,8 +74,11 @@ search any text, click a row for the raw event.
 </tr>
 <tr>
 <td width="50%" valign="top">
-<b>Materials</b> — your <b>Cargo</b> (the ship's hold and your carrier's, with Sell and Buy: see <a href="cargo-and-trading.md">Cargo and trading</a>), materials against their caps, and how many FSD injections, limpets, SRV refuels and
-repairs and Rhino rig restocks you can make now. <b>Mining sites</b> lists each body your SRV mined: minerals
+<b>Materials</b> — your <b>Cargo</b> (the ship's hold and your carrier's, with Sell and Buy: see <a href="cargo-and-trading.md">Cargo and trading</a>), materials against their caps, and how many of each synthesis you can make now: the FSD injections' cards,
+then Ship upkeep (AFMU refills, heat sinks, life support, limpets), SRV (refuel, repair, Rhino rig restocks) and Other
+recipes you have made, each folded into one line ("Ship upkeep ▸ AFMU refill B×4 S×1 P×0 · Heat sink B×12 S×0 P×0")
+that opens on a click (remembered on this device). A recipe you have synthesised is ✓, checked against your own
+synthesis and its date; the others are the published recipes. <b>Mining sites</b> lists each body your SRV mined: minerals
 and tons, saved spots, the last date and the distance.
 <br><br><img src="../images/materials.png" alt="Materials">
 </td>

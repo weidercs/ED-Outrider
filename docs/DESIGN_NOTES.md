@@ -549,6 +549,24 @@ upstream project's choices, not rules of the game.
   with the depot lighter by what the legs before burned (topping up from the hold moves weight, it adds none); its `k`
   is 1 until the carrier's own past jumps give a factor (S13 B). A plain average of past jumps would be worse: the burn
   depends on the distance and the mass. Red when the depot lacks it; amber when a confirmed tritium line covers it.
+- **The carrier's own jumps scale the formula, never replace it** (S13 B): `carrier_burns` measures each jump booked
+  and confirmed (a CarrierJumpRequest, not cancelled, then a CarrierLocation or CarrierJump in that system) that has
+  one depot reading on each side (CarrierStats' FuelLevel; a CarrierDepositFuel is a reading too, Total − Amount before
+  it and Total after) and no other jump between them; `burn_factor` is the median of the last 12 burned ÷ formula, from
+  3 on, held to 0.8–1.2, and scales the trip, a booked jump and the tile's jump count. On the author's journals: 214
+  jumps measured, 193 exact and the last 12 all exact (k 1.0); the outliers are 2024's (about ×1.1 throughout: a game
+  change, or mass the stats do not show) and jumps with another reading gap. Jumps longer than 500 ly are dropped (a
+  move missed between). Tritium donated by others is unjournaled and reads low: the median and the hold are why. The
+  fixed reserved-space bug (S13's review) shows why it only scales: a free-floating factor would have hidden that
+  error rather than fixed it.
+- **Synthesis recipes: published until you make one** (S15): `SYNTH` holds the published recipes (EDEngineer's
+  blueprints.json and EDDiscovery's RecipesSynthesis.cs, which agree on each, the journal names EDDiscovery's) with
+  the journal's Synthesis `name`; each Synthesis you make is kept (`recipes`: its latest materials, how often), and a
+  recipe you have made overrides the table and is shown ✓ with its date, whatever the table says ("the published
+  recipe said otherwise" in its title when they differ). A name the table lacks (Ammo Basic, AX Remote Flak Ammo
+  Basic...) goes to "Other recipes you have made" rather than being dropped. The names are matched without regard to
+  case; only Limpet Basic, Fuel Basic, Repair Basic and those two have been seen in the author's journals.
+  Layout: the FSD injections' three cards always open, every other group one folded line (per device).
 - **Upkeep at the published rates, said so** (S61): the journal has no upkeep figure, so `CARRIER_UPKEEP` (the core
   5M a week, each service active or suspended) is the community wiki's, not checked against the game's Finance
   screen; the tile's title says "published rates" until the author confirms them. Weeks = the balance ÷ the week's

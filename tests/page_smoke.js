@@ -1631,6 +1631,36 @@ const settle = async maxMs => {
     console.log(goodCT ? "OK" : "FAIL", "| carrier trip |", goodCT ? "the trip's tritium (short, covered), a booked jump's burn, suspended services, balance and upkeep, your carrier as a seller" :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
   }
+  // S13 B: the trip's and a booked jump's tritium say whether the carrier's own measured jumps scale the formula
+  {
+    const w = dom.window, before = errors.length;
+    const got = w.eval(`(() => {
+      const saved = data.carrier, o = {}, line = () => document.getElementById("carrierLine");
+      const titles = () => [...line().querySelectorAll("span[title]")].map(x => x.title).filter(t => /fuel formula/.test(t));
+      data.carrier = {name: "Out Of The Blue", callsign: "G0X-85Z", system: "Home", aboard: false, here: false, distance: 1200,
+                      has_uc: true, has_vista: true, suspended: [], fuel: 668, jump_range: 500, burn_factor: null,
+                      trip: {jumps: 3, burn: 1300, depot: 668, short: 632, depot_after: 0, hold: null, covered: false},
+                      planned: {system: "Far", departure: new Date(Date.now() + 3600e3).toISOString(), jump_ly: 432, burn: 96, depot_after: 572}};
+      renderCarrier(); o.none = titles();
+      data.carrier = Object.assign({}, data.carrier, {burn_factor: {k: 1.05, n: 12, raw: 1.05}});
+      renderCarrier(); o.scaled = titles();
+      data.carrier = Object.assign({}, data.carrier, {burn_factor: {k: 1.2, n: 5, raw: 1.4}});
+      renderCarrier(); o.held = titles();
+      data.carrier = Object.assign({}, data.carrier, {burn_factor: {k: 1, n: 12, raw: 1}});
+      renderCarrier(); o.one = titles();
+      data.carrier = saved; renderCarrier();
+      return o;
+    })()`);
+    const bad = [];
+    if (got.none.length !== 2 || !got.none.every(t => /own jumps check it once 3 are measured/.test(t))) bad.push("none");
+    if (got.scaled.length !== 2 || !got.scaled.every(t => /checked against your carrier's last 12 jumps: scaled ×1\.05 \(tritium other players donate/.test(t))) bad.push("scaled");
+    if (!got.held.every(t => /last 5 jumps: scaled ×1\.2 \(they measured ×1\.4, held to 0\.8–1\.2\)/.test(t))) bad.push("held");
+    if (!got.one.every(t => /last 12 jumps: no correction needed \(/.test(t))) bad.push("one");
+    const goodKB = !bad.length && errors.length === before;
+    allOk = allOk && goodKB;
+    console.log(goodKB ? "OK" : "FAIL", "| carrier burn factor |", goodKB ? "the tritium's title says the carrier's own jumps' scale, held, or none yet" :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+  }
   // The Sell / Buy lookup: a line's Sell asks the server (stubbed here: the scratch server has no Spansh) with that
   // line's commodity, tons and hold; a row opens on a click; Closest and the carriers box ask again
   {
@@ -2730,6 +2760,50 @@ const settle = async maxMs => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| R13 trip under way |", good ? "bio sales since the last carto sale drawn with their x5 check" : JSON.stringify(got), errors.slice(before));
   }
+  // S15: the Materials tab's synthesis: the FSD injections' cards open, Ship upkeep / SRV / Other folded into one line
+  // each (grades as B×4 S×1 P×0), a recipe of your own ✓ with its date, the fold kept per device ("synthOpen")
+  {
+    const w = dom.window, before = errors.length;
+    const got = JSON.parse(w.eval(`(() => {
+      const o = {}, md = matData, keep = store.get("synthOpen", []);
+      const card = (name, group, family, grade, n, extra) => Object.assign({name, group, family, grade, craftable: n, verified: false, learned: null,
+        materials: [{id: "iron", name: "Iron", need: 2, have: 2 * n}]}, extra || {});
+      store.set("synthOpen", []);
+      matData = {rows: [], snapshot_ts: "2026-01-01T00:00:00Z", ts: "2026-01-01T00:00:00Z", sources: {}, mining_sites: [], synthesis: [
+        card("FSD injection basic", "fsd", "FSD injection basic", null, 5, {boost: "+25%"}),
+        card("AFMU refill basic", "ship", "AFMU refill", "basic", 4), card("AFMU refill standard", "ship", "AFMU refill", "standard", 1),
+        card("AFMU refill premium", "ship", "AFMU refill", "premium", 0),
+        card("Life support", "ship", "Life support", null, 7, {verified: true, learned: {ts: "2026-09-30T10:00:00Z", n: 3, differs: false}}),
+        card("SRV refuel basic", "srv", "SRV refuel", null, 9),
+        card("Ammo Basic", "other", "Ammo Basic", null, 2, {verified: true, learned: {ts: "2026-08-01T00:00:00Z", n: 1, differs: false}})]};
+      renderMat();
+      const el = document.getElementById("matSynth");
+      o.fsdOpen = [...el.children].filter(x => x.classList.contains("synth")).map(x => x.querySelector("b").textContent);
+      o.groups = [...el.querySelectorAll("details.synthGroup")].map(d => [d.dataset.sgroup, d.open, d.querySelector("summary").textContent]);
+      const life = [...el.querySelectorAll(".synth")].find(x => /Life support/.test(x.textContent));
+      o.life = [life.title, !!life.querySelector(".learned")];
+      const ship = el.querySelector('[data-sgroup="ship"]');
+      ship.open = true; ship.dispatchEvent(new window.Event("toggle"));
+      o.stored = store.get("synthOpen", []);
+      renderMat();
+      o.reopened = el.querySelector('[data-sgroup="ship"]').open && !el.querySelector('[data-sgroup="srv"]').open;
+      store.set("synthOpen", keep); matData = md; matKey = null; if (md) renderMat();
+      return JSON.stringify(o);
+    })()`));
+    const bad = [];
+    if (JSON.stringify(got.fsdOpen) !== JSON.stringify(["FSD injection basic"])) bad.push("fsd");
+    const g = Object.fromEntries(got.groups.map(([k, open, text]) => [k, [open, text.replace(/\s+/g, " ").trim()]]));
+    if (JSON.stringify(Object.keys(g)) !== JSON.stringify(["ship", "srv", "other"]) || Object.values(g).some(x => x[0])) bad.push("folded");
+    if (g.ship && g.ship[1] !== "Ship upkeep ▸ AFMU refill B×4 S×1 P×0 · Life support ×7") bad.push("ship line");
+    if (g.srv && g.srv[1] !== "SRV ▸ SRV refuel ×9") bad.push("srv line");
+    if (g.other && g.other[1] !== "Other recipes you have made ▸ Ammo Basic ×2") bad.push("other line");
+    if (!/^✓ checked against your synthesis on 2026-09-30 \(made 3×\)$/.test(got.life[0]) || !got.life[1]) bad.push("learned");
+    if (JSON.stringify(got.stored) !== JSON.stringify(["ship"]) || !got.reopened) bad.push("fold kept");
+    const goodSY = !bad.length && errors.length === before;
+    allOk = allOk && goodSY;
+    console.log(goodSY ? "OK" : "FAIL", "| synthesis groups |", goodSY ? "FSD cards open, the other groups folded to one line each, yours ✓, the fold kept" :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+  }
   // M3: Materials' Mining sites (one row per body, open in Here, forget after a confirm) and the rig restock recipe
   {
     const w = dom.window, before = errors.length;
@@ -2741,7 +2815,7 @@ const settle = async maxMs => {
     const got = JSON.parse(await w.eval(`(async () => {
       const o = {}, md = matData, cf = window.confirm, v0 = view;
       matData = {rows: [], snapshot_ts: "2026-01-01T00:00:00Z", ts: "2026-01-01T00:00:00Z", sources: {},
-        synthesis: [{name: "Mining rig restock", craftable: 2, verified: false, materials: [{name: "Iron", have: 10, need: 3},
+        synthesis: [{name: "Mining rig restock", group: "srv", family: "Mining rig restock", craftable: 2, verified: false, materials: [{name: "Iron", have: 10, need: 3},
           {name: "Nickel", have: 5, need: 2}, {name: "Mechanical Equipment", have: 4, need: 1}]}],
         mining_sites: [{system: "Smojooe AR-E b25-8", id: "18207037532889", body_id: 19, body: "ABC 3 d", body_name: "Smojooe AR-E b25-8 ABC 3 d",
           minerals: [{name: "Water", tons: 10}, {name: "Methanol Monohydrate Crystals", tons: 20}], tons: 30, rigs: 2, unmarked: 1,

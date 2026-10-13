@@ -331,11 +331,15 @@ const carrierAim = c => c && !c.aboard && !c.here && c.system && !(c.decommissio
 // the tritium for the trip to you (S13 A): red when the depot lacks it, amber when a confirmed tritium line in the hold
 // covers what it lacks (moved into the depot first)
 const CARRIER_BURN_TITLE = "the game's fuel formula, checked against real carrier jumps: round(5 + ly × (25000 + capacity used + depot) / 200000) t a jump; a buy order's reserved space weighs nothing";
-const carrierTripHtml = t => !t ? "" :
-  ` · <span title="equal jumps of up to 500 ly in a straight line (the real trip is never shorter), each lighter than the last; ${CARRIER_BURN_TITLE}">≈ <b>${t.burn.toLocaleString()} t</b> tritium</span>` +
+// ...scaled by the carrier's own measured jumps (S13 B: the median of its last 12, held to 0.8-1.2), said in the title
+const carrierBurnTitle = f => CARRIER_BURN_TITLE + (!f ? "; your carrier's own jumps check it once 3 are measured (your journals hold none yet)" :
+  `; checked against your carrier's last ${f.n} jumps: ${f.k === 1 ? "no correction needed" : `scaled ×${f.k}`}${f.raw !== f.k ? ` (they measured ×${f.raw}, held to 0.8–1.2)` : ""}` +
+  " (tritium other players donate is not in your journal: such a jump reads low)");
+const carrierTripHtml = (t, f) => !t ? "" :
+  ` · <span title="equal jumps of up to 500 ly in a straight line (the real trip is never shorter), each lighter than the last; ${esc(carrierBurnTitle(f))}">≈ <b>${t.burn.toLocaleString()} t</b> tritium</span>` +
   (t.short ? ` · <span class="${t.covered ? "warnc" : "noscoop"}" title="${t.covered ? `the ${t.hold.toLocaleString()} t of tritium on a sell order in its hold covers it: move it into the depot before the jumps` : "the depot and the confirmed tritium in its hold (a sell order) do not cover the trip"}">depot ${t.depot.toLocaleString()} t: ${t.short.toLocaleString()} t short${t.covered ? ", enough after topping up" : ""}</span>` : "");
 // a booked jump's burn and the depot after it (S13 A)
-const carrierPlanBurn = pl => pl.burn == null ? "" : ` ≈ ${pl.burn} t; ` +
+const carrierPlanBurn = (pl, f) => pl.burn == null ? "" : ` ≈ <span title="${esc(carrierBurnTitle(f))}">${pl.burn} t</span>; ` +
   (pl.depot_after < 0 ? `<span class="noscoop">depot ${-pl.depot_after} t short</span>` : `depot after ≈ ${pl.depot_after.toLocaleString()} t`);
 // UC and Vista on, off or suspended, and any other service suspended, in red (S55 B: CarrierStats' crew, newer than its
 // last Docked or not)
@@ -387,7 +391,7 @@ function renderCarrier() {
     const tank = f && f.jumps_max != null ? f.jumps_max : null;
     meet = (mine != null ? `you → it ≈ <b>${mine}</b> jump${mine === 1 ? "" : "s"}` +
              (tank != null ? ` <span class="${tank < mine ? "warnc" : "unk"}" title="jumps at max range your tank covers now">(tank ${tank})</span>` : "") : "") +
-           ` · it → you ≈ <b>${theirs}</b> carrier jump${theirs === 1 ? "" : "s"}` + carrierTripHtml(c.trip);
+           ` · it → you ≈ <b>${theirs}</b> carrier jump${theirs === 1 ? "" : "s"}` + carrierTripHtml(c.trip, c.burn_factor);
   }
   let plan = "";
   const pl = c.planned;
@@ -396,7 +400,7 @@ function renderCarrier() {
     const mmss = t => t >= 3600 ? `${Math.floor(t / 3600)} h ${Math.floor(t % 3600 / 60)} min` : `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
     const urgent = left > 0 && left < 300 && !c.aboard;
     plan = `<span class="${urgent ? "noscoop" : ""}">${left > 0 ? `departs for <b>${esc(pl.system)}</b> in <b>${mmss(left)}</b>` : `jumping to <b>${esc(pl.system)}</b>`}</span>` +
-      (pl.jump_ly ? ` <span class="unk">(${fmtLy(pl.jump_ly)} ly jump${carrierPlanBurn(pl)}${pl.distance_from_you != null ? `${pl.burn != null ? ";" : ","} then ${fmtLy(pl.distance_from_you)} ly from you` : ""})</span>` : "");
+      (pl.jump_ly ? ` <span class="unk">(${fmtLy(pl.jump_ly)} ly jump${carrierPlanBurn(pl, c.burn_factor)}${pl.distance_from_you != null ? `${pl.burn != null ? ";" : ","} then ${fmtLy(pl.distance_from_you)} ly from you` : ""})</span>` : "");
     if (urgent && carrierWarned !== pl.departure) {   // once per booking, only if you are not aboard
       carrierWarned = pl.departure;
       // the last minute: one plain line (speech.json's lines say "{minutes} minutes", which cannot be singular: F37)
@@ -4151,9 +4155,7 @@ function renderMat() {
     (m.stale ? ` · <span class="noscoop">your last login wrote no Materials line: these counts predate it</span>` : "");
   // every material that runs out at the craftable count limits it (ties included, e.g. all three at 4)
   const limiting = r => r.materials.filter(x => Math.floor(x.have / x.need) === r.craftable).map(x => x.name);
-  document.getElementById("matSynth").innerHTML = m.synthesis.map(r => `<div class="synth" title="${r.verified ? "recipe checked against a real synthesis in your journals" : "published in-game recipe"}">
-      <span class="n${r.craftable ? "" : " zero"}">×${r.craftable}</span><b>${esc(r.name)}</b>${r.boost ? `<div class="unk boostline">${esc(r.boost)} range</div>` : ""}
-      <div class="mats">${r.materials.map(x => `<span class="${x.have < x.need ? "short" : r.craftable < 10 && limiting(r).includes(x.name) ? "limit" : ""}">${esc(x.name)} ${x.have}/${x.need}</span>`).join(" · ")}</div></div>`).join("");
+  document.getElementById("matSynth").innerHTML = synthHtml(m.synthesis, limiting);
   // where to find the FSD-injection materials: the nearest landable bodies you have scanned that carry them
   // only a recipe you are short of (under 10, the grid's threshold) has a limiting material worth fetching
   const src = m.sources || {}, limits = new Set(m.synthesis.filter(r => /^FSD/.test(r.name) && r.craftable < 10).flatMap(limiting));
@@ -4181,6 +4183,43 @@ function renderMat() {
       }).join("")).join("") + `</div>`;
   }).join("") || `<div class="unk">No materials match.</div>`;
 }
+
+// The Materials tab's synthesis (S15): the FSD injections' cards open, every other group folded into one line that says
+// what you can make ("Ship upkeep ▸ AFMU refill B×4 S×1 P×0 · Heat sink B×12 S×0 P×0 · Life support ×7"), open or
+// folded per device (store "synthOpen": the open groups). A recipe your own Synthesis made is ✓ with its date.
+const SYNTH_GROUPS = [["fsd", "FSD injections"], ["ship", "Ship upkeep"], ["srv", "SRV"], ["other", "Other recipes you have made"]];
+const synthTitle = r => r.learned ? `✓ checked against your synthesis on ${(r.learned.ts || "").slice(0, 10)} (made ${r.learned.n}×)` +
+    (r.learned.differs ? "; the published recipe said otherwise: yours is shown" : "") :
+  r.verified ? "recipe checked against a real synthesis (another commander's journal); not made by you yet" :
+  "published recipe (EDEngineer's and EDDiscovery's tables), not yet checked against a synthesis of yours";
+const synthCard = (r, limiting) => `<div class="synth" title="${esc(synthTitle(r))}">
+      <span class="n${r.craftable ? "" : " zero"}">×${r.craftable}</span><b>${esc(r.name)}</b>${r.learned ? ` <span class="learned">✓</span>` : ""}${r.boost ? `<div class="unk boostline">${esc(r.boost)} range</div>` : ""}
+      <div class="mats">${r.materials.map(x => `<span class="${x.have < x.need ? "short" : r.craftable < 10 && limiting(r).includes(x.name) ? "limit" : ""}">${esc(x.name)} ${x.have}/${x.need}</span>`).join(" · ")}</div></div>`;
+// a folded group's line: each family once, its grades as B×4 S×1 P×0 (a family of one recipe: ×7)
+function synthSummary(list) {
+  const fams = [];
+  for (const r of list) { const f = fams.find(x => x.name === (r.family || r.name)); if (f) f.items.push(r); else fams.push({name: r.family || r.name, items: [r]}); }
+  return fams.map(f => `${esc(f.name)} ` + (f.items.length > 1 || f.items[0].grade
+    ? f.items.map(r => `<span class="${r.craftable ? "" : "short"}">${(r.grade || "?")[0].toUpperCase()}×${r.craftable}</span>`).join(" ")
+    : `<span class="${f.items[0].craftable ? "" : "short"}">×${f.items[0].craftable}</span>`)).join(" · ");
+}
+function synthHtml(all, limiting) {
+  const open = (v => Array.isArray(v) ? v : [])(store.get("synthOpen", []));
+  return SYNTH_GROUPS.map(([g, label]) => {
+    const list = all.filter(r => (r.group || "other") === g);
+    if (!list.length) return "";
+    if (g === "fsd") return list.map(r => synthCard(r, limiting)).join("");
+    return `<details class="synthGroup" data-sgroup="${g}"${open.includes(g) ? " open" : ""}><summary><b>${label}</b> ▸ ${synthSummary(list)}</summary>` +
+      `<div class="synthGrid">${list.map(r => synthCard(r, limiting)).join("")}</div></details>`;
+  }).join("");
+}
+document.getElementById("matSynth").addEventListener("toggle", e => {
+  const g = e.target.dataset && e.target.dataset.sgroup;
+  if (!g) return;
+  const open = new Set((v => Array.isArray(v) ? v : [])(store.get("synthOpen", [])));
+  if (e.target.open) open.add(g); else open.delete(g);
+  store.set("synthOpen", [...open]);
+}, true);
 
 // ---- Nearest place to dock (GET api/nearest, outrider/dock.py): a finder beside Plot Route's To. Stations and
 // fleet carriers you can land at and use, from Spansh, the DSSA list and your own carrier; "Plot here" fills To and

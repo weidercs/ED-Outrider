@@ -55,10 +55,10 @@ the code; the constants named are in `ed_outrider.py` unless another file is giv
 | `HullDamage`, `Repair`, `RepairAll`, `RepairDrone`, `AfmuRepairs`, `HeatDamage`, `Interdicted`, `JetConeBoost` | Hull and module health, danger alerts. A `Repair` lists what was repaired (`Items`; older lines `Item`): "Wear" is the ship's integrity, not the hull, so only "Hull" (or "All", or a `RepairAll`) sets the hull to 100 %. `JetConeBoost` is the FSD supercharge signal (neutron or white dwarf cone, `BoostValue` the multiplier): the next jump's range, the "supercharged" moment, and the Highway's auto-target trigger. |
 | `Docked`, `Undocked` | Docked state and services (`exploration` = Universal Cartographics, `vistagenomics`), dock/undock alerts. |
 | `CarrierBuy`, `CarrierDecommission`, `CarrierCancelDecommission` | A new carrier (`CarrierID`, `Callsign`, `Location`, `SystemAddress`: its state starts afresh), and giving one up (`ScrapRefund`, `ScrapTime` in epoch seconds; the scrapping writes nothing). Per Frontier's manual; not yet seen in a real journal. |
-| `CarrierStats`, `CarrierLocation`, `CarrierJumpRequest`, `CarrierJumpCancelled` | Your fleet carrier. `CarrierStats` also gives its cargo total (`SpaceUsage.Cargo`: the cargo check), the capacity in use (`TotalCapacity - FreeSpace - CargoSpaceReserved`: a buy order's reserved space weighs nothing) and the depot (`FuelLevel`): the tritium's jumps. |
+| `CarrierStats`, `CarrierLocation`, `CarrierJumpRequest`, `CarrierJumpCancelled` | Your fleet carrier. `CarrierStats` also gives its cargo total (`SpaceUsage.Cargo`: the cargo check), the capacity in use (`TotalCapacity - FreeSpace - CargoSpaceReserved`: a buy order's reserved space weighs nothing) and the depot (`FuelLevel`): the tritium's jumps. These, `CarrierJump` (keyed by its `MarketID`) and `CarrierDepositFuel` are kept in `cargo_events` for the carrier's measured jumps (S13 B). |
 | `NavRouteClear` | The plotted route was cleared. |
 | `FSSSignalDiscovered`, `SupercruiseDestinationDrop` | Notable stellar phenomena (`$Fixed_Event_Life_*`): the FSS lists a system's phenomena as identical lines in one second, so a kind keeps the most one listing had (`phenomena.n`, `NSP_BURST_S`); a drop names only the kind ("a ring phenomenon"), not which site, so each drop is one site visited (`phenomena_sites`). `FSSSignalDiscovered` also gives the signals worth a detour (`poi`, `poi_kind`): a Titan (`SignalType` `Titan`), Guardian beacons, generation ships, listening posts, number stations, tourist beacons, memorials; ordinary megaships are left out. Two listening posts in one system are both "Listening Post" in the game's words (`#index=` in `SignalName` tells them apart), and some are named ("Listening Post Pollux D568"). |
-| `Materials`, `MaterialCollected`, `MaterialDiscarded`, `Synthesis`, `MaterialTrade`, `TechnologyBroker`, `ScientificResearch`, `MissionCompleted`, `EngineerContribution` | The materials inventory (`outrider.materials.apply`; each login's `Materials` is a full snapshot). |
+| `Materials`, `MaterialCollected`, `MaterialDiscarded`, `Synthesis`, `MaterialTrade`, `TechnologyBroker`, `ScientificResearch`, `MissionCompleted`, `EngineerContribution` | The materials inventory (`outrider.materials.apply`; each login's `Materials` is a full snapshot). `Synthesis` also teaches its recipe (`Name`, `Materials`: a list of `{Name, Count}`, in the oldest journals a `{name: count}` object), kept in the state's `recipes` (S15). Names seen: Limpet Basic, Fuel Basic and Repair Basic (the SRV's), Ammo Basic/Standard (multi-cannon), AX Remote Flak Ammo Basic. |
 | `CrewHire`, `CrewFire`, `Statistics.Crew` | `outrider/unsold.py`: an NPC crew member's cut of payouts. |
 
 ## Companion files
@@ -114,6 +114,13 @@ the code; the constants named are in `ed_outrider.py` unless another file is giv
   `Enabled` false = suspended. A suspended service is also left out of the next `Docked`'s `StationServices`.
   `CarrierCrewServices` (`CrewRole`, `Operation`: Activate, Deactivate, Pause, Resume, Replace) says a change between two
   CarrierStats; none in the author's journals yet.
+- A carrier's jump in the journal (S13 B): `CarrierJumpRequest` (`SystemAddress`, `DepartureTime`), then at the
+  departure time a `CarrierLocation` (only while the game runs; otherwise the next login's) and, only when you are
+  aboard, a `CarrierJump` a minute later. `CarrierJump` has **no CarrierID** (its `MarketID` is the carrier's, with
+  `StationType` FleetCarrier) and carries `StarPos`; `CarrierLocation` has none. Of the author's 248 requests, 172 have
+  a CarrierJump. A squadron's carrier writes `CarrierLocation` too (`CarrierType` SquadronCarrier, at every login).
+  The depot changes only by a jump and a `CarrierDepositFuel` (`Amount`, `Total` the depot after) or tritium donated by
+  other players (not in your journal).
 
 **Status.json**
 - It is rewritten only when something in it changes. A player standing still (a stopped Rhino included)

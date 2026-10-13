@@ -695,6 +695,125 @@ class CarrierTile(unittest.TestCase):
         self.assertEqual((s["uc"]["nearest"]["name"], s["vista"]["nearest"]["name"]), ("G0X-85Z", "G0X-85Z"))
 
 
+MOVES_FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "carrier_moves.json")
+
+
+def real_moves():
+    """The author's carrier on 2026-09-26/27 (in-game data, its CarrierStats cut to the fields used): eleven jumps booked
+    and made, nine of them aboard (CarrierJump with StarPos), a deposit before the ninth, a squadron carrier's line."""
+    with open(MOVES_FIXTURE, encoding="utf-8") as f:
+        return json.load(f)
+
+
+SMOJOO = 16013114550881   # the tenth jump's system: reached while not aboard (no StarPos in the carrier's lines)
+
+
+class CarrierBurns(unittest.TestCase):
+    """S13 B: the carrier's measured jumps (carrier_burns) and its factor on the formula (burn_factor). Pure."""
+
+    def test_real_jumps(self):
+        """The author's nine jumps aboard, each between two depot readings: burned exactly what the formula says; the
+        ninth's reading before it is the deposit's Total (the depot filled from the ship)."""
+        events = [(e["timestamp"], e) for e in real_moves()]
+        s = cargo.carrier_burns(CARRIER, events)
+        self.assertEqual([(x["burned"], x["formula"]) for x in s],
+                         [(115, 115), (112, 112), (113, 113), (114, 114), (114, 114), (113, 113), (112, 112), (113, 113), (111, 111)])
+        self.assertEqual((s[0]["ts"], s[0]["ly"]), ("2026-09-26T20:26:10Z", 496.29))   # the departure time
+        # the tenth system known elsewhere (where: the server's locate), its jump measured too
+        s = cargo.carrier_burns(CARRIER, events, lambda i: (-3791.21875, -2.4375, 3026.75) if i == SMOJOO else None)
+        self.assertEqual((len(s), s[-1]["burned"], s[-1]["formula"]), (10, 111, 111))
+        self.assertEqual(cargo.burn_factor(s), {"k": 1.0, "n": 10, "raw": 1.0})
+        self.assertEqual(cargo.carrier_burns(999, events), [])   # another carrier's history says nothing
+
+    def jump(self, ts, frm, to, ly=None):
+        """A booked jump from `frm` to `to` (positions on the x axis, ids = x), confirmed by a CarrierLocation."""
+        return [(ts + ":00Z", ev(ts + ":00Z", "CarrierJumpRequest", CarrierID=CARRIER, SystemAddress=to,
+                                 DepartureTime=ts + ":30Z")),
+                (ts + ":30Z", ev(ts + ":30Z", "CarrierLocation", CarrierID=CARRIER, CarrierType="FleetCarrier", SystemAddress=to))]
+
+    def test_what_is_not_a_sample(self):
+        where = lambda i: (float(i), 0.0, 0.0)   # noqa: E731
+        burn = cargo.carrier_burn(400, 1000, 900)
+        start = [("2026-01-01T00:00:00Z", ev("2026-01-01T00:00:00Z", "CarrierLocation", CarrierID=CARRIER, SystemAddress=1000))]
+        one = start + [("2026-01-01T00:01:00Z", stats("2026-01-01T00:01:00Z", 0, fuel=900, used=1000))] + \
+            self.jump("2026-01-01T00:02", 1000, 1400) + [("2026-01-01T00:03:00Z", stats("2026-01-01T00:03:00Z", 0, fuel=900 - burn, used=1000))]
+        self.assertEqual([(x["ly"], x["burned"]) for x in cargo.carrier_burns(CARRIER, one, where)], [(400.0, burn)])
+        # cancelled before it left: no move, no sample
+        cancelled = one[:3] + [("2026-01-01T00:02:10Z", ev("2026-01-01T00:02:10Z", "CarrierJumpCancelled", CarrierID=CARRIER))] + one[3:]
+        self.assertEqual(cargo.carrier_burns(CARRIER, cancelled, where), [])
+        # two jumps between the same two readings: neither is one jump's burn
+        two = one[:-1] + self.jump("2026-01-01T00:02:40", 1400, 1700) + one[-1:]
+        two.sort(key=lambda x: x[0])
+        self.assertEqual(cargo.carrier_burns(CARRIER, two, where), [])
+        # no reading after it yet, or a system nowhere known: nothing measured
+        self.assertEqual(cargo.carrier_burns(CARRIER, one[:-1], where), [])
+        self.assertEqual(cargo.carrier_burns(CARRIER, one), [])
+        # longer than a carrier jumps (a move missed between): not a sample
+        far = lambda i: (float(i) * 2, 0.0, 0.0)   # noqa: E731
+        self.assertEqual(cargo.carrier_burns(CARRIER, one, far), [])
+        # your own cargo moved aboard before the jump weighs: the mass is the stats' plus it
+        moved = one[:2] + [("2026-01-01T00:01:30Z", ev("2026-01-01T00:01:30Z", "CargoTransfer", _at=CARRIER,
+                                                         Transfers=[{"Type": "gold", "Count": 2000, "Direction": "tocarrier"}]))] + one[2:]
+        self.assertEqual(cargo.carrier_burns(CARRIER, moved, where)[0]["formula"], cargo.carrier_burn(400, 3000, 900))
+
+    def test_factor(self):
+        mk = lambda ks: [{"k": k} for k in ks]   # noqa: E731
+        self.assertIsNone(cargo.burn_factor(mk([1.1, 1.1])))   # fewer than three: the formula alone
+        self.assertEqual(cargo.burn_factor(mk([1.0, 1.1, 1.2])), {"k": 1.1, "n": 3, "raw": 1.1})
+        self.assertEqual(cargo.burn_factor(mk([1.0, 1.1, 1.2, 1.3])), {"k": 1.15, "n": 4, "raw": 1.15})
+        self.assertEqual(cargo.burn_factor(mk([0.3, 0.4, 0.5])), {"k": 0.8, "n": 3, "raw": 0.4})   # held to 0.8-1.2
+        self.assertEqual(cargo.burn_factor(mk([2.0] * 3 + [1.05] * 12)), {"k": 1.05, "n": 12, "raw": 1.05})   # the last 12
+        # scaled: the trip and the jumps all the tritium gives
+        self.assertEqual((cargo.carrier_jumps(1000, 0, 20000), cargo.carrier_jumps(1000, 0, 20000, k=1.2)), (8, 6))
+        self.assertEqual((cargo.carrier_jumps(1000, 3000, 20000), cargo.carrier_jumps(1000, 3000, 20000, k=1.2)), (34, 28))
+
+
+class CarrierHistory(unittest.TestCase):
+    """S13 B through the reader: the carrier's movements and deposits kept in cargo_events (CarrierJump by its MarketID,
+    never a squadron carrier's or a station's), and State.carrier_summary's tritium scaled by its own jumps."""
+
+    def setUp(self):
+        self.db = ed_outrider.open_db(":memory:")
+        self.addCleanup(self.db.close)
+        self.j = ed_outrider.Journals(self.db)
+        self.state = ed_outrider.State(self.db, self.j, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        for n, e in enumerate(real_moves()):
+            self.j.line_source = f"Journal.test.log:{n}"
+            self.j.handle(e)
+        self.j.line_source = ""
+
+    def test_kept_and_measured(self):
+        rows = self.db.execute("SELECT event, count(*) FROM cargo_events WHERE market = ? GROUP BY event", (CARRIER,)).fetchall()
+        self.assertEqual(dict((r[0], r[1]) for r in rows),
+                         {"CarrierStats": 23, "CarrierJumpRequest": 11, "CarrierLocation": 11, "CarrierJump": 10,
+                          "CarrierDepositFuel": 2})
+        self.assertEqual(self.db.execute("SELECT count(*) FROM cargo_events WHERE market != ?", (CARRIER,)).fetchone()[0], 0)
+        self.assertEqual(self.state.carrier_burn_factor(), {"k": 1.0, "n": 9, "raw": 1.0})
+        # a squadron carrier's line and a jump at a station that is not a fleet carrier: not stored
+        self.j.handle(ev("2026-09-28T00:00:00Z", "CarrierLocation", CarrierType="SquadronCarrier", CarrierID=5, SystemAddress=7))
+        self.j.handle(ev("2026-09-28T00:01:00Z", "CarrierJump", Docked=True, StationType="Coriolis", MarketID=6,
+                         StarSystem="X", SystemAddress=8, StarPos=[0, 0, 0]))
+        self.assertEqual(self.db.execute("SELECT count(*) FROM cargo_events WHERE market IN (5, 6)").fetchone()[0], 0)
+
+    def test_summary_scaled(self):
+        """The trip to you, a booked jump's burn and the tile's jumps all scaled by the carrier's factor."""
+        self.j.carrier.update(x=0.0, y=0.0, z=0.0)
+        self.j.pos = {"id64": 9, "name": "Here", "x": 1200.0, "y": 0.0, "z": 0.0, "ts": "2026-09-28T00:00:00Z"}
+        self.assertEqual(self.state.carrier_summary()["burn_factor"], {"k": 1.0, "n": 9, "raw": 1.0})
+        self.state._carrier_k = ((CARRIER, self.j.carrier_version), {"k": 1.1, "n": 12, "raw": 1.1})
+        c = self.state.carrier_summary()
+        used = self.state.carrier_cargo()["stats"]["used"]
+        self.assertEqual(c["trip"]["burn"], cargo.carrier_trip(1200.0, c["fuel"], used, k=1.1)["burn"])
+        self.assertGreater(c["trip"]["burn"], cargo.carrier_trip(1200.0, c["fuel"], used)["burn"])
+        self.assertEqual(c["burn_factor"]["k"], 1.1)
+        self.state.bases[222] = ("spansh", {"name": "Far", "x": 432.0, "y": 0.0, "z": 0.0})
+        self.j.handle(ev("2026-09-28T00:10:00Z", "CarrierJumpRequest", CarrierID=CARRIER, CarrierType="FleetCarrier",
+                         SystemName="Far", SystemAddress=222, DepartureTime="2026-09-28T00:30:00Z"))
+        self.state._carrier_k = ((CARRIER, self.j.carrier_version), {"k": 1.1, "n": 12, "raw": 1.1})
+        pl = self.state.carrier_summary()["planned"]
+        self.assertEqual(pl["burn"], round(1.1 * cargo.carrier_burn(432.0, used, c["fuel"])))
+
+
 class Lookup(unittest.TestCase):
     """The Sell / Buy lookup: Spansh's station search (outrider.cargo.market_query / market_rows, State.cargo_lookup)."""
 
