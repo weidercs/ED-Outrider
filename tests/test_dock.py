@@ -11,6 +11,7 @@ import os
 import time
 import types
 import unittest
+import unittest.mock
 
 from support import ed_outrider  # also puts the repository root on sys.path
 import outrider.ask as ask  # noqa: E402
@@ -270,6 +271,20 @@ class Endpoint(unittest.TestCase):
     def ask(self, **q):
         return asyncio.run(self.state.nearest_dock({k: str(v) for k, v in q.items()}))
 
+    def test_rows_can_be_targeted(self):
+        """S31: 🎯 on a Nearest row targets its system by id64: the systems the finder listed are located (route "system"),
+        those without an id64 (a DSSA carrier Spansh has not placed) have no 🎯; the list kept is bounded."""
+        self.j.pos = dict(HERE)
+        out, _ = self.ask(age=3650)
+        row = next(r for r in out["rows"] if r["id64"] and not r.get("here"))
+        tgt, why = self.state.route_target("system", int(row["id64"]))
+        self.assertIsNone(why)
+        self.assertEqual((tgt["name"], tgt["id64"], tgt["route"]), (row["system"], int(row["id64"]), None))
+        self.assertTrue(any(r["id64"] is None for r in out["rows"]))   # the DSSA list's: nothing to aim at
+        with unittest.mock.patch.object(ed_outrider, "NEAREST_FOUND_KEEP", 2):
+            self.ask(age=3650, need="repair")
+        self.assertEqual(len(self.state.nearest_found), 2)
+
     def test_validation(self):
         self.assertEqual(self.ask()[1], 409)   # no position yet
         self.j.pos = dict(HERE)
@@ -417,6 +432,60 @@ class Voice(unittest.TestCase):
                                 "in Smojooe QI-T d3-37.")
         self.assertEqual(seen[0][0], "/api/nearest")
         self.assertEqual((seen[0][1]["cached"], seen[0][1]["need"], seen[0][1]["stations"]), ("1", "Vista", "0"))
+
+    def test_far_places_get_a_route(self):
+        """D4 (option A): the voice's "nearest ..." also plots a neutron route to the place it named when that is further
+        than [highway] voice_plot_ly (on, 500 ly by default): to its system; never while a route you have not finished is
+        followed or a plot runs; the answer's shape unchanged, a sentence added."""
+        db = ed_outrider.open_db(":memory:")
+        self.addCleanup(db.close)
+        state = ed_outrider.State(db, ed_outrider.Journals(db), None, 25)
+        plots, answer = [], [({"ok": True}, 202)]
+        state.highway_start_plot = lambda body: plots.append(body) or answer[0]
+
+        def ask_at(ly, text="nearest carrier with vista"):
+            async def get(path, params=None):
+                return {"rows": [{"kind": "carrier", "name": "", "callsign": "KBT-B8Z", "system": "Smojooe QI-T d3-37", "ly": ly,
+                                  "ls": 235, "services": ["UC", "Vista"], "pads": "L M", "dssa": False, "own": False, "warn": [],
+                                  "age_s": 86400}], "hidden": {}, "pad": "L"}
+            body, status = asyncio.run(state.ask(text, get))
+            self.assertEqual((status, set(body), body["command"]), (200, {"answer", "spoken", "matched", "command"}, "nearest_dock"))
+            return body["answer"]
+        said = "Nearest carrier with Vista Genomics: KBT-B8Z, a fleet carrier, 712 light years away, in Smojooe QI-T d3-37."
+        self.assertEqual(ask_at(711.5), said + " Plotting a neutron route there.")
+        self.assertEqual(plots, [{"plotter": "neutron", "to": "Smojooe QI-T d3-37"}])   # the system, never the station
+        self.assertEqual(ask_at(420), said.replace("712", "420"))   # within 500 ly: nothing plotted
+        state.highway_cfg = dict(state.highway_cfg, voice_plot_ly=1000.0)
+        self.assertEqual(ask_at(711.5), said)
+        state.highway_cfg = dict(state.highway_cfg, voice_plot_ly=500.0, voice_plot=False)
+        self.assertEqual(ask_at(711.5), said)
+        state.highway_cfg = dict(state.highway_cfg, voice_plot=True)
+        self.assertEqual(len(plots), 1)
+        # a route you follow (the Highway, or the survey / trade slot): never replaced by voice; a finished one is
+        with unittest.mock.patch.object(state, "highway_state", lambda: ({"id": 1}, [{}])):
+            self.assertEqual(ask_at(711.5), said + " You're following a route, so I didn't plot one.")
+        with unittest.mock.patch.object(state, "riches_state", lambda: ({"id": 2}, [{}])):
+            self.assertEqual(ask_at(711.5), said + " You're following a route, so I didn't plot one.")
+        with unittest.mock.patch.object(state, "highway_state", lambda: ({"id": 1, "done_ts": "2026-10-13T00:00:00Z"}, [{}])):
+            self.assertTrue(ask_at(711.5).endswith("Plotting a neutron route there."))
+        self.assertEqual(len(plots), 2)
+        # the plot refused: a plot under way (409), no ship's range known (400), anything else said as it is
+        answer[0] = ({"error": "a route is being plotted already"}, 409)
+        self.assertTrue(ask_at(711.5).endswith("A route is being plotted already, so I didn't plot another."))
+        answer[0] = ({"error": "give the jump range (ly), or pick a ship you have flown"}, 400)
+        self.assertTrue(ask_at(711.5).endswith("I didn't plot a route there: I don't know your ship's jump range yet."))
+        answer[0] = ({"error": "to is too long"}, 400)
+        self.assertTrue(ask_at(711.5).endswith("I didn't plot a route there: to is too long."))
+
+    def test_voice_plot_config(self):
+        import argparse
+        import tomllib
+        args = argparse.Namespace(journals=None, legacy=None, host=None, port=None, radius=None, db=None)
+        st = ed_outrider.settings_from({}, args, None, ([], []))
+        self.assertEqual((st["highway"]["voice_plot"], st["highway"]["voice_plot_ly"]), (True, 500.0))
+        st = ed_outrider.settings_from({"highway": {"voice_plot": False, "voice_plot_ly": 800}}, args, None, ([], []))
+        back = tomllib.loads(ed_outrider.config_text(st))["highway"]
+        self.assertEqual((back["voice_plot"], back["voice_plot_ly"]), (False, 800))
 
 
 if __name__ == "__main__":

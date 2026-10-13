@@ -262,6 +262,7 @@ SPANSH_DUMP = "https://spansh.co.uk/api/dump/{id64}"
 SPANSH_BODY_SEARCH = "https://spansh.co.uk/api/bodies/search"
 SPANSH_STATION_SEARCH = "https://spansh.co.uk/api/stations/search"
 DOCK_CACHE_S = 120   # s: the Nearest finder reuses its last search this long (a filter change re-filters it)
+NEAREST_FOUND_KEEP = 500   # S31: the Nearest finder's systems kept for 🎯 on its rows (locate)
 # Spansh's commodity names (its min_max keys): the Sell / Buy lookup asks by them; cached a week (meta spansh_commodities)
 SPANSH_COMMODITIES = "https://spansh.co.uk/api/stations/field_values/commodities"
 COMMODITIES_MAX_AGE_S = 7 * 86400
@@ -293,7 +294,9 @@ HIGHWAY = {"clipboard": True, "autotarget": False, "autotarget_delay": 5.0, "eff
            "autotarget_entry": "type", "autotarget_map_wait": 5.0, "autotarget_search_wait": 2.0,
            "autotarget_key_delay": 0.05, "autotarget_keys": {}, "autotarget_plot": list(outrider.target.DEFAULT_PLOT),
            "autotarget_search": list(outrider.target.DEFAULT_SEARCH), "autotarget_submit": list(outrider.target.DEFAULT_SUBMIT),
-           "autotarget_dry_run": False}
+           "autotarget_dry_run": False,
+           # D4: the voice's "nearest ..." plots a neutron route to a place further than voice_plot_ly
+           "voice_plot": True, "voice_plot_ly": 500.0}
 AUTOTARGET_TEST_COUNTDOWN = 5   # s: the Plot Route tab's "test now": time to click into the game before the sequence
 AUTOTARGET_HONK_WAIT = 60       # s an auto-target waits for an auto honk on the same arrival to finish (honk first)
 OVERLAY_HIDE_FOCUS = {7, 8, 9, 10, 11}   # Status.json GuiFocus: system map, orrery, FSS, SAA, codex (no panels over them)
@@ -1021,7 +1024,11 @@ def settings_from(cfg, args, env_journals=None, detected=((), ())):
                                              list(HIGHWAY["autotarget_search"])),
                     "autotarget_submit": num("highway", hw, "autotarget_submit", _config_plot_steps,
                                              list(HIGHWAY["autotarget_submit"])),
-                    "autotarget_dry_run": flag("highway", hw, "autotarget_dry_run", HIGHWAY["autotarget_dry_run"])},
+                    "autotarget_dry_run": flag("highway", hw, "autotarget_dry_run", HIGHWAY["autotarget_dry_run"]),
+                    # D4: the voice plots a neutron route to a "nearest ..." further than voice_plot_ly
+                    "voice_plot": flag("highway", hw, "voice_plot", HIGHWAY["voice_plot"]),
+                    "voice_plot_ly": min(100000.0, max(1.0, num("highway", hw, "voice_plot_ly", float,
+                                                               HIGHWAY["voice_plot_ly"])))},
         # [mcp]: read by the MCP bridge (python3 -m outrider.mcp), not the server; here so --write-config writes it
         **outrider.mcp.mcp_settings(cfg),
         "assistant": outrider.ask.assistant_settings(cfg),   # the voice's optional AI layer (off by default)
@@ -1148,6 +1155,8 @@ autotarget_dry_run = {"true" if st["highway"]["autotarget_dry_run"] else "false"
 efficiency = {st["highway"]["efficiency"]}   # the neutron plotter's efficiency (%): lower takes longer neutron detours
 conservative = {"true" if st["highway"]["conservative"] else "false"}   # the plot form starts with "Conservative range" ticked: plot jumps a margin shorter than the ship's range
 conservative_ly = {n(st["highway"]["conservative_ly"])}   # that margin (ly, 0.5 to 50): about this many ly shorter jumps, times the supercharge on a neutron jump
+voice_plot = {"true" if st["highway"]["voice_plot"] else "false"}   # the voice's "nearest station"... also plots a neutron route there when it is further than voice_plot_ly (never while you follow a route)
+voice_plot_ly = {n(st["highway"]["voice_plot_ly"])}   # that distance (ly, 1 to 100000)
 background_image = {p(_root_relative(st["highway"]["background_image"])) if st["highway"]["background_image"] else '""'}   # a top-down galaxy image you downloaded (PNG, JPEG, WebP or GIF) under the map; Outrider ships none
 background_extent = [{", ".join(n(x) for x in st["highway"]["background_extent"])}]   # ly: the image's edges, [xmin, xmax, zmin, zmax] (the usual galaxy images: -45000, 45000, -20000, 70000)
 background_opacity = {n(st["highway"]["background_opacity"])}   # 0.05 to 1
@@ -6352,6 +6361,7 @@ class State:
         self.history_cache = None  # S24: (key, species_history) -- your completed runs, counted again when they change
         self.checklist_finds = {}  # S29: (species, colour, where you are) -> (time.time(), answer): Spansh asked again after a while
         self.checklist_found = {}  # S29: id64 -> (name, x, y, z) of the systems a find listed, for locate (☆ on its rows)
+        self.nearest_found = {}    # S31: the same for the Nearest finder's rows (their 🎯), at most NEAREST_FOUND_KEEP
         self.carrier_task = None
         self.carrier_retry = {}    # carrier system id64 -> time.time() before which Spansh is not asked again
         self.value_dirty = set()   # systems whose unsold value changed: rows rebuilt, scan_version left alone
@@ -6781,6 +6791,10 @@ class State:
         if cmd in ("hush", "unhush"):
             self.set_hush("30m" if cmd == "hush" else "off")
             words, action = ("Quiet for 30 minutes." if cmd == "hush" else "Voice back on."), "caption"   # the page says these
+        elif cmd == "nearest_dock":   # D4: a place further than [highway] voice_plot_ly gets a neutron route plotted there
+            words, place = await outrider.ask.nearest_dock(get, text)
+            plot = self.voice_plot(place)
+            words = f"{words} {plot}" if plot else words
         elif cmd:
             words = await outrider.ask.fixed_answer(cmd, get, text=text)
         elif self.assistant.get("enabled"):
@@ -6801,6 +6815,28 @@ class State:
         words = outrider.tts.clip_text(words)
         self.copilot_action(action, words)
         return {"answer": words, "spoken": self.speaker_present(), "matched": matched, "command": cmd}, 200
+
+    def voice_plot(self, place):
+        """D4 (option A, the author): the voice's "nearest ..." plots a neutron route to the place it named when that is
+        further than [highway] voice_plot_ly (on by default, 500 ly): to its system, never the station. A fixed command
+        acts, as hush does; the AI's tools stay read-only. Never while a route you have not finished is followed (the
+        Highway or the survey / trade slot) or a plot runs. The words to add to the answer, "" for nothing to say."""
+        cfg = self.highway_cfg
+        if not cfg.get("voice_plot") or not place or not place.get("system") or place.get("distance_ly") is None \
+                or place["distance_ly"] <= cfg.get("voice_plot_ly", HIGHWAY["voice_plot_ly"]):
+            return ""
+        if any(m and not m.get("done_ts") for m in (self.highway_state()[0], self.riches_state()[0])):
+            return "You're following a route, so I didn't plot one."
+        if any(t and not t.done() for t in (self.highway_task, self.riches_task)):
+            return "A route is being plotted already, so I didn't plot another."
+        body, status = self.highway_start_plot({"plotter": "neutron", "to": place["system"]})
+        if status < 400:
+            return "Plotting a neutron route there."
+        if status == 409:
+            return "A route is being plotted already, so I didn't plot another."
+        if "jump range" in (body.get("error") or ""):   # no ship flown here: the neutron plotter needs its range
+            return "I didn't plot a route there: I don't know your ship's jump range yet."
+        return f"I didn't plot a route there: {body.get('error') or 'the plot was refused'}."
 
     def set_hush(self, mode):
         """Hush the voice ("10m", "30m", "jump": until the position changes) or end it ("off"). Danger lines and
@@ -6877,8 +6913,9 @@ class State:
         route (the slot's) first; with none there (no such route, complete, at its end), the Highway's next while you are
         on it (at a route system); then the next system of the boxel being explored (boxel_target, 🎯's own path: a name
         the galaxy map cannot find marks the boxel's probable end the same way); then the Highway's off the route (its
-        closest system, or its start before you joined it: a route you left does not hide the boxel); with none, the last
-        reason found."""
+        closest system, or its start before you joined it: a route you left does not hide the boxel); then the header's
+        next stop (S31: a system you chose, route "system"; a complete route counts as none, so it comes through); with
+        none, the last reason found."""
         why = "no route is plotted"
         rc, rows = self.riches_state()
         if rc:
@@ -6903,7 +6940,15 @@ class State:
             if tgt:
                 return ("next", ("boxel", None)), None
             why = bwhy
-        return (off, None) if off else (None, why)
+        if off:
+            return off, None
+        ns = meta_get(self.db, "next_stop")
+        if ns and ns.get("id64") is not None:   # S31: the next stop you chose (the header's)
+            tgt, nwhy = self.route_target("system", ns["id64"])
+            if tgt:
+                return ("next", ("system", ns["id64"])), None
+            why = nwhy
+        return None, why
 
     def copilot_target(self):
         """The co-pilot button's single press in the ship: Target next on the route (or boxel) the line shows, after
@@ -8808,7 +8853,12 @@ class State:
         out = outrider.dock.nearest(rows, pos, need=need, stations=q.get("stations") != "0", carriers=q.get("carriers") != "0",
                                     pad=pad, age_days=age, permit=q.get("permit") == "1", permits=permits, laden=laden)
         for r in out["rows"]:
+            if r.get("id64") is not None and r.get("system") and r.get("x") is not None:   # S31: its 🎯 locates it
+                self.nearest_found.pop(r["id64"], None)
+                self.nearest_found[r["id64"]] = (r["system"], r["x"], r["y"], r["z"])
             r.update(id64=str(r["id64"]) if r.get("id64") is not None else None, seen=None)
+        while len(self.nearest_found) > NEAREST_FOUND_KEEP:   # the oldest listed first
+            self.nearest_found.pop(next(iter(self.nearest_found)))
         return dict(out, need=need, age=age, pad=pad, pad_known=bool(outrider.cargo.SHIP_PAD.get((ship.get("type") or "").lower())),
                     ship=ship.get("type"), laden=round(laden, 1) if laden else None, where=pos.get("name"), dssa=dinfo,
                     errors=errors), 200
@@ -10479,6 +10529,8 @@ class State:
             return self.searcher.found[id64]
         if id64 in self.checklist_found:   # S29: a system the checklist's find listed (its ☆)
             return self.checklist_found[id64]
+        if id64 in self.nearest_found:     # S31: a system the Nearest finder listed (its 🎯)
+            return self.nearest_found[id64]
         for table in ("visits", "route_systems"):
             r = self.db.execute(f"SELECT name, x, y, z FROM {table} WHERE id64=?", (id64,)).fetchone()
             if r:
@@ -14449,15 +14501,50 @@ class State:
             return None, f"your carrier is in this system ({c.get('system')})"
         return {"name": c.get("system") or str(c["id64"]), "id64": c["id64"], "here": pos["id64"], "route": None}, None
 
+    def listed_system(self, id64):
+        """(name, x, y, z) of a system the page lists that locate() does not know (S31, S72): a point of the Map (Spansh's
+        systems around you and the boost stars, as last fetched), your chosen next stop, your carrier's system; None."""
+        for v in list(self.map_cache.values()):
+            pt = (v.get("points") and next((p for p in v["points"] if p.get("id") == str(id64)), None)) \
+                if isinstance(v, dict) else v[0].get(id64)   # the boost stars' answer, or a sphere's {id64: point}
+            if pt:
+                return pt["name"], pt["x"], pt["y"], pt["z"]
+        ns = meta_get(self.db, "next_stop")
+        if ns and ns.get("id64") == id64:
+            return ns["name"], ns.get("x"), ns.get("y"), ns.get("z")
+        c = self.journals.carrier or {}
+        if c.get("id64") == id64 and c.get("system"):
+            return c["system"], c.get("x"), c.get("y"), c.get("z")
+        return None
+
+    def system_target(self, id64):
+        """({name, id64, here, route: None}, None) for 🎯 on any system the page lists (S31: a bookmark, the header's next
+        stop, a Nearest row, a checklist find; S72: a Map point), or (None, why not): known here by its id64 (locate, else
+        listed_system: the galaxy map is searched by its name), never the system you are in."""
+        if isinstance(id64, bool) or not isinstance(id64, int):
+            return None, "id must be a system's id64"
+        pos = self.journals.pos
+        if not pos or pos.get("id64") is None:
+            return None, "your position is not known yet"
+        where = self.locate(id64) or self.listed_system(id64)
+        if not where or not where[0]:
+            return None, "that system is not known here"
+        if id64 == pos["id64"]:
+            return None, f"you are in {where[0]} already"
+        return {"name": where[0], "id64": id64, "here": pos["id64"], "route": None}, None
+
     def route_target(self, route, index):
         """({name, id64, here, route, index}, None) for 🎯 on a system of a route ("highway" or "survey": Road to Riches /
         Exomastery), or (None, why not): a row of the route plotted now, not the system you are in, with an id64 (the
         target is checked against Status.json's Destination by id64). Route "carrier": your carrier's system; "boxel":
-        number `index` of the boxel being explored (None: the next you have not been to)."""
+        number `index` of the boxel being explored (None: the next you have not been to); "system" (S31): any system
+        known here, `index` its id64 (system_target)."""
         if route == "carrier":
             return self.carrier_target()
         if route == "boxel":
             return self.boxel_target(index)
+        if route == "system":
+            return self.system_target(index)
         if route not in ("highway", "survey"):
             return None, "route must be highway or survey"
         if isinstance(index, bool) or not isinstance(index, int):
@@ -16719,10 +16806,16 @@ def make_app(state, hosts=None):
             if n is not None and (isinstance(n, bool) or not isinstance(n, int)):
                 return web.json_response({"error": "index must be a whole number"}, status=400)
             aim = ("boxel", n)
+        elif body.get("route") == "system":      # S31: any system known here, by its id64 (a string: over 2^53)
+            try:
+                aim = ("system", parse_id64(body["id"]))
+            except (ValueError, KeyError, TypeError):
+                return web.json_response({"error": "id must be a system's id64"}, status=400)
         elif "route" in body or "index" in body:   # 🎯 on a system of a route: {route: "highway" | "survey", index}
             aim = (body.get("route"), body.get("index"))
             if aim[0] not in ("highway", "survey") or isinstance(aim[1], bool) or not isinstance(aim[1], int):
-                return web.json_response({"error": "route must be highway, survey or carrier, index a whole number"}, status=400)
+                return web.json_response({"error": "route must be highway, survey, carrier, boxel or system, index a whole number"},
+                                         status=400)
         out, status = state.start_autotarget_run("next", cd, aim)
         return web.json_response(out, status=status)
 

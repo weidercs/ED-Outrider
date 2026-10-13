@@ -129,6 +129,23 @@ def nearest_query(text):
     return need, kind
 
 
+async def nearest_dock(get, text, rows=10):
+    """The voice's "nearest station"... (the words of `text` narrow it): (words, the place said or None). The place is
+    the nearest_dock tool's row the answer names ({system, distance_ly, ...}), for D4's plot there (State.ask)."""
+    need, kind = nearest_query(text)
+    d = await tools.call("nearest_dock", {"need": need, "kind": kind or "any"}, get, rows)
+    if d.get("error"):
+        return d["error"], None
+    rows_ = [dict(p, ly=p["distance_ly"], here=not p["distance_ly"], warn=p["warnings"],
+                  station_type=p.get("station_type"), own=bool(p.get("yours"))) for p in d.get("places") or []]
+    said = dock.spoken({"rows": rows_}, need, kind)
+    # the row dock.spoken names: your own carrier where you are is no answer
+    place = next((p for p in rows_ if not (p["here"] and p["own"])), None)
+    if any("spansh" in str(e).lower() for e in d.get("errors") or []):
+        said = "Spansh could not be reached, so stations are missing. " + said
+    return said, place
+
+
 async def fixed_answer(command, get, rows=10, text=""):
     """The words for a fixed command (hush and unhush are the caller's: they change state, the tools cannot)."""
     if command == "fuel":
@@ -162,16 +179,7 @@ async def fixed_answer(command, get, rows=10, text=""):
             out += f", refuel in {h['refuel_in_jumps']}." if h.get("refuel_in_jumps") else "."
         return out
     if command == "nearest_dock":
-        need, kind = nearest_query(text)
-        d = await tools.call("nearest_dock", {"need": need, "kind": kind or "any"}, get, rows)
-        if d.get("error"):
-            return d["error"]
-        said = dock.spoken({"rows": [dict(p, ly=p["distance_ly"], here=not p["distance_ly"], warn=p["warnings"],
-                                          station_type=p.get("station_type"), own=bool(p.get("yours")))
-                                     for p in d.get("places") or []]}, need, kind)
-        if any("spansh" in str(e).lower() for e in d.get("errors") or []):
-            return "Spansh could not be reached, so stations are missing. " + said
-        return said
+        return (await nearest_dock(get, text, rows))[0]
     if command == "nearest_ggg":   # S27: Outrider's cache only, a guess from the ladder model (said so)
         g = await tools.call("nearest_ggg", {}, get, rows)
         if g.get("error"):

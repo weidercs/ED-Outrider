@@ -24,7 +24,8 @@ for this: see [Other devices on your network](install.md#-other-devices-on-your-
 - **The pages** are on the left in three groups of four: Explore (Now, Nearby, Here, Bio/Geo), Navigate (Bookmarks,
   Search, Map, Plot Route) and Records (History, Log, Materials, My firsts). There is no Overview.
 - **Tap a row** in a table for all of its facts, including the columns too narrow to show, with Show in Here,
-  Bookmark and, on a route's row (game PC), 🎯 Target.
+  Bookmark and, on a route's row or a bookmark (game PC), 🎯 Target. On the galaxy map a tap on a system shows its card,
+  with 🎯 Target when auto-target works on the game PC, and Copy name.
 - **The maps by touch:** on the galaxy map one finger rotates, two fingers move it and a pinch zooms; on Plot Route's
   map two fingers move and pinch.
 - **On a planet** the tablet switches to Now when the surface map appears (the Now button says MAP) and back to your

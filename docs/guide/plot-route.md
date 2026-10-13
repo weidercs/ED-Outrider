@@ -88,6 +88,12 @@ after a 5 s countdown to click back into the game; on the tablet, the row's shee
 and beside a boxel's Next and its rows (see [Boxel exploration](views.md#-boxel-exploration), whose opt-in **auto-target
 the next on arrival** uses the same run).
 
+**🎯 and Plot route anywhere.** A 🎯 also sits beside each bookmark, the header's next stop, the Nearest finder's rows
+and the Exo-Biology checklist's "🔍 nearby" rows (game PC; never your own system). **Plot route** beside a bookmark or
+the next stop puts the system in To and opens the form; it plots at once when you follow no route, and with one it
+waits for your Plot (a new plot replaces the route you follow). A click on a system in the Map tab targets it the same
+way when auto-target can work on this PC, else copies its name (see [the Map](views.md)).
+
 **Is the right system targeted?** The route line (under the tiles, on Now and in the tab) checks what the game has
 targeted against the next stop: "✓ targeted"; "⚠ targeted Ossia, not the next stop Pru Aim XY-Z d1"; or, for a later
 stop of the same route (on purpose, say to skip one), "↷ targeted Ossia, 2 stops ahead". A route plotted in the galaxy
@@ -160,6 +166,10 @@ targeted neutron jump target Hwy Stop 38" (or "Failed to…") under its own aler
 - **Each row shows** how far it is (and a rough jump count), how far from its star (far ones marked), what it has, its
   pads, its docking, and where the report came from and how old it is.
 - **Plot here** puts the system in To and plots it with the plotter chosen above (Exact when Trade is chosen). Following the route works as usual.
+  On the game PC a **🎯** beside it targets the system in the galaxy map.
+- **By voice** ("nearest station", "nearest Vista"...), a place further than 500 ly also gets a neutron route plotted
+  there, unless you are following a route ("You're following a route, so I didn't plot one"). `[highway] voice_plot`
+  switches it off, `voice_plot_ly` sets the distance (Settings → Server).
 - **Docking:**
   - "yours" for your own carrier, "open to all";
   - a **⚠ warning** for carriers set to friends or squadron only (Outrider cannot see the owner's list), and for those

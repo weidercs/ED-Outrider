@@ -5923,7 +5923,7 @@ const settle = async maxMs => {
       return JSON.stringify(o); })()`));
     const want = {here: "likeliest by value: Acies / Informem\nyours on bodies like this (Icy body, thin N2, 75–100 K, Inner Orion Spur): Informem 11 of 14, Acies 3 of 14",
                   grid: ["🔍", false], open: "ves",
-                  rows: [["Eol Prou LW-L c8-324", "4 b", "7.2 ly", "0.34 g", "Mulberry", "✓", "☆", "Copy"]],
+                  rows: [["Eol Prou LW-L c8-324", "4 b", "7.2 ly", "0.34 g", "Mulberry", "✓", "☆", "Copy 🎯"]],   // S29's 🎯 (S31)
                   head: "Nearest reported: Bacterium Vesicula", foot: "143 more further away · reported to Spansh by commanders' uploads; distances from Colonia",
                   bm: ["89128321720906", "Eol Prou LW-L c8-324"], copied: "Eol Prou LW-L c8-324", colourBtn: "🔍 nearby",
                   asked: ["species=ves", "species=ves&colour=Mulberry"], head2: "Nearest reported: Bacterium Vesicula - Mulberry", closed: true};
@@ -6589,6 +6589,97 @@ const settle = async maxMs => {
       /the suggested order ①–④/.test(got.head) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| S30 schematic stops |", good ? "①②③④ with a tinted skip, the path's rough legs, a tap makes a body first, ↺ order undoes it" : JSON.stringify(got), errors.slice(before));
+  }
+  // S31: 🎯 and Plot route anywhere (a bookmark, the header's next stop, a Nearest row, a checklist find: S29's 🎯), the
+  // id64 sent as its exact string (over 2^53); Plot route fills To and plots only when no route is followed. S72: a click
+  // on the Map targets the system when auto-target can work on this PC, else copies its name; the card and the hint under
+  // the map say which; your own system is copied; a touch card has 🎯 Target and Copy name. The posts are stubbed
+  {
+    const w = dom.window, d = w.document, before = errors.length, realFetch = w.fetch, sent = [];
+    w.fetch = (u, o) => {
+      const s = String(u);
+      if (/api\/highway\/(target|plot)/.test(s)) { sent.push([s.replace(/.*api\//, ""), o && o.body ? JSON.parse(o.body) : null]);
+        return Promise.resolve({ok: false, status: 400, json: async () => ({error: "smoke"})}); }
+      return realFetch(u, o);
+    };
+    const got = JSON.parse(w.eval(`(() => {
+      const o = {}, keep = window.__s31 = {bm: data.bookmarks, ns: data.next_stop, pc: data.game_pc, at: data.autotarget, hw: data.highway,
+        sv: data.survey, find: CL.find, md: M.data, copy: copyText, view, to: hEl("hwyTo").value};
+      data.game_pc = true; data.highway = null; data.survey = null;
+      data.bookmarks = [{id: "9007199254740993", name: "Far Out", distance: 12, note: "", created: ""}];
+      renderBookmarks(bmMap());
+      const aim = document.querySelector('#bmRows [data-aim][data-route="system"]');
+      o.bmAim = aim && aim.dataset.aimid;
+      o.bmPlot = !!document.querySelector('#bmRows [data-plotto="Far Out"]');
+      aim.click();
+      data.next_stop = {id: "4242", id64: 4242, name: "Chosen", distance: 40};
+      renderStrip();
+      o.nsAim = (document.querySelector('#nextStopLn [data-aim][data-route="system"]') || {dataset: {}}).dataset.aimid;
+      o.nsPlot = !!document.querySelector('#nextStopLn [data-plotto="Chosen"]');
+      const row = {kind: "station", name: "S", system: "Near Place", id64: "555", ly: 30, ls: 10, services: [], warn: [], source: "Spansh", age_s: 1};
+      o.nearAim = [/data-aimid="555"/.test(nearRowHtml(row)), /data-aim=/.test(nearRowHtml(Object.assign({}, row, {id64: null}))),
+                   /data-aim=/.test(nearRowHtml(Object.assign({}, row, {here: true})))];
+      CL.find = {id: "sp", colour: null, busy: false, answer: {rows: [{id: "777", system: "Bio Place", body: "A 1", ly: 3, gravity: 0.1, colours: [], visited: false}],
+        count: 1, radius: 100, where: "Sol"}};
+      o.findAim = /data-route="system" data-aimid="777"/.test(clFindHtml({id: "sp", name: "Bacterium"}));
+      data.game_pc = false; renderBookmarks(bmMap());
+      o.serverNoAim = !document.querySelector('#bmRows [data-aim]');
+      data.game_pc = true;
+      return JSON.stringify(o); })()`));
+    await settle(1000);
+    // Plot route: no route followed, so it plots; then with one followed, To only (and the form open)
+    d.querySelector('#nextStopLn [data-plotto="Chosen"]').click();
+    await settle(1000);
+    got.plotView = w.eval("view"); got.plotTo = d.getElementById("hwyTo").value;
+    w.eval(`data.highway = {complete: false, destination: "Somewhere", index: 1, total: 3}; renderBookmarks(bmMap());`);
+    d.querySelector('#bmRows [data-plotto="Far Out"]').click();
+    await settle(1000);
+    got.followTo = d.getElementById("hwyTo").value;
+    got.formOpen = d.getElementById("hwyPlot").open;
+    w.eval("data.highway = null");
+    Object.assign(got, JSON.parse(w.eval(`(() => {
+      const o = {}, copied = [];
+      copyText = t => copied.push(t);
+      M.data = {center: {id: "1", x: 0, y: 0, z: 0}, points: []};
+      const pt = {id: "9007199254740993", name: "Far Out", x: 3, y: 4, z: 0, kind: "known", scanned: true};
+      const here = {id: "1", name: "Home", x: 0, y: 0, z: 0, kind: "own", visited: true};
+      data.autotarget = Object.assign({}, data.autotarget, {available: true, missing: [], front: {front: false}, running: false, test: null});
+      hwyRun = null;
+      const last = h => { const m = h.match(/<div class="sec unk">([^<]*)<\\/div>$/); return m && m[1]; };
+      o.cardOn = [last(mapPopHtml(pt)), last(mapPopHtml(here))];
+      const touch = mapPopHtml(pt, true);
+      o.touchOn = [/data-aim="next" data-route="system" data-aimid="9007199254740993"/.test(touch), /data-mapcopy="Far Out"/.test(touch)];
+      mapClick(pt); mapClick(here);
+      hwyRun = {done: false}; mapClick(pt); hwyRun = null;   // a run under way: said, not started again
+      data.autotarget = Object.assign({}, data.autotarget, {available: false});
+      o.cardOff = last(mapPopHtml(pt));
+      o.touchOff = /data-aim/.test(mapPopHtml(pt, true));
+      mapClick(pt);
+      o.copied = copied;
+      return JSON.stringify(o); })()`)));
+    await settle(1000);
+    // the hint under the map follows: target (targeting on), copy (off)
+    w.eval(`data.autotarget = Object.assign({}, data.autotarget, {available: true, missing: []}); document.querySelector('[data-view="map"]').click();`);
+    got.hintOn = d.getElementById("mClickWhat").textContent;
+    w.eval(`data.autotarget = Object.assign({}, data.autotarget, {available: false}); render();`);
+    got.hintOff = d.getElementById("mClickWhat").textContent;
+    w.eval(`(() => { const k = window.__s31; data.bookmarks = k.bm; data.next_stop = k.ns; data.game_pc = k.pc; data.autotarget = k.at;
+      data.highway = k.hw; data.survey = k.sv; CL.find = k.find; M.data = k.md; copyText = k.copy; hwyRun = null; hEl("hwyTo").value = k.to;
+      document.querySelector('[data-view="' + k.view + '"]').click(); })()`);
+    await settle(1000);
+    w.fetch = realFetch;
+    got.sent = sent;
+    const big = "9007199254740993";
+    const want = {bmAim: big, bmPlot: true, nsAim: "4242", nsPlot: true, nearAim: [true, false, false], findAim: true, serverNoAim: true,
+                  plotView: "hwy", plotTo: "Chosen", followTo: "Far Out", formOpen: true,
+                  cardOn: ["click to target it in game (5 s)", "click to copy its name"], touchOn: [true, true],
+                  cardOff: "click to copy its name", touchOff: false, copied: ["Home", "Far Out"],
+                  hintOn: "target it in game (5 s) (your own system: copy its name)", hintOff: "copy its name",
+                  sent: [["highway/target", {route: "system", id: big}], ["highway/plot", "Chosen"], ["highway/target", {route: "system", id: big}]]};
+    got.sent = got.sent.map(([u, b]) => [u, u === "highway/plot" ? b && b.to : b]);
+    const good = Object.keys(want).every(k => JSON.stringify(got[k]) === JSON.stringify(want[k])) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| S31 aim and plot anywhere, S72 map click |", good ? "🎯 on bookmarks, the next stop, Nearest and a find by the exact id64, Plot route plots only with no route followed, the Map's click targets or copies as its card and hint say" : JSON.stringify(got), errors.slice(before));
   }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",

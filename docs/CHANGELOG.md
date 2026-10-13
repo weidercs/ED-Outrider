@@ -2,6 +2,25 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-13 · 🎯 and Plot route anywhere, a click on the Map targets, and the voice plots far places
+- **🎯 anywhere** (S31): POST `/api/highway/target` takes {route: "system", id} (the id64 as a string: over 2^53 a JSON
+  number rounds), `State.system_target` (route_target's "system"): any system Outrider can name by id64 (`locate`, else
+  `listed_system`: the Map's cached points and boost stars, the next stop, your carrier), never your own. 🎯 (game PC)
+  beside each bookmark, the header's next stop, the Nearest finder's rows (their systems kept in `nearest_found` for
+  `locate`, bounded) and the Exo-Biology checklist's "🔍 nearby" rows (S29's 🎯); the tablet's row sheet passes it on.
+- **Plot route** beside a bookmark and the next stop: To filled, Plot Route opened on its form, plotted at once only
+  when no route is followed (with one, Plot is your click).
+- **The co-pilot button** falls back to the header's next stop after the survey route, the Highway and the boxel; a
+  complete route counts as none.
+- **A click on the Map** (S72) targets the system in game when auto-target can work on this PC (its keyboard and
+  bindings, on the game PC), else copies its name; the card's last line and the hint under the map say which; your own
+  system is copied; a run under way is said, not doubled. A tap shows the card with 🎯 Target and Copy name (the card
+  takes taps then: `#pop.taps`).
+- **The voice plots far places** (D4, option A): "nearest station" (or carrier, Vista, a trader...) also plots a
+  neutron route to the place's system when it is further than `[highway] voice_plot_ly` (500 ly; `voice_plot` on by
+  default); never while a route you have not finished is followed or a plot runs, said in a sentence added to the
+  answer (`outrider.ask.nearest_dock`, `State.voice_plot`). The answer's shape is unchanged.
+
 ## 2026-10-13 · Survey routes skip finished systems, and a wrong-target check on the route line
 - **Survey routes skip finished systems** (S12): a Road to Riches or Exomastery route's next stop passes over the
   systems after where you are that came with work and have none left by your journal (`riches.had_work`,

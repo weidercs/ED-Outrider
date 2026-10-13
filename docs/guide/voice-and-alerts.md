@@ -229,7 +229,8 @@ Piper voice by the window that speaks (a PC browser, or the tablet with Play ale
 every open page. Outrider knows these without any AI: **status report, fuel, unsold, next jump, what's left here,
 nearest unvisited, nearest station** (or carrier, Vista, cartographics, repair, refuel, shipyard, material trader,
 raw material trader, "where can I sell": see
-[Nearest place to dock](plot-route.md#-nearest-place-to-dock)), **nearest green gas giant** (a guess from what
+[Nearest place to dock](plot-route.md#-nearest-place-to-dock); a place further than 500 ly also gets a neutron route
+plotted there while you follow none), **nearest green gas giant** (a guess from what
 Outrider has cached: see [Potential green gas giants](views.md#-potential-green-gas-giants)), **hush** and **unhush**. Their phrases are in `resources/ask.json`; edit them freely.
 
 Anything else goes to an optional AI layer, off by default (`[assistant] enabled = false`, also in ⚙ Settings →

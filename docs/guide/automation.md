@@ -47,7 +47,8 @@ Docker), where the HOTAS is plugged in:
   Elite not the active window it says so and presses nothing). It targets the next system of your Road to
   Riches, Exomastery or trade route first, then the Highway's while you are on it, then the Next of the boxel you
   explore (as 🎯 beside it does: a name the galaxy map cannot find is probably the boxel's end), then, off the Highway,
-  its closest system. Success or failure is said as for auto-target; with
+  its closest system, and last your chosen next stop (the header's, from a bookmark; a finished route counts as none).
+  Success or failure is said as for auto-target; with
   nothing to target, the voice says so in its personality. Out of the ship (the SRV, on foot, a fighter) a tap does
   nothing. A press during that half second cancels it before any key (a double tap that came a little slow) and
   gives the status report instead; so does a press while the run is still waiting with no key pressed (waiting out

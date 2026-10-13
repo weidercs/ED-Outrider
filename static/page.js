@@ -540,8 +540,10 @@ function renderStrip() {
     ["Explore", "Exobiologist"].filter(k => cm.ranks && cm.ranks[k]).map(k => { const r = cm.ranks[k];
       return ln(`<span title="${k === "Explore" ? "exploration" : "exobiology"} rank${r.progress != null ? `, ${r.progress}% to the next` : ""}">${k === "Explore" ? "Explorer" : "Exobiologist"}: <b>${esc(r.name)}</b>${r.progress != null ? ` <span class="unk">${r.progress}%</span>` : ""}</span>`); }).join("");
   const ns = data.next_stop, nsEl = document.getElementById("nextStopLn");
+  // S31: 🎯 and Plot route beside it
   nsEl.innerHTML = ns ? `<span title="your chosen next stop (clears when you arrive)">next stop:</span> <span class="copy" data-name="${esc(ns.name)}" title="click to copy">${esc(ns.name)}</span>` +
     (ns.distance != null ? ` · <b>${ns.distance.toLocaleString("en-US", {maximumFractionDigits: 1})} ly</b>${jr ? ` ≈ ${jumpsFor(ns.distance)} jump${jumpsFor(ns.distance) === 1 ? "" : "s"}` : ""}` : "") +
+    sysAimBtn(ns.name, ns.id) + plotBtn(ns.name) +
     ` <span class="unk" id="nsClear" title="clear the next stop" style="cursor:pointer">✕</span>` : "";
   const p0 = data.position, wl = document.getElementById("whereLn");
   wl.innerHTML = p0 ? `<span title="galactic coordinates (x / y / z)">Coord: ${[p0.x, p0.y, p0.z].map(v => v.toFixed(2)).join(" / ")}</span>` +
@@ -2922,7 +2924,12 @@ function render() {
   if (view === "now") renderNow(); else renderSurface();   // Now's map, or the on-body strip's copy
   nowWake();
   // opening the map asks again (Codex F5: the system's own history and scans changed while it was closed, A -> B -> A)
-  if (view === "map") { if (!M.open) M.key = null; M.open = true; loadMap(); drawMap(); } else M.open = false;
+  if (view === "map") {
+    if (!M.open) M.key = null; M.open = true; loadMap(); drawMap();
+    // S72: what a click does here (the card under the pointer says it per system)
+    const cw = document.getElementById("mClickWhat");   // the tablet's hint is its own (a tap shows the card)
+    if (cw) cw.textContent = mapCanTarget() ? `target it in game${hwyFront() ? "" : " (5 s)"} (your own system: copy its name)` : "copy its name";
+  } else M.open = false;
   if (view === "hwy") { loadHwy(); loadRich(); }
   refreshPop();
   const jr = effRange();
@@ -3221,7 +3228,7 @@ function renderBookmarks(bms) {
   const fk = focusKey("bmRows");
   document.getElementById("bmRows").innerHTML = list.map(b => `<tr>
       <td class="bmcell">${bmIcon(b.id, b.name, bms)}</td>
-      <td class="name" data-name="${esc(b.name)}" title="click to copy">${nameWords(b.name)}</td>
+      <td class="name" data-name="${esc(b.name)}" title="click to copy">${nameWords(b.name)}${sysAimBtn(b.name, b.id)}${plotBtn(b.name)}</td>
       <td class="num dist">${b.distance == null ? "?" : b.distance.toLocaleString("en-US", {maximumFractionDigits: 2})}</td>
       <td class="note">${esc(b.note) || `<span class="unk">no note</span>`}</td>
       <td class="hide-sm unk c2hide">${esc((b.created || "").slice(0, 10))}</td></tr>`).join("") ||
@@ -4483,7 +4490,8 @@ function nearRowHtml(r) {
     `<td class="num">${r.here ? "here" : `${Math.round(r.ly).toLocaleString()} ly`}${r.jumps ? `<div class="unk">≈ ${r.jumps} jump${r.jumps === 1 ? "" : "s"}</div>` : ""}</td>` +
     `<td class="num${r.far ? " warnc" : ""}">${r.ls == null ? `<span class="unk">?</span>` : `${r.ls.toLocaleString()} ls`}${r.far ? `<div class="small">⚠ far from the star</div>` : ""}</td>` +
     `<td class="has">${has}</td><td class="num">${esc(r.pads || "")}</td><td class="dk">${dock}</td><td class="src unk">${src}</td>` +
-    `<td class="num">${r.here ? `<span class="unk">${r.own ? "aboard" : "here"}</span>` : `<button type="button" class="mini go" data-nplot="${esc(r.system || "")}">Plot here</button>`}</td></tr>`;
+    `<td class="num">${r.here ? `<span class="unk">${r.own ? "aboard" : "here"}</span>` : `<button type="button" class="mini go" data-nplot="${esc(r.system || "")}">Plot here</button>` +
+      sysAimBtn(r.system, r.id64)}</td></tr>`;
 }
 function renderNearest() {
   const a = NR.answer, rows = document.getElementById("nearRows"), foot = document.getElementById("nearFoot");
@@ -5260,7 +5268,7 @@ function clFindHtml(r) {
     `<td class="num">${x.gravity == null ? "" : `${x.gravity.toFixed(2)} g`}</td>` +
     `<td>${f.colour ? "" : esc(x.colours.join(", "))}</td><td>${x.visited ? '<span class="good" title="you have been to this system">✓</span>' : ""}</td>` +
     `<td>${bmIcon(x.id, x.system, bms)}</td>` +
-    `<td><button type="button" class="mini" data-clcopy="${esc(x.system)}" title="copy the system's name">Copy</button></td></tr>`).join("");
+    `<td><button type="button" class="mini" data-clcopy="${esc(x.system)}" title="copy the system's name">Copy</button>${sysAimBtn(x.system, x.id)}</td></tr>`).join("");
   const more = a.count > a.rows.length ? `${(a.count - a.rows.length).toLocaleString()} more further away · ` : "";
   return head + `<table class="clfindt">${rows}</table><div class="unk">${more}reported to Spansh by commanders' uploads; distances from ${esc(a.where || "you")}</div></div>`;
 }
@@ -5808,7 +5816,17 @@ function mapHit(e) {
   for (const q of M.proj) { const dd = (q.sx - x) ** 2 + (q.sy - y) ** 2; if (dd < bd) { bd = dd; best = q; } }
   return best;
 }
-function mapPopHtml(pt) {
+// S72: a click on a Map system targets it in game when auto-target can work on this PC (the virtual keyboard and the
+// bindings it needs, on the game PC: not the "target automatically" switch), else copies its name; your own system and
+// a point without an id64 are copied only. `touch`: the tapped card's buttons (🎯 Target, Copy name)
+const mapCanTarget = () => !!(data && data.game_pc !== false && data.autotarget && data.autotarget.available &&
+                              !(data.autotarget.missing || []).length);
+const mapAimable = pt => !!pt.id && /^\d+$/.test(String(pt.id)) && String(pt.id) !== String(M.data.center.id ?? M.data.center.id64);
+function mapClickWords(pt) {
+  if (!mapAimable(pt) || !mapCanTarget()) return "click to copy its name";
+  return `click to target it in game${hwyFront() ? "" : " (5 s)"}`;
+}
+function mapPopHtml(pt, touch = false) {
   const c = M.data.center, dd = Math.hypot(pt.x - c.x, pt.y - c.y, pt.z - c.z);
   const boost = pt.boost ? (pt.boost === "N" ? "neutron star: jet-cone boost ×4" : "white dwarf: jet-cone boost ×1.5") : "";
   const what = (c.id ?? String(c.id64)) === pt.id ? "you are here" : pt.first ? "you discovered it" : pt.visited ? (pt.edsm ? "visited (your EDSM flight log)" : "visited")
@@ -5819,7 +5837,18 @@ function mapPopHtml(pt) {
   return `<h3>${esc(pt.name)}</h3><div>${dd.toFixed(2)} ly away · ${what2}</div>` +
     (pt.star ? `<div>main star: <span class="mono">${esc(pt.star)}</span></div>` : "") +
     (pt.arrived ? `<div class="unk">on your path: arrived ${esc(pt.arrived.replace("T", " ").replace("Z", ""))}</div>` : "") +
-    (b ? `<div class="sec">★ ${esc(b.note) || "bookmarked"}</div>` : "") + `<div class="sec unk">click to copy name</div>`;
+    (b ? `<div class="sec">★ ${esc(b.note) || "bookmarked"}</div>` : "") +
+    (!touch ? `<div class="sec unk">${mapClickWords(pt)}</div>` : `<div class="sec mapacts">` +
+      (mapAimable(pt) && mapCanTarget() ? `<button type="button" class="mini" data-aim="next" data-route="system" data-aimid="${esc(String(pt.id))}">🎯 Target</button> ` : "") +
+      `<button type="button" class="mini" data-mapcopy="${esc(pt.name)}">Copy name</button></div>`);
+}
+// S72: a mouse click on a system: target it (mapCanTarget) or copy its name; a run under way is said, not doubled
+function mapClick(pt) {
+  if (!mapAimable(pt) || !mapCanTarget()) return copyText(pt.name);
+  const a = data.autotarget || {}, t = a.test;
+  if ((hwyRun && !hwyRun.done) || a.running || (t && ["counting", "running"].includes(t.state)))
+    return toast("auto-target is already running: wait for it to finish");
+  hwyAutoStart("next", {route: "system", id: String(pt.id)});
 }
 // Two fingers on a map (pure): from where they were (a) to where they are (b), each [{x, y}, {x, y}], the move of their
 // midpoint (dx, dy), the ratio of their spread (scale: a pinch), and the midpoint now (x, y)
@@ -5863,7 +5892,7 @@ mapCanvas.addEventListener("pointermove", e => {
   }
   const q = mapHit(e);
   if ((q && q.pt) !== (M.hover && M.hover.pt)) { M.hover = q; drawMap(); }
-  if (q) { popId = "map"; pop.innerHTML = mapPopHtml(q.pt); pop.style.display = "block"; placePop(e.clientX, e.clientY); }
+  if (q) { popId = "map"; pop.innerHTML = mapPopHtml(q.pt); pop.style.display = "block"; pop.classList.remove("taps"); placePop(e.clientX, e.clientY); }
   else if (popId === "map") hidePop();
 });
 function mapPointerEnd(e) {
@@ -5877,8 +5906,9 @@ function mapPointerEnd(e) {
   const click = e.type === "pointerup" && M.drag && !M.drag.moved && !M.drag.pan; M.drag = null; mapCanvas.classList.remove("dragging");
   if (!click) return;
   const q = mapHit(e); if (!q) return;
-  if (e.pointerType === "touch") { popId = "map"; pop.innerHTML = mapPopHtml(q.pt); pop.style.display = "block"; placePop(e.clientX, e.clientY); }
-  else copyText(q.pt.name);
+  if (e.pointerType === "touch") {   // the card, with its buttons (it takes taps: .taps)
+    popId = "map"; pop.innerHTML = mapPopHtml(q.pt, true); pop.style.display = "block"; pop.classList.add("taps"); placePop(e.clientX, e.clientY);
+  } else mapClick(q.pt);
 }
 mapCanvas.addEventListener("pointerup", mapPointerEnd);
 mapCanvas.addEventListener("pointercancel", mapPointerEnd);
@@ -5975,15 +6005,48 @@ let hwyRun = null;   // the run this page started (test now, Target next, Retry)
 // front: Outrider brings the game to the front itself (no countdown), note: why it counts down after all (S74)}
 // Target next (review Q4): beside the line's next system; the run's countdown shows on it while this page's run counts
 // 🎯 on a route system (the author, 2026-10-07): route "highway" | "survey" and its row, or (no route) the Highway's
-// Target next as before (the next system, off the route the nearest); `icon`: just 🎯 (a list's rows)
+// Target next as before (the next system, off the route the nearest); `icon`: just 🎯 (a list's rows). Route "system"
+// (S31): any system known here, `index` its id64 as the exact string (data-aimid: over 2^53 a Number would round it)
 function hwyAimBtn(name, route = null, index = null, icon = false) {
   const key = route ? `${route}:${index ?? ""}` : "next", r = hwyRun, mine = r && r.kind === "next" && !r.done && (r.key || "next") === key;
   const label = !mine ? (icon ? "🎯" : "🎯 target") : r.n > 0 ? `🎯 in ${r.n} s` : "🎯 targeting…";
   return ` <button type="button" class="mini hwyaim${icon ? " icon" : ""}" data-aim="next"` +
-    (route ? ` data-route="${route}"${index != null ? ` data-index="${index}"` : ""}` : "") + `${mine ? " disabled" : ""}` +
+    (route ? ` data-route="${route}"${index != null ? ` data-${route === "system" ? "aimid" : "index"}="${esc(String(index))}"` : ""}` : "") + `${mine ? " disabled" : ""}` +
     ` title="target ${esc(name)} in the galaxy map${hwyFront() ? " (Outrider brings the game to the front)" : TABLET ? ""
       : ", 5 s from now: click back into the game meanwhile"}">${label}</button>`;
 }
+// S31: 🎯 on any system the page lists (a bookmark, the header's next stop, a Nearest row, a checklist find), by its id64
+// string; on the game PC only (it presses keys there), never for the system you are in
+const sysAimBtn = (name, id) => id != null && data && data.game_pc !== false && String(id) !== posId() ? hwyAimBtn(name, "system", String(id), true) : "";
+// the request's aim from a 🎯 button's data (the page-wide handler, the tablet's row sheet): {route, index} or {route, id}
+const aimOf = d => !d.route ? null : d.route === "system" ? {route: "system", id: d.aimid}
+  : Object.assign({route: d.route}, d.index != null && d.index !== "" ? {index: Number(d.index)} : {});
+// S31: "Plot route" beside a system (a bookmark, the header's next stop): it goes in Plot Route's To and the tab opens on
+// the form; plotted at once only when no route is followed (the plan's default: with one, Plot replaces it, your click)
+const routeFollowed = () => !!data && [data.highway, data.survey].some(s => s && !s.complete);
+const plotBtn = name => ` <button type="button" class="mini plotto" data-plotto="${esc(name)}" title="${esc(`put ${name} in Plot Route's To` +
+  (routeFollowed() ? " (you follow a route: press Plot there to replace it)" : " and plot a route there"))}">Plot route</button>`;
+// redraw where S31's 🎯 shows, so the one clicked counts down
+function renderSysAims() {
+  if (!data) return;
+  renderStrip(); renderBookmarks(bmMap());
+  if (document.getElementById("nearDlg").open) renderNearest();
+  if (CL.find) clDrawSide();
+}
+function plotRouteTo(name) {
+  hEl("hwyTo").value = name;
+  if (!["exact", "neutron"].includes(hwyPlotter())) { const x = hForm.querySelector('[name=hwyPlotter][value="exact"]'); x.checked = true; x.dispatchEvent(new Event("change", {bubbles: true})); }
+  H.openForm = true;   // renderHwy opens the form (it folds away while a route is followed)
+  if (view !== "hwy") { const v = document.querySelector('[data-view="hwy"]'); if (v) v.click(); } else renderHwy();
+  if (routeFollowed()) { toast(`Plot Route: to ${name} · press Plot to replace the route you follow`); return; }
+  hForm.dispatchEvent(new Event("submit", {cancelable: true, bubbles: true}));
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest && e.target.closest("[data-plotto]");
+  if (!b) return;
+  e.stopPropagation(); e.preventDefault();
+  plotRouteTo(b.dataset.plotto);
+}, true);
 // S74: whether a run brings Elite's window to the front itself (no countdown), from data.autotarget.front
 function hwyFront() {
   const f = data && data.autotarget && data.autotarget.front;
@@ -6385,7 +6448,7 @@ async function hwyAutoStart(kind, aim = null) {
   try { r = await fetch(url, opts); j = await r.json(); }
   catch { show("could not reach Outrider"); return; }
   if (!r.ok) { show(`cannot ${w}: ${j.error || "?"}`); return; }
-  const mine = hwyRun = {seq: j.seq, kind, key: aim ? `${aim.route}:${aim.index ?? ""}` : "next", system: j.system, n: j.in, dry: j.dry_run, done: false, msg: "",
+  const mine = hwyRun = {seq: j.seq, kind, key: aim ? `${aim.route}:${aim.index ?? aim.id ?? ""}` : "next", system: j.system, n: j.in, dry: j.dry_run, done: false, msg: "",
                          at: Date.now(), front: !!j.front, note: null, timer: null};
   const tick = mine.tick = () => {
     if (mine.done || mine !== hwyRun) return;
@@ -6393,6 +6456,7 @@ async function hwyAutoStart(kind, aim = null) {
       : mine.front && !mine.note ? `bringing the game to the front: targeting ${j.system}…` : `targeting ${j.system}…`;
     drawHwyAuto(); renderHwyLine(); renderCarrier(); renderTilesLine(); drawBoxel();   // the carrier's and the boxel's 🎯 count down too
     if (view === "hwy") renderHwy();   // the list's 🎯 counts down too
+    if (mine.key.startsWith("system:")) renderSysAims();   // S31's 🎯 (a bookmark, the next stop, Nearest, a find)
     if (mine.n > 0) { mine.n--; mine.timer = setTimeout(tick, 1000); }
   };
   tick();
@@ -6417,8 +6481,7 @@ document.addEventListener("click", e => {
   const b = e.target.closest("[data-aim]");
   if (!b) return;
   e.stopPropagation(); e.preventDefault();
-  if (!b.disabled) hwyAutoStart(b.dataset.aim, b.dataset.route ? Object.assign({route: b.dataset.route},
-    b.dataset.index != null ? {index: Number(b.dataset.index)} : {}) : null);
+  if (!b.disabled) hwyAutoStart(b.dataset.aim, aimOf(b.dataset));
 }, true);
 function renderHwy() {
   if (view !== "hwy") return;
@@ -6441,6 +6504,7 @@ function renderHwy() {
     H.watch = false;
     hEl("hwyPlot").open = !rid; H.routeId = rid; HM.auto = true;
   }
+  if (H.openForm) { H.openForm = false; hEl("hwyPlot").open = true; }   // S31's Plot route: the form, To filled
   const p = hd.plotting;
   if (p && p.state !== "running" && H.status && H.status.cls === "busy") H.status = null;
   drawHwyStatus();
@@ -7465,7 +7529,12 @@ function showPop(td, x, y) {
   popId = td.dataset.id;
   pop.innerHTML = popHtml(s); pop.style.display = "block"; placePop(x, y);
 }
-function hidePop() { popId = null; pop.style.display = "none"; }
+function hidePop() { popId = null; pop.style.display = "none"; pop.classList.remove("taps"); }
+// the Map's tapped card (S72): Copy name (its 🎯 Target goes through the page-wide [data-aim] handler)
+pop.addEventListener("click", e => {
+  const b = e.target.closest("[data-mapcopy]");
+  if (b) { copyText(b.dataset.mapcopy); hidePop(); }
+});
 let lastPointer = null;
 document.addEventListener("mousemove", e => {
   if (e.target === mapCanvas) return;  // the map draws its own hover
@@ -10615,7 +10684,7 @@ function tabSetup() {
     tabClose(document.getElementById("tabSheet"));
     if (b.dataset.act === "here") showInHere(b.dataset.id);
     else if (b.dataset.act === "updskip") skipUpdate();
-    else if (b.dataset.act === "aim") hwyAutoStart("next", {route: b.dataset.route, index: Number(b.dataset.index)});
+    else if (b.dataset.act === "aim") hwyAutoStart("next", aimOf(b.dataset));
     else if (b.dataset.act === "bm") openBookmark(b.dataset.id, b.dataset.name);
   });
   document.getElementById("tabBanner").onclick = () => tabBannerHide();
@@ -10631,7 +10700,7 @@ function tabSetup() {
   // before the page's own handlers (a name's click copies it, which means nothing on a tablet)
   document.addEventListener("click", tabRowTap, true);
   const hint = document.querySelector("#mapView .hint");   // the galaxy map by touch
-  if (hint) hint.textContent = "One finger rotates · two fingers move · pinch to zoom · tap a system for its card. " +
+  if (hint) hint.textContent = "One finger rotates · two fingers move · pinch to zoom · tap a system for its card (🎯 Target when auto-target works here, Copy name). " +
     "The grid is the galactic plane through your position; stalks drop each system onto it.";
   tabDrawNav(); tabDrawCaption(); tabDrawAsk();
 }
@@ -10770,7 +10839,8 @@ function tabOpenRow(table, tr) {
   document.getElementById("tabSheetActs").innerHTML =
     (id ? `<button type="button" class="tb-btn" data-act="here" data-id="${esc(id)}">Show in Here</button>` : "") +
     (bm ? `<button type="button" class="tb-btn" data-act="bm" data-id="${esc(bm.dataset.bm)}" data-name="${esc(bm.dataset.name || name)}">Bookmark…</button>` : "") +
-    (aim && data && data.game_pc !== false ? `<button type="button" class="tb-btn" data-act="aim" data-route="${esc(aim.dataset.route)}" data-index="${esc(aim.dataset.index)}">🎯 Target</button>` : "");
+    (aim && data && data.game_pc !== false ? `<button type="button" class="tb-btn" data-act="aim" data-route="${esc(aim.dataset.route)}"` +
+      ["index", "aimid"].filter(k => aim.dataset[k] != null).map(k => ` data-${k}="${esc(aim.dataset[k])}"`).join("") + `>🎯 Target</button>` : "");
   tabShow(document.getElementById("tabSheet"));
 }
 // ---- the settings sheet: the theme, dim, this screen's size (CSS px), the app's version, sign out, and the app's own

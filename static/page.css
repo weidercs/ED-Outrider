@@ -116,6 +116,8 @@ td.bodies { cursor: help; }
 #pop { position: fixed; z-index: 5; max-width: 380px; background: var(--panel); border: 1px solid var(--line);
   border-radius: 8px; padding: 10px 12px; box-shadow: 0 6px 24px rgba(0,0,0,.35); font-size: 13px;
   pointer-events: none; display: none; }
+#pop.taps { pointer-events: auto; }   /* the Map's tapped card (S72): its buttons take the tap */
+#pop .mapacts { display: flex; gap: 6px; flex-wrap: wrap; }
 #pop h3 { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--accent); }
 #pop .sec { margin-top: 6px; }
 #pop .lbl { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }

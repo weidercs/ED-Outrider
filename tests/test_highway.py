@@ -1190,7 +1190,8 @@ class HighwayH1(unittest.TestCase):
               "autotarget_search_wait": 2.0, "autotarget_key_delay": 0.05, "autotarget_keys": {},
               "autotarget_plot": ["hold CamZoomOut 0.2", "hold UI_Select 1"],
               "autotarget_search": ["hold CamYawRight 0.3", "press UI_Up", "press UI_Select"],
-              "autotarget_submit": ["wait 1.5", "press Enter", "wait 0.5", "press Enter"], "autotarget_dry_run": False}
+              "autotarget_submit": ["wait 1.5", "press Enter", "wait 0.5", "press Enter"], "autotarget_dry_run": False,
+              "voice_plot": True, "voice_plot_ly": 500.0}
         self.assertEqual(st["highway"], dict({"clipboard": True, "autotarget": False, "autotarget_delay": 5.0, "efficiency": 60}, **bg))
         back = tomllib.loads(ed_outrider.config_text(st))["highway"]
         self.assertEqual(back, dict({"clipboard": True, "autotarget": False, "autotarget_delay": 5, "efficiency": 60}, **bg))
@@ -2714,6 +2715,83 @@ class HighwayAutoTarget(unittest.TestCase):
         started, last = asyncio.run(go())
         self.assertEqual((started[0], started[1]["system"]), (200, "Bridge B"))
         self.assertEqual((last["done"], last["system"]), (True, "Bridge B"))
+
+    def test_aim_at_any_system(self):
+        """S31: 🎯 on any system the page lists, route "system" by its id64 (the request's id a string: over 2^53 a JSON
+        number would round): located where Outrider knows it (locate), else a Map point (S72: Spansh's systems around you,
+        the boost stars), your next stop or your carrier's system; never the system you are in; the same run as 🎯."""
+        import asyncio
+        from aiohttp.test_utils import TestClient, TestServer
+        self.state.honker, self.state.targeter = self.honker, self.targeter
+        self.j.status_json = self.status
+        R = self.state.route_target
+        self.assertEqual(R("system", 102), (None, "your position is not known yet"))
+        hwy_jump(self, 1, 101, "Neu A", 50)
+        self.assertEqual(R("system", 102), (None, "that system is not known here"))
+        self.assertEqual(R("system", 101), (None, "you are in Neu A already"))
+        self.assertEqual(R("system", "102")[1], "id must be a system's id64")
+        big = 2 ** 53 + 1   # a JavaScript number would read it as 2^53
+        self.state.map_cache[(101, 50)] = ({102: {"name": "Bridge B", "x": 70, "y": 0, "z": 0},
+                                            big: {"name": "Far Out", "x": 90, "y": 0, "z": 0}}, None)
+        self.state.map_cache[("boost", 101, 50)] = {"points": [{"id": "555", "name": "Col 285 Sector AB-C d13-5", "x": 60,
+                                                                "y": 0, "z": 0, "boost": "N"}], "complete_to": None}
+        self.assertEqual(R("system", 102)[0], {"name": "Bridge B", "id64": 102, "here": 101, "route": None})
+        self.assertEqual(R("system", big)[0]["name"], "Far Out")
+        self.assertEqual(R("system", 555)[0]["name"], "Col 285 Sector AB-C d13-5")
+        ed_outrider.meta_set(self.db, "next_stop", {"id64": 777, "name": "Chosen", "x": 1, "y": 2, "z": 3})
+        self.assertEqual(R("system", 777)[0]["name"], "Chosen")
+        self.j.carrier = {"id": 3700000001, "id64": 778, "system": "Carrier Place"}
+        self.assertEqual(R("system", 778)[0]["name"], "Carrier Place")
+
+        async def go():
+            out = {}
+            async with TestClient(TestServer(ed_outrider.make_app(self.state))) as c:
+                async def post(body):
+                    r = await c.post("/api/highway/target", json=body)
+                    return r.status, await r.json()
+                out["bad"] = [await post(b) for b in ({"route": "system"}, {"route": "system", "id": "x"},
+                                                      {"route": "system", "id": True}, {"route": "system", "id": "999"})]
+                out["big"] = await post({"route": "system", "id": str(big), "countdown": 10})
+                self.state.autotarget_test_task.cancel()
+                await asyncio.sleep(0)
+                self.state.autotarget_test = None
+                out["started"] = await post({"route": "system", "id": "102", "countdown": 0})
+                await self.state.autotarget_test_task
+                out["last"] = dict(self.state.autotarget_last)
+            return out
+        out = asyncio.run(go())
+        self.assertEqual([b[0] for b in out["bad"]], [400] * 4)
+        self.assertEqual(out["bad"][3][1]["error"], "that system is not known here")
+        self.assertEqual((out["big"][0], out["big"][1]["system"]), (200, "Far Out"))
+        self.assertEqual((out["started"][0], out["started"][1]["system"]), (200, "Bridge B"))
+        self.assertEqual((out["last"]["done"], out["last"]["system"]), (True, "Bridge B"))
+
+    def test_copilot_button_falls_back_to_the_next_stop(self):
+        """S31: after the survey route, the Highway and the boxel, the co-pilot button targets the header's next stop (a
+        system you chose); a complete route counts as none, so it comes through; a route you follow stays first."""
+        import asyncio
+        self.state.honker, self.state.targeter = self.honker, self.targeter
+        self.status["flags"] |= ed_outrider.FLAG_IN_MAIN_SHIP
+        self.j.status_json = self.status
+        self.state.COPILOT_TARGET_DELAY_S = 0.01
+        N = self.state.copilot_next
+        hwy_jump(self, 1, 101, "Neu A", 50)
+        self.assertEqual(N(), (None, "no route is plotted"))
+        ed_outrider.meta_set(self.db, "next_stop", {"id64": 102, "name": "Bridge B", "x": 70, "y": 0, "z": 0})
+        self.assertEqual(N(), (("next", ("system", 102)), None))
+
+        async def press():
+            self.state.copilot_gesture("status")
+            await self.state.autotarget_test_task
+        asyncio.run(press())
+        self.assertEqual((self.state.autotarget_last["system"], self.state.autotarget_last["done"]), ("Bridge B", True))
+        hwy_plot_exact(self)   # a route you are on (its start): first
+        self.assertEqual(N(), (("next", None), None))
+        hw = ed_outrider.meta_get(self.db, "highway")
+        ed_outrider.meta_set(self.db, "highway", dict(hw, done_ts=self.ts(0)))   # complete: as none
+        self.assertEqual(N(), (("next", ("system", 102)), None))
+        self.state.set_next_stop(None)
+        self.assertEqual(N(), (None, "the highway is complete"))
 
     def test_supercharge_during_a_manual_run_starts_no_second(self):
         """Review 2026-10-08 #1: a supercharge while Target next (or 🎯, or the co-pilot's tap) is counting down or

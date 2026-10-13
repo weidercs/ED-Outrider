@@ -54,7 +54,9 @@ and values as a spreadsheet.
 <td width="50%" valign="top">
 <b>Map</b> — a 3D view: left-drag to rotate, right-drag to move, scroll to zoom. Your path in orange,
 your first discoveries in gold, visited systems in blue (or colour them by star class; by touch: one finger rotates, two move,
-pinch zooms); tick <i>boost stars</i> for neutron stars and white dwarfs.
+pinch zooms); tick <i>boost stars</i> for neutron stars and white dwarfs. A click on a system targets it in the galaxy
+map when auto-target can work on this PC, else copies its name (the card says which; a tap shows the card with 🎯 Target
+and Copy name).
 <br><br><img src="../images/map.png" alt="The 3D map">
 </td>
 <td width="50%" valign="top">
@@ -132,7 +134,9 @@ The **Overview** at the top shows Here and Nearby together: drag the divider, sw
 Standard / Boxel switch sits on its bar, left of ▾ This system.
 
 **Bookmarks** is its own tab: the systems you have bookmarked (☆ beside any system), each with its note and distance.
-The same ☆ sets your **next stop**, shown in the header until you get there. **Plot Route** has its own page:
+The same ☆ sets your **next stop**, shown in the header until you get there. On the game PC a **🎯** beside a bookmark
+or the next stop targets it in the galaxy map, and **Plot route** puts it in Plot Route's To (plotted at once when you
+follow no route). **Plot Route** has its own page:
 [Plot Route](plot-route.md).
 
 On a window of at least about 900 × 600 the page fits the window: the header stays put and each list scrolls
@@ -314,7 +318,7 @@ for its name and your completion there. The line above the boxes counts it up: "
 **🔍** beside a species you have not found (and **🔍 nearby** beside a colour of it you have not found, and in its
 column) asks Spansh for the nearest bodies where commanders reported it, in that colour when you picked one: up to 25,
 nearest first, each with its distance, gravity, the colours reported there, ✓ if you have been to the system, ☆ to
-bookmark it and **Copy** for the name to paste into the galaxy map. It needs the internet, and lists only what
+bookmark it, **Copy** for the name to paste into the galaxy map and, on the game PC, **🎯** to target it there. It needs the internet, and lists only what
 commanders' uploads reported to Spansh.
 
 **Completion** counts what you have done, not only what is finished: each species that can grow in the region scores

@@ -136,8 +136,23 @@ upstream project's choices, not rules of the game.
 - **The co-pilot tap targets every "next system"** (the author, 2026-10-12, S76), in this order: the survey / trade
   route's next (past the systems you finished, S12; a trade route's first stop in another system, as its clipboard copy); the Highway's while you are on it (at a route system, its start included); the boxel being explored
   (its Next, the same run as 🎯 beside it, so a name the galaxy map cannot find marks the boxel's probable end); the
-  Highway's off the route (its closest system, or its start before you joined it). A route you are on stays first;
+  Highway's off the route (its closest system, or its start before you joined it); last, the header's next stop (S31,
+  a system you chose: a complete route counts as none, so it comes through). A route you are on stays first;
   one you left for a detour into a boxel does not hide the boxel, and comes back once the boxel has no Next.
+- **🎯 and Plot route anywhere** (S31): 🎯 on a bookmark, the header's next stop, a Nearest row, a checklist find and a
+  Map point aims at any system Outrider can name by id64 (route "system": `locate`, else the Map's last answer, the next
+  stop, your carrier); the id travels as a string, never a JSON number (over 2^53 it would round). Your own system is
+  refused. Plot route fills Plot Route's To and opens its form, and plots at once only when no route is followed:
+  with one, Plot is your click, since a new plot replaces the route you follow. The Nearest finder's older "Plot here"
+  keeps plotting at once with the plotter chosen.
+- **A click on the Map targets the system** (S72, the author) when auto-target can work on this PC (the virtual
+  keyboard and its bindings, on the game PC: not the "target automatically" switch), else copies its name; the card
+  and the hint say which. Your own system is copied; a touch shows the card, with 🎯 Target and Copy name.
+- **The voice plots far places** (D4, option A, the author): "nearest station" (or carrier, Vista, a trader...) also
+  plots a neutron route to the place it names when it is further than `[highway] voice_plot_ly` (on, 500 ly), to its
+  system, never the station; never while a route you have not finished is followed or a plot runs ("You're following
+  a route, so I didn't plot one"). A fixed command acts, as hush does; the AI's tools stay read-only. A route plotted
+  by voice is like one plotted on the page (auto-target follows it the same way).
 - **Listens on 127.0.0.1 by default; a password is optional.** Opening it to the network is an explicit setting; the
   Host and cross-site guards stop other web sites, not people on your network. `[server] password` stops those: a
   device that is not this PC needs a session (the `outrider_session` cookie, or `Authorization: Bearer` for the
@@ -969,7 +984,10 @@ confirmed while playing. Treat reports about them as likely real.
 - Auto-target in game: the first default sequence targeted a system end to end with "test now" (2026-10-02), and the
   current one (a camera yaw before the search, 1.5 s before Enter, a zoom in the plot step) is what worked on
   2026-10-03 (the author's bindings, Linux/Proton). Not yet tried: a run triggered by a real supercharge on a route,
-  Target next and Retry from the page, other keyboard layouts and presets, and both entry modes side by side.
+  Target next and Retry from the page, other keyboard layouts and presets, and both entry modes side by side; 🎯 on a
+  bookmark, the next stop, a Nearest row, a checklist find and a Map click (S31, S72), and the co-pilot button falling
+  back to the next stop.
+- The voice plotting a far "nearest ..." (D4): a neutron route to the place's system, tested with the plot faked.
 - Inara uploads: not yet tried live (a refusal shows in Settings in Inara's words). Built from Inara's API
   documentation, tested with fakes (`tests/test_inara.py`).
 - The EDSM and Inara key Checks (S45): built from the APIs' documentation with their documented example answers
