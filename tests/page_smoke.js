@@ -5476,7 +5476,7 @@ const settle = async maxMs => {
     const want = {
       shown: [false, ["CMDR*", "Inventory", "Engineering", "Missions", "Sessions"]],
       profile: ["CMDR Tester · Sample Wing · pledged to Aisling Duval, rank 3, 4,500 merits as of 2026-10-12 08:00",
-                ["Trade | Tycoon | 50% | next: Elite · about 330.0M cr of trade profit to go", "Combat | Expert | 0% | next: Master", "Federal Navy | Admiral |  | the top",
+                ["Trade | Tycoon | 50% | next: Elite in 330.0M cr", "Combat | Expert | 0% | next: Master", "Federal Navy | Admiral |  | the top",
                  "Sample Ship Krait Phantom | you fly it | 100.0M cr", "Anaconda | Colonia | 150.0M cr"],
                 ["Credits1.23B cr", "Net worth9.00B cr", "Fleet250.0M cr · 2 ships", "Stored modules5.1M cr", "Carrier balance250.0M cr",
                  "Time played2,000 h", "Distance jumped987,654 ly", "Spent on ships500.0M cr", "Systems visited12,345"],
