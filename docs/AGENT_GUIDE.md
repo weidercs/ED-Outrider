@@ -166,7 +166,7 @@ unittest, in-memory SQLite). `support.py` holds the shared fixtures and fakes (`
 5. **Commit, then follow-up.** After the commit the tick runs the follow-ups, each on its own (one that raises is
    reported by `follow_up_failed` and the rest still run; a database error stops them): `watch_status` (scoop, FSS,
    the hyperspace tunnel `watch_tunnel`, surface map, rig leash), `maybe_refresh` (the local cache at once, then the
-   Spansh sphere on arrival), `apply_own_changes`, `maybe_classify_target`, `maybe_unsold`, `maybe_sale_left`,
+   Spansh sphere on arrival; a failed search retried with a backoff, a retry that fails again bumping nothing), `apply_own_changes`, `maybe_classify_target`, `maybe_unsold`, `maybe_sale_left`,
    carrier, sellers, the quit backup, `maybe_curious`, `maybe_reported` (S23), `highway_copy_next`, `riches_copy_next`, `highway_heavy_check`, `last_scoop_check` (S2), `wrong_target_watch` (S11), `maybe_autotarget`, `maybe_boxel_autotarget`.
    `State.bump()` wakes every waiting page request.
 6. **Payload.** `GET /api/nearby?since=<run>:<version>` is a long poll (25 s, 204 when nothing changed; gzipped when the browser takes it) that
@@ -216,7 +216,11 @@ Ids: a system id64 can exceed 2^53, so the page compares the string `id` fields,
 - By hand: `python3 -m unittest discover tests` (one file: `python3 -m unittest tests.test_highway`);
   `node tests/page_smoke.js <port> [node_modules]` against a scratch server only: it clicks and POSTs, needs the port
   and refuses 8025. Waits in it: `settle(maxMs)` (the page's requests answered and quiet) rather than a fixed sleep,
-  except where the page itself is on a timer. Runner (auto-target) tests can run on fake time: `use_fake_time`
+  except where the page itself is on a timer. A block that injects state into `data` (or `hereData`, the Uploads box:
+  anything a payload redraws) and then waits starts with `holdPayloads()` and ends with `await releasePayloads()`:
+  the long poll's answers are held meanwhile, so the scratch server's own changes (a backup or a job an earlier block
+  started) cannot replace the injected state mid-block. Not for a block that needs a payload of its own (the hush
+  block in "batch B voice"). Runner (auto-target) tests can run on fake time: `use_fake_time`
   (`tests/support.py`).
 - **The sample journals** (`tests/fixtures/journals`) are synthetic: commander "Sample Pilot", made-up systems
   Hesperine (a station; a sale), Corvane (a Rhino mining run) and Talvik Reach (honk, scans, a mapped body, bio

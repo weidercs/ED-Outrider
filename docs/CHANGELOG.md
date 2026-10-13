@@ -2,6 +2,20 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-13 · No payload for a Spansh retry that changed nothing, and the smoke test holds payloads mid-block
+- **A Nearby retry that failed again redrew every open page for nothing.** With Spansh unreachable (the network down),
+  the sphere search is asked again after 30 s, 60 s, 2 min, 4 min, then every 5 min; each retry failed at once and
+  bumped the payload twice ("asking Spansh again", then "Spansh unavailable" again) with the same cached rows. Now a
+  retry says "asking again" only once its search has been out a second (`RETRY_SAY_S`), and bumps at the end only when
+  the status, the rows or the sphere's cut changed. Measured on a scratch server with every outside service offline:
+  3 payloads in 240 s before (all with nothing changed), 0 after. Test: a retry failing at once sends no payload, a slow
+  one still says so, a successful one sends its rows.
+- **The page smoke test's late blocks failed now and then** (EDSM flight log import, the backfill, S30's first stop):
+  that retry's payload landed while a block had injected state into the page and replaced it. `holdPayloads()` /
+  `releasePayloads()` hold the long poll's answers while a block that injects state and waits runs (39 blocks; not
+  the hush block, which needs its payload), with a check of its own; the put-backs added as stop-gaps (S31's next stop
+  and bookmark, the import's account) and the speech queue's three attempts are gone.
+
 ## 2026-10-13 · Review fixes: the overlay on a workspace per monitor, the first stop, S12's jumps, S2's top-up, the hush answer, the voice's window, the exposure warning
 From the Fable review sweep of the last 33 commits (areas overlay, routes, voice, security):
 - **Keep showing when Elite is not the active window** hid the overlay on window managers with a workspace per monitor

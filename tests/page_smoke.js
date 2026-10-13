@@ -28,6 +28,17 @@ const settle = async maxMs => {
     await sleep(25);
   }
 };
+// A block that injects state into the page's `data` (or what a payload redraws: hereData, the Uploads box...) and then
+// waits must not have it replaced by a payload landing meanwhile (the scratch server's own changes: a backup or a job a
+// block before started finishing): holdPayloads() holds every long-poll answer until releasePayloads(), which lets
+// them through (the page applies them then, as if the server had answered late) and, when one was held, waits for the
+// page to draw it before the next block starts. Only for blocks that need no payload of their own.
+let held = false, heldAnswers = 0;
+const holdPayloads = () => { held = true; };
+const releasePayloads = async () => {
+  held = false;
+  if (heldAnswers) { heldAnswers = 0; await sleep(100); await settle(2000); }
+};
 (async () => {
   const html = await (await fetch(base)).text(); const errors = [];
   const dom = new JSDOM(html, {url: base, runScripts: "dangerously", resources: "usable", pretendToBeVisual: true,
@@ -37,8 +48,15 @@ const settle = async maxMs => {
       w.AbortController = AbortController;
       w.fetch = (u, o) => {
         const poll = /api\/nearby\?since=/.test(String(u));
-        if (!poll) { inflight++; lastNet = Date.now(); }
-        return fetch(new URL(u, base), o).finally(() => { if (!poll) { inflight--; lastNet = Date.now(); } });
+        if (poll) return fetch(new URL(u, base), o).then(async r => {
+          if (!held) return r;
+          // the body read now: the page's poll timeout (40 s) would cut one left unread while it is held
+          const body = await r.arrayBuffer(); heldAnswers++;
+          while (held) await sleep(25);
+          return new Response([204, 304].includes(r.status) ? null : body, {status: r.status, statusText: r.statusText, headers: r.headers});
+        });
+        inflight++; lastNet = Date.now();
+        return fetch(new URL(u, base), o).finally(() => { inflight--; lastNet = Date.now(); });
       };
       w.addEventListener("error", e => errors.push(e.message));
       w.localStorage.clear();
@@ -73,6 +91,7 @@ const settle = async maxMs => {
   // the exobiology checklist: Bio/Geo -> Exo-Biology shows genus boxes from api/checklist, a click opens the species'
   // panel (its colours; the map needs a canvas, which jsdom has not), and Runs comes back
   {
+    holdPayloads();
     if (!d.getElementById("nowView").hidden) { d.getElementById("nowBack").click(); await sleep(500); }
     const before = errors.length;
     d.querySelector('[data-view="bio"]').click(); await settle(800);
@@ -155,6 +174,7 @@ const settle = async maxMs => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| exobiology checklist |", `${boxes} genus boxes, ${options} region choices, panel ${side && side.textContent}, geology ${geo} (${geoFirst}), counts ${countsOk || JSON.stringify(counts)}, genus ticks ${ticksOk || JSON.stringify(ticks)}, keyboard ${keyOk}, region race ${raceOk || JSON.stringify(race)}, back to runs ${back}`,
                 status.slice(0, 80), errors.slice(before));
+    await releasePayloads();
   }
   // the map reopened while its request was on its way asks again with the same key: the older request's failure
   // must not throw the newer answer away (#7 of the Fable review, 2026-10-10)
@@ -221,6 +241,25 @@ const settle = async maxMs => {
     w.fetch = realFetch; w.console.error = consoleError;
     w.eval(`data = ${good}; render()`);   // the bad payload stays until the next change: the tests below need a good one
   }
+  // holdPayloads (the blocks below that inject state): a payload the server sends meanwhile waits and the injected state
+  // stays; releasePayloads lets it in
+  {
+    const w = dom.window, before = errors.length;
+    await settle(1000);
+    holdPayloads();
+    const v0 = w.eval("version");
+    w.eval("data.heldMark = true");
+    // a hush ended when none is on: nothing changes but the payload's version, which the page would otherwise fetch
+    await fetch(base + "api/hush", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({mode: "off"})});
+    await sleep(800);
+    const kept = [w.eval("version") === v0, w.eval("data.heldMark === true")];
+    await releasePayloads();
+    for (let i = 0; i < 40 && w.eval("version") === v0; i++) await sleep(50);
+    const let_in = [w.eval("version") > v0, w.eval("data.heldMark === undefined")];
+    const good = kept.every(Boolean) && let_in.every(Boolean) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| payload hold |", good ? "held while a block injects state, let in afterwards" : JSON.stringify({kept, let_in}), errors.slice(before));
+  }
   // values: a logged species is priced as itself (x5 on a first footfall), a lost one says so, a genus with
   // samples under way is listed once, and a jet-cone charge boosts only the first jump of a trip
   {
@@ -280,6 +319,7 @@ const settle = async maxMs => {
   // robustness: an errored system lookup is asked again once due, a search whose polls keep failing stops
   // saying 'searching…', the unsold thresholds show the configured values, Materials refetches after a jump
   {
+    holdPayloads();
     const w = dom.window, realFetch = w.fetch, realST = w.setTimeout, before = errors.length, asked = [];
     let sysFail = true;
     w.fetch = (u, o) => {
@@ -313,10 +353,12 @@ const settle = async maxMs => {
     const goodR = goodS && goodP && goodT && goodM && errors.length === before;
     allOk = allOk && goodR;
     console.log(goodR ? "OK" : "FAIL", "| retries |", `system retried ${goodS}, search stops ${goodP} (${sr.status}), thresholds ${th.join("/")}, materials refetched ${goodM}`, errors.slice(before));
+    await releasePayloads();
   }
   // the speech queue: danger jumps ahead of queued finds (and cuts short the one playing), a find about a system
   // you have left is dropped, heat is said once per cooldown; the pure pick/expire rules too
   {
+    holdPayloads();
     const w = dom.window, before = errors.length, spoken = [], stopped = [];
     const realSay = w.sayNow, savedPos = w.eval("data.position && JSON.stringify([data.position.id64, data.position.id])");
     const savedFlags = w.eval("[speechOn, isSpeaker]");
@@ -327,23 +369,19 @@ const settle = async maxMs => {
       if (cur.stopped) stopped.push(item.words);
       w.eval("speechNow = null");
     };
-    // finds are tied to the system you are in: a live payload arriving mid-test replaces the position, so try again
-    let goodPrio = false, goodStale = false;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const d0 = w.eval("data"); spoken.length = stopped.length = 0;
-      w.eval(`speechItems = []; speechLast = {}; data.position.id64 = 42; data.position.id = "42"`);
-      for (const t of ["Find one.", "Find two.", "Find three."]) w.eval(`speak(${JSON.stringify(t)}, {kind: "find"})`);
-      w.eval('speak("Hull at 40 percent.", {kind: "hull", tag: "hull"})');
-      await sleep(400);
-      goodPrio = spoken.join("|") === "Find one.|Hull at 40 percent.|Find two.|Find three." && stopped.join() === "Find one.";
-      spoken.length = 0;
-      w.eval('speak("Something you asked for.")');                  // holds the voice while the ship moves
-      w.eval('speak("Find on the old system.", {kind: "find"})');
-      w.eval(`data.position.id64 = 43; data.position.id = "43"`);
-      await sleep(300);
-      goodStale = spoken.join("|") === "Something you asked for.";
-      if (w.eval("data") === d0) break;
-    }
+    // finds are tied to the system you are in (the payloads are held: one arriving mid-test would replace the position)
+    spoken.length = stopped.length = 0;
+    w.eval(`speechItems = []; speechLast = {}; data.position.id64 = 42; data.position.id = "42"`);
+    for (const t of ["Find one.", "Find two.", "Find three."]) w.eval(`speak(${JSON.stringify(t)}, {kind: "find"})`);
+    w.eval('speak("Hull at 40 percent.", {kind: "hull", tag: "hull"})');
+    await sleep(400);
+    const goodPrio = spoken.join("|") === "Find one.|Hull at 40 percent.|Find two.|Find three." && stopped.join() === "Find one.";
+    spoken.length = 0;
+    w.eval('speak("Something you asked for.")');                  // holds the voice while the ship moves
+    w.eval('speak("Find on the old system.", {kind: "find"})');
+    w.eval(`data.position.id64 = 43; data.position.id = "43"`);
+    await sleep(300);
+    const goodStale = spoken.join("|") === "Something you asked for.";
     spoken.length = 0;
     w.eval('speak("Heat damage.", {kind: "hull", tag: "heat"}); speak("Heat damage.", {kind: "hull", tag: "heat"})');
     await sleep(300);
@@ -360,6 +398,7 @@ const settle = async maxMs => {
     const goodQ = goodPrio && goodStale && goodCool && goodPure && errors.length === before;
     allOk = allOk && goodQ;
     console.log(goodQ ? "OK" : "FAIL", "| speech queue |", `priority ${goodPrio}, stale dropped ${goodStale}, cooldown ${goodCool}, pick/expire ${pure}`, errors.slice(before));
+    await releasePayloads();
   }
   // a jump clears the queue: lines queued (and the one playing) about the old system go, the FSD line is said,
   // danger lines and lines asked for by hand stay
@@ -437,6 +476,7 @@ const settle = async maxMs => {
   // a body someone else mapped (the author, 2026-10-09): no find alert for it; one "already mapped" line per system
   // instead; never in the leaving list
   {
+    holdPayloads();
     const w = dom.window, before = errors.length, said = [];
     const realPlay = w.play, realSpeak = w.speak;
     w.speak = (t, o) => said.push((o || {}).kind || ""); w.play = () => {};
@@ -458,6 +498,7 @@ const settle = async maxMs => {
     w.speak = realSpeak; w.play = realPlay;
     const ok = said.length === 2 && res.said && JSON.stringify(res.maps) === '["4"]' && errors.length === before;
     console.log(ok ? "OK" : "FAIL", "| mapped by someone else |", said.length, JSON.stringify(res), errors.slice(before));
+    await releasePayloads();
   }
   // one speaker: a window that is not the speaker still shows the alert but plays and says nothing; the
   // ▶ voice button still speaks; a danger line comes only from business and never swears
@@ -680,6 +721,7 @@ const settle = async maxMs => {
   }
   // Batch C (the page): what each fix changed, checked on the live page with made-up data
   {
+    holdPayloads();
     const w = dom.window, before = errors.length, said = [], toasts = [];
     const realSpeak = w.speak, realPlay = w.play, realToast = w.toast, realFetch = w.fetch;
     w.speak = (t, o) => said.push([t, o || {}]); w.play = () => {}; w.toast = t => toasts.push(t);
@@ -862,6 +904,7 @@ const settle = async maxMs => {
                 JSON.stringify(got2) === JSON.stringify(want2) ? "moments ok" : JSON.stringify(got2),
                 JSON.stringify(words) === JSON.stringify(wantWords) ? `spoken ${words.length}` : JSON.stringify(words), `delays ${delays.join("/")}, leads ${leads}, browser speech ${g11.join("/")}`,
                 `slept ${slept}, hush ${hush}, keyable ${keyable}, focus ${focus}, toasts ${JSON.stringify(toasts)}, tail ${tail.join()}, trip ${/→ now/.test(trip)}`, errors.slice(before));
+    await releasePayloads();
   }
   // F62: a refused search POST says so instead of showing the previous search's results as the new ones, and an
   // older result (a poll sent before the POST) is not taken for the search just started
@@ -894,6 +937,7 @@ const settle = async maxMs => {
   }
   // Batch 3 (review 2026-09-30b): the page's fixes, each on made-up data, everything restored afterwards
   {
+    holdPayloads();
     const w = dom.window, realFetch = w.fetch, before = errors.length, said = [];
     const realSpeak = w.speak, realPlay = w.play;
     w.speak = t => said.push(t); w.play = () => {};
@@ -1090,6 +1134,7 @@ const settle = async maxMs => {
     allOk = allOk && goodH;
     console.log(goodH ? "OK" : "FAIL", "| batch 3 page |", JSON.stringify(out) === JSON.stringify(want) ? "pure ok" : JSON.stringify(out),
                 JSON.stringify(out2) === JSON.stringify(want2) ? "fetches ok" : JSON.stringify(out2), `said ${JSON.stringify(said)}, search ${refused}`, errors.slice(before));
+    await releasePayloads();
   }
   // Suggestions batch S1: first footfall x5 and gravity in the suggested order and the leaving alert, signals never
   // DSS'd in Left behind, bodies not on Spansh, Now's heading-to line, and what the backup zip holds
@@ -1164,6 +1209,7 @@ const settle = async maxMs => {
   // batch S2 (the voice): procedural names spoken letter by letter, one personality per system, the welcome back
   // and ship-loss texts (ship_lost business-only), and the spoken-line transcript with each line's fate
   {
+    holdPayloads();
     const w = dom.window, before = errors.length, got = {}, bad = [];
     got.names = w.eval(`["Drojau LL-O b26-3 is undiscovered.", "Docked at Jaques Station.", "Out Of The Blue (K7F-3XZ)", "Syreadiae JX-F c0, 42 ly"].map(spokenText)`);
     got.shift = JSON.parse(w.eval(`(() => { const lib = speechLib, st = localStorage.getItem("speechStyles");
@@ -1231,6 +1277,7 @@ const settle = async maxMs => {
     const goodS2 = !bad.length && errors.length === before;
     allOk = allOk && goodS2;
     console.log(goodS2 ? "OK" : "FAIL", "| batch S2 |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(got)}` : `names, one personality per system, welcome back, ship lost, transcript (${got.fates.length} lines) ok`, errors.slice(before));
+    await releasePayloads();
   }
   // batch S2b: a sale that left data aboard: the facts line (cartographics and samples), its card under the header
   // (a new sale clears it) and the spoken line wrapping the facts
@@ -1306,6 +1353,7 @@ const settle = async maxMs => {
   // in the tab's list; with a Highway route too, a switch picks the route shown; Clear route clears the one shown.
   // Every request is answered here.
   {
+    holdPayloads();
     const w = dom.window, d = w.document, before = errors.length, realFetch = w.fetch, calls = [];
     const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), {status, headers: {"Content-Type": "application/json"}}));
     const body = (name, scan, o = {}) => Object.assign({name, type: "Planet", subtype: "Water world", ls: 1200, scan, map: scan * 3,
@@ -1418,10 +1466,12 @@ const settle = async maxMs => {
     allOk = allOk && goodRC;
     console.log(goodRC ? "OK" : "FAIL", "| riches in plot route |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "no tab of its own, the plotter switch and its options, plot and polling, systems/bodies/marks, the both-routes switch, clear", errors.slice(before));
+    await releasePayloads();
   }
   // a trade route in the slot (Spansh's trade planner): the Trade plotter's own options (no destination, ship or range),
   // its stops with what to sell and buy, its own heading row, the line under the tiles with the station, its alert
   {
+    holdPayloads();
     const w = dom.window, d = w.document, before = errors.length;
     d.querySelector('[data-view="hwy"]').click(); await sleep(100);
     const stop = (i, station, system, extra) => Object.assign({i, system, station, id: String(900 + i), x: i * 20, y: 0, z: 0, jumps: null,
@@ -1468,6 +1518,7 @@ const settle = async maxMs => {
     allOk = allOk && goodTR;
     console.log(goodTR ? "OK" : "FAIL", "| trade route |", goodTR ? "the Trade plotter's options, the stops and their goods, the heading row, the line, the alert" :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+    await releasePayloads();
   }
   // the line under the tiles for every route (the author, 2026-10-07): a survey route's own (💰 Road to Riches, 🧬
   // Exomastery), the Highway's, and with both the one Plot Route shows (this device's choice, else the newer)
@@ -2166,6 +2217,7 @@ const settle = async maxMs => {
   // captions filled in a window that is not speaking, a caption tap posting a replay without leaving Now, the bar,
   // ✕ back and a double tap; a ?mode=now window stays on Now with its URL; ↗ opens ?mode=now (once)
   {
+    holdPayloads();
     const w = dom.window, before = errors.length, got = {}, bad = [], realFetch = w.fetch, posted = [];
     const savedData = w.eval("JSON.stringify(data)"), flags = w.eval("[speechOn, isSpeaker, alertSpeak.sampling]");
     got.risk = JSON.parse(w.eval(`(() => {
@@ -2241,6 +2293,7 @@ const settle = async maxMs => {
     const goodC = !bad.length && errors.length === before;
     allOk = allOk && goodC;
     console.log(goodC ? "OK" : "FAIL", "| batch C now |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(got)}` : "at-risk line (3 states), captions in a quiet window, caption tap replays, bar, ✕ back, double tap, ?mode=now stays, ↗", errors.slice(before));
+    await releasePayloads();
   }
   // Batch D: the widened fuel_target (a top-up at a scoopable star; one card when both rules match; once per system),
   // the in-system scoopable star's wording (said only when one is known), "under N jumps", the fuel tile and the target cost
@@ -2939,6 +2992,7 @@ const settle = async maxMs => {
   // line of a pool before a repeat, kept across a reload, and ▶ voice samples not counted; S8 the mapped call-out's
   // words and its tick; S9 the session tally and its 🔇 (the grid's tick kept in step) with an undo
   {
+    holdPayloads();
     const w = dom.window, before = errors.length, got = {}, bad = [], realFetch = w.fetch;
     const flags = w.eval("[speechOn, isSpeaker]"), savedData = w.eval("JSON.stringify(data)"), savedLib = w.eval("JSON.stringify(speechLib)");
     const savedAs = w.eval("JSON.stringify(alertSpeak)"), savedServer = w.localStorage.getItem("speakOnServer");
@@ -3084,6 +3138,7 @@ const settle = async maxMs => {
     const goodD = !bad.length && errors.length === before;
     allOk = allOk && goodD;
     console.log(goodD ? "OK" : "FAIL", "| batch D voice |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}` : "capped line cut, beacon on pagehide, status leads with the target, no repeats across a reload, mapped call-out, session tally and mute", errors.slice(before));
+    await releasePayloads();
   }
   // Batch F (review 2026-10-01): S4 Search's mining section (the form, a hit that opens Here) and Nearby's ⛏ count on the
   // row and in the pop-up; S5 core modules under the level (the hull-area line, the dialog's level, welcome back, status
@@ -3445,6 +3500,7 @@ const settle = async maxMs => {
     position: {name: "Hwy Stop 37", id: "7000000037", x: 630, y: 0, z: 3480},
     clipboard: {enabled: true, available: false, tool: null, why: "neither", last: null}, autotarget: {enabled: false}, defaults: {efficiency: 60}});
   {
+    holdPayloads();
     const w = dom.window, before = errors.length, realFetch = w.fetch, realCopy = w.copyText, calls = [], copied = [];
     const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), {status, headers: {"Content-Type": "application/json"}}));
     let answer = () => json(hwyPayload(hwyFixture()));
@@ -3601,11 +3657,13 @@ const settle = async maxMs => {
     allOk = allOk && goodHW;
     console.log(goodHW ? "OK" : "FAIL", "| highway tab |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "200 of 400 ahead, done folded and grey, the next highlighted; form from the fleet, range override, plotters' fields; plot body and polled to done; errors; clear; projection; the line in three states with copy", errors.slice(before));
+    await releasePayloads();
   }
   // the plot form follows the current ship and cargo (review F3); only the newest answer of a loader counts (Codex F11:
   // Highway and Left behind); a failed region map is asked again after a back-off, a missing one never (review F14).
   // Every request is answered here: nothing reaches the server
   {
+    holdPayloads();
     const w = dom.window, before = errors.length, realFetch = w.fetch, got = {};
     const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), {status, headers: {"Content-Type": "application/json"}}));
     let calls = 0, payload = Object.assign(hwyPayload(null), {ship_id: 7, cargo: 4});
@@ -3678,10 +3736,12 @@ const settle = async maxMs => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| highway form and late answers |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "the form follows a ship swap and new cargo; an older Highway or Left answer is dropped; the region map retries after a failure, never after a 404", errors.slice(before));
+    await releasePayloads();
   }
   // the Highway tab's auto-target box: the toggle and the delay (POSTed), "test now" with its countdown and a refusal in
   // its words, the last result, missing bindings, the steps. Every request is answered here: nothing reaches the server
   {
+    holdPayloads();
     const w = dom.window, before = errors.length, realFetch = w.fetch, calls = [], got = {};
     const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), {status, headers: {"Content-Type": "application/json"}}));
     const at = {enabled: false, delay: 5, available: true, status: "off", entry: "type", dry_run: false, running: false, countdown: 5,
@@ -3740,6 +3800,7 @@ const settle = async maxMs => {
     allOk = allOk && goodAT;
     console.log(goodAT ? "OK" : "FAIL", "| highway auto-target box |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "toggle and delay posted (a bad delay refused here), test refused in its words, countdown, done, last result, missing bindings, steps", errors.slice(before));
+    await releasePayloads();
   }
   // review batch 6 on the page: Here follows the in-game target without a scan (F4); the fuel tile when the first
   // reading is on foot or in the SRV (F9); no "still aboard" on an undock from an estimate made before the sale (F39)
@@ -3789,6 +3850,7 @@ const settle = async maxMs => {
   // hidden row (F17), a browser-voice error not "said" (F44), a dropped heat line does not cool the next (F46), the
   // (A+B)+(C+D) schematic (F40), exact string ids (Codex C2)
   {
+    holdPayloads();
     const w = dom.window, before = errors.length;
     const got = JSON.parse(w.eval(`(() => {
       const o = {}, saved = {carrier: data.carrier, position: data.position, systems: data.systems};
@@ -3860,6 +3922,7 @@ const settle = async maxMs => {
     console.log(goodB8 ? "OK" : "FAIL", "| batch 8 page fixes |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "carrier's last minute, loss link, hidden row, browser voice error, heat cooldown, nested star pairs, exact ids", errors.slice(before));
     if (w.eval("view") === "firsts") { d.querySelector('[data-view="overview"]').click(); await sleep(300); }
+    await releasePayloads();
   }
   // S13: Outrider gone quiet: said once after the grace, in the browser's voice; said again when it is back
   {
@@ -4026,6 +4089,7 @@ const settle = async maxMs => {
   // tab not opened, the name not copied), a row's Retry while the failed run's row is still the one to target; and
   // the Highway in the spoken status report and welcome (S2). Every request is answered here: nothing reaches the server
   {
+    holdPayloads();
     const w = dom.window, before = errors.length, realFetch = w.fetch, realCopy = w.copyText, calls = [], copied = [], got = {};
     const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), {status, headers: {"Content-Type": "application/json"}}));
     const fx = hwyFixture(), txt = id => d.getElementById(id).textContent.replace(/\s+/g, " ").trim();
@@ -4085,11 +4149,13 @@ const settle = async maxMs => {
     allOk = allOk && goodTN;
     console.log(goodTN ? "OK" : "FAIL", "| highway target next |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "line and box buttons post with a countdown (no tab, no copy), refusal in its words, Retry on the failed row only, the Highway spoken in the report and welcome", errors.slice(before));
+    await releasePayloads();
   }
   // S74: a run that brings the game to the front itself (no countdown: "bringing the game to the front"), the server's
   // countdown after all when the game did not come (its reason on the box and the button), and the box's line saying
   // whether it brings the game forward or why not. Every request is answered here: nothing reaches the server
   {
+    holdPayloads();
     const w = dom.window, before = errors.length, realFetch = w.fetch, got = {};
     const json = o => Promise.resolve(new Response(JSON.stringify(o), {status: 200, headers: {"Content-Type": "application/json"}}));
     const fx = hwyFixture(), txt = id => d.getElementById(id).textContent.replace(/\s+/g, " ").trim();
@@ -4126,11 +4192,13 @@ const settle = async maxMs => {
     allOk = allOk && goodS74;
     console.log(goodS74 ? "OK" : "FAIL", "| target brings the game forward |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "no countdown when it brings the game forward, the server's countdown with its reason when not, the box says which", errors.slice(before));
+    await releasePayloads();
   }
   // too much fuel for the next jump: the warning in the strip and the Highway header; the Conservative range option
   // (off by default, [highway] defaults when this browser has none, the note, the plot body, saved per browser) and
   // the header's "conservative −5 ly"
   {
+    holdPayloads();
     const w = dom.window, before = errors.length, realFetch = w.fetch, got = {}, calls = [];
     const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), {status, headers: {"Content-Type": "application/json"}}));
     const fx = hwyFixture();
@@ -4183,10 +4251,12 @@ const settle = async maxMs => {
     console.log(ok ? "OK" : "FAIL", "| highway too heavy and conservative range |", bad.length
       ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "the warning in the strip and the header; the tick off by default, the note per supercharge, the body, saved, [highway] defaults", errors.slice(before));
+    await releasePayloads();
   }
   // off route: the Highway list marks the nearest route system (from the live summary, so it follows each jump without
   // a fetch) and scrolls it into view in the pane, never the window; a nearest among the done rows shows while folded
   {
+    holdPayloads();
     const w = dom.window, before = errors.length, realFetch = w.fetch, got = {};
     const off = hwyFixture({off: true});
     w.fetch = (u, o) => String(u).startsWith("api/highway") ? Promise.resolve(new Response(JSON.stringify(hwyPayload(off)),
@@ -4227,11 +4297,13 @@ const settle = async maxMs => {
     allOk = allOk && goodHN;
     console.log(goodHN ? "OK" : "FAIL", "| highway nearest off route |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "the nearest route system marked and scrolled into view in the pane (not the window); a done one shown while folded; gone back on the route", errors.slice(before));
+    await releasePayloads();
   }
   // the Highway map's background: the region layer from api/regions decoded as the server reads it, the landmarks'
   // projection, the corner toggles (per device), and the drawing order on a recording canvas: image, regions, names and
   // landmarks under the route, which still draws on top
   {
+    holdPayloads();
     const w = dom.window, before = errors.length, realFetch = w.fetch, got = {};
     if (!d.getElementById("nowView").hidden) { d.getElementById("nowBack").click(); await sleep(300); }
     const fx = hwyFixture();
@@ -4312,11 +4384,13 @@ const settle = async maxMs => {
     allOk = allOk && goodBG;
     console.log(goodBG ? "OK" : "FAIL", "| highway map background |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "42 regions decoded as the server reads them; landmarks projected; toggles per device; image, regions, names and landmarks under the route", errors.slice(before));
+    await releasePayloads();
   }
   // ---- the tablet layout (GET /tablet, PLAN-tablet phase 3): the same page in its own shell. The desktop page above
   // never shows the shell; the tablet opens on Now, shows every page from its nav, never speaks or plays sounds, goes to
   // Now while the surface map shows and back after, says the link in words, and opens a row's facts in a sheet.
   {
+    holdPayloads();
     const desk = [!d.body.classList.contains("tablet"), d.getElementById("tabNav").hidden, d.getElementById("tabMain").hidden,
                   !d.documentElement.dataset.theme];
     const terr = [];
@@ -4636,6 +4710,7 @@ const settle = async maxMs => {
     console.log(goodT ? "OK" : "FAIL", "| tablet layout |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "shell shown, every page from its nav, silent, map switch to Now and back, link in words, banner, row sheet, no countdown, Enter saves the rail, pinch, settings, the app's screens, Play alerts here", terr);
     tw.close();
+    await releasePayloads();
   }
   // Settings (was the alerts dialog): folding sections remembered per device, open/close all, and Server settings drawn
   // from the config file (GET api/config) with only the keys you change sent; never saved here (no POST)
@@ -4737,6 +4812,7 @@ const settle = async maxMs => {
   }
   // Settings > In-game overlay: the switches and each panel's place from data.overlay; a change posts it (stubbed)
   {
+    holdPayloads();
     const w = dom.window, before = errors.length, real = w.fetch, posted = [];
     const json = body => Promise.resolve({ok: true, status: 200, headers: {get: () => "application/json"}, json: async () => body});
     // as the server answers: api/overlay/layout the layout, api/overlay the whole state (its layout too), with a note
@@ -4807,11 +4883,13 @@ const settle = async maxMs => {
     const ok = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && ok;
     console.log(ok ? "OK" : "FAIL", "| settings: in-game overlay |", ok ? "switches, panels' places, a change and the test button posted" : JSON.stringify(got), errors.slice(before));
+    await releasePayloads();
   }
   // S8: the overlay pill beside the link pill: data.overlay.pill in three words, the reason on hover; "not the active
   // window" amber only while this page has the focus, red otherwise; none with no pill or on a server; the tablet's
   // link line adds it; Settings says the same. S25: "Keep showing when Elite is not the active window" posts.
   {
+    holdPayloads();
     const w = dom.window, before = errors.length, real = w.fetch, posted = [];
     const json = body => Promise.resolve({ok: true, status: 200, headers: {get: () => "application/json"}, json: async () => body});
     w.fetch = (u, o) => /api\/overlay$/.test(String(u)) && o && o.method === "POST"
@@ -4850,6 +4928,7 @@ const settle = async maxMs => {
     const ok = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && ok;
     console.log(ok ? "OK" : "FAIL", "| overlay pill |", ok ? "three words, the reason on hover, behind this page amber, the keep-showing switch" : JSON.stringify(got), errors.slice(before));
+    await releasePayloads();
   }
   // S26: the overlay's Alerts panel: every alert the page shows is posted (api/overlay/alert, stubbed) while the
   // overlay and its Alerts panel are on, on the game PC, and the kind is switched on in this browser (any of notify
@@ -4892,6 +4971,7 @@ const settle = async maxMs => {
   // Settings > Voice > More voices: Piper's catalogue from the server (stubbed here: no network), one language at a time;
   // "Download and use" asks the server for that voice (POST api/voice, stubbed: nothing downloads)
   {
+    holdPayloads();
     const w = dom.window, before = errors.length, real = w.fetch, posted = [];
     const cat = {current: "en_GB-cori-medium", voices: [
       {name: "de_DE-thorsten-high", language: "de_DE", language_name: "German (Germany)", quality: "high", speakers: 1, size_mb: 114, installed: false},
@@ -4938,6 +5018,7 @@ const settle = async maxMs => {
     const goodV = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodV;
     console.log(goodV ? "OK" : "FAIL", "| more voices |", goodV ? "Piper's catalogue by language, sorted by name, quality or size; ▶ sample plays Piper's recording; Download fetches it without switching, then it is picked in the lab" : JSON.stringify(got), errors.slice(before));
+    await releasePayloads();
   }
   // the desktop theme (Settings > Display): Default - Outrider and the tablet's nine; a choice is set on <html>, changes
   // the colours, is remembered for this browser; the Default again removes it
@@ -5257,6 +5338,7 @@ const settle = async maxMs => {
   // review 2026-10-08 #15-#18: answers that arrive out of order. An older, slower request lands after a newer one:
   // its answer (or its failure) must not replace the newer one's
   {
+    holdPayloads();
     const w = dom.window, before = errors.length, realF = w.fetch, got = {};
     const here = w.eval("posId()");
     const sys = here ? await (await realF("api/system/" + here)).json() : null;
@@ -5334,6 +5416,7 @@ const settle = async maxMs => {
     const goodO = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodO;
     console.log(goodO ? "OK" : "FAIL", "| answers out of order |", goodO ? "on-body strip, a pin's loading, Find, a failed older firsts, the map: the newest answer kept; the map asks again when reopened" : JSON.stringify(got), errors.slice(before));
+    await releasePayloads();
   }
   // the voice lab (2026-10-11; it was voice_lab.py): Settings > Voice shows a several-person voice's speaker; the lab
   // steps through speakers (each played, through api/say with the speaker), uses one, plays and cuts a line, saves a WAV
@@ -5540,6 +5623,7 @@ const settle = async maxMs => {
   // the Exo-Biology checklist's line, "downloading…" / "failed: <why>" while it runs or after, nothing once they are in;
   // the banner's card has Retry, which posts api/bio/colours (the scratch server's ExploData is offline: it fails there)
   {
+    holdPayloads();
     const w = dom.window, before = errors.length;
     const real = w.fetch, posted = [];
     w.fetch = (u, o) => { if (o && o.method === "POST" && /bio\/colours/.test(String(u))) posted.push(String(u)); return real(u, o); };
@@ -5581,6 +5665,7 @@ const settle = async maxMs => {
     const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| colour tables missing |", good ? "the note and Retry in Here's legend and the checklist, downloading / failed, the banner's Retry posts" : JSON.stringify({got, want}), errors.slice(before));
+    await releasePayloads();
   }
   // S6 (batch 16): someone else's scans of your unsold firsts: a card and a notification each time under its own alerts
   // row, the days worded from the timestamps, "so far today", spoken only when the server says (at most once in 30 min)
@@ -6017,6 +6102,7 @@ const settle = async maxMs => {
   // unknown action left out, ✕ hides it here at once and tells the server) and Settings -> Server's Show log (what the
   // scratch server printed, from GET api/serverlog, with where the file is)
   {
+    holdPayloads();
     const w = dom.window, before = errors.length;
     if (!w.HTMLDialogElement.prototype.showModal) w.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
     if (!w.Element.prototype.scrollIntoView) w.Element.prototype.scrollIntoView = function () {};   // jsdom lays nothing out
@@ -6056,12 +6142,14 @@ const settle = async maxMs => {
     const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| notices and the log |", good ? "the banner (escaped, its action, ✕ in every window), Show log with the server's lines and its file" : JSON.stringify({got, want}), errors.slice(before));
+    await releasePayloads();
   }
   // S16 / S3 (batch 12): Settings -> Uploads' Recent list (merged successes, a failure's raw text and its next try, what
   // it did at start), holds with Try again (POST api/uploads/retry; the scratch server answers "not on hold"), no hover-only
   // "last error"; the outage moments notify under their own alerts row, never spoken; the card's Uploads button opens
   // Settings at Uploads
   {
+    holdPayloads();
     const w = dom.window, before = errors.length;
     if (!w.HTMLDialogElement.prototype.showModal) w.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
     if (!w.Element.prototype.scrollIntoView) w.Element.prototype.scrollIntoView = function () {};
@@ -6125,12 +6213,14 @@ const settle = async maxMs => {
       JSON.stringify(got.open) === JSON.stringify(["Uploads", true, true]) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| uploads recent and outage |", good ? "Recent, catch-up, Try again, the outage notified not spoken, the card opens Uploads" : JSON.stringify(got), errors.slice(before));
+    await releasePayloads();
   }
   // S42 / S45 (batch 13): the Data tile keyed off the payload's health (the short form only: "Spansh unavailable", or "No
   // internet connection"; a failed search's own status keeps the horizon quiet); the Check buttons beside the EDSM and
   // Inara keys (EDSM's on the scratch server itself: offline, so "Couldn't reach EDSM", the typed key in the POST body;
   // Inara's answer stubbed: ✓ with the profile link)
   {
+    holdPayloads();
     const w = dom.window, before = errors.length;
     const real = w.fetch, posted = [];
     w.fetch = (u, o) => {
@@ -6187,12 +6277,14 @@ const settle = async maxMs => {
                                                     ["uploads/inara/check", "Sample Pilot", "", null]]) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| lookups down and key checks |", good ? "the Data tile says only \"Spansh unavailable\" / \"No internet connection\", the horizon waits, Check for EDSM and Inara keys" : JSON.stringify(got), errors.slice(before));
+    await releasePayloads();
   }
   // S43 / S44 (2026-10-12): a first run with no journals (the Data tile says where to set the folder and opens Settings ->
   // Server with [journals] live focused; Docker's words instead; no position yet: "No FSD jump yet"), and Settings ->
   // Server -> Backups (Back up now on the scratch server, its zip listed with what made it, the restore command for
   // this install, Copy)
   {
+    holdPayloads();
     const w = dom.window, before = errors.length;
     const got = JSON.parse(w.eval(`(() => {
       const o = {}, fr0 = data.freshness, pos0 = data.position, fl = document.getElementById("freshLine");
@@ -6242,12 +6334,14 @@ const settle = async maxMs => {
     const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| first run and backups S43 S44 |", good ? "no journals: where to set the folder (focused), Docker's words, no jump yet; Backups listed with the restore command and Copy" : JSON.stringify({got, want}), errors.slice(before));
+    await releasePayloads();
   }
   // S10 / S69 (2026-10-12): Restart (Settings -> Server's top row: off with the reason on verify.sh's server, which runs
   // as `python -`; with data.restart.can: a confirm, POST api/restart (answered here: nothing restarts), "Restarting…",
   // the update line's Restart now, done on another run_id) and Auto honk's readiness (the scratch server's own answer,
   // which only looks; then a not-ready one with its fix and Copy)
   {
+    holdPayloads();
     const w = dom.window, before = errors.length;
     const realFetch = w.fetch, realConfirm = w.confirm, realCopy = w.copyText, posted = [], copied = [], asked = [];
     const got = {};
@@ -6302,6 +6396,7 @@ const settle = async maxMs => {
     const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| restart and auto honk readiness S10 S69 |", good ? "Restart off with its reason, then confirm, POST, Restarting… and back; readiness from the server, a fix with Copy" : JSON.stringify({got, want}), errors.slice(before));
+    await releasePayloads();
   }
   // S70 / S9 (2026-10-12): Settings -> Server -> Start with this computer (the scratch server's own answer, from this PC;
   // then injected ones: Install posts (answered here: nothing is ever installed from the smoke test), Remove asks first,
@@ -6309,6 +6404,7 @@ const settle = async maxMs => {
   // the poll: "starting · 41%", not "not connected", and Restarting… says what it is doing; a normal answer clears it),
   // and the starting page itself (static/starting.html) in a window of its own, reloading once Outrider is ready
   {
+    holdPayloads();
     const w = dom.window, before = errors.length;
     const realFetch = w.fetch, realConfirm = w.confirm, realCopy = w.copyText, posted = [], copied = [], asked = [];
     const got = {};
@@ -6388,12 +6484,14 @@ const settle = async maxMs => {
     const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| service and starting S70 S9 |", good ? "Start with this computer (install, remove asks, another device, refused); 503 starting is starting; the starting page reloads when ready" : JSON.stringify({got, want}), errors.slice(before));
+    await releasePayloads();
   }
   // S68 / S47 (batch 14): the Log's upload marks (✓ EDDN · ⏳ EDSM..., the reason in the hover) and "not sent" (offered
   // while an upload is in use; ticked, the query asks the server for unsent lines and the category boxes dim); Settings ->
   // Uploads' Fill gaps in EDSM's flight log (a Check fills from / to, Send only for the previewed range and after a
   // confirm, Stop / Go on by the progress; the posts stubbed: nothing reaches EDSM)
   {
+    holdPayloads();
     const w = dom.window, before = errors.length, realFetch = w.fetch, realConfirm = w.confirm, posted = [], asked = [];
     w.fetch = (u, o) => {
       const url = String(u);
@@ -6485,12 +6583,14 @@ const settle = async maxMs => {
       got.preview.startsWith("Preview 2026-10-09 21:14:06 to 2026-10-11 08:00:00 UTC: 312 events (41 jumps) in 2 requests, about 30 s") && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| upload marks and EDSM backfill |", good ? "✓ / ✗ marks with their reason, not sent, Check fills the range, Preview then Send, Stop and Go on" : JSON.stringify(got), errors.slice(before));
+    await releasePayloads();
   }
   // S67 (batch 15): Settings -> Uploads' Import your EDSM flight log (Import posts the CMDR; while it runs, its week and
   // Stop; once done, "N visits from EDSM, <from> to <to> · Remove them", a confirm, then remove); History's sessions
   // "from EDSM" with no counts of what you did and the From EDSM line; the Map's hover says where the visit is from.
   // The posts are stubbed: nothing reaches EDSM
   {
+    holdPayloads();
     const w = dom.window, before = errors.length, realFetch = w.fetch, realConfirm = w.confirm, posted = [], asks = [];
     w.fetch = (u, o) => {
       const url = String(u);
@@ -6549,12 +6649,14 @@ const settle = async maxMs => {
     const good = Object.keys(want).every(k => JSON.stringify(got[k]) === JSON.stringify(want[k])) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| EDSM flight log import |", good ? "Import, its week and Stop, the visits from EDSM and Remove them, History's from EDSM, the Map's hover" : JSON.stringify(got), errors.slice(before));
+    await releasePayloads();
   }
   // S30: numbered stops on Here's schematic (two on a body with mapping and bio, a stop under your cr/min level tinted),
   // the faint path from the arrival star with rough leg times, the checklist numbered alike; a tap on a number makes
   // that body the first stop (posted: one order for every window, Now and the voice), "↺ order" puts it back; a first
   // stop of another system changes nothing. The posts are stubbed
   {
+    holdPayloads();
     const w = dom.window, before = errors.length, realFetch = w.fetch, posted = [];
     w.fetch = (u, o) => {
       if (o && o.method === "POST" && /api\/plan\/first/.test(String(u))) {
@@ -6619,12 +6721,14 @@ const settle = async maxMs => {
       /the suggested order ①–④/.test(got.head) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| S30 schematic stops |", good ? "①②③④ with a tinted skip, the path's rough legs, a tap makes a body first, ↺ order undoes it" : JSON.stringify(got), errors.slice(before));
+    await releasePayloads();
   }
   // S31: 🎯 and Plot route anywhere (a bookmark, the header's next stop, a Nearest row, a checklist find: S29's 🎯), the
   // id64 sent as its exact string (over 2^53); Plot route fills To and plots only when no route is followed. S72: a click
   // on the Map targets the system when auto-target can work on this PC, else copies its name; the card and the hint under
   // the map say which; your own system is copied; a touch card has 🎯 Target and Copy name. The posts are stubbed
   {
+    holdPayloads();
     const w = dom.window, d = w.document, before = errors.length, realFetch = w.fetch, sent = [];
     w.fetch = (u, o) => {
       const s = String(u);
@@ -6657,16 +6761,11 @@ const settle = async maxMs => {
       data.game_pc = true;
       return JSON.stringify(o); })()`));
     await settle(1000);
-    // Plot route: no route followed, so it plots; then with one followed, To only (and the form open). The next stop
-    // again first: a payload that came in meanwhile (the server's own changes: a Spansh retry) replaced the injected one
-    w.eval(`data.game_pc = true; data.highway = null; data.survey = null;
-      data.next_stop = {id: "4242", id64: 4242, name: "Chosen", distance: 40}; renderStrip();`);
+    // Plot route: no route followed, so it plots; then with one followed, To only (and the form open)
     d.querySelector('#nextStopLn [data-plotto="Chosen"]').click();
     await settle(1000);
     got.plotView = w.eval("view"); got.plotTo = d.getElementById("hwyTo").value;
-    // the bookmark again: a payload that came in meanwhile (the server's own changes) replaced the injected one
-    w.eval(`data.bookmarks = [{id: "9007199254740993", name: "Far Out", distance: 12, note: "", created: ""}];
-      data.highway = {complete: false, destination: "Somewhere", index: 1, total: 3}; renderBookmarks(bmMap());`);
+    w.eval(`data.highway = {complete: false, destination: "Somewhere", index: 1, total: 3}; renderBookmarks(bmMap());`);
     d.querySelector('#bmRows [data-plotto="Far Out"]').click();
     await settle(1000);
     got.followTo = d.getElementById("hwyTo").value;
@@ -6715,12 +6814,14 @@ const settle = async maxMs => {
     const good = Object.keys(want).every(k => JSON.stringify(got[k]) === JSON.stringify(want[k])) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| S31 aim and plot anywhere, S72 map click |", good ? "🎯 on bookmarks, the next stop, Nearest and a find by the exact id64, Plot route plots only with no route followed, the Map's click targets or copies as its card and hint say" : JSON.stringify(got), errors.slice(before));
+    await releasePayloads();
   }
   // S49: Search and the Nearest finder around another system: the Around select (kept on this device), a typed name
   // found by api/find first and sent as its exact id64, a name not found said without searching, the "from you" hover.
   // S50: the Map draws the route (mapRouteMarks: dashed legs from you, ◎ the next stop, the legend's entries, the card's
   // line) and asks again on a new plot. Every request is stubbed
   {
+    holdPayloads();
     const w = dom.window, d = w.document, realFetch = w.fetch, before = errors.length, asked = [], big = "9007199254740993";
     const json = (body, status = 200) => Promise.resolve(new Response(JSON.stringify(body), {status, headers: {"Content-Type": "application/json"}}));
     const route = {navroute: [{id: "2", name: "Hop One", x: 10, y: 0, z: 0}], kind: "highway",
@@ -6807,11 +6908,13 @@ const settle = async maxMs => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| S49 around another system, S50 route on the map |", good ? "Search and Nearest around your carrier or a system found by name (its id64), from you in the hover; the Map's dashed route, ◎ next stop, legend, asked again on a new plot" :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)} ${JSON.stringify(posts)} ${JSON.stringify(finds)}`, errors.slice(before));
+    await releasePayloads();
   }
   // S51: a sweep: ticks in Bookmarks, Left behind and My firsts (lost systems only), one set across the three; "Plot a
   // sweep (N)" posts them to api/riches/plot {kind: "sweep"} and Plot Route shows the route (its head: the systems ticked
   // and those Spansh did not know); a refusal is said beside the button. G4: the line's glyph and words per kind. Stubbed
   {
+    holdPayloads();
     const w = dom.window, d = w.document, before = errors.length, realFetch = w.fetch, posts = [];
     let plotAnswer = {ok: true, plotting: {state: "running", kind: "sweep", from: "Home", started: new Date().toISOString()}}, plotStatus = 202;
     const route = {id: "sw1", kind: "sweep", from: "Home", to: "Left One", count: 3, first: 0, next: 1, at: 0, furthest: 0, off_route: null,
@@ -6877,6 +6980,7 @@ const settle = async maxMs => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| S51 sweep, S52 kinds |", good ? "ticks in Bookmarks, Left behind and lost firsts, Plot a sweep (N) posts them and Plot Route shows it, a refusal said, the kinds' lines" :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+    await releasePayloads();
   }
   // S35: Settings' last section, Questions asked: two questions asked of the scratch server (a phrase, then none with the
   // AI off), newest first, each with what it matched and the answer; it follows the payload's ask_seq while open; Copy
@@ -7028,6 +7132,7 @@ const settle = async maxMs => {
   // posts a change, a speaker and a reset (api/voice/style, answered here), ▶ plays a line as it is heard; the voice
   // lab's Give to this personality posts the lab's voice and person, and a line played there is in the personality's
   {
+    holdPayloads();
     const w = dom.window, d = w.document, realFetch = w.fetch, before = errors.length, said = [], posted = [], played = [];
     const people = [{id: 0, name: "p225"}, {id: 1, name: "p226"}, {id: 2, name: "p227"}, {id: 3, name: "p228"}];
     const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), {status, headers: {"Content-Type": "application/json"}}));
@@ -7126,6 +7231,7 @@ const settle = async maxMs => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| S40 personality voices |", good ? "the file's voice and speaker, a pick wins, the speaker rides to the PC and the next line; the table, ▶, Give, the lab's lines" :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+    await releasePayloads();
   }
   // S39: Find a setting. A word leaves only the rows that match it (label, help, the config key a row defaults from, a
   // Server settings key loaded without opening its section), opens their sections and says how many; every section is

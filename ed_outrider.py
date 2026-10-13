@@ -372,6 +372,7 @@ ON_DEMAND_MAX_AGE = 86400  # s: a system fetched for Search/bookmarks/pins is fe
 UNSOLD_LOG = 3             # recent unsold estimates kept to stamp a sale with the one made before it
 NO_DUMP_RETRY = 3600       # s: a dump 404 for a system whose search lists bodies is asked again after this
 DUMP_MAX_TRIES = 5         # body-detail fetches for one system before we stop asking (this stay)
+RETRY_SAY_S = 1.0          # s: a Nearby retry says "asking Spansh again" only once its search has been out this long
 REPORTED_MAX_AGE = 86400   # s: the species reported on your system's bodies (S23) are asked for again after a day
 REPORTED_RETRY_S = 600     # s: ...and after a failed ask, not before this
 CHECKLIST_FIND_LY = 20000  # ly: S29's search for the nearest reported bodies of a species (sorted nearest first)
@@ -11218,9 +11219,19 @@ class State:
                     self.bases[row["id64"]] = (cached_source(b), b)
             for id64 in self.bases:
                 self.safe_row(id64)
+        # A retry (Spansh failed before) says "asking again" only once its search has been out RETRY_SAY_S: with the
+        # network down it fails at once, the status goes straight back and the rows are the cached ones again, so
+        # nothing on the page changed and no payload is sent for it (each retry redrew every open page for nothing)
+        said, before = [], (self.status, self.systems, self.sphere_cut) if retry else None
         self.status = (f"asking Spansh again about systems near {pos['name']}…" if retry
                        else f"asking Spansh about systems near {pos['name']}…")
-        self.bump()
+        if retry:
+            def say():
+                said.append(True)
+                self.bump()
+            saying = asyncio.get_running_loop().call_later(RETRY_SAY_S, say)
+        else:
+            self.bump()
         edsm, spansh_failed = [], None
         try:
             results = await self.spansh.sphere(pos, r)
@@ -11236,6 +11247,9 @@ class State:
                 edsm = await self.spansh.edsm_sphere(pos, r)
             except Exception:
                 pass
+        finally:
+            if retry:
+                saying.cancel()
         if retry:
             self.bases, self.systems = {}, {}
         if spansh_failed:
@@ -11303,7 +11317,8 @@ class State:
                            if need_dump else "ok")
             if not need_dump:
                 self.retry_backoff = 30
-        self.bump()
+        if said or (self.status, self.systems, self.sphere_cut) != before:
+            self.bump()
 
         # Nearest first, so the rows you care about fill in soonest.
         need_dump.sort(key=lambda t: self.systems.get(t[0], {}).get("distance", math.inf))   # a failed row: last

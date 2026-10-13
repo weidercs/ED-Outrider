@@ -2161,7 +2161,7 @@ class BatchBState(unittest.TestCase):
             db.close()
 
     # ---- G3.3 / F8: the Nearby refresh ----
-    def refresh(self, sphere, bad=None):
+    def refresh(self, sphere, bad=None, retry=False):
         import asyncio, types
 
         async def fail(*a):
@@ -2179,7 +2179,43 @@ class BatchBState(unittest.TestCase):
             return real(id64)
         self.state.row = row
         self.state.center = self.j.pos
-        asyncio.run(self.state._refresh(self.j.pos))
+        asyncio.run(self.state._refresh(self.j.pos, retry))
+
+    def test_a_retry_that_fails_again_sends_no_payload(self):
+        """Network down: each retry failing at once changed nothing on the page, but bumped the payload twice (its
+        "asking again" and the status back), so every open page redrew at every retry. A slow retry still says so."""
+        import asyncio, contextlib, io
+        from unittest import mock
+
+        async def down(pos, r):
+            raise OSError("Spansh down")
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.refresh(down)
+            self.assertEqual(self.state.status, "Spansh unavailable")
+            v, rows = self.state.version, self.state.systems
+            self.refresh(down, retry=True)
+            self.assertEqual(self.state.version, v)                  # nothing changed: no payload
+            self.assertEqual(self.state.systems, rows)
+            self.assertEqual(self.state.status, "Spansh unavailable")
+
+            async def slow(pos, r):   # a network that swallows the request: "asking again" shows while it waits
+                await asyncio.sleep(0.05)
+                seen.append((self.state.version, self.state.status))
+                raise OSError("Spansh down")
+            seen = []
+            with mock.patch.object(ed_outrider, "RETRY_SAY_S", 0.01):
+                self.refresh(slow, retry=True)
+            self.assertEqual(seen[0][0], v + 1)
+            self.assertTrue(seen[0][1].startswith("asking Spansh again"))
+            self.assertEqual(self.state.version, v + 2)              # and the status back afterwards
+            self.assertEqual(self.state.status, "Spansh unavailable")
+
+        async def found(pos, r):
+            return [{"id64": 11, "name": "N11", "x": 1, "y": 0, "z": 0, "distance": 1, "bodies": []}]
+        self.refresh(found, retry=True)                             # Spansh back: the new rows go out
+        self.assertGreater(self.state.version, v + 2)
+        self.assertEqual(self.state.status, "ok")
+        self.assertIn(11, self.state.systems)
 
     def test_failed_search_drops_the_old_sphere_cut(self):   # G3.3
         async def down(pos, r):

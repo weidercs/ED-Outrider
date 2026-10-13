@@ -670,6 +670,12 @@ upstream project's choices, not rules of the game.
   status ("Spansh unavailable") still keeps the unreported horizon quiet until a search answers. A card on the banner
   (the one notices board) only when it lasts: Spansh or EDSM down 10 minutes, or no network / an address not found at
   once; GitHub, EDAstro and Canonn are background checks and get none. bio.py's rules check (urllib) is not counted.
+- **A Nearby retry that fails again sends no payload.** A failed sphere search is asked again after 30 s, 60 s, ...
+  up to every 5 minutes. With the network down each retry fails at once, the status goes straight back to "Spansh
+  unavailable" and the rows are the cached ones again, yet it used to bump the payload twice: every open page (a
+  tablet, the Now window) fetched and redrew for nothing. A retry now says "asking Spansh again" only once its search
+  has been out `RETRY_SAY_S` (a network that swallows requests still shows it), and bumps at the end only when the
+  status, the rows or the sphere's cut changed.
 - **The key Check only reads, and one Inara gate paces everything** (S45, G3): EDSM's get-credits (100: the name and key
   go together; 203: they do not) and Inara's getCommanderProfile (the header's 400: the key refused; the event's 204: no
   such commander). The typed key, else the stored one; a success with the stored key ends its hold
