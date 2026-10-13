@@ -25,15 +25,16 @@ import math
 import os
 import re
 import sys
+import time
 
 from . import ROOT
 
 CANVAS_W, CANVAS_H = 1280, 960
-PANELS = ("system", "body", "radar", "strip", "now", "bio")
+PANELS = ("system", "body", "radar", "strip", "now", "bio", "alerts")
 # "body" is the Target panel (D1): the body you are at or have targeted, else the system targeted. Its id, config key
 # (body_panel) and layout key stayed, so an arrangement and a config made for the Body panel carry over unchanged.
 PANEL_NAMES = {"system": "System", "body": "Target", "radar": "Surface radar", "strip": "System strip",
-               "now": "Now (To-Do & Info)", "bio": "Bio signals"}
+               "now": "Now (To-Do & Info)", "bio": "Bio signals", "alerts": "Alerts"}
 # a panel is placed from a corner of the game window, or centred along its top or bottom edge (n, s: x is not used)
 CORNERS = ("nw", "ne", "sw", "se", "n", "s")
 SIZES = ("small", "normal", "large")
@@ -42,7 +43,7 @@ TEST_SECONDS = 60       # "Show test panels": how long they stay (shown whether 
 ARRANGE_SECONDS = 600   # Arrange mode ends by itself after this, so the overlay never stays in the way of the mouse
 
 DEFAULTS = {"enabled": False, "theme": "default", "text_size": "normal", "system_panel": True, "body_panel": True,
-            "radar": True, "strip_panel": False, "now_panel": False, "bio_panel": False, "system_seconds": 0,
+            "radar": True, "strip_panel": False, "now_panel": False, "bio_panel": False, "alerts_panel": False, "system_seconds": 0,
             "radar_range": 800, "analysis_only": [], "show_inactive": False}
 # where each panel starts: a corner of the game window, the offset from it as a share of the window's width (x) and
 # height (y), its size (1 = the canvas's own), its background's opacity (0: text only) and the whole panel's
@@ -51,7 +52,9 @@ LAYOUT_DEFAULT = {"system": {"corner": "nw", "x": 0.02, "y": 0.16, "scale": 1.0,
                   "radar": {"corner": "se", "x": 0.02, "y": 0.10, "scale": 1.0, "bg": 0.5, "alpha": 1.0},
                   "strip": {"corner": "n", "x": 0.0, "y": 0.005, "scale": 1.0, "bg": 0.5, "alpha": 1.0},
                   "now": {"corner": "sw", "x": 0.02, "y": 0.06, "scale": 1.0, "bg": 0.65, "alpha": 1.0},
-                  "bio": {"corner": "nw", "x": 0.02, "y": 0.45, "scale": 1.0, "bg": 0.65, "alpha": 1.0}}
+                  "bio": {"corner": "nw", "x": 0.02, "y": 0.45, "scale": 1.0, "bg": 0.65, "alpha": 1.0},
+                  # under the system strip, centred (S26)
+                  "alerts": {"corner": "n", "x": 0.0, "y": 0.09, "scale": 1.0, "bg": 0.65, "alpha": 1.0}}
 LIMITS = {"x": (0.0, 0.95), "y": (0.0, 0.95), "scale": (0.5, 2.5), "bg": (0.0, 1.0), "alpha": (0.1, 1.0)}
 
 # text metrics on the canvas: line heights and an average character width per size (the window's font is close to
@@ -140,7 +143,8 @@ def overlay_settings(cfg):
     if "overlay" in cfg and not isinstance(cfg.get("overlay"), dict):
         _warn("must be a section (a table of settings); ignored")
     out = dict(DEFAULTS)
-    for key in ("enabled", "system_panel", "body_panel", "radar", "strip_panel", "now_panel", "bio_panel", "show_inactive"):
+    for key in ("enabled", "system_panel", "body_panel", "radar", "strip_panel", "now_panel", "bio_panel", "alerts_panel",
+                "show_inactive"):
         v = o.get(key)
         if v is None:
             continue
@@ -1325,6 +1329,89 @@ def bio_panel(detail, pal, size="normal", bio_min=10_000_000, high_gravity=2.0, 
                       subtitle=f"{len(blocks)} bod{'y' if len(blocks) == 1 else 'ies'} · {tot['signals']} signal{'' if tot['signals'] == 1 else 's'}")
 
 
+# ---- the Alerts panel (S26): the page's alert cards, for a few seconds ----
+
+# The alerts are worded and switched in the browser (speech.json's lines, each kind's notify / sound / speak ticks):
+# the page posts each one it shows (POST /api/overlay/alert) and the server keeps the last few in memory. No page open
+# anywhere: no alerts on the overlay (DESIGN_NOTES).
+ALERT_SECONDS = 8            # how long an alert stays on the panel
+ALERT_DANGER_SECONDS = 15    # a danger alert (hull, heat, interdiction, fuel, the carrier leaving without you...): longer
+ALERT_KEEP = 6               # alerts kept (the newest)
+ALERT_SHOWN = 3              # at most this many on the panel, newest first
+ALERT_SAME_S = 10            # the same title and text again within this: dropped (every page window posts it)
+ALERT_TITLE_MAX, ALERT_BODY_MAX = 200, 300
+ALERT_KIND = re.compile(r"[a-z][a-z_]{0,31}")   # the page's alert kinds (page.js ALERTS: "find", "rare_star"...)
+ALERT_W = 460
+ALERT_BODY_ROWS = 2          # an alert's text wraps to at most this many rows
+
+
+def alert_entry(body, now):
+    """POST /api/overlay/alert's body {kind, title, body?, danger?} checked: ({kind, title, body, danger, t}, None),
+    or (None, why)."""
+    if not isinstance(body, dict):
+        return None, "expected {kind, title, body, danger}"
+    kind, title, text, danger = body.get("kind"), body.get("title"), body.get("body", ""), body.get("danger", False)
+    if not isinstance(kind, str) or not ALERT_KIND.fullmatch(kind):
+        return None, "kind: an alert kind (lower-case letters and _)"
+    if not isinstance(title, str) or not title.strip() or len(title) > ALERT_TITLE_MAX:
+        return None, f"title: text, 1 to {ALERT_TITLE_MAX} characters"
+    if text is None:
+        text = ""
+    if not isinstance(text, str) or len(text) > ALERT_BODY_MAX:
+        return None, f"body: text, at most {ALERT_BODY_MAX} characters"
+    if not isinstance(danger, bool):
+        return None, "danger: true or false"
+    if set(body) - {"kind", "title", "body", "danger"}:
+        return None, f"unknown keys: {', '.join(sorted(set(body) - {'kind', 'title', 'body', 'danger'}))}"
+    return {"kind": kind, "title": " ".join(title.split()), "body": " ".join(text.split()), "danger": danger, "t": now}, None
+
+
+def alert_add(alerts, entry):
+    """`alerts` (oldest first) with `entry` added: the same title and text within ALERT_SAME_S is dropped (each page
+    window posts every alert it shows, the tablet too); at most ALERT_KEEP kept. -> whether it was added."""
+    if any(a["title"] == entry["title"] and a["body"] == entry["body"] and 0 <= entry["t"] - a["t"] < ALERT_SAME_S
+           for a in alerts):
+        return False
+    alerts.append(entry)
+    del alerts[:-ALERT_KEEP]
+    return True
+
+
+def alert_live(a, now):
+    """Whether an alert is still on the panel: ALERT_SECONDS after it came, ALERT_DANGER_SECONDS for danger."""
+    return 0 <= now - a["t"] < (ALERT_DANGER_SECONDS if a.get("danger") else ALERT_SECONDS)
+
+
+def alerts_panel(alerts, pal, size="normal", now=None):
+    """The Alerts panel: the alerts still live (`alerts` oldest first, as kept), newest first, at most ALERT_SHOWN; each
+    its title (bold) and its text (muted, wrapped to ALERT_BODY_ROWS). A danger alert's title is red inside a red frame,
+    and the panel's frame turns red. None when none is live."""
+    now = time.time() if now is None else now
+    shown = [a for a in reversed(alerts or []) if alert_live(a, now)][:ALERT_SHOWN]
+    if not shown:
+        return None
+    lh, room, items, y = LINE_H.get(size, 20), ALERT_W - 2 * PAD, [], PAD
+    for i, a in enumerate(shown):
+        if i:
+            y += 4
+        top = y
+        items.append(runs(PAD, y, [(fit(a["title"], room, size), pal["bad"] if a["danger"] else pal["text"], size, True)]))
+        y += lh
+        rows = ["".join(t for t, _ in row) for row in wrap([(w, "muted") for w in a["body"].split()], room, size, sep=" ")]
+        if len(rows) > ALERT_BODY_ROWS:   # the rest joins the last row, cut there with …
+            rows = rows[:ALERT_BODY_ROWS - 1] + [" ".join(rows[ALERT_BODY_ROWS - 1:])]
+        for s in rows:
+            items.append(runs(PAD, y, [(fit(s, room, size), pal["muted"], size, False)]))
+            y += lh
+        if a["danger"]:
+            items.append(rect(PAD / 2, top - 3, ALERT_W - PAD, y - top + 4, c=pal["bad"], lw=2))
+            y += 2
+    danger = any(a["danger"] for a in shown)
+    return {"id": "alerts", "w": ALERT_W, "h": round(y + PAD - 4), "bg": pal["panel"],
+            "frame": pal["bad"] if danger else pal["frame"], "style": pal.get("style", "rounded"),
+            "accent": pal["bad"] if danger else pal["title"], "items": items}
+
+
 # ---- the test panels: every panel with sample data, to arrange them before flying ----
 
 def test_panels(pal, size="normal", radar_range=800):
@@ -1370,7 +1457,10 @@ def test_panels(pal, size="normal", radar_range=800):
          "organics": [{"genus": "Bacterium", "species": "Bacterium Acies", "variant": "Bacterium Acies - Cyan", "samples": 3,
                        "done": True, "value": 1_000_000}]}]}, pal, size)
     bio["items"][0]["runs"].append(["  test panel", pal["muted"], size, False])
-    return [system, body, radar_test(pal, size, radar_range), strip, now, bio]
+    alerts = alerts_panel([{"kind": "find", "title": "B 1: Earth-like world (test panel)", "body": "2.4M cr scanned and mapped",
+                            "danger": False, "t": 0},
+                           {"kind": "hull", "title": "Interdicted", "body": "you submitted", "danger": True, "t": 0}], pal, size, now=0)
+    return [system, body, radar_test(pal, size, radar_range), strip, now, bio, alerts]
 
 
 def radar_test(pal, size="normal", radar_range=800):

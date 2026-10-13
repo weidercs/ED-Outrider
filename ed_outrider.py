@@ -1159,9 +1159,10 @@ radar = {"true" if st["overlay"]["radar"] else "false"}   # the surface radar: s
 strip_panel = {"true" if st["overlay"]["strip_panel"] else "false"}   # the system strip: two short lines across the top (where you are, the star, bodies found, values)
 now_panel = {"true" if st["overlay"]["now_panel"] else "false"}   # Now (To-Do & Info): Now condensed, the target, fuel, data at risk, what to do next, this session
 bio_panel = {"true" if st["overlay"]["bio_panel"] else "false"}   # every bio signal in the system, the ones over your bio_min highlighted, with samples and values
+alerts_panel = {"true" if st["overlay"]["alerts_panel"] else "false"}   # the page's alerts for a few seconds (8 s, danger 15 s): every kind switched on in Settings -> Alerts (needs the page open)
 system_seconds = {st["overlay"]["system_seconds"]}   # how long the system panel stays after arriving (0: while in supercruise in that system)
 radar_range = {st["overlay"]["radar_range"]}   # metres from the radar's centre to its edge (it widens to fit a colony ring)
-analysis_only = [{", ".join(q(x) for x in st["overlay"]["analysis_only"])}]   # panels shown in your ship only while the HUD is in analysis mode: any of system, body, radar, strip, now, bio (not in the SRV, on foot or over the galaxy map)
+analysis_only = [{", ".join(q(x) for x in st["overlay"]["analysis_only"])}]   # panels shown in your ship only while the HUD is in analysis mode: any of system, body, radar, strip, now, bio, alerts (not in the SRV, on foot or over the galaxy map)
 show_inactive = {"true" if st["overlay"]["show_inactive"] else "false"}   # keep showing when Elite is not the active window (still hidden while other windows cover the game, minimised or on another desktop)
 
 [assistant]
@@ -6410,6 +6411,7 @@ class State:
         # time the overlay window asked (Settings says whether one is connected), and Here's summary cache for it
         self.overlay_cfg = dict(outrider.overlay.DEFAULTS, analysis_only=[])
         self.overlay_zone = None   # the Target panel's near-body zone: {system, body, t (last seen in it)}, D1
+        self.overlay_alerts = []   # the Alerts panel's (S26): the last few alerts the page posted, oldest first (in memory)
         self.overlay_test_until = 0.0
         self.overlay_arrange_until = 0.0
         self.overlay_seen = 0.0
@@ -7744,8 +7746,8 @@ class State:
     def overlay_panels(self, now=None):
         """The panels to draw now: the test panels while they show, else the ones switched on that have something to
         say (none while [overlay] enabled is off, the game is not live or still loading, the system map, the FSS, the
-        SAA or the codex is open, or in the hyperspace tunnel; over the galaxy map only the Target panel, D1). A panel
-        in [overlay] analysis_only shows in your ship only while the HUD is in analysis mode (D2a)."""
+        SAA or the codex is open, or in the hyperspace tunnel; over the galaxy map only the Target panel, D1, and the
+        alerts, S26). A panel in [overlay] analysis_only shows in your ship only while the HUD is in analysis mode (D2a)."""
         now = time.time() if now is None else now
         cfg, pal = self.overlay_cfg, self.overlay_palette()
         if now < self.overlay_test_until or now < self.overlay_arrange_until:
@@ -7757,9 +7759,11 @@ class State:
             return []
         flags, flags2, pos, out = st.get("flags") or 0, st.get("flags2") or 0, self.journals.pos, []
         if (st.get("gui_focus") or 0) == OVERLAY_GALAXY_MAP:
-            # the one panel over the galaxy map (D1): the system you target there, docked or not; never analysis-only
+            # over the galaxy map (D1): the Target panel with the system you target there, docked or not, and the alerts
+            # (S26); never analysis-only
             p = self.overlay_target_panel(st, pos, now, pal, cfg, galaxy=True) if cfg.get("body_panel") and pos else None
-            return [p] if p else []
+            a = outrider.overlay.alerts_panel(self.overlay_alerts, pal, cfg["text_size"], now) if cfg.get("alerts_panel") else None
+            return [x for x in (p, a) if x]
         # the system panel: in supercruise in the system you are in (for system_seconds after arriving, when set)
         if cfg.get("system_panel") and pos and flags & FLAG_SUPERCRUISE:
             try:
@@ -7802,6 +7806,11 @@ class State:
                 p = outrider.overlay.radar_panel(surf, pal, cfg["text_size"], cfg["radar_range"])
                 if p:
                     out.append(p)
+        # the page's alerts (S26): anywhere, for ALERT_SECONDS each
+        if cfg.get("alerts_panel"):
+            p = outrider.overlay.alerts_panel(self.overlay_alerts, pal, cfg["text_size"], now)
+            if p:
+                out.append(p)
         # analysis only (D2a): in your ship with the HUD in combat mode those panels stay off; in the SRV and on foot
         # (no HUD modes there) they show as the others
         only = set(cfg.get("analysis_only") or ())
@@ -7911,7 +7920,7 @@ class State:
                 "pill": self.overlay_pill(now)}   # the header's overlay pill (S8)
 
     def overlay_set(self, body, now=None):
-        """POST /api/overlay {enabled?, theme?, text_size?, panels?: {system|body|radar|strip|now|bio: bool}, analysis_only?:
+        """POST /api/overlay {enabled?, theme?, text_size?, panels?: {system|body|radar|strip|now|bio|alerts: bool}, analysis_only?:
         [panel ids], show_inactive?: bool, test?: bool, arrange?: bool}: the switches, applied at once and written into [overlay] for the next start; test panels for
         TEST_SECONDS; Arrange mode (the window takes the mouse to move and size the panels) until it is switched off or
         ARRANGE_SECONDS pass. (answer, HTTP status)."""
@@ -7948,6 +7957,19 @@ class State:
                 note = f"in use until Outrider stops, but the config file could not keep it: {out.get('error')}"
         self.bump()
         return dict(self.overlay_info(now), **({"note": note} if note else {})), 200
+
+    def overlay_alert(self, body, now=None):
+        """POST /api/overlay/alert {kind, title, body?, danger?} (S26): an alert the page showed, for the Alerts panel.
+        The page words and switches the alerts (speech.json, each kind's ticks): every window posts the ones switched on
+        there, the tablet too, and the same title and text within ALERT_SAME_S counts once. Kept only while the overlay
+        and its Alerts panel are on (else kept False). (answer, HTTP status)."""
+        now = time.time() if now is None else now
+        entry, why = outrider.overlay.alert_entry(body, now)
+        if why:
+            return {"error": why}, 400
+        if not self.overlay_cfg.get("enabled") or not self.overlay_cfg.get("alerts_panel"):
+            return {"kept": False, "why": "the overlay or its Alerts panel is off"}, 200
+        return {"kept": outrider.overlay.alert_add(self.overlay_alerts, entry)}, 200
 
     def overlay_layout_set(self, change):
         """POST /api/overlay/layout {panel: {corner?, x?, y?, scale?, bg?, alpha?, reset?}}: from the window's Arrange
@@ -16775,6 +16797,10 @@ def make_app(state, hosts=None):
         out, status = state.overlay_set(await json_object(request))
         return web.json_response(out, status=status)
 
+    async def overlay_alert_post(request):
+        out, status = state.overlay_alert(await json_object(request))
+        return web.json_response(out, status=status)
+
     async def overlay_layout_post(request):
         body = await json_object(request)
         out, status = state.overlay_layout_set(body if body is not None else None)
@@ -17095,6 +17121,7 @@ def make_app(state, hosts=None):
     app.router.add_get("/api/overlay", overlay_get)
     app.router.add_post("/api/overlay", pc_only(overlay_post))   # the overlay is a game-PC feature (the author, 2026-10-10)
     app.router.add_post("/api/overlay/layout", pc_only(overlay_layout_post))
+    app.router.add_post("/api/overlay/alert", pc_only(overlay_alert_post))   # S26: the page's alerts for the Alerts panel
     app.router.add_get("/api/rail", rail_view)
     app.router.add_post("/api/ask", ask_view)
     app.router.add_get("/api/config", config_get_view)

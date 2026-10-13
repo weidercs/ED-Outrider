@@ -232,10 +232,12 @@
 # strip_panel = false       # the system strip: two short lines across the top (where you are, the star, bodies found, mapped, Spansh)
 # now_panel = false         # Now (To-Do & Info): Now condensed, the target, fuel, data at risk, what to do next, this session
 # bio_panel = false         # every bio signal in the system, the ones over bio_min highlighted, with samples and values
+# alerts_panel = false      # the page's alerts for a few seconds (8 s, danger 15 s): every kind switched on in Settings ->
+#                           # Alerts (notify, sound or speak); worded by the page, so only while a page is open somewhere
 # system_seconds = 0        # how long the system panel stays after arriving (0: while in supercruise in that system)
 # radar_range = 800         # metres from the radar's centre to its edge (it widens to fit a colony ring)
 # analysis_only = []        # panels shown in your ship only while the HUD is in analysis mode, e.g. ["system", "bio"]
-#                           # (any of system, body, radar, strip, now, bio; not in the SRV, on foot or over the galaxy map)
+#                           # (any of system, body, radar, strip, now, bio, alerts; not in the SRV, on foot or over the galaxy map)
 # show_inactive = false     # keep showing when Elite is not the active window (Settings -> In-game overlay); it still
 #                           # hides while other windows cover the game, or the game is minimised or on another desktop
 

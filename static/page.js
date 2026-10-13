@@ -1925,8 +1925,27 @@ function uncool(it) {
 }
 // how long each sound plays before the voice starts (the fanfare's held chord runs to 1.7 s); others 900 ms
 const SOUND_LEAD = {fanfare: 1700, chime: 1000};
+// Is this alert kind switched on in this browser: any of its ticks in Settings → Alerts (notify with notifications on,
+// its sound, speak), whatever the 🗣 and 🔊 buttons or a hush say right now
+const alertOn = kind => {
+  const snd = (ALERTS.find(a => a[0] === kind) || [])[2];
+  return !!((alertCfg.enabled && alertCfg[kind]) || ((snd || kind === "arrival") && alertSound[kind]) || (alertSpeak[kind] && !UNSPOKEN.has(kind)));
+};
+// The overlay's Alerts panel (S26): an alert this page shows, posted to the game PC's Outrider while the overlay and
+// its Alerts panel are on and the kind is switched on here (the author: every alert switched on). Every window posts
+// it, the tablet too: the server keeps one of the same title and text within 10 s. Danger (as the speech queue ranks
+// it, or the danger sound) stays 15 s there, the rest 8 s. Returns whether it was posted.
+function overlayAlert(kind, title, body, tag) {
+  const o = data && data.overlay;
+  if (!o || !data.game_pc || !o.enabled || !(o.panels || {}).alerts || !alertOn(kind)) return false;
+  const danger = speechPrio(kind, tag) === 0 || (ALERTS.find(a => a[0] === kind) || [])[2] === "danger";
+  fetch("api/overlay/alert", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({kind, title: String(title || "").slice(0, 200), body: String(body || "").slice(0, 300), danger})}).catch(() => {});
+  return true;
+}
 function alertOut(kind, title, body, {sound, say, delay = 0, tag = null, still = null, quiet = false} = {}) {
   lastAlert = {kind, title, body, at: Date.now()};
+  overlayAlert(kind, title, body, tag);
   if (TABLET) tabBanner(kind, title, body, tag);   // the tablet shows it; the PC says it (and the tablet too with Play alerts here)
   const entry = logSpeech({kind, tag, words: title});
   const snd = sound === undefined ? (ALERTS.find(a => a[0] === kind) || [])[2] : sound;
@@ -2529,7 +2548,7 @@ function sayRegion(m) {
 }
 // "B 4 has polonium, 1.3 percent": a jumponium body, in the FSS debrief or alone
 const jumponiumSaid = j => `${j.body} has ${(j.name || j.material || "").toLowerCase()}, ${j.pct} percent.`;
-const jumponiumOn = () => !!(alertSpeak.jumponium || (alertCfg.enabled && alertCfg.jumponium) || alertSound.jumponium);
+const jumponiumOn = () => alertOn("jumponium");
 // Notable stellar phenomena in words: {ring: 3} -> "three notable stellar phenomena, all in rings"; {ring: 2, cloud: 1}
 // -> "three notable stellar phenomena: two in rings and one in a cloud"; {cloud: 1} -> "a notable stellar phenomenon, in a cloud"
 const NSP_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
@@ -9335,7 +9354,8 @@ const OV_PANELS = [["system", "System", "the bodies worth your time, in supercru
                    ["radar", "Surface radar", "on a body's surface: samples, colony rings, the ship"],
                    ["strip", "System strip", "two short lines across the top: where you are, the star, bodies found, values"],
                    ["now", "Now (To-Do & Info)", "Now, condensed: the target, fuel, data at risk, what to do next, this session"],
-                   ["bio", "Bio signals", "every bio signal in the system, the ones worth it highlighted: samples, values"]];
+                   ["bio", "Bio signals", "every bio signal in the system, the ones worth it highlighted: samples, values"],
+                   ["alerts", "Alerts", "the page's alerts for a few seconds (8 s, danger 15 s in red): every kind switched on in Settings → Alerts; needs the page open"]];
 const OV_CORNERS = {nw: "top left", n: "top centre", ne: "top right", sw: "bottom left", s: "bottom centre", se: "bottom right"};
 let overlayDrawn = "", overlayNote = "";
 // the window's state: Outrider runs it on the game PC (o.runner); on a server it runs on the game PC by hand

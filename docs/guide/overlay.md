@@ -3,7 +3,7 @@
 # In-game overlay
 
 Outrider can draw a few panels right over the game: what is worth your time in the system, your target (the body you
-are at or heading to, or the next system), a radar on a body's surface, and (when you tick them) the system strip, Now (To-Do & Info) and the bio signals. A
+are at or heading to, or the next system), a radar on a body's surface, and (when you tick them) the system strip, Now (To-Do & Info), the bio signals and your alerts. A
 small window on the game PC draws them; it sits over Elite's window and lets every click through, so you play as
 before.
 
@@ -67,9 +67,16 @@ before.
   muted and the finished ones carry a green ✓. Under each body, each species: sampled ✓ with its colour, a run under
   way ("2/3"), lost, or not started with its likeliest species, codex mark and value; signals the DSS has not named yet
   show what they could be. The foot says how many are sampled, what is left and how many bodies are under your level.
+- **Alerts** (optional): the page's alerts for a few seconds each, under the system strip at the top: what you
+  would hear or see as a notification ("B 1: Earth-like world", "Fuel low", "Interdicted"), its title and a line or two
+  of its text, newest first, three at most. Each stays 8 seconds; danger (hull, heat, interdiction, fuel, a rig too far,
+  the ship lost, the carrier leaving without you) stays 15 seconds, in red with a red frame. It shows every alert
+  switched on in **Settings → Alerts** in the browser that saw it (any of notify, sound or speak ticked), even while
+  the voice is off or hushed. The alerts are worded by Outrider's page, so a page must be open somewhere (a browser
+  window, the second screen or the tablet): with none open, the panel stays empty. Several windows open count once.
 
 No panel covers the system map, the orrery, the FSS, the SAA or the codex, and over the galaxy map only the Target
-panel shows. None shows in the hyperspace tunnel or while the game is loading (from its launch, the main menu included, until your session is in), even after a
+panel and the alerts show. None shows in the hyperspace tunnel or while the game is loading (from its launch, the main menu included, until your session is in), even after a
 crash left the old session's status behind.
 
 ## Starting it
@@ -98,7 +105,7 @@ does the **overlay pill** in the page's header, beside the link pill, while the 
 
 On the tablet the link line says it too ("linked · overlay ✓"). If the window stops by itself, Outrider starts it again after a growing wait; after five times in a row it gives up (Settings
 says so) until you switch the overlay off and on. A window that drew for a minute or more before it stopped starts
-the count again. **Show test panels** draws every panel (all six, switched on or
+the count again. **Show test panels** draws every panel (all seven, switched on or
 not) with made-up contents for a minute, without flying anywhere, even while Outrider's page is in front of the game.
 Start Outrider from your desktop (the launcher, or a terminal in your session): the window needs your screen.
 
@@ -131,8 +138,8 @@ Each panel has its tick box at the start of its row in Settings → In-game over
 it shows; a panel switched off has its row dimmed). **Analysis only**, the next column, keeps a panel off in your
 ship while the HUD is in combat mode: it shows only in analysis mode, so the screen stays clear in a fight. In the
 SRV and on foot (no HUD modes there) and over the galaxy map it shows as the others. The system, Target and radar
-panels start on; the system strip, Now
-and Bio signals start off. The **theme** colours and frames the panels as the page's themes do (Elite's orange with
+panels start on; the system strip, Now, Bio signals
+and Alerts start off. The **theme** colours and frames the panels as the page's themes do (Elite's orange with
 cut corners, LCARS's bars, ...); **text** is small, normal or large. In the config file (`[overlay]`):
 `system_seconds` keeps the system panel only that long after arriving (0: while you are in supercruise there), and
 `radar_range` is the radar's edge in metres (it widens to fit a colony ring); `analysis_only` lists the panels

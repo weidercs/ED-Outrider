@@ -1034,10 +1034,11 @@ class ColourTablesRetry(unittest.TestCase):
         self.assertIs(state.payload()["bio_rules"]["colours"], False)
 
         import threading
-        hold = threading.Event()   # the download waits until both requests are in
 
         async def go(get):
-            out = {}
+            # the download waits until both requests are in: a fresh event each run (a shared one, set by the first
+            # run, let the second run's download finish before its second POST, which then started another: flaky)
+            out, hold = {}, threading.Event()
 
             def slow(url):
                 hold.wait(5)
@@ -1062,7 +1063,8 @@ class ColourTablesRetry(unittest.TestCase):
         gen = state.bio_rules_gen
         state.journals.dirty = set()
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            asyncio.run(go(self.get()))
+            out = asyncio.run(go(self.get()))
+        self.assertEqual((out["first"], out["again"]), ((202, "running"), 409))  # one at a time on the Retry too
         self.assertEqual(state.bio_colours_job["state"], "done")
         self.assertEqual(state.notices.active(), [])                              # the card goes
         self.assertTrue(outrider.bio.colours_available())

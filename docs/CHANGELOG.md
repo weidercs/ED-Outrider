@@ -2,6 +2,27 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-13 · The overlay's Alerts panel, and a steady colour-tables test
+- **An Alerts panel on the overlay** (S26): `[overlay] alerts_panel` (false), the seventh panel (`overlay.PANELS`
+  "alerts", "Alerts"), placed top centre under the system strip (`LAYOUT_DEFAULT`; `clean_layout` fills it into an
+  older layout) and moved in Arrange mode like the others; its own row in Settings → In-game overlay with an Analysis
+  only box. The page words and switches the alerts, so it posts each alert it shows (`overlayAlert` from `alertOut`,
+  POST `/api/overlay/alert` {kind, title, body, danger}, `pc_only`) while the overlay and the panel are on, on the
+  game PC, and the kind is switched on in that browser (`alertOn`: any of notify with notifications on, its sound,
+  speak; the plan's recommended default; `jumponiumOn` is now `alertOn("jumponium")`). Every window posts, the tablet
+  too: the server (`State.overlay_alert`, `overlay.alert_entry` / `alert_add`, in memory) keeps the last
+  `ALERT_KEEP` (6) and drops the same title and text within `ALERT_SAME_S` (10 s). `overlay.alerts_panel`: newest
+  first, three at most, each `ALERT_SECONDS` (8 s), danger (the speech queue's danger rank or the danger sound)
+  `ALERT_DANGER_SECONDS` (15 s) with its title in red, a red frame round it and the panel's frame red. It shows
+  wherever the overlay shows panels, docked and on foot too, and over the galaxy map beside the Target panel; never
+  over the system map, the FSS, the SAA, the codex or in the tunnel. No page open anywhere: no alerts on the overlay
+  (DESIGN_NOTES' known limits). The test panels add a sample (all seven).
+- **A flaky test made steady:** `test_values.ColourTablesRetry.test_the_banner_and_retry` shared one `hold` event
+  between its two runs; set by the first, it let the second run's download finish before its second POST, which then
+  started another download and bumped `bio_rules_gen` twice (2 of 4 full runs failed). Each run has its own event now,
+  and the second run checks the one-at-a-time 409 too. The server's guard was sound: the check and the task's start
+  have no await between them, and a Retry after a finished download is meant to start a new one.
+
 ## 2026-10-13 · The overlay pill, and keeping the overlay when Elite is not the active window
 - **The overlay pill** (S8): `#ovPill` beside the link pill while the overlay is on (game PC only): "overlay ✓"
   drawing, "overlay …" starting, Elite not running or loading, behind this page, minimised or covered, "overlay ✗"

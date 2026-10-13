@@ -5,7 +5,8 @@
 ## 🔔 Alerts
 
 Alerts fire only for something out of the ordinary. Each can play a sound (🔊), show a desktop
-notification and be spoken (🗣), chosen per alert in **⚙ Settings → Alerts**:
+notification and be spoken (🗣), chosen per alert in **⚙ Settings → Alerts**. On the game PC the
+[in-game overlay](overlay.md)'s Alerts panel can show them over the game too, for a few seconds each:
 
 - a new discovery targeted, or arriving somewhere nobody has been
 - leaving with mapping or bio over your levels undone, or a first-discovered Earth-like, water, ammonia or

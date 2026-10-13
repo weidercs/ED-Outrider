@@ -4752,7 +4752,10 @@ const settle = async maxMs => {
                  dimmed: box.querySelector('[data-ovpanel="body"]').closest("tr").classList.contains("ovoff"),
                  // the help under it: three short points, no button it no longer has
                  wrapped: !!box.querySelector(".ovwrap > table.ovlay"),   // scrolled inside its section, never spilling out
-                 help: d.querySelectorAll("ul.ovhelp li").length === 3 && !/button/.test(d.querySelector("ul.ovhelp").textContent)};
+                 help: d.querySelectorAll("ul.ovhelp li").length === 4 && !/button/.test(d.querySelector("ul.ovhelp").textContent),
+                 // S26: the Alerts panel's row, what it shows on hover
+                 alerts: /^\s*Alerts$/.test(box.querySelector('[data-ovpanel="alerts"]').parentNode.textContent) &&
+                   /switched on in Settings → Alerts/.test(box.querySelector('[data-ovpanel="alerts"]').closest("label").title)};
     const x = box.querySelector('[data-ovlay="radar"][data-k="x"]');
     x.value = "30"; x.dispatchEvent(new w.Event("change", {bubbles: true}));
     await sleep(50);
@@ -4780,9 +4783,9 @@ const settle = async maxMs => {
     got.popup = [step("off"), step("installing"), step("starting"), step("installing"), step("install_failed"), step("off")]
       .map(t => t.replace(/ .*/, "") + (/installed/.test(t) ? " installed" : /failed/.test(t) ? " failed" : ""));
     w.eval(`data.overlay = JSON.parse(${JSON.stringify(saved)}); overlayNote = ""; overlayDrawn = ""; renderOverlay();`);
-    const want = {rows: 6, body: "120", off: true, theme: "elite", nowin: true, nowName: true, inRows: true, tip: true,
-                  target: true, analysis: "system body radar strip now bio✓ | Analysis only",
-                  dimmed: true, wrapped: true, help: true, analysisAfter: "system bio", note: true, themeNote: true,
+    const want = {rows: 7, body: "120", off: true, theme: "elite", nowin: true, nowName: true, inRows: true, tip: true,
+                  target: true, analysis: "system body radar strip now bio✓ alerts | Analysis only",
+                  dimmed: true, wrapped: true, help: true, alerts: true, analysisAfter: "system bio", note: true, themeNote: true,
                   posted: [["overlay/layout", {radar: {x: 0.3}}], ["overlay", {analysis_only: ["system", "bio"]}], ["overlay", {test: true}],
                            ["overlay", {theme: "default"}]],
                   venv: true, popup: ["", "⟳Installing", "✓ installed", "⟳Installing", "Installing failed", ""]};
@@ -4832,6 +4835,44 @@ const settle = async maxMs => {
     const ok = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && ok;
     console.log(ok ? "OK" : "FAIL", "| overlay pill |", ok ? "three words, the reason on hover, behind this page amber, the keep-showing switch" : JSON.stringify(got), errors.slice(before));
+  }
+  // S26: the overlay's Alerts panel: every alert the page shows is posted (api/overlay/alert, stubbed) while the
+  // overlay and its Alerts panel are on, on the game PC, and the kind is switched on in this browser (any of notify
+  // with notifications on, its sound, speak); danger by the speech queue's rank or the danger sound
+  {
+    const w = dom.window, before = errors.length, real = w.fetch, posted = [];
+    w.fetch = (u, o) => /api\/overlay\/alert$/.test(String(u)) && o && o.method === "POST"
+      ? (posted.push(JSON.parse(o.body)), Promise.resolve({ok: true, status: 200, json: async () => ({kept: true})})) : real(u, o);
+    const saved = w.eval("JSON.stringify([data.overlay || null, data.game_pc, alertCfg, alertSound, alertSpeak])");
+    const step = js => { w.eval(js); return posted.length; };
+    w.eval(`data.game_pc = true; data.overlay = Object.assign({}, data.overlay || {}, {enabled: true, panels: {alerts: true}});`);
+    const got = {counts: [
+      step(`alertOut("find", "B 1: Earth-like world", "2.4M cr scanned and mapped");
+            alertOut("hull", "Interdicted", "you submitted", {tag: "interdicted"});
+            alertOut("fuel", "Fuel low", "scoop at the next K star", {tag: "fuel_low"});
+            alertOut("rigleash", "Rig 3 is 4.2 km away", "");`),
+      // every tick of the kind off: not shown; its sound alone: shown
+      step(`alertSpeak.find = false; alertSound.find = false; alertCfg.find = false; alertOut("find", "C 2: Water world", "");`),
+      step(`alertSound.find = true; alertOut("find", "C 3: Water world", "");`),
+      // an upload outage: notify only (no sound, never spoken), so only with notifications on
+      step(`alertCfg.enabled = false; alertCfg.uploads = true; alertOut("uploads", "EDDN uploads are failing", "");`),
+      step(`alertCfg.enabled = true; alertOut("uploads", "EDDN uploads are failing", "");`),
+      // the panel off, a server, the overlay off: nothing posted
+      step(`data.overlay.panels = {alerts: false}; alertOut("hull", "Heat damage", "");`),
+      step(`data.overlay.panels = {alerts: true}; data.game_pc = false; alertOut("hull", "Heat damage", "");`),
+      step(`data.game_pc = true; data.overlay.enabled = false; alertOut("hull", "Heat damage", "");`)],
+      first: posted.slice(0, 4).map(b => [b.kind, b.title, b.body, b.danger].join("|")),
+      jumponium: w.eval(`jumponiumOn() === alertOn("jumponium")`)};
+    w.fetch = real;
+    w.eval(`(() => { const [o, pc, c, so, sp] = JSON.parse(${JSON.stringify(saved)}); data.overlay = o; data.game_pc = pc;
+      Object.assign(alertCfg, c); Object.assign(alertSound, so); Object.assign(alertSpeak, sp); })()`);
+    const want = {counts: [4, 4, 5, 5, 6, 6, 6, 6],
+                  first: ["find|B 1: Earth-like world|2.4M cr scanned and mapped|false", "hull|Interdicted|you submitted|true",
+                          "fuel|Fuel low|scoop at the next K star|true", "rigleash|Rig 3 is 4.2 km away||true"],
+                  jumponium: true};
+    const ok = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && ok;
+    console.log(ok ? "OK" : "FAIL", "| overlay alerts |", ok ? "posted when switched on here, danger marked, not with the panel off or on a server" : JSON.stringify(got), errors.slice(before));
   }
   // Settings > Voice > More voices: Piper's catalogue from the server (stubbed here: no network), one language at a time;
   // "Download and use" asks the server for that voice (POST api/voice, stubbed: nothing downloads)

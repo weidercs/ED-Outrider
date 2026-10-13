@@ -394,6 +394,16 @@ upstream project's choices, not rules of the game.
   checks run only while the setting is on and the game is not in front, kept a second (`INACTIVE_EVERY_S`). A native
   Wayland window is in no X11 list, so it is never seen covering the game (the overlay draws over it): said in the
   guide.
+- **The overlay's Alerts panel comes from the page** (S26, the author's defaults 2026-10-12): the alerts are worded
+  and switched in the browser (speech.json's personality lines, each kind's notify / sound / speak ticks in
+  localStorage), so the page posts each alert it shows (POST `/api/overlay/alert`, `pc_only`) and the server keeps the
+  last `ALERT_KEEP` in memory; a Python copy of every alert's wording would be large and drift. "Switched on" is any of
+  the kind's three ticks in the browser that saw it (the plan's recommended default), whatever 🗣, 🔊 or a hush say at
+  that moment; every window posts, the tablet too, and the same title and text within `ALERT_SAME_S` counts once. Each
+  stays `ALERT_SECONDS` (8 s), danger `ALERT_DANGER_SECONDS` (15 s, in red: the speech queue's danger rank or the
+  danger sound), newest first, three at most. It shows over the galaxy map too (beside the Target panel: an alert is
+  brief and the galaxy map is where a plotting player sits), never over the system map, the FSS, the SAA, the codex or
+  in the tunnel, like every panel; Analysis only applies to it as to the others.
 - **No rebuy multiple for a ship whose hull has no credit value** (the author, 2026-10-10). An Arx-bought ship's
   Loadout carries ModulesValue but no HullValue, and its rebuy is 5% of the modules alone, so "N× rebuy" said ~110
   on any trip and a rebuy-multiple level would always fire. Such a ship gets no rebuy in the risk figures (`risk_rebuy`,
@@ -862,6 +872,8 @@ upstream project's choices, not rules of the game.
   (`PROTON_ENABLE_WAYLAND=1`: Elite becomes a Wayland window the overlay cannot find); fractional display scaling is
   untried; Windows has the code, untried against the game. Native Wayland compositors, gamescope and exclusive
   fullscreen are out of scope.
+- **No page open, no alerts on the overlay:** the Alerts panel shows what an open Outrider page (a browser window or
+  the tablet) posts, so with none open anywhere the panel stays empty (see the decision above).
 
 ## Not yet tried in a live game
 
@@ -923,5 +935,6 @@ confirmed while playing. Treat reports about them as likely real.
   on Windows. The overlay pill's states over a real game (and whether, under Proton and XWayland, the active window's id
   matches wmctrl's: a mismatch would show as "not the active window" while playing), DisplaySettings.xml's
   `<FullScreen>` values, and "keep showing" with a window over the game (X11 stacking, and Windows' z-order walk).
+  The Alerts panel over a real game (its timing beside the voice, and how much a busy arrival puts on it).
 - The jump line's wait for Status.json's FsdJump flag (bit 30) in a live jump; your own sound files and Volume
   through the real players; the co-pilot button choosing the throttle of a real two-part X-56.

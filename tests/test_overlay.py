@@ -809,6 +809,71 @@ class Strip(unittest.TestCase):
         self.assertEqual(O.layout_update(None, {"system": {"corner": "s"}})[0]["system"]["corner"], "s")
 
 
+def alert(title, t, body="", danger=False, kind="find"):
+    return {"kind": kind, "title": title, "body": body, "danger": danger, "t": t}
+
+
+class AlertsPanel(unittest.TestCase):
+    """S26: the page's alerts on the overlay for a few seconds (the author: 8 s, 15 s for danger, placed in Arrange
+    mode like the other panels)."""
+
+    def test_entry_checked(self):
+        e, why = O.alert_entry({"kind": "rare_star", "title": " ⭐ A  black hole ", "body": "the main star", "danger": False}, 50)
+        self.assertIsNone(why)
+        self.assertEqual(e, {"kind": "rare_star", "title": "⭐ A black hole", "body": "the main star", "danger": False, "t": 50})
+        self.assertEqual(O.alert_entry({"kind": "fuel", "title": "Fuel low"}, 1)[0]["body"], "")   # body and danger optional
+        for bad in (None, [], {"title": "x"}, {"kind": "Find!", "title": "x"}, {"kind": "find", "title": ""},
+                    {"kind": "find", "title": "x" * (O.ALERT_TITLE_MAX + 1)}, {"kind": "find", "title": "x", "body": 3},
+                    {"kind": "find", "title": "x", "body": "y" * (O.ALERT_BODY_MAX + 1)},
+                    {"kind": "find", "title": "x", "danger": "yes"}, {"kind": "find", "title": "x", "sound": "chime"}):
+            self.assertIsNone(O.alert_entry(bad, 1)[0], bad)
+
+    def test_kept_and_deduped(self):
+        """Every page window posts each alert (the tablet too): the same title and text within ALERT_SAME_S counts once;
+        the newest ALERT_KEEP are kept."""
+        kept = []
+        self.assertTrue(O.alert_add(kept, alert("Fuel low", 100)))
+        self.assertFalse(O.alert_add(kept, alert("Fuel low", 100 + O.ALERT_SAME_S - 1)))   # another window's copy
+        self.assertTrue(O.alert_add(kept, alert("Fuel low", 100, body="2 jumps left")))     # other text: another alert
+        self.assertTrue(O.alert_add(kept, alert("Fuel low", 100 + O.ALERT_SAME_S)))         # later: again
+        for i in range(10):
+            O.alert_add(kept, alert(f"Find {i}", 200 + i))
+        self.assertEqual([a["title"] for a in kept], [f"Find {i}" for i in range(10 - O.ALERT_KEEP, 10)])
+
+    def test_panel(self):
+        pal = O.palette()
+        kept = [alert("Oldest", 100), alert("Interdicted", 101, "you submitted", danger=True), alert("Second", 102),
+                alert("Newest", 103, "a long text " * 30)]
+        p = O.alerts_panel(kept, pal, now=104)
+        lines = texts(p)
+        self.assertEqual([lines[0], lines[1], lines[-2], lines[-1]], ["Newest", lines[1], "Interdicted", "you submitted"])
+        self.assertNotIn("Oldest", lines)                                          # three at most, newest first
+        self.assertEqual(lines[1 + O.ALERT_BODY_ROWS], "Second")                  # the long text wrapped to two rows,
+        self.assertTrue(lines[O.ALERT_BODY_ROWS].endswith("…"))                    # then cut
+        self.assertTrue(all(O.text_width(t) <= O.ALERT_W - 2 * O.PAD for t in lines))
+        self.assertEqual((p["id"], p["frame"], colour_of(p, "Interdicted")), ("alerts", pal["bad"], pal["bad"]))
+        self.assertEqual(colour_of(p, "Newest"), pal["text"])
+        [box] = [i for i in p["items"] if i["t"] == "rect"]                        # the danger alert framed in red
+        self.assertEqual(box["c"], pal["bad"])
+        self.assertTrue(all(0 <= i.get("y", 0) <= p["h"] for i in p["items"]))
+        # 8 s each, 15 for danger
+        after = O.alerts_panel(kept, pal, now=101 + O.ALERT_SECONDS + 2)
+        self.assertEqual(texts(after), ["Interdicted", "you submitted"])
+        self.assertIsNone(O.alerts_panel(kept, pal, now=101 + O.ALERT_DANGER_SECONDS))
+        self.assertEqual(O.alerts_panel([alert("Calm", 100)], pal, now=101)["frame"], pal["frame"])
+        self.assertIsNone(O.alerts_panel([], pal, now=1))
+
+    def test_setting_and_place(self):
+        self.assertFalse(O.overlay_settings({})["overlay"]["alerts_panel"])           # optional: off by default
+        self.assertTrue(O.overlay_settings({"overlay": {"alerts_panel": True}})["overlay"]["alerts_panel"])
+        lay = O.clean_layout({"strip": {"y": 0.01}})                                 # a layout from before: filled in
+        self.assertEqual(lay["alerts"]["corner"], "n")                              # top centre, under the strip
+        self.assertGreater(lay["alerts"]["y"], lay["strip"]["y"])
+        self.assertEqual(O.layout_update(None, {"alerts": {"y": 0.2}})[0]["alerts"]["y"], 0.2)
+        self.assertEqual(O.analysis_list(["alerts"]), ["alerts"])
+        self.assertEqual(O.PANEL_NAMES["alerts"], "Alerts")
+
+
 class Server(unittest.TestCase):
     def setUp(self):
         self.db = ed_outrider.open_db(":memory:")
@@ -829,8 +894,8 @@ class Server(unittest.TestCase):
         out, status = self.state.overlay_set({"enabled": True, "theme": "elite", "panels": {"radar": False}, "test": True}, now=50)
         self.assertEqual(status, 200)
         self.assertEqual((out["enabled"], out["theme"], out["panels"], out["test"], out["analysis_only"]),
-                         (True, "elite", {"system": True, "body": True, "radar": False, "strip": False, "now": False, "bio": False},
-                          O.TEST_SECONDS, []))
+                         (True, "elite", {"system": True, "body": True, "radar": False, "strip": False, "now": False, "bio": False,
+                                          "alerts": False}, O.TEST_SECONDS, []))
         with open(self.state.config_path, encoding="utf-8") as f:   # written for the next start
             text = f.read()
         for line in ('enabled = true', 'theme = "elite"', 'radar = false'):
@@ -1074,6 +1139,39 @@ class Server(unittest.TestCase):
         self.state.overlay_set({"test": True}, now=1000)                            # the test panels: all of them
         self.assertEqual(shown(), list(O.PANELS))
 
+    def test_alerts_panel(self):
+        """S26: an alert the page posts shows on the Alerts panel for ALERT_SECONDS wherever the overlay shows panels
+        (docked, on foot, over the galaxy map beside the Target panel), never over the system map; kept only while
+        the overlay and the panel are on; analysis only applies to it as to the others."""
+        st = self.target_setup()
+        shown = lambda now=1010: [p["id"] for p in self.state.overlay_panels(now=now)]
+        post = lambda title, now=1010, **kw: self.state.overlay_alert(dict({"kind": "find", "title": title}, **kw), now=now)
+        self.assertEqual(post("Off"), ({"kept": False, "why": "the overlay or its Alerts panel is off"}, 200))
+        self.assertEqual(self.state.overlay_alerts, [])
+        self.state.overlay_cfg.update(alerts_panel=True)
+        self.assertEqual(post("B 1: Earth-like world", body="2.4M cr"), ({"kept": True}, 200))
+        self.assertEqual(post("B 1: Earth-like world", now=1011, body="2.4M cr"), ({"kept": False}, 200))   # another window's
+        self.assertEqual(post(""), ({"error": f"title: text, 1 to {O.ALERT_TITLE_MAX} characters"}, 400))
+        self.assertEqual(shown(), ["alerts"])
+        st["flags"] = ed_outrider.FLAG_IN_MAIN_SHIP | ed_outrider.FLAG_DOCKED            # docked: still shown
+        self.assertEqual(shown(), ["alerts"])
+        st.update(flags=0, flags2=1)                                                    # on foot
+        self.assertEqual(shown(), ["alerts"])
+        self.state.journals.handle({"event": "FSDTarget", "timestamp": ed_outrider.iso_ts(1005), "Name": "Ossia",
+                                    "SystemAddress": 99, "StarClass": "K"})
+        st.update(flags=ed_outrider.FLAG_IN_MAIN_SHIP, flags2=0, gui_focus=ed_outrider.OVERLAY_GALAXY_MAP)
+        self.assertEqual(shown(), ["body", "alerts"])                                  # over the galaxy map too
+        st["gui_focus"] = 7
+        self.assertEqual(shown(), [])                                                  # the system map: nothing
+        st["gui_focus"] = 0
+        self.assertEqual(shown(1010 + O.ALERT_SECONDS), ["body"])                      # gone after 8 s
+        self.state.overlay_cfg.update(analysis_only=["alerts"])
+        self.assertEqual(shown(), ["body"])                                            # combat mode: off
+        st["flags"] |= ed_outrider.FLAG_HUD_ANALYSIS
+        self.assertEqual(shown(), ["body", "alerts"])
+        self.state.overlay_cfg.update(alerts_panel=False)
+        self.assertEqual(shown(), ["body"])
+
     def test_radar_on_a_body(self):
         self.state.overlay_cfg.update(enabled=True, system_panel=False, body_panel=False)
         self.state.journals.status_json = {"live": True, "flags": ed_outrider.FLAG_IN_SRV, "gui_focus": 0}
@@ -1193,6 +1291,19 @@ class Server(unittest.TestCase):
                                                                         ("/api/overlay/layout", {"system": {"y": 0.5}}))]
                 self.assertEqual(server, [409, 409])
                 self.state.game_pc = True
+                # S26: the page's alerts, pc_only like the rest; checked, capped, refused from another site
+                self.state.overlay_cfg.update(enabled=True, alerts_panel=True)
+                one = {"kind": "hull", "title": "Interdicted", "body": "you submitted", "danger": True}
+                alerts = [await (await c.post("/api/overlay/alert", json=one)).json(),
+                          (await c.post("/api/overlay/alert", json=dict(one, body="x" * 400))).status,
+                          (await c.post("/api/overlay/alert", data="[1]", headers={"Content-Type": "application/json"})).status,
+                          (await c.post("/api/overlay/alert", json=dict(one, title="Other"),
+                                        headers={"Origin": "http://evil.example"})).status]
+                self.state.game_pc = False
+                alerts.append((await c.post("/api/overlay/alert", json=one)).status)
+                self.state.game_pc = True
+                self.assertEqual(alerts, [{"kept": True}, 400, 400, 403, 409])
+                self.assertEqual([a["title"] for a in self.state.overlay_alerts], ["Interdicted"])
                 return (first, same, bad, ok, lay.status, (await lay.json())["layout"]["system"]["y"], lay_bad, cross,
                         seen_by_visitor, seen_by_window)
         first, same, bad, ok, lay, y, lay_bad, cross, by_visitor, by_window = asyncio.run(go())
