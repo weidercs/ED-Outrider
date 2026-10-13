@@ -6242,6 +6242,76 @@ const settle = async maxMs => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| EDSM flight log import |", good ? "Import, its week and Stop, the visits from EDSM and Remove them, History's from EDSM, the Map's hover" : JSON.stringify(got), errors.slice(before));
   }
+  // S30: numbered stops on Here's schematic (two on a body with mapping and bio, a stop under your cr/min level tinted),
+  // the faint path from the arrival star with rough leg times, the checklist numbered alike; a tap on a number makes
+  // that body the first stop (posted: one order for every window, Now and the voice), "↺ order" puts it back; a first
+  // stop of another system changes nothing. The posts are stubbed
+  {
+    const w = dom.window, before = errors.length, realFetch = w.fetch, posted = [];
+    w.fetch = (u, o) => {
+      if (o && o.method === "POST" && /api\/plan\/first/.test(String(u))) {
+        const b = JSON.parse(o.body); posted.push([b.id64 === w.eval("posId()"), b.body]);
+        return Promise.resolve(new Response(JSON.stringify({ok: true, plan_first: b.body ? {id64: b.id64, body: b.body} : null}),
+                                            {status: 200, headers: {"Content-Type": "application/json"}}));
+      }
+      return realFetch(u, o);
+    };
+    const got = JSON.parse(w.eval(`(() => {
+      const o = {};
+      window.__s30 = {hd: hereData, pf: data.plan_first, modes: JSON.stringify(hereModes), sel: selectedBody};
+      const hd0 = hereData, id = posId();
+      if (!hd0 || hd0.error || String(hd0.id64) !== id) return JSON.stringify({noHere: true});
+      const P = hd0.bodies.filter(b => b.type === "Planet").map(b => b.name);
+      window.__s30.P = P;
+      const L = {id64: id, body_count: 4, scanned: 4, unscanned: 0, honked: true, all_found: true, unmapped_valuable: [], clean: false,
+        unmapped: [{body: P[1], subtype: "Water world", increment: 900000, special: true, dist_ls: 980},
+                   {body: P[2], subtype: "Rocky body", increment: 510000, special: false, dist_ls: 90000}],
+        bio_pending: [{body: P[0], signals: 1, genera: ["Stratum"], partial: {}, potential: 19e6, codex_new: false, dist_ls: 420, factor: 1},
+                      {body: P[1], signals: 1, genera: [], partial: {Bacterium: 1}, potential: 1e6, codex_new: false, dist_ls: 980, factor: 1}]};
+      window.__s30.L = L;
+      hereData = Object.assign({}, hd0, {leaving: L}); data.plan_first = null;
+      setHereMode("schematic"); renderHere();
+      const sEl = document.getElementById("hereSchematic");
+      const stops = () => [...sEl.querySelectorAll(".sstop")].map(s => [s.closest(".sbody").dataset.body, s.textContent + (s.classList.contains("skip") ? "?" : "") + (s.classList.contains("first") ? "!" : "")]);
+      o.stops = stops();
+      o.want = [[P[0], "①"], [P[1], "②"], [P[1], "③"], [P[2], "④?"]];
+      const svg = sEl.querySelector("svg.spath");
+      o.path = svg && [svg.querySelector("polyline").getAttribute("points").split(" ").length, [...svg.querySelectorAll("text")].map(t => t.textContent)];
+      o.wantPath = [4, [scText(scSeconds(420)), scText(scSeconds(560)), scText(scSeconds(89020))]];
+      o.head = sEl.querySelector(".splan").textContent;
+      o.noReset = !sEl.querySelector("[data-planfirst]");
+      o.list = document.getElementById("hereLeaving").querySelectorAll(".stopn").length;
+      drawHereLegend();
+      const lg = document.getElementById("hereLegend").textContent;
+      o.legend = [lg.includes("a stop in the suggested order"), lg.includes("a stop not worth the trip")];
+      sEl.querySelector(".sstop.skip").click();
+      o.noOpen = selectedBody === window.__s30.sel;
+      return JSON.stringify(o); })()`));
+    await settle(1000);
+    Object.assign(got, JSON.parse(w.eval(`(() => {
+      const o = {}, sEl = document.getElementById("hereSchematic"), P = window.__s30.P, L = window.__s30.L;
+      o.firstStops = [...sEl.querySelectorAll(".sstop")].map(s => s.textContent + (s.classList.contains("first") ? "!" : "")).join("");
+      o.firstOf = sEl.querySelector(".sstop.first").closest(".sbody").dataset.body === P[2];
+      o.reset = !!sEl.querySelector(".splan [data-planfirst]") && !!document.getElementById("hereLeaving").querySelector("[data-planfirst]");
+      o.spoken = statusReportText().includes("Next: map " + P[2]);
+      o.elsewhere = planItems(Object.assign({}, L, {id64: "123"}))[0].body === P[0];   // another system's first stop: ignored
+      sEl.querySelector("[data-planfirst]").click();
+      return JSON.stringify(o); })()`)));
+    await settle(1000);
+    Object.assign(got, JSON.parse(w.eval(`(() => {
+      const sEl = document.getElementById("hereSchematic"), o = {back: [...sEl.querySelectorAll(".sstop")].map(s => s.textContent).join("")};
+      const s = window.__s30;
+      hereData = s.hd; data.plan_first = s.pf; Object.assign(hereModes, JSON.parse(s.modes)); store.set("hereModes", hereModes); renderHere();
+      return JSON.stringify(o); })()`)));
+    w.fetch = realFetch;
+    got.posted = posted.map(([same, b]) => [same, b === null ? null : b === got.want[3][0]]);
+    const want = {stops: got.want, path: got.wantPath, noReset: true, list: 4, legend: [true, true], noOpen: true,
+                  firstStops: "②③④①!", firstOf: true, reset: true, spoken: true, elsewhere: true, back: "①②③④", posted: [[true, true], [true, null]]};
+    const good = !got.noHere && Object.keys(want).every(k => JSON.stringify(got[k]) === JSON.stringify(want[k])) &&
+      /the suggested order ①–④/.test(got.head) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| S30 schematic stops |", good ? "①②③④ with a tinted skip, the path's rough legs, a tap makes a body first, ↺ order undoes it" : JSON.stringify(got), errors.slice(before));
+  }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",
     headers: Object.assign({"Content-Type": "application/json"}, origin ? {Origin: origin} : {})}).then(r => r.status);

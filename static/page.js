@@ -793,8 +793,14 @@ const colonyTxt = g => colonyM(g) ? ` <span class="unk" title="samples of one sp
 // how you are on the body, naming the vehicle the journal says you launched ("in the Rhino", "in the Nomad")
 const howOnBody = ob => ob.how === "in the SRV" && ob.vehicle ? `in the ${ob.vehicle}` : ob.how === "flying low" ? `flying low, ${surfDist(ob.alt)}` : ob.how;
 const onOrOver = ob => ob.how === "flying low" ? "Over" : "On";
+// S30: the body you made the first stop in the system you are in (Here's schematic: a tap on its number), or null.
+// One for every window, the overlay and the voice (the server's meta plan_first); l: a leaving summary (its id64).
+const planFirstFor = l => { const pf = data && data.plan_first; return pf && l && l.id64 && pf.id64 === String(l.id64) ? pf.body : null; };
+// a stop's number in the suggested order: ① to ⑳, then (21) (the overlay's stop_glyph)
+const stopGlyph = n => n >= 1 && n <= 20 ? String.fromCodePoint(0x245F + n) : `(${n})`;
 // the map and bio items worth doing by your thresholds, nearest to the arrival star first, value per minute of
-// supercruise breaking ties, a body with no distance last (in the server's order).
+// supercruise breaking ties, a body with no distance last (in the server's order); the first stop you picked leads
+// (its items get `first`).
 // The overlay's Now panel has a Python copy (outrider/overlay.py plan_items): change both together.
 function planItems(l) {
   const w = worthLeavingFor(l);
@@ -807,8 +813,12 @@ function planItems(l) {
     it.perMin = it.sec && it.value ? it.value / (it.sec / 60) : null;
     it.skip = !it.keep && it.perMin != null && it.perMin < skipFloor();   // started samples and specials never
   }
-  return items.map((it, i) => [it, i]).sort(([a, i], [b, j]) => (a.dist == null) - (b.dist == null) || (a.dist || 0) - (b.dist || 0)
+  const order = items.map((it, i) => [it, i]).sort(([a, i], [b, j]) => (a.dist == null) - (b.dist == null) || (a.dist || 0) - (b.dist || 0)
     || (b.perMin ?? -1) - (a.perMin ?? -1) || i - j).map(([it]) => it);
+  const first = planFirstFor(l);
+  if (!first) return order;
+  for (const it of order) it.first = it.body === first;
+  return [...order.filter(it => it.first), ...order.filter(it => !it.first)];
 }
 // A body's mapped value as the "Next" lines give it (the author's choice, review Q5): the whole value once mapped,
 // without and with your first-discovery / first-mapped bonuses; one number when no bonus applies. Screen "771k/2.2M",
@@ -853,8 +863,9 @@ function checklistHtml(l) {
   const items = [item(l.honked, l.honked ? "honked" : "honk (FSS discovery scan)"),
     item(!l.unscanned && l.honked, (l.unscanned ? `${l.unscanned} bod${l.unscanned === 1 ? "y" : "ies"} left to find in the FSS` : l.all_found ? "all bodies found" : "bodies found") + spanshNoteHtml(l))];
   const plan = planItems(l);
-  if (plan.length > 1) items.push(`<li class="unk" title="nearest to the arrival star first, then the best value per minute of supercruise; a rough guide, not a route">suggested order:</li>`);
-  for (const it of plan) items.push(item(false, planText(it) + planCost(it)));
+  if (plan.length > 1) items.push(`<li class="unk" title="nearest to the arrival star first, then the best value per minute of supercruise; a rough guide, not a route">${plan[0].first ? "your first stop, then the suggested order:" : "suggested order:"}${plan[0].first ? planResetHtml(l) : ""}</li>`);
+  // numbered as on the schematic (S30), when there is an order to number
+  plan.forEach((it, i) => items.push(item(false, (plan.length > 1 ? `<span class="stopn">${stopGlyph(i + 1)}</span> ` : "") + planText(it) + planCost(it))));
   const smallMaps = (l.unmapped || []).length - w.maps.length;
   if (!w.maps.length) items.push(item(true, "no mapping worth doing" + (smallMaps ? ` <span class="unk">(${smallMaps} small, under your ${credits(hlLevel("body"))} level)</span>` : "")));
   const smallBio = l.bio_pending.length - w.bio_pending.length;
@@ -2860,7 +2871,7 @@ function render() {
   if (view === "here" || nearPinned || (view === "overview" && !ovState.collapsed) || view === "now") {   // Now reads Here's data
     loadHere();
     // tab and pane keep different modes; and the in-game target moves without a scan (review F4): redraw, no refetch
-    if (hereData && (lastHereCtx !== hereCtx() || lastHereDest !== hereDestKey())) renderHere();
+    if (hereData && (lastHereCtx !== hereCtx() || lastHereDest !== hereDestKey() || lastHerePlan !== herePlanKey())) renderHere();
   }
   if (view === "hist") { renderLastSession(); loadHistory(); }
   renderStrip();
@@ -3377,7 +3388,7 @@ function renderHere() {
   const firstsBlock = h.firsts ? firstsHtml(h.firsts).replace(/<div class="lbl">Your firsts<\/div>/, "") : "";
   lv.innerHTML = firstsBlock + (pinned ? (!h.firsts ? `<span class="unk">${row ? esc(row.status) : ""}${row && row.visited ? " · you have been here" : ""}</span>` : "")
     : !l ? `<span class="unk">Nothing of yours scanned here yet.</span>` : checklistHtml(l));
-  lastHereCtx = hereCtx(); lastHereDest = hereDestKey();
+  lastHereCtx = hereCtx(); lastHereDest = hereDestKey(); lastHerePlan = herePlanKey();
   const hm = h.tree ? hereMode() : {top: "list", split: false};
   document.getElementById("hereTable").classList.toggle("nosort", hm.top === "text");   // the tree is never sorted
   const showTable = hm.top !== "schematic", showSch = hm.top === "schematic" || hm.split;
@@ -3393,7 +3404,7 @@ function renderHere() {
   }
   const sEl = document.getElementById("hereSchematic");
   sEl.hidden = !showSch; sEl.classList.toggle("split", showTable && showSch);
-  if (showSch) sEl.innerHTML = schematicHtml(h);
+  if (showSch) { sEl.innerHTML = schematicHtml(h); drawSchemPath(sEl); }
   const dest = data.destination && posId() === h.id64 ? data.destination : null;
   const destBody = dest && h.bodies.find(b => b.body_id === dest.body_id);
   // one cell per heading of #hereTable, in its order: Rings before ⛏ (the author, 2026-10-11: an empty Rings cell, the
@@ -3506,6 +3517,8 @@ const HERE_LEGEND = [
   [q => q(".nb.AW"), `<span class="nb AW">AW</span>`, "ammonia world"],
   [q => q(".nb.T"), `<span class="nb T">T</span>`, "terraformable"],
   [q => q(".scoop"), "⛽", "scoopable star"],
+  [q => q(".sstop"), `<span class="sstop">${stopGlyph(1)}</span>`, "a stop in the suggested order"],
+  [q => q(".sstop.skip"), `<span class="sstop skip">${stopGlyph(2)}</span>`, "a stop not worth the trip"],
   [q => q(".ic.ring, .ringmark"), icon("ring", "i-ring", "", "rings"), "rings"],
   [q => q(".belt"), "⋯", "asteroid belts"],
   [(q, s) => q('.fl[title="first discovered"]') || s("🏁"), "🏁", "first discovered by you"],
@@ -3596,7 +3609,9 @@ function setHereMode(mode) {
   else m.top = mode;   // list or tree: swaps the top half, split stays as it was
   store.set("hereModes", hereModes);
 }
-let lastHereCtx = null, lastHereDest = null;
+let lastHereCtx = null, lastHereDest = null, lastHerePlan = null;
+// S30: the first stop picked (in another window, by the overlay's player): Here's order and numbers follow it
+const herePlanKey = () => JSON.stringify((data && data.plan_first) || null);
 // the body targeted in-game, as Here last drew it (its heading-to line and highlighted row follow the target)
 const hereDestKey = () => { const d = data && data.destination; return d ? `${posId()}|${d.body_id ?? ""}` : ""; };
 // Tree mode: the same table rows in orbital order, each child indented under its parent. A barycentre
@@ -3690,13 +3705,84 @@ function discHtml(b, depth) {
     b.type === "Star" && b.scoopable && `<span class="scoop">⛽</span>`].filter(Boolean).join("");
   const belts = (b.belts || []).length ? `<span class="belt" title="${b.belts.length} belt${b.belts.length === 1 ? "" : "s"}">⋯</span>` : "";
   return `<div class="sbody${hotClasses(b)}" data-body="${esc(b.name)}" data-bodypop="${esc(b.name)}">` +
-    `<div class="discwrap" style="width:${size + 14}px;height:${size + 14}px">${ring}<span class="${cls}" style="width:${size}px;height:${size}px;--c:${col}"></span></div>` +
+    `<div class="discwrap" style="width:${size + 14}px;height:${size + 14}px">${ring}<span class="${cls}" style="width:${size}px;height:${size}px;--c:${col}"></span>${stopsHtml(b)}</div>` +
     `<div class="sname" title="${esc(b.name)}">${esc(b.name)}${belts}</div><div class="badges">${badges}</div>` +
     `<div class="sval${maxOf(b) ? "" : " unk"}">${maxOf(b) ? credits(maxOf(b)) : "—"}</div>` +
     (b.type === "Planet" && b.dist_ls != null ? `<div class="sdist">${Math.round(b.dist_ls).toLocaleString()} ls</div>` : "") + `</div>`;
 }
+// S30: the suggested order on Here's schematic, for the system you are in: each stop's number on its body (two on a
+// body with both mapping and bio to do), a stop under your credits per minute of supercruise tinted (Here's "skip?").
+// A tap on a number makes that body the first stop, for every window, Now, the voice and the overlay (POST
+// api/plan/first); "↺ order" puts the suggested order back. The path between the stops: drawSchemPath.
+let schemPlanNow = [];                 // the order the schematic shows (planItems), for its path
+const schemStops = new Map();          // body name -> [{n, it}]: its numbers in that order
+function schemPlan(h) {
+  schemPlanNow = h.leaving && String(h.id64) === posId() ? planItems(h.leaving) : [];
+  schemStops.clear();
+  schemPlanNow.forEach((it, i) => { if (!schemStops.has(it.body)) schemStops.set(it.body, []); schemStops.get(it.body).push({n: i + 1, it}); });
+}
+const planResetHtml = l => ` <button type="button" class="mini" data-planfirst="" data-plansys="${esc(l.id64)}" title="back to the suggested order: nearest to the arrival star first">↺ order</button>`;
+const stopTitle = (n, it) => `stop ${n}: ${it.kind === "map" ? "map" : "bio"}` +
+  (it.sec != null ? ` · ${scText(it.sec)} of supercruise from the arrival star (rough)` : "") + (it.perMin ? ` · ${credits(it.perMin)}/min` : "") +
+  (it.skip ? ` · under your ${credits(skipFloor())} cr per minute of supercruise` : "") +
+  (it.first ? "\nyour first stop: ↺ order puts the suggested order back" : "\ntap: make this body the first stop");
+function stopsHtml(b) {
+  const st = schemStops.get(b.name);
+  return st ? `<span class="stops">${st.map(({n, it}) => `<span class="sstop${it.skip ? " skip" : ""}${it.first ? " first" : ""}" data-firststop="${esc(b.name)}" title="${esc(stopTitle(n, it))}">${stopGlyph(n)}</span>`).join("")}</span>` : "";
+}
+// The faint path between the stops in their order, from the arrival star, each leg with a rough supercruise time: from
+// the two bodies' distances to the arrival star (scSeconds of the difference), not a route, which the journal cannot
+// give. Drawn over the laid-out schematic, below its bodies; again when its box changes size (jsdom lays nothing out:
+// every point is 0, 0 there).
+function drawSchemPath(sEl) {
+  const old = sEl.querySelector("svg.spath"); if (old) old.remove();
+  const h = hereData; if (!schemPlanNow.length || !h || !h.bodies || sEl.hidden) return;
+  const box = sEl.getBoundingClientRect(), discs = [...sEl.querySelectorAll(".sbody")];
+  const at = name => { const el = discs.find(d => d.dataset.body === name), w = el && el.querySelector(".discwrap"); if (!w) return null;
+    const r = w.getBoundingClientRect(); return [r.left + r.width / 2 - box.left - sEl.clientLeft + sEl.scrollLeft, r.top + r.height / 2 - box.top - sEl.clientTop + sEl.scrollTop]; };
+  const star = h.bodies.find(b => b.type === "Star" && b.dist_ls === 0) || h.bodies.find(b => b.type === "Star");
+  const by = Object.fromEntries(h.bodies.map(b => [b.name, b]));
+  const pts = [], labels = [];
+  let prev = star ? {p: at(star.name), d: 0} : null;
+  if (prev && !prev.p) prev = null;
+  for (const it of schemPlanNow) {
+    if (prev && prev.name === it.body) continue;   // map and bio on one body: no leg between them
+    const p = at(it.body); if (!p) continue;
+    const d = it.dist ?? (by[it.body] || {}).dist_ls;
+    if (prev) {
+      const sec = prev.d != null && d != null ? scSeconds(Math.abs(d - prev.d)) : null;
+      if (sec != null) labels.push(`<text x="${((prev.p[0] + p[0]) / 2).toFixed(1)}" y="${((prev.p[1] + p[1]) / 2 - 3).toFixed(1)}">${scText(sec)}</text>`);
+    }
+    pts.push(...(prev && !pts.length ? [prev.p] : []), p);
+    prev = {name: it.body, p, d};
+  }
+  if (pts.length < 2) return;
+  const W = Math.max(sEl.scrollWidth, 1), H = Math.max(sEl.scrollHeight, 1);
+  sEl.insertAdjacentHTML("afterbegin", `<svg class="spath" width="${W}" height="${H}" aria-hidden="true">` +
+    `<polyline points="${pts.map(p => p.map(v => v.toFixed(1)).join(",")).join(" ")}"/>${labels.join("")}</svg>`);
+}
+if (typeof ResizeObserver === "function") {
+  let schemW = 0;
+  new ResizeObserver(([e]) => { const w = Math.round(e.contentRect.width); if (w !== schemW) { schemW = w; drawSchemPath(e.target); } })
+    .observe(document.getElementById("hereSchematic"));
+}
+async function setPlanFirst(sys, body) {
+  let r;
+  try { r = await apiJson("api/plan/first", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({id64: sys, body: body || null})}); }
+  catch (err) { r = {error: err.message}; }
+  if (r.error) { toast(`could not change the order: ${r.error}`); return; }
+  data.plan_first = r.plan_first || null;
+  render(); if (hereData) renderHere();
+}
+document.addEventListener("click", e => {
+  const s = e.target.closest("[data-firststop]"), r = e.target.closest("[data-planfirst]");
+  if (r) { e.preventDefault(); setPlanFirst(r.dataset.plansys, null); return; }
+  if (!s || s.classList.contains("first") || !hereData || String(hereData.id64) !== posId()) return;
+  e.preventDefault(); setPlanFirst(String(hereData.id64), s.dataset.firststop);
+});
 function schematicHtml(h) {
   schemSystem = String(h.id64 || "");
+  schemPlan(h);
   const by = Object.fromEntries(h.bodies.map(b => [b.name, b]));
   const isStar = n => n.kind === "body" && by[n.name] && by[n.name].type === "Star";
   // a barycentre with a star anywhere under it, (A+B)+(C+D) too: it gets star rows, not one flat column (review F40)
@@ -3731,13 +3817,18 @@ function schematicHtml(h) {
     }
     return `<div class="srowS"><div class="splanets">${col(n, 1)}</div></div>`;
   };
-  return h.tree.map(top).join("") || `<div class="unk">No bodies known here.</div>`;
+  const n = schemPlanNow.length, first = n && schemPlanNow[0].first;
+  const head = n > 1 ? `<div class="splan unk" title="rough: from distances to the arrival star, not a route">${first ? "your first stop, then " : ""}` +
+    `the suggested order ${stopGlyph(1)}–${stopGlyph(n)} · the times are rough supercruise from the arrival star · tap a number to go there first` +
+    `${first ? planResetHtml(h.leaving) : ""}</div>` : "";
+  return h.tree.length ? head + h.tree.map(top).join("") : `<div class="unk">No bodies known here.</div>`;
 }
 document.getElementById("hereHead").addEventListener("click", e => {
   const m = e.target.closest("[data-mode]"); if (!m) return;
   setHereMode(m.dataset.mode); renderHere();
 });
 document.getElementById("hereSchematic").addEventListener("click", e => {
+  if (e.target.closest("[data-firststop], [data-planfirst]")) return;   // a stop's number, ↺ order: the order, not the body
   const b = e.target.closest("[data-body]"); if (!b) return;
   b.dataset.body === selectedBody ? closeBody() : openBody(b.dataset.body);
 });

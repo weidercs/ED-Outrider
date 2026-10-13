@@ -3,6 +3,7 @@ window on the game PC is never opened here (its pure parts are tested in test_ov
 
 Run all: python3 -m unittest discover tests (or scripts/verify.sh).
 """
+import asyncio
 import contextlib
 import io
 import math
@@ -137,6 +138,67 @@ class SystemPanel(unittest.TestCase):
         # as page.js credits(): the unit follows what the figure rounds to (review 2026-10-11)
         self.assertEqual([O.credits(v) for v in (999_999, 999_600, 999_950_000, 1_250_000_000, 999.6, 2_500)],
                          ["1.0M", "1.0M", "1.00B", "1.25B", "1k", "3k"])
+
+
+# S30: a system you scanned, with its suggested order (the leaving summary): the panel numbers its stops
+LEAVING_PLAN = {"id64": "77", "honked": True, "unscanned": 0, "body_count": 7, "scanned": 6, "bio_pending": [
+    {"body": "B 2", "signals": 1, "genera": ["Fonticulua"], "partial": {}, "potential": 2_000_000, "factor": 1, "dist_ls": 40,
+     "codex_new": True},                                                                         # new to your codex: in the order
+    {"body": "A 3", "signals": 1, "genera": ["Stratum"], "partial": {}, "potential": 19_000_000, "factor": 1, "dist_ls": 600},
+    {"body": "B 1", "signals": 2, "genera": ["Stratum"], "partial": {"Bacterium": 1}, "potential": 19_000_000, "factor": 1,
+     "dist_ls": 900}],
+    "unmapped": [
+    {"body": "A 2", "subtype": "Icy body", "increment": 1_721, "dist_ls": 20},                     # under the 500k level
+    {"body": "A 3", "subtype": "Water world", "terraformable": True, "increment": 900_000, "special": True, "dist_ls": 600}]}
+DETAIL_PLAN = {"name": "Test Sector AB-C d1-2", "leaving": LEAVING_PLAN, "bodies": [
+    {"name": "A", "body_id": 0, "type": "Star", "subtype": "K (Yellow-Orange) Star", "dist_ls": 0, "value_parts": {}, "scanned": True},
+    body("A 2", 20, body_id=4, subtype="Icy body", scanned=True, value_parts={"carto_left": 1_721}),
+    body("B 2", 40, body_id=13, subtype="Rocky body", scanned=True, value_parts={"bio_left": 2_000_000}),
+    body("A 3", 600, body_id=9, notable="WW", terraformable=True, subtype="Water world", scanned=True,
+         value_parts={"carto_left": 2_400_000, "bio_left": 19_000_000}),
+    body("B 1", 900, body_id=12, subtype="Icy body", scanned=True, value_parts={"bio_left": 19_000_000}, organics=[
+        {"genus": "Bacterium", "samples": 1, "done": False, "lost": False}]),
+    body("D 1", 30, body_id=30, value_parts={"carto_left": 2_000_000}),                            # Spansh's only: not yours yet
+    body("C 1", 20, body_id=20, mapped=True, scanned=True, value_max=3_000_000, value_parts={"carto_left": 0}),
+]}
+
+
+class NumberedStops(unittest.TestCase):
+    """S30 (overlay): the system panel numbers the suggested order's stops as Here's schematic does."""
+
+    def test_glyphs(self):
+        self.assertEqual([O.stop_glyph(n) for n in (1, 2, 10, 20, 21, 35)], ["①", "②", "⑩", "⑳", "(21)", "(35)"])
+
+    def test_rows_in_the_order(self):
+        rows, left, under = O.system_rows(DETAIL_PLAN, 500_000, 10_000_000)
+        got = [(r["name"], r["stops"], r["status"], r["value"]) for r in rows]
+        self.assertEqual(got, [("B 2", [1], "TO LAND", 2_000_000),                  # nearest, new to your codex
+                               ("A 3", [2, 3], "MAP + LAND", 21_400_000),           # two stops: bio, then the map
+                               ("B 1", [4], "Bacterium 1/3", 19_000_000),
+                               ("D 1", [], "TO MAP", 2_000_000),                    # not yours: by its value, unnumbered
+                               ("C 1", [], "MAPPED", None)])                         # done: unnumbered, below
+        self.assertEqual(under, 1)                                                  # A 2's 1.7k of mapping
+        # golden parity with plan_items (the page's planItems): the numbers run 1..n in its order
+        plan = O.plan_items(LEAVING_PLAN, 500_000, 10_000_000)
+        self.assertEqual([(it["kind"], it["body"]) for it in plan], [("bio", "B 2"), ("bio", "A 3"), ("map", "A 3"), ("bio", "B 1")])
+        self.assertEqual([n for r in rows for n in r["stops"]], list(range(1, len(plan) + 1)))
+        rows, _, under = O.system_rows(DETAIL_PLAN, 500_000, 10_000_000, codex=False)   # codex finds not counted
+        self.assertEqual([(r["name"], r["stops"]) for r in rows if r["stops"]], [("A 3", [1, 2]), ("B 1", [3])])
+        self.assertEqual(under, 2)                                                  # B 2 is under your levels now
+
+    def test_first_stop(self):
+        plan = O.plan_items(LEAVING_PLAN, 500_000, 10_000_000, first="A 3")
+        self.assertEqual([(it["body"], it["first"]) for it in plan], [("A 3", True), ("A 3", True), ("B 2", False), ("B 1", False)])
+        self.assertEqual([it["body"] for it in O.plan_items(LEAVING_PLAN, 500_000, 10_000_000, first="A 2")],   # not in the list
+                         ["B 2", "A 3", "A 3", "B 1"])
+        rows, _, _ = O.system_rows(DETAIL_PLAN, 500_000, 10_000_000, first="B 1")
+        self.assertEqual([(r["name"], r["stops"]) for r in rows if r["stops"]], [("B 1", [1]), ("B 2", [2]), ("A 3", [3, 4])])
+        p = O.system_panel(DETAIL_PLAN, O.palette(), first="B 1")
+        lines = texts(p)
+        self.assertEqual(lines[1:5], ["Bacterium 1/3 19.0M", "① B 1 Icy", "TO LAND 2.0M", "② B 2 Rocky"])   # (the right column first)
+        self.assertEqual(colour_of(p, "①"), O.palette()["accent"])
+        info = dict(NowPanel.INFO, leaving=LEAVING_PLAN, plan_first="B 1")
+        self.assertIn("Next: bio on B 1: Bacterium 1/3, Stratum", texts(O.now_panel(info, O.palette())))
 
 
 class BodyPanel(unittest.TestCase):
@@ -761,6 +823,40 @@ class Server(unittest.TestCase):
         self.assertEqual(self.state.overlay_panels(now=1010), [])
         self.state.overlay_cfg.update(system_panel=True, enabled=False)
         self.assertEqual(self.state.overlay_panels(now=1010), [])
+
+    def test_first_stop_for_every_window(self):
+        """S30: the first stop picked on Here's schematic (POST /api/plan/first) is kept on the server, for the system
+        you are in only: the overlay's system and Now panels follow it, another system ignores it."""
+        from aiohttp.test_utils import TestClient, TestServer
+        self.state.journals.handle({"event": "FSDJump", "timestamp": ed_outrider.iso_ts(1000), "StarSystem": "Test Sector AB-C d1-2",
+                                    "SystemAddress": 77, "StarPos": [0, 0, 0]})
+        self.state.system_detail = lambda id64: DETAIL_PLAN if id64 == 77 else None
+        self.state.overlay_cfg.update(enabled=True, now_panel=True)
+        self.state.journals.status_json = {"live": True, "flags": ed_outrider.FLAG_SUPERCRUISE, "gui_focus": 0}
+        panel = lambda pid: next(texts(p) for p in self.state.overlay_panels(now=1010) if p["id"] == pid)
+        self.assertIn("① B 2 Rocky", panel("system"))
+
+        async def go():
+            async with TestClient(TestServer(ed_outrider.make_app(self.state))) as c:
+                post = lambda body: c.post("/api/plan/first", json=body)
+                out = [(await post({"id64": "77", "body": "B 1"})).status]
+                out.append(self.state.plan_first())
+                out += [(await post(b)).status for b in ({"id64": "78", "body": "B 1"}, {"id64": "77", "body": 5}, {"body": "B 1"},
+                                                         {"id64": "77", "body": "x" * 101})]
+                return out
+        ok, kept, elsewhere, bad, no_id, long = asyncio.run(go())
+        self.assertEqual((ok, kept, elsewhere, bad, no_id, long), (200, {"id64": "77", "body": "B 1"}, 409, 400, 400, 400))
+        self.assertEqual(self.state.payload()["plan_first"], {"id64": "77", "body": "B 1"})
+        self.assertEqual(panel("system")[2:5], ["① B 1 Icy", "TO LAND 2.0M", "② B 2 Rocky"])
+        self.assertTrue(any(t.startswith("Next: bio on B 1") for t in panel("now")))
+        self.assertTrue(self.state.set_plan_first(77, None))                         # ↺ order: the suggested order again
+        self.assertIsNone(self.state.plan_first())
+        self.assertIn("① B 2 Rocky", panel("system"))
+        self.state.set_plan_first(77, "B 1")
+        self.state.journals.handle({"event": "FSDJump", "timestamp": ed_outrider.iso_ts(2000), "StarSystem": "Elsewhere",
+                                    "SystemAddress": 78, "StarPos": [5, 0, 0]})
+        self.assertIsNone(self.state.plan_first())                                   # another system: forgotten
+        self.assertNotIn("plan_first", ed_outrider.RESET_JOURNAL_DATA)              # live-only: a re-read keeps it
 
     def test_nothing_while_the_game_loads(self):
         """After a crash the old Status.json still says live: the relaunched game's loading screens, before the menu

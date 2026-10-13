@@ -381,6 +381,7 @@ class Batch1Server(unittest.TestCase):
         self.j.handle(ev)
         self.db.commit()
         l = self.state.leaving_summary(1)
+        self.assertEqual(l["id64"], "1")   # S30: the system it is about (the first stop you picked applies there only)
         u = l["unmapped"][0]
         self.assertEqual(u["body"], "4")
         self.assertFalse(u["special"])

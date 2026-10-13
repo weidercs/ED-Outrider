@@ -97,7 +97,11 @@ and tons, saved spots, the last date and the distance.
 <b>Schematic</b> — Here switches between <i>list</i>, <i>tree</i> (orbital order) and <i>schematic</i>: stars
 with their planets left to right, moons underneath, barycentres boxed, each scanned body drawn from its scan data (as
 in the body panel: class colours, bands, oceans, clouds, atmosphere, rings). <i>Split</i> (on the Here tab, on by
-default) keeps the schematic under the list or tree.
+default) keeps the schematic under the list or tree. In the system you are in, the suggested order's stops are
+numbered on the bodies (①②③, two on a body with both mapping and bio; a stop not worth the trip greyed), with a faint
+path between them and rough supercruise times (from each body's distance to the arrival star, not a route). Tap a
+number to go there first: Now, the voice, the to-do line and the overlay follow; <i>↺ order</i> puts the suggested
+order back.
 <br><br><img src="../images/schematic.png" alt="The system schematic">
 </td>
 </tr>

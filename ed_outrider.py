@@ -6564,6 +6564,7 @@ class State:
             "this_session": self.this_session(),
             "streak": self.streak(),
             "destination": self.destination(),
+            "plan_first": self.plan_first(),   # S30: the body you made the suggested order's first stop here
             "moments": self.moments_summary(),
             "hull": self.journals.hull,
             "modules": self.modules_summary(),
@@ -7576,6 +7577,27 @@ class State:
         return {"body": short_name(pos["name"], st["body"]), "full": st["body"], "how": "flying low", "alt": round(alt),
                 "system": str(pos["id64"])}
 
+    def plan_first(self):
+        """S30: the body you made the first stop of the suggested order in the system you are in, {id64, body}, or None
+        (meta plan_first, live-only: one at a time, and forgotten in any other system). The page's planItems and the
+        overlay's plan_items move it to the front, so Here, Now, the voice and the overlay give one order."""
+        pf, pos = meta_get(self.db, "plan_first"), self.journals.pos
+        return pf if isinstance(pf, dict) and pos and pf.get("id64") == str(pos["id64"]) and pf.get("body") else None
+
+    def plan_first_body(self):
+        return (self.plan_first() or {}).get("body")
+
+    def set_plan_first(self, id64, body):
+        """POST /api/plan/first: `body` first in the system you are in (id64), or None: the suggested order again.
+        False when id64 is not where you are."""
+        pos = self.journals.pos
+        if not pos or pos["id64"] != id64:
+            return False
+        meta_set(self.db, "plan_first", {"id64": str(id64), "body": body} if body else None)
+        self.db.commit()
+        self.bump()
+        return True
+
     def destination(self):
         """The in-game destination when it is a body in the system you are in (Status.json), else None."""
         st, pos = self.journals.status_json or {}, self.journals.pos
@@ -7654,7 +7676,7 @@ class State:
                 "rebuy": risk_rebuy(self.journals.ship), "since_sale": self.since_sale(),
                 "on_body": ob, "body": bodies.get(ob["body"]) if ob else None,
                 "sampling": self.sampling_summary() if ob else None,
-                "detail_ready": detail is not None, "leaving": (detail or {}).get("leaving"),
+                "detail_ready": detail is not None, "leaving": (detail or {}).get("leaving"), "plan_first": self.plan_first_body(),
                 "value_now": (self.systems.get(pos["id64"]) or {}).get("value_now"),
                 "destination": dest["name"] if dest else None,
                 "destination_ls": dest.get("dist_ls") if dest else None,
@@ -7681,7 +7703,8 @@ class State:
             except (KeyError, TypeError, ValueError):
                 fresh = True
             if fresh:
-                p = outrider.overlay.system_panel(self.overlay_detail(pos["id64"]), pal, cfg["text_size"], BODY_HIGHLIGHT, BIO_MIN)
+                p = outrider.overlay.system_panel(self.overlay_detail(pos["id64"]), pal, cfg["text_size"], BODY_HIGHLIGHT, BIO_MIN,
+                                                  codex=CODEX_INTERESTING, first=self.plan_first_body())
                 if p:
                     out.append(p)
         # the body panel: the body targeted in game in this system, else the one you are flying near; flying your ship
@@ -9188,7 +9211,8 @@ class State:
                                  # someone else mapped it (your scan says): no alert points it out (the author, 2026-10-09)
                                  "mapped_before": rec.get("was_mapped") is True})   # the suggested order (by increment)
         unmapped_all.sort(key=lambda u: -(u["increment"] or 0))
-        return {"body_count": count, "scanned": len(bodies), "unscanned": unscanned,
+        # id64: the system, as a string (S30: the first stop you picked applies to its own system only)
+        return {"id64": str(id64), "body_count": count, "scanned": len(bodies), "unscanned": unscanned,
                 "honked": bool(sysrow), "all_found": bool(sysrow and sysrow["all_found"]),
                 "bio_pending": bio_pending, "unmapped_valuable": unmapped, "unmapped": unmapped_all,
                 "clean": not unscanned and not bio_pending and not unmapped}
@@ -16401,6 +16425,21 @@ def make_app(state, hosts=None):
             state.bump()   # the new version sends every page for the trimmed lines
         return web.json_response(out, status=status)
 
+    async def plan_first_view(request):
+        """S30 {id64, body}: that body first in the suggested order of the system you are in; {id64, body: null}: the
+        suggested order again (Here's "↺ order")."""
+        body = await json_object(request)
+        try:
+            id64 = parse_id64((body or {})["id64"])
+        except (ValueError, KeyError, TypeError, OverflowError):
+            id64 = None
+        name = (body or {}).get("body")
+        if id64 is None or not (name is None or isinstance(name, str) and 0 < len(name) <= 100):
+            return web.json_response({"error": "expected {id64, body: a body's name or null}"}, status=400)
+        if not state.set_plan_first(id64, name):
+            return web.json_response({"error": "not the system you are in"}, status=409)
+        return web.json_response({"ok": True, "plan_first": state.plan_first()})
+
     async def hush_view(request):
         """{mode: "10m" | "30m" | "jump" | "off"}: hush the voice (danger lines still speak) or end the hush."""
         body = await json_object(request)
@@ -16929,6 +16968,7 @@ def make_app(state, hosts=None):
     app.router.add_post("/api/speech/ban", speech_ban_view)
     app.router.add_post("/api/speech/unban", speech_ban_view)
     app.router.add_post("/api/hush", hush_view)
+    app.router.add_post("/api/plan/first", plan_first_view)
     app.router.add_post("/api/copilot", copilot_view)
     app.router.add_post("/api/backup", backup_view)
     app.router.add_post("/api/bio/colours", bio_colours_view)

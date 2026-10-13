@@ -2,6 +2,22 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-12 · Numbered stops on Here's schematic and the overlay's system panel
+- **The first stop, kept on the server** (S30, the shared piece): POST `/api/plan/first` {id64, body | null}
+  (`State.set_plan_first`: the system you are in only, else 409; meta `plan_first`, live-only, forgotten in another
+  system), the payload's `plan_first`; every leaving summary carries its `id64`. The page's `planItems` (`planFirstFor`)
+  and the overlay's `plan_items` (`first`) move that body's items to the front, so Here's to-do line, Now, the mapped
+  call-out, the status report and the overlay give one order.
+- **Here's schematic numbers the stops** (S30, page): ①②③ on each body in the suggested order of the system you are in
+  (two on a body with mapping and bio; a stop under your credits-per-minute level tinted, as "skip?"), the to-do line
+  numbered alike, a faint SVG path from the arrival star between the stops with rough leg times (the supercruise curve
+  over the difference of the distances to the arrival star: not a route), legend rows. A tap on a number makes that body
+  the first stop; "↺ order" puts the suggested order back.
+- **The overlay's system panel numbers them too** (S30, overlay): `system_rows` lists the bodies you scanned by
+  `plan_items` (with `codex_interesting` and the first stop), the numbers before each name (`stop_glyph`: ① to ⑳,
+  then (21)), the rows by their first number; a body known to Spansh only stays unnumbered after them, the done ones
+  last. Now's panel follows the first stop as well.
+
 ## 2026-10-12 · Your own runs in the guess's hover, and finding a missing species nearby
 - **Your runs rank a genus's species** (S24, the hover only): `species_history(db)` counts your completed runs by genus,
   the body's class, atmosphere and 25 K band (your scan) and region (your visit), the region dropped under 5 such runs

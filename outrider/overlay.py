@@ -336,10 +336,24 @@ def codex_mark(guesses):
     return ""
 
 
-def system_rows(detail, highlight, bio_min):
-    """The system panel's bodies: what is left to do on each body worth it, nearest first, then the valuable ones
-    already done. [{name, what, status, value, key (warn/accent/good), mark, todo, dist}], the credits left in the
-    whole system, and how many bodies have something left that is under your levels (not listed)."""
+def stop_glyph(n):
+    """A stop's number in the suggested order, as Here's schematic writes it (page.js stopGlyph): ① to ⑳, then (21)."""
+    return chr(0x245F + n) if 1 <= n <= 20 else f"({n})"
+
+
+def system_rows(detail, highlight, bio_min, codex=True, first=None):
+    """The system panel's bodies: what is left to do on each body worth it, then the valuable ones already done.
+    [{name, what, status, value, key (warn/accent/good), mark, todo, dist, stops}], the credits left in the whole
+    system, and how many bodies have something left that is under your levels (not listed).
+    S30: the bodies you scanned are listed by the suggested order (plan_items, as Now and Here's schematic): `stops`
+    their numbers in it (two on a body with both mapping and bio), the rows by their first number. A body you have not
+    scanned (Spansh's record only: the order cannot know it yet) is listed by its value as before, unnumbered, after
+    them; the done ones last."""
+    plan = plan_items((detail or {}).get("leaving"), highlight, bio_min, codex, first)
+    stops = {}
+    for n, it in enumerate(plan, 1):
+        stops.setdefault(it["body"], {}).setdefault("n", []).append(n)
+        stops[it["body"]].setdefault("kinds", set()).add(it["kind"])
     rows, left_all, under = [], 0, 0
     for b in (detail or {}).get("bodies") or []:
         if b.get("type") == "Star":
@@ -351,11 +365,17 @@ def system_rows(detail, highlight, bio_min):
         partial = [o for o in organics if not o.get("done") and not o.get("lost")]
         mapped = bool(b.get("mapped") or b.get("first_mapped"))
         special = bool(b.get("notable") or b.get("terraformable"))
-        to_map = not mapped and b.get("type") == "Planet" and map_left > 0 and (map_left >= highlight or special)
-        to_land = bool(partial) or bio_left >= bio_min
+        st = stops.get(b.get("name"))
+        if st:   # in the suggested order: what it holds there decides
+            to_map, to_land = "map" in st["kinds"], "bio" in st["kinds"]
+        elif b.get("scanned"):   # yours, and not in the order: under your levels (or nothing left)
+            to_map = to_land = False
+        else:
+            to_map = not mapped and b.get("type") == "Planet" and map_left > 0 and (map_left >= highlight or special)
+            to_land = bool(partial) or bio_left >= bio_min
         base = {"name": b.get("name", "?"), "what": body_what(b), "mark": codex_mark(b.get("bio_guess")) if to_land else "",
-                "dist": b.get("dist_ls") if b.get("dist_ls") is not None else 1e12}
-        if partial:
+                "dist": b.get("dist_ls") if b.get("dist_ls") is not None else 1e12, "stops": st["n"] if st else []}
+        if partial and to_land:
             o = partial[0]
             rows.append(dict(base, status=f"{o.get('genus', 'bio')} {o.get('samples', 0)}/3", value=bio_left + (map_left if to_map else 0),
                              key="accent", todo=True))
@@ -367,19 +387,21 @@ def system_rows(detail, highlight, bio_min):
             rows.append(dict(base, status="MAPPED" if mapped else "SAMPLED", value=None, key="good", todo=False))
         if not to_land and not to_map and (bio_left or (map_left and not mapped)):
             under += 1
-    rows.sort(key=lambda r: (not r["todo"], r["dist"]))
+    rows.sort(key=lambda r: (not r["todo"], not r["stops"], r["stops"][0] if r["stops"] else 0, r["dist"]))
     return rows, left_all, under
 
 
-def system_panel(detail, pal, size="normal", highlight=500_000, bio_min=10_000_000, max_rows=8):
-    """The system panel ("worth your time"): None when no body is worth listing."""
-    rows, left_all, under = system_rows(detail, highlight, bio_min)
+def system_panel(detail, pal, size="normal", highlight=500_000, bio_min=10_000_000, max_rows=8, codex=True, first=None):
+    """The system panel ("worth your time"): None when no body is worth listing. codex, first: as plan_items (the
+    config's codex_interesting, the first stop you picked here)."""
+    rows, left_all, under = system_rows(detail, highlight, bio_min, codex, first)
     if not rows:
         return None
     shown = rows[:max_rows]
     lines = []
     for r in shown:
-        left = [(r["name"] + " ", "title"), (r["what"], "text" if r["todo"] else "muted")]
+        left = ([("".join(stop_glyph(n) for n in r["stops"]) + " ", "accent")] if r["stops"] else []) + \
+            [(r["name"] + " ", "title"), (r["what"], "text" if r["todo"] else "muted")]
         if r["mark"]:
             left.append(("  " + r["mark"], "good" if r["mark"].startswith("✪") else "accent"))
         right = f"{r['status']} {credits(r['value'])}" if r["value"] else r["status"]
@@ -719,10 +741,12 @@ def boxel_parts(bx):
                    (" · " + (boxel_known_words(bx) if bx.get("spansh") else "to try"), "muted")]
 
 
-def plan_items(leaving, highlight, bio_min, codex=True):
+def plan_items(leaving, highlight, bio_min, codex=True, first=None):
     """Now's suggested order (page.js worthLeavingFor + planItems) with the config's levels: the mapping over the
     highlight level (or special) and the bio over bio_min (or started, unpriced, or new to your codex), nearest to the
-    arrival star first, then the best value per minute of supercruise. [{kind, body, dist, value, sec, per_min, u|b}]."""
+    arrival star first, then the best value per minute of supercruise. [{kind, body, dist, value, sec, per_min, u|b}].
+    first: the body you made the first stop (S30, State.plan_first_body): its items lead, `first` True; a body not in
+    the list changes nothing."""
     if not leaving:
         return []
     bio = [b for b in leaving.get("bio_pending") or [] if b.get("partial") or b.get("potential") is None
@@ -735,8 +759,13 @@ def plan_items(leaving, highlight, bio_min, codex=True):
     for it in items:
         it["sec"] = sc_seconds(it["dist"])
         it["per_min"] = it["value"] / (it["sec"] / 60) if it["sec"] and it["value"] else None
-    return sorted(items, key=lambda it: (it["dist"] is None, it["dist"] or 0,
-                                         -(it["per_min"] if it["per_min"] is not None else -1)))
+    items = sorted(items, key=lambda it: (it["dist"] is None, it["dist"] or 0,
+                                          -(it["per_min"] if it["per_min"] is not None else -1)))
+    if first:
+        for it in items:
+            it["first"] = it["body"] == first
+        items.sort(key=lambda it: not it["first"])   # stable: the rest keep their order
+    return items
 
 
 def map_totals(u):
@@ -959,7 +988,7 @@ def now_panel(info, pal, size="normal", highlight=500_000, bio_min=10_000_000, h
         rows += on_body_parts(ob, info.get("body"), info.get("sampling"), NOW_W - 2 * PAD, size)
     else:
         l = info.get("leaving")
-        plan = plan_items(l, highlight, bio_min, codex) if info.get("detail_ready") else []
+        plan = plan_items(l, highlight, bio_min, codex, info.get("plan_first")) if info.get("detail_ready") else []
         dest = info.get("destination")
         dest_next = bool(dest and plan and plan[0]["body"] == dest)
         right = (f"{credits(info['value_now'])} here", "muted") if info.get("value_now") else None

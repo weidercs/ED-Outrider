@@ -15,10 +15,12 @@ before.
 
 ## What it shows
 
-- **The system panel**, in supercruise: each body worth your time, nearest first, with what is left to do (TO MAP,
+- **The system panel**, in supercruise: each body worth your time, numbered in the suggested order as on Here's
+  schematic (①②③; the body you tapped to go to first leads), with what is left to do (TO MAP,
   TO LAND, a sample run under way such as "Bacterium 1/3") and what it pays, the codex mark with the new colour
   ("✪ Lime"), then the valuable bodies you have finished (MAPPED, SAMPLED); curiosities on an "Also here" line; what
-  is left in the whole system, and how many bodies are under your levels. It uses the levels in your config
+  is left in the whole system, and how many bodies are under your levels. A body you have not scanned yet (known to
+  Spansh only) is listed unnumbered after the stops. It uses the levels in your config
   (`body_highlight_level`, `bio_min`), as Here's to-do line does.
 - **The body panel**, flying your ship: the body you have targeted in this system (or the one you are near):
   landable, gravity (amber at your high-gravity level), atmosphere, temperature, what mapping is still worth, first

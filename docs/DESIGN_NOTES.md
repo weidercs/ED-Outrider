@@ -219,7 +219,10 @@ upstream project's choices, not rules of the game.
   run through hundreds of never-checked systems can find several in a row. The words say their scans reached Spansh,
   never "stolen": someone else's scans do not take a first discovery until they sell before you.
 - **The suggested order is not a route planner:** a fixed supercruise time curve; its first stop is said ("Next: …") only
-  in the mapped call-out and the status report.
+  in the mapped call-out and the status report. Here's schematic numbers its stops and draws a path between them (S30):
+  each leg's time is the curve over the difference of the two bodies' distances to the arrival star, which is what the
+  journal gives, not the distance between them. The first stop you pick there (one body, meta `plan_first`, live-only)
+  applies only in the system you are in and is forgotten after a jump.
 - **Discovery streak lines are limited to two kinds,** no records or milestones.
 - **The approach warning fires on ApproachBody only** and reuses the unsold amber level rather than a new setting.
 - **"Leaving a body unfinished" only nags** if you landed or sampled there this visit.
@@ -332,7 +335,8 @@ upstream project's choices, not rules of the game.
   `high_gravity` and `codex_interesting`. Now leaves out what only the page knows (the skip floor, the high-g approach
   stakes, captions).
 - **The overlay copies some of the page's rules in Python:** Now's suggested order (`overlay.plan_items`; the page's
-  `worthLeavingFor` + `planItems`), the supercruise time (`overlay.sc_seconds`, `SC_KNEE`; the page's `scSeconds`),
+  `worthLeavingFor` + `planItems`, with the first stop you picked: `first` / `planFirstFor`; the stop numbers
+  `stop_glyph` / `stopGlyph`), the supercruise time (`overlay.sc_seconds`, `SC_KNEE`; the page's `scSeconds`),
   the session figures (`overlay.session_bits`; the page's `sessionLine`), and the rebuy the risk figures use
   (`risk_rebuy` in ed_outrider.py; the page's `riskRebuy`). Two copies of one rule: a change to either is made to both.
 - **PyQt6 is installed when the overlay is on, never from a button** (the author, 2026-10-10: not a menu option).
