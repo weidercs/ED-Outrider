@@ -43,7 +43,7 @@ ARRANGE_SECONDS = 600   # Arrange mode ends by itself after this, so the overlay
 
 DEFAULTS = {"enabled": False, "theme": "default", "text_size": "normal", "system_panel": True, "body_panel": True,
             "radar": True, "strip_panel": False, "now_panel": False, "bio_panel": False, "system_seconds": 0,
-            "radar_range": 800, "analysis_only": []}
+            "radar_range": 800, "analysis_only": [], "show_inactive": False}
 # where each panel starts: a corner of the game window, the offset from it as a share of the window's width (x) and
 # height (y), its size (1 = the canvas's own), its background's opacity (0: text only) and the whole panel's
 LAYOUT_DEFAULT = {"system": {"corner": "nw", "x": 0.02, "y": 0.16, "scale": 1.0, "bg": 0.65, "alpha": 1.0},
@@ -140,7 +140,7 @@ def overlay_settings(cfg):
     if "overlay" in cfg and not isinstance(cfg.get("overlay"), dict):
         _warn("must be a section (a table of settings); ignored")
     out = dict(DEFAULTS)
-    for key in ("enabled", "system_panel", "body_panel", "radar", "strip_panel", "now_panel", "bio_panel"):
+    for key in ("enabled", "system_panel", "body_panel", "radar", "strip_panel", "now_panel", "bio_panel", "show_inactive"):
         v = o.get(key)
         if v is None:
             continue
@@ -182,6 +182,90 @@ def analysis_list(v, warn=None):
         warn(f"analysis_only: {', '.join(repr(x) for x in unknown)} not a panel ({', '.join(PANELS)}); left out")
     names = {x.strip().lower() for x in v}
     return [p for p in PANELS if p in names]
+
+
+# ---- the page's overlay pill (S8): how the overlay is doing, in one word and a reason ----
+
+# what the overlay window sees, sent with each of its GETs as &w= (overlay_window.track_code)
+TRACK_CODES = ("drawing", "behind", "hidden", "covered", "no_window", "no_wmctrl", "no_xprop", "no_tracker")
+QUIET_S = 15   # s without a GET from a window that should be running: "not answering"
+TRACK_WHY = {"drawing": ("ok", "drawing over Elite"),
+             "behind": ("wait", "Elite is not the active window"),   # the page: "behind this page" while it has the focus
+             "hidden": ("wait", "Elite's window is minimised or on another desktop"),
+             "covered": ("wait", "another window covers Elite's"),
+             "no_window": ("bad", "Elite's window cannot be found (exclusive fullscreen, or Proton's native Wayland mode?)"),
+             "no_wmctrl": ("bad", "wmctrl not installed: the overlay cannot find Elite's window"),
+             "no_xprop": ("bad", "xprop not installed: the overlay cannot tell whether Elite is in front"),
+             "no_tracker": ("bad", "the overlay cannot follow the game's window on this system")}
+FULLSCREEN_WHY = ("Elite is set to exclusive fullscreen: nothing can draw over it; "
+                  "choose Borderless in the game's Options → Graphics → Display")
+
+
+def health(wanted, runner, track, quiet, started, live, loading, fullscreen=False):
+    """The page's overlay pill: {state: ok | wait | bad, code, why}, or None when there is nothing to say (the overlay
+    not wanted, or Outrider runs no window here: a server). runner: OverlayRunner.status(); track: the window's last
+    TRACK_CODES word (None: never said); quiet: s since the window last asked or was started, whichever is later (None:
+    neither); started: whether it asked since the runner last started it (state off: not started yet); live / loading: the game, from the journals; fullscreen: DisplaySettings.xml says
+    exclusive fullscreen. The tools the window lacks come first (a fix for the player), then the game, then the window."""
+    if not wanted or runner is None:
+        return None
+    state, why = runner.get("state"), runner.get("why")
+
+    def out(level, code, text):
+        return {"state": level, "code": code, "why": text}
+    if state == "installing":
+        return out("wait", "installing", "installing PyQt6 for the overlay window")
+    if state == "no_qt":
+        return out("wait", "no_qt", "the overlay window needs PyQt6: Outrider installs it")
+    if state == "install_failed":
+        return out("bad", "install_failed", f"installing PyQt6 failed: {why or '?'}")
+    if state == "failed":
+        return out("bad", "failed", f"the overlay window: {why or 'it stopped'}")
+    if state == "restarting":
+        return out("wait", "restarting", f"the overlay window {why or 'stopped'}")
+    quiet = float("inf") if quiet is None else quiet
+    if state == "starting" or (not started and (quiet <= QUIET_S or state == "off")):
+        return out("wait", "starting", "starting the overlay window")
+    if quiet > QUIET_S:
+        return out("bad", "quiet", "the overlay window is not answering")
+    if track in ("no_wmctrl", "no_xprop", "no_tracker"):
+        return out(TRACK_WHY[track][0], track, TRACK_WHY[track][1])
+    if loading:
+        return out("wait", "loading", "Elite is loading")
+    if not live:
+        return out("wait", "no_game", "Elite is not running")
+    if fullscreen:
+        return out("bad", "fullscreen", FULLSCREEN_WHY)
+    if track not in TRACK_WHY:
+        return out("wait", "starting", "starting the overlay window")
+    level, text = TRACK_WHY[track]
+    return out(level, track, text)
+
+
+# Elite's display mode, from its DisplaySettings.xml (S8): exclusive fullscreen hides anything drawn over the game
+DISPLAY_SETTINGS = ("AppData", "Local", "Frontier Developments", "Elite Dangerous", "Options", "Graphics",
+                    "DisplaySettings.xml")
+FULLSCREEN_MODES = {"0": "windowed", "1": "fullscreen", "2": "borderless"}   # <FullScreen>: published values, unchecked
+
+
+def display_settings_paths(journal_dirs, environ=None):
+    """Where DisplaySettings.xml should be for these journal folders: the journals are in <user>/Saved Games/Frontier
+    Developments/Elite Dangerous, the options in <user>/AppData/Local/... (on Windows and in a Proton prefix alike);
+    on Windows also %LOCALAPPDATA%'s. Each once, in that order."""
+    environ = os.environ if environ is None else environ
+    out = []
+    for d in journal_dirs or ():
+        user = os.path.dirname(os.path.dirname(os.path.dirname(os.path.normpath(d))))
+        out.append(os.path.join(user, *DISPLAY_SETTINGS))
+    if environ.get("LOCALAPPDATA"):
+        out.append(os.path.join(environ["LOCALAPPDATA"], *DISPLAY_SETTINGS[2:]))
+    return list(dict.fromkeys(out))
+
+
+def display_mode(text):
+    """DisplaySettings.xml's text -> "windowed", "fullscreen", "borderless", or None (no <FullScreen>, another value)."""
+    m = re.search(r"<FullScreen>\s*(\d+)\s*</FullScreen>", text or "")
+    return FULLSCREEN_MODES.get(m.group(1)) if m else None
 
 
 def _num(v, lo, hi):

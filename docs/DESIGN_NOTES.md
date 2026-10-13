@@ -377,6 +377,23 @@ upstream project's choices, not rules of the game.
   HUD is in combat mode (Status.json bit 27 clear). The SRV and on foot have no HUD modes, so the mark is ignored
   there, as over the galaxy map and for the test panels and Arrange mode. The radar stays on wherever it applied
   before (D2b, an Artemis-suit or Genetic Sampler gate, was dropped by the author).
+- **The overlay pill** (S8, 2026-10-13): the overlay window says what it sees with each GET (`&w=`: drawing, behind,
+  hidden, covered, no window, a tool missing), a GET that changes state as `overlay_seen` already did; the server adds
+  what only it knows (the runner, the game live or loading from the journals, a window quiet for `QUIET_S`) in
+  `overlay.health`. The plan's game-process check in the window was left out: the journals already say whether the game
+  runs and loads (the link pill's "no game" comes from the same place), and the window's own "no window" covers the
+  rest. "Not the active window" is amber only while the page itself has the focus (the player looking at Outrider on
+  purpose), red otherwise. Exclusive fullscreen is out of scope; the pill only warns, from the game's DisplaySettings.xml
+  (`<FullScreen>` 1; 0 windowed and 2 borderless are the published values, not yet checked against a real file),
+  found from each live journal folder's user folder (Windows and a Proton prefix alike).
+- **Keep showing when Elite is not the active window** (S25 with S25b, the author, 2026-10-12): `[overlay]
+  show_inactive`, off by default. With it on the overlay still hides when the game's window is out of sight (minimised,
+  on another desktop: X11 `_NET_WM_STATE_HIDDEN` and `_NET_CURRENT_DESKTOP`, Windows cloaked) or covered by other
+  windows over more than a quarter of it (`overlay_tracking.COVERED_SHARE`: X11 from `_NET_CLIENT_LIST_STACKING` and
+  wmctrl's geometries, Windows by walking the z-order above the game, click-through and tool windows ignored). These
+  checks run only while the setting is on and the game is not in front, kept a second (`INACTIVE_EVERY_S`). A native
+  Wayland window is in no X11 list, so it is never seen covering the game (the overlay draws over it): said in the
+  guide.
 - **No rebuy multiple for a ship whose hull has no credit value** (the author, 2026-10-10). An Arx-bought ship's
   Loadout carries ModulesValue but no HullValue, and its rebuy is 5% of the modules alone, so "N× rebuy" said ~110
   on any trip and a rebuy-multiple level would always fire. Such a ship gets no rebuy in the risk figures (`risk_rebuy`,
@@ -903,6 +920,8 @@ confirmed while playing. Treat reports about them as likely real.
   planetary station's Docked with its Body.
 - The in-game overlay's real panels in live play (only the test panels have been seen over the game), Arrange mode
   over the game, PyQt6 installed by the launcher and by Outrider, the window's restart after a crash, and the overlay
-  on Windows.
+  on Windows. The overlay pill's states over a real game (and whether, under Proton and XWayland, the active window's id
+  matches wmctrl's: a mismatch would show as "not the active window" while playing), DisplaySettings.xml's
+  `<FullScreen>` values, and "keep showing" with a window over the game (X11 stacking, and Windows' z-order walk).
 - The jump line's wait for Status.json's FsdJump flag (bit 30) in a live jump; your own sound files and Volume
   through the real players; the co-pilot button choosing the throttle of a real two-part X-56.

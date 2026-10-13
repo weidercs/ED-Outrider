@@ -7,7 +7,9 @@ author, 2026-10-10), never drawn from a server. By hand, for development:
 
 It asks Outrider for the panels (GET /api/overlay, about once a second) and paints them over Elite's window: a
 frameless, translucent, always-on-top window that lets every click through to the game, follows Elite's window and
-hides when the game is not in front. Needs PyQt6 (requirements-overlay.txt; installed automatically while the overlay
+hides when the game is not in front (or, with [overlay] show_inactive, only when the game is out of sight or covered by
+other windows: S25). Each GET also says what it sees (`&w=`, `track_code`: drawing, behind, no window...), which
+Outrider turns into the page's overlay pill (S8). Needs PyQt6 (requirements-overlay.txt; installed automatically while the overlay
 is on: outrider/overlay_runner.py; never in the Docker image). On Linux it finds Elite's window with wmctrl, xprop and
 xwininfo; on a Wayland session it runs through XWayland, as Elite under Proton does.
 
@@ -143,11 +145,34 @@ def win_exstyle(style, through):
 def should_show(st, data, active=False):
     """Whether the overlay shows over the game's window state `st` (overlay_tracking.WindowState or None): while the
     game is in front, or this window is (Arrange mode takes the mouse), or for Arrange mode and the test panels whatever
-    is in front (they are pressed from Outrider's page: the game is behind it then)."""
+    is in front (they are pressed from Outrider's page: the game is behind it then); with show_inactive (S25) also
+    while another window is active, unless other windows cover the game (S25b: `st.covered`). Minimised or on
+    another desktop (`is_visible` false): never."""
     if not st or not st.is_visible:
         return False
     data = data or {}
-    return bool(st.is_foreground or active or data.get("arrange") or data.get("test"))
+    return bool(st.is_foreground or active or data.get("arrange") or data.get("test")
+                or (data.get("show_inactive") and not getattr(st, "covered", False)))
+
+
+def track_code(tracker, st, shown):
+    """What the window sees, sent with each GET as &w= (S8; Outrider makes the page's overlay pill of it), one of
+    overlay.TRACK_CODES: shown over the game (drawing); the game's window found but not in front (behind), minimised or
+    on another desktop (hidden), covered by other windows (covered); no game window (no_window); the tools missing
+    (no_wmctrl, no_xprop), or no tracker on this system (no_tracker)."""
+    if tracker is None:
+        return "no_tracker"
+    if getattr(tracker, "missing", False):
+        return "no_wmctrl"
+    if getattr(tracker, "xprop_missing", False):
+        return "no_xprop"
+    if st is None:
+        return "no_window"
+    if shown:
+        return "drawing"
+    if not st.is_visible:
+        return "hidden"
+    return "covered" if getattr(st, "covered", False) else "behind"
 
 
 def screen_for(infos, nx, ny):
@@ -219,9 +244,10 @@ class Client:
                 except ValueError:
                     raise RuntimeError(f"HTTP {e.code}") from None
 
-    def view(self, since=None):
-        q = f"?since={urllib.request.quote(since)}" if since else ""
-        return self._request("GET", "/api/overlay" + q)
+    def view(self, since=None, track=None):
+        """The panels; since: the version drawn (an unchanged answer is {same}); track: what the window sees (S8)."""
+        q = "&".join(f"{k}={urllib.request.quote(v)}" for k, v in (("since", since), ("w", track)) if v)
+        return self._request("GET", "/api/overlay" + (f"?{q}" if q else ""))
 
     def set_layout(self, change):
         return self._request("POST", "/api/overlay/layout", change)
@@ -236,12 +262,13 @@ class Feed:
 
     def __init__(self, client):
         self.client, self.data, self.seq, self.error = client, None, 0, None
+        self.track = None   # what the window sees (track_code), set by the window, sent with each GET
         self._stop = threading.Event()
         self._lock = threading.Lock()
 
     def fetch_once(self):
         try:
-            got = self.client.view(self.data["version"] if self.data else None)
+            got = self.client.view(self.data["version"] if self.data else None, self.track)
         except (OSError, RuntimeError, ValueError, urllib.error.URLError, http.client.HTTPException) as e:
             # HTTPException: a connection cut mid-answer (IncompleteRead, BadStatusLine) is none of the others
             with self._lock:
@@ -614,11 +641,15 @@ def run_window(client, title_hint=None):   # pragma: no cover - needs a display;
                     log.debug("Windows click-through: %s", e)
 
         def follow(self):
+            if tracker:   # S25: asked whether the game is out of sight or covered only while it may show behind
+                tracker.inactive_checks = bool(feed.data and feed.data.get("show_inactive"))
             st = tracker.poll() if tracker else None
             arranging = self.arranging()
             if self.click_through == arranging:   # Arrange mode takes the mouse; otherwise every click goes to the game
                 self.apply_click_through(not arranging)
-            if not should_show(st, feed.data, self.isActiveWindow()):
+            shown = should_show(st, feed.data, self.isActiveWindow())
+            feed.track = track_code(tracker, st, shown)
+            if not shown:
                 if self.isVisible():
                     self.hide()
                 return

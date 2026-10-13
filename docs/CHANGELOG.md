@@ -2,6 +2,27 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-13 · The overlay pill, and keeping the overlay when Elite is not the active window
+- **The overlay pill** (S8): `#ovPill` beside the link pill while the overlay is on (game PC only): "overlay ✓"
+  drawing, "overlay …" starting, Elite not running or loading, behind this page, minimised or covered, "overlay ✗"
+  with the reason on hover (wmctrl or xprop not installed, Elite's window not found, the window not answering for
+  `QUIET_S` 15 s, a PyQt6 install that failed, exclusive fullscreen). The window sends what it sees with each GET
+  (`&w=`, `overlay_window.track_code`, `overlay.TRACK_CODES`), kept for its User-Agent only in `State.overlay_track`
+  (the page woken on a change); `overlay.health` adds the runner, the game live / loading from the journals and
+  DisplaySettings.xml's `<FullScreen>` (`display_settings_paths` from the live journal folders, `display_mode`, read every
+  `OVERLAY_DISPLAY_CHECK_S`); `overlay_info.pill`; `overlay_window_tick` wakes the page when the pill changes on its
+  own (a window gone quiet). "Not the active window" is amber only while the page has the focus ("Elite is behind this
+  page"), red otherwise. The tablet's link line adds it ("linked · overlay ✓"); Settings → In-game overlay says the
+  same while the window runs. The X11 tracker notes a missing xprop (`xprop_missing`), which used to keep the game
+  silently never "in front". The plan's game-process check was left out: the journals say whether the game runs.
+- **Keep showing when Elite is not the active window** (S25 with S25b): `[overlay] show_inactive` (false), a switch in
+  Settings → In-game overlay, in GET `/api/overlay`'s answer. With it on the window still hides when the game is
+  minimised or on another desktop (X11 `_NET_WM_STATE_HIDDEN` / `_NET_CURRENT_DESKTOP`, Windows cloaked) or covered
+  by other windows over a quarter of it (`overlay_tracking.covered_share`, `COVERED_SHARE`: X11 from
+  `_NET_CLIENT_LIST_STACKING` and wmctrl's geometries, Windows' z-order walk `win_rects_above`, untried), asked only
+  while the switch is on and the game is not in front (`inactive_checks`), kept `INACTIVE_EVERY_S`. A native Wayland
+  window is not seen covering the game: the guide says so.
+
 ## 2026-10-13 · The overlay's Target panel, and panels shown only in analysis mode
 - **One Target panel** (D1): the overlay's body panel became the Target panel (same id `body`, `body_panel` switch and
   layout key: an existing arrangement and config carry over; PANEL_NAMES, Settings' row and help say "Target"). Inside a

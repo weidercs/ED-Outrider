@@ -236,6 +236,8 @@
 # radar_range = 800         # metres from the radar's centre to its edge (it widens to fit a colony ring)
 # analysis_only = []        # panels shown in your ship only while the HUD is in analysis mode, e.g. ["system", "bio"]
 #                           # (any of system, body, radar, strip, now, bio; not in the SRV, on foot or over the galaxy map)
+# show_inactive = false     # keep showing when Elite is not the active window (Settings -> In-game overlay); it still
+#                           # hides while other windows cover the game, or the game is minimised or on another desktop
 
 [mcp]
 # The MCP bridge, for asking an AI client (Claude Code, the Claude desktop app) about your game: the client starts

@@ -1199,3 +1199,166 @@ class Server(unittest.TestCase):
         self.assertEqual((by_visitor, by_window), (False, True))   # only the overlay window counts as drawing
         self.assertEqual((first["panels"], same["same"], bad, ok["test"], lay, y, lay_bad, cross),
                          ([], True, 400, O.TEST_SECONDS, 200, 0.5, 400, 403))
+
+
+class FakeRunner:
+    """OverlayRunner's face to the State (status, tick, proc): starts at "off", "starting" on the first wanted tick,
+    "running" after; never a process."""
+
+    def __init__(self, state="off", why=None):
+        self.state, self.why, self.proc, self.wants = state, why, None, []
+
+    def status(self):
+        return {"state": self.state, "why": self.why}
+
+    def tick(self, want):
+        self.wants.append(want)
+        self.state = ("starting" if self.state == "off" else "running") if want else "off"
+
+
+class Pill(unittest.TestCase):
+    """S8: the page's overlay pill, from the runner, the window's word (&w=), the game and DisplaySettings.xml."""
+
+    def test_health(self):
+        run = {"state": "running", "why": None}
+        h = lambda **kw: O.health(**dict(dict(wanted=True, runner=run, track="drawing", quiet=1, started=True, live=True,
+                                              loading=False), **kw))
+        self.assertEqual(h(), {"state": "ok", "code": "drawing", "why": "drawing over Elite"})
+        self.assertIsNone(h(wanted=False))                     # the overlay off: no pill
+        self.assertIsNone(h(runner=None))                      # no window run here (a server)
+        word = lambda **kw: (h(**kw)["state"], h(**kw)["code"])
+        self.assertEqual(word(runner={"state": "installing", "why": None}), ("wait", "installing"))
+        self.assertEqual(word(runner={"state": "install_failed", "why": "no network"}), ("bad", "install_failed"))
+        self.assertIn("no network", h(runner={"state": "install_failed", "why": "no network"})["why"])
+        self.assertEqual(word(runner={"state": "failed", "why": "it stopped 5 times"}), ("bad", "failed"))
+        self.assertEqual(word(runner={"state": "restarting", "why": "stopped"}), ("wait", "restarting"))
+        self.assertEqual(word(runner={"state": "starting", "why": None}), ("wait", "starting"))
+        self.assertEqual(word(started=False, quiet=3), ("wait", "starting"))           # started, not asked yet
+        self.assertEqual(word(started=False, quiet=O.QUIET_S + 1), ("bad", "quiet"))    # started and never asked
+        self.assertEqual(word(quiet=O.QUIET_S + 1), ("bad", "quiet"))                  # asked, then went quiet
+        self.assertEqual(word(quiet=None, started=False, runner={"state": "off", "why": None}), ("wait", "starting"))
+        # the tools first (a fix for the player, whatever the game does), then the game, then the window's word
+        self.assertEqual(word(track="no_wmctrl", live=False), ("bad", "no_wmctrl"))
+        self.assertIn("wmctrl not installed", h(track="no_wmctrl")["why"])
+        self.assertEqual(word(track="no_xprop"), ("bad", "no_xprop"))
+        self.assertEqual(word(track="no_window", loading=True), ("wait", "loading"))
+        self.assertEqual(word(track="no_window", live=False), ("wait", "no_game"))
+        self.assertEqual(word(track="no_window"), ("bad", "no_window"))
+        self.assertEqual(word(fullscreen=True), ("bad", "fullscreen"))
+        self.assertIn("Borderless", h(fullscreen=True)["why"])
+        for code, level in (("behind", "wait"), ("hidden", "wait"), ("covered", "wait"), ("no_tracker", "bad")):
+            self.assertEqual(word(track=code), (level, code))
+        self.assertEqual(word(track=None), ("wait", "starting"))
+        self.assertEqual(set(O.TRACK_WHY), set(O.TRACK_CODES))
+
+    def test_display_settings(self):
+        """Exclusive fullscreen from the game's DisplaySettings.xml, found from the journal folder (Proton or Windows)."""
+        j = os.path.join("pfx", "drive_c", "users", "steamuser", "Saved Games", "Frontier Developments", "Elite Dangerous")
+        got = O.display_settings_paths([j, j + os.sep], {"LOCALAPPDATA": "L"})
+        self.assertEqual(got, [os.path.join("pfx", "drive_c", "users", "steamuser", "AppData", "Local", "Frontier Developments",
+                                            "Elite Dangerous", "Options", "Graphics", "DisplaySettings.xml"),
+                               os.path.join("L", "Frontier Developments", "Elite Dangerous", "Options", "Graphics",
+                                            "DisplaySettings.xml")])
+        xml = "<?xml version=\"1.0\"?>\n<DisplayConfig>\n\t<ScreenWidth>2560</ScreenWidth>\n\t<FullScreen>{}</FullScreen>\n</DisplayConfig>\n"
+        self.assertEqual([O.display_mode(xml.format(v)) for v in ("0", "1", "2", "7")], ["windowed", "fullscreen", "borderless", None])
+        self.assertIsNone(O.display_mode("<DisplayConfig/>"))
+
+    def setUp(self):
+        self.db = ed_outrider.open_db(":memory:")
+        self.addCleanup(self.db.close)
+        self.state = ed_outrider.State(self.db, ed_outrider.Journals(self.db), types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = tmp.name
+        self.state.config_path = os.path.join(tmp.name, "ed_outrider.toml")
+        live = ed_outrider.LIVE_DIRS
+        ed_outrider.LIVE_DIRS = []
+        self.addCleanup(setattr, ed_outrider, "LIVE_DIRS", live)
+
+    def test_the_windows_word(self):
+        """The window's &w= is kept from its own GETs only, a known word only; the page is woken when it changes."""
+        s = self.state
+        s.overlay_view(now=10, window=False, track="behind")       # another visitor: not the window
+        self.assertIsNone(s.overlay_track)
+        v0 = s.version
+        s.overlay_view(now=11, track="behind")
+        self.assertEqual((s.overlay_track, s.version), ("behind", v0 + 1))
+        s.overlay_view(now=12, track="behind")                      # the same word: nothing to wake the page for
+        s.overlay_view(now=13, track="nonsense")                    # not a word: ignored
+        self.assertEqual((s.overlay_track, s.version), ("behind", v0 + 1))
+        s.overlay_view(now=14, track="drawing")
+        self.assertEqual((s.overlay_track, s.version), ("drawing", v0 + 2))
+
+    def test_pill_from_the_server(self):
+        s = self.state
+        self.assertIsNone(s.overlay_info(now=100)["pill"])           # no runner (a server, tests): no pill
+        s.overlay_runner = FakeRunner()
+        self.assertIsNone(s.overlay_info(now=100)["pill"])           # the overlay off
+        s.overlay_cfg.update(enabled=True)
+        last = s.overlay_window_tick(None, now=100)                   # the runner starts the window
+        self.assertEqual((s.overlay_started, s.overlay_info(now=100)["pill"]["code"]), (100, "starting"))
+        s.overlay_window_tick(last, now=102)                          # running, not asked yet
+        self.assertEqual(s.overlay_pill(now=103)["code"], "starting")
+        self.assertEqual(s.overlay_pill(now=100 + O.QUIET_S + 1)["code"], "quiet")   # never asked
+        s.overlay_view(now=104, track="drawing")
+        self.assertEqual(s.overlay_pill(now=105)["code"], "no_game")  # Elite not running (no live Status.json)
+        s.journals.status_json = {"live": True, "flags": 0}
+        self.assertEqual(s.overlay_pill(now=105), {"state": "ok", "code": "drawing", "why": "drawing over Elite"})
+        # a window gone quiet changes the pill with nothing else happening: the watcher's tick wakes the page
+        last = s.overlay_window_tick(None, now=105)
+        v0 = s.version
+        last = s.overlay_window_tick(last, now=106)
+        self.assertEqual(s.version, v0)
+        last = s.overlay_window_tick(last, now=104 + O.QUIET_S + 1)
+        self.assertEqual((s.version, last[1]["code"]), (v0 + 1, "quiet"))
+
+    def test_exclusive_fullscreen(self):
+        s = self.state
+        user = os.path.join(self.tmp, "steamuser")
+        jdir = os.path.join(user, "Saved Games", "Frontier Developments", "Elite Dangerous")
+        gdir = os.path.join(user, "AppData", "Local", "Frontier Developments", "Elite Dangerous", "Options", "Graphics")
+        os.makedirs(jdir)
+        os.makedirs(gdir)
+        with open(os.path.join(gdir, "DisplaySettings.xml"), "w", encoding="utf-8") as f:
+            f.write("<DisplayConfig><FullScreen>1</FullScreen></DisplayConfig>")
+        ed_outrider.LIVE_DIRS = [jdir]
+        s.overlay_runner = FakeRunner("running")
+        s.overlay_cfg.update(enabled=True)
+        s.journals.status_json = {"live": True, "flags": 0}
+        s.overlay_view(now=200, track="drawing")
+        self.assertEqual(s.overlay_pill(now=201)["code"], "fullscreen")
+        with open(os.path.join(gdir, "DisplaySettings.xml"), "w", encoding="utf-8") as f:
+            f.write("<DisplayConfig><FullScreen>2</FullScreen></DisplayConfig>")
+        self.assertEqual(s.overlay_pill(now=202)["code"], "fullscreen")                     # looked at now and then
+        later = 200 + ed_outrider.OVERLAY_DISPLAY_CHECK_S + 2
+        s.overlay_view(now=later, track="drawing")
+        self.assertEqual(s.overlay_pill(now=later)["code"], "drawing")
+
+    def test_show_inactive(self):
+        """S25: [overlay] show_inactive, switched from Settings, written for the next start, in the window's answer."""
+        s = self.state
+        self.assertFalse(s.overlay_view(now=1)["show_inactive"])
+        out, status = s.overlay_set({"show_inactive": True}, now=2)
+        self.assertEqual((status, out["show_inactive"]), (200, True))
+        self.assertTrue(s.overlay_view(now=3)["show_inactive"])
+        with open(s.config_path, encoding="utf-8") as f:
+            self.assertIn("show_inactive = true", f.read())
+        self.assertEqual(s.overlay_set({"show_inactive": "yes"}, now=4)[1], 400)
+
+    def test_show_inactive_setting(self):
+        self.assertFalse(O.overlay_settings({})["overlay"]["show_inactive"])
+        self.assertTrue(O.overlay_settings({"overlay": {"show_inactive": True}})["overlay"]["show_inactive"])
+        with contextlib.redirect_stderr(io.StringIO()) as e:
+            self.assertFalse(O.overlay_settings({"overlay": {"show_inactive": "on"}})["overlay"]["show_inactive"])
+        self.assertIn("show_inactive", e.getvalue())
+
+    def test_the_word_through_the_route(self):
+        from aiohttp.test_utils import TestClient, TestServer
+
+        async def go():
+            async with TestClient(TestServer(ed_outrider.make_app(self.state))) as c:
+                await c.get("/api/overlay", params={"w": "covered"})                       # a visitor's word: ignored
+                visitor = self.state.overlay_track
+                await c.get("/api/overlay", params={"w": "covered"}, headers={"User-Agent": "outrider-overlay"})
+                return visitor, self.state.overlay_track
+        self.assertEqual(asyncio.run(go()), (None, "covered"))

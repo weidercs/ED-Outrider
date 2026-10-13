@@ -86,8 +86,17 @@ crash left the old session's status behind.
    and Ubuntu: `sudo apt install wmctrl x11-utils`); the launcher says when `wmctrl` is missing.
 3. Play Elite **borderless or windowed**; exclusive fullscreen hides anything drawn over it.
 
-Settings → In-game overlay says how the window is doing (starting, drawing, waiting for the game's window). If the
-window stops by itself, Outrider starts it again after a growing wait; after five times in a row it gives up (Settings
+Settings → In-game overlay says how the window is doing (starting, drawing, waiting for the game's window), and so
+does the **overlay pill** in the page's header, beside the link pill, while the overlay is on:
+
+- **overlay ✓** (green): drawing over Elite;
+- **overlay …** (amber): starting, Elite not running or loading, Elite behind this page (you are looking at
+  Outrider), minimised or on another desktop, or covered by another window;
+- **overlay ✗** (red): something to fix, the reason on hover: wmctrl or xprop not installed, Elite's window not
+  found, the overlay window not answering, Elite set to exclusive fullscreen (Outrider reads the game's own
+  DisplaySettings.xml), or another window in front of the game while you are not on Outrider's page.
+
+On the tablet the link line says it too ("linked · overlay ✓"). If the window stops by itself, Outrider starts it again after a growing wait; after five times in a row it gives up (Settings
 says so) until you switch the overlay off and on. A window that drew for a minute or more before it stopped starts
 the count again. **Show test panels** draws every panel (all six, switched on or
 not) with made-up contents for a minute, without flying anywhere, even while Outrider's page is in front of the game.
@@ -129,6 +138,15 @@ cut corners, LCARS's bars, ...); **text** is small, normal or large. In the conf
 `radar_range` is the radar's edge in metres (it widens to fit a colony ring); `analysis_only` lists the panels
 ticked Analysis only (`["system", "bio"]`; the Target panel is `body`).
 
+<a id="keep-showing"></a>**Keep showing when Elite is not the active window** (`show_inactive`, off by default): the
+overlay normally hides as soon as another window is in front, Outrider's page included. With this on it stays over the
+game while you use a window beside it (a browser on another screen, a chat), and still hides when the game is
+minimised, on another desktop, or when other windows cover more than a quarter of it (then the pill says "another
+window covers Elite's"). On Linux that is judged from the X11 windows' stacking and sizes; on Windows from the
+windows above the game (not yet tried). **A native Wayland window cannot be seen:** on a Wayland desktop, a program
+running as a Wayland window (Firefox and most GNOME and KDE apps do) can sit over the game without the overlay
+knowing, so it draws over that window too; an XWayland window (most games, Steam, Discord) is seen.
+
 <p align="center">
   <img src="../images/overlay-settings.png" alt="Settings, In-game overlay: the switch, the window's state, the theme and text size, the test panels and Arrange buttons, and each panel's row with its tick box, corner, offsets, size and opacities" width="740">
 </p>
@@ -144,7 +162,8 @@ ticked Analysis only (`["system", "bio"]`; the Target panel is `body`).
   off or blur them: not tried yet.
 - **Windows**: the same window (finding Elite's with the Windows API, letting clicks through, always on top), not yet
   tried against the game. Play borderless; tell us how it goes.
-- Exclusive fullscreen and gamescope (the Steam Deck's game mode) are not supported: nothing can draw over them.
+- Exclusive fullscreen and gamescope (the Steam Deck's game mode) are not supported: nothing can draw over them. The
+  overlay pill turns red when the game's DisplaySettings.xml says exclusive fullscreen.
 - The window's code for finding and following the game's window, and drawing over it, is adapted from
   [EDMC Modern Overlay](https://github.com/SweetJonnySauce/EDMCModernOverlay); neither EDMC nor Modern Overlay is
   needed.

@@ -366,6 +366,7 @@ button.icon.hushbtn.on { border-color: var(--warn); }
 .linkpill { font-size: 11px; padding: 0 6px; border-radius: 9px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
 .linkpill.stale { color: var(--warn); border-color: var(--warn); }
 .linkpill.none { color: var(--bad, #e05555); border-color: var(--bad, #e05555); }
+.linkpill.ok { color: var(--good); border-color: var(--good); }   /* the overlay pill drawing (S8) */
 /* the last line said (review S18): muted, on the icons' own row (no new line: a short window keeps its layout) */
 .lastsaid { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; min-width: 0; }
 .lastsaid #lastSaidText { max-width: 32ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

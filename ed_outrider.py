@@ -302,6 +302,7 @@ FLAG_SUPERCRUISE = 1 << 4
 OVERLAY_UA = "outrider-overlay"   # the overlay window's User-Agent (outrider/overlay_window.py): only it counts as drawing
 OVERLAY_TICK_S = 2             # s between checks that the overlay window runs while wanted
 OVERLAY_SEEN_S = 5             # s: an overlay window that asked this recently counts as connected (Settings says so)
+OVERLAY_DISPLAY_CHECK_S = 30   # s between looks at Elite's DisplaySettings.xml for exclusive fullscreen (the overlay pill, S8)
 AUTOTARGET_DANGER_WAIT = 60     # s after an arrival a run waits for the game's own in-danger flag to clear (see arrival_danger_until)
 # The Highway map's optional background image ([highway] background_image): only the configured file is served
 # (GET /api/highway/background), and only one of these image types, checked by its first bytes too (no SVG: it can
@@ -1161,6 +1162,7 @@ bio_panel = {"true" if st["overlay"]["bio_panel"] else "false"}   # every bio si
 system_seconds = {st["overlay"]["system_seconds"]}   # how long the system panel stays after arriving (0: while in supercruise in that system)
 radar_range = {st["overlay"]["radar_range"]}   # metres from the radar's centre to its edge (it widens to fit a colony ring)
 analysis_only = [{", ".join(q(x) for x in st["overlay"]["analysis_only"])}]   # panels shown in your ship only while the HUD is in analysis mode: any of system, body, radar, strip, now, bio (not in the SRV, on foot or over the galaxy map)
+show_inactive = {"true" if st["overlay"]["show_inactive"] else "false"}   # keep showing when Elite is not the active window (still hidden while other windows cover the game, minimised or on another desktop)
 
 [assistant]
 enabled = {"true" if st["assistant"]["enabled"] else "false"}   # the voice's AI layer for questions the fixed phrases do not match (resources/ask.json); nothing is sent anywhere while false
@@ -6412,6 +6414,11 @@ class State:
         self.overlay_arrange_until = 0.0
         self.overlay_seen = 0.0
         self.overlay_runner = None   # outrider.overlay_runner.OverlayRunner on the game PC (run() makes it; None in tests)
+        # the overlay pill (S8): what the window last said it sees (its GET's &w=: outrider.overlay.TRACK_CODES), when
+        # Outrider last started it (wall time), and Elite's display mode from DisplaySettings.xml (checked now and then)
+        self.overlay_track = None
+        self.overlay_started = 0.0
+        self.overlay_display = (0.0, None)   # (when looked, "windowed" | "fullscreen" | "borderless" | None)
         self._hw_copied = (meta_get(db, "highway") or {}).get("arrival_ts")   # copied before a restart: not again
         self._autotarget_boost = (journals.boost or {}).get("ts")
         # boxel exploration: the arrival an automatic boxel run was decided for (one per arrival), Spansh's fetch running
@@ -7802,15 +7809,22 @@ class State:
             out = [p for p in out if p["id"] not in only]
         return out
 
-    def overlay_view(self, since=None, now=None, window=True):
-        """GET /api/overlay: what the overlay window draws, {version, enabled, arrange, canvas, layout, panels}; with
-        since = that version and nothing changed, only {same, version} (the window asks about once a second). window:
-        the overlay window asked (its User-Agent), not another visitor: only it counts as a window drawing."""
+    def overlay_view(self, since=None, now=None, window=True, track=None):
+        """GET /api/overlay: what the overlay window draws, {version, enabled, arrange, test, show_inactive, canvas,
+        layout, panels}; with since = that version and nothing changed, only {same, version} (the window asks about once
+        a second). window: the overlay window asked (its User-Agent), not another visitor: only it counts as a window
+        drawing, and only its `track` (&w=: what it sees, one of outrider.overlay.TRACK_CODES) is kept, for the page's
+        overlay pill (S8). This GET changes that state, as it sets overlay_seen: the page is woken only when the word
+        changes."""
         now = time.time() if now is None else now
         if window:
             self.overlay_seen = now
+            if track in outrider.overlay.TRACK_CODES and track != self.overlay_track:
+                self.overlay_track = track
+                self.bump()   # the pill
         out = {"enabled": bool(self.overlay_cfg.get("enabled")), "arrange": now < self.overlay_arrange_until,
-               "test": now < self.overlay_test_until, "canvas": [outrider.overlay.CANVAS_W, outrider.overlay.CANVAS_H],
+               "test": now < self.overlay_test_until, "show_inactive": bool(self.overlay_cfg.get("show_inactive")),
+               "canvas": [outrider.overlay.CANVAS_W, outrider.overlay.CANVAS_H],
                "layout": self.overlay_layout(), "panels": self.overlay_panels(now)}
         version = hashlib.sha1(json.dumps(out, sort_keys=True).encode()).hexdigest()[:16]
         if since and since == version:
@@ -7830,12 +7844,57 @@ class State:
         """Keep the overlay window running while it is wanted (OverlayRunner.tick every OVERLAY_TICK_S)."""
         last = None
         while True:
-            self.overlay_runner.tick(self.overlay_wanted())
-            st = self.overlay_runner.status()
-            if st != last:
-                last = st
-                self.bump()   # Settings shows the window's state
+            last = self.overlay_window_tick(last)
             await asyncio.sleep(OVERLAY_TICK_S)
+
+    def overlay_window_tick(self, last, now=None):
+        """One look of watch_overlay_window: the runner's tick, and the page woken when the window's state or the pill
+        changed (a window gone quiet changes it with nothing else happening). -> what to compare with next time."""
+        now = time.time() if now is None else now
+        was = self.overlay_runner.status()["state"]
+        self.overlay_runner.tick(self.overlay_wanted(now))
+        st = self.overlay_runner.status()
+        if st["state"] == "starting" and was != "starting":
+            self.overlay_started = now   # its first GET after this says it runs
+        seen = (st, self.overlay_pill(now))
+        if seen != last:
+            self.bump()   # Settings shows the window's state, the header its pill
+        return seen
+
+    def overlay_display_mode(self, now=None):
+        """Elite's display mode ("windowed", "fullscreen", "borderless" or None) from DisplaySettings.xml beside the live
+        journal folders (outrider.overlay.display_settings_paths), looked at every OVERLAY_DISPLAY_CHECK_S."""
+        now = time.time() if now is None else now
+        when, mode = self.overlay_display
+        if now - when < OVERLAY_DISPLAY_CHECK_S and when:
+            return mode
+        mode = None
+        for path in outrider.overlay.display_settings_paths(LIVE_DIRS):
+            try:
+                with open(path, encoding="utf-8", errors="replace") as f:
+                    mode = outrider.overlay.display_mode(f.read(65536))
+            except OSError:
+                continue
+            if mode:
+                break
+        self.overlay_display = (now, mode)
+        return mode
+
+    def overlay_pill(self, now=None):
+        """The page's overlay pill (S8, outrider.overlay.health): {state, code, why} or None (the overlay not wanted, or
+        no window run here: a server, --simulate)."""
+        now = time.time() if now is None else now
+        r = self.overlay_runner
+        if r is None:
+            return None
+        cfg, st = self.overlay_cfg, self.journals.status_json or {}
+        wanted = bool(cfg.get("enabled")) or now < self.overlay_test_until or now < self.overlay_arrange_until
+        if not wanted:
+            return None
+        since = max(self.overlay_seen, self.overlay_started)
+        return outrider.overlay.health(wanted, r.status(), self.overlay_track, now - since if since else None,
+                                       self.overlay_seen > self.overlay_started, bool(st.get("live")),
+                                       self.journals.loading(), self.overlay_display_mode(now) == "fullscreen")
 
     def overlay_info(self, now=None):
         """The page's Settings -> In-game overlay: the switches, whether a window is drawing (it asked within the last
@@ -7844,15 +7903,16 @@ class State:
         cfg = self.overlay_cfg
         return {"enabled": bool(cfg.get("enabled")), "theme": cfg.get("theme"), "text_size": cfg.get("text_size"),
                 "panels": {p: bool(cfg.get(f"{p}_panel" if p != "radar" else "radar")) for p in outrider.overlay.PANELS},
-                "analysis_only": list(cfg.get("analysis_only") or []),
+                "analysis_only": list(cfg.get("analysis_only") or []), "show_inactive": bool(cfg.get("show_inactive")),
                 "window": now - self.overlay_seen < OVERLAY_SEEN_S, "layout": self.overlay_layout(),
                 "test": max(0, round(self.overlay_test_until - now)), "arrange": max(0, round(self.overlay_arrange_until - now)),
                 # Outrider runs the window itself on the game PC: its state; None on a server (the window runs elsewhere)
-                "runner": self.overlay_runner.status() if self.overlay_runner else None}
+                "runner": self.overlay_runner.status() if self.overlay_runner else None,
+                "pill": self.overlay_pill(now)}   # the header's overlay pill (S8)
 
     def overlay_set(self, body, now=None):
         """POST /api/overlay {enabled?, theme?, text_size?, panels?: {system|body|radar|strip|now|bio: bool}, analysis_only?:
-        [panel ids], test?: bool, arrange?: bool}: the switches, applied at once and written into [overlay] for the next start; test panels for
+        [panel ids], show_inactive?: bool, test?: bool, arrange?: bool}: the switches, applied at once and written into [overlay] for the next start; test panels for
         TEST_SECONDS; Arrange mode (the window takes the mouse to move and size the panels) until it is switched off or
         ARRANGE_SECONDS pass. (answer, HTTP status)."""
         now = time.time() if now is None else now
@@ -7861,8 +7921,8 @@ class State:
             return {"error": "expected {enabled, theme, text_size, panels, test, arrange}"}, 400
         changes = {}
         for key, val in body.items():
-            if key == "enabled" and isinstance(val, bool):
-                changes["enabled"] = val
+            if key in ("enabled", "show_inactive") and isinstance(val, bool):
+                changes[key] = val
             elif key == "theme" and val in O.THEMES:
                 changes["theme"] = val
             elif key == "text_size" and val in O.SIZES:
@@ -16708,7 +16768,8 @@ def make_app(state, hosts=None):
     async def overlay_get(request):
         """GET /api/overlay[?since=version]: the overlay window's panels (State.overlay_view)."""
         return web.json_response(state.overlay_view(request.query.get("since"),
-                                                     window=request.headers.get("User-Agent", "").startswith(OVERLAY_UA)))
+                                                     window=request.headers.get("User-Agent", "").startswith(OVERLAY_UA),
+                                                     track=request.query.get("w")))
 
     async def overlay_post(request):
         out, status = state.overlay_set(await json_object(request))

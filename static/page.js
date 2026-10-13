@@ -9341,6 +9341,9 @@ let overlayDrawn = "", overlayNote = "";
 // the window's state: Outrider runs it on the game PC (o.runner); on a server it runs on the game PC by hand
 function overlayStatusHtml(o) {
   const r = o.runner;
+  // the window runs: what the header's pill says (S8), in words
+  const p = r && ["running", "off"].includes(r.state) ? ovPillState(o, true) : null;
+  if (p) return `<span class="${{ok: "ok", wait: "unk", bad: "bad"}[p.level]}">${p.text}: ${esc(p.why)}</span>`;
   if (o.window) return `<span class="ok">the overlay window is drawing</span>`;
   if (!r) return `<span class="unk">the overlay needs Outrider on the game PC</span>`;
   const st = r.state;
@@ -9376,6 +9379,9 @@ function overlayHtml(o) {
   }).join("");
   return `<label class="mod"><input type="checkbox" data-ov="enabled"${o.enabled ? " checked" : ""}> <b>Show the overlay</b> <span class="hint">the panels below, when they have something to say</span></label>` +
     `<div class="hint">${overlayStatusHtml(o)}</div>` +
+    // S25: with it on the overlay stays over the game while another window is active, unless other windows cover it
+    `<label class="mod"><input type="checkbox" data-ov="show_inactive"${o.show_inactive ? " checked" : ""}> Keep showing when Elite is not the active window ` +
+    `<span class="hint">still hidden while other windows cover the game (a native Wayland window is not seen)</span></label>` +
     `<div class="mod">Theme <select data-ov="theme">${opt(OV_THEMES, o.theme)}</select> · text <select data-ov="text_size">${opt(["small", "normal", "large"], o.text_size)}</select></div>` +
     `<div class="mod"><button type="button" class="try" data-ovact="test">${o.test ? `test panels: ${o.test} s` : "▶ Show test panels"}</button> ` +
     `<button type="button" class="try" data-ovact="arrange">${o.arrange ? `✓ Done arranging (${Math.ceil(o.arrange / 60)} min left)` : "✥ Arrange panels"}</button></div>` +
@@ -9428,7 +9434,7 @@ async function overlayPost(path, body) {
 }
 document.getElementById("overlayBox").addEventListener("change", e => {
   const t = e.target;
-  if (t.dataset.ov === "enabled") overlayPost("api/overlay", {enabled: t.checked});
+  if (t.dataset.ov && t.type === "checkbox") overlayPost("api/overlay", {[t.dataset.ov]: t.checked});   // enabled, show_inactive
   // a select keeps the focus, which holds renderOverlay off: let go, so the server's answer (its note) is drawn
   else if (t.dataset.ov) { t.blur(); overlayPost("api/overlay", {[t.dataset.ov]: t.value}); }
   else if (t.dataset.ovpanel) overlayPost("api/overlay", {panels: {[t.dataset.ovpanel]: t.checked}});
@@ -10181,7 +10187,34 @@ function drawLinkPill() {
   const l = linkState();
   if (el.textContent !== l.text) el.textContent = l.text;
   el.className = "linkpill " + l.state;
+  drawOvPill();
   if (TABLET) tabDrawLink(l);
+}
+// The overlay pill beside it (S8): data.overlay.pill (State.overlay_pill: {state ok | wait | bad, code, why}, null when
+// the overlay is off or no window runs here) as "overlay ✓" (drawing), "overlay …" (the game not running, loading,
+// behind this page) or "overlay ✗", the reason on hover. "Elite is not the active window" is only amber while this
+// page has the focus (the player is looking at it: the game is behind it on purpose); with another window in front, red.
+const OV_PILL = {ok: ["✓", "ok"], wait: ["…", "stale"], bad: ["✗", "none"]};
+function ovPillState(o, focused) {
+  const p = o && o.pill;
+  if (!p || !OV_PILL[p.state]) return null;
+  let level = p.state, why = p.why || "";
+  if (p.code === "behind") {
+    if (focused) why = "Elite is behind this page";
+    else level = "bad";
+  }
+  const [mark, cls] = OV_PILL[level];
+  return {text: `overlay ${mark}`, cls, why, level};
+}
+let ovPillNow = null;   // what the pill says now (the tablet's line adds it)
+function drawOvPill() {
+  const el = document.getElementById("ovPill"); if (!el) return;
+  const p = ovPillNow = data && data.game_pc !== false ? ovPillState(data.overlay, document.hasFocus()) : null;
+  el.hidden = !p;
+  if (!p) return;
+  if (el.textContent !== p.text) el.textContent = p.text;
+  el.className = `linkpill ovpill pcOnly ${p.cls}`;
+  el.title = `the in-game overlay: ${p.why}`;
 }
 setInterval(drawLinkPill, 1000);
 // Outrider gone quiet (stopped, crashed, the network down): after LOST_SAY_MS without it, the speaking window says
@@ -10556,7 +10589,7 @@ function tabDrawHush() {
   b.classList.toggle("on", on);
 }
 // the tablet's pill says what the desktop's does (linkState)
-const tabLinkText = l => l.text;
+const tabLinkText = l => l.text + (ovPillNow ? ` · ${ovPillNow.text}` : "");
 function tabDrawLink(l) {
   const el = document.getElementById("tabLink"), text = tabLinkText(l);
   if (el.textContent !== text) el.textContent = text;

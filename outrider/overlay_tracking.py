@@ -12,12 +12,20 @@ _convert_native_rect_to_qt_standard without its logging, and `title_bar_offset` 
 Changed on 2026-10-12 for auto-target (outrider/game_window.py): the trackers and `create_tracker` take a `match`
 (which titles count as the game's: auto-target wants the game's own title exactly, never a browser tab about it), the
 X11 tracker a `min_interval` (0: every poll asks afresh) and `create_tracker` the `run` it hands to it.
+Changed on 2026-10-13 for the overlay's status pill and "keep showing when Elite is not the active window" (S8, S25,
+S25b): the X11 tracker notes a missing xprop (`xprop_missing`: the game could never be "in front"); with
+`inactive_checks` on and the game not in front, both trackers say whether its window is out of sight (X11: minimised,
+_NET_WM_STATE_HIDDEN, or on another desktop than the current one; Windows: cloaked, as on another virtual desktop) and
+whether other windows cover it (`WindowState.covered`, `covered_share` over COVERED_SHARE: X11 from the stacking order,
+_NET_CLIENT_LIST_STACKING, and wmctrl's geometries; Windows by walking the z-order above it, `win_rects_above`). A native
+Wayland window is in neither list: it is never seen covering the game.
 """
 from __future__ import annotations
 
 import ctypes
 import logging
 import math
+import os
 import re
 import subprocess
 import sys
@@ -44,6 +52,7 @@ class WindowState:
     identifier: str = ""
     global_x: Optional[int] = None
     global_y: Optional[int] = None
+    covered: bool = False    # other windows over more than COVERED_SHARE of it (asked only with inactive_checks)
 
 
 MonitorSnapshot = Tuple[str, int, int, int, int]
@@ -52,7 +61,38 @@ Geometry = Tuple[int, int, int, int]
 
 _TITLE_PATTERN = re.compile(r"elite\s*-\s*dangerous", re.IGNORECASE)
 _DWMWA_EXTENDED_FRAME_BOUNDS = 9
+_DWMWA_CLOAKED = 14
 TITLE_HINT = "elite - dangerous"
+COVERED_SHARE = 0.25     # other windows over more than this share of the game's window: covered (S25b)
+INACTIVE_EVERY_S = 1.0   # how often the out-of-sight and covered checks ask afresh (a few more xprop calls each)
+
+
+def covered_share(rect: Geometry, others: List[Geometry]) -> float:
+    """How much of `rect` (x, y, w, h) the rectangles `others` cover together, 0 to 1 (overlaps counted once)."""
+    x, y, w, h = rect
+    if w <= 0 or h <= 0:
+        return 0.0
+    cut = []
+    for ox, oy, ow, oh in others:
+        l, t, r, b = max(x, ox), max(y, oy), min(x + w, ox + ow), min(y + h, oy + oh)
+        if r > l and b > t:
+            cut.append((l, t, r, b))
+    if not cut:
+        return 0.0
+    xs = sorted({v for l, _, r, _ in cut for v in (l, r)})
+    area = 0
+    for x0, x1 in zip(xs, xs[1:]):   # the union's area: strip by strip, the covered spans of each strip merged
+        spans = sorted((t, b) for l, t, r, b in cut if l <= x0 and r >= x1)
+        covered, end = 0, None
+        for t, b in spans:
+            if end is None or t > end:
+                covered += b - t
+                end = b
+            elif b > end:
+                covered += b - end
+                end = b
+        area += covered * (x1 - x0)
+    return min(1.0, area / float(w * h))
 
 
 def matches_window_title(title: str, hint: str = TITLE_HINT) -> bool:
@@ -132,13 +172,23 @@ class X11Tracker:
         self._last_refresh: float = 0.0
         self._min_interval: float = min_interval
         self._wmctrl_missing = False
+        self._xprop_missing = False
         self._monitor_provider = monitor_provider
         self._run = run or subprocess.run
+        # S25: with the game not in front, also ask whether it is out of sight or covered (the overlay window sets it
+        # while "keep showing when Elite is not the active window" is on); the answer kept INACTIVE_EVERY_S
+        self.inactive_checks = False
+        self._inactive: Optional[Tuple[str, float, bool, bool]] = None   # (window id, when, hidden, covered)
 
     @property
     def missing(self) -> bool:
         """wmctrl is not installed (the window cannot follow the game)."""
         return self._wmctrl_missing
+
+    @property
+    def xprop_missing(self) -> bool:
+        """xprop is not installed: which window is in front cannot be known, so the game never is (S8)."""
+        return self._xprop_missing
 
     def poll(self) -> Optional[WindowState]:
         if self._wmctrl_missing:
@@ -166,17 +216,19 @@ class X11Tracker:
         target_state: Optional[WindowState] = None
         best_state: Optional[WindowState] = None
         best_area = 0
+        listed = {}   # every window wmctrl lists: id -> (desktop, (x, y, w, h)), for the covered check
         for line in result.stdout.splitlines():
             fields = line.split(None, 8)
             if len(fields) < 9:
                 continue
-            win_id_hex, _desktop, x, y, w, h, _wm_class, _host, title = fields
-            if not self._match(title):
-                continue
+            win_id_hex, desktop, x, y, w, h, _wm_class, _host, title = fields
             try:
                 x_val, y_val, width, height = int(x), int(y), int(w), int(h)
                 win_id = int(win_id_hex, 16)
+                listed[win_id] = (int(desktop), (x_val, y_val, width, height))
             except ValueError:
+                continue
+            if not self._match(title):
                 continue
             is_foreground = active_id is not None and win_id == active_id
             candidate = WindowState(x=x_val, y=y_val, width=width, height=height, is_foreground=is_foreground,
@@ -192,10 +244,66 @@ class X11Tracker:
         if target_state is None:
             self._last_state = None
             return None
+        hidden = covered = False
+        if self.inactive_checks and not target_state.is_foreground:
+            hidden, covered = self._out_of_sight(target_state.identifier, listed, now)
         monitors = _invoke_monitor_provider(self._monitor_provider, self._logger)
         geometry = self._absolute_geometry(target_state.identifier) if monitors else None
-        self._last_state = _augment_state_with_monitors(target_state, monitors, self._logger, absolute_geometry=geometry)
+        state = _augment_state_with_monitors(target_state, monitors, self._logger, absolute_geometry=geometry)
+        if hidden or covered:
+            state.is_visible = state.is_visible and not hidden
+            state.covered = covered
+        self._last_state = state
         return self._last_state
+
+    def _out_of_sight(self, win_id_hex: str, listed, now: float) -> Tuple[bool, bool]:
+        """(hidden, covered) for the game's window, not in front (S25, S25b): hidden when minimised
+        (_NET_WM_STATE_HIDDEN) or on another desktop than the current one; covered when the windows above it in the
+        stacking order (on its desktop, not minimised) hide more than COVERED_SHARE of it."""
+        kept = self._inactive
+        if kept and kept[0] == win_id_hex and now - kept[1] < INACTIVE_EVERY_S:
+            return kept[2], kept[3]
+        win_id = int(win_id_hex, 16)
+        desktop, rect = listed.get(win_id, (-1, (0, 0, 0, 0)))
+        current = self._root_cardinal("_NET_CURRENT_DESKTOP")
+        hidden = self._minimised(win_id_hex) or (desktop >= 0 and current is not None and desktop != current)
+        covered = False
+        if not hidden:
+            stack = self._root_windows("_NET_CLIENT_LIST_STACKING")   # bottom to top
+            above = stack[stack.index(win_id) + 1:] if win_id in stack else []
+            others = []
+            for other in above:
+                o_desktop, o_rect = listed.get(other, (None, None))
+                if o_rect is None or (o_desktop >= 0 and desktop >= 0 and o_desktop != desktop):
+                    continue
+                if covered_share(rect, [o_rect]) > 0 and not self._minimised(hex(other)):
+                    others.append(o_rect)
+            covered = covered_share(rect, others) > COVERED_SHARE
+        self._inactive = (win_id_hex, now, hidden, covered)
+        return hidden, covered
+
+    def _xprop(self, args) -> Optional[str]:
+        try:
+            result = self._run(["xprop"] + list(args), check=False, capture_output=True, text=True, timeout=0.5)
+        except FileNotFoundError:
+            self._xprop_missing = True
+            return None
+        except subprocess.SubprocessError:
+            return None
+        return result.stdout if result.returncode == 0 and result.stdout else None
+
+    def _minimised(self, win_id_hex: str) -> bool:
+        out = self._xprop(["-id", win_id_hex, "_NET_WM_STATE"])
+        return bool(out) and "_NET_WM_STATE_HIDDEN" in out
+
+    def _root_cardinal(self, prop: str) -> Optional[int]:
+        out = self._xprop(["-root", prop])
+        match = re.search(r"=\s*(\d+)", out or "")
+        return int(match.group(1)) if match else None
+
+    def _root_windows(self, prop: str) -> List[int]:
+        out = self._xprop(["-root", prop]) or ""
+        return [int(v, 16) for v in re.findall(r"0x[0-9a-fA-F]+", out.split("#", 1)[-1])] if "#" in out else []
 
     def set_monitor_provider(self, provider: Optional[MonitorProvider]) -> None:
         self._monitor_provider = provider
@@ -234,14 +342,10 @@ class X11Tracker:
         return abs_x, abs_y, width or 0, height or 0
 
     def _active_window_id(self) -> Optional[int]:
-        try:
-            result = self._run(["xprop", "-root", "_NET_ACTIVE_WINDOW"], check=False, capture_output=True, text=True,
-                               timeout=0.5)
-        except (FileNotFoundError, subprocess.SubprocessError):
+        out = self._xprop(["-root", "_NET_ACTIVE_WINDOW"])
+        if not out:
             return None
-        if result.returncode != 0 or not result.stdout:
-            return None
-        match = re.search(r"0x[0-9a-fA-F]+", result.stdout)
+        match = re.search(r"0x[0-9a-fA-F]+", out)
         if not match:
             return None
         try:
@@ -252,6 +356,32 @@ class X11Tracker:
 
 class _RECT(ctypes.Structure):
     _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long), ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+
+
+GW_HWNDPREV = 3                                 # GetWindow: the window above in the z-order
+WS_EX_TRANSPARENT, WS_EX_TOOLWINDOW = 0x20, 0x80
+Z_WALK_MAX = 1000                               # windows looked at above the game, at most
+
+
+def win_rects_above(user32, hwnd, bounds, cloaked, own_pid) -> List[Geometry]:
+    """The rectangles (x, y, w, h) of the windows above `hwnd` in Windows' z-order that can hide it (S25b): shown, not
+    minimised, not cloaked (on another virtual desktop), not click-through (an overlay such as this one) or a tool
+    window, not this process's own. bounds(h) -> RECT or None; cloaked(h) -> bool (injected: tested without Windows)."""
+    out = []
+    pid = ctypes.c_ulong() if wintypes is None else wintypes.DWORD()
+    above = user32.GetWindow(hwnd, GW_HWNDPREV)
+    for _ in range(Z_WALK_MAX):
+        if not above:
+            break
+        if user32.IsWindowVisible(above) and not user32.IsIconic(above) and not cloaked(above):
+            ex = user32.GetWindowLongW(above, -20)   # GWL_EXSTYLE
+            user32.GetWindowThreadProcessId(above, ctypes.byref(pid))
+            if not ex & (WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW) and pid.value != own_pid:
+                rect = bounds(above)
+                if rect is not None and rect.right > rect.left and rect.bottom > rect.top:
+                    out.append((int(rect.left), int(rect.top), int(rect.right - rect.left), int(rect.bottom - rect.top)))
+        above = user32.GetWindow(above, GW_HWNDPREV)
+    return out
 
 
 class WindowsTracker:
@@ -269,8 +399,13 @@ class WindowsTracker:
             self._dwm_get_window_attribute = dwmapi.DwmGetWindowAttribute
             self._dwm_get_window_attribute.argtypes = [wintypes.HWND, ctypes.c_uint, ctypes.POINTER(_RECT), ctypes.c_uint]
             self._dwm_get_window_attribute.restype = ctypes.c_int
+            # the same call for DWMWA_CLOAKED, whose answer is an int (its own prototype: the one above takes a RECT)
+            self._dwm_cloaked = ctypes.WINFUNCTYPE(ctypes.c_int, wintypes.HWND, ctypes.c_uint, ctypes.c_void_p,
+                                                   ctypes.c_uint)(("DwmGetWindowAttribute", dwmapi))
         except Exception:
             self._dwm_get_window_attribute = None
+            self._dwm_cloaked = None
+        self.inactive_checks = False   # S25: as the X11 tracker's
         self._last_hwnd: Optional[int] = None
         self._enum_proc = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)(self._enum_windows)
 
@@ -287,9 +422,27 @@ class WindowsTracker:
         if width <= 0 or height <= 0:
             return None
         foreground = self._user32.GetForegroundWindow()
+        is_foreground = bool(foreground and hwnd == foreground)
         is_visible = bool(self._user32.IsWindowVisible(hwnd)) and not bool(self._user32.IsIconic(hwnd))
+        covered = False
+        if self.inactive_checks and not is_foreground:
+            is_visible = is_visible and not self._cloaked(hwnd)
+            if is_visible:
+                others = win_rects_above(self._user32, hwnd, self._window_bounds, self._cloaked, os.getpid())
+                covered = covered_share((int(rect.left), int(rect.top), int(width), int(height)), others) > COVERED_SHARE
         return WindowState(x=int(rect.left), y=int(rect.top), width=int(width), height=int(height),
-                           is_foreground=bool(foreground and hwnd == foreground), is_visible=is_visible, identifier=hex(hwnd))
+                           is_foreground=is_foreground, is_visible=is_visible, identifier=hex(hwnd), covered=covered)
+
+    def _cloaked(self, hwnd: int) -> bool:
+        """DWM keeps a window cloaked while it is on another virtual desktop (and for some hidden app windows)."""
+        if self._dwm_cloaked is None:
+            return False
+        value = ctypes.c_int(0)
+        try:
+            ok = self._dwm_cloaked(hwnd, ctypes.c_uint(_DWMWA_CLOAKED), ctypes.addressof(value), ctypes.sizeof(value)) == 0
+        except Exception:  # pragma: no cover - defensive
+            return False
+        return ok and value.value != 0
 
     def set_monitor_provider(self, provider: Optional[MonitorProvider]) -> None:
         return None   # monitor offsets are only used on X11

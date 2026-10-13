@@ -4790,6 +4790,49 @@ const settle = async maxMs => {
     allOk = allOk && ok;
     console.log(ok ? "OK" : "FAIL", "| settings: in-game overlay |", ok ? "switches, panels' places, a change and the test button posted" : JSON.stringify(got), errors.slice(before));
   }
+  // S8: the overlay pill beside the link pill: data.overlay.pill in three words, the reason on hover; "not the active
+  // window" amber only while this page has the focus, red otherwise; none with no pill or on a server; the tablet's
+  // link line adds it; Settings says the same. S25: "Keep showing when Elite is not the active window" posts.
+  {
+    const w = dom.window, before = errors.length, real = w.fetch, posted = [];
+    const json = body => Promise.resolve({ok: true, status: 200, headers: {get: () => "application/json"}, json: async () => body});
+    w.fetch = (u, o) => /api\/overlay$/.test(String(u)) && o && o.method === "POST"
+      ? (posted.push(JSON.parse(o.body)), json(Object.assign({}, w.eval("data.overlay"), JSON.parse(o.body)))) : real(u, o);
+    const saved = w.eval("JSON.stringify(data.overlay || null)"), savedPc = w.eval("JSON.stringify(data.game_pc)");
+    const got = JSON.parse(w.eval(`(() => {
+      const el = document.getElementById("ovPill");
+      const draw = pill => { data.overlay = Object.assign({}, data.overlay || {}, {pill}); drawOvPill();
+        return el.hidden ? "hidden" : [el.textContent, el.className.replace("linkpill ovpill pcOnly ", ""), el.title].join("|"); };
+      const drawn = [draw(null), draw({state: "ok", code: "drawing", why: "drawing over Elite"}),
+                     draw({state: "wait", code: "no_game", why: "Elite is not running"}),
+                     draw({state: "bad", code: "no_wmctrl", why: "wmctrl not installed: the overlay cannot find Elite's window"})];
+      const behind = {pill: {state: "wait", code: "behind", why: "Elite is not the active window"}};
+      const focus = [ovPillState(behind, true), ovPillState(behind, false)].map(p => [p.text, p.cls, p.why].join("|"));
+      draw({state: "ok", code: "drawing", why: "drawing over Elite"});
+      const tab = tabLinkText({text: "linked"}), after = el.previousElementSibling.id;
+      const settings = overlayStatusHtml({runner: {state: "running", why: null}, pill: {state: "bad", code: "no_window", why: "Elite's window cannot be found"}});
+      data.game_pc = false; const server = draw({state: "ok", code: "drawing", why: "x"});
+      return JSON.stringify({drawn, focus, tab, after, settings: /class="bad">overlay ✗: Elite's window cannot be found/.test(settings), server}); })()`));
+    w.eval(`data.game_pc = ${savedPc}; data.overlay = {enabled: true, theme: "default", text_size: "normal", panels: {}, analysis_only: [],
+      show_inactive: false, window: true, test: 0, arrange: 0, runner: {state: "running", why: null}, layout: {}, pill: null};
+      overlayDrawn = ""; renderOverlay();`);
+    const box = w.document.getElementById("overlayBox"), keep = box.querySelector('[data-ov="show_inactive"]');
+    got.toggle = !!keep && !keep.checked && /Keep showing when Elite is not the active window/.test(keep.closest("label").textContent);
+    keep.checked = true; keep.dispatchEvent(new w.Event("change", {bubbles: true}));
+    await sleep(100);
+    got.posted = posted;
+    got.checked = box.querySelector('[data-ov="show_inactive"]').checked;
+    w.fetch = real;
+    w.eval(`data.overlay = JSON.parse(${JSON.stringify(saved)}); data.game_pc = ${savedPc}; overlayNote = ""; overlayDrawn = ""; renderOverlay(); drawOvPill();`);
+    const want = {drawn: ["hidden", "overlay ✓|ok|the in-game overlay: drawing over Elite", "overlay …|stale|the in-game overlay: Elite is not running",
+                          "overlay ✗|none|the in-game overlay: wmctrl not installed: the overlay cannot find Elite's window"],
+                  focus: ["overlay …|stale|Elite is behind this page", "overlay ✗|none|Elite is not the active window"],
+                  tab: "linked · overlay ✓", after: "linkPill", settings: true, server: "hidden",
+                  toggle: true, posted: [{show_inactive: true}], checked: true};
+    const ok = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && ok;
+    console.log(ok ? "OK" : "FAIL", "| overlay pill |", ok ? "three words, the reason on hover, behind this page amber, the keep-showing switch" : JSON.stringify(got), errors.slice(before));
+  }
   // Settings > Voice > More voices: Piper's catalogue from the server (stubbed here: no network), one language at a time;
   // "Download and use" asks the server for that voice (POST api/voice, stubbed: nothing downloads)
   {
