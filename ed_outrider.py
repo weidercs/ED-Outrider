@@ -647,6 +647,11 @@ SPEAK_MAPPED = False   # the "mapped" call-out after each planet's DSS mapping (
 SPEECH_SPEED = 1.0   # spoken alerts' pace: 1 is the voice's own, 1.3 is 30% faster (0.5 to 2)
 # the player for the page's "Play speech and sounds on this PC" tick: auto (the first found), one by name, or off
 SERVER_PLAYER = "auto"
+# Voices kept loaded beside the main one ([speech] voices_loaded: a number, "all", or unset: the voices in use up to
+# outrider.tts.VOICES_LOADED_DEFAULT), and whether they load at start ([speech] voices_preload; off: each on its first line)
+VOICES_LOADED = None
+VOICES_LOADED_CHOICES = ("all",) + tuple(str(n) for n in range(1, 21))   # Settings -> Server settings' pick-list
+VOICES_PRELOAD = False
 # The co-pilot button (see outrider/button.py): tap (in the ship) target the next route system, double tap a status
 # report, hold hush until the next jump.
 COPILOT = {"enabled": False, "device": "", "button": "", "hold_ms": outrider.button.HOLD_MS, "double_ms": outrider.button.DOUBLE_MS}
@@ -771,8 +776,21 @@ def _config_player(v):
 
 
 def config_choices():
-    """The config keys with a fixed set of values, for the Settings dialog (config_edit.CHOICES and the PC players)."""
-    return {**outrider.config_edit.CHOICES, ("speech", "server_player"): outrider.tts.PLAYER_CHOICES}
+    """The config keys with a fixed set of values, for the Settings dialog (config_edit.CHOICES, the PC players and the
+    voices kept loaded)."""
+    return {**outrider.config_edit.CHOICES, ("speech", "server_player"): outrider.tts.PLAYER_CHOICES,
+            ("speech", "voices_loaded"): VOICES_LOADED_CHOICES}
+
+
+def _config_voices_loaded(v):
+    """[speech] voices_loaded: a whole number from 1 (also as text, as Server settings' pick-list writes it) or "all"."""
+    if isinstance(v, str) and v.strip().lower() == "all":
+        return "all"
+    if isinstance(v, str) and v.strip().isdigit():
+        v = int(v.strip())
+    if isinstance(v, int) and not isinstance(v, bool) and v >= 1:
+        return v
+    raise ValueError('not a number from 1 or "all"')
 
 
 def _config_entry(v):
@@ -979,6 +997,10 @@ def settings_from(cfg, args, env_journals=None, detected=((), ())):
                         else str(df.get("speech_names", SPEECH_NAMES)),
         "speech_file": speech_file_path(sv.get("speech_file")),
         "server_player": num("speech", spk, "server_player", _config_player, SERVER_PLAYER),
+        # unset: the voices in use, up to 4; a value it cannot read: 4, said (outrider.tts.loaded_slots)
+        "voices_loaded": VOICES_LOADED if spk.get("voices_loaded") is None else
+        num("speech", spk, "voices_loaded", _config_voices_loaded, outrider.tts.VOICES_LOADED_DEFAULT),
+        "voices_preload": flag("speech", spk, "voices_preload", VOICES_PRELOAD),
         # your own alert sounds: <name>.wav files replacing sounds.json's (review S16); "" for none
         "sound_dir": os.path.join(SCRIPT_DIR, os.path.expanduser(str(spk["sound_dir"])))
                      if isinstance(spk.get("sound_dir"), str) and spk["sound_dir"].strip() else "",
@@ -1120,9 +1142,11 @@ map_max_radius = {n(st["map_max_radius"])}    # ly: the largest 3D map the page 
 map_max_pages = {st["map_max_pages"]}        # pages of 500 systems fetched for the map
 watch_firsts = {"true" if st["watch_firsts"] else "false"}   # check your unsold first discoveries on Spansh in the background (one request every 10-30 s; each system daily for a month, then weekly; at most 150 a day) for someone else's scans
 
-[speech]   # for the page's "Play speech and sounds on this PC" tick (per browser, off until ticked)
+[speech]   # the page's "Play speech and sounds on this PC" tick (per browser, off until ticked), and the voices kept loaded
 server_player = {q(st["server_player"])}   # auto (the first of pw-play, paplay, aplay, ffplay found), one of those, or off (Linux)
 {"" if st["sound_dir"] else "# "}sound_dir = {p(_root_relative(st["sound_dir"]) if st["sound_dir"] else "my-sounds")}   # your own alert sounds: <name>.wav (fanfare, thud, chime, alert...), up to 3 s each
+{"# " if st["voices_loaded"] is None else ""}voices_loaded = {q(st["voices_loaded"]) if st["voices_loaded"] == "all" else st["voices_loaded"] or outrider.tts.VOICES_LOADED_DEFAULT}   # voices kept loaded beside the main one (each about 1.6 times its file's size in memory: ~100 MB for a medium voice): a number, or "all"; unset, the voices in use up to 4
+voices_preload = {"true" if st["voices_preload"] else "false"}   # load those voices when Outrider starts (one at a time, after the journals are read), so even the first line of each starts at once; off: each loads the first time it speaks (about a second)
 
 [autohonk]   # hold Primary Fire on arriving by hyperspace, so the Discovery Scanner fires (Linux; Windows experimental; see outrider/honk.py)
 # IMPORTANT: the Discovery Scanner MUST be on PRIMARY FIRE in the fire group that is active when you jump,
@@ -6421,6 +6445,7 @@ class State:
         self.player = None         # outrider.tts.LinePlayer: the tick that plays speech and sounds here (None in tests)
         self.sounds = outrider.tts.SoundBank()   # static/sounds.json rendered to WAV for it
         self.speech = None         # outrider.speech.SpeechLines, set at start (None in tests)
+        self.crew_noted = set()    # (voice or personality, why) a crew fill-in was logged for: once each per run
         self.honker = None         # outrider.honk.Honker, set at start (None in tests)
         self.simulate = False      # --simulate: the panels act as if the game were running (shown_status)
         self.game_pc = True        # [server] game_pc: False on a server away from the game PC (no keys, devices, clipboard, PC sound)
@@ -6713,6 +6738,8 @@ class State:
             "sphere_cut": self.sphere_cut,
             "tts": self.speaker.info() if self.speaker else None,
             "style_picks": self.style_picks(),   # S40: each personality's voice and speaker picked in Settings
+            "crew": self.crew_summary(),          # the crew: who speaks each alert row, and who cannot (the XO speaks for it)
+            "voice_memory": self.voice_memory(),  # the voices besides the main one in use, their memory and how many are kept
             "sound_files": self.sounds.info() if self.sounds and self.sounds.own_dir else None,   # your own sounds (S16)
             "player": self.player.info() if self.player else None,
             "speech": self.speech.info() if self.speech else None,
@@ -13200,9 +13227,188 @@ class State:
         return None
 
     def personality_voices(self):
-        """Every voice a personality may speak in (speech.json's and the picks): the room Speaker.size_extra keeps."""
+        """Every voice a personality may speak in (speech.json's and the picks)."""
         styles = self.speech.lines()["styles"] if self.speech else {}
         return outrider.speech.style_voices(styles) | {p["voice"] for p in self.style_picks().values()}
+
+    def voices_in_use(self):
+        """Every voice besides the main one a line may be spoken in now: the personalities' (personality_voices) and,
+        while the crew is on, its members' own. The room Speaker.size_extra keeps, and what the memory note counts."""
+        crew = self.crew_raw()
+        out = self.personality_voices() | ({m["voice"] for r, m in crew["members"].items() if r != "xo" and m["voice"]}
+                                           if crew["on"] else set())
+        out.discard(getattr(self.speaker, "voice_name", None))
+        return out
+
+    def voice_memory(self):
+        """The payload's voice_memory (crew batch 1; Settings' memory note and Keep loaded, crew batch 2): each installed
+        voice in use besides the main one (voices_in_use) with its memory (outrider.tts.voice_memory_estimate: never
+        guessed in the page), how many are kept loaded by [speech] voices_loaded and the memory of that many of the
+        largest (the worst case), how many are set aside when not in use, the preload switch, and whether this is a server
+        away from the game PC (the note says "on the server"). None without Piper: nothing is loaded then."""
+        sp = self.speaker
+        if not sp or not getattr(sp, "available", False):
+            return None
+        est = outrider.tts.voice_memory_estimate(self.voices_in_use(), getattr(sp, "dir", outrider.tts.VOICES_DIR))
+        choice = getattr(sp, "voices_loaded", None)
+        cap = outrider.tts.loaded_slots(choice, len(est))
+        kept = len(est) if cap is None else min(cap, len(est))
+        sizes = sorted(est.values(), reverse=True)
+        return {"voices": [{"voice": v, "mb": mb} for v, mb in sorted(est.items())], "count": len(est), "mb": sum(sizes),
+                "loaded": choice, "kept": kept, "kept_mb": sum(sizes[:kept]), "set_aside": len(est) - kept,
+                "preload": bool(getattr(sp, "voices_preload", False)), "on_server": not self.game_pc}
+
+    # ---- the crew (crew batch 1; project/PLAN-crew-voices-2026-10-13.md): the spoken alerts split among crew members
+    # (outrider.speech.CREW_ROLES), each with its own personality and voice. meta crew (live-only like style_picks: a
+    # re-read keeps it, backups carry it) = {on, danger, members: {role: {name, personality, voice, speaker}}, rows: {alert
+    # row: role}} (rows: only those moved from the table's default). A member's personality None is "as the XO" (the
+    # main personality: the lines of the personalities ticked in that browser), its voice None "as the personality"
+    # (S40's pick for the line's personality, then speech.json's, then the main voice). The XO / Co-pilot IS the main
+    # voice: its voice and speaker are the main voice's (POST /api/voice and this one's {role: "xo", voice} change the
+    # same thing), its personality the main one; only its name is kept here. The page resolves each line (page.js
+    # crewMember / crewVoice); the server says which members cannot speak (crew_fill: the XO speaks for them) and logs it.
+    CREW_NAME_MAX = 40
+
+    def crew_raw(self):
+        """meta crew as kept, the malformed left out: {on (default off), danger (default on), members, rows}."""
+        raw = meta_get(self.db, "crew")
+        raw = raw if isinstance(raw, dict) else {}
+        members = {}
+        for role, m in (raw.get("members").items() if isinstance(raw.get("members"), dict) else ()):
+            if role not in outrider.speech.CREW_IDS or not isinstance(m, dict):
+                continue
+            name = m.get("name") if isinstance(m.get("name"), str) and m["name"].strip() else None
+            voice = m.get("voice") if isinstance(m.get("voice"), str) and m["voice"] and os.path.basename(m["voice"]) == m["voice"] else None
+            members[role] = {"name": name,
+                             "personality": m.get("personality") if isinstance(m.get("personality"), str) and role != "xo" else None,
+                             "voice": voice if role != "xo" else None,
+                             "speaker": outrider.speech.speaker_number(m.get("speaker")) if voice and role != "xo" else None}
+        rows = raw.get("rows") if isinstance(raw.get("rows"), dict) else {}
+        rows = {r: x for r, x in rows.items() if r in outrider.speech.CREW_ROW_ROLE and x in outrider.speech.CREW_IDS
+                and x != outrider.speech.CREW_ROW_ROLE[r]}
+        return {"on": raw.get("on") is True, "danger": raw.get("danger") is not False, "members": members, "rows": rows}
+
+    def crew_fill(self, role, m, log=True, styles=False):
+        """Why crew member `m` of `role` cannot speak (the XO then says its lines), in words, or None: its personality gone
+        from the lines file, or (with Piper) its voice not installed, failed to load, or lacking that speaker. Logged to
+        the server log once per voice (or personality) and reason ("crew: Engineer's voice en_GB-x not installed: the XO
+        speaks for it")."""
+        if role == "xo":
+            return None
+        if styles is False:   # the lines file's personalities (crew_summary reads them once for every member)
+            styles = self.speech.lines()["styles"] if self.speech else None
+        sp, why = self.speaker, None
+        if m.get("personality") and styles is not None and m["personality"] not in styles:
+            what, why = m["personality"], f"personality {m['personality']} is not in the lines file"
+        elif m.get("voice") and sp and getattr(sp, "available", False):
+            what = m["voice"]
+            if m["voice"] not in sp.installed():
+                why = f"voice {m['voice']} not installed"
+            elif sp.failed(m["voice"]):
+                why = f"voice {m['voice']} failed to load"
+            elif m.get("speaker") is not None and m["speaker"] >= len(sp.voice_speakers(m["voice"])):
+                why = f"voice {m['voice']} has no speaker {m['speaker']}"
+        if why and log:
+            self.crew_note(role, what, why)
+        return why
+
+    def crew_note(self, role, what, why):
+        """A crew fill-in in the server log, once per voice (or personality) and reason this run."""
+        key = (what, why.removeprefix(f"voice {what} ").removeprefix(f"personality {what} "))
+        if key in self.crew_noted:
+            return
+        self.crew_noted.add(key)
+        print(f"crew: {outrider.speech.CREW_SHORT.get(role, role)}'s {why}: the XO speaks for it")
+
+    def crew_summary(self):
+        """The payload's crew: {on, danger, rows, members: {role: {name, personality, voice, speaker, fill}}} for every
+        role, the XO's voice and speaker being the main voice's; `fill` says why the XO speaks for that member (logged
+        while the crew is on)."""
+        crew, sp = self.crew_raw(), self.speaker
+        styles = self.speech.lines()["styles"] if self.speech else None
+        blank = {"name": None, "personality": None, "voice": None, "speaker": None}
+        members = {}
+        for role in outrider.speech.CREW_IDS:
+            m = dict(crew["members"].get(role, blank))
+            if role == "xo":
+                main = getattr(sp, "voice_name", None)
+                m.update(voice=main, speaker=sp.speaker_for(main) if main and hasattr(sp, "speaker_for") else None)
+            members[role] = dict(m, fill=self.crew_fill(role, m, log=crew["on"], styles=styles))
+        return {"on": crew["on"], "danger": crew["danger"], "rows": crew["rows"], "members": members}
+
+    def set_crew(self, body):
+        """POST /api/voice/crew: (answer, status). The body is one change: {on} / {danger} (the switches), {row, role}
+        (an alert row to that role; role null: back to the table's), or {role, name?, personality?, voice?, speaker?,
+        reset?} (a member: personality null "as the XO", voice null "as the personality", a speaker of that voice; reset:
+        back to "as the XO", its name kept). The XO's voice and speaker are the main voice's (switched as POST /api/voice
+        does); it has no personality of its own. Validated against the lines file's personalities and the voices installed."""
+        ids, crew = outrider.speech.CREW_IDS, self.crew_raw()
+        sp = self.speaker
+        styles = self.speech.lines()["styles"] if self.speech else {}
+        bad = lambda why: ({"error": why}, 400)   # noqa: E731
+        if "on" in body or "danger" in body:
+            for k in ("on", "danger"):
+                if k in body and not isinstance(body[k], bool):
+                    return bad(f"{k} must be true or false")
+                if k in body:
+                    crew[k] = body[k]
+        elif "row" in body:
+            row, role = body["row"], body.get("role")
+            if row not in outrider.speech.CREW_ROW_ROLE:
+                return bad(f"no alert row {row!r}")
+            if role is not None and role not in ids:
+                return bad(f"no crew role {role!r}")
+            crew["rows"].pop(row, None)
+            if role is not None and role != outrider.speech.CREW_ROW_ROLE[row]:
+                crew["rows"][row] = role
+        elif body.get("role") in ids:
+            role = body["role"]
+            m = dict(crew["members"].get(role) or {"name": None, "personality": None, "voice": None, "speaker": None})
+            if "name" in body:
+                name = body["name"]
+                if name is not None and not isinstance(name, str):
+                    return bad("name must be text")
+                name = " ".join((name or "").split())
+                if len(name) > self.CREW_NAME_MAX:
+                    return bad(f"a name of at most {self.CREW_NAME_MAX} characters")
+                m["name"] = name or None
+            if body.get("reset") is True:
+                m.update(personality=None, voice=None, speaker=None)
+            if "personality" in body:
+                p = body["personality"]
+                if role == "xo" and p is not None:
+                    return bad("the XO's personality is the main one (Settings -> Voice)")
+                if p is not None and (not isinstance(p, str) or p not in styles):
+                    return bad(f"no personality {p!r} in the lines file")
+                m["personality"] = p
+            if "speaker" in body and body["speaker"] is not None and outrider.speech.speaker_number(body["speaker"]) is None:
+                return bad("speaker must be a number or null")
+            if "voice" in body or "speaker" in body:
+                v = body["voice"] if "voice" in body else (getattr(sp, "voice_name", None) if role == "xo" else m["voice"])
+                spk = body.get("speaker")
+                if v is not None and (not isinstance(v, str) or not sp or not getattr(sp, "available", False)
+                                      or v not in sp.installed()):
+                    return bad(f"{v} is not installed")
+                if spk is not None and (v is None or spk >= len(sp.voice_speakers(v))):
+                    return bad(f"{v or 'as the personality'} has no speaker {spk}")
+                if role == "xo":   # the main voice: its person picked and the voice switched, as POST /api/voice does
+                    if v is None:
+                        return bad("the XO always has a voice: the main one")
+                    if "speaker" in body and not sp.set_speaker(v, spk):
+                        return bad(f"{v} has no speaker {spk}")
+                    if "voice" in body and not sp.use(v):   # always use()d, the voice speaking too (it is remembered)
+                        return bad(f"{v} is not a Piper voice")
+                else:
+                    m.update(voice=v, speaker=spk if v is not None else None)
+            if role == "xo":
+                m.update(personality=None, voice=None, speaker=None)
+            crew["members"][role] = m
+        else:
+            return bad("expected {on}, {danger}, {row, role} or {role, ...} with a crew role: " + ", ".join(ids))
+        meta_set(self.db, "crew", crew)
+        self.db.commit()
+        self.bump()
+        return {"ok": True, "crew": self.crew_summary()}, 200
 
     def remember_voice(self, name):
         """The voice picked in the alerts dialog, once it has loaded: preferred at the next start (a choice that
@@ -17341,24 +17547,38 @@ def make_app(state, hosts=None):
             return None
         return n if n is not None and n >= 0 else None
 
-    async def synth(sp, text, speed, voice, speaker=None):
+    async def synth(sp, text, speed, voice, speaker=None, role=None):
         """A line as WAV from Piper, or None (the page then uses browser speech for it). `speed` and `voice` as
         the page sent them: a personality's own voice only if installed, so a name from the page never downloads.
-        `speaker`: one of that voice's people (the voice lab's try, a personality's, S40); None: the one picked for it."""
+        `speaker`: one of that voice's people (the voice lab's try, a personality's, S40); None: the one picked for it.
+        `role`: the crew member whose own voice this is (crew batch 1): when that voice cannot say it (not installed,
+        failing to load, no such speaker) the XO says it, in the main voice and its own person, and the log says so once."""
         try:
             speed = float(speed or SPEECH_SPEED)
         except (TypeError, ValueError):
             speed = SPEECH_SPEED
         voice = str(voice) if voice else None
+        role = role if role in outrider.speech.CREW_IDS and role != "xo" and voice else None
         if voice and voice not in sp.installed():   # its speaker is that voice's person: not the main voice's (S40)
-            voice = speaker = None
-        own = state.personality_voices() if voice else ()
-        if own:   # room for every personality voice (speech.json's and the picks, S40), so none is reloaded before each line
+            if role:
+                state.crew_note(role, voice, f"voice {voice} not installed")
+            voice = speaker = role = None
+        own = state.voices_in_use() if voice else ()
+        if own:   # room for every voice in use (the personalities', the crew's), so none is reloaded before each line
             sp.size_extra(own)
+        speaker = speaker_arg(speaker)
+
+        def make():
+            v, who = voice, speaker
+            if role and v != sp.voice_name:   # a crew member's own voice: loadable, with that person, or the XO says it
+                why = (f"voice {v} failed to load" if sp.extra_voice(v) is None else
+                       f"voice {v} has no speaker {who}" if who is not None and who >= len(sp.voice_speakers(v)) else None)
+                if why:
+                    state.crew_note(role, v, why)
+                    v = who = None
+            return sp.say(text, speed, v) if who is None else sp.say(text, speed, v, who)
         try:
-            speaker = speaker_arg(speaker)
-            return await asyncio.get_running_loop().run_in_executor(
-                None, lambda: sp.say(text, speed, voice) if speaker is None else sp.say(text, speed, voice, speaker))
+            return await asyncio.get_running_loop().run_in_executor(None, make)
         except Exception as e:  # noqa: BLE001 -- a line Piper cannot speak: the page uses browser speech for it
             print(f"spoken alerts: could not speak {text[:60]!r}: {type(e).__name__}: {e}", file=sys.stderr)
             return None
@@ -17369,7 +17589,8 @@ def make_app(state, hosts=None):
         sp = state.speaker
         if not sp or not sp.ready or not text.strip():
             return web.json_response({"error": "no Piper voice ready" if text.strip() else "no text"}, status=503)
-        audio = await synth(sp, text, request.query.get("speed"), request.query.get("voice"), request.query.get("speaker"))
+        audio = await synth(sp, text, request.query.get("speed"), request.query.get("voice"), request.query.get("speaker"),
+                            request.query.get("role"))
         if not audio:
             return web.json_response({"error": "no Piper voice ready"}, status=503)
         return web.Response(body=audio, content_type="audio/wav", headers={"Cache-Control": "no-store"})
@@ -17383,7 +17604,7 @@ def make_app(state, hosts=None):
         if not isinstance(d, dict) or not isinstance(d.get("text"), str) or not d["text"].strip() or not sp or not sp.ready:
             return None
         t = asyncio.get_running_loop().create_task(synth(sp, outrider.tts.clip_text(d["text"]), d.get("speed"), d.get("voice"),
-                                                         d.get("speaker")))
+                                                         d.get("speaker"), d.get("role")))
         prefetching.add(t)
         t.add_done_callback(lambda x: (prefetching.discard(x), x.cancelled() or x.exception()))
         return t
@@ -17443,7 +17664,7 @@ def make_app(state, hosts=None):
         if line is None:
             return web.json_response({"error": "another line is playing"}, status=409)
         try:
-            audio = await synth(sp, text, body.get("speed"), body.get("voice"), body.get("speaker"))
+            audio = await synth(sp, text, body.get("speed"), body.get("voice"), body.get("speaker"), body.get("role"))
             if not audio:
                 return web.json_response({"error": "no Piper voice ready"}, status=503)
             prefetch(sp, body.get("next"))   # the page's next line, made while this one plays
@@ -17492,7 +17713,8 @@ def make_app(state, hosts=None):
     async def speech_view(_):
         """The spoken alerts' lines (speech.json, less the banned ones): the page asks again when the payload's
         version changes."""
-        return web.json_response(state.speech.lines() if state.speech else {"styles": {}, "lines": {}, "version": None})
+        return web.json_response(state.speech.lines() if state.speech else
+                                 {"styles": {}, "lines": {}, "version": None, "crew_roles": outrider.speech.crew_roles_info()})
 
     async def speech_ban_view(request):
         """{alert, template}: /api/speech/ban leaves that line out from now on (in data/speech_banned.json, or next to
@@ -17814,6 +18036,18 @@ def make_app(state, hosts=None):
             return web.json_response({"error": why}, status=400)
         return web.json_response({"ok": True, "style_picks": state.style_picks()})
 
+    async def voice_crew_view(request):
+        """POST /api/voice/crew (crew batch 1): one change to the crew, for every browser and the tablet ({on}, {danger},
+        {row, role} or {role, name?, personality?, voice?, speaker?, reset?}: State.set_crew). Behind request_guard and the
+        sign-in like POST /api/voice/style. Answers {ok, crew} (the payload's crew)."""
+        body = await json_object(request)
+        if body is None:
+            return web.json_response({"error": "expected a JSON object"}, status=400)
+        if body.get("voice") is not None and (not state.speaker or not state.speaker.available):
+            return web.json_response({"error": "Piper is not installed"}, status=503)
+        out, status = state.set_crew(body)
+        return web.json_response(out, status=status)
+
     async def speaker_audio_view(request):
         """POST /api/speaker/audio {blocked}: the speaking window's browser holds audio back until a click (true) or
         plays again (false). The payload's speaker_audio_blocked tells the tablet, which asks for that click."""
@@ -18124,6 +18358,7 @@ def make_app(state, hosts=None):
     app.router.add_get("/api/status.txt", status_txt_view)
     app.router.add_post("/api/voice", voice_view)
     app.router.add_post("/api/voice/style", voice_style_view)
+    app.router.add_post("/api/voice/crew", voice_crew_view)
     app.router.add_get("/api/voices/catalogue", voice_catalogue_view)
     app.router.add_get("/api/voices/speakers", voice_speakers_view)
     app.router.add_post("/api/voices/download", voice_download_view)
@@ -18923,6 +19158,8 @@ async def run(args, st):
                                    on_switched=lambda name: loop.call_soon_threadsafe(state.remember_voice, name),
                                    speakers=spk if isinstance(spk, dict) else None,
                                    on_speaker=lambda chosen: loop.call_soon_threadsafe(state.remember_speakers, chosen))
+    # the voices kept loaded beside the main one, and whether they load now ([speech] voices_loaded / voices_preload)
+    state.speaker.voices_loaded, state.speaker.voices_preload = st["voices_loaded"], st["voices_preload"]
     print("spoken alerts: " + ("Piper found, preparing a voice" if state.speaker.available else
                                "Piper not installed, the page uses browser speech (see outrider/tts.py)"))
     state.speaker.start()
@@ -19007,6 +19244,8 @@ async def run(args, st):
         n = len(sp["problems"])
         notices.set("speech", f"The spoken lines file {sp['file']} has {n}{'+' if n >= 20 else ''} problem{'' if n == 1 else 's'}: "
                     f"{sp['problems'][0]}" + (" (the others in the log)" if n > 1 else ""), action="open:log")
+    if st["voices_preload"]:   # the journals are read: the voices in use load now, one at a time, behind the main one
+        state.speaker.preload(state.voices_in_use())
     rules_task = asyncio.create_task(check_bio_rules(state)) if outrider.bio else None
     watcher = asyncio.create_task(state.watch())
     state.firsts_watch_on = st["watch_firsts"]

@@ -151,7 +151,7 @@
 #                       # Your own EDDN uploads (EDMC and the like) are told apart by their time. false: never asks
 
 [speech]
-# Sounds and the PC's player. server_player is for the page's "Play speech and sounds on this PC" tick (in ⚙
+# Sounds, the PC's player and the voices kept loaded. server_player is for the page's "Play speech and sounds on this PC" tick (in ⚙
 # Settings → Voice, per browser, off until ticked): the PC running Outrider then plays the spoken lines and the alert
 # sounds itself (Linux only). sound_dir is used in the browser and on the PC.
 # server_player = "auto"   # "auto" (the first of pw-play, paplay, aplay and ffplay installed), one of those
@@ -159,6 +159,14 @@
 # sound_dir = "my-sounds"  # your own alert sounds, played in the browser and on the PC: a folder of <name>.wav
 #                          # files (fanfare, thud, chime, alert... the names in static/sounds.json), WAV only,
 #                          # up to 3 seconds each; a sound with no file keeps Outrider's own
+# Voices besides the main one (a personality's own voice, a crew member's) are loaded the first time they speak and
+# stay loaded, least recently used set aside first. Each takes about 1.6 times its .onnx file's size in memory (about
+# 100 MB for a medium voice, 170 MB for a high one; the people of one several-person voice share a single load); the
+# main voice is always loaded and not counted. A voice set aside waits about a second while it loads again.
+# voices_loaded = 4        # how many to keep loaded beside the main one: a number, or "all"; unset, the voices in use
+#                          # up to 4 (a value Outrider cannot read: 4, said at start)
+# voices_preload = false   # true: load them when Outrider starts (one at a time, after the journals are read), so
+#                          # even the first line of each starts at once; false: each loads the first time it speaks
 
 [copilot]
 # One HOTAS (or keyboard) button (Linux; outrider/button.py). Tap, flying the ship: target the next route system in the

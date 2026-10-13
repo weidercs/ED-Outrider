@@ -2,6 +2,38 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-13 · The crew, batch 1: who says each line, the XO standing in, the voices kept loaded
+The first of three batches of the crew (the spoken alerts split among crew members, each with its own personality and
+voice). This one is the resolution and storage; Settings' crew table and the new lines come in the next two. Off by
+default, and with it off everything is said exactly as before.
+- **The roles and their rows.** `outrider.speech.CREW_ROLES`: the XO / Co-pilot, Navigator (every route line, trade
+  routes too), Science Officer, Exobiologist, Chief Engineer (low fuel too), Quartermaster, Comms Officer, Tactical (the
+  danger lines while the Danger switch is on, its default) and Mining Officer, each with the alert rows it speaks for.
+  One table: the page reads it from GET `/api/speech` (`crew_roles`); a test fails when an alert row is missing or twice.
+- **Kept on the server.** Meta `crew` (live-only: a journal re-read keeps it, backups carry it): the crew switch, the
+  Danger switch, each member {name, personality, voice, speaker} and any row moved to another member. POST
+  `/api/voice/crew`, one change at a time, checked against the lines file's personalities and the voices installed;
+  the payload's `crew`. The XO is the main voice: giving it a voice switches the main voice; only its name is kept.
+- **Who says a line.** The page resolves it (`crewMember`, `crewVoice`): Tactical for a danger line while the switch is
+  on, else the row's member; its personality's lines and its own voice and person, "as the personality" falling back
+  to the personality's own voice (S40's pick, then speech.json's), then the main voice. Every member starts "as the XO".
+- **The XO stands in.** A member whose voice is not installed, failed to load or lacks that speaker, or whose
+  personality the lines file no longer has, and any alert row no role covers: the XO says the line, never dropping it.
+  The payload says why for each member; the server checks again when it says a member's line (the page sends the role
+  with the voice), and writes it once per voice and reason to the log: "crew: Engineer's voice en_GB-x not installed:
+  the XO speaks for it".
+- **Voices kept loaded.** `[speech] voices_loaded` (a number, "all", or unset: the voices in use up to 4) replaces the
+  fixed 2..4: never more loaded beside the main voice than chosen, the main voice never set aside; a value it cannot
+  read is 4, said at start. `[speech] voices_preload` (off) loads them at start, one at a time after the journals are
+  read. Both in Server settings (a pick-list), the example config and the guide's Settings page.
+- **Memory.** The payload's `voice_memory`: each voice in use besides the main one with its memory (the installed
+  .onnx × 1.6, measured), how many are kept and what that costs, how many are set aside; for Settings' note in batch 2.
+- Tests: `tests/test_crew.py` (the table against the page, storage and checks, the XO for each failure kind and the log
+  once, a member's line on the server, the LRU never above the number chosen with the main voice never in it, "all",
+  the preload, the estimate, the config keys); a smoke check that with the crew on a tank-full and a fuel line are the
+  Engineer's voice, a fuel line Tactical's with the Danger switch on, a moved row its new member's, the XO for one who
+  cannot speak, and that with the crew off nothing changes.
+
 ## 2026-10-13 · No payload for a Spansh retry that changed nothing, and the smoke test holds payloads mid-block
 - **A Nearby retry that failed again redrew every open page for nothing.** With Spansh unreachable (the network down),
   the sphere search is asked again after 30 s, 60 s, 2 min, 4 min, then every 5 min; each retry failed at once and

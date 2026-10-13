@@ -7233,6 +7233,80 @@ const releasePayloads = async () => {
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
     await releasePayloads();
   }
+  // Crew batch 1: with the crew on, an alert row's line is said by its crew member (the table from api/speech's
+  // crew_roles): a tank-full line in the Engineer's personality, voice and person (its role riding to the PC's player),
+  // a fuel-low line by the Engineer with the Danger switch off and by Tactical with it on, a moved row by its new member;
+  // a member who cannot speak (data.crew's fill) and a row no role covers are the XO's (the main voice, as before);
+  // with the crew off the same lines are exactly as before (styleVoice, no role)
+  {
+    holdPayloads();
+    const w = dom.window, before = errors.length, played = [];
+    const realFetch = w.fetch, savedServer = w.localStorage.getItem("speakOnServer");
+    const served = await (await fetch(base + "api/speech")).json();   // the table, as the scratch server serves it
+    w.fetch = (u, o) => String(u) === "api/say/play" ? (played.push(JSON.parse(o.body)), Promise.resolve(new Response(JSON.stringify({ok: true}), {status: 200})))
+      : realFetch(u, o);
+    w.eval(`window.__crew = {tts: data.tts, crew: data.crew, lib: speechLib, speak, flags: [speechOn, isSpeaker, soundOn], hush: hushState,
+        styles: localStorage.getItem("speechStyles"), danger: localStorage.getItem("speechDangerBusiness")};
+      window.__spoken = [];
+      data.tts = {engine: "piper", available: true, status: "ready", voices: ["en_GB-cori-medium", "en_GB-vctk-medium", "en_GB-alan-low"], voice: "en_GB-cori-medium"};
+      speechLib = {version: "crew", banned: {}, crew_roles: ${JSON.stringify(served.crew_roles)}, styles: {business: "Down to business", sarcastic: "Sarcastic", sweet: "Sweet"},
+        lines: {tank_full: {business: ["Tank full."], sarcastic: ["Tank full, finally."], sweet: ["All topped up, love."]},
+                fuel_low: {business: ["Fuel low."], sarcastic: ["Fuel low, genius."], sweet: ["Fuel's low, dear."]},
+                fsd_charge: {business: ["Jumping."]}}};
+      store.set("speechStyles", ["business"]); store.set("speechDangerBusiness", false);
+      speechOn = true; isSpeaker = true; soundOn = false; hushState = null; speechLast = {};
+      const m = (personality, voice, speaker, fill) => ({name: null, personality, voice, speaker, fill: fill || null});
+      data.crew = {on: true, danger: false, rows: {},
+        members: {xo: m(null, "en_GB-cori-medium", null), engineer: m("sarcastic", "en_GB-vctk-medium", 2), tactical: m("sweet", "en_GB-alan-low", null),
+                  navigator: m(null, "en_GB-gone-low", null, "voice en_GB-gone-low not installed"), quartermaster: m(null, null, null)}};
+      speak = (t, o) => window.__spoken.push([t, o.voice || null, o.speaker ?? null, o.role || null, o.crew ? crewWords(o.crew) : null]);
+      window.__say = () => {
+        alertOut("scoop", "Tank full", "", {say: () => line("tank_full", {jumps: 8}, "Tank full.")});
+        alertOut("fuel", "Fuel 18%", "", {tag: "fuel_low", say: () => line("fuel_low", {pct: 18}, "Fuel low.")});
+        alertOut("jump", "Jumping", "", {say: () => line("fsd_charge", {system: "X"}, "Jumping.")});
+      };`);
+    const got = {};
+    got.roles = w.eval(`speechLib.crew_roles.map(r => r.id).join()`);
+    w.eval(`__say()`);
+    got.dangerOff = JSON.parse(w.eval(`JSON.stringify(__spoken.splice(0))`));
+    w.eval(`data.crew.danger = true; speechLast = {}; __say()`);
+    got.dangerOn = JSON.parse(w.eval(`JSON.stringify(__spoken.splice(0))`));
+    w.eval(`data.crew.rows = {scoop: "quartermaster"}; speechLast = {}; __say()`);   // moved: as the XO (its personality and voice)
+    got.moved = JSON.parse(w.eval(`JSON.stringify(__spoken.splice(0).slice(0, 1))`));
+    got.unowned = JSON.parse(w.eval(`JSON.stringify([crewMember("nosuchrow", "x"), crewMember(null, "speech_on")])`));
+    w.eval(`data.crew.on = false; data.crew.rows = {}; speechLast = {}; __say()`);
+    got.off = JSON.parse(w.eval(`JSON.stringify(__spoken.splice(0))`));
+    // the role rides to the PC's player with the Engineer's own voice
+    w.localStorage.setItem("speakOnServer", "true");
+    w.eval(`data.crew.on = true; speak = window.__crew.speak; speechItems = []; speechLast = {};
+      alertOut("scoop", "Tank full", "", {say: () => line("tank_full", {jumps: 8}, "Tank full.")})`);
+    for (let i = 0; i < 40 && !played.length; i++) await sleep(50);
+    got.played = played.map(b => [b.text, b.voice, b.speaker, b.role]);
+    w.eval(`hushSpeech(true); const k = window.__crew; data.tts = k.tts; data.crew = k.crew; speechLib = k.lib; speak = k.speak;
+      [speechOn, isSpeaker, soundOn] = k.flags; hushState = k.hush;
+      for (const [key, v] of [["speechStyles", k.styles], ["speechDangerBusiness", k.danger]]) if (v === null) localStorage.removeItem(key); else localStorage.setItem(key, v);
+      delete window.__crew; delete window.__spoken; delete window.__say;`);
+    w.fetch = realFetch;
+    if (savedServer === null) w.localStorage.removeItem("speakOnServer"); else w.localStorage.setItem("speakOnServer", savedServer);
+    const want = {
+      roles: "xo,navigator,science,exobiologist,engineer,quartermaster,comms,tactical,mining",
+      dangerOff: [["Tank full, finally.", "en_GB-vctk-medium", 2, "engineer", "Engineer"], ["Fuel low, genius.", "en_GB-vctk-medium", 2, "engineer", "Engineer"],
+                  ["Jumping.", null, null, null, "XO for Navigator: voice en_GB-gone-low not installed"]],
+      dangerOn: [["Tank full, finally.", "en_GB-vctk-medium", 2, "engineer", "Engineer"], ["Fuel's low, dear.", "en_GB-alan-low", null, "tactical", "Tactical"],
+                 ["Jumping.", null, null, null, "XO for Navigator: voice en_GB-gone-low not installed"]],
+      moved: [["Tank full.", null, null, null, "Quartermaster"]],
+      unowned: [{role: "xo", personality: null, voice: null, speaker: null, fill: "no crew member for the alert row nosuchrow", for: null},
+                {role: "xo", personality: null, voice: null, speaker: null, fill: null, for: null}],
+      off: [["Tank full.", null, null, null, null], ["Fuel low.", null, null, null, null], ["Jumping.", null, null, null, null]],
+      played: [["Tank full, finally.", "en_GB-vctk-medium", 2, "engineer"]],
+    };
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    const good = !bad.length && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| crew batch 1 |", good ? "a fuel line in the Engineer's voice, danger in Tactical's, a moved row, the XO for one who cannot speak and an unowned row, the role to the PC; off: as before" :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+    await releasePayloads();
+  }
   // S39: Find a setting. A word leaves only the rows that match it (label, help, the config key a row defaults from, a
   // Server settings key loaded without opening its section), opens their sections and says how many; every section is
   // found by a word of its own rows and by its name; nothing matching says so; clearing puts every section back as it

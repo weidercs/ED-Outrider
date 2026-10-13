@@ -517,7 +517,7 @@ class Batch6Voice(unittest.TestCase):
                          [12, 3, None, None, None, None, None])
         self.assertEqual(outrider.speech.style_voice(doc["styles"], "sarcastic"), ("en_GB-vctk-medium", None))   # its tuple unchanged
 
-    def test_voice_pool(self):   # P10(b): installed personality voices load on first use, at most EXTRA_VOICES kept
+    def test_voice_pool(self):   # P10(b): installed personality voices load on first use, at most voices_loaded kept
         import io, tempfile, contextlib, wave as _wave
         import outrider.tts
         loads = []
@@ -534,6 +534,7 @@ class Batch6Voice(unittest.TestCase):
                 for ext in (".onnx", ".onnx.json"):
                     open(os.path.join(d, v + ext), "w").close()
             sp = outrider.tts.Speaker("en_GB-main-low", None, voices_dir=d)
+            sp.voices_loaded = 2   # [speech] voices_loaded
             sp.PiperVoice = unittest.mock.Mock()
             sp.PiperVoice.load = lambda path: loads.append(os.path.basename(path)) or FakeVoice(os.path.basename(path))
             with contextlib.redirect_stdout(io.StringIO()):
@@ -1249,7 +1250,7 @@ class PlausibleFixes(unittest.TestCase):
                 sp.say(f"line {i}", voice=names[i % 3])
         self.assertEqual(sorted(loads), [n + ".onnx" for n in names])   # each loaded once
         sp.size_extra(["x"] * 9 + [f"en_GB-v{i}-low" for i in range(9)])
-        self.assertEqual(sp._extra_slots, outrider.tts.EXTRA_VOICES_MAX)   # bounded
+        self.assertEqual(sp.slots(), outrider.tts.VOICES_LOADED_DEFAULT)   # bounded
         # the server sizes the cache from speech.json's personalities when a line asks for one of their voices
         import asyncio, types
         from aiohttp.test_utils import TestClient, TestServer

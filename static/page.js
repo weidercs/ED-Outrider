@@ -2011,11 +2011,14 @@ function alertOut(kind, title, body, {sound, say, delay = 0, tag = null, still =
   if (plays) setTimeout(() => play(snd), delay);
   const notified = notify(kind, title, body);
   if (loud && speechOn && alertSpeak[kind] && !UNSPOKEN.has(kind) && !quiet && !hush) {
-    lineStyle = lineKey = lineTemplate = null;
-    const words = (typeof say === "function" ? say() : say) || title;
+    lineStyle = lineKey = lineTemplate = null; lineCrew = undefined; lineRow = kind;   // line() resolves this row's crew member
+    let words;
+    try { words = (typeof say === "function" ? say() : say) || title; } finally { lineRow = null; }
     // the line's alert and its speech.json wording, for the 👎 in Spoken lines
     entry.style = lineStyle; entry.key = lineKey; entry.template = lineTemplate;
-    speak(words, {delay: plays ? delay + soundLead(snd) : delay, kind, tag, still, log: entry, ...styleVoice(lineStyle)});
+    // who says it (the crew, when on): the member line() picked the words for, else the row's by the line's tag
+    const crew = lineCrew !== undefined ? lineCrew : crewMember(kind, tag || lineKey);
+    speak(words, {delay: plays ? delay + soundLead(snd) : delay, kind, tag, still, log: entry, ...crewVoice(crew, lineStyle)});
     addCaption(words);
     return true;
   }
@@ -2084,17 +2087,19 @@ async function runningAudio() {
 // play first); `kind` is the alert kind ("manual" for a click in this window), `tag` its speech.json key.
 // `log` is the transcript entry alertOut made for it (a line spoken some other way gets its own). `piperOnly`: said in
 // Piper or not at all, never the browser's own voice (the co-pilot channel's lines: the author's choice).
-function speak(text, {delay = 0, kind = "manual", tag = null, still = null, voice = null, speaker = null, pace = 1, log = null, piperOnly = false} = {}) {
+function speak(text, {delay = 0, kind = "manual", tag = null, still = null, voice = null, speaker = null, pace = 1, log = null, piperOnly = false,
+                      role = null, crew = null} = {}) {
   const words = spokenText(text);
   const entry = log || logSpeech({kind, tag});
   if (words) entry.words = words;
   if (voice || speaker != null) entry.voice = (voice || "the main voice") + (speaker != null ? ` #${speaker}` : "");
+  if (crew) entry.crew = crewWords(crew);
   if (!words) return setFate(entry, "nothing to say");
   const now = Date.now();
   if (tag && !speechCooled(speechLast, tag, now)) return setFate(entry, `refused: said under ${SPEECH_COOLDOWN[tag] / 1000} s ago`);
   const prevLast = tag ? speechLast[tag] : undefined;
   if (tag) speechLast[tag] = now;
-  const item = {words, kind, tag, still, voice, speaker, pace, piperOnly, prio: speechPrio(kind, tag), at: now, notBefore: now + delay, prevLast,
+  const item = {words, kind, tag, still, voice, speaker, pace, piperOnly, role: voice ? role : null, prio: speechPrio(kind, tag), at: now, notBefore: now + delay, prevLast,
                 sys: SPEECH_SYS_BOUND.has(kind) && data && data.position ? posId() : null, log: entry};
   const before = speechItems;
   speechItems = speechAdd(speechItems, item);
@@ -2188,7 +2193,7 @@ addEventListener("pagehide", () => {
 const lineSpeed = it => Math.min(2, Math.max(0.5, speechSpeed() * (it.pace || 1)));
 function nextLine() {
   const i = speechPick(speechItems), it = i < 0 ? null : speechItems[i];
-  return it ? {text: it.words, voice: it.voice || null, speaker: it.speaker ?? null, speed: lineSpeed(it)} : null;
+  return it ? {text: it.words, voice: it.voice || null, speaker: it.speaker ?? null, speed: lineSpeed(it), role: it.role || null} : null;
 }
 async function sayNow(item) {
   const cur = speechNow = {prio: item.prio, kind: item.kind, stopped: false, halt: null, stop() { this.stopped = true; if (this.halt) this.halt(); }};
@@ -2201,7 +2206,7 @@ async function sayNow(item) {
       try {
         const speed = Math.min(2, Math.max(0.5, speechSpeed() * (item.pace || 1)));
         const r = await fetch("api/say/play", {method: "POST", headers: {"Content-Type": "application/json"},
-                                               body: JSON.stringify({text: item.words, voice: item.voice || null, speaker: item.speaker ?? null, speed, id, next: nextLine(),
+                                               body: JSON.stringify({text: item.words, voice: item.voice || null, speaker: item.speaker ?? null, role: item.role || null, speed, id, next: nextLine(),
                                                                      volume: outVolume()})});
         if (r.ok) {
           item.engine = "Piper on the PC";
@@ -2231,7 +2236,7 @@ async function sayNow(item) {
       try {
         const speed = Math.min(2, Math.max(0.5, speechSpeed() * (item.pace || 1)));
         const r = await fetch(`api/say?text=${encodeURIComponent(item.words)}&speed=${speed}${item.voice ? `&voice=${encodeURIComponent(item.voice)}` : ""}`
-                              + (item.speaker != null ? `&speaker=${item.speaker}` : ""));
+                              + (item.speaker != null ? `&speaker=${item.speaker}` : "") + (item.role ? `&role=${encodeURIComponent(item.role)}` : ""));
         if (r.ok) {
           const buf = await ctx.decodeAudioData(await r.arrayBuffer());
           if (cur.stopped) return;
@@ -2359,7 +2364,11 @@ function line(key, vars = {}, plain = "") {
   if (shift && !(shiftStyle && ticked.includes(shiftStyle))) pickShift();   // first line, or its personality unticked
   // the personality on shift, unless it has nothing for this alert (then every ticked one, as without the tick)
   const onShift = shift && shiftStyle && (listOf(shiftStyle).length || (speechProfane() && listOf(shiftStyle + "_profane").length));
-  const styles = serious && listOf("business").length ? ["business"] : onShift ? [shiftStyle] : ticked;
+  // the crew (when on): the row's crew member speaks in its own personality, when it has lines for this alert (else
+  // as the XO: the ticked ones); "as the XO" is the ticked ones too, the shift included
+  const crew = lineCrew = crewMember(lineRow, key), mine = crew && crew.personality;
+  const own = mine && (listOf(mine).length || (speechProfane() && listOf(mine + "_profane").length)) ? mine : null;
+  const styles = serious && listOf("business").length ? ["business"] : own ? [own] : onShift ? [shiftStyle] : ticked;
   const lists = suffix => styles.flatMap(st => listOf(st + suffix).map(x => [st, x]));   // [personality, line]
   // with profanity on, roll first: the swearing versions this share of the time, the clean ones otherwise
   // (whichever side has nothing for this alert gives way to the other)
@@ -2394,6 +2403,44 @@ function line(key, vars = {}, plain = "") {
 // speaker; the pace stays the file's. The browser's own speech ignores the voice.
 let lineStyle = null;
 let lineKey = null, lineTemplate = null;   // and its alert and speech.json wording (the 👎 bans that wording)
+// ---- the crew (crew batch 1; outrider.speech.CREW_ROLES, sent as speechLib.crew_roles; the server's data.crew): each
+// alert row's lines are said by a crew member in its own personality and voice, so you know who is talking before the
+// sentence ends. Off (the default): one voice for everything, exactly as before. The XO / Co-pilot is the main voice and
+// personality: every member left "as the XO" speaks so (a new crew sounds the same until a role gets a voice of its
+// own), and the XO says the line of any member who cannot speak (data.crew's `fill`: a voice not installed, failing to
+// load, a speaker it lacks, a personality gone) and of any alert row no role covers, so no line is ever lost. Danger
+// lines (DANGER) are Tactical's while the Danger switch is on. The voice lab never goes through it.
+let lineRow = null;   // the alert row whose line line() is picking (alertOut sets it): its crew member chooses
+let lineCrew = null;  // the crew member line() picked the last line for (crewMember), null with the crew off
+const crewRoles = () => Array.isArray(speechLib.crew_roles) ? speechLib.crew_roles : [];
+const crewTitle = id => (crewRoles().find(r => r.id === id) || {}).short || id;
+// the crew member who says a line of alert row `row` with speech key `key`: {role, personality, voice, speaker, fill,
+// for}; null with the crew off. `row` null (a line that is no alert's: speech on, the ▶ try) is the XO's.
+function crewMember(row, key) {
+  const c = data && data.crew;
+  if (!c || !c.on) return null;
+  const xo = (why, of) => ({role: "xo", personality: null, voice: null, speaker: null, fill: why || null, for: of || null});
+  if (row == null) return xo();
+  const role = c.danger !== false && key && DANGER.has(key) ? "tactical"
+    : (c.rows && c.rows[row]) || (crewRoles().find(r => Array.isArray(r.rows) && r.rows.includes(row)) || {}).id;
+  if (!role) return xo(`no crew member for the alert row ${row}`);
+  if (role === "xo") return xo();
+  const m = (c.members && c.members[role]) || {};
+  if (m.fill) return xo(m.fill, role);
+  const styles = speechLib.styles || {};
+  if (m.personality && !(m.personality in styles)) return xo(`personality ${m.personality} is not in the lines file`, role);
+  return {role, personality: m.personality || null, voice: m.voice || null, speaker: spkNum(m.speaker), fill: null, for: null};
+}
+// the voice a crew member says a line of personality `style` in: its own (with its person), else "as the personality"
+// (styleVoice: S40's pick, speech.json's, the main voice); `role` rides to the server, which has the XO say it when that
+// voice cannot. No crew: styleVoice alone, as before.
+function crewVoice(crew, style) {
+  const sv = styleVoice(style);
+  if (!crew) return sv;
+  return crew.voice ? {voice: crew.voice, speaker: crew.speaker, pace: sv.pace, role: crew.role, crew} : Object.assign({}, sv, {crew});
+}
+// a crew member in Spoken lines' facts: "Navigator", "XO for Engineer: voice en_GB-x not installed"
+const crewWords = m => m.role !== "xo" ? crewTitle(m.role) : m.fill ? `XO${m.for ? " for " + crewTitle(m.for) : ""}: ${m.fill}` : "XO";
 const spkNum = v => Number.isInteger(v) && v >= 0 ? v : null;
 function styleVoice(style) {
   const base = String(style || "").replace(/_profane$/, ""), st = base && speechLib.styles && speechLib.styles[base];
@@ -8639,7 +8686,7 @@ function fateGroup(f) {   // hoisted: setFate counts by it
     : /^(dropped|replaced|refused|not said|nothing)/.test(f) ? "dropped" : "silent";
 }
 const hms = t => new Date(t).toTimeString().slice(0, 8);
-const speechLogFacts = e => [e.kind + (e.tag ? "/" + e.tag : ""), e.style, e.voice, e.engine,
+const speechLogFacts = e => [e.kind + (e.tag ? "/" + e.tag : ""), e.crew, e.style, e.voice, e.engine,
   e.waited != null ? `waited ${(e.waited / 1000).toFixed(1)} s` : "", e.took != null && /^said/.test(e.fate || "") ? `${(e.took / 1000).toFixed(1)} s long` : ""].filter(Boolean);
 // the tally's short names (the alerts table has only the long descriptions)
 const ALERT_SHORT = {arrival: "Arrival", game: "Game start and quit", jump: "FSD charge", honk: "Honk", brief: "Arrival brief", fss: "FSS",

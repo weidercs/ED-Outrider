@@ -373,7 +373,8 @@ class SpeechLines:
         trimmed, whole = apply_bans((self.doc or {}).get("lines") or {}, self.bans)
         return {"styles": (self.doc or {}).get("styles") or {}, "lines": trimmed,
                 "banned": self.banned(), "banned_whole": whole,
-                "version": self.version(), "error": self.error, "problems": self.problems[:20]}
+                "version": self.version(), "error": self.error, "problems": self.problems[:20],
+                "crew_roles": crew_roles_info()}   # the crew's roles and their alert rows, for the page
 
     def set_ban(self, alert, template, ban=True):
         """Ban (or unban) one line of an alert: (HTTP status, answer). Only a line that is in the speech file is
@@ -468,6 +469,37 @@ SAMPLES = {
     "sale_left": {"text": "Sold 50 systems for 14.8M. 43 systems are still unsold, 2.0M, 270 first discoveries: "
                           "sell the next page."},
 }
+# The crew (the author's plan of 2026-10-13): the spoken alerts split among crew members, each with its own personality
+# and voice, so you know who is talking (and so what about) before the sentence ends. Each alert row of Settings ->
+# Alerts (page.js ALERTS) belongs to one role by default: (id, title in Settings, short name in the server log, rows).
+# The XO / Co-pilot is the main voice and personality (the voice answers, the status report, the co-pilot's lines, any
+# line that is no alert row's) and stands in for a role that cannot speak; Tactical has no row of its own: it speaks
+# the danger lines (page.js DANGER) while the crew's Danger switch is on. The one source: the page gets it from GET
+# /api/speech (`crew_roles`), and a test keeps the rows in step with page.js ALERTS (every row exactly once).
+CREW_ROLES = (
+    ("xo", "XO / Co-pilot", "XO", ()),
+    ("navigator", "Navigator", "Navigator",
+     ("jump", "highway", "riches", "trade", "refuelshort", "lastscoop", "autotarget", "wrongtarget", "supercharge")),
+    ("science", "Science Officer", "Science Officer",
+     ("discovery", "arrival", "honk", "brief", "fss", "mapped", "approach", "bodybrief", "leaving", "codex", "phenomena",
+      "ggg", "rare_star", "surface_site", "signal_poi", "curious")),
+    ("exobiologist", "Exobiologist", "Exobiologist", ("exo", "find", "sampling")),
+    ("engineer", "Chief Engineer", "Engineer", ("fuel", "scoop", "scoopstop", "jumponium", "hull")),
+    ("quartermaster", "Quartermaster", "Quartermaster", ("sell", "saleleft", "unsold", "carrier", "loss")),
+    ("comms", "Comms Officer", "Comms", ("uploads", "firstsseen", "game")),
+    ("tactical", "Tactical", "Tactical", ()),
+    ("mining", "Mining Officer", "Mining Officer", ("rigs", "rigleash", "rigsout")),
+)
+CREW_IDS = tuple(r[0] for r in CREW_ROLES)
+CREW_SHORT = {r[0]: r[2] for r in CREW_ROLES}
+CREW_ROW_ROLE = {row: r[0] for r in CREW_ROLES for row in r[3]}   # an alert row -> its role by default
+
+
+def crew_roles_info():
+    """CREW_ROLES for the page: [{id, title, short, rows}], the XO first."""
+    return [{"id": i, "title": t, "short": s, "rows": list(rows)} for i, t, s, rows in CREW_ROLES]
+
+
 # the voice lab's Audition (page.js AUDITION_KEYS): one personality across the alerts that matter, in a session's order
 AUDITION = ("game_start", "arrival_brief", "find_body", "leaving", "fuel_low", "sold", "bio_done_last", "session_recap")
 DEFAULT_NAMES = "Boss, Hefay, Sir"

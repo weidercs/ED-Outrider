@@ -788,7 +788,42 @@ upstream project's choices, not rules of the game.
   The page still sends the voice and speaker with each line (the server never downloads one for it): a picked voice
   deleted later is said in the main voice by that voice's own person, never by the pick's number of another voice.
   Worth having mainly where personalities share one several-person voice; each other voice picked is another loaded
-  model (up to `EXTRA_VOICES_MAX`, the least used reloaded).
+  model (as many kept as `[speech] voices_loaded` says, the least used reloaded).
+- **The crew: who says a line** (crew batch 1, 2026-10-13; the author's plan and answers of that day). Off by default:
+  one voice for everything, exactly as before. On, each alert row (Settings → Alerts) belongs to a role
+  (`outrider.speech.CREW_ROLES`, the one table: the page reads it from GET `/api/speech`, a test keeps it in step with
+  page.js `ALERTS`; the Navigator keeps every route line, trade routes too; low fuel is the Chief Engineer's). A line
+  is resolved on the page (`crewMember`, `crewVoice`): the crew on → a danger line (`DANGER`) is Tactical's while the
+  Danger switch is on (default on, so a danger line is never mistaken for chatter; off, it stays with its row's
+  member), else the row's member (a row moved in meta `crew`'s `rows`, else the table's) → that member's personality
+  picks the lines (when it has lines for that alert; "as the XO" is the personalities ticked in that browser, the shift
+  included) → its voice and speaker; a voice left "as the personality" falls back through S40's pick for the line's
+  personality, then speech.json's, then the main voice. "Danger alerts always down to business" still decides a danger
+  line's words; the crew only decides whose voice. The priority (danger first) never changes. The words never change
+  either: a role only picks whose personality's lines and whose voice.
+- **The XO is the main voice and stands in for everyone** (the author, 2026-10-13). The XO / Co-pilot row and the main
+  voice are one setting: meta `crew` keeps only the XO's name; giving the XO a voice switches the main voice (as POST
+  `/api/voice`). Voice answers, the status report, the co-pilot's lines and any line that is no alert row's are the
+  XO's. Whenever a member cannot speak, the XO says the line instead, never dropping it: a voice not installed, one
+  that failed to load, a speaker number the voice lacks, a personality speech.json no longer has (the payload's
+  `crew.members[role].fill`, `State.crew_fill`), and an alert row no role covers (the page). The server checks again
+  when it says a member's line (the page sends `role` with its voice: `synth`). Each fill-in is written to the server
+  log once per voice (or personality) and reason ("crew: Engineer's voice en_GB-x not installed: the XO speaks for
+  it"), only while the crew is on. The voice lab's lines and the pronunciation tests keep the lab's voice.
+- **Voices kept loaded: a number the player picks, not a fixed cap** (crew batch 1; the author: a 64 GB PC could keep
+  20, a small machine fewer). `[speech] voices_loaded` is a number (exactly that many beside the main voice, whatever is
+  in use), "all", or unset: the voices in use (`State.voices_in_use`: the personalities' and, with the crew on, its
+  members'), up to 4 (today's behaviour for anyone who never touches it). A value it cannot read is 4, said at start.
+  Never under 1 (a voice tried in the voice lab needs a place). The main voice is loaded on its own: never counted,
+  never set aside. A voice set aside waits about a second when it speaks again. `[speech] voices_preload` (off by
+  default: a quicker start) loads the voices in use, up to that number, one at a time after the journals are read and
+  the main voice is ready. Both are config keys, not per browser: they are about the machine that speaks.
+- **The memory rule of thumb** (measured on the author's PC, 2026-10-13, a scratch process, nothing played): a loaded
+  voice takes about 1.6 × its `.onnx` file's size (en_GB-cori-medium's 64 MB file: ~100 MB per extra copy; cori-high's
+  114 MB: ~170 MB). The people of one several-person voice share a single load (vctk's 109 speakers in one ~75 MB
+  model), so a crew made of one many-speaker voice costs no more than one voice. The payload's `voice_memory`
+  (`outrider.tts.voice_memory_estimate`) is computed on the server from the installed files, per distinct voice in use,
+  never the main voice; the page never guesses it.
 - **Find a setting filters, it does not search a list** (S39, 2026-10-13): the box at the top of Settings hides what
   does not match in place, so a match is the setting itself, ready to change. A row shows when every word is in its
   text, its section's heading or the config key it defaults from (`data-find`), at least one in the row itself; a word
