@@ -230,6 +230,21 @@ upstream project's choices, not rules of the game.
   zone you are in (D1's rule), else the one targeted in this system; `/api/status` says those two (game facts, like
   `on_body`, on an open route knowingly). A hush by voice takes a time, but the hush has only three lengths (10, 30
   minutes, the next jump): another time gets the nearest, and the answer names the three first.
+- **"Questions asked" is kept in memory, never in the database** (S35, 2026-10-13). What the voice heard is the
+  player's own words, sometimes not meant for Outrider at all (the wake word misfires): the last 50, every device's,
+  are kept while Outrider runs, so a misheard word or two phrases that clash can be checked, and a restart clears them.
+  GET `/api/ask/log` is behind the sign-in like every route and is not one of the AI's tools (an AI client reading
+  what was said to the voice is not what those tools are for). Every way out is kept, refusals (400, 426) and the AI's
+  failures with their code included, but never the AI's key; `matched` "error" is the log's value only, POST
+  `/api/ask`'s `matched` stays fixed, ai or none (the app's contract).
+- **Any view in its own window** (S37, 2026-10-13): `?view=<tab>` shows that view without the tab row and never saves
+  the view (the main window keeps its own), so a second monitor can hold Bookmarks or the Map. The ↗ is in the tab's
+  corner, shown on hover or focus only and drawn over the padding, so the tab row keeps its width; never on a device
+  that cannot hover (a hover-only reveal eats a phone's first tap). A jump to Here from such a window (⌖, a body) goes to
+  the main window while it is open (the author's default, 2026-10-12): the view window keeps showing what it was opened
+  for; with no main window it shows Here itself, unsaved, with ↩ back. The main window speaks: a view window joins the
+  one-speaker queue a second late, as the Now window does. Now keeps its own ↗ and `?mode=now` (`?view=now` is not a
+  view window); the tablet has its own shell and no view windows.
 - **Outrider presses keys for three things now:** auto honk, auto-target and the tablet's rail. The rail is one key
   per tap, only for signed-in devices (or this PC), only while the game is live, never while one of the other two is
   pressing, and only the binding the game itself has for that control; there are no macros or sequences on it (Board

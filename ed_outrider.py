@@ -6335,6 +6335,10 @@ class State:
         # last asked for the payload (S24: whether an answer will be said on the PC)
         self.ask_phrases = outrider.ask.load_phrases()
         self.assistant = dict(outrider.ask.ASSISTANT)
+        # S35: the last ASK_LOG_MAX questions (POST /api/ask, its refusals too) for Settings' "Questions asked": in
+        # memory only, gone at a restart, never the AI's key; ask_seq in the payload tells an open page one came
+        self.ask_log = collections.deque(maxlen=self.ASK_LOG_MAX)
+        self.ask_seq = 0
         self.speaker_seen = None
         self.speaker_audio_blocked = False   # the speaking window's browser holds audio back until a click (the tablet says so)
         self.autohonk = dict(AUTOHONK)
@@ -6609,6 +6613,7 @@ class State:
             "boxel": self.boxel_payload(),
             "codex_types": self.codex_types(),   # your codex's body types per region (✦ / ✪ on bodies)
             "hush": self.hush_info(),
+            "ask_seq": self.ask_seq,   # S35: Settings' "Questions asked" fetches GET /api/ask/log when it changes
             "firsts_watch": self.firsts_watch_info(),
             "copilot": dict(self.copilot, button=self.button.status if self.button else None),
             "region": self.region_info(),
@@ -6796,15 +6801,50 @@ class State:
         now = time.monotonic() if now is None else now
         return self.speaker_seen is not None and now - self.speaker_seen < self.SPEAKER_SEEN_S
 
-    async def ask(self, text, get):
+    ASK_LOG_MAX = 50   # S35: questions kept for Settings' "Questions asked"
+
+    def ask_record(self, text, matched, source=None, started=None, **fields):
+        """S35: one question for Settings' "Questions asked" (GET /api/ask/log): what was heard, what it matched
+        (`matched` fixed | ai | none, or "error": a log value only, the API's `matched` never says it), the command
+        and the ask.json phrase, the answer or the error and its code, how long it took (ms), the AI's rounds and the
+        tools it ran. In memory only (the last ASK_LOG_MAX), never the AI's key."""
+        if isinstance(text, str) and len(text) > outrider.ask.TEXT_MAX:
+            text = text[:outrider.ask.TEXT_MAX] + "…"
+        cmd = fields.get("command")
+        self.ask_seq += 1
+        self.ask_log.append(dict({"seq": self.ask_seq, "ts": round(time.time(), 3), "text": text if isinstance(text, str) else None,
+                                  "source": source, "matched": matched, "command": None, "label": outrider.ask.LABELS.get(cmd),
+                                  "phrase": None, "answer": None, "spoken": None, "error": None, "code": None, "hush": None,
+                                  "ai": None, "ms": round((time.monotonic() - started) * 1000) if started is not None else None},
+                                 **fields))
+        self.bump()
+
+    def ask_log_info(self):
+        """GET /api/ask/log: the questions newest first, and whether the AI layer would take one no phrase matched
+        ("off", "on", or "unset": switched on without base_url and model)."""
+        a = self.assistant
+        return {"questions": list(reversed(self.ask_log)), "seq": self.ask_seq, "max": self.ASK_LOG_MAX,
+                "ai": "off" if not a.get("enabled") else "on" if a.get("base_url") and a.get("model") else "unset"}
+
+    async def ask(self, text, get, source=None):
         """POST /api/ask: a question in words -> (answer, status). A fixed command first (resources/ask.json), then the
         AI layer when [assistant] enabled. The answer goes to every window through the co-pilot channel: the window
         that speaks says it (an asked line: it speaks through a hush), the others (the tablet) show it as a caption.
-        get: the in-process GET for the read-only tools."""
-        cmd = outrider.ask.match(text, self.ask_phrases)
-        matched, action = "fixed", "say"
+        get: the in-process GET for the read-only tools. Every way out is kept for "Questions asked" (S35)."""
+        started = time.monotonic()
+        cmd, phrase = outrider.ask.match_phrase(text, self.ask_phrases)
+        log = functools.partial(self.ask_record, text, source=source, started=started, command=cmd, phrase=phrase)
+        try:
+            return await self._ask(text, get, cmd, log)
+        except Exception as e:   # a fixed answer's own failure (the AI layer's are its own): kept, then a 500 as before
+            log("error", error=f"the answer failed ({type(e).__name__})", code="server_error")
+            raise
+
+    async def _ask(self, text, get, cmd, log):
+        matched, action, hush, trace = "fixed", "say", None, None
         if cmd == "hush":   # S32: "hush for ten minutes", "quiet until the next jump"; 30 minutes when no time is said
             mode, words = outrider.ask.hush_words(text)
+            hush = mode
             self.set_hush(mode)
             action = "caption"   # the page says its own hush news
         elif cmd == "unhush":
@@ -6817,23 +6857,28 @@ class State:
         elif cmd:   # left_behind filters at the server's thresholds (never a browser's: DESIGN_NOTES)
             words = await outrider.ask.fixed_answer(cmd, get, text=text, limits=(BODY_HIGHLIGHT, BIO_MIN))
         elif self.assistant.get("enabled"):
-            matched = "ai"
+            matched, trace = "ai", {"rounds": 0, "tools": []}
             try:
                 async with ClientSession(timeout=ClientTimeout(total=self.assistant["timeout"] + 5),
                                          headers={"User-Agent": USER_AGENT}) as session:
-                    words = await outrider.ask.ai_answer(text, self.assistant, get, session)
+                    words = await outrider.ask.ai_answer(text, self.assistant, get, session, trace=trace)
             except outrider.ask.AIError as e:
+                log("error", error=e.why, code=e.code, ai=trace)
                 return {"error": e.why, "code": e.code}, {"ai_timeout": 504, "ai_off": 503}.get(e.code, 502)
             except Exception as e:  # noqa: BLE001 -- a backstop (R4): the AI layer's own failure, never a 500
                 import traceback
                 traceback.print_exc()
-                return {"error": f"the AI layer failed ({type(e).__name__})", "code": "ai_error"}, 502
+                why = f"the AI layer failed ({type(e).__name__})"
+                log("error", error=why, code="ai_error", ai=trace)
+                return {"error": why, "code": "ai_error"}, 502
         else:
             matched = "none"
             words = outrider.ask.known_questions()
         words = outrider.tts.clip_text(words)
         self.copilot_action(action, words)
-        return {"answer": words, "spoken": self.speaker_present(), "matched": matched, "command": cmd}, 200
+        spoken = self.speaker_present()
+        log(matched, answer=words, spoken=spoken, hush=hush, ai=trace)
+        return {"answer": words, "spoken": spoken, "matched": matched, "command": cmd}, 200
 
     def voice_plot(self, place):
         """D4 (option A, the author): the voice's "nearest ..." plots a neutron route to the place it named when that is
@@ -17325,17 +17370,29 @@ def make_app(state, hosts=None):
 
     async def ask_view(request):
         """POST /api/ask {text, source?} (the tablet app's voice; native-facing contract): {answer, spoken, matched,
-        command}; errors {error, code}: bad_request, app_too_old, ai_off / ai_timeout / ai_error."""
+        command}; errors {error, code}: bad_request, app_too_old, ai_off / ai_timeout / ai_error. Every question, a
+        refused one too, goes into Settings' "Questions asked" (S35) with its `source` (the app's name for where it
+        was asked, else "app" for the app's header)."""
         old = app_too_old(request)
-        if old:
-            return old
         body = await json_object(request)
         text = body.get("text") if body else None
+        source = body.get("source") if body else None
+        source = (" ".join(source.split())[:40] if isinstance(source, str) else "") or \
+            ("app" if request.headers.get("X-Outrider-App") else None)
+        if old:
+            state.ask_record(text, "error", source=source, error=json.loads(old.text)["error"], code="app_too_old")
+            return old
         if not isinstance(text, str) or not text.strip() or len(text) > outrider.ask.TEXT_MAX:
-            return web.json_response({"error": f"expected {{text}}: the question, 1 to {outrider.ask.TEXT_MAX} characters",
-                                      "code": "bad_request"}, status=400)
-        out, status = await state.ask(" ".join(text.split()), local_get())
+            why = f"expected {{text}}: the question, 1 to {outrider.ask.TEXT_MAX} characters"
+            state.ask_record(text, "error", source=source, error=why, code="bad_request")
+            return web.json_response({"error": why, "code": "bad_request"}, status=400)
+        out, status = await state.ask(" ".join(text.split()), local_get(), source=source)
         return web.json_response(out, status=status)
+
+    async def ask_log_view(_):
+        """GET /api/ask/log: Settings' "Questions asked" (S35), newest first; behind the sign-in like every route, and
+        not one of the AI's tools (it holds what was said)."""
+        return web.json_response(state.ask_log_info())
 
     async def copilot_view(request):
         """{action: "status" | "again" | "hush" | "replay", words?}: the speaking window does it (the button and a
@@ -17780,6 +17837,7 @@ def make_app(state, hosts=None):
     app.router.add_post("/api/overlay/alert", pc_only(overlay_alert_post))   # S26: the page's alerts for the Alerts panel
     app.router.add_get("/api/rail", rail_view)
     app.router.add_post("/api/ask", ask_view)
+    app.router.add_get("/api/ask/log", ask_log_view)   # S35: Settings' "Questions asked"
     app.router.add_get("/api/config", config_get_view)
     app.router.add_get("/api/serverlog", serverlog_view)
     app.router.add_post("/api/notices/dismiss", notices_dismiss_view)

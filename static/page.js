@@ -634,7 +634,7 @@ function renderStrip() {
   } else se.innerHTML = "";
   // tab title: what a background tab needs to know
   const p = data.position;
-  document.title = (audioIsBlocked ? "🔇 " : "") + (disconnected ? "⚠ " : "") + (p ? p.name : "ED Outrider") +
+  document.title = (audioIsBlocked ? "🔇 " : "") + (disconnected ? "⚠ " : "") + (viewWindow ? `${viewName(viewWindow)} · ` : "") + (p ? p.name : "ED Outrider") +
     (f && f.live && f.pct != null && f.pct < 30 ? ` · ⛽${f.pct}%` : "") +
     (unsoldLevel(data.unsold) === "urgent" ? " · 💰 sell!" : "");
   renderTilesLine();
@@ -1603,11 +1603,39 @@ const TABLET_VIEWS = ["now", "near", "here", "bio", "bm", "search", "map", "hwy"
 let view = TABLET ? store.get("tabletView", "now") : store.get("view", "near");
 if (view === "rich") view = "hwy";   // Road to Riches had a tab of its own for a day (PR #1): it is a route type of Plot Route now
 if (TABLET && !TABLET_VIEWS.includes(view)) view = "now";
-const saveView = () => store.set(TABLET ? "tabletView" : "view", view);
+// a view window (S37) never saves its view: the main window's stays as it was
+const saveView = () => { if (!viewWindow) store.set(TABLET ? "tabletView" : "view", view); };
 let viewBeforeNow = view === "now" ? "overview" : view;
-// the only URL parameter the page reads: a window opened at ?mode=now (the ↗ beside Now) shows Now and nothing else
+// the URL parameters the page reads: a window opened at ?mode=now (the ↗ beside Now) shows Now and nothing else
 const nowWindow = new URLSearchParams(location.search).get("mode") === "now";
 if (nowWindow) view = "now";
+// S37: any other view in a window of its own (?view=bm, the ↗ in a tab's corner): it shows that view without the tab
+// row and never saves it; a jump to Here (⌖, a body) goes to the main window while it is open, else this window shows
+// it (unsaved) with ↩ back. It is not the Now window (leaveNow, nowWindow) and claims the voice only after the main one.
+// Not on the tablet (its own shell) and never Now (?mode=now is that window).
+const POP_VIEWS = [...document.querySelectorAll(".views [data-view]")].map(b => b.dataset.view).filter(v => v !== "now");
+const viewWindow = (() => { const v = new URLSearchParams(location.search).get("view");
+  return !TABLET && !nowWindow && POP_VIEWS.includes(v) ? v : null; })();
+if (viewWindow) { view = viewWindow; document.body.classList.add("viewwin"); }
+const viewName = v => { const b = document.querySelector(`.views [data-view="${v}"]`); return b ? b.dataset.name || b.textContent.trim() : v; };
+const popWins = {};
+function popView(v) {
+  const w = popWins[v];
+  if (w && !w.closed) { w.focus(); return; }
+  popWins[v] = window.open(`${location.pathname}?view=${v}`, `ed-outrider-view-${v}`, "popup,width=1100,height=800");
+  if (!popWins[v]) toast("The browser blocked the new window");
+}
+// a jump to another view from a view window: the main window does it (and comes forward) while it is open; false when
+// there is none, and this window switches itself
+function inMainWindow(fn, ...args) {
+  if (!viewWindow) return false;
+  let o = null;
+  try { o = window.opener && !window.opener.closed && typeof window.opener[fn] === "function" ? window.opener : null; } catch { o = null; }
+  if (!o) return false;
+  o[fn](...args);
+  try { o.focus(); } catch { /* the browser decides */ }
+  return true;
+}
 // ---- app mode: on a window at least APP_MIN_W x APP_MIN_H the page fits the window (body.app): the header stays, the
 // view fills the rest and each of its panes (.pane: a bordered box) scrolls on its own, its table headings sticky.
 // Smaller windows (phones, narrow or short ones) scroll the page as before, and Now keeps its own fit-to-screen layout.
@@ -2911,7 +2939,12 @@ function render() {
   loadOnBody();
   document.getElementById("searchView").hidden = view !== "search";
   document.querySelectorAll("[data-view]").forEach(b => b.classList.toggle("on", b.dataset.view === view));
-  document.getElementById("bmViewBtn").textContent = `Bookmarks${(data.bookmarks || []).length ? ` (${data.bookmarks.length})` : ""}`;
+  // the tab's own words (its first child), so the ↗ in its corner (S37) stays
+  document.getElementById("bmViewBtn").firstChild.textContent = `Bookmarks${(data.bookmarks || []).length ? ` (${data.bookmarks.length})` : ""}`;
+  if (viewWindow) {   // S37: ↩ back to this window's own view after a jump it made itself (the main window gone)
+    const back = document.getElementById("viewWinBack");
+    back.hidden = view === viewWindow; back.textContent = `↩ ${viewName(viewWindow)}`;
+  }
   aroundOptions(document.getElementById("sAround"));   // S49: "you (where you are)", your carrier's and the next stop's names
   renderBookmarks(bms);
   renderSearch(bms);
@@ -3316,7 +3349,17 @@ bmDialog.addEventListener("close", async () => {
     poll(true);
   } catch (err) { toast("bookmark failed: " + err.message); }
 });
-document.querySelectorAll("[data-view]").forEach(b => b.onclick = () => {
+// S37: a ↗ in each tab's corner (shown on hover or focus, the row's width unchanged; Shift+Enter on a focused tab too)
+// opens that view in a window of its own, or brings forward the one already open
+if (!TABLET) document.querySelectorAll(".views [data-view]").forEach(b => {
+  if (!POP_VIEWS.includes(b.dataset.view)) return;
+  b.dataset.name = b.textContent.trim();
+  b.insertAdjacentHTML("beforeend", `<span class="tabpop" data-popview="${b.dataset.view}" aria-hidden="true" title="open ${esc(b.dataset.name)} in a window of its own">↗</span>`);
+  b.addEventListener("keydown", e => { if (e.key === "Enter" && e.shiftKey) { e.preventDefault(); popView(b.dataset.view); } });
+});
+if (viewWindow) document.getElementById("viewWinBack").onclick = () => document.querySelector(`.views [data-view="${viewWindow}"]`).click();
+document.querySelectorAll("[data-view]").forEach(b => b.onclick = ev => {
+  if (ev && ev.target && ev.target.closest && ev.target.closest("[data-popview]")) { popView(b.dataset.view); return; }
   if (b.dataset.view !== view && pinnedSystem) { pinnedSystem = null; if (selectedBody) closeBody(); }  // a pin belongs to the view it was made in
   if (b.dataset.view === "now" && view !== "now") viewBeforeNow = view;
   if (b.dataset.view === "hist" && view !== "hist") histKey = null;   // fresh numbers each time the tab opens
@@ -5033,6 +5076,7 @@ async function tailLog() {   // new journal lines since the newest row: prepend 
   } catch { if (gen === L.gen) { L.loading = false; L.journal = null; } }
 }
 function openBodyIn(id, name) {
+  if (viewWindow !== "here" && inMainWindow("openBodyIn", id, name)) return;   // S37: from a view window, the main one
   id = String(id);
   view = "here"; saveView();
   pinnedSystem = posId() === id ? null : id;
@@ -5092,7 +5136,10 @@ let bioSort = store.get("bioSort", {key: "ts", dir: -1});
 bDays.onchange = () => { store.set("bDays", bDays.value); bioKey = null; loadBio(); };
 bState.onchange = () => { store.set("bState", bState.value); renderBio(); };
 bFilter.oninput = () => renderBio();
-function showInHere(id) { view = "here"; saveView(); pinSystem(id); }
+function showInHere(id) {
+  if (viewWindow !== "here" && inMainWindow("showInHere", id)) return;   // S37: ⌖ in a view window: the main one shows it
+  view = "here"; saveView(); pinSystem(id);
+}
 // ---- Find a system by name (Search's top row): the server resolves it, Here shows it ----
 const foundSys = {};   // id -> the last /api/find answer: the pinned Here heading's distance for a system not nearby
 document.getElementById("findForm").addEventListener("submit", async e => {
@@ -8060,6 +8107,7 @@ function onData() {
   // first payload, the server was restarted, or this window slept (see poll): no sounds for old state
   const firstNews = data.run_id !== runId || woke;
   onHush(firstNews); takeCopilot(data.copilot, firstNews); nowStakesTick();
+  if (data.ask_seq !== AL.seq) loadAskLog();   // S35: a new question while Questions asked is open
   const cpl = document.getElementById("copilotLine"), btn = data.copilot && data.copilot.button;
   cpl.hidden = !btn; cpl.textContent = btn ? `Co-pilot button: ${btn}` : "";
   if (firstNews) {
@@ -8613,6 +8661,50 @@ function drawSpeechLogSoon() { if (!speechLogTimer) speechLogTimer = setTimeout(
 const speechLogText = () => [...speechLog].reverse().map(e => `${hms(e.t)}  ${e.fate || "waiting"}  [${speechLogFacts(e).join(", ")}]  ${e.words}`).join("\n");
 document.getElementById("speechLogBox").addEventListener("toggle", drawSpeechLog);
 document.getElementById("speechLogCopy").onclick = () => copyText(speechLogText() || "(nothing yet)", `${speechLog.length} lines`);
+// ---- Questions asked (S35, Settings' last section): what the voice heard on any device, what it matched and the answer,
+// from GET api/ask/log (the server keeps the last 50 in memory). Fetched when the section opens and again when the
+// payload's ask_seq moves while it is open.
+const AL = {seq: null, data: null};
+const ASK_HUSH = {"10m": "for 10 minutes", "30m": "for 30 minutes", jump: "until the next jump"};   // S32's three
+// what a question matched, in words: the ask.json phrase and its command, "no phrase matched (AI off)", the AI's rounds
+// and tools, or why it was refused
+function askMatchText(q) {
+  const ai = q.ai ? ` (${q.ai.rounds} round${q.ai.rounds === 1 ? "" : "s"}${q.ai.tools.length ? `: ${q.ai.tools.join(", ")}` : ", no tools"})` : "";
+  const hush = q.hush ? ` · ${ASK_HUSH[q.hush] || q.hush}` : "";
+  if (q.matched === "fixed") return `matched “${esc(q.phrase)}” → <b>${esc(q.label || q.command)}</b>${esc(hush)}`;
+  if (q.matched === "ai") return `no phrase matched → <b>the AI answered</b>${esc(ai)}`;
+  if (q.matched === "none") return `<b>no phrase matched</b> (AI off): the answer lists what it knows`;
+  if (q.code === "ai_off") return `no phrase matched → <b>the AI is switched on but not set up</b>: ${esc(q.error)}`;
+  if (/^ai_/.test(q.code || "")) return `no phrase matched → <b>the AI failed</b>${esc(ai)}: ${esc(q.error)}`;
+  if (q.command) return `matched “${esc(q.phrase)}” → ${esc(q.label || q.command)}, <b>but the answer failed</b>: ${esc(q.error)}`;
+  return `<b>refused</b>: ${esc(q.error)}`;
+}
+const askLogFacts = q => [q.source, q.ms != null ? `${q.ms} ms` : "", q.matched === "fixed" || q.matched === "ai" || q.matched === "none"
+  ? (q.spoken ? "said on the PC" : "shown, not said: no window speaks") : ""].filter(Boolean);
+function drawAskLog() {
+  const el = document.getElementById("askLog"), qs = AL.data && AL.data.questions;
+  if (!el) return;
+  el.innerHTML = !AL.data ? `<div class="unk">loading…</div>` : AL.data.error ? `<div class="unk">Could not load the questions: ${esc(AL.data.error)}</div>`
+    : !qs.length ? `<div class="unk">Nothing asked since Outrider started.</div>`
+    : qs.map(q => `<div class="alog ${esc(q.matched)}"><span class="unk">${hms(q.ts * 1000)}</span> heard “${esc(q.text == null ? "(no text)" : q.text)}”` +
+        `${askLogFacts(q).length ? ` <span class="unk">· ${esc(askLogFacts(q).join(" · "))}</span>` : ""}<br><span class="match">${askMatchText(q)}</span>` +
+        (q.answer ? `<br>“${esc(q.answer)}”` : "") + `</div>`).join("");
+}
+async function loadAskLog() {
+  const box = document.getElementById("askLogBox");
+  if (!box || !box.open || !document.getElementById("alertDialog").open) return;
+  const want = data ? data.ask_seq : null;
+  if (AL.data && !AL.data.error && want != null && want === AL.seq) return;
+  AL.seq = want;
+  try { AL.data = await apiJson("api/ask/log"); } catch (e) { AL.data = {error: e.message}; }
+  if (AL.data && !AL.data.error) AL.seq = AL.data.seq;
+  drawAskLog();
+}
+const htmlText = h => { const e = document.createElement("div"); e.innerHTML = h; return e.textContent; };
+const askLogText = () => ((AL.data && AL.data.questions) || []).map(q => `${hms(q.ts * 1000)}  heard: ${q.text == null ? "(no text)" : q.text}` +
+  `${askLogFacts(q).length ? `  [${askLogFacts(q).join(", ")}]` : ""}\n    ${htmlText(askMatchText(q))}` + (q.answer ? `\n    answer: ${q.answer}` : "")).join("\n");
+document.getElementById("askLogBox").addEventListener("toggle", () => { drawAskLog(); loadAskLog(); });
+document.getElementById("askLogCopy").onclick = () => copyText(askLogText() || "(nothing asked yet)", `${((AL.data && AL.data.questions) || []).length} questions`);
 // ---- alert settings ----
 const alertDialog = document.getElementById("alertDialog");
 // a heading over a group of alerts in the list, before its first one: the discoveries together, each still its own row
@@ -8755,8 +8847,8 @@ window.addEventListener("storage", e => { if (e.key === "speakMode") drawSpeaker
   // 🗣 in another window of this browser (a ?mode=now window's bar): the window speaking follows it
   if (e.key === "speech" && !TABLET) { speechOn = store.get("speech", false); drawSpeechBtn(); if (!speechOn) hushSpeech(true); if (view === "now") drawNowBar(); } if (e.key === "speakOnServer") { drawServerPlay(); drawSoundBtn(); } });
 drawSpeaker(); drawServerPlay();
-// a window opened at ?mode=now (the second screen) waits a moment, so a main window opened with it speaks
-if (view === "now") setTimeout(() => claimSpeaker(), 1000); else claimSpeaker();
+// a window opened at ?mode=now (the second screen) or at ?view= (S37) waits a moment, so a main window opened with it speaks
+if (view === "now" || viewWindow) setTimeout(() => claimSpeaker(), 1000); else claimSpeaker();
 // auto honk: the server holds Primary Fire on arrival; this is its on/off and status
 const honkBox = document.getElementById("autoHonk"), honkSayBox = document.getElementById("autoHonkSay");
 // say the body count when an auto honk completes: per browser, the config's [autohonk] announce by default
@@ -10104,7 +10196,7 @@ function showAlertSection(i, remember = true) {
 alertChips.addEventListener("click", e => { const b = e.target.closest("[data-sec]"); if (b) showAlertSection(Number(b.dataset.sec)); });
 document.getElementById("alertsBtn").onclick = () => {
   setSecsRestore();
-  drawSpeechStyles(); fillThresholds(); alertDialog.showModal(); drawSpeechLog();
+  drawSpeechStyles(); fillThresholds(); alertDialog.showModal(); drawSpeechLog(); loadAskLog();
   const last = Number(store.get("alertSection", 0));
   if (last > 0) showAlertSection(last, false);
 };

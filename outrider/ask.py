@@ -87,12 +87,18 @@ def norm(text):
 
 def match(text, phrases):
     """The fixed command a question is (the first in `phrases`' order with a phrase as whole words in it), or None."""
+    return match_phrase(text, phrases)[0]
+
+
+def match_phrase(text, phrases):
+    """(command, the ask.json phrase that matched it), or (None, None): S35's "Questions asked" says which phrase."""
     t = WAKE.sub("", norm(text)).strip()
     padded = f" {t} "
     for name, ps in phrases.items():
-        if any(f" {p} " in padded for p in ps):
-            return name
-    return None
+        for p in ps:
+            if f" {p} " in padded:
+                return name, p
+    return None, None
 
 
 # ---- hush for a set time (S32) ----
@@ -518,9 +524,13 @@ def openai_tools():
             for t in tools.listing()]
 
 
-async def ai_answer(text, cfg, get, session, rows=10):
+async def ai_answer(text, cfg, get, session, rows=10, trace=None):
     """Ask the configured chat-completions endpoint, running its tool calls through the read-only registry, until it
-    answers in words (at most max_rounds tool rounds). Raises AIError."""
+    answers in words (at most max_rounds tool rounds). Raises AIError. trace (a dict, S35's "Questions asked"): its
+    `rounds` counts the requests made and `tools` lists the tools run, kept up to a failure too (never the key)."""
+    trace = {} if trace is None else trace
+    trace.setdefault("rounds", 0)
+    trace.setdefault("tools", [])
     if not cfg.get("base_url") or not cfg.get("model"):
         raise AIError("ai_off", "the AI layer needs [assistant] base_url and model")
     url = cfg["base_url"].rstrip("/") + "/chat/completions"
@@ -536,6 +546,7 @@ async def ai_answer(text, cfg, get, session, rows=10):
             body = {"model": cfg["model"], "messages": messages, "tools": openai_tools()}
             if last:
                 body["tool_choice"] = "none"
+            trace["rounds"] += 1
             try:
                 async with session.post(url, json=body, headers=headers) as r:
                     if r.status in (401, 403):
@@ -568,6 +579,7 @@ async def ai_answer(text, cfg, get, session, rows=10):
             messages.append({"role": "assistant", "content": content, "tool_calls": calls})
             for c in calls:
                 fn = c.get("function") or {}
+                trace["tools"].append(str(fn.get("name")))
                 out = await tools.call(str(fn.get("name")), call_arguments(fn), get, rows)
                 messages.append({"role": "tool", "tool_call_id": c.get("id"), "name": fn.get("name"),
                                  "content": json.dumps(out, separators=(",", ":"))})

@@ -241,6 +241,14 @@ dialog .reset { color: var(--info); cursor: pointer; font-size: 11px; margin-lef
   background: transparent; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); }
 .views button:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: var(--accent); }
 .views button.on { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
+/* S37: a view in a window of its own: the ↗ in a tab's corner, only where there is a pointer that hovers (a hover-only
+   reveal would eat a phone's first tap), drawn over the padding so the row keeps its width; a view window has no tabs */
+.views button { position: relative; }
+.views .tabpop { position: absolute; top: 0; right: 2px; font-size: 9px; line-height: 1; font-weight: 400; visibility: hidden; opacity: .75; }
+@media (hover: hover) { .views button:hover .tabpop, .views button:focus-visible .tabpop { visibility: visible; } }
+.views .tabpop:hover { opacity: 1; }
+body.viewwin .views { display: none; }
+.viewback { margin-left: auto; }
 #nearOpts { display: inline-flex; gap: 16px; }
 /* boxel exploration (2026-10-11): the switch, and the boxel pane in Nearby's place */
 .nearmode { display: inline-flex; gap: 2px; border: 1px solid var(--line); border-radius: 6px; padding: 1px 4px; }
@@ -916,6 +924,11 @@ details.speechlog { margin-top: 12px; } details.speechlog summary { cursor: poin
 #speechLog .said b { color: var(--good); } #speechLog .cut b { color: var(--warn); }
 #speechLog .dropped b { color: var(--bad); } #speechLog .silent b, #speechLog .wait b { color: var(--muted); }
 #speechLog button.ban { padding: 0 4px; font-size: 12px; }
+/* S35: Settings' "Questions asked", newest first: what was heard, what it matched, the answer */
+#askLog { max-height: 360px; overflow-y: auto; font-size: 12px; margin-top: 6px; }
+#askLog .alog { padding: 3px 0; border-bottom: 1px solid var(--line, rgba(128,128,128,.2)); overflow-wrap: anywhere; }
+#askLog .alog .match { color: var(--muted); } #askLog .alog.fixed .match b, #askLog .alog.ai .match b { color: var(--good); }
+#askLog .alog.none .match b { color: var(--warn); } #askLog .alog.error .match b { color: var(--bad); }
 .spacing.elsewhere { color: var(--warn); }
 #refLn .regionnew { color: var(--good); font-weight: 600; }
 #tripRows tr.hasnote td { border-bottom: none; padding-bottom: 1px; }

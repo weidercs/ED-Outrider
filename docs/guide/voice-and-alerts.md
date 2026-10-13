@@ -210,7 +210,7 @@ Sound: Allow; Firefox: Autoplay: Allow Audio and Video).
 
 **Spoken lines: what was said, and banning lines**
 
-Open ⚙ Settings and its **Spoken lines** section (the last one). It lists this
+Open ⚙ Settings and its **Spoken lines** section. It lists this
 window's last 100 alerts and what became of each: said, cut short, dropped or silent, and why. **copy**
 puts it on the clipboard.
 
@@ -239,6 +239,13 @@ biology and geology), **left behind** (the nearest one or two systems within 100
 `body_highlight_level` and `bio_min`), **hush** and **unhush**. A hush can take a time: "hush for ten minutes",
 "quiet until the next jump" (30 minutes when you say none; another time gets the nearest of 10, 30 minutes or the
 next jump). Their phrases are in `resources/ask.json`; edit them freely.
+
+**Questions asked** (⚙ Settings, the last section) shows what the voice heard, newest first: the words, which phrase
+they matched and what that asks for ("matched “status report” → a status report"), or "no phrase matched (AI off)",
+or what the AI did (its rounds and the tools it looked at, or why it failed), then the answer. A misheard word or two
+phrases that clash show up there; **copy** puts it on the clipboard. Outrider keeps the last 50 questions from every
+device in its memory only (a restart clears them), behind the password like the rest of the page, and never the AI's
+key.
 
 Anything else goes to an optional AI layer, off by default (`[assistant] enabled = false`, also in ⚙ Settings →
 Server). It sends nothing anywhere until you set it up: an OpenAI-compatible endpoint (`base_url`: Ollama on your PC,

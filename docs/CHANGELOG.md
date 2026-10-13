@@ -2,6 +2,23 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-13 · Questions asked, and any view in its own window
+- **Questions asked** (S35): Settings' new last section shows what the voice heard, newest first: the words, where they
+  came from, the ask.json phrase they matched and what it asks for ("matched “status report” → a status report", a
+  hush with its length, the four questions of S14 by name), "no phrase matched (AI off)", or what the AI did (its
+  rounds and the tools it ran, or why it failed), then the answer and whether it was said on the PC; **copy** puts it
+  on the clipboard. The server keeps the last 50 in memory only (`State.ask_log`, `ASK_LOG_MAX`), every way out of
+  POST `/api/ask` included (refusals 400 and 426, the AI's failures with their code, never its key); GET
+  `/api/ask/log` serves them (behind the sign-in; not one of the AI's tools), the payload's `ask_seq` says when one
+  came. `outrider.ask.match_phrase` names the phrase; `ai_answer` takes a `trace`. POST `/api/ask`'s shape is
+  unchanged.
+- **Any view in its own window** (S37): hovering a tab shows a small ↗ in its corner (or Shift+Enter on the tab) that
+  opens that view alone in a window of its own (`?view=bm`...; pressed again it brings that window forward). Such a
+  window has no tab row, never saves the view (the main window keeps its own) and its title starts with the view's
+  name; ⌖ or a body opened from it goes to Here in the main window while that is open, otherwise it shows Here itself
+  with ↩ back. The main window speaks: a view window joins the one-speaker queue a second late, like the Now window,
+  which keeps its own ↗ and `?mode=now`. A bad `?view=` is ignored; the tablet has none.
+
 ## 2026-10-13 · Hush by voice for a set time, and four more questions without AI
 - **A hush by voice takes a time** (S32, the server half): "hush for ten minutes", "quiet for half an hour", "hush until
   the next jump" (or next system, leave, arrive); no time is 30 minutes as before. `outrider.ask.hush_mode` gives only

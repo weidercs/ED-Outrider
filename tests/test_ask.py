@@ -272,6 +272,63 @@ class Endpoint(unittest.TestCase):
         self.assertEqual(out["bad"], [(400, "bad_request")] * 4)
         self.assertEqual((out["old"], out["lan"]), ((426, "app_too_old"), (401, "signin_required")))
 
+    def test_questions_asked(self):
+        """S35: every question goes into Settings' "Questions asked" (GET /api/ask/log, newest first): what was heard,
+        where from, what it matched (the command, its label and the ask.json phrase), the answer, a hush's length;
+        a question no phrase matched with the AI off; refusals (400, 426) with their code. In memory, the last 50."""
+        async def go(c):
+            seq0 = (await (await c.get("/api/nearby")).json())["ask_seq"]
+            for body in ({"text": "Hey Vespa, status report", "source": "vespa"}, {"text": "hush for ten minutes"},
+                         {"text": "how far have I gone today"}, {"text": "can I still make an FSD injection"},
+                         {"text": "what is the meaning of life"}, {"text": ""}):
+                await c.post("/api/ask", json=body)
+            await c.post("/api/ask", json={"text": "fuel"}, headers={"X-Outrider-App": "0.1.0"})
+            log = await (await c.get("/api/ask/log")).json()
+            seq1 = (await (await c.get("/api/nearby")).json())["ask_seq"]
+            return seq0, seq1, log
+        seq0, seq1, log = self.client(go)
+        q = log["questions"]
+        self.assertEqual((seq0, seq1, log["seq"], log["max"], log["ai"], len(q)), (0, 7, 7, 50, "off", 7))
+        self.assertEqual([x["seq"] for x in q], [7, 6, 5, 4, 3, 2, 1])   # newest first
+        old, bad, none, fsd, today, hush, status = q
+        self.assertEqual({k: status[k] for k in ("text", "source", "matched", "command", "label", "phrase", "code")},
+                         {"text": "Hey Vespa, status report", "source": "vespa", "matched": "fixed", "command": "status_report",
+                          "label": "a status report", "phrase": "status report", "code": None})
+        self.assertTrue(status["answer"] and isinstance(status["ms"], int) and status["spoken"] is False and status["ts"] > 0)
+        self.assertEqual((hush["command"], hush["hush"], hush["answer"]), ("hush", "10m", "Quiet for 10 minutes."))
+        self.assertEqual((today["command"], today["label"], fsd["command"], fsd["label"]),
+                         ("travel_today", "how far today", "fsd_injection", "FSD injections"))
+        self.assertEqual((none["matched"], none["command"], none["phrase"], none["ai"]), ("none", None, None, None))
+        self.assertIn("status report", none["answer"])
+        self.assertEqual((bad["matched"], bad["code"], bad["text"]), ("error", "bad_request", ""))
+        self.assertEqual((old["matched"], old["code"], old["text"], old["source"]), ("error", "app_too_old", "fuel", "app"))
+        self.assertIn("too old", old["error"])
+        # the last 50 only
+        for i in range(60):
+            self.state.ask_record(f"q{i}", "none")
+        self.assertEqual((len(self.state.ask_log), self.state.ask_log[0]["text"]), (50, "q10"))
+        self.assertFalse(ask.tools.allowed("/api/ask/log"))   # what was said is not one of the AI's tools
+
+    def test_questions_asked_ai(self):
+        """S35: the AI's answers and failures are kept with its rounds and the tools it ran; never the key."""
+        call = {"choices": [{"message": {"content": None, "tool_calls": [
+            {"id": "c1", "type": "function", "function": {"name": "nearest_unvisited", "arguments": "{}"}}]}}]}
+        done = {"choices": [{"message": {"content": "Nothing unvisited is known nearby."}}]}
+        self.ai_run([call, done], text="tell me something interesting")
+        self.ai_run([401], text="sing")
+        self.ai_run([("sleep", 1.0)], text="sing slowly", timeout=0.2)
+        timeout, refused, ok = list(self.state.ask_log)[::-1]
+        self.assertEqual((ok["matched"], ok["answer"], ok["ai"]), ("ai", "Nothing unvisited is known nearby.",
+                                                                   {"rounds": 2, "tools": ["nearest_unvisited"]}))
+        self.assertEqual((refused["matched"], refused["code"], refused["error"], refused["ai"]),
+                         ("error", "ai_error", "the AI provider refused the key (HTTP 401)", {"rounds": 1, "tools": []}))
+        self.assertEqual((timeout["matched"], timeout["code"], timeout["text"]), ("error", "ai_timeout", "sing slowly"))
+        self.assertNotIn("sk-test", json.dumps(list(self.state.ask_log)))
+        self.assertEqual(self.state.ask_log_info()["ai"], "on")
+        self.state.assistant = dict(ask.ASSISTANT, enabled=True)   # switched on, never set up
+        self.assertEqual(self.client(lambda c: self._post(c, "sing")), (503, "ai_off"))
+        self.assertEqual((self.state.ask_log[-1]["code"], self.state.ask_log_info()["ai"]), ("ai_off", "unset"))
+
     def test_this_body_from_the_status(self):
         """S14: /api/status says the body whose near-body zone you are in and the body targeted in this system (game
         facts, like on_body); the voice's "this body" reads them."""

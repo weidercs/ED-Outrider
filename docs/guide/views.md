@@ -137,6 +137,13 @@ behind</b> lists nearby systems with work over your thresholds.
 The **Overview** at the top shows Here and Nearby together: drag the divider, swap sides or stack them. Nearby's
 Standard / Boxel switch sits on its bar, left of ▾ This system.
 
+**Any view in a window of its own:** hover a tab and a small **↗** shows in its corner (or press Shift+Enter on the
+tab); it opens that view alone in a new window, to drag to another monitor (pressed again, it brings that window
+forward). Such a window has no tab row and leaves the main window's view as it was; ⌖ or a body opened from it shows
+in Here in the main window while that is open (otherwise the window shows Here itself, with ↩ back). The main window
+speaks; Now has its own ↗ (below). The address is `http://127.0.0.1:8025/?view=bm` (bm, near, here, bio, search,
+map, hwy, hist, log, mat, firsts, overview).
+
 **Bookmarks** is its own tab: the systems you have bookmarked (☆ beside any system), each with its note and distance.
 The same ☆ sets your **next stop**, shown in the header until you get there. On the game PC a **🎯** beside a bookmark
 or the next stop targets it in the galaxy map, and **Plot route** puts it in Plot Route's To (plotted at once when you

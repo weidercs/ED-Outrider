@@ -1328,7 +1328,7 @@ const settle = async maxMs => {
       return realFetch(u, o);
     };
     const got = {};
-    got.noTab = !d.querySelector('[data-view="rich"]') && d.querySelector('.views [data-view="hwy"]').textContent;
+    got.noTab = !d.querySelector('[data-view="rich"]') && d.querySelector('.views [data-view="hwy"]').firstChild.textContent;   // S37: its ↗ is a child of its own
     if (!d.getElementById("nowView").hidden) { d.getElementById("nowBack").click(); await sleep(300); }
     w.localStorage.removeItem("hwyShow");
     d.querySelector('[data-view="hwy"]').click(); await sleep(300);
@@ -3992,7 +3992,7 @@ const settle = async maxMs => {
     const want = {colony: [500, null, " · 1,000 m"], sortTh: ["dist", "grav", "now", "max"], sortCycle: ["dist", "-dist rev", "max"],
       nearCycle: ["value", "-value", "distance"], treeSort: "max", halves: [true, true, true], halvesOff: false, matRow: true, link: ["linked", "linked"],
       nogame: ["linked · no game", "linked"], stale: ["unlinked · retrying", "stale"], none: ["unlinked · retrying", "none"], pill: true,
-      chips: ["Alerts", "Voice", "What is said", "Sounds", "Values", "Risk & warnings", "Surface map", "Auto honk", "Uploads", "In-game overlay", "Display", "Sharing", "Server", "Spoken lines"],
+      chips: ["Alerts", "Voice", "What is said", "Sounds", "Values", "Risk & warnings", "Surface map", "Auto honk", "Uploads", "In-game overlay", "Display", "Sharing", "Server", "Spoken lines", "Questions asked"],
       autoSmall: true, autoBig: false, line: true, cut: true};
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
     const goodB12 = !bad.length && errors.length === before;
@@ -4662,7 +4662,7 @@ const settle = async maxMs => {
     await sleep(100);
     got.push(w.eval(`JSON.stringify(Object.values(JSON.parse(localStorage.getItem("settingsOpen"))).some(Boolean))`));
     w.eval(`document.getElementById("alertDialog").close ? document.getElementById("alertDialog").close() : document.getElementById("alertDialog").removeAttribute("open")`);
-    const want = ["Settings", true, 14, ["alerts"], true, '[true,true,true,"","auto true false","1"]', JSON.stringify({server: {port: "9999"}, autohonk: {enabled: true}}), "false"];
+    const want = ["Settings", true, 15, ["alerts"], true, '[true,true,true,"","auto true false","1"]', JSON.stringify({server: {port: "9999"}, autohonk: {enabled: true}}), "false"];
     const goodS = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodS;
     console.log(goodS ? "OK" : "FAIL", "| settings |", goodS ? "12 folding sections, remembered; server settings from the config file (choices as a list); only changes sent" : JSON.stringify(got), errors.slice(before));
@@ -6853,6 +6853,84 @@ const settle = async maxMs => {
     const good = !bad.length && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| S51 sweep, S52 kinds |", good ? "ticks in Bookmarks, Left behind and lost firsts, Plot a sweep (N) posts them and Plot Route shows it, a refusal said, the kinds' lines" :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+  }
+  // S35: Settings' last section, Questions asked: two questions asked of the scratch server (a phrase, then none with the
+  // AI off), newest first, each with what it matched and the answer; it follows the payload's ask_seq while open; Copy
+  {
+    const w = dom.window, d = w.document, before = errors.length;
+    w.eval(`const dla = document.getElementById("alertDialog"); dla.showModal ? dla.showModal() : dla.setAttribute("open", "");
+      document.getElementById("askLogBox").open = true; loadAskLog()`);
+    await settle(1500);
+    const ask = text => w.fetch("api/ask", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({text, source: "smoke"})});
+    await ask("Vespa, status report"); await ask("what is the meaning of life");
+    for (let i = 0; i < 40 && !/meaning of life/.test(d.getElementById("askLog").textContent); i++) await sleep(250);   // the long poll's ask_seq
+    const rows = [...d.querySelectorAll("#askLog .alog")].slice(0, 2).map(r => [r.className, r.textContent.replace(/\s+/g, " ")]);
+    const copied = [], realCopy = w.copyText;
+    w.copyText = (text, what) => copied.push([text, what]);
+    d.getElementById("askLogCopy").click();
+    w.copyText = realCopy;
+    w.eval(`document.getElementById("askLogBox").open = false; const dlb = document.getElementById("alertDialog"); if (dlb.close) dlb.close(); else dlb.removeAttribute("open")`);
+    const got = {last: w.eval(`[...document.querySelectorAll("#alertChips button")].pop().textContent`),
+      none: rows[0] && rows[0][0] === "alog none" && /heard “what is the meaning of life” · smoke · \d+ ms/.test(rows[0][1]) &&
+        /no phrase matched \(AI off\)/.test(rows[0][1]) && /I only know a few questions/.test(rows[0][1]),
+      fixed: rows[1] && rows[1][0] === "alog fixed" && /heard “Vespa, status report”/.test(rows[1][1]) && /matched “status report” → a status report/.test(rows[1][1]),
+      copy: copied.length === 1 && /heard: what is the meaning of life/.test(copied[0][0]) && /matched “status report” → a status report/.test(copied[0][0])};
+    const want = {last: "Questions asked", none: true, fixed: true, copy: true};
+    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| S35 questions asked |", good ? "the last section: newest first, the phrase matched or none (AI off), the answer, Copy" : JSON.stringify({got, rows}), errors.slice(before));
+  }
+  // S37: any view in its own window: the ↗ in a tab's corner opens ?view=<it> in a named window (a second press brings
+  // it forward), the main window's view untouched; a window at ?view=bm shows Bookmarks without the tab row, never saves
+  // the view, sends ⌖ to the main window while it is open (else shows Here itself, with ↩ back); a bad view falls back
+  {
+    const w = dom.window, d = w.document, before = errors.length;
+    const opened = [], realOpen = w.open, view0 = w.eval("view"), stored0 = w.localStorage.getItem("view");
+    w.open = (u, n) => { opened.push([u, n]); return {closed: false, focus() { opened.push("focus"); }}; };
+    const pop = d.querySelector('.views [data-view="bm"] .tabpop');
+    pop.click(); pop.click();
+    w.open = realOpen; w.eval("for (const k in popWins) delete popWins[k]");
+    const got = {pop: [opened[0] && opened[0][0].endsWith("?view=bm"), opened[0] && opened[0][1], opened[1]],
+      main: [w.eval("view") === view0, w.localStorage.getItem("view") === stored0, !!d.querySelector('.views [data-view="now"] .tabpop'),
+             d.querySelectorAll(".views .tabpop").length === d.querySelectorAll(".views [data-view]").length - 1]};
+    const load = async search => {
+      const errs = [], html2 = await (await fetch(base + search)).text();
+      const dom2 = new JSDOM(html2, {url: base + search, runScripts: "dangerously", resources: "usable", pretendToBeVisual: true,
+        beforeParse(w2) { w2.AbortController = AbortController; w2.fetch = (u, o) => fetch(new URL(u, base), o); w2.addEventListener("error", e => errs.push(e.message));
+          w2.localStorage.clear(); w2.localStorage.setItem("view", JSON.stringify("near")); w2.scrollBy = () => {}; w2.HTMLCanvasElement.prototype.getContext = () => null; }});
+      for (let i = 0; i < 60 && !dom2.window.eval("typeof data !== 'undefined' && !!data"); i++) await sleep(250);   // the first payload drawn
+      return [dom2, errs];
+    };
+    const [vb, errsB] = await load("?view=bm"), wb = vb.window, db = wb.document;
+    got.win = [wb.eval("view"), db.body.classList.contains("viewwin"), wb.getComputedStyle(db.querySelector(".views")).display, wb.eval("nowWindow"),
+               /^Bookmarks · /.test(db.title), db.getElementById("viewWinBack").hidden];
+    // ⌖ with the main window open: it shows the system there; this window stays on Bookmarks
+    const sent = [];
+    wb.eval(`window.__opener = {closed: false, showInHere: id => window.__sent.push(["here", id]), openBodyIn: (id, n) => window.__sent.push(["body", id, n]), focus() { window.__sent.push("focus"); }}`);
+    wb.__sent = sent;
+    Object.defineProperty(wb, "opener", {value: wb.__opener, configurable: true, writable: true});
+    wb.eval(`showInHere("42"); openBodyIn("42", "Sys 1")`);
+    got.opener = [sent, wb.eval("view")];
+    // the main window gone: this window shows Here (unsaved) with ↩ back to Bookmarks
+    Object.defineProperty(wb, "opener", {value: null, configurable: true, writable: true});
+    wb.eval(`showInHere("42")`); await sleep(200);
+    got.alone = [wb.eval("view"), db.getElementById("viewWinBack").hidden, db.getElementById("viewWinBack").textContent, wb.localStorage.getItem("view")];
+    db.getElementById("viewWinBack").click(); await sleep(200);
+    got.back = [wb.eval("view"), db.getElementById("viewWinBack").hidden, wb.localStorage.getItem("view"), errsB];
+    vb.window.close();
+    const [vx, errsX] = await load("?view=nope"), [vn, errsN] = await load("?view=now");
+    got.bad = [vx.window.eval("view"), vx.window.document.body.classList.contains("viewwin"), vn.window.eval("[view, nowWindow]"), errsX, errsN];
+    vx.window.close(); vn.window.close();
+    const want = {pop: [true, "ed-outrider-view-bm", "focus"], main: [true, true, false, true],
+      win: ["bm", true, "none", false, true, true],
+      opener: [[["here", "42"], "focus", ["body", "42", "Sys 1"], "focus"], "bm"],
+      alone: ["here", false, "↩ Bookmarks", '"near"'], back: ["bm", true, '"near"', []],
+      bad: ["near", false, ["near", false], [], []]};
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    const good = !bad.length && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| S37 view windows |", good ? "↗ opens ?view=bm (once), the window has no tabs and saves no view, ⌖ goes to the main window, else ↩ back; a bad view falls back" :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
   }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
