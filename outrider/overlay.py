@@ -1116,6 +1116,7 @@ def bio_panel(detail, pal, size="normal", bio_min=10_000_000, high_gravity=2.0, 
 
 ROUTE_W = 430
 KNOWN_MARK = {"visited": ("✓", "good"), "known": ("●", "muted"), "new": ("○", "warn")}
+HIGHWAY_STOPS_MIN = 3   # the Plot Route stops the Route panel lists at least, however long the game's own route
 
 
 def route_panel(info, pal, size="normal", max_rows=6):
@@ -1124,7 +1125,9 @@ def route_panel(info, pal, size="normal", max_rows=6):
     (a route plotted in Plot Route: next, jumps_left, ly_left, refuel_in, off_route, complete), "to": the game
     route's last system}. The game's route first: jumps and light years left, the next scoopable star, then the next
     `max_rows` jumps, each with its star (scoopable in green, not in the warning colour), the jump, and ✓ you have
-    been there / ○ nobody has reported it to Spansh. Then the Highway's next stop. None with neither."""
+    been there / ○ nobody has reported it to Spansh. Then the Highway's next stop and, from info["stops"]
+    (State.highway_ahead: the stops after it, each {name, neutron, refuel, ly, jumps, known}), the stops that follow:
+    the game's route often reaches only the next stop, the systems along the route are these. None with neither."""
     info = info or {}
     r, hw = info.get("route"), info.get("highway")
     hops = (r or {}).get("hops") or []
@@ -1180,6 +1183,18 @@ def route_panel(info, pal, size="normal", max_rows=6):
             used += text_width(seg, size)
         if line_:
             rows.append(line_)
+        # the stops after the next, numbered as stops of the route from here: as many as the game's jumps left room
+        stops = info.get("stops") or []
+        room = max(HIGHWAY_STOPS_MIN, max_rows - min(len(hops), max_rows))
+        for i, st in enumerate(stops[:room]):
+            mark = KNOWN_MARK.get(st.get("known"))
+            right = ("⚡ " if st.get("neutron") else "") + ("⛽ " if st.get("refuel") else "") + \
+                    (f"{st['ly']:,.1f} ly" if isinstance(st.get("ly"), (int, float)) else "") + \
+                    (f" · {st['jumps']} jumps" if (st.get("jumps") or 0) > 1 else "")
+            rows.append({"left": [(f"{i + 2} ", "muted"), (f"{st.get('name') or '?'} ", "text")] + ([mark] if mark else []),
+                         "right": (right, "accent" if st.get("neutron") else "warn" if st.get("refuel") else "muted")})
+        if len(stops) > room:
+            rows.append([(f"+{len(stops) - room} more", "muted")])
         if not hops:
             subtitle = f"to {hw.get('destination') or '?'}"
     return text_panel("route", "Route", rows, pal, width=ROUTE_W, size=size, subtitle=subtitle)

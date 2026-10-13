@@ -103,6 +103,14 @@ Beside upstream's ([DESIGN_NOTES.md](DESIGN_NOTES.md)):
 
 Newest first. Upstream's is [CHANGELOG.md](CHANGELOG.md).
 
+## 2026-10-12 · Overlay: the Route panel lists the Plot Route stops ahead
+- With a Plot Route route followed, the panel showed its systems only as far as the game's own route went:
+  once a stop is targeted (Target next, auto-target, auto honk's "then target") that is the one jump to the next
+  stop, so the systems along the route were gone. The panel now lists the stops after the next from the route
+  itself (⚡ neutron, ⛽ refuel, the hop's length, known or not): as many as the game's jumps leave room for of
+  six, three at least, the rest counted.
+- `State.highway_ahead`, `overlay.route_panel`'s `stops` (`HIGHWAY_STOPS_MIN`).
+
 ## 2026-10-12 · This fork: its notes in one file, remotes renamed
 - The fork's changelog, code map, design notes and settings moved out of upstream's documents into `docs/FORK.md`;
   `CHANGELOG.md`, `AGENT_GUIDE.md`, `DESIGN_NOTES.md` and `guide/settings.md` are upstream's again, word for word

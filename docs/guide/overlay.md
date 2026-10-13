@@ -102,7 +102,9 @@ The arrangement is kept in Outrider's database, not the config file: to take it 
 - **Route** (this fork; optional): the route ahead, wherever you are. The game's own route: jumps and light years
   left and how many jumps to the next scoopable star, then the next six jumps, each with its star (⛽ scoopable), the
   jump's length and whether the system is known (✓ you have been there, ● reported, ○ nobody has reported it to
-  Spansh). With a Highway route followed too, its next stop, jumps and light years left and the refuel coming up.
+  Spansh). With a Highway route followed too, its next stop, jumps and light years left and the refuel coming up,
+  then the stops after it (⚡ neutron, ⛽ refuel, the hop's length): the game's own route reaches only as far as the
+  stop you targeted, the systems along the route are these.
   Nothing shows without a route.
 ## Settings
 

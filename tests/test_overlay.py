@@ -733,6 +733,29 @@ class RoutePanel(unittest.TestCase):
         done = self.left(O.route_panel({"route": self.route(), "highway": dict(self.HIGHWAY, complete=True)}, pal))
         self.assertFalse(any("Highway" in t for t in done))
 
+    def test_the_highway_stops(self):
+        """The stops after the Highway's next one are listed (the game's own route often ends at the next stop): as
+        many as the game's jumps leave room for, never fewer than HIGHWAY_STOPS_MIN, the rest counted."""
+        pal = O.palette()
+        stops = [{"name": "Hwy Stop 39", "neutron": True, "refuel": False, "ly": 812.4, "jumps": 1, "known": "visited"},
+                 {"name": "Hwy Stop 40", "neutron": False, "refuel": True, "ly": 61.25, "jumps": 3, "known": "new"},
+                 {"name": "Hwy Stop 41", "neutron": False, "refuel": False, "ly": 58.0, "jumps": 1, "known": None}] + \
+                [{"name": f"Hwy Stop {n}", "neutron": False, "refuel": False, "ly": 50.0, "jumps": 1, "known": "known"} for n in range(42, 50)]
+        p = O.route_panel({"highway": self.HIGHWAY, "stops": stops}, pal)
+        lines = self.left(p)
+        self.assertEqual(lines[:2], ["Route  to Hwy End", "Highway: Hwy Stop 38 ⚡ · 4.2 ly"])
+        self.assertEqual(lines[3:], ["2 Hwy Stop 39 ✓", "3 Hwy Stop 40 ○", "4 Hwy Stop 41 ", "5 Hwy Stop 42 ●", "6 Hwy Stop 43 ●",
+                                     "7 Hwy Stop 44 ●", "+5 more"])                 # no game route: six of them
+        right = [(i["s"], i["c"]) for i in p["items"] if i["t"] == "text"]
+        self.assertEqual(right[:3], [("⚡ 812.4 ly", pal["accent"]), ("⛽ 61.2 ly · 3 jumps", pal["warn"]), ("58.0 ly", pal["muted"])])
+        one = self.left(O.route_panel({"route": self.route(hops=self.HOPS[:1], ly=58.2), "highway": self.HIGHWAY, "stops": stops}, pal))
+        self.assertEqual(one[2:3] + one[-6:], ["1 Neu A ○", "2 Hwy Stop 39 ✓", "3 Hwy Stop 40 ○", "4 Hwy Stop 41 ", "5 Hwy Stop 42 ●",
+                                                "6 Hwy Stop 43 ●", "+6 more"])       # one game jump: five stops
+        full = self.left(O.route_panel({"route": self.route(hops=self.HOPS * 3), "highway": self.HIGHWAY, "stops": stops}, pal))
+        self.assertEqual(full[-4:], ["2 Hwy Stop 39 ✓", "3 Hwy Stop 40 ○", "4 Hwy Stop 41 ", "+8 more"])   # a long game route: three still
+        none = self.left(O.route_panel({"route": self.route(), "stops": stops}, pal))
+        self.assertFalse(any("Hwy" in t for t in none))                              # no Highway followed: none listed
+
     def test_settings(self):
         self.assertFalse(O.overlay_settings({})["overlay"]["route_panel"])            # optional: off by default
         self.assertTrue(O.overlay_settings({"overlay": {"route_panel": True}})["overlay"]["route_panel"])
@@ -757,6 +780,33 @@ class Server(unittest.TestCase):
         self.assertEqual(self.state.overlay_view(since=v["version"], now=1001), {"same": True, "version": v["version"]})
         self.assertTrue(self.state.overlay_info(now=1002)["window"])   # it asked just now
         self.assertFalse(self.state.overlay_info(now=1000 + ed_outrider.OVERLAY_SEEN_S + 1)["window"])
+
+    def test_route_panel_lists_the_plot_route_stops(self):
+        """With a Plot Route route followed, the panel lists the stops after the next one from the route itself: the
+        game's own route reaches only the next stop once it is targeted."""
+        j = self.state.journals
+        j.handle({"event": "FSDJump", "timestamp": ed_outrider.iso_ts(1000), "StarSystem": "Start", "SystemAddress": 1,
+                  "StarPos": [0, 0, 0]})
+        row = lambda i, name, **kw: dict({"system": name, "id64": i, "x": 50.0 * (i - 1), "y": 0.0, "z": 0.0, "distance": 50.0 if i > 1 else 0.0,
+                                          "fuel_used": None, "fuel_left": None, "neutron": 0, "refuel": 0, "jumps": 1 if i > 1 else 0,
+                                          "remaining": 50.0 * (5 - i)}, **kw)
+        self.state.highway_store([row(1, "Start"), row(2, "Stop B"), row(3, "Stop C", neutron=1), row(4, "Stop D", refuel=1),
+                                  row(5, "Stop E")], {"plotter": "exact", "options": {}, "ship": None})
+        self.assertEqual([(s["name"], s["neutron"], s["refuel"], s["ly"]) for s in self.state.highway_ahead()],
+                         [("Stop C", True, False, 50.0), ("Stop D", False, True, 50.0), ("Stop E", False, False, 50.0)])
+        self.assertEqual(len(self.state.highway_ahead(limit=2)), 2)
+        # the game's route: one jump, to the next stop (what Target next plots)
+        ed_outrider.meta_set(self.state.db, "route", {"ts": ed_outrider.iso_ts(1001), "hops": [
+            {"id64": 1, "name": "Start", "star_class": "G", "x": 0.0, "y": 0.0, "z": 0.0},
+            {"id64": 2, "name": "Stop B", "star_class": "K", "x": 50.0, "y": 0.0, "z": 0.0}]})
+        self.state.overlay_cfg.update(enabled=True, system_panel=False, body_panel=False, radar=False, route_panel=True)
+        j.status_json = {"live": True, "flags": ed_outrider.FLAG_SUPERCRUISE | ed_outrider.FLAG_IN_MAIN_SHIP, "flags2": 0, "gui_focus": 0}
+        lines = RoutePanel.left(self.state.overlay_panels(now=1010)[0])
+        self.assertEqual(lines[2], "1 Stop B ○")
+        self.assertEqual(lines[-3:], ["2 Stop C ", "3 Stop D ", "4 Stop E "])
+        j.handle({"event": "FSDJump", "timestamp": ed_outrider.iso_ts(1100), "StarSystem": "Stop E", "SystemAddress": 5,
+                  "StarPos": [200, 0, 0]})
+        self.assertEqual(self.state.highway_ahead(), [])                               # at the end: nothing ahead
 
     def test_route_panel_shows_with_a_route(self):
         """Off by default; on, it shows while the game has a route ahead of you (or a Highway route is followed),

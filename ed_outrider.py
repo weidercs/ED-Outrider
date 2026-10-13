@@ -311,6 +311,7 @@ HIGHWAY_AHEAD = 200         # route rows GET /api/highway lists ahead of you...
 HIGHWAY_DONE = 20           # ...and done rows above them (the most recent)
 ROUTE_KNOWN_GAP_S = 1.0     # s between two Spansh lookups of the listed route systems' discovery state
 ROUTE_KNOWN_BATCH = 10      # lookups between two page updates
+HIGHWAY_AHEAD_SHOWN = 12    # the followed route's stops after the next given to the overlay's Route panel
 BOXEL_SPANSH_CHUNK = 300   # names per Spansh request (an exact list of a boxel's names)
 BOXEL_SPANSH_MAX = 3000    # names asked about at most for one boxel
 BOXEL_SPANSH_MAX_AGE = 86400   # s: Spansh's list of a boxel is asked again after a day
@@ -7200,7 +7201,8 @@ class State:
         if cfg.get("route_panel") and pos:
             left, _ = self.navroute_ahead()
             p = outrider.overlay.route_panel({"route": self.route_summary(), "highway": self.highway_summary(),
-                                              "to": left[-1]["name"] if left else None}, pal, cfg["text_size"])
+                                              "stops": self.highway_ahead(), "to": left[-1]["name"] if left else None},
+                                             pal, cfg["text_size"])
             if p:
                 out.append(p)
         # the surface radar: on a body (landed, in the SRV, on foot) or low over it, as the surface map shows
@@ -11833,6 +11835,20 @@ class State:
             "heavy": self.highway_heavy(hw),
             "known_v": self.route_known_v,   # grows as the listed systems' discovery state comes in: the list reloads
         }
+
+    def highway_ahead(self, limit=HIGHWAY_AHEAD_SHOWN):
+        """The followed route's stops after the next one, for the overlay's Route panel (this fork): up to `limit` of
+        {name, neutron, refuel, ly (the hop into it), jumps, known ("visited" / "known" / "new", None when nobody was
+        asked yet: route_known_state)} and, past `limit`, nothing: the panel says how many more by its own count. []
+        with no route, a finished one or none after the next."""
+        hw, rows = self.highway_state()
+        nx = self.highway_next(hw, rows) if hw and not hw.get("done_ts") else None
+        if nx is None:
+            return []
+        marks = {"visited": "visited", "explored": "known", "partial": "known", "no bodies": "new"}
+        return [{"name": r["system"], "neutron": bool(r["neutron"]), "refuel": bool(r["refuel"]), "ly": r["distance"],
+                 "jumps": r["jumps"], "known": marks.get(self.route_known_state(r["id64"]))}
+                for r in rows[nx + 1:nx + 1 + limit]]
 
     @staticmethod
     def _hw_heavy_key(hw):
