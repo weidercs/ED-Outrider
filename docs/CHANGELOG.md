@@ -2,6 +2,10 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · "wks upkeep"
+- The Carrier tile (and the CMDR tab's carrier line) say "~96 wks upkeep" instead of "~96 weeks of upkeep (as of
+  Oct 12)" (the author's ask): how old the carrier's stats are moved into the hover.
+
 ## 2026-10-14 · The launchers keep certifi current, checking once a week
 Follow-up to issue #9 (the HTTPS fix): pip never upgrades an installed certifi that meets `requirements.txt`'s floor,
 so the root certificates Outrider trusts would age with the environment (the author's decision, 2026-10-14).

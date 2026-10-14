@@ -372,11 +372,11 @@ const crSign = n => n == null ? "?" : (n < 0 ? "−" : "") + credits(Math.abs(n)
 function carrierFinanceHtml(fi) {
   if (!fi) return "";
   const old = Date.now() - Date.parse(fi.ts) > 86400e3, w = fi.weeks;
-  const title = `balance ${crSign(fi.balance)} cr · reserve ${crSign(fi.reserve)} cr · available ${crSign(fi.available)} cr, from the carrier's last stats (${(fi.ts || "").slice(0, 10)}: opening its management writes them).` +
+  // the line says only "~N wks upkeep" (the author, 2026-10-14); how old the stats are goes in the title
+  const title = `balance ${crSign(fi.balance)} cr · reserve ${crSign(fi.reserve)} cr · available ${crSign(fi.available)} cr, from the carrier's last stats (${(fi.ts || "").slice(0, 10)}${old ? `: as of ${shortDay(fi.ts)}` : ""}: opening its management writes them).` +
     (fi.upkeep ? ` Upkeep ≈ ${credits(fi.upkeep)} cr a week at the published rates (the core and each service, a suspended one at its lower rate), not yet checked against the game's carrier Finance screen: the journal has no upkeep figure. Upkeep is drawn from the balance each week.` : "");
   return `<span id="carrierFin" class="${fi.warn ? "warnc" : ""}" title="${esc(title)}">balance <b>${crSign(fi.balance)}</b>` +
-    (w != null ? ` · ~<b>${w < 10 ? w.toFixed(1) : Math.floor(w).toLocaleString()}</b> week${w === 1 ? "" : "s"} of upkeep` : "") + `</span>` +
-    (old ? ` <span class="unk">(as of ${esc(shortDay(fi.ts))})</span>` : "");
+    (w != null ? ` · ~<b>${w < 10 ? w.toFixed(1) : Math.floor(w).toLocaleString()}</b> wks upkeep` : "") + `</span>`;
 }
 function renderCarrier() {
   const c = data && data.carrier, cl = document.getElementById("carrierLine");
@@ -10163,7 +10163,7 @@ function cmdrCarrierHtml(c) {
   const dc = c.decommission, fi = c.finance, w = fi ? fi.weeks : null;
   const money = dc ? ` · <span class="short" title="its decommissioning was requested ${esc(shortDay(dc.ts || ""))}">${dc.done ? "Decommissioned" : "Decommissioning"} ${esc(shortDay(dc.scrap_ts || dc.ts || ""))}</span>`
     : fi ? ` · <span class="${fi.warn ? "warnc" : ""}">balance <b>${esc(crSign(fi.balance))}</b>` +
-      (w != null ? ` · ~<b>${esc(w < 10 ? w.toFixed(1) : Math.floor(w).toLocaleString())}</b> week${w === 1 ? "" : "s"} of upkeep` : "") + `</span>` : "";
+      (w != null ? ` · ~<b>${esc(w < 10 ? w.toFixed(1) : Math.floor(w).toLocaleString())}</b> wks upkeep` : "") + `</span>` : "";
   return `<div class="cmrep"><span class="unk">Fleet carrier:</span> <b>${esc(c.name || "")}</b> ${esc(c.callsign || "")}${money}` +
     `${c.fuel != null ? ` · ${cmNum(c.fuel)} t tritium` : ""} <span class="unk">(the Carrier tile's figures)</span></div>`;
 }

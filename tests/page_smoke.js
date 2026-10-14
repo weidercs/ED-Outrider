@@ -1699,7 +1699,7 @@ const releasePayloads = async () => {
         finance: Object.assign({}, data.carrier.finance, {balance: 40000000, weeks: 2.9, warn: true, ts: "2026-09-27T12:00:00Z"})});
       renderCarrier();
       o.amber = [...line().querySelectorAll(".warnc")].map(x => x.textContent).filter(t => /depot|balance/.test(t));   // not the tank's
-      o.asOf = line().textContent;
+      o.asOf = [line().textContent, (line().querySelector("#carrierFin") || {}).title || ""];
       // more than one top-up gives (the depot holds 1,000 t): covered only by topping up again on the way
       data.carrier = Object.assign({}, data.carrier, {trip: Object.assign({}, data.carrier.trip, {top_up: "on_the_way"})});
       renderCarrier();
@@ -1717,9 +1717,10 @@ const releasePayloads = async () => {
     if (!/\(432 ly jump ≈ 96 t; depot after ≈ 572 t\)/.test(got.trip)) bad.push("booked jump");
     if (JSON.stringify(got.red) !== JSON.stringify(["depot 668 t: 632 t short", "UC ✗ (hover: suspended)", "Redemption office ✗ (hover: suspended)"])) bad.push("red " + JSON.stringify(got.red));
     if (!/Vista ✓/.test(got.trip)) bad.push("vista");
-    if (got.fin[0] !== "balance 1.33B · ~96 weeks of upkeep" || got.fin[1] !== "" || !got.fin[2] || /as of/.test(got.trip)) bad.push("finance " + JSON.stringify(got.fin));
-    if (JSON.stringify(got.amber) !== JSON.stringify(["depot 668 t: 632 t short, enough after topping up", "balance 40.0M · ~2.9 weeks of upkeep"])) bad.push("amber " + JSON.stringify(got.amber));
-    if (!/\(as of (Sep 27|27 Sep)\)/.test(got.asOf)) bad.push("as of");
+    if (got.fin[0] !== "balance 1.33B · ~96 wks upkeep" || got.fin[1] !== "" || !got.fin[2] || /as of/.test(got.trip)) bad.push("finance " + JSON.stringify(got.fin));
+    if (JSON.stringify(got.amber) !== JSON.stringify(["depot 668 t: 632 t short, enough after topping up", "balance 40.0M · ~2.9 wks upkeep"])) bad.push("amber " + JSON.stringify(got.amber));
+    // "~N wks upkeep" only on the line (the author, 2026-10-14); how old the stats are only in its hover
+    if (/as of/.test(got.asOf[0]) || !/as of (Sep 27|27 Sep)/.test(got.asOf[1])) bad.push("as of " + JSON.stringify(got.asOf));
     if (JSON.stringify(got.onTheWay) !== JSON.stringify([["depot 668 t: 632 t short, enough if topped up on the way", true]])) bad.push("on the way " + JSON.stringify(got.onTheWay));
     if (!/G0X-85Z \(your carrier\) · Home · 1,200 ly.* · ≈ 3 carrier jumps to you/.test(got.sell)) bad.push("seller");
     const goodCT = !bad.length && errors.length === before;
@@ -8105,7 +8106,7 @@ const releasePayloads = async () => {
                  "Sample Ship Krait Phantom ⚖\uFE0E EDSY ↗ Coriolis ↗ | you fly it | 100.0M cr", "Anaconda no build | Colonia | 150.0M cr"],
                 ["Credits≈ 1.30B cr", "Net worth9.00B cr", "Fleet250.0M cr · 2 ships", "Stored modules5.1M cr", "Carrier balance250.0M cr",
                  "Time played2,000 h", "Distance jumped987,654 ly", "Spent on ships500.0M cr", "Systems visited12,345"],
-                ["Reputation: Federation -40% · Empire 77%", "Fleet carrier: SAMPLE CARRIER X1X-X1X · balance 250.0M · ~12 weeks of upkeep · 800 t tritium (the Carrier tile's figures)"],
+                ["Reputation: Federation -40% · Empire 77%", "Fleet carrier: SAMPLE CARRIER X1X-X1X · balance 250.0M · ~12 wks upkeep · 800 t tritium (the Carrier tile's figures)"],
                 ["64%", "0%", "10%"], false],
       liveCredits: "≈ 1.40B cr",
       inventory: ["Sample Ship Krait Phantom SP-01 ⚖\uFE0E EDSY ↗ Coriolis ↗ | you fly it | 100.0M cr | ", "Anaconda ⚖\uFE0E no build | Colonia | 150.0M cr | 1.2M cr · 2 h 0 min",
