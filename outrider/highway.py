@@ -167,27 +167,52 @@ def highway_text(rows, i):
     return text
 
 
+PASTE_MAX = 100   # characters: a system or station name to paste is at most this long (the To field's maxlength)
+
+
+def paste_name(text):
+    """The clipboard's text as a name to paste into a system or station field (NEXT-VERSION #5): stripped, one line, at
+    most PASTE_MAX characters, no control characters and no link; None for anything else (a paragraph, a URL, nothing)."""
+    if not isinstance(text, str):
+        return None
+    name = text.strip()
+    if not name or len(name) > PASTE_MAX or "://" in name or any(ord(c) < 32 or ord(c) == 127 for c in name):
+        return None
+    return name
+
+
 class Clipboard:
     """The desktop clipboard. Linux: wl-copy under Wayland, xclip under X11, whichever is installed for the session
     there is, run as a plain subprocess (no shell) with the text on its stdin; both fork to serve the selection, so
-    the call returns at once. Windows: the clipboard API itself (outrider.winkeys.set_clipboard). Tests pass fakes for
-    `which`, `run`, `env`, `platform` and `win_set`: nothing is ever copied from a test."""
+    the call returns at once. Windows: the clipboard API itself (outrider.winkeys.set_clipboard). Reading it (`paste`,
+    the page's 📋 buttons): wl-paste or xclip -o, Windows' get_clipboard. Tests pass fakes for `which`, `run`, `env`,
+    `platform`, `win_set` and `win_get`: nothing is ever copied or read from a test."""
     TOOLS = (("wl-copy", "WAYLAND_DISPLAY", ("wl-copy",)), ("xclip", "DISPLAY", ("xclip", "-selection", "clipboard")))
+    READ_TOOLS = (("wl-paste", "WAYLAND_DISPLAY", ("wl-paste", "--no-newline", "--type", "text")),
+                  ("xclip", "DISPLAY", ("xclip", "-selection", "clipboard", "-o")))
 
-    def __init__(self, enabled=True, which=None, run=None, env=None, platform=None, win_set=None):
+    def __init__(self, enabled=True, which=None, run=None, env=None, platform=None, win_set=None, win_get=None):
         import shutil
         import subprocess
         self.enabled = bool(enabled)
         self._which, self._run, self._env = which or shutil.which, run or subprocess.run, os.environ if env is None else env
         self._devnull = subprocess.DEVNULL
-        self.tool = self.argv = self._win_set = None
+        self._pipe = subprocess.PIPE
+        self.tool = self.argv = self._win_set = self.read_tool = self.read_argv = self._win_get = None
         if (platform or sys.platform).startswith("win"):
             if win_set is None:
                 from outrider.winkeys import set_clipboard as win_set
+            if win_get is None:
+                from outrider.winkeys import get_clipboard as win_get
             self.tool, self._win_set = "Windows", win_set
+            self.read_tool, self._win_get = "Windows", win_get
         for name, var, argv in () if self.tool else self.TOOLS:
             if self._env.get(var) and self._which(name):
                 self.tool, self.argv = name, list(argv)
+                break
+        for name, var, argv in () if self.read_tool else self.READ_TOOLS:
+            if self._env.get(var) and self._which(name):
+                self.read_tool, self.read_argv = name, list(argv)
                 break
         self.last = None   # {text, ok, ts, error}: the latest copy, for the Plot Route tab
 
@@ -216,3 +241,32 @@ class Clipboard:
             ok, err = False, f"{self.tool}: {type(e).__name__}"
         self.last = {"text": str(text), "ok": ok, "ts": iso_ts(time.time()), "error": err}
         return ok
+
+    def paste_why(self):
+        """Why the clipboard cannot be read on this desktop, or None when it can."""
+        return None if self.read_tool else \
+            "neither wl-paste (Wayland) nor xclip (X11) was found for Outrider's desktop session"
+
+    def paste(self):
+        """The clipboard's text as a name to paste (paste_name): {text} or {error, code} (no_tool, failed, empty,
+        not_a_name). Blocking, briefly (run it off the loop); never raises. The [highway] clipboard switch is about
+        copying the next system, not this."""
+        if not self.read_tool:
+            return {"error": self.paste_why(), "code": "no_tool"}
+        try:
+            if self._win_get:
+                text = self._win_get()
+            else:
+                r = self._run(self.read_argv, stdout=self._pipe, stderr=self._devnull, timeout=3, check=False)
+                # wl-paste exits 1 on an empty clipboard ("Nothing is copied"): read as empty, not as a failure
+                text = r.stdout.decode("utf-8") if r.returncode == 0 else ""
+        except UnicodeDecodeError:
+            return {"error": "the clipboard doesn't hold text", "code": "not_a_name"}
+        except Exception as e:  # noqa: BLE001 -- OSError, subprocess.TimeoutExpired, Windows refusing: said, never raised
+            return {"error": f"couldn't read the clipboard ({self.read_tool}: {type(e).__name__})", "code": "failed"}
+        if not (text or "").strip():
+            return {"error": "the clipboard is empty", "code": "empty"}
+        name = paste_name(text)
+        if name is None:
+            return {"error": "the clipboard doesn't hold a system name (one short line)", "code": "not_a_name"}
+        return {"text": name}

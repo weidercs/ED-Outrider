@@ -4880,6 +4880,32 @@ function aroundOptions(sel, kinds = AROUND_KINDS, extra = {}) {
     o.disabled = !!none[o.value] && sel.value !== o.value;
   }
 }
+// ---- #5 (Kurbo26, GitHub discussion #3): 📋 beside each system or station name field (Plot Route's From, To and
+// Station, the "a system…" boxes of Nearby's Focus/Lock, Search's and the Nearest finder's Around) fills it from the
+// GAME PC's clipboard, read by the server: a browser window that never takes focus cannot read its own. For this PC's
+// browser and the Android app only (the author, 2026-10-14): GET api/clipboard says whether this device can
+// (body.canpaste). Filled as typing would be (input, then change): the "a system…" boxes act on it, Plot Route only
+// fills (no plot by itself) ----
+async function checkPaste() {
+  let r;
+  try { r = await apiJson("api/clipboard"); } catch { r = null; }
+  document.body.classList.toggle("canpaste", !!(r && r.can));
+}
+async function pasteInto(field) {
+  let r;
+  try { r = await apiJson("api/clipboard/paste", {method: "POST"}); } catch (err) { r = {error: err.message}; }
+  if (!r || r.error || !r.text) return toast((r && r.error) || "nothing to paste");
+  field.value = r.text;
+  field.dispatchEvent(new Event("input", {bubbles: true}));
+  field.dispatchEvent(new Event("change", {bubbles: true}));
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest && e.target.closest(".pastebtn");
+  if (!b || !b.previousElementSibling) return;
+  e.preventDefault();
+  pasteInto(b.previousElementSibling);
+});
+checkPaste();
 // what a request sends as `around`: the kind, or for a typed name its id64 from GET api/find; {error} when there is none
 async function aroundParam(kind, name) {
   if (kind !== "system") return {around: AROUND_KINDS.some(([v]) => v === kind) ? kind : "here"};

@@ -579,6 +579,7 @@ def simulate_keyboard_off(honker, why="--simulate"):
 
 
 NOT_GAME_PC = "needs Outrider on the PC the game runs on (this one is a server: [server] game_pc)"
+PASTE_DEVICES = "📋 reads the game PC's clipboard for that PC's own browser and the Android app only"
 
 
 def in_container(dockerenv="/.dockerenv", env=None):
@@ -7819,6 +7820,25 @@ class State:
             return f"cd /d {outrider.service.cmd_quote(outrider.ROOT)} && launch_outrider.bat {args}"
         args = " ".join(shlex.quote(a) for a in [flag, *(self.service_args if action == "install" else [])])
         return f"cd {shlex.quote(outrider.ROOT)} && ./launch_outrider.sh {args}"
+
+    def paste_info(self, device):
+        """GET /api/clipboard (NEXT-VERSION #5): whether this device gets the 📋 paste buttons, {can, why}. `device`: the
+        request is this PC's own browser or the Android app (paste_device). Not on a server (no game PC's clipboard
+        there), nor under --simulate."""
+        why = NOT_GAME_PC if not self.game_pc else "not while simulating" if self.simulate \
+            else PASTE_DEVICES if not device else "the clipboard is not set up yet" if not self.clipboard \
+            else self.clipboard.paste_why()
+        return {"can": why is None, "why": why}
+
+    async def paste(self, device):
+        """POST /api/clipboard/paste: the game PC's clipboard as a name to paste (Clipboard.paste, on a worker): ({text},
+        200), else ({error, code}, 403 not_this_device | 409 not_game_pc, no_tool, empty, not_a_name, failed)."""
+        info = self.paste_info(device)
+        if not info["can"]:
+            code = "not_game_pc" if not self.game_pc or self.simulate else "not_this_device" if not device else "no_tool"
+            return {"error": info["why"], "code": code}, 403 if code == "not_this_device" else 409
+        out = await asyncio.to_thread(self.clipboard.paste)
+        return out, 200 if "text" in out else 409
 
     def service_info(self, this_pc):
         """GET /api/service: {kind, can, why, installed, path, running, this_pc, command, remove}. kind "systemd" |
@@ -18474,6 +18494,21 @@ def make_app(state, hosts=None):
         return web.json_response({"phase": "ready", "text": STARTING_WORDS["ready"], "pct": 100, "why": None,
                                   "since": None}, headers={"Cache-Control": "no-store"})
 
+    def paste_device(request):
+        """The 📋 buttons (NEXT-VERSION #5) are for this PC's own browser and the Android app (its WebView's User-Agent
+        says OutriderApp/), not any other browser on the network (the author, 2026-10-14): a filter, not a lock."""
+        return outrider.auth.from_this_pc(request.remote, request.headers) \
+            or "OutriderApp/" in (request.headers.get("User-Agent") or "")
+
+    async def clipboard_view(request):
+        """GET /api/clipboard: whether this device gets the 📋 paste buttons, {can, why}."""
+        return web.json_response(state.paste_info(paste_device(request)))
+
+    async def clipboard_paste_view(request):
+        """POST /api/clipboard/paste: the game PC's clipboard as a system or station name, {text}, else {error, code}."""
+        out, status = await state.paste(paste_device(request))
+        return web.json_response(out, status=status)
+
     async def service_view(request):
         """GET /api/service (S70): Settings -> Server's Start with this computer."""
         return web.json_response(state.service_info(outrider.auth.from_this_pc(request.remote, request.headers)))
@@ -19038,6 +19073,8 @@ def make_app(state, hosts=None):
     app.router.add_post("/api/config", config_post_view)
     app.router.add_post("/api/restart", restart_view)   # not pc_only: a server restarts from the tablet (S10)
     app.router.add_get("/api/starting", starting_view)   # S9: the starting page reloads on this
+    app.router.add_get("/api/clipboard", clipboard_view)             # #5: the 📋 buttons (this PC's browser, the app)
+    app.router.add_post("/api/clipboard/paste", clipboard_paste_view)
     app.router.add_get("/api/service", service_view)       # S70: this PC only for the POST (not the game PC: a server too)
     app.router.add_post("/api/service", service_post_view)
     app.router.add_post("/api/rail/press", pc_only(rail_press_view))

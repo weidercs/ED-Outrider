@@ -2,6 +2,22 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · 📋 paste: system name fields filled from the game PC's clipboard
+NEXT-VERSION #5 (Kurbo26, GitHub discussion #3: a touchscreen browser window that never takes focus cannot be typed or
+pasted into, and a browser reads its own clipboard only while focused).
+- **📋** beside Plot Route's From, To and Station, and the "a system…" boxes of Nearby's Focus/Lock, Search's and the
+  Nearest finder's Around. A tap fills the field as typing would (input, then change): Plot Route only fills (no plot by
+  itself), the "a system…" boxes act on it as before.
+- The server reads the game PC's clipboard: `Clipboard.paste` (wl-paste / xclip -o, `READ_TOOLS`; Windows'
+  `winkeys.get_clipboard`), only one line of at most 100 characters with no link (`paste_name`). GET `/api/clipboard`
+  {can, why}, POST `/api/clipboard/paste` {text} | {error, code}. For this PC's own browser and the Android app (its
+  `OutriderApp/` User-Agent; the author's choice: a filter, not a lock), 403 `not_this_device` for other browsers; 409
+  on a server, under --simulate, with no tool, an empty clipboard or not a name. Not an AI tool. verify.sh blanks
+  `READ_TOOLS` too.
+- Tests: `test_clipboard_paste` (each tool's command, the filter, empty, binary, a failure, Windows),
+  `test_clipboard_paste_state`, `test_auth.Paste` (this PC, another browser, the app, a server); the smoke block (shown
+  only when allowed, the six fields, To fills without plotting, Focus/Lock acts, a refusal said). Guide: plot-route.md.
+
 ## 2026-10-14 · In-Game Route: chips copy their name, ⛽ where the tank's fuel runs out
 NEXT-VERSION #4 (Kurbo26, GitHub discussion #3; the Route Scoop idea, scaled down).
 - A chip copies its system's name (the page-wide click-to-copy).

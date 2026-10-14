@@ -349,3 +349,45 @@ class SystemExport(Base):
         self.assertTrue(lines[0].startswith("body,type,subtype,distance_ls,landable"))
         self.assertTrue(lines[1].startswith("1,Planet,High metal content world,400.0,True,False,0,0,,True,False,"))
         self.assertEqual((bad, unknown), (400, 404))
+
+
+class Paste(Base):
+    """#5's 📋 buttons: the game PC's clipboard for this PC's own browser and the Android app (its User-Agent), not for
+    another browser on the network (the author, 2026-10-14: a filter, not a lock). Never a real clipboard."""
+
+    APP_UA = "Mozilla/5.0 (Linux; Android 14; wv) AppleWebKit/537.36 Chrome/129.0 Mobile Safari/537.36 OutriderApp/1.3.0"
+
+    def setUp(self):
+        super().setUp()
+        import types
+        self.state.password = ""
+        self.state.game_pc = True
+        self.state.clipboard = types.SimpleNamespace(read_tool="xclip", paste_why=lambda: None,
+                                                     paste=lambda: {"text": "Smojooe GW-W c1-4"})
+
+    def ask(self, ua=None):
+        headers = {"User-Agent": ua} if ua else {}
+
+        async def go(c):
+            r = await c.get("/api/clipboard", headers=headers)
+            can = (await r.json())["can"]
+            r = await c.post("/api/clipboard/paste", headers=headers)
+            return can, r.status, await r.json()
+        return self.client(go)
+
+    def test_this_pc(self):
+        self.assertEqual(self.ask(), (True, 200, {"text": "Smojooe GW-W c1-4"}))
+
+    def test_another_browser_is_refused(self):
+        self.lan()
+        can, status, body = self.ask("Mozilla/5.0 (X11; Linux x86_64) Firefox/131.0")
+        self.assertEqual((can, status, body["code"]), (False, 403, "not_this_device"))
+
+    def test_the_android_app(self):
+        self.lan()
+        self.assertEqual(self.ask(self.APP_UA), (True, 200, {"text": "Smojooe GW-W c1-4"}))
+
+    def test_a_server_has_no_game_pc_clipboard(self):
+        self.state.game_pc = False
+        can, status, body = self.ask()
+        self.assertEqual((can, status, body["code"]), (False, 409, "not_game_pc"))

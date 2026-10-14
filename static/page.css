@@ -727,6 +727,11 @@ ul.checklist li.todo b { color: var(--text); }
 #tripRows .lost, #topRows .lost { color: var(--bad); } #topRows .sold { color: var(--good); } #topRows .unsold { color: var(--warn); }
 #tripRows td { white-space: nowrap; }
 button.mini { background: var(--panel); color: var(--info); border: 1px solid var(--line); border-radius: 4px; font: inherit; font-size: 11px; padding: 0 5px; cursor: pointer; }
+/* #5: 📋 beside a system or station name field, only where this device can read the game PC's clipboard (body.canpaste:
+   GET api/clipboard), and only while its field shows (an Around's name box is hidden until "a system…" is picked) */
+.pastebtn { display: none; margin-left: 3px; }
+body.canpaste .pastebtn { display: inline-block; }
+body.canpaste input[hidden] + .pastebtn { display: none; }
 
 #leftRows td.left-what { white-space: normal; font-size: 13px; }
 #lbRadius { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 4px; font: inherit; font-size: 12px; }

@@ -1636,6 +1636,49 @@ const releasePayloads = async () => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| in-game route, not written |", good ? "jumps left and the end in words, no stars" : JSON.stringify(got), errors.slice(before));
   }
+  // #5: 📋 beside each system or station name field, shown only when GET api/clipboard says this device can; a tap
+  // fills the field from the game PC's clipboard as typing would: Plot Route's To only fills (no plot), Nearby's
+  // Focus/Lock name acts on it; a refusal is said and leaves the field alone
+  {
+    const w = dom.window, d = w.document, realFetch = w.fetch, before = errors.length, asked = [];
+    let can = false, answer = {text: "Smojooe GW-W c1-4"};
+    const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), {status, headers: {"Content-Type": "application/json"}}));
+    w.fetch = (u, o) => {
+      const s = String(u), m = (o && o.method) || "GET";
+      if (s.startsWith("api/clipboard") || s.startsWith("api/find") || s.startsWith("api/nearby/around") || /plot/.test(s)) asked.push(m + " " + s.split("?")[0]);
+      if (s === "api/clipboard") return json({can, why: can ? null : "no"});
+      if (s === "api/clipboard/paste") return json(answer, answer.error ? 409 : 200);
+      if (s.startsWith("api/find")) return json({id: "2869708727553", name: "Smojooe GW-W c1-4"});
+      if (s === "api/nearby/around") return json({near_around: {around: "here"}});
+      return realFetch(u, o);
+    };
+    const tick = () => new Promise(r => setTimeout(r, 60)), o = {};
+    const na0 = w.eval("data.near_around"), to0 = d.getElementById("hwyTo").value, cp0 = d.body.classList.contains("canpaste");
+    await w.eval("checkPaste()"); o.off = d.body.classList.contains("canpaste");
+    can = true; await w.eval("checkPaste()"); o.on = d.body.classList.contains("canpaste");
+    o.fields = [...d.querySelectorAll(".pastebtn")].map(b => b.previousElementSibling.id || b.previousElementSibling.dataset.nf).join(" ");
+    o.types = [...d.querySelectorAll(".pastebtn")].every(b => b.type === "button");
+    d.getElementById("hwyTo").value = ""; asked.length = 0;
+    d.querySelector("#hwyTo + .pastebtn").click(); await tick();
+    o.to = [d.getElementById("hwyTo").value, asked.join(" | ")];
+    const nm = d.getElementById("nearAroundName"); nm.hidden = false; nm.value = ""; asked.length = 0;
+    d.querySelector("#nearAroundName + .pastebtn").click(); await tick(); await tick();
+    o.around = asked.join(" | ");
+    answer = {error: "the clipboard doesn't hold a system name (one short line)", code: "not_a_name"};
+    d.getElementById("hwyTo").value = "Colonia";
+    d.querySelector("#hwyTo + .pastebtn").click(); await tick();
+    o.refused = [d.getElementById("hwyTo").value, d.getElementById("toast").textContent];
+    w.fetch = realFetch; nm.value = ""; d.getElementById("hwyTo").value = to0;
+    w.eval(`data.near_around = ${JSON.stringify(na0 ?? null)}; NA.typing = false; render();`);
+    d.body.classList.toggle("canpaste", cp0);
+    const want = {off: false, on: true, fields: "nearAroundName hwyFrom hwyTo tradeStation sAroundName aroundName", types: true,
+                  to: ["Smojooe GW-W c1-4", "POST api/clipboard/paste"],
+                  around: "POST api/clipboard/paste | GET api/find | POST api/nearby/around",
+                  refused: ["Colonia", "the clipboard doesn't hold a system name (one short line)"]};
+    const good = JSON.stringify(o) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| paste buttons |", good ? "📋 only where this device can; fills To without plotting, Focus/Lock acts on it, a refusal said" : JSON.stringify(o), errors.slice(before));
+  }
   // Settings links to the project on GitHub, with the version running (desktop at the top; the tablet's sheet too)
   {
     const w = dom.window, d = w.document, before = errors.length;
