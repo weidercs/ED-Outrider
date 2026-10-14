@@ -2,6 +2,19 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · Docs brought up to date
+A sweep over the commits since 2026.10.23 for what fell between the batches.
+- **For the curious**: the file table lists every module again (`tls.py`, `service.py`, `serverlog.py`,
+  `notices.py`, `health.py`, `game_window.py`, `readclient.py`, `backfill.py`, `edsmlog.py`) and the scripts
+  (`install.sh`, `build_blueprints.py`, `trader_probe.py`, `exact_probe.py`); the launchers' weekly certifi check; the
+  CMDR tab by its label.
+- **README**: the CMDR tab (with its EDSY / Coriolis builds), Nearby around another system, the list of voice commands.
+- **Views and settings guides**: the In-Game Route's ✦ is not asked in the bubble or around Colonia; Settings → Display
+  chooses the header tiles; "~96 wks upkeep"; `panel_scale` is multiplied with each panel's Size % (the example config
+  too).
+- **DESIGN_NOTES' "Not yet tried in a live game"**: the EDSY / Coriolis links, the hot ⚖ and the stored-module fold,
+  Nearby's Around, the overlay's px figures, certifi on Windows, the route's hop lookups.
+
 ## 2026-10-14 · "All Panels: Theme · Text Sz · Scale"
 - The overlay settings' top row reads "All Panels: Theme [ ] Text Sz [ ] Scale [100 %]" (the author's wording) instead
   of "Theme · Text size · All panels"; the hovers and the guide say the Scale is multiplied with each panel's own Size %

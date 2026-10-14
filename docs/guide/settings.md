@@ -71,7 +71,7 @@ and `resources/speech.json`.
 | `[assistant]` | `enabled` (false), `base_url` (""), `api_key` (""), `model` (""), `timeout` (20 s), `max_rounds` (4): the voice's optional AI layer |
 | `[mcp]` | `url` (this PC at `[server] port`), `max_rows` (25), `password` (""): for the MCP bridge (see Ask an AI about your game) |
 | `[eddn]`, `[edsm]`, `[inara]` | `enabled` (false): written by the switches in Settings → Uploads (the only place to change them) |
-| `[overlay]` | `enabled` (false), `theme` ("default"; or lcars, elite, babylon5, narn, minbari, centauri, vorlon, shadow, sith, alliance, dark), `text_size` ("normal"; a panel can have its own in Settings), `panel_scale` (100: all panels' size in %, 20 to 250; text is never drawn under 9 px), `system_panel` (true), `body_panel` (true: the Target panel), `radar` (true), `strip_panel` (false), `now_panel` (false), `bio_panel` (false), `alerts_panel` (false: the page's alerts for a few seconds), `system_seconds` (0: while in supercruise there), `radar_range` (800 m), `analysis_only` ([]: the panels shown in your ship only while the HUD is in analysis mode), `hide_docked` (["system", "body", "now", "bio"]: the panels hidden while docked), `show_inactive` (false: keep showing when Elite is not the active window) (the overlay is a game-PC feature: see In-game overlay) |
+| `[overlay]` | `enabled` (false), `theme` ("default"; or lcars, elite, babylon5, narn, minbari, centauri, vorlon, shadow, sith, alliance, dark), `text_size` ("normal"; a panel can have its own in Settings), `panel_scale` (100: all panels' size in %, 20 to 250, Settings' All Panels: Scale, multiplied with each panel's own Size %; text is never drawn under 9 px), `system_panel` (true), `body_panel` (true: the Target panel), `radar` (true), `strip_panel` (false), `now_panel` (false), `bio_panel` (false), `alerts_panel` (false: the page's alerts for a few seconds), `system_seconds` (0: while in supercruise there), `radar_range` (800 m), `analysis_only` ([]: the panels shown in your ship only while the HUD is in analysis mode), `hide_docked` (["system", "body", "now", "bio"]: the panels hidden while docked), `show_inactive` (false: keep showing when Elite is not the active window) (the overlay is a game-PC feature: see In-game overlay) |
 | `[highway]` | `clipboard` (true), `efficiency` (60 %), `conservative` (false), `conservative_ly` (5 ly), `voice_plot` (true: the voice's "nearest station"... also plots a neutron route there past `voice_plot_ly`, 500 ly), `background_image` ("": none), `background_extent` ([-45000, 45000, -20000, 70000]), `background_opacity` (0.6); auto-target: `autotarget` (false), `autotarget_delay` (5 s), `autotarget_entry` ("type"), `autotarget_map_wait` (5 s), `autotarget_search_wait` (2 s), `autotarget_key_delay` (0.05 s), `autotarget_keys` ({}: read from your controls preset), `autotarget_search`, `autotarget_submit`, `autotarget_plot` (the galaxy map's steps: see the example file), `autotarget_dry_run` (false) |
 
 Command-line flags override the file for a single run:
@@ -120,8 +120,8 @@ Command-line flags override the file for a single run:
 - **Small things worth knowing:** the pill at the top right says whether the page is linked to Outrider:
   "linked", "linked · no game" (the game is not running), "unlinked · retrying" (after 30 s without an answer); Here's Dist, Grav, Now and Max headings sort the bodies; a genus's tooltip gives
   its colony distance; Search's mining list includes minerals you have refined, with those bodies first; the
-  Settings' chips jump to its sections; and Settings → Display chooses this browser's theme and whether the header tiles fold to one line on a
-  small window, on this device.
+  Settings' chips jump to its sections; and Settings → Display chooses this browser's theme, whether the header tiles fold to one line on a
+  small window, and which header tiles show, on this device.
 
 ---
 

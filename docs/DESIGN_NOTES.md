@@ -1373,5 +1373,22 @@ confirmed while playing. Treat reports about them as likely real.
   matches wmctrl's: a mismatch would show as "not the active window" while playing), DisplaySettings.xml's
   `<FullScreen>` values, and "keep showing" with a window over the game (X11 stacking, and Windows' z-order walk).
   The Alerts panel over a real game (its timing beside the voice, and how much a busy arrival puts on it).
+  The overlay's sizes on real screens: the Size % cells' "≈ 11 px text" / "held at 9 px" figures and the 9 px floor
+  against a real 1080p and 4K game window (tested on rendered frames and a faked window height), and Ctrl + wheel in
+  Arrange mode over the game.
 - The jump line's wait for Status.json's FsdJump flag (bit 30) in a live jump; your own sound files and Volume
   through the real players; the co-pilot button choosing the throttle of a real two-part X-56.
+- The CMDR tab's **EDSY ↗ / Coriolis ↗** links opened in those sites with real builds (the tests decode the links back
+  to EDMC's shape only), and in the Android app's hand-over to the browser. Its **hot ⚖** on a wanted ship or module:
+  no real journal had a hot ship or a Loadout with `Hot` (Frontier's manual only). The **stored-module fold** between
+  Outfitting lists: ModuleSellRemote and MassModuleStore had no real line, and FetchRemoteModule's arrival time is
+  taken from its `TransferTime` without a live transfer watched.
+- Nearby's **Around** (S49's choice on Nearby, "Lock System") while flying: a locked, destination, carrier or next-stop
+  centre against live Spansh, ↻'s pace, the strip and the From you / Jumps columns on the tablet (tested with stubbed
+  Spansh answers).
+- **certifi on Windows** (issue #9): the fix on a PC that had the error (none was tried), and the .bat's weekly certifi
+  check on a real Windows (its lines checked as text, its Python run on Linux); Docker's `CERTIFI_CHECKED` rebuild
+  only through `scripts/docker_bundle.sh`.
+- The In-Game Route's **hop lookups**: Spansh's search by id64 was probed (2026-10-14, `tests/fixtures/spansh_ids.json`),
+  but not a real plotted route's ✦ chips out in the black, nor the bubble and Colonia skip (`ROUTE_LOOKUP_SKIP`) on a
+  route crossing its edge.

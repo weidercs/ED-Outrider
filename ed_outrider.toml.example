@@ -239,7 +239,7 @@
 # enabled = false
 # theme = "default"         # the panels' colours: default, lcars, elite, babylon5, narn, minbari, centauri, vorlon, shadow, sith, alliance, dark
 # text_size = "normal"      # small, normal or large (a panel can have its own: Settings -> In-game overlay's Text column)
-# panel_scale = 100         # all panels' size in % (20 to 250), on top of each panel's own Size %: lower it on a big TV;
+# panel_scale = 100         # all panels' size in % (20 to 250), multiplied with each panel's own Size %: lower it on a big TV;
 #                           # text is never drawn under 9 px, however small the sizes
 # system_panel = true       # the bodies worth your time, in supercruise
 # body_panel = true         # the Target panel: the body you are near or have targeted, else the system targeted (also over the galaxy map)
