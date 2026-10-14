@@ -7958,9 +7958,10 @@ const releasePayloads = async () => {
              reward: 9000000, expiry: null, expires_in: null, soon: false, expired: false, wing: true, passengers: false, redirected: true},
             {id: 3, name: "Courier", faction: "Sol Workers", system: "Sol", station: null, target: null, commodity: null, count: null, delivered: null,
              reward: 100000, expiry: "2026-01-01T00:00:00Z", expires_in: 5, soon: true, expired: false, wing: false, passengers: false, redirected: false}]},
-          sessions: {days: 30, totals: {combat: {sessions: 1, kills: 3, bounties: 400000, bonds: 60000, deaths: 1}, mining: {sessions: 1, tons: 6, prospected: 2, sold: 1500000}},
+          sessions: {max: 40, totals: {combat: {sessions: 1, kills: 3, bounties: 400000, bonds: 60000, deaths: 1}, mining: {sessions: 1, tons: 6, srv_tons: 3, prospected: 2, sold: 1500000}},
             sessions: [
               {start: "2026-10-12T11:00:00Z", end: "2026-10-12T11:51:00Z", ship: "Type-9 Heavy", combat: null, mining: {tons: 6, refined: {Platinum: 5, Osmium: 1},
+                srv_tons: 3, srv_refined: {Gold: 3}, srv_seconds: 600,
                 prospected: 2, content: {High: 1, Low: 1}, motherlodes: 1, cracked: 1, prospectors: 1, collectors: 1, sold: 1500000, seconds: 1800, per_hour: 12}},
               {start: "2026-10-12T08:00:00Z", end: "2026-10-12T09:00:00Z", ship: "Krait Mk II", mining: null, combat: {kills: 3, bounties: 400000, bonds: 60000,
                 deaths: 1, interdicted: 1, redeemed: 400000, by_ship: {Anaconda: 2}, seconds: 1800, per_hour: "<u>6</u>"}}]},
@@ -8009,7 +8010,7 @@ const releasePayloads = async () => {
       await tab("missions");
       got.missions = [text(body().querySelector(".hwyttl")), rows(), body().querySelectorAll(".warnc").length];
       await tab("sessions");
-      got.sessions = [rows(), [...body().querySelectorAll(".cmfig")].map(text)];
+      got.sessions = [rows(), [...body().querySelectorAll(".cmfig")].map(text), [...body().querySelectorAll("h3.subhead")].map(text)];
       // asked again only when the payload says so: an unchanged one draws from what it has, a new version asks (the
       // open tab only), the materials' version only for Engineering; Refresh asks now
       const n0 = asked.length;
@@ -8061,8 +8062,9 @@ const releasePayloads = async () => {
                  "Massacre wing redirected | Sol Workers | Sol · Old Port | Bad Lot 12 | 9.0M cr | no limit",
                  "Courier | Sol Workers | Sol |  | 100k cr | expired"], 2],
       sessions: [["2026-10-12 08:00 | Krait Mk II | 3 | Anaconda 2 | 400k cr | 60k cr | NaN | 30 min | 1",
-                  "2026-10-12 11:00 | Type-9 Heavy | 6 t | Platinum 5, Osmium 1 | 12 | 2 High 1, Low 1 · 1 core | 1 / 1 | 30 min | 1.5M cr"],
-                 ["Sessions1", "Kills3", "Bounties400k cr", "Combat bonds60k cr", "Deaths1", "Sessions1", "Refined6 t", "Asteroids prospected2", "Sold1.5M cr"]],
+                  "2026-10-12 11:00 | Type-9 Heavy | 6 t + 3 t SRV | Platinum 5, Osmium 1 · SRV: Gold 3 | 12 | 2 High 1, Low 1 · 1 core | 1 / 1 | 30 min | 1.5M cr"],
+                 ["Sessions1", "Kills3", "Bounties400k cr", "Combat bonds60k cr", "Deaths1", "Sessions1", "Refined6 t", "SRV refined3 t", "Asteroids prospected2", "Sold1.5M cr"],
+                 ["Combat your latest sessions, 40 at most", "Mining your latest sessions, 40 at most"]],
       unchanged: 0, matOther: 0,
       moved: ["api/commander/sessions"],
       after: ["api/commander/sessions", "api/commander/missions", "api/commander/missions"],
@@ -8076,7 +8078,7 @@ const releasePayloads = async () => {
     const goodCM = !bad.length && errors.length === before;
     allOk = allOk && goodCM;
     console.log(goodCM ? "OK" : "FAIL", "| commander |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))} asked ${JSON.stringify(asked)}`
-      : "controls above the pane, the theme's green and red, the tiles' credits and carrier; asked again only on a new version or Refresh; the real profile", errors.slice(before));
+      : "controls above the pane, the theme's green and red, the tiles' credits and carrier, the SRV's refinery apart; asked again only on a new version or Refresh; the real profile", errors.slice(before));
   }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",

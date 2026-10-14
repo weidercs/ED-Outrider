@@ -205,7 +205,7 @@ import outrider.uploads    # EDDN / EDSM uploads (opt-in): the session, the live
 import outrider.eddn       # EDDN's messages from journal events, and what its answers mean
 import outrider.edsm       # EDSM's journal upload: the events with where you were, and what its answers mean
 import outrider.inara      # Inara's commander profile: travel, ranks, ships, inventory..., and what its answers mean
-import outrider.commander  # the Commander view: the commander, inventory, engineering, missions, sessions (journals read on request)
+import outrider.commander  # the Commander view: the commander, inventory, engineering, missions, sessions (folds of the journal)
 import outrider.readclient  # EDSM's and Inara's account reads (G3): the key checks, EDSM's flight log
 import outrider.backfill   # filling a gap in EDSM's flight log (S47): the events rebuilt from the journals (pure)
 import outrider.edsmlog    # your EDSM flight log from before your journals (S67): kept entries, which count as visits
@@ -1277,8 +1277,9 @@ def core_label(slot, item):
 DATA_EVENTS = ("MultiSellExplorationData", "SellExplorationData", "SellOrganicData", "Died", "Resurrect")
 # Who is playing and what they had at login: name, credits.
 CMDR_EVENTS = ("LoadGame", "Commander", "Rank", "Progress", "Promotion", "Statistics")
-# written while the game loads (at the main menu, before LoadGame): not play, so not where a session ended
-LOGIN_EVENTS = frozenset(CMDR_EVENTS) | {"Fileheader", "Materials"}
+# written while the game loads (at the main menu, before LoadGame, and the snapshots just after it: missions,
+# reputation, engineers, Powerplay, squadron, ship locker): not play, so not where a session ended
+LOGIN_EVENTS = frozenset(CMDR_EVENTS) | {"Fileheader", "Materials"} | frozenset(outrider.commander.LOGIN_SNAPSHOTS)
 RANK_KEYS = ("Combat", "Trade", "Explore", "Soldier", "Exobiologist", "Empire", "Federation", "CQC")
 RANK_NAMES = {   # the two ranks an explorer cares about
     "Explore": ["Aimless", "Mostly Aimless", "Scout", "Surveyor", "Trailblazer", "Pathfinder", "Ranger", "Pioneer",
@@ -1311,13 +1312,14 @@ CARGO_EVENTS = frozenset(CARGO_ONLY) | {"Cargo", "Docked", "Undocked", "CarrierS
 # you deposit for the jumps it measured (outrider.cargo.carrier_burns, S13 B)
 CARRIER_CARGO_EVENTS = ("CarrierStats", "CarrierTradeOrder", "CargoTransfer", "MarketBuy", "MarketSell",
                         "CarrierCrewServices", "CarrierDepositFuel") + CARRIER_MOVE_EVENTS
-# the events the Commander view reads (outrider.commander, from the journal files when asked): a line naming one bumps
-# Journals.commander_version, the page's cue to ask again (until the view reads from the database)
-COMMANDER_VIEW_EVENTS = frozenset(n.encode() for n in outrider.commander.INVENTORY_EVENTS + outrider.commander.PROFILE_EVENTS
-                                  + outrider.commander.MISSION_EVENTS + outrider.commander.SESSION_EVENTS + ("EngineerProgress",))
-WANTED = tuple(f'"event":"{e}"'.encode()
-               for e in POSITION_EVENTS + STAR_CLASS_EVENTS + SCAN_EVENTS + DATA_EVENTS + SHIP_EVENTS
-               + CMDR_EVENTS + MATERIAL_EVENTS + BODY_EVENTS + SRV_EVENTS + CARGO_ONLY + ("Loadout", "Shutdown", "Fileheader"))
+_OTHER_EVENTS = (POSITION_EVENTS + STAR_CLASS_EVENTS + SCAN_EVENTS + DATA_EVENTS + SHIP_EVENTS + CMDR_EVENTS + MATERIAL_EVENTS
+                 + BODY_EVENTS + SRV_EVENTS + CARGO_ONLY + ("Loadout", "Shutdown", "Fileheader"))
+# The Commander view (outrider/commander.py): Journals.handle_commander folds these into the meta keys of
+# outrider.commander.COMMANDER_META and the play_activity table, and each one bumps Journals.commander_version (the page's
+# cue to ask for the open tab again); COMMANDER_ONLY are read for it alone
+COMMANDER_EVENTS = frozenset(outrider.commander.EVENTS)
+COMMANDER_ONLY = COMMANDER_EVENTS - frozenset(_OTHER_EVENTS) - SRV_TRACKED - CARGO_EVENTS
+WANTED = tuple(f'"event":"{e}"'.encode() for e in dict.fromkeys(_OTHER_EVENTS + outrider.commander.EVENTS))
 
 # Bump when the journal parser learns new events: forces a one-off re-read of every journal.
 # 27: sale pages keyed by journal position (same-second 'Sell all' pages were dropped before); logins.
@@ -1339,7 +1341,10 @@ WANTED = tuple(f'"event":"{e}"'.encode()
 #     were dropped; the SRV's refinery and scoop stay out of the ship's hold; an older Location's relog is judged
 #     against the arrival before it (a legacy folder read late counted every login as a visit).
 # 43: a system's population (system_population) and own_firsts.bio_x5: no x5 bio bonus in populated systems.
-PARSER_VERSION = 50
+PARSER_VERSION = 51
+# 51: the Commander view reads the database (outrider/commander.py's folds: meta reputation, powerplay, squadron,
+#     stored_ships, stored_modules, ship_locker, suit_loadouts, engineers, missions; play_activity per login), the
+#     statistics keep the career's sections, and fleet_loadouts each ship's value
 # 50: your carrier's movements and tritium deposits are kept (cargo_events: its measured jumps scale the tritium
 #     formula, S13 B); each Synthesis's recipe is kept (materials' recipes, S15); CarrierCrewServices, stored since the
 #     last version without a re-read, comes back from the older journals too
@@ -1352,6 +1357,8 @@ PARSER_VERSION = 50
 # Why each version reads the journals again, in the player's words: said at the start that re-reads (reread_message).
 # Every bump adds its line here too (a test checks PARSER_VERSION has one).
 PARSER_CHANGES = {
+    51: "the Commander tab's ships, modules, locker, suit loadouts, engineers, missions and combat and mining sessions are "
+        "kept from your journals, all of them, instead of read from the last weeks' files each time",
     50: "your carrier's jumps and tritium deposits are kept (its own jumps check the tritium formula), the recipes you "
         "have synthesised, and the carrier's services switched on, off or suspended",
     49: "named listening posts are kept, and two in one system count as two",
@@ -1634,9 +1641,15 @@ CREATE TABLE IF NOT EXISTS bookmarks (
     id64 INTEGER PRIMARY KEY, name TEXT, x REAL, y REAL, z REAL, note TEXT, created_ts TEXT);
 -- Every ship you have flown, as its latest Loadout (one row per ShipID, an older Loadout read later never replaces a
 -- newer one): the Highway's ship list and the exact plotter's inputs. figures: JSON from fleet_figures (drive, masses,
--- tanks, booster, range). Journal-derived: RESET_JOURNAL_DATA clears it and the re-read rebuilds it.
+-- tanks, booster, range); value: HullValue + ModulesValue (the Commander view's fleet). Journal-derived:
+-- RESET_JOURNAL_DATA clears it and the re-read rebuilds it.
 CREATE TABLE IF NOT EXISTS fleet_loadouts (
-    ship_id INTEGER PRIMARY KEY, name TEXT, ship_type TEXT, ident TEXT, ts TEXT, figures TEXT);
+    ship_id INTEGER PRIMARY KEY, name TEXT, ship_type TEXT, ident TEXT, ts TEXT, figures TEXT, value INTEGER);
+-- The Commander view's sessions (outrider/commander.py): one row per login (LoadGame, as the logins table), with the
+-- commander and ship it names, and JSON counts of the fighting and mining between it and the next login
+-- (commander.activity_apply; NULL until there was some). Journal-derived: cleared by RESET_JOURNAL_DATA.
+CREATE TABLE IF NOT EXISTS play_activity (
+    login_ts TEXT PRIMARY KEY, commander TEXT, ship TEXT, combat TEXT, mining TEXT);
 -- The Neutron Highway: the one active route Spansh plotted (idx 0 is where it starts), with its plot in meta
 -- 'highway' (plotter, ship, options, created_ts, and the progress: at, furthest, off_route, arrival_ts, done_ts).
 -- distance: the jump into this system; remaining: ly left to the destination from here; jumps: jumps from the row
@@ -1698,6 +1711,9 @@ DELETE FROM own_barycentres; DELETE FROM phenomena; DELETE FROM phenomena_sites;
 DELETE FROM own_mined; DELETE FROM meta WHERE key IN ('srv_state', 'vehicle', 'ship_marker', 'body_here');
 DELETE FROM fleet_loadouts; DELETE FROM cargo_events; DELETE FROM system_population;
 DELETE FROM meta WHERE key IN ('ship_cargo', 'cargo_dock');
+DELETE FROM play_activity;
+DELETE FROM meta WHERE key IN ('reputation', 'powerplay', 'squadron', 'stored_ships', 'stored_modules', 'ship_locker',
+                               'suit_loadouts', 'engineers', 'missions');
 DELETE FROM meta WHERE key IN ('ship', 'carrier', 'fuel_hist', 'last_scoop', 'commander', 'materials', 'last_session', 'cargo',
                                'game_load');
 DELETE FROM meta WHERE key LIKE 'legacy:%' OR key IN ('pos', 'prev', 'jump_range', 'state_ts');
@@ -2475,9 +2491,9 @@ class Journals:
         self.carrier_version = 0
         # bumped by every write leaving_summary reads (mark(), deaths and sales): its cache key (S17)
         self.data_seq = 0
-        # bumped by every line naming an event the Commander view reads (COMMANDER_VIEW_EVENTS): the payload's
-        # commander_version, on which the page asks for the view's tab again. Only ever goes up: a rolled-back tick
-        # that reads the lines again bumps it again, which only means one more read
+        # bumped by every line the Commander view reads (COMMANDER_EVENTS: handle_commander), a ShipLocker.json read and
+        # reload(): the payload's commander_version, on which the page asks for the view's tab again. Only ever goes
+        # up: a rolled-back tick that reads the lines again bumps it again, which only means one more read
         self.commander_version = 0
         # the live tail's quick scan (S18): per journal its last size and how many stats in a row found it unchanged;
         # `settled` the files unchanged for JOURNAL_SETTLE_STATS stats, which a quick scan does not stat again until
@@ -2600,12 +2616,13 @@ class Journals:
         sid = ev.get("ShipID")
         if sid is None or not ev.get("Ship") or not_a_ship(ev.get("Ship")):
             return
-        self.db.execute("""INSERT INTO fleet_loadouts (ship_id, name, ship_type, ident, ts, figures) VALUES (?, ?, ?, ?, ?, ?)
+        value = (ev.get("HullValue") or 0) + (ev.get("ModulesValue") or 0) or None
+        self.db.execute("""INSERT INTO fleet_loadouts (ship_id, name, ship_type, ident, ts, figures, value) VALUES (?, ?, ?, ?, ?, ?, ?)
                            ON CONFLICT(ship_id) DO UPDATE SET name=excluded.name, ship_type=excluded.ship_type,
-                             ident=excluded.ident, ts=excluded.ts, figures=excluded.figures
+                             ident=excluded.ident, ts=excluded.ts, figures=excluded.figures, value=excluded.value
                            WHERE excluded.ts >= fleet_loadouts.ts""",
                         (sid, ev.get("ShipName") or None, ev.get("Ship"), ev.get("ShipIdent") or None, ts,
-                         json.dumps(fleet_figures(ev))))
+                         json.dumps(fleet_figures(ev)), value))
 
     def highway_route(self, hw):
         """The active route's rows (cached per plot: a new plot has a new id)."""
@@ -3004,8 +3021,11 @@ class Journals:
         self.ship_cargo = meta_get(db, "ship_cargo") or outrider.cargo.new_ship()
         self.cargo_dock = meta_get(db, "cargo_dock")
         self.commodity_names = meta_get(db, "commodity_names", {})
+        # the Commander view's folds (outrider/commander.py, handle_commander): meta key -> its state
+        self.cmdr_view = {k: meta_get(db, k) for k in outrider.commander.COMMANDER_META}
         self.cargo_version += 1
         self.carrier_version += 1
+        self.commander_version += 1
         self.data_seq += 1   # rolled-back rows: whatever was cached from them goes
         # a rolled-back tick's offsets went back: a file it read must be stat'd (and read) again, settled or not
         self.settled.clear()
@@ -3134,9 +3154,6 @@ class Journals:
                     print(f"uploads: a line was skipped ({type(e).__name__}: {e})", file=sys.stderr)
             elif self.uploads is not None and self.upload_mode:
                 self.uploads.forget()   # not following now: switched on again, it reads the file from its top
-            ev_at = line.find(b'"event":"', 0, 80)   # the game writes it second, after the timestamp
-            if ev_at >= 0 and line[ev_at + 9:line.find(b'"', ev_at + 9)] in COMMANDER_VIEW_EVENTS:
-                self.commander_version += 1
             if any(w in line for w in WANTED) or b"Fixed_Event_Life" in line or any(w in line for w in POI_BYTES):
                 # where the line is (the file's name, so a twin copy in another folder gives the same key):
                 # tells apart sale pages written in the same second (sale_events)
@@ -3175,6 +3192,10 @@ class Journals:
         if name in ("Fileheader", "LoadGame", "Location"):
             self.note_loading(name, ev, ts)
             if name == "Fileheader":
+                return
+        if name in COMMANDER_EVENTS:
+            self.handle_commander(name, ev, ts)
+            if name in COMMANDER_ONLY:
                 return
         if name in ("FSSSignalDiscovered", "SupercruiseDestinationDrop"):
             self.handle_phenomenon(name, ev, ts)
@@ -3928,6 +3949,58 @@ class Journals:
                 if mo.get("seq") == b["seq"]:
                     self.moments[i] = dict(mo, **fields)
 
+    def handle_commander(self, name, ev, ts):
+        """The Commander view (outrider/commander.py): a fold's line into its meta key (fresh()-guarded per key: a line
+        older than the newest folded, from a legacy folder read late, is ignored), a login's play_activity row, a
+        fighting or mining line into its login's row. Every line it is given moves commander_version."""
+        self.commander_version += 1
+        key = outrider.commander.FOLD_OF.get(name)
+        if key:
+            if not self.fresh("cmdr:" + key, ts):
+                return
+            here = {"system": (self.pos or {}).get("name"), "station": (self.docked or {}).get("station")}
+            self.cmdr_view[key] = outrider.commander.apply(key, self.cmdr_view.get(key), ev, here)
+            meta_set(self.db, key, self.cmdr_view[key])
+        elif name == "LoadGame":
+            ship = ev.get("ShipName") or ev.get("Ship_Localised") or ev.get("Ship")
+            self.db.execute("INSERT OR IGNORE INTO play_activity (login_ts, commander, ship) VALUES (?, ?, ?)",
+                            (ts, ev.get("Commander"), ship))
+        elif name in outrider.commander.ACTIVITY_EVENTS:
+            self.note_activity(ev, ts)
+
+    def note_activity(self, ev, ts):
+        """A fighting or mining line: into the counts of the login it follows (play_activity, its login the latest at
+        or before it, so a legacy folder read late counts in its own sessions). None before any login on record. The
+        SRV's refinery apart from the ship's: the vehicle you are in (track_srv keeps it)."""
+        row = self.db.execute("SELECT * FROM play_activity WHERE login_ts <= ? ORDER BY login_ts DESC LIMIT 1", (ts,)).fetchone()
+        if not row:
+            return
+        acts = {k: json.loads(row[k]) if row[k] else None for k in ("combat", "mining")}
+        srv = bool(self.vehicle) and ts >= (self.vehicle.get("ts") or "")
+        if outrider.commander.activity_apply(acts, ev, srv):
+            self.db.execute("UPDATE play_activity SET combat=?, mining=? WHERE login_ts=?",
+                            (acts["combat"] and json.dumps(acts["combat"]), acts["mining"] and json.dumps(acts["mining"]),
+                             row["login_ts"]))
+
+    def read_locker_file(self, d):
+        """ShipLocker.json: the ship locker whole, rewritten at every change (the journal's ShipLocker line has the
+        contents at login only). Kept when it is newer than what is folded. True if it changed the locker."""
+        try:
+            with open(os.path.join(d, "ShipLocker.json"), encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            return False
+        if not isinstance(data, dict) or not isinstance(data.get("timestamp"), str):
+            return False
+        old = self.cmdr_view.get("ship_locker")
+        new = outrider.commander.locker_apply(old, data)
+        if new == old or not self.fresh("cmdr:ship_locker", data["timestamp"]):
+            return False
+        self.cmdr_view["ship_locker"] = new
+        meta_set(self.db, "ship_locker", new)
+        self.commander_version += 1
+        return True
+
     def handle_cmdr(self, name, ev, ts):
         c = self.commander or {}
         if name == "LoadGame":   # every login, old ones read out of order too (History's session windows)
@@ -3939,9 +4012,8 @@ class Journals:
             c[key] = dict(c.get(key) or {}, **{k: v for k, v in ev.items() if k in RANK_KEYS})
             if name == "Promotion":     # a new rank starts at 0%
                 c["progress"] = dict(c.get("progress") or {}, **{k: 0 for k in ev if k in RANK_KEYS})
-        elif name == "Statistics":
-            meta_set(self.db, "statistics", {"ts": ts, "Exploration": ev.get("Exploration") or {},
-                                             "Exobiology": ev.get("Exobiology") or {}})
+        elif name == "Statistics":   # the History's career line and the Commander view's (its sections)
+            meta_set(self.db, "statistics", dict({k: ev.get(k) or {} for k in outrider.commander.STAT_SECTIONS}, ts=ts))
             return
         elif name == "Commander":
             c.update(name=ev.get("Name") or c.get("name"), fid=ev.get("FID") or c.get("fid"))
@@ -8669,6 +8741,45 @@ class State:
         return {"name": c.get("name"), "credits": cr + (c.get("earned") or 0) if cr is not None else None,
                 "credits_login": cr, "earned": c.get("earned") or 0, "login_ts": c.get("login_ts"),
                 "loan": c.get("loan"), "mode": c.get("mode"), "ranks": ranks}
+
+    # ---- the Commander view (outrider/commander.py): its tabs, from what Journals.handle_commander folded ----
+    # Each a quick read on the event loop: the folds are in memory (Journals.cmdr_view), the rest small tables
+
+    def commander_fleet(self):
+        """Your ships: the stored ones (the fold) and the one you fly, each worth its latest Loadout (fleet_loadouts)."""
+        rows = [dict(r) for r in self.db.execute(
+            "SELECT ship_id, name, ship_type, ident, ts, value FROM fleet_loadouts ORDER BY ts DESC")]
+        return outrider.commander.ships(self.journals.cmdr_view.get("stored_ships"), rows)
+
+    def commander_profile(self):
+        """GET /api/commander/profile."""
+        v = self.journals.cmdr_view
+        return {"profile": outrider.commander.profile(self.journals.commander, meta_get(self.db, "statistics"), v.get("reputation"),
+                                                      v.get("powerplay"), v.get("squadron"), self.commander_fleet(),
+                                                      v.get("stored_modules"))}
+
+    def commander_inventory(self):
+        """GET /api/commander/inventory."""
+        v = self.journals.cmdr_view
+        return {"ships": self.commander_fleet(), "modules": outrider.commander.stored_modules(v.get("stored_modules")),
+                "locker": outrider.commander.locker(v.get("ship_locker")), "suits": outrider.commander.suits(v.get("suit_loadouts"))}
+
+    def commander_engineering(self):
+        """GET /api/commander/engineering: the blueprints against the materials held now."""
+        return outrider.commander.engineering(self.journals.materials, self.journals.cmdr_view.get("engineers"))
+
+    def commander_missions(self):
+        """GET /api/commander/missions."""
+        return {"missions": outrider.commander.missions(self.journals.cmdr_view.get("missions"))}
+
+    def commander_sessions(self):
+        """GET /api/commander/sessions: the newest logins with fighting or mining (play_activity)."""
+        rows = ({"login_ts": r["login_ts"], "commander": r["commander"], "ship": r["ship"],
+                 "combat": json.loads(r["combat"]) if r["combat"] else None, "mining": json.loads(r["mining"]) if r["mining"] else None}
+                for r in self.db.execute("SELECT * FROM play_activity WHERE combat IS NOT NULL OR mining IS NOT NULL "
+                                         "ORDER BY login_ts DESC"))
+        out = outrider.commander.sessions(rows)
+        return {"sessions": out, "totals": outrider.commander.totals(out), "max": outrider.commander.SESSIONS_MAX}
 
     def materials_summary(self):
         m = self.journals.materials
@@ -16155,7 +16266,8 @@ class State:
                     route_mtimes[nr] = m
                     if self.journals.read_navroute(d):
                         self.bump()
-                for fname, read in (("Cargo.json", self.journals.read_cargo_file), ("Market.json", self.journals.read_market)):
+                for fname, read in (("Cargo.json", self.journals.read_cargo_file), ("Market.json", self.journals.read_market),
+                                    ("ShipLocker.json", self.journals.read_locker_file)):
                     fp = os.path.join(d, fname)
                     try:
                         m = os.path.getmtime(fp)
@@ -18417,6 +18529,11 @@ def make_app(state, hosts=None):
         state.set_radius(r)
         return web.json_response({"radius": state.radius})
 
+    def commander_view(fn):
+        async def view(_):
+            return web.json_response(fn())
+        return view
+
     async def materials_view(_):
         inv = outrider.materials.inventory(state.journals.materials)
         inv["stale"] = bool((state.materials_summary() or {}).get("stale"))
@@ -18522,7 +18639,10 @@ def make_app(state, hosts=None):
     app.router.add_get("/api/checklist/find", checklist_find_view)   # S29: asks Spansh, so not among the AI's READ_ROUTES
     app.router.add_get("/api/log", log_view)
     app.router.add_get("/api/materials", materials_view)
-    outrider.commander.add_routes(app, state, lambda: LIVE_DIRS)   # the Commander view: GET /api/commander/<part>
+    for part, fn in (("profile", state.commander_profile), ("inventory", state.commander_inventory),
+                     ("engineering", state.commander_engineering), ("missions", state.commander_missions),
+                     ("sessions", state.commander_sessions)):   # the Commander view's tabs, read from the database
+        app.router.add_get(f"/api/commander/{part}", commander_view(fn))
     app.router.add_post("/api/cargo/recount", cargo_recount_view)
     app.router.add_get("/api/cargo/lookup", cargo_lookup_view)
     app.router.add_get("/api/nearest", nearest_view)

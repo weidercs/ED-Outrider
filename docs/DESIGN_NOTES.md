@@ -21,17 +21,29 @@ upstream project's choices, not rules of the game.
   deaths, sales; `mark()`), the system's `locate` answer changes (its region decides "new to your codex") or the bio
   rules are updated (`bio_rules_gen`); not on `scan_version`, which moves later in the tick. The carrier's fold is
   kept until its own history changes (`carrier_version`), not on every change to the ship's hold.
-- **The Commander view stores nothing** (2026-10-12, `outrider/commander.py`). Everything is read from the journal
-  files when a tab is opened, so it is only as complete as the journal: stored ships and modules as of the last
-  shipyard or outfitting you opened, suit loadouts only once worn, a mission accepted before the journals kept by its
-  name alone. Ranks and statistics are as of the last login (the game writes them then); the credits and the carrier
+- **The Commander view is journal-derived** (2026-10-12, `outrider/commander.py`; read from the database since
+  2026-10-14, PARSER_VERSION 51). `Journals.handle_commander` folds its lines as the reader meets them, like every other
+  part: meta keys (`COMMANDER_META`: reputation, Powerplay, squadron, the stored ships, stored modules, ship locker,
+  suit loadouts, engineers, missions), each `fresh()`-guarded so a legacy folder read late cannot put back a sold ship
+  or a handed-in mission, and `play_activity` (the fighting and mining per login). All of it is in `RESET_JOURNAL_DATA`
+  and rebuilt on a re-read; none of it is live-only. A tab's GET is a quick read on the event loop, never a scan of the
+  journal files (which read each file whole, the live folder only, and missed every older stored module). The view
+  snapshots what the game lists whole and folds the changes it logs between: the fleet from the last StoredShips plus
+  ships bought, sold, swapped, sent for and renamed (as `outrider/inara.py` reads them), each ship's value from its
+  latest Loadout; suit loadouts created, changed, upgraded or deleted; the ship locker from the login line, then
+  ShipLocker.json whenever it is newer (the later journal lines carry no contents). Stored modules stay as of the last
+  outfitting you opened (moving one between lists is not followed), and a mission accepted before the journals is kept
+  by its name alone. The login-time snapshots (Missions, Reputation, EngineerProgress, Powerplay, SquadronStartup,
+  ShipLocker) are in `LOGIN_EVENTS`: loading the game is not play, so they never move `last_play_ts` (History's
+  session end, the "away" greeting). Mining in the SRV (the reader knows the vehicle) is counted apart from the ship's.
+  Ranks and statistics are as of the last login (the game writes them then); the credits and the carrier
   are the Commander and Carrier tiles' own (one owner each). What exobiology's next rank still takes is an estimate:
   the post-Update-14 step (the Frontier forum, 2 Jan 2023; Elite IV and V uncertain) times the share the game's own
   percentage leaves, never Organic_Data_Profits against the totals (checked on real journals: the bands' steps hold
   within 3 %, the totals not); every other rank shows its percentage only (no trade or exploration figures could be
   checked the same way). EngineerProgress' Rank is the highest grade an engineer crafts for you (real journals: no
-  craft above it). A tab is read again when a journal line it reads is written (`commander_version`), not on a
-  timer. The blueprint table is a copy of community data (EDCD's
+  craft above it). A tab is asked for again when a journal line it reads is handled (`commander_version`), not on
+  a timer. The blueprint table is a copy of community data (EDCD's
   coriolis-data), not the game's own: a recipe Frontier changes is wrong until the table is rebuilt. No voice lines:
   a mission about to expire is marked on the page only.
 - **Green gas giants are a guess, said as one** (2026-10-12, `outrider/ggg.py`). The seven-layer ladder model is a

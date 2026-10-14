@@ -2,6 +2,32 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · Commander tab: read from the database
+Batch 2 of the PR #5 review's plan: the Commander tab no longer scans journal files (each read whole, the live folder
+only, a year at a time) but reads what the journal reader keeps, like every other view. A journal re-read (journal
+reader version 51) fills it from all your journals, legacy folders included.
+- **Folded as the lines are read**: `Journals.handle_commander` keeps meta reputation, powerplay, squadron,
+  stored_ships, stored_modules, ship_locker, suit_loadouts, engineers and missions (`outrider/commander.py`'s
+  `*_apply` folds, each `fresh()`-guarded: a legacy line older than the latest Missions list cannot bring a mission
+  back), and a journal-derived `play_activity` table (one row per login: its fighting and mining). All of it is in
+  `RESET_JOURNAL_DATA`; meta statistics keeps the career's sections; `fleet_loadouts` keeps each ship's value.
+  `outrider/jscan.py` is gone; the GETs are `State.commander_*`, quick reads on the event loop, registered in `make_app`.
+- **The login's snapshots are not play**: Missions, Reputation, EngineerProgress, Powerplay, SquadronStartup and
+  ShipLocker joined `LOGIN_EVENTS`, so reading them does not move `last_play_ts` (History's session end, the "away"
+  greeting).
+- **The fleet follows the shipyard** (should 1): the last StoredShips, then ships bought, sold (also on a rebuy),
+  swapped, sent for and renamed, as the Inara uploader reads them; the ship you fly is the newest Loadout, and each
+  ship's value its latest Loadout's when that is newer than the list.
+- **Suit loadouts** (should 2): created, changed (a weapon equipped or removed), upgraded, renamed and deleted, not
+  only the ones worn.
+- **The ship locker** (should 3): the login line, then ShipLocker.json whenever it is newer (read in the tick, as
+  Cargo.json), since the later journal lines carry no contents.
+- **Mining in the SRV** (should 4): the Rhino's refinery is counted apart from the ship's (its tons beside the
+  ship's, not in t/h); the Sessions tab lists the latest 40 logins with fighting or mining, not the last 30 days.
+- Tests (`tests/test_commander.py`, through `Journals.handle` on a scratch database): a legacy line older than the
+  latest Missions line is ignored, a re-read doubles nothing, the login snapshots leave `last_play_ts`, a sold ship and
+  a deleted suit loadout disappear, the SRV's mining apart, ShipLocker.json when newer; smoke: the SRV's tons.
+
 ## 2026-10-14 · Commander tab: the review's fixes
 The fixes the review of PR #5 asked for before a release (batch 1 of its plan; the database move is next).
 - **One owner for credits and the carrier.** The CMDR tab shows the Commander tile's credits (the login's plus sales

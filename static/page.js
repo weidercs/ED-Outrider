@@ -10014,8 +10014,9 @@ function starWords(cls, lum) {
 }
 // ---- The Commander view (GET /api/commander/<tab>, outrider/commander.py): who you are in the game (CMDR), what you own (Inventory),
 // what engineering takes against your materials (Engineering), the missions you hold (Missions) and how your combat
-// and mining sessions went (Sessions). A tab is read from the journals when opened, and again when the payload's
-// commander_version has moved since (a line the view reads was written; Engineering also on the materials' version),
+// and mining sessions went (Sessions), as Outrider keeps them from the journals (outrider/commander.py's folds, in the
+// database). A tab is asked for when opened, and again when the payload's commander_version has moved since (a line
+// the view reads was handled; Engineering also on the materials' version),
 // as loadMat keys on its own; Refresh reads it again now. Credits and the carrier are the payload's (the Commander and
 // Carrier tiles' own figures), drawn at every render ----
 // CM: tab (the one shown), data / error / key (the versions it was read at) / loading per tab, q and craft
@@ -10064,6 +10065,9 @@ function cmSpan(s) {   // seconds as "2 d 3 h", "3 h 20 min", "12 min"
 const cmAsOf = (ts, how) => ts ? `<span class="unk" title="${esc(how)}">as of ${cmWhen(ts)}</span>` : "";
 const cmTable = (head, rows) => `<table class="cmtable"><thead><tr>${head.map(h => `<th${h[1] ? ` class="num"` : ""}>${h[0]}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table>`;
 const cmCls = m => esc((m.size != null && m.size > 0 ? m.size : "") + (m.rating || ""));
+// a session's tons refined: the ship's, and the SRV's apart
+const cmRefined = (ship, srv) => (ship || !srv ? `<b>${cmNum(ship)} t</b>` : "") +
+  (srv ? `${ship ? " + " : ""}<span class="unk" title="refined by the SRV (surface mining), apart from the ship's">${cmNum(srv)} t SRV</span>` : "");
 const cmTile = (k, v, title = "") => v == null || v === "" ? "" : `<span class="cmfig"${title ? ` title="${esc(title)}"` : ""}><span class="unk">${k}</span><b>${v}</b></span>`;
 
 // your fleet carrier as the Carrier tile has it (State.carrier_summary): its balance and weeks of upkeep, or its
@@ -10135,19 +10139,19 @@ function cmdrInventoryHtml(d) {
   const suitRow = x => `<tr><td><b>${esc(x.loadout || "?")}</b></td><td>${esc(x.suit)}${x.class ? ` <span class="unk">G${cmNum(x.class)}</span>` : ""}` +
     `${x.mods.length ? `<div class="unk">${esc(x.mods.join(", "))}</div>` : ""}</td>` +
     `<td>${x.weapons.map(w => `<div>${esc(w.name)}${w.class ? ` <span class="unk">G${cmNum(w.class)}</span>` : ""}${w.mods.length ? ` <span class="unk">${esc(w.mods.join(", "))}</span>` : ""}</div>`).join("")}</td></tr>`;
-  return `<h3 class="subhead">Ships <span class="cmcount">${s.ships.length}</span> ${cmAsOf(s.ts, "the stored ships as the last shipyard you opened listed them")}</h3>` +
+  return `<h3 class="subhead">Ships <span class="cmcount">${s.ships.length}</span> ${cmAsOf(s.ts, "the stored ships as the last shipyard you opened listed them, with the ships bought, sold, swapped, sent for or renamed since")}</h3>` +
     (s.ships.length ? cmTable([["Ship"], ["Where"], ["Value", 1], ["To bring it here", 1]], s.ships.map(shipRow)) : "") +
     (s.ts ? "" : `<div class="unk">Your stored ships are listed once you open a shipyard: the game writes the list then.</div>`) +
     `<h3 class="subhead">Stored modules <span class="cmcount">${m.modules.length}</span> ${cmAsOf(m.ts, "as the last outfitting you opened listed them")}</h3>` +
     (m.modules.length ? cmTable([["Module"], ["Engineering"], ["Where"], ["Value", 1], ["To bring it here", 1]], m.modules.map(modRow))
       : `<div class="unk">${m.ts ? "None stored." : "Listed once you open outfitting: the game writes the list then."}</div>`) +
-    `<h3 class="subhead">Ship locker ${cmAsOf(lk.ts, "the locker as the game last wrote it whole (at login, and when it changes)")}</h3>` +
+    `<h3 class="subhead">Ship locker ${cmAsOf(lk.ts, "the locker as the game last wrote it whole: at login, then ShipLocker.json as it changes")}</h3>` +
     (held.length ? `<div class="cmlocker">${held.map(k => `<div><b>${esc(k.name)}</b>${k.items.map(i =>
       `<div class="cmitem"><span>${esc(i.name)}${i.mission ? ` <span class="unk" title="a mission's own">mission</span>` : ""}</span><b>${cmNum(i.count)}</b></div>`).join("")}</div>`).join("")}</div>`
       : `<div class="unk">${lk.ts ? "Empty." : "Nothing on record (Odyssey writes it at login)."}</div>`) +
     `<h3 class="subhead">Suit loadouts <span class="cmcount">${suits.length}</span></h3>` +
     (suits.length ? cmTable([["Loadout"], ["Suit"], ["Weapons"]], suits.map(suitRow))
-      : `<div class="unk">The journal names a loadout only when you put it on: those worn in the last year are listed.</div>`);
+      : `<div class="unk">A loadout is listed once you create or wear one: the journal names it then.</div>`);
 }
 
 // Engineering: the blueprints by module, each grade's materials against what you hold (green: enough, red: short, as
@@ -10200,7 +10204,8 @@ function cmdrMissionsHtml(d) {
       : `<div class="unk">Missions you accept are listed here with where they go, what they ask and when they run out.</div>`);
 }
 
-// Sessions: the totals, then each combat and each mining session. Pure.
+// Sessions: the totals, then each combat and each mining session (per login; the SRV's refinery apart from the
+// ship's mining: its tons are not in t/h). Pure.
 function cmdrSessionsHtml(d) {
   const all = d.sessions || [], t = d.totals || {combat: {}, mining: {}};
   const list = o => Object.entries(o || {}).map(([k, v]) => `${esc(k)} ${cmNum(v)}`).join(", ");
@@ -10208,17 +10213,19 @@ function cmdrSessionsHtml(d) {
     `<td class="num"><b>${cmNum(c.kills)}</b></td><td>${list(c.by_ship)}</td><td class="num">${cmCr(c.bounties)}</td><td class="num">${cmCr(c.bonds)}</td>` +
     `<td class="num">${cmNum(c.per_hour)}</td><td class="num">${cmSpan(c.seconds)}</td><td class="num">${c.deaths ? `<span class="short">${cmNum(c.deaths)}</span>` : ""}</td></tr>`; });
   const mining = all.filter(s => s.mining).map(s => { const m = s.mining; return `<tr><td>${cmWhen(s.start)}</td><td>${esc(s.ship || "")}</td>` +
-    `<td class="num"><b>${cmNum(m.tons)} t</b></td><td>${list(m.refined)}</td><td class="num">${cmNum(m.per_hour)}</td>` +
+    `<td class="num">${cmRefined(m.tons, m.srv_tons)}</td><td>${list(m.refined)}${m.srv_tons ? `${m.tons ? " · " : ""}<span class="unk">SRV:</span> ${list(m.srv_refined)}` : ""}</td>` +
+    `<td class="num">${cmNum(m.per_hour)}</td>` +
     `<td>${cmNum(m.prospected)}${m.prospected ? ` <span class="unk">${list(m.content)}${m.motherlodes ? ` · ${cmNum(m.motherlodes)} core${m.motherlodes === 1 ? "" : "s"}` : ""}</span>` : ""}</td>` +
     `<td class="num" title="prospector / collector limpets launched">${m.prospectors || m.collectors ? `${cmNum(m.prospectors)} / ${cmNum(m.collectors)}` : ""}</td>` +
-    `<td class="num">${cmSpan(m.seconds)}</td><td class="num">${cmCr(m.sold)}</td></tr>`; });
-  const c = t.combat, m = t.mining, days = cmNum(d.days || 30);
-  return `<h3 class="subhead">Combat <span class="unk">the last ${days} days</span></h3>` +
+    `<td class="num">${cmSpan(m.seconds != null ? m.seconds : m.srv_seconds)}</td><td class="num">${cmCr(m.sold)}</td></tr>`; });
+  const c = t.combat, m = t.mining, latest = `<span class="unk" title="each from a login to the next">your latest sessions, ${cmNum(d.max || 40)} at most</span>`;
+  return `<h3 class="subhead">Combat ${latest}</h3>` +
     (combat.length ? `<div class="cmfigs">${cmTile("Sessions", cmNum(c.sessions))}${cmTile("Kills", cmNum(c.kills))}${cmTile("Bounties", cmCr(c.bounties))}${cmTile("Combat bonds", cmCr(c.bonds))}${cmTile("Deaths", c.deaths ? cmNum(c.deaths) : "")}</div>` +
       cmTable([["Session"], ["Ship"], ["Kills", 1], ["Bounties by ship"], ["Bounties", 1], ["Bonds", 1], ["Kills/h", 1], ["Fighting", 1], ["Deaths", 1]], combat)
       : `<div class="unk">No fighting in these journals.</div>`) +
-    `<h3 class="subhead">Mining <span class="unk">the last ${days} days</span></h3>` +
-    (mining.length ? `<div class="cmfigs">${cmTile("Sessions", cmNum(m.sessions))}${cmTile("Refined", `${cmNum(m.tons)} t`)}${cmTile("Asteroids prospected", cmNum(m.prospected))}${cmTile("Sold", cmCr(m.sold))}</div>` +
+    `<h3 class="subhead">Mining ${latest}</h3>` +
+    (mining.length ? `<div class="cmfigs">${cmTile("Sessions", cmNum(m.sessions))}${cmTile("Refined", m.tons || !m.srv_tons ? `${cmNum(m.tons)} t` : "")}` +
+      `${cmTile("SRV refined", m.srv_tons ? `${cmNum(m.srv_tons)} t` : "", "the SRV's refinery: surface mining")}${cmTile("Asteroids prospected", cmNum(m.prospected))}${cmTile("Sold", cmCr(m.sold))}</div>` +
       cmTable([["Session"], ["Ship"], ["Refined", 1], ["What"], ["t/h", 1], ["Prospected"], ["Limpets", 1], ["Mining", 1], ["Sold", 1]], mining)
       : `<div class="unk">No mining in these journals.</div>`);
 }

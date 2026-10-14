@@ -1,30 +1,108 @@
-"""The Commander view: who you are in the game (ranks, credits, assets, the fleet), what you own, what engineering takes, the missions you hold, and how your combat
-and mining sessions went. All of it from the journals as they are (outrider/jscan.py: read when asked, nothing
-stored), the blueprints from resources/blueprints.json. The functions taking events are pure; `add_routes` serves
-them (GET /api/commander/profile, /inventory, /engineering, /missions, /sessions).
+"""The Commander view: who you are in the game (ranks, assets, the fleet), what you own, what engineering takes, the
+missions you hold, and how your combat and mining sessions went. All of it from the journals as Outrider reads them:
+`Journals.handle_commander` (ed_outrider.py) folds each line it is given into the meta keys of `COMMANDER_META` and the
+`play_activity` table (one row per login), with the `*_apply` functions here; the GETs render what is kept with the
+other functions here. Everything is pure. Journal-derived: a re-read rebuilds it. The blueprints come from
+resources/blueprints.json.
 
-What the journal does not state is not shown: a ship or stored module appears once the game has listed it (the
-shipyard's and outfitting's StoredShips / StoredModules), suits and weapons only as a loadout you have worn, and a
-mission's progress only where the game logs it (cargo deliveries).
+What the journal does not state is not shown: a stored ship appears once the game has listed it (the shipyard's
+StoredShips; ships bought, sold, swapped, sent for or renamed since are folded in), stored modules as outfitting last
+listed them, suit loadouts once created or worn (deleted ones go), and a mission's progress only where the game logs
+it (cargo deliveries).
 """
 import json
 import os
 import re
 import time
 
-from . import RESOURCES_DIR, jscan, materials
+from . import RESOURCES_DIR, materials
 from .core import iso_ts, ts_seconds
 
 BLUEPRINTS_FILE = os.path.join(RESOURCES_DIR, "blueprints.json")
-INVENTORY_DAYS = 365    # how far back the last StoredShips / StoredModules is looked for
-MISSION_DAYS = 45       # missions run at most a few weeks
-SESSION_DAYS = 30       # the sessions listed
-SESSIONS_MAX = 40
+SESSIONS_MAX = 40   # the sessions listed, the newest
 
-# ---- inventory: ships, stored modules, the ship locker, suit loadouts ----
+# ---- what is folded, from which events (Journals.handle_commander) ----
 
-INVENTORY_EVENTS = ("StoredShips", "StoredModules", "ShipLocker", "SuitLoadout", "Loadout")
-LOCKER_KINDS = (("Items", "Goods"), ("Components", "Assets"), ("Data", "Data"), ("Consumables", "Consumables"))
+# meta key -> the events folded into it (each fresh()-guarded on "cmdr:<key>": a line older than the newest folded is
+# ignored, as a legacy folder read late would otherwise put back a sold ship or a mission handed in)
+FOLD_EVENTS = {
+    "reputation": ("Reputation",),
+    "powerplay": ("Powerplay", "PowerplayJoin", "PowerplayLeave", "PowerplayDefect", "PowerplayRank", "PowerplayMerits"),
+    "squadron": ("SquadronStartup", "JoinedSquadron", "LeftSquadron", "KickedFromSquadron", "DisbandedSquadron"),
+    "stored_ships": ("StoredShips", "ShipyardBuy", "ShipyardNew", "ShipyardSell", "ShipyardSwap", "ShipyardTransfer",
+                     "SellShipOnRebuy", "SetUserShipName"),
+    "stored_modules": ("StoredModules",),
+    "ship_locker": ("ShipLocker",),
+    "suit_loadouts": ("SuitLoadout", "CreateSuitLoadout", "DeleteSuitLoadout", "RenameSuitLoadout", "LoadoutEquipModule",
+                      "LoadoutRemoveModule", "UpgradeSuit", "UpgradeWeapon"),
+    "engineers": ("EngineerProgress",),
+    "missions": ("Missions", "MissionAccepted", "MissionCompleted", "MissionFailed", "MissionAbandoned", "MissionRedirected",
+                 "CargoDepot"),
+}
+COMMANDER_META = tuple(FOLD_EVENTS)
+FOLD_OF = {e: k for k, names in FOLD_EVENTS.items() for e in names}
+# fighting and mining, counted per login in play_activity (a LoadGame opens the row)
+ACTIVITY_EVENTS = ("Bounty", "FactionKillBond", "PVPKill", "CapShipBond", "Died", "Interdicted", "RedeemVoucher",
+                   "MiningRefined", "ProspectedAsteroid", "AsteroidCracked", "LaunchDrone", "MarketSell")
+# read by other handlers (the login, ranks, statistics, a ship's Loadout), shown here: they only move commander_version
+SHOWN_EVENTS = ("LoadGame", "Rank", "Progress", "Promotion", "Statistics", "Loadout")
+EVENTS = tuple(FOLD_OF) + ACTIVITY_EVENTS + SHOWN_EVENTS
+# written as the game loads, around LoadGame: not play (ed_outrider's LOGIN_EVENTS), so not where a session ended
+LOGIN_SNAPSHOTS = ("Missions", "Reputation", "EngineerProgress", "Powerplay", "SquadronStartup", "ShipLocker")
+# the Statistics sections the profile reads (meta statistics keeps them beside Exploration and Exobiology)
+STAT_SECTIONS = ("Bank_Account", "Exploration", "Exobiology", "Trading", "Mining", "Combat")
+
+
+def apply(key, state, ev, here=None):
+    """One line folded into the meta key's state: the new state (None: nothing kept). here: {system, station} where
+    you are (the fleet's ships stored or sent for here)."""
+    if key == "stored_ships":
+        return fleet_apply(state, ev, here)
+    return _APPLY[key](state, ev)
+
+
+def _snapshot(keys):
+    def fold(state, ev):
+        return dict({k: ev[k] for k in keys if k in ev}, ts=ev["timestamp"])
+    return fold
+
+
+def reputation_apply(state, ev):
+    """Reputation (at login): the superpowers' standing, %."""
+    return dict({k: ev[k] for k in ("Federation", "Empire", "Alliance", "Independent") if isinstance(ev.get(k), (int, float))},
+                ts=ev["timestamp"])
+
+
+def power_apply(state, ev):
+    """Powerplay: the login's pledge, then joining, leaving, defecting, a new rank, merits gained. None unpledged."""
+    name, st = ev["event"], dict(state or {})
+    if name == "PowerplayLeave":
+        return None
+    if name in ("Powerplay", "PowerplayJoin", "PowerplayDefect"):
+        st = {"power": ev.get("ToPower") if name == "PowerplayDefect" else ev.get("Power"),
+              "rank": ev.get("Rank"), "merits": ev.get("Merits")}
+    elif name == "PowerplayRank" and isinstance(ev.get("Rank"), int):
+        st["rank"] = ev["Rank"]
+    elif name == "PowerplayMerits" and isinstance(ev.get("TotalMerits"), int):
+        st["merits"] = ev["TotalMerits"]
+    if not st.get("power"):
+        st["power"] = ev.get("Power")
+    return dict(st, ts=ev["timestamp"]) if st.get("power") else None
+
+
+def squadron_apply(state, ev):
+    """Your squadron: the login's, one joined; None once left, kicked or disbanded."""
+    if ev["event"] in ("SquadronStartup", "JoinedSquadron") and ev.get("SquadronName"):
+        return {"name": ev["SquadronName"], "ts": ev["timestamp"]}
+    return None
+
+
+def locker_apply(state, ev):
+    """The ship locker whole: the login's ShipLocker line (later ones carry no contents: ShipLocker.json has them,
+    Journals.read_locker_file) or the file itself. A line without the lists keeps what is kept."""
+    if not any(isinstance(ev.get(k), list) for k, _ in LOCKER_KINDS):
+        return state
+    return dict({k: ev[k] for k, _ in LOCKER_KINDS if isinstance(ev.get(k), list)}, ts=ev["timestamp"])
 
 
 def _text(ev, key):
@@ -35,34 +113,88 @@ def _text(ev, key):
     return re.sub(r"^\$|_name;$|;$", "", v, flags=re.I) if v.startswith("$") else v
 
 
-def _last(events, name, has=None):
-    return next((e for e in reversed(events) if e.get("event") == name and (has is None or isinstance(e.get(has), list))), None)
+# ---- inventory: ships, stored modules, the ship locker, suit loadouts ----
+
+LOCKER_KINDS = (("Items", "Goods"), ("Components", "Assets"), ("Data", "Data"), ("Consumables", "Consumables"))
 
 
-def ships(events):
-    """Your ships: the one you fly (the newest Loadout) and those stored (the newest StoredShips: where each is,
-    its value, what moving it here costs). {ts (of the list), here (where the list was made), ships: [...]}."""
-    stored, load = _last(events, "StoredShips", "ShipsHere"), _last(events, "Loadout", "Modules")
-    rows = []
-    if load:
-        rows.append({"id": load.get("ShipID"), "type": load.get("Ship"), "name": load.get("ShipName") or None,
-                     "ident": load.get("ShipIdent") or None, "current": True, "system": None, "station": None,
-                     "value": (load.get("HullValue") or 0) + (load.get("ModulesValue") or 0) or None,
-                     "hot": bool(load.get("Hot")), "transfer_cost": None, "transfer_s": None, "in_transit": False})
-    if stored:
-        here = {"system": stored.get("StarSystem"), "station": stored.get("StationName")}
+def fleet_apply(state, ev, here=None):
+    """Your stored ships (not the one you fly: State takes it from fleet_loadouts), as inara._fleet reads the same
+    events: the shipyard's StoredShips lists them whole (where each is, its value, what moving it costs); a ship
+    bought (the old one stored here or sold), swapped (the old one stored here), sold (also on a rebuy), sent for
+    (ShipyardTransfer: here when it arrives) or renamed is folded in since. {listed: {ts, system, station} (the last
+    list), ships: {id: {id, type, type_name, name, ident, system, station, value, value_ts, hot, transfer_cost,
+    transfer_s, in_transit, arrive_ts}}}."""
+    st = state or {"listed": None, "ships": {}}
+    ships, name, ts = st["ships"], ev["event"], ev["timestamp"]
+    here = here or {}
+
+    def store(sid, kind, kind_name=None, **kw):
+        if sid is None:
+            return
+        row = ships.setdefault(str(sid), {"id": sid, "name": None, "ident": None, "value": None, "value_ts": None, "hot": False})
+        row.update(type=kind or row.get("type"), type_name=kind_name or row.get("type_name"), system=here.get("system"),
+                   station=here.get("station"), transfer_cost=None, transfer_s=None, in_transit=False, arrive_ts=None)
+        row.update(kw)
+    if name == "StoredShips":
+        old, ships = ships, {}
+        st.update(listed={"ts": ts, "system": ev.get("StarSystem"), "station": ev.get("StationName")}, ships=ships)
         for key, local in (("ShipsHere", True), ("ShipsRemote", False)):
-            for s in stored.get(key) or []:
-                if not isinstance(s, dict) or (load and s.get("ShipID") == load.get("ShipID")):
+            for s in ev.get(key) or []:
+                if not isinstance(s, dict) or s.get("ShipID") is None:
                     continue
-                rows.append({"id": s.get("ShipID"), "type": s.get("ShipType"), "type_name": s.get("ShipType_Localised"),
-                             "name": s.get("Name") or None, "ident": None, "current": False,
-                             "system": here["system"] if local else s.get("StarSystem"),
-                             "station": here["station"] if local else None, "value": s.get("Value"),
-                             "hot": bool(s.get("Hot")), "transfer_cost": None if local else s.get("TransferPrice"),
-                             "transfer_s": None if local else s.get("TransferTime"), "in_transit": bool(s.get("InTransit"))})
-    return {"ts": stored.get("timestamp") if stored else None, "ships": rows,
-            "here": {"system": stored.get("StarSystem"), "station": stored.get("StationName")} if stored else None}
+                ships[str(s["ShipID"])] = {
+                    "id": s["ShipID"], "type": s.get("ShipType"), "type_name": s.get("ShipType_Localised"),
+                    "name": (s.get("Name") or "").strip() or None, "ident": (old.get(str(s["ShipID"])) or {}).get("ident"),
+                    "system": ev.get("StarSystem") if local else s.get("StarSystem"),
+                    "station": ev.get("StationName") if local else None, "value": s.get("Value"), "value_ts": ts,
+                    "hot": bool(s.get("Hot")), "transfer_cost": None if local else s.get("TransferPrice"),
+                    "transfer_s": None if local else s.get("TransferTime"), "in_transit": bool(s.get("InTransit")), "arrive_ts": None}
+    elif name in ("ShipyardBuy", "ShipyardSwap", "ShipyardSell", "SellShipOnRebuy"):
+        if ev.get("StoreShipID") is not None:
+            store(ev["StoreShipID"], ev.get("StoreOldShip"))
+        sold = ev.get("SellShipID", ev.get("SellShipId"))   # SellShipOnRebuy writes "SellShipId"
+        if sold is not None:
+            ships.pop(str(sold), None)
+        if name == "ShipyardSwap" and ev.get("ShipID") is not None:
+            ships.pop(str(ev["ShipID"]), None)              # the one you fly now
+    elif name == "ShipyardNew" and ev.get("NewShipID") is not None:
+        ships.pop(str(ev["NewShipID"]), None)
+    elif name == "ShipyardTransfer" and ev.get("ShipID") is not None:
+        wait = ev.get("TransferTime") if isinstance(ev.get("TransferTime"), (int, float)) else 0
+        store(ev["ShipID"], ev.get("ShipType"), ev.get("ShipType_Localised"), in_transit=wait > 0,
+              arrive_ts=iso_ts(ts_seconds(ts) + wait) if wait > 0 else None)
+    elif name == "SetUserShipName" and str(ev.get("ShipID")) in ships:
+        ships[str(ev["ShipID"])].update(name=(ev.get("UserShipName") or "").strip() or None, ident=ev.get("UserShipId") or None)
+    return st
+
+
+def ships(fleet, loadouts=(), now=None):
+    """Your ships: the one you fly (the newest Loadout: loadouts are fleet_loadouts' rows {ship_id, name, ship_type,
+    ident, ts, value}, the newest first) and those stored (fleet_apply's), each worth its newest figure (a Loadout newer
+    than the list gives it). {ts (of the last list), here (where it was made), ships: [...]}."""
+    now = time.time() if now is None else now
+    fleet = fleet or {"listed": None, "ships": {}}
+    worth = {r["ship_id"]: r for r in loadouts if r.get("value")}
+    cur = loadouts[0] if loadouts else None
+    rows = []
+    if cur:
+        rows.append({"id": cur["ship_id"], "type": cur["ship_type"], "name": cur["name"] or None, "ident": cur["ident"] or None,
+                     "current": True, "system": None, "station": None, "value": cur.get("value") or None, "hot": False,
+                     "transfer_cost": None, "transfer_s": None, "in_transit": False})
+    for s in fleet["ships"].values():
+        if cur and s["id"] == cur["ship_id"]:
+            continue
+        lo = worth.get(s["id"])
+        value = lo["value"] if lo and lo["ts"] >= (s.get("value_ts") or "") else s.get("value")
+        arriving = s.get("in_transit") and (not s.get("arrive_ts") or ts_seconds(s["arrive_ts"]) > now)
+        rows.append({"id": s["id"], "type": s.get("type"), "type_name": s.get("type_name"), "name": s.get("name"),
+                     "ident": s.get("ident"), "current": False, "system": s.get("system"), "station": s.get("station"),
+                     "value": value, "hot": bool(s.get("hot")), "transfer_cost": s.get("transfer_cost"),
+                     "transfer_s": s.get("transfer_s"), "in_transit": bool(arriving)})
+    listed = fleet.get("listed")
+    return {"ts": listed and listed["ts"], "ships": rows,
+            "here": {"system": listed["system"], "station": listed["station"]} if listed else None}
 
 
 _RATING = {1: "E", 2: "D", 3: "C", 4: "B", 5: "A"}
@@ -95,12 +227,12 @@ def module_label(symbol, localised=None):
     return " ".join(words.split("_")).strip().capitalize() or "?", size, rating, mount
 
 
-def stored_modules(events):
-    """Your stored modules as outfitting last listed them: name (class, rating, mount), where, the engineering,
-    what moving it here costs. {ts, modules: [...]}, the engineered first, then by name."""
-    ev = _last(events, "StoredModules", "Items")
+def stored_modules(snap):
+    """Your stored modules as outfitting last listed them (snap: the StoredModules fold, {Items, ts}): name (class,
+    rating, mount), where, the engineering, what moving it here costs. {ts, modules: [...]}, the engineered first,
+    then by name."""
     rows = []
-    for m in (ev or {}).get("Items") or []:
+    for m in (snap or {}).get("Items") or []:
         if not isinstance(m, dict):
             continue
         name, size, rating, mount = module_label(m.get("Name"), m.get("Name_Localised"))
@@ -112,40 +244,79 @@ def stored_modules(events):
                      "blueprint": blueprint,
                      "level": m.get("Level"), "quality": m.get("Quality")})
     rows.sort(key=lambda r: (r["blueprint"] is None, r["name"], -(r["size"] or 0)))
-    return {"ts": ev.get("timestamp") if ev else None, "modules": rows}
+    return {"ts": (snap or {}).get("ts"), "modules": rows}
 
 
-def locker(events):
-    """The ship locker (Odyssey) as the game last wrote it whole: each kind's items with their counts, a mission's
-    own kept apart. {ts, kinds: [{name, items: [{name, count, mission}]}]}."""
-    ev = _last(events, "ShipLocker", "Items")
+def locker(snap):
+    """The ship locker (Odyssey) as last written whole (snap: locker_apply's): each kind's items with their counts, a
+    mission's own kept apart. {ts, kinds: [{name, items: [{name, count, mission}]}]}."""
     kinds = []
     for key, title in LOCKER_KINDS:
         tally = {}
-        for it in (ev or {}).get(key) or []:
+        for it in (snap or {}).get(key) or []:
             if isinstance(it, dict) and isinstance(it.get("Count"), int):
                 k = (_text(it, "Name") or "?", it.get("MissionID") is not None)
                 tally[k] = tally.get(k, 0) + it["Count"]
         kinds.append({"name": title, "items": [{"name": n, "count": c, "mission": ms} for (n, ms), c in sorted(tally.items())]})
-    return {"ts": ev.get("timestamp") if ev else None, "kinds": kinds}
+    return {"ts": (snap or {}).get("ts"), "kinds": kinds}
 
 
-def suits(events):
-    """The suit loadouts you have worn (the journal lists no others): suit, its class and mods, the weapons with
-    theirs. Newest first."""
-    seen = {}
-    for e in events:
-        if e.get("event") == "SuitLoadout" and e.get("LoadoutID") is not None:
-            seen[e["LoadoutID"]] = e
+def _weapon(m):
+    return {"id": m.get("SuitModuleID"), "slot": m.get("SlotName"), "name": m.get("ModuleName"),
+            "name_l": m.get("ModuleName_Localised"), "class": m.get("Class"), "mods": list(m.get("WeaponMods") or [])}
+
+
+def suit_apply(state, ev):
+    """Odyssey suit loadouts, as inara._suits reads the same events: one created or worn (SuitLoadout comes at every
+    disembark) is kept whole; a module equipped or removed, a rename, an upgraded suit or weapon (UpgradeSuit,
+    UpgradeWeapon: its new class) change it; a deleted one goes. {loadout id: {id, loadout, suit_id, suit, suit_l,
+    class, mods, weapons: [_weapon], ts}}."""
+    st, name, ts = dict(state or {}), ev["event"], ev["timestamp"]
+    if name == "UpgradeSuit" and ev.get("SuitID") is not None and isinstance(ev.get("Class"), int):
+        for row in st.values():
+            if row.get("suit_id") == ev["SuitID"]:
+                row["class"] = ev["Class"]
+        return st
+    if name == "UpgradeWeapon" and ev.get("SuitModuleID") is not None and isinstance(ev.get("Class"), int):
+        for row in st.values():
+            for w in row["weapons"]:
+                if w.get("id") == ev["SuitModuleID"]:
+                    w["class"] = ev["Class"]
+        return st
+    lid = ev.get("LoadoutID")
+    if lid is None:
+        return st
+    key = str(lid)
+    if name in ("SuitLoadout", "CreateSuitLoadout"):
+        cls = re.search(r"_class(\d)", str(ev.get("SuitName") or ""))
+        st[key] = {"id": lid, "loadout": ev.get("LoadoutName"), "suit_id": ev.get("SuitID"), "suit": ev.get("SuitName"),
+                   "suit_l": ev.get("SuitName_Localised"), "class": int(cls.group(1)) if cls else None,
+                   "mods": list(ev.get("SuitMods") or []),
+                   "weapons": [_weapon(m) for m in ev.get("Modules") or [] if isinstance(m, dict)], "ts": ts}
+    elif name == "DeleteSuitLoadout":
+        st.pop(key, None)
+    elif key not in st:
+        pass   # a loadout the journals never showed whole: nothing to change
+    elif name == "RenameSuitLoadout":
+        st[key].update(loadout=ev.get("LoadoutName") or st[key]["loadout"], ts=ts)
+    elif name in ("LoadoutEquipModule", "LoadoutRemoveModule") and ev.get("SlotName"):
+        ws = [w for w in st[key]["weapons"] if w.get("slot") != ev["SlotName"]]
+        if name == "LoadoutEquipModule":
+            ws.append(_weapon(ev))
+        st[key].update(weapons=ws, ts=ts)
+    return st
+
+
+def suits(state):
+    """The suit loadouts (suit_apply's): suit, its class and mods, the weapons with theirs. The latest changed first."""
     rows = []
-    for e in sorted(seen.values(), key=lambda e: e["timestamp"], reverse=True):
-        suit = _text(e, "SuitName") or "?"
-        cls = re.search(r"_class(\d)", str(e.get("SuitName") or ""))
-        rows.append({"loadout": e.get("LoadoutName"), "suit": suit, "class": int(cls.group(1)) if cls else None,
-                     "mods": [_mod(m) for m in e.get("SuitMods") or []], "ts": e["timestamp"],
-                     "weapons": [{"name": _text(w, "ModuleName") or "?", "class": w.get("Class"), "slot": w.get("SlotName"),
-                                  "mods": [_mod(m) for m in w.get("WeaponMods") or []]}
-                                 for w in e.get("Modules") or [] if isinstance(w, dict)]})
+    for e in sorted((state or {}).values(), key=lambda e: e.get("ts") or "", reverse=True):
+        suit = _text({"S": e.get("suit"), "S_Localised": e.get("suit_l")}, "S") or "?"
+        rows.append({"loadout": e.get("loadout"), "suit": suit, "class": e.get("class"),
+                     "mods": [_mod(m) for m in e.get("mods") or []], "ts": e.get("ts"),
+                     "weapons": [{"name": _text({"N": w.get("name"), "N_Localised": w.get("name_l")}, "N") or "?",
+                                  "class": w.get("class"), "slot": w.get("slot"), "mods": [_mod(m) for m in w.get("mods") or []]}
+                                 for w in e.get("weapons") or []]})
     return rows
 
 
@@ -156,11 +327,6 @@ def _mod(symbol):
                r"backpack|ammo|magazine|scope|range|stability|handling|reload|battery|shield|sprint|jump|melee|tool|"
                r"duration|capacity|assist|vision|size|rate|accuracy|speed|headshot)", r" \1", s)
     return " ".join(s.split()).capitalize() or "?"
-
-
-def inventory(dirs, days=INVENTORY_DAYS, now=None):
-    evs = jscan.events(dirs, INVENTORY_EVENTS, days, now)
-    return {"ships": ships(evs), "modules": stored_modules(evs), "locker": locker(evs), "suits": suits(evs)}
 
 
 # ---- engineering: the blueprints against your materials, and where the engineers stand ----
@@ -185,18 +351,15 @@ def _plain(name):
     return re.sub(r"[^a-z0-9]", "", str(name or "").lower())
 
 
-def engineers(events):
-    """Where each engineer stands, from the newest EngineerProgress lines: {name: {progress ("Known", "Invited",
-    "Unlocked"...), rank (the highest grade they craft for you, 1 to 5; None until unlocked)}}. The login's list, then each change since."""
-    out = {}
-    for e in events:
-        if e.get("event") != "EngineerProgress":
-            continue
-        for row in (e["Engineers"] if isinstance(e.get("Engineers"), list) else [e]):
-            if isinstance(row, dict) and row.get("Engineer"):
-                had = out.get(row["Engineer"]) or {}
-                out[row["Engineer"]] = {"progress": row.get("Progress") or had.get("progress"),
-                                        "rank": row.get("Rank") if row.get("Rank") is not None else had.get("rank")}
+def engineer_apply(state, ev):
+    """EngineerProgress: the login's list, then each change since. {name: {progress ("Known", "Invited",
+    "Unlocked"...), rank (the highest grade they craft for you, 1 to 5; None until unlocked)}}."""
+    out = dict(state or {})
+    for row in (ev["Engineers"] if isinstance(ev.get("Engineers"), list) else [ev]):
+        if isinstance(row, dict) and row.get("Engineer"):
+            had = out.get(row["Engineer"]) or {}
+            out[row["Engineer"]] = {"progress": row.get("Progress") or had.get("progress"),
+                                    "rank": row.get("Rank") if row.get("Rank") is not None else had.get("rank")}
     return out
 
 
@@ -204,7 +367,7 @@ def blueprints(counts, known=None, name=None, rows=None):
     """Every blueprint with what each grade takes against the materials you hold: [{id, module, name, grades:
     [{grade, materials: [{id, name, need, have}], rolls (how many times you could craft it now), engineers:
     [{name, progress, rank, ready (unlocked far enough for this grade)}]}]}]. counts: {material id: held};
-    known: engineers(); name: fn(material id) -> its name."""
+    known: engineer_apply's; name: fn(material id) -> its name."""
     known = {_plain(k): v for k, v in (known or {}).items()}
     name = name or (lambda mid: materials.MATERIALS.get(mid, (mid,))[0])
     out = []
@@ -227,54 +390,55 @@ def blueprints(counts, known=None, name=None, rows=None):
     return out
 
 
-def engineering(dirs, material_state, days=INVENTORY_DAYS, now=None):
-    known = engineers(jscan.events(dirs, ("EngineerProgress",), days, now))
+def engineering(material_state, known):
+    """The Engineering tab: the blueprints against the materials held (Journals.materials) and the engineers."""
     counts = (material_state or {}).get("counts") or {}
     return {"blueprints": blueprints(counts, known, lambda mid: materials.display_name(material_state, mid)),
-            "engineers": [dict(v, name=k) for k, v in sorted(known.items())]}
+            "engineers": [dict(v, name=k) for k, v in sorted((known or {}).items())]}
 
 
 # ---- missions ----
 
-MISSION_EVENTS = ("Missions", "MissionAccepted", "MissionCompleted", "MissionFailed", "MissionAbandoned",
-                  "MissionRedirected", "CargoDepot")
 MISSION_SOON_S = 1800   # an expiry within this is marked
 
 
-def missions(events, now=None):
-    """The missions you hold, the soonest to expire first: [{id, name, faction, system, station, target, commodity,
-    count, delivered, reward, expiry (ISO or None), expires_in (s; None without one), soon, expired, wing,
-    passengers, redirected, influence, reputation}]. The login's Missions line says which are still active (one the
-    journals here never saw accepted is listed by its name alone); accept, redirect, a cargo depot, and the endings
-    follow in order."""
+def mission_apply(state, ev):
+    """The missions you hold, as cargo.ship_apply folds the hold: {mission id: row}. The login's Missions line says
+    which are still active (one the journals never saw accepted is kept by its name alone); accept, redirect, a cargo
+    depot and the endings follow in order."""
+    held, name, mid = dict(state or {}), ev["event"], ev.get("MissionID")
+    if name == "Missions":
+        active = {str(m.get("MissionID")): m for m in ev.get("Active") or [] if isinstance(m, dict) and m.get("MissionID") is not None}
+        at = ts_seconds(ev["timestamp"])
+        held = {k: v for k, v in held.items() if k in active}
+        for k, m in active.items():
+            row = held.setdefault(k, _mission({"MissionID": m["MissionID"], "Name": m.get("Name")}))
+            if not row["expiry"] and isinstance(m.get("Expires"), (int, float)) and m["Expires"] > 0:
+                row["expiry"] = iso_ts(at + m["Expires"])
+            row["passengers"] = row["passengers"] or bool(m.get("PassengerMission"))
+        return held
+    if mid is None:
+        return held
+    key = str(mid)
+    if name == "MissionAccepted":
+        held[key] = _mission(ev)
+    elif name in ("MissionCompleted", "MissionFailed", "MissionAbandoned"):
+        held.pop(key, None)
+    elif key in held and name == "MissionRedirected":
+        held[key] = dict(held[key], system=ev.get("NewDestinationSystem") or held[key]["system"],
+                         station=ev.get("NewDestinationStation") or held[key]["station"], redirected=True)
+    elif key in held and name == "CargoDepot" and isinstance(ev.get("TotalItemsToDeliver"), int):
+        held[key] = dict(held[key], count=ev["TotalItemsToDeliver"], delivered=ev.get("ItemsDelivered") or 0)
+    return held
+
+
+def missions(state, now=None):
+    """The missions you hold (mission_apply's), the soonest to expire first: [{id, name, faction, system, station,
+    target, commodity, count, delivered, reward, expiry (ISO or None), expires_in (s; None without one), soon, expired,
+    wing, passengers, redirected, influence, reputation}]."""
     now = time.time() if now is None else now
-    held = {}
-    for e in events:
-        name, mid = e["event"], e.get("MissionID")
-        if name == "Missions":
-            active = {m.get("MissionID"): m for m in e.get("Active") or [] if isinstance(m, dict)}
-            at = ts_seconds(e["timestamp"])
-            for k in [k for k in held if k not in active]:
-                del held[k]
-            for k, m in active.items():
-                row = held.setdefault(k, _mission({"MissionID": k, "Name": m.get("Name")}))
-                if not row["expiry"] and isinstance(m.get("Expires"), (int, float)) and m["Expires"] > 0:
-                    row["expiry"] = iso_ts(at + m["Expires"])
-                row["passengers"] = row["passengers"] or bool(m.get("PassengerMission"))
-        elif mid is None:
-            continue
-        elif name == "MissionAccepted":
-            held[mid] = _mission(e)
-        elif name in ("MissionCompleted", "MissionFailed", "MissionAbandoned"):
-            held.pop(mid, None)
-        elif mid in held and name == "MissionRedirected":
-            held[mid].update(system=e.get("NewDestinationSystem") or held[mid]["system"],
-                             station=e.get("NewDestinationStation") or held[mid]["station"], redirected=True)
-        elif mid in held and name == "CargoDepot":
-            if isinstance(e.get("TotalItemsToDeliver"), int):
-                held[mid].update(count=e["TotalItemsToDeliver"], delivered=e.get("ItemsDelivered") or 0)
     out = []
-    for row in held.values():
+    for row in (state or {}).values():
         left = ts_seconds(row["expiry"]) - now if row["expiry"] else None
         out.append(dict(row, expires_in=None if left is None else int(left), soon=left is not None and 0 <= left <= MISSION_SOON_S,
                         expired=left is not None and left < 0))
@@ -293,14 +457,8 @@ def _mission(e):
             "influence": e.get("Influence"), "reputation": e.get("Reputation"), "accepted": e.get("timestamp")}
 
 
-def missions_now(dirs, days=MISSION_DAYS, now=None):
-    return {"missions": missions(jscan.events(dirs, MISSION_EVENTS, days, now), now)}
+# ---- sessions: combat and mining, per login ----
 
-
-# ---- sessions: combat and mining, from login to logout ----
-
-SESSION_EVENTS = ("LoadGame", "Shutdown", "Bounty", "FactionKillBond", "PVPKill", "CapShipBond", "Died", "Interdicted",
-                  "RedeemVoucher", "MiningRefined", "ProspectedAsteroid", "AsteroidCracked", "LaunchDrone", "MarketSell")
 _KILLS = ("Bounty", "FactionKillBond", "PVPKill", "CapShipBond")
 _MINING = ("MiningRefined", "ProspectedAsteroid", "AsteroidCracked")
 
@@ -310,110 +468,131 @@ def _span(first, last):
     return max(60, ts_seconds(last) - ts_seconds(first)) if first and last else None
 
 
-def sessions(events):
-    """The play sessions with fighting or mining in them, newest first; each from a LoadGame to the next (or a
-    Shutdown): {start, end, commander, ship, combat: {kills, bounties, bonds, by_ship, deaths, interdicted,
-    redeemed, seconds, per_hour} or None, mining: {tons, refined: {name: t}, prospected, content: {High, Medium,
-    Low}, motherlodes, cracked, prospectors, collectors, sold, seconds, per_hour} or None}."""
-    out, cur = [], None
+def _seen(acc, ts, first="first", last="last"):
+    acc[first] = min(acc[first] or ts, ts)
+    acc[last] = max(acc[last] or ts, ts)
 
-    def close():
-        if cur and (cur["_c"]["n"] or cur["_m"]["n"]):
-            out.append(_session(cur))
-    for e in events:
-        name = e["event"]
-        if name == "LoadGame" or cur is None:
-            close()
-            cur = {"start": e["timestamp"], "end": e["timestamp"], "commander": e.get("Commander") if name == "LoadGame" else None,
-                   "ship": (_text(e, "Ship") if name == "LoadGame" else None),
-                   "_c": {"n": 0, "kills": 0, "bounties": 0, "bonds": 0, "by_ship": {}, "deaths": 0, "interdicted": 0,
-                          "redeemed": 0, "first": None, "last": None},
-                   "_m": {"n": 0, "refined": {}, "prospected": 0, "content": {}, "motherlodes": 0, "cracked": 0,
-                          "prospectors": 0, "collectors": 0, "sold": 0, "first": None, "last": None}}
-            if name == "LoadGame":
-                continue
-        cur["end"] = e["timestamp"]
-        c, m = cur["_c"], cur["_m"]
+
+def activity_apply(acts, ev, srv=False):
+    """One fighting or mining line into a login's counts (play_activity's combat and mining, created when first
+    needed): acts {combat, mining}, changed in place; True if it counted. srv: you are in an SRV (Journals.vehicle),
+    whose refinery is kept apart from the ship's (`srv`; the Rhino's surface mining). first / last (and srv_first /
+    srv_last) are the earliest and latest such line, so a line read out of order still counts once at its place."""
+    name, ts = ev["event"], ev["timestamp"]
+    if name in _KILLS + ("Died", "Interdicted", "RedeemVoucher"):
+        if name == "RedeemVoucher" and ev.get("Type") not in ("bounty", "CombatBond"):
+            return False
+        c = acts["combat"] = acts.get("combat") or {"n": 0, "kills": 0, "bounties": 0, "bonds": 0, "by_ship": {}, "deaths": 0,
+                                                    "interdicted": 0, "redeemed": 0, "first": None, "last": None, "seen": None}
+        c["seen"] = max(c["seen"] or ts, ts)
         if name in _KILLS:
             c["n"] += 1
             c["kills"] += 1
-            c["first"], c["last"] = c["first"] or e["timestamp"], e["timestamp"]
+            _seen(c, ts)
             if name == "Bounty":
-                c["bounties"] += e.get("TotalReward") or sum((r.get("Reward") or 0) for r in e.get("Rewards") or [] if isinstance(r, dict)) \
-                    or e.get("Reward") or 0
-                ship = _text(e, "Target") or "?"
+                c["bounties"] += ev.get("TotalReward") or sum((r.get("Reward") or 0) for r in ev.get("Rewards") or [] if isinstance(r, dict)) \
+                    or ev.get("Reward") or 0
+                ship = _text(ev, "Target") or "?"
                 c["by_ship"][ship] = c["by_ship"].get(ship, 0) + 1
             elif name in ("FactionKillBond", "CapShipBond"):
-                c["bonds"] += e.get("Reward") or 0
+                c["bonds"] += ev.get("Reward") or 0
         elif name == "Died":
             c["n"] += 1
             c["deaths"] += 1
         elif name == "Interdicted":
             c["interdicted"] += 1
-        elif name == "RedeemVoucher" and e.get("Type") in ("bounty", "CombatBond"):
-            c["redeemed"] += e.get("Amount") or 0
-        elif name in _MINING:
-            m["n"] += 1
-            m["first"], m["last"] = m["first"] or e["timestamp"], e["timestamp"]
-            if name == "MiningRefined":
-                what = _text(e, "Type") or "?"
-                m["refined"][what] = m["refined"].get(what, 0) + 1
-            elif name == "AsteroidCracked":
-                m["cracked"] += 1
-            else:
-                m["prospected"] += 1
-                level = re.sub(r"^\$AsteroidMaterialContent_|;$", "", str(e.get("Content") or "?"))
-                m["content"][level] = m["content"].get(level, 0) + 1
-                m["motherlodes"] += bool(e.get("MotherlodeMaterial"))
-        elif name == "LaunchDrone":
-            if e.get("Type") == "Prospector":
-                m["prospectors"] += 1
-            elif e.get("Type") == "Collection":
-                m["collectors"] += 1
-        elif name == "MarketSell" and m["refined"] and (_text(e, "Type") or "").lower() in {k.lower() for k in m["refined"]}:
-            m["sold"] += e.get("TotalSale") or 0
-        elif name == "Shutdown":
-            close()
-            cur = None
-    close()
-    return out[::-1][:SESSIONS_MAX]
+        else:
+            c["redeemed"] += ev.get("Amount") or 0
+        return True
+    m = acts.get("mining")
+    if name == "MarketSell":
+        types = {k.lower() for k in list((m or {}).get("refined") or {}) + list((m or {}).get("srv") or {})}
+        if not types or (_text(ev, "Type") or "").lower() not in types:
+            return False
+        m["sold"] += ev.get("TotalSale") or 0
+        m["seen"] = max(m["seen"] or ts, ts)
+        return True
+    if name == "LaunchDrone" and ev.get("Type") not in ("Prospector", "Collection"):
+        return False
+    if name not in _MINING + ("LaunchDrone",):
+        return False
+    m = acts["mining"] = m or {"n": 0, "refined": {}, "srv": {}, "prospected": 0, "content": {}, "motherlodes": 0, "cracked": 0,
+                               "prospectors": 0, "collectors": 0, "sold": 0, "first": None, "last": None,
+                               "srv_first": None, "srv_last": None, "seen": None}
+    m["seen"] = max(m["seen"] or ts, ts)
+    if name == "LaunchDrone":
+        m["prospectors" if ev["Type"] == "Prospector" else "collectors"] += 1
+        return True
+    m["n"] += 1
+    if name == "MiningRefined":
+        what = _text(ev, "Type") or "?"
+        into = m["srv"] if srv else m["refined"]
+        into[what] = into.get(what, 0) + 1
+        _seen(m, ts, *(("srv_first", "srv_last") if srv else ("first", "last")))
+        return True
+    _seen(m, ts)
+    if name == "AsteroidCracked":
+        m["cracked"] += 1
+    else:
+        m["prospected"] += 1
+        level = re.sub(r"^\$AsteroidMaterialContent_|;$", "", str(ev.get("Content") or "?"))
+        m["content"][level] = m["content"].get(level, 0) + 1
+        m["motherlodes"] += bool(ev.get("MotherlodeMaterial"))
+    return True
 
 
-def _session(s):
-    c, m = s["_c"], s["_m"]
+def session(row):
+    """A play_activity row as the Sessions tab lists it, None without fighting or mining: {start (the login), end (its
+    last such line), commander, ship, combat: {kills, bounties, bonds, by_ship, deaths, interdicted, redeemed,
+    seconds, per_hour} or None, mining: {tons, refined: {name: t} (the ship's), srv_tons, srv_refined (the SRV's
+    refinery), prospected, content: {High, Medium, Low}, motherlodes, cracked, prospectors, collectors, sold, seconds,
+    per_hour (the ship's), srv_seconds} or None}."""
+    c = row.get("combat") if (row.get("combat") or {}).get("n") else None
+    m = row.get("mining") if (row.get("mining") or {}).get("n") else None
+    if not c and not m:
+        return None
     combat = mining = None
-    if c["n"]:
+    if c:
         secs = _span(c["first"], c["last"])
         combat = {"kills": c["kills"], "bounties": c["bounties"], "bonds": c["bonds"], "deaths": c["deaths"],
                   "interdicted": c["interdicted"], "redeemed": c["redeemed"], "seconds": secs,
                   "by_ship": dict(sorted(c["by_ship"].items(), key=lambda kv: (-kv[1], kv[0]))),
                   "per_hour": round(c["kills"] * 3600 / secs, 1) if secs and c["kills"] > 1 else None}
-    if m["n"]:
-        secs, tons = _span(m["first"], m["last"]), sum(m["refined"].values())
-        mining = {"tons": tons, "refined": dict(sorted(m["refined"].items(), key=lambda kv: (-kv[1], kv[0]))),
+    if m:
+        secs, tons, srv = _span(m["first"], m["last"]), sum(m["refined"].values()), sum(m["srv"].values())
+        order = lambda d: dict(sorted(d.items(), key=lambda kv: (-kv[1], kv[0])))
+        mining = {"tons": tons, "refined": order(m["refined"]), "srv_tons": srv, "srv_refined": order(m["srv"]),
                   "prospected": m["prospected"], "content": m["content"], "motherlodes": m["motherlodes"],
                   "cracked": m["cracked"], "prospectors": m["prospectors"], "collectors": m["collectors"], "sold": m["sold"],
-                  "seconds": secs, "per_hour": round(tons * 3600 / secs, 1) if secs and tons > 1 else None}
-    return {"start": s["start"], "end": s["end"], "commander": s["commander"], "ship": s["ship"], "combat": combat, "mining": mining}
+                  "seconds": secs, "per_hour": round(tons * 3600 / secs, 1) if secs and tons > 1 else None,
+                  "srv_seconds": _span(m["srv_first"], m["srv_last"])}
+    end = max(x["seen"] for x in (row.get("combat"), row.get("mining")) if x and x.get("seen"))
+    return {"start": row["login_ts"], "end": end, "commander": row.get("commander"), "ship": row.get("ship"),
+            "combat": combat, "mining": mining}
+
+
+def sessions(rows, limit=SESSIONS_MAX):
+    """The logins with fighting or mining (play_activity's rows, the newest first), at most `limit`."""
+    out = []
+    for r in rows:
+        s = session(r)
+        if s:
+            out.append(s)
+            if len(out) >= limit:
+                break
+    return out
 
 
 def totals(rows):
     """The listed sessions summed: {combat: {sessions, kills, bounties, bonds, deaths}, mining: {sessions, tons,
-    prospected, sold}}."""
+    srv_tons, prospected, sold}}."""
     c, m = [r["combat"] for r in rows if r["combat"]], [r["mining"] for r in rows if r["mining"]]
     return {"combat": {"sessions": len(c), **{k: sum(x[k] for x in c) for k in ("kills", "bounties", "bonds", "deaths")}},
-            "mining": {"sessions": len(m), **{k: sum(x[k] for x in m) for k in ("tons", "prospected", "sold")}}}
+            "mining": {"sessions": len(m), **{k: sum(x[k] for x in m) for k in ("tons", "srv_tons", "prospected", "sold")}}}
 
 
-def sessions_now(dirs, days=SESSION_DAYS, now=None):
-    rows = sessions(jscan.events(dirs, SESSION_EVENTS, days, now))
-    return {"sessions": rows, "totals": totals(rows), "days": days}
+# ---- the commander: ranks with what the next one takes, assets, the fleet, the career ----
 
-
-# ---- the commander: ranks with what the next one takes, credits and assets, the fleet, the career ----
-
-PROFILE_EVENTS = ("LoadGame", "Rank", "Progress", "Promotion", "Statistics", "Reputation", "Powerplay", "SquadronStartup",
-                  "StoredShips", "StoredModules", "Loadout")
 _PILOT = ("Elite", "Elite I", "Elite II", "Elite III", "Elite IV", "Elite V")
 # the journal's rank keys in the order shown: (title, the ranks' names by number)
 RANKS = (
@@ -484,78 +663,40 @@ def rank_rows(rank, progress):
     return out
 
 
-def profile(events):
+def profile(commander, stats=None, reputation=None, power=None, squadron=None, fleet=None, modules=None):
     """The commander as the journals last said: {commander, ts (the login it is from), ranks (rank_rows), reputation
     {Federation, Empire, Alliance, Independent: %}, power {name, rank, merits}, squadron, assets {wealth (the game's
-    own total at login), fleet (your ships' value), ships, modules (stored modules' value)}, fleet (ships(): the one
-    you fly first), career [{label, value, kind}]}. None before any login is on record. Credits and the carrier are
-    not here: the page shows the Commander tile's credits (State.commander_summary: the login's plus sales since) and
-    the Carrier tile's carrier (State.carrier_summary), one owner each."""
-    login = _last(events, "LoadGame")
-    if not login:
+    own total at login), fleet (your ships' value), ships, modules (stored modules' value)}, fleet (ships()'s rows:
+    the one you fly first), career [{label, value, kind}]}. None before any login is on record. commander: Journals'
+    meta commander (name, login_ts, rank and progress with promotions since); stats: meta statistics; the others the
+    folds' states (fleet: ships()'s answer). Credits and the carrier are not here: the page shows the Commander
+    tile's credits (State.commander_summary: the login's plus sales since) and the Carrier tile's carrier
+    (State.carrier_summary), one owner each."""
+    c = commander or {}
+    if not c.get("login_ts"):
         return None
-    rank, prog = {}, {}
-    last = {}
-    for e in events:
-        name = e["event"]
-        if name == "Rank":
-            rank = {k: v for k, v in e.items() if isinstance(v, int) and not isinstance(v, bool)}
-        elif name == "Progress":
-            prog = {k: v for k, v in e.items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
-        elif name == "Promotion":
-            for k, v in e.items():
-                if isinstance(v, int) and not isinstance(v, bool) and k in rank:
-                    rank[k], prog[k] = v, 0
-        elif name in ("Statistics", "Reputation", "Powerplay", "SquadronStartup"):
-            last[name] = e
-    stats = last.get("Statistics") or {}
+    stats, rep, pp = stats or {}, reputation or {}, power or {}
     bank = stats.get("Bank_Account") if isinstance(stats.get("Bank_Account"), dict) else {}
-    fleet = ships(events)["ships"]
-    stored = stored_modules(events)["modules"]
-    rep, pp, sq = (last.get(k) or {} for k in ("Reputation", "Powerplay", "SquadronStartup"))
+    ships_ = (fleet or {}).get("ships") or []
+    stored = stored_modules(modules)["modules"]
     career = []
     for section, key, label, kind in CAREER:
         v = (stats.get(section) or {}).get(key) if isinstance(stats.get(section), dict) else None
         if isinstance(v, (int, float)) and not isinstance(v, bool) and v:
             career.append({"label": label, "value": v, "kind": kind})
     return {
-        "commander": login.get("Commander"), "ts": login["timestamp"],
-        "ranks": rank_rows(rank, prog),
+        "commander": c.get("name"), "ts": c["login_ts"],
+        "ranks": rank_rows(c.get("rank"), c.get("progress")),
         "reputation": {k: round(rep[k], 1) for k in ("Federation", "Empire", "Alliance", "Independent") if isinstance(rep.get(k), (int, float))},
-        "power": {"name": pp.get("Power"), "rank": pp.get("Rank"), "merits": pp.get("Merits")} if pp.get("Power") else None,
-        "squadron": sq.get("SquadronName"),
-        "assets": {"wealth": bank.get("Current_Wealth"), "ships": len(fleet), "fleet": sum(s["value"] or 0 for s in fleet) or None,
+        "power": {"name": pp.get("power"), "rank": pp.get("rank"), "merits": pp.get("merits")} if pp.get("power") else None,
+        "squadron": (squadron or {}).get("name"),
+        "assets": {"wealth": bank.get("Current_Wealth"), "ships": len(ships_), "fleet": sum(s["value"] or 0 for s in ships_) or None,
                    "modules": sum(m["value"] or 0 for m in stored) or None},
-        "fleet": sorted(fleet, key=lambda s: (not s["current"], -(s["value"] or 0))),
+        "fleet": sorted(ships_, key=lambda s: (not s["current"], -(s["value"] or 0))),
         "career": career,
     }
 
 
-def profile_now(dirs, days=INVENTORY_DAYS, now=None):
-    return {"profile": profile(jscan.events(dirs, PROFILE_EVENTS, days, now))}
-
-
-# ---- the server's routes ----
-
-def add_routes(app, state, dirs):
-    """GET /api/commander/<part>: each reads journal files, so each runs off the event loop. dirs: fn() -> the
-    live journal folders. What the worker needs of the server's state is copied on the loop first (the tick changes
-    the materials while a worker reads). An error is the server's json_errors' to log and answer, as everywhere."""
-    import asyncio
-    import copy
-    from aiohttp import web
-
-    def route(part, fn):
-        async def view(_):
-            work = fn()   # on the loop: the snapshot, then the reading in a worker
-            return web.json_response(await asyncio.get_running_loop().run_in_executor(None, work))
-        app.router.add_get(f"/api/commander/{part}", view)
-
-    def engineering_now():
-        snap = copy.deepcopy(state.journals.materials)
-        return lambda: engineering(dirs(), snap)
-    route("profile", lambda: lambda: profile_now(dirs()))
-    route("inventory", lambda: lambda: inventory(dirs()))
-    route("engineering", engineering_now)
-    route("missions", lambda: lambda: missions_now(dirs()))
-    route("sessions", lambda: lambda: sessions_now(dirs()))
+_APPLY = {"reputation": reputation_apply, "powerplay": power_apply, "squadron": squadron_apply,
+          "stored_modules": _snapshot(("Items",)), "ship_locker": locker_apply, "suit_loadouts": suit_apply,
+          "engineers": engineer_apply, "missions": mission_apply}

@@ -428,9 +428,9 @@ always uses the config file's `rig_warn`.
 
 ## 🧑‍🚀 Commander
 
-What you are, what you own and what you have been doing, read from your journals when you open the tab and again
-when the game writes something new for it (nothing is stored, and nothing is asked of anyone). The tabs, Refresh and
-Engineering's filter sit above the list:
+What you are, what you own and what you have been doing, from all your journals: Outrider keeps it as it reads them
+(nothing is asked of anyone), and a list updates as soon as the game writes something new for it. The tabs, Refresh
+and Engineering's filter sit above the list:
 
 - **CMDR**: who you are in the game, as of your last login (the game writes ranks and statistics then): your
   credits as the Commander tile shows them (the login's plus what you sold since), net worth, the value of your fleet
@@ -440,17 +440,20 @@ Engineering's filter sit above the list:
   reputation, Powerplay and squadron; your ships; and career figures (time played, systems visited, distance,
   profits by career).
 - **Inventory**: your ships (where each is, its value, what bringing it here costs), your stored modules with their
-  engineering, the ship locker, and the suit loadouts you have worn. The game writes the list of stored ships when
-  you open a shipyard and of stored modules when you open outfitting: each is shown as of then.
+  engineering, the ship locker, and your suit loadouts. The game writes the list of stored ships when you open a
+  shipyard: ships bought, sold, swapped, sent for or renamed since are followed, and each ship's value is its latest.
+  Stored modules are as outfitting last listed them. The ship locker is as of your login, then follows the game's own
+  file as it changes. A suit loadout is listed once you create or wear one, and goes when you delete it.
 - **Engineering**: every ship-module blueprint, grade by grade, with the materials one roll takes against what you
   hold (green: enough, red: short), how many rolls you could make now, and the engineers offering it (green:
   unlocked up to that grade). Filter by module, blueprint or material, or show only what you can craft now. Experimental effects and
   suit and weapon upgrades are not listed.
 - **Missions**: the missions you hold, the soonest to expire first: where they go, what they ask (and how much is
   delivered), the reward, and the time left, marked when under half an hour.
-- **Sessions**: your combat and mining sessions of the last 30 days, each from login to logout. Combat: kills, by
-  ship, bounties and bonds, kills an hour, deaths. Mining: tons refined and of what, tons an hour, asteroids
-  prospected and their content, limpets launched, and what the haul sold for.
+- **Sessions**: your latest sessions with fighting or mining in them (40 at most), each from one login to the next. Combat:
+  kills, by ship, bounties and bonds, kills an hour, deaths. Mining: tons refined and of what (what the SRV's refinery
+  collected on a planet is shown apart, and is not in the tons an hour), asteroids prospected and their content,
+  limpets launched, and what the haul sold for.
 
 ---
 
