@@ -3147,7 +3147,7 @@ function render() {
     return `<tr class="${cls}" data-id="${esc(s.id)}">
       <td class="bmcell">${bmIcon(s.id, s.name, bms)}</td>
       <td class="name" data-name="${esc(s.name)}" title="click to copy">${isPrev
-        ? `<span class="prevmark" title="you just came from here">↩</span>` : ""}${nameWords(s.name)}${firstsIcon(s.firsts)}<div class="sf2 sub2">${status}</div></td>
+        ? `<span class="prevmark" title="you just came from here">↩</span>` : ""}${nameWords(s.name)}${firstsIcon(s.firsts)}${nearAimBtn(s)}<div class="sf2 sub2">${status}</div></td>
       <td class="num dist"${far ? ` title="beyond your max jump range"` : ""}>${s.distance.toFixed(2)}</td>
       <td class="num hide-sm c2hide">${jumps == null ? "" : jumps === 1 ? "1" : `<span class="unk">${jumps}</span>`}</td>
       <td class="c2hide">${status}</td>
@@ -6352,6 +6352,9 @@ function hwyAimBtn(name, route = null, index = null, icon = false) {
 // S31: 🎯 on any system the page lists (a bookmark, the header's next stop, a Nearest row, a checklist find), by its id64
 // string; on the game PC only (it presses keys there), never for the system you are in
 const sysAimBtn = (name, id) => id != null && data && data.game_pc !== false && String(id) !== posId() ? hwyAimBtn(name, "system", String(id), true) : "";
+// 🎯 on a Nearby row (the Overview's too: the author, 2026-10-14): S31's, by the row's id64 string, only where
+// auto-target can work (mapCanTarget, as a Map click: not a column of buttons that cannot), never your own system's row
+const nearAimBtn = s => mapCanTarget() && /^\d+$/.test(String(s.id)) ? sysAimBtn(s.name, s.id) : "";
 // the request's aim from a 🎯 button's data (the page-wide handler, the tablet's row sheet): {route, index} or {route, id}
 const aimOf = d => !d.route ? null : d.route === "system" ? {route: "system", id: d.aimid}
   : Object.assign({route: d.route}, d.index != null && d.index !== "" ? {index: Number(d.index)} : {});
@@ -6363,7 +6366,8 @@ const plotBtn = name => ` <button type="button" class="mini plotto" data-plotto=
 // redraw where S31's 🎯 shows, so the one clicked counts down
 function renderSysAims() {
   if (!data) return;
-  renderStrip(); renderBookmarks(bmMap());
+  if (view === "near" || view === "overview") render();   // Nearby's rows count down too (render draws the strip, ☆s)
+  else { renderStrip(); renderBookmarks(bmMap()); }
   if (document.getElementById("nearDlg").open) renderNearest();
   if (CL.find) clDrawSide();
 }
@@ -6807,7 +6811,7 @@ async function hwyAutoStart(kind, aim = null) {
       : mine.front && !mine.note ? `bringing the game to the front: targeting ${j.system}…` : `targeting ${j.system}…`;
     drawHwyAuto(); renderHwyLine(); renderCarrier(); renderTilesLine(); drawBoxel();   // the carrier's and the boxel's 🎯 count down too
     if (view === "hwy") renderHwy();   // the list's 🎯 counts down too
-    if (mine.key.startsWith("system:")) renderSysAims();   // S31's 🎯 (a bookmark, the next stop, Nearest, a find)
+    if (mine.key.startsWith("system:")) renderSysAims();   // S31's 🎯 (a bookmark, the next stop, Nearby, Nearest, a find)
     if (mine.n > 0) { mine.n--; mine.timer = setTimeout(tick, 1000); }
   };
   tick();

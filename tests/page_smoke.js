@@ -6065,6 +6065,56 @@ const releasePayloads = async () => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| nearby row click |", good ? "a row opens the system, again closes it; the name copies, ☆ bookmarks, a drag opens nothing" : JSON.stringify({g, want}), errors.slice(before));
   }
+  // 🎯 on Nearby's rows (the author, 2026-10-14): S31's route "system" by the row's exact id64 string, where auto-target
+  // can work (the game PC, available: as a Map click), none on your own system's row; a click targets without opening
+  // (S73) or copying the row; the tablet's row sheet offers 🎯 Target. The post is stubbed
+  {
+    holdPayloads();
+    const w = dom.window, before = errors.length, realFetch = w.fetch, sent = [];
+    w.fetch = (u, o) => {
+      if (/api\/highway\/target/.test(String(u))) { sent.push(o && o.body ? JSON.parse(o.body) : null);
+        return Promise.resolve({ok: false, status: 400, json: async () => ({error: "smoke"})}); }
+      return realFetch(u, o);
+    };
+    const got = JSON.parse(w.eval(`(() => {
+      const o = {}, keep = window.__nearAim = {pc: data.game_pc, at: data.autotarget, sys: data.systems, view, copy: copyText};
+      window.__nearCopied = null; copyText = t => { window.__nearCopied = t; };
+      data.game_pc = true; data.autotarget = Object.assign({}, data.autotarget, {available: true, missing: []}); hwyRun = null;
+      // your own system: Nearby lists no row for it (as a copy of another row in the list, so it would have one), and
+      // its 🎯 would be none anyway
+      const other = data.systems.find(s => sysId(s) !== posId()), mine = Object.assign({}, other, {id: posId(), id64: Number(posId()), distance: 0});
+      data.systems = data.systems.filter(s => sysId(s) !== posId()).concat([mine]);
+      view = "near"; render();
+      const tr = document.querySelector('#rows tr[data-id="' + other.id + '"]'), own = document.querySelector('#rows tr[data-id="' + posId() + '"]');
+      const aim = tr && tr.querySelector('td.name [data-aim][data-route="system"]');
+      o.aim = aim && aim.dataset.aimid === other.id;
+      o.own = [!!own, nearAimBtn(mine)];
+      window.__nearAimId = other.id;
+      tabOpenRow(document.getElementById("nearTable"), tr);
+      const t = document.querySelector('#tabSheetActs [data-act="aim"]');
+      o.sheet = t && [t.dataset.route, t.dataset.aimid === other.id];
+      tabClose(document.getElementById("tabSheet"));
+      aim.click();
+      return JSON.stringify(o); })()`));
+    await settle(1000);
+    Object.assign(got, JSON.parse(w.eval(`(() => {
+      const o = {}, id = window.__nearAimId, has = () => !!document.querySelector('#rows tr[data-id="' + id + '"] [data-aim]');
+      o.clicked = [pinnedSystem, window.__nearCopied];
+      data.autotarget = Object.assign({}, data.autotarget, {available: false}); render(); o.unavailable = has();
+      data.autotarget = Object.assign({}, data.autotarget, {available: true}); data.game_pc = false; render(); o.server = has();
+      const k = window.__nearAim; Object.assign(data, {game_pc: k.pc, autotarget: k.at, systems: k.sys}); copyText = k.copy;
+      hwyRun = null; view = k.view; render();
+      return JSON.stringify(o); })()`)));
+    w.fetch = realFetch;
+    got.sent = sent;
+    const id = w.eval("window.__nearAimId");
+    const want = {aim: true, own: [false, ""], sheet: ["system", true], clicked: [null, null], unavailable: false, server: false,
+                  sent: [{route: "system", id}]};
+    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| nearby 🎯 |", good ? "🎯 by the row's id64, none on your own row or where auto-target cannot work; it targets without opening or copying, the tablet's sheet offers it" : JSON.stringify({got, want}), errors.slice(before));
+    await releasePayloads();
+  }
   // S75 (2026-10-12): the jump range under the ship in the Commander tile; "from X (Y ly)" beside the system's name
   // (no "came"); no "nearest known unvisited" in the Where tile, while Now keeps it
   {

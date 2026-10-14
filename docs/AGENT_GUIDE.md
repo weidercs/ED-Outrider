@@ -190,7 +190,8 @@ unittest, in-memory SQLite). `support.py` holds the shared fixtures and fakes (`
    (`highway_summary`); the Plot Route tab fetches the route itself (`/api/highway`, and `/api/riches` with POST `/api/riches/plot` {kind: one of `outrider.riches.SURVEY_KINDS` (riches, exo, elw, aw, sweep with `systems`, trade), its fields} and `/clear` for the slot; page: S51's sweep ticks `SW`, `sweepTick`, `drawSweep`, `plotSweep` in Left behind, My firsts (lost) and Bookmarks). The payload's `survey` (`State.survey_summary`) is the survey route's line, as `highway` the Highway's. POST `/api/highway/target` {route: "highway" | "survey", index} targets any route system (`State.route_target`; no body: Target next; {route: "carrier"}: your carrier's system, `State.carrier_target`; {route: "boxel", index}: a boxel's system by number, `State.boxel_target`; {route: "system", id}: S31's any system by its
 id64 string, `State.system_target`: `locate`, then `listed_system` (the Map's cached points, the next stop, your
 carrier); the Nearest finder's rows go in `State.nearest_found` for `locate`, `NEAREST_FOUND_KEEP`). Page: `sysAimBtn`
-(🎯 on bookmarks, the header's next stop, Nearest rows, the checklist's finds; `data-aimid`, never a Number), `aimOf`
+(🎯 on bookmarks, the header's next stop, Nearest rows, the checklist's finds; `data-aimid`, never a Number; Nearby's
+rows through `nearAimBtn`, also gated on `mapCanTarget`, redrawn by `renderSysAims` for the countdown), `aimOf`
 (a 🎯's request from its data), `plotBtn`/`plotRouteTo` (S31's Plot route: To filled, the form opened via `H.openForm`,
 submitted only when `routeFollowed()` is false), the Map's click (S72: `mapCanTarget` = `data.autotarget.available`
 with no missing binding on a game PC, `mapAimable`, `mapClick`, `mapClickWords`, the touch card's buttons with

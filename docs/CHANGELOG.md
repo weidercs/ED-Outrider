@@ -2,6 +2,18 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · 🎯 on Nearby's rows
+The author noticed Nearby had no 🎯, while bookmarks, the header's next stop, the Nearest finder, checklist finds (S31)
+and the Map (S72) all target by a click.
+- **Nearby (the Overview's pane too)**: a small 🎯 beside each system's name targets it in the galaxy map, by the row's
+  exact id64 string (route "system", POST `/api/highway/target`). Shown where auto-target can work (the game PC,
+  available: `mapCanTarget`, as a Map click), never on your own system's row. A click on it targets only: it neither
+  opens the system (S73's row click) nor copies the name. Its countdown shows on the row (`renderSysAims` redraws Nearby).
+- **Tablet**: a Nearby row's sheet now offers 🎯 Target; a tap on the 🎯 itself targets.
+- `static/page.js`: `nearAimBtn`. Docs: views.md, plot-route.md, tablet.md, DESIGN_NOTES, AGENT_GUIDE.
+- Tests: page smoke "nearby 🎯" (the id, none on your own row, the post and no pin or copy, none without auto-target or
+  off the game PC, the tablet sheet's Target).
+
 ## 2026-10-14 · EDSM flight log import rides out a timeout
 The author's import of his EDSM flight log stopped for good at week 203 of 438: "failed, Couldn't reach EDSM: timeout".
 One timeout ended a walk of over an hour.

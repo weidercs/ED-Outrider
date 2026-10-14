@@ -106,7 +106,8 @@ and beside a boxel's Next and its rows (see [Boxel exploration](views.md#-boxel-
 the next on arrival** uses the same run).
 
 **🎯 and Plot route anywhere.** A 🎯 also sits beside each bookmark, the header's next stop, the Nearest finder's rows
-and the Exo-Biology checklist's "🔍 nearby" rows (game PC; never your own system). **Plot route** beside a bookmark or
+and the Exo-Biology checklist's "🔍 nearby" rows (game PC; never your own system), and beside each system in Nearby
+(the Overview's too) when auto-target can work on this PC. **Plot route** beside a bookmark or
 the next stop puts the system in To and opens the form; it plots at once when you follow no route, and with one it
 waits for your Plot (a new plot replaces the route you follow). A click on a system in the Map tab targets it the same
 way when auto-target can work on this PC, else copies its name (see [the Map](views.md)).

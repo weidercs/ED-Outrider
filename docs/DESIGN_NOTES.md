@@ -139,8 +139,9 @@ upstream project's choices, not rules of the game.
   Highway's off the route (its closest system, or its start before you joined it); last, the header's next stop (S31,
   a system you chose: a complete route counts as none, so it comes through). A route you are on stays first;
   one you left for a detour into a boxel does not hide the boxel, and comes back once the boxel has no Next.
-- **🎯 and Plot route anywhere** (S31): 🎯 on a bookmark, the header's next stop, a Nearest row, a checklist find and a
-  Map point aims at any system Outrider can name by id64 (route "system": `locate`, else the Map's last answer, the next
+- **🎯 and Plot route anywhere** (S31): 🎯 on a bookmark, the header's next stop, a Nearest row, a checklist find, a
+  Nearby row (2026-10-14: only where auto-target can work, `mapCanTarget` as a Map click, so a whole table is not
+  dead buttons) and a Map point aims at any system Outrider can name by id64 (route "system": `locate`, else the Map's last answer, the next
   stop, your carrier); the id travels as a string, never a JSON number (over 2^53 it would round). Your own system is
   refused. Plot route fills Plot Route's To and opens its form, and plots at once only when no route is followed:
   with one, Plot is your click, since a new plot replaces the route you follow. The Nearest finder's older "Plot here"

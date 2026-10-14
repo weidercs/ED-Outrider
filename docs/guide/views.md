@@ -12,7 +12,8 @@ is scanned, the main star and whether it scoops, notable bodies, curiosities (�
 classes such as water giants, helium giants, Sudarsky class V and green gas giants) and a credit estimate. Sort,
 hide visited and fully scanned systems, or keep only those one jump away. A dashed <i>old data</i> mark flags Spansh
 records from before Odyssey (thin-atmosphere planets there may hold unsampled life). Click a row to see that system
-body by body beside the list (click it again to close it); its name copies it, ☆ bookmarks it. ⛏ N counts planetary mining
+body by body beside the list (click it again to close it); its name copies it, ☆ bookmarks it, and on the game PC,
+when auto-target can work there, the 🎯 beside the name targets it in the galaxy map (not on your own system's row). ⛏ N counts planetary mining
 locations on ground worth a Rhino. 🌀 N counts the notable stellar phenomena your FSS found there (life in clouds or rings; hover
 for what they are), dimmed once you have been to them. ⭐ marks a rare star (a black hole, a Wolf-Rayet, a carbon,
 MS, S or O-type star, a Herbig Ae/Be star, a supergiant, a rare white dwarf, an exotic star), from Spansh's records
