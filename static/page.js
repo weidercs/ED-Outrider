@@ -1457,7 +1457,7 @@ function renderSurface() {
   // Overview: the same map and legend in the lower half of the system pane, where a body's detail panel goes; an
   // open body panel takes the spot, and the map comes back when it is closed. Not while the pane shows another system.
   const ovBox = document.getElementById("ovMap"), hv = document.getElementById("hereView");
-  const onOv = show && view === "overview" && !ovState.collapsed && !selectedBody && !pinnedSystem;
+  const onOv = show && view === "overview" && !selectedBody && !pinnedSystem;
   ovBox.hidden = !onOv;
   hv.classList.toggle("mapon", onOv);
   document.getElementById("ovHere").classList.toggle("hasMap", onOv);
@@ -3092,7 +3092,7 @@ function render() {
   document.getElementById("bmTable").hidden = view !== "bm";
   document.getElementById("bmTools").hidden = view !== "bm";
   const nearPinned = view === "near" && !!pinnedSystem;
-  document.getElementById("hereView").hidden = !(view === "here" || nearPinned || (view === "overview" && !ovState.collapsed));
+  document.getElementById("hereView").hidden = !(view === "here" || nearPinned || view === "overview");
   document.querySelector("main").classList.toggle("nearPinned", nearPinned);
   document.getElementById("firstsView").hidden = view !== "firsts";
   document.getElementById("cmdrView").hidden = view !== "cmdr";
@@ -3107,7 +3107,7 @@ function render() {
   if (view === "log") { logUnsentShow(); if (L.key === null) loadLog(); else tailLog(); }
   document.getElementById("bioView").hidden = view !== "bio";
   if (view === "bio") { if (bioMode !== "runs") { loadChecklist(); if (CL.find) clDrawSide(); } else loadBio(); }   // a ☆ set from the find's list
-  if (view === "here" || nearPinned || (view === "overview" && !ovState.collapsed) || view === "now") {   // Now reads Here's data
+  if (view === "here" || nearPinned || view === "overview" || view === "now") {   // Now reads Here's data
     loadHere();
     // tab and pane keep different modes; and the in-game target moves without a scan (review F4): redraw, no refetch
     if (hereData && (lastHereCtx !== hereCtx() || lastHereDest !== hereDestKey() || lastHerePlan !== herePlanKey())) renderHere();
@@ -3698,7 +3698,6 @@ function pinSystem(id) {
   // the system you are in is not "pinned": Here shows it anyway, with its to-do line
   pinnedSystem = posId() === String(id) ? null : String(id);
   forgetOtherHere();
-  if (view === "overview" && ovState.collapsed) { ovState.collapsed = false; saveOv(); }   // else the pin shows nothing
   if (selectedBody) closeBody(); hidePop(); render(); renderHere(); paneTop("hereMain");
 }
 function unpinSystem() { pinnedSystem = null; forgetOtherHere(); if (selectedBody) closeBody(); render(); renderHere(); paneTop("hereMain"); }
@@ -3729,17 +3728,19 @@ async function loadHere() {
 }
 // ---- Overview: the Here section and the Nearby table shown together ----
 // Defaults: side by side, nearby on the left and this system on the right at 40%.
-const ovState = Object.assign({layout: "side", collapsed: false, flip: false, split: 40}, store.get("overview", {}));
+const ovState = Object.assign({layout: "side", flip: false, split: 40}, store.get("overview", {}));
+delete ovState.collapsed;   // the ▾ This system fold is gone (the author, 2026-10-14): the system pane always shows
 const ovHome = {here: null, near: null};   // where the sections live when not in the overview
 function placeOverview() {
   const ov = document.getElementById("overView"), here = document.getElementById("hereView"), near = document.getElementById("nearWrap");
   const paneHere = document.getElementById("ovHere"), paneNear = document.getElementById("ovNear");
   if (!ovHome.here) { ovHome.here = here.nextSibling; ovHome.near = near.nextSibling; }
-  // the Standard / Boxel switch: on the Overview's own bar, left of "This system" (the author, 2026-10-11); in
-  // Nearby's options on the Nearby tab
-  const mode = document.querySelector(".nearmode"), bar = document.querySelector("#overView .ovbar"), opts = document.getElementById("nearOpts");
+  // the Standard / Boxel switch with Around beside it: on the Overview's own bar (the author, 2026-10-11 and
+  // 2026-10-14); on Nearby's top bar on the Nearby tab
+  const mode = document.querySelector(".nearhead"), bar = document.querySelector("#overView .ovbar"), head = document.getElementById("nearHead");
   if (view === "overview") { if (mode.parentNode !== bar) bar.insertBefore(mode, bar.firstChild); }
-  else if (mode.parentNode !== opts) opts.insertBefore(mode, opts.firstChild);
+  else if (mode.parentNode !== head) head.appendChild(mode);
+  head.hidden = view === "overview";
   if (view === "overview") {
     if (here.parentNode !== paneHere) paneHere.appendChild(here);
     if (near.parentNode !== paneNear) paneNear.appendChild(near);
@@ -3748,16 +3749,14 @@ function placeOverview() {
     if (here.parentNode === paneHere) main.insertBefore(here, ovHome.here);
     if (near.parentNode === paneNear) main.insertBefore(near, ovHome.near);
   }
-  ov.className = `${ovState.layout}${ovState.collapsed ? " collapsed" : ""}${ovState.flip ? " flip" : ""}`;
+  ov.className = `${ovState.layout}${ovState.flip ? " flip" : ""}`;
   ov.style.setProperty("--ovw", ovState.split + "%");
   paneHere.classList.toggle("compact", ovState.layout === "side");
   paneHere.classList.toggle("hasDetail", !!selectedBody);
   here.classList.toggle("detail", !!selectedBody);
-  document.getElementById("ovCollapse").textContent = (ovState.collapsed ? "▸ " : "▾ ") + "This system";
   const r = document.querySelector(`input[name=ovLayout][value="${ovState.layout}"]`); if (r) r.checked = true;
 }
 const saveOv = () => store.set("overview", ovState);
-document.getElementById("ovCollapse").onclick = () => keepPanes(() => { ovState.collapsed = !ovState.collapsed; saveOv(); render(); });
 document.getElementById("ovFlip").onclick = () => keepPanes(() => { ovState.flip = !ovState.flip; saveOv(); render(); });
 document.querySelectorAll("input[name=ovLayout]").forEach(r => r.onchange = () => keepPanes(() => { ovState.layout = r.value; saveOv(); render(); }));
 // Drag the divider: the system pane's share of the width, 20-70 %.

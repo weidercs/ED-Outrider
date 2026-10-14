@@ -2,6 +2,16 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · Nearby's bars: Around beside Standard / Boxel, the filters on the checkboxes' row, no ▾ This system
+- **Around** sits beside the Standard / Boxel switch: on the Overview's bar, and on Nearby's own top bar (`#nearHead`)
+  on the Nearby tab (`.nearhead` moves between them, `placeOverview`).
+- One row of options under it: **Mass** first, then **visited**, **fully explored**, **1 jump** (were "show visited",
+  "show fully explored", "one jump only"), **no scan data** (was "No scan data only") and **⧉ Copy visible**; the
+  separate filters row (`#nearFilters`) is gone.
+- The Overview's **▾ This system** fold is gone: the system pane always shows (`ovState.collapsed` dropped, a stored
+  one deleted on load).
+- Smoke: the bar's contents and the row's order, the fold's checks removed. Guide: views.md.
+
 ## 2026-10-14 · Overlay settings: "Text Size", a wider Scale box, the buttons on their own line
 - The All Panels row reads "Text Size" instead of "Text Sz" (the Text column's hover and the overlay guide too).
 - The Scale box is wide enough for "100" beside its spinner (5em, was 3.4em).

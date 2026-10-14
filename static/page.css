@@ -162,7 +162,6 @@ td.bodies { cursor: help; }
 #overView.side #ovDivider:hover, #overView.side #ovDivider.drag { background: var(--accent); }
 #overView.side #ovHere { flex: 0 0 var(--ovw); min-width: 0; order: 2; max-height: 80vh; overflow: auto; }
 #overView.side.flip #ovHere { order: 0; } #overView.side.flip #ovNear { order: 2; }
-#overView.collapsed #ovHere, #overView.collapsed #ovDivider { display: none; }
 #overView #hereView { margin-top: 0; }
 #ovHere.compact #hereTable .hide-sm, #ovHere.compact #hereView .hint { display: none; }
 #ovHere.compact #hereTable th, #ovHere.compact #hereTable td { padding: 4px 4px; font-size: 12px; }
@@ -255,6 +254,8 @@ body.viewwin .views { display: none; }
 .viewback { margin-left: auto; }
 #nearOpts { display: inline-flex; gap: 16px; }
 /* boxel exploration (2026-10-11): the switch, and the boxel pane in Nearby's place */
+/* the Standard / Boxel switch and Around, on Nearby's top bar (or the Overview's) */
+.nearhead { display: inline-flex; gap: 16px; align-items: center; flex-wrap: wrap; }
 .nearmode { display: inline-flex; gap: 2px; border: 1px solid var(--line); border-radius: 6px; padding: 1px 4px; }
 .nearmode label { display: inline-flex; align-items: center; gap: 3px; padding: 1px 4px; }
 #nearWrap.boxel .stdonly { display: none; }
@@ -263,7 +264,6 @@ body.viewwin .views { display: none; }
 #nearTable:not(.around) .fromcol { display: none; }
 .nearAround { display: inline-flex; align-items: center; gap: 6px; }
 .nearAround .lbl { color: var(--muted); }
-#nearFilters { padding-top: 2px; gap: 12px; }
 #nearStrip { margin-top: 6px; font-size: 13px; }
 #nearStrip .nsline { padding: 3px 8px; border-left: 3px solid var(--accent); margin-top: 2px; }
 #nearStrip .nsline.warn { border-left-color: var(--warn); color: var(--warn); }

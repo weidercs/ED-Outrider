@@ -137,9 +137,9 @@ behind</b> lists nearby systems with work over your thresholds.
 </table>
 
 The **Overview** at the top shows Here and Nearby together: drag the divider, swap sides or stack them. Nearby's
-Standard / Boxel switch sits on its bar, left of ▾ This system.
+Standard / Boxel switch and its Around sit on its bar.
 
-<a id="nearby-around"></a>**Nearby around another system** (Around, on Nearby's bar; the idea of Rainmangames' pull
+<a id="nearby-around"></a>**Nearby around another system** (Around, beside the Standard / Boxel switch; the idea of Rainmangames' pull
 request #8): to sweep an area for unreported systems while you fly about in it.
 - **You** (the default): the list follows your ship. **Lock this system** keeps it centred where you are now;
   **your destination**, **carrier** or **next stop** follow those; **a system…** takes a name. The choice is kept by
@@ -151,8 +151,8 @@ request #8): to sweep an area for unreported systems while you fly about in it.
   timer. A system you visit inside the sphere joins the list at once, and your scans fill its rows as usual.
 - A centre that names nothing now (no target, no carrier) says why, and the list stays around you meanwhile.
 - Around applies to Standard mode; a boxel has its own centre.
-- **Filters** on Nearby's second row, kept per device: **Mass** (one mass code, a to h: the letter before the number of a
-  procedural name), **No scan data only** (systems nobody has reported scanning), and **⧉ Copy visible** (the names of
+- **Filters** on Nearby's row of checkboxes, kept per device: **Mass** (one mass code, a to h: the letter before the number of a
+  procedural name), **no scan data** (systems nobody has reported scanning), and **⧉ Copy visible** (the names of
   the rows shown, one per line). When Spansh returns its maximum, a line above the list says the list is complete only
   to so many light years: a smaller radius shows them all.
 
@@ -302,7 +302,7 @@ A procedural system name says which cube of space (a **boxel**) it is in and wha
 in `Drojau TF-H c13-5` the **c** is the mass code (a 40 ly cube of K and M stars, some G) and **5** the system's number.
 A boxel's systems are numbered 0, 1, 2… without gaps, so you can visit them in order.
 
-**Nearby → Boxel** (the switch on the Overview's bar, left of ▾ This system, and in Nearby's options on the Nearby tab;
+**Nearby → Boxel** (the switch on the Overview's bar, and on Nearby's top bar on the Nearby tab;
 one choice for both) lists the boxel you are in by number: systems you visited show your scans as Nearby does, ones
 Spansh knows are marked "known" (someone has been there), the rest are "to try". Above the list: how many you have
 visited, how many Spansh knows and the **highest known** number (yours or Spansh's). On the game PC, **Next** (with 🎯 where auto-target can work)

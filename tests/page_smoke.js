@@ -2763,7 +2763,7 @@ const releasePayloads = async () => {
   }
   // Overview's surface map: the same map and legend in the lower half of the system pane while the map is shown (the
   // strip's copy stands down there), sized to the box; an open body panel takes the spot and the map comes back when
-  // it is closed; hidden with the map off, the pane collapsed, or another system pinned into it
+  // it is closed; hidden with the map off or another system pinned into it
   {
     const w = dom.window, before = errors.length;
     const got = JSON.parse(w.eval(`(() => {
@@ -2773,7 +2773,7 @@ const releasePayloads = async () => {
       data.surface = {body: "ABC 1", system: "5", body_id: 3, lat: 0, lon: 0, heading: 0, alt: 0, radius: 1000000, show: true, down: true,
         alt_avg: false, rhino: false, ship: {lat: 0.01, lon: 0.01}, rigs: [], sites: [], locations: [], bio: []};
       store.set("surfaceCfg", {strip: true});
-      Object.assign(ovState, {layout: "side", collapsed: false}); view = "overview";
+      Object.assign(ovState, {layout: "side"}); view = "overview";
       const box = document.getElementById("ovMap"), hv = document.getElementById("hereView"), cv = document.getElementById("ovMapCanvas");
       const size = (wd, ht) => { Object.defineProperty(box, "clientWidth", {value: wd, configurable: true});
                                  Object.defineProperty(box, "clientHeight", {value: ht, configurable: true}); };
@@ -2803,7 +2803,6 @@ const releasePayloads = async () => {
       size(640, 380);
       selectedBody = "ABC 1"; render(); o.body = state();
       closeBody(); o.closed = state();
-      ovState.collapsed = true; render(); o.collapsed = state(); ovState.collapsed = false;
       data.surface = {...data.surface, show: false, down: undefined}; render(); o.off = state();
       data.surface = null; render(); o.none = state();
       view = "here"; data.surface = {body: "ABC 1", lat: 0, lon: 0, heading: 0, radius: 1000000, show: true, down: true, alt: 0, rigs: [], bio: []}; render(); o.hereView = state();
@@ -2820,7 +2819,7 @@ const releasePayloads = async () => {
       on: got.on.shown && got.on.mapon && got.on.inHere && !got.on.leaving && got.closed.leaving === false && got.body.leaving && !got.on.stack && got.on.S >= 160 && got.on.S <= 380 && got.on.legend && !got.on.strip,
       narrow: got.narrow.shown && got.narrow.stack && got.narrow.S <= 300 && got.narrow.S > 0,
       body: !got.body.shown && !got.body.mapon && got.body.strip, closed: got.closed.shown && got.closed.mapon,
-      off: !got.collapsed.shown && !got.off.shown && !got.off.mapon && !got.none.shown && !got.none.mapon,
+      off: !got.off.shown && !got.off.mapon && !got.none.shown && !got.none.mapon,
       hereView: !got.hereView.shown && !got.hereView.mapon && got.hereView.strip,
       reveal: got.revealOnce.length === 1 && got.revealOnce[0] === "ABC 1 start hereMain" && got.revealAgain === 2 &&
         // a short list: nothing on the plain page; in app mode the row's pane scrolls (never the window: no box given)
@@ -3384,7 +3383,7 @@ const releasePayloads = async () => {
       // Overview: the map in the system pane under the body table, Nearby its own pane, no inline window height
       data.surface = {body: "ABC 1", system: "5", body_id: 3, lat: 0, lon: 0, heading: 0, alt: 0, radius: 1000000, show: true, down: true,
         alt_avg: false, rhino: false, ship: null, rigs: [], sites: [], locations: [], bio: []};
-      Object.assign(ovState, {layout: "side", collapsed: false}); view = "overview"; render();
+      Object.assign(ovState, {layout: "side"}); view = "overview"; render();
       const hv = document.getElementById("hereView"), map = document.getElementById("ovMap"), near = document.getElementById("nearPane");
       o.ov = {map: !map.hidden && document.getElementById("ovHere").contains(map) && !near.contains(map), inline: hv.style.height,
               nearPane: document.getElementById("ovNear").contains(near) && cs(near).overflow, here: cs(document.getElementById("hereMain")).overflow};
@@ -5689,12 +5688,16 @@ const releasePayloads = async () => {
       o.shown = [!pane.hidden, document.getElementById("nearPane").hidden, document.getElementById("nearWrap").classList.contains("boxel")];
       o.warning = pane.textContent.includes("Outrider cannot know how many systems a boxel holds")
         && !!pane.querySelector(".bxhead .hint .bxwarn");   // on the "you have visited" line (the author, 2026-10-11)
-      // the switch sits on the Overview's bar, left of "This system", and back in Nearby's options on the Nearby tab
+      // the switch and Around beside it sit on the Overview's bar (no ▾ This system: 2026-10-14), and on Nearby's own top
+      // bar on the Nearby tab, the checkboxes' row under it: Mass first, no scan data and ⧉ Copy visible after the rest
       const v0 = view; view = "overview"; render();
-      const bar = document.querySelector("#overView .ovbar");
-      o.place = [bar.firstElementChild.classList.contains("nearmode"), bar.querySelector(".nearmode + #ovCollapse") !== null];
+      const bar = document.querySelector("#overView .ovbar"), nh = bar.firstElementChild;
+      o.place = [nh.classList.contains("nearhead") && !!nh.querySelector(".nearmode + .nearAround #nearAround"),
+                 !document.getElementById("ovCollapse"), document.getElementById("nearHead").hidden];
       view = "near"; render();
-      o.place.push(document.getElementById("nearOpts").firstElementChild.classList.contains("nearmode"));
+      const head = document.getElementById("nearHead"), opts = document.getElementById("nearOpts");
+      o.place.push(!head.hidden && head.firstElementChild.classList.contains("nearhead"));
+      o.opts = [...opts.children].map(e => e.id || e.textContent.trim().replace(/^Mass.*/, "Mass")).join("|");
       view = v0; render(); await tick();
       o.rows = [...pane.querySelectorAll("#boxelTable tbody tr")].map(r => r.className);
       o.next = !!pane.querySelector('.bxacts button[data-aim="next"][data-route="boxel"]:not([data-index])');
@@ -5722,7 +5725,7 @@ const releasePayloads = async () => {
       o.back = !document.getElementById("nearPane").hidden;
       return o; })()`);
     w.fetch = realFetch;
-    const want = {shown: [true, true, true], warning: true, place: [true, true, true], rows: ["visited", "next", "try"], next: true, aims: "1,2", near: [true, true, true, true, true], doneBtn: true,
+    const want = {shown: [true, true, true], warning: true, place: [true, true, true, true], opts: "Mass|visited|fully explored|1 jump|no scan data|nearCopy|click a column heading to sort", rows: ["visited", "next", "try"], next: true, aims: "1,2", near: [true, true, true, true, true], doneBtn: true,
                   known: ["known · 3 of 14 bodies", "known · all 9 bodies", "known · honked only", "known · nothing reported"],
                   grid: [1024, "bxc v you", "2", "bxc k", "bxc c", "bxc", "layer 32 of 32 (yours)"],
                   gridTitle: "Drojau TF-H c13 · you visited 2 · tap to explore this boxel",
