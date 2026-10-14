@@ -68,7 +68,8 @@ class RouteBase(unittest.TestCase):
                        "StarPos": [0, 0, 0]})
 
     def route(self, n):
-        hops = [{"id64": i, "name": f"S{i}", "star_class": "K", "x": i * 10.0, "y": 0, "z": 0} for i in range(1, n + 1)]
+        hops = [{"id64": i, "name": f"S{i}", "star_class": "K", "x": -4000.0 + i * 10.0, "y": 0, "z": 3000.0}   # out in the black
+                for i in range(1, n + 1)]
         ed_outrider.meta_set(self.db, "route", {"ts": "2026-01-01T00:00:30Z", "hops": hops})
 
     def known(self):
@@ -147,6 +148,20 @@ class RouteLookup(RouteBase):
         self.state.route_retry_at = 0
         self.run_lookup()
         self.assertEqual((len(self.calls), self.known()), (2, {2: True, 3: False}))
+
+    def test_populated_hops_are_not_asked(self):
+        """Near Sol (1,000 ly) or Colonia (500 ly) Spansh knows every system and its records are heavy: those hops are
+        never looked up (the author, 2026-10-14); the chips claim nothing there, as for any hop not asked."""
+        hops = [{"id64": 10, "name": "Sol-ish", "star_class": "G", "x": 50.0, "y": 0, "z": 30.0},
+                {"id64": 12, "name": "Colonia-ish", "star_class": "K", "x": -9500.0, "y": -900.0, "z": 19800.0},
+                {"id64": 14, "name": "Black", "star_class": "M", "x": -4000.0, "y": 0, "z": 3000.0}]
+        ed_outrider.meta_set(self.db, "route", {"ts": "2026-01-01T00:00:30Z", "hops": hops})
+        self.run_lookup()
+        self.assertEqual(self.calls, [[14]])
+        self.assertEqual({k: v for k, v in self.known().items()}, {10: None, 12: None, 14: True})
+        self.assertTrue(ed_outrider.route_hop_populated({"x": 999.0, "y": 0, "z": 0}))
+        self.assertFalse(ed_outrider.route_hop_populated({"x": 1001.0, "y": 0, "z": 0}))
+        self.assertFalse(ed_outrider.route_hop_populated({"name": "no position"}))
 
     def test_without_the_lookup_nothing_is_asked(self):
         self.route(3)

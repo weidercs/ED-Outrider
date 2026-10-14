@@ -759,7 +759,10 @@ upstream project's choices, not rules of the game.
   shown) that nothing has answered, in one Spansh search by id64 (`Spansh.records_by_id`, the request `permit_ids`
   already made), one at a time, a failure retried after 5 minutes, each answer kept in memory for a day (no table: it
   is a display aid, and a restart asks once more). The positive answers are not cached as bases: a search-level base
-  stored for its `updated_at` would stop the refresh from ever fetching that system's bodies.
+  stored for its `updated_at` would stop the refresh from ever fetching that system's bodies. Hops in the populated
+  regions are never asked (`ROUTE_LOOKUP_SKIP`, `route_hop_populated`: within 1,000 ly of Sol or 500 ly of Colonia;
+  the author, 2026-10-14): Spansh knows every system there, and those records are heavy (Sol and Colonia alone ~190
+  KB), so a bubble route would pull megabytes for an answer already known; their chips claim nothing.
 - **A lookup that fails says only "Spansh unavailable"** (S42, the author's answer, 2026-10-12): the Data tile names the
   source and nothing more ("EDSM unavailable", "GitHub unavailable"), or "No internet connection" when two or more
   sources failed by DNS or no route with no answer from anywhere between (one source's DNS failure can be that

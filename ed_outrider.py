@@ -381,6 +381,9 @@ REPORTED_RETRY_S = 600     # s: ...and after a failed ask, not before this
 ROUTE_LOOKUP_MAX = 24      # hops of the game's route asked of Spansh at once (the In-Game Route strip shows 24 chips)
 ROUTE_LOOKUP_KEEP_S = 86400   # s: Spansh's answer for a route hop (has it or not) is trusted this long
 ROUTE_LOOKUP_RETRY_S = 300    # s: after a failed hop lookup, not asked again before this
+# the populated regions, where Spansh knows every system and its records are heavy (Sol and Colonia: ~190 KB for the
+# two): a route hop inside one is never looked up (the author, 2026-10-14). (x, y, z, radius ly)
+ROUTE_LOOKUP_SKIP = ((0.0, 0.0, 0.0, 1000.0), (-9530.5, -910.28125, 19808.125, 500.0))
 CHECKLIST_FIND_LY = 20000  # ly: S29's search for the nearest reported bodies of a species (sorted nearest first)
 CHECKLIST_FIND_ROWS = 25   # bodies asked for (one page)
 CHECKLIST_FIND_KEEP_S = 600   # s: the same species, colour and place answered from memory, not asked again
@@ -6570,6 +6573,17 @@ def backup_due(last, every_days, now=None):
         return True   # never backed up
     return age >= every_days * 86400
 
+
+
+def route_hop_populated(h):
+    """Whether a route hop lies in a populated region (ROUTE_LOOKUP_SKIP: around Sol and Colonia), where Spansh knows
+    every system: it is not looked up there (its records are heavy, and the answer is known). A hop without a position
+    counts as not populated."""
+    try:
+        x, y, z = float(h["x"]), float(h["y"]), float(h["z"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    return any((x - cx) ** 2 + (y - cy) ** 2 + (z - cz) ** 2 <= r * r for cx, cy, cz, r in ROUTE_LOOKUP_SKIP)
 
 class State:
     def __init__(self, db, journals, spansh, radius):
@@ -13546,7 +13560,8 @@ class State:
         key = ((self.journals.game_route() or {}).get("ts"), (self.journals.pos or {}).get("id64"), self.version)
         if key == self.route_seen:
             return   # nothing changed since the last look (it runs every tick)
-        ids = [h["id64"] for h in self.summary_hops()[:ROUTE_LOOKUP_MAX] if self.spansh_knows(h["id64"]) is None]
+        ids = [h["id64"] for h in self.summary_hops()[:ROUTE_LOOKUP_MAX]
+               if self.spansh_knows(h["id64"]) is None and not route_hop_populated(h)]
         if ids:
             self.route_task = asyncio.create_task(self.fetch_route_ids(ids))
         else:

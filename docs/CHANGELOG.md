@@ -2,6 +2,12 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · No route lookups in the bubble
+- The game route's hops are no longer looked up on Spansh within 1,000 ly of Sol or 500 ly of Colonia (the author's
+  ask): Spansh knows every system there and their records are heavy (Sol and Colonia alone ~190 KB), so a route
+  through the bubble pulled megabytes for an answer already known. Out in the black, where an unreported system matters,
+  nothing changes. Those hops' chips claim nothing, as for any hop not asked.
+
 ## 2026-10-14 · Route chips say "not reported to Spansh" only when Spansh was asked
 Reported by Kurbo26 in GitHub discussion #3: Sol's chip on the In-Game Route line showed ✦ "not reported to Spansh".
 A hop counted as known only if it was in the Nearby list or Outrider's Spansh cache, so every system Outrider had
