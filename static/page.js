@@ -93,7 +93,8 @@ const SHORT_FORMS = {
   head: {"Main star": "Star", "Value now / max": "Value", "Dist ls": "ls", "Atmosphere": "Atm", "Bio / Geo": "Bio",
     "System tag": "Tag", "Seen by others": "Seen", "Lost: scan (FSS)": "FSS", "Lost: map (DSS)": "DSS", "Lost total": "Lost",
     "Unsold value": "Unsold", "Max from Sol": "Sol", "🏁 systems": "🏁", "ship losses": "losses", "Samples": "Samp",
-    "Bookmarked system": "System", "Jump ly": "ly", "Fuel used": "Used", "Fuel left": "Fuel", "Remaining ly": "Left"},
+    "Bookmarked system": "System", "Jump ly": "ly", "Fuel used": "Used", "Fuel left": "Fuel", "Remaining ly": "Left",
+    "Expires in": "Left", "Bounties by ship": "By ship", "Fighting": "Time", "Mining": "Time", "Prospected": "Prosp"},
   state: {"in progress": "in prog"},
 };
 // the planet classes inside a longer text ("map 2 Water world T"), longest first so "Rocky Ice world" is not "Rocky"
@@ -384,6 +385,7 @@ function renderCarrier() {
   const none = !!data && !c;
   document.getElementById("tCarrier").hidden = none;
   document.getElementById("tiles").classList.toggle("nocarrier", none);
+  tileCols();
   if (!c) { cl.innerHTML = val(`<span class="unk">none seen</span>`); return; }
   // decommissioned (or being): in red with the date, rather than the tile vanishing (a mistake would go unseen)
   const dc = c.decommission;
@@ -703,6 +705,41 @@ const VARIANT_COLOURS = {Amethyst: "#b48cf0", Aquamarine: "#6fe3c8", Black: "#8a
   White: "#f2f2f2", Yellow: "#f5d84a"};
 const colourName = name => { const m = /^(.* - )([A-Za-z]+)$/.exec(String(name || "")), c = m && VARIANT_COLOURS[m[2]];
   return c && hereBio().colours ? `${esc(m[1])}<span class="vc" style="--vc: ${c}">${esc(m[2])}</span>` : esc(name); };
+// Which header tiles this device shows (the author, 2026-10-14: there are many tiles now): an unticked one is left out
+// here, as a tile and from the one line alike; at least one stays. Per device (store tilesHidden, the tiles' keys), as
+// tilesMode; the tablet has its own strip. [key, the tile's id, its name in Settings → Display]
+const TILES = [["where", "tWhere", "Where I am"], ["cmdr", "tCmdr", "Commander"], ["fuel", "tFuel", "Fuel"], ["carrier", "tCarrier", "Carrier"],
+               ["unsold", "tUnsold", "Unsold"], ["data", "tData", "Data"]];
+const TILE_COL = {where: "1.5fr", cmdr: "0.75fr"};   // wide screens: Where half as much again, Commander less (as before)
+const tilesHidden = () => { const v = store.get("tilesHidden", null);
+  const off = Array.isArray(v) ? TILES.map(t => t[0]).filter(k => v.includes(k)) : [];
+  return off.length >= TILES.length ? [] : off; };   // never all of them
+const tileShown = k => !tilesHidden().includes(k);
+// the wide grid's columns: one per tile shown (the Carrier tile is also hidden with no carrier on record)
+function tileCols() {
+  const box = document.getElementById("tiles"), off = tilesHidden();
+  const cols = TILES.filter(([k, id]) => !off.includes(k) && !document.getElementById(id).hidden).map(([k]) => TILE_COL[k] || "1fr").join(" ") || "1fr";
+  if (box.style.getPropertyValue("--tile-cols") !== cols) box.style.setProperty("--tile-cols", cols);
+}
+function drawTileChoice() {
+  const off = tilesHidden();
+  // an attribute, not a class: the fuel, unsold and Data tiles set their className at each draw
+  for (const [k, id] of TILES) document.getElementById(id).toggleAttribute("data-off", off.includes(k));
+  tileCols();
+  document.querySelectorAll("#tilesShown [data-tile]").forEach(x => {
+    x.checked = !off.includes(x.dataset.tile);
+    x.disabled = x.checked && off.length === TILES.length - 1;   // the last one shown stays
+  });
+}
+document.getElementById("tilesShown").addEventListener("change", e => {
+  const k = e.target.dataset && e.target.dataset.tile; if (!k) return;
+  const off = new Set(tilesHidden());
+  if (e.target.checked) off.delete(k); else off.add(k);
+  if (off.size < TILES.length) store.set("tilesHidden", TILES.map(t => t[0]).filter(x => off.has(x)));
+  drawTileChoice();
+  if (data) render();   // the header's height changed, and the one line
+});
+drawTileChoice();
 const tilesModeEl = document.getElementById("tilesMode");
 const drawTilesMode = () => { tilesModeEl.value = tilesMode() || ""; };
 tilesModeEl.onchange = () => { store.set("tilesMode", tilesModeEl.value || null); drawTilesFold(); if (data) render(); };
@@ -716,18 +753,21 @@ function tilesLineHtml() {
   const p = data.position, f = data.fuel, cm = data.commander, u = data.unsold, c = data.carrier;
   const bit = (html, lvl, title) => `<span class="tl${lvl ? " tl-" + lvl : ""}"${title ? ` title="${esc(title)}"` : ""}>${html}</span>`;
   const ly = d => `${d.toLocaleString("en-US", {maximumFractionDigits: d < 10 ? 1 : 0})} ly`;
-  const out = [p ? `<span class="copy tl-sys" data-name="${esc(p.name)}" title="click to copy">${esc(p.name)}</span>` : `<span class="unk">${esc(noJumpText())}</span>`];
-  if (f && f.live && f.main != null) out.push(bit(`⛽ ${f.pct != null ? f.pct + "%" : f.main.toFixed(1) + " t"}`, tileLevel("tFuel"), "fuel in the main tank"));
-  if (cm && cm.credits != null) out.push(bit(`${credits(cm.credits)} cr`, "", "credits at login plus exploration and exobiology sales since"));
-  if (u && !u.error && u.total != null) out.push(bit(`unsold ${credits(u.total)}`, tileLevel("tUnsold"), "unsold data on board (estimate): hover the tiles for the detail"));
-  if (c) {
+  // each tile's bit only where this device shows the tile (Settings → Display); the system's name if nothing else is left
+  const where = p ? `<span class="copy tl-sys" data-name="${esc(p.name)}" title="click to copy">${esc(p.name)}</span>` : `<span class="unk">${esc(noJumpText())}</span>`;
+  const out = tileShown("where") ? [where] : [], on = k => tileShown(k);
+  if (on("fuel") && f && f.live && f.main != null) out.push(bit(`⛽ ${f.pct != null ? f.pct + "%" : f.main.toFixed(1) + " t"}`, tileLevel("tFuel"), "fuel in the main tank"));
+  if (on("cmdr") && cm && cm.credits != null) out.push(bit(`${credits(cm.credits)} cr`, "", "credits at login plus exploration and exobiology sales since"));
+  if (on("unsold") && u && !u.error && u.total != null) out.push(bit(`unsold ${credits(u.total)}`, tileLevel("tUnsold"), "unsold data on board (estimate): hover the tiles for the detail"));
+  if (on("carrier") && c) {
     const pl = c.planned, left = pl && pl.departure ? (Date.parse(pl.departure) - Date.now()) / 1000 : null;
     const where = c.aboard ? "aboard" : c.here ? "here" : c.distance != null ? ly(c.distance) : esc(c.system || "");
     const dep = left != null && left > 0 ? ` · departs in ${left >= 3600 ? `${Math.floor(left / 3600)} h ${Math.floor(left % 3600 / 60)} min` : `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, "0")}`}` : "";
     out.push(bit(`carrier ${where}${dep}`, dep && left < 300 && !c.aboard ? "urgent" : "", c.name || "your fleet carrier") + carrierAim(c));
   }
   const dl = tileLevel("tData");
-  if (dl) out.push(bit(dataBit, dl, "the Data tile: unfold the tiles for the detail"));
+  if (on("data") && dl) out.push(bit(dataBit, dl, "the Data tile: unfold the tiles for the detail"));
+  if (!out.length) out.push(where);
   return out.join(`<span class="tl-sep"> · </span>`);
 }
 function renderTilesLine() {
@@ -1609,7 +1649,8 @@ function star(s) {
 }
 
 // the tablet keeps its own page (a desktop browser opening /tablet to try it must not lose its view) and has no Overview
-const TABLET_VIEWS = ["now", "near", "here", "bio", "bm", "search", "map", "hwy", "hist", "log", "mat", "firsts", "cmdr"];
+// in the nav's order (tests/test_tablet.py checks it against page.html's tb-page buttons and TB.groups)
+const TABLET_VIEWS = ["now", "near", "here", "bio", "bm", "search", "map", "hwy", "hist", "log", "mat", "cmdr", "firsts"];
 let view = TABLET ? store.get("tabletView", "now") : store.get("view", "near");
 if (view === "rich") view = "hwy";   // Road to Riches had a tab of its own for a day (PR #1): it is a route type of Plot Route now
 if (TABLET && !TABLET_VIEWS.includes(view)) view = "now";
@@ -1715,7 +1756,9 @@ const VIEW_PANE = {overview: "nearPane", near: "nearPane", here: "hereMain", bio
 // with each level's forms in turn; going back to a longer form needs COMPACT_SLACK px to spare, so a scrollbar that
 // comes and goes with the row heights cannot make it flap.
 const FIT_TABLES = ["nearTable", "hereTable", "firstsTable", "leftTable", "bioTable", "codexTable", "histTable", "tripTable",
-                    "topTable", "logTable", "sTable", "bmTable", "hwyTable"];
+                    "topTable", "logTable", "sTable", "bmTable", "hwyTable", "cmMissions", "cmCombat", "cmMining"];
+// boxes whose FIT_TABLES are drawn later, replaced whole at each draw (the CMDR tab's): watched, so a new table is fitted
+const FIT_HOSTS = ["cmdrBody"];
 const COMPACT_SLACK = 24;
 // widths[l]: the table's width with level l's forms (measured in order; later ones may be missing); current: its level now
 function compactLevel(widths, avail, current) {
@@ -1774,6 +1817,11 @@ function fitSoon() {
     const t = document.getElementById(id); if (!t) continue;
     if (ro) { ro.observe(t); if (t.parentElement) ro.observe(t.parentElement); }
     if (mo) mo.observe(t, {childList: true, subtree: true, characterData: true});
+  }
+  for (const id of FIT_HOSTS) {
+    const h = document.getElementById(id); if (!h) continue;
+    if (ro) ro.observe(h);
+    if (mo) mo.observe(h, {childList: true, subtree: true, characterData: true});
   }
   if (!ro) window.addEventListener("resize", fitSoon);
 }
@@ -5754,6 +5802,8 @@ function diedHtml(x) {
   return ` <span class="lost" title="${esc(title)}">✗${x.died > 1 ? x.died : ""}</span>`;
 }
 const openSessions = new Set();
+// the CMDR tab's "History ›" (its career block): History's Career row brought into view at the next draw with data
+let histReveal = false;
 function renderHistory() {
   renderLastSession();
   const h = histData, st = document.getElementById("hStatus");
@@ -5782,6 +5832,7 @@ function renderHistory() {
         <td class="num hide-sm">${(e.First_Footfalls || 0).toLocaleString()}</td><td class="num" title="organic species encountered">${(o.Organic_Species_Encountered || 0).toLocaleString()}</td>` +
         soldCell((e.Exploration_Profits || 0) + (o.Organic_Data_Profits || 0), "exploration profits and organic data profits, the game's statistics") +
         `<td class="num hide-sm c2hide"></td></tr>`); }
+  if (histReveal) { histReveal = false; const r = document.querySelector("#histAll tr.career"); if (r) revealIn(r, "start"); }
   const fmtD = t => t ? t.slice(0, 10) : "start";
   // compact: "✗ 09-01 −12.3M" (the split between carto and bio stays in the full form and the title)
   const lossHtml = ls => ls.map(l => {
@@ -10053,17 +10104,39 @@ document.getElementById("cmRefresh").addEventListener("click", () => loadCmdr(tr
 document.getElementById("cmFilter").addEventListener("input", e => { CM.q = e.target.value; cmdrDrawBody(); });
 document.getElementById("cmCraft").addEventListener("change", e => { CM.craft = e.target.checked; cmdrDrawBody(); });
 document.getElementById("cmdrBody").addEventListener("toggle", e => { const k = e.target.dataset && e.target.dataset.cmmod; if (k) CM.open[k] = e.target.open; }, true);
+// links out of the tab (should 5: the tiles stay informational, the links go from here): the career to History's
+// Career row; a material Engineering is short of to the Materials tab (filtered to it) and its ⇄ to the nearest trader
+function cmdrGo(el) {
+  const t = el.closest("[data-trader]"), m = el.closest("[data-cmmat]"), h = el.closest("[data-cmgo]");
+  if (t) openNearest({need: [t.dataset.trader]});
+  else if (m) { mFilter.value = m.dataset.cmmat; mHeld.checked = false; const b = document.querySelector('[data-view="mat"]'); if (b) b.click(); }
+  else if (h) { histReveal = true; const b = document.querySelector('[data-view="hist"]'); if (b) b.click(); }
+  return !!(t || m || h);
+}
+document.getElementById("cmdrBody").addEventListener("click", e => cmdrGo(e.target));
+document.getElementById("cmdrBody").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.dataset && e.target.dataset.cmmat != null && cmdrGo(e.target)) e.preventDefault(); });
 // small pure helpers
 const cmNum = v => v == null ? "" : esc(Number(v).toLocaleString());
 const cmCr = v => v == null || v === 0 ? "" : `${esc(credits(v))} cr`;
+const cmCrS = v => v == null || v === 0 ? "" : dual(`${esc(credits(v))} cr`, esc(credits(v)));   // in a fitted table
 const cmWhen = ts => ts ? esc(String(ts).slice(0, 16).replace("T", " ")) : "";
 function cmSpan(s) {   // seconds as "2 d 3 h", "3 h 20 min", "12 min"
   if (s == null) return "";
   const m = Math.max(0, Math.round(s / 60)), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60);
   return d ? `${d} d ${h} h` : h ? `${h} h ${m % 60} min` : `${m} min`;
 }
+// both forms of a span in a fitted table: "2 h 0 min" / "2h00", "2 d 7 h" / "2d7h", "12 min" / "12m"
+function cmSpanDual(s) {
+  if (s == null) return "";
+  const m = Math.max(0, Math.round(s / 60)), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60);
+  return dual(cmSpan(s), d ? `${d}d${h}h` : h ? `${h}h${String(m % 60).padStart(2, "0")}` : `${m}m`);
+}
+const cmWhenDual = ts => ts ? dual(cmWhen(ts), esc(shortForm("when", String(ts).slice(0, 16).replace("T", " ")))) : "";
 const cmAsOf = (ts, how) => ts ? `<span class="unk" title="${esc(how)}">as of ${cmWhen(ts)}</span>` : "";
-const cmTable = (head, rows) => `<table class="cmtable"><thead><tr>${head.map(h => `<th${h[1] ? ` class="num"` : ""}>${h[0]}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table>`;
+// head: [label, numeric, extra class (c1hide / c2hide)]; id: one of FIT_TABLES (its headings' SHORT_FORMS.head)
+const cmTable = (head, rows, id) => `<table class="cmtable"${id ? ` id="${id}"` : ""}><thead><tr>${head.map(([label, num, cls]) => {
+  const c = [num ? "num" : "", cls || ""].filter(Boolean).join(" "), short = id ? SHORT_FORMS.head[label] : null;
+  return `<th${c ? ` class="${c}"` : ""}>${short != null ? dual(label, esc(short)) : label}</th>`; }).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table>`;
 const cmCls = m => esc((m.size != null && m.size > 0 ? m.size : "") + (m.rating || ""));
 // a session's tons refined: the ship's, and the SRV's apart
 const cmRefined = (ship, srv) => (ship || !srv ? `<b>${cmNum(ship)} t</b>` : "") +
@@ -10116,7 +10189,8 @@ function cmdrProfileHtml(d) {
     `<h3 class="subhead">Fleet <span class="cmcount">${p.fleet.length}</span></h3>` +
     (p.fleet.length ? cmTable([["Ship"], ["Where"], ["Value", 1]], p.fleet.map(ship)) : `<div class="unk">No ship on record yet.</div>`) +
     cmdrCarrierHtml(car) +
-    (p.career.length ? `<h3 class="subhead">Career</h3><div class="cmfigs">${p.career.map(c => cmTile(esc(c.label), fig(c))).join("")}</div>` : "");
+    (p.career.length ? `<h3 class="subhead">Career <button type="button" class="mini" data-cmgo="hist" title="History's Career row: the game's statistics beside your sessions">History ›</button></h3>` +
+      `<div class="cmfigs">${p.career.map(c => cmTile(esc(c.label), fig(c))).join("")}</div>` : "");
 }
 
 // Inventory. Pure.
@@ -10145,7 +10219,7 @@ function cmdrInventoryHtml(d) {
     `<h3 class="subhead">Stored modules <span class="cmcount">${m.modules.length}</span> ${cmAsOf(m.ts, "as the last outfitting you opened listed them")}</h3>` +
     (m.modules.length ? cmTable([["Module"], ["Engineering"], ["Where"], ["Value", 1], ["To bring it here", 1]], m.modules.map(modRow))
       : `<div class="unk">${m.ts ? "None stored." : "Listed once you open outfitting: the game writes the list then."}</div>`) +
-    `<h3 class="subhead">Ship locker ${cmAsOf(lk.ts, "the locker as the game last wrote it whole: at login, then ShipLocker.json as it changes")}</h3>` +
+    `<h3 class="subhead">Ship locker ${cmAsOf(lk.ts, "the locker as the game last wrote it whole: a journal line that lists it, or ShipLocker.json")}</h3>` +
     (held.length ? `<div class="cmlocker">${held.map(k => `<div><b>${esc(k.name)}</b>${k.items.map(i =>
       `<div class="cmitem"><span>${esc(i.name)}${i.mission ? ` <span class="unk" title="a mission's own">mission</span>` : ""}</span><b>${cmNum(i.count)}</b></div>`).join("")}</div>`).join("")}</div>`
       : `<div class="unk">${lk.ts ? "Empty." : "Nothing on record (Odyssey writes it at login)."}</div>`) +
@@ -10160,7 +10234,9 @@ function cmdrEngineeringHtml(d) {
   const q = CM.q.trim().toLowerCase();
   const eng = d.engineers || [], unlocked = eng.filter(e => e.progress === "Unlocked").length;
   const gradeRow = g => {
-    const mats = g.materials.map(x => `<span class="cmmat ${x.have >= x.need ? "ok" : "short"}" title="you hold ${cmNum(x.have)}">${esc(x.name)} ${cmNum(x.have)}/${cmNum(x.need)}</span>`).join("");
+    // short: a link to the Materials tab on it, and ⇄ the nearest trader of its kind (as the Materials tab's own)
+    const mats = g.materials.map(x => x.have >= x.need ? `<span class="cmmat ok" title="you hold ${cmNum(x.have)}">${esc(x.name)} ${cmNum(x.have)}/${cmNum(x.need)}</span>`
+      : `<span class="cmshort"><span class="cmmat short cmlink" data-cmmat="${esc(x.name)}" role="link" tabindex="0" title="you hold ${cmNum(x.have)}: show it in the Materials tab">${esc(x.name)} ${cmNum(x.have)}/${cmNum(x.need)}</span>${traderBtn(x.category, true)}</span>`).join("");
     const who = g.engineers.map(e => `<span class="${e.ready ? "ok" : "unk"}" title="${esc(e.progress ? `${e.progress}${e.rank != null ? `, crafts up to grade ${e.rank}` : ""}` : "not met yet")}">${esc(e.name)}</span>`).join(", ");
     return `<tr><td><b>G${cmNum(g.grade)}</b></td><td><div class="cmstats">${mats}</div></td>` +
       `<td class="num ${g.rolls ? "ok" : "unk"}" title="how many times you could craft this grade now">${g.rolls ? `×${cmNum(g.rolls)}` : "–"}</td><td>${who}</td></tr>`;
@@ -10174,6 +10250,7 @@ function cmdrEngineeringHtml(d) {
     groups.get(b.module).push(`<h4 class="cmbp">${esc(b.name)}</h4>` + cmTable([["Grade"], ["Materials <span class=\"unk\">(held / one roll)</span>"], ["Rolls", 1], ["Engineers"]], grades.map(gradeRow)));
   }
   const open = k => q || CM.craft || CM.open[k];   // a filter shows what it found
+  if (d.unreadable) return `<div class="short">Blueprint table unreadable: resources/blueprints.json is missing or damaged (a fresh copy of Outrider brings it back).</div>`;
   return `<div class="unk cmnote">${eng.length ? `${unlocked} of ${eng.length} engineers unlocked` : "no engineer on record yet"} · ship modules only: no experimental effects, suits or weapons</div>` +
     ([...groups].map(([mod, list]) => `<details class="cmmod" data-cmmod="${esc(mod)}"${open(mod) ? " open" : ""}><summary><b>${esc(mod)}</b> <span class="unk">${list.length} blueprint${list.length === 1 ? "" : "s"}</span></summary>${list.join("")}</details>`).join("")
       || `<div class="unk">Nothing matches.</div>`);
@@ -10191,16 +10268,17 @@ function cmdrMissionsHtml(d) {
     const need = [m.commodity, m.target].filter(Boolean).map(esc).join(" · ") +
       (m.count != null ? ` <b>${m.delivered != null ? `${cmNum(m.delivered)}/` : ""}${cmNum(m.count)}</b>` : "");
     const exp = m.left == null ? `<span class="unk">no limit</span>` : m.expired ? `<span class="short">expired</span>`
-      : `<span class="${m.soon ? "warnc" : ""}" title="${cmWhen(m.expiry)} UTC">${cmSpan(m.left)}</span>`;
-    return `<tr><td><b>${esc(m.name || "?")}</b>${m.wing ? ` <span class="unk">wing</span>` : ""}${m.passengers ? ` <span class="unk">passengers</span>` : ""}` +
-      `${m.redirected ? ` <span class="ok" title="the game sent you on: usually back to hand it in">redirected</span>` : ""}</td>` +
-      `<td>${esc(m.faction || "")}</td><td>${esc([m.system, m.station].filter(Boolean).join(" · "))}</td><td>${need}</td>` +
-      `<td class="num">${cmCr(m.reward)}</td><td class="num">${exp}</td></tr>`;
+      : `<span class="${m.soon ? "warnc" : ""}" title="${cmWhen(m.expiry)} UTC">${cmSpanDual(m.left)}</span>`;
+    const where = [m.system, m.station].filter(Boolean).map(esc);   // compact: the system alone, the station in its title
+    return `<tr><td><b>${esc(m.name || "?")}</b>${m.wing ? ` <span class="unk">wing</span>` : ""}${m.passengers ? ` <span class="unk">${dual("passengers", "pax")}</span>` : ""}` +
+      `${m.redirected ? ` <span class="ok" title="the game sent you on: usually back to hand it in">${dual("redirected", "redir.", {title: false})}</span>` : ""}</td>` +
+      `<td class="c2hide">${esc(m.faction || "")}</td><td>${where.length > 1 ? dual(where.join(" · "), where[0]) : where.join("")}</td><td>${need}</td>` +
+      `<td class="num">${cmCrS(m.reward)}</td><td class="num">${exp}</td></tr>`;
   });
   const soon = all.filter(m => m.soon).length;
   return `<div class="hwyttl">${rows.length ? `${rows.length} mission${rows.length === 1 ? "" : "s"}` : "No missions"}` +
     `${soon ? ` <span class="warnc">· ${soon} expiring within half an hour</span>` : ""}</div>` +
-    (rows.length ? cmTable([["Mission"], ["Faction"], ["Where"], ["What"], ["Reward", 1], ["Expires in", 1]], rows)
+    (rows.length ? cmTable([["Mission"], ["Faction", 0, "c2hide"], ["Where"], ["What"], ["Reward", 1], ["Expires in", 1]], rows, "cmMissions")
       : `<div class="unk">Missions you accept are listed here with where they go, what they ask and when they run out.</div>`);
 }
 
@@ -10209,24 +10287,25 @@ function cmdrMissionsHtml(d) {
 function cmdrSessionsHtml(d) {
   const all = d.sessions || [], t = d.totals || {combat: {}, mining: {}};
   const list = o => Object.entries(o || {}).map(([k, v]) => `${esc(k)} ${cmNum(v)}`).join(", ");
-  const combat = all.filter(s => s.combat).map(s => { const c = s.combat; return `<tr><td>${cmWhen(s.start)}</td><td>${esc(s.ship || "")}</td>` +
-    `<td class="num"><b>${cmNum(c.kills)}</b></td><td>${list(c.by_ship)}</td><td class="num">${cmCr(c.bounties)}</td><td class="num">${cmCr(c.bonds)}</td>` +
-    `<td class="num">${cmNum(c.per_hour)}</td><td class="num">${cmSpan(c.seconds)}</td><td class="num">${c.deaths ? `<span class="short">${cmNum(c.deaths)}</span>` : ""}</td></tr>`; });
-  const mining = all.filter(s => s.mining).map(s => { const m = s.mining; return `<tr><td>${cmWhen(s.start)}</td><td>${esc(s.ship || "")}</td>` +
-    `<td class="num">${cmRefined(m.tons, m.srv_tons)}</td><td>${list(m.refined)}${m.srv_tons ? `${m.tons ? " · " : ""}<span class="unk">SRV:</span> ${list(m.srv_refined)}` : ""}</td>` +
+  // fitted tables (compact: short dates, spans and credits; compact2 drops the lists by ship and of minerals, the limpets)
+  const combat = all.filter(s => s.combat).map(s => { const c = s.combat; return `<tr><td>${cmWhenDual(s.start)}</td><td>${esc(s.ship || "")}</td>` +
+    `<td class="num"><b>${cmNum(c.kills)}</b></td><td class="c2hide">${list(c.by_ship)}</td><td class="num">${cmCrS(c.bounties)}</td><td class="num">${cmCrS(c.bonds)}</td>` +
+    `<td class="num">${cmNum(c.per_hour)}</td><td class="num">${cmSpanDual(c.seconds)}</td><td class="num">${c.deaths ? `<span class="short">${cmNum(c.deaths)}</span>` : ""}</td></tr>`; });
+  const mining = all.filter(s => s.mining).map(s => { const m = s.mining; return `<tr><td>${cmWhenDual(s.start)}</td><td>${esc(s.ship || "")}</td>` +
+    `<td class="num">${cmRefined(m.tons, m.srv_tons)}</td><td class="c2hide">${list(m.refined)}${m.srv_tons ? `${m.tons ? " · " : ""}<span class="unk">SRV:</span> ${list(m.srv_refined)}` : ""}</td>` +
     `<td class="num">${cmNum(m.per_hour)}</td>` +
-    `<td>${cmNum(m.prospected)}${m.prospected ? ` <span class="unk">${list(m.content)}${m.motherlodes ? ` · ${cmNum(m.motherlodes)} core${m.motherlodes === 1 ? "" : "s"}` : ""}</span>` : ""}</td>` +
-    `<td class="num" title="prospector / collector limpets launched">${m.prospectors || m.collectors ? `${cmNum(m.prospectors)} / ${cmNum(m.collectors)}` : ""}</td>` +
-    `<td class="num">${cmSpan(m.seconds != null ? m.seconds : m.srv_seconds)}</td><td class="num">${cmCr(m.sold)}</td></tr>`; });
+    `<td>${cmNum(m.prospected)}${m.prospected ? ` <span class="unk c1hide">${list(m.content)}${m.motherlodes ? ` · ${cmNum(m.motherlodes)} core${m.motherlodes === 1 ? "" : "s"}` : ""}</span>` : ""}</td>` +
+    `<td class="num c2hide" title="prospector / collector limpets launched">${m.prospectors || m.collectors ? `${cmNum(m.prospectors)} / ${cmNum(m.collectors)}` : ""}</td>` +
+    `<td class="num">${cmSpanDual(m.seconds != null ? m.seconds : m.srv_seconds)}</td><td class="num">${cmCrS(m.sold)}</td></tr>`; });
   const c = t.combat, m = t.mining, latest = `<span class="unk" title="each from a login to the next">your latest sessions, ${cmNum(d.max || 40)} at most</span>`;
   return `<h3 class="subhead">Combat ${latest}</h3>` +
     (combat.length ? `<div class="cmfigs">${cmTile("Sessions", cmNum(c.sessions))}${cmTile("Kills", cmNum(c.kills))}${cmTile("Bounties", cmCr(c.bounties))}${cmTile("Combat bonds", cmCr(c.bonds))}${cmTile("Deaths", c.deaths ? cmNum(c.deaths) : "")}</div>` +
-      cmTable([["Session"], ["Ship"], ["Kills", 1], ["Bounties by ship"], ["Bounties", 1], ["Bonds", 1], ["Kills/h", 1], ["Fighting", 1], ["Deaths", 1]], combat)
+      cmTable([["Session"], ["Ship"], ["Kills", 1], ["Bounties by ship", 0, "c2hide"], ["Bounties", 1], ["Bonds", 1], ["Kills/h", 1], ["Fighting", 1], ["Deaths", 1]], combat, "cmCombat")
       : `<div class="unk">No fighting in these journals.</div>`) +
     `<h3 class="subhead">Mining ${latest}</h3>` +
     (mining.length ? `<div class="cmfigs">${cmTile("Sessions", cmNum(m.sessions))}${cmTile("Refined", m.tons || !m.srv_tons ? `${cmNum(m.tons)} t` : "")}` +
       `${cmTile("SRV refined", m.srv_tons ? `${cmNum(m.srv_tons)} t` : "", "the SRV's refinery: surface mining")}${cmTile("Asteroids prospected", cmNum(m.prospected))}${cmTile("Sold", cmCr(m.sold))}</div>` +
-      cmTable([["Session"], ["Ship"], ["Refined", 1], ["What"], ["t/h", 1], ["Prospected"], ["Limpets", 1], ["Mining", 1], ["Sold", 1]], mining)
+      cmTable([["Session"], ["Ship"], ["Refined", 1], ["What", 0, "c2hide"], ["t/h", 1], ["Prospected"], ["Limpets", 1, "c2hide"], ["Mining", 1], ["Sold", 1]], mining, "cmMining")
       : `<div class="unk">No mining in these journals.</div>`);
 }
 

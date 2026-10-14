@@ -79,8 +79,12 @@ def power_apply(state, ev):
     if name == "PowerplayLeave":
         return None
     if name in ("Powerplay", "PowerplayJoin", "PowerplayDefect"):
-        st = {"power": ev.get("ToPower") if name == "PowerplayDefect" else ev.get("Power"),
-              "rank": ev.get("Rank"), "merits": ev.get("Merits")}
+        # a join names the power alone, and the game writes its PowerplayRank (0) just before it, at the same second
+        # (real journals, 2025-11-30): what the line leaves out stays, for the same power
+        power = ev.get("ToPower") if name == "PowerplayDefect" else ev.get("Power")
+        same = power == st.get("power")
+        st = {"power": power, "rank": ev.get("Rank", st.get("rank") if same else None),
+              "merits": ev.get("Merits", st.get("merits") if same else None)}
     elif name == "PowerplayRank" and isinstance(ev.get("Rank"), int):
         st["rank"] = ev["Rank"]
     elif name == "PowerplayMerits" and isinstance(ev.get("TotalMerits"), int):
@@ -98,8 +102,9 @@ def squadron_apply(state, ev):
 
 
 def locker_apply(state, ev):
-    """The ship locker whole: the login's ShipLocker line (later ones carry no contents: ShipLocker.json has them,
-    Journals.read_locker_file) or the file itself. A line without the lists keeps what is kept."""
+    """The ship locker whole: a ShipLocker line with its lists (the game writes them at login and at most changes, but
+    not always: ShipLocker.json, Journals.read_locker_file, has them then) or the file itself. A line without the lists
+    keeps what is kept."""
     if not any(isinstance(ev.get(k), list) for k, _ in LOCKER_KINDS):
         return state
     return dict({k: ev[k] for k, _ in LOCKER_KINDS if isinstance(ev.get(k), list)}, ts=ev["timestamp"])
@@ -335,7 +340,7 @@ _BLUEPRINTS = {}
 
 
 def load_blueprints(path=BLUEPRINTS_FILE):
-    """resources/blueprints.json's list (read once per file time), [] when it cannot be read."""
+    """resources/blueprints.json's list (read once per file time), None when it cannot be read."""
     try:
         stamp = os.path.getmtime(path)
         if _BLUEPRINTS.get("key") != (path, stamp):
@@ -344,7 +349,7 @@ def load_blueprints(path=BLUEPRINTS_FILE):
             _BLUEPRINTS.update(key=(path, stamp), rows=rows)
         return _BLUEPRINTS["rows"]
     except (OSError, ValueError, KeyError, TypeError):
-        return []
+        return None
 
 
 def _plain(name):
@@ -365,16 +370,17 @@ def engineer_apply(state, ev):
 
 def blueprints(counts, known=None, name=None, rows=None):
     """Every blueprint with what each grade takes against the materials you hold: [{id, module, name, grades:
-    [{grade, materials: [{id, name, need, have}], rolls (how many times you could craft it now), engineers:
+    [{grade, materials: [{id, name, need, have, category (Raw, Manufactured, Encoded: its trader's kind)}], rolls (how many times you could craft it now), engineers:
     [{name, progress, rank, ready (unlocked far enough for this grade)}]}]}]. counts: {material id: held};
     known: engineer_apply's; name: fn(material id) -> its name."""
     known = {_plain(k): v for k, v in (known or {}).items()}
     name = name or (lambda mid: materials.MATERIALS.get(mid, (mid,))[0])
     out = []
-    for b in load_blueprints() if rows is None else rows:
+    for b in (load_blueprints() or []) if rows is None else rows:
         grades = []
         for g, v in sorted(b["grades"].items()):
-            need = [{"id": mid, "name": name(mid), "need": n, "have": int(counts.get(mid, 0))} for mid, n in v["materials"].items()]
+            need = [{"id": mid, "name": name(mid), "need": n, "have": int(counts.get(mid, 0)),
+                 "category": materials.MATERIALS.get(mid, (None, None))[1]} for mid, n in v["materials"].items()]
             who = []
             for e in v.get("engineers") or []:
                 st = known.get(_plain(e)) or {}
@@ -391,15 +397,18 @@ def blueprints(counts, known=None, name=None, rows=None):
 
 
 def engineering(material_state, known):
-    """The Engineering tab: the blueprints against the materials held (Journals.materials) and the engineers."""
+    """The Engineering tab: the blueprints against the materials held (Journals.materials) and the engineers;
+    `unreadable` when resources/blueprints.json could not be read (the page says so rather than "nothing matches")."""
     counts = (material_state or {}).get("counts") or {}
-    return {"blueprints": blueprints(counts, known, lambda mid: materials.display_name(material_state, mid)),
-            "engineers": [dict(v, name=k) for k, v in sorted((known or {}).items())]}
+    rows = load_blueprints()
+    return {"blueprints": blueprints(counts, known, lambda mid: materials.display_name(material_state, mid), rows=rows or []),
+            "engineers": [dict(v, name=k) for k, v in sorted((known or {}).items())], "unreadable": rows is None}
 
 
 # ---- missions ----
 
 MISSION_SOON_S = 1800   # an expiry within this is marked
+EXPIRES_IS_TIME = 10 ** 9   # a Missions list's Expires this large is a Unix time, not seconds left (2001 on)
 
 
 def mission_apply(state, ev):
@@ -412,9 +421,12 @@ def mission_apply(state, ev):
         at = ts_seconds(ev["timestamp"])
         held = {k: v for k, v in held.items() if k in active}
         for k, m in active.items():
-            row = held.setdefault(k, _mission({"MissionID": m["MissionID"], "Name": m.get("Name")}))
-            if not row["expiry"] and isinstance(m.get("Expires"), (int, float)) and m["Expires"] > 0:
-                row["expiry"] = iso_ts(at + m["Expires"])
+            row = held.setdefault(k, _mission({"MissionID": m["MissionID"], "Name": m.get("Name"), "LocalisedName": m.get("Name_Localised")}))
+            exp = m.get("Expires")
+            if not row["expiry"] and isinstance(exp, (int, float)) and exp > 0:
+                # the seconds left; a colonisation mission's is the time itself (real journals, 2026-10-14:
+                # "Expires":1745159181 on its login lists, where every other mission's counts down from ~86400)
+                row["expiry"] = iso_ts(exp if exp >= EXPIRES_IS_TIME else at + exp)
             row["passengers"] = row["passengers"] or bool(m.get("PassengerMission"))
         return held
     if mid is None:
@@ -447,7 +459,8 @@ def missions(state, now=None):
 
 
 def _mission(e):
-    name = e.get("LocalisedName") or re.sub(r"_name$", "", re.sub(r"^Mission_", "", str(e.get("Name") or "?"))).replace("_", " ")
+    # the game's own words, else its symbol tidied: "Mission_Courier_War_name" and "$Mission_Colonisation_Initial_Name;"
+    name = e.get("LocalisedName") or re.sub(r"_name;?$", "", re.sub(r"^\$?Mission_", "", str(e.get("Name") or "?")), flags=re.I).replace("_", " ")
     return {"id": e.get("MissionID"), "name": name, "faction": e.get("Faction"), "system": e.get("DestinationSystem"),
             "station": e.get("DestinationStation") or e.get("DestinationSettlement"),
             "target": _text(e, "Target") or e.get("TargetFaction"), "commodity": _text(e, "Commodity"),

@@ -339,7 +339,7 @@ dialog button { background: var(--panel); color: var(--text); border: 1px solid 
 dialog button.primary { border-color: var(--accent); color: var(--accent); }
 dialog button.danger { color: var(--bad); }
 dialog .hint { color: var(--muted); font-size: 11px; margin-top: 4px; }
-dialog label.mod { display: block; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 13px; }
+dialog label.mod, dialog #tilesShown { display: block; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 13px; }
 dialog input[type=number] { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; font: inherit; }
 #here .copy { cursor: copy; border-bottom: 1px dotted var(--muted); }
 #here .sol { color: var(--muted); font-size: 14px; font-weight: 400; }
@@ -394,9 +394,9 @@ button.icon.hushbtn.on { border-color: var(--warn); }
 .hushmenu .unk { font-size: 11px; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; margin-top: 10px; }
 /* wide screens: Where gets half as much again (its lines are the longest), Commander less (short lines, ranks stacked) */
-@media (min-width: 1200px) { .tiles { grid-template-columns: 1.5fr 0.75fr repeat(4, 1fr); }
-  .tiles.nocarrier { grid-template-columns: 1.5fr 0.75fr repeat(3, 1fr); } }
-.tile[hidden] { display: none; }
+/* --tile-cols: one column per tile shown (tileCols: the tiles this device shows, the Carrier tile with a carrier) */
+@media (min-width: 1200px) { .tiles { grid-template-columns: var(--tile-cols, 1.5fr 0.75fr repeat(4, 1fr)); } }
+.tile[hidden], .tile[data-off] { display: none; }
 @media (min-width: 640px) and (max-width: 1199px) { #tWhere { grid-column: span 2; } }
 .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 7px; min-width: 0; }
 .tile .lbl { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; }
@@ -477,6 +477,9 @@ h3.subhead { font-size: 13px; font-weight: 600; color: var(--muted); text-transf
 .cmfilter:not([hidden]) { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; } #cmFilter { width: 19em; } .cmnote { margin: 6px 0; }
 .cmmod { border-top: 1px solid var(--line); padding: 5px 0; } .cmmod > summary { cursor: pointer; }
 .cmbp { margin: 10px 0 0; font-size: 13px; } .cmmat { white-space: nowrap; }
+/* the links out of the tab: a short material (to the Materials tab, ⇄ to a trader), the career (to History) */
+.cmlink { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; } .cmshort { white-space: nowrap; }
+.cmshort .trbtn { margin-left: 4px; } h3.subhead > button.mini { margin-left: 8px; text-transform: none; letter-spacing: 0; }
 .cmbar { display: inline-block; width: 120px; height: 8px; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; vertical-align: middle; }
 .cmbar > span { display: block; height: 100%; background: var(--info, var(--muted)); } .cmbarcell { white-space: nowrap; } .cmrep { margin-top: 8px; }
 .cmranks { width: auto; } .cmranks td { padding-right: 18px; }

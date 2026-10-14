@@ -2,6 +2,46 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · CMDR tab: checked against real journals, links out, blueprints by module, tiles to choose
+Batch 3 of the PR #5 review's plan, with the author's answers of 2026-10-14.
+- **The field names checked against real journals** (the author's live and legacy folders, read only): every event the
+  tab folds that has lines there matched (StoredShips, ShipyardBuy/Swap/New/Transfer, SetUserShipName, StoredModules,
+  ShipLocker and ShipLocker.json, SuitLoadout, CreateSuitLoadout, EngineerProgress both forms, Reputation, Powerplay,
+  PowerplayMerits/Rank, SquadronStartup, JoinedSquadron, Missions, MissionAccepted/Completed/Abandoned/Redirected,
+  CargoDepot, Bounty, FactionKillBond, Died, Interdicted, RedeemVoucher, MiningRefined, ProspectedAsteroid,
+  AsteroidCracked, LaunchDrone, MarketSell); the events with no line there (DeleteSuitLoadout, RenameSuitLoadout,
+  LoadoutEquip/RemoveModule, UpgradeSuit/Weapon, ShipyardSell, SellShipOnRebuy, PowerplayLeave/Defect, leaving a
+  squadron) follow Frontier's manual. Three fixes, each with a test built from the real lines (`RealLines`): a
+  colonisation mission's `Expires` is a Unix time, not seconds left (it showed 2080); a mission on the login's list
+  only is named from its `Name_Localised` ("$Mission_Colonisation_Initial_Name;" before); `PowerplayRank` 0 comes just
+  before `PowerplayJoin`, at the same second, and the join no longer wipes the rank. ShipLocker lines carry their lists
+  at most changes, not only at login: the wording follows; ShipLocker.json is read in the tick only when its
+  modification time moves (a test). No journal re-read: version 51 is not released and stays.
+- **Links out of the tab, the tiles informational** (should 5): the career's History › opens History at its Career
+  row; a material Engineering is short of opens the Materials tab filtered to it, its ⇄ the nearest trader of its kind
+  (`openNearest({need})`; the blueprint rows carry each material's `category`). The Commander tile does not open it.
+- **"CMDR"** is the tab's label: the header, its ↗ window and the tablet's nav (Records). The header row at 1280 px in
+  the Default and all 11 themes (headless, a throwaway server): one row beside the title everywhere, 32-44 px
+  narrower than with "Commander".
+- **Blueprints by kind of module** (should 7): one row per kind and blueprint, each grade's engineers that kind's (a
+  pulse laser's Overcharged is Broo Tarquin's, a cannon's Tod McQuinn's; a heat sink's Lightweight is no longer filed
+  under the chaff launcher): 185 rows for 43 kinds. `scripts/build_blueprints.py` fetches coriolis-data itself at a
+  pinned commit (0db9234, 2026-04-24), records it with the licence (Frontier's terms for the data; only coriolis.io's
+  code is MIT) in the file's `_readme` and `source` and in the README's credits; FDevIDs (no licence) is dropped: the
+  material names are matched by `outrider.materials`' own table (every material the same as before).
+- **An unreadable blueprint table says so** (should 8): "Blueprint table unreadable", not "Nothing matches"
+  (`engineering`'s `unreadable`; `load_blueprints` gives None).
+- **The tablet**: `TABLET_VIEWS` in the nav's order, and a test that every nav page is in it and in exactly one
+  `TB.groups` list (should 11); the Missions and Sessions tables are fitted tables (`FIT_TABLES`, drawn into
+  `FIT_HOSTS`): short dates, spans and credits, then the faction, the lists by ship and of minerals and the limpets
+  left out.
+- **Choose the header tiles** (the author's request): Settings → Display → Header tiles shown on this device, a box
+  per tile (Where I am, Commander, Fuel, Carrier, Unsold, Data). An unticked tile is left out on this device, from the
+  one line too; the wide grid gets a column per tile shown; the last one cannot be unticked; per device (`tilesHidden`,
+  not a shared setting); one line / six tiles work as before.
+- Docs: DESIGN_NOTES, JOURNAL_REFERENCE (the traps above), AGENT_GUIDE, the guide's CMDR section and tablet page.
+  Smoke: the links, the label, the unreadable table, the fitted tables' short forms, the tile choice.
+
 ## 2026-10-14 · Commander tab: read from the database
 Batch 2 of the PR #5 review's plan: the Commander tab no longer scans journal files (each read whole, the live folder
 only, a year at a time) but reads what the journal reader keeps, like every other view. A journal re-read (journal

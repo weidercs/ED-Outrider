@@ -109,7 +109,7 @@ The project's history is in the [changelog](docs/CHANGELOG.md). Contributors and
 | Galactic region map | [klightspeed's EliteDangerousRegionMap](https://github.com/klightspeed/EliteDangerousRegionMap) | MIT | in `resources/bio_rules.json` |
 | Planetary mining odds | CMDR Grumlop's survey, [Elite Dangerous Field Manual](https://edfieldmanual.com/index.php?title=Module:Data/SurfaceMiningProspecting) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) | `resources/mining_odds.json`, unchanged |
 | Geology sites; checklist pictures | [Canonn](https://canonn.science)'s codex records and screenshots | Canonn's | site counts in `resources/geo_codex.json`; pictures linked, never copied, credited to the commander who took each |
-| Engineering blueprints | [coriolis-data](https://github.com/EDCD/coriolis-data) and [FDevIDs](https://github.com/EDCD/FDevIDs) (EDCD) | game data, Frontier Developments' | `resources/blueprints.json`, built by `scripts/build_blueprints.py` |
+| Engineering blueprints | [coriolis-data](https://github.com/EDCD/coriolis-data) (EDCD), commit `0db9234` of 2026-04-24 | game data, Frontier Developments' (its LICENSE.md: Frontier's terms; only coriolis.io's code is MIT) | `resources/blueprints.json`, built by `scripts/build_blueprints.py`; the material names are Outrider's own table |
 | EDDN, EDSM and Inara upload rules | [EDMarketConnector](https://github.com/EDCD/EDMarketConnector) (EDCD) | GPL v2 or later | followed, with EDCD's notice in `outrider/eddn.py` |
 | The overlay window's code | [EDMC Modern Overlay](https://github.com/SweetJonnySauce/EDMCModernOverlay) | GPL v3 | adapted, with its notice: `outrider/overlay_tracking.py`, `outrider/overlay_window.py` |
 

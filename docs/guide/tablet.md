@@ -21,8 +21,8 @@ for this: see [Other devices on your network](install.md#-other-devices-on-your-
 
 - **The strip on top** shows the system, fuel and unsold data, and the link to Outrider in words ("LINKED",
   "LINKED · NO GAME", "UNLINKED · RETRYING").
-- **The pages** are on the left in three groups of four: Explore (Now, Nearby, Here, Bio/Geo), Navigate (Bookmarks,
-  Search, Map, Plot Route) and Records (History, Log, Materials, My firsts). There is no Overview.
+- **The pages** are on the left in three groups: Explore (Now, Nearby, Here, Bio/Geo), Navigate (Bookmarks,
+  Search, Map, Plot Route) and Records (History, Log, Materials, CMDR, My firsts). There is no Overview.
 - **Tap a row** in a table for all of its facts, including the columns too narrow to show, with Show in Here,
   Bookmark and, on a route's row, a bookmark or a Nearby row (game PC), 🎯 Target. On the galaxy map a tap on a system shows its card,
   with 🎯 Target when auto-target works on the game PC, and Copy name.

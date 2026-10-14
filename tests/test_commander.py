@@ -7,6 +7,7 @@ import os
 import tempfile
 import types
 import unittest
+import unittest.mock
 
 from support import ed_outrider
 
@@ -169,6 +170,33 @@ class Inventory(unittest.TestCase):
         self.assertEqual(state.commander_inventory()["locker"]["ts"], T("09:30:00"))
         self.assertFalse(j.read_locker_file(os.path.join(d, "none")))
 
+    def test_the_tick_reads_the_locker_file_when_it_changes(self):
+        """ShipLocker.json is read in the tick as Cargo.json: once, then only when its modification time moves."""
+        j, state = setup(self, INVENTORY)
+        d = temp_dir(self)
+        path = os.path.join(d, "ShipLocker.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(ev(T("09:30:00"), "ShipLocker", Items=[], Components=[], Data=[], Consumables=[]), f)
+        reads, mtimes = [], {}
+        later = ("watch_status", "maybe_refresh", "apply_own_changes", "maybe_classify_target", "maybe_unsold",
+                 "maybe_sale_left", "maybe_locate_carrier", "maybe_find_sellers", "maybe_backup_on_quit")
+        with unittest.mock.patch.object(ed_outrider, "LIVE_DIRS", [d]), \
+                unittest.mock.patch.object(j, "read_locker_file", lambda folder: reads.append(folder) or False):
+            patches = [unittest.mock.patch.object(state, n, lambda *a: None) for n in later]
+            for p in patches:
+                p.start()
+            try:
+                state.tick(mtimes)
+                state.tick(mtimes)                                             # unchanged: not read again
+                m = os.path.getmtime(path)
+                os.utime(path, (m + 5, m + 5))
+                state.tick(mtimes)
+            finally:
+                for p in patches:
+                    p.stop()
+        self.assertIsNone(state.tail_error)
+        self.assertEqual(reads, [d, d])
+
 
 class Engineering(unittest.TestCase):
     ROWS = [{"id": "FSD_LongRange", "module": "Frame shift drive", "name": "Increased range", "grades": {
@@ -196,7 +224,7 @@ class Engineering(unittest.TestCase):
         self.assertEqual((b["module"], b["name"], [g["grade"] for g in b["grades"]]), ("Frame shift drive", "Increased range", [1, 5]))
         g1, g5 = b["grades"]
         self.assertEqual((g1["rolls"], g5["rolls"]), (7, 2))                    # 5 wake data at 2 a roll: twice
-        self.assertEqual(g5["materials"][2], {"id": "dataminedwake", "name": "DATAMINEDWAKE", "need": 2, "have": 5})
+        self.assertEqual(g5["materials"][2], {"id": "dataminedwake", "name": "DATAMINEDWAKE", "need": 2, "have": 5, "category": "Encoded"})   # its trader's kind
         self.assertEqual([(e["name"], e["ready"]) for e in g1["engineers"]], [("Felicity Farseer", True), ("Elvira Martuuk", False)])
         # Rank is the highest grade an engineer crafts for you (the author's journals: no craft above it): rank 4, no G5
         self.assertEqual([(e["progress"], e["rank"], e["ready"]) for e in g5["engineers"]], [("Unlocked", 4, False), ("Unlocked", 3, False)])
@@ -219,7 +247,32 @@ class Engineering(unittest.TestCase):
                 for mid, n in v["materials"].items():
                     self.assertIn(mid, M.MATERIALS, f"{b['id']} G{g}")           # the journal's own names: they meet your counts
                     self.assertGreater(n, 0)
-        self.assertEqual(C.load_blueprints(os.path.join(temp_dir(self), "none.json")), [])
+        # the engineers are the module kind's (should 7): a pulse laser's Overcharged is not a cannon's, nor a heat
+        # sink's Lightweight a chaff launcher's module
+        over = {b["module"]: b["grades"]["1"]["engineers"] for b in rows if b["id"] == "Weapon_Overcharged"}
+        self.assertIn("Broo Tarquin", over["Pulse laser"])
+        self.assertNotIn("Broo Tarquin", over["Cannon"])
+        self.assertIn("Tod \"The Blaster\" McQuinn", over["Cannon"])
+        self.assertEqual(len({(b["module"], b["id"]) for b in rows}), len(rows))
+        self.assertIn("Heat sink launcher", {b["module"] for b in rows if b["id"] == "Misc_LightWeight"})
+        with open(C.BLUEPRINTS_FILE, encoding="utf-8") as f:
+            src = json.load(f)["source"]
+        self.assertEqual((len(src["commit"]), src["repo"]), (40, "https://github.com/EDCD/coriolis-data"))
+        self.assertIn("Frontier", src["licence"])
+        self.assertIsNone(C.load_blueprints(os.path.join(temp_dir(self), "none.json")))
+
+    def test_an_unreadable_table_says_so(self):
+        """Should 8: a missing or broken blueprints file is not "nothing matches"."""
+        _, state = setup(self)
+        self.assertFalse(state.commander_engineering()["unreadable"])
+        bad = os.path.join(temp_dir(self), "blueprints.json")
+        with open(bad, "w", encoding="utf-8") as f:
+            f.write("{not json")
+        for path in (bad, os.path.join(temp_dir(self), "none.json")):
+            with unittest.mock.patch.object(C, "BLUEPRINTS_FILE", path), \
+                    unittest.mock.patch.object(C.load_blueprints, "__defaults__", (path,)):
+                eng = state.commander_engineering()
+            self.assertEqual((eng["unreadable"], eng["blueprints"]), (True, []))
 
 
 class Missions(unittest.TestCase):
@@ -258,6 +311,67 @@ class Missions(unittest.TestCase):
         j.handle(ev(T("07:00:00"), "MissionAccepted", MissionID=8, Name="Mission_Long_gone"))
         j.handle(ev(T("09:00:00"), "MissionCompleted", MissionID=2))
         self.assertEqual([r["id"] for r in state.commander_missions()["missions"]], [7, 2])
+
+
+class RealLines(unittest.TestCase):
+    """The field names checked against a player's real journals (2026-10-14): lines copied as the game wrote them."""
+    def setup(self, lines):
+        return setup(self, [json.loads(x) for x in lines])
+
+    def test_a_colonisation_mission_on_the_login_list(self):
+        """Its Expires is the time itself (a Unix time), every other mission's the seconds left; its name is localised
+        and its symbol is written "$...;"."""
+        j, _ = self.setup([
+            '{ "timestamp":"2024-10-05T20:58:01Z", "event":"Missions", "Active":[ { "MissionID":979525210, "Name":"Mission_Courier_name", '
+            '"PassengerMission":false, "Expires":85993 } ], "Failed":[  ], "Complete":[  ] }'])
+        self.assertEqual([(r["name"], r["expiry"]) for r in C.missions(j.cmdr_view["missions"], now=NOW)],
+                         [("Courier", "2024-10-06T20:51:14Z")])                # the MissionAccepted's own Expiry
+        j, _ = self.setup([
+            '{ "timestamp":"2025-03-24T19:38:35Z", "event":"Missions", "Active":[ { "MissionID":18446744073709551615, '
+            '"Name":"$Mission_Colonisation_Initial_Name;", "Name_Localised":"Construct primary port", "PassengerMission":false, '
+            '"Expires":1745159181 } ], "Failed":[  ], "Complete":[  ] }'])
+        self.assertEqual([(r["name"], r["expiry"]) for r in C.missions(j.cmdr_view["missions"], now=NOW)],
+                         [("Construct primary port", "2025-04-20T14:26:21Z")])
+        self.assertEqual(C._mission({"Name": "$Mission_Colonisation_Initial_Name;"})["name"], "Colonisation Initial")
+
+    def test_powerplay_join_after_its_rank(self):
+        """The game writes PowerplayRank 0 just before PowerplayJoin, at the same second: the join keeps the rank."""
+        j, _ = self.setup([
+            '{ "timestamp":"2025-11-30T14:25:35Z", "event":"PowerplayRank", "Power":"Nakato Kaine", "Rank":0 }',
+            '{ "timestamp":"2025-11-30T14:25:35Z", "event":"PowerplayJoin", "Power":"Nakato Kaine" }',
+            '{ "timestamp":"2025-11-30T16:02:52Z", "event":"PowerplayMerits", "Power":"Nakato Kaine", "MeritsGained":52, "TotalMerits":52 }',
+            '{ "timestamp":"2025-11-30T21:10:51Z", "event":"PowerplayRank", "Power":"Nakato Kaine", "Rank":1 }'])
+        self.assertEqual({k: j.cmdr_view["powerplay"][k] for k in ("power", "rank", "merits")}, {"power": "Nakato Kaine", "rank": 1, "merits": 52})
+        j, _ = self.setup(['{ "timestamp":"2025-11-30T14:25:35Z", "event":"PowerplayRank", "Power":"Nakato Kaine", "Rank":0 }',
+                           '{ "timestamp":"2025-11-30T14:25:35Z", "event":"PowerplayJoin", "Power":"Nakato Kaine" }'])
+        self.assertEqual(j.cmdr_view["powerplay"]["rank"], 0)
+        j, _ = self.setup(['{ "timestamp":"2026-09-19T14:55:17Z", "event":"Powerplay", "Power":"Nakato Kaine", "Rank":17, "Merits":117279, "TimePledged":25316982 }'])
+        self.assertEqual({k: j.cmdr_view["powerplay"][k] for k in ("power", "rank", "merits")}, {"power": "Nakato Kaine", "rank": 17, "merits": 117279})
+
+    def test_the_shipyard_engineers_and_suits(self):
+        j, state = self.setup([
+            '{ "timestamp":"2026-09-26T14:17:19Z", "event":"StoredShips", "StationName":"G0X-85Z", "MarketID":3700251648, '
+            '"StarSystem":"Col 285 Sector KM-V d2-106", "ShipsHere":[ { "ShipID":36, "ShipType":"panthermkii", "ShipType_Localised":"Panther Clipper Mk II", '
+            '"Value":100, "Hot":false }, { "ShipID":29, "ShipType":"dolphin", "Name":"Dolph Cruises", "Value":6584028, "Hot":false } ], '
+            '"ShipsRemote":[ { "ShipID":39, "ShipType":"explorer_nx", "ShipType_Localised":"Caspian Explorer", "Name":"", "StarSystem":"Shinrarta Dezhra", '
+            '"ShipMarketID":128666762, "TransferPrice":7007804, "TransferTime":53956, "Value":170990782, "Hot":false } ] }',
+            '{ "timestamp":"2026-09-26T14:20:57Z", "event":"ShipyardSwap", "ShipType":"panthermkii", "ShipType_Localised":"Panther Clipper Mk II", '
+            '"ShipID":36, "StoreOldShip":"LakonMiner", "StoreShipID":35, "MarketID":3700251648 }',
+            '{ "timestamp":"2026-09-27T17:50:57Z", "event":"ShipyardTransfer", "ShipType":"Explorer_NX", "ShipType_Localised":"Caspian Explorer", '
+            '"ShipID":39, "System":"Shinrarta Dezhra", "ShipMarketID":128666762, "Distance":5365.605957, "TransferPrice":7007804, "TransferTime":53956, '
+            '"MarketID":3700251648 }',
+            '{ "timestamp":"2026-09-27T17:51:00Z", "event":"SetUserShipName", "Ship":"dolphin", "ShipID":29, "UserShipName":"Rhinocart", "UserShipId":"br-rhi" }',
+            '{ "timestamp":"2025-10-02T02:06:11Z", "event":"EngineerProgress", "Engineer":"Bill Turner", "EngineerID":300010, "Rank":2 }',
+            '{ "timestamp":"2025-03-18T05:54:49Z", "event":"CreateSuitLoadout", "SuitID":1826892828743577, "SuitName":"explorationsuit_class1", '
+            '"SuitName_Localised":"Artemis Suit", "SuitMods":[  ], "LoadoutID":4293000001, "LoadoutName":"Xenobio", "Modules":[ { "SlotName":"PrimaryWeapon1", '
+            '"SuitModuleID":1826892921801189, "ModuleName":"wpn_m_sniper_plasma_charged", "ModuleName_Localised":"Manticore Executioner", "Class":1, "WeaponMods":[  ] } ] }'])
+        ships = {s["id"]: s for s in j.cmdr_view["stored_ships"]["ships"].values()}
+        self.assertEqual(sorted(ships), [29, 35, 39])                          # the Panther flown now, the miner stored
+        self.assertEqual((ships[39]["in_transit"], ships[39]["system"], ships[29]["name"], ships[29]["ident"], ships[35]["type"]),
+                         (True, None, "Rhinocart", "br-rhi", "LakonMiner"))
+        self.assertEqual(j.cmdr_view["engineers"], {"Bill Turner": {"progress": None, "rank": 2}})
+        self.assertEqual([(s["loadout"], s["suit"], s["class"], [w["name"] for w in s["weapons"]]) for s in state.commander_inventory()["suits"]],
+                         [("Xenobio", "Artemis Suit", 1, ["Manticore Executioner"])])
 
 
 class Sessions(unittest.TestCase):

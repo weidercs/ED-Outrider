@@ -30,8 +30,9 @@ upstream project's choices, not rules of the game.
   journal files (which read each file whole, the live folder only, and missed every older stored module). The view
   snapshots what the game lists whole and folds the changes it logs between: the fleet from the last StoredShips plus
   ships bought, sold, swapped, sent for and renamed (as `outrider/inara.py` reads them), each ship's value from its
-  latest Loadout; suit loadouts created, changed, upgraded or deleted; the ship locker from the login line, then
-  ShipLocker.json whenever it is newer (the later journal lines carry no contents). Stored modules stay as of the last
+  latest Loadout; suit loadouts created, changed, upgraded or deleted; the ship locker from each ShipLocker line that
+  carries its lists (the game writes them at login and at most changes; some carry none), then ShipLocker.json whenever
+  it is newer, read in the tick only when its modification time moves (as Cargo.json). Stored modules stay as of the last
   outfitting you opened (moving one between lists is not followed), and a mission accepted before the journals is kept
   by its name alone. The login-time snapshots (Missions, Reputation, EngineerProgress, Powerplay, SquadronStartup,
   ShipLocker) are in `LOGIN_EVENTS`: loading the game is not play, so they never move `last_play_ts` (History's
@@ -43,9 +44,18 @@ upstream project's choices, not rules of the game.
   within 3 %, the totals not); every other rank shows its percentage only (no trade or exploration figures could be
   checked the same way). EngineerProgress' Rank is the highest grade an engineer crafts for you (real journals: no
   craft above it). A tab is asked for again when a journal line it reads is handled (`commander_version`), not on
-  a timer. The blueprint table is a copy of community data (EDCD's
-  coriolis-data), not the game's own: a recipe Frontier changes is wrong until the table is rebuilt. No voice lines:
-  a mission about to expire is marked on the page only.
+  a timer. The blueprint table is a copy of community data (EDCD's coriolis-data at a pinned commit, recorded in the
+  file's `_readme` and `source`; the data is Frontier's, under its terms), not the game's own: a recipe Frontier changes
+  is wrong until the table is rebuilt. One row per kind of module and blueprint, its engineers that kind's (a pulse
+  laser's Overcharged is offered by other engineers than a cannon's); the material names are matched to the journal's
+  by Outrider's own `outrider.materials` table (FDevIDs, which has no licence, is not used). A table that cannot be
+  read says so on the tab, not "Nothing matches". The field names were checked against real journals (2026-10-14:
+  every event with lines on record; DeleteSuitLoadout, RenameSuitLoadout, LoadoutEquip/RemoveModule, UpgradeSuit,
+  UpgradeWeapon, ShipyardSell, SellShipOnRebuy, PowerplayLeave/Defect and the squadron's leaving have none there and
+  follow Frontier's journal manual). A Missions list's `Expires` is the seconds left, except for a colonisation
+  mission, whose `Expires` is the time itself (a Unix time). Links go from the CMDR tab outward only (the career to
+  History, a short material to the Materials tab and the nearest trader); the header tiles stay informational. No
+  voice lines: a mission about to expire is marked on the page only.
 - **Green gas giants are a guess, said as one** (2026-10-12, `outrider/ggg.py`). The seven-layer ladder model is a
   community reconstruction (Canonn's issue 222, 2026-10-05), not the game's code: a match is "potential", never a fact,
   and a codex entry replaces it. It needs the journal's own temperature (green windows can be 0.00002 K wide): yours

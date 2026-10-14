@@ -7947,7 +7947,7 @@ const releasePayloads = async () => {
             blueprints: [
               {id: "FSD_LongRange", module: "Frame shift drive", name: "Increased range", grades: [
                 {grade: 1, rolls: 7, materials: [{id: "a", name: "Atypical Disrupted Wake Echoes", need: 1, have: 7}], engineers: [{name: "Felicity Farseer", progress: "Unlocked", rank: 5, ready: true}]},
-                {grade: 5, rolls: 0, materials: [{id: "b", name: "Arsenic", need: 1, have: 0}, {id: "c", name: "Datamined Wake Exceptions", need: 2, have: 5}],
+                {grade: 5, rolls: 0, materials: [{id: "b", name: "Arsenic", need: 1, have: 0, category: "Raw"}, {id: "c", name: "Datamined Wake Exceptions", need: 2, have: 5, category: "Encoded"}],
                  engineers: [{name: "Elvira Martuuk", progress: "Known", rank: null, ready: false}]}]},
               {id: "Sensor_Light", module: "Sensors", name: "Lightweight", grades: [
                 {grade: 1, rolls: 0, materials: [{id: "p", name: "Phosphorus", need: 1, have: 0}], engineers: []}]}]},
@@ -7970,7 +7970,9 @@ const releasePayloads = async () => {
       CM.data = {}; CM.key = {}; CM.error = {}; CM.loading = {}; CM.tab = "profile"; CM.q = ""; CM.craft = false; CM.open = {};
       document.getElementById("cmFilter").value = ""; document.getElementById("cmCraft").checked = false;`);
     const text = el => el ? el.textContent.replace(/\s+/g, " ").trim() : "", body = () => d.getElementById("cmdrBody");
-    const rows = () => [...body().querySelectorAll("table.cmtable tbody tr")].map(t => [...t.cells].map(text).join(" | "));
+    // a cell's full form (a fitted table's cells hold both: .lf and the short .sf)
+    const full = el => { const c = el.cloneNode(true); c.querySelectorAll(".sf, .sf1, .sf2").forEach(x => x.remove()); return text(c); };
+    const rows = () => [...body().querySelectorAll("table.cmtable tbody tr")].map(t => [...t.cells].map(full).join(" | "));
     // a class's colour as the theme gives it: jsdom leaves var() unresolved, so it is looked up on :root here
     const colour = el => { const c = w.getComputedStyle(el).color, m = /^var\((--[\w-]+)\)$/.exec(c);
       return m ? w.getComputedStyle(d.documentElement).getPropertyValue(m[1]).trim() : c; };
@@ -8007,10 +8009,34 @@ const releasePayloads = async () => {
                      colour(body().querySelector(".cmmat.short")) === root("--bad") && !!root("--bad")];
       d.getElementById("cmCraft").click();
       got.craft = rows().length;
+      // should 5: links go out of the tab: a short material to the Materials tab (filtered to it), its ⇄ to the nearest
+      // trader of its kind
+      d.getElementById("cmCraft").click();
+      w.eval(`window.__cmNearKeep = openNearest; openNearest = o => { window.__cmNear = o; };`);
+      body().querySelector('.cmshort [data-trader]').click();
+      got.trader = w.eval(`JSON.stringify(window.__cmNear)`);
+      w.eval(`openNearest = __cmNearKeep;`);
+      body().querySelector('[data-cmmat="Arsenic"]').click(); await settle(400);
+      got.toMat = [w.eval("view"), d.getElementById("mFilter").value];
+      d.getElementById("mFilter").value = ""; d.getElementById("mFilter").dispatchEvent(new w.Event("input"));
+      d.querySelector('[data-view="cmdr"]').click(); await settle(400);
+      // should 8: a blueprint table that cannot be read says so
+      w.eval(`CM.data.engineering = {unreadable: true, blueprints: [], engineers: []}; cmdrDrawBody();`);
+      got.unreadable = text(body());
       await tab("missions");
       got.missions = [text(body().querySelector(".hwyttl")), rows(), body().querySelectorAll(".warnc").length];
+      // the tablet's compact tables: Missions fitted (FIT_TABLES), its headings and cells with short forms, the faction
+      // left out at the tightest level
+      const mt = d.getElementById("cmMissions");
+      w.eval(`setTableLevel(document.getElementById("cmMissions"), 2)`);
+      const shown = el => w.getComputedStyle(el).display !== "none";
+      got.fitMissions = [w.eval(`FIT_TABLES.includes("cmMissions")`), [...mt.querySelectorAll("th .sf")].map(text),
+                         text(mt.rows[1].cells[4].querySelector(".sf")), text(mt.rows[1].cells[2].querySelector(".sf")), shown(mt.rows[1].cells[1]),
+                         shown(mt.rows[1].cells[4].querySelector(".lf")), text(mt.rows[1].cells[5].querySelector(".sf"))];
       await tab("sessions");
       got.sessions = [rows(), [...body().querySelectorAll(".cmfig")].map(text), [...body().querySelectorAll("h3.subhead")].map(text)];
+      got.fitSessions = ["cmCombat", "cmMining"].map(id => { const t = d.getElementById(id); return [w.eval(`FIT_TABLES.includes("${id}")`), [...t.querySelectorAll("th .sf")].map(text),
+                                                                                                text(t.rows[1].cells[0].querySelector(".sf"))]; });
       // asked again only when the payload says so: an unchanged one draws from what it has, a new version asks (the
       // open tab only), the materials' version only for Engineering; Refresh asks now
       const n0 = asked.length;
@@ -8026,6 +8052,14 @@ const releasePayloads = async () => {
       got.after = asked.slice(n0);
       got.pure = [w.eval(`cmSpan(7200)`), w.eval(`cmSpan(200000)`), w.eval(`cmSpan(540)`)];
       got.stored = w.eval(`store.get("cmdrTab")`);
+      // the career's link: History, its Career row brought into view at the next draw
+      await tab("profile");
+      body().querySelector('[data-cmgo="hist"]').click(); await settle(1500);
+      got.toHist = [w.eval("view"), w.eval("histReveal")];
+      d.querySelector('[data-view="cmdr"]').click(); await settle(400);
+      // the tab's label (2026-10-14): CMDR on the header, its ↗ window and the tablet's nav
+      got.label = [d.querySelector('.views [data-view="cmdr"]').dataset.name, text(d.querySelector('.tb-page[data-view="cmdr"]'))];
+      await tab("sessions");                                                   // so that the real profile below is a change of tab
       // the real server's answer for the sample journals
       w.eval(`apiJson = __cmKeep.api; CM.key = {}; CM.data = {};`);
       await tab("profile"); await settle(3000);
@@ -8055,7 +8089,14 @@ const releasePayloads = async () => {
       noTags: true,
       engineering: [["Frame shift drive 1 blueprint", "Sensors 1 blueprint"], "1 of 2 engineers unlocked · ship modules only: no experimental effects, suits or weapons", false],
       filtered: [["Frame shift drive 1 blueprint open"], ["G1 | Atypical Disrupted Wake Echoes 7/1 | ×7 | Felicity Farseer",
-                 "G5 | Arsenic 0/1Datamined Wake Exceptions 5/2 | – | Elvira Martuuk"], "cmFilter", 2, 1],
+                 "G5 | Arsenic 0/1⇄Datamined Wake Exceptions 5/2 | – | Elvira Martuuk"], "cmFilter", 2, 1],
+      trader: JSON.stringify({need: ["Raw"]}),
+      toMat: ["mat", "Arsenic"],
+      unreadable: "Blueprint table unreadable: resources/blueprints.json is missing or damaged (a fresh copy of Outrider brings it back).",
+      fitMissions: [true, ["Left"], "2.5M", "Alpha Centauri", false, false, "20m"],
+      fitSessions: [["cmCombat", [true, ["By ship", "Time"], "10-12 08:00"]], ["cmMining", [true, ["Prosp", "Time"], "10-12 11:00"]]].map(x => x[1]),
+      toHist: ["hist", false],
+      label: ["CMDR", "CMDR"],
       colours: [true, true],
       craft: 1,
       missions: ["3 missions · 1 expiring within half an hour", ["Deliver 20 units of Gold | Sol Workers | Alpha Centauri · Hutton Orbital | Gold 8/20 | 2.5M cr | 20 min",
@@ -8079,6 +8120,59 @@ const releasePayloads = async () => {
     allOk = allOk && goodCM;
     console.log(goodCM ? "OK" : "FAIL", "| commander |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))} asked ${JSON.stringify(asked)}`
       : "controls above the pane, the theme's green and red, the tiles' credits and carrier, the SRV's refinery apart; asked again only on a new version or Refresh; the real profile", errors.slice(before));
+  }
+  // Which header tiles this device shows (the author, 2026-10-14): Settings → Display ticks them; an unticked one is
+  // left out (tile and one line), the wide grid has a column per tile shown, at least one stays, per device (not a
+  // shared setting), and the one-line / six-tile modes still work
+  {
+    holdPayloads();
+    const w = dom.window, d = w.document, before = errors.length, got = {};
+    const box = d.getElementById("tilesShown"), cb = k => box.querySelector(`[data-tile="${k}"]`);
+    const tick = (k, on) => { cb(k).checked = on; cb(k).dispatchEvent(new w.Event("change", {bubbles: true})); };
+    const off = () => ["tWhere", "tCmdr", "tFuel", "tCarrier", "tUnsold", "tData"].filter(id => d.getElementById(id).hasAttribute("data-off"));
+    const cols = () => d.getElementById("tiles").style.getPropertyValue("--tile-cols");
+    w.eval(`window.__tlKeep = {hidden: localStorage.getItem("tilesHidden"), mode: localStorage.getItem("tilesMode"), fuel: data.fuel, cm: data.commander};
+      localStorage.removeItem("tilesHidden");
+      data.fuel = Object.assign({}, data.fuel, {live: true, main: 8, pct: 50}); data.commander = Object.assign({}, data.commander, {credits: 1300000000});
+      drawTileChoice(); render();`);
+    const car = !d.getElementById("tCarrier").hidden;   // the Carrier tile shows only with a carrier on record
+    const one = car ? " 1fr" : "";
+    try {
+      got.all = [off(), [...box.querySelectorAll("[data-tile]")].map(x => x.checked).every(Boolean), cols()];
+      tick("fuel", false); tick("cmdr", false);
+      got.two = [off(), cols(), w.eval(`JSON.stringify(store.get("tilesHidden"))`), w.eval(`/⛽|1\\.30B cr/.test(tilesLineHtml())`),
+                 w.eval(`/Talvik Reach/.test(tilesLineHtml())`)];
+      // not one of the shared settings: it stays on this device
+      got.perDevice = w.eval(`SETTINGS_KEYS.includes("tilesHidden")`);
+      for (const k of ["where", "carrier", "unsold"]) tick(k, false);
+      got.last = [cb("data").checked, cb("data").disabled, off().length];
+      tick("data", false);                                                     // refused: at least one stays
+      got.lastStays = [cb("data").checked, off().length];
+      w.eval(`localStorage.setItem("tilesHidden", JSON.stringify(["where", "cmdr", "fuel", "carrier", "unsold", "data"]));`);
+      got.neverAll = w.eval(`JSON.stringify(tilesHidden())`);
+      w.eval(`localStorage.setItem("tilesHidden", JSON.stringify(["cmdr", "fuel"])); drawTileChoice();`);
+      // the one-line and six-tile modes still work
+      w.eval(`localStorage.setItem("tilesMode", '"line"'); drawTilesFold(); render();`);
+      got.line = [w.eval("tilesFolded"), d.getElementById("tilesLine").hidden, /⛽/.test(d.getElementById("tilesLine").textContent)];
+      w.eval(`localStorage.setItem("tilesMode", '"six"'); drawTilesFold(); render();`);
+      got.six = [w.eval("tilesFolded"), d.getElementById("tiles").hidden, off()];
+      tick("cmdr", true); tick("fuel", true);
+      got.back = [off(), w.eval(`JSON.stringify(store.get("tilesHidden"))`)];
+    } finally {
+      w.eval(`const k = __tlKeep; Object.assign(data, {fuel: k.fuel, commander: k.cm});
+        for (const [key, v] of [["tilesHidden", k.hidden], ["tilesMode", k.mode]]) { if (v === null) localStorage.removeItem(key); else localStorage.setItem(key, v); }
+        drawTileChoice(); drawTilesFold(); drawTilesMode(); render();`);
+      await releasePayloads();
+    }
+    const want = {all: [[], true, `1.5fr 0.75fr 1fr${one} 1fr 1fr`],
+      two: [["tCmdr", "tFuel"], `1.5fr${one} 1fr 1fr`, JSON.stringify(["cmdr", "fuel"]), false, true],
+      perDevice: false, last: [true, true, 5], lastStays: [true, 5], neverAll: "[]",
+      line: [true, false, false], six: [false, false, ["tCmdr", "tFuel"]], back: [[], "[]"]};
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    const goodTL = !bad.length && errors.length === before;
+    allOk = allOk && goodTL;
+    console.log(goodTL ? "OK" : "FAIL", "| header tiles shown |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
+      : "Settings → Display ticks the tiles this device shows: left out of the row and the one line, a column each, at least one stays, the fold modes kept", errors.slice(before));
   }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",

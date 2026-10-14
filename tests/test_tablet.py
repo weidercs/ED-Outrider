@@ -55,6 +55,26 @@ class Tablet(unittest.TestCase):
             self.assertIsNone(re.search(r"^:root\s*\{", css, re.M), "a theme sets nothing outside its data-theme")
             self.assertIn(f'<option value="{t}">', tablet)
 
+    def test_every_tablet_page_in_its_lists(self):
+        """Should 11 (PR #5's review): every page of the tablet's nav is in TABLET_VIEWS (else opening it falls back to
+        Now) and in exactly one TB.groups list (its group lights up), and TABLET_VIEWS is the nav's order."""
+        with open(os.path.join(ed_outrider.STATIC_DIR, "page.html"), encoding="utf-8") as f:
+            html = f.read()
+        with open(os.path.join(ed_outrider.STATIC_DIR, "page.js"), encoding="utf-8") as f:
+            js = f.read()
+        nav = re.search(r'<nav id="tabNav".*?</nav>', html, re.S).group(0)
+        pages = re.findall(r'<button type="button" class="tb-page" data-view="(\w+)"', nav)
+        views = re.findall(r'"(\w+)"', re.search(r"const TABLET_VIEWS = \[(.*?)\];", js).group(1))
+        groups = {g: re.findall(r'"(\w+)"', v) for g, v in re.findall(r'(\w+): \[([^\]]*)\]', re.search(r"groups: \{(.*?)\}", js).group(1))}
+        self.assertEqual(len(pages), 13)
+        self.assertEqual(views, pages)
+        for p in pages:
+            self.assertEqual(sum(p in v for v in groups.values()), 1, p)
+        # each group's pages sit under its own heading in the nav, in the same order
+        for g, v in groups.items():
+            block = re.search(rf'<div class="tb-pages" data-pages="{g}">(.*?)</div>', nav, re.S).group(1)
+            self.assertEqual(re.findall(r'data-view="(\w+)"', block), v, g)
+
     def test_desktop_theme_picker(self):
         """Desktop themes (the author, 2026-10-04): Settings > Display offers Default - Outrider and every tablet theme
         under the tablet's label; the browser's choice is set before the first paint (no flash of the default)."""

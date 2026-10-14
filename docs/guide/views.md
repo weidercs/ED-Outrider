@@ -426,7 +426,8 @@ for your next visit and listed under Materials' **Mining sites**.
 The map's sizes and the leash distance are in ⚙ Settings → Surface map; the spoken leash warning
 always uses the config file's `rig_warn`.
 
-## 🧑‍🚀 Commander
+<a id="-commander"></a>
+## 🧑‍🚀 CMDR
 
 What you are, what you own and what you have been doing, from all your journals: Outrider keeps it as it reads them
 (nothing is asked of anyone), and a list updates as soon as the game writes something new for it. The tabs, Refresh
@@ -438,16 +439,18 @@ and Engineering's filter sit above the list:
   bar to the next one and, for exobiology, about how many credits it still takes (the community's figures for each
   rank's step, times the share your game says is left: an estimate; Elite IV and V are marked uncertain);
   reputation, Powerplay and squadron; your ships; and career figures (time played, systems visited, distance,
-  profits by career).
+  profits by career; **History ›** opens History at its Career row, the game's statistics beside your sessions).
 - **Inventory**: your ships (where each is, its value, what bringing it here costs), your stored modules with their
   engineering, the ship locker, and your suit loadouts. The game writes the list of stored ships when you open a
   shipyard: ships bought, sold, swapped, sent for or renamed since are followed, and each ship's value is its latest.
-  Stored modules are as outfitting last listed them. The ship locker is as of your login, then follows the game's own
-  file as it changes. A suit loadout is listed once you create or wear one, and goes when you delete it.
-- **Engineering**: every ship-module blueprint, grade by grade, with the materials one roll takes against what you
-  hold (green: enough, red: short), how many rolls you could make now, and the engineers offering it (green:
-  unlocked up to that grade). Filter by module, blueprint or material, or show only what you can craft now. Experimental effects and
-  suit and weapon upgrades are not listed.
+  Stored modules are as outfitting last listed them. The ship locker is as the game last wrote it, in the journal or in
+  its own file. A suit loadout is listed once you create or wear one, and goes when you delete it.
+- **Engineering**: every ship-module blueprint by kind of module, grade by grade, with the materials one roll takes
+  against what you hold (green: enough, red: short), how many rolls you could make now, and the engineers offering it
+  for that kind of module (green: unlocked up to that grade). A material you are short of opens the Materials tab on
+  it, and its **⇄** finds the nearest material trader of its kind. Filter by module, blueprint or material, or show
+  only what you can craft now. Experimental effects and suit and weapon upgrades are not listed. The blueprints are a
+  copy of EDCD's coriolis-data (community data): a recipe the game changes is wrong until the copy is updated.
 - **Missions**: the missions you hold, the soonest to expire first: where they go, what they ask (and how much is
   delivered), the reward, and the time left, marked when under half an hour.
 - **Sessions**: your latest sessions with fighting or mining in them (40 at most), each from one login to the next. Combat:
