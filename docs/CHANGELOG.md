@@ -2,6 +2,30 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · Overlay sizes: all panels at once, down to 20 %, a 9 px text floor, text size per panel
+Answers a GitHub report: "the in-game overlay is too large on my 4K TV … below 50 % it resets to 50 %". Panels follow
+the game window's height, so the same % is tiny at 1080p and big at 4K: the floor is now in readable pixels.
+- **All panels** (`[overlay] panel_scale`, 100 %, 20 to 250): one size on top of each panel's own, in Settings → In-game
+  overlay, and **Ctrl + wheel** over any panel in Arrange mode (the wheel alone and Shift + wheel keep the two
+  opacities; the help and the window's hint say so).
+- **A panel's Size % goes down to 20 %** (`LIMITS["scale"]` 0.2; the page's field too); the window never draws text
+  under **9 px** (`overlay.MIN_TEXT_PX`): `overlay.effective_scale` raises a panel's scale to keep its smallest text
+  there, in paint and in Arrange mode's resizing.
+- **Settings says what you get**: the overlay window sends the game window's height with its requests (`&h=`); each
+  Size % cell shows "≈ 11 px text", or "held at 9 px" with a line naming those panels ("your screen is too small to go
+  lower"). No window drawing: no figure.
+- **Text size, clearer and per panel**: the lone "text" dropdown is now **Text size**, and the panel table has a
+  **Text** column (small, normal, large or as all panels), kept in the layout beside the size (an old layout reads
+  unchanged); each panel is built at its own size.
+- **One control row**: Theme, Text size and All panels, with Show test panels and Arrange panels at its far right
+  (under it on a narrow window).
+- Tests: `effective_scale` (1080p, 4K, each text size, the floor), `text_px`, `smallest_font` against `panel_font`,
+  `panel_scale` (config, POST, the window's GET), LIMITS at 20 %, the layout's `text`, the per-panel size reaching the
+  builders, the height kept from the window only, the Ctrl + wheel (`wheel_key`, `wheeled_all`), resizing with all
+  panels and the floor, a 4K frame at 25 % drawing no text under 9 px (with PyQt6); the smoke block (the figures, the
+  Text column, the one row, the posts). Docs: the overlay guide (Sizes and text), settings, the example config,
+  AGENT_GUIDE, DESIGN_NOTES.
+
 ## 2026-10-14 · Nearby around another system ("Lock System") and Nearby's filters
 The ideas of Rainmangames' pull request #8 ("Nearby exploration: area locking, filters, auto-refresh"; closed, not
 merged), rebuilt on 2026.10.23's Around (S49). Thanks to Rainmangames, PR #8.

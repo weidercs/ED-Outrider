@@ -4911,12 +4911,31 @@ const releasePayloads = async () => {
          json(/layout$/.test(String(u)) ? {layout: w.eval("data.overlay.layout")}
               : Object.assign({}, w.eval("data.overlay"), JSON.parse(o.body), ovNote ? {note: ovNote} : {}))) : real(u, o);
     const saved = w.eval("JSON.stringify(data.overlay || null)");
-    w.eval(`data.overlay = {enabled: true, theme: "elite", text_size: "normal", panels: {system: true, body: false, radar: true},
-      analysis_only: ["bio"], hide_docked: ["system", "body", "now", "bio"], window: false, test: 0, arrange: 0, runner: {state: "no_qt", why: null}, layout: {system: {corner: "nw", x: 0.02, y: 0.16, scale: 1, bg: 0.65, alpha: 1},
-      body: {corner: "ne", x: 0.02, y: 0.16, scale: 1.2, bg: 0.5, alpha: 0.8}, radar: {corner: "se", x: 0.02, y: 0.1, scale: 1, bg: 0.5, alpha: 1}}};
+    // the 4K TV report (2026-10-14): all panels' size, each panel's text size, and the text figures from the game
+    // window's height (text_px: the radar has none here, as with no figure)
+    w.eval(`data.overlay = {enabled: true, theme: "elite", text_size: "normal", panel_scale: 60, panels: {system: true, body: false, radar: true},
+      analysis_only: ["bio"], hide_docked: ["system", "body", "now", "bio"], window: false, test: 0, arrange: 0, runner: {state: "no_qt", why: null}, layout: {system: {corner: "nw", x: 0.02, y: 0.16, scale: 1, bg: 0.65, alpha: 1, text: "large"},
+      body: {corner: "ne", x: 0.02, y: 0.16, scale: 0.2, bg: 0.5, alpha: 0.8, text: ""}, radar: {corner: "se", x: 0.02, y: 0.1, scale: 1, bg: 0.5, alpha: 1}},
+      win_h: 2160, min_text_px: 9, text_px: {system: {px: 26, held: false}, body: {px: 9, held: true}}};
       overlayDrawn = ""; renderOverlay();`);
     const d = w.document, box = d.getElementById("overlayBox");
+    const cell = id => box.querySelector(`[data-ovlay="${id}"][data-k="scale"]`).closest("td");
+    const ctl = box.querySelector(".ovctl");
     const got = {rows: box.querySelectorAll("table.ovlay tbody tr").length, body: box.querySelector('[data-ovlay="body"][data-k="scale"]').value,
+                 // each Size % cell: what its text comes to, held at the floor said; none without a figure; down to 20 %
+                 figures: ["system", "body", "radar"].map(id => cell(id).querySelector(".ovpx") ? cell(id).querySelector(".ovpx").textContent : "").join("|"),
+                 heldTip: /your screen is too small to go lower/.test(cell("body").querySelector(".ovpx").title),
+                 heldLine: (box.querySelector(".ovheld") || {}).textContent || "",
+                 sizeMin: box.querySelector('[data-ovlay="radar"][data-k="scale"]').min,
+                 // 3b: the Text column, each panel's own size or as all panels
+                 text: ["system", "body", "radar"].map(id => { const t = box.querySelector(`[data-ovlay="${id}"][data-k="text"]`);
+                   return t.value + ":" + t.selectedOptions[0].textContent; }).join(" "),
+                 // 3c: one control row: Theme, Text size, All panels and the two buttons at its far right
+                 row: !!ctl && ["[data-ov=theme]", "[data-ov=text_size]", "[data-ov=panel_scale]", ".ovbtns [data-ovact=test]", ".ovbtns [data-ovact=arrange]"]
+                   .every(q => ctl.querySelector(q)) && /Text size/.test(ctl.textContent) && /All panels/.test(ctl.textContent) &&
+                   ctl.querySelector("[data-ov=panel_scale]").value === "60" && !box.querySelector(".mod:not(.ovctl) [data-ovact]"),
+                 rowFind: ctl ? ctl.dataset.find : "",
+                 ctrlWheel: /Ctrl \+ wheel for all panels/.test(d.querySelector("ul.ovhelp").textContent),
                  off: !box.querySelector('[data-ovpanel="body"]').checked, theme: box.querySelector('[data-ov="theme"]').value,
                  // PyQt6 missing: said, no button (Outrider installs it while the overlay is on: the author, 2026-10-10)
                  nowin: /needs PyQt6: Outrider installs it in its own venv/.test(box.textContent) && !box.querySelector("button[data-ovinstall]"),
@@ -4964,6 +4983,14 @@ const releasePayloads = async () => {
     th.focus(); th.value = "default"; th.dispatchEvent(new w.Event("change", {bubbles: true}));
     await sleep(100);
     got.themeNote = /could not keep it/.test(box.textContent) && box.querySelector('[data-ov="theme"]').value === "default";
+    const tx = box.querySelector('[data-ovlay="body"][data-k="text"]');
+    tx.value = "small"; tx.dispatchEvent(new w.Event("change", {bubbles: true}));
+    await sleep(50);
+    const all = box.querySelector('[data-ov="panel_scale"]');
+    all.value = "40"; all.dispatchEvent(new w.Event("change", {bubbles: true}));
+    await sleep(50);
+    all.value = ""; all.dispatchEvent(new w.Event("change", {bubbles: true}));   // emptied: nothing sent
+    await sleep(50);
     got.posted = posted;
     w.fetch = real;
     // the PyQt6 install's popup: shown while installing, then the outcome, then gone (a state it never had: hidden)
@@ -4974,15 +5001,19 @@ const releasePayloads = async () => {
     got.popup = [step("off"), step("installing"), step("starting"), step("installing"), step("install_failed"), step("off")]
       .map(t => t.replace(/ .*/, "") + (/installed/.test(t) ? " installed" : /failed/.test(t) ? " failed" : ""));
     w.eval(`data.overlay = JSON.parse(${JSON.stringify(saved)}); overlayNote = ""; overlayDrawn = ""; renderOverlay();`);
-    const want = {rows: 7, body: "120", off: true, theme: "elite", nowin: true, nowName: true, inRows: true, tip: true,
+    const want = {rows: 7, body: "20", figures: "≈ 26 px text|held at 9 px|", heldTip: true,
+                  heldLine: "Target: held at 9 px: your screen is too small to go lower", sizeMin: "20",
+                  text: "large:large :as all panels :as all panels", row: true,
+                  rowFind: "overlay.theme overlay.text_size overlay.panel_scale", ctrlWheel: true,
+                  off: true, theme: "elite", nowin: true, nowName: true, inRows: true, tip: true,
                   target: true, analysis: "system body radar strip now bio✓ alerts",
                   docked: "system✓ body✓ –radar strip now✓ bio✓ alerts",
-                  heads: "Panel|Hide when mode|Corner|X %|Y %|Size %|BG %|Opac. %||Combat|Docked", headTips: true,
+                  heads: "Panel|Hide when mode|Corner|X %|Y %|Size %|Text|BG %|Opac. %||Combat|Docked", headTips: true,
                   finds: "overlay.analysis_only overlay.hide_docked",
                   dimmed: true, wrapped: true, help: true, alerts: true, analysisAfter: "system bio", dockedAfter: "system body now", note: true, themeNote: true,
                   posted: [["overlay/layout", {radar: {x: 0.3}}], ["overlay", {analysis_only: ["system", "bio"]}],
                            ["overlay", {hide_docked: ["system", "body", "now"]}], ["overlay", {test: true}],
-                           ["overlay", {theme: "default"}]],
+                           ["overlay", {theme: "default"}], ["overlay/layout", {body: {text: "small"}}], ["overlay", {panel_scale: 40}]],
                   venv: true, popup: ["", "⟳Installing", "✓ installed", "⟳Installing", "Installing failed", ""]};
     const ok = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && ok;

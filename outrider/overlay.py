@@ -50,9 +50,14 @@ DOCKED_PANELS = tuple(p for p in PANELS if p != "radar")
 HIDE_DOCKED_DEFAULT = ("system", "body", "now", "bio")
 DEFAULTS = {"enabled": False, "theme": "default", "text_size": "normal", "system_panel": True, "body_panel": True,
             "radar": True, "strip_panel": False, "now_panel": False, "bio_panel": False, "alerts_panel": False, "system_seconds": 0,
-            "radar_range": 800, "analysis_only": [], "hide_docked": list(HIDE_DOCKED_DEFAULT), "show_inactive": False}
+            "radar_range": 800, "analysis_only": [], "hide_docked": list(HIDE_DOCKED_DEFAULT), "show_inactive": False,
+            "panel_scale": 100}
+# [overlay] panel_scale (a GitHub report, 2026-10-14: too large on a 4K TV): all panels' size in %, on top of each panel's
+# own; Settings -> In-game overlay's All panels, Ctrl + wheel in Arrange mode
+PANEL_SCALE_LIMITS = (20, 250)
 # where each panel starts: a corner of the game window, the offset from it as a share of the window's width (x) and
-# height (y), its size (1 = the canvas's own), its background's opacity (0: text only) and the whole panel's
+# height (y), its size (1 = the canvas's own), its background's opacity (0: text only) and the whole panel's; its own
+# text size ("text": small, normal or large; "" as all panels, [overlay] text_size), added below
 LAYOUT_DEFAULT = {"system": {"corner": "nw", "x": 0.02, "y": 0.16, "scale": 1.0, "bg": 0.65, "alpha": 1.0},
                   "body": {"corner": "ne", "x": 0.02, "y": 0.16, "scale": 1.0, "bg": 0.65, "alpha": 1.0},
                   "radar": {"corner": "se", "x": 0.02, "y": 0.10, "scale": 1.0, "bg": 0.5, "alpha": 1.0},
@@ -61,13 +66,59 @@ LAYOUT_DEFAULT = {"system": {"corner": "nw", "x": 0.02, "y": 0.16, "scale": 1.0,
                   "bio": {"corner": "nw", "x": 0.02, "y": 0.45, "scale": 1.0, "bg": 0.65, "alpha": 1.0},
                   # under the system strip, centred (S26)
                   "alerts": {"corner": "n", "x": 0.0, "y": 0.09, "scale": 1.0, "bg": 0.65, "alpha": 1.0}}
-LIMITS = {"x": (0.0, 0.95), "y": (0.0, 0.95), "scale": (0.5, 2.5), "bg": (0.0, 1.0), "alpha": (0.1, 1.0)}
+for _entry in LAYOUT_DEFAULT.values():
+    _entry["text"] = ""   # as all panels: a layout saved before the per-panel text size reads as it drew then
+del _entry
+# the size goes down to 20 % (it stopped at 50 % until the 4K TV report): what keeps a panel readable is MIN_TEXT_PX,
+# in the window's pixels, not a share (50 % of small text is about 7 px on a 1080p window but 13 px on a 4K one)
+LIMITS = {"x": (0.0, 0.95), "y": (0.0, 0.95), "scale": (0.2, 2.5), "bg": (0.0, 1.0), "alpha": (0.1, 1.0)}
 
 # text metrics on the canvas: line heights and an average character width per size (the window's font is close to
 # these; long texts are cut with … to the panel's width rather than run over its edge)
 LINE_H = {"small": 16, "normal": 20, "large": 26}
 CHAR_W = {"small": 6.6, "normal": 8.2, "large": 10.4}
+FONT_PX = {"small": 12, "normal": 15, "large": 19}   # the window's font sizes in canvas units (scaled with the panel)
 PAD = 10
+MIN_TEXT_PX = 9   # the window never draws a panel's text smaller than this many pixels, whatever the sizes say
+
+
+def base_scale(win_h):
+    """Canvas units to window pixels: the 960-unit-high canvas fits the game window's height."""
+    return max(0.1, win_h / CANVAS_H)
+
+
+def effective_scale(win_h, panel_scale, size, smallest_font):
+    """Canvas units to window pixels for one panel: base_scale(win_h) times all panels' size (panel_scale, 1 = 100 %)
+    times the panel's own (size, its layout's scale), raised to the least that draws its smallest text (smallest_font,
+    canvas units: FONT_PX) at MIN_TEXT_PX, so a small setting stays readable on a small window while a 4K one can go
+    much smaller. smallest_font None (no text): no floor."""
+    s = base_scale(win_h) * panel_scale * size
+    return max(s, MIN_TEXT_PX / smallest_font) if smallest_font else s
+
+
+def smallest_font(panel):
+    """The smallest text a panel's items draw, in canvas units (FONT_PX of their sizes); None with no text."""
+    sizes = []
+    for it in panel.get("items") or []:
+        if it.get("t") == "text":
+            sizes.append(it.get("size"))
+        elif it.get("t") == "runs":
+            sizes += [r[2] for r in it.get("runs") or [] if len(r) > 2]
+    return min((FONT_PX.get(x, FONT_PX["normal"]) for x in sizes), default=None)
+
+
+def panel_font(pid, size):
+    """The smallest text panel `pid` draws at text size `size`, as smallest_font finds it in the panel (the radar's
+    labels are small whatever the size): for Settings' figure, before the panel is built."""
+    return FONT_PX["small"] if pid == "radar" else FONT_PX.get(size, FONT_PX["normal"])
+
+
+def text_px(win_h, panel_scale, size, font):
+    """Settings' figure for one panel: (the height of its smallest text in the game window's pixels, held: raised to
+    MIN_TEXT_PX because the sizes would draw it smaller)."""
+    want = base_scale(win_h) * panel_scale * size * font
+    got = effective_scale(win_h, panel_scale, size, font) * font
+    return round(got), got > want + 1e-9
 
 # the Default theme's colours: the page's dark ones (page.css :root), the title in its info blue
 DEFAULT_PALETTE = {"title": "#6AA8FF", "text": "#D8DDE4", "muted": "#7D8794", "good": "#5CC98A", "warn": "#E3B341",
@@ -166,7 +217,7 @@ def overlay_settings(cfg):
             out[key] = v.strip().lower()
         else:
             _warn(f"{key} = {v!r} must be one of {', '.join(allowed)}; using {DEFAULTS[key]!r}")
-    for key, lo, hi in (("system_seconds", 0, 3600), ("radar_range", 100, 20000)):
+    for key, lo, hi in (("system_seconds", 0, 3600), ("radar_range", 100, 20000), ("panel_scale", *PANEL_SCALE_LIMITS)):
         v = o.get(key)
         if v is None:
             continue
@@ -306,6 +357,8 @@ def clean_layout(raw):
         got = raw.get(panel) if isinstance(raw.get(panel), dict) else {}
         if got.get("corner") in CORNERS:
             keys["corner"] = got["corner"]
+        if got.get("text") in SIZES:
+            keys["text"] = got["text"]
         for k, (lo, hi) in LIMITS.items():
             v = _num(got.get(k), lo, hi)
             if v is not None:
@@ -330,6 +383,10 @@ def layout_update(current, change):
                 if v not in CORNERS:
                     return None, f"{panel}.corner must be one of {', '.join(CORNERS)}"
                 new[panel]["corner"] = v
+            elif k == "text":   # the panel's own text size, "" (or null): as all panels
+                if v not in SIZES and v not in ("", None):
+                    return None, f"{panel}.text must be one of {', '.join(SIZES)} or \"\" (as all panels)"
+                new[panel]["text"] = v or ""
             elif k in LIMITS:
                 n = _num(v, *LIMITS[k])
                 if n is None:
@@ -1471,23 +1528,27 @@ def alerts_panel(alerts, pal, size="normal", now=None):
 # ---- the test panels: every panel with sample data, to arrange them before flying ----
 
 def test_panels(pal, size="normal", radar_range=800):
-    """Every panel with made-up contents ("Show test panels" in Settings, and the window's Arrange mode)."""
+    """Every panel with made-up contents ("Show test panels" in Settings, and the window's Arrange mode). size: one text
+    size for all, or {panel id: size} (each panel's own, State.overlay_sizes)."""
+    sizes = size if isinstance(size, dict) else {}
+    one = size if isinstance(size, str) else "normal"
     system = text_panel("system", "Test Sector AB-C d1-2", [
         {"left": [("A 3 ", "title"), ("Water world, terraformable", "text")], "right": ("TO MAP 2.4M", "warn")},
         {"left": [("B 1 ", "title"), ("Bacterium · Stratum", "text")], "right": ("TO LAND 19.0M", "warn")},
         {"left": [("A 1 ", "title"), ("High metal content", "muted")], "right": ("MAPPED", "good")},
         "rule",
         [("Left here: ", "muted"), ("21.4M", "accent"), (" · 9 bodies not listed", "muted")],
-    ], pal, width=420, size=size, subtitle="test panel")
+    ], pal, width=420, size=sizes.get("system", one), subtitle="test panel")
     # the Target panel's system (a body you are at or have targeted shows as the body panel did)
     body = target_system_panel({"name": "Test Sector AB-C d1-3", "status": "partial", "known": 3, "count": 12,
                                 "edsm": {"known": 5, "count": 12}, "star_class": "N", "remaining": 4,
                                 "hop": {"ly": 38.2, "fuel": 2.9, "left": 3, "reach": True},
-                                "value": {"carto": 12_300_000, "bio": 40_000_000}, "notable": {"WW": 1, "T": 2}}, pal, size)
-    body["items"][0]["runs"].append(["  test panel", pal["muted"], size, False])
+                                "value": {"carto": 12_300_000, "bio": 40_000_000}, "notable": {"WW": 1, "T": 2}}, pal,
+                               sizes.get("body", one))
+    body["items"][0]["runs"].append(["  test panel", pal["muted"], sizes.get("body", one), False])
     strip = strip_panel({"name": "Test Sector AB-C d1-2", "region": "Inner Orion Spur", "sol_ly": 5411, "star": "K",
                          "found": 12, "total": 14, "honked": True, "value_now": 2_100_000, "value_max": 35_100_000,
-                         "first": True, "firsts": 12, "mapped": 3, "planets": 11, "in_spansh": False}, pal, size)
+                         "first": True, "firsts": 12, "mapped": 3, "planets": 11, "in_spansh": False}, pal, sizes.get("strip", one))
     now = now_panel({"name": "Test Sector AB-C d1-2", "now": 0, "detail_ready": True, "value_now": 2_100_000,
                      "target": {"name": "Test Sector AB-C d1-3", "status": "unreported", "star_class": "K"},
                      "fuel": {"live": True, "pct": 64, "jumps_max": 9, "since_scoop": 3},
@@ -1497,8 +1558,8 @@ def test_panels(pal, size="normal", radar_range=800):
                          {"body": "B 1", "genera": ["Stratum"], "partial": {}, "potential": 19_000_000, "factor": 1, "dist_ls": 50,
                           "gravity": 0.42, "atmosphere": "Neon", "codex_galaxy": True},
                          {"body": "B 2", "genera": ["Bacterium"], "partial": {}, "potential": 12_000_000, "factor": 1, "dist_ls": 70}]},
-                     "this_session": {"start": None, "jumps": 28, "ly": 1540, "firsts": 12, "samples": 6}}, pal, size)
-    now["items"][0]["runs"].append(["  test panel", pal["muted"], size, False])
+                     "this_session": {"start": None, "jumps": 28, "ly": 1540, "firsts": 12, "samples": 6}}, pal, sizes.get("now", one))
+    now["items"][0]["runs"].append(["  test panel", pal["muted"], sizes.get("now", one), False])
     bio = bio_panel({"bodies": [
         {"name": "B 1", "type": "Planet", "bio": 2, "gravity": 0.42, "dist_ls": 50, "genera": ["Stratum", "Bacterium"],
          "value_parts": {"bio_left": 20_000_000, "bio_factor": 1},
@@ -1511,12 +1572,12 @@ def test_panels(pal, size="normal", radar_range=800):
         {"name": "A 1", "type": "Planet", "bio": 1, "gravity": 0.39, "dist_ls": 335, "genera": ["Bacterium"],
          "value_parts": {"bio_left": 0, "bio_factor": 5},
          "organics": [{"genus": "Bacterium", "species": "Bacterium Acies", "variant": "Bacterium Acies - Cyan", "samples": 3,
-                       "done": True, "value": 1_000_000}]}]}, pal, size)
-    bio["items"][0]["runs"].append(["  test panel", pal["muted"], size, False])
+                       "done": True, "value": 1_000_000}]}]}, pal, sizes.get("bio", one))
+    bio["items"][0]["runs"].append(["  test panel", pal["muted"], sizes.get("bio", one), False])
     alerts = alerts_panel([{"kind": "find", "title": "B 1: Earth-like world (test panel)", "body": "2.4M cr scanned and mapped",
                             "danger": False, "t": 0},
-                           {"kind": "hull", "title": "Interdicted", "body": "you submitted", "danger": True, "t": 0}], pal, size, now=0)
-    return [system, body, radar_test(pal, size, radar_range), strip, now, bio, alerts]
+                           {"kind": "hull", "title": "Interdicted", "body": "you submitted", "danger": True, "t": 0}], pal, sizes.get("alerts", one), now=0)
+    return [system, body, radar_test(pal, sizes.get("radar", one), radar_range), strip, now, bio, alerts]
 
 
 def radar_test(pal, size="normal", radar_range=800):

@@ -520,6 +520,15 @@ upstream project's choices, not rules of the game.
   top or bottom edge, as a share of the window, so a resolution change keeps the arrangement. Linux is where it is
   tried (X11, and XWayland on a Wayland session, as Modern Overlay runs on GNOME); Windows has the code, untried;
   native Wayland compositors, gamescope and exclusive fullscreen are out of scope.
+- **The overlay's sizes have a floor in pixels, not a percentage** (a GitHub report, 2026-10-14: too large on a 4K TV,
+  and a size under 50 % was put back to 50 %). Panels scale with the game window's height, so a panel takes the same
+  share of the screen at 4K as at 1080p, and the same percentage is unreadable on one screen and big on another (small
+  text at 50 % is about 7 px at 1080p, 13 px at 4K). So a panel's size goes down to 20 %, all panels have one size on
+  top of their own (`[overlay] panel_scale`, in the config: a setting, not an arrangement), and the window raises a
+  panel's scale so its smallest text is never under `MIN_TEXT_PX` (9 px, `overlay.effective_scale`). Settings shows the
+  figure only from a window drawing now (it alone knows the game window's height). A panel's own text size lives in
+  the layout beside its size (`text`, "" as all panels), not in an `[overlay]` list: it is per panel like the size,
+  Settings and Arrange write the layout, and an old layout reads unchanged.
 - **The overlay uses the config's levels.** The panels are built on the server, which cannot see a browser's levels:
   the system panel `body_highlight_level` and `bio_min`; the Target panel's body `high_gravity`; Now `body_highlight_level`,
   `bio_min`, `high_gravity`, `codex_interesting`, `unsold_warn` and `unsold_urgent`; Bio signals `bio_min`,

@@ -30,6 +30,18 @@ class Settings(unittest.TestCase):
         # no url or password: the overlay is a game-PC feature, drawn from this PC's Outrider only (the author, 2026-10-10)
         self.assertNotIn("url", O.overlay_settings({"overlay": {"url": "http://erangel:8025"}})["overlay"])
 
+    def test_panel_scale(self):
+        """The 4K TV report (2026-10-14): [overlay] panel_scale, all panels' size in % (100 when missing), a whole
+        number within PANEL_SCALE_LIMITS (20 to 250), anything but a number the default with a warning."""
+        self.assertEqual(O.overlay_settings({})["overlay"]["panel_scale"], 100)
+        self.assertEqual(O.PANEL_SCALE_LIMITS, (20, 250))
+        for v, want in ((40, 40), (37.6, 37), (5, 20), (900, 250)):
+            self.assertEqual(O.overlay_settings({"overlay": {"panel_scale": v}})["overlay"]["panel_scale"], want, v)
+        for bad in ("50%", True):
+            with contextlib.redirect_stderr(io.StringIO()) as e:
+                self.assertEqual(O.overlay_settings({"overlay": {"panel_scale": bad}})["overlay"]["panel_scale"], 100)
+            self.assertIn("panel_scale", e.getvalue())
+
     def test_analysis_only_list(self):
         """D2a: [overlay] analysis_only, the overlay's one list: panel ids kept in PANELS' order, unknown ones dropped
         with a warning, anything but a list of names the default []."""
@@ -71,11 +83,12 @@ class Settings(unittest.TestCase):
         import tomllib
         args = types.SimpleNamespace(**{k: None for k in ("journals", "legacy", "host", "port", "db", "radius")})
         st = ed_outrider.settings_from({"overlay": {"enabled": True, "theme": "lcars", "radar_range": 1200,
-                                                    "analysis_only": ["now", "bio"], "hide_docked": ["strip", "bio"]}}, args)
+                                                    "analysis_only": ["now", "bio"], "hide_docked": ["strip", "bio"],
+                                                    "panel_scale": 45}}, args)
         text = ed_outrider.config_text(st)
         back = tomllib.loads(text)["overlay"]
-        self.assertEqual((back["enabled"], back["theme"], back["radar_range"], back["analysis_only"], back["hide_docked"]),
-                         (True, "lcars", 1200, ["now", "bio"], ["strip", "bio"]))
+        self.assertEqual((back["enabled"], back["theme"], back["radar_range"], back["analysis_only"], back["hide_docked"],
+                          back["panel_scale"]), (True, "lcars", 1200, ["now", "bio"], ["strip", "bio"], 45))
         # a config written before hide_docked: the default, written out as such
         back = tomllib.loads(ed_outrider.config_text(ed_outrider.settings_from({"overlay": {}}, args)))["overlay"]
         self.assertEqual(back["hide_docked"], ["system", "body", "now", "bio"])
@@ -93,13 +106,78 @@ class Layout(unittest.TestCase):
     def test_update(self):
         new, why = O.layout_update(None, {"radar": {"x": 0.3, "y": 0.2, "scale": 1.5, "bg": 0, "corner": "ne"}})
         self.assertIsNone(why)
-        self.assertEqual(new["radar"], {"corner": "ne", "x": 0.3, "y": 0.2, "scale": 1.5, "bg": 0.0, "alpha": 1.0})
+        self.assertEqual(new["radar"], {"corner": "ne", "x": 0.3, "y": 0.2, "scale": 1.5, "bg": 0.0, "alpha": 1.0, "text": ""})
         self.assertEqual(new["system"], O.LAYOUT_DEFAULT["system"])
         again, _ = O.layout_update(new, {"radar": {"reset": True}})
         self.assertEqual(again["radar"], O.LAYOUT_DEFAULT["radar"])
         for bad in ({}, [], {"moon": {"x": 1}}, {"body": {"x": "left"}}, {"body": {"corner": "middle"}}, {"body": {"size": 2}},
-                    {"body": {}}):
+                    {"body": {}}, {"body": {"text": "huge"}}, {"body": {"text": 1}}):
             self.assertIsNone(O.layout_update(None, bad)[0], bad)
+
+    def test_size_down_to_20_percent(self):
+        """The 4K TV report (2026-10-14): a panel's size goes down to 20 % (it was put back to 50 %): what keeps it
+        readable is the window's MIN_TEXT_PX floor, not a percentage."""
+        self.assertEqual(O.LIMITS["scale"], (0.2, 2.5))
+        new, _ = O.layout_update(None, {"system": {"scale": 0.2}, "radar": {"scale": 0.05}})
+        self.assertEqual((new["system"]["scale"], new["radar"]["scale"]), (0.2, 0.2))
+        self.assertEqual(O.clean_layout(new)["system"]["scale"], 0.2)                # stored and read back as it was
+        self.assertEqual(O.clean_layout({"body": {"scale": 0.25}})["body"]["scale"], 0.25)
+
+    def test_text_size_per_panel(self):
+        """3b: a panel's own text size in the layout ("text": small, normal, large; "" as all panels, the default); a
+        layout saved before it reads unchanged, with every panel as all panels."""
+        old = {"system": {"corner": "sw", "x": 0.1, "y": 0.2, "scale": 0.8, "bg": 0.3, "alpha": 0.9}}
+        got = O.clean_layout(old)
+        self.assertEqual(got["system"], dict(old["system"], text=""))
+        self.assertTrue(all(e["text"] == "" for e in got.values()))
+        new, why = O.layout_update(old, {"system": {"text": "large"}, "bio": {"text": "small"}})
+        self.assertIsNone(why)
+        self.assertEqual((new["system"]["text"], new["bio"]["text"], new["system"]["scale"]), ("large", "small", 0.8))
+        self.assertEqual(O.layout_update(new, {"system": {"text": ""}})[0]["system"]["text"], "")
+        self.assertEqual(O.layout_update(new, {"system": {"text": None}})[0]["system"]["text"], "")
+        self.assertEqual(O.clean_layout({"system": {"text": "huge"}})["system"]["text"], "")
+        self.assertEqual(O.layout_update(new, {"system": {"reset": True}})[0]["system"]["text"], "")
+
+
+class TextFloor(unittest.TestCase):
+    """The 4K TV report (2026-10-14): the overlay never draws text under MIN_TEXT_PX pixels."""
+
+    def test_effective_scale(self):
+        self.assertEqual(O.MIN_TEXT_PX, 9)
+        # 1080p, all at 100 %: unchanged for every text size (small text is 13.5 px)
+        for size, font in O.FONT_PX.items():
+            self.assertAlmostEqual(O.effective_scale(1080, 1.0, 1.0, font), 1.125, msg=size)
+        # 1080p at 50 %: small text would be 6.75 px, held at 9; normal (8.4 px) held too; large (10.7 px) not
+        self.assertAlmostEqual(O.effective_scale(1080, 1.0, 0.5, O.FONT_PX["small"]), 9 / 12)
+        self.assertAlmostEqual(O.effective_scale(1080, 0.5, 1.0, O.FONT_PX["normal"]), 9 / 15)
+        self.assertAlmostEqual(O.effective_scale(1080, 1.0, 0.5, O.FONT_PX["large"]), 0.5625)
+        # 4K at 50 %: small text 13.5 px, nothing held; at 25 % (all panels) x 100 % small and normal are held, large not
+        self.assertAlmostEqual(O.effective_scale(2160, 1.0, 0.5, O.FONT_PX["small"]), 1.125)
+        self.assertAlmostEqual(O.effective_scale(2160, 0.25, 1.0, O.FONT_PX["small"]), 0.75)
+        self.assertAlmostEqual(O.effective_scale(2160, 0.25, 1.0, O.FONT_PX["normal"]), 0.6)
+        self.assertAlmostEqual(O.effective_scale(2160, 0.25, 1.0, O.FONT_PX["large"]), 0.5625)
+        for win_h in (720, 1080, 1440, 2160):
+            for every in (0.2, 0.5, 1.0):
+                for size in (0.2, 0.5, 1.0, 2.5):
+                    for font in O.FONT_PX.values():
+                        s = O.effective_scale(win_h, every, size, font)
+                        self.assertGreaterEqual(s * font, O.MIN_TEXT_PX - 1e-9)
+                        self.assertGreaterEqual(s, O.base_scale(win_h) * every * size - 1e-9)   # only ever raised
+        self.assertAlmostEqual(O.effective_scale(2160, 0.2, 0.2, None), 0.09)   # no text: no floor
+
+    def test_settings_figure(self):
+        self.assertEqual(O.text_px(1080, 1.0, 1.0, O.FONT_PX["normal"]), (17, False))
+        self.assertEqual(O.text_px(2160, 0.25, 1.0, O.FONT_PX["large"]), (11, False))
+        self.assertEqual(O.text_px(1080, 1.0, 0.3, O.FONT_PX["small"]), (9, True))
+        self.assertEqual(O.text_px(720, 1.0, 1.0, O.FONT_PX["small"]), (9, False))     # exactly at it: not held
+
+    def test_smallest_font(self):
+        """The window floors each panel by its smallest text; Settings' figure (panel_font, before a panel is built)
+        names the same one for every panel and text size: the radar's labels are small whatever the size."""
+        for size in O.SIZES:
+            for p in O.test_panels(O.palette(), size):
+                self.assertEqual(O.smallest_font(p), O.panel_font(p["id"], size), (p["id"], size))
+        self.assertIsNone(O.smallest_font({"items": [{"t": "rect"}]}))
 
 
 class Panels(unittest.TestCase):
@@ -993,6 +1071,68 @@ class Server(unittest.TestCase):
                     {"hide_docked": ["radar"]}, {"hide_docked": "now"}):
             self.assertEqual(self.state.overlay_set(bad, now=300)[1], 400, bad)
 
+    def test_all_panels_size(self):
+        """The 4K TV report (2026-10-14): POST /api/overlay {panel_scale} sets all panels' size (clamped, a whole %),
+        written into [overlay], in the window's GET and in Settings' state."""
+        out, status = self.state.overlay_set({"panel_scale": 35}, now=10)
+        self.assertEqual((status, out["panel_scale"], self.state.overlay_view(now=11)["panel_scale"]), (200, 35, 35))
+        with open(self.state.config_path, encoding="utf-8") as f:
+            self.assertIn("panel_scale = 35", f.read())
+        self.assertEqual(self.state.overlay_set({"panel_scale": 3}, now=12)[0]["panel_scale"], 20)
+        self.assertEqual(self.state.overlay_set({"panel_scale": 120.4}, now=12)[0]["panel_scale"], 120)
+        for bad in ({"panel_scale": "50"}, {"panel_scale": True}, {"panel_scale": None}, {"panel_scale": float("nan")}):
+            self.assertEqual(self.state.overlay_set(bad, now=13)[1], 400, bad)
+
+    def test_text_size_per_panel_reaches_the_builders(self):
+        """3b: a panel's own text size (the layout's "text") builds that panel at it; the others at [overlay]
+        text_size; the test panels too."""
+        self.state.overlay_cfg["text_size"] = "small"
+        self.state.overlay_layout_set({"system": {"text": "large"}, "radar": {"text": "normal"}})
+        self.assertEqual(self.state.overlay_sizes(), {"system": "large", "body": "small", "radar": "normal", "strip": "small",
+                                                      "now": "small", "bio": "small", "alerts": "small"})
+        self.state.overlay_set({"test": True}, now=50)
+        panels = {p["id"]: p for p in self.state.overlay_view(now=51)["panels"]}
+        sizes = lambda p: {it.get("size") for it in p["items"] if it["t"] == "text"} | \
+            {r[2] for it in p["items"] if it["t"] == "runs" for r in it["runs"]}   # noqa: E731
+        self.assertEqual(sizes(panels["system"]), {"large"})
+        self.assertEqual(sizes(panels["bio"]) - {"large"}, {"small"})           # its title is large at any size
+        self.assertEqual(panels["system"]["w"], O.test_panels(O.palette(), "large")[0]["w"])
+        # live, as the test panels: the alerts panel at its own size
+        self.state.overlay_test_until = 0
+        self.state.overlay_cfg.update(enabled=True, alerts_panel=True)
+        self.state.overlay_layout_set({"alerts": {"text": "large"}})
+        self.state.journals.status_json = {"live": True, "flags": 0, "gui_focus": 0}
+        self.state.overlay_alerts.append({"kind": "find", "title": "B 1", "body": "x", "danger": False, "t": 100})
+        got = [p for p in self.state.overlay_panels(now=101) if p["id"] == "alerts"]
+        self.assertEqual(sizes(got[0]) if got else None, {"large"})
+
+    def test_text_figures_from_the_windows_height(self):
+        """Settings says what each size comes to: the window's GET carries the game window's height (&h=), kept from
+        the window only, the page woken on a change; each panel's smallest text in pixels, held at MIN_TEXT_PX where the
+        sizes would draw it smaller. No window drawing: no figure."""
+        s = self.state
+        s.overlay_view(now=10, window=False, height="2160")                   # another visitor: nothing learned
+        self.assertIsNone(s.overlay_win_h)
+        v0 = s.version
+        s.overlay_view(now=11, height="2160")
+        self.assertEqual((s.overlay_win_h, s.version), (2160, v0 + 1))
+        s.overlay_view(now=12, height="2160")                                 # the same: nothing to wake the page for
+        s.overlay_view(now=12, height="tall")                                 # not a number: ignored
+        s.overlay_view(now=12, height="99999")                                # out of reason: ignored
+        self.assertEqual((s.overlay_win_h, s.version), (2160, v0 + 1))
+        s.overlay_cfg["panel_scale"] = 25
+        info = s.overlay_info(now=13)
+        self.assertEqual((info["win_h"], info["panel_scale"], info["min_text_px"]), (2160, 25, O.MIN_TEXT_PX))
+        # 4K at 25 %, normal text: 2.25 x 0.25 x 15 = 8.4 px, held at 9; the radar's small labels too
+        self.assertEqual(info["text_px"]["system"], {"px": 9, "held": True})
+        self.assertEqual(info["text_px"]["radar"], {"px": 9, "held": True})
+        s.overlay_layout_set({"system": {"scale": 2.0, "text": "large"}})
+        self.assertEqual(s.overlay_info(now=13)["text_px"]["system"], {"px": 21, "held": False})   # 2.25 x .5 x 19
+        s.overlay_view(now=14, height="")                                      # no game window now
+        self.assertIsNone(s.overlay_info(now=14)["text_px"])
+        s.overlay_view(now=15, height="1080")
+        self.assertEqual(s.overlay_info(now=15 + ed_outrider.OVERLAY_SEEN_S + 1)["text_px"], None)   # no window drawing
+
     def test_system_panel_shows_in_supercruise(self):
         self.state.journals.handle({"event": "FSDJump", "timestamp": ed_outrider.iso_ts(1000), "StarSystem": "Test Sector AB-C d1-2",
                                     "SystemAddress": 77, "StarPos": [0, 0, 0]})
@@ -1395,8 +1535,9 @@ class Server(unittest.TestCase):
                 r = await c.get("/api/overlay")
                 first = await r.json()
                 seen_by_visitor = self.state.overlay_info()["window"]   # another visitor's GET: not a window
-                await c.get("/api/overlay", headers={"User-Agent": "outrider-overlay"})
+                await c.get("/api/overlay", headers={"User-Agent": "outrider-overlay"}, params={"w": "drawing", "h": "1440"})
                 seen_by_window = self.state.overlay_info()["window"]
+                self.assertEqual(self.state.overlay_win_h, 1440)   # the game window's height, through the route
                 same = await (await c.get("/api/overlay", params={"since": first["version"]})).json()
                 bad = (await c.post("/api/overlay", data="[1]", headers={"Content-Type": "application/json"})).status
                 ok = await (await c.post("/api/overlay", json={"test": True})).json()

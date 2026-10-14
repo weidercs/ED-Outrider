@@ -1216,7 +1216,8 @@ background_opacity = {n(st["highway"]["background_opacity"])}   # 0.05 to 1
 [overlay]   # the in-game overlay: panels drawn over Elite's window by a window Outrider runs on the game PC (not on a server)
 enabled = {"true" if st["overlay"]["enabled"] else "false"}   # build the panels (the window shows nothing while false; Settings -> In-game overlay switches it)
 theme = {q(st["overlay"]["theme"])}   # the panels' colours: default, lcars, elite, babylon5, narn, minbari, centauri, vorlon, shadow, sith, alliance or dark
-text_size = {q(st["overlay"]["text_size"])}   # small, normal or large
+text_size = {q(st["overlay"]["text_size"])}   # small, normal or large (a panel can have its own: Settings -> In-game overlay's Text column)
+panel_scale = {st["overlay"]["panel_scale"]}   # all panels' size in % (20 to 250), on top of each panel's own; text is never drawn under {outrider.overlay.MIN_TEXT_PX} px
 system_panel = {"true" if st["overlay"]["system_panel"] else "false"}   # the system panel: the bodies worth your time, in supercruise
 body_panel = {"true" if st["overlay"]["body_panel"] else "false"}   # the Target panel: the body you are near or have targeted, else the system targeted (also over the galaxy map)
 radar = {"true" if st["overlay"]["radar"] else "false"}   # the surface radar: samples, colony rings, the ship, on a body's surface
@@ -6794,6 +6795,7 @@ class State:
         # the overlay pill (S8): what the window last said it sees (its GET's &w=: outrider.overlay.TRACK_CODES), when
         # Outrider last started it (wall time), and Elite's display mode from DisplaySettings.xml (checked now and then)
         self.overlay_track = None
+        self.overlay_win_h = None   # the game window's height the overlay window last reported (&h=), for Settings' text figures
         self.overlay_started = 0.0
         self.overlay_display = (0.0, None)   # (when looked, "windowed" | "fullscreen" | "borderless" | None)
         self._hw_copied = (meta_get(db, "highway") or {}).get("arrival_ts")   # copied before a restart: not again
@@ -8152,6 +8154,11 @@ class State:
         """Where each overlay panel goes, how big, how opaque (meta overlay_layout: live-only, the player's own)."""
         return outrider.overlay.clean_layout(meta_get(self.db, "overlay_layout"))
 
+    def overlay_sizes(self):
+        """Each panel's text size: its own in the layout (Settings' Text column), else [overlay] text_size."""
+        lay, every = self.overlay_layout(), self.overlay_cfg.get("text_size") or "normal"
+        return {p: lay[p].get("text") or every for p in outrider.overlay.PANELS}
+
     def overlay_palette(self):
         return outrider.overlay.palette(self.overlay_cfg.get("theme", "default"))
 
@@ -8248,7 +8255,7 @@ class State:
             return z["body"]
         return None
 
-    def overlay_target_panel(self, st, pos, now, pal, cfg, galaxy):
+    def overlay_target_panel(self, st, pos, now, pal, size, galaxy):
         """The Target panel (D1, id "body"): inside a body's near-body zone (and TARGET_ZONE_LINGER_S after leaving it)
         that body, even over a target; outside it the body targeted in game in this system, else the system targeted.
         Over the galaxy map always the system targeted. A body with nothing to say gives way to the system."""
@@ -8258,11 +8265,11 @@ class State:
             # the targeted body by its id (a station targeted is no body; a mining site's is its planet)
             for b in (next((x for x in bodies if zone and x.get("name") == zone), None),
                       next((x for x in bodies if dest and x.get("body_id") == dest["body_id"]), None)):
-                p = outrider.overlay.body_panel(b, pal, cfg["text_size"], HIGH_GRAVITY,
+                p = outrider.overlay.body_panel(b, pal, size, HIGH_GRAVITY,
                                                 outrider.bio.colony_table() if outrider.bio else None) if b else None
                 if p:
                     return p
-        return outrider.overlay.target_system_panel(self.overlay_target_info(pos), pal, cfg["text_size"])
+        return outrider.overlay.target_system_panel(self.overlay_target_info(pos), pal, size)
 
     def overlay_panels(self, now=None):
         """The panels to draw now: the test panels while they show, else the ones switched on that have something to
@@ -8272,9 +8279,9 @@ class State:
         one in [overlay] hide_docked hides while docked (the ship docked, or on foot in a station, hangar or social space),
         except the Target panel over the galaxy map."""
         now = time.time() if now is None else now
-        cfg, pal = self.overlay_cfg, self.overlay_palette()
+        cfg, pal, size = self.overlay_cfg, self.overlay_palette(), self.overlay_sizes()   # size: each panel's text size
         if now < self.overlay_test_until or now < self.overlay_arrange_until:
-            return outrider.overlay.test_panels(pal, cfg["text_size"], cfg["radar_range"])
+            return outrider.overlay.test_panels(pal, size, cfg["radar_range"])
         st = self.journals.status_json or {}
         if not cfg.get("enabled") or not st.get("live") or self.journals.loading() \
                 or (st.get("gui_focus") or 0) in OVERLAY_HIDE_FOCUS \
@@ -8284,8 +8291,8 @@ class State:
         if (st.get("gui_focus") or 0) == OVERLAY_GALAXY_MAP:
             # over the galaxy map (D1): the Target panel with the system you target there, docked or not, and the alerts
             # (S26); never analysis-only
-            p = self.overlay_target_panel(st, pos, now, pal, cfg, galaxy=True) if cfg.get("body_panel") and pos else None
-            a = outrider.overlay.alerts_panel(self.overlay_alerts, pal, cfg["text_size"], now) if cfg.get("alerts_panel") else None
+            p = self.overlay_target_panel(st, pos, now, pal, size["body"], galaxy=True) if cfg.get("body_panel") and pos else None
+            a = outrider.overlay.alerts_panel(self.overlay_alerts, pal, size["alerts"], now) if cfg.get("alerts_panel") else None
             return [x for x in (p, a) if x]
         # the system panel: in supercruise in the system you are in (for system_seconds after arriving, when set)
         if cfg.get("system_panel") and pos and flags & FLAG_SUPERCRUISE:
@@ -8294,7 +8301,7 @@ class State:
             except (KeyError, TypeError, ValueError):
                 fresh = True
             if fresh:
-                p = outrider.overlay.system_panel(self.overlay_detail(pos["id64"]), pal, cfg["text_size"], BODY_HIGHLIGHT, BIO_MIN,
+                p = outrider.overlay.system_panel(self.overlay_detail(pos["id64"]), pal, size["system"], BODY_HIGHLIGHT, BIO_MIN,
                                                   codex=CODEX_INTERESTING, first=self.plan_first_body())
                 if p:
                     out.append(p)
@@ -8302,23 +8309,23 @@ class State:
         # as [overlay] hide_docked says, below
         if cfg.get("body_panel") and pos and flags & FLAG_IN_MAIN_SHIP and not flags & (FLAG_LANDED | FLAG_IN_SRV) \
                 and not flags2 & 1:
-            p = self.overlay_target_panel(st, pos, now, pal, cfg, galaxy=False)
+            p = self.overlay_target_panel(st, pos, now, pal, size["body"], galaxy=False)
             if p:
                 out.append(p)
         # the system strip: where you are, wherever you are (ship, SRV, on foot)
         if cfg.get("strip_panel") and pos:
-            p = outrider.overlay.strip_panel(self.overlay_strip_info(pos), pal, cfg["text_size"])
+            p = outrider.overlay.strip_panel(self.overlay_strip_info(pos), pal, size["strip"])
             if p:
                 out.append(p)
         # Now, condensed: anywhere in the system (docked as hide_docked says); every bio signal in the system: anywhere,
         # as the strip
         if cfg.get("now_panel") and pos:
-            p = outrider.overlay.now_panel(self.overlay_now_info(pos, now), pal, cfg["text_size"], BODY_HIGHLIGHT, BIO_MIN,
+            p = outrider.overlay.now_panel(self.overlay_now_info(pos, now), pal, size["now"], BODY_HIGHLIGHT, BIO_MIN,
                                            HIGH_GRAVITY, CODEX_INTERESTING)
             if p:
                 out.append(p)
         if cfg.get("bio_panel") and pos:
-            p = outrider.overlay.bio_panel(self.overlay_detail(pos["id64"]), pal, cfg["text_size"], BIO_MIN, HIGH_GRAVITY,
+            p = outrider.overlay.bio_panel(self.overlay_detail(pos["id64"]), pal, size["bio"], BIO_MIN, HIGH_GRAVITY,
                                            CODEX_INTERESTING)
             if p:
                 out.append(p)
@@ -8326,12 +8333,12 @@ class State:
         if cfg.get("radar"):
             surf = self.surface_summary(now)
             if surf and (surf.get("down") or surf.get("show")):
-                p = outrider.overlay.radar_panel(surf, pal, cfg["text_size"], cfg["radar_range"])
+                p = outrider.overlay.radar_panel(surf, pal, size["radar"], cfg["radar_range"])
                 if p:
                     out.append(p)
         # the page's alerts (S26): anywhere, for ALERT_SECONDS each
         if cfg.get("alerts_panel"):
-            p = outrider.overlay.alerts_panel(self.overlay_alerts, pal, cfg["text_size"], now)
+            p = outrider.overlay.alerts_panel(self.overlay_alerts, pal, size["alerts"], now)
             if p:
                 out.append(p)
         # analysis only (D2a): in your ship with the HUD in combat mode those panels stay off; in the SRV and on foot
@@ -8346,21 +8353,31 @@ class State:
             out = [p for p in out if p["id"] not in hide]
         return out
 
-    def overlay_view(self, since=None, now=None, window=True, track=None):
-        """GET /api/overlay: what the overlay window draws, {version, enabled, arrange, test, show_inactive, canvas,
-        layout, panels}; with since = that version and nothing changed, only {same, version} (the window asks about once
-        a second). window: the overlay window asked (its User-Agent), not another visitor: only it counts as a window
-        drawing, and only its `track` (&w=: what it sees, one of outrider.overlay.TRACK_CODES) is kept, for the page's
-        overlay pill (S8). This GET changes that state, as it sets overlay_seen: the page is woken only when the word
-        changes."""
+    def overlay_view(self, since=None, now=None, window=True, track=None, height=None):
+        """GET /api/overlay: what the overlay window draws, {version, enabled, arrange, test, show_inactive, panel_scale,
+        canvas, layout, panels}; with since = that version and nothing changed, only {same, version} (the window asks
+        about once a second). window: the overlay window asked (its User-Agent), not another visitor: only it counts as a
+        window drawing, and only its `track` (&w=: what it sees, one of outrider.overlay.TRACK_CODES) and `height` (&h=:
+        the game window's height in its pixels, none without a game window; Settings' text figures) are kept, `track` for
+        the page's overlay pill (S8). This GET changes that state, as it sets overlay_seen: the page is woken only when
+        the word or the height changes."""
         now = time.time() if now is None else now
         if window:
             self.overlay_seen = now
             if track in outrider.overlay.TRACK_CODES and track != self.overlay_track:
                 self.overlay_track = track
                 self.bump()   # the pill
+            try:
+                h = int(height) if height not in (None, "") else None
+            except (TypeError, ValueError):
+                h = self.overlay_win_h   # not a number: nothing learned
+            h = h if h is None or 100 <= h <= 20000 else self.overlay_win_h
+            if h != self.overlay_win_h:
+                self.overlay_win_h = h
+                self.bump()   # Settings' "≈ N px text"
         out = {"enabled": bool(self.overlay_cfg.get("enabled")), "arrange": now < self.overlay_arrange_until,
                "test": now < self.overlay_test_until, "show_inactive": bool(self.overlay_cfg.get("show_inactive")),
+               "panel_scale": self.overlay_cfg.get("panel_scale", 100),
                "canvas": [outrider.overlay.CANVAS_W, outrider.overlay.CANVAS_H],
                "layout": self.overlay_layout(), "panels": self.overlay_panels(now)}
         version = hashlib.sha1(json.dumps(out, sort_keys=True).encode()).hexdigest()[:16]
@@ -8437,20 +8454,33 @@ class State:
         """The page's Settings -> In-game overlay: the switches, whether a window is drawing (it asked within the last
         few seconds), the layout, and the test panels' and Arrange mode's time left."""
         now = time.time() if now is None else now
-        cfg = self.overlay_cfg
+        cfg, O = self.overlay_cfg, outrider.overlay
+        window = now - self.overlay_seen < OVERLAY_SEEN_S
+        # what each panel's text comes to in the game window (the 4K TV report, 2026-10-14): only from a window drawing
+        # now, which says the game window's height; {panel: {px, held}}, held: kept at MIN_TEXT_PX
+        win_h, text_px, layout = self.overlay_win_h if window else None, None, self.overlay_layout()
+        if win_h:
+            sizes, ps = self.overlay_sizes(), cfg.get("panel_scale", 100) / 100
+            text_px = {}
+            for p in O.PANELS:
+                px, held = O.text_px(win_h, ps, layout[p]["scale"], O.panel_font(p, sizes[p]))
+                text_px[p] = {"px": px, "held": held}
         return {"enabled": bool(cfg.get("enabled")), "theme": cfg.get("theme"), "text_size": cfg.get("text_size"),
+                "panel_scale": cfg.get("panel_scale", 100), "win_h": win_h, "text_px": text_px, "min_text_px": O.MIN_TEXT_PX,
                 "panels": {p: bool(cfg.get(f"{p}_panel" if p != "radar" else "radar")) for p in outrider.overlay.PANELS},
                 "analysis_only": list(cfg.get("analysis_only") or []), "hide_docked": list(cfg.get("hide_docked") or []),
                 "show_inactive": bool(cfg.get("show_inactive")),
-                "window": now - self.overlay_seen < OVERLAY_SEEN_S, "layout": self.overlay_layout(),
+                "window": window, "layout": layout,
                 "test": max(0, round(self.overlay_test_until - now)), "arrange": max(0, round(self.overlay_arrange_until - now)),
                 # Outrider runs the window itself on the game PC: its state; None on a server (the window runs elsewhere)
                 "runner": self.overlay_runner.status() if self.overlay_runner else None,
                 "pill": self.overlay_pill(now)}   # the header's overlay pill (S8)
 
     def overlay_set(self, body, now=None):
-        """POST /api/overlay {enabled?, theme?, text_size?, panels?: {system|body|radar|strip|now|bio|alerts: bool}, analysis_only?:
-        [panel ids], hide_docked?: [panel ids but radar], show_inactive?: bool, test?: bool, arrange?: bool}: the switches, applied at once and written into [overlay] for the next start; test panels for
+        """POST /api/overlay {enabled?, theme?, text_size?, panel_scale?: %, panels?: {system|body|radar|strip|now|bio|alerts: bool},
+        analysis_only?: [panel ids], hide_docked?: [panel ids but radar], show_inactive?: bool, test?: bool, arrange?: bool}: the
+        switches, applied at once and written into [overlay] for the next start (panel_scale clamped to
+        outrider.overlay.PANEL_SCALE_LIMITS); test panels for
         TEST_SECONDS; Arrange mode (the window takes the mouse to move and size the panels) until it is switched off or
         ARRANGE_SECONDS pass. (answer, HTTP status)."""
         now = time.time() if now is None else now
@@ -8465,6 +8495,9 @@ class State:
                 changes["theme"] = val
             elif key == "text_size" and val in O.SIZES:
                 changes["text_size"] = val
+            elif key == "panel_scale" and isinstance(val, (int, float)) and not isinstance(val, bool) and math.isfinite(val):
+                lo, hi = O.PANEL_SCALE_LIMITS
+                changes["panel_scale"] = int(round(min(hi, max(lo, val))))
             elif key == "panels" and isinstance(val, dict) and val and all(
                     p in O.PANELS and isinstance(v, bool) for p, v in val.items()):
                 changes.update({(f"{p}_panel" if p != "radar" else "radar"): v for p, v in val.items()})
@@ -18578,7 +18611,7 @@ def make_app(state, hosts=None):
         """GET /api/overlay[?since=version]: the overlay window's panels (State.overlay_view)."""
         return web.json_response(state.overlay_view(request.query.get("since"),
                                                      window=request.headers.get("User-Agent", "").startswith(OVERLAY_UA),
-                                                     track=request.query.get("w")))
+                                                     track=request.query.get("w"), height=request.query.get("h")))
 
     async def overlay_post(request):
         out, status = state.overlay_set(await json_object(request))

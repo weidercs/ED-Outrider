@@ -37,7 +37,7 @@ from . import overlay as O
 POLL_S = 1.0           # how often the window asks Outrider for the panels
 FOLLOW_MS = 500        # how often it looks where Elite's window is
 HTTP_TIMEOUT = 5
-FONT_PX = {"small": 12, "normal": 15, "large": 19}   # text sizes in canvas units (scaled with the panel)
+FONT_PX = O.FONT_PX    # text sizes in canvas units (scaled with the panel; never drawn under O.MIN_TEXT_PX)
 RADIUS = 6             # the panels' corner rounding in canvas units
 
 log = logging.getLogger("outrider.overlay_window")
@@ -45,15 +45,21 @@ log = logging.getLogger("outrider.overlay_window")
 
 # ---- the layout, in window pixels (pure) ----
 
-def base_scale(win_h):
-    """Canvas units to window pixels: the 960-unit-high canvas fits the game window's height."""
-    return max(0.1, win_h / O.CANVAS_H)
+base_scale = O.base_scale   # canvas units to window pixels (the canvas's height is the game window's)
 
 
-def panel_rect(entry, pw, ph, win_w, win_h):
+def panel_scale_of(data, pct=None):
+    """All panels' size as a factor: `pct` (Arrange mode's Ctrl + wheel, not saved yet), else GET /api/overlay's
+    panel_scale (%; 100 when missing, as from an older Outrider)."""
+    v = pct if pct is not None else (data or {}).get("panel_scale", 100)
+    return v / 100 if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 else 1.0
+
+
+def panel_rect(entry, pw, ph, win_w, win_h, s=None):
     """Where a panel goes in a game window of win_w x win_h px: (x, y, w, h). entry: one panel's layout (corner, x, y
-    as shares of the window from that corner, scale). Kept inside the window."""
-    s = base_scale(win_h) * entry["scale"]
+    as shares of the window from that corner, scale); s: canvas units to pixels (paint's O.effective_scale), else
+    base_scale × the entry's scale. Kept inside the window."""
+    s = base_scale(win_h) * entry["scale"] if s is None else s
     w, h = pw * s, ph * s
     ox, oy = entry["x"] * win_w, entry["y"] * win_h
     corner = entry["corner"]
@@ -88,6 +94,7 @@ HANDLE_PX = 16          # the square at a panel's bottom-right corner that sizes
 CENTRE_SNAP = 0.06      # a panel dropped with its centre this close to the window's middle (a share of the width) is centred
 DONE_W, DONE_H = 220, 34
 WHEEL_STEP = 0.05       # one wheel notch: this much more or less opacity
+ALL_STEP = 5            # one Ctrl + wheel notch: all panels' size this many % bigger or smaller
 
 
 def done_rect(win_w):
@@ -109,9 +116,10 @@ def hit(geoms, x, y):
     return None
 
 
-def dragged(entry, start_rect, dx, dy, mode, nat_w, nat_h, win_w, win_h):
+def dragged(entry, start_rect, dx, dy, mode, nat_w, nat_h, win_w, win_h, panel_scale=1.0, smallest=None):
     """A panel's layout entry after dragging (dx, dy) px from where it was (start_rect): moved (kept inside the
-    window), or sized from its corner handle (top left kept, the aspect kept, the scale within LIMITS); its corner and
+    window), or sized from its corner handle (top left kept, the aspect kept, the scale within LIMITS; drawn as paint
+    draws it: times all panels' size, `panel_scale`, held at the text floor for its `smallest` font); its corner and
     offsets re-chosen from where it ends up (place)."""
     x, y, w, h = start_rect
     if mode == "move":
@@ -122,14 +130,26 @@ def dragged(entry, start_rect, dx, dy, mode, nat_w, nat_h, win_w, win_h):
     gx, gy = (dx / w if w else 0.0), (dy / h if h else 0.0)
     grow = gx if abs(gx) >= abs(gy) else gy   # the direction dragged more: smaller as well as bigger
     scale = round(min(hi, max(lo, entry["scale"] * (1 + grow))), 4)
-    s = base_scale(win_h) * scale
+    s = O.effective_scale(win_h, panel_scale, scale, smallest)
     return dict(entry, scale=scale, **place(x, y, nat_w * s, nat_h * s, win_w, win_h))
+
+
+def wheel_key(shift, ctrl):
+    """What the wheel over a panel changes in Arrange mode: its background's opacity ("bg"), with Shift the whole
+    panel's ("alpha"), with Ctrl all panels' size ("all", [overlay] panel_scale; the 4K TV report, 2026-10-14)."""
+    return "all" if ctrl else "alpha" if shift else "bg"
 
 
 def wheeled(entry, key, notches):
     """The entry with its background's ("bg") or whole panel's ("alpha") opacity moved by `notches` wheel steps."""
     lo, hi = O.LIMITS[key]
     return dict(entry, **{key: round(min(hi, max(lo, entry[key] + WHEEL_STEP * notches)), 4)})
+
+
+def wheeled_all(pct, notches):
+    """All panels' size (%) after `notches` Ctrl + wheel steps, a whole number within PANEL_SCALE_LIMITS."""
+    lo, hi = O.PANEL_SCALE_LIMITS
+    return int(min(hi, max(lo, round(pct + ALL_STEP * notches))))
 
 
 WS_EX_LAYERED, WS_EX_TRANSPARENT = 0x80000, 0x20   # Windows' extended window styles (click-through: both)
@@ -244,9 +264,10 @@ class Client:
                 except ValueError:
                     raise RuntimeError(f"HTTP {e.code}") from None
 
-    def view(self, since=None, track=None):
-        """The panels; since: the version drawn (an unchanged answer is {same}); track: what the window sees (S8)."""
-        q = "&".join(f"{k}={urllib.request.quote(v)}" for k, v in (("since", since), ("w", track)) if v)
+    def view(self, since=None, track=None, height=None):
+        """The panels; since: the version drawn (an unchanged answer is {same}); track: what the window sees (S8);
+        height: the game window's, in this window's pixels (Settings' "≈ N px text")."""
+        q = "&".join(f"{k}={urllib.request.quote(str(v))}" for k, v in (("since", since), ("w", track), ("h", height)) if v)
         return self._request("GET", "/api/overlay" + (f"?{q}" if q else ""))
 
     def set_layout(self, change):
@@ -263,12 +284,13 @@ class Feed:
     def __init__(self, client):
         self.client, self.data, self.seq, self.error = client, None, 0, None
         self.track = None   # what the window sees (track_code), set by the window, sent with each GET
+        self.height = None  # the game window's height in this window's pixels (None: no game window), sent too
         self._stop = threading.Event()
         self._lock = threading.Lock()
 
     def fetch_once(self):
         try:
-            got = self.client.view(self.data["version"] if self.data else None, self.track)
+            got = self.client.view(self.data["version"] if self.data else None, self.track, self.height)
         except (OSError, RuntimeError, ValueError, urllib.error.URLError, http.client.HTTPException) as e:
             # HTTPException: a connection cut mid-answer (IncompleteRead, BadStatusLine) is none of the others
             with self._lock:
@@ -299,10 +321,11 @@ class Feed:
 
 # ---- Qt: painting and the window ----
 
-def paint(painter, data, win_w, win_h, arrange=False, override=None):
+def paint(painter, data, win_w, win_h, arrange=False, override=None, all_pct=None):
     """Draw every panel of `data` (GET /api/overlay's answer) for a game window of win_w x win_h px. arrange: frame
     and label each panel for moving and sizing, and the Done button (Arrange mode); override: {panel: layout entry}
-    being dragged here, not saved yet. -> [(panel id, (x, y, w, h))] as drawn (for hit tests)."""
+    being dragged here, not saved yet; all_pct: all panels' size being wheeled here (%), not saved yet. Each panel at
+    O.effective_scale: its text never under O.MIN_TEXT_PX. -> [(panel id, (x, y, w, h))] as drawn (for hit tests)."""
     from PyQt6.QtCore import QPointF, QRectF, Qt
     from PyQt6.QtGui import QBrush, QColor, QFont, QFontMetricsF, QPainterPath, QPen, QPolygonF
 
@@ -316,13 +339,14 @@ def paint(painter, data, win_w, win_h, arrange=False, override=None):
         return p
 
     layout = dict((data or {}).get("layout") or O.clean_layout(None), **(override or {}))
+    every = panel_scale_of(data, all_pct)
     geoms = []
     painter.setRenderHint(painter.RenderHint.Antialiasing, True)
     painter.setRenderHint(painter.RenderHint.TextAntialiasing, True)
     for panel in (data or {}).get("panels") or []:
         entry = layout.get(panel.get("id")) or O.LAYOUT_DEFAULT.get(panel.get("id")) or O.LAYOUT_DEFAULT["system"]
-        x, y, w, h = panel_rect(entry, panel["w"], panel["h"], win_w, win_h)
-        s = base_scale(win_h) * entry["scale"]
+        s = O.effective_scale(win_h, every, entry["scale"], O.smallest_font(panel))
+        x, y, w, h = panel_rect(entry, panel["w"], panel["h"], win_w, win_h, s)
         painter.save()
         painter.setOpacity(entry["alpha"])
         painter.translate(x, y)
@@ -441,7 +465,7 @@ def paint_frame(painter, panel, opacity):
 
 def paint_done(painter, win_w):
     """Arrange mode's Done button and what the mouse does, at the top middle."""
-    from PyQt6.QtCore import QPointF, QRectF, Qt
+    from PyQt6.QtCore import QRectF, Qt
     from PyQt6.QtGui import QBrush, QColor, QFont, QPen
     x, y, w, h = done_rect(win_w)
     painter.setPen(QPen(Qt.PenStyle.NoPen))
@@ -457,7 +481,8 @@ def paint_done(painter, win_w):
     f.setBold(False)
     painter.setFont(f)
     painter.setPen(QColor(255, 200, 60))
-    painter.drawText(QPointF(x - 170, y + h + 22), "drag: move · drag the corner: size · wheel: background · Shift+wheel: panel")
+    painter.drawText(QRectF(win_w / 2 - 400, y + h + 8, 800, 20), int(Qt.AlignmentFlag.AlignHCenter),
+                     "drag: move · drag the corner: size · wheel: background · Shift+wheel: panel · Ctrl+wheel: all panels' size")
 
 
 def paint_arrange_frame(painter, panel, rect):
@@ -548,6 +573,7 @@ def run_window(client, title_hint=None):   # pragma: no cover - needs a display;
             # dirty: an edit not sent yet (kept over Outrider's answers until it is); saved_at: the feed's seq when the
             # last edit was sent (the next answer carries it, and the local copy can go)
             self.geoms, self.drag, self.override, self.saved_at, self.dirty = [], None, {}, None, False
+            self.all_pct = None   # all panels' size (%) being wheeled (Ctrl + wheel), kept until Outrider's answer has it
             self.wheel_timer = QTimer(self)
             self.wheel_timer.setSingleShot(True)
             self.wheel_timer.timeout.connect(self.save_override)
@@ -573,6 +599,8 @@ def run_window(client, title_hint=None):   # pragma: no cover - needs a display;
             self.dirty = False
             if change:
                 self.post(client.set_layout, change)
+            if self.all_pct is not None:
+                self.post(client.set, {"panel_scale": self.all_pct})
 
         def entry(self, pid):
             lay = (feed.data or {}).get("layout") or O.clean_layout(None)
@@ -602,7 +630,7 @@ def run_window(client, title_hint=None):   # pragma: no cover - needs a display;
             if not p:
                 return
             self.override[pid] = dragged(start, rect, ev.position().x() - x0, ev.position().y() - y0, mode, p["w"], p["h"],
-                                         self.width(), self.height())
+                                         self.width(), self.height(), panel_scale_of(feed.data, self.all_pct), O.smallest_font(p))
             self.edited()
             self.update()
 
@@ -618,8 +646,13 @@ def run_window(client, title_hint=None):   # pragma: no cover - needs a display;
             if not got:
                 return
             notches = ev.angleDelta().y() / 120 or ev.angleDelta().x() / 120
-            key = "alpha" if ev.modifiers() & Qt.KeyboardModifier.ShiftModifier else "bg"
-            self.override[got[0]] = wheeled(self.entry(got[0]), key, notches)
+            mods = ev.modifiers()
+            key = wheel_key(bool(mods & Qt.KeyboardModifier.ShiftModifier), bool(mods & Qt.KeyboardModifier.ControlModifier))
+            if key == "all":   # every panel at once: [overlay] panel_scale, sent once the wheel stops
+                self.all_pct = wheeled_all(self.all_pct if self.all_pct is not None
+                                           else round(panel_scale_of(feed.data) * 100), notches)
+            else:
+                self.override[got[0]] = wheeled(self.entry(got[0]), key, notches)
             self.edited()
             self.update()
             self.wheel_timer.start(400)   # saved once the wheel stops
@@ -649,11 +682,13 @@ def run_window(client, title_hint=None):   # pragma: no cover - needs a display;
                 self.apply_click_through(not arranging)
             shown = should_show(st, feed.data, self.isActiveWindow())
             feed.track = track_code(tracker, st, shown)
+            rect = overlay_tracking.native_rect_to_qt((st.x, st.y, st.width, st.height), screen_of(st)) if st else None
+            feed.height = round(rect[3]) if rect else None   # the game window's height, as paint sees it
             if not shown:
                 if self.isVisible():
                     self.hide()
                 return
-            x, y, w, h = overlay_tracking.native_rect_to_qt((st.x, st.y, st.width, st.height), screen_of(st))
+            x, y, w, h = rect
             if (self.x(), self.y(), self.width(), self.height()) != (x, y, w, h):
                 self.setGeometry(x, y, w, h)
             if not self.isVisible():
@@ -666,14 +701,17 @@ def run_window(client, title_hint=None):   # pragma: no cover - needs a display;
                 self.seq = feed.seq
                 if self.saved_at is not None and self.seq > self.saved_at and not self.drag and not self.dirty:
                     self.override, self.saved_at = {}, None   # Outrider has the edits now
+                    if (feed.data or {}).get("panel_scale") == self.all_pct:
+                        self.all_pct = None
                 if not self.arranging():
-                    self.override, self.drag = {}, None
+                    self.override, self.drag, self.all_pct = {}, None, None
                 self.update()
 
         def paintEvent(self, _event):
             p = QPainter(self)
             try:
-                self.geoms = paint(p, feed.data, self.width(), self.height(), arrange=self.arranging(), override=self.override)
+                self.geoms = paint(p, feed.data, self.width(), self.height(), arrange=self.arranging(), override=self.override,
+                                   all_pct=self.all_pct)
             finally:
                 p.end()
 

@@ -126,7 +126,7 @@ PC's draws it.
   centred along the top or bottom edge), so it stays there when the window or resolution changes;
 - **drag its corner** (the square handle) to make it bigger or smaller;
 - **mouse wheel** over it: its background, from solid to text only; **Shift and wheel**: the whole panel's
-  transparency;
+  transparency; **Ctrl and wheel**: the size of all the panels at once (**All panels** in Settings);
 - **Done**, at the top of the game window (or the button in Settings), ends it. Arranging ends by itself after ten
   minutes, so the overlay never stays in the way of the mouse.
 
@@ -149,11 +149,21 @@ Bio signals panels, not for the system strip and the alerts. The radar has no Do
 surface. The Target panel still shows over the galaxy map while docked, so you see the system you pick. The system, Target and radar
 panels start on; the system strip, Now, Bio signals
 and Alerts start off. The **theme** colours and frames the panels as the page's themes do (Elite's orange with
-cut corners, LCARS's bars, ...); **text** is small, normal or large. In the config file (`[overlay]`):
+cut corners, LCARS's bars, ...). In the config file (`[overlay]`):
 `system_seconds` keeps the system panel only that long after arriving (0: while you are in supercruise there), and
 `radar_range` is the radar's edge in metres (it widens to fit a colony ring); `analysis_only` lists the panels
 ticked Combat (`["system", "bio"]`; the Target panel is `body`) and `hide_docked` the ones ticked Docked
 (`["system", "body", "now", "bio"]` when the key is missing).
+
+<a id="sizes"></a>**Sizes and text.** The row at the top has **Theme**, **Text size** (small, normal or large, for every
+panel: `text_size`) and **All panels** (a %, 100 to start: `panel_scale`), with Show test panels and Arrange panels at
+its right. Each panel's **Size %** (down to 20 %) comes on top of All panels, and its **Text** column gives it a text
+size of its own, or "as all panels". Panels follow the game window's height, so a panel takes the same share of the
+screen at 4K as at 1080p: on a big TV seen from the sofa, turn **All panels** down (or Ctrl and wheel over a panel in
+Arrange mode). Text is never drawn smaller than **9 pixels**, whatever the sizes say: a small setting on a 1080p screen
+stays readable, while a 4K screen can go much smaller. While the overlay window draws, each Size % shows what its
+text comes to in the game window ("≈ 11 px text"), or "held at 9 px" when the sizes ask for smaller (the line under the
+table names those panels: your screen is too small to go lower). With the game not running there is no figure.
 
 <a id="keep-showing"></a>**Keep showing when Elite is not the active window** (`show_inactive`, off by default): the
 overlay normally hides as soon as another window is in front, Outrider's page included. With this on it stays over the

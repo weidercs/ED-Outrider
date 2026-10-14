@@ -1364,6 +1364,11 @@ table.ovlay tr.ovoff td { opacity: .55; }   /* a panel switched off: its row dim
 /* the overlay's placement table: compact, and scrolled sideways inside its section on a narrow window rather than
    spilling out of it */
 .ovwrap { overflow-x: auto; max-width: 100%; }
+/* Theme, Text size and All panels on one row, the test and Arrange buttons at its far right (under, when it wraps) */
+.ovctl { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
+.ovctl .ovbtns { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; }
+.ovctl input[type=number] { width: 3.4em; }
+table.ovlay .ovpx { font-size: 11px; white-space: nowrap; }   /* under Size %: "≈ 11 px text", or held at the floor */
 table.ovlay { border-collapse: collapse; margin: 6px 0; font-size: 13px; } table.ovlay th, table.ovlay td { padding: 2px 3px; text-align: left; }
 table.ovlay td.ovana, table.ovlay th.ovgrp { text-align: center; }   /* the Hide when mode boxes (combat, docked) under their headings */
 table.ovlay input[type=number] { width: 2.6em; padding: 3px; text-align: right; appearance: textfield; -moz-appearance: textfield; }   /* no spin arrows: room for "100" (typing and the arrow keys still work) */
