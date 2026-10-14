@@ -344,9 +344,13 @@ class FableScriptFixes(unittest.TestCase):
         stamp = hashlib.sha256(b"aiohttp\n").hexdigest()
         with open(os.path.join(d, ".venv", ".requirements.sha256"), "w") as f:
             f.write(stamp + "\n")
-        fake = os.path.join(d, ".venv", "bin", "python")   # pip and aiohttp present: nothing to install, then Outrider
+        # pip and aiohttp present: nothing to install, then Outrider. The real Python's path is quoted: this checkout's
+        # own path has spaces, and an unquoted one made every -c call fail, so the hash came out empty and the test
+        # passed through a reinstall it says cannot happen (found 2026-10-14)
+        fake = os.path.join(d, ".venv", "bin", "python")
         with open(fake, "w") as f:
-            f.write('#!/bin/sh\nif [ "$1" = "-c" ]; then exec %s "$@"; fi\necho STARTED\n' % shutil.which("python3"))
+            f.write('#!/bin/sh\nif [ "$2" = "import aiohttp" ]; then exit 0; fi\nif [ "$1" = "-c" ]; then exec "%s" "$@"; fi\n'
+                    'echo STARTED\n' % shutil.which("python3"))
         os.chmod(fake, 0o755)
         bins = tempfile.mkdtemp()                          # a PATH with no sha256sum on it
         self.addCleanup(shutil.rmtree, bins)
@@ -357,8 +361,10 @@ class FableScriptFixes(unittest.TestCase):
         with open(os.path.join(d, ".venv", "bin", "activate"), "w") as f:
             f.write("PATH=\"%s:$PATH\"\n" % os.path.join(d, ".venv", "bin"))
         r = self.run_launcher(d, [bins])
+        self.assertEqual(r.returncode, 0, r.stderr)
         self.assertNotIn("sha256sum", r.stderr)
-        self.assertIn("STARTED", r.stdout, r.stderr)        # the stamp matched: no reinstall, Outrider started
+        self.assertNotIn("Installing", r.stdout, r.stderr)  # the stamp matched: Python's hash is sha256sum's hex
+        self.assertIn("STARTED", r.stdout, r.stderr)        # and Outrider started
 
     def test_relative_arguments_are_the_callers(self):
         """Run from another folder, the launcher starts Outrider in that folder (with the repository's files by their
@@ -377,8 +383,8 @@ class FableScriptFixes(unittest.TestCase):
         with open(os.path.join(d, ".venv", ".requirements.sha256"), "w") as f:
             f.write(hashlib.sha256(b"aiohttp\n").hexdigest() + "\n")
         fake = os.path.join(d, ".venv", "bin", "python")   # nothing to install; Outrider says where and what it got
-        with open(fake, "w") as f:
-            f.write('#!/bin/sh\nif [ "$1" = "-c" ]; then exec %s "$@"; fi\n'
+        with open(fake, "w") as f:   # (the real Python's path quoted: see test_no_sha256sum_needed)
+            f.write('#!/bin/sh\nif [ "$2" = "import aiohttp" ]; then exit 0; fi\nif [ "$1" = "-c" ]; then exec "%s" "$@"; fi\n'
                     'if [ "$1" = "-m" ]; then echo "SETUP CWD=$(pwd) PATH0=${PYTHONPATH%%%%:*} ARGS=$*"; exit 0; fi\n'
                     'echo "CWD=$(pwd) ARGS=$*"\n' % shutil.which("python3"))
         os.chmod(fake, 0o755)
@@ -388,6 +394,8 @@ class FableScriptFixes(unittest.TestCase):
         env = {k: v for k, v in os.environ.items() if k not in ("DISPLAY", "WAYLAND_DISPLAY", "XDG_SESSION_TYPE")}
         r = subprocess.run(["bash", os.path.join(d, "launch_outrider.sh"), "--config", "my.toml"], cwd=caller,
                            capture_output=True, text=True, env=env, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("Installing", r.stdout, r.stderr)   # the stamp matched: straight to the start
         self.assertIn(f"CWD={os.path.realpath(caller)} ARGS={os.path.realpath(d)}/ed_outrider.py --config my.toml",
                       r.stdout.replace(caller, os.path.realpath(caller)).replace(d, os.path.realpath(d)), r.stderr)
         # the overlay's PyQt6 step reads the same config: the caller's folder, the repository importable (review)

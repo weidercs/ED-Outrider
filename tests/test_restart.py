@@ -231,8 +231,10 @@ class Launchers(unittest.TestCase):
         with open(os.path.join(d, ".venv", ".requirements.sha256"), "w") as f:
             f.write(hashlib.sha256(b"aiohttp\n").hexdigest() + "\n")
         fake = os.path.join(d, ".venv", "bin", "python")
-        with open(fake, "w") as f:
-            f.write('#!/bin/sh\nif [ "$1" = "-c" ]; then exec %s "$@"; fi\nif [ "$1" = "-m" ]; then exit 0; fi\n'
+        with open(fake, "w") as f:   # the real Python's path quoted: a checkout's path may have spaces (an unquoted one
+            # failed every -c call, so the launcher reinstalled where it should not have: test_server_mode's twin)
+            f.write('#!/bin/sh\nif [ "$2" = "import aiohttp" ]; then exit 0; fi\nif [ "$1" = "-c" ]; then exec "%s" "$@"; fi\n'
+                    'if [ "$1" = "-m" ]; then exit 0; fi\n'
                     'echo "LAUNCHER=$OUTRIDER_LAUNCHER CWD=$(pwd)"\n' % shutil.which("python3"))
         os.chmod(fake, 0o755)
         with open(os.path.join(d, ".venv", "bin", "activate"), "w") as f:
@@ -240,6 +242,8 @@ class Launchers(unittest.TestCase):
         env = {k: v for k, v in os.environ.items() if k not in ("DISPLAY", "WAYLAND_DISPLAY", "XDG_SESSION_TYPE", "OUTRIDER_LAUNCHER")}
         r = subprocess.run(["bash", os.path.join(d, "launch_outrider.sh")], cwd=caller, capture_output=True, text=True,
                            env=env, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("Installing", r.stdout, r.stderr)   # the stamp matched: straight to the start
         real = r.stdout.replace(d, os.path.realpath(d)).replace(caller, os.path.realpath(caller))
         self.assertIn(f"LAUNCHER={os.path.realpath(d)}/launch_outrider.sh CWD={os.path.realpath(caller)}", real, r.stderr)
 

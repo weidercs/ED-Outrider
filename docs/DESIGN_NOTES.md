@@ -747,6 +747,19 @@ upstream project's choices, not rules of the game.
   refused EDSM or Inara key at once (the hold otherwise lasts until a new key or the switch; `State.clear_key_hold`, the
   one helper a new key also goes through) and releases an EDDN kind on hold with its refusals (else the next refusal
   holds it again); that kind's refused messages were dropped, so only new ones go.
+- **"Not reported to Spansh" only for a system Spansh was asked about** (2026-10-14, reported by Kurbo26 in GitHub
+  discussion #3: Sol's In-Game Route chip said it). Three states, one place (`State.spansh_knows`): known (the Nearby
+  search listed it, or Spansh's record is in the cache), unreported (asked, no record: inside a Nearby search Spansh
+  answered, a route hop lookup, the target's lookup), and not looked up (never asked, Spansh unreachable, or past a busy
+  region's `sphere_cut`), which claims nothing. The cache holds only what Spansh had, so its silence is not an answer;
+  an EDSM stand-in in it is not Spansh's either. The route chips (✦ only when unreported), the Nearby row's `in_spansh`
+  (a stand-in the answer did not cover reads "not looked up", never "unreported" or "Spansh doesn't have this
+  system"), the arrival briefing ("Known, not in Spansh." only when asked) and the overlay's strip ("Spansh ✗") all
+  read it. The route's hops are asked about when a route is plotted (`maybe_route_lookup`): the first 24 (the chips
+  shown) that nothing has answered, in one Spansh search by id64 (`Spansh.records_by_id`, the request `permit_ids`
+  already made), one at a time, a failure retried after 5 minutes, each answer kept in memory for a day (no table: it
+  is a display aid, and a restart asks once more). The positive answers are not cached as bases: a search-level base
+  stored for its `updated_at` would stop the refresh from ever fetching that system's bodies.
 - **A lookup that fails says only "Spansh unavailable"** (S42, the author's answer, 2026-10-12): the Data tile names the
   source and nothing more ("EDSM unavailable", "GitHub unavailable"), or "No internet connection" when two or more
   sources failed by DNS or no route with no answer from anywhere between (one source's DNS failure can be that

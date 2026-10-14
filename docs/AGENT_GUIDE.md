@@ -176,12 +176,12 @@ unittest, in-memory SQLite). `support.py` holds the shared fixtures and fakes (`
    overwrites it at the next market). NavRoute.json also every `NAVROUTE_RETRY_S` for `NAVROUTE_LATE_S` after a
    `NavRoute` line it has not followed (`State.navroute_retry`, meta `navroute_event`: the game sometimes never writes
    it); read the route through `Journals.game_route()` (None while the stored one is older than that line), never meta
-   `route` directly; `State.route_minimal` is the payload's `route` meanwhile ({minimal, jumps_left, destination}, no hops).
+   `route` directly; `State.route_minimal` is the payload's `route` meanwhile ({minimal, jumps_left, destination}, no hops). Each hop's `known` (and the Nearby row's `in_spansh`, the briefing's and the overlay strip's) is `State.spansh_knows`: True, False (Spansh asked, no record) or None (never asked: claim nothing); never read "not in the cache" as "Spansh has none".
 5. **Commit, then follow-up.** After the commit the tick runs the follow-ups, each on its own (one that raises is
    reported by `follow_up_failed` and the rest still run; a database error stops them): `watch_status` (scoop, FSS,
    the hyperspace tunnel `watch_tunnel`, surface map, rig leash), `maybe_refresh` (the local cache at once, then the
    Spansh sphere on arrival; a failed search retried with a backoff, a retry that fails again bumping nothing), `apply_own_changes`, `maybe_classify_target`, `maybe_unsold`, `maybe_sale_left`,
-   carrier, sellers, the quit backup, `maybe_curious`, `maybe_reported` (S23), `highway_copy_next`, `riches_copy_next`, `highway_heavy_check`, `last_scoop_check` (S2), `wrong_target_watch` (S11), `maybe_autotarget`, `maybe_boxel_autotarget`.
+   carrier, sellers, the quit backup, `maybe_curious`, `maybe_reported` (S23), `maybe_route_lookup` (the game route's first 24 hops asked of Spansh in one search, `Spansh.records_by_id`; answers in `State.route_spansh`, in memory), `highway_copy_next`, `riches_copy_next`, `highway_heavy_check`, `last_scoop_check` (S2), `wrong_target_watch` (S11), `maybe_autotarget`, `maybe_boxel_autotarget`.
    `State.bump()` wakes every waiting page request.
 6. **Payload.** `GET /api/nearby?since=<run>:<version>` is a long poll (25 s, 204 when nothing changed; gzipped when the browser takes it) that
    returns `State.payload()`: position, systems, target, moments (priced by `moments_summary`), fuel,

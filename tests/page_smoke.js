@@ -1576,6 +1576,29 @@ const releasePayloads = async () => {
     allOk = allOk && goodIG;
     console.log(goodIG ? "OK" : "FAIL", "| in-game route |", goodIG ? 'the game\'s route is "In-Game Route:"' : got, errors.slice(before));
   }
+  // a hop's chip claims "not reported to Spansh" (✦) only when Spansh was asked and has no record (known false): one
+  // never asked (null) claims nothing (Kurbo26, GitHub discussion #3: Sol said "not reported to Spansh"); the arrival
+  // briefing and a Nearby stand-in Spansh's answer did not cover read the same way
+  {
+    const w = dom.window, before = errors.length;
+    const got = JSON.parse(w.eval(`(() => { const saved = data.route, el = document.getElementById("routeStrip");
+      data.route = {hops: [{name: "Sol", star_class: "G", scoopable: true, ly: 8.6, known: null},
+                           {name: "Drojo OP-V d3-36", star_class: "K", scoopable: true, ly: 70.2, known: false},
+                           {name: "Colonia", star_class: "F", scoopable: true, ly: 60.0, known: true}], ly: 138.8, next_scoop: 1, longest_dry: 0};
+      renderRoute(); const hops = [...el.querySelectorAll(".hop")].map(h => [h.textContent, h.title]);
+      data.route = saved; renderRoute();
+      const pill = document.createElement("div");
+      pill.innerHTML = statusPill({status: "unasked"});
+      return JSON.stringify({hops, brief: [arrivalBriefText({undiscovered: false, visits: 1, in_spansh: null}),
+                                           arrivalBriefText({undiscovered: false, visits: 1, in_spansh: false})],
+                             pill: [pill.textContent, /not known/.test(pill.innerHTML)]}); })()`));
+    const want = {hops: [["G", "Sol · G (scoopable) · 8.6 ly"], ["K✦", "Drojo OP-V d3-36 · K (scoopable) · 70.2 ly · not reported to Spansh"],
+                         ["F", "Colonia · F (scoopable) · 60 ly"]],
+                  brief: ["Known.", "Known, not in Spansh."], pill: ["not looked up…", true]};   // the long form and its short mark
+    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| route chips and Spansh |", good ? "✦ only for a hop Spansh was asked about, no claim for one never asked" : JSON.stringify(got), errors.slice(before));
+  }
   // the game logged a plot but wrote no NavRoute.json (2026-10-14): the payload's minimal form, said in words, no chips
   {
     const w = dom.window, before = errors.length;

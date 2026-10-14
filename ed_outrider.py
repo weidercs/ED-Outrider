@@ -118,6 +118,7 @@ even for systems Spansh has never heard of. Your own data wins where both exist.
 Each row shows how much is known about the system:
 
   unreported    only seen in your own NavRoute.json, nobody has reported any bodies
+  not looked up only seen in your own NavRoute.json, and Spansh's answer did not cover it (unreachable, a busy region)
   no scan data  the system is known (route plot or a jump) but nothing scanned
   NN% scanned   some bodies known, fewer than the system's FSS body count
   fully scanned every body known
@@ -377,6 +378,9 @@ DUMP_MAX_TRIES = 5         # body-detail fetches for one system before we stop a
 RETRY_SAY_S = 1.0          # s: a Nearby retry says "asking Spansh again" only once its search has been out this long
 REPORTED_MAX_AGE = 86400   # s: the species reported on your system's bodies (S23) are asked for again after a day
 REPORTED_RETRY_S = 600     # s: ...and after a failed ask, not before this
+ROUTE_LOOKUP_MAX = 24      # hops of the game's route asked of Spansh at once (the In-Game Route strip shows 24 chips)
+ROUTE_LOOKUP_KEEP_S = 86400   # s: Spansh's answer for a route hop (has it or not) is trusted this long
+ROUTE_LOOKUP_RETRY_S = 300    # s: after a failed hop lookup, not asked again before this
 CHECKLIST_FIND_LY = 20000  # ly: S29's search for the nearest reported bodies of a species (sorted nearest first)
 CHECKLIST_FIND_ROWS = 25   # bodies asked for (one page)
 CHECKLIST_FIND_KEEP_S = 600   # s: the same species, colour and place answered from memory, not asked again
@@ -5983,12 +5987,22 @@ class Spansh:
         ids = sorted({int(i) for i in ids if isinstance(i, int) or str(i).isdigit()})
         if not ids or self.session is None:
             return set()
-        body = {"filters": {"id64": {"value": ids}}, "size": len(ids), "page": 0}
+        return {x.get("id64") for x in await self.records_by_id(ids) if x.get("needs_permit")}
+
+    async def records_by_id(self, ids):
+        """Spansh's system records for these id64s, in one search (its id64 filter): a system it has no record of is
+        simply not in the answer (probed 2026-10-14: tests/fixtures/spansh_ids.json). Raises when Spansh cannot be
+        asked, so a failure is never read as "has none"."""
+        if self.session is None:
+            raise ClientError("no network session")
+        body = {"filters": {"id64": {"value": list(ids)}}, "size": len(ids), "page": 0}
         async with self.sem_fast:
             async with self.session.post(SPANSH_SEARCH, json=body) as r:
                 r.raise_for_status()
                 d = await r.json()
-        return {x.get("id64") for x in (d.get("results") or []) if isinstance(x, dict) and x.get("needs_permit")}
+        if not isinstance(d, dict) or not isinstance(d.get("results"), list):
+            raise ClientError("Spansh's search answer had no results list")
+        return [x for x in d["results"] if isinstance(x, dict)]
 
     async def get_if_changed(self, url, etag=None, modified=None):
         """A conditional GET: (304, None, etag, modified) when unchanged, else (200, json, its etag, its date)."""
@@ -6575,6 +6589,10 @@ class State:
         self.reported_task = None  # S23: the ask for the species reported in your system (one at a time)
         self.reported_tried = {}   # id64 -> when last asked (or found fresh): not asked again before REPORTED_RETRY_S
         self.reported_seen = None  # the overlay_detail key of the last look that found no life
+        self.route_spansh = {}     # id64 -> (when, has a record): Spansh asked about the game's route hops (in memory only)
+        self.route_task = None     # that ask (one at a time)
+        self.route_retry_at = 0.0  # time.time() before which a failed ask is not repeated
+        self.route_seen = None     # (route ts, where you are, State.version) of the last look that found nothing to ask
         self.searcher = None       # set once the Searcher exists
         self.speaker = None        # outrider.tts.Speaker, set at start (None in tests)
         self.player = None         # outrider.tts.LinePlayer: the tick that plays speech and sounds here (None in tests)
@@ -8126,7 +8144,7 @@ class State:
                 "first": bool(firsts.get("system")), "firsts": firsts.get("bodies") or 0,
                 "mapped": sum(1 for b in bodies if b.get("mapped") or b.get("first_mapped")),
                 "planets": row.get("planets") or len(bodies) or None,
-                "in_spansh": row.get("in_spansh") if "in_spansh" in row else None}
+                "in_spansh": row.get("in_spansh") if "in_spansh" in row else self.spansh_knows(pos["id64"])}
 
     def overlay_route(self):
         """The route Now's panel gives the next stop of: the unfinished one plotted last (route_newest: the page
@@ -8723,7 +8741,7 @@ class State:
         special = [w for w in worth if w["notable"] or w["terraformable"]]
         return {"undiscovered": (scan["was_discovered"] is False) if scan and scan["id64"] == id64 else None,
                 "visits": self.visit_count(id64), "status": row.get("status"),
-                "in_spansh": row["in_spansh"] if "in_spansh" in row else mr["base"],
+                "in_spansh": row["in_spansh"] if "in_spansh" in row else self.spansh_knows(id64),   # None: never asked
                 "body_count": (sysrow["body_count"] if sysrow else None) or mr["body_count"],
                 "honked": bool(sysrow), "all_found": bool(sysrow and sysrow["all_found"]), "star_class": mr["star"],
                 "base_known": mr["base_known"],
@@ -11175,7 +11193,9 @@ class State:
                                   "ON b.system = g.system AND b.body_id = g.body_id WHERE g.system=?", (id64,)):
             own_genera.setdefault(short_name(base["name"], r_["name"]), []).append(r_["genus_name"])
         s = summarise(records, body_count, star, ctx, own_genera)
-        s.update(id64=id64, id=str(id64), name=base["name"], source=source, in_spansh=source == "spansh",
+        # in_spansh: True, False (the search answered without it), None (a stand-in Spansh's answer did not cover)
+        s.update(id64=id64, id=str(id64), name=base["name"], source=source,
+                 in_spansh=True if source == "spansh" else None if source == "edsm" or base.get("unasked") else False,
                  visited=id64 in self.visited, distance=round(dist(self.center or base, base), 2),   # (no sphere yet: 0)
                  own_scans=len(own), firsts=own_firsts(self.db, id64, base["name"]),
                  mapped=self.db.execute(
@@ -11200,7 +11220,7 @@ class State:
         s["curiosity_list"] = [{"body": bn, "tag": t, "why": w} for bn, lst in cur.items() for t, w in lst]
         s["curiosities"] = len(s["curiosity_list"])
         if not s["bodies_known"]:
-            s["status"] = "unreported" if source == "route" else "no bodies"
+            s["status"] = ("unasked" if base.get("unasked") else "unreported") if source == "route" else "no bodies"
         elif s["body_count"] is None or s["bodies_known"] < s["body_count"]:
             s["status"] = "partial"
         else:
@@ -11563,17 +11583,20 @@ class State:
                 self.spansh.store(id64, s.get("updated_at"), base)
             self.bases[id64] = ("spansh", base)
 
-        # Systems you've been to that Spansh doesn't have (e.g. your own fresh discoveries).
+        # Systems you've been to that Spansh doesn't have (e.g. your own fresh discoveries), and systems from your own
+        # route plots that nobody has reported. "unasked": the search failed, or a dense region's answer stopped short
+        # of it (sphere_cut): Spansh's answer says nothing about it, and the page claims nothing (spansh_knows)
+        def unasked(p):
+            return bool(spansh_failed) or (self.sphere_cut is not None and dist(pos, p) > self.sphere_cut)
         for v in self.near("visits", pos, r):
             if v["id64"] not in self.bases and dist(pos, v) <= r:
                 self.bases[v["id64"]] = ("own", {"name": v["name"], "x": v["x"], "y": v["y"],
-                                                 "z": v["z"], "body_count": None, "records": []})
-        # Systems from your own route plots that nobody has reported.
+                                                 "z": v["z"], "body_count": None, "records": [], "unasked": unasked(v)})
         for rs in self.near("route_systems", pos, r):
             if rs["id64"] not in self.bases and dist(pos, rs) <= r:
                 self.bases[rs["id64"]] = ("route", {"name": rs["name"], "x": rs["x"], "y": rs["y"],
                                                     "z": rs["z"], "body_count": None, "records": [],
-                                                    "star_class": rs["star_class"]})
+                                                    "star_class": rs["star_class"], "unasked": unasked(rs)})
         for id64 in self.bases:
             self.safe_row(id64)
 
@@ -13471,9 +13494,7 @@ class State:
             return None
         if not route:
             return self.route_minimal()
-        hops = route["hops"]
-        i = next((k for k, h in enumerate(hops) if h["id64"] == pos["id64"]), None)
-        left = hops[i + 1:] if i is not None else hops
+        left = self.summary_hops()
         if not left:
             return None
         visited = {r[0] for r in self.db.execute(
@@ -13486,12 +13507,73 @@ class State:
             scoop = class_scoopable(h["star_class"]) if h.get("star_class") else None
             dry = 0 if scoop else dry + 1
             longest = max(longest, dry)
-            known = h["id64"] in self.systems or bool(self.spansh.cached(h["id64"])[1]) if self.spansh else False
+            # True, False (Spansh asked: no record) or None (never asked: no claim, Kurbo26's Sol in discussion #3)
             out.append({"id": str(h["id64"]), "name": h["name"], "star_class": h.get("star_class"), "scoopable": scoop,
-                        "ly": round(d, 1), "visited": h["id64"] in visited, "known": known})
+                        "ly": round(d, 1), "visited": h["id64"] in visited, "known": self.spansh_knows(h["id64"])})
             prev = h
         next_scoop = next((k + 1 for k, h in enumerate(out) if h["scoopable"]), None)
         return {"hops": out, "ly": round(total, 1), "longest_dry": longest, "next_scoop": next_scoop, "ts": route.get("ts")}
+
+    def spansh_knows(self, id64):
+        """Whether Spansh has a record of this system: True; False when it was asked and has none (the Nearby search
+        around you, the route hop lookup, the target's lookup); None when it was never asked, or could not be reached.
+        Absent from the cache is not an answer: the cache holds only what Spansh had (Kurbo26, GitHub discussion #3:
+        Sol's route chip said "not reported to Spansh")."""
+        source, base = self.bases.get(id64) or (None, None)
+        if source == "spansh":
+            return True
+        cached = self.spansh.cached(id64)[1] if self.spansh else None
+        if cached and cached_source(cached) == "spansh":
+            return True
+        if source in ("own", "route") and not base.get("unasked"):
+            return False   # within the search Spansh answered, and not in its answer
+        hit = self.route_spansh.get(id64)
+        if hit and time.time() - hit[0] < ROUTE_LOOKUP_KEEP_S:
+            return hit[1]
+        verdict = self.target_verdicts.get(id64)
+        return False if verdict == "unreported" else True if verdict in ("explored", "partial") else None
+
+    def maybe_route_lookup(self, now=None):
+        """The game's route: ask Spansh about the hops ahead (the first ROUTE_LOOKUP_MAX) that nothing has answered
+        for yet, in one search, so the In-Game Route's chips can say which ones it has no record of. One ask at a
+        time; a failed one waits ROUTE_LOOKUP_RETRY_S. A hop asked once is not asked again for ROUTE_LOOKUP_KEEP_S."""
+        if not hasattr(self.spansh, "records_by_id") or getattr(self.spansh, "session", None) is None \
+                or (self.route_task and not self.route_task.done()):
+            return   # no network session (a test, or not started yet): nothing to ask with
+        now = time.time() if now is None else now
+        if now < self.route_retry_at:
+            return
+        key = ((self.journals.game_route() or {}).get("ts"), (self.journals.pos or {}).get("id64"), self.version)
+        if key == self.route_seen:
+            return   # nothing changed since the last look (it runs every tick)
+        ids = [h["id64"] for h in self.summary_hops()[:ROUTE_LOOKUP_MAX] if self.spansh_knows(h["id64"]) is None]
+        if ids:
+            self.route_task = asyncio.create_task(self.fetch_route_ids(ids))
+        else:
+            self.route_seen = key
+
+    async def fetch_route_ids(self, ids):
+        try:
+            found = {x.get("id64") for x in await self.spansh.records_by_id(ids)}
+        except Exception as e:   # noqa: BLE001 -- Spansh down, slow or odd: no answer, asked again later
+            self.route_retry_at = time.time() + ROUTE_LOOKUP_RETRY_S
+            print(f"route hop lookup: {type(e).__name__}: {e}", file=sys.stderr)
+            return
+        now = time.time()
+        for i in ids:
+            self.route_spansh[i] = (now, i in found)
+        while len(self.route_spansh) > 2000:   # a long session's routes: the oldest asks go first
+            self.route_spansh.pop(next(iter(self.route_spansh)))
+        self.bump()
+
+    def summary_hops(self):
+        """The game's route hops after where you are (route_summary's), [] with none."""
+        route, pos = self.journals.game_route(), self.journals.pos
+        if not route or not pos:
+            return []
+        hops = route["hops"]
+        i = next((k for k, h in enumerate(hops) if h["id64"] == pos["id64"]), None)
+        return hops[i + 1:] if i is not None else hops
 
     def route_minimal(self):
         """The In-Game Route line while the game has not written NavRoute.json for the route it plotted (2026-10-14:
@@ -15841,7 +15923,8 @@ class State:
         return [t for t in (self.refresh_task, self.target_task, self.unsold_task, self.seller_task, self.carrier_task,
                             self.searcher.task, self.honk_test_task, self.honk_run_task, self.highway_task, self.riches_task,
                             self.autotarget_task, self.autotarget_test_task, self.lease_task, self.edsm_discard_task,
-                            self.edsm_bf_task, self.edsm_import_task, self.reported_task, *self.upload_tasks.values()) if t]
+                            self.edsm_bf_task, self.edsm_import_task, self.reported_task, self.route_task,
+                            *self.upload_tasks.values()) if t]
 
     def arrival_danger_until(self, now=None):
         """The game sets Status.json's in-danger flag on every use of the FSD, from the charge until some 16-26 s after
@@ -16342,6 +16425,7 @@ class State:
                                ("apply_own_changes", self.apply_own_changes), ("maybe_classify_target", self.maybe_classify_target),
                                ("maybe_unsold", self.maybe_unsold), ("maybe_sale_left", self.maybe_sale_left),
                                ("maybe_curious", self.maybe_curious), ("maybe_reported", self.maybe_reported),
+                               ("maybe_route_lookup", self.maybe_route_lookup),
                                ("maybe_locate_carrier", self.maybe_locate_carrier), ("maybe_find_sellers", self.maybe_find_sellers),
                                ("maybe_backup_on_quit", self.maybe_backup_on_quit), ("highway_copy_next", self.highway_copy_next), ("riches_copy_next", self.riches_copy_next),
                                ("highway_heavy_check", self.highway_heavy_check), ("last_scoop_check", self.last_scoop_check),

@@ -88,7 +88,7 @@ const SHORT_FORMS = {
     "Herbig Ae/Be Star": "Ae/Be", "Wolf-Rayet Star": "WR", "Wolf-Rayet N Star": "WN", "Wolf-Rayet NC Star": "WNC",
     "Wolf-Rayet C Star": "WC", "Wolf-Rayet O Star": "WO", "MS-type Star": "MS star", "S-type Star": "S star"},
   // Nearby's status badges: the words become marks, the meaning stays in the title
-  status: {"no scan data": "—", "fully scanned": "✓", "unreported": "?", "partly scanned": "part", "yours only": "own"},
+  status: {"no scan data": "—", "fully scanned": "✓", "unreported": "?", "not looked up": "…", "partly scanned": "part", "yours only": "own"},
   // headings
   head: {"Main star": "Star", "Value now / max": "Value", "Dist ls": "ls", "Atmosphere": "Atm", "Bio / Geo": "Bio",
     "System tag": "Tag", "Seen by others": "Seen", "Lost: scan (FSS)": "FSS", "Lost: map (DSS)": "DSS", "Lost total": "Lost",
@@ -1021,9 +1021,11 @@ function renderRoute() {
   }
   if (!r || !r.hops.length) { el.innerHTML = ""; return; }
   const n = r.hops.length;
+  // h.known: true, false (Spansh was asked and has no record: ✦) or null (never asked: no claim either way; Kurbo26,
+  // GitHub discussion #3: Sol said "not reported to Spansh")
   const chips = r.hops.slice(0, 24).map(h => `<span class="hop${h.scoopable ? " sc" : h.scoopable === false ? " dry" : ""}${h.visited ? " vis" : ""}" ` +
-    `title="${esc(h.name)} · ${esc(h.star_class || "?")}${h.scoopable ? " (scoopable)" : h.scoopable === false ? " (not scoopable)" : ""} · ${h.ly} ly${h.visited ? " · visited" : ""}${h.known ? "" : " · not reported to Spansh"}">` +
-    `${esc(h.star_class || "?")}${h.known ? "" : "✦"}</span>`).join("");
+    `title="${esc(h.name)} · ${esc(h.star_class || "?")}${h.scoopable ? " (scoopable)" : h.scoopable === false ? " (not scoopable)" : ""} · ${h.ly} ly${h.visited ? " · visited" : ""}${h.known === false ? " · not reported to Spansh" : ""}">` +
+    `${esc(h.star_class || "?")}${h.known === false ? "✦" : ""}</span>`).join("");
   el.innerHTML = `In-Game Route: <b>${n}</b> jump${n === 1 ? "" : "s"} · <b>${Math.round(r.ly).toLocaleString()}</b> ly` +
     (r.next_scoop ? ` · next scoop in <b>${r.next_scoop}</b>` : ` · <span class="warnc">no scoopable star on the route</span>`) +
     (r.longest_dry > 1 ? ` · <span class="${r.longest_dry >= 4 ? "warnc" : ""}">longest dry stretch ${r.longest_dry}</span>` : "") +
@@ -1620,6 +1622,9 @@ function renderLeaving(l) {
 function statusPill(s) {
   let label = s.status, title = "", short = null;
   if (s.status === "no bodies") { label = "no scan data"; title = "known to exist, but nobody has reported scanning anything"; }
+  // a system of your own route plots that Spansh's answer did not cover (it was unreachable, or a busy region's answer
+  // stopped short): never "unreported", which would claim it was asked
+  else if (s.status === "unasked") { label = "not looked up"; title = "Spansh's answer did not cover it (unreachable, or a busy region's list stopped short): whether anyone reported it is not known"; }
   else if (s.status === "explored") label = "fully scanned";
   else if (s.status === "partial") {
     label = s.body_count ? `${Math.floor(100 * s.bodies_known / s.body_count)}% scanned` : "partly scanned";
@@ -2723,7 +2728,7 @@ function highGStakes(m) {
 // the arrival briefing: verdict, body count, star, then the best unmapped planet and the richest bio over your levels
 function arrivalBriefText(m) {
   const verdict = m.undiscovered && !(m.visits > 1) ? "Undiscovered." : m.visits > 1 ? "Visited before." : m.status === "explored" ? "Fully scanned."
-    : m.in_spansh ? "Known." : m.undiscovered === false ? "Known, not in Spansh." : "";
+    : m.in_spansh ? "Known." : m.undiscovered === false ? (m.in_spansh === false ? "Known, not in Spansh." : "Known.") : "";   // null: Spansh never asked
   // the first crossing into a galactic region this session opens the briefing ("Entering the Norma Arm.")
   const bits = [m.region && m.region.spoken ? `Entering ${m.region.spoken}.` : "", verdict];
   if (m.body_count) bits.push(m.all_found ? `All ${nBodies(m.body_count)} found.` : `${nBodies(m.body_count)}.`);
@@ -3206,7 +3211,8 @@ function render() {
     const known = s.body_count ? `${s.bodies_known}/${s.body_count}` : (s.bodies_known || "");
     // compact2 merges: the status badges go under the name, the notable tags under the bodies
     const status = statusPill(s) + (s.mapped ? statusBadge("s-mapped", `${s.mapped} mapped`, "DSS-mapped bodies, from your own journal", `🗺${s.mapped}`) : "") +
-      (s.source === "own" ? statusBadge("s-own", "yours only", "Spansh doesn't have this system; data is from your own scans") : "") +
+      (s.source === "own" ? statusBadge("s-own", "yours only", s.in_spansh === false ? "Spansh doesn't have this system; data is from your own scans"
+                                                                                      : "data is from your own scans (Spansh's answer did not cover this system)") : "") +
       (s.source === "edsm" ? `<span class="badge s-edsm" title="Spansh is unreachable; this comes from EDSM (no body data)">EDSM</span>` : "");
     const nb = notable(s);
     return `<tr class="${cls}" data-id="${esc(s.id)}">

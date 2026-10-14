@@ -2,6 +2,32 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · Route chips say "not reported to Spansh" only when Spansh was asked
+Reported by Kurbo26 in GitHub discussion #3: Sol's chip on the In-Game Route line showed ✦ "not reported to Spansh".
+A hop counted as known only if it was in the Nearby list or Outrider's Spansh cache, so every system Outrider had
+never looked up (anything far away) was called unreported.
+- **Three states** (`State.spansh_knows`): known (listed by the Nearby search, or Spansh's record cached), unreported
+  (Spansh was asked and has no record: inside a Nearby search it answered, the route lookup below, the target's lookup)
+  and not looked up (no ✦, nothing said about Spansh in the hover). An EDSM stand-in in the cache is not Spansh's.
+- **The route's hops are looked up when a route is plotted**: the first 24 hops (the chips the line shows) that nothing
+  has answered yet, in one Spansh search by id64 (`Spansh.records_by_id`, the same request the permit check makes;
+  probed 2026-10-14, `tests/fixtures/spansh_ids.json`). One at a time, a failure retried after 5 minutes, each answer
+  kept in memory for a day. So the ✦ now means what it says.
+- **The same mistake elsewhere**: the arrival briefing said "Known, not in Spansh." for a system the Nearby list did not
+  have yet (it read the cache), and the overlay's strip, the Nearby badges and statuses said Spansh lacked a system
+  whenever its search had failed or a busy region's answer stopped short of it. These read the same three states: the
+  briefing says "Known.", the strip says nothing, and a route-plot system Spansh's answer did not cover shows "not
+  looked up" (never "unreported"; its "yours only" badge no longer says Spansh doesn't have it).
+- **Launcher tests that passed by luck**: three launcher tests (`test_server_mode.py` FableScriptFixes'
+  `test_no_sha256sum_needed` and `test_relative_arguments_are_the_callers`, and `test_restart.py`'s
+  `test_shell_launcher_exports_itself`) wrote their fake venv Python with the real Python's path unquoted. This checkout's
+  path has spaces, so every `-c` call failed, the requirements hash came out empty and each run went through a reinstall
+  the tests say cannot happen, while their assertions still matched. The path is quoted (as CertifiWeekly's is), the
+  fake answers `import aiohttp` itself, and each test now asserts no install ran. The launcher itself was fine.
+- Tests: `tests/test_route_spansh.py` (the three states, the lookup's one search and pacing, the briefing and strip, the
+  Nearby stand-ins after a failed or cut search); a page smoke block (chips and their titles, the briefing, the "not
+  looked up" pill). Docs: DESIGN_NOTES, AGENT_GUIDE, the Views guide.
+
 ## 2026-10-14 · "wks upkeep"
 - The Carrier tile (and the CMDR tab's carrier line) say "~96 wks upkeep" instead of "~96 weeks of upkeep (as of
   Oct 12)" (the author's ask): how old the carrier's stats are moved into the hover.

@@ -205,7 +205,9 @@ and its balance in weeks of upkeep), the nearest places to sell (your carrier am
 and the last backup.
 
 The **In-Game Route:** line under the tiles is the route the game plotted in the galaxy map: its jumps and light years,
-the next scoopable star, the longest stretch without one, and each star as a chip. The game sometimes logs a plot but
+the next scoopable star, the longest stretch without one, and each star as a chip. A chip marked ✦ is a system nobody
+has reported to Spansh (Outrider asks Spansh about the first 24 hops once you plot); one without it is known there, or
+could not be checked. The game sometimes logs a plot but
 never writes the route's file (NavRoute.json); Outrider then waits a minute for it and says what the game does tell:
 "In-Game Route: 2 jumps left to Smojooe SJ-I b23-0 · the game didn't write the route's stars", without stars, distances
 or fuel figures. If the line stays like that, clear the route in the galaxy map and plot a different destination: the

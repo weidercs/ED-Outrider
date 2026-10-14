@@ -1,0 +1,28 @@
+{
+ "_probe": "2026-10-14: POST https://spansh.co.uk/api/systems/search {filters: {id64: {value: [10477373803, 3238296097059, 123456789012345]}}, size: 3, page: 0}; trimmed to a few fields per record (bodies, stations and factions left out). The third id64 has no record and is simply absent from the results.",
+ "count": 2,
+ "from": 0,
+ "size": 3,
+ "results": [
+  {
+   "id64": 3238296097059,
+   "name": "Colonia",
+   "x": -9530.5,
+   "y": -910.28125,
+   "z": 19808.125,
+   "updated_at": "2026-10-14T14:26:40Z",
+   "body_count": 32,
+   "needs_permit": false
+  },
+  {
+   "id64": 10477373803,
+   "name": "Sol",
+   "x": 0.0,
+   "y": 0.0,
+   "z": 0.0,
+   "updated_at": "2026-10-14T14:15:04Z",
+   "body_count": 40,
+   "needs_permit": true
+  }
+ ]
+}
