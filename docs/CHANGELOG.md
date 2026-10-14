@@ -2,6 +2,10 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · The overlay's docking refusal wraps instead of being cut
+- `overlay.pad_panel`'s reason is flowed word by word: "no pad free for your ship: try ag…" was cut at the panel's edge
+  (seen in an offscreen render). Test: every reason at every text size, no "…".
+
 ## 2026-10-14 · Docking: the pad number, big and spoken; why a station refused
 NEXT-VERSION #3 (Kurbo26, GitHub discussion #3; an EDMC plugin's job). The pad number only, no map: the journal never
 says which layout a station uses (the author: "just say pad number").

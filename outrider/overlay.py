@@ -930,7 +930,9 @@ def pad_panel(d, pal, size="normal"):
         p["h"] = round(y + LINE_H["huge"] + PAD)
         return p
     if d.get("words"):
-        rows = [[("Docking denied", "bad")]] + flow([(d["words"], "warn")], PAD_W - 2 * PAD, size)
+        words = d["words"].split()   # word by word, so the reason wraps rather than being cut with …
+        rows = [[("Docking denied", "bad")]] + flow([((" " if i else "") + w, "warn") for i, w in enumerate(words)],
+                                                    PAD_W - 2 * PAD, size)
         return text_panel("body", "🛬 " + station, rows, pal, width=PAD_W, size=size)
     return None
 

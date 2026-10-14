@@ -96,9 +96,16 @@ class Docking(unittest.TestCase):
         self.assertTrue(any("Jameson Memorial" in t for t in texts))
         no = outrider.overlay.pad_panel({"denied": "NoSpace", "words": "no pad free for your ship: try again shortly",
                                          "station": "Jameson Memorial"}, pal)
-        words = " ".join(r[0] for it in no["items"] if it["t"] == "runs" for r in it["runs"])
+        words = " ".join(" ".join(r[0] for it in no["items"] if it["t"] == "runs" for r in it["runs"]).split())
         self.assertIn("Docking denied", words)
         self.assertIn("no pad free", words)
+        self.assertIn("try again shortly", words)   # wrapped, never cut with …
+        self.assertNotIn("…", words)
+        for size in ("small", "normal", "large"):   # the longest reason wraps at every text size
+            long = outrider.overlay.pad_panel({"denied": "RestrictedAccess", "station": "X",
+                                               "words": ed_outrider.DENIED_WORDS["RestrictedAccess"]}, pal, size)
+            said = " ".join(r[0] for it in long["items"] if it["t"] == "runs" for r in it["runs"])
+            self.assertNotIn("…", said, size)
         self.assertIsNone(outrider.overlay.pad_panel(None, pal))
 
     def test_the_target_panel_shows_the_pad_while_docking(self):
