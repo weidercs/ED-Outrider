@@ -139,9 +139,17 @@ upstream project's choices, not rules of the game.
   Highway's off the route (its closest system, or its start before you joined it); last, the header's next stop (S31,
   a system you chose: a complete route counts as none, so it comes through). A route you are on stays first;
   one you left for a detour into a boxel does not hide the boxel, and comes back once the boxel has no Next.
+- **One rule for every 🎯** (the author, 2026-10-14): a 🎯 shows only on the game PC AND where auto-target can work
+  there: the virtual keyboard available and no key it needs without a binding (`canAim`, page.js; not the "target
+  automatically" switch). It is checked once, in `hwyAimBtn`, which every 🎯 goes through: a route's rows and its line,
+  the carrier's, a boxel's Next and rows, S31's `sysAimBtn` (bookmarks, the next stop, Nearest rows, checklist finds),
+  Nearby's rows; the Map's click and card use the same test, a failed row's ⟳ Retry too, and Plot Route's "🎯 target
+  next" is disabled by it. Before, S31's 🎯, the carrier's and a boxel's checked only for the game PC, and a route's
+  rows not even that (CSS hid them on a server): a 🎯 that could not work was a dead button, and a page full of them
+  (Nearby's column) worse than none. Nearby's 🎯 sit left of the names in a slot of their own width, so they make one
+  column and the names stay in line.
 - **🎯 and Plot route anywhere** (S31): 🎯 on a bookmark, the header's next stop, a Nearest row, a checklist find, a
-  Nearby row (2026-10-14: only where auto-target can work, `mapCanTarget` as a Map click, so a whole table is not
-  dead buttons) and a Map point aims at any system Outrider can name by id64 (route "system": `locate`, else the Map's last answer, the next
+  Nearby row and a Map point aims at any system Outrider can name by id64 (route "system": `locate`, else the Map's last answer, the next
   stop, your carrier); the id travels as a string, never a JSON number (over 2^53 it would round). Your own system is
   refused. Plot route fills Plot Route's To and opens its form, and plots at once only when no route is followed:
   with one, Plot is your click, since a new plot replaces the route you follow. The Nearest finder's older "Plot here"
@@ -453,9 +461,15 @@ upstream project's choices, not rules of the game.
   on the page (Now's at-risk line, the welcome back) and on the overlay's Now panel (`overlay.unsold_age`: "3 days
   unsold", from a week "2 weeks 2 days since sold", or "2wk2d since sold" when the written-out form would not fit).
 - **The panels hide over the system map, the orrery, the FSS, the SAA and the codex, and in the hyperspace tunnel; the
-  Now panel also while docked** (the author, 2026-10-10, for docked). GuiFocus 7-11 (`OVERLAY_HIDE_FOCUS`) and the
-  FSD-jump flag hide every panel; over the galaxy map (6, `OVERLAY_GALAXY_MAP`) only the Target panel shows (D1, below); the ship's docked flag, or on foot in a station, hangar or social space (`FLAG_DOCKED`,
-  `ON_FOOT_DOCKED`), hides Now. The test panels and Arrange mode are the exception: they show over the game's window
+  ones ticked Docked while docked** (the author, 2026-10-10 for Now, 2026-10-14 for the setting). GuiFocus 7-11
+  (`OVERLAY_HIDE_FOCUS`) and the FSD-jump flag hide every panel; over the galaxy map (6, `OVERLAY_GALAXY_MAP`) only the
+  Target panel shows (D1, below); the ship's docked flag, or on foot in a station, hangar or social space (`FLAG_DOCKED`,
+  `ON_FOOT_DOCKED`), hides the panels in `[overlay] hide_docked` (Settings' Docked column). That list replaced the two
+  fixed rules (Now hidden docked since 2026-10-10, the Target panel since D1); its default when the key is missing,
+  System, Target, Now and Bio (`overlay.HIDE_DOCKED_DEFAULT`), keeps them and adds the two other panels about flying,
+  while the strip and the alerts stay: what an older config gets without a word. The radar is never in it (it shows
+  only on a body's surface: no box, a dash). The Target panel over the galaxy map is shown docked whatever the list
+  says: you pick the next system there before you undock. The test panels and Arrange mode are the exception: they show over the game's window
   whatever is in front. Nothing shows while the game loads (2026-10-11): after a crash the game writes no Shutdown and
   leaves Status.json saying live with the dead session's flags until the new session is in, so from a game launch (a
   journal's first part) or LoadGame to the Location (meta `game_load`, journal-derived) the panels stay off.
@@ -470,8 +484,8 @@ upstream project's choices, not rules of the game.
   destination. No altitude setting: the game gives no "within probe range" signal, and a body you probe is the one
   you targeted anyway. A body with nothing to show (a star, one nothing is known of) gives way to the target. The
   panel shows over the galaxy map (the one exception to hiding there: you see what you picked before you jump, docked
-  too) with the system targeted, and stays off while docked elsewhere, landed, in the SRV and on foot (the radar's
-  screen). Its system facts come from the target's lookup when it is for this target (`State.target`, matched on id
+  too) with the system targeted, and stays off while landed, in the SRV and on foot (the radar's screen), and docked
+  elsewhere while its Docked box is ticked (the default). Its system facts come from the target's lookup when it is for this target (`State.target`, matched on id
   and time: "checking…" until then) and its value from the Nearby row only (`State.target`'s `leaving` is the system
   you are in); the hazard is the page's `hazardNote` (`overlay.star_hazard`: neutron star, white dwarf, black hole).
 - **Analysis-only panels** (D2a, 2026-10-12): `[overlay] analysis_only` keeps those panels off in your ship while the
@@ -532,6 +546,19 @@ upstream project's choices, not rules of the game.
   lacks MaxFuelPerJump or p. Only for the ship the route was plotted for. The neutron plotter has no fuel plan: its
   next jump alone, when one jump away. A route plotted with FSD injections keeps that one-jump check too (its boosted
   jumps are not marked in the rows).
+- **NavRoute.json the game does not write** (2026-10-14, on the author's PC). The journal had NavRouteClear at 09:10:46,
+  then NavRoute at 09:11:58, 09:24:08 and 09:25:27, and NavRoute.json stayed the cleared file from 09:10:46 throughout
+  (its mtime too): the In-Game Route line showed nothing mid-route, and the EDDN sender rightly refused the stale file
+  ("NavRoute.json was not written for the line of …: not sent"). Clearing the route and plotting a different
+  destination made the game write it again; the guide tells players so. Outrider now keeps the journal's last
+  NavRoute line (meta `navroute_event` {ts, written}, journal-derived): a file older than it is not that route, nor a
+  route cleared (`read_navroute` leaves it alone; `Journals.game_route` is None while the stored route is older), and
+  the file is read again every `NAVROUTE_RETRY_S` for `NAVROUTE_LATE_S` after the line (`State.navroute_retry`: a late
+  write that kept the mtime), then whenever it changes. Meanwhile the payload's route is `route_minimal`: the jumps
+  left from the latest FSDTarget after the line (RemainingJumpsInRoute) and the route's end from Status.json's
+  Destination, no hops; it ends with NavRouteClear or on arriving (the FSDTarget is dropped there). Nothing else takes
+  a route from it: the look-ahead (`navroute_ahead`, S1, S2), S11's game target and the Map read `game_route`, so they
+  see no game route rather than the previous one's stars.
 - **The last scoopable star before a stretch you can't cover (S2)** works on any route Outrider follows: the hops ahead
   (`route_ahead`) are the game's own plotted route from where you are (a survey route's legs come this way), then the
   Highway's rows after its end. A star counts as not scoopable only when that is KNOWN: the game's star class (NavRoute,

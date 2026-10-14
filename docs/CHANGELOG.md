@@ -2,6 +2,42 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · Overlay panels hidden while docked, one rule for every 🎯, the In-Game Route the game did not write
+The author's requests of 2026-10-14, and a game quirk seen on his PC the same morning.
+- **Hide while docked, per overlay panel**: Settings → In-game overlay's table has a **Docked** box per panel (none for
+  the radar: a dash, it shows only on a body's surface), kept in a new `[overlay] hide_docked` list as `analysis_only`
+  is (`overlay.docked_list`, POST `/api/overlay` {hide_docked}). Default, also for a config without the key: System,
+  Target, Now and Bio hidden, the strip and the alerts shown. It replaces the fixed rules (Now hidden docked, the Target
+  panel since D1); the Target panel still shows over the galaxy map while docked.
+- **A narrower panel table**: short headings with the full wording on hover ("Hide when mode" over "Combat" and
+  "Docked", "Corner", "X %", "Y %", "Size %", "BG %", "Opac. %"), the panels' names in plain case (wrapped when the
+  dialog is narrow), narrower number fields and corner list, ↺ for reset; every control kept. Checked headless at the
+  Settings dialog's width (1280, 1400, 1920 px windows), Default and Elite themes: no sideways scroll any more.
+- **One rule for every 🎯**: a 🎯 shows only on the game PC and where auto-target can work (the virtual keyboard
+  available, no binding missing: `canAim`, the Map's old `mapCanTarget`), checked once in `hwyAimBtn`. Changed: S31's
+  🎯 (bookmarks, the next stop, Nearest rows, checklist finds), the carrier's and a boxel's checked only for the game PC;
+  a route's rows and line not at all (CSS hid them on a server); a failed row's ⟳ Retry now follows it too, and Plot
+  Route's "🎯 target next" is disabled by it. Nearby and the Map already used it.
+- **Nearby's 🎯 left of the name**, in a slot every row has, so the 🎯 make one column and the names stay in line; none
+  where auto-target cannot work.
+- **Carrier tile**: a suspended service reads as its name and a red ✗ ("Redemption office ✗", "suspended" on hover),
+  like "UC ✓ · Vista ✓" beside it.
+- **NavRoute.json the game did not write**: after a `NavRoute` journal line (now read: meta `navroute_event`,
+  journal-derived, reset on a re-read) an older NavRoute.json is not taken for the route nor for a cleared one; the file
+  is read again every 2 s for a minute (`NAVROUTE_RETRY_S`, `NAVROUTE_LATE_S`), then when it changes. Meanwhile the
+  In-Game Route line says "2 jumps left to Smojooe SJ-I b23-0 · the game didn't write the route's stars"
+  (`State.route_minimal`: FSDTarget's RemainingJumpsInRoute, Status.json's Destination; no hops), until NavRouteClear or
+  arriving. The look-ahead (S1, S2), S11's game target and the Map's route read `Journals.game_route()`, so they see no
+  game route rather than the previous one. The guide says to clear and plot a different destination if it stays so.
+- Tests: test_overlay (hide_docked's parsing, default, config round trip, POST, each panel docked, the galaxy-map
+  exception; the old docked expectations follow the default), new test_navroute.py with tests/fixtures/navroute_late
+  (that morning's sequence: the minimal line, a late write, an older file never taken, the file before its line, clear
+  and arrival, the re-read timing and a tick); page smoke: the overlay table (Docked boxes, headings and hovers, the
+  post), "one 🎯 rule", "nearby 🎯" (left of the name, the slots), the carrier's ✗, "in-game route, not written"; the
+  smoke blocks that check 🎯 make auto-target available first (`aimReady`).
+- Docs: overlay.md, settings.md, plot-route.md, views.md, cargo-and-trading.md, DESIGN_NOTES, JOURNAL_REFERENCE,
+  AGENT_GUIDE, the example config.
+
 ## 2026-10-14 · 🎯 on Nearby's rows
 The author noticed Nearby had no 🎯, while bookmarks, the header's next stop, the Nearest finder, checklist finds (S31)
 and the Map (S72) all target by a click.

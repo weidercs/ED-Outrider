@@ -381,6 +381,12 @@ CHECKLIST_FIND_KEEP_S = 600   # s: the same species, colour and place answered f
 USER_AGENT = "ED Outrider (personal exploration helper)"
 
 POLL_SECONDS = 1.0
+# NavRoute.json after a NavRoute journal line (2026-10-14): the game sometimes writes the line but not the file (three
+# plots in a row that day, the file left as the NavRouteClear before them wrote it), or late. The file is read again
+# every NAVROUTE_RETRY_S for NAVROUTE_LATE_S after the line, then whenever it changes; meanwhile an older file is never
+# taken for the new route, and the In-Game Route line says what the game does tell (State.route_summary's `minimal`)
+NAVROUTE_RETRY_S = 2
+NAVROUTE_LATE_S = 60
 CARRIER_RETRY_S = 600      # s: a carrier system Spansh could not place is looked up again after this
 RUN_ID = int(time.time())  # identifies this server process to the page
 STARTED = time.monotonic() # when this process started: a restart in Docker waits RESTART_MIN_UPTIME_S from here
@@ -1207,6 +1213,7 @@ alerts_panel = {"true" if st["overlay"]["alerts_panel"] else "false"}   # the pa
 system_seconds = {st["overlay"]["system_seconds"]}   # how long the system panel stays after arriving (0: while in supercruise in that system)
 radar_range = {st["overlay"]["radar_range"]}   # metres from the radar's centre to its edge (it widens to fit a colony ring)
 analysis_only = [{", ".join(q(x) for x in st["overlay"]["analysis_only"])}]   # panels shown in your ship only while the HUD is in analysis mode: any of system, body, radar, strip, now, bio, alerts (not in the SRV, on foot or over the galaxy map)
+hide_docked = [{", ".join(q(x) for x in st["overlay"]["hide_docked"])}]   # panels hidden while docked (the ship, or on foot in a station, hangar or social space): any of system, body, strip, now, bio, alerts (the Target panel still shows over the galaxy map)
 show_inactive = {"true" if st["overlay"]["show_inactive"] else "false"}   # keep showing when Elite is not the active window (still hidden while other windows cover the game, minimised or on another desktop)
 
 [assistant]
@@ -1249,7 +1256,8 @@ SHIP_EVENTS = ("FuelScoop", "RefuelAll", "RefuelPartial", "CarrierStats", "Carri
                "HullDamage", "RepairAll", "Repair", "RepairDrone", "HeatDamage", "Interdicted",
                "JetConeBoost",   # a neutron / white dwarf charge: the next jump's range is multiplied
                "AfmuRepairs",    # a module repaired in flight: its new health (core module health, S5)
-               "NavRouteClear")  # the plotted route was cleared
+               "NavRouteClear",  # the plotted route was cleared
+               "NavRoute")       # a route plotted: NavRoute.json should follow (the game sometimes never writes it)
 # Core modules whose health is kept per ship (S5): by Loadout slot, and the fuel scoop and AFMU by item (they sit in
 # any optional slot). Hardpoints and utilities are left out: noise for an explorer.
 CORE_SLOTS = {"FrameShiftDrive": "FSD", "PowerPlant": "Power plant", "MainEngines": "Thrusters",
@@ -1676,7 +1684,7 @@ CREATE INDEX IF NOT EXISTS edsm_log_id64 ON edsm_log (id64);
 """
 
 RESET_JOURNAL_DATA = """
-DELETE FROM meta WHERE key IN ('hull', 'modules', 'last_sale', 'boost', 'statistics', 'route');
+DELETE FROM meta WHERE key IN ('hull', 'modules', 'last_sale', 'boost', 'statistics', 'route', 'navroute_event');
 DELETE FROM journal_files; DELETE FROM visits; DELETE FROM jumps;
 DELETE FROM own_systems; DELETE FROM own_bodies; DELETE FROM own_signals; DELETE FROM own_ring_signals;
 DELETE FROM own_firsts; DELETE FROM own_mapped; DELETE FROM own_footfall; DELETE FROM sales; DELETE FROM deaths;
@@ -4113,6 +4121,18 @@ class Journals:
             if self.fresh("route", ts, (meta_get(self.db, "route") or {}).get("ts")):
                 meta_set(self.db, "route", None)
                 self.navroute_end = None
+            if self.fresh("navroute_event", ts, (meta_get(self.db, "navroute_event") or {}).get("ts")):
+                meta_set(self.db, "navroute_event", None)   # nothing plotted: no NavRoute.json to wait for
+            return
+        if name == "NavRoute":
+            # a route plotted (meta navroute_event, journal-derived): NavRoute.json from this time on is the route; an
+            # older one (the game did not write it, or not yet) is not, whatever it holds (read_navroute, game_route)
+            if self.fresh("navroute_event", ts, (meta_get(self.db, "navroute_event") or {}).get("ts")):
+                have = (meta_get(self.db, "route") or {}).get("ts")
+                written = isinstance(have, str) and have >= ts   # the file was read before its line
+                meta_set(self.db, "navroute_event", {"ts": ts, "written": written})
+                if not written:
+                    self.navroute_end = None   # auto-target's route end: not the old route's
             return
         if name == "JetConeBoost":
             if self.fresh("boost", ts, (self.boost or {}).get("ts")):
@@ -4508,6 +4528,13 @@ class Journals:
         ts = route.get("timestamp")
         if isinstance(ts, str) and ts and not self.fresh("route", ts, (meta_get(self.db, "route") or {}).get("ts")):
             return
+        # older than the journal's last NavRoute line: the game has not written that route (yet), so this is not it,
+        # nor a route cleared (NAVROUTE_LATE_S): left alone, read again
+        ev = meta_get(self.db, "navroute_event")
+        if ev and not ev.get("written"):
+            if not isinstance(ts, str) or ts < ev["ts"]:
+                return False
+            meta_set(self.db, "navroute_event", dict(ev, written=True))
         hops = [{"id64": h["SystemAddress"], "name": h.get("StarSystem"), "star_class": h.get("StarClass"),
                  "x": h["StarPos"][0], "y": h["StarPos"][1], "z": h["StarPos"][2]} for h in raw]
         # the plotted route in order (the route strip); an empty file means the route was cleared
@@ -4522,6 +4549,18 @@ class Journals:
             if hop.get("StarClass"):
                 self.db.execute("INSERT OR REPLACE INTO star_classes VALUES (?, ?)",
                                 (hop["SystemAddress"], hop["StarClass"]))
+        return True
+
+    def navroute_waiting(self):
+        """The time of the journal's last NavRoute line while NavRoute.json has not been written for it, else None."""
+        ev = meta_get(self.db, "navroute_event")
+        return ev["ts"] if ev and not ev.get("written") else None
+
+    def game_route(self):
+        """The route the game plotted ({ts, hops}, meta route), or None: none plotted, or one older than the journal's
+        last NavRoute line (the game did not write that route's NavRoute.json, or not yet): not the route flown now."""
+        route, wait = meta_get(self.db, "route"), self.navroute_waiting()
+        return None if not route or (wait and (route.get("ts") or "") < wait) else route
 
 
 def route_end(route):
@@ -6590,8 +6629,10 @@ class State:
         self.clipboard = None
         # the in-game overlay ([overlay]; run() sets the config's): test panels until, Arrange mode until, the last
         # time the overlay window asked (Settings says whether one is connected), and Here's summary cache for it
-        self.overlay_cfg = dict(outrider.overlay.DEFAULTS, analysis_only=[])
-        self.overlay_zone = None   # the Target panel's near-body zone: {system, body, t (last seen in it)}, D1
+        self.overlay_cfg = dict(outrider.overlay.DEFAULTS, analysis_only=[],
+                                hide_docked=list(outrider.overlay.HIDE_DOCKED_DEFAULT))
+        self.overlay_zone = None
+        self.navroute_late = None   # NavRoute.json owed for a NavRoute line: {ts, since, last} (navroute_retry)   # the Target panel's near-body zone: {system, body, t (last seen in it)}, D1
         self.overlay_alerts = []   # the Alerts panel's (S26): the last few alerts the page posted, oldest first (in memory)
         self.overlay_test_until = 0.0
         self.overlay_arrange_until = 0.0
@@ -8062,7 +8103,9 @@ class State:
         """The panels to draw now: the test panels while they show, else the ones switched on that have something to
         say (none while [overlay] enabled is off, the game is not live or still loading, the system map, the FSS, the
         SAA or the codex is open, or in the hyperspace tunnel; over the galaxy map only the Target panel, D1, and the
-        alerts, S26). A panel in [overlay] analysis_only shows in your ship only while the HUD is in analysis mode (D2a)."""
+        alerts, S26). A panel in [overlay] analysis_only shows in your ship only while the HUD is in analysis mode (D2a);
+        one in [overlay] hide_docked hides while docked (the ship docked, or on foot in a station, hangar or social space),
+        except the Target panel over the galaxy map."""
         now = time.time() if now is None else now
         cfg, pal = self.overlay_cfg, self.overlay_palette()
         if now < self.overlay_test_until or now < self.overlay_arrange_until:
@@ -8090,10 +8133,10 @@ class State:
                                                   codex=CODEX_INTERESTING, first=self.plan_first_body())
                 if p:
                     out.append(p)
-        docked = bool(flags & FLAG_DOCKED) or bool(flags2 & ON_FOOT_DOCKED)
-        # the Target panel: flying your ship, not docked (landed, in the SRV or on foot the radar has the screen)
+        # the Target panel: in your ship, not landed (landed, in the SRV or on foot the radar has the screen); docked
+        # as [overlay] hide_docked says, below
         if cfg.get("body_panel") and pos and flags & FLAG_IN_MAIN_SHIP and not flags & (FLAG_LANDED | FLAG_IN_SRV) \
-                and not flags2 & 1 and not docked:
+                and not flags2 & 1:
             p = self.overlay_target_panel(st, pos, now, pal, cfg, galaxy=False)
             if p:
                 out.append(p)
@@ -8102,9 +8145,9 @@ class State:
             p = outrider.overlay.strip_panel(self.overlay_strip_info(pos), pal, cfg["text_size"])
             if p:
                 out.append(p)
-        # Now, condensed: anywhere in the system but docked (the ship docked, or on foot in a station, hangar or social
-        # space: the author, 2026-10-10); every bio signal in the system: anywhere, as the strip
-        if cfg.get("now_panel") and pos and not docked:
+        # Now, condensed: anywhere in the system (docked as hide_docked says); every bio signal in the system: anywhere,
+        # as the strip
+        if cfg.get("now_panel") and pos:
             p = outrider.overlay.now_panel(self.overlay_now_info(pos, now), pal, cfg["text_size"], BODY_HIGHLIGHT, BIO_MIN,
                                            HIGH_GRAVITY, CODEX_INTERESTING)
             if p:
@@ -8131,6 +8174,11 @@ class State:
         only = set(cfg.get("analysis_only") or ())
         if only and flags & FLAG_IN_MAIN_SHIP and not flags2 & 1 and not flags & FLAG_HUD_ANALYSIS:
             out = [p for p in out if p["id"] not in only]
+        # hidden while docked (the author, 2026-10-14; it replaced the fixed rules: Now hidden since 2026-10-10, the
+        # Target panel since D1): the ship's docked flag, or on foot in a station, hangar or social space
+        hide = set(cfg.get("hide_docked") or ())
+        if hide and (flags & FLAG_DOCKED or flags2 & ON_FOOT_DOCKED):
+            out = [p for p in out if p["id"] not in hide]
         return out
 
     def overlay_view(self, since=None, now=None, window=True, track=None):
@@ -8227,7 +8275,8 @@ class State:
         cfg = self.overlay_cfg
         return {"enabled": bool(cfg.get("enabled")), "theme": cfg.get("theme"), "text_size": cfg.get("text_size"),
                 "panels": {p: bool(cfg.get(f"{p}_panel" if p != "radar" else "radar")) for p in outrider.overlay.PANELS},
-                "analysis_only": list(cfg.get("analysis_only") or []), "show_inactive": bool(cfg.get("show_inactive")),
+                "analysis_only": list(cfg.get("analysis_only") or []), "hide_docked": list(cfg.get("hide_docked") or []),
+                "show_inactive": bool(cfg.get("show_inactive")),
                 "window": now - self.overlay_seen < OVERLAY_SEEN_S, "layout": self.overlay_layout(),
                 "test": max(0, round(self.overlay_test_until - now)), "arrange": max(0, round(self.overlay_arrange_until - now)),
                 # Outrider runs the window itself on the game PC: its state; None on a server (the window runs elsewhere)
@@ -8236,7 +8285,7 @@ class State:
 
     def overlay_set(self, body, now=None):
         """POST /api/overlay {enabled?, theme?, text_size?, panels?: {system|body|radar|strip|now|bio|alerts: bool}, analysis_only?:
-        [panel ids], show_inactive?: bool, test?: bool, arrange?: bool}: the switches, applied at once and written into [overlay] for the next start; test panels for
+        [panel ids], hide_docked?: [panel ids but radar], show_inactive?: bool, test?: bool, arrange?: bool}: the switches, applied at once and written into [overlay] for the next start; test panels for
         TEST_SECONDS; Arrange mode (the window takes the mouse to move and size the panels) until it is switched off or
         ARRANGE_SECONDS pass. (answer, HTTP status)."""
         now = time.time() if now is None else now
@@ -8256,6 +8305,8 @@ class State:
                 changes.update({(f"{p}_panel" if p != "radar" else "radar"): v for p, v in val.items()})
             elif key == "analysis_only" and isinstance(val, list) and all(isinstance(p, str) and p in O.PANELS for p in val):
                 changes["analysis_only"] = O.analysis_list(val)   # the whole list, in PANELS' order
+            elif key == "hide_docked" and isinstance(val, list) and all(isinstance(p, str) and p in O.DOCKED_PANELS for p in val):
+                changes["hide_docked"] = O.docked_list(val)   # the whole list too
             elif key in ("test", "arrange") and isinstance(val, bool):
                 pass
             else:
@@ -13247,10 +13298,13 @@ class State:
 
     def route_summary(self):
         """The plotted route from where you are: each hop's star (scoopable or not), whether you have been
-        there, and the longest stretch without a scoopable star (where fuel runs out)."""
-        route, pos = meta_get(self.db, "route"), self.journals.pos
-        if not route or not pos:
+        there, and the longest stretch without a scoopable star (where fuel runs out). While the game has not written
+        NavRoute.json for the route it plotted last (game_route None), what it does tell: route_minimal."""
+        route, pos = self.journals.game_route(), self.journals.pos
+        if not pos:
             return None
+        if not route:
+            return self.route_minimal()
         hops = route["hops"]
         i = next((k for k, h in enumerate(hops) if h["id64"] == pos["id64"]), None)
         left = hops[i + 1:] if i is not None else hops
@@ -13272,6 +13326,23 @@ class State:
             prev = h
         next_scoop = next((k + 1 for k, h in enumerate(out) if h["scoopable"]), None)
         return {"hops": out, "ly": round(total, 1), "longest_dry": longest, "next_scoop": next_scoop, "ts": route.get("ts")}
+
+    def route_minimal(self):
+        """The In-Game Route line while the game has not written NavRoute.json for the route it plotted (2026-10-14:
+        the journal's NavRoute line came, the file stayed the cleared one): the jumps left from the latest FSDTarget
+        after that line (RemainingJumpsInRoute, this jump included) and the route's end from Status.json's Destination
+        when it is another system; {minimal: True, hops: [], jumps_left, destination, ts}. No stars, distances or fuel:
+        the game gave none. None when nothing was plotted since the last NavRouteClear, no FSDTarget came after the
+        plot, or it was reached (the FSDTarget is dropped on arriving there)."""
+        wait, t, pos = self.journals.navroute_waiting(), self.journals.target, self.journals.pos
+        left = (t or {}).get("remaining")
+        if not wait or not t or not pos or (t.get("ts") or "") < wait or not isinstance(left, int) or isinstance(left, bool) \
+                or left < 1:
+            return None
+        dest = (self.journals.status_json or {}).get("destination")
+        end = dest.get("Name") if isinstance(dest, dict) and dest.get("System") and dest["System"] != pos["id64"] \
+            and isinstance(dest.get("Name"), str) and not dest["Name"].startswith("$") else None
+        return {"minimal": True, "hops": [], "jumps_left": left, "destination": end or t.get("name"), "ts": wait}
 
     def next_stop_summary(self):
         ns, pos = meta_get(self.db, "next_stop"), self.journals.pos
@@ -14240,7 +14311,7 @@ class State:
         """The game's plotted route (NavRoute.json, meta route) after where you are on it: its hops [{id64, name, x, y, z,
         star_class}], [] when you are not on it (route_ahead's look-ahead, the Map's route: map_route)."""
         pos = self.journals.pos
-        hops = (meta_get(self.db, "route") or {}).get("hops") or []
+        hops = (self.journals.game_route() or {}).get("hops") or []   # none while the game owes NavRoute.json
         i = next((k for k, h in enumerate(hops) if pos and h.get("id64") == pos.get("id64")), None)
         return hops[i + 1:] if i is not None else []
 
@@ -15305,7 +15376,7 @@ class State:
         of the route the game plotted through it, or with no live Status.json the journal's FSDTarget; None."""
         j = self.journals
         return outrider.target.game_target(j.status_json, (j.pos or {}).get("id64"),
-                                           (meta_get(self.db, "route") or {}).get("hops"), j.target)
+                                           (j.game_route() or {}).get("hops"), j.target)
 
     def target_check(self, rows, nx):
         """S11, the wrong-jump check: route row nx (the next stop) against the game's target. {ok, name (the system
@@ -16007,6 +16078,23 @@ class State:
             self.journals.moment("bio_left", ts, sold_species=run["species"], sold_value=run["bio"],
                                  left_samples=b["samples"], left_value=b["estimated_value"])
 
+    def navroute_retry(self, now):
+        """Whether this tick reads NavRoute.json again though it did not change: the game owes it for a NavRoute line
+        (Journals.navroute_waiting) seen under NAVROUTE_LATE_S ago, and NAVROUTE_RETRY_S have passed since the last
+        try. Past that the file is read when it changes, as always."""
+        wait = self.journals.navroute_waiting()
+        if not wait:
+            self.navroute_late = None
+            return False
+        late = self.navroute_late
+        if not late or late["ts"] != wait:
+            self.navroute_late = {"ts": wait, "since": now, "last": now}
+            return True
+        if now - late["since"] > NAVROUTE_LATE_S or now - late["last"] < NAVROUTE_RETRY_S:
+            return False
+        late["last"] = now
+        return True
+
     async def watch(self):
         """Tail the live journals and NavRoute.json forever."""
         route_mtimes = {}
@@ -16023,6 +16111,7 @@ class State:
         last_error, self.tail_error = self.tail_error, None
         seq_before = self.journals.moment_seq
         try:
+            late = None
             for d in LIVE_DIRS:
                 if self.journals.scan_dir(d, upload="live", quick=True):
                     self.unsold_dirty = True
@@ -16031,9 +16120,12 @@ class State:
                     m = os.path.getmtime(nr)
                 except OSError:
                     m = None
-                if m and route_mtimes.get(nr) != m:
+                if late is None:   # after the first folder's lines: a NavRoute line read this tick counts
+                    late = self.navroute_retry(time.time())
+                if m and (route_mtimes.get(nr) != m or late):
                     route_mtimes[nr] = m
-                    self.journals.read_navroute(d)
+                    if self.journals.read_navroute(d):
+                        self.bump()
                 for fname, read in (("Cargo.json", self.journals.read_cargo_file), ("Market.json", self.journals.read_market)):
                     fp = os.path.join(d, fname)
                     try:

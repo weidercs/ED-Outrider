@@ -38,8 +38,8 @@ The **Materials** tab starts with your **Cargo**.
   before and after each one, from its stats and your tritium deposits): once three are measured, their median scales
   the figures (at most ±20%), and the hover says so ("checked against your carrier's last 12 jumps: no correction
   needed"). Tritium other players donate is not in your journal, so such a jump reads low; the median rides over it.
-- **Services and upkeep:** a service suspended in the carrier's management shows in red ("UC suspended",
-  "Redemption office suspended"), from its last stats or the newer of them and your last docking there. Under them,
+- **Services and upkeep:** a service suspended in the carrier's management shows as its name and a red ✗ ("UC ✗",
+  "Redemption office ✗"; "suspended" on hover), beside "Vista ✓" for one that is on, from its last stats or the newer of them and your last docking there. Under them,
   "balance 1.33B · ~96 weeks of upkeep" (amber under 4 weeks; "as of" a date when the stats are over a day old). The
   journal has no upkeep figure: the week's upkeep is worked out from the services installed at the **published rates**
   (the core and each service, a suspended one at its lower rate), not yet checked against the game's Finance screen;

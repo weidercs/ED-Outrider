@@ -100,14 +100,20 @@ Highway, 💰 Road to Riches, 🧬 Exomastery, 🌍 Earth-like worlds, 🧪 ammo
 **In-Game Route:** line above it is the game's own
 route, the one plotted in the galaxy map: it can differ from Outrider's until 🎯 targets the next stop, which has the
 game plot its route there. A 🎯 beside that next system, and beside every system in the tab's lists,
-targets it in the galaxy map for you (game PC only; Outrider brings the game to the front itself where it can, else
+targets it in the galaxy map for you (Outrider brings the game to the front itself where it can, else
 after a 5 s countdown to click back into the game; on the tablet, the row's sheet has 🎯 Target). The same 🎯 sits beside your carrier's system on the Carrier tile while it is elsewhere,
 and beside a boxel's Next and its rows (see [Boxel exploration](views.md#-boxel-exploration), whose opt-in **auto-target
 the next on arrival** uses the same run).
 
+**Where a 🎯 shows.** Every 🎯, wherever it is, follows one rule: it shows only on the game PC and only when
+auto-target can work there (the virtual keyboard open and every key it needs bound; whether **Auto-target after a
+supercharge** is ticked does not matter). Anywhere else there is no 🎯 at all, rather than a button that cannot work:
+on a server, without the keyboard, or while the box below lists a missing binding (then **🎯 target next** in the box
+is greyed out too, and a failed row gets no ⟳ Retry).
+
 **🎯 and Plot route anywhere.** A 🎯 also sits beside each bookmark, the header's next stop, the Nearest finder's rows
-and the Exo-Biology checklist's "🔍 nearby" rows (game PC; never your own system), and beside each system in Nearby
-(the Overview's too) when auto-target can work on this PC. **Plot route** beside a bookmark or
+and the Exo-Biology checklist's "🔍 nearby" rows (never your own system), and left of each system's name in Nearby
+(the Overview's too, in a column of their own). **Plot route** beside a bookmark or
 the next stop puts the system in To and opens the form; it plots at once when you follow no route, and with one it
 waits for your Plot (a new plot replaces the route you follow). A click on a system in the Map tab targets it the same
 way when auto-target can work on this PC, else copies its name (see [the Map](views.md)).
@@ -186,7 +192,7 @@ targeted neutron jump target Hwy Stop 38" (or "Failed to…") under its own aler
 - **Each row shows** how far it is (and a rough jump count), how far from its star (far ones marked), what it has, its
   pads, its docking, and where the report came from and how old it is.
 - **Plot here** puts the system in To and plots it with the plotter chosen above (Exact when Trade is chosen). Following the route works as usual.
-  On the game PC a **🎯** beside it targets the system in the galaxy map.
+  Where auto-target can work, a **🎯** beside it targets the system in the galaxy map.
 - **By voice** ("nearest station", "nearest Vista"...), a place further than 500 ly also gets a neutron route plotted
   there, unless you are following a route ("You're following a route, so I didn't plot one"). `[highway] voice_plot`
   switches it off, `voice_plot_ly` sets the distance (Settings → Server).

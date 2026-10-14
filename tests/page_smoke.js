@@ -64,6 +64,14 @@ const releasePayloads = async () => {
       w.HTMLCanvasElement.prototype.getContext = () => null;   // no canvas in jsdom: the page draws nothing and says nothing
     }});
   const d = dom.window.document;
+  // One rule for every 🎯 (the author, 2026-10-14): a 🎯 shows only where auto-target can work (canAim), which the
+  // scratch server (no virtual keyboard) never has. A block that checks 🎯 makes it so, and puts it back with what
+  // this returns; with payloads held whenever it waits (a payload brings the server's own autotarget back)
+  const aimReady = () => {
+    dom.window.eval(`(window.__aimKeep = window.__aimKeep || []).push({pc: data.game_pc, at: data.autotarget}); data.game_pc = true;
+      data.autotarget = Object.assign({}, data.autotarget, {available: true, missing: []});`);
+    return () => dom.window.eval(`(() => { const k = __aimKeep.pop(); data.game_pc = k.pc; data.autotarget = k.at; })()`);
+  };
   for (let i = 0; i < 60 && !d.querySelector("#sub") ; i++) await sleep(500);
   await settle(3000);
   const ok = errors.length === 0 && /known within/.test(d.querySelector("#sub").textContent);
@@ -1353,6 +1361,7 @@ const releasePayloads = async () => {
   // in the tab's list; with a Highway route too, a switch picks the route shown; Clear route clears the one shown.
   // Every request is answered here.
   {
+    const aimBack = aimReady();   // its 🎯 need auto-target to work (canAim)
     holdPayloads();
     const w = dom.window, d = w.document, before = errors.length, realFetch = w.fetch, calls = [];
     const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), {status, headers: {"Content-Type": "application/json"}}));
@@ -1464,6 +1473,7 @@ const releasePayloads = async () => {
     if (!(got.done[0] && /Plotted: a Road to Riches route of 3 systems/.test(got.done[1]))) bad.push("done");
     const goodRC = !bad.length && errors.length === before;
     allOk = allOk && goodRC;
+    aimBack();
     console.log(goodRC ? "OK" : "FAIL", "| riches in plot route |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "no tab of its own, the plotter switch and its options, plot and polling, systems/bodies/marks, the both-routes switch, clear", errors.slice(before));
     await releasePayloads();
@@ -1523,6 +1533,7 @@ const releasePayloads = async () => {
   // the line under the tiles for every route (the author, 2026-10-07): a survey route's own (💰 Road to Riches, 🧬
   // Exomastery), the Highway's, and with both the one Plot Route shows (this device's choice, else the newer)
   {
+    const aimBack = aimReady();   // its 🎯 need auto-target to work (canAim)
     const w = dom.window, d = w.document, before = errors.length, got = {};
     const line = () => d.getElementById("hwyLine").textContent.replace(/\s+/g, " ").trim();
     const keep = w.eval("[data.highway, data.survey, view]");
@@ -1548,6 +1559,7 @@ const releasePayloads = async () => {
     const bad = Object.keys(want).filter(k => !String(got[k]).startsWith(want[k]));
     const goodRL = !bad.length && errors.length === before;
     allOk = allOk && goodRL;
+    aimBack();
     console.log(goodRL ? "OK" : "FAIL", "| route line |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(got)}` : "a survey route's line (💰, 🧬), the Highway's, the one shown with both, complete", errors.slice(before));
   }
   // the game's own route (NavRoute.json) is labelled "In-Game Route:" (the author, 2026-10-12): Outrider's route is the
@@ -1564,6 +1576,20 @@ const releasePayloads = async () => {
     allOk = allOk && goodIG;
     console.log(goodIG ? "OK" : "FAIL", "| in-game route |", goodIG ? 'the game\'s route is "In-Game Route:"' : got, errors.slice(before));
   }
+  // the game logged a plot but wrote no NavRoute.json (2026-10-14): the payload's minimal form, said in words, no chips
+  {
+    const w = dom.window, before = errors.length;
+    const got = JSON.parse(w.eval(`(() => { const saved = data.route, el = document.getElementById("routeStrip");
+      data.route = {minimal: true, hops: [], jumps_left: 2, destination: "Smojooe SJ-I b23-0", ts: "2026-10-14T09:11:58Z"};
+      renderRoute(); const o = {text: el.textContent, chips: el.querySelectorAll(".hop").length, tip: /did not write NavRoute.json/.test(el.innerHTML)};
+      data.route = Object.assign({}, data.route, {jumps_left: 1, destination: null}); renderRoute(); o.one = el.textContent;
+      data.route = saved; renderRoute(); return JSON.stringify(o); })()`));
+    const want = {text: "In-Game Route: 2 jumps left to Smojooe SJ-I b23-0 · the game didn't write the route's stars", chips: 0, tip: true,
+                  one: "In-Game Route: 1 jump left · the game didn't write the route's stars"};
+    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| in-game route, not written |", good ? "jumps left and the end in words, no stars" : JSON.stringify(got), errors.slice(before));
+  }
   // Settings links to the project on GitHub, with the version running (desktop at the top; the tablet's sheet too)
   {
     const w = dom.window, d = w.document, before = errors.length;
@@ -1579,6 +1605,7 @@ const releasePayloads = async () => {
   // Cargo: the Carrier tile's tritium only with a tritium sell order (else as before, one line); the Materials tab's
   // Cargo (the ship with what you paid, the carrier's marks and its sync line); Recount lists only what is not confirmed
   {
+    const aimBack = aimReady();   // its 🎯 need auto-target to work (canAim)
     const w = dom.window, d = w.document, before = errors.length;
     const got = w.eval(`(() => {
       const saved = data.carrier, o = {};
@@ -1644,6 +1671,7 @@ const releasePayloads = async () => {
     if (got.recount !== "water,metaalloys" || !/Total 13,544 t · the carrier reports 16,085 t · 2,541 t short/.test(got.total)) bad.push("recount");
     const goodCG = !bad.length && errors.length === before;
     allOk = allOk && goodCG;
+    aimBack();
     console.log(goodCG ? "OK" : "FAIL", "| cargo |", goodCG ? "the tile's tritium (and without), the ship's Avg, the carrier's marks, Recount's lines" :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
   }
@@ -1663,7 +1691,9 @@ const releasePayloads = async () => {
                                 upkeep: 13700000, weeks: 96.9, warn: false, rates: "published"}};
       renderCarrier();
       o.trip = line().textContent;
-      o.red = [...line().querySelectorAll(".noscoop")].map(x => x.textContent);
+      // a suspended service: its name and a red ✗, "suspended" on hover (the author, 2026-10-14)
+      o.red = [...line().querySelectorAll(".noscoop")].map(x => (x.textContent === "✗" ? x.previousSibling.textContent.split("·").pop().trim() + " " : "") + x.textContent +
+                                                              (x.textContent === "✗" && /^suspended/.test(x.title) ? " (hover: suspended)" : ""));
       o.fin = [document.getElementById("carrierFin").textContent, document.getElementById("carrierFin").className, /published rates/.test(document.getElementById("carrierFin").title)];
       data.carrier = Object.assign({}, data.carrier, {trip: Object.assign({}, data.carrier.trip, {hold: 5000, covered: true}),
         finance: Object.assign({}, data.carrier.finance, {balance: 40000000, weeks: 2.9, warn: true, ts: "2026-09-27T12:00:00Z"})});
@@ -1685,7 +1715,7 @@ const releasePayloads = async () => {
     const bad = [];
     if (!/it → you ≈ 3 carrier jumps · ≈ 1,300 t tritium · depot 668 t: 632 t short/.test(got.trip)) bad.push("trip " + got.trip);
     if (!/\(432 ly jump ≈ 96 t; depot after ≈ 572 t\)/.test(got.trip)) bad.push("booked jump");
-    if (JSON.stringify(got.red) !== JSON.stringify(["depot 668 t: 632 t short", "UC suspended", "Redemption office suspended"])) bad.push("red " + JSON.stringify(got.red));
+    if (JSON.stringify(got.red) !== JSON.stringify(["depot 668 t: 632 t short", "UC ✗ (hover: suspended)", "Redemption office ✗ (hover: suspended)"])) bad.push("red " + JSON.stringify(got.red));
     if (!/Vista ✓/.test(got.trip)) bad.push("vista");
     if (got.fin[0] !== "balance 1.33B · ~96 weeks of upkeep" || got.fin[1] !== "" || !got.fin[2] || /as of/.test(got.trip)) bad.push("finance " + JSON.stringify(got.fin));
     if (JSON.stringify(got.amber) !== JSON.stringify(["depot 668 t: 632 t short, enough after topping up", "balance 40.0M · ~2.9 weeks of upkeep"])) bad.push("amber " + JSON.stringify(got.amber));
@@ -3500,6 +3530,7 @@ const releasePayloads = async () => {
     position: {name: "Hwy Stop 37", id: "7000000037", x: 630, y: 0, z: 3480},
     clipboard: {enabled: true, available: false, tool: null, why: "neither", last: null}, autotarget: {enabled: false}, defaults: {efficiency: 60}});
   {
+    const aimBack = aimReady();   // its 🎯 need auto-target to work (canAim)
     holdPayloads();
     const w = dom.window, before = errors.length, realFetch = w.fetch, realCopy = w.copyText, calls = [], copied = [];
     const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), {status, headers: {"Content-Type": "application/json"}}));
@@ -3655,6 +3686,7 @@ const releasePayloads = async () => {
           && JSON.stringify(p.back) === "[33,44]" && JSON.stringify(p.nice) === "[100,5000,2]")) bad.push("proj");
     const goodHW = !bad.length && errors.length === before;
     allOk = allOk && goodHW;
+    aimBack();
     console.log(goodHW ? "OK" : "FAIL", "| highway tab |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "200 of 400 ahead, done folded and grey, the next highlighted; form from the fleet, range override, plotters' fields; plot body and polled to done; errors; clear; projection; the line in three states with copy", errors.slice(before));
     await releasePayloads();
@@ -4198,6 +4230,7 @@ const releasePayloads = async () => {
   // (off by default, [highway] defaults when this browser has none, the note, the plot body, saved per browser) and
   // the header's "conservative −5 ly"
   {
+    const aimBack = aimReady();   // its 🎯 need auto-target to work (canAim)
     holdPayloads();
     const w = dom.window, before = errors.length, realFetch = w.fetch, got = {}, calls = [];
     const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), {status, headers: {"Content-Type": "application/json"}}));
@@ -4248,6 +4281,7 @@ const releasePayloads = async () => {
     if (!(got.saved && got.saved.conservative === true && got.saved.conservative_ly === 4)) bad.push("saved");
     const ok = !bad.length && errors.length === before;
     allOk = allOk && ok;
+    aimBack();
     console.log(ok ? "OK" : "FAIL", "| highway too heavy and conservative range |", bad.length
       ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "the warning in the strip and the header; the tick off by default, the note per supercharge, the body, saved, [highway] defaults", errors.slice(before));
@@ -4823,7 +4857,7 @@ const releasePayloads = async () => {
               : Object.assign({}, w.eval("data.overlay"), JSON.parse(o.body), ovNote ? {note: ovNote} : {}))) : real(u, o);
     const saved = w.eval("JSON.stringify(data.overlay || null)");
     w.eval(`data.overlay = {enabled: true, theme: "elite", text_size: "normal", panels: {system: true, body: false, radar: true},
-      analysis_only: ["bio"], window: false, test: 0, arrange: 0, runner: {state: "no_qt", why: null}, layout: {system: {corner: "nw", x: 0.02, y: 0.16, scale: 1, bg: 0.65, alpha: 1},
+      analysis_only: ["bio"], hide_docked: ["system", "body", "now", "bio"], window: false, test: 0, arrange: 0, runner: {state: "no_qt", why: null}, layout: {system: {corner: "nw", x: 0.02, y: 0.16, scale: 1, bg: 0.65, alpha: 1},
       body: {corner: "ne", x: 0.02, y: 0.16, scale: 1.2, bg: 0.5, alpha: 0.8}, radar: {corner: "se", x: 0.02, y: 0.1, scale: 1, bg: 0.5, alpha: 1}}};
       overlayDrawn = ""; renderOverlay();`);
     const d = w.document, box = d.getElementById("overlayBox");
@@ -4838,8 +4872,15 @@ const releasePayloads = async () => {
                  // D1: the Body panel is the Target panel (its id, so its place, kept); D2a: an Analysis only box per row
                  target: /^\s*Target$/.test(box.querySelector('[data-ovpanel="body"]').parentNode.textContent) &&
                    /galaxy map/.test(box.querySelector('[data-ovpanel="body"]').closest("label").title),
-                 analysis: [...box.querySelectorAll("[data-ovanalysis]")].map(x => x.dataset.ovanalysis + (x.checked ? "✓" : "")).join(" ") +
-                   " | " + [...box.querySelectorAll("table.ovlay thead th")][1].textContent,
+                 analysis: [...box.querySelectorAll("[data-ovanalysis]")].map(x => x.dataset.ovanalysis + (x.checked ? "✓" : "")).join(" "),
+                 // the author, 2026-10-14: a Docked box per panel but the radar (a dash), the defaults ticked; short
+                 // headings with the full words on hover; Find a setting finds the boxes by their keys
+                 docked: [...box.querySelectorAll("table.ovlay tbody tr")].map(tr => { const b = tr.querySelector("[data-ovdocked]");
+                   return b ? b.dataset.ovdocked + (b.checked ? "✓" : "") : "–" + tr.querySelector("[data-ovpanel]").dataset.ovpanel; }).join(" "),
+                 heads: [...box.querySelectorAll("table.ovlay thead th")].map(th => th.textContent + (th.title || !th.textContent ? "" : "(no title)")).join("|"),
+                 headTips: /combat mode/.test(box.querySelector("table.ovlay thead tr:nth-child(2) th").title) &&
+                   /docked/.test(box.querySelector("table.ovlay thead tr:nth-child(2) th:nth-child(2)").title),
+                 finds: [box.querySelector("[data-ovanalysis]").dataset.find, box.querySelector("[data-ovdocked]").dataset.find].join(" "),
                  dimmed: box.querySelector('[data-ovpanel="body"]').closest("tr").classList.contains("ovoff"),
                  // the help under it: three short points, no button it no longer has
                  wrapped: !!box.querySelector(".ovwrap > table.ovlay"),   // scrolled inside its section, never spilling out
@@ -4854,6 +4895,10 @@ const releasePayloads = async () => {
     an.checked = true; an.dispatchEvent(new w.Event("change", {bubbles: true}));
     await sleep(50);
     got.analysisAfter = [...box.querySelectorAll("[data-ovanalysis]:checked")].map(x => x.dataset.ovanalysis).join(" ");
+    const dk = box.querySelector('[data-ovdocked="bio"]');
+    dk.checked = false; dk.dispatchEvent(new w.Event("change", {bubbles: true}));
+    await sleep(50);
+    got.dockedAfter = [...box.querySelectorAll("[data-ovdocked]:checked")].map(x => x.dataset.ovdocked).join(" ");
     box.querySelector('[data-ovact="test"]').click();
     await sleep(100);
     got.note = /cannot run yet/.test(w.eval("overlayNote"));   // nothing can draw yet: the button says why
@@ -4875,9 +4920,13 @@ const releasePayloads = async () => {
       .map(t => t.replace(/ .*/, "") + (/installed/.test(t) ? " installed" : /failed/.test(t) ? " failed" : ""));
     w.eval(`data.overlay = JSON.parse(${JSON.stringify(saved)}); overlayNote = ""; overlayDrawn = ""; renderOverlay();`);
     const want = {rows: 7, body: "120", off: true, theme: "elite", nowin: true, nowName: true, inRows: true, tip: true,
-                  target: true, analysis: "system body radar strip now bio✓ alerts | Analysis only",
-                  dimmed: true, wrapped: true, help: true, alerts: true, analysisAfter: "system bio", note: true, themeNote: true,
-                  posted: [["overlay/layout", {radar: {x: 0.3}}], ["overlay", {analysis_only: ["system", "bio"]}], ["overlay", {test: true}],
+                  target: true, analysis: "system body radar strip now bio✓ alerts",
+                  docked: "system✓ body✓ –radar strip now✓ bio✓ alerts",
+                  heads: "Panel|Hide when mode|Corner|X %|Y %|Size %|BG %|Opac. %||Combat|Docked", headTips: true,
+                  finds: "overlay.analysis_only overlay.hide_docked",
+                  dimmed: true, wrapped: true, help: true, alerts: true, analysisAfter: "system bio", dockedAfter: "system body now", note: true, themeNote: true,
+                  posted: [["overlay/layout", {radar: {x: 0.3}}], ["overlay", {analysis_only: ["system", "bio"]}],
+                           ["overlay", {hide_docked: ["system", "body", "now"]}], ["overlay", {test: true}],
                            ["overlay", {theme: "default"}]],
                   venv: true, popup: ["", "⟳Installing", "✓ installed", "⟳Installing", "Installing failed", ""]};
     const ok = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
@@ -5516,6 +5565,7 @@ const releasePayloads = async () => {
   // boxel exploration (2026-10-11): Nearby's Standard / Boxel switch shows the boxel's list (visited with your scans,
   // Spansh's, the ones to try), the warning, Target next and 🎯 by number, Keep, and the recommended boxels by mass code
   {
+    holdPayloads(); const aimBack = aimReady();   // its 🎯 need auto-target to work (canAim)
     const w = dom.window, realFetch = w.fetch, before = errors.length, posted = [];
     const view = {boxel: {prefix: "Drojau TF-H c13-", label: "Drojau TF-H c13", mc: "c", size: 40, kind: "K and M stars, some G", standard: true,
                           here: true, picked: false, center: {x: 0, y: 0, z: 0}, sector_index: [35, 31, 54], distance: 3},
@@ -5591,6 +5641,7 @@ const releasePayloads = async () => {
     got.posted = posted; got.asked = asked.filter(Boolean);
     const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
+    aimBack(); await releasePayloads();
     console.log(good ? "OK" : "FAIL", "| boxel mode |", good ? "the switch, the boxel's list and warning, Target next and 🎯 by number, Keep, the boxels nearby" : JSON.stringify({got, want}), errors.slice(before));
   }
   // green gas giants (2026-10-12): the ladder model's guess as a green planet with "?", a confirmed one without; on the
@@ -5827,6 +5878,7 @@ const releasePayloads = async () => {
   // hover) and S11 (the wrong-jump check on every copy of the route's line, its own alerts row, notify off by default,
   // and the wrong_target key)
   {
+    const aimBack = aimReady();   // its 🎯 need auto-target to work (canAim)
     const w = dom.window, before = errors.length;
     const got = JSON.parse(w.eval(`(() => {
       const o = {}, said = [], told = [], realSpeak = speak, realNotify = notify, m0 = data.moments, d0 = JSON.stringify(data);
@@ -5879,6 +5931,7 @@ const releasePayloads = async () => {
       said: [["wrong_target", "Targeted Elsewhere; next is Neu A."]], row: true};
     const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
+    aimBack();
     console.log(good ? "OK" : "FAIL", "| batch 25 wrong target and finished systems skipped |", good ? "✓ / stops ahead / ⚠ on the route line's copies and the tab, skipping N done with names, the wrongtarget row and wrong_target key" : JSON.stringify({got, want}), errors.slice(before));
   }
   // star and planet types new to your codex (2026-10-12): ✦ not in this region's codex, ✪ in none; Here's name cell,
@@ -5972,6 +6025,7 @@ const releasePayloads = async () => {
   // the Exo-Biology checklist's 🔍 on a species and a colour not found: the nearest reported bodies in the side panel
   // (api/checklist/find answered here), with ✓ visited, ☆ (opens the bookmark), Copy and ✕; none on a species found
   {
+    holdPayloads(); const aimBack = aimReady();   // its 🎯 need auto-target to work (canAim)
     const w = dom.window, before = errors.length;
     const got = JSON.parse(await w.eval(`(async () => {
       const o = {}, hd0 = hereData, v0 = view, real = apiJson, c0 = copyText, b0 = openBookmark, cl0 = Object.assign({}, CL);
@@ -6036,6 +6090,7 @@ const releasePayloads = async () => {
                   asked: ["species=ves", "species=ves&colour=Mulberry"], head2: "Nearest reported: Bacterium Vesicula - Mulberry", closed: true};
     const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
+    aimBack(); await releasePayloads();
     console.log(good ? "OK" : "FAIL", "| own runs, find nearby |", good ? "your runs in the guess's hover; 🔍 on a species and a colour not found, the nearest reported with ✓, ☆, Copy, ✕" : JSON.stringify({got, want}), errors.slice(before));
   }
   // S73 (2026-10-12): a click anywhere on a Nearby row shows the system in Here (again: closes it); the name still
@@ -6089,6 +6144,10 @@ const releasePayloads = async () => {
       const aim = tr && tr.querySelector('td.name [data-aim][data-route="system"]');
       o.aim = aim && aim.dataset.aimid === other.id;
       o.own = [!!own, nearAimBtn(mine)];
+      // left of the name, in a slot every row has (the author, 2026-10-14: the 🎯 in one column, the names in line)
+      const cells = [...document.querySelectorAll("#rows td.name")];
+      o.left = !!aim && aim.parentNode === tr.querySelector("td.name").firstElementChild && aim.parentNode.classList.contains("nearaim") &&
+        cells.length > 1 && cells.every(td => td.firstElementChild && td.firstElementChild.classList.contains("nearaim"));
       window.__nearAimId = other.id;
       tabOpenRow(document.getElementById("nearTable"), tr);
       const t = document.querySelector('#tabSheetActs [data-act="aim"]');
@@ -6100,7 +6159,7 @@ const releasePayloads = async () => {
     Object.assign(got, JSON.parse(w.eval(`(() => {
       const o = {}, id = window.__nearAimId, has = () => !!document.querySelector('#rows tr[data-id="' + id + '"] [data-aim]');
       o.clicked = [pinnedSystem, window.__nearCopied];
-      data.autotarget = Object.assign({}, data.autotarget, {available: false}); render(); o.unavailable = has();
+      data.autotarget = Object.assign({}, data.autotarget, {available: false}); render(); o.unavailable = has() || !!document.querySelector("#rows .nearaim");
       data.autotarget = Object.assign({}, data.autotarget, {available: true}); data.game_pc = false; render(); o.server = has();
       const k = window.__nearAim; Object.assign(data, {game_pc: k.pc, autotarget: k.at, systems: k.sys}); copyText = k.copy;
       hwyRun = null; view = k.view; render();
@@ -6108,12 +6167,36 @@ const releasePayloads = async () => {
     w.fetch = realFetch;
     got.sent = sent;
     const id = w.eval("window.__nearAimId");
-    const want = {aim: true, own: [false, ""], sheet: ["system", true], clicked: [null, null], unavailable: false, server: false,
+    const want = {aim: true, own: [false, ""], left: true, sheet: ["system", true], clicked: [null, null], unavailable: false, server: false,
                   sent: [{route: "system", id}]};
     const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| nearby 🎯 |", good ? "🎯 by the row's id64, none on your own row or where auto-target cannot work; it targets without opening or copying, the tablet's sheet offers it" : JSON.stringify({got, want}), errors.slice(before));
     await releasePayloads();
+  }
+  // One rule for every 🎯 (the author, 2026-10-14): on the game PC with auto-target available and no binding missing,
+  // a route row's, the route line's, the carrier's, S31's (sysAimBtn), Nearby's and a failed row's Retry; otherwise none
+  {
+    const w = dom.window, before = errors.length;
+    const got = JSON.parse(w.eval(`(() => {
+      const keep = {pc: data.game_pc, at: data.autotarget, run: hwyRun}, out = {};
+      const other = data.systems.find(s => sysId(s) !== posId()) || {id: "123", name: "Other"};
+      const car = {system: "Far", aboard: false, here: false};
+      const each = () => [!!hwyAimBtn("A", "highway", 1, true), !!hwyAimBtn("B"), !!carrierAim(car), !!sysAimBtn("C", "555"),
+        !!nearAimBtn(other), /hwyretry/.test(hwyRowHtml({i: 2, system: "D", distance: 1}, "ahead", true))].map(x => x ? 1 : 0).join("");
+      hwyRun = null;
+      const states = {ready: [true, {available: true, missing: []}], missing: [true, {available: true, missing: [{key: "GalaxyMapOpen", why: "no key"}]}],
+                      unavailable: [true, {available: false, missing: []}], server: [false, {available: true, missing: []}]};
+      for (const [k, [pc, at]] of Object.entries(states)) {
+        data.game_pc = pc; data.autotarget = Object.assign({}, keep.at || {}, at);
+        out[k] = each();
+      }
+      data.game_pc = keep.pc; data.autotarget = keep.at; hwyRun = keep.run;
+      return JSON.stringify(out); })()`));
+    const want = {ready: "111111", missing: "000000", unavailable: "000000", server: "000000"};   // the Map's: S72's block
+    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| one 🎯 rule |", good ? "every 🎯 only where auto-target can work" : JSON.stringify(got), errors.slice(before));
   }
   // S75 (2026-10-12): the jump range under the ship in the Commander tile; "from X (Y ly)" beside the system's name
   // (no "came"); no "nearest known unvisited" in the Where tile, while Now keeps it
@@ -6797,6 +6880,7 @@ const releasePayloads = async () => {
       const o = {}, keep = window.__s31 = {bm: data.bookmarks, ns: data.next_stop, pc: data.game_pc, at: data.autotarget, hw: data.highway,
         sv: data.survey, find: CL.find, md: M.data, copy: copyText, view, to: hEl("hwyTo").value};
       data.game_pc = true; data.highway = null; data.survey = null;
+      data.autotarget = Object.assign({}, data.autotarget, {available: true, missing: []});   // every 🎯: canAim
       data.bookmarks = [{id: "9007199254740993", name: "Far Out", distance: 12, note: "", created: ""}];
       renderBookmarks(bmMap());
       const aim = document.querySelector('#bmRows [data-aim][data-route="system"]');

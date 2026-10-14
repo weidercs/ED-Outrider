@@ -46,15 +46,39 @@ class Settings(unittest.TestCase):
         a["analysis_only"].append("now")                                     # one config's list is never another's
         self.assertEqual(O.overlay_settings({})["overlay"]["analysis_only"], [])
 
+    def test_hide_docked_list(self):
+        """[overlay] hide_docked (the author, 2026-10-14): missing, the default (System, Target, Now, Bio: what Outrider
+        hid before, Now and the Target panel, and the System and Bio panels); a list kept in PANELS' order; the radar is
+        never one (it shows only on a body's surface); anything but a list of names the default, with a warning."""
+        self.assertEqual(O.overlay_settings({})["overlay"]["hide_docked"], ["system", "body", "now", "bio"])
+        self.assertEqual(O.overlay_settings({"overlay": {"hide_docked": []}})["overlay"]["hide_docked"], [])
+        with contextlib.redirect_stderr(io.StringIO()) as e:
+            got = O.overlay_settings({"overlay": {"hide_docked": ["Alerts", "strip", "radar", "moon"]}})["overlay"]["hide_docked"]
+        self.assertEqual(got, ["strip", "alerts"])
+        self.assertIn("'radar', 'moon' not a panel", e.getvalue())
+        for bad in ("now", [1]):
+            with contextlib.redirect_stderr(io.StringIO()) as e:
+                self.assertEqual(O.overlay_settings({"overlay": {"hide_docked": bad}})["overlay"]["hide_docked"],
+                                 list(O.HIDE_DOCKED_DEFAULT))
+            self.assertIn("hide_docked", e.getvalue())
+        a = O.overlay_settings({})["overlay"]
+        a["hide_docked"].append("strip")                                       # one config's list is never another's
+        self.assertEqual(O.overlay_settings({})["overlay"]["hide_docked"], ["system", "body", "now", "bio"])
+        self.assertNotIn("radar", O.DOCKED_PANELS)
+
     def test_written_and_read_back(self):
         """--write-config writes [overlay] with every key, and the file reads back to the same settings."""
         import tomllib
         args = types.SimpleNamespace(**{k: None for k in ("journals", "legacy", "host", "port", "db", "radius")})
         st = ed_outrider.settings_from({"overlay": {"enabled": True, "theme": "lcars", "radar_range": 1200,
-                                                    "analysis_only": ["now", "bio"]}}, args)
+                                                    "analysis_only": ["now", "bio"], "hide_docked": ["strip", "bio"]}}, args)
         text = ed_outrider.config_text(st)
         back = tomllib.loads(text)["overlay"]
-        self.assertEqual((back["enabled"], back["theme"], back["radar_range"], back["analysis_only"]), (True, "lcars", 1200, ["now", "bio"]))
+        self.assertEqual((back["enabled"], back["theme"], back["radar_range"], back["analysis_only"], back["hide_docked"]),
+                         (True, "lcars", 1200, ["now", "bio"], ["strip", "bio"]))
+        # a config written before hide_docked: the default, written out as such
+        back = tomllib.loads(ed_outrider.config_text(ed_outrider.settings_from({"overlay": {}}, args)))["overlay"]
+        self.assertEqual(back["hide_docked"], ["system", "body", "now", "bio"])
         self.assertEqual(set(back), set(O.DEFAULTS))
 
 
@@ -959,8 +983,14 @@ class Server(unittest.TestCase):
         with open(self.state.config_path, encoding="utf-8") as f:
             self.assertIn('analysis_only = ["system", "bio"]', f.read())
         self.assertEqual(self.state.overlay_set({"analysis_only": []}, now=251)[0]["analysis_only"], [])
+        self.assertEqual(out["hide_docked"], ["system", "body", "now", "bio"])          # the default, as the page shows it
+        out, _ = self.state.overlay_set({"hide_docked": ["alerts", "now"]}, now=252)  # the whole list
+        self.assertEqual((out["hide_docked"], self.state.overlay_cfg["hide_docked"]), (["now", "alerts"], ["now", "alerts"]))
+        with open(self.state.config_path, encoding="utf-8") as f:
+            self.assertIn('hide_docked = ["now", "alerts"]', f.read())
         for bad in (None, {}, {"enabled": "yes"}, {"theme": "neon"}, {"panels": {"map": True}}, {"panels": {}}, {"test": 1},
-                    {"volume": 3}, {"analysis_only": ["map"]}, {"analysis_only": "bio"}, {"analysis_only": [True]}):
+                    {"volume": 3}, {"analysis_only": ["map"]}, {"analysis_only": "bio"}, {"analysis_only": [True]},
+                    {"hide_docked": ["radar"]}, {"hide_docked": "now"}):
             self.assertEqual(self.state.overlay_set(bad, now=300)[1], 400, bad)
 
     def test_system_panel_shows_in_supercruise(self):
@@ -1194,6 +1224,36 @@ class Server(unittest.TestCase):
         self.state.overlay_set({"test": True}, now=1000)                            # the test panels: all of them
         self.assertEqual(shown(), list(O.PANELS))
 
+    def test_hidden_while_docked(self):
+        """[overlay] hide_docked (the author, 2026-10-14): each panel docked (the ship's flag, or on foot in a station)
+        shows or hides as its box says; by default System, Target, Now and Bio hide, Strip and Alerts show; the Target
+        panel still shows over the galaxy map, docked; undocked nothing is hidden by it."""
+        st = self.target_setup()
+        self.state.journals.handle({"event": "FSDTarget", "timestamp": ed_outrider.iso_ts(1005), "Name": "Ossia",
+                                    "SystemAddress": 99, "StarClass": "K"})
+        self.state.overlay_cfg.update(strip_panel=True, now_panel=True, bio_panel=True, alerts_panel=True)
+        self.state.overlay_alert({"kind": "find", "title": "B 1: Earth-like world"}, now=1009)
+        shown = lambda: [p["id"] for p in self.state.overlay_panels(now=1010)]
+        ship = ed_outrider.FLAG_IN_MAIN_SHIP
+        self.assertEqual(shown(), ["body", "strip", "now", "bio", "alerts"])         # flying: all of them
+        st["flags"] = ship | ed_outrider.FLAG_DOCKED
+        self.assertEqual(shown(), ["strip", "alerts"])                               # docked, the defaults
+        st.update(flags=0, flags2=1 | (1 << 13))                                     # on foot in a hangar: the same
+        self.assertEqual(shown(), ["strip", "alerts"])
+        st.update(flags=ship | ed_outrider.FLAG_DOCKED, flags2=0)
+        for p in ("body", "strip", "now", "bio", "alerts"):                          # each box on its own
+            others = [x for x in ("body", "strip", "now", "bio", "alerts") if x != p]
+            self.state.overlay_cfg["hide_docked"] = others
+            self.assertEqual(shown(), [p], p)
+        self.state.overlay_cfg["hide_docked"] = []                                   # nothing ticked: all of them docked
+        self.assertEqual(shown(), ["body", "strip", "now", "bio", "alerts"])
+        self.state.overlay_cfg["hide_docked"] = list(O.HIDE_DOCKED_DEFAULT)
+        st["gui_focus"] = ed_outrider.OVERLAY_GALAXY_MAP                             # the galaxy map: the Target panel shows
+        self.assertEqual(shown(), ["body", "alerts"])
+        st.update(gui_focus=0, flags=ship | ed_outrider.FLAG_SUPERCRUISE)            # the system panel: hidden docked only
+        self.state.overlay_cfg.update(system_panel=True)
+        self.assertEqual(shown()[0], "system")
+
     def test_alerts_panel(self):
         """S26: an alert the page posts shows on the Alerts panel for ALERT_SECONDS wherever the overlay shows panels
         (docked, on foot, over the galaxy map beside the Target panel), never over the system map; kept only while
@@ -1296,9 +1356,11 @@ class Server(unittest.TestCase):
         self.assertIn("Next: bio on B 2: Fonticulua", texts(now))                # the config's levels (bio_min 10M)
         st["gui_focus"] = 6                                                       # the galaxy map: nothing
         self.assertEqual(self.state.overlay_panels(now=1010), [])
-        st.update(gui_focus=0, flags=ed_outrider.FLAG_DOCKED | ed_outrider.FLAG_IN_MAIN_SHIP)     # docked: no Now
-        self.assertEqual([p["id"] for p in self.state.overlay_panels(now=1010)], ["bio"])
-        st.update(flags=0, flags2=1 | (1 << 3))                                   # on foot in the station: no Now
+        st.update(gui_focus=0, flags=ed_outrider.FLAG_DOCKED | ed_outrider.FLAG_IN_MAIN_SHIP)     # docked: neither (hide_docked's default)
+        self.assertEqual([p["id"] for p in self.state.overlay_panels(now=1010)], [])
+        st.update(flags=0, flags2=1 | (1 << 3))                                   # on foot in the station: neither
+        self.assertEqual([p["id"] for p in self.state.overlay_panels(now=1010)], [])
+        self.state.overlay_cfg.update(hide_docked=["now"])                        # Bio unticked: it shows docked
         self.assertEqual([p["id"] for p in self.state.overlay_panels(now=1010)], ["bio"])
         st.update(flags=ed_outrider.FLAG_SUPERCRUISE | ed_outrider.FLAG_IN_MAIN_SHIP, flags2=0)  # undocked: back
         self.assertEqual([p["id"] for p in self.state.overlay_panels(now=1010)], ["now", "bio"])

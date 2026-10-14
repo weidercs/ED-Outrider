@@ -12,8 +12,9 @@ is scanned, the main star and whether it scoops, notable bodies, curiosities (�
 classes such as water giants, helium giants, Sudarsky class V and green gas giants) and a credit estimate. Sort,
 hide visited and fully scanned systems, or keep only those one jump away. A dashed <i>old data</i> mark flags Spansh
 records from before Odyssey (thin-atmosphere planets there may hold unsampled life). Click a row to see that system
-body by body beside the list (click it again to close it); its name copies it, ☆ bookmarks it, and on the game PC,
-when auto-target can work there, the 🎯 beside the name targets it in the galaxy map (not on your own system's row). ⛏ N counts planetary mining
+body by body beside the list (click it again to close it); its name copies it, ☆ bookmarks it, and where auto-target
+can work (the game PC, see [Plot Route](plot-route.md)) the 🎯 left of the name, in a column of its own, targets it in
+the galaxy map (not on your own system's row). ⛏ N counts planetary mining
 locations on ground worth a Rhino. 🌀 N counts the notable stellar phenomena your FSS found there (life in clouds or rings; hover
 for what they are), dimmed once you have been to them. ⭐ marks a rare star (a black hole, a Wolf-Rayet, a carbon,
 MS, S or O-type star, a Herbig Ae/Be star, a supergiant, a rare white dwarf, an exotic star), from Spansh's records
@@ -147,7 +148,7 @@ speaks, also after it reloads (**Speak from this window** makes such a window sp
 map, hwy, hist, log, mat, firsts, overview).
 
 **Bookmarks** is its own tab: the systems you have bookmarked (☆ beside any system), each with its note and distance.
-The same ☆ sets your **next stop**, shown in the header until you get there. On the game PC a **🎯** beside a bookmark
+The same ☆ sets your **next stop**, shown in the header until you get there. Where auto-target can work (the game PC) a **🎯** beside a bookmark
 or the next stop targets it in the galaxy map, and **Plot route** puts it in Plot Route's To (plotted at once when you
 follow no route). **Export** saves them as CSV or JSON; **Import…** beside it adds the bookmarks in such a file to yours
 ("12 added, 3 already there"): a system you have already bookmarked keeps your own note, and a row it cannot read is
@@ -181,7 +182,7 @@ with different reporters.
 - **Where the next jump goes**, under the target: the route's next stop as the strip under the header says it ("🛣
   Next: Stop 38 · 4.2 ly · 38 of 120 · refuel in 3 jumps", or the Road to Riches / Exomastery one), and a kept boxel's
   Next (or the boxel followed, in Boxel mode): "▦ Boxel: next Smojooe KL-P d5-41 · to try" or "· known · 3 of 14
-  bodies", each with 🎯 on the game PC.
+  bodies", each with 🎯 where auto-target can work.
 - An **at-risk line** shows what is aboard against your rebuy ("🗺 380M · 🧬 412M aboard · 3.2× rebuy · 4 d
   unsold"), only once that is over your amber level or rebuy multiple; a ship bought with Arx (its hull has no credit
   value) gets no rebuy multiple. Docked where your data sells it says what
@@ -197,10 +198,18 @@ with different reporters.
 
 The **header** shows the galactic region, ranks, fuel, hull, any core module under your level (`module_warn`,
 80%; as of the last Loadout or repair, since the journal logs nothing in between), your carrier's jump countdown
-(and its tritium while it is on a sell order: see [Cargo and trading](cargo-and-trading.md); on the game PC 🎯 beside
-its system, when it is elsewhere, puts it in the galaxy map; the tritium for its trip to you, suspended services in red
+(and its tritium while it is on a sell order: see [Cargo and trading](cargo-and-trading.md); where auto-target can work
+🎯 beside its system, when it is elsewhere, puts it in the galaxy map; the tritium for its trip to you, a suspended
+service as its name and a red ✗
 and its balance in weeks of upkeep), the nearest places to sell (your carrier among them while its UC or Vista is on),
 and the last backup.
+
+The **In-Game Route:** line under the tiles is the route the game plotted in the galaxy map: its jumps and light years,
+the next scoopable star, the longest stretch without one, and each star as a chip. The game sometimes logs a plot but
+never writes the route's file (NavRoute.json); Outrider then waits a minute for it and says what the game does tell:
+"In-Game Route: 2 jumps left to Smojooe SJ-I b23-0 · the game didn't write the route's stars", without stars, distances
+or fuel figures. If the line stays like that, clear the route in the galaxy map and plot a different destination: the
+game writes the file again.
 
 The **Data tile** says how fresh your journal is, the last backup, the uploads in use, and whether the outside lookups
 answer: "Spansh ok", or just "Spansh unavailable" (EDSM, GitHub... the same) while one does not, and "No internet
@@ -274,7 +283,7 @@ A boxel's systems are numbered 0, 1, 2… without gaps, so you can visit them in
 **Nearby → Boxel** (the switch on the Overview's bar, left of ▾ This system, and in Nearby's options on the Nearby tab;
 one choice for both) lists the boxel you are in by number: systems you visited show your scans as Nearby does, ones
 Spansh knows are marked "known" (someone has been there), the rest are "to try". Above the list: how many you have
-visited, how many Spansh knows and the **highest known** number (yours or Spansh's). On the game PC, **Next** (with 🎯)
+visited, how many Spansh knows and the **highest known** number (yours or Spansh's). On the game PC, **Next** (with 🎯 where auto-target can work)
 is the lowest number you have not visited, and every row has its own 🎯: auto-target types the name into the galaxy
 map and checks the game targeted it, even for a system nobody has visited (Outrider works out its address from the
 boxel).
@@ -334,7 +343,7 @@ for its name and your completion there. The line above the boxes counts it up: "
 **🔍** beside a species you have not found (and **🔍 nearby** beside a colour of it you have not found, and in its
 column) asks Spansh for the nearest bodies where commanders reported it, in that colour when you picked one: up to 25,
 nearest first, each with its distance, gravity, the colours reported there, ✓ if you have been to the system, ☆ to
-bookmark it, **Copy** for the name to paste into the galaxy map and, on the game PC, **🎯** to target it there. It needs the internet, and lists only what
+bookmark it, **Copy** for the name to paste into the galaxy map and, where auto-target can work, **🎯** to target it there. It needs the internet, and lists only what
 commanders' uploads reported to Spansh.
 
 **Completion** counts what you have done, not only what is finished: each species that can grow in the region scores

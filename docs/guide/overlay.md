@@ -42,7 +42,8 @@ before.
     bio up to, and its notable bodies (ELW, WW, AW, T).
 
   It is the one panel that shows **over the galaxy map**, with the system you target there, so you see what you
-  picked before you jump (docked too). Docked, outside the galaxy map, it stays off.
+  picked before you jump (docked too). Docked, outside the galaxy map, it stays off unless you untick its
+  **Docked** box (see [Settings](#settings)).
 - **The surface radar**, on a body (landed, in the SRV, on foot) or low over it: heading up, you in the middle, N on
   the rim; the sample points of your run with their colony rings, red while you are inside one and green once you are
   clear; tagged plants, the ship and your rigs. Underneath: how far the next sample must be, or "Clear: sample here".
@@ -52,8 +53,8 @@ before.
   The second, condensed: the distance from Sol, what its data pays now and at most, 🏁 when you discovered it, how many
   bodies and how many found of them, 🏁 how many you discovered, 🗺 the planets you mapped of all of them, and whether
   Spansh knows the system ("Spansh ✗ (new to it)" when it does not).
-- **Now (To-Do & Info)** (optional): the page's Now view in a few lines, anywhere but docked (at a station or carrier,
-  or on foot inside one). The system (and for 20 s after the jump whether it was
+- **Now (To-Do & Info)** (optional): the page's Now view in a few lines, anywhere in the system (by default not while
+  docked: see [Settings](#settings)). The system (and for 20 s after the jump whether it was
   undiscovered), the system you have targeted next (never reported, no scan data, partly or fully scanned, or visited;
   how many bodies are known; the star with ⛽ or ✕, and ⚠ for a neutron star or white dwarf), where the next jump goes
   (the next stop of the unfinished route you plotted last: the Highway, a survey or trade route;
@@ -78,7 +79,9 @@ before.
   window, the second screen or the tablet): with none open, the panel stays empty. Several windows open count once.
 
 No panel covers the system map, the orrery, the FSS, the SAA or the codex, and over the galaxy map only the Target
-panel and the alerts show. None shows in the hyperspace tunnel or while the game is loading (from its launch, the main menu included, until your session is in), even after a
+panel and the alerts show. While docked (at a station, a carrier or a port, or on foot inside one) the panels ticked
+**Docked** in Settings hide: by default the system, Target, Now and Bio signals panels, while the system strip and the
+alerts stay. None shows in the hyperspace tunnel or while the game is loading (from its launch, the main menu included, until your session is in), even after a
 crash left the old session's status behind.
 
 ## Starting it
@@ -129,7 +132,7 @@ PC's draws it.
 
 While arranging, the overlay takes the mouse: do it with the game paused or in a menu. The same settings are in
 Settings → In-game overlay as fields for each panel (where it is placed from, how far in, its size and the two
-transparencies), with a **reset**.
+transparencies), with a **↺** to reset it.
 
 The arrangement is kept in Outrider's database, not the config file: to take it to another PC, copy
 `data/ed_outrider.sqlite` along with `ed_outrider.toml`.
@@ -137,15 +140,20 @@ The arrangement is kept in Outrider's database, not the config file: to take it 
 ## Settings
 
 Each panel has its tick box at the start of its row in Settings → In-game overlay's table (hover its name for what
-it shows; a panel switched off has its row dimmed). **Analysis only**, the next column, keeps a panel off in your
-ship while the HUD is in combat mode: it shows only in analysis mode, so the screen stays clear in a fight. In the
-SRV and on foot (no HUD modes there) and over the galaxy map it shows as the others. The system, Target and radar
+it shows; a panel switched off has its row dimmed). The headings are short: hover one for its full meaning.
+Under **Hide when mode**, **Combat** keeps a panel off in your ship while the HUD is in combat mode: it shows only
+in analysis mode, so the screen stays clear in a fight. In the SRV and on foot (no HUD modes there) and over the
+galaxy map it shows as the others. **Docked** hides a panel while you are docked (the ship at a station, a carrier or
+a port, or you on foot in a station, hangar or social space); ticked to start with for the system, Target, Now and
+Bio signals panels, not for the system strip and the alerts. The radar has no Docked box: it shows only on a body's
+surface. The Target panel still shows over the galaxy map while docked, so you see the system you pick. The system, Target and radar
 panels start on; the system strip, Now, Bio signals
 and Alerts start off. The **theme** colours and frames the panels as the page's themes do (Elite's orange with
 cut corners, LCARS's bars, ...); **text** is small, normal or large. In the config file (`[overlay]`):
 `system_seconds` keeps the system panel only that long after arriving (0: while you are in supercruise there), and
 `radar_range` is the radar's edge in metres (it widens to fit a colony ring); `analysis_only` lists the panels
-ticked Analysis only (`["system", "bio"]`; the Target panel is `body`).
+ticked Combat (`["system", "bio"]`; the Target panel is `body`) and `hide_docked` the ones ticked Docked
+(`["system", "body", "now", "bio"]` when the key is missing).
 
 <a id="keep-showing"></a>**Keep showing when Elite is not the active window** (`show_inactive`, off by default): the
 overlay normally hides as soon as another window is in front, Outrider's page included. With this on it stays over the

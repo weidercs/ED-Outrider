@@ -719,6 +719,8 @@ tr.nextstop td.name::after { content: " ⚑ next stop"; color: var(--info); font
 /* 🎯 beside each route system in the lists: small, brighter on the row you point at */
 .hwyaim.icon { margin-left: 6px; padding: 0 4px; font-size: 11px; opacity: .55; }
 tr:hover .hwyaim.icon, .hwyaim.icon:focus-visible, .hwyaim.icon:disabled { opacity: 1; }
+/* Nearby's 🎯 before the name: a fixed-width slot, empty on your own system's row, so the names stay in line */
+td.name .nearaim { display: inline-block; width: 2.1em; } td.name .nearaim .hwyaim.icon { margin-left: 0; }
 .hwyoff { color: var(--warn); font-weight: 600; } .hwydone { color: var(--good); font-weight: 600; }
 .hwyn { color: var(--info); } .hwyfuel { color: var(--good); } .hwyheavy { color: var(--warn); font-weight: 600; }
 .hwytgt { color: var(--good); } .hwytgt.ahead { color: var(--info); } .hwytgt.wrong { color: var(--warn); font-weight: 600; }
@@ -1316,9 +1318,14 @@ table.ovlay tr.ovoff td { opacity: .55; }   /* a panel switched off: its row dim
 /* the overlay's placement table: compact, and scrolled sideways inside its section on a narrow window rather than
    spilling out of it */
 .ovwrap { overflow-x: auto; max-width: 100%; }
-table.ovlay { border-collapse: collapse; margin: 6px 0; font-size: 13px; } table.ovlay th, table.ovlay td { padding: 2px 4px; text-align: left; }
-table.ovlay td.ovana { text-align: center; }   /* the analysis-only box under its heading */
-table.ovlay input[type=number] { width: 3.4em; appearance: textfield; -moz-appearance: textfield; }   /* no spin arrows: room for "100" (typing and the arrow keys still work) */
+table.ovlay { border-collapse: collapse; margin: 6px 0; font-size: 13px; } table.ovlay th, table.ovlay td { padding: 2px 3px; text-align: left; }
+table.ovlay td.ovana, table.ovlay th.ovgrp { text-align: center; }   /* the Hide when mode boxes (combat, docked) under their headings */
+table.ovlay input[type=number] { width: 2.6em; padding: 3px; text-align: right; appearance: textfield; -moz-appearance: textfield; }   /* no spin arrows: room for "100" (typing and the arrow keys still work) */
+/* narrow enough for the Settings dialog (the author, 2026-10-14): short headings (the full words on hover), the panels'
+   names in plain case and wrapped when the dialog is narrow, a smaller corner list; the table never wider than its box */
+table.ovlay { max-width: 100%; } table.ovlay thead th { letter-spacing: 0; }
+table.ovlay tbody th { text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--text); white-space: normal; }
+table.ovlay select { font-size: 12px; padding-left: 2px; padding-right: 0; }
 table.ovlay input[type=number]::-webkit-inner-spin-button, table.ovlay input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; } table.ovlay th { white-space: nowrap; }
 /* Settings → Alerts: a heading over a group of alerts (the discoveries) */
 #alertOpts tr.agroup th { text-align: left; padding-top: .7em; font-weight: 600; }

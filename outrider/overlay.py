@@ -43,9 +43,14 @@ THEMES = ("default", "lcars", "elite", "babylon5", "narn", "minbari", "centauri"
 TEST_SECONDS = 60       # "Show test panels": how long they stay (shown whether or not the game is in front)
 ARRANGE_SECONDS = 600   # Arrange mode ends by itself after this, so the overlay never stays in the way of the mouse
 
+# [overlay] hide_docked (the author, 2026-10-14): the panels hidden while docked (the ship docked, or on foot in a station,
+# hangar or social space). Every panel but the radar, which shows only on a body's surface; by default the ones about
+# flying (System, Target, Now, Bio): the strip and the alerts still say where you are and what happened
+DOCKED_PANELS = tuple(p for p in PANELS if p != "radar")
+HIDE_DOCKED_DEFAULT = ("system", "body", "now", "bio")
 DEFAULTS = {"enabled": False, "theme": "default", "text_size": "normal", "system_panel": True, "body_panel": True,
             "radar": True, "strip_panel": False, "now_panel": False, "bio_panel": False, "alerts_panel": False, "system_seconds": 0,
-            "radar_range": 800, "analysis_only": [], "show_inactive": False}
+            "radar_range": 800, "analysis_only": [], "hide_docked": list(HIDE_DOCKED_DEFAULT), "show_inactive": False}
 # where each panel starts: a corner of the game window, the offset from it as a share of the window's width (x) and
 # height (y), its size (1 = the canvas's own), its background's opacity (0: text only) and the whole panel's
 LAYOUT_DEFAULT = {"system": {"corner": "nw", "x": 0.02, "y": 0.16, "scale": 1.0, "bg": 0.65, "alpha": 1.0},
@@ -170,23 +175,37 @@ def overlay_settings(cfg):
         else:
             _warn(f"{key} = {v!r} must be a number; using {DEFAULTS[key]}")
     out["analysis_only"] = analysis_list(o.get("analysis_only"), _warn)
+    out["hide_docked"] = docked_list(o.get("hide_docked"), _warn)
     return {"overlay": out}
 
 
-def analysis_list(v, warn=None):
-    """[overlay] analysis_only (D2a): the panels shown in your ship only while the HUD is in analysis mode, as panel
-    ids in PANELS' order; an unknown id is dropped (said through `warn`), anything but a list of names is []."""
+def panel_list(key, v, warn=None, default=(), allowed=PANELS):
+    """One of [overlay]'s panel lists: panel ids in PANELS' order; an id not in `allowed` is dropped (said through
+    `warn`), missing or anything but a list of names is `default` (a fresh list each time)."""
     if v is None:
-        return []
+        return list(default)
     if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
         if warn:
-            warn(f"analysis_only = {v!r} must be a list of panel names ({', '.join(PANELS)}); using []")
-        return []
-    unknown = [x for x in v if x.strip().lower() not in PANELS]
+            warn(f"{key} = {v!r} must be a list of panel names ({', '.join(allowed)}); using {list(default)}")
+        return list(default)
+    unknown = [x for x in v if x.strip().lower() not in allowed]
     if unknown and warn:
-        warn(f"analysis_only: {', '.join(repr(x) for x in unknown)} not a panel ({', '.join(PANELS)}); left out")
+        warn(f"{key}: {', '.join(repr(x) for x in unknown)} not a panel ({', '.join(allowed)}); left out")
     names = {x.strip().lower() for x in v}
-    return [p for p in PANELS if p in names]
+    return [p for p in PANELS if p in names and p in allowed]
+
+
+def analysis_list(v, warn=None):
+    """[overlay] analysis_only (D2a): the panels shown in your ship only while the HUD is in analysis mode; none when
+    the key is missing."""
+    return panel_list("analysis_only", v, warn)
+
+
+def docked_list(v, warn=None):
+    """[overlay] hide_docked (the author, 2026-10-14): the panels hidden while docked, any of DOCKED_PANELS (the radar
+    is never one: it shows only on a body's surface); HIDE_DOCKED_DEFAULT when the key is missing, so a config written
+    before it hides what Outrider hid then (Now and the Target panel) and the System and Bio panels too."""
+    return panel_list("hide_docked", v, warn, HIDE_DOCKED_DEFAULT, DOCKED_PANELS)
 
 
 # ---- the page's overlay pill (S8): how the overlay is doing, in one word and a reason ----

@@ -337,8 +337,8 @@ setInterval(() => { if (data) renderStrip(); }, 30000);
 // ---- carrier tile: where it is, the rendezvous maths, and a live countdown to a booked jump ----
 let carrierWarned = null;
 // 🎯 beside your carrier when it is in another system (the author, 2026-10-11): auto-target puts its system in the
-// galaxy map, as 🎯 on a route's row does; on the game PC only (it presses keys there)
-const carrierAim = c => c && !c.aboard && !c.here && c.system && !(c.decommission && c.decommission.done) && data.game_pc !== false
+// galaxy map, as 🎯 on a route's row does; where auto-target can work (hwyAimBtn: canAim)
+const carrierAim = c => c && !c.aboard && !c.here && c.system && !(c.decommission && c.decommission.done)
   ? hwyAimBtn(c.system, "carrier", null, true) : "";
 // the tritium for the trip to you (S13 A): red when the depot lacks it, amber when a confirmed tritium line in the hold
 // covers what it lacks (moved into the depot first, or, past the depot's 1,000 t, topped up again on the way)
@@ -356,14 +356,14 @@ const carrierTripHtml = (t, f) => !t ? "" :
 // a booked jump's burn and the depot after it (S13 A)
 const carrierPlanBurn = (pl, f) => pl.burn == null ? "" : ` ≈ <span title="${esc(carrierBurnTitle(f))}">${pl.burn} t</span>; ` +
   (pl.depot_after < 0 ? `<span class="noscoop">depot ${-pl.depot_after} t short</span>` : `depot after ≈ ${pl.depot_after.toLocaleString()} t`);
-// UC and Vista on, off or suspended, and any other service suspended, in red (S55 B: CarrierStats' crew, newer than its
-// last Docked or not)
+// UC and Vista on, off or suspended, and any other service suspended (S55 B: CarrierStats' crew, newer than its last
+// Docked or not): a suspended one is its name and a red ✗, as "UC ✓" beside it (the author, 2026-10-14), "suspended" on hover
 function carrierServicesHtml(c) {
   const sus = c.suspended || [], title = "suspended in the carrier's management: it costs less upkeep, but serves no one";
-  const one = (on, label) => on ? `${label} ✓` : sus.includes(label) ? `<span class="noscoop" title="${title}">${label} suspended</span>` : `no ${label}`;
+  const off = label => `${esc(label)} <span class="noscoop" title="${title}">✗</span>`;
+  const one = (on, label) => on ? `${label} ✓` : sus.includes(label) ? off(label) : `no ${label}`;
   const others = sus.filter(x => x !== "UC" && x !== "Vista");
-  return `${one(c.has_uc, "UC")} · ${one(c.has_vista, "Vista")}` +
-    (others.length ? ` · <span class="noscoop" title="${title}">${esc(others.join(", "))} suspended</span>` : "");
+  return `${one(c.has_uc, "UC")} · ${one(c.has_vista, "Vista")}` + others.map(x => ` · ${off(x)}`).join("");
 }
 // the carrier's balance and the weeks of upkeep it pays (S61): amber under UPKEEP_WARN_WEEKS (outrider.cargo); the
 // rates are the published ones until checked against the game's Finance screen, and the title says so
@@ -967,6 +967,13 @@ function renderOnBody() {
 // 2026-10-12): Outrider's own route is the "Next:" line, and the two differ until 🎯 targets its next stop ----
 function renderRoute() {
   const r = data.route, el = document.getElementById("routeStrip");
+  // the game plotted a route but wrote no NavRoute.json for it (2026-10-14): what FSDTarget and Status.json tell, no stars
+  if (r && r.minimal) {
+    el.innerHTML = `In-Game Route: <b>${r.jumps_left}</b> jump${r.jumps_left === 1 ? "" : "s"} left` +
+      (r.destination ? ` to <b>${esc(r.destination)}</b>` : "") +
+      ` · <span class="unk" title="the game logged the plot but did not write NavRoute.json: no stars, distances or fuel figures until it does (clearing the route and plotting another destination makes it write the file)">the game didn't write the route's stars</span>`;
+    return;
+  }
   if (!r || !r.hops.length) { el.innerHTML = ""; return; }
   const n = r.hops.length;
   const chips = r.hops.slice(0, 24).map(h => `<span class="hop${h.scoopable ? " sc" : h.scoopable === false ? " dry" : ""}${h.visited ? " vis" : ""}" ` +
@@ -1082,7 +1089,7 @@ function nowBoxelHtml() {
   if (bx.complete || bx.done) return `${head}${esc(bx.label)} <span class="ok">✓ ${bx.complete ? "complete" : "done"}</span>`;
   if (!bx.name) return `${head}${esc(bx.label)} <span class="unk">every system known is visited</span>`;
   return `${head}<span class="warnc">Boxel: next</span> <span class="copy" data-name="${esc(bx.name)}" title="click to copy">${esc(bx.name)}</span>` +
-    (data.game_pc !== false && bx.standard ? hwyAimBtn(bx.name, "boxel", null) : "") +
+    (bx.standard ? hwyAimBtn(bx.name, "boxel", null) : "") +
     ` · ${bx.spansh ? boxelKnown(bx) : `<span class="unk">to try</span>`}`;
 }
 // Now's at-risk line, under fuel: what the data aboard stands to lose, shown only once it matters (your amber level
@@ -3071,7 +3078,7 @@ function render() {
     if (!M.open) M.key = null; M.open = true; loadMap(); drawMap();
     // S72: what a click does here (the card under the pointer says it per system)
     const cw = document.getElementById("mClickWhat");   // the tablet's hint is its own (a tap shows the card)
-    if (cw) cw.textContent = mapCanTarget() ? `target it in game${hwyFront() ? "" : " (5 s)"} (your own system: copy its name)` : "copy its name";
+    if (cw) cw.textContent = canAim() ? `target it in game${hwyFront() ? "" : " (5 s)"} (your own system: copy its name)` : "copy its name";
   } else M.open = false;
   if (view === "hwy") { loadHwy(); loadRich(); }
   refreshPop();
@@ -3129,6 +3136,9 @@ function render() {
       ? `<span class="yes">arrival star undiscovered — first discovery is yours to sell</span>`
       : `<span class="no">already discovered by someone` + (a.announced === "unreported" ? " — Spansh just hadn't heard of it" : "") + `</span>`);
   const fkRows = focusKey("rows");
+  // the 🎯 (nearAimBtn) left of each name, in a column of its own width (the author, 2026-10-14): your own system's row
+  // keeps the space, so the names stay in line; no column where auto-target cannot work
+  const aimCol = canAim();
   document.getElementById("rows").innerHTML = rows.map(s => {
     const isPrev = prev && sysId(s) === sysId(prev);
     const far = jr && s.distance > jr;
@@ -3146,8 +3156,8 @@ function render() {
     const nb = notable(s);
     return `<tr class="${cls}" data-id="${esc(s.id)}">
       <td class="bmcell">${bmIcon(s.id, s.name, bms)}</td>
-      <td class="name" data-name="${esc(s.name)}" title="click to copy">${isPrev
-        ? `<span class="prevmark" title="you just came from here">↩</span>` : ""}${nameWords(s.name)}${firstsIcon(s.firsts)}${nearAimBtn(s)}<div class="sf2 sub2">${status}</div></td>
+      <td class="name" data-name="${esc(s.name)}" title="click to copy">${aimCol ? `<span class="nearaim">${nearAimBtn(s)}</span>` : ""}${isPrev
+        ? `<span class="prevmark" title="you just came from here">↩</span>` : ""}${nameWords(s.name)}${firstsIcon(s.firsts)}<div class="sf2 sub2">${status}</div></td>
       <td class="num dist"${far ? ` title="beyond your max jump range"` : ""}>${s.distance.toFixed(2)}</td>
       <td class="num hide-sm c2hide">${jumps == null ? "" : jumps === 1 ? "1" : `<span class="unk">${jumps}</span>`}</td>
       <td class="c2hide">${status}</td>
@@ -6149,14 +6159,12 @@ function mapHit(e) {
   for (const q of M.proj) { const dd = (q.sx - x) ** 2 + (q.sy - y) ** 2; if (dd < bd) { bd = dd; best = q; } }
   return best;
 }
-// S72: a click on a Map system targets it in game when auto-target can work on this PC (the virtual keyboard and the
-// bindings it needs, on the game PC: not the "target automatically" switch), else copies its name; your own system and
-// a point without an id64 are copied only. `touch`: the tapped card's buttons (🎯 Target, Copy name)
-const mapCanTarget = () => !!(data && data.game_pc !== false && data.autotarget && data.autotarget.available &&
-                              !(data.autotarget.missing || []).length);
+// S72: a click on a Map system targets it in game when auto-target can work on this PC (canAim, the rule every 🎯
+// follows), else copies its name; your own system and a point without an id64 are copied only. `touch`: the tapped
+// card's buttons (🎯 Target, Copy name)
 const mapAimable = pt => !!pt.id && /^\d+$/.test(String(pt.id)) && String(pt.id) !== String(M.data.center.id ?? M.data.center.id64);
 function mapClickWords(pt) {
-  if (!mapAimable(pt) || !mapCanTarget()) return "click to copy its name";
+  if (!mapAimable(pt) || !canAim()) return "click to copy its name";
   return `click to target it in game${hwyFront() ? "" : " (5 s)"}`;
 }
 function mapPopHtml(pt, touch = false) {
@@ -6173,12 +6181,12 @@ function mapPopHtml(pt, touch = false) {
     (pt.onroute ? `<div class="unk">${esc(pt.onroute)}</div>` : "") +
     (b ? `<div class="sec">★ ${esc(b.note) || "bookmarked"}</div>` : "") +
     (!touch ? `<div class="sec unk">${mapClickWords(pt)}</div>` : `<div class="sec mapacts">` +
-      (mapAimable(pt) && mapCanTarget() ? `<button type="button" class="mini" data-aim="next" data-route="system" data-aimid="${esc(String(pt.id))}">🎯 Target</button> ` : "") +
+      (mapAimable(pt) && canAim() ? `<button type="button" class="mini" data-aim="next" data-route="system" data-aimid="${esc(String(pt.id))}">🎯 Target</button> ` : "") +
       `<button type="button" class="mini" data-mapcopy="${esc(pt.name)}">Copy name</button></div>`);
 }
-// S72: a mouse click on a system: target it (mapCanTarget) or copy its name; a run under way is said, not doubled
+// S72: a mouse click on a system: target it (canAim) or copy its name; a run under way is said, not doubled
 function mapClick(pt) {
-  if (!mapAimable(pt) || !mapCanTarget()) return copyText(pt.name);
+  if (!mapAimable(pt) || !canAim()) return copyText(pt.name);
   const a = data.autotarget || {}, t = a.test;
   if ((hwyRun && !hwyRun.done) || a.running || (t && ["counting", "running"].includes(t.state)))
     return toast("auto-target is already running: wait for it to finish");
@@ -6337,11 +6345,18 @@ const hwyShortTitle = sh => `${sh.have_t} t aboard. The exact plotter's jumps to
     : `: they all go with ${Number(sh.need_t).toFixed(1)} t${sh.max_t != null ? ` to ${Number(sh.max_t).toFixed(1)} t (more is too heavy for a jump planned at the limit)` : " or more"} in the main tank`);
 let hwyRun = null;   // the run this page started (test now, Target next, Retry): {seq, kind, system, n, dry, done, msg,
 // front: Outrider brings the game to the front itself (no countdown), note: why it counts down after all (S74)}
+// One rule for every 🎯 (the author, 2026-10-14): it shows only where auto-target can work, on the game PC with the
+// virtual keyboard and the bindings it needs (not the "target automatically" switch): a route's rows, its line, the
+// carrier, a boxel, S31's (bookmarks, the next stop, Nearby, Nearest, a checklist find), the Map's click and card, the
+// Retry, and Plot Route's "target next" (disabled). Anywhere else a 🎯 would be a button that cannot work.
+const canAim = () => !!(data && data.game_pc !== false && data.autotarget && data.autotarget.available &&
+                        !(data.autotarget.missing || []).length);
 // Target next (review Q4): beside the line's next system; the run's countdown shows on it while this page's run counts
 // 🎯 on a route system (the author, 2026-10-07): route "highway" | "survey" and its row, or (no route) the Highway's
 // Target next as before (the next system, off the route the nearest); `icon`: just 🎯 (a list's rows). Route "system"
 // (S31): any system known here, `index` its id64 as the exact string (data-aimid: over 2^53 a Number would round it)
 function hwyAimBtn(name, route = null, index = null, icon = false) {
+  if (!canAim()) return "";
   const key = route ? `${route}:${index ?? ""}` : "next", r = hwyRun, mine = r && r.kind === "next" && !r.done && (r.key || "next") === key;
   const label = !mine ? (icon ? "🎯" : "🎯 target") : r.n > 0 ? `🎯 in ${r.n} s` : "🎯 targeting…";
   return ` <button type="button" class="mini hwyaim${icon ? " icon" : ""}" data-aim="next"` +
@@ -6350,11 +6365,11 @@ function hwyAimBtn(name, route = null, index = null, icon = false) {
       : ", 5 s from now: click back into the game meanwhile"}">${label}</button>`;
 }
 // S31: 🎯 on any system the page lists (a bookmark, the header's next stop, a Nearest row, a checklist find), by its id64
-// string; on the game PC only (it presses keys there), never for the system you are in
-const sysAimBtn = (name, id) => id != null && data && data.game_pc !== false && String(id) !== posId() ? hwyAimBtn(name, "system", String(id), true) : "";
-// 🎯 on a Nearby row (the Overview's too: the author, 2026-10-14): S31's, by the row's id64 string, only where
-// auto-target can work (mapCanTarget, as a Map click: not a column of buttons that cannot), never your own system's row
-const nearAimBtn = s => mapCanTarget() && /^\d+$/.test(String(s.id)) ? sysAimBtn(s.name, s.id) : "";
+// string; where auto-target can work (hwyAimBtn: canAim), never for the system you are in
+const sysAimBtn = (name, id) => id != null && data && String(id) !== posId() ? hwyAimBtn(name, "system", String(id), true) : "";
+// 🎯 on a Nearby row (the Overview's too: the author, 2026-10-14): S31's, by the row's id64 string, never your own
+// system's row
+const nearAimBtn = s => /^\d+$/.test(String(s.id)) ? sysAimBtn(s.name, s.id) : "";
 // the request's aim from a 🎯 button's data (the page-wide handler, the tablet's row sheet): {route, index} or {route, id}
 const aimOf = d => !d.route ? null : d.route === "system" ? {route: "system", id: d.aimid}
   : Object.assign({route: d.route}, d.index != null && d.index !== "" ? {index: Number(d.index)} : {});
@@ -6485,7 +6500,7 @@ function hwyRowHtml(r, cls, retry = false) {
   return `<tr class="${cls}" data-i="${r.i}"><td class="num">${r.i}</td>` +
     `<td class="name" data-name="${esc(r.system)}" title="click to copy">${nameWords(r.system)}` +
     (/\bat\b/.test(cls) ? "" : hwyAimBtn(r.system, "highway", r.i, true)) +
-    (retry ? ` <button type="button" class="mini hwyretry" data-aim="next" title="auto-target failed here: try again, 5 s from now (click back into the game meanwhile)">⟳ Retry</button>` : "") +
+    (retry && canAim() ? ` <button type="button" class="mini hwyretry" data-aim="next" title="auto-target failed here: try again, 5 s from now (click back into the game meanwhile)">⟳ Retry</button>` : "") +
     `</td>` +
     `<td class="num">${r.i > 0 && r.distance != null ? r.distance.toFixed(1) : ""}</td>` +
     `<td class="hwyc">${r.neutron ? `<span class="hwyn" title="a neutron star: supercharge your FSD there">⚡</span>` : ""}</td>` +
@@ -6757,7 +6772,7 @@ function drawHwyAuto() {
   if (document.activeElement !== dl) dl.value = a.delay ?? "";
   const busy = !a.available || !!a.running || !!(a.test && ["counting", "running"].includes(a.test.state));
   hEl("hwyAutoTest").disabled = busy;
-  hEl("hwyAutoNext").disabled = busy || !(data.highway && !data.highway.complete);
+  hEl("hwyAutoNext").disabled = busy || !canAim() || !(data.highway && !data.highway.complete);   // a key without a binding: no 🎯
   hEl("hwyAutoState").textContent = a.running ? "· pressing keys…" : a.enabled ? `· ${a.status || "on"}` : a.available ? "· off" : `· ${a.status || "not available"}`;
   const last = hEl("hwyAutoLast"), lt = hwyAutoLastText(a.last);
   last.textContent = lt ? "Last: " + lt : ""; last.className = a.last && !a.last.done ? "warnc" : "unk";
@@ -10377,6 +10392,20 @@ const OV_PANELS = [["system", "System", "the bodies worth your time, in supercru
                    ["now", "Now (To-Do & Info)", "Now, condensed: the target, fuel, data at risk, what to do next, this session"],
                    ["bio", "Bio signals", "every bio signal in the system, the ones worth it highlighted: samples, values"],
                    ["alerts", "Alerts", "the page's alerts for a few seconds (8 s, danger 15 s in red): every kind switched on in Settings → Alerts; needs the page open"]];
+// the panel table's headings, short so the table fits the Settings dialog (the author, 2026-10-14); the full wording on
+// hover. Combat and Docked sit under "Hide when mode": a ticked box hides the panel in that mode
+const OV_HEADS = (() => {
+  const th = (text, title, attrs = "") => `<th${attrs} title="${title}">${text}</th>`, r2 = ` rowspan="2"`;
+  return `<tr>${th("Panel", "tick a panel to show it; hover its name for what it shows", r2)}` +
+    th("Hide when mode", "a ticked box hides the panel in that mode", ` colspan="2" class="ovgrp"`) +
+    th("Corner", "placed from: the corner of the game window (or the middle of its top or bottom edge) it is kept from", r2) +
+    th("X %", "across: how far in from that corner's side, in % of the game window's width", r2) +
+    th("Y %", "down: how far in from that corner's top or bottom, in % of the game window's height", r2) +
+    th("Size %", "its size, in %", r2) + th("BG %", "background: its background's opacity, in % (0: text only)", r2) +
+    th("Opac. %", "opacity: the whole panel's, in %", r2) + `<th${r2}></th></tr><tr>` +
+    th("Combat", "the HUD in combat mode (analysis only): ticked, hidden in your ship while the HUD is in combat mode, shown only in analysis mode (in the SRV, on foot and over the galaxy map it shows as the others)") +
+    th("Docked", "ticked: hidden while docked (the ship at a station, a carrier or a port, or you on foot in a station, hangar or social space); the Target panel still shows over the galaxy map") + `</tr>`;
+})();
 const OV_CORNERS = {nw: "top left", n: "top centre", ne: "top right", sw: "bottom left", s: "bottom centre", se: "bottom right"};
 let overlayDrawn = "", overlayNote = "";
 // the window's state: Outrider runs it on the game PC (o.runner); on a server it runs on the game PC by hand
@@ -10404,19 +10433,22 @@ function overlayHtml(o) {
   const opt = (vals, cur, label = v => v) => vals.map(v => `<option value="${v}"${v === cur ? " selected" : ""}>${esc(label(v))}</option>`).join("");
   const pct = v => Math.round(v * 100);
   const lay = o.layout || {};
-  const ana = new Set(o.analysis_only || []);
+  const ana = new Set(o.analysis_only || []), dock = new Set(o.hide_docked || []);
   const rows = OV_PANELS.map(([id, name, what]) => {
     const e = lay[id] || {}, on = !!(o.panels || {})[id];
     const num = (k, v, min, max, title) => `<td><input type="number" data-ovlay="${id}" data-k="${k}" min="${min}" max="${max}" step="1" value="${v}" title="${title}"></td>`;
     // each panel's own row: its on/off box (what it shows on hover), then where it goes; a panel switched off is dimmed
-    // then whether it shows in your ship only while the HUD is in analysis mode (D2a)
+    // then whether it hides in your ship while the HUD is in combat mode (analysis only, D2a) and while docked (the author,
+    // 2026-10-14: the radar has no box, it shows only on a body's surface); data-find: Find a setting finds them by key
+    const docked = id === "radar" ? `<td class="ovana unk" title="the radar shows only on a body's surface">–</td>`
+      : `<td class="ovana"><input type="checkbox" data-ovdocked="${id}" data-find="overlay.hide_docked"${dock.has(id) ? " checked" : ""} title="${esc(name)}: hidden while docked${id === "body" ? " (still shown over the galaxy map)" : ""}"></td>`;
     return `<tr class="${on ? "" : "ovoff"}"><th><label title="${esc(what)}"><input type="checkbox" data-ovpanel="${id}"${on ? " checked" : ""}> ${esc(name)}</label></th>` +
-      `<td class="ovana"><input type="checkbox" data-ovanalysis="${id}"${ana.has(id) ? " checked" : ""} title="${esc(name)}: only while the HUD is in analysis mode"></td><td><select data-ovlay="${id}" data-k="corner" title="the corner of the game window it is placed from">${opt(Object.keys(OV_CORNERS), e.corner, c => OV_CORNERS[c])}</select></td>` +
+      `<td class="ovana"><input type="checkbox" data-ovanalysis="${id}" data-find="overlay.analysis_only"${ana.has(id) ? " checked" : ""} title="${esc(name)}: hidden in your ship while the HUD is in combat mode (shown only in analysis mode)"></td>${docked}<td><select data-ovlay="${id}" data-k="corner" title="the corner of the game window it is placed from">${opt(Object.keys(OV_CORNERS), e.corner, c => OV_CORNERS[c])}</select></td>` +
       num("x", pct(e.x || 0), 0, 95, "how far in from that corner's side, in % of the game window's width") +
       num("y", pct(e.y || 0), 0, 95, "how far in from that corner's top or bottom, in % of the game window's height") +
       num("scale", pct(e.scale || 1), 50, 250, "its size, in %") + num("bg", pct(e.bg ?? 0.65), 0, 100, "its background's opacity, in % (0: text only)") +
       num("alpha", pct(e.alpha ?? 1), 10, 100, "the whole panel's opacity, in %") +
-      `<td><a href="#" data-ovreset="${id}" title="back to where it started">reset</a></td></tr>`;
+      `<td><a href="#" data-ovreset="${id}" title="reset: back to where it started" aria-label="reset">↺</a></td></tr>`;
   }).join("");
   return `<label class="mod"><input type="checkbox" data-ov="enabled"${o.enabled ? " checked" : ""}> <b>Show the overlay</b> <span class="hint">the panels below, when they have something to say</span></label>` +
     `<div class="hint">${overlayStatusHtml(o)}</div>` +
@@ -10426,7 +10458,7 @@ function overlayHtml(o) {
     `<div class="mod">Theme <select data-ov="theme">${opt(OV_THEMES, o.theme)}</select> · text <select data-ov="text_size">${opt(["small", "normal", "large"], o.text_size)}</select></div>` +
     `<div class="mod"><button type="button" class="try" data-ovact="test">${o.test ? `test panels: ${o.test} s` : "▶ Show test panels"}</button> ` +
     `<button type="button" class="try" data-ovact="arrange">${o.arrange ? `✓ Done arranging (${Math.ceil(o.arrange / 60)} min left)` : "✥ Arrange panels"}</button></div>` +
-    `<div class="ovwrap" data-find-block="panels"><table class="ovlay"><thead><tr><th title="tick a panel to show it; hover its name for what it shows">Panel</th><th title="ticked: shown in your ship only while the HUD is in analysis mode (in combat mode it stays off); in the SRV, on foot and over the galaxy map it shows as the others">Analysis only</th><th>Placed from</th><th>Across %</th><th>Down %</th><th>Size %</th><th>Background %</th><th>Panel %</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` +
+    `<div class="ovwrap" data-find-block="panels"><table class="ovlay"><thead>${OV_HEADS}</thead><tbody>${rows}</tbody></table></div>` +
     `<div class="hint" id="overlayMsg">${esc(overlayNote)}</div>`;
 }
 // A popup while Outrider installs PyQt6 for the overlay window (the author, 2026-10-10), then its outcome for a few
@@ -10481,6 +10513,7 @@ document.getElementById("overlayBox").addEventListener("change", e => {
   else if (t.dataset.ovpanel) overlayPost("api/overlay", {panels: {[t.dataset.ovpanel]: t.checked}});
   // analysis only: the whole list, as the boxes now say
   else if (t.dataset.ovanalysis) overlayPost("api/overlay", {analysis_only: [...e.currentTarget.querySelectorAll("[data-ovanalysis]:checked")].map(x => x.dataset.ovanalysis)});
+  else if (t.dataset.ovdocked) overlayPost("api/overlay", {hide_docked: [...e.currentTarget.querySelectorAll("[data-ovdocked]:checked")].map(x => x.dataset.ovdocked)});
   else if (t.dataset.ovlay) {
     const k = t.dataset.k, v = k === "corner" ? t.value : Number(t.value) / 100;
     if (k !== "corner" && !isFinite(v)) return;
