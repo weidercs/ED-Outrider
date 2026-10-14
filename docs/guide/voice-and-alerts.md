@@ -39,7 +39,13 @@ notification and be spoken (🗣), chosen per alert in **⚙ Settings → Alerts
 - **docking** (its own row, **Docking**, spoken by Comms): the pad the station gave you, said every time, even while
   hushed ("Pad 34."), and why it refused when that isn't obvious: no pad free, ship too big, access restricted, hostile,
   your offences, a fighter still out (too far away is not said). No notification by default. The pad also shows large on
-  Now and the overlay's Target panel.
+  Now and the overlay's Target panel. At a starport or carrier the pad's place follows: "Pad 34. At the back, up on
+  your right." The words assume you come through the slot with the **green lights on your right**, and the first docking
+  of each game session (then every fourth) says so: "With the green lights on your right, it's at the back, up on your
+  right." **With a docking computer fitted** the pad is shown at once but said only if the computer hasn't taken over
+  within 12 seconds (it flies you in; you switched it off: it is said then). To try a pad without docking, type the
+  LandingPad plugin's commands in the game's chat: `!sppad 34` (a starport), `!fcpad 7` (a fleet carrier), `!scpad 23`
+  (a squadron carrier), `!cspad 3` (a colonisation ship). Local chat reaches other players: use Solo or a private group.
 - docking where the station buys your data, and what you banked when you sold
 - a sale that left data aboard (Universal Cartographics sells 50 systems a page; at Vista Genomics, the species
   you kept back), said 90 seconds after the last page

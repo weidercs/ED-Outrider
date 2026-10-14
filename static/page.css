@@ -854,6 +854,16 @@ body.nowmode header, body.nowmode main { display: none; }
 /* #3: the pad the station gave you, in large letters, the station under it */
 #nowView .now-pad { font-size: clamp(48px, 11vw, 140px); font-weight: 800; color: var(--good); line-height: 1; margin: 1vh 0 2vh; }
 #nowView .now-pad span { display: block; font-size: clamp(16px, 2.4vw, 28px); font-weight: 400; color: var(--muted); margin-top: .6vh; }
+#nowView .now-pad .now-where { color: var(--text); font-size: clamp(18px, 3vw, 34px); }
+/* #12: the pad diagram under it (padMapSvg) */
+#nowView .now-padmap { display: block; width: min(60vw, 42vh, 360px); height: auto; margin-top: 1.4vh; }
+.now-padmap polygon, .now-padmap line, .now-padmap rect, .now-padmap circle { fill: none; stroke-width: 1.2; }
+.now-padmap .pm-out { stroke: var(--muted); } .now-padmap .pm-wall, .now-padmap .pm-box { stroke: var(--line); }
+.now-padmap .pm-pad { stroke: var(--muted); }
+.now-padmap .pm-me { fill: var(--good); stroke: var(--good); }
+.now-padmap .pm-red { stroke: #e0453a; stroke-width: 4; } .now-padmap .pm-green { stroke: #3ad16b; stroke-width: 4; }
+.now-padmap text { font: 600 11px system-ui, sans-serif; text-anchor: middle; }
+.now-padmap .pm-num { fill: var(--bg); } .now-padmap .pm-lbl { fill: var(--muted); font-weight: 400; }
 @media (prefers-color-scheme: light) { #nowView .now-sys { color: #9a4a00; } }
 
 .synth .boostline { font-size: 12px; margin-top: 1px; }

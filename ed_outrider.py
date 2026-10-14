@@ -217,6 +217,7 @@ import outrider.overlay_runner  # Outrider runs that window itself on the game P
 import outrider.ggg        # potential green gas giants: the community's seven-layer ladder model (pure)
 import outrider.serverlog  # Outrider's own log: the terminal's lines kept for Show log and in <db dir>/outrider.log
 import outrider.notices    # the notices banner: start-up problems shown on every page until fixed or dismissed
+import outrider.pads       # where your landing pad is: starport and carrier layouts, the words, the diagrams (#12; pure)
 import outrider.boxel      # boxel exploration: the cube a procedural name places a system in, its systems, its id64s (pure)
 import outrider.codex_bodies  # star and planet types as codex entries: what a body would log (pure)
 import outrider.codex_geo  # geology as codex entries: what a body's volcanism could log (pure)
@@ -1231,6 +1232,7 @@ radar_range = {st["overlay"]["radar_range"]}   # metres from the radar's centre 
 analysis_only = [{", ".join(q(x) for x in st["overlay"]["analysis_only"])}]   # panels shown in your ship only while the HUD is in analysis mode: any of system, body, radar, strip, now, bio, alerts (not in the SRV, on foot or over the galaxy map)
 hide_docked = [{", ".join(q(x) for x in st["overlay"]["hide_docked"])}]   # panels hidden while docked (the ship, or on foot in a station, hangar or social space): any of system, body, strip, now, bio, alerts (the Target panel still shows over the galaxy map)
 show_inactive = {"true" if st["overlay"]["show_inactive"] else "false"}   # keep showing when Elite is not the active window (still hidden while other windows cover the game, minimised or on another desktop)
+pad_diagram = {"true" if st["overlay"]["pad_diagram"] else "false"}   # while docking at a starport or carrier, a diagram of where your pad is under PAD 34, in the Target panel and on Now (false: the number and its words only)
 
 [assistant]
 enabled = {"true" if st["assistant"]["enabled"] else "false"}   # the voice's AI layer for questions the fixed phrases do not match (resources/ask.json); nothing is sent anywhere while false
@@ -1311,8 +1313,14 @@ BODY_EVENTS = ("ApproachBody", "LeaveBody", "Touchdown")
 SRV_EVENTS = ("LaunchSRV", "LaunchVessel", "DockSRV", "SRVDestroyed", "MiningRefined", "SupercruiseExit", "SupercruiseEntry", "Liftoff")
 # Docking (#3, Kurbo26 in GitHub discussion #3): the pad a station gave you and why one refused, live only (meta
 # `docking`); DOCKING_EVENTS are read for it alone, DOCKING_WATCH also end it (docked, left, a login, a death)
-DOCKING_EVENTS = ("DockingGranted", "DockingDenied", "DockingCancelled", "DockingTimeout")
-DOCKING_WATCH = frozenset(DOCKING_EVENTS) | {"Docked", "SupercruiseEntry", "FSDJump", "LoadGame", "Shutdown", "Died"}
+DOCKING_EVENTS = ("DockingGranted", "DockingDenied", "DockingCancelled", "DockingTimeout",
+                  "SendText",   # #12: only the LandingPad plugin's test commands ("!sppad 34"); other chat is never read
+                  "Music")      # #12: only the docking computer's track
+DOCKING_WATCH = frozenset(DOCKING_EVENTS) | {"Docked", "SupercruiseEntry", "FSDJump", "LoadGame", "Shutdown", "Died",
+                                             "Music"}   # Music: only the docking computer's track (it took over)
+# the docking computer takes over 2-10 s after the grant (the author's journals: its Music line); with one fitted, the pad
+# is shown at once but said only if it has not taken over within this many seconds (the author: no audio on auto-dock)
+AUTO_DOCK_WAIT_S = 12
 # a refusal's Reason in words, said only when it is not obvious (the author, 2026-10-14): Distance (you can see you are
 # too far, and the game says so) and any other reason are left out. From the author's journals: NoSpace 50, Distance
 # 16, RestrictedAccess 4, TooLarge 2, Hostile 1
@@ -2510,6 +2518,7 @@ class Journals:
         self.jumponium = None      # this system's best jumponium body so far {system, body, material, pct, said}
         # the FSS's notable stellar phenomena as they come (several lines in one moment): {system, t, counts, new, seq}
         self.nsp_burst = None
+        self.docking_hold = None   # #12: a grant's moment held while the docking computer may take over (State.docking_release)
         # a live sale still coming in (a 'Sell all' writes a page every 10 s to a minute or so): State.maybe_sale_left
         # says what it left aboard once the pages stop. {carto, systems, bio, species, read_at (wall clock)}
         self.sale_run = None
@@ -2986,11 +2995,11 @@ class Journals:
                 set(self.body_touched), set(self.approached), self.brief_key,
                 set(self.regions_said), self.region_entered, self.jumponium, dict(self.sale_run or {}) or None,
                 json.loads(json.dumps(self.burst)), self.uploads.snapshot() if self.uploads else None,
-                json.loads(json.dumps(self.nsp_burst)))
+                json.loads(json.dumps(self.nsp_burst)), json.loads(json.dumps(self.docking_hold)))
 
     def restore(self, cp):
         (self.moment_seq, moments, self.last_heat, touched, approached, self.brief_key,
-         regions, self.region_entered, self.jumponium, self.sale_run, self.burst, uploads, self.nsp_burst) = cp
+         regions, self.region_entered, self.jumponium, self.sale_run, self.burst, uploads, self.nsp_burst, self.docking_hold) = cp
         if self.uploads and uploads:
             self.uploads.restore(uploads)
         self.body_touched, self.approached, self.regions_said = set(touched), set(approached), set(regions)
@@ -3594,20 +3603,58 @@ class Journals:
         if cur and ts < (cur.get("ts") or ""):
             return   # an older line than what is kept (two live folders)
         station = ev.get("StationName") or ""
+        if name == "LoadGame":   # a new session: the green lights are said again at its first docking (#12)
+            meta_set(self.db, "docking_said", {"n": 0})
+        if name == "Music":
+            if ev.get("MusicTrack") == "DockingComputer":
+                self.docking_hold = None   # the docking computer took over: the pad is shown, not said (the author)
+            return
+        test = outrider.pads.test_command(ev.get("Message")) if name == "SendText" else None
+        if name == "SendText" and not test:
+            return   # any other chat: not read
+        if test:   # #12: the LandingPad plugin's commands, to try a pad's place without docking
+            kind, pad = test
+            name, ev = "DockingGranted", {"LandingPad": pad, "test": kind}
+            station = outrider.pads.TEST_NAMES[kind]
         if name == "DockingGranted" and isinstance(ev.get("LandingPad"), int) and not isinstance(ev.get("LandingPad"), bool):
+            kind = ev.get("test") or outrider.pads.layout(ev.get("StationType"), station, ev.get("MarketID"))
+            place = outrider.pads.where(kind, ev["LandingPad"])
+            said = meta_get(self.db, "docking_said") or {"n": 0}
+            green = said["n"] % outrider.pads.GREEN_EVERY == 0   # the first of a session, then every 4th (the author)
+            meta_set(self.db, "docking_said", {"n": said["n"] + 1})
             d = {"pad": ev["LandingPad"], "station": station, "type": ev.get("StationType"), "market": ev.get("MarketID"),
-                 "ts": ts}
+                 "ts": ts, "layout": kind, "where": place and place["words"], "map": place and place["map"],
+                 "test": bool(test)}
             meta_set(self.db, "docking", d)
-            self.moment("docking", ts, what="granted", pad=d["pad"], station=station, station_type=d["type"])
+            said = {"what": "granted", "pad": d["pad"], "station": station, "station_type": d["type"],
+                    "where": place and place["words"], "say_where": outrider.pads.spoken(place, green)}
+            if not test and self.docking_computer():
+                # held: said by State.docking_release unless the docking computer takes over first (a Music line)
+                self.docking_hold = {"until": ts_seconds(ts) + AUTO_DOCK_WAIT_S, "moment": said}
+            else:
+                self.docking_hold = None
+                self.moment("docking", ts, **said)
             return
         if name == "DockingDenied" and DENIED_WORDS.get(ev.get("Reason")):
             words = DENIED_WORDS[ev["Reason"]]
             meta_set(self.db, "docking", {"denied": ev["Reason"], "words": words, "station": station, "ts": ts})
             self.moment("docking", ts, what="denied", reason=ev["Reason"], words=words, station=station)
             return
+        self.docking_hold = None
         if cur:
             meta_set(self.db, "docking", None)
             self.moment("docking", ts, what="clear")
+
+    def docking_computer(self):
+        """Whether the ship flown now has a docking computer fitted (#12), from its latest Loadout kept whole in
+        fleet_loadouts; False when that is not known (no Loadout kept: the pad is said at once)."""
+        sid = (self.ship or {}).get("ship_id")
+        row = self.db.execute("SELECT loadout FROM fleet_loadouts WHERE ship_id=?", (sid,)).fetchone() if sid is not None else None
+        try:
+            mods = json.loads(row[0]).get("Modules") or [] if row and row[0] else []
+        except (TypeError, ValueError, AttributeError):
+            return False
+        return any(str(m.get("Item") or "").lower().startswith("int_dockingcomputer") for m in mods if isinstance(m, dict))
 
     def handle_body(self, name, ev, ts):
         """ApproachBody (orbital cruise begins: the approach briefing, once per body per session), LeaveBody
@@ -7012,7 +7059,7 @@ class State:
             "route": self.route_summary(),
             "highway": self.highway_summary(),
             "dry_stretch": self.dry_stretch_summary(),   # S2: the last scoopable star before a stretch the fuel won't cover
-            "docking": self.docking_summary(),   # #3: the pad you were given, or why a station refused
+            "docking": self.docking_shown(),   # #3: the pad you were given (#12: where, its diagram), or why a station refused
             "survey": self.survey_summary(),   # Road to Riches / Exomastery: the line under the tiles, as the Highway's
             "backup": dict(meta_get(self.db, "last_backup") or {}, running=bool(self.backup_task and not self.backup_task.done()),
                            every_days=BACKUP_EVERY_DAYS, keep=BACKUP_KEEP, restore=self.restore_command(None)),
@@ -8321,6 +8368,17 @@ class State:
             return z["body"]
         return None
 
+    def docking_release(self, now=None):
+        """A follow-up (#12): a grant held while the docking computer might take over is said once AUTO_DOCK_WAIT_S have
+        passed without it (its Music line drops the hold, as a dock, a cancel or leaving do). True when said."""
+        h = self.journals.docking_hold
+        now = time.time() if now is None else now
+        if not h or now < h["until"]:
+            return False
+        self.journals.docking_hold = None
+        self.journals.moment("docking", iso_ts(now), **h["moment"])
+        return True
+
     def docking_summary(self, now=None):
         """#3: the pad you were given ({pad, station, type, ts}), or a refusal's words ({denied, words, station, ts}),
         while it holds: a grant DOCK_GRANT_KEEP_S at most (a dock, a cancel, a timeout or leaving ends it sooner), a
@@ -8334,12 +8392,20 @@ class State:
             return None
         return d if age <= (DOCK_DENIED_KEEP_S if d.get("denied") else DOCK_GRANT_KEEP_S) else None
 
+    def docking_shown(self, now=None):
+        """docking_summary as the page and the overlay show it: without the diagram's map while [overlay] pad_diagram is
+        off (#12: the number and its words only)."""
+        d = self.docking_summary(now)
+        if d and d.get("map") and not self.overlay_cfg.get("pad_diagram", True):
+            d = dict(d, map=None)
+        return d
+
     def overlay_target_panel(self, st, pos, now, pal, size, galaxy):
         """The Target panel (D1, id "body"): inside a body's near-body zone (and TARGET_ZONE_LINGER_S after leaving it)
         that body, even over a target; outside it the body targeted in game in this system, else the system targeted.
         Over the galaxy map always the system targeted. A body with nothing to say gives way to the system. While docking
         (#3: a pad given, or a refusal's words), the pad in large letters instead (the author, 2026-10-14)."""
-        dock = None if galaxy else self.docking_summary(now)
+        dock = None if galaxy else self.docking_shown(now)
         if dock:
             return outrider.overlay.pad_panel(dock, pal, size)
         if not galaxy:
@@ -8552,7 +8618,7 @@ class State:
                 "panel_scale": cfg.get("panel_scale", 100), "win_h": win_h, "text_px": text_px, "min_text_px": O.MIN_TEXT_PX,
                 "panels": {p: bool(cfg.get(f"{p}_panel" if p != "radar" else "radar")) for p in outrider.overlay.PANELS},
                 "analysis_only": list(cfg.get("analysis_only") or []), "hide_docked": list(cfg.get("hide_docked") or []),
-                "show_inactive": bool(cfg.get("show_inactive")),
+                "show_inactive": bool(cfg.get("show_inactive")), "pad_diagram": bool(cfg.get("pad_diagram", True)),
                 "window": window, "layout": layout,
                 "test": max(0, round(self.overlay_test_until - now)), "arrange": max(0, round(self.overlay_arrange_until - now)),
                 # Outrider runs the window itself on the game PC: its state; None on a server (the window runs elsewhere)
@@ -8561,7 +8627,8 @@ class State:
 
     def overlay_set(self, body, now=None):
         """POST /api/overlay {enabled?, theme?, text_size?, panel_scale?: %, panels?: {system|body|radar|strip|now|bio|alerts: bool},
-        analysis_only?: [panel ids], hide_docked?: [panel ids but radar], show_inactive?: bool, test?: bool, arrange?: bool}: the
+        analysis_only?: [panel ids], hide_docked?: [panel ids but radar], show_inactive?: bool, pad_diagram?: bool, test?: bool,
+        arrange?: bool}: the
         switches, applied at once and written into [overlay] for the next start (panel_scale clamped to
         outrider.overlay.PANEL_SCALE_LIMITS); test panels for
         TEST_SECONDS; Arrange mode (the window takes the mouse to move and size the panels) until it is switched off or
@@ -8572,7 +8639,7 @@ class State:
             return {"error": "expected {enabled, theme, text_size, panels, test, arrange}"}, 400
         changes = {}
         for key, val in body.items():
-            if key in ("enabled", "show_inactive") and isinstance(val, bool):
+            if key in ("enabled", "show_inactive", "pad_diagram") and isinstance(val, bool):
                 changes[key] = val
             elif key == "theme" and val in O.THEMES:
                 changes["theme"] = val
@@ -16744,7 +16811,7 @@ class State:
                                ("maybe_backup_on_quit", self.maybe_backup_on_quit), ("highway_copy_next", self.highway_copy_next), ("riches_copy_next", self.riches_copy_next),
                                ("highway_heavy_check", self.highway_heavy_check), ("last_scoop_check", self.last_scoop_check),
                                ("wrong_target_watch", self.wrong_target_watch), ("maybe_autotarget", self.maybe_autotarget),
-                               ("maybe_boxel_autotarget", self.maybe_boxel_autotarget)):
+                               ("maybe_boxel_autotarget", self.maybe_boxel_autotarget), ("docking_release", self.docking_release)):
                 try:
                     step()
                 except sqlite3.Error:

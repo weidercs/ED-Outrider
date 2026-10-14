@@ -111,6 +111,7 @@ The project's history is in the [changelog](docs/CHANGELOG.md). Contributors and
 | Geology sites; checklist pictures | [Canonn](https://canonn.science)'s codex records and screenshots | Canonn's | site counts in `resources/geo_codex.json`; pictures linked, never copied, credited to the commander who took each |
 | Engineering blueprints | [coriolis-data](https://github.com/EDCD/coriolis-data) (EDCD), commit `0db9234` of 2026-04-24 | game data, Frontier Developments' (its LICENSE.md: Frontier's terms; only coriolis.io's code is MIT) | `resources/blueprints.json`, built by `scripts/build_blueprints.py`; the material names are Outrider's own table |
 | EDDN, EDSM and Inara upload rules | [EDMarketConnector](https://github.com/EDCD/EDMarketConnector) (EDCD) | GPL v2 or later | followed, with EDCD's notice in `outrider/eddn.py` |
+| Landing pad layouts (starports, carriers) | [LandingPad](https://github.com/bgol/LandingPad) by Bernd Gollesch | GPL v2 or later | its tables, with its notice: `outrider/pads.py` |
 | The overlay window's code | [EDMC Modern Overlay](https://github.com/SweetJonnySauce/EDMCModernOverlay) | GPL v3 | adapted, with its notice: `outrider/overlay_tracking.py`, `outrider/overlay_window.py` |
 
 The tablet themes' emblems (`static/emblems/`, each under the terms in its `CREDITS.txt`, not the GPL): the Explorer

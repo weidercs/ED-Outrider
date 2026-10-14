@@ -51,7 +51,7 @@ HIDE_DOCKED_DEFAULT = ("system", "body", "now", "bio")
 DEFAULTS = {"enabled": False, "theme": "default", "text_size": "normal", "system_panel": True, "body_panel": True,
             "radar": True, "strip_panel": False, "now_panel": False, "bio_panel": False, "alerts_panel": False, "system_seconds": 0,
             "radar_range": 800, "analysis_only": [], "hide_docked": list(HIDE_DOCKED_DEFAULT), "show_inactive": False,
-            "panel_scale": 100}
+            "panel_scale": 100, "pad_diagram": True}
 # [overlay] panel_scale (a GitHub report, 2026-10-14: too large on a 4K TV): all panels' size in %, on top of each panel's
 # own; Settings -> In-game overlay's All panels, Ctrl + wheel in Arrange mode
 PANEL_SCALE_LIMITS = (20, 250)
@@ -203,7 +203,7 @@ def overlay_settings(cfg):
         _warn("must be a section (a table of settings); ignored")
     out = dict(DEFAULTS)
     for key in ("enabled", "system_panel", "body_panel", "radar", "strip_panel", "now_panel", "bio_panel", "alerts_panel",
-                "show_inactive"):
+                "show_inactive", "pad_diagram"):
         v = o.get(key)
         if v is None:
             continue
@@ -914,12 +914,70 @@ def target_system_panel(t, pal, size="normal"):
 
 
 PAD_W = 300
+SLOT_GREEN, SLOT_RED = "#3AD16B", "#E0453A"   # the slot's own lights: green and red whatever the theme
+
+
+def pad_map_items(m, pal, x0, y0, w):
+    """The pad diagram (#12) as draw items in a box `w` wide from (x0, y0), and its height: a starport seen from the slot
+    looking in (12 wall sectors, 3 depths, outside near the slot; the slot's lights across the far wall, green on the
+    right as the words assume) or a carrier from above, bow up (a squadron carrier's two decks side by side), your pad
+    filled in. m: outrider.pads.where's map ({kind, pad, pads})."""
+    items, pad = [], m.get("pad")
+    if m.get("kind") == "starport":
+        import outrider.pads as P
+        R = min(w / 2 - 6, 110)
+        cx, cy = x0 + w / 2, y0 + R + 2
+        for k, sc in enumerate(P.SHELLS):
+            r = R * sc
+            pts = [(cx + math.cos(math.radians(15 + 30 * j)) * r, cy + math.sin(math.radians(15 + 30 * j)) * r) for j in range(13)]
+            items.append(line(pts, pal["frame"] if k else pal["muted"], 1))
+        for j in range(12):
+            a = math.radians(15 + 30 * j)
+            r0 = R * P.SHELLS[-1]
+            items.append(line([(cx + math.cos(a) * r0, cy + math.sin(a) * r0), (cx + math.cos(a) * R, cy + math.sin(a) * R)],
+                              pal["frame"], 1))
+        slot = R * P.SHELLS[-1] * 0.8
+        items.append(line([(cx - slot, cy), (cx - 2, cy)], SLOT_RED, 3))
+        items.append(line([(cx + 2, cy), (cx + slot, cy)], SLOT_GREEN, 3))
+        for n, (sec, d, k, of) in enumerate(m.get("pads") or [], 1):
+            dx, dy = P.SECTORS[sec]
+            r = R * (P.SHELLS[d] + P.SHELLS[d + 1]) / 2
+            a = math.atan2(dy, dx) + (k - (of + 1) / 2) * math.radians(9)
+            x, y = cx + math.cos(a) * r, cy + math.sin(a) * r
+            me = n == pad
+            items.append(circle(x, y, 9 if me else 3.2, pal["good"] if me else pal["muted"], pal["good"] if me else None, 2 if me else 1))
+            if me:
+                items.append(runs(x, y - 7, [(str(pad), pal["panel"], "small", True)], align="center"))
+        items.append(runs(cx, cy + R + 4, [("seen from the slot, looking in", pal["muted"], "small", False)], align="center"))
+        return items, 2 * R + 6 + LINE_H["small"]
+    boxes = m.get("pads") or []
+    if not boxes:
+        return items, 0
+    decks = (26, -26) if m.get("kind") == "squadron" else (0,)
+    span = 52 * len(decks) + 4
+    u = min(2.6, (w - 8) / span)
+    cx, top = x0 + w / 2, y0 + LINE_H["small"]
+    cy = top + 44 * u
+    items.append(runs(cx, y0, [("bow ▲", pal["muted"], "small", False)], align="center"))
+    for xo in decks:
+        hx = cx + xo * u
+        items.append(line([(hx - 26 * u, cy + 40 * u), (hx - 26 * u, cy - 30 * u), (hx, cy - 44 * u), (hx + 26 * u, cy - 30 * u),
+                           (hx + 26 * u, cy + 40 * u), (hx - 26 * u, cy + 40 * u)], pal["muted"], 1))
+    for n, (x, y, bw, bh) in enumerate(boxes, 1):
+        me = n == pad
+        items.append(rect(cx + x * u, cy + y * u, bw * u, bh * u, pal["good"] if me else pal["frame"], pal["good"] if me else None,
+                          2 if me else 1))
+        if me or bw >= 7:   # the small pads are too small to number, but yours
+            items.append(runs(cx + (x + bw / 2) * u, cy + (y + bh / 2) * u - 8,
+                              [(str(n), pal["panel"] if me else pal["muted"], "small", me)], align="center"))
+    return items, LINE_H["small"] + 84 * u + 4
 
 
 def pad_panel(d, pal, size="normal"):
     """The Target panel while docking (#3, the author 2026-10-14: the pad number in large letters): the station's name,
-    then "PAD 34" (FONT_PX huge), or a refusal: "Docking denied" and its words. d: State.docking_summary's. None
-    without either."""
+    then "PAD 34" (FONT_PX huge); #12: where it is ("at the back · up on your right") and, at a starport or carrier
+    with [overlay] pad_diagram on, the diagram (pad_map_items). A refusal: "Docking denied" and its words. d:
+    State.docking_shown's. None without either."""
     if not d:
         return None
     station = d.get("station") or "Docking"
@@ -927,7 +985,17 @@ def pad_panel(d, pal, size="normal"):
         p = text_panel("body", "🛬 " + station, [], pal, width=PAD_W, size=size)
         y = p["h"] - PAD + 2
         p["items"].append(runs(PAD_W / 2, y, [(f"PAD {d['pad']}", pal["good"], "huge", True)], align="center"))
-        p["h"] = round(y + LINE_H["huge"] + PAD)
+        y += LINE_H["huge"]
+        if d.get("where"):
+            for row in flow([((" " if i else "") + x, "text") for i, x in enumerate(d["where"].split())], PAD_W - 2 * PAD, size):
+                p["items"].append(runs(PAD_W / 2, y, [(t, pal["text"], size, False) for t, _ in row], align="center"))
+                y += LINE_H[size]
+            y += 6
+        if d.get("map"):
+            items, h = pad_map_items(d["map"], pal, PAD, y, PAD_W - 2 * PAD)
+            p["items"] += items
+            y += h
+        p["h"] = round(y + PAD)
         return p
     if d.get("words"):
         words = d["words"].split()   # word by word, so the reason wraps rather than being cut with …

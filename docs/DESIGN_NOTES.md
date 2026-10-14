@@ -1303,6 +1303,11 @@ upstream project's choices, not rules of the game.
 These were built and tested with synthetic events, recorded files, fakes or headless browsers, but not
 confirmed while playing. Treat reports about them as likely real.
 
+- The pad's place at starports and carriers (#12): the words ("at the back, up on your right") and the diagrams follow
+  the LandingPad plugin's tables read with the green lights on your right; which way is up, which ring is the back,
+  which way the numbers run and the carrier's bow are to be checked in game (`!sppad 34` and friends in Solo help).
+  The docking computer's silence (its Music line within 12 s) is from the author's journals (2-10 s after the grant).
+
 - `CarrierBuy`, `CarrierDecommission` and `CarrierCancelDecommission`: written to Frontier's journal manual, never seen
   in the author's journals (the carrier was bought before them).
 - Status.json Flags2 on-foot-in-station bits (3, 13, 14) counting as docked.

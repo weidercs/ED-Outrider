@@ -29,7 +29,12 @@ before.
   system, or else **the system you have targeted** (in the galaxy map, or the next jump of the route plotted there).
   Nothing targeted: no panel. **Docking**: from the moment a station gives you a pad until you touch down, it shows
   **PAD 34** in large letters under the station's name (any station, carrier, outpost, port or settlement); a refusal
-  that isn't obvious shows "Docking denied" and why for a minute.
+  that isn't obvious shows "Docking denied" and why for a minute. At a starport (Coriolis, Orbis, Ocellus, asteroid
+  base, Dodec) or a carrier it also says where the pad is ("at the back · up on your right"; a carrier "port side,
+  toward the bow") and draws it: the starport as you see it coming through the slot (outer ring near the slot, inner
+  ring the back, the slot's lights across the middle, green on the right), the carrier from above with the bow up.
+  **Show the pad diagram while docking** (Settings → In-game overlay, `pad_diagram`) turns the drawing off; the words
+  stay. Pad positions come from bgol's LandingPad plugin.
   - A body: landable, gravity (amber at your high-gravity level), atmosphere, temperature, what mapping is still
     worth, first discovered; its life, each likely species with its codex mark, colony distance and value, the runs
     under way (what each pays, "1.0M (×5: 5.0M)" with the first-footfall bonus) and the species finished; and whether

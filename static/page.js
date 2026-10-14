@@ -1043,6 +1043,42 @@ function renderRoute() {
       : fr && fr.hops >= shown ? `<span class="freach past" title="the fuel in your tank makes ${fr.hops} jumps of this route without scooping">⛽ ${fr.hops}</span>` : "") +
     `</span>`;
 }
+// #12: the pad diagram (overlay.pad_map_items' twin, from the payload's docking.map: outrider.pads.where): a starport seen
+// from the slot looking in (12 sectors, 3 depths, the slot's lights green on the right), a carrier from above, bow up;
+// your pad filled in. An SVG for Now (the desktop's and the tablet's)
+const PAD_SHELLS = [1, 0.625, 0.455, 0.25];
+const PAD_SECTORS = [[0, 1], [-0.5, 0.866], [-0.866, 0.5], [-1, 0], [-0.866, -0.5], [-0.5, -0.866],
+                     [0, -1], [0.5, -0.866], [0.866, -0.5], [1, 0], [0.866, 0.5], [0.5, 0.866]];
+function padMapSvg(m) {
+  const pad = m.pad, f = n => n.toFixed(1), parts = [];
+  if (m.kind === "starport") {
+    const R = 110, c = 116, ring = (r, cls) => parts.push(`<polygon class="${cls}" points="${[...Array(12).keys()].map(j =>
+      `${f(c + Math.cos((15 + 30 * j) * Math.PI / 180) * r)},${f(c + Math.sin((15 + 30 * j) * Math.PI / 180) * r)}`).join(" ")}"/>`);
+    PAD_SHELLS.forEach((s, k) => ring(R * s, k ? "pm-wall" : "pm-out"));
+    for (let j = 0; j < 12; j++) {
+      const a = (15 + 30 * j) * Math.PI / 180, r0 = R * PAD_SHELLS[3];
+      parts.push(`<line class="pm-wall" x1="${f(c + Math.cos(a) * r0)}" y1="${f(c + Math.sin(a) * r0)}" x2="${f(c + Math.cos(a) * R)}" y2="${f(c + Math.sin(a) * R)}"/>`);
+    }
+    const slot = R * PAD_SHELLS[3] * 0.8;
+    parts.push(`<line class="pm-red" x1="${f(c - slot)}" y1="${c}" x2="${c - 2}" y2="${c}"/><line class="pm-green" x1="${c + 2}" y1="${c}" x2="${f(c + slot)}" y2="${c}"/>`);
+    (m.pads || []).forEach(([sec, d, k, of], i) => {
+      const [dx, dy] = PAD_SECTORS[sec], r = R * (PAD_SHELLS[d] + PAD_SHELLS[d + 1]) / 2;
+      const a = Math.atan2(dy, dx) + (k - (of + 1) / 2) * 9 * Math.PI / 180, x = c + Math.cos(a) * r, y = c + Math.sin(a) * r;
+      parts.push(i + 1 === pad ? `<circle class="pm-me" cx="${f(x)}" cy="${f(y)}" r="10"/><text class="pm-num" x="${f(x)}" y="${f(y + 4)}">${pad}</text>`
+                               : `<circle class="pm-pad" cx="${f(x)}" cy="${f(y)}" r="3.5"/>`);
+    });
+    return `<svg class="now-padmap" viewBox="0 0 232 232" role="img" aria-label="pad ${pad}, seen from the slot looking in">${parts.join("")}</svg>`;
+  }
+  const decks = m.kind === "squadron" ? [26, -26] : [0], u = 2.6, w = (52 * decks.length + 4) * u, cx = w / 2, cy = 46 * u;
+  decks.forEach(xo => { const hx = cx + xo * u;
+    parts.push(`<polygon class="pm-out" points="${[[-26, 40], [-26, -30], [0, -44], [26, -30], [26, 40]].map(([x, y]) => `${f(hx + x * u)},${f(cy + y * u)}`).join(" ")}"/>`); });
+  (m.pads || []).forEach(([x, y, bw, bh], i) => {
+    const me = i + 1 === pad;
+    parts.push(`<rect class="${me ? "pm-me" : "pm-box"}" x="${f(cx + x * u)}" y="${f(cy + y * u)}" width="${f(bw * u)}" height="${f(bh * u)}"/>`);
+    if (me || bw >= 7) parts.push(`<text class="${me ? "pm-num" : "pm-lbl"}" x="${f(cx + (x + bw / 2) * u)}" y="${f(cy + (y + bh / 2) * u + 4)}">${i + 1}</text>`);
+  });
+  return `<svg class="now-padmap" viewBox="0 0 ${f(w)} ${f(90 * u)}" role="img" aria-label="pad ${pad}, the carrier from above, bow up">${parts.join("")}</svg>`;
+}
 // ---- Now mode: five big lines for a second monitor, readable from the chair ----
 function renderNow() {
   drawNowBar();
@@ -1051,7 +1087,8 @@ function renderNow() {
   const lines = [`<div class="now-sys">${esc(p.name)}</div>`];
   // #3: docking: the pad in large letters (the author, 2026-10-14), or why the station refused; gone once docked
   const dk = data.docking;
-  if (dk && dk.pad != null) lines.push(`<div class="now-pad">PAD ${esc(dk.pad)}<span>${esc(dk.station || "")}</span></div>`);
+  if (dk && dk.pad != null) lines.push(`<div class="now-pad">PAD ${esc(dk.pad)}<span>${esc(dk.station || "")}</span>` +
+    (dk.where ? `<span class="now-where">${esc(dk.where)}</span>` : "") + (dk.map ? padMapSvg(dk.map) : "") + `</div>`);
   else if (dk && dk.words && Date.now() - Date.parse(dk.ts) < 60000)
     lines.push(`<div class="now-card alert">🛬 Docking denied${dk.station ? ` at ${esc(dk.station)}` : ""}: ${esc(dk.words)}</div>`);
   // the arrival verdict, for twenty seconds after a jump
@@ -8787,9 +8824,11 @@ function onData() {
       else if (m.kind === "wrong_target" && m.system && m.next)   // S11: the game targets another system than the next stop
         alertOut("wrongtarget", `Targeted ${m.system}, not the next stop`, `the next stop is ${m.next}`, {tag: "wrong_target",
                  say: () => line("wrong_target", {system: m.system, next: m.next}, `You've targeted ${m.system}. The next stop is ${m.next}.`)});
-      else if (m.kind === "docking" && m.what === "granted" && m.pad != null)   // #3: the pad, said every time (the author)
-        alertOut("docking", `🛬 Pad ${m.pad}`, m.station || "", {tag: "docking",
-                 say: () => line("docking_granted", {pad: m.pad, station: m.station || "the station"}, `Pad ${m.pad}.`)});
+      else if (m.kind === "docking" && m.what === "granted" && m.pad != null)   // #3: the pad, said every time (the author);
+        // #12: then where it is, a plain sentence after the personality's line (the green lights now and then: the server's)
+        alertOut("docking", `🛬 Pad ${m.pad}`, [m.station, m.where].filter(Boolean).join(" · "), {tag: "docking",
+                 say: () => line("docking_granted", {pad: m.pad, station: m.station || "the station"}, `Pad ${m.pad}.`) +
+                   (m.say_where ? " " + m.say_where : "")});
       else if (m.kind === "docking" && m.what === "denied" && m.words)   // #3: only the reasons that are not obvious
         alertOut("docking", "🛬 Docking denied", `${m.station ? m.station + ": " : ""}${m.words}`, {tag: "docking",
                  say: () => line("docking_denied", {reason: m.words, station: m.station || "the station"}, `Docking denied: ${m.words}.`)});
@@ -10993,6 +11032,9 @@ function overlayHtml(o) {
     // S25: with it on the overlay stays over the game while another window is active, unless other windows cover it
     `<label class="mod"><input type="checkbox" data-ov="show_inactive"${o.show_inactive ? " checked" : ""}> Keep showing when Elite is not the active window ` +
     `<span class="hint">still hidden while other windows cover the game (a native Wayland window is not seen)</span></label>` +
+    // #12: the pad diagram while docking at a starport or carrier, in the Target panel and on Now
+    `<label class="mod"><input type="checkbox" data-ov="pad_diagram"${o.pad_diagram !== false ? " checked" : ""}> Show the pad diagram while docking ` +
+    `<span class="hint">at a starport or carrier, under PAD 34 in the Target panel and on Now (off: the number and where it is, in words)</span></label>` +
     // one control row (the author, 2026-10-14): "All Panels: Theme [ ] Text Size [ ] Scale [100 %]", the two buttons on
     // a line of their own under it, at its left (page.css .ovbtns)
     `<div class="mod ovctl" data-find="overlay.theme overlay.text_size overlay.panel_scale text size all panels"><b>All Panels:</b> <label>Theme <select data-ov="theme">${opt(OV_THEMES, o.theme)}</select></label>` +
@@ -11050,7 +11092,7 @@ async function overlayPost(path, body) {
 }
 document.getElementById("overlayBox").addEventListener("change", e => {
   const t = e.target;
-  if (t.dataset.ov && t.type === "checkbox") overlayPost("api/overlay", {[t.dataset.ov]: t.checked});   // enabled, show_inactive
+  if (t.dataset.ov && t.type === "checkbox") overlayPost("api/overlay", {[t.dataset.ov]: t.checked});   // enabled, show_inactive, pad_diagram
   // a select keeps the focus, which holds renderOverlay off: let go, so the server's answer (its note) is drawn
   else if (t.dataset.ov === "panel_scale") {   // all panels' size, a number (the server clamps it)
     const v = Number(t.value);

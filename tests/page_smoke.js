@@ -1691,11 +1691,26 @@ const releasePayloads = async () => {
       data.docking = {denied: "NoSpace", words: "no pad free for your ship: try again shortly", station: "Jameson Memorial", ts: new Date().toISOString()};
       renderNow(); o.denied = (document.querySelector("#nowBody .now-card.alert") || {}).textContent || null;
       data.docking = null; renderNow(); o.gone = !document.querySelector("#nowBody .now-pad");
+      // #12: where it is and the diagram (a starport from the slot, a carrier from above), your pad filled in
+      const sp = {kind: "starport", pad: 34, pads: Array.from({length: 45}, (_, i) => [Math.floor(i / 4) % 12, i % 3, 1, 1])};
+      data.docking = {pad: 34, station: "Jameson Memorial", where: "at the back · up on your right", map: sp, ts: new Date().toISOString()}; renderNow();
+      const svg = document.querySelector("#nowBody .now-pad svg.now-padmap");
+      o.map = [(document.querySelector("#nowBody .now-where") || {}).textContent || null, !!svg && svg.querySelectorAll("circle.pm-pad").length,
+               !!svg && svg.querySelectorAll("circle.pm-me").length, !!svg && !!svg.querySelector(".pm-green") && !!svg.querySelector(".pm-red")];
+      data.docking = {pad: 7, station: "G0X-85Z", where: "port side, toward the bow", map: {kind: "fleet", pad: 7,
+        pads: Array.from({length: 16}, (_, i) => [i, i, 10, 16])}, ts: new Date().toISOString()}; renderNow();
+      o.carrier = [...document.querySelectorAll("#nowBody svg.now-padmap rect")].map(r => r.getAttribute("class")).filter(c => c === "pm-me").length;
+      data.docking = {pad: 2, station: "Outpost", where: null, map: null, ts: new Date().toISOString()}; renderNow();
+      o.plain = !document.querySelector("#nowBody svg.now-padmap") && !document.querySelector("#nowBody .now-where");
+      o.setting = (() => { const box = document.createElement("div");
+        box.innerHTML = overlayHtml(Object.assign({}, data.overlay || {}, {enabled: true, pad_diagram: false, panels: {}, layout: {}}));
+        const cb = box.querySelector('[data-ov="pad_diagram"]'); return !!cb && !cb.checked; })();
       speechLib = {styles: {business: "B"}, lines: {docking_granted: {business: ["Pad {pad}."]}, docking_denied: {business: ["Denied: {reason}."]}}};
       speak = (t, opt) => said.push([opt && opt.log && opt.log.key, t]); notify = (kind, title, body) => { told.push([kind, title, body]); return true; };
       speechOn = true; isSpeaker = true; alertSpeak.docking = true;
       const now = new Date().toISOString();
-      data.moments = [{seq: lastMomentSeq + 1, ts: now, kind: "docking", what: "granted", pad: 7, station: "G0X-85Z", station_type: "FleetCarrier"},
+      data.moments = [{seq: lastMomentSeq + 1, ts: now, kind: "docking", what: "granted", pad: 7, station: "G0X-85Z", station_type: "FleetCarrier",
+                       where: "port side, toward the bow", say_where: "Port side, toward the bow."},
                       {seq: lastMomentSeq + 2, ts: now, kind: "docking", what: "denied", reason: "TooLarge", words: "your ship is too big for this station's pads", station: "Outpost"},
                       {seq: lastMomentSeq + 3, ts: now, kind: "docking", what: "clear"}];
       onData();
@@ -1709,7 +1724,8 @@ const releasePayloads = async () => {
       data.docking = JSON.parse(d0).docking; data.moments = m0; renderNow();
       return JSON.stringify(o); })()`));
     const want = {now: "PAD 34Jameson Memorial", denied: "🛬 Docking denied at Jameson Memorial: no pad free for your ship: try again shortly",
-                  gone: true, said: ["Pad 7.", "Denied: your ship is too big for this station's pads."], row: true};
+                  gone: true, map: ["at the back · up on your right", 44, 1, true], carrier: 1, plain: true, setting: true,
+                  said: ["Pad 7. Port side, toward the bow.", "Denied: your ship is too big for this station's pads."], row: true};
     const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| docking |", good ? "PAD 34 on Now, the pad and a refusal said on their own row, a clear quiet" : JSON.stringify(got), errors.slice(before));

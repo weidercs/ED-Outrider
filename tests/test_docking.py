@@ -81,8 +81,134 @@ class Docking(unittest.TestCase):
         self.assertEqual(self.moments(), [])
         self.assertIsNone(ed_outrider.meta_get(self.db, "docking"))
 
+    def test_where_the_pad_is(self):
+        """#12: a starport or carrier grant carries the place in words and the diagram's map; an outpost the number only."""
+        self.ev("DockingGranted", -5, LandingPad=34, StationName="Jameson Memorial", StationType="Orbis")
+        d = self.state.docking_summary()
+        self.assertEqual((d["layout"], d["where"], d["map"]["kind"], d["map"]["pad"]),
+                         ("starport", "at the back · up on your right", "starport", 34))
+        m = [x for x in self.j.moments if x["kind"] == "docking"][-1]
+        self.assertEqual((m["where"], m["say_where"]),
+                         ("at the back · up on your right",
+                          "With the green lights on your right, it's at the back, up on your right."))
+        self.ev("DockingGranted", -4, LandingPad=7, StationName="G0X-85Z", StationType="FleetCarrier")
+        self.assertEqual(self.state.docking_summary()["where"], "port side, toward the bow")
+        self.ev("DockingGranted", -3, LandingPad=2, StationName="Outpost", StationType="Outpost")
+        d = self.state.docking_summary()
+        self.assertEqual((d["pad"], d["where"], d["map"]), (2, None, None))
+        self.assertIsNone([x for x in self.j.moments if x["kind"] == "docking"][-1]["say_where"])
+
+    def test_the_green_lights_now_and_then(self):
+        """Said at the first starport docking of a session, then every 4th grant; a new session starts again."""
+        def said():
+            return [x["say_where"].startswith("With the green") for x in self.j.moments
+                    if x["kind"] == "docking" and x["what"] == "granted"]
+        for k in range(6):
+            self.ev("DockingGranted", -20 + k, LandingPad=34, StationName="Jameson Memorial", StationType="Orbis")
+        self.assertEqual(said(), [True, False, False, False, True, False])
+        self.ev("LoadGame", -10, Commander="Sample Pilot")
+        self.ev("DockingGranted", -5, LandingPad=34, StationName="Jameson Memorial", StationType="Orbis")
+        self.assertEqual(said()[-1], True)
+
+    def test_the_plugins_test_commands(self):
+        """"!sppad 34" typed in game: as a grant at a test starport; other chat is never read or kept."""
+        self.ev("SendText", -5, To="local", Message="o7 commanders", Sent=True)
+        self.assertIsNone(ed_outrider.meta_get(self.db, "docking"))
+        self.ev("SendText", -4, To="local", Message="!sppad 34", Sent=True)
+        d = self.state.docking_summary()
+        self.assertEqual((d["pad"], d["station"], d["layout"], d["test"]), (34, "Test starport", "starport", True))
+        self.ev("SendText", -3, To="local", Message="!scpad 23", Sent=True)
+        self.assertEqual(self.state.docking_summary()["where"], "port deck, port side, toward the bow")
+
+    def test_the_diagram_switch(self):
+        """[overlay] pad_diagram off: the words stay, no map for the page or the overlay; the switch is a setting."""
+        self.ev("DockingGranted", -5, LandingPad=34, StationName="Jameson Memorial", StationType="Orbis")
+        self.assertIsNotNone(self.state.docking_shown()["map"])
+        out, status = self.state.overlay_set({"pad_diagram": False})
+        self.assertEqual(status, 200, out)
+        d = self.state.docking_shown()
+        self.assertEqual((d["where"], d["map"]), ("at the back · up on your right", None))
+        self.assertIsNotNone(self.state.docking_summary()["map"])   # kept, only not shown
+        self.assertFalse(self.state.overlay_info()["pad_diagram"])
+        self.assertTrue(outrider.overlay.overlay_settings({})["overlay"]["pad_diagram"])   # on by default
+        self.assertFalse(outrider.overlay.overlay_settings({"overlay": {"pad_diagram": False}})["overlay"]["pad_diagram"])
+
+    def test_the_overlay_draws_the_diagram(self):
+        pal = outrider.overlay.palette("default")
+        import outrider.pads as P
+        for kind, n in (("starport", 34), ("fleet", 7), ("squadron", 23)):
+            w = P.where(kind, n)
+            with_map = outrider.overlay.pad_panel({"pad": n, "station": "X", "where": w["words"], "map": w["map"]}, pal)
+            words_only = outrider.overlay.pad_panel({"pad": n, "station": "X", "where": w["words"], "map": None}, pal)
+            self.assertGreater(len(with_map["items"]), len(words_only["items"]) + 10, kind)
+            self.assertGreater(with_map["h"], words_only["h"] + 150, kind)
+            said = " ".join(" ".join(r[0] for it in words_only["items"] if it["t"] == "runs" for r in it["runs"]).split())
+            self.assertIn(w["words"].split(" · ")[0], said, kind)
+            if kind == "starport":   # the slot's lights: green on the right of the far wall, red on the left
+                lights = [it for it in with_map["items"] if it["t"] == "line" and it["c"] in ("#3AD16B", "#E0453A")]
+                green = next(it for it in lights if it["c"] == "#3AD16B")
+                red = next(it for it in lights if it["c"] == "#E0453A")
+                self.assertGreater(green["pts"][1][0], red["pts"][0][0])
+
+    def fit(self, *items):
+        self.ev("Loadout", -60, Ship="krait_light", ShipID=7, ShipName="Sample Ship", ShipIdent="SP-01", UnladenMass=400.0,
+                FuelCapacity={"Main": 32.0, "Reserve": 0.63}, MaxJumpRange=40.0,
+                Modules=[{"Slot": f"Slot0{i}_Size2", "Item": it, "Health": 1.0} for i, it in enumerate(items, 1)])
+
+    def granted(self):
+        return [m for m in self.j.moments if m["kind"] == "docking" and m["what"] == "granted"]
+
+    def test_quiet_when_the_docking_computer_takes_over(self):
+        """#12 (the author): with a docking computer fitted, the pad shows at once but is said only if the computer has
+        not taken over (its Music line) within AUTO_DOCK_WAIT_S."""
+        self.fit("int_dockingcomputer_advanced")
+        self.assertTrue(self.j.docking_computer())
+        self.ev("DockingGranted", -8, LandingPad=34, StationName="Jameson Memorial", StationType="Orbis")
+        self.assertEqual(self.state.docking_summary()["pad"], 34)   # shown at once
+        self.assertEqual(self.granted(), [])                        # not said yet
+        self.ev("Music", -5, MusicTrack="DockingComputer")
+        self.assertFalse(self.state.docking_release(time.time() + 60))
+        self.assertEqual(self.granted(), [])                        # never said
+        self.assertEqual(self.state.docking_summary()["pad"], 34)   # still shown
+
+    def test_said_late_when_flown_by_hand(self):
+        """The docking computer fitted but not taking over (switched off): said once the wait is over, never twice."""
+        self.fit("int_dockingcomputer_standard")
+        self.ev("DockingGranted", -2, LandingPad=7, StationName="G0X-85Z", StationType="FleetCarrier")
+        self.ev("Music", -1, MusicTrack="Starport")   # another track: not the computer
+        self.assertFalse(self.state.docking_release(time.time()))
+        self.assertTrue(self.state.docking_release(time.time() + ed_outrider.AUTO_DOCK_WAIT_S))
+        self.assertFalse(self.state.docking_release(time.time() + 60))
+        self.assertEqual([(m["pad"], m["say_where"]) for m in self.granted()], [(7, "Port side, toward the bow.")])
+
+    def test_said_at_once_without_a_docking_computer(self):
+        self.fit("int_fuelscoop_size5_class5")
+        self.assertFalse(self.j.docking_computer())
+        self.ev("DockingGranted", -2, LandingPad=7, StationName="G0X-85Z", StationType="FleetCarrier")
+        self.assertEqual(len(self.granted()), 1)
+        self.fit("int_dockingcomputer_advanced")
+        self.ev("SendText", -1, To="local", Message="!sppad 3", Sent=True)   # a test: said at once whatever is fitted
+        self.assertEqual(len(self.granted()), 2)
+
+    def test_a_dock_or_leaving_drops_the_hold(self):
+        self.fit("int_dockingcomputer_advanced")
+        self.ev("DockingGranted", -6, LandingPad=34, StationName="Jameson Memorial", StationType="Orbis")
+        self.ev("DockingCancelled", -3, StationName="Jameson Memorial")
+        self.assertFalse(self.state.docking_release(time.time() + 60))
+        self.assertEqual(self.granted(), [])
+
+    def test_a_failed_tick_puts_the_hold_back(self):
+        self.fit("int_dockingcomputer_advanced")
+        cp = self.j.checkpoint()
+        self.ev("DockingGranted", -6, LandingPad=34, StationName="Jameson Memorial", StationType="Orbis")
+        self.assertIsNotNone(self.j.docking_hold)
+        self.j.restore(cp)
+        self.assertIsNone(self.j.docking_hold)
+
     def test_live_only(self):
         self.assertNotIn("docking", ed_outrider.RESET_JOURNAL_DATA)   # a re-read would drop a grant in progress
+        self.ev("DockingGranted", -86400, LandingPad=12, StationName="Old", StationType="Orbis")
+        self.assertIsNone(ed_outrider.meta_get(self.db, "docking_said"))   # the cadence counts live grants only
 
     def test_the_overlay_target_panel(self):
         pal = outrider.overlay.palette("default")

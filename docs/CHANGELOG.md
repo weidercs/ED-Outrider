@@ -2,6 +2,28 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · Where your pad is: words, diagrams, quiet on auto-dock
+NEXT-VERSION #12 (the author liked the mockup), on #3's pad number. After bgol's LandingPad plugin for EDMC (GPL-2+,
+credited in `outrider/pads.py` and the README).
+- **Words**: at a starport (Coriolis, Orbis, Ocellus, asteroid base, Dodec) "at the back · up on your right" (the
+  author's wording, not a clock), at a carrier "port side, toward the bow" (a squadron carrier names the deck); shown
+  under PAD on Now and the Target panel, and said after the personality's pad line as a plain sentence. The words assume
+  the green lights on your right; the first docking of a session, then every 4th, says so ("With the green lights on
+  your right, it's …"; meta `docking_said`, live-only).
+- **Diagrams**: the starport seen from the slot looking in (12 sectors, 3 depths, the slot's red and green lights) or
+  the carrier from above, bow up, your pad filled in: the overlay's Target panel (`overlay.pad_map_items`) and Now
+  (`padMapSvg`). `[overlay] pad_diagram` (Settings → In-game overlay, on by default) turns them off; the words stay.
+- **Quiet on auto-dock** (the author): with a docking computer fitted the grant's moment is held (`docking_hold`,
+  checkpointed) and said by `State.docking_release` after 12 s (`AUTO_DOCK_WAIT_S`) unless the `Music` line
+  "DockingComputer" came first (2-10 s after the grant in the author's journals); shown at once either way.
+- **Test commands** (the plugin's): `!sppad 34`, `!fcpad 7`, `!scpad 23`, `!cspad 3` typed in game chat act as a grant
+  at a test station of that layout, said at once; any other chat is never read.
+- Tests: `tests/test_pads.py` (layouts, the 45-pad pattern, the words, carriers and squadron decks, the spoken
+  sentence, the commands), test_docking (the place, the green-lights cadence, the commands, the diagram switch, the
+  panel's drawing and the slot's lights, the docking computer's hold, a cancel, a rollback); the smoke block (the words
+  and diagram on Now, a carrier's, number only at an outpost, the setting, the sentence said). Docs: overlay.md,
+  voice-and-alerts.md, views.md, settings.md, the example config, JOURNAL_REFERENCE, AGENT_GUIDE, DESIGN_NOTES, README.
+
 ## 2026-10-14 · The overlay's docking refusal wraps instead of being cut
 - `overlay.pad_panel`'s reason is flowed word by word: "no pad free for your ship: try ag…" was cut at the panel's edge
   (seen in an offscreen render). Test: every reason at every text size, no "…".

@@ -132,7 +132,13 @@ the code; the constants named are in `ed_outrider.py` unless another file is giv
   Reasons in the author's journals: NoSpace 50, Distance 16, RestrictedAccess 4, TooLarge 2, Hostile 1 (Frontier's docs
   also list Offences, ActiveFighter, NoReason). A grant ends with `Docked`, `DockingCancelled` or `DockingTimeout`.
 - The journal never says which layout a station uses (outposts, ports and Odyssey settlements come in several models), so
-  Outrider gives the pad number only, never a map.
+  there Outrider gives the pad number only. Starports (StationType Coriolis, Orbis, Ocellus or Bernal, AsteroidBase,
+  Dodec) and carriers have one layout each (#12, after the LandingPad plugin); a squadron carrier is a FleetCarrier with a
+  four-letter name, a colonisation ship a SurfaceStation (or unknown) with one of seven MarketIDs.
+- The docking computer taking over writes `Music` with `MusicTrack` "DockingComputer", 2 to 10 s after DockingGranted
+  in the author's journals; its module is `int_dockingcomputer_advanced` (or `_standard`) in the Loadout.
+- `SendText` (your own chat) carries `To`, `Message`, `Sent`: Outrider reads only the LandingPad plugin's test
+  commands from it ("!sppad 34").
 
 **Status.json**
 - It is rewritten only when something in it changes. A player standing still (a stopped Rhino included)
