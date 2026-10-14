@@ -575,5 +575,144 @@ class StartUp(unittest.TestCase):
         self.assertEqual(ed_outrider.sweep_backup_leftovers("/nonexistent/backups"), [])
 
 
+class CertifiWeekly(unittest.TestCase):
+    """The launchers upgrade certifi once a week (the author, 2026-10-14): pip never upgrades an installed certifi that
+    meets requirements.txt's floor, so its root certificates would otherwise age with the environment. A stamp in the
+    venv holds the date of the last check; a failed pip (offline) says one line, leaves the stamp alone so the next
+    start tries again, and never stops the start. Run with a fake venv Python (pip is logged, never run)."""
+    ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    FAIL_LINE = "certifi: could not check for a newer certificate bundle (offline?); using the installed one"
+
+    def read(self, name):
+        with open(os.path.join(self.ROOT, name), encoding="utf-8") as f:
+            return f.read()
+
+    def launch(self, stamp=None, pip_rc=0):
+        """launch_outrider.sh in a scratch checkout whose environment needs no install; returns (output, pip calls,
+        the stamp's text or None)."""
+        import datetime
+        import hashlib
+        import shutil
+        import subprocess
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        shutil.copy(os.path.join(self.ROOT, "launch_outrider.sh"), d)
+        with open(os.path.join(d, "requirements.txt"), "w") as f:
+            f.write("aiohttp\n")
+        venv = os.path.join(d, ".venv")
+        os.makedirs(os.path.join(venv, "bin"))
+        with open(os.path.join(venv, ".requirements.sha256"), "w") as f:
+            f.write(hashlib.sha256(b"aiohttp\n").hexdigest() + "\n")
+        if stamp is not None:
+            with open(os.path.join(venv, ".certifi-checked"), "w") as f:
+                f.write((datetime.date.today() - datetime.timedelta(days=stamp)).isoformat() + "\n")
+        log = os.path.join(d, "pip.log")
+        with open(os.path.join(venv, "bin", "python"), "w") as f:   # aiohttp there, -c real Python, pip logged
+            f.write('#!/bin/sh\nif [ "$2" = "import aiohttp" ]; then exit 0; fi\nif [ "$1" = "-c" ]; then exec "%s" "$@"; fi\n'
+                    'if [ "$1" = "-m" ] && [ "$2" = "pip" ]; then echo "$*" >> "%s"; exit %d; fi\n'
+                    'if [ "$1" = "-m" ]; then exit 0; fi\necho STARTED\n' % (shutil.which("python3"), log, pip_rc))
+        os.chmod(os.path.join(venv, "bin", "python"), 0o755)
+        with open(os.path.join(venv, "bin", "activate"), "w") as f:
+            f.write('PATH="%s:$PATH"\n' % os.path.join(venv, "bin"))
+        env = {k: v for k, v in os.environ.items() if k not in ("DISPLAY", "WAYLAND_DISPLAY", "XDG_SESSION_TYPE")}
+        r = subprocess.run([shutil.which("bash"), os.path.join(d, "launch_outrider.sh")], cwd=d, capture_output=True,
+                           text=True, env=env, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("STARTED", r.stdout, r.stderr)                       # the start is never blocked
+
+        def text(path):
+            if not os.path.exists(path):
+                return None
+            with open(path) as f:
+                return f.read()
+        calls = (text(log) or "").splitlines()
+        stamp = text(os.path.join(venv, ".certifi-checked"))
+        return r.stdout, calls, (stamp.strip() if stamp is not None else None)
+
+    def test_missing_stamp_checks_and_stamps(self):
+        import datetime
+        out, calls, stamp = self.launch()
+        self.assertEqual(len(calls), 1)
+        self.assertIn("pip install --upgrade --quiet", calls[0])
+        self.assertTrue(calls[0].endswith(" certifi"))
+        self.assertEqual(stamp, datetime.date.today().isoformat())
+        self.assertNotIn(self.FAIL_LINE, out)
+
+    def test_fresh_stamp_skips(self):
+        for days in (0, 6):
+            out, calls, stamp = self.launch(stamp=days)
+            self.assertEqual(calls, [], days)
+
+    def test_stale_stamp_checks(self):
+        import datetime
+        out, calls, stamp = self.launch(stamp=8)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(stamp, datetime.date.today().isoformat())
+        _, calls, _ = self.launch(stamp=-3)   # a stamp in the future (the clock was wrong): checked, not trusted
+        self.assertEqual(len(calls), 1)
+
+    def test_failing_pip_says_so_and_keeps_no_stamp(self):
+        import datetime
+        out, calls, stamp = self.launch(pip_rc=1)
+        self.assertEqual(len(calls), 1)                                      # tried once, not retried in a loop
+        self.assertIn(self.FAIL_LINE, out)
+        self.assertIsNone(stamp)                                             # the next start tries again
+        stale = (datetime.date.today() - datetime.timedelta(days=8)).isoformat()
+        out, calls, stamp = self.launch(stamp=8, pip_rc=1)
+        self.assertEqual(stamp, stale)                                       # an old stamp is left as it was
+
+    def test_windows_launcher_does_the_same(self):
+        """launch_outrider.bat: the same check with the same Python lines (run here against real stamps), reached on
+        both paths to :run (after an install and the fast path), before Outrider; the stamp written only after pip
+        got through; Windows line endings kept."""
+        import datetime
+        import shutil
+        import subprocess
+        with open(os.path.join(self.ROOT, "launch_outrider.bat"), "rb") as f:
+            raw = f.read()
+        self.assertEqual(raw.count(b"\n"), raw.count(b"\r\n"))
+        bat, sh = raw.decode("ascii").replace("\r\n", "\n"), self.read("launch_outrider.sh")
+        self.assertIn('set "CERTSTAMP=%VENV%\\.certifi-checked"', bat)
+        self.assertIn('CERTIFI_STAMP="$VENV/.certifi-checked"', sh)
+        check = re.search(r'^"%VPY%" -c "(import datetime as d.*?)" "%CERTSTAMP%" >nul 2>&1 && goto overlay$', bat, re.M)
+        write = re.search(r'^:certstamp\n"%VPY%" -c "(import datetime, sys.*?)" "%CERTSTAMP%"$', bat, re.M)
+        self.assertTrue(check and write)
+        # the shell launcher runs the same Python (quotes swapped)
+        self.assertIn(check.group(1), sh)
+        self.assertIn(write.group(1).replace("'", '"'), sh)
+        self.assertIn("certifi >nul 2>&1 && goto certstamp\necho " + self.FAIL_LINE + "\ngoto overlay\n", bat)
+        start = bat.index("\n:run\n")
+        self.assertLess(start, check.start())
+        self.assertLess(write.end(), bat.index("-m outrider.overlay_runner --setup"))
+        self.assertIn("\n:stamp\ncopy /y requirements.txt", bat)            # an install falls through into :run
+        self.assertLess(bat.index(":stamp\n"), start)
+        python3 = shutil.which("python3")
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "stamp")
+
+            def fresh():
+                return subprocess.run([python3, "-c", check.group(1), path], capture_output=True).returncode == 0
+            self.assertFalse(fresh())                                          # missing
+            subprocess.run([python3, "-c", write.group(1), path], check=True)
+            self.assertTrue(fresh())
+            for days, want in ((6, True), (7, False), (8, False), (-1, False)):
+                with open(path, "w") as f:
+                    f.write((datetime.date.today() - datetime.timedelta(days=days)).isoformat() + "\r\n")
+                self.assertEqual(fresh(), want, days)
+            with open(path, "w") as f:
+                f.write("garbage")
+            self.assertFalse(fresh())
+
+    def test_docker_build_asks_for_the_newest(self):
+        """The image needs no weekly check (it is built at each release), but Docker's layer cache would keep the
+        certifi of the first build: the bundle passes the day's date, which makes the certifi upgrade run again."""
+        df = self.read("Dockerfile")
+        arg = df.index("\nARG CERTIFI_CHECKED=")
+        self.assertLess(arg, df.index("--upgrade certifi"))
+        self.assertIn("${CERTIFI_CHECKED", df[arg:df.index("--upgrade certifi")])
+        self.assertLess(df.index("--upgrade certifi"), df.index("COPY . ."))   # before the source: cached between days
+        self.assertIn('--build-arg CERTIFI_CHECKED="$(date +%F)"', self.read("scripts/docker_bundle.sh"))
+
+
 if __name__ == "__main__":
     unittest.main()

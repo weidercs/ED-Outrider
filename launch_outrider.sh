@@ -69,6 +69,19 @@ if needs_install; then
     echo "$want" > "$STAMP"
 fi
 
+# certifi (the root certificates every HTTPS request also trusts, outrider/tls.py) upgraded once a week: pip never
+# upgrades an installed one that meets requirements.txt's floor (the author, 2026-10-14). The stamp holds the date of
+# the last check, compared in Python; written only when pip got through, so an offline start tries again next time.
+# Never stops Outrider from starting.
+CERTIFI_STAMP="$VENV/.certifi-checked"
+if ! "$VENV/bin/python" -c 'import datetime as d, sys; s = open(sys.argv[1]).read().strip(); sys.exit(not 0 <= (d.date.today() - d.date.fromisoformat(s)).days < 7)' "$CERTIFI_STAMP" >/dev/null 2>&1; then
+    if "$VENV/bin/python" -m pip install --upgrade --quiet --disable-pip-version-check --retries 1 --timeout 10 certifi >/dev/null 2>&1; then
+        "$VENV/bin/python" -c 'import datetime, sys; open(sys.argv[1], "w").write(datetime.date.today().isoformat() + "\n")' "$CERTIFI_STAMP" || true
+    else
+        echo "certifi: could not check for a newer certificate bundle (offline?); using the installed one"
+    fi
+fi
+
 # the in-game overlay's PyQt6, installed when [overlay] enabled is true in the config and it is missing (never stops
 # Outrider from starting). Run in the caller's folder like Outrider, so a relative --config is the same file.
 (cd "$CALLER" && PYTHONPATH="$HERE${PYTHONPATH:+:$PYTHONPATH}" "$HERE/$VENV/bin/python" -m outrider.overlay_runner --setup "$@") || true

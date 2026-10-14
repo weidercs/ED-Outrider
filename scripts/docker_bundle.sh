@@ -14,7 +14,9 @@ REV=$(git describe --always --dirty 2>/dev/null || echo unknown)
 IMAGE="ed-outrider:$VER"
 
 echo "building $IMAGE ($REV)"
+# CERTIFI_CHECKED: a new value each day, so the Dockerfile's certifi upgrade runs again instead of coming from the cache
 docker build ${PLATFORM:+--platform "$PLATFORM"} \
+  --build-arg CERTIFI_CHECKED="$(date +%F)" \
   --label org.opencontainers.image.title="ED Outrider" \
   --label org.opencontainers.image.version="$VER" \
   --label org.opencontainers.image.revision="$REV" \

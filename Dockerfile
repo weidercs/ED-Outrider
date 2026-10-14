@@ -16,6 +16,11 @@ WORKDIR /app
 ARG WITH_PIPER=1
 RUN pip install --no-cache-dir "aiohttp>=3.9" "certifi>=2024.7.4" \
  && if [ "$WITH_PIPER" = "1" ]; then pip install --no-cache-dir "piper-tts>=1.3"; fi
+# certifi (the root certificates every HTTPS request also trusts) as new as the build: the layer above stays in
+# Docker's cache while this file and the base image are unchanged, keeping the certifi of the first build.
+# scripts/docker_bundle.sh passes the day's date, so a release's build always asks for the newest
+ARG CERTIFI_CHECKED=
+RUN echo "certifi: the newest as of ${CERTIFI_CHECKED:-the first build}" && pip install --no-cache-dir --upgrade certifi
 
 COPY . .
 # runs as your user (compose's user:), so the shipped data it refreshes (the bio rules) and the defaults it needs must

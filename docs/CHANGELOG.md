@@ -2,6 +2,26 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · The launchers keep certifi current, checking once a week
+Follow-up to issue #9 (the HTTPS fix): pip never upgrades an installed certifi that meets `requirements.txt`'s floor,
+so the root certificates Outrider trusts would age with the environment (the author's decision, 2026-10-14).
+- **`launch_outrider.sh` and `launch_outrider.bat`**, after the requirements step, run `pip install --upgrade --quiet
+  certifi` when `.venv/.certifi-checked` (the date of the last check, compared in Python) is missing, 7 days old or
+  more, or unreadable, then write today's date. Offline (or PyPI down) they say "certifi: could not check for a newer
+  certificate bundle (offline?); using the installed one", write no stamp (the next start tries again) and start
+  Outrider anyway; pip tries once with a short timeout. The .bat keeps its Windows line endings; its check sits at the
+  top of `:run`, reached after an install and on the fast path.
+- **Docker**: the image needs no weekly check (each release builds it), but Docker's layer cache kept the certifi of
+  the first build. The Dockerfile now upgrades certifi in a step after `ARG CERTIFI_CHECKED`, and
+  `scripts/docker_bundle.sh` passes the day's date, so a release's image always has the newest.
+- Why weekly (DESIGN_NOTES): certifi holds root certificates, which change rarely; a site's own certificate (Let's
+  Encrypt's 90-day ones) is checked live against those roots and needs no new bundle.
+- Tests (`tests/test_server_mode.py` CertifiWeekly): the shell launcher in a scratch checkout with a fake venv Python
+  (a missing stamp checks and stamps, a fresh one skips, an 8-day or future one checks, a failing pip says the line,
+  keeps no stamp and still starts); the .bat's lines checked as text and its Python run against real stamps (the same
+  lines as the shell's); the Dockerfile's ARG and the bundle's build argument. Docs: install guide, DESIGN_NOTES,
+  AGENT_GUIDE.
+
 ## 2026-10-14 · CMDR tab: each ship's build in EDSY and Coriolis
 The author's request of 2026-10-14.
 - **EDSY ↗ and Coriolis ↗** beside each ship in the CMDR tab's Fleet (the ship you fly included) and Inventory's

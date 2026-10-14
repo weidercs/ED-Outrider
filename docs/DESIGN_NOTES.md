@@ -775,9 +775,23 @@ upstream project's choices, not rules of the game.
   was in `requirements.txt`, the launcher not used) it falls back to the system store, with one line in the log. A
   certificate failure is its own kind in `outrider.health.classify` ("certificate", not "tls"), worded with the host
   and the fix: the date and time first, because a wrong clock fails the same way for every site, then an update (an
-  Outrider from before this fix has no certifi; a later root change is met by raising the floor in `requirements.txt`,
-  now `certifi>=2024.7.4`, which the launchers install again because the file changed). Known limit: pip leaves an
-  installed certifi that meets the floor alone, so the bundle is as old as the last time the floor moved.
+  Outrider from before this fix has no certifi). The floor in `requirements.txt` is `certifi>=2024.7.4`.
+- **The launchers upgrade certifi once a week** (2026-10-14, the author's decision). pip leaves an installed certifi
+  that meets the requirements floor alone, so without this the bundle would be as old as the environment.
+  `launch_outrider.sh`/`.bat`, after the requirements step, run `pip install --upgrade --quiet certifi` when
+  `.venv/.certifi-checked` (the date of the last check, compared in Python, as the .bat compares its requirements stamp)
+  is missing, 7 days old or more, unreadable or in the future. Weekly because certifi holds root certificates, which
+  change rarely (a few times a year, announced months ahead); a site's own certificate, such as Let's Encrypt's 90-day
+  ones, is not in it and is checked live against those roots, so a renewed site certificate needs no new bundle. A
+  daily check would only add a PyPI request to most starts. Never in the way of the start: pip's output is hidden, it
+  tries once (`--retries 1 --timeout 10`, so an offline start waits seconds, not a minute), a failure says "certifi:
+  could not check for a newer certificate bundle (offline?); using the installed one" and leaves the stamp, so the next
+  start tries again (a Settings Restart is a start: it may try again too). The Docker image needs no weekly check (a
+  release builds a new one, and a container's environment is the image's), but Docker's layer cache would keep the
+  certifi of the first build while the Dockerfile's pip line and the base image are unchanged: the Dockerfile upgrades
+  certifi in a step after `ARG CERTIFI_CHECKED`, and `scripts/docker_bundle.sh` passes the day's date, so a release's
+  build always asks PyPI for the newest (only that step and the source run again). An image built with
+  `docker compose up --build` has no date passed and keeps its cached certifi until the Dockerfile changes.
 - **A Nearby retry that fails again sends no payload.** A failed sphere search is asked again after 30 s, 60 s, ...
   up to every 5 minutes. With the network down each retry fails at once, the status goes straight back to "Spansh
   unavailable" and the rows are the cached ones again, yet it used to bump the payload twice: every open page (a
