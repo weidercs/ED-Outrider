@@ -216,6 +216,9 @@ answer: "Spansh ok", or just "Spansh unavailable" (EDSM, GitHub... the same) whi
 connection" when two or more fail because this PC has no network. Meanwhile the lists show what Outrider kept from
 earlier, and it asks again by itself. If Spansh or EDSM stays unavailable for 10 minutes, or this PC has no network,
 a card says so at the top of the page (✕ hides it); it goes when they answer. The error itself is in Show log.
+One failure is said in full, on the tile and at once on a card, because it is yours to fix: "couldn't verify
+spansh.co.uk's certificate (expired): check this PC's date and time; if they are right, update Outrider" (see
+[Windows: certificate errors](install.md#-getting-started)). Settings → Uploads' Recent list words it the same way.
 
 The **fuel tile** counts jumps as the ship gets lighter ("≈6 jumps at max range (484 ly), 3,500 at your pace"),
 for any drive, engineered or not, from your own Loadout and jumps. Nearby (and Now) shows laden range and the targeted

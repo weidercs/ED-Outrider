@@ -221,6 +221,7 @@ import outrider.codex_bodies  # star and planet types as codex entries: what a b
 import outrider.codex_geo  # geology as codex entries: what a body's volcanism could log (pure)
 import outrider.service    # Install as a service (S70): a systemd user unit on Linux, a Startup .cmd on Windows
 import outrider.health     # what kind of failure a call to an outside service met (dns, offline, timeout, http5xx...)
+import outrider.tls        # the one TLS context of every outgoing HTTPS connection: the system store plus certifi's
 from outrider.core import iso_ts, ts_seconds   # journal timestamps
 from outrider.fsd import (   # the frame shift drive's maths: range, fuel per jump, the fuel model, fleet figures
     FSD_RANGE_MODS, GUARDIAN_BOOST, conservative_optimal_mass, conservative_range, fleet_figures, fleet_range, fsd_range,
@@ -5817,8 +5818,10 @@ class Spansh:
         self.sem_plot = asyncio.Semaphore(1)   # the Highway's plots: one at a time
 
     async def start(self):
+        # every outgoing HTTPS connection verifies with outrider.tls's context: the system store plus certifi's (issue #9)
         self.session = ClientSession(timeout=ClientTimeout(total=60), headers={"User-Agent": USER_AGENT},
-                                     trace_configs=[self.health.trace_config(lookup_source)])
+                                     trace_configs=[self.health.trace_config(lookup_source)],
+                                     connector=outrider.tls.connector())
 
     async def close(self):
         await self.session.close()
@@ -7164,7 +7167,7 @@ class State:
             matched, trace = "ai", {"rounds": 0, "tools": []}
             try:
                 async with ClientSession(timeout=ClientTimeout(total=self.assistant["timeout"] + 5),
-                                         headers={"User-Agent": USER_AGENT}) as session:
+                                         headers={"User-Agent": USER_AGENT}, connector=outrider.tls.connector()) as session:
                     words = await outrider.ask.ai_answer(text, self.assistant, get, session, trace=trace)
             except outrider.ask.AIError as e:
                 log("error", error=e.why, code=e.code, ai=trace)
@@ -7883,7 +7886,7 @@ class State:
         try:
             n = await asyncio.get_running_loop().run_in_executor(None, lambda: outrider.bio.update_colours(log=print))
         except Exception as e:  # noqa: BLE001 -- offline, GitHub down, upstream changed its form: said, Retry again
-            why = f"{type(e).__name__}: {e}" if not isinstance(e, ValueError) else str(e)
+            why = f"{type(e).__name__}: {e}" if not isinstance(e, ValueError | outrider.tls.CertificateFailed) else str(e)
             print(f"exobiology colour tables: download failed ({why})", file=sys.stderr)
             self.bio_colours_job = {"state": "failed", "why": why[:200]}
         else:
@@ -11352,9 +11355,11 @@ class State:
 
     def check_lookup_outages(self, now=None):
         """S42: a card on the banner for a lookup that stays down: no network at all (two sources failing by DNS or no
-        route) at once, a source whose address is not found at once, Spansh or EDSM down LOOKUP_DOWN_S. The card goes
-        when it answers again (or nothing has asked it for outrider.health.DOWN_FRESH_S). The Data tile says only
-        "Spansh unavailable" (the payload's health); the card's words stay the same for the whole outage."""
+        route) at once, a source whose address is not found at once, a certificate that cannot be verified at once
+        (issue #9: one card for every source failing so, with the first one's words), Spansh or EDSM down
+        LOOKUP_DOWN_S. The card goes when it answers again (or nothing has asked it for outrider.health.DOWN_FRESH_S).
+        The Data tile says only "Spansh unavailable" (the payload's health), a certificate failure its words; the card's
+        words stay the same for the whole outage."""
         now = time.time() if now is None else now
         if self.health.expire(now):
             return   # expire's on_change came back here already
@@ -11363,9 +11368,17 @@ class State:
             want["lookup_down:internet"] = (f"{outrider.health.OFFLINE}: Outrider's lookups (Spansh, EDSM, GitHub) "
                                             "are failing. Check this PC's network; what Outrider has kept still shows.")
         else:
+            certs = [d for d in self.health.down() if d["kind"] == "certificate"]
+            if certs:   # the clock or the certificate store: the same fix for every source, so one card
+                then = (f"Meanwhile {self.LOOKUP_DOWN_WORDS.get(certs[0]['source'], 'it asks again by itself')}"
+                        if len(certs) == 1 else "Meanwhile what Outrider has kept still shows")
+                want["lookup_down:certificate"] = (f"{' and '.join(d['name'] for d in certs)} unavailable: "
+                                                   f"{certs[0]['text'] or outrider.tls.cert_text(None)}. {then}.")
             for d in self.health.down():
                 src, name = d["source"], d["name"]
                 then = self.LOOKUP_DOWN_WORDS.get(src, "it asks again by itself")
+                if d["kind"] == "certificate":
+                    continue
                 if d["user_fix"]:
                     want[f"lookup_down:{src}"] = (f"{name} unavailable: its address is not found (this PC's network or "
                                                   f"DNS?). Meanwhile {then}.")
@@ -12061,6 +12074,7 @@ class State:
     # the outage card's verb per failure kind (outrider.health.classify)
     DOWN_WORDS = {"dns": "unreachable (its address not found)", "offline": "unreachable (no network)",
                   "refused": "unreachable", "timeout": "not answering", "tls": "unreachable (the secure connection failed)",
+                  "certificate": f"unreachable (its certificate could not be verified: {outrider.tls.ADVICE})",
                   "http5xx": "failing", "http4xx": "refusing", "bad_answer": "answering oddly", "other": "failing"}
 
     def check_upload_outages(self, now=None):
@@ -19605,7 +19619,7 @@ async def run(args, st):
         state.overlay_runner = outrider.overlay_runner.OverlayRunner(f"http://127.0.0.1:{args.port}")
         overlay_task = asyncio.create_task(state.watch_overlay_window())
     # uploads: their own session (never queued behind Spansh), named and versioned as EDDN asks of a sender
-    state.upload_session = ClientSession(timeout=ClientTimeout(total=20),
+    state.upload_session = ClientSession(timeout=ClientTimeout(total=20), connector=outrider.tls.connector(),
                                          headers={"User-Agent": f"ED-Outrider/{outrider.__version__}"})
     state.start_uploads()
     print("update check: " + ("on (GitHub's latest release, once a day)" if st["update_check"] else "off ([server] update_check)"))

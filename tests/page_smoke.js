@@ -6394,6 +6394,14 @@ const releasePayloads = async () => {
       renderStrip(); o.failedSearch = [sl(), horizon(), emptyMessage([]).startsWith("Spansh unavailable — the list is incomplete")];
       data.status = "ok (3 Spansh body lookups failed, retrying in 60s)"; renderStrip(); o.partial = [sl(), /warn/.test(cls())];
       data.status = "ok"; renderStrip(); o.ok = [sl(), /warn/.test(cls())];
+      // issue #9: a certificate failure in its own words (once, not also "Spansh unavailable"), short on the folded line;
+      // an upload's Recent line in the same words
+      const ct = "couldn't verify spansh.co.uk's certificate (expired): check this PC's date and time; if they are right, update Outrider";
+      data.health = {down: [{source: "spansh", name: "Spansh", since: 1, kind: "certificate", user_fix: false, text: ct}], offline: false};
+      data.status = "Spansh unavailable"; renderStrip(); o.cert = [sl(), /warn/.test(cls()), dataBit];
+      const up = document.createElement("div");
+      up.innerHTML = uploadRecentLine({state: "fail", kind: "certificate", say: ct.replace("spansh.co.uk", "eddn.edcd.io"), error: "raw", at: 1, first: 1, rounds: 1}, false);
+      o.certUp = up.querySelector(".bad").textContent;
       data.health = keep.health; data.status = keep.status; data.sphere_cut = keep.sphere_cut; renderStrip();
       // the Check buttons
       window.__u1 = keep.uploads;
@@ -6419,7 +6427,11 @@ const releasePayloads = async () => {
     w.fetch = real;
     const want = {down: ["Spansh unavailable", true, "Spansh unavailable"], offline: "No internet connection",
                   failedSearch: ["Spansh unavailable", null, true], partial: ["ok (3 Spansh body lookups failed, retrying in 60s)", false],
-                  ok: ["Spansh ok", false], buttons: ["edsm:Check", "inara:Check"], busy: "checking…"};
+                  ok: ["Spansh ok", false],
+                  cert: ["Spansh: couldn't verify spansh.co.uk's certificate (expired): check this PC's date and time; if they are right, update Outrider",
+                         true, "Spansh: certificate not verified"],
+                  certUp: "✗ couldn't verify eddn.edcd.io's certificate (expired): check this PC's date and time; if they are right, update Outrider",
+                  buttons: ["edsm:Check", "inara:Check"], busy: "checking…"};
     const good = Object.keys(want).every(k => JSON.stringify(got[k]) === JSON.stringify(want[k])) &&
       /^✗ \d\d?:\d\d( [AP]M)? Couldn't reach EDSM: the connection was refused$/.test(got.edsm || "") &&
       /^✓ \d\d?:\d\d( [AP]M)? Inara: CMDR Sample Pilot · profile · on hold no more/.test(got.inara || "") && got.link === "https://inara.cz/elite/cmdr/1/" &&
@@ -6427,7 +6439,7 @@ const releasePayloads = async () => {
       JSON.stringify(got.posted) === JSON.stringify([["uploads/edsm/check", "Sample Pilot", "0123456789abcdef0123456789abcdef01234567", "Sample Pilot"],
                                                     ["uploads/inara/check", "Sample Pilot", "", null]]) && errors.length === before;
     allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| lookups down and key checks |", good ? "the Data tile says only \"Spansh unavailable\" / \"No internet connection\", the horizon waits, Check for EDSM and Inara keys" : JSON.stringify(got), errors.slice(before));
+    console.log(good ? "OK" : "FAIL", "| lookups down and key checks |", good ? "the Data tile says only \"Spansh unavailable\" / \"No internet connection\" (a certificate failure its words), the horizon waits, Check for EDSM and Inara keys" : JSON.stringify(got), errors.slice(before));
     await releasePayloads();
   }
   // S43 / S44 (2026-10-12): a first run with no journals (the Data tile says where to set the folder and opens Settings ->

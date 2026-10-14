@@ -1285,7 +1285,7 @@ class Batch4Review(unittest.TestCase):
             self.assertEqual(sp.voice_name, "en_GB-b-low")                # the installed one speaks at once
             self.assertEqual([t["args"] for t in threads], [("en_GB-a-low", "en_GB-b-low")])
             it = iter([_FakeResponse(b"{}"), _FakeResponse(b"model")])
-            with unittest.mock.patch.object(outrider.tts.urllib.request, "urlopen", lambda url, timeout: next(it)), \
+            with unittest.mock.patch.object(outrider.tls.urllib.request, "urlopen", lambda url, timeout, **k: next(it)), \
                     contextlib.redirect_stdout(io.StringIO()):
                 threads[0]["target"](*threads[0]["args"])
             self.assertEqual(sp.voice_name, "en_GB-a-low")                # switched once it arrived

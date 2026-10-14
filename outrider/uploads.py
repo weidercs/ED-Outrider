@@ -27,6 +27,7 @@ import time
 
 from outrider.core import ts_seconds
 from outrider.health import classify
+from outrider.tls import cert_text
 
 MAX_AGE_S = 7 * 86400    # a line older than this (by this machine's clock) is never uploaded, even on a catch-up (the
 #                          author's cap: a forgotten instance must not send months of play; listeners may refuse old data)
@@ -844,7 +845,8 @@ def local_status(status):
 
 class Recent:
     """Per service the last RECENT_KEEP sending rounds, newest last: {state: ok | fail | held, first, at, rounds, sent,
-    dropped, dry, retry, held, error, kind, user_fix, next, note}. Back-to-back successes are merged, and so are the
+    dropped, dry, retry, held, error, kind, user_fix, next, note, say}; say: a certificate failure's words
+    (outrider.tls.cert_text: the host, the clock, update Outrider; issue #9), else None. Back-to-back successes are merged, and so are the
     same failure repeated (each backoff's try). `outage(service)`: a raised round or one the service only asked to retry
     starts it or carries it on, any round the service answered (a row sent, or refused by the service itself) ends it,
     a held round (a key refused) and one settled here alone (local_status) are neither. `catchup`: what each service
@@ -866,10 +868,12 @@ class Recent:
         raised = outcome.get("raised")
         e = {"first": at, "at": at, "rounds": 1, "sent": count("sent"), "dropped": count("dropped"), "dry": count("dry"),
              "retry": count("queued"), "held": held, "error": None, "kind": None, "user_fix": False, "next": None,
-             "note": None}
+             "note": None, "say": None}
         if raised is not None or (e["retry"] and not answered and not held):
             e["error"] = str(outcome.get("error") or next((text for _, st, text, _ in res if st == "queued"), ""))[:300]
             e["kind"], e["user_fix"] = classify(raised) if raised is not None else classify(text=e["error"])
+            if e["kind"] == "certificate":
+                e["say"] = cert_text(raised)
             e.update(state="fail", next=at + (outcome.get("wait") or 0))
         elif held:
             e["state"] = "held"

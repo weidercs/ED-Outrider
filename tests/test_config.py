@@ -750,7 +750,7 @@ class Batch5ConfigCli(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             def run(responses, files=files):
                 it = iter(responses)
-                with unittest.mock.patch.object(outrider.tts.urllib.request, "urlopen", lambda url, timeout: next(it)):
+                with unittest.mock.patch.object(outrider.tls.urllib.request, "urlopen", lambda url, timeout, **k: next(it)):
                     outrider.tts.download_voice_files(files, d)
             # the connection drops 3 bytes into the model: nothing is left, not even the finished config
             with self.assertRaises(ConnectionResetError):

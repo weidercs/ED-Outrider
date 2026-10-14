@@ -26,6 +26,14 @@ are **experimental on Windows** (they press keys the Windows way, untested again
 co-pilot button is Linux only for now. Windows is less tested than Linux: if something goes wrong, an issue on GitHub
 is welcome.
 
+**Windows: certificate errors.** Older Outriders on some Windows PCs failed every lookup with `CERTIFICATE_VERIFY_FAILED
+… certificate has expired` (Spansh, EDSM, GitHub): Windows only fetches a new or renewed root certificate when
+something asks it to (a browser does, Python does not), so a site on a newer root could not be verified. Outrider now
+also trusts Mozilla's list of roots (the `certifi` package in `requirements.txt`, installed by the launcher), so this
+fixes itself after an update: no setting, no `SSL_CERT_FILE`. If the Data tile still says *couldn't verify …'s
+certificate*, check the PC's **date and time** first (a clock that is wrong gives the same error); if they are right,
+update Outrider.
+
 > [!TIP]
 > The first start reads all your journals (a few seconds, or a few minutes for years of them); after that it only
 > reads what's new. When an update changes how journals are read, its first start reads them all again once (after a

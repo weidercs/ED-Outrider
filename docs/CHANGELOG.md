@@ -2,6 +2,28 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · HTTPS: the system's certificates plus certifi's, and a plain certificate error
+Reported by Aerics84, issue #9: on Windows every lookup failed with `CERTIFICATE_VERIFY_FAILED … certificate has
+expired` for spansh.co.uk. Python verifies against the Windows store, which fetches a new root only when something asks
+it to (a browser does, Python does not).
+- **certifi in `requirements.txt`** (`certifi>=2024.7.4`): the launchers install it on the next start (the file
+  changed), the Docker image too.
+- **One TLS context for every outgoing HTTPS connection** (`outrider/tls.py`): `ssl.create_default_context()` (the
+  system store, so a corporate or self-added root keeps working) with certifi's bundle loaded into it; without certifi
+  the system store alone, said once in the log. Cached. The lookups' session, the assistant's, the uploads', the MCP
+  bridge's (`tls.connector()`), and the urllib downloads (the bio rules and colour tables, Piper's voice list and voices:
+  `tls.urlopen`). A test walks the source so a new session or urlopen cannot leave it out.
+- **A certificate failure said plainly**: `outrider.health.classify` has a "certificate" kind (aiohttp's
+  ClientConnectorCertificateError, ssl's SSLCertVerificationError, urllib's URLError around one); the Data tile says
+  "Spansh: couldn't verify spansh.co.uk's certificate (expired): check this PC's date and time; if they are right,
+  update Outrider" (a wrong clock gives the same error), a banner card says it at once (one card for every source
+  failing so) and so does Show log; Settings → Uploads' Recent lines and the upload outage card use the same words; a
+  failed voice or bio download says it too.
+- Tests (`tests/test_tls.py`): the context loads both sources (certifi faked, a test root in tests/fixtures), the
+  fallback without certifi or with a broken bundle, classify and the words, the tile and the banner, the uploads'
+  Recent entry, the source walk; smoke: the tile's and the Recent line's words. No network in any of them.
+  Docs: install (Windows: certificate errors), the views guide's Data tile, DESIGN_NOTES, AGENT_GUIDE.
+
 ## 2026-10-14 · CMDR tab: sessions by days, hot ships, stored modules followed
 Batch 4 of the PR #5 review's plan, with the author's answers of 2026-10-14.
 - **Sessions by days**, like everything else: the Sessions tab lists the logins of the last 30 days with fighting or

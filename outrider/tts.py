@@ -30,12 +30,12 @@ import sys
 import tempfile
 import threading
 import time
-import urllib.request
 import wave
 from collections import OrderedDict
 
 from . import DATA_DIR, ROOT
 from . import pronounce
+from . import tls   # every download verifies with the shared context (issue #9)
 
 VOICES_DIR = os.path.join(DATA_DIR, "piper-voices")
 # how the words espeak gets wrong are said (resources/pronounce.json, your data/pronounce.json on top)
@@ -187,7 +187,7 @@ def fetch_catalogue(force=False, cache=None):
         except (OSError, ValueError):   # a cut-short copy: fetch it again rather than trust it for a week
             pass
     try:
-        with urllib.request.urlopen(CATALOGUE_URL, timeout=30) as r:
+        with tls.urlopen(CATALOGUE_URL, timeout=30) as r:
             data = r.read()
     except http.client.HTTPException as e:   # cut off mid-answer (IncompleteRead) is no OSError: said as one
         raise OSError(f"{type(e).__name__}: {e}") from e
@@ -280,7 +280,7 @@ def download_voice_files(files, voices_dir, progress=None, timeout=60):
             parts.append((part, dest))
             md5, got = hashlib.md5(), 0
             os.chmod(part, 0o644)   # mkstemp's 0600 would carry over to the installed voice
-            with os.fdopen(fd, "wb") as f, urllib.request.urlopen(FILE_URL.format(path=path), timeout=timeout) as r:
+            with os.fdopen(fd, "wb") as f, tls.urlopen(FILE_URL.format(path=path), timeout=timeout) as r:
                 size = r.headers.get("Content-Length") if getattr(r, "headers", None) else None
                 while chunk := r.read(1 << 16):
                     f.write(chunk)

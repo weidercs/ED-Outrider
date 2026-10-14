@@ -14,7 +14,7 @@ WORKDIR /app
 # Piper (the voice, about 100 MB with onnxruntime) is in by default; --build-arg WITH_PIPER=0 leaves it out (the
 # pages then speak with the browser's voice)
 ARG WITH_PIPER=1
-RUN pip install --no-cache-dir "aiohttp>=3.9" \
+RUN pip install --no-cache-dir "aiohttp>=3.9" "certifi>=2024.7.4" \
  && if [ "$WITH_PIPER" = "1" ]; then pip install --no-cache-dir "piper-tts>=1.3"; fi
 
 COPY . .

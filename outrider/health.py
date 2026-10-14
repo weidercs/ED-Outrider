@@ -10,8 +10,9 @@ TraceConfig on the lookups' one session (`trace_config`: every request, so no ca
 failure counts only when no answer from that source came since the request began (one slow request among fifty
 answered ones is not an outage); "No internet connection" only when two or more sources failed by DNS or no route with
 no answer from anywhere between. A failure is forgotten after DOWN_FRESH_S with nothing asked since (a daily check that
-failed once is not "down" all day). The uploads have their own record (outrider.uploads.Recent); bio.py's rules check
-(urllib, on a worker) is not counted.
+failed once is not "down" all day). A certificate failure (issue #9: the clock, or a root this PC's store lacks) keeps
+its words (outrider.tls.cert_text: the host and the fix) for the Data tile and its own banner card. The uploads have
+their own record (outrider.uploads.Recent); bio.py's rules check (urllib, on a worker) is not counted.
 """
 import asyncio
 import errno
@@ -21,10 +22,14 @@ import ssl
 import time
 from urllib.parse import urlsplit
 
+from . import tls
+
 # dns: the name not found; offline: no route to it (this machine's network down); refused: nothing listening there;
-# timeout: no answer in time; tls: the secure connection failed; http5xx: the service failing; rate: asked to slow
-# down; http4xx: a request it refused; bad_answer: an answer that is not what the service answers; other: anything else
-KINDS = ("dns", "offline", "refused", "timeout", "tls", "http5xx", "rate", "http4xx", "bad_answer", "other")
+# timeout: no answer in time; certificate: the service's certificate could not be verified (this PC's clock, or a root
+# its store has not fetched: outrider.tls); tls: the secure connection failed otherwise; http5xx: the service failing;
+# rate: asked to slow down; http4xx: a request it refused; bad_answer: an answer that is not what the service answers;
+# other: anything else
+KINDS = ("dns", "offline", "refused", "timeout", "certificate", "tls", "http5xx", "rate", "http4xx", "bad_answer", "other")
 USER_FIX = frozenset({"dns", "offline"})
 # words in a 4xx answer that mean "too many requests" (Inara says it in its header's text, with a 400: inara.RATE_WORDS)
 RATE_WORDS = ("slow down", "too many", "too much", "rate limit", "revoked", "temporarily")
@@ -49,11 +54,13 @@ def _by_status(status, text=""):
 
 
 def _chain(exc):
-    """The exception and what it wraps (__cause__, __context__, aiohttp's os_error), each once."""
+    """The exception and what it wraps (urllib's reason, __cause__, __context__, aiohttp's os_error), each once."""
     seen = []
     while exc is not None and exc not in seen and len(seen) < 8:
         seen.append(exc)
-        exc = getattr(exc, "os_error", None) or exc.__cause__ or exc.__context__
+        reason = getattr(exc, "reason", None)
+        exc = getattr(exc, "os_error", None) or (reason if isinstance(reason, BaseException) else None) \
+            or exc.__cause__ or exc.__context__
     return seen
 
 
@@ -68,6 +75,8 @@ def classify(exc=None, status=None, text=None):
             name = type(e).__name__
             if isinstance(e, socket.gaierror) or name == "ClientConnectorDNSError":
                 kind = "dns"
+            elif tls.cert_failure(e) is not None:
+                kind = "certificate"
             elif isinstance(e, ssl.SSLError | ssl.CertificateError) or "SSL" in name or "Certificate" in name:
                 kind = "tls"
             elif isinstance(e, asyncio.TimeoutError | TimeoutError) or "Timeout" in name:
@@ -145,20 +154,22 @@ class Health:
         if changed:
             self._changed()
 
-    def failed(self, source, exc=None, status=None, started=None, at=None):
+    def failed(self, source, exc=None, status=None, started=None, at=None, host=None):
         """A request to `source` failed. Ignored when the source answered another request since this one began.
-        True when it counted."""
+        True when it counted. A certificate failure keeps its words (outrider.tls.cert_text, naming `host`)."""
         at = self.clock() if at is None else at
         if started is not None and self.last_ok.get(source, -1) >= started:
             return False
         kind, user_fix = classify(exc, status)
-        was, offline = source in self.out, self.offline()
+        was, offline = self.out.get(source, {}).get("kind"), self.offline()
         o = self.out.setdefault(source, {"since": at, "fails": 0})
         o.update(last=at, kind=kind, user_fix=user_fix, fails=o["fails"] + 1,
-                 error=f"{type(exc).__name__}: {exc}"[:300] if exc is not None else f"HTTP {status}")
+                 error=f"{type(exc).__name__}: {exc}"[:300] if exc is not None else f"HTTP {status}",
+                 text=tls.cert_text(exc, host) if kind == "certificate" else None)
         if user_fix:
             self.no_net[source] = at
-        if not was or offline != self.offline():
+        # a source newly down, the network's state turned, or a certificate failure begun or ended (it has its own card)
+        if was is None or offline != self.offline() or (kind == "certificate") != (was == "certificate"):
             self._changed()
         return True
 
@@ -177,9 +188,10 @@ class Health:
         return bool(old)
 
     def down(self):
-        """[{source, name, since, kind, user_fix}] in SOURCES' order (timestamps, never ticking text)."""
+        """[{source, name, since, kind, user_fix, text}] in SOURCES' order (timestamps, never ticking text); text: a
+        certificate failure's words (outrider.tls.cert_text), else None."""
         return [{"source": s, "name": SOURCES.get(s, s), "since": self.out[s]["since"], "kind": self.out[s]["kind"],
-                 "user_fix": self.out[s]["user_fix"]} for s in sorted(self.out, key=lambda s: list(SOURCES).index(s)
+                 "user_fix": self.out[s]["user_fix"], "text": self.out[s].get("text")} for s in sorted(self.out, key=lambda s: list(SOURCES).index(s)
                                                                       if s in SOURCES else 99)]
 
     def is_down(self, source):
@@ -214,7 +226,8 @@ class Health:
         async def exception(session, ctx, params):
             src = source_of(params.url)
             if src and not isinstance(params.exception, asyncio.CancelledError):
-                self.failed(src, params.exception, started=getattr(ctx, "started", None))
+                self.failed(src, params.exception, started=getattr(ctx, "started", None),
+                            host=urlsplit(str(params.url)).hostname)
 
         tc = TraceConfig()
         tc.on_request_start.append(start)

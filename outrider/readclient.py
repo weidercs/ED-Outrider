@@ -36,7 +36,9 @@ EDSM_CODES = {201: "commander name missing", 202: "API key missing", 203: "comma
               208: "no credits stored yet"}
 # what kind of failure, in the words of "Couldn't reach Inara: timeout"
 REACH_WORDS = {"dns": "its address is not found (is this PC online?)", "offline": "no network",
-               "refused": "the connection was refused", "timeout": "timeout", "tls": "the secure connection failed",
+               "refused": "the connection was refused", "timeout": "timeout",
+               "certificate": "its certificate could not be verified (check this PC's date and time)",
+               "tls": "the secure connection failed",
                "http5xx": "it is failing (HTTP 5xx)", "rate": "it asked Outrider to slow down",
                "http4xx": "it refused the request", "bad_answer": "its answer was not understood", "other": "failed"}
 

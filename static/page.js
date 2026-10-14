@@ -501,13 +501,18 @@ function streakHtml(sk) {
 // "Spansh unavailable" / "No internet connection", or "refresh failed")
 const SPHERE_INCOMPLETE = /^(starting|asking|Spansh unavailable|No internet connection|refresh failed)/;
 // S42: the lookups down (data.health, the Spansh session's trace) in the Data tile's words: "No internet connection",
-// else "Spansh unavailable" per source; a failed search's own status too (the list stays incomplete until it answers)
-function lookupsDown(d) {
+// else "Spansh unavailable" per source, a certificate failure its own words (issue #9: "Spansh: couldn't verify
+// spansh.co.uk's certificate (expired): check this PC's date and time; ...", or with `short` "Spansh: certificate not
+// verified" for the folded tiles' line); a failed search's own status too (the list stays incomplete until it answers)
+function lookupsDown(d, short) {
   const h = (d && d.health) || {}, out = [];
   if (h.offline) out.push("No internet connection");
-  else for (const x of h.down || []) out.push(`${x.name} unavailable`);
+  else for (const x of h.down || []) {
+    out.push(x.kind === "certificate" ? `${x.name}: ${short ? "certificate not verified" : x.text || "certificate not verified"}`
+      : `${x.name} unavailable`);
+  }
   if (/^(Spansh unavailable|No internet connection)$/.test((d && d.status) || "") && !out.includes(d.status)
-      && !out.includes("No internet connection")) out.unshift(d.status);
+      && !out.includes("No internet connection") && !(h.down || []).some(x => `${x.name} unavailable` === d.status)) out.unshift(d.status);
   return out;
 }
 function horizon() {
@@ -609,7 +614,7 @@ function renderStrip() {
   td.className = "tile " + tcls; td.title = data.tail_error || (down.length ? "" : data.status) || "";
   // the folded tiles' line names it, in a few words, when the tile is coloured (the tile has the detail)
   dataBit = disconnected ? `not connected since ${disconnected}` : data.tail_error ? "journal tailing error" : pageError ? "page error"
-    : down.length ? down[0] : failed ? "server error" : fr && !fr.journal && fr.missing ? "no journals found" : text;
+    : down.length ? lookupsDown(data, true)[0] : failed ? "server error" : fr && !fr.journal && fr.missing ? "no journals found" : text;
   fl.innerHTML = val(`<span class="dot ${dot}"></span>${text}`);
   sl.innerHTML = problems.length ? problems.join(" · ") : /^asking|^fetching|^ok \(/.test(data.status || "") ? esc(data.status) : "Spansh ok";
   document.getElementById("backupLine").innerHTML = backupHtml(data.backup || {});
@@ -10373,7 +10378,7 @@ function uploadLineHtml(u) {
 // seconds, never ticking text), newest first: "12:04 sent 37 (11:58–12:04)", "11:58 ✗ unreachable: <the raw error> ·
 // trying again at 12:00"; what it did at start; and what is on hold, with Try again
 const UPLOAD_KIND_WORDS = {dns: "address not found", offline: "no network", refused: "unreachable", timeout: "no answer in time",
-  tls: "secure connection failed", http5xx: "failing", rate: "asked to slow down", http4xx: "refused", bad_answer: "an odd answer", other: "failed"};
+  certificate: "certificate not verified", tls: "secure connection failed", http5xx: "failing", rate: "asked to slow down", http4xx: "refused", bad_answer: "an odd answer", other: "failed"};
 const upTime = t => {
   const d = new Date(t * 1000);
   if (isNaN(d)) return "?";
@@ -10385,7 +10390,8 @@ function uploadRecentLine(e, newest) {
   const span = e.rounds > 1 && e.first !== e.at ? ` (${upTime(e.first)}–${upTime(e.at)})` : "";
   if (e.state === "fail") {
     const tries = e.rounds > 1 ? ` · ${e.rounds} tries since ${upTime(e.first)}` : "";
-    return `<div class="uprow fail">${upTime(e.at)} <span class="bad">✗ ${esc(UPLOAD_KIND_WORDS[e.kind] || "failed")}</span>: ` +
+    // a certificate failure (issue #9) in the server's words: the host and what to check (the clock, then an update)
+    return `<div class="uprow fail">${upTime(e.at)} <span class="bad">✗ ${esc(e.say || UPLOAD_KIND_WORDS[e.kind] || "failed")}</span>: ` +
       `<span class="upraw">${esc(e.error || "")}</span>${tries}${newest && e.next ? ` · trying again at ${upTime(e.next)}` : ""}</div>`;
   }
   if (e.state === "held") return `<div class="uprow">${upTime(e.at)} <span class="bad">⏸ held</span>: ${esc(e.held || "")}</div>`;

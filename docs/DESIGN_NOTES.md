@@ -745,6 +745,26 @@ upstream project's choices, not rules of the game.
   status ("Spansh unavailable") still keeps the unreported horizon quiet until a search answers. A card on the banner
   (the one notices board) only when it lasts: Spansh or EDSM down 10 minutes, or no network / an address not found at
   once; GitHub, EDAstro and Canonn are background checks and get none. bio.py's rules check (urllib) is not counted.
+  The one exception to "no detail" is a certificate that cannot be verified (issue #9, below): the tile says
+  "Spansh: couldn't verify spansh.co.uk's certificate (expired): check this PC's date and time; if they are right,
+  update Outrider", and the banner has one card at once for every source failing so, because the player is the one who
+  can fix it and "unavailable" would send them to wait for Spansh instead.
+- **HTTPS verifies against the system's store plus certifi's, not certifi alone** (2026-10-14, issue #9, reported by
+  Aerics84; `outrider/tls.py`). On Windows Python verifies against the Windows certificate store, and Windows fetches a
+  new or renewed root only when something asks it to: a browser does, Python does not. A site whose chain moved to a
+  root the store has not fetched yet then fails with "certificate has expired" (or "unable to get local issuer
+  certificate") while the browser on the same PC opens it fine. Every outgoing connection (the aiohttp sessions through
+  `tls.connector()`, urllib through `tls.urlopen`; a test walks the source so a new one cannot forget) uses one context:
+  `ssl.create_default_context()` (the system store) with certifi's bundle loaded into it. Not certifi alone: a
+  corporate proxy's root, or one the player added on purpose, lives only in the system store, and dropping it would
+  break those PCs instead. Not the system store alone: that is the bug. OpenSSL looks for a trusted issuer among both
+  (trusted-first), so a root that only one of them has is enough. Without certifi (an environment installed before it
+  was in `requirements.txt`, the launcher not used) it falls back to the system store, with one line in the log. A
+  certificate failure is its own kind in `outrider.health.classify` ("certificate", not "tls"), worded with the host
+  and the fix: the date and time first, because a wrong clock fails the same way for every site, then an update (an
+  Outrider from before this fix has no certifi; a later root change is met by raising the floor in `requirements.txt`,
+  now `certifi>=2024.7.4`, which the launchers install again because the file changed). Known limit: pip leaves an
+  installed certifi that meets the floor alone, so the bundle is as old as the last time the floor moved.
 - **A Nearby retry that fails again sends no payload.** A failed sphere search is asked again after 30 s, 60 s, ...
   up to every 5 minutes. With the network down each retry fails at once, the status goes straight back to "Spansh
   unavailable" and the rows are the cached ones again, yet it used to bump the payload twice: every open page (a
