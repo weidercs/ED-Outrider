@@ -25,7 +25,8 @@ route (any of the others), each until you plot another of its kind or **Clear ro
   or the Android app, where typing is awkward. It only fills: nothing is plotted until you press Plot. Shown in the game
   PC's own browser and the Android app only (not in other browsers on your network), and only for one short line of
   text (a paragraph or a link is refused). Linux needs `wl-paste` (Wayland) or `xclip` (X11), the same packages that
-  copy the next system; the Nearby Focus/Lock, Search and Nearest "a system…" boxes have one too.
+  copy the next system; Search's Find a system by name and the Nearby Focus/Lock, Search and Nearest "a system…"
+  boxes have one too.
 - **Conservative range** (off by default): jumps a margin (5 ly) shorter than the ship's range, leaving room for a
   fuller tank.
 - **A system Spansh doesn't know yet.** Spansh can only plot between systems it has heard of, and a system you

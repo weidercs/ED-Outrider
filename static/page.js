@@ -4881,7 +4881,8 @@ function aroundOptions(sel, kinds = AROUND_KINDS, extra = {}) {
   }
 }
 // ---- #5 (Kurbo26, GitHub discussion #3): 📋 beside each system or station name field (Plot Route's From, To and
-// Station, the "a system…" boxes of Nearby's Focus/Lock, Search's and the Nearest finder's Around) fills it from the
+// Station, Search's Find a system by name, the "a system…" boxes of Nearby's Focus/Lock, Search's and the Nearest
+// finder's Around) fills it from the
 // GAME PC's clipboard, read by the server: a browser window that never takes focus cannot read its own. For this PC's
 // browser and the Android app only (the author, 2026-10-14): GET api/clipboard says whether this device can
 // (body.canpaste). Filled as typing would be (input, then change): the "a system…" boxes act on it, Plot Route only

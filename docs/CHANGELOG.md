@@ -2,6 +2,10 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · 📋 on Search's Find a system by name
+- The seventh name field (a `type="search"` box, missed by the first count): 📋 fills it, Find still looks it up. Smoke
+  and plot-route.md follow.
+
 ## 2026-10-14 · 📋 paste: system name fields filled from the game PC's clipboard
 NEXT-VERSION #5 (Kurbo26, GitHub discussion #3: a touchscreen browser window that never takes focus cannot be typed or
 pasted into, and a browser reads its own clipboard only while focused).

@@ -1671,7 +1671,7 @@ const releasePayloads = async () => {
     w.fetch = realFetch; nm.value = ""; d.getElementById("hwyTo").value = to0;
     w.eval(`data.near_around = ${JSON.stringify(na0 ?? null)}; NA.typing = false; render();`);
     d.body.classList.toggle("canpaste", cp0);
-    const want = {off: false, on: true, fields: "nearAroundName hwyFrom hwyTo tradeStation sAroundName aroundName", types: true,
+    const want = {off: false, on: true, fields: "nearAroundName hwyFrom hwyTo tradeStation findName sAroundName aroundName", types: true,
                   to: ["Smojooe GW-W c1-4", "POST api/clipboard/paste"],
                   around: "POST api/clipboard/paste | GET api/find | POST api/nearby/around",
                   refused: ["Colonia", "the clipboard doesn't hold a system name (one short line)"]};
