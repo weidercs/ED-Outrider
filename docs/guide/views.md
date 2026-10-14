@@ -428,20 +428,23 @@ always uses the config file's `rig_warn`.
 
 ## 🧑‍🚀 Commander
 
-What you are, what you own and what you have been doing, read from your journals when you open the tab (nothing is
-stored, and nothing is asked of anyone):
+What you are, what you own and what you have been doing, read from your journals when you open the tab and again
+when the game writes something new for it (nothing is stored, and nothing is asked of anyone). The tabs, Refresh and
+Engineering's filter sit above the list:
 
-- **CMDR**: who you are in the game, as of your last login (the game writes credits, ranks and statistics then):
-  credits, net worth, the value of your fleet and stored modules, your carrier's balance; every rank with a bar
-  to the next one and, for trade, exploration and exobiology, about how many credits it still takes (the
-  community's figures for each rank's step: an estimate); reputation, Powerplay and squadron; your ships; and
-  career figures (time played, systems visited, distance, profits by career).
+- **CMDR**: who you are in the game, as of your last login (the game writes ranks and statistics then): your
+  credits as the Commander tile shows them (the login's plus what you sold since), net worth, the value of your fleet
+  and stored modules, your carrier as the Carrier tile shows it (its balance and weeks of upkeep); every rank with a
+  bar to the next one and, for exobiology, about how many credits it still takes (the community's figures for each
+  rank's step, times the share your game says is left: an estimate; Elite IV and V are marked uncertain);
+  reputation, Powerplay and squadron; your ships; and career figures (time played, systems visited, distance,
+  profits by career).
 - **Inventory**: your ships (where each is, its value, what bringing it here costs), your stored modules with their
   engineering, the ship locker, and the suit loadouts you have worn. The game writes the list of stored ships when
   you open a shipyard and of stored modules when you open outfitting: each is shown as of then.
 - **Engineering**: every ship-module blueprint, grade by grade, with the materials one roll takes against what you
-  hold (green: enough), how many rolls you could make now, and the engineers offering it (green: unlocked far
-  enough). Filter by module, blueprint or material, or show only what you can craft now. Experimental effects and
+  hold (green: enough, red: short), how many rolls you could make now, and the engineers offering it (green:
+  unlocked up to that grade). Filter by module, blueprint or material, or show only what you can craft now. Experimental effects and
   suit and weapon upgrades are not listed.
 - **Missions**: the missions you hold, the soonest to expire first: where they go, what they ask (and how much is
   delivered), the reward, and the time left, marked when under half an hour.

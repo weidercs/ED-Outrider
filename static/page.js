@@ -10014,47 +10014,48 @@ function starWords(cls, lum) {
 }
 // ---- The Commander view (GET /api/commander/<tab>, outrider/commander.py): who you are in the game (CMDR), what you own (Inventory),
 // what engineering takes against your materials (Engineering), the missions you hold (Missions) and how your combat
-// and mining sessions went (Sessions). Each tab is read from the journals when opened, and again when stale ----
-// CM: tab (the one shown), data / error / at / loading per tab, q and craft (Engineering's filter), open (its modules)
-const CM = {tab: "profile", data: {}, error: {}, at: {}, loading: {}, q: "", craft: false, open: {}, wired: false};
-const CM_TABS = [["profile", "CMDR", "your ranks and the way to the next, credits and assets, your fleet, your career"],
-                 ["inventory", "Inventory", "your ships, stored modules, ship locker and suit loadouts"],
-                 ["engineering", "Engineering", "every ship-module blueprint against the materials you hold"],
-                 ["missions", "Missions", "the missions you hold, the soonest to expire first"],
-                 ["sessions", "Sessions", "your combat and mining sessions of the last weeks"]];
-const CM_STALE_MS = 30 * 1000;   // a tab opened again after this long asks again (the server reads only what changed)
+// and mining sessions went (Sessions). A tab is read from the journals when opened, and again when the payload's
+// commander_version has moved since (a line the view reads was written; Engineering also on the materials' version),
+// as loadMat keys on its own; Refresh reads it again now. Credits and the carrier are the payload's (the Commander and
+// Carrier tiles' own figures), drawn at every render ----
+// CM: tab (the one shown), data / error / key (the versions it was read at) / loading per tab, q and craft
+// (Engineering's filter), open (its modules unfolded)
+const CM = {tab: "profile", data: {}, error: {}, key: {}, loading: {}, q: "", craft: false, open: {}};
+const CM_TABS = ["profile", "inventory", "engineering", "missions", "sessions"];
+const CM_SOON_S = 1800;   // a mission expiring within this is marked (outrider.commander.MISSION_SOON_S)
+const cmKey = tab => `${data && data.commander_version}` + (tab === "engineering" ? `|${data && data.materials && data.materials.version}` : "");
 
 async function loadCmdr(force = false) {
-  cmdrWire();
-  const tab = CM.tab;
-  if (CM.loading[tab] || (!force && CM.at[tab] && Date.now() - CM.at[tab] < CM_STALE_MS)) return renderCmdr();
+  const tab = CM.tab, key = cmKey(tab);
+  if (!force && CM.key[tab] === key) return renderCmdr();
+  CM.key[tab] = key;
+  const g = newRequest("cmdr:" + tab);   // a Refresh during a read: only the newest answer is kept
   CM.loading[tab] = true;
   renderCmdr();
   let d;
   try { d = await apiJson("api/commander/" + tab); } catch (err) { d = {error: err.message}; }
-  CM.loading[tab] = false; CM.at[tab] = Date.now();
-  if (!d || d.error) CM.error[tab] = (d && d.error) || "no answer"; else { CM.error[tab] = null; CM.data[tab] = d; }
-  renderCmdr();
+  if (!isNewest("cmdr:" + tab, g)) return;
+  CM.loading[tab] = false;
+  if (!d || d.error) { CM.error[tab] = (d && d.error) || "no answer"; CM.key[tab] = null; }   // asked again at the next render
+  else { CM.error[tab] = null; CM.data[tab] = d; }
+  if (view === "cmdr" && CM.tab === tab) renderCmdr();
 }
-// the view's own clicks and typing, wired once (the section is in the page before any script runs)
-function cmdrWire() {
-  const el = document.getElementById("cmdrView");
-  if (CM.wired || !el) return;
-  CM.wired = true;
-  el.addEventListener("click", e => {
-    const t = e.target.closest("[data-cmtab]");
-    if (t) { CM.tab = t.dataset.cmtab; try { localStorage.setItem("cmdrTab", CM.tab); } catch {} loadCmdr(); return; }
-    if (e.target.closest("#cmRefresh")) loadCmdr(true);
-  });
-  el.addEventListener("input", e => { if (e.target.id === "cmFilter") { CM.q = e.target.value; cmdrDrawBody(); } });
-  el.addEventListener("change", e => { if (e.target.id === "cmCraft") { CM.craft = e.target.checked; cmdrDrawBody(); } });
-  el.addEventListener("toggle", e => { const k = e.target.dataset && e.target.dataset.cmmod; if (k) CM.open[k] = e.target.open; }, true);
-  try { const t = localStorage.getItem("cmdrTab"); if (CM_TABS.some(x => x[0] === t)) CM.tab = t; } catch {}
+function setCmdrTab(t) {
+  CM.tab = CM_TABS.includes(t) ? t : "profile";
+  store.set("cmdrTab", CM.tab);
+  if (view === "cmdr") loadCmdr();
 }
+// the controls sit above the pane, in the page from the start: wired once
+CM.tab = CM_TABS.includes(store.get("cmdrTab", "profile")) ? store.get("cmdrTab", "profile") : "profile";
+document.querySelectorAll("[name=cmdrTab]").forEach(x => x.addEventListener("change", () => setCmdrTab(x.value)));
+document.getElementById("cmRefresh").addEventListener("click", () => loadCmdr(true));
+document.getElementById("cmFilter").addEventListener("input", e => { CM.q = e.target.value; cmdrDrawBody(); });
+document.getElementById("cmCraft").addEventListener("change", e => { CM.craft = e.target.checked; cmdrDrawBody(); });
+document.getElementById("cmdrBody").addEventListener("toggle", e => { const k = e.target.dataset && e.target.dataset.cmmod; if (k) CM.open[k] = e.target.open; }, true);
 // small pure helpers
-const cmNum = v => v == null ? "" : Number(v).toLocaleString();
-const cmCr = v => v == null || v === 0 ? "" : `${credits(v)} cr`;
-const cmWhen = ts => ts ? esc(ts.slice(0, 16).replace("T", " ")) : "";
+const cmNum = v => v == null ? "" : esc(Number(v).toLocaleString());
+const cmCr = v => v == null || v === 0 ? "" : `${esc(credits(v))} cr`;
+const cmWhen = ts => ts ? esc(String(ts).slice(0, 16).replace("T", " ")) : "";
 function cmSpan(s) {   // seconds as "2 d 3 h", "3 h 20 min", "12 min"
   if (s == null) return "";
   const m = Math.max(0, Math.round(s / 60)), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60);
@@ -10063,38 +10064,55 @@ function cmSpan(s) {   // seconds as "2 d 3 h", "3 h 20 min", "12 min"
 const cmAsOf = (ts, how) => ts ? `<span class="unk" title="${esc(how)}">as of ${cmWhen(ts)}</span>` : "";
 const cmTable = (head, rows) => `<table class="cmtable"><thead><tr>${head.map(h => `<th${h[1] ? ` class="num"` : ""}>${h[0]}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table>`;
 const cmCls = m => esc((m.size != null && m.size > 0 ? m.size : "") + (m.rating || ""));
+const cmTile = (k, v, title = "") => v == null || v === "" ? "" : `<span class="cmfig"${title ? ` title="${esc(title)}"` : ""}><span class="unk">${k}</span><b>${v}</b></span>`;
 
-// CMDR: who you are in the game: ranks with the way to the next, credits and assets, the fleet, the career. Pure.
+// your fleet carrier as the Carrier tile has it (State.carrier_summary): its balance and weeks of upkeep, or its
+// decommissioning in red. Pure.
+function cmdrCarrierHtml(c) {
+  if (!c) return "";
+  const dc = c.decommission, fi = c.finance, w = fi ? fi.weeks : null;
+  const money = dc ? ` · <span class="short" title="its decommissioning was requested ${esc(shortDay(dc.ts || ""))}">${dc.done ? "Decommissioned" : "Decommissioning"} ${esc(shortDay(dc.scrap_ts || dc.ts || ""))}</span>`
+    : fi ? ` · <span class="${fi.warn ? "warnc" : ""}">balance <b>${esc(crSign(fi.balance))}</b>` +
+      (w != null ? ` · ~<b>${esc(w < 10 ? w.toFixed(1) : Math.floor(w).toLocaleString())}</b> week${w === 1 ? "" : "s"} of upkeep` : "") + `</span>` : "";
+  return `<div class="cmrep"><span class="unk">Fleet carrier:</span> <b>${esc(c.name || "")}</b> ${esc(c.callsign || "")}${money}` +
+    `${c.fuel != null ? ` · ${cmNum(c.fuel)} t tritium` : ""} <span class="unk">(the Carrier tile's figures)</span></div>`;
+}
+
+// CMDR: who you are in the game: ranks with the way to the next, credits and assets, the fleet, the career. Pure but
+// for the payload's commander (credits) and carrier: the tiles' own.
 function cmdrProfileHtml(d) {
   const p = d.profile;
   if (!p) return `<div class="hwyttl">No commander yet</div><div class="unk">Shown once the journals hold a login.</div>`;
-  const tile = (k, v, title = "") => v == null || v === "" ? "" : `<span class="cmfig"${title ? ` title="${esc(title)}"` : ""}><span class="unk">${k}</span><b>${v}</b></span>`;
-  const a = p.assets || {};
+  const a = p.assets || {}, cm = data && data.commander, car = data && data.carrier;
   const rank = r => `<tr><td class="unk">${esc(r.title)}</td><td><b>${esc(r.name)}</b></td>` +
-    `<td class="cmbarcell">${r.progress == null ? "" : `<span class="cmbar" title="${r.progress}% of the way to ${esc(r.next || "")}"><span style="width:${Math.round(r.progress)}%"></span></span> <span class="unk">${Math.round(r.progress)}%</span>`}</td>` +
+    `<td class="cmbarcell">${r.progress == null ? "" : `<span class="cmbar" title="${Math.round(r.progress)}% of the way to ${esc(r.next || "")}"><span style="width:${Math.round(r.progress)}%"></span></span> <span class="unk">${Math.round(r.progress)}%</span>`}</td>` +
     `<td>${r.next ? `<span class="unk">next:</span> ${esc(r.next)}` : `<span class="ok">the top</span>`}` +
-    `${r.to_next != null ? ` <span title="an estimate: about this much more ${esc(r.earned_by)} (what that rank's step takes, by the community's figures, times the share still to go)">in <b>${credits(r.to_next)} cr</b></span>` : ""}</td></tr>`;
-  const rep = Object.entries(p.reputation || {}).map(([k, v]) => `${esc(k)} <b class="${v >= 35 ? "ok" : v <= -35 ? "noscoop" : ""}">${Math.round(v)}%</b>`).join(" · ");
+    `${r.to_next != null ? ` <span title="an estimate: about this much more ${esc(r.earned_by || "")}: the rank's step by the community's post-Update-14 table (the Frontier forum, 2 Jan 2023) times the share your game says is still to go${r.uncertain ? ". This step's figure is itself an estimate" : ""}">in about <b>${esc(credits(r.to_next))} cr</b>${r.uncertain ? ` <span class="unk">(uncertain)</span>` : ""}</span>` : ""}</td></tr>`;
+  const rep = Object.entries(p.reputation || {}).map(([k, v]) => `${esc(k)} <b class="${v >= 35 ? "ok" : v <= -35 ? "short" : ""}">${Math.round(v)}%</b>`).join(" · ");
   const ship = x => { const label = shipLabel(x.name, x.type), type = x.type_name || shipLabel(null, x.type);
     return `<tr><td><b>${esc(label)}</b>${type !== label ? ` <span class="unk">${esc(type)}</span>` : ""}</td>` +
       `<td>${x.current ? `<span class="ok">you fly it</span>` : x.in_transit ? `<span class="warnc">in transit</span>` : esc([x.system, x.station].filter(Boolean).join(" · ") || "?")}</td>` +
       `<td class="num">${cmCr(x.value)}</td></tr>`; };
-  const fig = c => c.kind === "cr" ? `${credits(c.value)} cr` : c.kind === "ly" ? `${cmNum(Math.round(c.value))} ly`
+  const fig = c => c.kind === "cr" ? `${esc(credits(c.value))} cr` : c.kind === "ly" ? `${cmNum(Math.round(c.value))} ly`
     : c.kind === "time" ? `${cmNum(Math.round(c.value / 3600))} h` : cmNum(c.value);
+  // the Commander tile's credits (the login's plus sales since), worded and explained as the tile does
+  const cr = cm && cm.credits != null ? `≈ ${esc(credits(cm.credits))} cr` : "";
+  const crTitle = cm ? `Credits at login (${(cm.login_ts || "").replace("T", " ").slice(0, 16)} UTC)${cm.credits_login != null ? ": " + cm.credits_login.toLocaleString() : ""}` +
+    " plus exploration and exobiology sales since, as the Commander tile. Other spending and income (market, repairs, missions) is not tracked." : "";
+  const fin = car && !car.decommission && car.finance;
   return `<div class="hwyttl">CMDR ${esc(p.commander || "?")}${p.squadron ? ` <span class="unk">· ${esc(p.squadron)}</span>` : ""}` +
-    `${p.power ? ` <span class="unk">· pledged to ${esc(p.power.name)}${p.power.rank != null ? `, rank ${p.power.rank}` : ""}${p.power.merits != null ? `, ${cmNum(p.power.merits)} merits` : ""}</span>` : ""}` +
-    ` ${cmAsOf(p.ts, "the login these figures are from: the game writes credits, ranks and statistics then")}</div>` +
-    `<div class="cmfigs">${tile("Credits", cmCr(p.credits) || "0 cr", "at that login")}${p.loan ? tile("Loan", cmCr(p.loan)) : ""}` +
-    `${tile("Net worth", cmCr(a.wealth), "the game's own total (Statistics: current wealth) at that login")}` +
-    `${tile("Fleet", a.fleet ? `${cmCr(a.fleet)} · ${a.ships} ship${a.ships === 1 ? "" : "s"}` : a.ships ? `${a.ships} ship${a.ships === 1 ? "" : "s"}` : "", "hull and modules of every ship listed below")}` +
-    `${tile("Stored modules", cmCr(a.modules))}${tile("Carrier balance", cmCr(a.carrier))}</div>` +
+    `${p.power ? ` <span class="unk">· pledged to ${esc(p.power.name)}${p.power.rank != null ? `, rank ${cmNum(p.power.rank)}` : ""}${p.power.merits != null ? `, ${cmNum(p.power.merits)} merits` : ""}</span>` : ""}` +
+    ` ${cmAsOf(p.ts, "the login these figures are from: the game writes ranks and statistics then")}</div>` +
+    `<div class="cmfigs">${cmTile("Credits", cr || `<span class="unk">unknown</span>`, crTitle)}${cm && cm.loan ? cmTile("Loan", cmCr(cm.loan)) : ""}` +
+    `${cmTile("Net worth", cmCr(a.wealth), "the game's own total (Statistics: current wealth) at that login")}` +
+    `${cmTile("Fleet", a.fleet ? `${cmCr(a.fleet)} · ${cmNum(a.ships)} ship${a.ships === 1 ? "" : "s"}` : a.ships ? `${cmNum(a.ships)} ship${a.ships === 1 ? "" : "s"}` : "", "hull and modules of every ship listed below")}` +
+    `${cmTile("Stored modules", cmCr(a.modules))}${fin ? cmTile("Carrier balance", `${esc(crSign(fin.balance))} cr`, "the Carrier tile's balance, from the carrier's last stats") : ""}</div>` +
     `<h3 class="subhead">Ranks</h3>` + (p.ranks.length ? `<table class="cmtable cmranks"><tbody>${p.ranks.map(rank).join("")}</tbody></table>` : `<div class="unk">No ranks on record.</div>`) +
     (rep ? `<div class="cmrep"><span class="unk">Reputation:</span> ${rep}</div>` : "") +
     `<h3 class="subhead">Fleet <span class="cmcount">${p.fleet.length}</span></h3>` +
     (p.fleet.length ? cmTable([["Ship"], ["Where"], ["Value", 1]], p.fleet.map(ship)) : `<div class="unk">No ship on record yet.</div>`) +
-    (p.carrier ? `<div class="cmrep"><span class="unk">Fleet carrier:</span> <b>${esc(p.carrier.name || "")}</b> ${esc(p.carrier.callsign)}` +
-      `${p.carrier.balance != null ? ` · ${cmCr(p.carrier.balance) || "0 cr"}` : ""}${p.carrier.fuel != null ? ` · ${cmNum(p.carrier.fuel)} t tritium` : ""}</div>` : "") +
-    (p.career.length ? `<h3 class="subhead">Career</h3><div class="cmfigs">${p.career.map(c => tile(esc(c.label), fig(c))).join("")}</div>` : "");
+    cmdrCarrierHtml(car) +
+    (p.career.length ? `<h3 class="subhead">Career</h3><div class="cmfigs">${p.career.map(c => cmTile(esc(c.label), fig(c))).join("")}</div>` : "");
 }
 
 // Inventory. Pure.
@@ -10110,13 +10128,13 @@ function cmdrInventoryHtml(d) {
   };
   const modRow = x => `<tr><td><span class="cmcls">${cmCls(x)}</span> <b>${esc(x.name)}</b>${x.mount ? ` <span class="unk">${esc(x.mount)}</span>` : ""}` +
     `${x.hot ? ` <span class="warnc">hot</span>` : ""}</td>` +
-    `<td>${x.blueprint ? `<b>${esc(x.blueprint)}</b>${x.level ? ` G${x.level}` : ""}` : `<span class="unk">stock</span>`}</td>` +
+    `<td>${x.blueprint ? `<b>${esc(x.blueprint)}</b>${x.level ? ` G${cmNum(x.level)}` : ""}` : `<span class="unk">stock</span>`}</td>` +
     `<td>${x.in_transit ? `<span class="warnc">in transit</span>` : esc(x.system || "?")}</td><td class="num">${cmCr(x.value)}</td>` +
     `<td class="num">${x.transfer_cost ? `${cmCr(x.transfer_cost)}${x.transfer_s ? ` · ${cmSpan(x.transfer_s)}` : ""}` : ""}</td></tr>`;
   const held = lk.kinds.filter(k => k.items.length);
-  const suitRow = x => `<tr><td><b>${esc(x.loadout || "?")}</b></td><td>${esc(x.suit)}${x.class ? ` <span class="unk">G${x.class}</span>` : ""}` +
+  const suitRow = x => `<tr><td><b>${esc(x.loadout || "?")}</b></td><td>${esc(x.suit)}${x.class ? ` <span class="unk">G${cmNum(x.class)}</span>` : ""}` +
     `${x.mods.length ? `<div class="unk">${esc(x.mods.join(", "))}</div>` : ""}</td>` +
-    `<td>${x.weapons.map(w => `<div>${esc(w.name)}${w.class ? ` <span class="unk">G${w.class}</span>` : ""}${w.mods.length ? ` <span class="unk">${esc(w.mods.join(", "))}</span>` : ""}</div>`).join("")}</td></tr>`;
+    `<td>${x.weapons.map(w => `<div>${esc(w.name)}${w.class ? ` <span class="unk">G${cmNum(w.class)}</span>` : ""}${w.mods.length ? ` <span class="unk">${esc(w.mods.join(", "))}</span>` : ""}</div>`).join("")}</td></tr>`;
   return `<h3 class="subhead">Ships <span class="cmcount">${s.ships.length}</span> ${cmAsOf(s.ts, "the stored ships as the last shipyard you opened listed them")}</h3>` +
     (s.ships.length ? cmTable([["Ship"], ["Where"], ["Value", 1], ["To bring it here", 1]], s.ships.map(shipRow)) : "") +
     (s.ts ? "" : `<div class="unk">Your stored ships are listed once you open a shipyard: the game writes the list then.</div>`) +
@@ -10132,14 +10150,15 @@ function cmdrInventoryHtml(d) {
       : `<div class="unk">The journal names a loadout only when you put it on: those worn in the last year are listed.</div>`);
 }
 
-// Engineering: the blueprints by module, each grade's materials against what you hold. Pure (CM.q, CM.craft, CM.open).
+// Engineering: the blueprints by module, each grade's materials against what you hold (green: enough, red: short, as
+// the Materials tab). Pure (CM.q, CM.craft, CM.open; the filter and the switch are above the pane).
 function cmdrEngineeringHtml(d) {
   const q = CM.q.trim().toLowerCase();
   const eng = d.engineers || [], unlocked = eng.filter(e => e.progress === "Unlocked").length;
   const gradeRow = g => {
-    const mats = g.materials.map(x => `<span class="cmmat ${x.have >= x.need ? "ok" : "noscoop"}" title="you hold ${cmNum(x.have)}">${esc(x.name)} ${cmNum(x.have)}/${x.need}</span>`).join("");
-    const who = g.engineers.map(e => `<span class="${e.ready ? "ok" : "unk"}" title="${esc(e.progress ? `${e.progress}${e.rank != null ? `, rank ${e.rank}` : ""}` : "not met yet")}">${esc(e.name)}</span>`).join(", ");
-    return `<tr><td><b>G${g.grade}</b></td><td><div class="cmstats">${mats}</div></td>` +
+    const mats = g.materials.map(x => `<span class="cmmat ${x.have >= x.need ? "ok" : "short"}" title="you hold ${cmNum(x.have)}">${esc(x.name)} ${cmNum(x.have)}/${cmNum(x.need)}</span>`).join("");
+    const who = g.engineers.map(e => `<span class="${e.ready ? "ok" : "unk"}" title="${esc(e.progress ? `${e.progress}${e.rank != null ? `, crafts up to grade ${e.rank}` : ""}` : "not met yet")}">${esc(e.name)}</span>`).join(", ");
+    return `<tr><td><b>G${cmNum(g.grade)}</b></td><td><div class="cmstats">${mats}</div></td>` +
       `<td class="num ${g.rolls ? "ok" : "unk"}" title="how many times you could craft this grade now">${g.rolls ? `×${cmNum(g.rolls)}` : "–"}</td><td>${who}</td></tr>`;
   };
   const groups = new Map();
@@ -10151,26 +10170,30 @@ function cmdrEngineeringHtml(d) {
     groups.get(b.module).push(`<h4 class="cmbp">${esc(b.name)}</h4>` + cmTable([["Grade"], ["Materials <span class=\"unk\">(held / one roll)</span>"], ["Rolls", 1], ["Engineers"]], grades.map(gradeRow)));
   }
   const open = k => q || CM.craft || CM.open[k];   // a filter shows what it found
-  return `<div class="srow cmfilter"><input type="search" id="cmFilter" placeholder="filter: module, blueprint or material" value="${esc(CM.q)}" size="34">` +
-    ` <label title="only the grades you hold every material for"><input type="checkbox" id="cmCraft"${CM.craft ? " checked" : ""}> only what I can craft now</label>` +
-    ` <span class="unk">${eng.length ? `${unlocked} of ${eng.length} engineers unlocked` : "no engineer on record yet"} · ship modules only: no experimental effects, suits or weapons</span></div>` +
+  return `<div class="unk cmnote">${eng.length ? `${unlocked} of ${eng.length} engineers unlocked` : "no engineer on record yet"} · ship modules only: no experimental effects, suits or weapons</div>` +
     ([...groups].map(([mod, list]) => `<details class="cmmod" data-cmmod="${esc(mod)}"${open(mod) ? " open" : ""}><summary><b>${esc(mod)}</b> <span class="unk">${list.length} blueprint${list.length === 1 ? "" : "s"}</span></summary>${list.join("")}</details>`).join("")
       || `<div class="unk">Nothing matches.</div>`);
 }
 
-// Missions. Pure.
+// Missions: the time left counted here at each draw (the answer is read only when a journal line moves the version). Pure
+// but for the clock.
 function cmdrMissionsHtml(d) {
-  const rows = (d.missions || []).map(m => {
+  const now = Date.now();
+  const all = (d.missions || []).map(m => {
+    const left = m.expiry ? Math.round((Date.parse(m.expiry) - now) / 1000) : null;
+    return Object.assign({}, m, {left, soon: left != null && left >= 0 && left <= CM_SOON_S, expired: left != null && left < 0});
+  });
+  const rows = all.map(m => {
     const need = [m.commodity, m.target].filter(Boolean).map(esc).join(" · ") +
       (m.count != null ? ` <b>${m.delivered != null ? `${cmNum(m.delivered)}/` : ""}${cmNum(m.count)}</b>` : "");
-    const exp = m.expires_in == null ? `<span class="unk">no limit</span>` : m.expired ? `<span class="noscoop">expired</span>`
-      : `<span class="${m.soon ? "warnc" : ""}" title="${cmWhen(m.expiry)} UTC">${cmSpan(m.expires_in)}</span>`;
+    const exp = m.left == null ? `<span class="unk">no limit</span>` : m.expired ? `<span class="short">expired</span>`
+      : `<span class="${m.soon ? "warnc" : ""}" title="${cmWhen(m.expiry)} UTC">${cmSpan(m.left)}</span>`;
     return `<tr><td><b>${esc(m.name || "?")}</b>${m.wing ? ` <span class="unk">wing</span>` : ""}${m.passengers ? ` <span class="unk">passengers</span>` : ""}` +
       `${m.redirected ? ` <span class="ok" title="the game sent you on: usually back to hand it in">redirected</span>` : ""}</td>` +
       `<td>${esc(m.faction || "")}</td><td>${esc([m.system, m.station].filter(Boolean).join(" · "))}</td><td>${need}</td>` +
       `<td class="num">${cmCr(m.reward)}</td><td class="num">${exp}</td></tr>`;
   });
-  const soon = (d.missions || []).filter(m => m.soon).length;
+  const soon = all.filter(m => m.soon).length;
   return `<div class="hwyttl">${rows.length ? `${rows.length} mission${rows.length === 1 ? "" : "s"}` : "No missions"}` +
     `${soon ? ` <span class="warnc">· ${soon} expiring within half an hour</span>` : ""}</div>` +
     (rows.length ? cmTable([["Mission"], ["Faction"], ["Where"], ["What"], ["Reward", 1], ["Expires in", 1]], rows)
@@ -10180,47 +10203,42 @@ function cmdrMissionsHtml(d) {
 // Sessions: the totals, then each combat and each mining session. Pure.
 function cmdrSessionsHtml(d) {
   const all = d.sessions || [], t = d.totals || {combat: {}, mining: {}};
-  const tile = (k, v) => v == null || v === "" ? "" : `<span class="cmfig"><span class="unk">${k}</span><b>${v}</b></span>`;
   const list = o => Object.entries(o || {}).map(([k, v]) => `${esc(k)} ${cmNum(v)}`).join(", ");
   const combat = all.filter(s => s.combat).map(s => { const c = s.combat; return `<tr><td>${cmWhen(s.start)}</td><td>${esc(s.ship || "")}</td>` +
     `<td class="num"><b>${cmNum(c.kills)}</b></td><td>${list(c.by_ship)}</td><td class="num">${cmCr(c.bounties)}</td><td class="num">${cmCr(c.bonds)}</td>` +
-    `<td class="num">${c.per_hour != null ? c.per_hour : ""}</td><td class="num">${cmSpan(c.seconds)}</td><td class="num">${c.deaths ? `<span class="noscoop">${c.deaths}</span>` : ""}</td></tr>`; });
+    `<td class="num">${cmNum(c.per_hour)}</td><td class="num">${cmSpan(c.seconds)}</td><td class="num">${c.deaths ? `<span class="short">${cmNum(c.deaths)}</span>` : ""}</td></tr>`; });
   const mining = all.filter(s => s.mining).map(s => { const m = s.mining; return `<tr><td>${cmWhen(s.start)}</td><td>${esc(s.ship || "")}</td>` +
-    `<td class="num"><b>${cmNum(m.tons)} t</b></td><td>${list(m.refined)}</td><td class="num">${m.per_hour != null ? m.per_hour : ""}</td>` +
-    `<td>${cmNum(m.prospected)}${m.prospected ? ` <span class="unk">${list(m.content)}${m.motherlodes ? ` · ${m.motherlodes} core${m.motherlodes === 1 ? "" : "s"}` : ""}</span>` : ""}</td>` +
+    `<td class="num"><b>${cmNum(m.tons)} t</b></td><td>${list(m.refined)}</td><td class="num">${cmNum(m.per_hour)}</td>` +
+    `<td>${cmNum(m.prospected)}${m.prospected ? ` <span class="unk">${list(m.content)}${m.motherlodes ? ` · ${cmNum(m.motherlodes)} core${m.motherlodes === 1 ? "" : "s"}` : ""}</span>` : ""}</td>` +
     `<td class="num" title="prospector / collector limpets launched">${m.prospectors || m.collectors ? `${cmNum(m.prospectors)} / ${cmNum(m.collectors)}` : ""}</td>` +
     `<td class="num">${cmSpan(m.seconds)}</td><td class="num">${cmCr(m.sold)}</td></tr>`; });
-  const c = t.combat, m = t.mining;
-  return `<h3 class="subhead">Combat <span class="unk">the last ${d.days || 30} days</span></h3>` +
-    (combat.length ? `<div class="cmfigs">${tile("Sessions", cmNum(c.sessions))}${tile("Kills", cmNum(c.kills))}${tile("Bounties", cmCr(c.bounties))}${tile("Combat bonds", cmCr(c.bonds))}${tile("Deaths", c.deaths ? cmNum(c.deaths) : "")}</div>` +
+  const c = t.combat, m = t.mining, days = cmNum(d.days || 30);
+  return `<h3 class="subhead">Combat <span class="unk">the last ${days} days</span></h3>` +
+    (combat.length ? `<div class="cmfigs">${cmTile("Sessions", cmNum(c.sessions))}${cmTile("Kills", cmNum(c.kills))}${cmTile("Bounties", cmCr(c.bounties))}${cmTile("Combat bonds", cmCr(c.bonds))}${cmTile("Deaths", c.deaths ? cmNum(c.deaths) : "")}</div>` +
       cmTable([["Session"], ["Ship"], ["Kills", 1], ["Bounties by ship"], ["Bounties", 1], ["Bonds", 1], ["Kills/h", 1], ["Fighting", 1], ["Deaths", 1]], combat)
       : `<div class="unk">No fighting in these journals.</div>`) +
-    `<h3 class="subhead">Mining <span class="unk">the last ${d.days || 30} days</span></h3>` +
-    (mining.length ? `<div class="cmfigs">${tile("Sessions", cmNum(m.sessions))}${tile("Refined", `${cmNum(m.tons)} t`)}${tile("Asteroids prospected", cmNum(m.prospected))}${tile("Sold", cmCr(m.sold))}</div>` +
+    `<h3 class="subhead">Mining <span class="unk">the last ${days} days</span></h3>` +
+    (mining.length ? `<div class="cmfigs">${cmTile("Sessions", cmNum(m.sessions))}${cmTile("Refined", `${cmNum(m.tons)} t`)}${cmTile("Asteroids prospected", cmNum(m.prospected))}${cmTile("Sold", cmCr(m.sold))}</div>` +
       cmTable([["Session"], ["Ship"], ["Refined", 1], ["What"], ["t/h", 1], ["Prospected"], ["Limpets", 1], ["Mining", 1], ["Sold", 1]], mining)
       : `<div class="unk">No mining in these journals.</div>`);
 }
 
 const CM_HTML = {profile: cmdrProfileHtml, inventory: cmdrInventoryHtml, engineering: cmdrEngineeringHtml, missions: cmdrMissionsHtml, sessions: cmdrSessionsHtml};
-// the tab's own content: drawn apart from the tab row so typing in Engineering's filter keeps its place
+// the tab's own content (the pane); drawn only when it changed, so a <details> keeps its state and the pane its place
 function cmdrDrawBody() {
   const el = document.getElementById("cmdrBody");
-  if (!el) return;
   const tab = CM.tab, d = CM.data[tab];
-  const h = CM.error[tab] && !d ? `<div class="noscoop">Could not be read: ${esc(CM.error[tab])}</div>`
+  const h = CM.error[tab] && !d ? `<div class="short">Could not be read: ${esc(CM.error[tab])}</div>`
     : !d ? `<div class="unk">${CM.loading[tab] ? "Reading your journals…" : ""}</div>` : CM_HTML[tab](d);
-  if (el.innerHTML === h) return;
-  const typing = document.activeElement && document.activeElement.id === "cmFilter", at = typing ? document.activeElement.selectionStart : null;
-  el.innerHTML = h;
-  if (typing) { const f = document.getElementById("cmFilter"); if (f) { f.focus(); try { f.setSelectionRange(at, at); } catch {} } }
+  if (el.innerHTML !== h) el.innerHTML = h;
 }
+// the controls above the pane (the tab switch, Engineering's filter, the status), then the pane
 function renderCmdr() {
-  const tabs = document.getElementById("cmdrTabs");
-  if (!tabs) return;
-  const h = `<span class="cmtabs">${CM_TABS.map(([k, name, title]) => `<button type="button" class="cmtab${k === CM.tab ? " on" : ""}" data-cmtab="${k}" title="${esc(title)}">${name}</button>`).join("")}</span>` +
-    ` <button type="button" class="mini" id="cmRefresh" title="read the journals again now">Refresh</button>` +
-    ` <span class="unk">${CM.loading[CM.tab] ? "reading…" : CM.error[CM.tab] && CM.data[CM.tab] ? `could not be read again: ${esc(CM.error[CM.tab])}` : "from your journals"}</span>`;
-  if (tabs.innerHTML !== h) tabs.innerHTML = h;
+  const tab = CM.tab, st = document.getElementById("cmdrStatus");
+  document.querySelectorAll("[name=cmdrTab]").forEach(x => { x.checked = x.value === tab; });
+  document.getElementById("cmEngCtl").hidden = tab !== "engineering";
+  const s = CM.loading[tab] ? "reading…" : CM.error[tab] && CM.data[tab] ? `could not be read again: ${CM.error[tab]}` : "from your journals";
+  if (st.textContent !== s) st.textContent = s;
   cmdrDrawBody();
 }
 

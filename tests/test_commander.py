@@ -127,7 +127,13 @@ class Engineering(unittest.TestCase):
         self.assertEqual((g1["rolls"], g5["rolls"]), (7, 2))                    # 5 wake data at 2 a roll: twice
         self.assertEqual(g5["materials"][2], {"id": "dataminedwake", "name": "DATAMINEDWAKE", "need": 2, "have": 5})
         self.assertEqual([(e["name"], e["ready"]) for e in g1["engineers"]], [("Felicity Farseer", True), ("Elvira Martuuk", False)])
-        self.assertEqual([(e["progress"], e["rank"], e["ready"]) for e in g5["engineers"]], [("Unlocked", 4, True), ("Unlocked", 3, False)])
+        # Rank is the highest grade an engineer crafts for you (the author's journals: no craft above it): rank 4, no G5
+        self.assertEqual([(e["progress"], e["rank"], e["ready"]) for e in g5["engineers"]], [("Unlocked", 4, False), ("Unlocked", 3, False)])
+        known["Felicity Farseer"]["rank"] = 5
+        g5 = C.blueprints(counts, known, lambda mid: mid.upper(), rows=self.ROWS)[0]["grades"][1]
+        self.assertEqual([e["ready"] for e in g5["engineers"]], [True, False])
+        known["Felicity Farseer"].update(progress="Unlocked", rank=None)                 # unlocked, no rank said yet
+        self.assertFalse(C.blueprints(counts, known, rows=self.ROWS)[0]["grades"][0]["engineers"][0]["ready"])
         self.assertEqual(C.blueprints({}, rows=self.ROWS)[0]["grades"][1]["rolls"], 0)
 
     def test_the_shipped_table(self):
@@ -247,29 +253,69 @@ class Profile(unittest.TestCase):
         r = {x["key"]: x for x in p["ranks"]}
         self.assertEqual([x["title"] for x in p["ranks"]], ["Combat", "Trade", "Exploration", "Exobiology", "Mercenary", "CQC", "Federal Navy", "Imperial Navy"])
         self.assertEqual((r["Combat"]["name"], r["Combat"]["progress"], r["Combat"]["next"], r["Combat"]["to_next"]), ("Expert", 0, "Master", None))   # promoted since
-        self.assertEqual((r["Trade"]["name"], r["Trade"]["next"], r["Trade"]["to_next"], r["Trade"]["earned_by"]),
-                         ("Tycoon", "Elite", 330000000, "trade profit"))                 # half of the 660M step left
-        self.assertEqual((r["Explore"]["name"], r["Explore"]["next"], r["Explore"]["to_next"]), ("Elite", "Elite I", None))   # past the known steps
-        self.assertEqual((r["Exobiologist"]["name"], r["Exobiologist"]["to_next"]), ("Cataloguer", 3000000))   # 75% of 4M
+        # trade and exploration: their percentage only (no figures that could be checked against the game's own)
+        self.assertEqual((r["Trade"]["name"], r["Trade"]["next"], r["Trade"]["progress"], r["Trade"]["to_next"], r["Trade"]["earned_by"]),
+                         ("Tycoon", "Elite", 50, None, None))
+        self.assertEqual((r["Explore"]["name"], r["Explore"]["next"], r["Explore"]["to_next"]), ("Elite", "Elite I", None))
+        self.assertEqual((r["Exobiologist"]["name"], r["Exobiologist"]["to_next"], r["Exobiologist"]["earned_by"], r["Exobiologist"]["uncertain"]),
+                         ("Cataloguer", 458_400_000, "exobiology data sold", False))   # 75% of the 611.2M step
         self.assertEqual((r["Federation"]["name"], r["Federation"]["progress"], r["Federation"]["next"]), ("Admiral", None, None))   # the top
         self.assertEqual((r["Empire"]["name"], r["Empire"]["next"], r["Empire"]["progress"]), ("Serf", "Master", 80))
         self.assertEqual(C.rank_rows({"Trade": 99, "Explore": "x"}, {})[0]["name"], "99")
 
+    def test_the_exobiology_table(self):
+        """The post-Update-14 thresholds (the Frontier forum, 2 Jan 2023), pinned; what is left is the step times the
+        game's own share still to go. The author's journals: Geneticist 64% at the 2026-10-12 login."""
+        self.assertEqual(C.RANK_CREDITS["Exobiologist"], (0, 22_500_000, 83_475_000, 210_560_000, 532_800_000, 1_144_000_000, 2_262_600_000,
+                                                          3_996_000_000, 8_425_000_000, 12_969_000_000, 17_425_000_000, 21_925_000_000,
+                                                          26_320_000_000, 30_917_860_900))
+        self.assertEqual(set(C.RANK_CREDITS), {"Exobiologist"})
+        row = lambda n, pct: C.rank_rows({"Exobiologist": n}, {"Exobiologist": pct})[0]
+        g = row(7, 64)
+        self.assertEqual((g["name"], g["next"], g["to_next"], g["uncertain"]), ("Geneticist", "Elite", 1_594_440_000, False))   # 36% of 4.429B
+        self.assertEqual((row(8, 50)["to_next"], row(8, 50)["uncertain"]), (2_272_000_000, False))
+        self.assertEqual([row(n, 0)["uncertain"] for n in (10, 11, 12)], [False, True, True])   # Elite IV and V are estimates
+        top = row(13, 40)
+        self.assertEqual((top["name"], top["next"], top["to_next"], top["progress"]), ("Elite V", None, None, None))
+
     def test_money_fleet_and_career(self):
         p = C.profile(self.EVENTS)
-        self.assertEqual((p["commander"], p["ts"], p["credits"], p["loan"], p["squadron"]), ("Tester", T("08:00:00"), 1234567890, 5000, "Sample Wing"))
-        self.assertEqual(p["assets"], {"wealth": 9000000000, "ships": 4, "fleet": 100 + 9000000 + 150000000 + 32000, "modules": 5103953 + 35400,
-                                       "carrier": 250000000})
+        self.assertEqual((p["commander"], p["ts"], p["squadron"]), ("Tester", T("08:00:00"), "Sample Wing"))
+        # credits and the carrier have one owner each: the payload's commander and carrier (the tiles'), not this
+        self.assertFalse({"credits", "loan", "carrier"} & set(p))
+        self.assertEqual(p["assets"], {"wealth": 9000000000, "ships": 4, "fleet": 100 + 9000000 + 150000000 + 32000, "modules": 5103953 + 35400})
         self.assertEqual([s["id"] for s in p["fleet"]], [7, 5, 3, 6])                    # the one you fly, then by value
         self.assertEqual(p["reputation"], {"Federation": -40.0, "Empire": 76.5, "Alliance": 12.2})
         self.assertEqual(p["power"], {"name": "Aisling Duval", "rank": 3, "merits": 4500})
-        self.assertEqual(p["carrier"], {"name": "SAMPLE CARRIER", "callsign": "X1X-X1X", "balance": 250000000, "fuel": 800})
         self.assertEqual([(c["label"], c["value"], c["kind"]) for c in p["career"]], [
             ("Time played", 7200000, "time"), ("Systems visited", 12345, "n"), ("Distance jumped", 987654, "ly"), ("Bounties claimed", 40, "n"),
             ("Insurance claims", 3, "n"), ("Spent on ships", 500000000, "cr")])          # a zero is left out
         self.assertIsNone(C.profile(Inventory.EVENTS))                                  # no login on record
         bare = C.profile([ev(T("08:00:00"), "LoadGame", Commander="New")])
-        self.assertEqual((bare["ranks"], bare["fleet"], bare["career"], bare["power"], bare["carrier"]), ([], [], [], None, None))
+        self.assertEqual((bare["ranks"], bare["fleet"], bare["career"], bare["power"]), ([], [], [], None))
+
+
+class Version(unittest.TestCase):
+    def test_a_line_the_view_reads_moves_it(self):
+        """The payload's commander_version: the page asks for the open tab again when it moves (as Materials on its
+        version), not on a timer; State wakes the page for it."""
+        db = ed_outrider.open_db(":memory:")
+        self.addCleanup(db.close)
+        j = ed_outrider.Journals(db)
+        state = ed_outrider.State(db, j, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        d = temp_dir(self)
+        write(d, "Journal.2026-10-12T080000.01.log", [ev(T("08:00:00"), "Music", MusicTrack="Exploration"),
+                                                      ev(T("08:01:00"), "MissionAccepted", MissionID=1, Name="Mission_A"),
+                                                      ev(T("08:02:00"), "ReceiveText", Message="MissionAccepted"),
+                                                      ev(T("08:03:00"), "Bounty", TotalReward=5)])
+        j.read_file(os.path.join(d, "Journal.2026-10-12T080000.01.log"))
+        self.assertEqual(j.commander_version, 2)                    # the mission and the bounty, not a text naming one
+        self.assertEqual(state.payload()["commander_version"], 2)
+        v = state.version
+        state.apply_own_changes()
+        self.assertEqual(state.version, v + 1)                      # the page is woken for it
+        state.apply_own_changes()
+        self.assertEqual(state.version, v + 1)                      # once
 
 
 class Server(unittest.TestCase):
@@ -299,6 +345,51 @@ class Server(unittest.TestCase):
         self.assertTrue(all(e["ready"] for g in fsd["grades"] for e in g["engineers"] if e["name"] == "Felicity Farseer"))
         self.assertEqual([m["name"] for m in mis["missions"]], ["A job"])
         self.assertEqual((ses["sessions"][0]["combat"]["kills"], ses["totals"]["combat"]["sessions"]), (3, 1))
+
+    def test_a_worker_gets_a_copy_of_the_materials(self):
+        """The tick changes the materials dict while a worker reads: the route copies it on the loop first."""
+        from aiohttp import web
+        from aiohttp.test_utils import TestClient, TestServer
+        mats = {"counts": {"arsenic": 4}, "names": {}}
+        state = types.SimpleNamespace(journals=types.SimpleNamespace(materials=mats))
+        seen = []
+        real = C.engineering
+        C.engineering = lambda dirs, material_state: seen.append(material_state) or {"blueprints": [], "engineers": []}
+        self.addCleanup(setattr, C, "engineering", real)
+        app = web.Application()
+        C.add_routes(app, state, lambda: [])
+
+        async def go():
+            async with TestClient(TestServer(app)) as c:
+                return (await c.get("/api/commander/engineering")).status
+        self.assertEqual(asyncio.run(go()), 200)
+        self.assertEqual(seen, [mats])
+        self.assertIsNot(seen[0], mats)
+        self.assertIsNot(seen[0]["counts"], mats["counts"])
+
+    def test_an_error_is_the_servers_to_log(self):
+        """No local 500: json_errors answers {error, code: server_error} and prints the traceback for Show log."""
+        import contextlib
+        import io
+        from aiohttp.test_utils import TestClient, TestServer
+        db = ed_outrider.open_db(":memory:")
+        self.addCleanup(db.close)
+        state = ed_outrider.State(db, ed_outrider.Journals(db), types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        real = C.inventory
+        C.inventory = lambda dirs: (_ for _ in ()).throw(ValueError("a line nobody expected"))
+        self.addCleanup(setattr, C, "inventory", real)
+        app = ed_outrider.make_app(state)
+
+        async def go():
+            async with TestClient(TestServer(app)) as c:
+                r = await c.get("/api/commander/inventory")
+                return r.status, await r.json()
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            status, body = asyncio.run(go())
+        self.assertEqual((status, body["code"]), (500, "server_error"))
+        self.assertIn("a line nobody expected", body["error"])
+        self.assertIn("Traceback", err.getvalue())
 
     def test_the_real_server_has_them(self):
         db = ed_outrider.open_db(":memory:")

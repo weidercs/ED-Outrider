@@ -187,7 +187,7 @@ def _plain(name):
 
 def engineers(events):
     """Where each engineer stands, from the newest EngineerProgress lines: {name: {progress ("Known", "Invited",
-    "Unlocked"...), rank (0 to 5, None until unlocked)}}. The login's list, then each change since."""
+    "Unlocked"...), rank (the highest grade they craft for you, 1 to 5; None until unlocked)}}. The login's list, then each change since."""
     out = {}
     for e in events:
         if e.get("event") != "EngineerProgress":
@@ -216,9 +216,11 @@ def blueprints(counts, known=None, name=None, rows=None):
             for e in v.get("engineers") or []:
                 st = known.get(_plain(e)) or {}
                 rank = st.get("rank")
-                # an engineer crafts up to one grade past the rank reached (rank 0: grade 1)
+                # EngineerProgress' Rank is the highest grade the engineer crafts for you (checked on real journals,
+                # 2026-10-14: every EngineerCraft's Level was at most the Rank then, and a rank-up follows the roll
+                # that earned it: G4 at rank 4, then Rank 5)
                 who.append({"name": e, "progress": st.get("progress"), "rank": rank,
-                            "ready": st.get("progress") == "Unlocked" and (rank or 0) + 1 >= int(g)})
+                            "ready": st.get("progress") == "Unlocked" and isinstance(rank, int) and rank >= int(g)})
             grades.append({"grade": int(g), "materials": need, "engineers": who,
                            "rolls": min((m["have"] // m["need"] for m in need if m["need"]), default=0)})
         out.append({"id": b["id"], "module": b["module"], "name": b["name"], "grades": grades})
@@ -411,7 +413,7 @@ def sessions_now(dirs, days=SESSION_DAYS, now=None):
 # ---- the commander: ranks with what the next one takes, credits and assets, the fleet, the career ----
 
 PROFILE_EVENTS = ("LoadGame", "Rank", "Progress", "Promotion", "Statistics", "Reputation", "Powerplay", "SquadronStartup",
-                  "CarrierStats", "StoredShips", "StoredModules", "Loadout")
+                  "StoredShips", "StoredModules", "Loadout")
 _PILOT = ("Elite", "Elite I", "Elite II", "Elite III", "Elite IV", "Elite V")
 # the journal's rank keys in the order shown: (title, the ranks' names by number)
 RANKS = (
@@ -429,15 +431,23 @@ RANKS = (
     ("Empire", "Imperial Navy", ("None", "Outsider", "Serf", "Master", "Squire", "Knight", "Lord", "Baron", "Viscount", "Count", "Earl",
                                  "Marquis", "Duke", "Prince", "King")),
 )
-# What each rank up to Elite takes, in credits earned in that career (the community's figures, as the game's Codex
-# and the wikis give them; Frontier publishes none): what is left to the next rank is the step times the share of it
-# still to go. Combat, Mercenary, CQC and the navies go by points nobody outside can count: their percentage only.
+# What a rank's step takes, in credits earned in that career: what is left to the next rank is the step times the share
+# of it still to go, by the game's own percentage. Exobiology only: the post-Update-14 thresholds (total Organic Data
+# profit; Aunty Sledge's post of 2 Jan 2023 in the Frontier forum's "Exobiology rank threshold rebalance information"
+# thread, https://forums.frontier.co.uk/threads/elite-dangerous-exobiology-rank-threshold-rebalance-information.611830/,
+# as the wiki copies it, https://elite-dangerous.fandom.com/wiki/Exobiologist, read 2026-10-14: "most confirmed, some
+# estimated"; Elite IV and V are estimates, RANK_UNCERTAIN). Checked 2026-10-14 against a player's journals since 2023
+# (each login's Progress beside its Statistics): Organic_Data_Profits moves through the Cataloguer, Taxonomist,
+# Ecologist and Geneticist bands at these steps within 3 %, but not from these totals (Geneticist 64 % at 7.28B, where
+# the totals say 74 %): so the step times the game's percentage, never the counter against the totals. The trade and
+# exploration figures once here could not be confirmed the same way (trade progress moved with Market_Profits still;
+# exploration has no published steps past Elite): their percentage only, as Combat, Mercenary, CQC and the navies.
 RANK_CREDITS = {
-    "Trade": (0, 5_000, 100_000, 800_000, 3_700_000, 30_000_000, 140_000_000, 390_000_000, 1_050_000_000),
-    "Explore": (0, 40_000, 270_000, 1_140_000, 4_200_000, 10_000_000, 35_000_000, 116_000_000, 320_000_000),
-    "Exobiologist": (0, 2_000, 50_000, 250_000, 1_000_000, 5_000_000, 15_000_000, 50_000_000, 150_000_000),
+    "Exobiologist": (0, 22_500_000, 83_475_000, 210_560_000, 532_800_000, 1_144_000_000, 2_262_600_000, 3_996_000_000,
+                     8_425_000_000, 12_969_000_000, 17_425_000_000, 21_925_000_000, 26_320_000_000, 30_917_860_900),
 }
-RANK_EARNED_BY = {"Trade": "trade profit", "Explore": "exploration data sold", "Exobiologist": "exobiology data sold"}
+RANK_UNCERTAIN = {"Exobiologist": {12, 13}}   # the ranks whose threshold is an estimate (Elite IV, Elite V)
+RANK_EARNED_BY = {"Exobiologist": "exobiology data sold"}
 # the career figures shown, from the login's Statistics: (section, key, label, kind)
 CAREER = (
     ("Exploration", "Time_Played", "Time played", "time"), ("Exploration", "Systems_Visited", "Systems visited", "n"),
@@ -453,8 +463,8 @@ CAREER = (
 
 def rank_rows(rank, progress):
     """The ranks as rows: {key, title, rank, name, progress (% of the way to the next, None at the top or unknown),
-    next (its name, None at the top), to_next (credits still to earn in that career, about; None where the game
-    counts points), earned_by}."""
+    next (its name, None at the top), to_next (credits still to earn in that career, about; None where no step is
+    known), uncertain (the step's figure is itself an estimate), earned_by}."""
     out = []
     for key, title, names in RANKS:
         n = (rank or {}).get(key)
@@ -465,20 +475,22 @@ def rank_rows(rank, progress):
         pct = None if top or not isinstance(pct, (int, float)) else max(0, min(100, pct))
         steps = RANK_CREDITS.get(key)
         left = None
-        if steps and pct is not None and n + 1 < len(steps):
+        if steps and pct is not None and 0 <= n and n + 1 < len(steps):
             left = int(round((steps[n + 1] - steps[n]) * (100 - pct) / 100))
         out.append({"key": key, "title": title, "rank": n, "name": names[n] if 0 <= n < len(names) else str(n), "progress": pct,
                     "next": None if top or n + 1 >= len(names) else names[n + 1], "to_next": left,
+                    "uncertain": left is not None and bool({n, n + 1} & RANK_UNCERTAIN.get(key, set())),
                     "earned_by": RANK_EARNED_BY.get(key) if left is not None else None})
     return out
 
 
 def profile(events):
-    """The commander as the journals last said: {commander, ts (the login it is from), credits, loan (both at that
-    login), ranks (rank_rows), reputation {Federation, Empire, Alliance, Independent: %}, power {name, rank, merits},
-    squadron, assets {wealth (the game's own total at login), fleet (your ships' value), ships, modules (stored
-    modules' value), carrier (its balance)}, fleet (ships(): the one you fly first), carrier {name, callsign,
-    balance, fuel}, career [{label, value, kind}]}. None before any login is on record."""
+    """The commander as the journals last said: {commander, ts (the login it is from), ranks (rank_rows), reputation
+    {Federation, Empire, Alliance, Independent: %}, power {name, rank, merits}, squadron, assets {wealth (the game's
+    own total at login), fleet (your ships' value), ships, modules (stored modules' value)}, fleet (ships(): the one
+    you fly first), career [{label, value, kind}]}. None before any login is on record. Credits and the carrier are
+    not here: the page shows the Commander tile's credits (State.commander_summary: the login's plus sales since) and
+    the Carrier tile's carrier (State.carrier_summary), one owner each."""
     login = _last(events, "LoadGame")
     if not login:
         return None
@@ -494,30 +506,27 @@ def profile(events):
             for k, v in e.items():
                 if isinstance(v, int) and not isinstance(v, bool) and k in rank:
                     rank[k], prog[k] = v, 0
-        elif name in ("Statistics", "Reputation", "Powerplay", "SquadronStartup", "CarrierStats"):
+        elif name in ("Statistics", "Reputation", "Powerplay", "SquadronStartup"):
             last[name] = e
     stats = last.get("Statistics") or {}
     bank = stats.get("Bank_Account") if isinstance(stats.get("Bank_Account"), dict) else {}
     fleet = ships(events)["ships"]
     stored = stored_modules(events)["modules"]
-    rep, pp, sq, cs = (last.get(k) or {} for k in ("Reputation", "Powerplay", "SquadronStartup", "CarrierStats"))
-    finance = cs.get("Finance") if isinstance(cs.get("Finance"), dict) else {}
+    rep, pp, sq = (last.get(k) or {} for k in ("Reputation", "Powerplay", "SquadronStartup"))
     career = []
     for section, key, label, kind in CAREER:
         v = (stats.get(section) or {}).get(key) if isinstance(stats.get(section), dict) else None
         if isinstance(v, (int, float)) and not isinstance(v, bool) and v:
             career.append({"label": label, "value": v, "kind": kind})
     return {
-        "commander": login.get("Commander"), "ts": login["timestamp"], "credits": login.get("Credits"), "loan": login.get("Loan") or 0,
+        "commander": login.get("Commander"), "ts": login["timestamp"],
         "ranks": rank_rows(rank, prog),
         "reputation": {k: round(rep[k], 1) for k in ("Federation", "Empire", "Alliance", "Independent") if isinstance(rep.get(k), (int, float))},
         "power": {"name": pp.get("Power"), "rank": pp.get("Rank"), "merits": pp.get("Merits")} if pp.get("Power") else None,
         "squadron": sq.get("SquadronName"),
         "assets": {"wealth": bank.get("Current_Wealth"), "ships": len(fleet), "fleet": sum(s["value"] or 0 for s in fleet) or None,
-                   "modules": sum(m["value"] or 0 for m in stored) or None, "carrier": finance.get("CarrierBalance")},
+                   "modules": sum(m["value"] or 0 for m in stored) or None},
         "fleet": sorted(fleet, key=lambda s: (not s["current"], -(s["value"] or 0))),
-        "carrier": {"name": cs.get("Name"), "callsign": cs.get("Callsign"), "balance": finance.get("CarrierBalance"),
-                    "fuel": cs.get("FuelLevel")} if cs.get("Callsign") else None,
         "career": career,
     }
 
@@ -530,19 +539,23 @@ def profile_now(dirs, days=INVENTORY_DAYS, now=None):
 
 def add_routes(app, state, dirs):
     """GET /api/commander/<part>: each reads journal files, so each runs off the event loop. dirs: fn() -> the
-    live journal folders."""
+    live journal folders. What the worker needs of the server's state is copied on the loop first (the tick changes
+    the materials while a worker reads). An error is the server's json_errors' to log and answer, as everywhere."""
     import asyncio
+    import copy
     from aiohttp import web
 
     def route(part, fn):
         async def view(_):
-            try:
-                return web.json_response(await asyncio.get_running_loop().run_in_executor(None, fn))
-            except (OSError, ValueError, KeyError, TypeError) as e:   # a journal line nobody expected: say so, do not fail
-                return web.json_response({"error": f"{type(e).__name__}: {e}"}, status=500)
+            work = fn()   # on the loop: the snapshot, then the reading in a worker
+            return web.json_response(await asyncio.get_running_loop().run_in_executor(None, work))
         app.router.add_get(f"/api/commander/{part}", view)
-    route("profile", lambda: profile_now(dirs()))
-    route("inventory", lambda: inventory(dirs()))
-    route("engineering", lambda: engineering(dirs(), state.journals.materials))
-    route("missions", lambda: missions_now(dirs()))
-    route("sessions", lambda: sessions_now(dirs()))
+
+    def engineering_now():
+        snap = copy.deepcopy(state.journals.materials)
+        return lambda: engineering(dirs(), snap)
+    route("profile", lambda: lambda: profile_now(dirs()))
+    route("inventory", lambda: lambda: inventory(dirs()))
+    route("engineering", engineering_now)
+    route("missions", lambda: lambda: missions_now(dirs()))
+    route("sessions", lambda: lambda: sessions_now(dirs()))

@@ -7905,27 +7905,34 @@ const releasePayloads = async () => {
     console.log(good ? "OK" : "FAIL", "| voice commands |", good ? "Settings → Voice lists every command with what it does, its phrases and narrowing words; the filter finds it" :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)} (${rows.length} rows)`, errors.slice(before));
   }
-  // The Commander view: its tabs drawn from the server's answers (made up here),
-  // Last of the page's checks: a check added in the middle shifts the page's long poll into a later batch's window
-  // and Engineering's filter
+  // The Commander view (PR #5): its tabs drawn from the server's answers (made up here, the real profile once): the
+  // controls above the pane in the themed switch, green / red the theme's own colours, the credits and the carrier the
+  // tiles' (the payload's), a tab asked again only when the payload's commander_version moves (Engineering also on the
+  // materials' version), not on a timer; Engineering's filter; the missions' time left counted at each draw
   {
+    holdPayloads();
     const w = dom.window, d = w.document, before = errors.length, got = {}, asked = [];
     w.__cmAsked = asked;
-    w.eval(`window.__cmApi = apiJson;
+    w.eval(`window.__cmKeep = {api: apiJson, cm: data.commander, car: data.carrier, ver: data.commander_version, mat: data.materials, view};
+      const soon = new Date(Date.now() + 1200e3 + 10e3).toISOString().slice(0, 19) + "Z";
+      data.commander = {name: "Tester", credits: 1300000000, credits_login: 1234567890, earned: 65432110, login_ts: "2026-10-12T08:00:00Z", loan: 0, ranks: {}};
+      data.carrier = {name: "SAMPLE CARRIER", callsign: "X1X-X1X", fuel: 800, decommission: null,
+                      finance: {balance: 250000000, reserve: 0, available: 250000000, weeks: 12.5, warn: false, ts: "2026-10-12T08:00:07Z"}};
+      data.commander_version = 7; data.materials = Object.assign({}, data.materials, {version: 3});
       apiJson = async (u, o) => {
         const s = String(u);
-        if (!s.startsWith("api/commander/")) return __cmApi(u, o);
+        if (!s.startsWith("api/commander/")) return __cmKeep.api(u, o);
         __cmAsked.push(s);
         return {
-          profile: {profile: {commander: "Tester", ts: "2026-10-12T08:00:00Z", credits: 1234567890, loan: 0, squadron: "Sample Wing",
-            power: {name: "Aisling Duval", rank: 3, merits: 4500},
-            ranks: [{key: "Trade", title: "Trade", rank: 7, name: "Tycoon", progress: 50, next: "Elite", to_next: 330000000, earned_by: "trade profit"},
+          profile: {profile: {commander: "Tester", ts: "2026-10-12T08:00:00Z", squadron: "Sample Wing",
+            power: {name: "Aisling Duval", rank: "<b>3</b>", merits: 4500},
+            ranks: [{key: "Exobiologist", title: "Exobiology", rank: 7, name: "Geneticist", progress: 64, next: "Elite", to_next: 1594440000, uncertain: false, earned_by: "exobiology data sold"},
                     {key: "Combat", title: "Combat", rank: 4, name: "Expert", progress: 0, next: "Master", to_next: null, earned_by: null},
+                    {key: "Explore", title: "Exploration", rank: 11, name: "Elite III", progress: 10, next: "Elite IV", to_next: 4000000000, uncertain: true, earned_by: "x"},
                     {key: "Federation", title: "Federal Navy", rank: 14, name: "Admiral", progress: null, next: null, to_next: null, earned_by: null}],
-            reputation: {Federation: -40, Empire: 76.5}, assets: {wealth: 9000000000, ships: 2, fleet: 250000000, modules: 5139353, carrier: 250000000},
+            reputation: {Federation: -40, Empire: 76.5}, assets: {wealth: 9000000000, ships: 2, fleet: 250000000, modules: 5139353},
             fleet: [{id: 7, type: "krait_light", name: "Sample Ship", current: true, value: 100000000},
                     {id: 5, type: "anaconda", type_name: "Anaconda", name: null, current: false, system: "Colonia", station: null, value: 150000000}],
-            carrier: {name: "SAMPLE CARRIER", callsign: "X1X-X1X", balance: 250000000, fuel: 800},
             career: [{label: "Time played", value: 7200000, kind: "time"}, {label: "Distance jumped", value: 987654, kind: "ly"},
                      {label: "Spent on ships", value: 500000000, kind: "cr"}, {label: "Systems visited", value: 12345, kind: "n"}]}},
           inventory: {ships: {ts: "2026-10-12T09:01:00Z", here: {system: "Sol", station: "Old Port"}, ships: [
@@ -7933,7 +7940,7 @@ const releasePayloads = async () => {
               {id: 5, type: "anaconda", type_name: "Anaconda", name: null, current: false, system: "Colonia", station: null, value: 150000000, hot: true,
                transfer_cost: 1234567, transfer_s: 7200, in_transit: false}]},
             modules: {ts: "2026-10-12T09:02:00Z", modules: [{name: "Frame Shift Drive", size: 5, rating: "A", mount: null, system: "Sol", blueprint: "Long Range",
-              level: 5, value: 5103953, transfer_cost: 0, transfer_s: 0, in_transit: false, hot: false}]},
+              level: "<i>5</i>", value: 5103953, transfer_cost: 0, transfer_s: 0, in_transit: false, hot: false}]},
             locker: {ts: "2026-10-12T09:03:00Z", kinds: [{name: "Goods", items: [{name: "Weapon <Schematic>", count: 3, mission: false}]}, {name: "Data", items: []}]},
             suits: [{loadout: "Bio", suit: "Artemis Suit", class: 3, mods: ["Increased sprint duration"], weapons: [{name: "TK Aphelion", class: 2, slot: "PrimaryWeapon1", mods: []}]}]},
           engineering: {engineers: [{name: "Felicity Farseer", progress: "Unlocked", rank: 5}, {name: "Elvira Martuuk", progress: "Known", rank: null}],
@@ -7946,79 +7953,130 @@ const releasePayloads = async () => {
                 {grade: 1, rolls: 0, materials: [{id: "p", name: "Phosphorus", need: 1, have: 0}], engineers: []}]}]},
           missions: {missions: [
             {id: 1, name: "Deliver 20 units of Gold", faction: "Sol Workers", system: "Alpha Centauri", station: "Hutton Orbital", target: null, commodity: "Gold",
-             count: 20, delivered: 8, reward: 2500000, expiry: "2026-10-12T12:20:00Z", expires_in: 1200, soon: true, expired: false, wing: false, passengers: false, redirected: false},
+             count: 20, delivered: 8, reward: 2500000, expiry: soon, expires_in: 99999, soon: false, expired: false, wing: false, passengers: false, redirected: false},
             {id: 2, name: "Massacre", faction: "Sol Workers", system: "Sol", station: "Old Port", target: "Bad Lot", commodity: null, count: 12, delivered: null,
-             reward: 9000000, expiry: null, expires_in: null, soon: false, expired: false, wing: true, passengers: false, redirected: true}]},
+             reward: 9000000, expiry: null, expires_in: null, soon: false, expired: false, wing: true, passengers: false, redirected: true},
+            {id: 3, name: "Courier", faction: "Sol Workers", system: "Sol", station: null, target: null, commodity: null, count: null, delivered: null,
+             reward: 100000, expiry: "2026-01-01T00:00:00Z", expires_in: 5, soon: true, expired: false, wing: false, passengers: false, redirected: false}]},
           sessions: {days: 30, totals: {combat: {sessions: 1, kills: 3, bounties: 400000, bonds: 60000, deaths: 1}, mining: {sessions: 1, tons: 6, prospected: 2, sold: 1500000}},
             sessions: [
               {start: "2026-10-12T11:00:00Z", end: "2026-10-12T11:51:00Z", ship: "Type-9 Heavy", combat: null, mining: {tons: 6, refined: {Platinum: 5, Osmium: 1},
                 prospected: 2, content: {High: 1, Low: 1}, motherlodes: 1, cracked: 1, prospectors: 1, collectors: 1, sold: 1500000, seconds: 1800, per_hour: 12}},
               {start: "2026-10-12T08:00:00Z", end: "2026-10-12T09:00:00Z", ship: "Krait Mk II", mining: null, combat: {kills: 3, bounties: 400000, bonds: 60000,
-                deaths: 1, interdicted: 1, redeemed: 400000, by_ship: {Anaconda: 2}, seconds: 1800, per_hour: 6}}]},
+                deaths: 1, interdicted: 1, redeemed: 400000, by_ship: {Anaconda: 2}, seconds: 1800, per_hour: "<u>6</u>"}}]},
         }[s.slice("api/commander/".length)];
       };
-      CM.data = {}; CM.at = {}; CM.error = {}; CM.tab = "profile"; CM.q = ""; CM.craft = false;`);
+      CM.data = {}; CM.key = {}; CM.error = {}; CM.loading = {}; CM.tab = "profile"; CM.q = ""; CM.craft = false; CM.open = {};
+      document.getElementById("cmFilter").value = ""; document.getElementById("cmCraft").checked = false;`);
     const text = el => el ? el.textContent.replace(/\s+/g, " ").trim() : "", body = () => d.getElementById("cmdrBody");
     const rows = () => [...body().querySelectorAll("table.cmtable tbody tr")].map(t => [...t.cells].map(text).join(" | "));
-    const tab = async name => { d.querySelector(`#cmdrTabs [data-cmtab="${name}"]`).click(); await sleep(120); };
+    // a class's colour as the theme gives it: jsdom leaves var() unresolved, so it is looked up on :root here
+    const colour = el => { const c = w.getComputedStyle(el).color, m = /^var\((--[\w-]+)\)$/.exec(c);
+      return m ? w.getComputedStyle(d.documentElement).getPropertyValue(m[1]).trim() : c; };
+    const root = name => w.getComputedStyle(d.documentElement).getPropertyValue(name).trim();
+    const tab = async name => { d.querySelector(`[name=cmdrTab][value="${name}"]`).click(); await settle(400); };
     try {
       d.querySelector('[data-view="cmdr"]').click();
-      await sleep(150);
-      got.shown = [d.getElementById("cmdrView").hidden, [...d.querySelectorAll("#cmdrTabs .cmtab")].map(b => b.textContent + (b.classList.contains("on") ? "*" : ""))];
+      await settle(400);
+      const pane = d.getElementById("cmdrPane");
+      got.shown = [d.getElementById("cmdrView").hidden, [...d.querySelectorAll("#cmdrTabs .seg label")].map(l => text(l) + (l.querySelector("input").checked ? "*" : "")),
+                   // the controls above the pane, not in it
+                   ["cmFilter", "cmCraft", "cmRefresh", "cmdrStatus"].every(id => !pane.contains(d.getElementById(id))) &&
+                     !pane.querySelector(".seg") && !!(d.getElementById("cmdrTabs").compareDocumentPosition(pane) & w.Node.DOCUMENT_POSITION_FOLLOWING),
+                   d.getElementById("cmEngCtl").hidden];
       got.profile = [text(body().querySelector(".hwyttl")), rows(), [...body().querySelectorAll(".cmfig")].map(text), [...body().querySelectorAll(".cmrep")].map(text),
-                     [...body().querySelectorAll(".cmbar > span")].map(x => x.style.width)];
+                     [...body().querySelectorAll(".cmbar > span")].map(x => x.style.width), !!body().querySelector(".hwyttl b")];
+      // the payload's credits move: the tab follows at the next draw without asking the server
+      w.eval(`data.commander = Object.assign({}, data.commander, {credits: 1400000000}); render();`);
+      got.liveCredits = text(body().querySelector(".cmfig b"));
       await tab("inventory");
       got.inventory = rows();
       got.heads = [...body().querySelectorAll("h3.subhead")].map(text);
       got.locker = [...body().querySelectorAll(".cmitem")].map(text);
+      got.noTags = !body().querySelector("table i, table u");
       await tab("engineering");
-      got.engineering = [[...body().querySelectorAll("details.cmmod")].map(x => text(x.querySelector("summary")) + (x.open ? " open" : "")), text(body().querySelector(".cmfilter .unk"))];
+      got.engineering = [[...body().querySelectorAll("details.cmmod")].map(x => text(x.querySelector("summary")) + (x.open ? " open" : "")), text(body().querySelector(".cmnote")),
+                         d.getElementById("cmEngCtl").hidden];
       const f = d.getElementById("cmFilter");
       f.focus(); f.value = "wake"; f.dispatchEvent(new w.Event("input", {bubbles: true}));
       got.filtered = [[...body().querySelectorAll("details.cmmod")].map(x => text(x.querySelector("summary")) + (x.open ? " open" : "")), rows(),
-                      d.activeElement && d.activeElement.id, body().querySelectorAll(".cmmat.ok").length, body().querySelectorAll(".cmmat.noscoop").length];
-      d.getElementById("cmCraft").checked = true; d.getElementById("cmCraft").dispatchEvent(new w.Event("change", {bubbles: true}));
+                      d.activeElement && d.activeElement.id, body().querySelectorAll(".cmmat.ok").length, body().querySelectorAll(".cmmat.short").length];
+      // green and red are the theme's own (the Materials tab's): --good and --bad, resolved
+      got.colours = [colour(body().querySelector(".cmmat.ok")) === root("--good") && !!root("--good"),
+                     colour(body().querySelector(".cmmat.short")) === root("--bad") && !!root("--bad")];
+      d.getElementById("cmCraft").click();
       got.craft = rows().length;
       await tab("missions");
       got.missions = [text(body().querySelector(".hwyttl")), rows(), body().querySelectorAll(".warnc").length];
       await tab("sessions");
       got.sessions = [rows(), [...body().querySelectorAll(".cmfig")].map(text)];
-      await tab("missions");                                                   // fresh: not asked again
-      d.getElementById("cmRefresh").click();                                    // asked again when you say so
-      await sleep(120);
+      // asked again only when the payload says so: an unchanged one draws from what it has, a new version asks (the
+      // open tab only), the materials' version only for Engineering; Refresh asks now
+      const n0 = asked.length;
+      w.eval(`render(); render();`); await settle(400);
+      got.unchanged = asked.length - n0;
+      w.eval(`data.materials = Object.assign({}, data.materials, {version: 4}); render();`); await settle(400);
+      got.matOther = asked.length - n0;
+      w.eval(`data.commander_version = 8; render();`); await settle(400);
+      got.moved = asked.slice(n0);
+      await tab("missions");                                                   // read at version 7: asked again
+      await tab("missions");
+      d.getElementById("cmRefresh").click(); await settle(400);              // asked again when you say so
+      got.after = asked.slice(n0);
       got.pure = [w.eval(`cmSpan(7200)`), w.eval(`cmSpan(200000)`), w.eval(`cmSpan(540)`)];
-    } finally { w.eval(`apiJson = __cmApi; CM.data = {}; CM.at = {}; CM.q = ""; CM.craft = false;`); d.querySelector('[data-view="overview"]').click(); }
-    await sleep(60);
+      got.stored = w.eval(`store.get("cmdrTab")`);
+      // the real server's answer for the sample journals
+      w.eval(`apiJson = __cmKeep.api; CM.key = {}; CM.data = {};`);
+      await tab("profile"); await settle(3000);
+      got.real = [text(body().querySelector(".hwyttl")).replace(/ as of .*/, ""), !!body().querySelector(".cmranks"), text(d.getElementById("cmdrStatus"))];
+    } finally {
+      w.eval(`apiJson = __cmKeep.api; Object.assign(data, {commander: __cmKeep.cm, carrier: __cmKeep.car, commander_version: __cmKeep.ver, materials: __cmKeep.mat});
+        CM.data = {}; CM.key = {}; CM.q = ""; CM.craft = false; CM.tab = "profile"; store.set("cmdrTab", "profile");
+        document.getElementById("cmFilter").value = ""; document.getElementById("cmCraft").checked = false;`);
+      d.querySelector('[data-view="overview"]').click();
+      await releasePayloads();
+    }
     const want = {
-      shown: [false, ["CMDR*", "Inventory", "Engineering", "Missions", "Sessions"]],
-      profile: ["CMDR Tester · Sample Wing · pledged to Aisling Duval, rank 3, 4,500 merits as of 2026-10-12 08:00",
-                ["Trade | Tycoon | 50% | next: Elite in 330.0M cr", "Combat | Expert | 0% | next: Master", "Federal Navy | Admiral |  | the top",
+      shown: [false, ["CMDR*", "Inventory", "Engineering", "Missions", "Sessions"], true, true],
+      profile: ["CMDR Tester · Sample Wing · pledged to Aisling Duval, rank NaN, 4,500 merits as of 2026-10-12 08:00",
+                ["Exobiology | Geneticist | 64% | next: Elite in about 1.59B cr", "Combat | Expert | 0% | next: Master",
+                 "Exploration | Elite III | 10% | next: Elite IV in about 4.00B cr (uncertain)", "Federal Navy | Admiral |  | the top",
                  "Sample Ship Krait Phantom | you fly it | 100.0M cr", "Anaconda | Colonia | 150.0M cr"],
-                ["Credits1.23B cr", "Net worth9.00B cr", "Fleet250.0M cr · 2 ships", "Stored modules5.1M cr", "Carrier balance250.0M cr",
+                ["Credits≈ 1.30B cr", "Net worth9.00B cr", "Fleet250.0M cr · 2 ships", "Stored modules5.1M cr", "Carrier balance250.0M cr",
                  "Time played2,000 h", "Distance jumped987,654 ly", "Spent on ships500.0M cr", "Systems visited12,345"],
-                ["Reputation: Federation -40% · Empire 77%", "Fleet carrier: SAMPLE CARRIER X1X-X1X · 250.0M cr · 800 t tritium"], ["50%", "0%"]],
+                ["Reputation: Federation -40% · Empire 77%", "Fleet carrier: SAMPLE CARRIER X1X-X1X · balance 250.0M · ~12 weeks of upkeep · 800 t tritium (the Carrier tile's figures)"],
+                ["64%", "0%", "10%"], false],
+      liveCredits: "≈ 1.40B cr",
       inventory: ["Sample Ship Krait Phantom SP-01 | you fly it | 100.0M cr | ", "Anaconda hot | Colonia | 150.0M cr | 1.2M cr · 2 h 0 min",
-                  "5A Frame Shift Drive | Long Range G5 | Sol | 5.1M cr | ", "Bio | Artemis Suit G3Increased sprint duration | TK Aphelion G2"],
+                  "5A Frame Shift Drive | Long Range GNaN | Sol | 5.1M cr | ", "Bio | Artemis Suit G3Increased sprint duration | TK Aphelion G2"],
       heads: ["Ships 2 as of 2026-10-12 09:01", "Stored modules 1 as of 2026-10-12 09:02", "Ship locker as of 2026-10-12 09:03", "Suit loadouts 1"],
       locker: ["Weapon <Schematic>3"],
-      engineering: [["Frame shift drive 1 blueprint", "Sensors 1 blueprint"], "1 of 2 engineers unlocked · ship modules only: no experimental effects, suits or weapons"],
+      noTags: true,
+      engineering: [["Frame shift drive 1 blueprint", "Sensors 1 blueprint"], "1 of 2 engineers unlocked · ship modules only: no experimental effects, suits or weapons", false],
       filtered: [["Frame shift drive 1 blueprint open"], ["G1 | Atypical Disrupted Wake Echoes 7/1 | ×7 | Felicity Farseer",
                  "G5 | Arsenic 0/1Datamined Wake Exceptions 5/2 | – | Elvira Martuuk"], "cmFilter", 2, 1],
+      colours: [true, true],
       craft: 1,
-      missions: ["2 missions · 1 expiring within half an hour", ["Deliver 20 units of Gold | Sol Workers | Alpha Centauri · Hutton Orbital | Gold 8/20 | 2.5M cr | 20 min",
-                 "Massacre wing redirected | Sol Workers | Sol · Old Port | Bad Lot 12 | 9.0M cr | no limit"], 2],
-      sessions: [["2026-10-12 08:00 | Krait Mk II | 3 | Anaconda 2 | 400k cr | 60k cr | 6 | 30 min | 1",
+      missions: ["3 missions · 1 expiring within half an hour", ["Deliver 20 units of Gold | Sol Workers | Alpha Centauri · Hutton Orbital | Gold 8/20 | 2.5M cr | 20 min",
+                 "Massacre wing redirected | Sol Workers | Sol · Old Port | Bad Lot 12 | 9.0M cr | no limit",
+                 "Courier | Sol Workers | Sol |  | 100k cr | expired"], 2],
+      sessions: [["2026-10-12 08:00 | Krait Mk II | 3 | Anaconda 2 | 400k cr | 60k cr | NaN | 30 min | 1",
                   "2026-10-12 11:00 | Type-9 Heavy | 6 t | Platinum 5, Osmium 1 | 12 | 2 High 1, Low 1 · 1 core | 1 / 1 | 30 min | 1.5M cr"],
                  ["Sessions1", "Kills3", "Bounties400k cr", "Combat bonds60k cr", "Deaths1", "Sessions1", "Refined6 t", "Asteroids prospected2", "Sold1.5M cr"]],
+      unchanged: 0, matOther: 0,
+      moved: ["api/commander/sessions"],
+      after: ["api/commander/sessions", "api/commander/missions", "api/commander/missions"],
       pure: ["2 h 0 min", "2 d 7 h", "9 min"],
+      stored: "missions",
+      real: ["CMDR Sample Pilot", true, "from your journals"],
     };
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
-    if (JSON.stringify(asked) !== JSON.stringify(["api/commander/profile", "api/commander/inventory", "api/commander/engineering", "api/commander/missions", "api/commander/sessions",
-                                                 "api/commander/missions"])) bad.push("asked");
+    if (JSON.stringify(asked.slice(0, 5)) !== JSON.stringify(["api/commander/profile", "api/commander/inventory", "api/commander/engineering", "api/commander/missions",
+                                                             "api/commander/sessions"])) bad.push("asked");
     const goodCM = !bad.length && errors.length === before;
     allOk = allOk && goodCM;
     console.log(goodCM ? "OK" : "FAIL", "| commander |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))} asked ${JSON.stringify(asked)}`
-      : "the commander's ranks, money and fleet, inventory, engineering with its filter, missions, sessions; a fresh tab is not asked again", errors.slice(before));
+      : "controls above the pane, the theme's green and red, the tiles' credits and carrier; asked again only on a new version or Refresh; the real profile", errors.slice(before));
   }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",

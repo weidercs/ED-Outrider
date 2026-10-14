@@ -24,9 +24,14 @@ upstream project's choices, not rules of the game.
 - **The Commander view stores nothing** (2026-10-12, `outrider/commander.py`). Everything is read from the journal
   files when a tab is opened, so it is only as complete as the journal: stored ships and modules as of the last
   shipyard or outfitting you opened, suit loadouts only once worn, a mission accepted before the journals kept by its
-  name alone. Credits, ranks and statistics are as of the last login (the game writes them then). What a rank still
-  takes is an estimate from the community's credit figures per rank (Frontier publishes none); combat, mercenary,
-  CQC and navy ranks show their percentage only. The blueprint table is a copy of community data (EDCD's
+  name alone. Ranks and statistics are as of the last login (the game writes them then); the credits and the carrier
+  are the Commander and Carrier tiles' own (one owner each). What exobiology's next rank still takes is an estimate:
+  the post-Update-14 step (the Frontier forum, 2 Jan 2023; Elite IV and V uncertain) times the share the game's own
+  percentage leaves, never Organic_Data_Profits against the totals (checked on real journals: the bands' steps hold
+  within 3 %, the totals not); every other rank shows its percentage only (no trade or exploration figures could be
+  checked the same way). EngineerProgress' Rank is the highest grade an engineer crafts for you (real journals: no
+  craft above it). A tab is read again when a journal line it reads is written (`commander_version`), not on a
+  timer. The blueprint table is a copy of community data (EDCD's
   coriolis-data), not the game's own: a recipe Frontier changes is wrong until the table is rebuilt. No voice lines:
   a mission about to expire is marked on the page only.
 - **Green gas giants are a guess, said as one** (2026-10-12, `outrider/ggg.py`). The seven-layer ladder model is a

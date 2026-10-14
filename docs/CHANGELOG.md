@@ -2,6 +2,37 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · Commander tab: the review's fixes
+The fixes the review of PR #5 asked for before a release (batch 1 of its plan; the database move is next).
+- **One owner for credits and the carrier.** The CMDR tab shows the Commander tile's credits (the login's plus sales
+  since, with the tile's hover) and the Carrier tile's carrier (balance, weeks of upkeep, or its decommissioning in
+  red) from the payload, live; `commander.profile` no longer reads its own credits, loan or CarrierStats.
+- **Rank estimates.** Exobiology uses the post-Update-14 thresholds (Aunty Sledge's Frontier forum post of 2 Jan 2023,
+  as the wiki copies it), worded "in about N cr", Elite IV and V marked uncertain. Checked on the author's journals
+  since 2023 (each login's Progress beside its Statistics): Organic_Data_Profits moves through the Cataloguer,
+  Taxonomist, Ecologist and Geneticist bands at the table's steps within 3 %, but not from its totals (Geneticist 64 %
+  at 7.28B, where the totals give 74 %; the review's 64.1 % paired the 10-11 statistics with the 10-12 percentage), so
+  it stays the step times the game's own percentage. The trade and exploration figures could not be checked (trade
+  progress moved while Market_Profits did not; exploration has no published steps past Elite): those ranks, like
+  combat, show their percentage only.
+- **Engineering "ready"**: EngineerProgress' Rank is the highest grade the engineer crafts for you (the author's
+  journals: 944 crafts, none above the rank then; a rank-up follows the roll that earns it), so ready is rank >=
+  grade, not one past it.
+- **The page's rules**: the tab switch (the themed `.seg`), Refresh and Engineering's filter sit above the pane; green
+  and red are the theme's `--good` / `--bad` (`#cmdrView .ok` / `.short`, the Materials tab's classes; there was no
+  `.ok` colour, and `--panel2` did not exist); a tab is asked for again only when the payload's new
+  `commander_version` moves (a journal line naming an event the view reads: `COMMANDER_VIEW_EVENTS`, which also wakes
+  the page) or, for Engineering, the materials' version, instead of a 30 s timer; the missions' time left is counted
+  at each draw; the tab is kept with `store.set("cmdrTab")`; four unescaped values (Powerplay rank, G levels, a
+  material's need, rates) go through `cmNum`.
+- **Errors and threads**: no local "500 with the error" any more (it hid the traceback from Show log): `json_errors`
+  logs and answers; the engineering worker gets a copy of the materials made on the event loop.
+- **A 14th header tab** at 1280 and 1366 px in the Default and all 11 themes (measured headless on a throwaway server):
+  nothing overflows, but at 1280 px Centauri's and Alliance's rows went below the title (+41 px of header); their pills
+  are 12 px now (Centauri 8 px a side: its own padding never applied), and every row stays beside the title.
+- Smoke: the Commander block waits with `settle()` under `holdPayloads()`, checks the controls are outside the pane,
+  the colours resolve, no refetch on an unchanged payload, and reads the real `/api/commander/profile` once.
+
 ## 2026-10-14 · Commander: who you are, what you own, engineering, missions, sessions (weidercs, PR #5)
 Contributed by weidercs (GitHub PR #5, written 2026-10-12), merged as is; the review's fixes follow in their own entry.
 - A new **Commander** tab (Records on the tablet), five parts, each read from the journal files when opened

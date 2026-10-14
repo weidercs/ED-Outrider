@@ -72,13 +72,14 @@
 [data-theme="centauri"] .tb-emblem { display: block; background-image: url("../emblems/centauri.webp"); }
 
 /* ---- the desktop page (Settings > Display): gold on purple, notched corners, gold double borders ---- */
-:root[data-theme="centauri"] { --desk-pill: 0; --desk-radius: 0; --desk-lbl: var(--ct-gold); --desk-pill-size: 13px; }
+:root[data-theme="centauri"] { --desk-pill: 0; --desk-radius: 0; --desk-lbl: var(--ct-gold); --desk-pill-size: 12px; }
 [data-theme="centauri"] body:not(.tablet) :is(.tile, .views button, dialog) {
   clip-path: polygon(6px 0, calc(100% - 6px) 0, calc(100% - 6px) 6px, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) calc(100% - 6px),
     calc(100% - 6px) 100%, 6px 100%, 6px calc(100% - 6px), 0 calc(100% - 6px), 0 6px, 6px 6px); }
 [data-theme="centauri"] body:not(.tablet) header { border-bottom: 4px double var(--ct-gold); }
 [data-theme="centauri"] body:not(.tablet) .tile { border-color: var(--ct-line); border-top: 2px solid var(--ct-gold); }
-[data-theme="centauri"] body:not(.tablet) .views button { border-color: var(--ct-gold); padding: 3px 11px; }
+/* at the shared pill rule's specificity (a plain padding here never applied): 8px a side, so 14 pills fit beside the title at 1280 px */
+:root[data-theme="centauri"] body:not(.tablet) .views button { border-color: var(--ct-gold); padding-inline: 8px; }
 [data-theme="centauri"] body:not(.tablet) .views button.on { background: var(--ct-gold); color: var(--ct-bg); }
 [data-theme="centauri"] body:not(.tablet) dialog { border: 5px double var(--ct-gold); }
 [data-theme="centauri"] body:not(.tablet) th { color: var(--ct-gold); }

@@ -1311,6 +1311,10 @@ CARGO_EVENTS = frozenset(CARGO_ONLY) | {"Cargo", "Docked", "Undocked", "CarrierS
 # you deposit for the jumps it measured (outrider.cargo.carrier_burns, S13 B)
 CARRIER_CARGO_EVENTS = ("CarrierStats", "CarrierTradeOrder", "CargoTransfer", "MarketBuy", "MarketSell",
                         "CarrierCrewServices", "CarrierDepositFuel") + CARRIER_MOVE_EVENTS
+# the events the Commander view reads (outrider.commander, from the journal files when asked): a line naming one bumps
+# Journals.commander_version, the page's cue to ask again (until the view reads from the database)
+COMMANDER_VIEW_EVENTS = frozenset(n.encode() for n in outrider.commander.INVENTORY_EVENTS + outrider.commander.PROFILE_EVENTS
+                                  + outrider.commander.MISSION_EVENTS + outrider.commander.SESSION_EVENTS + ("EngineerProgress",))
 WANTED = tuple(f'"event":"{e}"'.encode()
                for e in POSITION_EVENTS + STAR_CLASS_EVENTS + SCAN_EVENTS + DATA_EVENTS + SHIP_EVENTS
                + CMDR_EVENTS + MATERIAL_EVENTS + BODY_EVENTS + SRV_EVENTS + CARGO_ONLY + ("Loadout", "Shutdown", "Fileheader"))
@@ -2471,6 +2475,10 @@ class Journals:
         self.carrier_version = 0
         # bumped by every write leaving_summary reads (mark(), deaths and sales): its cache key (S17)
         self.data_seq = 0
+        # bumped by every line naming an event the Commander view reads (COMMANDER_VIEW_EVENTS): the payload's
+        # commander_version, on which the page asks for the view's tab again. Only ever goes up: a rolled-back tick
+        # that reads the lines again bumps it again, which only means one more read
+        self.commander_version = 0
         # the live tail's quick scan (S18): per journal its last size and how many stats in a row found it unchanged;
         # `settled` the files unchanged for JOURNAL_SETTLE_STATS stats, which a quick scan does not stat again until
         # the folder's full re-check (full_check_at, on `clock`) comes round
@@ -3126,6 +3134,9 @@ class Journals:
                     print(f"uploads: a line was skipped ({type(e).__name__}: {e})", file=sys.stderr)
             elif self.uploads is not None and self.upload_mode:
                 self.uploads.forget()   # not following now: switched on again, it reads the file from its top
+            ev_at = line.find(b'"event":"', 0, 80)   # the game writes it second, after the timestamp
+            if ev_at >= 0 and line[ev_at + 9:line.find(b'"', ev_at + 9)] in COMMANDER_VIEW_EVENTS:
+                self.commander_version += 1
             if any(w in line for w in WANTED) or b"Fixed_Event_Life" in line or any(w in line for w in POI_BYTES):
                 # where the line is (the file's name, so a twin copy in another folder gives the same key):
                 # tells apart sale pages written in the same second (sale_events)
@@ -6593,6 +6604,7 @@ class State:
         # full pass over your bodies, run on the event loop)
         self.history_version = 0
         self._history_jump = None
+        self._commander_seen = 0   # journals.commander_version at the last bump
         self.system_values = {}    # system name -> unsold cartographic value, from the last estimate
         t = journals.target        # whatever was targeted before we started: no sound for it
         self.startup_target_key = t and (t["id64"], t["ts"])
@@ -6829,6 +6841,7 @@ class State:
             "position": dict(pos, id=str(pos["id64"]), visits=self.visit_count(pos["id64"])) if pos else pos,
             "previous": with_id(self.journals.prev),
             "commander": self.commander_summary(),
+            "commander_version": self.journals.commander_version,   # the Commander view asks again when it moves
             "materials": self.materials_summary(), "jump_range": jr["ly"] if jr else None,
             # the range with the fuel and cargo aboard now (the fuel model), None without the Loadout's mass
             "jump_range_now": self.range_now(),
@@ -13160,6 +13173,9 @@ class State:
             if self.journals.materials_changed:
                 self.materials_version += 1
             self.journals.materials_changed = self.journals.cmdr_changed = False
+            self.bump()
+        if self.journals.commander_version != self._commander_seen:   # a line the Commander view reads: the page asks again
+            self._commander_seen = self.journals.commander_version
             self.bump()
 
     # ---- 3D map ----

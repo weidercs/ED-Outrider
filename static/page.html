@@ -112,7 +112,14 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
   <div id="ovMap" hidden><div class="smap"><canvas id="ovMapCanvas" aria-label="surface map: heading up, you at the centre"></canvas></div><div id="ovMapLegend" class="smap-legend"></div></div>
 </section>
 <section id="cmdrView" hidden>
-  <div class="pane" id="cmdrPane"><div class="srow" id="cmdrTabs"></div><div id="cmdrBody"></div></div>
+  <div class="srow" id="cmdrTabs">
+    <span class="seg" role="radiogroup" aria-label="Commander view"><label title="your ranks and the way to the next, credits and assets, your fleet, your career"><input type="radio" name="cmdrTab" value="profile" checked>CMDR</label><label title="your ships, stored modules, ship locker and suit loadouts"><input type="radio" name="cmdrTab" value="inventory">Inventory</label><label title="every ship-module blueprint against the materials you hold"><input type="radio" name="cmdrTab" value="engineering">Engineering</label><label title="the missions you hold, the soonest to expire first"><input type="radio" name="cmdrTab" value="missions">Missions</label><label title="your combat and mining sessions of the last weeks"><input type="radio" name="cmdrTab" value="sessions">Sessions</label></span>
+    <span id="cmEngCtl" class="cmfilter" hidden><input type="search" id="cmFilter" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="filter: module, blueprint or material" class="filter">
+      <label title="only the grades you hold every material for"><input type="checkbox" id="cmCraft"> only what I can craft now</label></span>
+    <button type="button" class="mini" id="cmRefresh" title="read the journals again now">Refresh</button>
+    <span id="cmdrStatus" class="unk"></span>
+  </div>
+  <div class="pane" id="cmdrPane"><div id="cmdrBody"></div></div>
 </section>
 <section id="firstsView" hidden>
   <div class="srow"><span id="fStatus"></span>
