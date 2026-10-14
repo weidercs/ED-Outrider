@@ -153,7 +153,7 @@ or the next stop targets it in the galaxy map, and **Plot route** puts it in Plo
 follow no route). **Export** saves them as CSV or JSON; **Import…** beside it adds the bookmarks in such a file to yours
 ("12 added, 3 already there"): a system you have already bookmarked keeps your own note, and a row it cannot read is
 left out with its line and the reason (a spreadsheet that turned a long id64 into 1.15292E+18 is the usual one; save
-that column as text). Up to 10,000 bookmarks a file. **Plot Route** has its own page:
+that column as text). Up to 10,000 bookmarks a file. The Android app has no Import… (it opens no file picker): import from a browser. **Plot Route** has its own page:
 [Plot Route](plot-route.md).
 
 On a window of at least about 900 × 600 the page fits the window: the header stays put and each list scrolls

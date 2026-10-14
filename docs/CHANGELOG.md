@@ -2,6 +2,15 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · No file picker in the Android app
+The author's decision of 2026-10-14: the Android app's WebView has no file picker and will not get one.
+- In the app (`window.OutriderApp` exists) the two controls that open a file input, Bookmarks → **Import…** and
+  Settings → Sharing → **Import settings…**, are hidden, and a muted note in their place says to import from a browser
+  on the PC. Any browser, a tablet's included, keeps both. They are the page's only file inputs (no sound, font or
+  voice control picks a file). `data-picker` marks such a control, `.nopicker` its note, `drawFilePickers()` sets them.
+- Smoke check: one control and one note per file input; hidden / shown with `OutriderApp`, the other way round without.
+  Docs: tablet.md (the app), views.md (Bookmarks), voice-and-alerts.md (settings import), AGENT_GUIDE (the app's contract).
+
 ## 2026-10-14 · Version 2026.10.23
 - The Massive Tweak Update: the crew of voices (nine roles, names, crew lines, voices kept loaded, a voice per
   personality), 🎯 on every system with the game brought forward, the overlay's Target and Alerts panels, its pill and

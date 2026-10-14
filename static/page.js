@@ -10730,6 +10730,15 @@ settingsFile.onchange = async () => {
   toast(`imported ${r.applied} settings${r.skipped.length ? ` (${r.skipped.length} unknown left out)` : ""}; reloading`);
   setTimeout(() => location.reload(), 600);
 };
+// The Android app's WebView opens no file picker (and will not: the author's call, 2026-10-14), so in the app a control
+// that would open one ([data-picker]: Bookmarks' Import…, Import settings…) is hidden and its .nopicker note says where
+// to do it instead. Any browser, a tablet's included, keeps the control.
+function drawFilePickers() {
+  const app = typeof window !== "undefined" && !!window.OutriderApp;
+  document.querySelectorAll("[data-picker]").forEach(b => { b.hidden = app; });
+  document.querySelectorAll(".nopicker").forEach(n => { n.hidden = !app; });
+}
+drawFilePickers();
 async function saveServerSettings(body) {
   try {
     const r = await apiJson("api/defaults", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});

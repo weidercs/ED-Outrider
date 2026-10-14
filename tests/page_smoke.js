@@ -7786,6 +7786,28 @@ const releasePayloads = async () => {
     console.log(good ? "OK" : "FAIL", "| S53 bookmarks import |", good ? "Import… picks a file, merged on the server (2 added, then 2 already there, a bad line said), the exact id64 with its tick and Plot route, an unreadable file in red" :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
   }
+  // the Android app has no file picker: with window.OutriderApp, every control that opens one (one per file input) is
+  // hidden and its note shows; in a browser they show and the notes do not
+  {
+    const w = dom.window, d = w.document, before = errors.length;
+    const state = () => [["bmImport", "settingsImport"].map(id => !d.getElementById(id).hidden),
+      [...d.querySelectorAll(".nopicker")].map(n => !n.hidden)];
+    const got = {counts: [d.querySelectorAll('input[type="file"]').length, d.querySelectorAll("[data-picker]").length,
+      d.querySelectorAll(".nopicker").length]};
+    got.browser = state();
+    w.eval("window.OutriderApp = {}; drawFilePickers()");
+    got.app = state();
+    got.note = d.querySelector("#bmTools .nopicker").textContent;
+    w.eval("delete window.OutriderApp; drawFilePickers()");
+    got.back = state();
+    const want = {counts: [2, 2, 2], browser: [[true, true], [false, false]], app: [[false, false], [true, true]],
+      note: "Import from a browser on the PC", back: [[true, true], [false, false]]};
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    const good = !bad.length && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| no file picker in the app |", good ? "Import… and Import settings… hidden with OutriderApp, a note in their place; shown in a browser" :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+  }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",
     headers: Object.assign({"Content-Type": "application/json"}, origin ? {Origin: origin} : {})}).then(r => r.status);

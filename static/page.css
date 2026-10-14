@@ -27,6 +27,8 @@ h1 span { color: var(--accent); }
 #pop .adv { margin-top: 8px; font-weight: 500; }
 #pop .adv.warn { color: var(--warn); } #pop .adv.urgent { color: var(--bad); } #pop .adv.ok { color: var(--good); }
 .sub { color: var(--muted); margin-top: 2px; font-size: 13px; }
+/* where a file picker would open in the Android app (it has none): the note in its place */
+.nopicker { color: var(--muted); font-size: 12px; align-self: center; }
 .controls { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; align-items: center; font-size: 13px; }
 .controls button { background: var(--panel); color: var(--text); border: 1px solid var(--line);
   border-radius: 6px; padding: 3px 10px; cursor: pointer; font: inherit; }

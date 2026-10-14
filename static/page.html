@@ -262,7 +262,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
 </section>
 <section id="bmView" hidden>
 <div id="bmTools" hidden class="srow"><span class="swbar"><button type="button" class="mini swbtn" hidden></button><button type="button" class="mini swclear" hidden title="untick every system ticked for a sweep">✕ untick all</button><span class="swmsg" role="status"></span></span><span class="grow"></span><span class="exports">Export: <a href="api/export?what=bookmarks&format=csv" download>CSV</a> · <a href="api/export?what=bookmarks&format=json" download>JSON</a></span>
-  <button type="button" class="mini" id="bmImport" title="add the bookmarks in a file (Outrider's CSV or JSON export) to yours; a system already bookmarked here keeps its own note">Import…</button><input type="file" id="bmFile" accept=".csv,.json,text/csv,application/json" hidden><span id="bmImportMsg" role="status"></span></div>
+  <button type="button" class="mini" id="bmImport" data-picker title="add the bookmarks in a file (Outrider's CSV or JSON export) to yours; a system already bookmarked here keeps its own note">Import…</button><input type="file" id="bmFile" accept=".csv,.json,text/csv,application/json" hidden><span class="nopicker" hidden>Import from a browser on the PC</span><span id="bmImportMsg" role="status"></span></div>
 <div class="pane" id="bmPane">
 <table id="bmTable" hidden>
   <thead><tr>
@@ -784,8 +784,9 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     <details class="setsec" data-sec-key="sharing" data-chip="Sharing"><summary>Sharing these settings <span class="sum-note">export, import, defaults for new browsers</span></summary>
       <div class="opts inline">
         <button type="button" class="try" id="settingsExport" title="download this browser's settings as a file">Export settings</button>
-        <button type="button" class="try" id="settingsImport" title="load settings from an exported file (the page reloads)">Import settings…</button>
+        <button type="button" class="try" id="settingsImport" data-picker title="load settings from an exported file (the page reloads)">Import settings…</button>
         <input type="file" id="settingsFile" accept=".json,application/json" hidden>
+        <span class="nopicker" hidden>Import settings from a browser on the PC</span>
         <button type="button" class="try" id="settingsServer" title="save these settings on the server: a browser uses them for anything it has not set itself">Use these for new browsers</button>
         <button type="button" class="try" id="settingsServerClear" hidden>stop</button>
       </div>

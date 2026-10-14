@@ -75,7 +75,7 @@ browser starts with.
 | Core modules | 80% | A core module under this shows under hull and is said in the status report. |
 | Surface map | 1,000 m / 500 m / 50 m / 3,500 m | Altitude it shows below, narrowest view, rig spacing ring (0 = none), rig leash warning. |
 
-**Export settings** and **Import settings** move them to another browser profile. **Use these for new
+**Export settings** and **Import settings** move them to another browser profile (Import is a browser's: the Android app opens no file picker). **Use these for new
 browsers** keeps a copy on the server (`data/browser_defaults.json`, included in backups), so a tablet running
 Now starts with your voice, names and alert choices. The view and layouts stay per device.
 

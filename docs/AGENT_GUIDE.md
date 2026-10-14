@@ -417,6 +417,9 @@ Ids: a system id64 can exceed 2^53, so the page compares the string `id` fields,
   The other way, the page calls the app's JavaScript bridge `window.OutriderApp` (bridgeVersion 1): `listen()`,
   `setTheme(name)`, `appVersion()`, and from app 1.2 `openServer()`, `openVoice()`, `openMenu()` (the tablet's
   Settings → Tablet app). Feature-detect every call (`typeof OutriderApp.x === "function"`): an older app lacks them.
+  The app's WebView has no file picker (and will not get one): a control that opens a `type="file"` input carries
+  `data-picker` and has a `.nopicker` note beside it; `drawFilePickers()` hides the one and shows the other when
+  `window.OutriderApp` exists (the smoke test expects one of each per file input).
 - **Devices.** Never exercise auto honk (uinput key presses: they go to whatever window has focus, including
   a running game) or the co-pilot button (reads `/dev/input`) against a real game or device from tests or a
   scratch server, and the same for auto-target (it opens the galaxy map and types): tests use `FakeGame` (a fake

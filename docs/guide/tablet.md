@@ -60,7 +60,9 @@ for this: see [Other devices on your network](install.md#-other-devices-on-your-
 **The Android app.** [ED Outrider for Android](https://github.com/weslocke/ED-Outrider-Android) shows the tablet layout
 full screen with the screen kept on, signs in once, listens for a wake word ("Hey Vespa", "OK Vespa"; the word and
 its sensitivity are in the app's Voice screen) or a tap on Ask, and can read answers aloud when nothing else speaks.
-Any browser at `/tablet` works too, without the wake word and Ask.
+The app opens no file picker, so the controls that would (Bookmarks → **Import…**, Settings → **Import settings…**)
+are not shown there; a note in their place says to import from a browser on the PC. Exporting works as anywhere.
+Any browser at `/tablet` works too, without the wake word and Ask, and with every control.
 
 The fonts are Antonio and Barlow Condensed, both under the SIL Open Font License and shipped with Outrider, as are the
 other themes' (Michroma, Saira, Orbitron, Exo 2, Russo One, Marcellus, Cinzel, Cormorant Garamond, Share Tech Mono, Rajdhani,
