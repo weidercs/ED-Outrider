@@ -3328,7 +3328,7 @@ function renderNearAround() {
   nearAroundName.hidden = kind !== "system";
   if (kind === "system" && !NA.typing && document.activeElement !== nearAroundName && na.name) nearAroundName.value = na.name;
   const bx = document.getElementById("nearAroundBx"), bxText = na.around !== "here"
-    ? `Nearby's Around (${[na.name, NEAR_AROUND_WHAT[na.around]].filter(Boolean).join(", ")}) is for Standard: a boxel has its own centre` : "";
+    ? `Nearby's Focus/Lock (${[na.name, NEAR_AROUND_WHAT[na.around]].filter(Boolean).join(", ")}) is for Standard: a boxel has its own centre` : "";
   bx.hidden = nearMode() !== "boxel" || !bxText;
   if (bx.textContent !== bxText) bx.textContent = bxText;
   const parts = [];

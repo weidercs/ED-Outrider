@@ -5688,11 +5688,12 @@ const releasePayloads = async () => {
       o.shown = [!pane.hidden, document.getElementById("nearPane").hidden, document.getElementById("nearWrap").classList.contains("boxel")];
       o.warning = pane.textContent.includes("Outrider cannot know how many systems a boxel holds")
         && !!pane.querySelector(".bxhead .hint .bxwarn");   // on the "you have visited" line (the author, 2026-10-11)
-      // the switch and Around beside it sit on the Overview's bar (no ▾ This system: 2026-10-14), and on Nearby's own top
+      // the switch and Around (labelled Focus/Lock) beside it sit on the Overview's bar (no ▾ This system: 2026-10-14), and on Nearby's own top
       // bar on the Nearby tab, the checkboxes' row under it: Mass first, no scan data and ⧉ Copy visible after the rest
       const v0 = view; view = "overview"; render();
       const bar = document.querySelector("#overView .ovbar"), nh = bar.firstElementChild;
-      o.place = [nh.classList.contains("nearhead") && !!nh.querySelector(".nearmode + .nearAround #nearAround"),
+      o.place = [nh.classList.contains("nearhead") && !!nh.querySelector(".nearmode + .nearAround #nearAround") &&
+                   nh.querySelector(".nearAround .lbl").textContent === "Focus/Lock",
                  !document.getElementById("ovCollapse"), document.getElementById("nearHead").hidden];
       view = "near"; render();
       const head = document.getElementById("nearHead"), opts = document.getElementById("nearOpts");
@@ -6370,7 +6371,7 @@ const releasePayloads = async () => {
       why: ["⌖ your carrier: you have no fleet carrier; Nearby is around you meanwhile · ✕ back to you", false, ""],
       cut: [false, "Spansh returned its maximum: the list is complete only to 11.5 ly — a smaller radius shows them all",
             "Spansh returned its maximum: the list is complete only to 11.5 ly — a smaller radius shows them all"],
-      boxel: [true, false, "Nearby's Around (Smojooe GW-W c1-4, locked) is for Standard: a boxel has its own centre"],
+      boxel: [true, false, "Nearby's Focus/Lock (Smojooe GW-W c1-4, locked) is for Standard: a boxel has its own centre"],
       typed: true,
       sent: [["nearby/around", {around: "lock"}], ["nearby/refresh", null], ["nearby/around", {around: "here"}], ["nearby/around", {around: "77"}]],
       copied: [["Smojooe GW-W c1-4", null], [got.noScan ? got.noScan[0].join("\n") : "", "2 system names"]], toast: "Spansh was asked 5 s ago: again in 115 s"};

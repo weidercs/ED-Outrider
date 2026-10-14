@@ -2,6 +2,10 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · Nearby's Around reads "Focus/Lock"
+- The label beside the Standard / Boxel switch, and Boxel mode's hint ("Nearby's Focus/Lock (…) is for Standard"). Search's
+  and the Nearest finder's Around keep their name. Smoke and views.md follow.
+
 ## 2026-10-14 · Nearby's bars: Around beside Standard / Boxel, the filters on the checkboxes' row, no ▾ This system
 - **Around** sits beside the Standard / Boxel switch: on the Overview's bar, and on Nearby's own top bar (`#nearHead`)
   on the Nearby tab (`.nearhead` moves between them, `placeOverview`).

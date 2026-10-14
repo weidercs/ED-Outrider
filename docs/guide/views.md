@@ -137,9 +137,9 @@ behind</b> lists nearby systems with work over your thresholds.
 </table>
 
 The **Overview** at the top shows Here and Nearby together: drag the divider, swap sides or stack them. Nearby's
-Standard / Boxel switch and its Around sit on its bar.
+Standard / Boxel switch and its Focus/Lock sit on its bar.
 
-<a id="nearby-around"></a>**Nearby around another system** (Around, beside the Standard / Boxel switch; the idea of Rainmangames' pull
+<a id="nearby-around"></a>**Nearby around another system** (**Focus/Lock**, beside the Standard / Boxel switch; the idea of Rainmangames' pull
 request #8): to sweep an area for unreported systems while you fly about in it.
 - **You** (the default): the list follows your ship. **Lock this system** keeps it centred where you are now;
   **your destination**, **carrier** or **next stop** follow those; **a system…** takes a name. The choice is kept by
@@ -150,7 +150,7 @@ request #8): to sweep an area for unreported systems while you fly about in it.
 - Spansh is asked when the centre changes, and again only when you press ↻ (at most every 2 minutes): nothing on a
   timer. A system you visit inside the sphere joins the list at once, and your scans fill its rows as usual.
 - A centre that names nothing now (no target, no carrier) says why, and the list stays around you meanwhile.
-- Around applies to Standard mode; a boxel has its own centre.
+- Focus/Lock applies to Standard mode; a boxel has its own centre.
 - **Filters** on Nearby's row of checkboxes, kept per device: **Mass** (one mass code, a to h: the letter before the number of a
   procedural name), **no scan data** (systems nobody has reported scanning), and **⧉ Copy visible** (the names of
   the rows shown, one per line). When Spansh returns its maximum, a line above the list says the list is complete only
