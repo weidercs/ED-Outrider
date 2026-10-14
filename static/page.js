@@ -10867,16 +10867,16 @@ const OV_PANELS = [["system", "System", "the bodies worth your time, in supercru
                    ["bio", "Bio signals", "every bio signal in the system, the ones worth it highlighted: samples, values"],
                    ["alerts", "Alerts", "the page's alerts for a few seconds (8 s, danger 15 s in red): every kind switched on in Settings → Alerts; needs the page open"]];
 // the panel table's headings, short so the table fits the Settings dialog (the author, 2026-10-14); the full wording on
-// hover. Combat and Docked sit under "Hide when mode": a ticked box hides the panel in that mode
+// hover. Combat and Docked sit under "Hide in mode": a ticked box hides the panel in that mode
 const OV_HEADS = (() => {
   const th = (text, title, attrs = "") => `<th${attrs} title="${title}">${text}</th>`, r2 = ` rowspan="2"`;
   return `<tr>${th("Panel", "tick a panel to show it; hover its name for what it shows", r2)}` +
-    th("Hide when mode", "a ticked box hides the panel in that mode", ` colspan="2" class="ovgrp"`) +
+    th("Hide in mode", "a ticked box hides the panel in that mode", ` colspan="2" class="ovgrp"`) +
     th("Corner", "placed from: the corner of the game window (or the middle of its top or bottom edge) it is kept from", r2) +
     th("X %", "across: how far in from that corner's side, in % of the game window's width", r2) +
     th("Y %", "down: how far in from that corner's top or bottom, in % of the game window's height", r2) +
-    th("Size %", "its size, in % (on top of All panels); under it, how tall its smallest text comes out in the game window (shown while the overlay window draws): never under 9 px", r2) +
-    th("Text", "its text size: small, normal or large, or as all panels (Text size above)", r2) +
+    th("Size %", "its size, in % (multiplied with All Panels' Scale); under it, how tall its smallest text comes out in the game window (shown while the overlay window draws): never under 9 px", r2) +
+    th("Text", "its text size: small, normal or large, or as all panels (All Panels' Text Sz above)", r2) +
     th("BG %", "background: its background's opacity, in % (0: text only)", r2) +
     th("Opac. %", "opacity: the whole panel's, in %", r2) + `<th${r2}></th></tr><tr>` +
     th("Combat", "the HUD in combat mode (analysis only): ticked, hidden in your ship while the HUD is in combat mode, shown only in analysis mode (in the SRV, on foot and over the galaxy map it shows as the others)") +
@@ -10932,7 +10932,7 @@ function overlayHtml(o) {
       `<td class="ovana"><input type="checkbox" data-ovanalysis="${id}" data-find="overlay.analysis_only"${ana.has(id) ? " checked" : ""} title="${esc(name)}: hidden in your ship while the HUD is in combat mode (shown only in analysis mode)"></td>${docked}<td><select data-ovlay="${id}" data-k="corner" title="the corner of the game window it is placed from">${opt(Object.keys(OV_CORNERS), e.corner, c => OV_CORNERS[c])}</select></td>` +
       num("x", pct(e.x || 0), 0, 95, "how far in from that corner's side, in % of the game window's width") +
       num("y", pct(e.y || 0), 0, 95, "how far in from that corner's top or bottom, in % of the game window's height") +
-      num("scale", pct(e.scale || 1), 20, 250, "its size, in % (on top of All panels)").replace("</td>", sizeFig(id, name) + "</td>") +
+      num("scale", pct(e.scale || 1), 20, 250, "its size, in % (multiplied with All Panels' Scale)").replace("</td>", sizeFig(id, name) + "</td>") +
       `<td><select data-ovlay="${id}" data-k="text" title="${esc(name)}: its text size">${opt(["", "small", "normal", "large"], e.text || "", v => v || "as all panels")}</select></td>` +
       num("bg", pct(e.bg ?? 0.65), 0, 100, "its background's opacity, in % (0: text only)") +
       num("alpha", pct(e.alpha ?? 1), 10, 100, "the whole panel's opacity, in %") +
@@ -10943,10 +10943,11 @@ function overlayHtml(o) {
     // S25: with it on the overlay stays over the game while another window is active, unless other windows cover it
     `<label class="mod"><input type="checkbox" data-ov="show_inactive"${o.show_inactive ? " checked" : ""}> Keep showing when Elite is not the active window ` +
     `<span class="hint">still hidden while other windows cover the game (a native Wayland window is not seen)</span></label>` +
-    // one control row (the author, 2026-10-14): Theme, Text size, All panels, the two buttons at its far right
-    `<div class="mod ovctl" data-find="overlay.theme overlay.text_size overlay.panel_scale"><label>Theme <select data-ov="theme">${opt(OV_THEMES, o.theme)}</select></label>` +
-    `<label title="every panel's text, unless its Text column says otherwise">Text size <select data-ov="text_size">${opt(["small", "normal", "large"], o.text_size)}</select></label>` +
-    `<label title="all panels' size, in % (20 to 250), on top of each panel's own Size %; Ctrl + wheel over a panel in Arrange mode">All panels <input type="number" data-ov="panel_scale" min="20" max="250" step="5" value="${o.panel_scale ?? 100}"> %</label>` +
+    // one control row (the author, 2026-10-14): "All Panels: Theme [ ] Text Sz [ ] Scale [100 %]", the two buttons at
+    // its far right
+    `<div class="mod ovctl" data-find="overlay.theme overlay.text_size overlay.panel_scale text size all panels"><b>All Panels:</b> <label>Theme <select data-ov="theme">${opt(OV_THEMES, o.theme)}</select></label>` +
+    `<label title="every panel's text, unless its Text column says otherwise">Text Sz <select data-ov="text_size">${opt(["small", "normal", "large"], o.text_size)}</select></label>` +
+    `<label title="all panels' size, in % (20 to 250), multiplied with each panel's own Size % (100 % here: each panel at its own size; 50 % here and 50 % on a panel: 25 %); Ctrl + wheel over a panel in Arrange mode">Scale <input type="number" data-ov="panel_scale" min="20" max="250" step="5" value="${o.panel_scale ?? 100}"> %</label>` +
     `<span class="ovbtns"><button type="button" class="try" data-ovact="test">${o.test ? `test panels: ${o.test} s` : "▶ Show test panels"}</button>` +
     `<button type="button" class="try" data-ovact="arrange">${o.arrange ? `✓ Done arranging (${Math.ceil(o.arrange / 60)} min left)` : "✥ Arrange panels"}</button></span></div>` +
     `<div class="ovwrap" data-find-block="panels"><table class="ovlay"><thead>${OV_HEADS}</thead><tbody>${rows}</tbody></table></div>` +

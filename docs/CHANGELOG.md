@@ -2,6 +2,12 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · "All Panels: Theme · Text Sz · Scale"
+- The overlay settings' top row reads "All Panels: Theme [ ] Text Sz [ ] Scale [100 %]" (the author's wording) instead
+  of "Theme · Text size · All panels"; the hovers and the guide say the Scale is multiplied with each panel's own Size %
+  (100 %: each panel at its own size; 50 % and 50 %: 25 %), not added. The panel table's "Hide when mode" heading reads
+  "Hide in mode".
+
 ## 2026-10-14 · Overlay sizes: all panels at once, down to 20 %, a 9 px text floor, text size per panel
 Answers a GitHub report: "the in-game overlay is too large on my 4K TV … below 50 % it resets to 50 %". Panels follow
 the game window's height, so the same % is tiny at 1080p and big at 4K: the floor is now in readable pixels.

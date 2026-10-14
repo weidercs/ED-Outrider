@@ -126,7 +126,7 @@ PC's draws it.
   centred along the top or bottom edge), so it stays there when the window or resolution changes;
 - **drag its corner** (the square handle) to make it bigger or smaller;
 - **mouse wheel** over it: its background, from solid to text only; **Shift and wheel**: the whole panel's
-  transparency; **Ctrl and wheel**: the size of all the panels at once (**All panels** in Settings);
+  transparency; **Ctrl and wheel**: the size of all the panels at once (**All Panels: Scale** in Settings);
 - **Done**, at the top of the game window (or the button in Settings), ends it. Arranging ends by itself after ten
   minutes, so the overlay never stays in the way of the mouse.
 
@@ -141,7 +141,7 @@ The arrangement is kept in Outrider's database, not the config file: to take it 
 
 Each panel has its tick box at the start of its row in Settings → In-game overlay's table (hover its name for what
 it shows; a panel switched off has its row dimmed). The headings are short: hover one for its full meaning.
-Under **Hide when mode**, **Combat** keeps a panel off in your ship while the HUD is in combat mode: it shows only
+Under **Hide in mode**, **Combat** keeps a panel off in your ship while the HUD is in combat mode: it shows only
 in analysis mode, so the screen stays clear in a fight. In the SRV and on foot (no HUD modes there) and over the
 galaxy map it shows as the others. **Docked** hides a panel while you are docked (the ship at a station, a carrier or
 a port, or you on foot in a station, hangar or social space); ticked to start with for the system, Target, Now and
@@ -155,11 +155,12 @@ cut corners, LCARS's bars, ...). In the config file (`[overlay]`):
 ticked Combat (`["system", "bio"]`; the Target panel is `body`) and `hide_docked` the ones ticked Docked
 (`["system", "body", "now", "bio"]` when the key is missing).
 
-<a id="sizes"></a>**Sizes and text.** The row at the top has **Theme**, **Text size** (small, normal or large, for every
-panel: `text_size`) and **All panels** (a %, 100 to start: `panel_scale`), with Show test panels and Arrange panels at
-its right. Each panel's **Size %** (down to 20 %) comes on top of All panels, and its **Text** column gives it a text
-size of its own, or "as all panels". Panels follow the game window's height, so a panel takes the same share of the
-screen at 4K as at 1080p: on a big TV seen from the sofa, turn **All panels** down (or Ctrl and wheel over a panel in
+<a id="sizes"></a>**Sizes and text.** The row at the top reads **All Panels: Theme · Text Sz** (small, normal or large,
+for every panel: `text_size`) **· Scale** (a %, 100 to start: `panel_scale`), with Show test panels and Arrange panels
+at its right. Each panel's **Size %** (down to 20 %) is multiplied with the Scale (Scale 100 %: each panel at its own
+size; Scale 50 % and a panel at 50 %: 25 %), and its **Text** column gives it a text size of its own, or "as all
+panels". Panels follow the game window's height, so a panel takes the same share of the screen at 4K as at 1080p: on a
+big TV seen from the sofa, turn the **Scale** down (or Ctrl and wheel over a panel in
 Arrange mode). Text is never drawn smaller than **9 pixels**, whatever the sizes say: a small setting on a 1080p screen
 stays readable, while a 4K screen can go much smaller. While the overlay window draws, each Size % shows what its
 text comes to in the game window ("≈ 11 px text"), or "held at 9 px" when the sizes ask for smaller (the line under the

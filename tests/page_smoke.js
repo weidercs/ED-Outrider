@@ -4932,7 +4932,8 @@ const releasePayloads = async () => {
                    return t.value + ":" + t.selectedOptions[0].textContent; }).join(" "),
                  // 3c: one control row: Theme, Text size, All panels and the two buttons at its far right
                  row: !!ctl && ["[data-ov=theme]", "[data-ov=text_size]", "[data-ov=panel_scale]", ".ovbtns [data-ovact=test]", ".ovbtns [data-ovact=arrange]"]
-                   .every(q => ctl.querySelector(q)) && /Text size/.test(ctl.textContent) && /All panels/.test(ctl.textContent) &&
+                   .every(q => ctl.querySelector(q)) && (b => !!b && /^All Panels:$/.test(b.textContent))(ctl.querySelector("b")) &&
+                   /Theme/.test(ctl.textContent) && /Text Sz/.test(ctl.textContent) && /Scale/.test(ctl.textContent) &&
                    ctl.querySelector("[data-ov=panel_scale]").value === "60" && !box.querySelector(".mod:not(.ovctl) [data-ovact]"),
                  rowFind: ctl ? ctl.dataset.find : "",
                  ctrlWheel: /Ctrl \+ wheel for all panels/.test(d.querySelector("ul.ovhelp").textContent),
@@ -5004,11 +5005,11 @@ const releasePayloads = async () => {
     const want = {rows: 7, body: "20", figures: "≈ 26 px text|held at 9 px|", heldTip: true,
                   heldLine: "Target: held at 9 px: your screen is too small to go lower", sizeMin: "20",
                   text: "large:large :as all panels :as all panels", row: true,
-                  rowFind: "overlay.theme overlay.text_size overlay.panel_scale", ctrlWheel: true,
+                  rowFind: "overlay.theme overlay.text_size overlay.panel_scale text size all panels", ctrlWheel: true,
                   off: true, theme: "elite", nowin: true, nowName: true, inRows: true, tip: true,
                   target: true, analysis: "system body radar strip now bio✓ alerts",
                   docked: "system✓ body✓ –radar strip now✓ bio✓ alerts",
-                  heads: "Panel|Hide when mode|Corner|X %|Y %|Size %|Text|BG %|Opac. %||Combat|Docked", headTips: true,
+                  heads: "Panel|Hide in mode|Corner|X %|Y %|Size %|Text|BG %|Opac. %||Combat|Docked", headTips: true,
                   finds: "overlay.analysis_only overlay.hide_docked",
                   dimmed: true, wrapped: true, help: true, alerts: true, analysisAfter: "system bio", dockedAfter: "system body now", note: true, themeNote: true,
                   posted: [["overlay/layout", {radar: {x: 0.3}}], ["overlay", {analysis_only: ["system", "bio"]}],
