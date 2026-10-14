@@ -1344,7 +1344,8 @@ WANTED = tuple(f'"event":"{e}"'.encode() for e in dict.fromkeys(_OTHER_EVENTS + 
 PARSER_VERSION = 51
 # 51: the Commander view reads the database (outrider/commander.py's folds: meta reputation, powerplay, squadron,
 #     stored_ships, stored_modules, ship_locker, suit_loadouts, engineers, missions; play_activity per login), the
-#     statistics keep the career's sections, and fleet_loadouts each ship's value
+#     statistics keep the career's sections, and fleet_loadouts each ship's value; still unreleased, so not bumped again
+#     for the ships' hot flags (Loadout folded too) and the modules stored, taken, sent for or sold between two lists
 # 50: your carrier's movements and tritium deposits are kept (cargo_events: its measured jumps scale the tritium
 #     formula, S13 B); each Synthesis's recipe is kept (materials' recipes, S15); CarrierCrewServices, stored since the
 #     last version without a re-read, comes back from the older journals too
@@ -3958,7 +3959,8 @@ class Journals:
         if key:
             if not self.fresh("cmdr:" + key, ts):
                 return
-            here = {"system": (self.pos or {}).get("name"), "station": (self.docked or {}).get("station")}
+            here = {"system": (self.docked or {}).get("system") or (self.pos or {}).get("name"), "station": (self.docked or {}).get("station"),
+                    "market": (self.docked or {}).get("market_id"), "login": (self.commander or {}).get("login_ts")}
             self.cmdr_view[key] = outrider.commander.apply(key, self.cmdr_view.get(key), ev, here)
             meta_set(self.db, key, self.cmdr_view[key])
         elif name == "LoadGame":
@@ -8772,14 +8774,16 @@ class State:
         """GET /api/commander/missions."""
         return {"missions": outrider.commander.missions(self.journals.cmdr_view.get("missions"))}
 
-    def commander_sessions(self):
-        """GET /api/commander/sessions: the newest logins with fighting or mining (play_activity)."""
+    def commander_sessions(self, now=None):
+        """GET /api/commander/sessions: the logins of the last 30 days with fighting or mining (play_activity), the
+        newest first, 40 at most (outrider.commander.SESSIONS_DAYS, SESSIONS_MAX)."""
         rows = ({"login_ts": r["login_ts"], "commander": r["commander"], "ship": r["ship"],
                  "combat": json.loads(r["combat"]) if r["combat"] else None, "mining": json.loads(r["mining"]) if r["mining"] else None}
-                for r in self.db.execute("SELECT * FROM play_activity WHERE combat IS NOT NULL OR mining IS NOT NULL "
-                                         "ORDER BY login_ts DESC"))
+                for r in self.db.execute("SELECT * FROM play_activity WHERE (combat IS NOT NULL OR mining IS NOT NULL) "
+                                         "AND login_ts >= ? ORDER BY login_ts DESC", (outrider.commander.sessions_since(now),)))
         out = outrider.commander.sessions(rows)
-        return {"sessions": out, "totals": outrider.commander.totals(out), "max": outrider.commander.SESSIONS_MAX}
+        return {"sessions": out, "totals": outrider.commander.totals(out), "max": outrider.commander.SESSIONS_MAX,
+                "days": outrider.commander.SESSIONS_DAYS}
 
     def materials_summary(self):
         m = self.journals.materials

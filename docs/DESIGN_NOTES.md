@@ -32,11 +32,23 @@ upstream project's choices, not rules of the game.
   ships bought, sold, swapped, sent for and renamed (as `outrider/inara.py` reads them), each ship's value from its
   latest Loadout; suit loadouts created, changed, upgraded or deleted; the ship locker from each ShipLocker line that
   carries its lists (the game writes them at login and at most changes; some carry none), then ShipLocker.json whenever
-  it is newer, read in the tick only when its modification time moves (as Cargo.json). Stored modules stay as of the last
-  outfitting you opened (moving one between lists is not followed), and a mission accepted before the journals is kept
-  by its name alone. The login-time snapshots (Missions, Reputation, EngineerProgress, Powerplay, SquadronStartup,
+  it is newer, read in the tick only when its modification time moves (as Cargo.json). Stored modules: the last
+  StoredModules list, then ModuleStore, MassModuleStore, ModuleBuy's `StoredItem` (the old module stored, not sold),
+  ModuleRetrieve (its `SwapOutItem` stored), FetchRemoteModule (in transit until its `TransferTime` has passed, then
+  where you sent for it; a list written meanwhile keeps that) and ModuleSellRemote, until the next list replaces the
+  fold (`fresh()`-guarded like the rest); ModuleSell and ModuleBuy's `SellItem` sell from the ship and leave storage
+  alone. A module stored since the list has no value until outfitting lists it. Checked on the author's journals
+  (2026-10-14): replayed, the fold equalled the next list 341 times in 345; of the four, two were modules (probably free with the ship) the game
+  threw away when swapped out (the line does not say so) and two lists held a module no line had moved there (a gap in
+  the journals). ModuleSellRemote and MassModuleStore had no real line: Frontier's manual. A ship's hot flag (wanted)
+  is the latest line that says it, for every ship the same way: a StoredShips entry's `Hot` (always there) and the
+  Loadout's `Hot` for the ship you fly, which by Frontier's manual is there "if wanted at startup": the login's Loadout
+  without it says not hot, a later one counts only when it has it. No real journal had a hot ship or a Loadout with
+  `Hot`; the page marks one with a red ⚖ (the theme's `--bad`). A mission accepted before the journals is kept by its
+  name alone. The login-time snapshots (Missions, Reputation, EngineerProgress, Powerplay, SquadronStartup,
   ShipLocker) are in `LOGIN_EVENTS`: loading the game is not play, so they never move `last_play_ts` (History's
   session end, the "away" greeting). Mining in the SRV (the reader knows the vehicle) is counted apart from the ship's.
+  The Sessions tab goes by days like the rest (History's default): the logins of the last 30 days, 40 at most.
   Ranks and statistics are as of the last login (the game writes them then); the credits and the carrier
   are the Commander and Carrier tiles' own (one owner each). What exobiology's next rank still takes is an estimate:
   the post-Update-14 step (the Frontier forum, 2 Jan 2023; Elite IV and V uncertain) times the share the game's own

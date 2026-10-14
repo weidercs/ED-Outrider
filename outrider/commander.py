@@ -7,7 +7,7 @@ resources/blueprints.json.
 
 What the journal does not state is not shown: a stored ship appears once the game has listed it (the shipyard's
 StoredShips; ships bought, sold, swapped, sent for or renamed since are folded in), stored modules as outfitting last
-listed them, suit loadouts once created or worn (deleted ones go), and a mission's progress only where the game logs
+listed them (modules stored, taken, sent for or sold from storage since are folded in), suit loadouts once created or worn (deleted ones go), and a mission's progress only where the game logs
 it (cargo deliveries).
 """
 import json
@@ -19,7 +19,8 @@ from . import RESOURCES_DIR, materials
 from .core import iso_ts, ts_seconds
 
 BLUEPRINTS_FILE = os.path.join(RESOURCES_DIR, "blueprints.json")
-SESSIONS_MAX = 40   # the sessions listed, the newest
+SESSIONS_MAX = 40   # the sessions listed, the newest...
+SESSIONS_DAYS = 30  # ...of those whose login is at most this old (as History's default)
 
 # ---- what is folded, from which events (Journals.handle_commander) ----
 
@@ -30,8 +31,9 @@ FOLD_EVENTS = {
     "powerplay": ("Powerplay", "PowerplayJoin", "PowerplayLeave", "PowerplayDefect", "PowerplayRank", "PowerplayMerits"),
     "squadron": ("SquadronStartup", "JoinedSquadron", "LeftSquadron", "KickedFromSquadron", "DisbandedSquadron"),
     "stored_ships": ("StoredShips", "ShipyardBuy", "ShipyardNew", "ShipyardSell", "ShipyardSwap", "ShipyardTransfer",
-                     "SellShipOnRebuy", "SetUserShipName"),
-    "stored_modules": ("StoredModules",),
+                     "SellShipOnRebuy", "SetUserShipName", "Loadout"),
+    "stored_modules": ("StoredModules", "ModuleStore", "MassModuleStore", "ModuleBuy", "ModuleRetrieve", "FetchRemoteModule",
+                       "ModuleSellRemote"),
     "ship_locker": ("ShipLocker",),
     "suit_loadouts": ("SuitLoadout", "CreateSuitLoadout", "DeleteSuitLoadout", "RenameSuitLoadout", "LoadoutEquipModule",
                       "LoadoutRemoveModule", "UpgradeSuit", "UpgradeWeapon"),
@@ -44,8 +46,9 @@ FOLD_OF = {e: k for k, names in FOLD_EVENTS.items() for e in names}
 # fighting and mining, counted per login in play_activity (a LoadGame opens the row)
 ACTIVITY_EVENTS = ("Bounty", "FactionKillBond", "PVPKill", "CapShipBond", "Died", "Interdicted", "RedeemVoucher",
                    "MiningRefined", "ProspectedAsteroid", "AsteroidCracked", "LaunchDrone", "MarketSell")
-# read by other handlers (the login, ranks, statistics, a ship's Loadout), shown here: they only move commander_version
-SHOWN_EVENTS = ("LoadGame", "Rank", "Progress", "Promotion", "Statistics", "Loadout")
+# read by other handlers (the login, ranks, statistics), shown here: they only move commander_version (a ship's Loadout,
+# read by others too, is folded: the hot flag)
+SHOWN_EVENTS = ("LoadGame", "Rank", "Progress", "Promotion", "Statistics")
 EVENTS = tuple(FOLD_OF) + ACTIVITY_EVENTS + SHOWN_EVENTS
 # written as the game loads, around LoadGame: not play (ed_outrider's LOGIN_EVENTS), so not where a session ended
 LOGIN_SNAPSHOTS = ("Missions", "Reputation", "EngineerProgress", "Powerplay", "SquadronStartup", "ShipLocker")
@@ -54,17 +57,14 @@ STAT_SECTIONS = ("Bank_Account", "Exploration", "Exobiology", "Trading", "Mining
 
 
 def apply(key, state, ev, here=None):
-    """One line folded into the meta key's state: the new state (None: nothing kept). here: {system, station} where
-    you are (the fleet's ships stored or sent for here)."""
+    """One line folded into the meta key's state: the new state (None: nothing kept). here: {system, station, market,
+    login} where you are (the ships and modules stored or sent for here) and the login on record (Journals.commander's:
+    the Loadout written at it says whether the ship is hot)."""
     if key == "stored_ships":
         return fleet_apply(state, ev, here)
+    if key == "stored_modules":
+        return modules_apply(state, ev, here)
     return _APPLY[key](state, ev)
-
-
-def _snapshot(keys):
-    def fold(state, ev):
-        return dict({k: ev[k] for k in keys if k in ev}, ts=ev["timestamp"])
-    return fold
 
 
 def reputation_apply(state, ev):
@@ -129,19 +129,36 @@ def fleet_apply(state, ev, here=None):
     bought (the old one stored here or sold), swapped (the old one stored here), sold (also on a rebuy), sent for
     (ShipyardTransfer: here when it arrives) or renamed is folded in since. {listed: {ts, system, station} (the last
     list), ships: {id: {id, type, type_name, name, ident, system, station, value, value_ts, hot, transfer_cost,
-    transfer_s, in_transit, arrive_ts}}}."""
+    transfer_s, in_transit, arrive_ts}}, hot: {id: bool}, hot_login}.
+
+    hot: whether the game marks each ship hot (wanted), the one you fly too, by the latest line that says it: a
+    StoredShips entry's `Hot` (every entry has it: real journals, 2026-10-14) and, for the ship you fly, the Loadout's
+    `Hot`, which no real journal had (none was hot): by Frontier's journal manual it is there "if wanted at startup", so
+    the login's Loadout without it says not hot (hot_login: the login whose Loadout was read), a later one only when it
+    is there."""
     st = state or {"listed": None, "ships": {}}
     ships, name, ts = st["ships"], ev["event"], ev["timestamp"]
+    hot = st.setdefault("hot", {})
     here = here or {}
 
     def store(sid, kind, kind_name=None, **kw):
         if sid is None:
             return
-        row = ships.setdefault(str(sid), {"id": sid, "name": None, "ident": None, "value": None, "value_ts": None, "hot": False})
+        row = ships.setdefault(str(sid), {"id": sid, "name": None, "ident": None, "value": None, "value_ts": None})
         row.update(type=kind or row.get("type"), type_name=kind_name or row.get("type_name"), system=here.get("system"),
-                   station=here.get("station"), transfer_cost=None, transfer_s=None, in_transit=False, arrive_ts=None)
+                   station=here.get("station"), transfer_cost=None, transfer_s=None, in_transit=False, arrive_ts=None,
+                   hot=hot.get(str(sid), False))
         row.update(kw)
-    if name == "StoredShips":
+    if name == "Loadout" and ev.get("ShipID") is not None:
+        login, sid = here.get("login"), str(ev["ShipID"])
+        at_login = bool(login) and ts >= login and st.get("hot_login") != login
+        if isinstance(ev.get("Hot"), bool):
+            hot[sid] = ev["Hot"]
+        elif at_login:
+            hot[sid] = False                  # the login's Loadout without it: not wanted at startup
+        if at_login:
+            st["hot_login"] = login
+    elif name == "StoredShips":
         old, ships = ships, {}
         st.update(listed={"ts": ts, "system": ev.get("StarSystem"), "station": ev.get("StationName")}, ships=ships)
         for key, local in (("ShipsHere", True), ("ShipsRemote", False)):
@@ -155,12 +172,14 @@ def fleet_apply(state, ev, here=None):
                     "station": ev.get("StationName") if local else None, "value": s.get("Value"), "value_ts": ts,
                     "hot": bool(s.get("Hot")), "transfer_cost": None if local else s.get("TransferPrice"),
                     "transfer_s": None if local else s.get("TransferTime"), "in_transit": bool(s.get("InTransit")), "arrive_ts": None}
+                hot[str(s["ShipID"])] = bool(s.get("Hot"))
     elif name in ("ShipyardBuy", "ShipyardSwap", "ShipyardSell", "SellShipOnRebuy"):
         if ev.get("StoreShipID") is not None:
             store(ev["StoreShipID"], ev.get("StoreOldShip"))
         sold = ev.get("SellShipID", ev.get("SellShipId"))   # SellShipOnRebuy writes "SellShipId"
         if sold is not None:
             ships.pop(str(sold), None)
+            hot.pop(str(sold), None)
         if name == "ShipyardSwap" and ev.get("ShipID") is not None:
             ships.pop(str(ev["ShipID"]), None)              # the one you fly now
     elif name == "ShipyardNew" and ev.get("NewShipID") is not None:
@@ -180,12 +199,14 @@ def ships(fleet, loadouts=(), now=None):
     than the list gives it). {ts (of the last list), here (where it was made), ships: [...]}."""
     now = time.time() if now is None else now
     fleet = fleet or {"listed": None, "ships": {}}
+    hot = fleet.get("hot") or {}   # fleet_apply's: the latest the game said of each ship, the one you fly too
     worth = {r["ship_id"]: r for r in loadouts if r.get("value")}
     cur = loadouts[0] if loadouts else None
     rows = []
     if cur:
         rows.append({"id": cur["ship_id"], "type": cur["ship_type"], "name": cur["name"] or None, "ident": cur["ident"] or None,
-                     "current": True, "system": None, "station": None, "value": cur.get("value") or None, "hot": False,
+                     "current": True, "system": None, "station": None, "value": cur.get("value") or None,
+                     "hot": bool(hot.get(str(cur["ship_id"]))),
                      "transfer_cost": None, "transfer_s": None, "in_transit": False})
     for s in fleet["ships"].values():
         if cur and s["id"] == cur["ship_id"]:
@@ -195,7 +216,7 @@ def ships(fleet, loadouts=(), now=None):
         arriving = s.get("in_transit") and (not s.get("arrive_ts") or ts_seconds(s["arrive_ts"]) > now)
         rows.append({"id": s["id"], "type": s.get("type"), "type_name": s.get("type_name"), "name": s.get("name"),
                      "ident": s.get("ident"), "current": False, "system": s.get("system"), "station": s.get("station"),
-                     "value": value, "hot": bool(s.get("hot")), "transfer_cost": s.get("transfer_cost"),
+                     "value": value, "hot": bool(hot.get(str(s["id"]), s.get("hot"))), "transfer_cost": s.get("transfer_cost"),
                      "transfer_s": s.get("transfer_s"), "in_transit": bool(arriving)})
     listed = fleet.get("listed")
     return {"ts": listed and listed["ts"], "ships": rows,
@@ -232,10 +253,97 @@ def module_label(symbol, localised=None):
     return " ".join(words.split("_")).strip().capitalize() or "?", size, rating, mount
 
 
-def stored_modules(snap):
-    """Your stored modules as outfitting last listed them (snap: the StoredModules fold, {Items, ts}): name (class,
-    rating, mount), where, the engineering, what moving it here costs. {ts, modules: [...]}, the engineered first,
-    then by name."""
+# what a stored module keeps of the line that stored it (ModuleStore, MassModuleStore's items, ModuleRetrieve's swapped-out
+# one, ModuleBuy's old one): its engineering and hot flag, when the line has them
+_MODULE_KEEP = ("Hot", "EngineerModifications", "Level", "Quality")
+
+
+def _arrived(m, ts):
+    """A stored module that can be taken from where it is at `ts` (not on its way: in transit with no arrival known, or
+    arriving after it)."""
+    return not m.get("InTransit") or bool(m.get("_arrive")) and m["_arrive"] <= ts
+
+
+def modules_apply(state, ev, here=None):
+    """Your stored modules: the StoredModules list whole (outfitting writes it when you open it, and again after most
+    changes), then what is stored, taken, sent for or sold from storage until the next list replaces it. {Items: the
+    list's items (the journal's own keys; a module stored since has no StorageSlot nor BuyPrice, one sent for keeps
+    `_arrive`, its arrival), ts (the last list), changed (the last line folded since, None when none)}.
+
+    Field names checked against real journals (2026-10-14): ModuleStore (StoredItem, MarketID, Hot, the engineering),
+    ModuleRetrieve (RetrievedItem, MarketID, SwapOutItem: the module it replaced, stored), ModuleBuy's StoredItem (the
+    old module stored, not sold; SellItem is sold, and ModuleSell sells from the ship: neither touches storage) and
+    FetchRemoteModule (StorageSlot, TransferTime). ModuleSellRemote (StorageSlot) and MassModuleStore (Items) had no
+    real line: they follow Frontier's journal manual."""
+    name, ts, here = ev["event"], ev["timestamp"], here or {}
+    if name == "StoredModules":
+        # one sent for before the list: the list says in transit only, the fold knows where to and when it arrives
+        sent = {m["StorageSlot"]: m for m in (state or {}).get("Items") or [] if m.get("_arrive") and m.get("StorageSlot") is not None}
+        items = []
+        for m in ev.get("Items") or []:
+            if isinstance(m, dict):
+                was = sent.get(m.get("StorageSlot")) if m.get("InTransit") else None
+                items.append(dict(m, **{k: was.get(k) for k in ("StarSystem", "MarketID", "_arrive")}) if was else m)
+        return {"Items": items, "ts": ts, "changed": None}
+    st = dict(state or {"Items": [], "ts": None})
+    items = list(st.get("Items") or [])
+    market = ev.get("MarketID") or here.get("market")
+
+    def stored(symbol, localised, src):
+        if not symbol:
+            return False
+        m = {"Name": symbol, "StarSystem": here.get("system"), "MarketID": market, "TransferCost": 0, "TransferTime": 0}
+        if localised:
+            m["Name_Localised"] = localised
+        m.update({k: src[k] for k in _MODULE_KEEP if k in src})
+        items.append(m)
+        return True
+
+    def slot(n):
+        return next((i for i, m in enumerate(items) if n is not None and m.get("StorageSlot") == n), None)
+    changed = False
+    if name == "ModuleStore":
+        changed = stored(ev.get("StoredItem"), ev.get("StoredItem_Localised"), ev)
+    elif name == "MassModuleStore":
+        for m in ev.get("Items") or []:
+            if isinstance(m, dict):
+                changed = stored(m.get("Name"), m.get("Name_Localised"), m) or changed
+    elif name == "ModuleBuy":
+        changed = stored(ev.get("StoredItem"), ev.get("StoredItem_Localised"), {})
+    elif name == "ModuleRetrieve":
+        want = str(ev.get("RetrievedItem") or "").lower()
+        here_ = [i for i, m in enumerate(items) if str(m.get("Name") or "").lower() == want and m.get("MarketID") == market
+                 and _arrived(m, ts)]
+        # the same module when several match: the same engineering first
+        same = [i for i in here_ if all(items[i].get(k) == ev.get(k) for k in ("EngineerModifications", "Level"))]
+        if same or here_:
+            items.pop((same or here_)[0])
+            changed = True
+        changed = stored(ev.get("SwapOutItem"), ev.get("SwapOutItem_Localised"), {}) or changed
+    elif name == "FetchRemoteModule":
+        i = slot(ev.get("StorageSlot"))
+        if i is not None:
+            wait = ev.get("TransferTime") if isinstance(ev.get("TransferTime"), (int, float)) else 0
+            m = {k: v for k, v in items[i].items() if k not in ("TransferCost", "TransferTime")}
+            # on its way here: shown in transit until it arrives, then here
+            m.update(StarSystem=here.get("system"), MarketID=market, InTransit=wait > 0, _arrive=iso_ts(ts_seconds(ts) + wait))
+            items[i], changed = m, True
+    elif name == "ModuleSellRemote":
+        i = slot(ev.get("StorageSlot"))
+        if i is not None:
+            items.pop(i)
+            changed = True
+    if not changed:
+        return state
+    return dict(st, Items=items, changed=ts)
+
+
+def stored_modules(snap, now=None):
+    """Your stored modules (snap: modules_apply's): name (class, rating, mount), where, the engineering, what moving it
+    here costs. {ts (the last list), changed (a line folded since), modules: [...]}, the engineered first, then by
+    name. One sent for since the list is in transit until it arrives (`_arrive`), then where it was sent."""
+    now = time.time() if now is None else now
+    at = iso_ts(now)
     rows = []
     for m in (snap or {}).get("Items") or []:
         if not isinstance(m, dict):
@@ -243,13 +351,14 @@ def stored_modules(snap):
         name, size, rating, mount = module_label(m.get("Name"), m.get("Name_Localised"))
         # "FSD_LongRange" -> "Long range": the blueprint's own words, without the module it is for
         blueprint = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", re.sub(r"^[A-Za-z]+_", "", str(m.get("EngineerModifications") or ""))).capitalize() or None
+        moving = not _arrived(m, at)
         rows.append({"name": name, "size": size, "rating": rating, "mount": mount,
-                     "system": m.get("StarSystem"), "in_transit": bool(m.get("InTransit")), "hot": bool(m.get("Hot")),
+                     "system": None if moving else m.get("StarSystem"), "in_transit": moving, "hot": bool(m.get("Hot")),
                      "value": m.get("BuyPrice"), "transfer_cost": m.get("TransferCost"), "transfer_s": m.get("TransferTime"),
                      "blueprint": blueprint,
                      "level": m.get("Level"), "quality": m.get("Quality")})
     rows.sort(key=lambda r: (r["blueprint"] is None, r["name"], -(r["size"] or 0)))
-    return {"ts": (snap or {}).get("ts"), "modules": rows}
+    return {"ts": (snap or {}).get("ts"), "changed": (snap or {}).get("changed"), "modules": rows}
 
 
 def locker(snap):
@@ -584,8 +693,14 @@ def session(row):
             "combat": combat, "mining": mining}
 
 
+def sessions_since(now=None):
+    """The oldest login the Sessions tab lists: SESSIONS_DAYS before now (ISO)."""
+    return iso_ts((time.time() if now is None else now) - SESSIONS_DAYS * 86400)
+
+
 def sessions(rows, limit=SESSIONS_MAX):
-    """The logins with fighting or mining (play_activity's rows, the newest first), at most `limit`."""
+    """The logins with fighting or mining (play_activity's rows, the newest first: State reads those of the last
+    SESSIONS_DAYS, sessions_since), at most `limit`."""
     out = []
     for r in rows:
         s = session(r)
@@ -711,5 +826,5 @@ def profile(commander, stats=None, reputation=None, power=None, squadron=None, f
 
 
 _APPLY = {"reputation": reputation_apply, "powerplay": power_apply, "squadron": squadron_apply,
-          "stored_modules": _snapshot(("Items",)), "ship_locker": locker_apply, "suit_loadouts": suit_apply,
+          "ship_locker": locker_apply, "suit_loadouts": suit_apply,
           "engineers": engineer_apply, "missions": mission_apply}

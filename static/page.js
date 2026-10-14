@@ -10141,6 +10141,8 @@ const cmCls = m => esc((m.size != null && m.size > 0 ? m.size : "") + (m.rating 
 // a session's tons refined: the ship's, and the SRV's apart
 const cmRefined = (ship, srv) => (ship || !srv ? `<b>${cmNum(ship)} t</b>` : "") +
   (srv ? `${ship ? " + " : ""}<span class="unk" title="refined by the SRV (surface mining), apart from the ship's">${cmNum(srv)} t SRV</span>` : "");
+// the game marks a ship (or a module) hot: wanted. The same red ⚖ beside the ship you fly, a stored ship or module
+const cmHot = (x, what = "ship") => x && x.hot ? ` <span class="cmhot" title="hot: this ${what} is wanted">⚖&#xFE0E;</span>` : "";
 const cmTile = (k, v, title = "") => v == null || v === "" ? "" : `<span class="cmfig"${title ? ` title="${esc(title)}"` : ""}><span class="unk">${k}</span><b>${v}</b></span>`;
 
 // your fleet carrier as the Carrier tile has it (State.carrier_summary): its balance and weeks of upkeep, or its
@@ -10167,7 +10169,7 @@ function cmdrProfileHtml(d) {
     `${r.to_next != null ? ` <span title="an estimate: about this much more ${esc(r.earned_by || "")}: the rank's step by the community's post-Update-14 table (the Frontier forum, 2 Jan 2023) times the share your game says is still to go${r.uncertain ? ". This step's figure is itself an estimate" : ""}">in about <b>${esc(credits(r.to_next))} cr</b>${r.uncertain ? ` <span class="unk">(uncertain)</span>` : ""}</span>` : ""}</td></tr>`;
   const rep = Object.entries(p.reputation || {}).map(([k, v]) => `${esc(k)} <b class="${v >= 35 ? "ok" : v <= -35 ? "short" : ""}">${Math.round(v)}%</b>`).join(" · ");
   const ship = x => { const label = shipLabel(x.name, x.type), type = x.type_name || shipLabel(null, x.type);
-    return `<tr><td><b>${esc(label)}</b>${type !== label ? ` <span class="unk">${esc(type)}</span>` : ""}</td>` +
+    return `<tr><td><b>${esc(label)}</b>${type !== label ? ` <span class="unk">${esc(type)}</span>` : ""}${cmHot(x)}</td>` +
       `<td>${x.current ? `<span class="ok">you fly it</span>` : x.in_transit ? `<span class="warnc">in transit</span>` : esc([x.system, x.station].filter(Boolean).join(" · ") || "?")}</td>` +
       `<td class="num">${cmCr(x.value)}</td></tr>`; };
   const fig = c => c.kind === "cr" ? `${esc(credits(c.value))} cr` : c.kind === "ly" ? `${cmNum(Math.round(c.value))} ly`
@@ -10202,10 +10204,10 @@ function cmdrInventoryHtml(d) {
       : esc([x.system, x.station].filter(Boolean).join(" · ") || "?");
     const move = x.transfer_cost ? `${cmCr(x.transfer_cost)}${x.transfer_s ? ` · ${cmSpan(x.transfer_s)}` : ""}` : "";
     return `<tr><td><b>${esc(label)}</b>${type !== label ? ` <span class="unk">${esc(type)}</span>` : ""}${x.ident ? ` <span class="unk">${esc(x.ident)}</span>` : ""}` +
-      `${x.hot ? ` <span class="warnc">hot</span>` : ""}</td><td>${where}</td><td class="num">${cmCr(x.value)}</td><td class="num">${move}</td></tr>`;
+      `${cmHot(x)}</td><td>${where}</td><td class="num">${cmCr(x.value)}</td><td class="num">${move}</td></tr>`;
   };
   const modRow = x => `<tr><td><span class="cmcls">${cmCls(x)}</span> <b>${esc(x.name)}</b>${x.mount ? ` <span class="unk">${esc(x.mount)}</span>` : ""}` +
-    `${x.hot ? ` <span class="warnc">hot</span>` : ""}</td>` +
+    `${cmHot(x, "module")}</td>` +
     `<td>${x.blueprint ? `<b>${esc(x.blueprint)}</b>${x.level ? ` G${cmNum(x.level)}` : ""}` : `<span class="unk">stock</span>`}</td>` +
     `<td>${x.in_transit ? `<span class="warnc">in transit</span>` : esc(x.system || "?")}</td><td class="num">${cmCr(x.value)}</td>` +
     `<td class="num">${x.transfer_cost ? `${cmCr(x.transfer_cost)}${x.transfer_s ? ` · ${cmSpan(x.transfer_s)}` : ""}` : ""}</td></tr>`;
@@ -10216,9 +10218,10 @@ function cmdrInventoryHtml(d) {
   return `<h3 class="subhead">Ships <span class="cmcount">${s.ships.length}</span> ${cmAsOf(s.ts, "the stored ships as the last shipyard you opened listed them, with the ships bought, sold, swapped, sent for or renamed since")}</h3>` +
     (s.ships.length ? cmTable([["Ship"], ["Where"], ["Value", 1], ["To bring it here", 1]], s.ships.map(shipRow)) : "") +
     (s.ts ? "" : `<div class="unk">Your stored ships are listed once you open a shipyard: the game writes the list then.</div>`) +
-    `<h3 class="subhead">Stored modules <span class="cmcount">${m.modules.length}</span> ${cmAsOf(m.ts, "as the last outfitting you opened listed them")}</h3>` +
+    `<h3 class="subhead">Stored modules <span class="cmcount">${m.modules.length}</span> ${cmAsOf(m.changed || m.ts, "as the last outfitting you opened listed them" +
+      (m.changed ? `${m.ts ? ` (${cmWhen(m.ts)})` : ""}, with the modules stored, taken, sent for or sold from storage since: a module stored since shows its value once outfitting lists it` : ""))}</h3>` +
     (m.modules.length ? cmTable([["Module"], ["Engineering"], ["Where"], ["Value", 1], ["To bring it here", 1]], m.modules.map(modRow))
-      : `<div class="unk">${m.ts ? "None stored." : "Listed once you open outfitting: the game writes the list then."}</div>`) +
+      : `<div class="unk">${m.ts || m.changed ? "None stored." : "Listed once you open outfitting: the game writes the list then."}</div>`) +
     `<h3 class="subhead">Ship locker ${cmAsOf(lk.ts, "the locker as the game last wrote it whole: a journal line that lists it, or ShipLocker.json")}</h3>` +
     (held.length ? `<div class="cmlocker">${held.map(k => `<div><b>${esc(k.name)}</b>${k.items.map(i =>
       `<div class="cmitem"><span>${esc(i.name)}${i.mission ? ` <span class="unk" title="a mission's own">mission</span>` : ""}</span><b>${cmNum(i.count)}</b></div>`).join("")}</div>`).join("")}</div>`
@@ -10297,16 +10300,17 @@ function cmdrSessionsHtml(d) {
     `<td>${cmNum(m.prospected)}${m.prospected ? ` <span class="unk c1hide">${list(m.content)}${m.motherlodes ? ` · ${cmNum(m.motherlodes)} core${m.motherlodes === 1 ? "" : "s"}` : ""}</span>` : ""}</td>` +
     `<td class="num c2hide" title="prospector / collector limpets launched">${m.prospectors || m.collectors ? `${cmNum(m.prospectors)} / ${cmNum(m.collectors)}` : ""}</td>` +
     `<td class="num">${cmSpanDual(m.seconds != null ? m.seconds : m.srv_seconds)}</td><td class="num">${cmCrS(m.sold)}</td></tr>`; });
-  const c = t.combat, m = t.mining, latest = `<span class="unk" title="each from a login to the next">your latest sessions, ${cmNum(d.max || 40)} at most</span>`;
+  const days = d.days || 30, c = t.combat, m = t.mining;
+  const latest = `<span class="unk" title="each from a login to the next">your sessions of the last ${cmNum(days)} days, ${cmNum(d.max || 40)} at most</span>`;
   return `<h3 class="subhead">Combat ${latest}</h3>` +
     (combat.length ? `<div class="cmfigs">${cmTile("Sessions", cmNum(c.sessions))}${cmTile("Kills", cmNum(c.kills))}${cmTile("Bounties", cmCr(c.bounties))}${cmTile("Combat bonds", cmCr(c.bonds))}${cmTile("Deaths", c.deaths ? cmNum(c.deaths) : "")}</div>` +
       cmTable([["Session"], ["Ship"], ["Kills", 1], ["Bounties by ship", 0, "c2hide"], ["Bounties", 1], ["Bonds", 1], ["Kills/h", 1], ["Fighting", 1], ["Deaths", 1]], combat, "cmCombat")
-      : `<div class="unk">No fighting in these journals.</div>`) +
+      : `<div class="unk">No fighting in the last ${cmNum(days)} days.</div>`) +
     `<h3 class="subhead">Mining ${latest}</h3>` +
     (mining.length ? `<div class="cmfigs">${cmTile("Sessions", cmNum(m.sessions))}${cmTile("Refined", m.tons || !m.srv_tons ? `${cmNum(m.tons)} t` : "")}` +
       `${cmTile("SRV refined", m.srv_tons ? `${cmNum(m.srv_tons)} t` : "", "the SRV's refinery: surface mining")}${cmTile("Asteroids prospected", cmNum(m.prospected))}${cmTile("Sold", cmCr(m.sold))}</div>` +
       cmTable([["Session"], ["Ship"], ["Refined", 1], ["What", 0, "c2hide"], ["t/h", 1], ["Prospected"], ["Limpets", 1, "c2hide"], ["Mining", 1], ["Sold", 1]], mining, "cmMining")
-      : `<div class="unk">No mining in these journals.</div>`);
+      : `<div class="unk">No mining in the last ${cmNum(days)} days.</div>`);
 }
 
 const CM_HTML = {profile: cmdrProfileHtml, inventory: cmdrInventoryHtml, engineering: cmdrEngineeringHtml, missions: cmdrMissionsHtml, sessions: cmdrSessionsHtml};

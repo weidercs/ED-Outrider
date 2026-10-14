@@ -7931,16 +7931,16 @@ const releasePayloads = async () => {
                     {key: "Explore", title: "Exploration", rank: 11, name: "Elite III", progress: 10, next: "Elite IV", to_next: 4000000000, uncertain: true, earned_by: "x"},
                     {key: "Federation", title: "Federal Navy", rank: 14, name: "Admiral", progress: null, next: null, to_next: null, earned_by: null}],
             reputation: {Federation: -40, Empire: 76.5}, assets: {wealth: 9000000000, ships: 2, fleet: 250000000, modules: 5139353},
-            fleet: [{id: 7, type: "krait_light", name: "Sample Ship", current: true, value: 100000000},
+            fleet: [{id: 7, type: "krait_light", name: "Sample Ship", current: true, value: 100000000, hot: true},
                     {id: 5, type: "anaconda", type_name: "Anaconda", name: null, current: false, system: "Colonia", station: null, value: 150000000}],
             career: [{label: "Time played", value: 7200000, kind: "time"}, {label: "Distance jumped", value: 987654, kind: "ly"},
                      {label: "Spent on ships", value: 500000000, kind: "cr"}, {label: "Systems visited", value: 12345, kind: "n"}]}},
           inventory: {ships: {ts: "2026-10-12T09:01:00Z", here: {system: "Sol", station: "Old Port"}, ships: [
-              {id: 7, type: "krait_light", name: "Sample Ship", ident: "SP-01", current: true, value: 100000000, hot: false},
+              {id: 7, type: "krait_light", name: "Sample Ship", ident: "SP-01", current: true, value: 100000000, hot: true},
               {id: 5, type: "anaconda", type_name: "Anaconda", name: null, current: false, system: "Colonia", station: null, value: 150000000, hot: true,
                transfer_cost: 1234567, transfer_s: 7200, in_transit: false}]},
-            modules: {ts: "2026-10-12T09:02:00Z", modules: [{name: "Frame Shift Drive", size: 5, rating: "A", mount: null, system: "Sol", blueprint: "Long Range",
-              level: "<i>5</i>", value: 5103953, transfer_cost: 0, transfer_s: 0, in_transit: false, hot: false}]},
+            modules: {ts: "2026-10-12T09:02:00Z", changed: "2026-10-12T10:30:00Z", modules: [{name: "Frame Shift Drive", size: 5, rating: "A", mount: null, system: "Sol", blueprint: "Long Range",
+              level: "<i>5</i>", value: 5103953, transfer_cost: 0, transfer_s: 0, in_transit: false, hot: true}]},
             locker: {ts: "2026-10-12T09:03:00Z", kinds: [{name: "Goods", items: [{name: "Weapon <Schematic>", count: 3, mission: false}]}, {name: "Data", items: []}]},
             suits: [{loadout: "Bio", suit: "Artemis Suit", class: 3, mods: ["Increased sprint duration"], weapons: [{name: "TK Aphelion", class: 2, slot: "PrimaryWeapon1", mods: []}]}]},
           engineering: {engineers: [{name: "Felicity Farseer", progress: "Unlocked", rank: 5}, {name: "Elvira Martuuk", progress: "Known", rank: null}],
@@ -7958,7 +7958,7 @@ const releasePayloads = async () => {
              reward: 9000000, expiry: null, expires_in: null, soon: false, expired: false, wing: true, passengers: false, redirected: true},
             {id: 3, name: "Courier", faction: "Sol Workers", system: "Sol", station: null, target: null, commodity: null, count: null, delivered: null,
              reward: 100000, expiry: "2026-01-01T00:00:00Z", expires_in: 5, soon: true, expired: false, wing: false, passengers: false, redirected: false}]},
-          sessions: {max: 40, totals: {combat: {sessions: 1, kills: 3, bounties: 400000, bonds: 60000, deaths: 1}, mining: {sessions: 1, tons: 6, srv_tons: 3, prospected: 2, sold: 1500000}},
+          sessions: {max: 40, days: 30, totals: {combat: {sessions: 1, kills: 3, bounties: 400000, bonds: 60000, deaths: 1}, mining: {sessions: 1, tons: 6, srv_tons: 3, prospected: 2, sold: 1500000}},
             sessions: [
               {start: "2026-10-12T11:00:00Z", end: "2026-10-12T11:51:00Z", ship: "Type-9 Heavy", combat: null, mining: {tons: 6, refined: {Platinum: 5, Osmium: 1},
                 srv_tons: 3, srv_refined: {Gold: 3}, srv_seconds: 600,
@@ -7992,8 +7992,13 @@ const releasePayloads = async () => {
       // the payload's credits move: the tab follows at the next draw without asking the server
       w.eval(`data.commander = Object.assign({}, data.commander, {credits: 1400000000}); render();`);
       got.liveCredits = text(body().querySelector(".cmfig b"));
+      // batch 4: the ship you fly marked hot (wanted): a red ⚖ (the theme's --bad) with its title, as a stored one
+      const hot = () => [...body().querySelectorAll(".cmhot")].map(x => [x.closest("tr").cells[0].querySelector("b").textContent, x.title,
+                                                                             colour(x) === root("--bad") && !!root("--bad")]);
+      got.hotProfile = hot();
       await tab("inventory");
       got.inventory = rows();
+      got.hotInventory = hot();
       got.heads = [...body().querySelectorAll("h3.subhead")].map(text);
       got.locker = [...body().querySelectorAll(".cmitem")].map(text);
       got.noTags = !body().querySelector("table i, table u");
@@ -8076,15 +8081,18 @@ const releasePayloads = async () => {
       profile: ["CMDR Tester · Sample Wing · pledged to Aisling Duval, rank NaN, 4,500 merits as of 2026-10-12 08:00",
                 ["Exobiology | Geneticist | 64% | next: Elite in about 1.59B cr", "Combat | Expert | 0% | next: Master",
                  "Exploration | Elite III | 10% | next: Elite IV in about 4.00B cr (uncertain)", "Federal Navy | Admiral |  | the top",
-                 "Sample Ship Krait Phantom | you fly it | 100.0M cr", "Anaconda | Colonia | 150.0M cr"],
+                 "Sample Ship Krait Phantom ⚖\uFE0E | you fly it | 100.0M cr", "Anaconda | Colonia | 150.0M cr"],
                 ["Credits≈ 1.30B cr", "Net worth9.00B cr", "Fleet250.0M cr · 2 ships", "Stored modules5.1M cr", "Carrier balance250.0M cr",
                  "Time played2,000 h", "Distance jumped987,654 ly", "Spent on ships500.0M cr", "Systems visited12,345"],
                 ["Reputation: Federation -40% · Empire 77%", "Fleet carrier: SAMPLE CARRIER X1X-X1X · balance 250.0M · ~12 weeks of upkeep · 800 t tritium (the Carrier tile's figures)"],
                 ["64%", "0%", "10%"], false],
       liveCredits: "≈ 1.40B cr",
-      inventory: ["Sample Ship Krait Phantom SP-01 | you fly it | 100.0M cr | ", "Anaconda hot | Colonia | 150.0M cr | 1.2M cr · 2 h 0 min",
-                  "5A Frame Shift Drive | Long Range GNaN | Sol | 5.1M cr | ", "Bio | Artemis Suit G3Increased sprint duration | TK Aphelion G2"],
-      heads: ["Ships 2 as of 2026-10-12 09:01", "Stored modules 1 as of 2026-10-12 09:02", "Ship locker as of 2026-10-12 09:03", "Suit loadouts 1"],
+      inventory: ["Sample Ship Krait Phantom SP-01 ⚖\uFE0E | you fly it | 100.0M cr | ", "Anaconda ⚖\uFE0E | Colonia | 150.0M cr | 1.2M cr · 2 h 0 min",
+                  "5A Frame Shift Drive ⚖\uFE0E | Long Range GNaN | Sol | 5.1M cr | ", "Bio | Artemis Suit G3Increased sprint duration | TK Aphelion G2"],
+      hotProfile: [["Sample Ship", "hot: this ship is wanted", true]],
+      hotInventory: [["Sample Ship", "hot: this ship is wanted", true], ["Anaconda", "hot: this ship is wanted", true],
+                     ["Frame Shift Drive", "hot: this module is wanted", true]],
+      heads: ["Ships 2 as of 2026-10-12 09:01", "Stored modules 1 as of 2026-10-12 10:30", "Ship locker as of 2026-10-12 09:03", "Suit loadouts 1"],
       locker: ["Weapon <Schematic>3"],
       noTags: true,
       engineering: [["Frame shift drive 1 blueprint", "Sensors 1 blueprint"], "1 of 2 engineers unlocked · ship modules only: no experimental effects, suits or weapons", false],
@@ -8105,7 +8113,7 @@ const releasePayloads = async () => {
       sessions: [["2026-10-12 08:00 | Krait Mk II | 3 | Anaconda 2 | 400k cr | 60k cr | NaN | 30 min | 1",
                   "2026-10-12 11:00 | Type-9 Heavy | 6 t + 3 t SRV | Platinum 5, Osmium 1 · SRV: Gold 3 | 12 | 2 High 1, Low 1 · 1 core | 1 / 1 | 30 min | 1.5M cr"],
                  ["Sessions1", "Kills3", "Bounties400k cr", "Combat bonds60k cr", "Deaths1", "Sessions1", "Refined6 t", "SRV refined3 t", "Asteroids prospected2", "Sold1.5M cr"],
-                 ["Combat your latest sessions, 40 at most", "Mining your latest sessions, 40 at most"]],
+                 ["Combat your sessions of the last 30 days, 40 at most", "Mining your sessions of the last 30 days, 40 at most"]],
       unchanged: 0, matOther: 0,
       moved: ["api/commander/sessions"],
       after: ["api/commander/sessions", "api/commander/missions", "api/commander/missions"],
@@ -8119,7 +8127,7 @@ const releasePayloads = async () => {
     const goodCM = !bad.length && errors.length === before;
     allOk = allOk && goodCM;
     console.log(goodCM ? "OK" : "FAIL", "| commander |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))} asked ${JSON.stringify(asked)}`
-      : "controls above the pane, the theme's green and red, the tiles' credits and carrier, the SRV's refinery apart; asked again only on a new version or Refresh; the real profile", errors.slice(before));
+      : "controls above the pane, the theme's green and red, the hot ⚖, the tiles' credits and carrier, the SRV's refinery apart; asked again only on a new version or Refresh; the real profile", errors.slice(before));
   }
   // Which header tiles this device shows (the author, 2026-10-14): Settings → Display ticks them; an unticked one is
   // left out (tile and one line), the wide grid has a column per tile shown, at least one stays, per device (not a

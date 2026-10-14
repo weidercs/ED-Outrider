@@ -438,12 +438,15 @@ and Engineering's filter sit above the list:
   and stored modules, your carrier as the Carrier tile shows it (its balance and weeks of upkeep); every rank with a
   bar to the next one and, for exobiology, about how many credits it still takes (the community's figures for each
   rank's step, times the share your game says is left: an estimate; Elite IV and V are marked uncertain);
-  reputation, Powerplay and squadron; your ships; and career figures (time played, systems visited, distance,
+  reputation, Powerplay and squadron; your ships (a red ⚖ beside one the game marks hot: wanted, the one you fly
+  included); and career figures (time played, systems visited, distance,
   profits by career; **History ›** opens History at its Career row, the game's statistics beside your sessions).
 - **Inventory**: your ships (where each is, its value, what bringing it here costs), your stored modules with their
   engineering, the ship locker, and your suit loadouts. The game writes the list of stored ships when you open a
   shipyard: ships bought, sold, swapped, sent for or renamed since are followed, and each ship's value is its latest.
-  Stored modules are as outfitting last listed them. The ship locker is as the game last wrote it, in the journal or in
+  Stored modules are as outfitting last listed them, with the modules stored, taken back, sent for or sold from
+  storage since (one stored since shows its value once outfitting lists it again; one sent for is in transit until
+  it arrives). A red ⚖ marks a ship or module the game says is hot (wanted). The ship locker is as the game last wrote it, in the journal or in
   its own file. A suit loadout is listed once you create or wear one, and goes when you delete it.
 - **Engineering**: every ship-module blueprint by kind of module, grade by grade, with the materials one roll takes
   against what you hold (green: enough, red: short), how many rolls you could make now, and the engineers offering it
@@ -453,7 +456,8 @@ and Engineering's filter sit above the list:
   copy of EDCD's coriolis-data (community data): a recipe the game changes is wrong until the copy is updated.
 - **Missions**: the missions you hold, the soonest to expire first: where they go, what they ask (and how much is
   delivered), the reward, and the time left, marked when under half an hour.
-- **Sessions**: your latest sessions with fighting or mining in them (40 at most), each from one login to the next. Combat:
+- **Sessions**: your sessions of the last 30 days with fighting or mining in them (40 at most), each from one login to
+  the next. Combat:
   kills, by ship, bounties and bonds, kills an hour, deaths. Mining: tons refined and of what (what the SRV's refinery
   collected on a planet is shown apart, and is not in the tons an hour), asteroids prospected and their content,
   limpets launched, and what the haul sold for.

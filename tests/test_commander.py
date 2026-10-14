@@ -373,6 +373,123 @@ class RealLines(unittest.TestCase):
         self.assertEqual([(s["loadout"], s["suit"], s["class"], [w["name"] for w in s["weapons"]]) for s in state.commander_inventory()["suits"]],
                          [("Xenobio", "Artemis Suit", 1, ["Manticore Executioner"])])
 
+    def test_hot_ships(self):
+        """Batch 4: whether the game marks a ship hot (wanted). In real journals every StoredShips entry carries `Hot`
+        (false: the author was never hot) and no Loadout carries it at all; the ship you fly is not hot by them."""
+        login = '{ "timestamp":"2026-09-26T14:04:44Z", "event":"LoadGame", "FID":"F331255", "Commander":"Briadin", "Horizons":true, ' \
+                '"Odyssey":true, "Ship":"Explorer_NX", "Ship_Localised":"Caspian Explorer", "ShipID":39, "ShipName":"", "ShipIdent":"", ' \
+                '"FuelLevel":128.000000, "FuelCapacity":160.000000, "GameMode":"Solo", "Credits":13329673300, "Loan":0, "language":"English/UK", ' \
+                '"gameversion":"4.4.1.1", "build":"r332841/r0 " }'
+        # (its Modules list cut)
+        loadout = '{ "timestamp":"2026-09-26T14:05:46Z", "event":"Loadout", "Ship":"explorer_nx", "ShipID":39, "ShipName":" ", "ShipIdent":"BR-03E", ' \
+                  '"ModulesValue":21751050, "HullHealth":1.000000, "UnladenMass":1290.875000, "CargoCapacity":64, "MaxJumpRange":72.746780, ' \
+                  '"FuelCapacity":{ "Main":160.000000, "Reserve":1.140000 }, "Rebuy":1087554, "Modules":[  ] }'
+        stored = '{ "timestamp":"2026-09-26T14:17:19Z", "event":"StoredShips", "StationName":"G0X-85Z", "MarketID":3700251648, ' \
+                 '"StarSystem":"Col 285 Sector KM-V d2-106", "ShipsHere":[ { "ShipID":36, "ShipType":"panthermkii", "ShipType_Localised":"Panther Clipper Mk II", ' \
+                 '"Value":100, "Hot":false } ], "ShipsRemote":[  ] }'
+        j, state = self.setup([login, loadout, stored])
+        self.assertEqual(j.cmdr_view["stored_ships"]["hot"], {"39": False, "36": False})
+        self.assertEqual([(s["id"], s["current"], s["hot"]) for s in state.commander_fleet()["ships"]], [(39, True, False), (36, False, False)])
+        # Frontier's journal manual (no real line): Loadout's Hot "if wanted at startup"; a StoredShips entry's when listed
+        j.handle(ev("2026-09-26T15:00:00Z", "StoredShips", StationName="G0X-85Z", StarSystem="Col 285 Sector KM-V d2-106",
+                    ShipsHere=[{"ShipID": 36, "ShipType": "panthermkii", "Value": 100, "Hot": True}], ShipsRemote=[]))
+        self.assertEqual([(s["id"], s["hot"]) for s in state.commander_fleet()["ships"]], [(39, False), (36, True)])
+        j.handle(ev("2026-09-26T15:01:00Z", "ShipyardSwap", ShipType="panthermkii", ShipID=36, StoreOldShip="Explorer_NX", StoreShipID=39, MarketID=3700251648))
+        j.handle(ev("2026-09-26T15:01:02Z", "Loadout", Ship="panthermkii", ShipID=36, ShipName="", ShipIdent="BR-36P", Modules=[]))
+        rows = {s["id"]: s for s in state.commander_fleet()["ships"]}
+        self.assertEqual((rows[36]["current"], rows[36]["hot"], rows[39]["hot"]), (True, True, False))   # still hot once flown: no line said otherwise
+        j.handle(ev("2026-09-27T10:00:00Z", "LoadGame", Commander="Briadin", Ship="panthermkii", ShipID=36))
+        j.handle(ev("2026-09-27T10:00:05Z", "Loadout", Ship="panthermkii", ShipID=36, ShipName="", ShipIdent="BR-36P", Hot=True, Modules=[]))
+        j.handle(ev("2026-09-27T10:30:00Z", "Loadout", Ship="panthermkii", ShipID=36, ShipName="", ShipIdent="BR-36P", Modules=[]))
+        self.assertTrue(state.commander_fleet()["ships"][0]["hot"])           # a later Loadout says it only when it is
+        j.handle(ev("2026-09-28T10:00:00Z", "LoadGame", Commander="Briadin", Ship="panthermkii", ShipID=36))
+        j.handle(ev("2026-09-28T10:00:05Z", "Loadout", Ship="panthermkii", ShipID=36, ShipName="", ShipIdent="BR-36P", Modules=[]))
+        self.assertFalse(state.commander_fleet()["ships"][0]["hot"])          # the login's without it: not wanted at startup
+        j.handle(ev("2026-09-28T11:00:00Z", "ShipyardSwap", ShipType="explorer_nx", ShipID=39, StoreOldShip="panthermkii", StoreShipID=36, MarketID=1))
+        j.handle(ev("2026-09-28T11:00:02Z", "Loadout", Ship="explorer_nx", ShipID=39, ShipName="", ShipIdent="BR-03E", Hot=True, Modules=[]))
+        rows = {s["id"]: s for s in state.commander_fleet()["ships"]}
+        self.assertEqual((rows[39]["hot"], rows[36]["hot"]), (True, False))  # stored: its marker kept the same way
+
+    LISTED = ('{ "timestamp":"2026-09-26T14:37:29Z", "event":"StoredModules", "MarketID":128666762, "StationName":"Jameson Memorial", '
+              '"StarSystem":"Shinrarta Dezhra", "Items":[ '   # (the list cut to three of its 207 items)
+              '{ "Name":"$int_cargorack_size5_class1_name;", "Name_Localised":"Cargo Rack", "StorageSlot":9, "StarSystem":"Col 285 Sector KM-V d2-106", '
+              '"MarketID":3700251648, "TransferCost":100, "TransferTime":2000, "BuyPrice":0, "Hot":false, "EngineerModifications":"CargoRack_IncreasedCapacity", '
+              '"Level":5, "Quality":1.000000 }, '
+              '{ "Name":"$int_cargorack_size5_class1_name;", "Name_Localised":"Cargo Rack", "StorageSlot":502, "StarSystem":"Shinrarta Dezhra", '
+              '"MarketID":128666762, "TransferCost":0, "TransferTime":0, "BuyPrice":97900, "Hot":false }, '
+              '{ "Name":"$int_detailedsurfacescanner_tiny_name;", "Name_Localised":"Surface Scanner", "StorageSlot":585, "StarSystem":"Col 285 Sector KM-V d2-106", '
+              '"MarketID":3700251648, "TransferCost":2382, "TransferTime":2000, "BuyPrice":219375, "Hot":false, "EngineerModifications":"Sensor_Expanded", '
+              '"Level":4, "Quality":0.934000 } ] }')
+    DOCKED = ('{ "timestamp":"2026-09-26T14:34:33Z", "event":"Docked", "StationName":"Jameson Memorial", "StationType":"Orbis", "Taxi":false, '
+              '"Multicrew":false, "StarSystem":"Shinrarta Dezhra", "SystemAddress":3932277478106, "MarketID":128666762, '
+              '"DistFromStarLS":335.482538, "LandingPads":{ "Small":17, "Medium":18, "Large":9 } }')   # (its faction, services and economies cut)
+
+    def test_stored_modules_between_lists(self):
+        """Batch 4: modules stored, taken, sent for and stored instead of sold, followed between two Outfitting lists
+        (real lines, 2026-09-26; the game's next list there had the point defence and the old drive here, the cargo
+        rack and the heatsink gone), the next list replacing the fold."""
+        stamp = lambda s: ed_outrider.ts_seconds(s)
+        j, state = self.setup([self.DOCKED, self.LISTED,
+            '{ "timestamp":"2026-09-26T14:39:23Z", "event":"ModuleBuy", "Slot":"FrameShiftDrive", "StoredItem":"$int_hyperdrive_overcharge_size8_class1_name;", '
+            '"StoredItem_Localised":"FSD (SCO)", "BuyItem":"$int_hyperdrive_overcharge_size8_class5_overchargebooster_mkii_name;", "BuyItem_Localised":"FSD (SCO)", '
+            '"MarketID":128666762, "BuyPrice":71991912, "Ship":"explorer_nx", "ShipID":50 }',
+            '{ "timestamp":"2026-09-26T14:42:57Z", "event":"ModuleRetrieve", "MarketID":128666762, "Slot":"Slot04_Size5", "RetrievedItem":"$int_cargorack_size5_class1_name;", '
+            '"RetrievedItem_Localised":"Cargo Rack", "Ship":"explorer_nx", "ShipID":50, "Hot":false }',
+            '{ "timestamp":"2026-09-26T14:53:56Z", "event":"ModuleBuy", "Slot":"TinyHardpoint6", "StoredItem":"$hpt_heatsinklauncher_turret_tiny_name;", '
+            '"StoredItem_Localised":"Heatsink", "BuyItem":"$hpt_plasmapointdefence_turret_tiny_name;", "BuyItem_Localised":"Point Defence Turret", '
+            '"MarketID":128666762, "BuyPrice":16275, "Ship":"explorer_nx", "ShipID":50 }',
+            '{ "timestamp":"2026-09-26T14:54:12Z", "event":"ModuleRetrieve", "MarketID":128666762, "Slot":"TinyHardpoint1", "RetrievedItem":"$hpt_heatsinklauncher_turret_tiny_name;", '
+            '"RetrievedItem_Localised":"Heatsink", "Ship":"explorer_nx", "ShipID":50, "Hot":false, "SwapOutItem":"$hpt_plasmapointdefence_turret_tiny_name;", '
+            '"SwapOutItem_Localised":"Point Defence Turret" }',
+            '{ "timestamp":"2026-09-26T15:11:11Z", "event":"FetchRemoteModule", "StorageSlot":585, "StoredItem":"$int_detailedsurfacescanner_tiny_name;", '
+            '"StoredItem_Localised":"Surface Scanner", "ServerId":128666634, "TransferCost":277, "TransferTime":401, "Ship":"panthermkii", "ShipID":36 }'])
+        rows = lambda now: [(m["name"], m["system"], m["in_transit"], m["blueprint"], m["value"])
+                            for m in C.stored_modules(j.cmdr_view["stored_modules"], now=now)["modules"]]
+        self.assertEqual(rows(stamp("2026-09-26T15:12:00Z")), [
+            ("Cargo Rack", "Col 285 Sector KM-V d2-106", False, "Increased capacity", 0),   # the engineered one elsewhere stays
+            ("Surface Scanner", None, True, "Expanded", 219375),                            # on its way here
+            ("FSD (SCO)", "Shinrarta Dezhra", False, None, None),                           # stored, not sold: its value once listed
+            ("Point Defence Turret", "Shinrarta Dezhra", False, None, None)])                # swapped out by the heatsink taken
+        self.assertEqual(rows(stamp("2026-09-26T15:18:00Z"))[1], ("Surface Scanner", "Shinrarta Dezhra", False, "Expanded", 219375))   # 401 s later
+        got = state.commander_inventory()["modules"]
+        self.assertEqual((got["ts"], got["changed"]), ("2026-09-26T14:37:29Z", "2026-09-26T15:11:11Z"))
+        # a line older than the latest list is a legacy folder's, read late: ignored; the next list replaces the fold
+        j.handle(json.loads('{ "timestamp":"2026-09-26T15:11:12Z", "event":"StoredModules", "MarketID":128666762, "StationName":"Jameson Memorial", '
+                            '"StarSystem":"Shinrarta Dezhra", "Items":[ { "Name":"$int_detailedsurfacescanner_tiny_name;", "Name_Localised":"Surface Scanner", '
+                            '"StorageSlot":585, "InTransit":true, "BuyPrice":219375, "Hot":false, "EngineerModifications":"Sensor_Expanded", "Level":4, '
+                            '"Quality":0.934000 } ] }'))
+        j.handle(ev("2026-09-26T14:00:00Z", "ModuleStore", MarketID=128666762, StoredItem="$int_old_name;", Ship="x", ShipID=1))
+        got = state.commander_inventory()["modules"]
+        self.assertEqual((got["ts"], got["changed"], [m["name"] for m in got["modules"]]), ("2026-09-26T15:11:12Z", None, ["Surface Scanner"]))
+        # the list says only "in transit": the fetch before it still knows when it arrives, and where
+        self.assertEqual(rows(stamp("2026-09-26T15:18:00Z")), [("Surface Scanner", "Shinrarta Dezhra", False, "Expanded", 219375)])
+
+    def test_a_module_stored_from_the_ship(self):
+        """ModuleStore (a real line, 2026-09-26): stored where you are docked, with its engineering."""
+        j, state = self.setup([
+            '{ "timestamp":"2026-09-26T19:05:31Z", "event":"Docked", "StationName":"Port Drakkus", "StationType":"Coriolis", "Taxi":false, "Multicrew":false, '
+            '"StarSystem":"Crucis Sector RT-R b4-3", "SystemAddress":7269098005961, "MarketID":4256091651, "DistFromStarLS":12.0 }',   # (cut)
+            '{ "timestamp":"2026-09-26T19:06:26Z", "event":"ModuleStore", "MarketID":4256091651, "Slot":"Slot10_Size1", "StoredItem":"$int_detailedsurfacescanner_tiny_name;", '
+            '"StoredItem_Localised":"Surface Scanner", "Ship":"panthermkii", "ShipID":36, "Hot":false, "EngineerModifications":"Sensor_Expanded", "Level":4, "Quality":0.934000 }'])
+        m = state.commander_inventory()["modules"]
+        self.assertEqual([(r["name"], r["system"], r["blueprint"], r["level"], r["hot"]) for r in m["modules"]],
+                         [("Surface Scanner", "Crucis Sector RT-R b4-3", "Expanded", 4, False)])
+        self.assertEqual((m["ts"], m["changed"]), (None, "2026-09-26T19:06:26Z"))   # no list yet: what was folded
+
+    def test_the_events_with_no_real_line(self):
+        """ModuleSellRemote and MassModuleStore: no line in the author's journals, so Frontier's journal manual's fields."""
+        j, state = self.setup([self.DOCKED, self.LISTED])
+        j.handle(ev("2026-09-26T15:00:00Z", "ModuleSellRemote", StorageSlot=9, SellItem="$int_cargorack_size5_class1_name;",
+                    SellItem_Localised="Cargo Rack", ServerId=1, SellPrice=1000, Ship="explorer_nx", ShipID=50))
+        j.handle(ev("2026-09-26T15:01:00Z", "MassModuleStore", MarketID=128666762, Ship="explorer_nx", ShipID=50, Items=[
+            {"Slot": "MediumHardpoint1", "Name": "$hpt_pulselaser_gimbal_medium_name;", "Hot": True},
+            {"Slot": "MediumHardpoint2", "Name": "$hpt_multicannon_fixed_medium_name;", "Hot": False, "EngineerModifications": "Weapon_Overcharged",
+             "Level": 3, "Quality": 0.5}, "junk"]))
+        got = [(r["name"], r["system"], r["hot"], r["level"]) for r in state.commander_inventory()["modules"]["modules"]]
+        self.assertEqual(got, [("Multicannon", "Shinrarta Dezhra", False, 3), ("Surface Scanner", "Col 285 Sector KM-V d2-106", False, 4),
+                               ("Cargo Rack", "Shinrarta Dezhra", False, None), ("Pulselaser", "Shinrarta Dezhra", True, None)])   # the sold one gone
+        self.assertEqual(C.modules_apply(None, ev("2026-09-26T15:02:00Z", "ModuleSellRemote", StorageSlot=12345)), None)   # nothing to change
+
 
 class Sessions(unittest.TestCase):
     EVENTS = [
@@ -400,7 +517,7 @@ class Sessions(unittest.TestCase):
 
     def test_combat_and_mining(self):
         _, state = setup(self, self.EVENTS)
-        got = state.commander_sessions()
+        got = state.commander_sessions(now=NOW)
         rows = got["sessions"]
         self.assertEqual([(r["start"], r["ship"], bool(r["combat"]), bool(r["mining"])) for r in rows],
                          [(T("11:00:00"), "Type-9 Heavy", False, True), (T("08:00:00"), "Krait Mk II", True, False)])   # newest first
@@ -416,6 +533,24 @@ class Sessions(unittest.TestCase):
         self.assertEqual((got["totals"]["combat"], got["totals"]["mining"], got["max"]),
                          ({"sessions": 1, "kills": 3, "bounties": 400000, "bonds": 60000, "deaths": 1},
                           {"sessions": 1, "tons": 6, "srv_tons": 0, "prospected": 2, "sold": 1500000}, C.SESSIONS_MAX))
+        self.assertEqual(got["days"], 30)
+
+    def test_the_last_30_days(self):
+        """Batch 4: Sessions by days, as History: the logins of the last 30 days, 40 at most."""
+        old = [ev(T("10:00:00", "2026-09-11"), "LoadGame", Commander="Tester", Ship="python"),     # 31 days before NOW
+               ev(T("10:10:00", "2026-09-11"), "Bounty", TotalReward=5)]
+        new = [ev(T("10:00:00", "2026-09-13"), "LoadGame", Commander="Tester", Ship="python"),     # 29 days
+               ev(T("10:10:00", "2026-09-13"), "Bounty", TotalReward=5)]
+        _, state = setup(self, old + new)
+        self.assertEqual([s["start"] for s in state.commander_sessions(now=NOW)["sessions"]], [T("10:00:00", "2026-09-13")])
+        self.assertEqual(state.commander_sessions(now=NOW - 2 * 86400)["totals"]["combat"]["sessions"], 2)
+        many = []
+        for i in range(45):                                                     # a login every half hour, each with a kill
+            at = NOW - 86400 + i * 1800
+            many += [ev(ed_outrider.iso_ts(at), "LoadGame", Commander="Tester"), ev(ed_outrider.iso_ts(at + 60), "Bounty", TotalReward=1)]
+        _, state = setup(self, many)
+        got = state.commander_sessions(now=NOW + 86400)["sessions"]
+        self.assertEqual((len(got), got[0]["start"]), (40, ed_outrider.iso_ts(NOW - 86400 + 44 * 1800)))   # the newest 40
 
     def test_the_srv_refinery_apart(self):
         """Should 4: the Rhino's refinery is not the ship's mining (the reader knows the vehicle you are in)."""
@@ -428,13 +563,13 @@ class Sessions(unittest.TestCase):
             ev(T("11:40:00"), "DockSRV", SRVType="mev_rhino", ID=1),
             ev(T("11:45:00"), "MiningRefined", Type="$painite_name;", Type_Localised="Painite"),
             ev(T("11:50:00"), "MarketSell", Type="gold", Type_Localised="Gold", Count=2, TotalSale=100000, MarketID=1)])
-        m = state.commander_sessions()["sessions"][0]["mining"]
+        m = state.commander_sessions(now=NOW)["sessions"][0]["mining"]
         self.assertEqual((m["tons"], m["refined"], m["srv_tons"], m["srv_refined"], m["seconds"], m["srv_seconds"], m["sold"]),
                          (2, {"Painite": 2}, 2, {"Gold": 2}, 2400, 600, 100000))
 
     def test_before_any_login(self):
         _, state = setup(self, self.EVENTS[1:3])                               # no login on record: no session to count in
-        self.assertEqual(state.commander_sessions()["sessions"], [])
+        self.assertEqual(state.commander_sessions(now=NOW)["sessions"], [])
 
     def test_a_reread_doubles_nothing(self):
         """Everything is journal-derived: a re-read (RESET_JOURNAL_DATA, then the files again) gives the same, and a
@@ -444,7 +579,7 @@ class Sessions(unittest.TestCase):
             ev(T("08:01:00"), "MissionAccepted", MissionID=1, Name="Mission_A"),
             ev(T("08:02:00"), "EngineerProgress", Engineers=[{"Engineer": "Felicity Farseer", "Progress": "Unlocked", "Rank": 5}])])
         j, state = setup(self)
-        reads = lambda: [state.commander_profile(), state.commander_inventory(), state.commander_missions(), state.commander_sessions(),
+        reads = lambda: [state.commander_profile(), state.commander_inventory(), state.commander_missions(), state.commander_sessions(now=NOW),
                          state.commander_engineering()]
         j.scan_dir(d)
         first = reads()
@@ -617,7 +752,8 @@ class Server(unittest.TestCase):
             ev(T("08:00:00"), "EngineerProgress", Engineers=[{"Engineer": "Felicity Farseer", "Progress": "Unlocked", "Rank": 5}]),
             ev(T("08:01:00"), "MissionAccepted", MissionID=1, Name="Mission_A", LocalisedName="A job")])
         j.materials = {"counts": {"arsenic": 4}, "names": {}}
-        (_, pro), (_, inv), (_, eng), (_, mis), (_, ses) = self._get(state, ("profile", "inventory", "engineering", "missions", "sessions"))
+        with unittest.mock.patch.object(C, "time", types.SimpleNamespace(time=lambda: NOW)):   # the sessions' 30 days
+            (_, pro), (_, inv), (_, eng), (_, mis), (_, ses) = self._get(state, ("profile", "inventory", "engineering", "missions", "sessions"))
         self.assertEqual((pro["profile"]["commander"], len(pro["profile"]["fleet"])), ("Tester", 4))
         self.assertEqual((len(inv["ships"]["ships"]), len(inv["modules"]["modules"]), len(inv["suits"])), (4, 3, 1))
         fsd = next(b for b in eng["blueprints"] if b["id"] == "FSD_LongRange")

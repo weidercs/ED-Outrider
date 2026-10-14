@@ -2,6 +2,30 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · CMDR tab: sessions by days, hot ships, stored modules followed
+Batch 4 of the PR #5 review's plan, with the author's answers of 2026-10-14.
+- **Sessions by days**, like everything else: the Sessions tab lists the logins of the last 30 days with fighting or
+  mining, 40 at most (`commander.SESSIONS_DAYS`, `sessions_since`), and says "your sessions of the last 30 days".
+- **Hot ships**: a small red ⚖ (the theme's `--bad`, titled "hot: this ship is wanted") beside the ship you fly when the
+  game marks it hot, and beside a stored ship or module the same way (it was the word "hot" in amber). The author's
+  journals (read only) carry `Hot` on every StoredShips entry and never on a Loadout (none was hot), so a ship's flag is
+  the latest line that says it: its StoredShips entry, and for the ship you fly the Loadout's `Hot` as Frontier's
+  manual describes it ("if wanted at startup": the login's Loadout without it says not hot). The stored ships' fold
+  keeps it per ship (`hot`), Loadout joined its events.
+- **Stored modules followed between Outfitting lists**: ModuleStore, MassModuleStore, ModuleBuy's `StoredItem` (stored,
+  not sold), ModuleRetrieve (its `SwapOutItem` stored), FetchRemoteModule (in transit until it arrives, then where you
+  sent for it, kept through a list written meanwhile) and ModuleSellRemote are folded into meta stored_modules,
+  `fresh()`-guarded, until the next StoredModules list replaces it (`commander.modules_apply`); the heading says as of
+  the last change. Field names checked on the author's journals; replayed through the fold, they matched the game's next
+  list 341 times in 345 (two modules the game threw away when swapped out, two lists after a gap in the journals).
+  ModuleSellRemote and MassModuleStore had no real line: Frontier's manual. ModuleSell sells from the ship and leaves
+  storage alone.
+- No journal re-read: version 51 is unreleased and stays, though what it keeps changed shape (the ships' hot flags, the
+  modules' fold); an Outrider already on 51 picks them up from the next shipyard or outfitting visit.
+- Tests from real lines (`RealLines`: the hot flags, the modules between two lists, ModuleStore), the manual's events,
+  the 30 days; smoke: the ⚖ in both tables, its title and colour, the stored modules' heading, the sessions' wording.
+  Docs: the guide's CMDR section, DESIGN_NOTES, JOURNAL_REFERENCE, AGENT_GUIDE.
+
 ## 2026-10-14 · CMDR tab: checked against real journals, links out, blueprints by module, tiles to choose
 Batch 3 of the PR #5 review's plan, with the author's answers of 2026-10-14.
 - **The field names checked against real journals** (the author's live and legacy folders, read only): every event the
