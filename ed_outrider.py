@@ -6503,9 +6503,11 @@ class State:
         # status report, the last line again or a replay. Kept out of Journals.moments, whose checkpoint and
         # rollback during a journal re-read could replay or drop it
         self.copilot = {"seq": 0, "action": None, "words": None, "hush": None}
-        # the voice (POST /api/ask): its phrases, the AI layer's settings (set by run()), and when a window that speaks
-        # last asked for the payload (S24: whether an answer will be said on the PC)
-        self.ask_phrases = outrider.ask.load_phrases()
+        # the voice (POST /api/ask): its phrases (ask_file: resources/ask.json as read at start, the list of voice
+        # commands, GET /api/ask/commands, shows the same), the AI layer's settings (set by run()), and when a window
+        # that speaks last asked for the payload (S24: whether an answer will be said on the PC)
+        self.ask_file = outrider.ask.read_file()
+        self.ask_phrases = outrider.ask.phrases_of(self.ask_file[0])
         self.assistant = dict(outrider.ask.ASSISTANT)
         # S35: the last ASK_LOG_MAX questions (POST /api/ask, its refusals too) for Settings' "Questions asked": in
         # memory only, gone at a restart, never the AI's key; ask_seq in the payload tells an open page one came
@@ -7021,12 +7023,22 @@ class State:
                                  **fields))
         self.bump()
 
+    def ask_commands_info(self):
+        """GET /api/ask/commands: the fixed voice commands (outrider.ask.command_list, from the ask.json the voice
+        matches with) for Settings → Voice and the tablet's Voice commands…, and whether the AI layer takes the rest."""
+        return {"groups": outrider.ask.command_list(self.ask_file), "ai": self.ask_ai_state()}
+
+    def ask_ai_state(self):
+        """Whether the AI layer would take a question no phrase matched: "off", "on", or "unset" (switched on without
+        base_url and model)."""
+        a = self.assistant
+        return "off" if not a.get("enabled") else "on" if a.get("base_url") and a.get("model") else "unset"
+
     def ask_log_info(self):
         """GET /api/ask/log: the questions newest first, and whether the AI layer would take one no phrase matched
         ("off", "on", or "unset": switched on without base_url and model)."""
-        a = self.assistant
         return {"questions": list(reversed(self.ask_log)), "seq": self.ask_seq, "max": self.ASK_LOG_MAX,
-                "ai": "off" if not a.get("enabled") else "on" if a.get("base_url") and a.get("model") else "unset"}
+                "ai": self.ask_ai_state()}
 
     async def ask(self, text, get, source=None):
         """POST /api/ask: a question in words -> (answer, status). A fixed command first (resources/ask.json), then the
@@ -18045,6 +18057,11 @@ def make_app(state, hosts=None):
         not one of the AI's tools (it holds what was said)."""
         return web.json_response(state.ask_log_info())
 
+    async def ask_commands_view(_):
+        """GET /api/ask/commands: the voice's fixed commands, what each does and the phrases that ask it (Settings →
+        Voice, the tablet's Voice commands…)."""
+        return web.json_response(state.ask_commands_info())
+
     async def copilot_view(request):
         """{action: "status" | "again" | "hush" | "replay", words?}: the speaking window does it (the button and a
         tablet's Now bar post here, so a tap anywhere speaks through the window that is speaking)."""
@@ -18516,6 +18533,7 @@ def make_app(state, hosts=None):
     app.router.add_get("/api/rail", rail_view)
     app.router.add_post("/api/ask", ask_view)
     app.router.add_get("/api/ask/log", ask_log_view)   # S35: Settings' "Questions asked"
+    app.router.add_get("/api/ask/commands", ask_commands_view)   # the list of voice commands
     app.router.add_get("/api/config", config_get_view)
     app.router.add_get("/api/serverlog", serverlog_view)
     app.router.add_post("/api/notices/dismiss", notices_dismiss_view)

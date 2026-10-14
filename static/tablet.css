@@ -275,6 +275,9 @@ body.tablet.tb-norail #tabRail { display: none !important; }
 .tb-tog { min-height: var(--tb-touch); min-width: 128px; display: inline-flex; align-items: center; gap: 8px; padding: 0 14px;
   border: 1px solid var(--line); border-radius: 999px; font-size: 17px; cursor: pointer; }
 .tb-tog input { width: 26px; height: 26px; }
+/* the voice commands (Settings > Voice commands…): the same list as the PC's, in the alerts' big sheet, at the sheet's size */
+.tb-cmds .vclist { font-size: 17px; display: block; }
+.tb-cmds .vclist .vcrow { padding: 8px 0; }
 /* the exobiology checklist: the view fills the page, and the species boxes and a species' details (with its map) each
    scroll on their own (the author, 2026-10-09); stacked on a narrow tablet, each takes about half */
 body.tablet main > #bioView.check:not([hidden]) { display: flex; flex-direction: column; height: var(--tb-view-h); overflow: hidden; }

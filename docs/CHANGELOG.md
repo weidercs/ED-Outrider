@@ -2,6 +2,27 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · No page-made saves in the Android app, the list of voice commands
+The author's requests of 2026-10-14, relayed by the Android app's session.
+- The app's WebView downloads same-origin http(s) links (every `api/export?what=…` link: kept) but cannot save a
+  `blob:` or `data:` URL. The page has two such saves, both now through `saveBlob` (which refuses in the app):
+  Settings → Sharing → **Export settings** and the voice lab's **⬇ Save WAV**. In the app both are hidden with a muted
+  note in their place ("Export settings from a browser on the PC", "Save WAV from a browser on the PC"), as the file
+  pickers are: `data-blobsave` marks the control, `.nosave` its note, `drawBlobSaves()` sets them. The lab's other
+  blob URL plays a sound (no download); the copy buttons use the clipboard; nothing else makes a blob or data download.
+- **Voice commands**: every fixed command the voice answers without the AI, grouped (where you are, where to go, your
+  trip and materials, the voice), each with what it does, every phrase that asks it and the words that narrow it
+  ("nearest Vista / repair / carrier / raw … trader", "hush for ten minutes / for half an hour / until the next jump",
+  "this session"). From GET `/api/ask/commands` (`outrider.ask.command_list`): the phrases from resources/ask.json as
+  the server read it at start (one spelling of each), a new `descriptions` object there for what each does, the
+  narrowing words from the tables the answers read. On the PC: Settings → Voice's **Voice commands** fold (Find a
+  setting finds it by "voice commands", "phrases" or a phrase's words); on the tablet: Settings → **Voice commands…**,
+  a big scrolling sheet like Choose alerts….
+- Tests: test_ask's VoiceCommands (a description per command, each command in one group, the list the file's phrases
+  with each one asking its own command, the narrowing words read as listed, the endpoint); smoke checks for the app's
+  hidden saves (no visible blob:/data: download with `OutriderApp`, shown without, Export settings saving a blob), the
+  desktop list and its filter, and the tablet's sheet. Docs: tablet.md, voice-and-alerts.md, AGENT_GUIDE.
+
 ## 2026-10-14 · No file picker in the Android app
 The author's decision of 2026-10-14: the Android app's WebView has no file picker and will not get one.
 - In the app (`window.OutriderApp` exists) the two controls that open a file input, Bookmarks → **Import…** and

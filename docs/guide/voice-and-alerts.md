@@ -75,7 +75,7 @@ browser starts with.
 | Core modules | 80% | A core module under this shows under hull and is said in the status report. |
 | Surface map | 1,000 m / 500 m / 50 m / 3,500 m | Altitude it shows below, narrowest view, rig spacing ring (0 = none), rig leash warning. |
 
-**Export settings** and **Import settings** move them to another browser profile (Import is a browser's: the Android app opens no file picker). **Use these for new
+**Export settings** and **Import settings** move them to another browser profile (both are a browser's: the Android app opens no file picker and saves no file the page makes). **Use these for new
 browsers** keeps a copy on the server (`data/browser_defaults.json`, included in backups), so a tablet running
 Now starts with your voice, names and alert choices. The view and layouts stay per device.
 
@@ -108,7 +108,8 @@ Outrider runs (a Docker server too):
   has each crew member say one of its own lines in its own voice and personality. **▶ Audition: crew lines** plays one
   line where a crew member mentions another for each alert that has them, in each personality (or the one picked),
   with your crew's names and made-up ones for a member without. **✂ Cut this line** bans the line just played, like 👎.
-- **Your own words**: type anything for **▶ Speak**, or **⬇ Save WAV** to keep it.
+- **Your own words**: type anything for **▶ Speak**, or **⬇ Save WAV** to keep it (in a browser: the Android app saves
+  no file the page makes).
 - **How is it said**: a word the voice says wrong, said your way. Pick or type the word, write how it sounds as
   syllables joined by "-" with the stressed one in capitals (**fon-TIK-yoo-loo-uh**; "uh", "eh", "ih" are short
   sounds, the rest spelled plainly as English says it: kew, few, NIGH), **▶ this way** to hear it, **Save** to keep it.
@@ -316,7 +317,12 @@ for the latest session), **this body** (the body you are on, fly near or have ta
 biology and geology), **left behind** (the nearest one or two systems within 100 ly with work over your
 `body_highlight_level` and `bio_min`), **hush** and **unhush**. A hush can take a time: "hush for ten minutes",
 "quiet until the next jump" (30 minutes when you say none; another time gets the nearest of 10, 30 minutes or the
-next jump). Their phrases are in `resources/ask.json`; edit them freely.
+next jump). Their phrases are in `resources/ask.json`; edit them freely (Outrider reads them at start).
+
+**Voice commands** (⚙ Settings → Voice, the fold at the end; on the tablet, Settings → **Voice commands…**) lists
+them all, grouped, from that file: what each one does, every phrase that asks it, and the words that narrow it ("vista",
+"repair", "carrier", "raw" beside "trader"; "for ten minutes", "until the next jump"; "session"). Find a setting finds
+it by "voice commands" or "phrases", and by a phrase's own words ("nearest vista").
 
 **Questions asked** (⚙ Settings, the last section) shows what the voice heard, newest first: the words, which phrase
 they matched and what that asks for ("matched “status report” → a status report"), or "no phrase matched (AI off)",

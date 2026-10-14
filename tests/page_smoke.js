@@ -4720,6 +4720,23 @@ const releasePayloads = async () => {
       tw.eval('tabClose(document.getElementById("tabSettings"))');
       got.tabletAudio = ta;
     }
+    // Voice commands… (in Settings, beside Play alerts here, shown with it off too): a big sheet of every command the
+    // server lists, grouped, each with its phrases; it scrolls
+    {
+      const api = await (await fetch(base + "api/ask/commands")).json();
+      td.getElementById("tabSetBtn").click(); await settle(300);
+      const vc = [!td.getElementById("tabCmdsBtn").closest("[hidden]")];
+      td.getElementById("tabCmdsBtn").click(); await settle(1500);
+      const sheet = td.getElementById("tabCmds"), list = td.getElementById("tabCmdList");
+      vc.push(sheet.hasAttribute("open"), td.getElementById("tabSettings").hasAttribute("open"),
+        list.querySelectorAll(".vcrow").length === api.groups.reduce((n, g) => n + g.commands.length, 0),
+        [...list.querySelectorAll(".vcgroup")].map(h => h.textContent).join("|") === api.groups.map(g => g.name).join("|"),
+        list.querySelector('[data-vc="hush"] .vcphr').textContent.includes("“be quiet”"),
+        list.querySelector('[data-vc="hush"] .vcnarrow').textContent.includes("“until the next jump”"),
+        tw.getComputedStyle(list).overflowY);
+      tw.eval('tabClose(document.getElementById("tabCmds"))');
+      got.voiceCmds = vc;
+    }
     const want = {desk: [true, true, true, true], shell: [true, true, true, true, true], moved: [true, true, true], theme: "lcars", start: "now",
       quiet: [false, false, "never", false], status: [true, true], pages: [],
       mapSwitch: [["now", true], ["hwy", false], ["bm", false]],
@@ -4737,12 +4754,13 @@ const releasePayloads = async () => {
       railShown: [true, false, true, "false", true, false, false, "true"],
       appScreens: [true, false, [false, false, true], "ED Outrider for Android 1.2.0", ["voice"], false],
       tabletAudio: ["[false,false]", false, '[true,true,"always","true"]', false, [true, true, true, true, true], "[false,false]", ["A line here."], "🔇 Tap anywhere to let Outrider speak here",
-                    '[false,false,"false"]'], prefs: ["lcars", true, "true", null, "here"]};
+                    '[false,false,"false"]'], prefs: ["lcars", true, "true", null, "here"],
+      voiceCmds: [true, true, false, true, true, true, true, "auto"]};
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
     const goodT = !bad.length && !terr.length;
     allOk = allOk && goodT;
     console.log(goodT ? "OK" : "FAIL", "| tablet layout |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
-      : "shell shown, every page from its nav, silent, map switch to Now and back, link in words, banner, row sheet, no countdown, Enter saves the rail, pinch, settings, the app's screens, Play alerts here", terr);
+      : "shell shown, every page from its nav, silent, map switch to Now and back, link in words, banner, row sheet, no countdown, Enter saves the rail, pinch, settings, the app's screens, Play alerts here, Voice commands…", terr);
     tw.close();
     await releasePayloads();
   }
@@ -7807,6 +7825,85 @@ const releasePayloads = async () => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| no file picker in the app |", good ? "Import… and Import settings… hidden with OutriderApp, a note in their place; shown in a browser" :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+  }
+  // nor can the app save a file the page makes itself (a blob: or data: URL: its DownloadListener takes http(s) only, so
+  // the api/export links stay): with window.OutriderApp no control that saves one shows ([data-blobsave], each saved
+  // through saveBlob, the one place a page-made file is saved), their notes do, and saveBlob refuses; in a browser they
+  // show and Export settings saves a blob
+  {
+    const w = dom.window, d = w.document, before = errors.length;
+    const src = await (await fetch(base + "static/page.js")).text();
+    const count = re => (src.match(re) || []).length;
+    const laid = el => !el.closest("[hidden]");
+    const state = () => [[...d.querySelectorAll("[data-blobsave]")].map(el => el.id + ":" + laid(el)), [...d.querySelectorAll(".nosave")].map(laid)];
+    // every visible link that downloads: never a blob: or data: one in the app (the export links are api/export?...)
+    const pageMade = () => [...d.querySelectorAll("a[download]")].filter(a => laid(a) && /^(blob|data):/.test(a.getAttribute("href") || "")).length;
+    const got = {counts: [d.querySelectorAll("[data-blobsave]").length, d.querySelectorAll(".nosave").length,
+      count(/\bsaveBlob\(/g) - 1, count(/\.download\s*=/g), count(/createObjectURL\(/g)],
+      exports: [...d.querySelectorAll("a[download]")].every(a => /^api\/export\?/.test(a.getAttribute("href")))};
+    got.browser = state();
+    const cu = w.URL.createObjectURL, ru = w.URL.revokeObjectURL, click = w.HTMLAnchorElement.prototype.click, saved = [];
+    w.URL.createObjectURL = () => "blob:smoke"; w.URL.revokeObjectURL = () => {};
+    w.HTMLAnchorElement.prototype.click = function () { saved.push([this.getAttribute("href"), this.download.startsWith("outrider-settings-")]); };
+    d.getElementById("settingsExport").click();
+    w.eval("window.OutriderApp = {}; drawBlobSaves()");
+    got.app = state();
+    got.appLinks = pageMade();
+    got.note = d.querySelector("#settingsExport ~ .nosave").textContent;
+    got.refused = w.eval('saveBlob(new Blob(["x"]), "x.json")');
+    w.eval("delete window.OutriderApp; drawBlobSaves()");
+    got.back = state();
+    got.saved = saved;
+    w.URL.createObjectURL = cu; w.URL.revokeObjectURL = ru || (() => {}); w.HTMLAnchorElement.prototype.click = click;
+    const want = {counts: [2, 2, 2, 1, 2], exports: true, browser: [["settingsExport:true", "labSave:true"], [false, false]],
+      app: [["settingsExport:false", "labSave:false"], [true, true]], appLinks: 0, note: "Export settings from a browser on the PC",
+      refused: false, back: [["settingsExport:true", "labSave:true"], [false, false]], saved: [["blob:smoke", true]]};
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    const good = !bad.length && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| no page-made saves in the app |", good ? "Export settings and Save WAV hidden with OutriderApp, a note in their place, saveBlob refuses; shown in a browser, Export settings saves a blob" :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+  }
+  // the voice commands (Settings → Voice's fold, GET api/ask/commands): every command of the server's list, grouped,
+  // with what it does, its phrases and the words that narrow it; the Settings filter finds it by "voice commands" and
+  // "phrases", and a phrase's word ("vista") finds it too
+  {
+    const w = dom.window, d = w.document, before = errors.length;
+    const api = await (await fetch(base + "api/ask/commands")).json();
+    if (!w.HTMLDialogElement.prototype.showModal) w.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
+    d.getElementById("alertsBtn").click(); await settle(1500);
+    const fold = d.getElementById("voiceCmds"), list = d.getElementById("voiceCmdList");
+    fold.open = true; fold.dispatchEvent(new w.Event("toggle")); await settle(1500);
+    const rows = [...list.querySelectorAll(".vcrow")];
+    const want = api.groups.flatMap(g => g.commands);
+    const got = {
+      groups: [...list.querySelectorAll(".vcgroup")].map(h => h.textContent),
+      rows: rows.map(r => r.dataset.vc),
+      // each row: its description, every phrase of the server's list quoted, every narrowing word
+      full: rows.every((r, i) => r.querySelector(".vcdesc").textContent === want[i].description &&
+        want[i].phrases.every(p => r.querySelector(".vcphr").textContent.includes(`“${p}”`)) &&
+        want[i].narrowing.every(n => n.words.every(x => r.querySelector(".vcnarrow").textContent.includes(`“${x}”`)))),
+      dock: (list.querySelector('[data-vc="nearest_dock"] .vcnarrow') || {}).textContent || "",
+      hush: [...list.querySelectorAll('[data-vc="hush"] .vcnarrow li')].length,
+      ai: list.querySelector(".vcnote").textContent.includes("the AI layer is off")};
+    got.dock = ["“vista”", "“repair”", "“raw”", "raw material trader", "“carrier”"].every(x => got.dock.includes(x));
+    fold.open = false;
+    const find = async q => {
+      w.eval(`(() => { const b = document.getElementById("setFind"); b.value = ${JSON.stringify(q)}; b.dispatchEvent(new Event("input")); })()`);
+      await settle(2500); await sleep(250);   // Server settings arriving, then the observer's pass
+      return !fold.closest(".sfhide") && fold.open;
+    };
+    got.find = [await find("voice commands"), await find("phrases"), await find("nearest vista"), await find("xyzzy nothing")];
+    w.eval("sfClear()");
+    got.after = fold.open;
+    w.eval(`document.getElementById("alertDialog").close ? document.getElementById("alertDialog").close() : document.getElementById("alertDialog").removeAttribute("open")`);
+    const wantGot = {groups: api.groups.map(g => g.name), rows: want.map(c => c.command), full: true, dock: true, hush: 3, ai: true,
+      find: [true, true, true, false], after: false};
+    const bad = Object.keys(wantGot).filter(k => JSON.stringify(got[k]) !== JSON.stringify(wantGot[k]));
+    const good = !bad.length && rows.length === 14 && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| voice commands |", good ? "Settings → Voice lists every command with what it does, its phrases and narrowing words; the filter finds it" :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)} (${rows.length} rows)`, errors.slice(before));
   }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",

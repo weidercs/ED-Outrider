@@ -553,6 +553,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     <label class="tb-row" id="tabRailRow"><input type="checkbox" id="tabRailOn"> Show the game controls <span class="tb-note">the ship, SRV and on-foot buttons on the right; off gives the pages the whole width (a second tablet, say)</span></label>
     <label class="tb-row"><input type="checkbox" id="tabAudio"> Play alerts here <span class="tb-note">the voice and the alert sounds, on this tablet, even when a PC browser plays them too</span></label>
     <div class="tb-acts" id="tabAlertsRow" hidden><button type="button" id="tabAlertsBtn" class="tb-btn">Choose alerts…</button></div>
+    <div class="tb-acts"><button type="button" id="tabCmdsBtn" class="tb-btn" title="what you can ask by voice, and the phrases that ask it">Voice commands…</button></div>
     <dl class="tb-facts"><dt>Screen</dt><dd id="tabViewport"></dd><dt>App</dt><dd id="tabAppVer"></dd><dt>Sign-in</dt><dd id="tabSignState"></dd>
       <dt>Project</dt><dd><a href="https://github.com/weslocke/ED-Outrider" target="_blank" rel="noopener">ED Outrider on GitHub ↗</a> <span id="tabOutVer" class="unk"></span><br>
         <a href="https://github.com/weslocke/ED-Outrider-Android" target="_blank" rel="noopener">The Android app on GitHub ↗</a></dd></dl>
@@ -572,6 +573,12 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     <p class="tb-note">What this tablet says and plays with Play alerts here. The PC's browser keeps its own choices.</p>
     <div class="tb-acts"><button type="button" id="tabAlertsCopy" class="tb-btn" hidden>Copy the PC's saved choices</button></div>
     <div id="tabAlertList" class="tb-alertlist"></div>
+  </form>
+</dialog>
+<dialog id="tabCmds" class="tb-sheet tb-alerts tb-cmds" aria-labelledby="tabCmdsTitle">
+  <form method="dialog">
+    <div class="tb-sheethead"><h2 id="tabCmdsTitle">Voice commands</h2><button type="button" data-close class="tb-btn" aria-label="close">✕</button></div>
+    <div id="tabCmdList" class="tb-alertlist vclist"></div>
   </form>
 </dialog>
 <div id="toast"></div>
@@ -648,6 +655,9 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         <span class="hint">Outrider's own voice and alert sounds, on this device (or on the PC when it plays them); the game's sound is its own</span></label>
       <label data-find="defaults.speech_names" class="mod">Call me <input type="text" id="speechNames" style="width:18em" placeholder="Boss, Hefay, Sir">
         <span class="hint">comma separated; each line uses one at random, in place of your commander name (which a voice often cannot say); empty goes back to the default</span></label>
+      <details class="srvbk" id="voiceCmds" data-find-block="voice commands phrases questions"><summary>Voice commands <span class="sum-note">what you can ask by voice without the AI, and the phrases that ask it</span></summary>
+        <div id="voiceCmdList" class="vclist"></div>
+      </details>
       <div class="hint" id="speechHint"></div>
       <div class="hint" id="speechTried"></div>
     </details>
@@ -783,7 +793,8 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     </details>
     <details class="setsec" data-sec-key="sharing" data-chip="Sharing"><summary>Sharing these settings <span class="sum-note">export, import, defaults for new browsers</span></summary>
       <div class="opts inline">
-        <button type="button" class="try" id="settingsExport" title="download this browser's settings as a file">Export settings</button>
+        <button type="button" class="try" id="settingsExport" data-blobsave title="download this browser's settings as a file">Export settings</button>
+        <span class="nosave" hidden>Export settings from a browser on the PC</span>
         <button type="button" class="try" id="settingsImport" data-picker title="load settings from an exported file (the page reloads)">Import settings…</button>
         <input type="file" id="settingsFile" accept=".json,application/json" hidden>
         <span class="nopicker" hidden>Import settings from a browser on the PC</span>
@@ -879,7 +890,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     <div id="labWords" class="labwords hint"></div>
     <h4>Your own words</h4>
     <textarea id="labText" rows="2" placeholder="Type anything, then ▶ Speak"></textarea>
-    <div class="mod inlineopts"><button type="button" id="labSpeak">▶ Speak</button> <button type="button" id="labSave">⬇ Save WAV</button></div>
+    <div class="mod inlineopts"><button type="button" id="labSpeak">▶ Speak</button> <button type="button" id="labSave" data-blobsave>⬇ Save WAV</button><span class="nosave" hidden>Save WAV from a browser on the PC</span></div>
     <details id="pronBox" class="pronbox"><summary>How is it said <span class="sum-note">a word the voice says wrong, said your way (Piper voices in English)</span></summary>
       <div class="mod inlineopts"><input id="pronWord" list="pronWords" placeholder="a word: Fonticulua" aria-label="word" autocomplete="off">
         <input id="pronSay" placeholder="fon-TIK-yoo-loo-uh" aria-label="how it is said" autocomplete="off">

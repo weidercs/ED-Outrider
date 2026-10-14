@@ -27,8 +27,9 @@ h1 span { color: var(--accent); }
 #pop .adv { margin-top: 8px; font-weight: 500; }
 #pop .adv.warn { color: var(--warn); } #pop .adv.urgent { color: var(--bad); } #pop .adv.ok { color: var(--good); }
 .sub { color: var(--muted); margin-top: 2px; font-size: 13px; }
-/* where a file picker would open in the Android app (it has none): the note in its place */
-.nopicker { color: var(--muted); font-size: 12px; align-self: center; }
+/* where a file picker would open, or a file be saved from the page (blob:), in the Android app (it can do neither): the
+   note in its place */
+.nopicker, .nosave { color: var(--muted); font-size: 12px; align-self: center; }
 .controls { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; align-items: center; font-size: 13px; }
 .controls button { background: var(--panel); color: var(--text); border: 1px solid var(--line);
   border-radius: 6px; padding: 3px 10px; cursor: pointer; font: inherit; }
@@ -984,6 +985,15 @@ details.speechlog { margin-top: 12px; } details.speechlog summary { cursor: poin
 #askLog .alog { padding: 3px 0; border-bottom: 1px solid var(--line, rgba(128,128,128,.2)); overflow-wrap: anywhere; }
 #askLog .alog .match { color: var(--muted); } #askLog .alog.fixed .match b, #askLog .alog.ai .match b { color: var(--good); }
 #askLog .alog.none .match b { color: var(--warn); } #askLog .alog.error .match b { color: var(--bad); }
+/* the voice commands (Settings > Voice's fold, the tablet's Voice commands… sheet): a group heading, then each command's
+   name and what it does, its phrases, and the words that narrow it */
+.vclist { font-size: 13px; color: var(--text); }
+.vclist .vcnote { color: var(--muted); margin: 4px 0 6px; }
+.vclist .vcgroup { margin: 10px 0 2px; color: var(--accent); font-size: 1em; }
+.vclist .vcrow { padding: 5px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.vclist .vcdesc { color: var(--muted); }
+.vclist .vcphr { margin-top: 2px; }
+.vclist .vcnarrow { margin: 2px 0 0; padding-left: 1.4em; color: var(--muted); }
 .spacing.elsewhere { color: var(--warn); }
 #refLn .regionnew { color: var(--good); font-weight: 600; }
 #tripRows tr.hasnote td { border-bottom: none; padding-bottom: 1px; }

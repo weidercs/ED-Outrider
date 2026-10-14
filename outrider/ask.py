@@ -52,6 +52,10 @@ NEAREST_WORDS = {"vista": "Vista", "genomics": "Vista", "cartographics": "UC", "
 # a material trader (S54): "trader" asks for one, a kind's word narrows it only beside "trader" ("nearest station
 # with raw..." is no trader question)
 TRADER_WORDS = {"raw": "Raw", "manufactured": "Manufactured", "encoded": "Encoded", "data": "Encoded"}
+TRADER_ASK = ("trader", "traders")
+# "nearest station" / "nearest carrier": only that kind of place
+STATION_WORDS = ("station", "stations", "starport", "outpost")
+CARRIER_WORDS = ("carrier", "carriers")
 WAKE = re.compile(r"^(hey|hi|ok|okay)?\s*vespa\b[\s,]*")
 ASSISTANT = {"enabled": False, "base_url": "", "api_key": "", "model": "", "timeout": 20.0, "max_rounds": 4}
 SYSTEM_PROMPT = ("You are Vespa, the co-pilot voice of ED Outrider, an exploration companion for the game Elite Dangerous. "
@@ -60,23 +64,32 @@ SYSTEM_PROMPT = ("You are Vespa, the co-pilot voice of ED Outrider, an explorati
                  "If the tools cannot answer, say so briefly.")
 
 
-def load_phrases(path=ASK_FILE):
-    """{command: [phrases]} from resources/ask.json, in its order; a missing or broken file falls back to the
-    command names themselves (reported on stderr)."""
+def read_file(path=ASK_FILE):
+    """ask.json as written: ({command: [phrases]}, {command: description}), the known commands only, in the file's
+    order; a missing or broken file falls back to the command names themselves (reported on stderr), no descriptions."""
     try:
         with open(path, encoding="utf-8") as f:
             doc = json.load(f)
         cmds = doc.get("commands") if isinstance(doc, dict) else None   # a list or a string: broken too, not a crash
         if not isinstance(cmds, dict):
             raise ValueError("no \"commands\" object")
-        out = {}
-        for name, phrases in cmds.items():
-            if name in COMMANDS and isinstance(phrases, list):
-                out[name] = [p for p in (norm(x) for x in phrases if isinstance(x, str)) if p]
-        return out
+        desc = doc.get("descriptions")
+        return ({name: [x for x in phrases if isinstance(x, str)] for name, phrases in cmds.items()
+                 if name in COMMANDS and isinstance(phrases, list)},
+                {k: v for k, v in desc.items() if isinstance(v, str)} if isinstance(desc, dict) else {})
     except (OSError, ValueError) as e:
         print(f"ask: {path}: {e}; using the command names as phrases", file=sys.stderr)
-        return {c: [c.replace("_", " ")] for c in COMMANDS}
+        return {c: [c.replace("_", " ")] for c in COMMANDS}, {}
+
+
+def phrases_of(cmds):
+    """{command: [phrases]} as matched: each one normalised (norm), the empty ones dropped."""
+    return {name: [p for p in (norm(x) for x in phrases) if p] for name, phrases in cmds.items()}
+
+
+def load_phrases(path=ASK_FILE):
+    """{command: [phrases]} from resources/ask.json, in its order (read_file's fallback for a missing or broken one)."""
+    return phrases_of(read_file(path)[0])
 
 
 def norm(text):
@@ -191,11 +204,11 @@ def nearest_query(text):
             need.append(s)
     if "uc" in words and "UC" not in need:
         need.append("UC")
-    if "trader" in words or "traders" in words:
+    if any(w in TRADER_ASK for w in words):
         kinds = [TRADER_WORDS[w] for w in words if w in TRADER_WORDS]
         need.append(kinds[0] if kinds else "Trader")
-    kind = "station" if any(w in ("station", "stations", "starport", "outpost") for w in words) else \
-        "carrier" if any(w in ("carrier", "carriers") for w in words) else None
+    kind = "station" if any(w in STATION_WORDS for w in words) else \
+        "carrier" if any(w in CARRIER_WORDS for w in words) else None
     return need, kind
 
 
@@ -255,6 +268,9 @@ def local_midnight(now=None):
     return iso_ts(midnight)
 
 
+SESSION_WORD = "session"   # "how far this session": the latest session alone
+
+
 def plural(n, one, many=None):
     return f"{n:,} {one if n == 1 else many or one + 's'}"
 
@@ -268,7 +284,7 @@ async def travel_today(get, rows, text="", now=None):
         return h["error"]
     sessions = h.get("sessions") or []
     now = time.time() if now is None else now
-    if "session" in norm(text).split():
+    if SESSION_WORD in norm(text).split():
         if not sessions:
             return "No session in the last two days."
         x = sessions[0]
@@ -454,6 +470,71 @@ async def fixed_answer(command, get, rows=10, text="", limits=None):
             out.append(f"Highway: next {h['next']['system']}, {jumps(h.get('jumps_left'))} left.")
         return " ".join(out)
     raise ValueError(command)
+
+
+# ---- the list of voice commands (Settings → Voice, the tablet's Voice commands…: GET /api/ask/commands) ----
+
+# how the list groups the commands (a test checks each command is in exactly one)
+GROUPS = (("Where you are", ("status_report", "fuel", "unsold", "whats_left", "this_body")),
+          ("Where to go", ("next_jump", "nearest_unvisited", "nearest_dock", "nearest_ggg", "left_behind")),
+          ("Your trip and your materials", ("travel_today", "fsd_injection")),
+          ("The voice", ("hush", "unhush")))
+# hush's times as they can be said (S32): (the mode, what it gives, examples); a test checks hush_mode reads each one so
+HUSH_EXAMPLES = (("10m", "10 minutes", ("for ten minutes", "for 10 min", "for a quarter of an hour")),
+                 ("30m", "30 minutes (also when no time is said)", ("for half an hour", "for thirty minutes")),
+                 ("jump", "until the next jump", ("until the next jump", "until we leave", "till the next system")))
+SERVICE_NAMES = {"UC": "Universal Cartographics", "Vista": "Vista Genomics"}
+
+
+def title(command):
+    """A command's name in the list, from LABELS: "a status report" -> "Status report"."""
+    t = re.sub(r"^(a|an|the) ", "", LABELS.get(command) or command.replace("_", " "))
+    return t[:1].upper() + t[1:]
+
+
+def narrowing(command):
+    """The words that narrow a command once one of its phrases matched, from the tables its answer reads: [{words,
+    means}] (nearest_dock's services, stations or carriers, a trader and its kind; hush's times; travel_today's
+    "session"); [] for the others."""
+    if command == "nearest_dock":
+        by = {}
+        for w, svc in NEAREST_WORDS.items():
+            by.setdefault(svc, []).append(w)
+        by.setdefault("UC", []).append("uc")   # nearest_query's own: "uc" is not a NEAREST_WORDS key
+        kinds = {}
+        for w, k in TRADER_WORDS.items():
+            kinds.setdefault(k, []).append(w)
+        return ([{"words": ws, "means": f"with {SERVICE_NAMES.get(svc, svc)}"} for svc, ws in by.items()]
+                + [{"words": list(STATION_WORDS), "means": "stations only"},
+                   {"words": list(CARRIER_WORDS), "means": "fleet carriers only"},
+                   {"words": list(TRADER_ASK), "means": "a material trader of any kind"}]
+                + [{"words": ws, "means": f"beside \"trader\": {a_or_an(k)} {dock.trader_words(k)}"} for k, ws in kinds.items()])
+    if command == "hush":
+        return [{"words": list(ex), "means": means} for _, means, ex in HUSH_EXAMPLES]
+    if command == "travel_today":
+        return [{"words": [SESSION_WORD], "means": "the latest session alone, not all of today"}]
+    return []
+
+
+def command_list(file=None):
+    """GET /api/ask/commands: every fixed command, by GROUPS: {command, title, description (ask.json's
+    "descriptions"), phrases (as the file writes them, one spelling of each), narrowing}. `file`: read_file's answer (the server passes the
+    one it matches with, read at start); a command with no phrase left is left out (nothing asks it)."""
+    cmds, desc = file or read_file()
+
+    def said(phrases):   # each phrase once as it is heard ("what's left" and "whats left" are one), the first spelling
+        seen = {}
+        for p in phrases:
+            seen.setdefault(norm(p), " ".join(p.split()))
+        return [p for k, p in seen.items() if k]
+    groups = []
+    for name, members in GROUPS:
+        rows = [{"command": c, "title": title(c), "description": desc.get(c), "narrowing": narrowing(c),
+                 "phrases": said(cmds.get(c) or [])} for c in members]
+        rows = [r for r in rows if r["phrases"]]
+        if rows:
+            groups.append({"name": name, "commands": rows})
+    return groups
 
 
 # ---- the optional AI layer ----

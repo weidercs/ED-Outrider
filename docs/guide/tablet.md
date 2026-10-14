@@ -42,7 +42,9 @@ for this: see [Other devices on your network](install.md#-other-devices-on-your-
   counts down 5 s when the game is not the active window (see [auto-target](plot-route.md)). Auto honk, auto-target's switch and test, backups and the voice
   settings stay on the PC.
 - **Settings** (bottom right): the theme, a dim switch, the theme's emblem, **Show the game controls** (off: no rail
-  on this tablet and the pages take its width, for a second tablet), Play alerts here and Choose alerts…, the screen size in CSS
+  on this tablet and the pages take its width, for a second tablet), Play alerts here and Choose alerts…, **Voice
+  commands…** (a big sheet listing what you can ask by voice without any AI: what each command does, the phrases that
+  ask it and the words that narrow it, such as "nearest Vista" or "hush until the next jump"), the screen size in CSS
   pixels, the app's version and, in the Android app, its own screens (Server…, Voice…, App menu…), and Sign out when
   Outrider asks for a password.
 - **A smaller tablet** (under 1200 × 700 CSS pixels) gets a compact layout: a narrower page
@@ -61,7 +63,10 @@ for this: see [Other devices on your network](install.md#-other-devices-on-your-
 full screen with the screen kept on, signs in once, listens for a wake word ("Hey Vespa", "OK Vespa"; the word and
 its sensitivity are in the app's Voice screen) or a tap on Ask, and can read answers aloud when nothing else speaks.
 The app opens no file picker, so the controls that would (Bookmarks → **Import…**, Settings → **Import settings…**)
-are not shown there; a note in their place says to import from a browser on the PC. Exporting works as anywhere.
+are not shown there; a note in their place says to import from a browser on the PC. Nor can it save a file the page
+makes itself, so Settings → **Export settings** and the voice lab's **⬇ Save WAV** are not shown there either (a note
+says to do it from a browser on the PC). Every other export (the CSV and JSON links on Bookmarks, History and the
+other pages) downloads in the app as anywhere.
 Any browser at `/tablet` works too, without the wake word and Ask, and with every control.
 
 The fonts are Antonio and Barlow Condensed, both under the SIL Open Font License and shipped with Outrider, as are the

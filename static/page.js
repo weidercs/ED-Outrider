@@ -8867,6 +8867,35 @@ const askLogText = () => ((AL.data && AL.data.questions) || []).map(q => `${hms(
   `${askLogFacts(q).length ? `  [${askLogFacts(q).join(", ")}]` : ""}\n    ${htmlText(askMatchText(q))}` + (q.answer ? `\n    answer: ${q.answer}` : "")).join("\n");
 document.getElementById("askLogBox").addEventListener("toggle", () => { drawAskLog(); loadAskLog(); });
 document.getElementById("askLogCopy").onclick = () => copyText(askLogText() || "(nothing asked yet)", `${((AL.data && AL.data.questions) || []).length} questions`);
+// ---- Voice commands: the questions the voice answers without the AI (GET api/ask/commands, from resources/ask.json as
+// the server read it at start: what each does, the phrases that ask it, the words that narrow it), in Settings → Voice's
+// fold and the tablet's Voice commands… sheet. Fetched once, when either first opens (or the Settings filter starts).
+const VC = {data: null, loading: null};
+function loadVoiceCmds() {
+  if (VC.data && !VC.data.error) return Promise.resolve(VC.data);
+  if (!VC.loading) VC.loading = apiJson("api/ask/commands").catch(e => ({error: e.message}))
+    .then(d => { VC.data = d; VC.loading = null; return d; });
+  return VC.loading;
+}
+const VC_AI = {on: "Anything else goes to the AI layer.", unset: "The AI layer is switched on but not set up, so anything else is answered with what the voice knows.",
+  off: "Anything else is answered with what the voice knows (the AI layer is off)."};
+function voiceCmdsHtml(d) {
+  if (!d) return `<div class="unk">loading…</div>`;
+  if (d.error) return `<div class="unk">Could not load the voice commands: ${esc(d.error)}</div>`;
+  const q = p => `“${esc(p)}”`;
+  return `<p class="vcnote">Ask through the Android app (its wake word, or Ask on the tablet). A question is the first command with one of ` +
+    `its phrases as whole words in it, case and punctuation ignored; a word more narrows some. ${esc(VC_AI[d.ai] || "")}</p>` +
+    d.groups.map(g => `<h4 class="vcgroup">${esc(g.name)}</h4>` + g.commands.map(c =>
+      `<div class="vcrow" data-vc="${esc(c.command)}"><b class="vctitle">${esc(c.title)}</b>${c.description ? ` <span class="vcdesc">${esc(c.description)}</span>` : ""}` +
+      `<div class="vcphr">${c.phrases.map(q).join(" · ")}</div>` +
+      (c.narrowing.length ? `<ul class="vcnarrow">${c.narrowing.map(n => `<li>${n.words.map(q).join(", ")} → ${esc(n.means)}</li>`).join("")}</ul>` : "") +
+      `</div>`).join("")).join("");
+}
+async function drawVoiceCmds(el) {
+  if (!VC.data || VC.data.error) el.innerHTML = voiceCmdsHtml(null);
+  el.innerHTML = voiceCmdsHtml(await loadVoiceCmds());
+}
+document.getElementById("voiceCmds").addEventListener("toggle", e => { if (e.target.open) drawVoiceCmds(document.getElementById("voiceCmdList")); });
 // ---- alert settings ----
 const alertDialog = document.getElementById("alertDialog");
 // a heading over a group of alerts in the list, before its first one: the discoveries together, each still its own row
@@ -9820,12 +9849,8 @@ labEl("labSave").onclick = async () => {
   if (!labEl("labText").value.trim()) { labMsg("Type something first", true); return; }
   const p = labPick(), blob = await labFetch(labOwnText(), p);
   if (!blob) return;
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `outrider-${p.voice || "voice"}${p.speaker != null ? `-${p.speaker}` : ""}.wav`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-  labMsg(`Saved as ${a.download}`);
+  const name = `outrider-${p.voice || "voice"}${p.speaker != null ? `-${p.speaker}` : ""}.wav`;
+  if (saveBlob(blob, name)) labMsg(`Saved as ${name}`);
 };
 // ---- How is it said (a review suggestion the author picked, 2026-10-12): the pronunciation table, word by word ----
 // api/pronounce: the shipped words with yours on top; a respelling ("fon-TIK-yoo-loo-uh") is tried as "{...}" in a line
@@ -10712,10 +10737,7 @@ function drawSettingsServer() {
 drawSettingsServer();
 document.getElementById("settingsExport").onclick = () => {
   const blob = new Blob([JSON.stringify(settingsDoc(), null, 1)], {type: "application/json"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = `outrider-settings-${new Date().toISOString().slice(0, 10)}.json`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  saveBlob(blob, `outrider-settings-${new Date().toISOString().slice(0, 10)}.json`);
 };
 const settingsFile = document.getElementById("settingsFile");
 document.getElementById("settingsImport").onclick = () => settingsFile.click();
@@ -10739,6 +10761,26 @@ function drawFilePickers() {
   document.querySelectorAll(".nopicker").forEach(n => { n.hidden = !app; });
 }
 drawFilePickers();
+// Nor can the app's WebView save a file the page makes itself (a blob: or data: URL; its DownloadListener takes only
+// http(s) links, so every api/export link works there): a control that saves one ([data-blobsave]: Export settings,
+// the voice lab's Save WAV) is hidden in the app and its .nosave note says where to do it instead. Every such save goes
+// through saveBlob, which refuses in the app as well (the smoke test counts its callers against [data-blobsave]).
+const inApp = () => typeof window !== "undefined" && !!window.OutriderApp;
+function drawBlobSaves() {
+  const app = inApp();
+  document.querySelectorAll("[data-blobsave]").forEach(b => { b.hidden = app; });
+  document.querySelectorAll(".nosave").forEach(n => { n.hidden = !app; });
+}
+drawBlobSaves();
+// the browser saves `blob` as a file called `name`; false in the app (nothing saved)
+function saveBlob(blob, name) {
+  if (inApp()) { toast("The app cannot save files: do it from a browser on the PC"); return false; }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  return true;
+}
 async function saveServerSettings(body) {
   try {
     const r = await apiJson("api/defaults", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
@@ -10782,7 +10824,7 @@ function drawAlertsBtn() { document.getElementById("alertsBtn").classList.toggle
 // Settings (the dialog the 🔔 used to open): collapsible sections, each remembered open or closed on this device
 // (store "settingsOpen"; Alerts is open the first time), with chips that open one and scroll to it (review S43)
 const alertChips = document.getElementById("alertChips");
-const SF = {active: false, q: "", opened: null, folds: null, srvLoaded: false, timer: 0};   // Find a setting (S39, below)
+const SF = {active: false, q: "", opened: null, folds: null, srvLoaded: false, vcLoaded: false, timer: 0};   // Find a setting (S39, below)
 const setSecs = [...alertDialog.querySelectorAll("details.setsec")];
 function setSecsRestore() {
   const open = store.get("settingsOpen", null);
@@ -10923,6 +10965,7 @@ function sfSet(q) {
   }
   SF.q = q;
   if (!SF.srvLoaded) { SF.srvLoaded = true; loadServerSettings(); }   // its keys, without opening its section
+  if (!SF.vcLoaded) { SF.vcLoaded = true; drawVoiceCmds(document.getElementById("voiceCmdList")); }   // "nearest vista" finds it too
   return sfApply();
 }
 function sfClear() {
@@ -11708,6 +11751,7 @@ function tabSetup() {
   document.getElementById("tabAlertsBtn").onclick = tabOpenAlerts;
   document.getElementById("tabAlertList").addEventListener("change", tabAlertToggle);
   document.getElementById("tabAlertsCopy").onclick = tabCopyPcAlerts;
+  document.getElementById("tabCmdsBtn").onclick = tabOpenCmds;
   document.getElementById("tabSignOut").onclick = tabSignOut;
   document.getElementById("tabSheetActs").addEventListener("click", e => {
     const b = e.target.closest("[data-act]"); if (!b) return;
@@ -11922,6 +11966,12 @@ function tabOpenAlerts() {
   tabClose(document.getElementById("tabSettings"));
   tabDrawAlerts();
   tabShow(document.getElementById("tabAlerts"));
+}
+// the voice commands (the same list as Settings → Voice's), in a big sheet of their own
+function tabOpenCmds() {
+  tabClose(document.getElementById("tabSettings"));
+  tabShow(document.getElementById("tabCmds"));
+  return drawVoiceCmds(document.getElementById("tabCmdList"));
 }
 function tabAlertToggle(e) {
   const el = e.target, k = el.dataset.tspeak || el.dataset.tsound;
