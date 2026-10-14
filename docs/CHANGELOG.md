@@ -2,6 +2,17 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · Version 2026.10.23
+- The Massive Tweak Update: the crew of voices (nine roles, names, crew lines, voices kept loaded, a voice per
+  personality), 🎯 on every system with the game brought forward, the overlay's Target and Alerts panels, its pill and
+  per-panel hiding in combat or docked, fuel and route checks (one fuel window, the last scoopable star, wrong target,
+  finished systems skipped, Earth-like / ammonia routes, sweeps, Around, the Map's route, the In-Game Route the game did
+  not write), exobiology (value from sample 1, geology ✦, reported species, your own runs, 🔍 nearby), the carrier's
+  upkeep and trip, material traders, uploads' Recent / Try again / outage card / key checks / Log marks / EDSM gap fill
+  and import, Show log, Restart, Backups, start with this computer, sector names, hush times, Find a setting, view
+  windows, bookmark import, the Shadows theme, and the review fixes. What's new has its section. PARSER_VERSION 50:
+  the first start re-reads the journals once, after a backup.
+
 ## 2026-10-14 · Overlay panels hidden while docked, one rule for every 🎯, the In-Game Route the game did not write
 The author's requests of 2026-10-14, and a game quirk seen on his PC the same morning.
 - **Hide while docked, per overlay panel**: Settings → In-game overlay's table has a **Docked** box per panel (none for
