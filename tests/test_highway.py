@@ -965,6 +965,37 @@ class HighwayH1(unittest.TestCase):
                          plotter="neutron", start=-10)
         self.assertEqual([(h["name"], h["scoopable"], h["mult"]) for h in self.state.route_ahead()], [("Ay", None, 1)])
 
+    def test_route_fuel_reach(self):
+        """The In-Game Route's fuel reach (Kurbo26, GitHub discussion #3): the hops the tank makes without scooping, from
+        the fuel aboard now (a scoop on the way moves it), the whole route said as such; nothing claimed without a
+        complete fuel model, for a hop too long at any fuel, or past the hops looked at."""
+        self.jump(-100, 300, "Start", 0)
+        self.navroute(self.DRY_NAV)   # five hops of 70 ly
+        self.fuel(10)
+        self.assertIsNone(self.state.route_summary()["fuel_reach"])   # no Loadout: no fuel model, no claim
+        self.j.handle(self.caspian_loadout(self.ts(-1000)))
+        self.assertEqual(self.state.route_summary()["fuel_reach"], {"hops": 2, "whole": False})
+        self.fuel(15)   # scooped a little: further
+        self.assertEqual(self.state.route_summary()["fuel_reach"], {"hops": 3, "whole": False})
+        self.fuel(3)
+        self.assertEqual(self.state.route_summary()["fuel_reach"], {"hops": 0, "whole": False})
+        self.fuel(40)
+        self.assertEqual(self.state.route_summary()["fuel_reach"], {"hops": 5, "whole": True})
+        self.jump(-40, 402, "Neutron B", 140.0)   # further along: from where you are on it
+        self.assertEqual(self.state.route_summary()["fuel_reach"], {"hops": 3, "whole": True})
+        # a hop beyond the drive at any fuel: a range matter, not the tank's: nothing said
+        self.jump(-30, 300, "Start", 0)
+        self.navroute([(300, "Start", "K", 0.0), (401, "Far", "K", 200.0)])
+        self.fuel(10)
+        self.assertIsNone(self.state.route_summary()["fuel_reach"])
+        # more hops than FUEL_RUN_MAX_HOPS, every one looked at going: the end is not known
+        n = ed_outrider.FUEL_RUN_MAX_HOPS + 5
+        self.navroute([(300, "Start", "K", 0.0)] + [(500 + k, f"Hop {k}", "K", 2.0 * (k + 1)) for k in range(n)])
+        self.fuel(160)
+        self.assertIsNone(self.state.route_summary()["fuel_reach"])
+        self.navroute([(300, "Start", "K", 0.0)] + [(500 + k, f"Hop {k}", "K", 2.0 * (k + 1)) for k in range(3)])
+        self.assertEqual(self.state.route_summary()["fuel_reach"], {"hops": 3, "whole": True})
+
     def test_last_scoopable_star(self):
         """S2 on the game's own route: here a K star, three stars after it known not to scoop, and too little fuel for
         the four hops to the next one that does: warned once per stretch, with how much to scoop."""

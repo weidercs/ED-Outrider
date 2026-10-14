@@ -1599,6 +1599,29 @@ const releasePayloads = async () => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| route chips and Spansh |", good ? "✦ only for a hop Spansh was asked about, no claim for one never asked" : JSON.stringify(got), errors.slice(before));
   }
+  // the In-Game Route's chips copy their system's name; ⛽ after the last hop the tank makes without scooping (the
+  // server's fuel_reach), ⛽✓ at the end when it makes them all, "⛽ N" past the chips shown, nothing without a figure
+  // (Kurbo26, GitHub discussion #3)
+  {
+    const w = dom.window, before = errors.length, copied = [], realCopy = w.copyText;
+    w.copyText = t => copied.push(t);
+    const got = JSON.parse(w.eval(`(() => { const saved = data.route, el = document.getElementById("routeStrip"), o = {};
+      const hops = k => Array.from({length: k}, (_, i) => ({name: "Hop " + i, star_class: "K", scoopable: true, ly: 50, known: true}));
+      const mark = () => { const f = el.querySelector(".freach"); if (!f) return null;
+        const nx = f.nextElementSibling; return [f.className, f.textContent, nx ? nx.dataset.name : null]; };
+      const show = (k, fr) => { data.route = {hops: hops(k), ly: 50 * k, next_scoop: 1, longest_dry: 0, fuel_reach: fr}; renderRoute(); return mark(); };
+      o.mid = show(3, {hops: 1, whole: false}); el.querySelectorAll(".hop")[2].click();
+      o.none = show(3, {hops: 0, whole: false}); o.whole = show(3, {hops: 3, whole: true}); o.unknown = show(3, null);
+      o.past = show(30, {hops: 26, whole: false}); o.wholeLong = show(30, {hops: 30, whole: true});
+      data.route = saved; renderRoute(); return JSON.stringify(o); })()`));
+    w.copyText = realCopy;
+    got.copied = copied;
+    const want = {mid: ["freach", "⛽", "Hop 1"], none: ["freach", "⛽", "Hop 0"], whole: ["freach whole", "⛽✓", null], unknown: null,
+                  past: ["freach past", "⛽ 26", null], wholeLong: ["freach whole", "⛽✓", null], copied: ["Hop 2"]};
+    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| route chips copy, fuel reach |", good ? "a chip copies its name; ⛽ where the tank runs out, ⛽✓ when it makes the route" : JSON.stringify(got), errors.slice(before));
+  }
   // the game logged a plot but wrote no NavRoute.json (2026-10-14): the payload's minimal form, said in words, no chips
   {
     const w = dom.window, before = errors.length;

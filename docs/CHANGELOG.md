@@ -2,6 +2,18 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · In-Game Route: chips copy their name, ⛽ where the tank's fuel runs out
+NEXT-VERSION #4 (Kurbo26, GitHub discussion #3; the Route Scoop idea, scaled down).
+- A chip copies its system's name (the page-wide click-to-copy).
+- **Fuel reach**: the payload's `route.fuel_reach` {hops, whole} (`State.route_fuel_reach`): the hops the fuel in the
+  main tank makes without scooping, burned hop by hop as the ship lightens (`fsd.fuel_run`), a held charge on the first
+  hop only; worked out with each payload, so a scoop on the way moves it. None (no mark) while the fuel model is
+  incomplete, when the failing hop is out of the drive's reach at any fuel (a range matter), or past
+  `FUEL_RUN_MAX_HOPS` hops all going. The page draws ⛽ with a bar before the first hop it does not make, ⛽✓ at the end
+  when it makes them all, "⛽ N" after the chips when the reach is past the 24 shown.
+- Tests: `test_route_fuel_reach` (a short tank, a scoop, none, the whole route, further along, a hop out of range, the
+  look-ahead's cap); the smoke block (the copy, each mark's place). Guide: views.md.
+
 ## 2026-10-14 · Nearby's Around reads "Focus/Lock"
 - The label beside the Standard / Boxel switch, and Boxel mode's hint ("Nearby's Focus/Lock (…) is for Standard"). Search's
   and the Nearest finder's Around keep their name. Smoke and views.md follow.

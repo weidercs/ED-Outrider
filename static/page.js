@@ -1024,14 +1024,24 @@ function renderRoute() {
   const n = r.hops.length;
   // h.known: true, false (Spansh was asked and has no record: ✦) or null (never asked: no claim either way; Kurbo26,
   // GitHub discussion #3: Sol said "not reported to Spansh")
-  const chips = r.hops.slice(0, 24).map(h => `<span class="hop${h.scoopable ? " sc" : h.scoopable === false ? " dry" : ""}${h.visited ? " vis" : ""}" ` +
+  // a chip copies its system's name (the page-wide .copy handler); ⛽ marks how far the fuel in the tank goes without
+  // scooping (the server's fuel_reach, worked out from the fuel aboard now: a scoop on the way moves it), ⛽✓ at the end
+  // when it makes the whole route (Kurbo26, GitHub discussion #3)
+  const fr = r.fuel_reach, shown = Math.min(n, 24);
+  const reachMark = k => `<span class="freach" title="${k ? `the fuel in your tank makes ${k} jump${k === 1 ? "" : "s"} of this route without scooping: scoop or refuel by here`
+    : "the fuel in your tank does not make the next jump: scoop or refuel here"}">⛽</span>`;
+  const chips = r.hops.slice(0, 24).map((h, k) => (fr && !fr.whole && fr.hops === k ? reachMark(k) : "") +
+    `<span class="hop copy${h.scoopable ? " sc" : h.scoopable === false ? " dry" : ""}${h.visited ? " vis" : ""}" data-name="${esc(h.name)}" ` +
     `title="${esc(h.name)} · ${esc(h.star_class || "?")}${h.scoopable ? " (scoopable)" : h.scoopable === false ? " (not scoopable)" : ""} · ${h.ly} ly${h.visited ? " · visited" : ""}${h.known === false ? " · not reported to Spansh" : ""}">` +
     `${esc(h.star_class || "?")}${h.known === false ? "✦" : ""}</span>`).join("");
   el.innerHTML = `In-Game Route: <b>${n}</b> jump${n === 1 ? "" : "s"} · <b>${Math.round(r.ly).toLocaleString()}</b> ly` +
     (r.next_scoop ? ` · next scoop in <b>${r.next_scoop}</b>` : ` · <span class="warnc">no scoopable star on the route</span>`) +
     (r.longest_dry > 1 ? ` · <span class="${r.longest_dry >= 4 ? "warnc" : ""}">longest dry stretch ${r.longest_dry}</span>` : "") +
     (dryStretchHere() ? ` · ${dryStretchHtml()}` : "") +
-    ` <span class="hops">${chips}${n > 24 ? ` <span class="unk">+${n - 24}</span>` : ""}</span>`;
+    ` <span class="hops">${chips}${n > 24 ? ` <span class="unk">+${n - 24}</span>` : ""}` +
+    (fr && fr.whole ? `<span class="freach whole" title="the fuel in your tank makes the whole route without scooping">⛽<span class="good">✓</span></span>`
+      : fr && fr.hops >= shown ? `<span class="freach past" title="the fuel in your tank makes ${fr.hops} jumps of this route without scooping">⛽ ${fr.hops}</span>` : "") +
+    `</span>`;
 }
 // ---- Now mode: five big lines for a second monitor, readable from the chair ----
 function renderNow() {

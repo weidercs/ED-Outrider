@@ -13699,10 +13699,11 @@ class State:
         visited = {r[0] for r in self.db.execute(
             f"SELECT id64 FROM visits WHERE id64 IN ({','.join('?' * len(left))})", [h["id64"] for h in left])}
         visited |= {r["id64"] for r in outrider.edsmlog.rows(self.db, ids=[h["id64"] for h in left])}   # S67
-        out, prev, dry, longest, total = [], pos, 0, 0, 0.0
+        out, prev, dry, longest, total, lys = [], pos, 0, 0, 0.0, []
         for h in left:
             d = dist(prev, h)
             total += d
+            lys.append(d)
             scoop = class_scoopable(h["star_class"]) if h.get("star_class") else None
             dry = 0 if scoop else dry + 1
             longest = max(longest, dry)
@@ -13711,7 +13712,37 @@ class State:
                         "ly": round(d, 1), "visited": h["id64"] in visited, "known": self.spansh_knows(h["id64"])})
             prev = h
         next_scoop = next((k + 1 for k, h in enumerate(out) if h["scoopable"]), None)
-        return {"hops": out, "ly": round(total, 1), "longest_dry": longest, "next_scoop": next_scoop, "ts": route.get("ts")}
+        return {"hops": out, "ly": round(total, 1), "longest_dry": longest, "next_scoop": next_scoop, "ts": route.get("ts"),
+                "fuel_reach": self.route_fuel_reach(lys)}
+
+    def route_fuel_reach(self, lys):
+        """How many of the game's route hops (`lys`, their ly in order from where you are) the fuel in the main tank makes
+        without scooping (Kurbo26, GitHub discussion #3: a ship with no scoop sees where it must refuel): burned hop by
+        hop as the ship lightens (fsd.fuel_run), a charge you hold counted on the first hop only. Worked out with each
+        payload from the fuel aboard now, so a scoop on the way moves it. {hops, whole}: whole when every hop goes. None
+        when nothing can be claimed: the fuel model not complete, no fuel or cargo reading, every one of more than
+        FUEL_RUN_MAX_HOPS hops looked at going, or the first hop the fuel fails out of the drive's reach at any fuel level
+        (a range matter, not fuel)."""
+        now, tank = self.fuel_now(), (self.journals.ship or {}).get("fuel_main")
+        if not now or not lys:
+            return None
+        model, fuel, cargo = now
+        if not model.get("max_fuel") or not model.get("power"):
+            return None   # the fuel model is not complete yet (model["need"] > 0): nothing to claim
+        other = cargo + (self.shown_status().get("fuel_reservoir") or 0)
+        boost = (self.journals.boost or {}).get("value") or 1
+        hops = [(d, boost if k == 0 else 1) for k, d in enumerate(lys[:FUEL_RUN_MAX_HOPS])]
+        ran = fuel_run(model, fuel, other, hops)
+        if ran is None:
+            return None
+        k = ran[0]
+        if k == len(hops):
+            return {"hops": k, "whole": True} if len(lys) <= FUEL_RUN_MAX_HOPS else None
+        d, mult = hops[k]
+        mf = min(model["max_fuel"], tank or model["max_fuel"])
+        if d / mult > fsd_range(model, model["unladen"] + other + mf, mf) + 1e-6:
+            return None   # too long at any fuel level: not the tank's doing
+        return {"hops": k, "whole": False}
 
     def spansh_knows(self, id64):
         """Whether Spansh has a record of this system: True; False when it was asked and has none (the Nearby search

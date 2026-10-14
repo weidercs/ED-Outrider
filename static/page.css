@@ -740,7 +740,10 @@ tr.nextstop td.name::after { content: " ⚑ next stop"; color: var(--info); font
 
 #routeStrip { margin-top: 4px; font-size: 13px; } #routeStrip:empty { display: none; }
 #routeStrip .hops { display: inline-flex; flex-wrap: wrap; gap: 2px; vertical-align: middle; margin-left: 6px; }
-#routeStrip .hop { font-family: ui-monospace, monospace; font-size: 11px; padding: 0 4px; border-radius: 3px; border: 1px solid var(--line); cursor: help; }
+#routeStrip .hop { font-family: ui-monospace, monospace; font-size: 11px; padding: 0 4px; border-radius: 3px; border: 1px solid var(--line); cursor: copy; }
+/* how far the fuel in the tank goes without scooping: a bar after the last hop it makes; ⛽✓ when it makes them all */
+#routeStrip .freach { font-size: 11px; padding-left: 3px; border-left: 2px solid var(--warn); cursor: help; }
+#routeStrip .freach.whole, #routeStrip .freach.past { border-left: 0; padding-left: 0; }
 #routeStrip .hop.sc { color: var(--good); border-color: color-mix(in srgb, var(--good) 50%, transparent); }
 #routeStrip .hop.dry { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 50%, transparent); }
 #routeStrip .hop.vis { opacity: .5; }
