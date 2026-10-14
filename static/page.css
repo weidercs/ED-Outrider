@@ -468,6 +468,8 @@ h3.subhead { font-size: 13px; font-weight: 600; color: var(--muted); text-transf
 /* green: enough, ready, yours; red: short, expired (the Materials tab's colours) */
 #cmdrView .ok { color: var(--good); } #cmdrView .short { color: var(--bad); }
 #cmdrView .cmhot { color: var(--bad); font-weight: 700; cursor: help; }   /* hot (wanted): a red ⚖, every theme's own red */
+#cmdrView .cmlinks { font-size: 0.85em; white-space: nowrap; margin-left: 0.3em; }   /* a ship's EDSY ↗ / Coriolis ↗ */
+#cmdrView .cmlinks.unk { cursor: help; }
 .cmtable { width: 100%; border-collapse: collapse; margin-top: 4px; } .cmtable td, .cmtable th { padding: 4px 10px 4px 0; text-align: left; vertical-align: top; }
 .cmtable th { color: var(--muted); font-weight: 600; } .cmtable .num { text-align: right; white-space: nowrap; } .cmtable td { border-top: 1px solid var(--line); }
 .cmcount { color: var(--muted); font-weight: 400; } .cmcls { color: var(--muted); font-variant-numeric: tabular-nums; }

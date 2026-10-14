@@ -7943,12 +7943,14 @@ const releasePayloads = async () => {
                     {key: "Explore", title: "Exploration", rank: 11, name: "Elite III", progress: 10, next: "Elite IV", to_next: 4000000000, uncertain: true, earned_by: "x"},
                     {key: "Federation", title: "Federal Navy", rank: 14, name: "Admiral", progress: null, next: null, to_next: null, earned_by: null}],
             reputation: {Federation: -40, Empire: 76.5}, assets: {wealth: 9000000000, ships: 2, fleet: 250000000, modules: 5139353},
-            fleet: [{id: 7, type: "krait_light", name: "Sample Ship", current: true, value: 100000000, hot: true},
+            fleet: [{id: 7, type: "krait_light", name: "Sample Ship", current: true, value: 100000000, hot: true,
+                     links: {edsy: "https://edsy.org/#/I=H4sIAAAAAAAC_6tW%3D%3D", coriolis: 'https://coriolis.io/import?data="><b>x</b>'}},
                     {id: 5, type: "anaconda", type_name: "Anaconda", name: null, current: false, system: "Colonia", station: null, value: 150000000}],
             career: [{label: "Time played", value: 7200000, kind: "time"}, {label: "Distance jumped", value: 987654, kind: "ly"},
                      {label: "Spent on ships", value: 500000000, kind: "cr"}, {label: "Systems visited", value: 12345, kind: "n"}]}},
           inventory: {ships: {ts: "2026-10-12T09:01:00Z", here: {system: "Sol", station: "Old Port"}, ships: [
-              {id: 7, type: "krait_light", name: "Sample Ship", ident: "SP-01", current: true, value: 100000000, hot: true},
+              {id: 7, type: "krait_light", name: "Sample Ship", ident: "SP-01", current: true, value: 100000000, hot: true,
+               links: {edsy: "https://edsy.org/#/I=H4sIAAAAAAAC_6tW%3D%3D", coriolis: "https://coriolis.io/import?data=H4sIAAAAAAAC_6tW%3D%3D"}},
               {id: 5, type: "anaconda", type_name: "Anaconda", name: null, current: false, system: "Colonia", station: null, value: 150000000, hot: true,
                transfer_cost: 1234567, transfer_s: 7200, in_transit: false}]},
             modules: {ts: "2026-10-12T09:02:00Z", changed: "2026-10-12T10:30:00Z", modules: [{name: "Frame Shift Drive", size: 5, rating: "A", mount: null, system: "Sol", blueprint: "Long Range",
@@ -8008,9 +8010,16 @@ const releasePayloads = async () => {
       const hot = () => [...body().querySelectorAll(".cmhot")].map(x => [x.closest("tr").cells[0].querySelector("b").textContent, x.title,
                                                                              colour(x) === root("--bad") && !!root("--bad")]);
       got.hotProfile = hot();
+      // 2026-10-14: each ship's build in EDSY and Coriolis (the server's links), a new tab, escaped; none without a Loadout
+      const build = () => [...body().querySelectorAll("table.cmtable tbody tr")].filter(t => t.querySelector(".cmlinks")).map(t => {
+        const l = t.querySelector(".cmlinks");
+        return [t.cells[0].querySelector("b").textContent, [...l.querySelectorAll("a")].map(a => [a.textContent, a.getAttribute("href"), a.target, a.rel].join(" ")),
+                l.classList.contains("unk") ? l.title : ""]; });
+      got.buildProfile = [build(), !body().querySelector(".cmlinks b")];
       await tab("inventory");
       got.inventory = rows();
       got.hotInventory = hot();
+      got.buildInventory = build();
       got.heads = [...body().querySelectorAll("h3.subhead")].map(text);
       got.locker = [...body().querySelectorAll(".cmitem")].map(text);
       got.noTags = !body().querySelector("table i, table u");
@@ -8093,15 +8102,21 @@ const releasePayloads = async () => {
       profile: ["CMDR Tester · Sample Wing · pledged to Aisling Duval, rank NaN, 4,500 merits as of 2026-10-12 08:00",
                 ["Exobiology | Geneticist | 64% | next: Elite in about 1.59B cr", "Combat | Expert | 0% | next: Master",
                  "Exploration | Elite III | 10% | next: Elite IV in about 4.00B cr (uncertain)", "Federal Navy | Admiral |  | the top",
-                 "Sample Ship Krait Phantom ⚖\uFE0E | you fly it | 100.0M cr", "Anaconda | Colonia | 150.0M cr"],
+                 "Sample Ship Krait Phantom ⚖\uFE0E EDSY ↗ Coriolis ↗ | you fly it | 100.0M cr", "Anaconda no build | Colonia | 150.0M cr"],
                 ["Credits≈ 1.30B cr", "Net worth9.00B cr", "Fleet250.0M cr · 2 ships", "Stored modules5.1M cr", "Carrier balance250.0M cr",
                  "Time played2,000 h", "Distance jumped987,654 ly", "Spent on ships500.0M cr", "Systems visited12,345"],
                 ["Reputation: Federation -40% · Empire 77%", "Fleet carrier: SAMPLE CARRIER X1X-X1X · balance 250.0M · ~12 weeks of upkeep · 800 t tritium (the Carrier tile's figures)"],
                 ["64%", "0%", "10%"], false],
       liveCredits: "≈ 1.40B cr",
-      inventory: ["Sample Ship Krait Phantom SP-01 ⚖\uFE0E | you fly it | 100.0M cr | ", "Anaconda ⚖\uFE0E | Colonia | 150.0M cr | 1.2M cr · 2 h 0 min",
+      inventory: ["Sample Ship Krait Phantom SP-01 ⚖\uFE0E EDSY ↗ Coriolis ↗ | you fly it | 100.0M cr | ", "Anaconda ⚖\uFE0E no build | Colonia | 150.0M cr | 1.2M cr · 2 h 0 min",
                   "5A Frame Shift Drive ⚖\uFE0E | Long Range GNaN | Sol | 5.1M cr | ", "Bio | Artemis Suit G3Increased sprint duration | TK Aphelion G2"],
       hotProfile: [["Sample Ship", "hot: this ship is wanted", true]],
+      buildProfile: [[["Sample Ship", ["EDSY ↗ https://edsy.org/#/I=H4sIAAAAAAAC_6tW%3D%3D _blank noopener",
+                                       'Coriolis ↗ https://coriolis.io/import?data="><b>x</b> _blank noopener'], ""],
+                      ["Anaconda", [], "no build on record for this ship yet: board it once to record its build"]], true],
+      buildInventory: [["Sample Ship", ["EDSY ↗ https://edsy.org/#/I=H4sIAAAAAAAC_6tW%3D%3D _blank noopener",
+                                        "Coriolis ↗ https://coriolis.io/import?data=H4sIAAAAAAAC_6tW%3D%3D _blank noopener"], ""],
+                       ["Anaconda", [], "no build on record for this ship yet: board it once to record its build"]],
       hotInventory: [["Sample Ship", "hot: this ship is wanted", true], ["Anaconda", "hot: this ship is wanted", true],
                      ["Frame Shift Drive", "hot: this module is wanted", true]],
       heads: ["Ships 2 as of 2026-10-12 09:01", "Stored modules 1 as of 2026-10-12 10:30", "Ship locker as of 2026-10-12 09:03", "Suit loadouts 1"],

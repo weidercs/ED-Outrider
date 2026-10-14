@@ -442,11 +442,13 @@ and Engineering's filter sit above the list:
   bar to the next one and, for exobiology, about how many credits it still takes (the community's figures for each
   rank's step, times the share your game says is left: an estimate; Elite IV and V are marked uncertain);
   reputation, Powerplay and squadron; your ships (a red ⚖ beside one the game marks hot: wanted, the one you fly
-  included); and career figures (time played, systems visited, distance,
+  included; **EDSY ↗** and **Coriolis ↗** open that ship's build in the ship designer, in a new tab, as the game last
+  described it when you flew it; a ship you have not boarded since your journals begin says "no build"); and career figures (time played, systems visited, distance,
   profits by career; **History ›** opens History at its Career row, the game's statistics beside your sessions).
 - **Inventory**: your ships (where each is, its value, what bringing it here costs), your stored modules with their
   engineering, the ship locker, and your suit loadouts. The game writes the list of stored ships when you open a
   shipyard: ships bought, sold, swapped, sent for or renamed since are followed, and each ship's value is its latest.
+  Each ship has the same EDSY ↗ and Coriolis ↗ links as on the CMDR tab (in the Android app they open in your browser).
   Stored modules are as outfitting last listed them, with the modules stored, taken back, sent for or sold from
   storage since (one stored since shows its value once outfitting lists it again; one sent for is in transit until
   it arrives). A red ⚖ marks a ship or module the game says is hot (wanted). The ship locker is as the game last wrote it, in the journal or in

@@ -10148,6 +10148,12 @@ const cmRefined = (ship, srv) => (ship || !srv ? `<b>${cmNum(ship)} t</b>` : "")
   (srv ? `${ship ? " + " : ""}<span class="unk" title="refined by the SRV (surface mining), apart from the ship's">${cmNum(srv)} t SRV</span>` : "");
 // the game marks a ship (or a module) hot: wanted. The same red ⚖ beside the ship you fly, a stored ship or module
 const cmHot = (x, what = "ship") => x && x.hot ? ` <span class="cmhot" title="hot: this ${what} is wanted">⚖&#xFE0E;</span>` : "";
+// a ship's build opened in EDSY or Coriolis (the server's links: outrider/shipyard_links.py, from its latest Loadout);
+// a ship never boarded since the journals begin has none. A new tab (the Android app opens it in the browser)
+const cmBuild = x => x.links && x.links.edsy && x.links.coriolis
+  ? ` <span class="cmlinks"><a href="${esc(x.links.edsy)}" target="_blank" rel="noopener" title="this ship's build in EDSY, the ship designer: from its latest Loadout">EDSY ↗</a>` +
+    ` <a href="${esc(x.links.coriolis)}" target="_blank" rel="noopener" title="this ship's build in Coriolis, the ship designer: from its latest Loadout">Coriolis ↗</a></span>`
+  : ` <span class="cmlinks unk" title="no build on record for this ship yet: board it once to record its build">no build</span>`;
 const cmTile = (k, v, title = "") => v == null || v === "" ? "" : `<span class="cmfig"${title ? ` title="${esc(title)}"` : ""}><span class="unk">${k}</span><b>${v}</b></span>`;
 
 // your fleet carrier as the Carrier tile has it (State.carrier_summary): its balance and weeks of upkeep, or its
@@ -10174,7 +10180,7 @@ function cmdrProfileHtml(d) {
     `${r.to_next != null ? ` <span title="an estimate: about this much more ${esc(r.earned_by || "")}: the rank's step by the community's post-Update-14 table (the Frontier forum, 2 Jan 2023) times the share your game says is still to go${r.uncertain ? ". This step's figure is itself an estimate" : ""}">in about <b>${esc(credits(r.to_next))} cr</b>${r.uncertain ? ` <span class="unk">(uncertain)</span>` : ""}</span>` : ""}</td></tr>`;
   const rep = Object.entries(p.reputation || {}).map(([k, v]) => `${esc(k)} <b class="${v >= 35 ? "ok" : v <= -35 ? "short" : ""}">${Math.round(v)}%</b>`).join(" · ");
   const ship = x => { const label = shipLabel(x.name, x.type), type = x.type_name || shipLabel(null, x.type);
-    return `<tr><td><b>${esc(label)}</b>${type !== label ? ` <span class="unk">${esc(type)}</span>` : ""}${cmHot(x)}</td>` +
+    return `<tr><td><b>${esc(label)}</b>${type !== label ? ` <span class="unk">${esc(type)}</span>` : ""}${cmHot(x)}${cmBuild(x)}</td>` +
       `<td>${x.current ? `<span class="ok">you fly it</span>` : x.in_transit ? `<span class="warnc">in transit</span>` : esc([x.system, x.station].filter(Boolean).join(" · ") || "?")}</td>` +
       `<td class="num">${cmCr(x.value)}</td></tr>`; };
   const fig = c => c.kind === "cr" ? `${esc(credits(c.value))} cr` : c.kind === "ly" ? `${cmNum(Math.round(c.value))} ly`
@@ -10209,7 +10215,7 @@ function cmdrInventoryHtml(d) {
       : esc([x.system, x.station].filter(Boolean).join(" · ") || "?");
     const move = x.transfer_cost ? `${cmCr(x.transfer_cost)}${x.transfer_s ? ` · ${cmSpan(x.transfer_s)}` : ""}` : "";
     return `<tr><td><b>${esc(label)}</b>${type !== label ? ` <span class="unk">${esc(type)}</span>` : ""}${x.ident ? ` <span class="unk">${esc(x.ident)}</span>` : ""}` +
-      `${cmHot(x)}</td><td>${where}</td><td class="num">${cmCr(x.value)}</td><td class="num">${move}</td></tr>`;
+      `${cmHot(x)}${cmBuild(x)}</td><td>${where}</td><td class="num">${cmCr(x.value)}</td><td class="num">${move}</td></tr>`;
   };
   const modRow = x => `<tr><td><span class="cmcls">${cmCls(x)}</span> <b>${esc(x.name)}</b>${x.mount ? ` <span class="unk">${esc(x.mount)}</span>` : ""}` +
     `${cmHot(x, "module")}</td>` +

@@ -15,7 +15,7 @@ import os
 import re
 import time
 
-from . import RESOURCES_DIR, materials
+from . import RESOURCES_DIR, materials, shipyard_links
 from .core import iso_ts, ts_seconds
 
 BLUEPRINTS_FILE = os.path.join(RESOURCES_DIR, "blueprints.json")
@@ -195,19 +195,28 @@ def fleet_apply(state, ev, here=None):
 
 def ships(fleet, loadouts=(), now=None):
     """Your ships: the one you fly (the newest Loadout: loadouts are fleet_loadouts' rows {ship_id, name, ship_type,
-    ident, ts, value}, the newest first) and those stored (fleet_apply's), each worth its newest figure (a Loadout newer
-    than the list gives it). {ts (of the last list), here (where it was made), ships: [...]}."""
+    ident, ts, value, loadout}, the newest first) and those stored (fleet_apply's), each worth its newest figure (a
+    Loadout newer than the list gives it), each with `links` {edsy, coriolis}: its latest Loadout's build
+    (shipyard_links), None for a ship never boarded since the journals begin. {ts (of the last list), here (where it
+    was made), ships: [...]}."""
     now = time.time() if now is None else now
     fleet = fleet or {"listed": None, "ships": {}}
     hot = fleet.get("hot") or {}   # fleet_apply's: the latest the game said of each ship, the one you fly too
     worth = {r["ship_id"]: r for r in loadouts if r.get("value")}
+    builds = {r["ship_id"]: r["loadout"] for r in loadouts if r.get("loadout")}
+
+    def links(sid):
+        try:
+            return shipyard_links.links(json.loads(builds[sid])) if sid in builds else None
+        except ValueError:
+            return None
     cur = loadouts[0] if loadouts else None
     rows = []
     if cur:
         rows.append({"id": cur["ship_id"], "type": cur["ship_type"], "name": cur["name"] or None, "ident": cur["ident"] or None,
                      "current": True, "system": None, "station": None, "value": cur.get("value") or None,
                      "hot": bool(hot.get(str(cur["ship_id"]))),
-                     "transfer_cost": None, "transfer_s": None, "in_transit": False})
+                     "transfer_cost": None, "transfer_s": None, "in_transit": False, "links": links(cur["ship_id"])})
     for s in fleet["ships"].values():
         if cur and s["id"] == cur["ship_id"]:
             continue
@@ -217,7 +226,7 @@ def ships(fleet, loadouts=(), now=None):
         rows.append({"id": s["id"], "type": s.get("type"), "type_name": s.get("type_name"), "name": s.get("name"),
                      "ident": s.get("ident"), "current": False, "system": s.get("system"), "station": s.get("station"),
                      "value": value, "hot": bool(hot.get(str(s["id"]), s.get("hot"))), "transfer_cost": s.get("transfer_cost"),
-                     "transfer_s": s.get("transfer_s"), "in_transit": bool(arriving)})
+                     "transfer_s": s.get("transfer_s"), "in_transit": bool(arriving), "links": links(s["id"])})
     listed = fleet.get("listed")
     return {"ts": listed and listed["ts"], "ships": rows,
             "here": {"system": listed["system"], "station": listed["station"]} if listed else None}

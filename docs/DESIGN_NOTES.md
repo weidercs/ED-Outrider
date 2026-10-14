@@ -21,6 +21,19 @@ upstream project's choices, not rules of the game.
   deaths, sales; `mark()`), the system's `locate` answer changes (its region decides "new to your codex") or the bio
   rules are updated (`bio_rules_gen`); not on `scan_version`, which moves later in the tick. The carrier's fold is
   kept until its own history changes (`carrier_version`), not on every change to the ship's hold.
+- **A ship's build in EDSY and Coriolis** (2026-10-14, `outrider/shipyard_links.py`): EDMC's format, matched step by
+  step from its `plugins/edsy.py`, `plugins/coriolis.py` and `plugins/common_coreutils.py` (`shipyard_url_common`),
+  nothing copied: the Loadout reshaped as EDMC's `monitor.ship()` (canonical lower-case names, modules one per slot in
+  its order, no Health or Value, a laser's 1/1 ammo dropped, a blank ShipName left out, the hull's figures left out),
+  then compact JSON with sorted keys, gzip, URL-safe base64, '=' as `%3D`. Two differences, both on purpose: the build
+  is stamped with the Loadout's own time, not the moment of the click, and the gzip header's time is 0, so one build
+  always gives the same link (tests pin it). The links are built on the server from each ship's latest Loadout, kept
+  whole in `fleet_loadouts.loadout` (journal-derived: the release's one re-read fills it, PARSER_VERSION stays 51); a
+  ship never boarded since the journals begin has none, as nothing records its modules. Privacy differs by site:
+  **EDSY's link keeps the build in the URL's fragment** (after `#`: the browser never sends it to a server; EDSY's
+  page reads it), **Coriolis's sends it as a query parameter** (`/import?data=`: it reaches coriolis.io with the page
+  request, as with EDMC). Either way only the ship's modules and engineering go, never the commander's name. In the
+  Android app a `target="_blank"` link opens in the browser (its WebView hands every other-origin navigation over).
 - **The Commander view is journal-derived** (2026-10-12, `outrider/commander.py`; read from the database since
   2026-10-14, PARSER_VERSION 51). `Journals.handle_commander` folds its lines as the reader meets them, like every other
   part: meta keys (`COMMANDER_META`: reputation, Powerplay, squadron, the stored ships, stored modules, ship locker,

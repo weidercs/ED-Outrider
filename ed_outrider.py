@@ -1346,7 +1346,8 @@ PARSER_VERSION = 51
 # 51: the Commander view reads the database (outrider/commander.py's folds: meta reputation, powerplay, squadron,
 #     stored_ships, stored_modules, ship_locker, suit_loadouts, engineers, missions; play_activity per login), the
 #     statistics keep the career's sections, and fleet_loadouts each ship's value; still unreleased, so not bumped again
-#     for the ships' hot flags (Loadout folded too) and the modules stored, taken, sent for or sold between two lists
+#     for the ships' hot flags (Loadout folded too), the modules stored, taken, sent for or sold between two lists, and
+#     fleet_loadouts' loadout (each ship's latest Loadout line whole: the CMDR tab's EDSY and Coriolis links)
 # 50: your carrier's movements and tritium deposits are kept (cargo_events: its measured jumps scale the tritium
 #     formula, S13 B); each Synthesis's recipe is kept (materials' recipes, S15); CarrierCrewServices, stored since the
 #     last version without a re-read, comes back from the older journals too
@@ -1359,8 +1360,9 @@ PARSER_VERSION = 51
 # Why each version reads the journals again, in the player's words: said at the start that re-reads (reread_message).
 # Every bump adds its line here too (a test checks PARSER_VERSION has one).
 PARSER_CHANGES = {
-    51: "the Commander tab's ships, modules, locker, suit loadouts, engineers, missions and combat and mining sessions are "
-        "kept from your journals, all of them, instead of read from the last weeks' files each time",
+    51: "the Commander tab's ships (each with its build, for its EDSY and Coriolis links), modules, locker, suit loadouts, "
+        "engineers, missions and combat and mining sessions are kept from your journals, all of them, instead of read from "
+        "the last weeks' files each time",
     50: "your carrier's jumps and tritium deposits are kept (its own jumps check the tritium formula), the recipes you "
         "have synthesised, and the carrier's services switched on, off or suspended",
     49: "named listening posts are kept, and two in one system count as two",
@@ -1643,10 +1645,11 @@ CREATE TABLE IF NOT EXISTS bookmarks (
     id64 INTEGER PRIMARY KEY, name TEXT, x REAL, y REAL, z REAL, note TEXT, created_ts TEXT);
 -- Every ship you have flown, as its latest Loadout (one row per ShipID, an older Loadout read later never replaces a
 -- newer one): the Highway's ship list and the exact plotter's inputs. figures: JSON from fleet_figures (drive, masses,
--- tanks, booster, range); value: HullValue + ModulesValue (the Commander view's fleet). Journal-derived:
+-- tanks, booster, range); value: HullValue + ModulesValue (the Commander view's fleet); loadout: the Loadout line
+-- itself, as JSON (the CMDR tab's EDSY and Coriolis links, outrider/shipyard_links.py). Journal-derived:
 -- RESET_JOURNAL_DATA clears it and the re-read rebuilds it.
 CREATE TABLE IF NOT EXISTS fleet_loadouts (
-    ship_id INTEGER PRIMARY KEY, name TEXT, ship_type TEXT, ident TEXT, ts TEXT, figures TEXT, value INTEGER);
+    ship_id INTEGER PRIMARY KEY, name TEXT, ship_type TEXT, ident TEXT, ts TEXT, figures TEXT, value INTEGER, loadout TEXT);
 -- The Commander view's sessions (outrider/commander.py): one row per login (LoadGame, as the logins table), with the
 -- commander and ship it names, and JSON counts of the fighting and mining between it and the next login
 -- (commander.activity_apply; NULL until there was some). Journal-derived: cleared by RESET_JOURNAL_DATA.
@@ -2614,17 +2617,21 @@ class Journals:
         meta_set(self.db, "modules", self.modules)
 
     def note_fleet(self, ev, ts):
-        """A Loadout: that ship's row in fleet_loadouts (the Highway's ship list), unless a newer Loadout is kept."""
+        """A Loadout: that ship's row in fleet_loadouts (the Highway's ship list, the CMDR tab's fleet and its EDSY and
+        Coriolis links: the line itself is kept whole), unless a newer Loadout is kept (the row's own ts guards it as
+        fresh() guards meta: a legacy folder read late never puts back an older build)."""
         sid = ev.get("ShipID")
         if sid is None or not ev.get("Ship") or not_a_ship(ev.get("Ship")):
             return
         value = (ev.get("HullValue") or 0) + (ev.get("ModulesValue") or 0) or None
-        self.db.execute("""INSERT INTO fleet_loadouts (ship_id, name, ship_type, ident, ts, figures, value) VALUES (?, ?, ?, ?, ?, ?, ?)
+        self.db.execute("""INSERT INTO fleet_loadouts (ship_id, name, ship_type, ident, ts, figures, value, loadout)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                            ON CONFLICT(ship_id) DO UPDATE SET name=excluded.name, ship_type=excluded.ship_type,
-                             ident=excluded.ident, ts=excluded.ts, figures=excluded.figures, value=excluded.value
+                             ident=excluded.ident, ts=excluded.ts, figures=excluded.figures, value=excluded.value,
+                             loadout=excluded.loadout
                            WHERE excluded.ts >= fleet_loadouts.ts""",
                         (sid, ev.get("ShipName") or None, ev.get("Ship"), ev.get("ShipIdent") or None, ts,
-                         json.dumps(fleet_figures(ev)), value))
+                         json.dumps(fleet_figures(ev)), value, json.dumps(ev, ensure_ascii=False)))
 
     def highway_route(self, hw):
         """The active route's rows (cached per plot: a new plot has a new id)."""
@@ -8751,9 +8758,10 @@ class State:
     # Each a quick read on the event loop: the folds are in memory (Journals.cmdr_view), the rest small tables
 
     def commander_fleet(self):
-        """Your ships: the stored ones (the fold) and the one you fly, each worth its latest Loadout (fleet_loadouts)."""
+        """Your ships: the stored ones (the fold) and the one you fly, each worth its latest Loadout (fleet_loadouts),
+        with that Loadout's EDSY and Coriolis links."""
         rows = [dict(r) for r in self.db.execute(
-            "SELECT ship_id, name, ship_type, ident, ts, value FROM fleet_loadouts ORDER BY ts DESC")]
+            "SELECT ship_id, name, ship_type, ident, ts, value, loadout FROM fleet_loadouts ORDER BY ts DESC")]
         return outrider.commander.ships(self.journals.cmdr_view.get("stored_ships"), rows)
 
     def commander_profile(self):

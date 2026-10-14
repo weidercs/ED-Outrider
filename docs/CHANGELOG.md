@@ -2,6 +2,28 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · CMDR tab: each ship's build in EDSY and Coriolis
+The author's request of 2026-10-14.
+- **EDSY ↗ and Coriolis ↗** beside each ship in the CMDR tab's Fleet (the ship you fly included) and Inventory's
+  Ships: they open the ship designer in a new tab with that ship's exact build loaded (in the Android app, in the
+  browser, as the page's other outside links). A ship not boarded since the journals begin says "no build", titled
+  "board it once to record its build".
+- **Each ship's latest Loadout kept whole**: `fleet_loadouts` has a `loadout` column (the line as JSON), filled by the
+  same Loadout handling and guarded the same way (an older Loadout read later changes nothing); journal-derived, in
+  `RESET_JOURNAL_DATA` with the rest of the row. PARSER_VERSION stays 51: it is unreleased, and the release's one
+  re-read fills the column (its re-read reason now names the builds).
+- **The links built on the server** (`outrider/shipyard_links.py`, pure), in the format EDMC uses: EDMC's own plugins
+  (plugins/edsy.py, plugins/coriolis.py and common_coreutils.py's `shipyard_url_common`, EDMarketConnector, read on
+  2026-10-14) were the reference, matched step by step, nothing copied. The Loadout reshaped as EDMC's
+  `monitor.ship()` does, then compact sorted JSON, gzip, URL-safe base64 with '=' as `%3D`; the gzip header's time is
+  0 and the build keeps the Loadout's own timestamp, so a build always gives the same link. EDSY's link keeps the
+  build in the URL's fragment (never sent to a server), Coriolis's sends it as a query parameter (DESIGN_NOTES).
+- Tests (`tests/test_shipyard_links.py`): a real Loadout from the author's journals, both links decoded (base64url,
+  gunzip, JSON) back to it as EDMC shapes it, EDMC's reshaping (lasers' ammo, symbols, blank names, slot order), the
+  fixed gzip header, the line kept whole and the older one ignored, a ship never boarded without links, an older
+  database given the column; smoke: the links in the Fleet and Ships lists (new tab, escaped, "no build" titled).
+  Docs: the views guide's CMDR section, DESIGN_NOTES, AGENT_GUIDE, for-developers.
+
 ## 2026-10-14 · HTTPS: the system's certificates plus certifi's, and a plain certificate error
 Reported by Aerics84, issue #9: on Windows every lookup failed with `CERTIFICATE_VERIFY_FAILED … certificate has
 expired` for spansh.co.uk. Python verifies against the Windows store, which fetches a new root only when something asks
