@@ -6567,6 +6567,13 @@ const releasePayloads = async () => {
         total: 312, counts: {stored: 200}, why: "203 EDSM refused the commander name or API key"}});
       uploadsDrawn = ""; renderUploads();
       o.held = [!!q('[data-bfact="resume"]'), !!q('[data-bfact="stop"]')];
+      // a Check waiting to ask EDSM again (its retries can take 20 min): said on its line, with a Stop of its own
+      data.uploads.edsm.backfill = Object.assign({}, data.uploads.edsm.backfill, {progress: null, job: {kind: "check", state: "running", at: 3,
+        text: "EDSM not answering: trying again at 21:30 (attempt 2 of 6)…"}});
+      uploadsDrawn = ""; renderUploads();
+      const jl = [...box.querySelectorAll(".bfill .hint")].find(h => h.textContent.includes("not answering"));
+      o.jobWait = [!!jl && /^… .*EDSM not answering: trying again at 21:30 \\(attempt 2 of 6\\)… Stop$/.test(jl.textContent.trim()),
+                   !!(jl && jl.querySelector('[data-bfact="stop"]')), q('[data-bfact="check"]').disabled];
       BF.open = false; data.uploads = window.__u2; uploadsDrawn = ""; renderUploads();
       return JSON.stringify(o); })()`)));
     got.posted = posted.map(b => [b.action, b.commander, b.start, b.end]);
@@ -6576,13 +6583,13 @@ const releasePayloads = async () => {
                   rowsWithMarks: 1, hiddenOff: true, shownOn: true, dim: true, saved: true, unsentAsked: true, undim: false,
                   filled: ["2026-10-09 21:14:06", "2026-10-11 08:00:00"], sendOff: true, jobLine: true, sendOn: true,
                   progress: "Sending 200 of 312 (2026-10-09 21:14:06 to 2026-10-11 08:00:00, CMDR Sample Pilot): 200 stored Stop", stop: true, checkOff: true,
-                  paused: true, held: [true, true],
+                  paused: true, held: [true, true], jobWait: [true, true, true],
                   posted: [["preview", "Sample Pilot", "2026-10-09 21:14:06", "2026-10-11 08:00:00"], ["send", "Sample Pilot", "2026-10-09 21:14:06", "2026-10-11 08:00:00"]],
                   asks: ["Send 312 events to EDSM for CMDR Sample "]};
     const good = Object.keys(want).every(k => JSON.stringify(got[k]) === JSON.stringify(want[k])) && /^0 not sent/.test(got.status) &&
       got.preview.startsWith("Preview 2026-10-09 21:14:06 to 2026-10-11 08:00:00 UTC: 312 events (41 jumps) in 2 requests, about 30 s") && errors.length === before;
     allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| upload marks and EDSM backfill |", good ? "✓ / ✗ marks with their reason, not sent, Check fills the range, Preview then Send, Stop and Go on" : JSON.stringify(got), errors.slice(before));
+    console.log(good ? "OK" : "FAIL", "| upload marks and EDSM backfill |", good ? "✓ / ✗ marks with their reason, not sent, Check fills the range, Preview then Send, Stop and Go on, a Check's retry and its Stop" : JSON.stringify(got), errors.slice(before));
     await releasePayloads();
   }
   // S67 (batch 15): Settings -> Uploads' Import your EDSM flight log (Import posts the CMDR; while it runs, its week and

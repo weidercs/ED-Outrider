@@ -16,6 +16,7 @@ import unittest.mock
 from support import ed_outrider, _HwSession  # also puts the repository root on sys.path
 import outrider.backfill as BF  # noqa: E402
 import outrider.edsm as E  # noqa: E402
+import outrider.readclient as RC  # noqa: E402
 import outrider.uploads as U  # noqa: E402
 from outrider.core import iso_ts  # noqa: E402
 
@@ -150,8 +151,16 @@ class Server(unittest.TestCase):
         self.addCleanup(shutil.rmtree, cfg)
         self.state.config_path = os.path.join(cfg, "ed_outrider.toml")
         self.state.set_edsm_account("Sample Pilot", "Sample EDSM", KEY)
-        self.printed = []
+        self.printed, self.slept, self.hang = [], [], False
         p = unittest.mock.patch("builtins.print", lambda *a, **k: self.printed.append(" ".join(map(str, a))))
+        p.start()
+        self.addCleanup(p.stop)
+
+        async def no_wait(seconds):   # readclient.retrying's waits: kept with the job's line meanwhile, never slept
+            self.slept.append((seconds, (self.state.edsm_bf_job or {}).get("text")))
+            if self.hang:
+                await asyncio.Event().wait()   # until Stop cancels it
+        p = unittest.mock.patch.object(RC, "_sleep", no_wait)
         p.start()
         self.addCleanup(p.stop)
         with open(os.path.join(self.live, "Journal.2026-10-01T120000.01.log"), "w", encoding="utf-8") as f:
@@ -216,12 +225,40 @@ class Server(unittest.TestCase):
 
     def test_check_failures_say_the_kind_only(self):
         self.post([ConnectionRefusedError(f"https://www.edsm.net/x?apiKey={KEY}")], {"action": "check", "commander": "Sample Pilot"})
-        self.assertEqual(self.state.edsm_bf_job["text"], "Couldn't reach EDSM: the connection was refused")
+        self.assertEqual(self.state.edsm_bf_job["text"], "Couldn't reach EDSM: the connection was refused (tried 6 times)")
+        self.assertEqual([s for s, _ in self.slept], [30, 60, 120, 300, 600])   # asked again, then it stops
+        self.slept.clear()
         self.post([(200, EX["edsm_credits_wrong"])], {"action": "check", "commander": "Sample Pilot"})
         self.assertEqual(self.state.edsm_bf_job["text"], "EDSM: 203 commander name or API key not found")
+        self.assertEqual((len(self.state.upload_session.calls), self.slept), (1, []))   # a refusal: at once
         [(status, j)] = self.post([(200, {})], {"action": "check", "commander": "Nobody"})
         self.assertEqual(status, 400)                            # no key stored for that commander
         self.assertFalse([p for p in self.printed if KEY in p])
+
+    def test_check_and_guard_ride_out_a_failure_that_passes(self):
+        """S47's reads are asked again after a timeout or a 5xx (the job's line says when) instead of failing at once;
+        reads only, so nothing a retry repeats was stored."""
+        ed_outrider.meta_set(self.db, "edsm_since", at(45))
+        pos = dict(EX["edsm_position_ok"], date="2026-10-01 12:10:00")
+        self.post([asyncio.TimeoutError(), (502, {}), (200, pos)], {"action": "check", "commander": "Sample Pilot"})
+        job = self.state.edsm_bf_job
+        self.assertEqual((job["state"], job["result"]["start"]), ("done", "2026-10-01T12:10:01Z"))
+        self.assertEqual([s for s, _ in self.slept], [30, 60])
+        self.assertRegex(self.slept[0][1], r"^EDSM not answering: trying again at \d\d:\d\d \(attempt 2 of 6\)…$")
+        self.slept.clear()
+        self.post([(200, {})], dict(self.range(), action="preview"))
+        self.post([asyncio.TimeoutError(), (200, self.logs())], dict(self.range(), action="send"))
+        self.assertEqual((self.state.edsm_bf_job["state"], len(self.state.upload_session.calls)), ("done", 2))
+        self.assertEqual(self.queued(), [("edsm_bf", "FSDJump", "queued"), ("edsm_bf", "FSDJump", "queued")])
+        self.assertEqual([s for s, _ in self.slept], [30])
+        self.assertEqual(self.slept[0][1].split(" again at")[0], "EDSM not answering: trying")   # one week: no "week 1 of 1"
+
+    def test_stop_ends_a_check_waiting_to_ask_again(self):
+        self.hang = True
+        [(s1, _), (s2, j)] = self.post([asyncio.TimeoutError()], {"action": "check", "commander": "Sample Pilot"},
+                                       {"action": "stop"}, wait=False)
+        self.assertEqual((s1, s2, j["job"]["state"], j["job"]["text"]), (202, 200, "failed", "stopped by you"))
+        self.assertIsNone(self.state.edsm_backfill())                  # no backfill was under way
 
     def range(self, **kw):
         return dict({"commander": "Sample Pilot", "start": "2026-10-01 12:20", "end": "2026-10-01 12:45"}, **kw)

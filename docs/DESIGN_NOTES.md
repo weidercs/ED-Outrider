@@ -709,7 +709,15 @@ upstream project's choices, not rules of the game.
   not kept), never `visit_count`, the left-behind list or the boxel code stats (your scans' figures). One-off: a done
   import refuses another until Remove them; a stopped one goes on from its cursor (meta `edsm_import`). Paced at one
   read every 10 s (`IMPORT_GAP_S`; EDSM limits its API per hour) besides the 2 s gate; a slow-down answer waits
-  `IMPORT_RATE_WAIT_S`. Known limits: every imported commander counts as "you"; an entry EDSM gave no position for is
+  `IMPORT_RATE_WAIT_S`. A failure that passes (a timeout, no connection or DNS, an HTTP 5xx, EDSM's own msgnum 5xx:
+  `readclient.transient`, `try_later`) is asked again for the same week after each of `readclient.RETRY_WAITS_S` (30 s,
+  1, 2, 5, 10 min: about 20 min in all, then "failed" with the reason and "tried 6 times"; Go on resumes from the
+  cursor), because the author's first real import, some 440 weeks, stopped for good at week 203 on a single timeout.
+  A refusal (203, any other msgnum under 500, an HTTP 4xx) or a malformed answer stops at once: waiting cannot fix it.
+  The lookups by name at the end follow the same rule (`readclient.Unreachable` names Spansh or EDSM; a name refused
+  is left unplaced as before). S47's Check and guard ride out the same failures (`State._bf_read`, Stop ends the wait);
+  they are reads, so a retry can repeat nothing EDSM stored. S47's sender is not retried here: `upload_loop` already
+  retries a raised send (`BACKOFF_S`), and EDSM answers 101 for an event it already holds. Known limits: every imported commander counts as "you"; an entry EDSM gave no position for is
   looked up by name afterwards (here, then Spansh, then EDSM; at most 500, `IMPORT_LOOKUP_GAP_S` 3 s between two
   requests and EDSM's through its gate too, so 500 take up to an hour: back to back they were a burst), else counts
   by name only (the boxel lists, Find).

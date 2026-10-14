@@ -10085,7 +10085,8 @@ function backfillHtml(u) {
   out.push(`<div class="bfrow">CMDR <select data-bf="commander">${cmdrs.map(c => `<option${c === BF.commander ? " selected" : ""}>${esc(c)}</option>`).join("")}</select>` +
     ` <button type="button" class="try" data-bfact="check"${busy || running ? " disabled" : ""} title="reads EDSM's flight log (get-position, get-logs): nothing is sent">Check EDSM's log</button></div>`);
   if (job) out.push(`<div class="hint">${job.state === "running" ? "…" : job.state === "failed" ? `<span class="bad">✗</span>` : `<span class="ok">✓</span>`} ` +
-    `${job.at ? upTime(job.at) + " " : ""}${esc(job.text || "")}</div>`);
+    `${job.at ? upTime(job.at) + " " : ""}${esc(job.text || "")}` +
+    `${busy ? ` <button type="button" class="try" data-bfact="stop" title="stop asking EDSM: nothing was sent">Stop</button>` : ""}</div>`);
   out.push(`<div class="bfrow">From <input type="text" data-bf="start" value="${esc(BF.start)}" placeholder="2026-10-09 21:14" spellcheck="false">` +
     ` to <input type="text" data-bf="end" value="${esc(BF.end)}" placeholder="2026-10-11 08:00" spellcheck="false"> UTC` +
     ` <button type="button" class="try" data-bfact="preview"${busy || running ? " disabled" : ""} title="rebuild what Outrider would send for this range from your journals: nothing is sent">Preview</button>` +
@@ -10281,7 +10282,8 @@ document.getElementById("uploadsBox").addEventListener("click", async e => {
   const pv = (((data.uploads || {}).edsm || {}).backfill || {}).preview;
   if (action === "send" && !confirm(`Send ${pv ? upN(pv.summary.events) + " events" : "the previewed events"} to EDSM for CMDR ${BF.commander}, ` +
       `${BF.start} to ${BF.end} UTC? EDSM's flight log is checked over the range first; what EDSM stores cannot be taken back.`)) return;
-  if (action === "stop" && !confirm("Stop the backfill? What still waits is not sent.")) return;
+  const job = ((((data.uploads || {}).edsm || {}).backfill || {}).job || {});
+  if (action === "stop" && job.state !== "running" && !confirm("Stop the backfill? What still waits is not sent.")) return;
   b.disabled = true; BF.note = "";
   try {
     const j = await apiJson("api/uploads/edsm/backfill", {method: "POST", headers: {"Content-Type": "application/json"},

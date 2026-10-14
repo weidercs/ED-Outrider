@@ -2,6 +2,26 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · EDSM flight log import rides out a timeout
+The author's import of his EDSM flight log stopped for good at week 203 of 438: "failed, Couldn't reach EDSM: timeout".
+One timeout ended a walk of over an hour.
+- **Import (S67)**: a week EDSM does not answer (a timeout, no connection, no DNS, an HTTP 5xx, EDSM's own msgnum 5xx)
+  is asked again, the same week, after 30 s, 1, 2, 5 and 10 min (`readclient.RETRY_WAITS_S`, about 20 min), the 10 s
+  pace and the slow-down wait unchanged. The progress says "EDSM not answering: trying week 203 again at 21:30
+  (attempt 2 of 6)". Only then does it stop "failed", the reason ending "(tried 6 times)"; Go on resumes from the
+  cursor. A refused key (203), any other refusal, an HTTP 4xx or a malformed answer still stops at once.
+- **The lookups by name at the end**: the same rule. Spansh or EDSM down past the retries stops the import "failed"
+  ("Couldn't reach Spansh: timeout (tried 6 times)") instead of finishing with the names silently unplaced; Go on looks
+  up the names still without a place.
+- **Backfill (S47)**: the Check and Send's guard had the same weakness (one timeout failed the job): their reads now
+  retry the same way, the job's line saying when, and **Stop** on that line ends the wait. Reads only, so a retry
+  repeats nothing EDSM stored. The sender itself was already retried by the upload loop.
+- `outrider/readclient.py`: `retrying`, `transient`, `try_later` (an EDSM answer saying slow down or failing), `Unreachable`.
+- Tests: a timeout, a 503 and a msgnum 500 then success (the week kept once, the progress during each wait); refused
+  every time (six tries, then failed with the reason); a 203, a malformed answer and a 403 at once; a lookup's timeouts,
+  failed, then Go on finds it; the Check and the guard retrying; Stop during a Check's wait; smoke: the retry line and
+  its Stop.
+
 ## 2026-10-13 · Find a setting keeps the context: whole blocks and whole tables
 The author's report: "crew" showed only the XO's row of the crew table (its description says "crew member"), hiding
 the rest of the table, the switches and the note on the XO.

@@ -6675,6 +6675,7 @@ class State:
         self.edsm_bf_preview = None   # the last Preview: {commander, start, end, rows, summary, files, at} (Send needs it)
         # S67: the import of your EDSM flight log from before your journals (progress in meta edsm_import)
         self.edsm_import_task = None
+        self.edsm_import_waited = False   # a lookup waited to be asked again: the progress says how far it is at once
         self._edsm_counted = (None, None)   # ((cutoff, edsm_seq), outrider.edsmlog.counted): the payload asks often
         self.edsm_seq = 0                   # bumped by every import write and Remove
         self.journal_archive = None   # the backups' journal archive (run(): BACKUP_DIR/journals), read by the backfill
@@ -12285,13 +12286,43 @@ class State:
         self.edsm_bf_job = dict(self.edsm_bf_job or {}, **changes, at=time.time())
         self.bump()
 
+    async def _bf_read(self, url, data, parse, what=None):
+        """One of the Check's or the guard's reads of EDSM (through edsm_gate) -> parse(its answer). A failure that passes
+        (a timeout, no connection, EDSM failing or asking to slow down) is asked again after a growing wait
+        (readclient.retrying, the job's line saying when; Stop ends it); reads only, so a retry stores nothing."""
+        rc, before, waited = outrider.readclient, (self.edsm_bf_job or {}).get("text"), []
+
+        def waiting(attempt, attempts, at, e):
+            waited.append(attempt)
+            when = time.strftime("%H:%M", time.localtime(at))
+            self._bf_job(text=f"EDSM not answering: trying {what + ' ' if what else ''}again at {when} (attempt {attempt} of {attempts})…")
+            print(f"uploads: EDSM flight log read: EDSM not answering ({rc.reach_words(e)}), again at {when} "
+                  f"(attempt {attempt} of {attempts})")
+
+        async def once():
+            return rc.try_later(parse(await rc.fetch(self.upload_session, url, self.edsm_gate, data=data)))
+        got = await rc.retrying(once, waiting)
+        if waited:
+            self._bf_job(text=before)
+        return got
+
+    @staticmethod
+    def _bf_failed(e):
+        """The Check's or the guard's words for a read that failed: EDSM's refusal, or the kind only (an error's text can
+        carry the URL), saying so when it outlasted the retries."""
+        rc = outrider.readclient
+        if isinstance(e, ValueError):
+            return str(e) if str(e).startswith("EDSM:") else "EDSM's answer was not understood"
+        return f"Couldn't reach EDSM: {rc.reach_words(e)}" + (f" (tried {len(rc.RETRY_WAITS_S) + 1} times)" if rc.transient(e) else "")
+
     async def _bf_logs(self, account, start, end):
-        """EDSM's flight log over [start, end) (get-logs, a week per read, paced by edsm_gate): its entries, oldest first.
-        A refusal raises ValueError with EDSM's words."""
+        """EDSM's flight log over [start, end) (get-logs, a week per read, paced by edsm_gate; _bf_read): its entries,
+        oldest first. A refusal raises ValueError with EDSM's words."""
         rc, out = outrider.readclient, []
-        for ws, we in outrider.backfill.windows(start, end, rc.EDSM_LOGS_WINDOW_S):
-            got = rc.edsm_logs_answer(await rc.fetch(self.upload_session, rc.EDSM_LOGS_URL, self.edsm_gate,
-                                                     data=rc.edsm_logs_request(account["name"], account["key"], ws, we)))
+        weeks = outrider.backfill.windows(start, end, rc.EDSM_LOGS_WINDOW_S)
+        for i, (ws, we) in enumerate(weeks):
+            got = await self._bf_read(rc.EDSM_LOGS_URL, rc.edsm_logs_request(account["name"], account["key"], ws, we),
+                                      rc.edsm_logs_answer, f"week {i + 1} of {len(weeks)}" if len(weeks) > 1 else None)
             if not got["ok"]:
                 raise ValueError(f"EDSM: {got['code']} {got['text']}")
             out += [e for e in got["logs"] if start <= ts_seconds(e["date"]) < end]
@@ -12304,9 +12335,15 @@ class State:
     def edsm_backfill_start(self, action, commander, start=None, end=None):
         """POST /api/uploads/edsm/backfill: check (where EDSM's flight log ends: a background read, 202), preview (the
         events of the range rebuilt from the journals: awaited by the route, see edsm_backfill_preview), send (after a
-        Preview of the same range: the guard, then the queue; 202), stop, resume (a held one). (answer, status)."""
+        Preview of the same range: the guard, then the queue; 202), stop (a Check or guard under way, else the backfill),
+        resume (a held one). (answer, status)."""
         commander = str(commander or "").strip()
         if action == "stop":
+            if self.edsm_bf_task is not None and not self.edsm_bf_task.done():   # a Check or the guard (its retries wait)
+                self.edsm_bf_task.cancel()
+                self._bf_job(state="failed", text="stopped by you")
+                print("uploads: EDSM flight log check stopped by you")
+                return self.edsm_backfill_summary(), 200
             return self.edsm_backfill_stop("stopped by you")
         if action == "resume":
             bf = self.edsm_backfill()
@@ -12355,8 +12392,8 @@ class State:
             since, b = None, time.time()
         since = since if isinstance(since, str) else None
         try:
-            pos = rc.edsm_position_answer(await rc.fetch(self.upload_session, rc.EDSM_POSITION_URL, self.edsm_gate,
-                                                         data=rc.edsm_position_request(account["name"], account["key"])))
+            pos = await self._bf_read(rc.EDSM_POSITION_URL, rc.edsm_position_request(account["name"], account["key"]),
+                                      rc.edsm_position_answer)
             if not pos["ok"]:
                 raise ValueError(f"EDSM: {pos['code']} {pos['text']}")
             last = None
@@ -12382,10 +12419,8 @@ class State:
                          result={"log_end": last, "since": since, "jumps": jumps, "start": iso_ts(a) if a else None, "end": iso_ts(b)})
         except asyncio.CancelledError:
             raise
-        except ValueError as e:
-            self._bf_job(state="failed", text=str(e) if str(e).startswith("EDSM:") else "EDSM's answer was not understood")
-        except Exception as e:   # the kind only: an error's text can carry the URL
-            self._bf_job(state="failed", text=f"Couldn't reach EDSM: {rc.reach_words(e)}")
+        except Exception as e:   # noqa: BLE001 -- a refusal, or the kind only
+            self._bf_job(state="failed", text=self._bf_failed(e))
         print(f"uploads: EDSM flight log check for CMDR {commander}: {self.edsm_bf_job['text']}")
 
     async def edsm_backfill_preview(self, commander, start, end):
@@ -12426,8 +12461,9 @@ class State:
     async def _edsm_bf_send(self, pv, account, start, end):
         """S47b's Send: the guard (EDSM's flight log must have nothing in the range: never resend what EDSM has), then
         the Preview's rows queued as service edsm_bf (UNIQUE per source: a second start never doubles) and the progress
-        in meta edsm_backfill; the sender (upload_loop) goes one request every SEND_GAP_S."""
-        rc = outrider.readclient
+        in meta edsm_backfill; the sender (upload_loop) goes one request every SEND_GAP_S. The guard's reads ride out a
+        failure that passes (_bf_read); the sender's own requests are retried by upload_loop (BACKOFF_S), as every
+        upload's are."""
         try:
             found = await self._bf_logs(account, start, end)
             if found:
@@ -12454,10 +12490,8 @@ class State:
                 self.upload_wake["edsm_bf"].set()
         except asyncio.CancelledError:
             raise
-        except ValueError as e:
-            self._bf_job(state="failed", text=str(e) if str(e).startswith("EDSM:") else "EDSM's answer was not understood")
-        except Exception as e:
-            self._bf_job(state="failed", text=f"Couldn't reach EDSM: {rc.reach_words(e)}")
+        except Exception as e:   # noqa: BLE001 -- a refusal, or the kind only
+            self._bf_job(state="failed", text=self._bf_failed(e))
         print(f"uploads: EDSM flight log backfill for CMDR {pv['commander']}: {self.edsm_bf_job['text']}")
 
     async def edsm_bf_send(self, rows):
@@ -12629,24 +12663,36 @@ class State:
         """S67's walk: get-logs a week at a time (outrider.backfill.windows), back from where it stopped toward the game's
         launch, paced (edsm_gate and IMPORT_GAP_S; EDSM asking to slow down waits IMPORT_RATE_WAIT_S), each week's
         entries kept as they come (a stop or a restart loses nothing read); then the systems EDSM gave no position for,
-        looked up by name. Reads only: nothing is sent to EDSM but the request."""
+        looked up by name. A read that fails in passing is asked again (readclient.retrying, the progress saying when);
+        a refusal, a malformed answer or a failure outlasting the retries stops it "failed", and Go on carries on from
+        the cursor. Reads only: nothing is sent to EDSM but the request."""
         rc, el = outrider.readclient, outrider.edsmlog
         p = self.edsm_import()
+
+        async def week(ws, we):
+            while True:
+                try:
+                    return rc.try_later(rc.edsm_logs_answer(await rc.fetch(
+                        self.upload_session, rc.EDSM_LOGS_URL, self.edsm_gate,
+                        data=rc.edsm_logs_request(account["name"], account["key"], ws, we))))
+                except Exception as e:   # noqa: BLE001 -- only a request to slow down is waited out here
+                    if outrider.health.classify(e)[0] != "rate":
+                        raise
+                    self.edsm_import_set(why=f"EDSM asked Outrider to slow down: asking again in {IMPORT_RATE_WAIT_S // 60} min")
+                    self.db.commit()
+                    self.bump()
+                    await asyncio.sleep(IMPORT_RATE_WAIT_S)
+
+        def waiting(attempt, attempts, at, e):
+            n = (p.get("weeks_done") or 0) + 1
+            self._import_waiting(f"week {n:,}", attempt, attempts, at, e)
         try:
             weeks = outrider.backfill.windows(ts_seconds(p["start"]), ts_seconds(p["cursor"]), rc.EDSM_LOGS_WINDOW_S)
             for ws, we in reversed(weeks):
-                while True:
-                    try:
-                        got = rc.edsm_logs_answer(await rc.fetch(self.upload_session, rc.EDSM_LOGS_URL, self.edsm_gate,
-                                                                 data=rc.edsm_logs_request(account["name"], account["key"], ws, we)))
-                        break
-                    except Exception as e:   # noqa: BLE001 -- only a request to slow down is waited out here
-                        if outrider.health.classify(e)[0] != "rate":
-                            raise
-                        self.edsm_import_set(why=f"EDSM asked Outrider to slow down: asking again in {IMPORT_RATE_WAIT_S // 60} min")
-                        self.db.commit()
-                        self.bump()
-                        await asyncio.sleep(IMPORT_RATE_WAIT_S)
+                # a failure that passes (a timeout, no connection, EDSM failing) is asked again, the same week, after a
+                # growing wait (readclient.RETRY_WAITS_S, about 20 min in all) before the import stops: one timeout
+                # once ended a walk of hours
+                got = await rc.retrying(lambda: week(ws, we), waiting)
                 if not got["ok"]:
                     raise ValueError(f"EDSM: {got['code']} {got['text']}")
                 n = el.store(self.db, commander, [e for e in got["logs"] if ws <= ts_seconds(e["date"]) < we])
@@ -12667,21 +12713,34 @@ class State:
                                  finished=time.time())
             self.db.commit()
         except Exception as e:   # the kind only: an error's text can carry the URL
-            self.edsm_import_set(state="failed", why=f"Couldn't reach EDSM: {rc.reach_words(e)}", finished=time.time())
+            self.edsm_import_set(state="failed", why=f"Couldn't reach {getattr(e, 'source', 'EDSM')}: {rc.reach_words(e)}"
+                                 + (f" (tried {len(rc.RETRY_WAITS_S) + 1} times)" if rc.transient(e) else ""), finished=time.time())
             self.db.commit()
         p = self.edsm_import() or {}
         print(f"uploads: EDSM flight log import for CMDR {commander}: {p.get('state')}, {p.get('weeks_done', 0)} of "
               f"{p.get('weeks', 0)} weeks, {p.get('entries', 0):,} entries" + (f" ({p['why']})" if p.get("why") else ""))
         self.bump()
 
+    def _import_waiting(self, what, attempt, attempts, at, e, source="EDSM"):
+        """The import's progress while a read that failed in passing waits to be asked again (readclient.retrying)."""
+        when = time.strftime("%H:%M", time.localtime(at))
+        self.edsm_import_waited = True
+        self.edsm_import_set(why=f"{source} not answering: trying {what} again at {when} (attempt {attempt} of {attempts})")
+        self.db.commit()
+        self.bump()
+        print(f"uploads: EDSM flight log import: {source} not answering ({outrider.readclient.reach_words(e)}), "
+              f"{what} again at {when} (attempt {attempt} of {attempts})")
+
     async def edsm_import_resolve(self, names):
         """The import's last step: where each system EDSM gave no position for is (edsm_import_locate), stored as found.
         Paced, up to RESOLVE_MAX names: a lookup that asks Spansh or EDSM waits IMPORT_LOOKUP_GAP_S after the last one
         (back to back they made hundreds of requests a minute, and a refusal raised the 'unavailable' card), EDSM's
-        through edsm_gate too; the Settings line says how far it is."""
+        through edsm_gate too; the Settings line says how far it is. A service down past the retries raises
+        (readclient.Unreachable): the import stops "failed", and Go on looks up the names still without a place."""
         el, gate = outrider.edsmlog, outrider.uploads.Gate(IMPORT_LOOKUP_GAP_S)
         for n, name in enumerate(names):
-            if n % 10 == 0:
+            if n % 10 == 0 or self.edsm_import_waited:
+                self.edsm_import_waited = False
                 self.edsm_import_set(why=f"looking up where the systems EDSM gave no position for are: {n:,} of {len(names):,}")
                 self.db.commit()
                 self.bump()
@@ -12693,20 +12752,30 @@ class State:
     async def edsm_import_locate(self, name, gate=None):
         """(id64, x, y, z) of a system by name for an imported entry EDSM gave no position for: known here, else
         Spansh's record, else EDSM's (through edsm_gate); None when nobody knows (it still counts by name: the boxel
-        lists, Find). gate: edsm_import_resolve's pace, waited on before each request."""
+        lists, Find). gate: edsm_import_resolve's pace, waited on before each request. A lookup that fails in passing (a
+        timeout, no connection, a 5xx) is asked again as the import's weeks are (readclient.retrying); when that runs out
+        it raises readclient.Unreachable (the import stops, Go on looks again); one refused leaves the entry as it is."""
+        rc = outrider.readclient
         hit = self.find_local(name)
         if hit and hit[0] is not None and hit[5] != "edsm_log":
             return hit[0], hit[2], hit[3], hit[4]
         for edsm, ask in enumerate((getattr(self.spansh, "system_record", None), getattr(self.spansh, "edsm_system", None))):
             if ask is None:
                 continue
-            if gate:
-                await gate.wait()
-            if edsm:
-                await self.edsm_gate.wait()
+            source = "EDSM" if edsm else "Spansh"
+
+            async def once(ask=ask, edsm=edsm):
+                if gate:
+                    await gate.wait()
+                if edsm:
+                    await self.edsm_gate.wait()
+                return await ask(name)
             try:
-                d = await ask(name)
-            except Exception:   # noqa: BLE001 -- a lookup that fails leaves the entry as it is
+                d = await rc.retrying(once, lambda attempt, attempts, at, e, source=source: self._import_waiting(
+                    f"the lookup of {name}", attempt, attempts, at, e, source))
+            except Exception as e:   # noqa: BLE001 -- a lookup refused leaves the entry as it is
+                if rc.transient(e):
+                    raise rc.Unreachable(source) from e
                 continue
             if not d:
                 continue

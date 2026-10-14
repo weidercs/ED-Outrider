@@ -16,6 +16,7 @@ import unittest.mock
 
 from support import ed_outrider, _HwSession  # also puts the repository root on sys.path
 import outrider.edsmlog as EL  # noqa: E402
+import outrider.readclient as RC  # noqa: E402
 import outrider.uploads as U  # noqa: E402
 from outrider.core import iso_ts, ts_seconds  # noqa: E402
 
@@ -123,8 +124,12 @@ class Server(unittest.TestCase):
         self.addCleanup(shutil.rmtree, cfg)
         self.state.config_path = os.path.join(cfg, "ed_outrider.toml")
         self.state.set_edsm_account("Sample Pilot", "Sample EDSM", KEY)
-        self.printed = []
+        self.printed, self.slept = [], []
+
+        async def no_wait(seconds):   # readclient.retrying's waits: kept with the progress said meanwhile, never slept
+            self.slept.append((seconds, (self.state.edsm_import() or {}).get("why")))
         for patch in (unittest.mock.patch("builtins.print", lambda *a, **k: self.printed.append(" ".join(map(str, a)))),
+                      unittest.mock.patch.object(RC, "_sleep", no_wait),
                       unittest.mock.patch.object(EL, "GAME_LAUNCH", at(-21 * DAY)),   # three weeks to read, not 600
                       unittest.mock.patch.object(ed_outrider, "IMPORT_GAP_S", 0),
                       unittest.mock.patch.object(ed_outrider, "IMPORT_LOOKUP_GAP_S", 0),
@@ -217,7 +222,11 @@ class Server(unittest.TestCase):
     def test_stop_or_failure_then_go_on_and_remove(self):
         [(status, _)] = self.start([self.weeks()[0], ConnectionRefusedError(f"https://www.edsm.net/x?apiKey={KEY}")])
         p = self.state.edsm_import_summary()["progress"]
-        self.assertEqual((p["state"], p["weeks_done"], p["why"]), ("failed", 1, "Couldn't reach EDSM: the connection was refused"))
+        # refused every time: asked again after each growing wait (about 20 min), then it stops with the reason
+        self.assertEqual((p["state"], p["weeks_done"], p["why"]),
+                         ("failed", 1, "Couldn't reach EDSM: the connection was refused (tried 6 times)"))
+        self.assertEqual([s for s, _ in self.slept], [30, 60, 120, 300, 600])
+        self.assertEqual(len(self.state.upload_session.calls), 1 + 6)
         self.assertFalse([x for x in self.printed if KEY in x])
         # Go on: from where it stopped, the week already read not asked again
         self.start(self.weeks()[1:])
@@ -232,6 +241,68 @@ class Server(unittest.TestCase):
         self.assertEqual({r[0] for r in self.db.execute("SELECT id64 FROM visits")}, {2, 3})
         self.assertNotIn(101, self.state.visited)
         self.assertIn(2, self.state.visited)
+
+    def test_a_failure_that_passes_is_asked_again_and_the_week_kept_once(self):
+        """The author's import stopped for good at week 203 of 438 on one timeout. A timeout, a 5xx and EDSM's own
+        failing answer (msgnum 500) are asked again, the same week, after 30 s, 1 min, 2 min; the progress says when."""
+        week1, week2, week3 = self.weeks()
+        t0 = time.time()
+        self.start([week1, asyncio.TimeoutError(), (503, {}), (200, {"msgnum": 500, "msg": "Exception"}), week2, week3])
+        t1 = time.time()
+        calls = self.state.upload_session.calls
+        self.assertEqual(len(calls), 6)
+        self.assertEqual({c[2]["endDateTime"] for c in calls[1:5]}, {"2026-09-24 12:00:00"})   # the same week each time
+        p = self.state.edsm_import()
+        self.assertEqual((p["state"], p["weeks_done"], p["entries"], p["why"]), ("done", 3, 5, None))
+        self.assertEqual(EL.stored(self.db), 5)                           # each week kept once
+        self.assertEqual([s for s, _ in self.slept], [30, 60, 120])
+        whys = [w for _, w in self.slept]
+        at = {time.strftime("%H:%M", time.localtime(t + 30)) for t in (t0, t1)}
+        self.assertIn(whys[0], {f"EDSM not answering: trying week 2 again at {hm} (attempt 2 of 6)" for hm in at})
+        self.assertRegex(whys[2], r"^EDSM not answering: trying week 2 again at \d\d:\d\d \(attempt 4 of 6\)$")
+        self.assertTrue([x for x in self.printed if "EDSM not answering (timeout), week 2 again at" in x])
+        self.assertFalse([x for x in self.printed if KEY in x])
+
+    def test_a_refusal_stops_at_once(self):
+        """A wrong name or key (203), a malformed answer, an HTTP 4xx: no retry, the import stops as before."""
+        week1 = self.weeks()[0]
+        cases = [((200, EX["edsm_credits_wrong"]), "EDSM: 203 commander name or API key not found"),
+                 ((200, ["not", "an", "answer"]), "EDSM's answer was not understood"),
+                 ((403, {}), "Couldn't reach EDSM: it refused the request")]
+        for answer, why in cases:
+            with self.subTest(why=why):
+                self.db.execute("DELETE FROM meta WHERE key = 'edsm_import'")
+                self.slept.clear()
+                self.start([week1, answer, *self.weeks()[1:]])
+                p = self.state.edsm_import()
+                self.assertEqual((p["state"], p["weeks_done"], p["why"]), ("failed", 1, why))
+                self.assertEqual((len(self.state.upload_session.calls), self.slept), (2, []))
+
+    def test_name_lookups_ride_out_a_failure_and_stop_when_it_lasts(self):
+        """The lookups after the weeks: Spansh failing in passing is asked again; failing past the retries stops the
+        import "failed" (not done with the names silently unplaced), and Go on looks them up again."""
+        fails = [6]
+
+        async def system_record(name):
+            self.located.append(name)
+            if fails[0]:
+                fails[0] -= 1
+                raise asyncio.TimeoutError()
+            return {"name": name, "id64": 404, "x": 7.0, "y": 8.0, "z": 9.0}
+        self.state.spansh.system_record = system_record
+        self.start(self.weeks())
+        p = self.state.edsm_import()
+        self.assertEqual((p["state"], p["weeks_done"], p["why"]), ("failed", 3, "Couldn't reach Spansh: timeout (tried 6 times)"))
+        self.assertEqual(self.located, ["Mystery"] * 6)
+        self.assertRegex(self.slept[0][1], r"^Spansh not answering: trying the lookup of Mystery again at \d\d:\d\d \(attempt 2 of 6\)$")
+        self.assertEqual(EL.unlocated(self.db), ["Mystery"])
+        fails[0] = 1                                                     # Go on: no week asked again, the name looked up
+        self.start([(200, {})])
+        self.assertEqual(self.state.upload_session.calls, [])
+        p = self.state.edsm_import()
+        self.assertEqual((p["state"], p["why"]), ("done", None))
+        self.assertEqual(EL.unlocated(self.db), [])
+        self.assertIn(404, self.state.visited)
 
     def test_slow_down_waits_and_a_stopped_outrider_says_stopped(self):
         from outrider.health import HttpError

@@ -64,6 +64,58 @@ class Parsers(unittest.TestCase):
         self.assertIsNone(RC.inara_profile_answer(evil)["url"])   # only Inara's own links are offered
 
 
+class Retrying(unittest.TestCase):
+    """The long reads' retry (S67's import, S47's Check and guard): what passes is asked again, a refusal is not."""
+
+    def test_which_failures_pass(self):
+        from outrider.health import HttpError, classify
+        ok = RC.edsm_logs_answer(EX["edsm_logs_ok"])
+        self.assertIs(RC.try_later(ok), ok)
+        wrong = RC.edsm_logs_answer(EX["edsm_credits_wrong"])
+        self.assertIs(RC.try_later(wrong), wrong)                      # a refused key is the caller's to read: no retry
+        with self.assertRaises(RC.TryLater) as failing:
+            RC.try_later(RC.edsm_logs_answer({"msgnum": 500, "msg": "Exception"}))
+        self.assertEqual(RC.transient(failing.exception), "http5xx")
+        with self.assertRaises(HttpError) as slow:
+            RC.try_later(RC.edsm_logs_answer({"msgnum": 299, "msg": "Too many requests, try again later"}))
+        self.assertEqual(classify(slow.exception)[0], "rate")
+        for exc, kind in ((asyncio.TimeoutError(), "timeout"), (ConnectionResetError(), "refused"), (HttpError(503, "HTTP 503"), "http5xx")):
+            self.assertEqual(RC.transient(exc), kind)
+        for exc in (ValueError("the answer has no msgnum"), HttpError(403, "HTTP 403")):
+            self.assertIsNone(RC.transient(exc))
+
+    def test_asked_again_after_each_wait_then_it_raises(self):
+        waited, told = [], []
+
+        async def no_wait(s):
+            waited.append(s)
+
+        def run(script):
+            calls = []
+
+            async def call():
+                calls.append(1)
+                item = script.pop(0) if len(script) > 1 else script[0]
+                if isinstance(item, Exception):
+                    raise item
+                return item
+
+            async def go():
+                return await RC.retrying(call, lambda *a: told.append(a[:2]))
+            with unittest.mock.patch.object(RC, "_sleep", no_wait):
+                return asyncio.run(go()), len(calls)
+        self.assertEqual(run([asyncio.TimeoutError(), "answer"]), ("answer", 2))
+        self.assertEqual((waited, told), ([30], [(2, 6)]))
+        waited.clear()
+        with self.assertRaises(asyncio.TimeoutError):
+            run([asyncio.TimeoutError()])
+        self.assertEqual(waited, list(RC.RETRY_WAITS_S))
+        waited.clear()
+        with self.assertRaises(ValueError):                            # a refusal: at once
+            run([ValueError("bad"), "answer"])
+        self.assertEqual(waited, [])
+
+
 class GateTests(unittest.TestCase):
     """One gate paces every caller: Inara's sender and its key Check never make two requests within MIN_GAP_S."""
 

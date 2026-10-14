@@ -10,7 +10,13 @@ together, 203 they do not), get-position and get-logs (S47 and S67: where EDSM's
 holds for a window of at most a week). Inara (inara.cz/elite/inara-api-docs): getCommanderProfile (S45's key check: the
 header's 400 refuses the key, the event's 204 finds no such commander, 200 is the profile with its link). The shapes
 are the services' documented ones (tests/fixtures/account_checks.json); their live replies are still to be checked.
+
+The long reads (S67's import, S47's Check and guard) ride out a passing failure with `retrying`: the same request again
+after each of RETRY_WAITS_S while it fails in a way that passes (`transient`: no answer, or EDSM failing or saying try
+later: `try_later`), then the failure raises. A refusal (a wrong key, a malformed answer) raises at once. Reads only:
+a request retried here stores nothing anywhere.
 """
+import asyncio
 import time
 
 from outrider.health import HttpError, classify
@@ -20,6 +26,10 @@ EDSM_POSITION_URL = "https://www.edsm.net/api-logs-v1/get-position"
 EDSM_LOGS_URL = "https://www.edsm.net/api-logs-v1/get-logs"
 EDSM_GAP_S = 2.0                  # between two of EDSM's account reads, at least
 EDSM_LOGS_WINDOW_S = 7 * 86400    # get-logs answers at most a week per request
+RETRY_WAITS_S = (30, 60, 120, 300, 600)   # s before each new try of a read that failed in passing; then it stops (~20 min)
+TRANSIENT = frozenset({"dns", "offline", "refused", "timeout", "http5xx", "rate"})   # health.classify's kinds that pass
+_sleep = asyncio.sleep            # retrying's wait (tests replace it)
+SLOW_WORDS = ("slow down", "too many", "too much", "rate limit", "try again later", "temporarily")   # in EDSM's msg
 URLS = ("EDSM_CREDITS_URL", "EDSM_POSITION_URL", "EDSM_LOGS_URL")   # verify.sh points each at a closed port
 
 EDSM_CODES = {201: "commander name missing", 202: "API key missing", 203: "commander name or API key not found",
@@ -147,6 +157,52 @@ async def fetch(session, url, gate, data=None, body=None):
         if r.status != 200:
             raise HttpError(r.status, f"HTTP {r.status}")
         return await r.json(content_type=None)
+
+
+class TryLater(HttpError):
+    """EDSM answered, but with a failure of its own (msgnum 5xx): the same request may work later."""
+
+
+class Unreachable(Exception):
+    """A service still failing in passing when `retrying` ran out, named (source: "Spansh", "EDSM"); raised from the
+    failure itself, so health.classify and reach_words read its kind through __cause__."""
+
+    def __init__(self, source):
+        super().__init__(f"{source} not reached")
+        self.source = source
+
+
+def try_later(got):
+    """An EDSM read's parsed answer -> itself; one saying slow down raises HttpError 429 (health's "rate"), one saying
+    EDSM is failing (msgnum 500 and up) raises TryLater (HTTP 5xx). Any other refusal is the caller's to read."""
+    if not got.get("ok"):
+        if any(w in str(got.get("text") or "").lower() for w in SLOW_WORDS):
+            raise HttpError(429, f"EDSM {got.get('code')}")
+        if isinstance(got.get("code"), int) and got["code"] >= 500:
+            raise TryLater(got["code"] if got["code"] <= 599 else 503, f"EDSM {got['code']}")
+    return got
+
+
+def transient(exc):
+    """The kind of a failure that passes (TRANSIENT: a timeout, no connection, no DNS, a 5xx, a slow down), else None."""
+    kind = classify(exc)[0]
+    return kind if kind in TRANSIENT else None
+
+
+async def retrying(call, waiting=None, waits=None):
+    """await call() -> its answer, asked again after each of `waits` (RETRY_WAITS_S) while it raises a transient failure;
+    waiting(attempt, attempts, at, exc) before each wait (the next attempt's number, how many in all, its epoch time).
+    The last failure, or any that does not pass, raises."""
+    waits = RETRY_WAITS_S if waits is None else waits
+    for k in range(len(waits) + 1):
+        try:
+            return await call()
+        except Exception as e:
+            if k == len(waits) or not transient(e):
+                raise
+            if waiting:
+                waiting(k + 2, len(waits) + 1, time.time() + waits[k], e)
+            await _sleep(waits[k])
 
 
 def reach_words(exc):

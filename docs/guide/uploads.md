@@ -178,6 +178,10 @@ that stretch is missing there. Settings → Uploads → **Fill gaps in EDSM's fl
   its log has, the backfill stops by itself: EDSM does not take back-dated events then.
 - **Stop** ends it (what still waits is not sent). A key EDSM refuses holds it until you fix the key and press **Go on**.
   It waits ("paused") under `--simulate` and while another Outrider uploads to EDSM: only one talks to EDSM.
+- If EDSM does not answer the Check or Send's first look at its log (a timeout, no connection, EDSM failing or asking
+  to slow down), Outrider asks again after 30 seconds, 1, 2, 5 and 10 minutes, and the line says when ("EDSM not
+  answering: trying again at 21:30 (attempt 2 of 6)"); only then does it give up. **Stop** on that line ends the wait.
+  A refused key stops it at once.
 - What EDSM stores cannot be taken back from here. Try a small range first (a jump or two), and look at your flight
   log on edsm.net before sending a long one.
 
@@ -190,6 +194,11 @@ the commander (one with an EDSM key saved) and press **Import**.
 - It reads EDSM's flight log one week at a time, back from your first journal to the game's launch, one read every
   10 seconds: several years take an hour or more. Nothing is sent to EDSM. **Stop** keeps what was read; **Go on**
   carries on from there (also after Outrider was stopped).
+- A week EDSM does not answer (a timeout, no connection, EDSM failing) is asked again after 30 seconds, then 1, 2, 5
+  and 10 minutes: "EDSM not answering: trying week 203 again at 21:30 (attempt 2 of 6)". Only when EDSM stays silent
+  through all of that (about 20 minutes) does the import stop, saying why; **Go on** then carries on from that week.
+  The same goes for the lookups of places at the end (Spansh or EDSM). A refused key (EDSM's "commander name or API key
+  not found") or an answer Outrider cannot read stops it at once, with no retry.
 - Then: "1,288 visits from EDSM, 2016-03-02 to 2019-11-30 · **Remove them**". Remove forgets them all (your journals'
   visits are not touched) and you can import again.
 - Those systems count as **visited**: Nearby's marks, Search's visited filter, the target's verdict, Find ("visited 3×
