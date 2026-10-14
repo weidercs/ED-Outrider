@@ -205,6 +205,7 @@ import outrider.uploads    # EDDN / EDSM uploads (opt-in): the session, the live
 import outrider.eddn       # EDDN's messages from journal events, and what its answers mean
 import outrider.edsm       # EDSM's journal upload: the events with where you were, and what its answers mean
 import outrider.inara      # Inara's commander profile: travel, ranks, ships, inventory..., and what its answers mean
+import outrider.commander  # the Commander view: the commander, inventory, engineering, missions, sessions (journals read on request)
 import outrider.readclient  # EDSM's and Inara's account reads (G3): the key checks, EDSM's flight log
 import outrider.backfill   # filling a gap in EDSM's flight log (S47): the events rebuilt from the journals (pure)
 import outrider.edsmlog    # your EDSM flight log from before your journals (S67): kept entries, which count as visits
@@ -18505,6 +18506,7 @@ def make_app(state, hosts=None):
     app.router.add_get("/api/checklist/find", checklist_find_view)   # S29: asks Spansh, so not among the AI's READ_ROUTES
     app.router.add_get("/api/log", log_view)
     app.router.add_get("/api/materials", materials_view)
+    outrider.commander.add_routes(app, state, lambda: LIVE_DIRS)   # the Commander view: GET /api/commander/<part>
     app.router.add_post("/api/cargo/recount", cargo_recount_view)
     app.router.add_get("/api/cargo/lookup", cargo_lookup_view)
     app.router.add_get("/api/nearest", nearest_view)

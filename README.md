@@ -51,6 +51,7 @@ also run 24/7 on a home server in Docker.
 | 📍 **Nearest place to dock** | The nearest stations and fleet carriers you can land at and use (UC, Vista, repair, material traders...), from Spansh and the Deep Space Support Array's carriers, with how old each report is; one click plots there, or ask "nearest Vista" out loud. |
 | 💱 **Trading, kept small** | Where to sell or buy what you carry, from Spansh's markets, and Spansh's trade planner as a route Outrider follows and talks you through. |
 | 📜 **Your logbook** | Every journal event in a searchable log, every exobiology sample and what became of it, and a schematic of the system. |
+| 🧑‍🚀 **Your commander** | Ranks with the way to the next, credits and assets, every ship and stored module, engineering blueprints against your materials, the missions you hold, and how your combat and mining sessions went. |
 | 📈 **The long view** | Each trip from sale to sale with what it actually paid, what each ship loss cost, your best finds, ranks and career statistics. |
 | 🗣 **A voice with personality** | A natural neural voice, down to business, sarcastic or sweet, briefing you on arrival and warning before you leave something unfinished. |
 | ⛏️ **Rhino mining** | A heading-up surface map on Now with your rigs, sample points and ship, and every collection kept per body. |
@@ -108,6 +109,7 @@ The project's history is in the [changelog](docs/CHANGELOG.md). Contributors and
 | Galactic region map | [klightspeed's EliteDangerousRegionMap](https://github.com/klightspeed/EliteDangerousRegionMap) | MIT | in `resources/bio_rules.json` |
 | Planetary mining odds | CMDR Grumlop's survey, [Elite Dangerous Field Manual](https://edfieldmanual.com/index.php?title=Module:Data/SurfaceMiningProspecting) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) | `resources/mining_odds.json`, unchanged |
 | Geology sites; checklist pictures | [Canonn](https://canonn.science)'s codex records and screenshots | Canonn's | site counts in `resources/geo_codex.json`; pictures linked, never copied, credited to the commander who took each |
+| Engineering blueprints | [coriolis-data](https://github.com/EDCD/coriolis-data) and [FDevIDs](https://github.com/EDCD/FDevIDs) (EDCD) | game data, Frontier Developments' | `resources/blueprints.json`, built by `scripts/build_blueprints.py` |
 | EDDN, EDSM and Inara upload rules | [EDMarketConnector](https://github.com/EDCD/EDMarketConnector) (EDCD) | GPL v2 or later | followed, with EDCD's notice in `outrider/eddn.py` |
 | The overlay window's code | [EDMC Modern Overlay](https://github.com/SweetJonnySauce/EDMCModernOverlay) | GPL v3 | adapted, with its notice: `outrider/overlay_tracking.py`, `outrider/overlay_window.py` |
 

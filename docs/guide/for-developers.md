@@ -45,6 +45,8 @@ Changing Outrider yourself, or with a coding agent? Start with [`docs/AGENT_GUID
 | `outrider/codex_geo.py` | Which geology codex entries a body's volcanism could log, for the ✦ / ✪ on geology new to your codex |
 | `outrider/boxel.py` | Boxels: a procedural name's boxel, its place and its systems' addresses, for Boxel mode and the sector map |
 | `outrider/riches.py` | The survey routes (Road to Riches, Exomastery, Earth-like and ammonia worlds, sweeps), one table of their kinds: Spansh's answer as route rows, what is still to do in a system, the arrival lines |
+| `outrider/commander.py`, `outrider/jscan.py` | The Commander view: your ranks, money and fleet, inventory, engineering blueprints against your materials, missions, and combat and mining sessions, read from the journal files on request |
+| `resources/blueprints.json` | Ship-module engineering blueprints (materials per grade, engineers), built from EDCD's coriolis-data and FDevIDs by `scripts/build_blueprints.py` |
 | `outrider/uploads.py` | Uploads (opt-in, off by default): the session each journal line belongs to, the outbox, what may be sent |
 | `outrider/eddn.py` | EDDN: the messages a journal event becomes, and what EDDN's answer means |
 | `outrider/edsm.py` | EDSM's journal upload: what a line sends to your own EDSM account, and what EDSM's answer means |

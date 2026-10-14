@@ -2,6 +2,31 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · Commander: who you are, what you own, engineering, missions, sessions (weidercs, PR #5)
+Contributed by weidercs (GitHub PR #5, written 2026-10-12), merged as is; the review's fixes follow in their own entry.
+- A new **Commander** tab (Records on the tablet), five parts, each read from the journal files when opened
+  (`outrider/commander.py`, `outrider/jscan.py`): nothing is stored, nothing is asked of anyone.
+- **CMDR**: credits, net worth, the value of your fleet and stored modules and your carrier's balance, as of your last
+  login; every rank with a bar to the next and, for trade, exploration and exobiology, about how many credits it still
+  takes (the community's figures for each rank's step: an estimate, said as one); reputation, Powerplay, squadron;
+  every ship; career figures from the game's Statistics.
+- **Inventory**: your ships (where each is, its value, what bringing it here costs), stored modules with their
+  engineering, the ship locker, the suit loadouts you have worn. Stored ships and modules are as of the last shipyard
+  or outfitting you opened: the game writes those lists then.
+- **Engineering**: 80 ship-module blueprints, grade by grade: what a roll takes against what you hold, how many rolls
+  you could make now, the engineers offering the grade and whether yours are unlocked far enough. A filter (module,
+  blueprint, material) and "only what I can craft now". `resources/blueprints.json`, built by
+  `scripts/build_blueprints.py` from EDCD's coriolis-data and FDevIDs (materials by the journal's names). No
+  experimental effects, suits or weapons.
+- **Missions**: those you hold, the soonest to expire first: where, what (and how much is delivered), the reward, the
+  time left, marked under half an hour. The login's Missions line decides what is still held.
+- **Sessions**: combat and mining of the last 30 days, each from login to logout: kills, by ship, bounties, bonds,
+  kills an hour, deaths; tons refined and of what, tons an hour, asteroids prospected and their content, limpets, and
+  what the haul sold for.
+- GET `/api/commander/profile`, `/inventory`, `/engineering`, `/missions`, `/sessions`. Not in the smoke test's
+  every-page loops (one more page there shifts later batches' timing); its own batch runs last. `__version__` is
+  left for the release.
+
 ## 2026-10-14 · No page-made saves in the Android app, the list of voice commands
 The author's requests of 2026-10-14, relayed by the Android app's session.
 - The app's WebView downloads same-origin http(s) links (every `api/export?what=…` link: kept) but cannot save a
