@@ -127,6 +127,13 @@ the code; the constants named are in `ed_outrider.py` unless another file is giv
   The depot changes only by a jump and a `CarrierDepositFuel` (`Amount`, `Total` the depot after) or tritium donated by
   other players (not in your journal).
 
+**Docking** (#3, 2026-10-14)
+- `DockingGranted` has `LandingPad` (the number), `StationName`, `StationType`, `MarketID`; `DockingDenied` has `Reason`.
+  Reasons in the author's journals: NoSpace 50, Distance 16, RestrictedAccess 4, TooLarge 2, Hostile 1 (Frontier's docs
+  also list Offences, ActiveFighter, NoReason). A grant ends with `Docked`, `DockingCancelled` or `DockingTimeout`.
+- The journal never says which layout a station uses (outposts, ports and Odyssey settlements come in several models), so
+  Outrider gives the pad number only, never a map.
+
 **Status.json**
 - It is rewritten only when something in it changes. A player standing still (a stopped Rhino included)
   produces no new reading, so "fresh" means "the game is live and this is the latest reading", not "written

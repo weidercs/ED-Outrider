@@ -1309,6 +1309,20 @@ BODY_EVENTS = ("ApproachBody", "LeaveBody", "Touchdown")
 # These are read for that alone; the body comes from SRV_TRACKED (see Journals.track_srv).
 # Liftoff: only for the surface map's ship marker (a Liftoff while aboard takes it away).
 SRV_EVENTS = ("LaunchSRV", "LaunchVessel", "DockSRV", "SRVDestroyed", "MiningRefined", "SupercruiseExit", "SupercruiseEntry", "Liftoff")
+# Docking (#3, Kurbo26 in GitHub discussion #3): the pad a station gave you and why one refused, live only (meta
+# `docking`); DOCKING_EVENTS are read for it alone, DOCKING_WATCH also end it (docked, left, a login, a death)
+DOCKING_EVENTS = ("DockingGranted", "DockingDenied", "DockingCancelled", "DockingTimeout")
+DOCKING_WATCH = frozenset(DOCKING_EVENTS) | {"Docked", "SupercruiseEntry", "FSDJump", "LoadGame", "Shutdown", "Died"}
+# a refusal's Reason in words, said only when it is not obvious (the author, 2026-10-14): Distance (you can see you are
+# too far, and the game says so) and any other reason are left out. From the author's journals: NoSpace 50, Distance
+# 16, RestrictedAccess 4, TooLarge 2, Hostile 1
+DENIED_WORDS = {"NoSpace": "no pad free for your ship: try again shortly",
+                "TooLarge": "your ship is too big for this station's pads",
+                "RestrictedAccess": "access restricted: the carrier's docking setting, or a permit",
+                "Hostile": "the station is hostile to you", "Offences": "refused for your offences here",
+                "ActiveFighter": "dock your fighter first"}
+DOCK_GRANT_KEEP_S = 900    # s: a grant shown this long at most (the game ends it sooner: DockingTimeout, a dock)
+DOCK_DENIED_KEEP_S = 60    # s: a refusal's reason shown this long
 SRV_TRACKED = frozenset(SRV_EVENTS) | {"ApproachBody", "LeaveBody", "Touchdown", "Location", "LoadGame",
                                        "FSDJump", "CarrierJump", "Died"}
 MATERIAL_EVENTS = ("Materials", "MaterialCollected", "MaterialDiscarded", "Synthesis", "EngineerCraft",
@@ -1328,7 +1342,7 @@ CARGO_EVENTS = frozenset(CARGO_ONLY) | {"Cargo", "Docked", "Undocked", "CarrierS
 CARRIER_CARGO_EVENTS = ("CarrierStats", "CarrierTradeOrder", "CargoTransfer", "MarketBuy", "MarketSell",
                         "CarrierCrewServices", "CarrierDepositFuel") + CARRIER_MOVE_EVENTS
 _OTHER_EVENTS = (POSITION_EVENTS + STAR_CLASS_EVENTS + SCAN_EVENTS + DATA_EVENTS + SHIP_EVENTS + CMDR_EVENTS + MATERIAL_EVENTS
-                 + BODY_EVENTS + SRV_EVENTS + CARGO_ONLY + ("Loadout", "Shutdown", "Fileheader"))
+                 + BODY_EVENTS + SRV_EVENTS + CARGO_ONLY + DOCKING_EVENTS + ("Loadout", "Shutdown", "Fileheader"))
 # The Commander view (outrider/commander.py): Journals.handle_commander folds these into the meta keys of
 # outrider.commander.COMMANDER_META and the play_activity table, and each one bumps Journals.commander_version (the page's
 # cue to ask for the open tab again); COMMANDER_ONLY are read for it alone
@@ -3216,6 +3230,10 @@ class Journals:
             self.note_loading(name, ev, ts)
             if name == "Fileheader":
                 return
+        if name in DOCKING_WATCH:
+            self.handle_docking(name, ev, ts)
+            if name in DOCKING_EVENTS:
+                return
         if name in COMMANDER_EVENTS:
             self.handle_commander(name, ev, ts)
             if name in COMMANDER_ONLY:
@@ -3563,6 +3581,33 @@ class Journals:
         j = self.jumponium
         if j and not j["said"] and (system is None or j["system"] == system):
             self.moment("jumponium", ts, system=j["system"], jumponium=self.take_jumponium(j["system"]))
+
+    def handle_docking(self, name, ev, ts):
+        """#3 (Kurbo26, GitHub discussion #3): the pad a station gave you, and why one refused. Live only (meta `docking`,
+        live-only; a re-read or a late folder says and keeps nothing): DockingGranted keeps {pad, station, type, market,
+        ts} and says the pad, every time (moment `docking`, what "granted"); DockingDenied keeps {denied, words, station,
+        ts} and says the words for a reason in DENIED_WORDS (others clear it, said by nobody); a dock, a cancel, a timeout,
+        leaving (supercruise, a jump), a login, a quit or a death clear it (moment what "clear": the page redraws)."""
+        if not live_event(ts):
+            return
+        cur = meta_get(self.db, "docking")
+        if cur and ts < (cur.get("ts") or ""):
+            return   # an older line than what is kept (two live folders)
+        station = ev.get("StationName") or ""
+        if name == "DockingGranted" and isinstance(ev.get("LandingPad"), int) and not isinstance(ev.get("LandingPad"), bool):
+            d = {"pad": ev["LandingPad"], "station": station, "type": ev.get("StationType"), "market": ev.get("MarketID"),
+                 "ts": ts}
+            meta_set(self.db, "docking", d)
+            self.moment("docking", ts, what="granted", pad=d["pad"], station=station, station_type=d["type"])
+            return
+        if name == "DockingDenied" and DENIED_WORDS.get(ev.get("Reason")):
+            words = DENIED_WORDS[ev["Reason"]]
+            meta_set(self.db, "docking", {"denied": ev["Reason"], "words": words, "station": station, "ts": ts})
+            self.moment("docking", ts, what="denied", reason=ev["Reason"], words=words, station=station)
+            return
+        if cur:
+            meta_set(self.db, "docking", None)
+            self.moment("docking", ts, what="clear")
 
     def handle_body(self, name, ev, ts):
         """ApproachBody (orbital cruise begins: the approach briefing, once per body per session), LeaveBody
@@ -6967,6 +7012,7 @@ class State:
             "route": self.route_summary(),
             "highway": self.highway_summary(),
             "dry_stretch": self.dry_stretch_summary(),   # S2: the last scoopable star before a stretch the fuel won't cover
+            "docking": self.docking_summary(),   # #3: the pad you were given, or why a station refused
             "survey": self.survey_summary(),   # Road to Riches / Exomastery: the line under the tiles, as the Highway's
             "backup": dict(meta_get(self.db, "last_backup") or {}, running=bool(self.backup_task and not self.backup_task.done()),
                            every_days=BACKUP_EVERY_DAYS, keep=BACKUP_KEEP, restore=self.restore_command(None)),
@@ -8275,10 +8321,27 @@ class State:
             return z["body"]
         return None
 
+    def docking_summary(self, now=None):
+        """#3: the pad you were given ({pad, station, type, ts}), or a refusal's words ({denied, words, station, ts}),
+        while it holds: a grant DOCK_GRANT_KEEP_S at most (a dock, a cancel, a timeout or leaving ends it sooner), a
+        refusal DOCK_DENIED_KEEP_S; None otherwise, and while docked."""
+        d = meta_get(self.db, "docking")
+        if not d or (self.journals.status_json or {}).get("flags", 0) & FLAG_DOCKED:
+            return None
+        try:
+            age = (time.time() if now is None else now) - ts_seconds(d["ts"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        return d if age <= (DOCK_DENIED_KEEP_S if d.get("denied") else DOCK_GRANT_KEEP_S) else None
+
     def overlay_target_panel(self, st, pos, now, pal, size, galaxy):
         """The Target panel (D1, id "body"): inside a body's near-body zone (and TARGET_ZONE_LINGER_S after leaving it)
         that body, even over a target; outside it the body targeted in game in this system, else the system targeted.
-        Over the galaxy map always the system targeted. A body with nothing to say gives way to the system."""
+        Over the galaxy map always the system targeted. A body with nothing to say gives way to the system. While docking
+        (#3: a pad given, or a refusal's words), the pad in large letters instead (the author, 2026-10-14)."""
+        dock = None if galaxy else self.docking_summary(now)
+        if dock:
+            return outrider.overlay.pad_panel(dock, pal, size)
         if not galaxy:
             bodies = (self.overlay_detail(pos["id64"]) or {}).get("bodies") or []
             zone, dest = self.overlay_zone_body(st, pos, now), self.destination()

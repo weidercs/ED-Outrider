@@ -568,7 +568,8 @@ class CrewLines(unittest.TestCase):
             doc = json.load(f)
         S = outrider.speech
         self.assertEqual(S.check(doc), [])
-        short = {"mapped_before": 12, "bio_tag_near": 15, "autotarget_nothing": 15, "wrong_target": 15}
+        short = {"mapped_before": 12, "bio_tag_near": 15, "autotarget_nothing": 15, "wrong_target": 15,
+                 "docking_granted": 15, "docking_denied": 15}
         crew_keys, said = {}, []
         for key, entry in doc["lines"].items():
             for lst, vs in entry.items():

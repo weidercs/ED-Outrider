@@ -187,7 +187,8 @@ follows your system's light mode. Each browser keeps its own choice, and the tab
   <img src="../images/themes.png" alt="The desktop page in four themes: LCARS, Elite, Minbari and Centauri" width="900">
 </p>
 
-**Now** is the cockpit view for a second monitor or a tablet, in big text: the system, the target, fuel,
+**Now** is the cockpit view for a second monitor or a tablet, in big text: the system (and, from a docking grant until you
+touch down, **PAD 34** in very large letters under it; a refusal's reason for a minute), the target, fuel,
 what to do next, the body you have targeted, signals worth a detour ("📍 Titan Cocijo · 2 tourist beacons"), any surface sites ("🏛 Guardian sites on 10 b"), any rare star here ("⭐ A black hole (main star)"), the notable stellar phenomena here ("🌀 Three notable stellar phenomena,
 all in rings · 1 of 3 visited": each drop at one counts, since the journal cannot tell which of a kind's sites it was)
 and the nearest unvisited system. Under the target, the jump's cost ("56.7 ly · 0.9 t · leaves 20 max jumps"); under the

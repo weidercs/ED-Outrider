@@ -75,9 +75,11 @@ LIMITS = {"x": (0.0, 0.95), "y": (0.0, 0.95), "scale": (0.2, 2.5), "bg": (0.0, 1
 
 # text metrics on the canvas: line heights and an average character width per size (the window's font is close to
 # these; long texts are cut with … to the panel's width rather than run over its edge)
-LINE_H = {"small": 16, "normal": 20, "large": 26}
-CHAR_W = {"small": 6.6, "normal": 8.2, "large": 10.4}
-FONT_PX = {"small": 12, "normal": 15, "large": 19}   # the window's font sizes in canvas units (scaled with the panel)
+LINE_H = {"small": 16, "normal": 20, "large": 26, "huge": 56}
+CHAR_W = {"small": 6.6, "normal": 8.2, "large": 10.4, "huge": 26.0}
+# the window's font sizes in canvas units (scaled with the panel); "huge" only for the docking pad's number (#3), not a
+# text size a player picks (SIZES)
+FONT_PX = {"small": 12, "normal": 15, "large": 19, "huge": 48}
 PAD = 10
 MIN_TEXT_PX = 9   # the window never draws a panel's text smaller than this many pixels, whatever the sizes say
 
@@ -909,6 +911,28 @@ def target_system_panel(t, pal, size="normal"):
     if row:
         rows += flow(row, room, size)
     return text_panel("body", "➜ " + t["name"], rows, pal, width=TARGET_W, size=size)
+
+
+PAD_W = 300
+
+
+def pad_panel(d, pal, size="normal"):
+    """The Target panel while docking (#3, the author 2026-10-14: the pad number in large letters): the station's name,
+    then "PAD 34" (FONT_PX huge), or a refusal: "Docking denied" and its words. d: State.docking_summary's. None
+    without either."""
+    if not d:
+        return None
+    station = d.get("station") or "Docking"
+    if d.get("pad") is not None:
+        p = text_panel("body", "🛬 " + station, [], pal, width=PAD_W, size=size)
+        y = p["h"] - PAD + 2
+        p["items"].append(runs(PAD_W / 2, y, [(f"PAD {d['pad']}", pal["good"], "huge", True)], align="center"))
+        p["h"] = round(y + LINE_H["huge"] + PAD)
+        return p
+    if d.get("words"):
+        rows = [[("Docking denied", "bad")]] + flow([(d["words"], "warn")], PAD_W - 2 * PAD, size)
+        return text_panel("body", "🛬 " + station, rows, pal, width=PAD_W, size=size)
+    return None
 
 
 # ---- the Now panel: the page's Now view, condensed (the author, 2026-10-10) ----

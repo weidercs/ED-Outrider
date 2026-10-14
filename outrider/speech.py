@@ -42,6 +42,10 @@ KEYS = {
     "bio_tag_near": "within 100 m of a plant you tagged with the composition scanner where the next sample of the "
                     "species you are sampling would count: {genus}, {distance} (metres)",
     "codex": "a new codex entry: {entry} (the entry's name), {what} (voucher or new to the region)",
+    "docking_granted": "docking granted, said every time: {pad} (the landing pad's number), {station} (the station or carrier)",
+    "docking_denied": "docking denied for a reason that is not obvious (no pad free, ship too big, access restricted, "
+                      "hostile, your offences, a fighter out; never for distance): {reason} (the reason in words), "
+                      "{station} (the station or carrier)",
     "phenomena": "the FSS found notable stellar phenomena in a system where you have none on record (said with delight, in "
                  "every style: the co-pilot loves new things): {what} (already phrased, e.g. 'three notable stellar "
                  "phenomena, all in rings')",
@@ -443,6 +447,8 @@ SAMPLES = {
     "find_body": {"what": "Water world, terraformable, undiscovered", "body": "A 3", "value": "2.3M"}, "mapped_before": {},
     "find_bio": {"body": "B 7", "value": "19.0M"}, "sample_clear": {"genus": "Stratum"}, "bio_tag_near": {"genus": "Tussock", "distance": 80},
     "codex": {"entry": "Stratum Tectonicas", "what": "new to your codex for this region"},
+    "docking_granted": {"pad": 34, "station": "Jameson Memorial"},
+    "docking_denied": {"reason": "no pad free for your ship: try again shortly", "station": "Jameson Memorial"},
     "phenomena": {"what": "three notable stellar phenomena, all in rings"},
     "rare_star": {"what": "a black hole at B"},
     "surface_site": {"what": "Guardian sites on B 3"},
@@ -499,7 +505,7 @@ CREW_ROLES = (
     ("exobiologist", "Exobiologist", "Exobiologist", ("exo", "find", "sampling")),
     ("engineer", "Chief Engineer", "Engineer", ("fuel", "scoop", "scoopstop", "jumponium", "hull")),
     ("quartermaster", "Quartermaster", "Quartermaster", ("sell", "saleleft", "unsold", "carrier", "loss")),
-    ("comms", "Comms Officer", "Comms", ("uploads", "firstsseen", "game")),
+    ("comms", "Comms Officer", "Comms", ("uploads", "firstsseen", "game", "docking")),
     ("tactical", "Tactical", "Tactical", ()),
     ("mining", "Mining Officer", "Mining Officer", ("rigs", "rigleash", "rigsout")),
 )
@@ -518,7 +524,7 @@ ROW_KEYS = {
     "autotarget": ("autotarget_nothing",), "wrongtarget": ("wrong_target",),
     "find": ("find_body", "find_bio", "mapped_before", "sample_clear"), "jumponium": ("jumponium",),
     "sampling": ("bio_done_last", "bio_done_more", "bio_tag_near", "left_body"), "approach": ("high_g",),
-    "bodybrief": ("body_brief",), "sell": ("docked_sell", "sold", "undocked_unsold"), "saleleft": ("sale_left",),
+    "bodybrief": ("body_brief",), "docking": ("docking_granted", "docking_denied"), "sell": ("docked_sell", "sold", "undocked_unsold"), "saleleft": ("sale_left",),
     "unsold": ("unsold_warn", "unsold_urgent"), "firstsseen": ("firsts_seen",), "hull": ("hull", "heat", "interdicted"),
     "carrier": ("carrier_arrived", "carrier_departs"), "codex": ("codex",), "phenomena": ("phenomena",), "ggg": ("ggg",),
     "rare_star": ("rare_star",), "surface_site": ("surface_site",), "signal_poi": ("signal_poi",), "curious": ("curious",),

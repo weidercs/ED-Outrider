@@ -851,6 +851,9 @@ body.nowmode header, body.nowmode main { display: none; }
 #nowView .now-card { font-size: clamp(22px, 3.8vw, 44px); padding: 1.2vh 1.6vw; border-radius: 10px; margin: 1.4vh 0; border: 2px solid var(--line); }
 #nowView .now-card.yes { border-color: var(--good); color: var(--good); } #nowView .now-card.no { color: var(--muted); }
 #nowView .now-card.alert { border-color: var(--warn); color: var(--warn); }
+/* #3: the pad the station gave you, in large letters, the station under it */
+#nowView .now-pad { font-size: clamp(48px, 11vw, 140px); font-weight: 800; color: var(--good); line-height: 1; margin: 1vh 0 2vh; }
+#nowView .now-pad span { display: block; font-size: clamp(16px, 2.4vw, 28px); font-weight: 400; color: var(--muted); margin-top: .6vh; }
 @media (prefers-color-scheme: light) { #nowView .now-sys { color: #9a4a00; } }
 
 .synth .boostline { font-size: 12px; margin-top: 1px; }

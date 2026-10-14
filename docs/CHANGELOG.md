@@ -2,6 +2,25 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · Docking: the pad number, big and spoken; why a station refused
+NEXT-VERSION #3 (Kurbo26, GitHub discussion #3; an EDMC plugin's job). The pad number only, no map: the journal never
+says which layout a station uses (the author: "just say pad number").
+- **DockingGranted**: the pad, said every time by the Comms Officer ("Pad 34."; speech priority 1, as an answer to your
+  own press: even while hushed), on Now in very large letters under the system (`.now-pad`, with the station), and in the
+  overlay's **Target panel** (the author: the existing panel, not a new one): "PAD 34" in a new `huge` canvas size
+  (`overlay.pad_panel`, FONT_PX 48) under the station's name, from the grant until you dock.
+- **DockingDenied**: the reason in words when it is not obvious (`DENIED_WORDS`: NoSpace, TooLarge, RestrictedAccess,
+  Hostile, Offences, ActiveFighter; never Distance), said, on Now and in the Target panel for a minute.
+- `Journals.handle_docking` (live lines only; meta `docking`, live-only), cleared by Docked, DockingCancelled,
+  DockingTimeout, SupercruiseEntry, FSDJump, LoadGame, Shutdown or Died (a moment "clear" redraws the page);
+  `State.docking_summary` (the payload's `docking`; a grant 15 min at most, none while docked).
+- A new alert row **Docking** (Comms; notify off by default; bound to the system), speech keys `docking_granted` and
+  `docking_denied`, 15 lines in each list for the author's ears.
+- Tests: `tests/test_docking.py` (granted and docked, a carrier's pad and every way it ends, the reasons said and not,
+  how long it shows, a re-read says nothing, live-only, the panel, the Target panel while docking); the smoke block
+  (PAD on Now, a refusal, the lines said, the row's tables); test_crew's short-list counts, test_state's kept keys.
+  Docs: overlay.md, voice-and-alerts.md, views.md, JOURNAL_REFERENCE, AGENT_GUIDE.
+
 ## 2026-10-14 · 📋 on Search's Find a system by name
 - The seventh name field (a `type="search"` box, missed by the first count): 📋 fills it, Find still looks it up. Smoke
   and plot-route.md follow.

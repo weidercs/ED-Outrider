@@ -27,7 +27,9 @@ before.
   targeted something else; once you leave, it goes back to your target after 5 seconds out (the edge of that zone
   comes and goes, so it may flick back now and then). Elsewhere it shows **the body you have targeted** in this
   system, or else **the system you have targeted** (in the galaxy map, or the next jump of the route plotted there).
-  Nothing targeted: no panel.
+  Nothing targeted: no panel. **Docking**: from the moment a station gives you a pad until you touch down, it shows
+  **PAD 34** in large letters under the station's name (any station, carrier, outpost, port or settlement); a refusal
+  that isn't obvious shows "Docking denied" and why for a minute.
   - A body: landable, gravity (amber at your high-gravity level), atmosphere, temperature, what mapping is still
     worth, first discovered; its life, each likely species with its codex mark, colony distance and value, the runs
     under way (what each pays, "1.0M (×5: 5.0M)" with the first-footfall bonus) and the species finished; and whether

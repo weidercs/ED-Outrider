@@ -1679,6 +1679,41 @@ const releasePayloads = async () => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| paste buttons |", good ? "📋 only where this device can; fills To without plotting, Focus/Lock acts on it, a refusal said" : JSON.stringify(o), errors.slice(before));
   }
+  // #3 docking: the pad in large letters on Now, said every time on its own row (Comms; notify off), a refusal's words
+  // said and shown; nothing for a "clear"
+  {
+    const w = dom.window, before = errors.length;
+    const got = JSON.parse(w.eval(`(() => {
+      const o = {}, said = [], told = [], d0 = JSON.stringify({docking: data.docking ?? null}), m0 = data.moments, lib = speechLib;
+      const realSpeak = speak, realNotify = notify, flags = [speechOn, isSpeaker, alertSpeak.docking, lastMomentSeq];
+      data.docking = {pad: 34, station: "Jameson Memorial", type: "Orbis", ts: new Date().toISOString()}; renderNow();
+      const pad = document.querySelector("#nowBody .now-pad"); o.now = pad ? pad.textContent : null;
+      data.docking = {denied: "NoSpace", words: "no pad free for your ship: try again shortly", station: "Jameson Memorial", ts: new Date().toISOString()};
+      renderNow(); o.denied = (document.querySelector("#nowBody .now-card.alert") || {}).textContent || null;
+      data.docking = null; renderNow(); o.gone = !document.querySelector("#nowBody .now-pad");
+      speechLib = {styles: {business: "B"}, lines: {docking_granted: {business: ["Pad {pad}."]}, docking_denied: {business: ["Denied: {reason}."]}}};
+      speak = (t, opt) => said.push([opt && opt.log && opt.log.key, t]); notify = (kind, title, body) => { told.push([kind, title, body]); return true; };
+      speechOn = true; isSpeaker = true; alertSpeak.docking = true;
+      const now = new Date().toISOString();
+      data.moments = [{seq: lastMomentSeq + 1, ts: now, kind: "docking", what: "granted", pad: 7, station: "G0X-85Z", station_type: "FleetCarrier"},
+                      {seq: lastMomentSeq + 2, ts: now, kind: "docking", what: "denied", reason: "TooLarge", words: "your ship is too big for this station's pads", station: "Outpost"},
+                      {seq: lastMomentSeq + 3, ts: now, kind: "docking", what: "clear"}];
+      onData();
+      o.said = said.map(x => x[1]);
+      o.row = ALERTS.some(a => a[0] === "docking") && alertCfgBase().docking === false && alertSpeakBase().docking === true &&
+        !!ALERT_SHORT.docking && !!TAB_ALERT_NAMES.docking && SPEECH_SYS_BOUND.has("docking") && speechPrio("docking") === 1 &&
+        !!document.querySelector('#alertOpts [data-aspeak="docking"]') && !!LINE_SAMPLES.docking_granted && !!LINE_SAMPLES.docking_denied &&
+        JSON.stringify(ROW_KEYS.docking) === JSON.stringify(["docking_granted", "docking_denied"]);
+      speak = realSpeak; notify = realNotify; speechLib = lib;
+      [speechOn, isSpeaker, alertSpeak.docking] = flags; lastMomentSeq = flags[3];
+      data.docking = JSON.parse(d0).docking; data.moments = m0; renderNow();
+      return JSON.stringify(o); })()`));
+    const want = {now: "PAD 34Jameson Memorial", denied: "🛬 Docking denied at Jameson Memorial: no pad free for your ship: try again shortly",
+                  gone: true, said: ["Pad 7.", "Denied: your ship is too big for this station's pads."], row: true};
+    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| docking |", good ? "PAD 34 on Now, the pad and a refusal said on their own row, a clear quiet" : JSON.stringify(got), errors.slice(before));
+  }
   // Settings links to the project on GitHub, with the version running (desktop at the top; the tablet's sheet too)
   {
     const w = dom.window, d = w.document, before = errors.length;

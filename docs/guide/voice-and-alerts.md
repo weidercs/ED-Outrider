@@ -36,6 +36,10 @@ notification and be spoken (🗣), chosen per alert in **⚙ Settings → Alerts
   own row, **Last scoopable star**)
 - on a route you follow in Outrider, a system targeted in game that is not the next stop (its own row, **Wrong target**;
   spoken once per target, no notification by default; see [Plot Route](plot-route.md))
+- **docking** (its own row, **Docking**, spoken by Comms): the pad the station gave you, said every time, even while
+  hushed ("Pad 34."), and why it refused when that isn't obvious: no pad free, ship too big, access restricted, hostile,
+  your offences, a fighter still out (too far away is not said). No notification by default. The pad also shows large on
+  Now and the overlay's Target panel.
 - docking where the station buys your data, and what you banked when you sold
 - a sale that left data aboard (Universal Cartographics sells 50 systems a page; at Vista Genomics, the species
   you kept back), said 90 seconds after the last page
@@ -185,7 +189,7 @@ the sentence ends:
 | Exobiologist | valuable bodies, sampling, Exomastery routes |
 | Chief Engineer | fuel, tank full, scooping stopped, jumponium, hull and heat |
 | Quartermaster | sales, unsold data, your carrier, losses |
-| Comms Officer | the game's start and exit, someone scanning your firsts |
+| Comms Officer | the game's start and exit, someone scanning your firsts, docking pads and refusals |
 | Tactical | every danger line (while Danger lines always in Tactical's voice is on) |
 | Mining Officer | the Rhino's rigs |
 

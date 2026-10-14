@@ -3070,6 +3070,8 @@ class JournalsRegistry(unittest.TestCase):
     }
     # meta key -> why it is NOT cleared by RESET_JOURNAL_DATA
     KEPT_THROUGH_REREAD = {
+        "docking": "live-only: the pad a station gave you just now (#3), written for live lines only; a re-read writes "
+                   "nothing to it",
         "highway": "live-only: the Highway route (DESIGN_NOTES), cannot be rebuilt from journals",
         "riches": "live-only: the Road to Riches route (Spansh's plot), cannot be rebuilt from journals",
         "next_stop": "live-only: the player's chosen next stop (stamp_next_stop keeps it through the re-read)",
