@@ -2,6 +2,12 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · Overlay settings: "Text Size", a wider Scale box, the buttons on their own line
+- The All Panels row reads "Text Size" instead of "Text Sz" (the Text column's hover and the overlay guide too).
+- The Scale box is wide enough for "100" beside its spinner (5em, was 3.4em).
+- Show test panels and Arrange panels sit on a line of their own under the row, at its left, instead of its far right.
+- Smoke: the label, the buttons' line and the box's width.
+
 ## 2026-10-14 · Docs brought up to date
 A sweep over the commits since 2026.10.23 for what fell between the batches.
 - **For the curious**: the file table lists every module again (`tls.py`, `service.py`, `serverlog.py`,

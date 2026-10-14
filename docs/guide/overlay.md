@@ -155,9 +155,9 @@ cut corners, LCARS's bars, ...). In the config file (`[overlay]`):
 ticked Combat (`["system", "bio"]`; the Target panel is `body`) and `hide_docked` the ones ticked Docked
 (`["system", "body", "now", "bio"]` when the key is missing).
 
-<a id="sizes"></a>**Sizes and text.** The row at the top reads **All Panels: Theme · Text Sz** (small, normal or large,
+<a id="sizes"></a>**Sizes and text.** The row at the top reads **All Panels: Theme · Text Size** (small, normal or large,
 for every panel: `text_size`) **· Scale** (a %, 100 to start: `panel_scale`), with Show test panels and Arrange panels
-at its right. Each panel's **Size %** (down to 20 %) is multiplied with the Scale (Scale 100 %: each panel at its own
+on the line under it. Each panel's **Size %** (down to 20 %) is multiplied with the Scale (Scale 100 %: each panel at its own
 size; Scale 50 % and a panel at 50 %: 25 %), and its **Text** column gives it a text size of its own, or "as all
 panels". Panels follow the game window's height, so a panel takes the same share of the screen at 4K as at 1080p: on a
 big TV seen from the sofa, turn the **Scale** down (or Ctrl and wheel over a panel in

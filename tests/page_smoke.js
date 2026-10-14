@@ -4930,11 +4930,14 @@ const releasePayloads = async () => {
                  // 3b: the Text column, each panel's own size or as all panels
                  text: ["system", "body", "radar"].map(id => { const t = box.querySelector(`[data-ovlay="${id}"][data-k="text"]`);
                    return t.value + ":" + t.selectedOptions[0].textContent; }).join(" "),
-                 // 3c: one control row: Theme, Text size, All panels and the two buttons at its far right
+                 // 3c: one control row: Theme, Text Size, Scale; the two buttons on a line of their own under it, at its
+                 // left; the Scale box wide enough for "100" beside its spinner
                  row: !!ctl && ["[data-ov=theme]", "[data-ov=text_size]", "[data-ov=panel_scale]", ".ovbtns [data-ovact=test]", ".ovbtns [data-ovact=arrange]"]
                    .every(q => ctl.querySelector(q)) && (b => !!b && /^All Panels:$/.test(b.textContent))(ctl.querySelector("b")) &&
-                   /Theme/.test(ctl.textContent) && /Text Sz/.test(ctl.textContent) && /Scale/.test(ctl.textContent) &&
+                   /Theme/.test(ctl.textContent) && /Text Size/.test(ctl.textContent) && /Scale/.test(ctl.textContent) &&
                    ctl.querySelector("[data-ov=panel_scale]").value === "60" && !box.querySelector(".mod:not(.ovctl) [data-ovact]"),
+                 rowCss: (s => s.flexBasis + " " + s.marginLeft)(w.getComputedStyle(ctl.querySelector(".ovbtns"))) + " " +
+                   w.getComputedStyle(ctl.querySelector("[data-ov=panel_scale]")).width,
                  rowFind: ctl ? ctl.dataset.find : "",
                  ctrlWheel: /Ctrl \+ wheel for all panels/.test(d.querySelector("ul.ovhelp").textContent),
                  off: !box.querySelector('[data-ovpanel="body"]').checked, theme: box.querySelector('[data-ov="theme"]').value,
@@ -5004,7 +5007,7 @@ const releasePayloads = async () => {
     w.eval(`data.overlay = JSON.parse(${JSON.stringify(saved)}); overlayNote = ""; overlayDrawn = ""; renderOverlay();`);
     const want = {rows: 7, body: "20", figures: "≈ 26 px text|held at 9 px|", heldTip: true,
                   heldLine: "Target: held at 9 px: your screen is too small to go lower", sizeMin: "20",
-                  text: "large:large :as all panels :as all panels", row: true,
+                  text: "large:large :as all panels :as all panels", row: true, rowCss: "100% 0 60px",
                   rowFind: "overlay.theme overlay.text_size overlay.panel_scale text size all panels", ctrlWheel: true,
                   off: true, theme: "elite", nowin: true, nowName: true, inRows: true, tip: true,
                   target: true, analysis: "system body radar strip now bio✓ alerts",
