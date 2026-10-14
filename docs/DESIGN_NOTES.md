@@ -224,6 +224,28 @@ upstream project's choices, not rules of the game.
   `/api/nearest` stays read-only for the AI's tools. The distances are from there, each row's hover says how far from
   you; "here" is still where you are, and the finder gives no jump count from elsewhere (your laden range says nothing
   of jumps from a place you are not in). The choice is per device, with the rest of each one's filters.
+- **Nearby around another system** (2026-10-14; the ideas of Rainmangames' PR #8 "Lock System", closed, rebuilt on
+  S49's Around). Nearby's sphere is around you, or around a chosen centre: your destination, carrier or next stop
+  (followed: a new sphere when they change), "this system" locked where you are, or a system by name (both kept as fixed
+  coordinates). The choice is the server's (meta `near_around`, live-only: it survives a restart and a re-read), not the
+  browser's like Search's, because the sphere is one per server: every window and the tablet must agree on what it
+  lists. Distances keep S49's rule: Dist is from the centre, a From you column and the jump count from you (each row
+  carries its xyz, so From you follows your ship without the server rebuilding rows); what reads "from you" elsewhere
+  (the target line, scoop hints, the auto-target test's nearest system, the AI's nearby tools) uses that, and the
+  horizon line and the AI's nearest unvisited say nothing while the list is elsewhere (their claim, "nothing closer is
+  reported", holds only for a sphere around you). A centre that names nothing now (no target, no carrier) falls back to
+  you and says why.
+- **Spansh is asked when the centre changes, and on ↻ only** (the author: go easy on Spansh). The PR refreshed a locked
+  area every 10 minutes; a free service asked again and again about a sphere that rarely changes is the cost we chose
+  not to pay. ↻ asks no sooner than 2 minutes after the last ask (`NEAR_REFRESH_GAP_S`) and never while a search runs.
+  Arriving in a system inside a pinned sphere asks nothing: Spansh learns of your scans only later, through uploads, so
+  the system joins the list at once as your own (Spansh's answer did not list it) and your scans fill its rows as
+  anywhere. Known limit: away from the sphere, the system you are in is not one of its rows; Here, the briefing and the
+  overlay read it as any system outside the sphere (the cache, the target's lookup, Here's on-demand fetch). The 75 and
+  100 ly radii stay out (a 100 ly sphere is up to 64 times a 25 ly one) until Spansh's maintainer agrees;
+  `[server] radius_choices` can still offer them.
+- **Nearby's filters are per device** (the mass code, "No scan data only"): a view's filter, like show visited.
+  "No scan data" means no body reported by anyone (Spansh's "no scan data", never reported, not looked up).
 - **The Map draws the route ahead** (S50): the game's plotted route after you, then the rows of the route Outrider
   follows (the survey / trade route's or the Highway's; with both, the one plotted last, as for the clipboard), from
   where you are on it, dashed, with ◎ on its next stop (else the header's next stop). At most 300 points

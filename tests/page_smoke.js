@@ -4532,6 +4532,19 @@ const releasePayloads = async () => {
       sh.querySelector('[data-act="here"]').click(); await settle(1500);
       got.sheetHere = [sh.hasAttribute("open"), tw.eval("view")];
     } else got.sheet = "no Nearby row";
+    // Nearby's Around (2026-10-14) on the tablet: the strip above the list, a row's sheet with From you (the server's
+    // rows carry their xyz)
+    got.tabAround = JSON.parse(tw.eval(`(() => {
+      const keep = {na: data.near_around, v: view}, p = data.position, o = [];
+      view = "near"; data.near_around = {around: "lock", name: "Smojooe GW-W c1-4", id: "9001", x: p.x + 30, y: p.y, z: p.z, from_you: 30, why: null};
+      render();
+      const strip = document.getElementById("nearStrip");
+      o.push(!strip.hidden && strip.textContent.includes("Around Smojooe GW-W c1-4 (locked)"));
+      tabOpenRow(document.getElementById("nearTable"), document.querySelector("#rows tr[data-id]"));
+      o.push([...document.querySelectorAll("#tabSheet dt")].map(x => x.textContent).includes("From you"));
+      tabClose(document.getElementById("tabSheet"));
+      data.near_around = keep.na; view = keep.v; render();
+      return JSON.stringify(o); })()`));
     // a search result (a ☆ and a name, no other link): its sheet still opens the system in Here (author, on the tablet)
     got.searchSheet = JSON.parse(tw.eval(`(() => {
       document.getElementById("sRows").innerHTML = '<tr><td class="bmcell"><span class="bm" data-bm="123456" data-name="Smoke Sys">☆</span></td>' +
@@ -4772,7 +4785,7 @@ const releasePayloads = async () => {
              "tb-rb nolink|no rail: docked|0", "tb-rb na|true|in supercruise|N/A"],
       serverRail: ["none", true],
       reload: [true, true, false, false, 0, false, 0, true, true, 1], hint: [true, false], searchSheet: "123456", popKeeps: true, link: ["linked", "unlinked · retrying", "unlinked · retrying"], pill: [true, "tb-link linked"],
-      banner: [true, true, true, 0], sheet: [true, true, true, true, true, true, true], sheetHere: [false, "here"],
+      banner: [true, true, true, 0], sheet: [true, true, true, true, true, true, true], sheetHere: [false, "here"], tabAround: [true, true],
       target: '{"countdown":0}', railEnter: ["Wheels", true, false], pinch: '{"dx":10,"dy":5,"scale":2,"x":15,"y":5}',
       settings: [true, true, "a browser (no app)", true], signOut: [true, false], emblem: [false, true, true, true, "false", false],
       railShown: [true, false, true, "false", true, false, false, "true"],
@@ -6214,6 +6227,118 @@ const releasePayloads = async () => {
     const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| nearby 🎯 |", good ? "🎯 by the row's id64, none on your own row or where auto-target cannot work; it targets without opening or copying, the tablet's sheet offers it" : JSON.stringify({got, want}), errors.slice(before));
+    await releasePayloads();
+  }
+  // Nearby's Around and filters (2026-10-14, the ideas of Rainmangames' PR #8): the Around select (saved on the server:
+  // its POSTs stubbed here), the strip naming the centre (its name copies; ↻ refresh, ✕ back to you), Dist from there with
+  // a From you column and Jumps from you, the Where tile's "around"; a centre that names nothing says why; Spansh's cut
+  // sphere said plainly; the mass code and "No scan data only" filters (per device) and ⧉ Copy visible; Boxel mode's hint
+  {
+    holdPayloads();
+    const w = dom.window, before = errors.length, realFetch = w.fetch, sent = [];
+    w.fetch = (u, o) => {
+      const url = String(u);
+      if (/api\/nearby\/(around|refresh)/.test(url)) {
+        sent.push([url.replace(/^.*api\//, ""), o && o.body ? JSON.parse(o.body) : null]);
+        const ans = /refresh/.test(url) ? {error: "Spansh was asked 5 s ago: again in 115 s"} : {near_around: {around: "here"}};
+        return Promise.resolve(new Response(JSON.stringify(ans), {status: ans.error ? 409 : 200, headers: {"Content-Type": "application/json"}}));
+      }
+      if (/api\/find\?/.test(url)) return Promise.resolve(new Response(JSON.stringify({id: "77", name: "Far Water"}), {headers: {"Content-Type": "application/json"}}));
+      return realFetch(u, o);
+    };
+    const got = JSON.parse(w.eval(`(() => {
+      const o = {}, keep = window.__na = {sys: data.systems, na: data.near_around, cut: data.sphere_cut, pos: data.position, view, copy: copyText,
+                                          range: data.jump_range, now: data.jump_range_now, boost: data.boost};
+      window.__naCopied = []; copyText = (t, what) => { window.__naCopied.push([t, what || null]); };
+      const p = data.position, at = (dx, extra) => Object.assign({}, data.systems[0] || {}, {x: undefined}, extra, {xyz: [p.x + dx, p.y, p.z]});
+      // three rows around a centre 30 ly from you (x + 30): its own row, one 2 ly beyond it, and yours
+      const C = p.x + 30;
+      data.systems = [at(30, {id: "9001", id64: 9001, name: "Smojooe GW-W c1-4", distance: 0, status: "no bodies", visited: false}),
+                      at(32, {id: "9002", id64: 9002, name: "Smojooe AB-C d2-5", distance: 2, status: "explored", visited: false}),
+                      at(0, {id: posId(), id64: Number(posId()), name: p.name, distance: 30, status: "unreported", visited: true})];
+      data.sphere_cut = null; data.jump_range = 10; data.jump_range_now = 10; data.boost = null;
+      view = "near";
+      data.near_around = {around: "here"}; render();
+      const sel = document.getElementById("nearAround");
+      o.options = [...sel.options].map(x => x.value);
+      o.lockName = sel.options[4].textContent === "lock this system (" + p.name + ")";
+      o.youRows = [...document.querySelectorAll("#rows tr[data-id]")].map(r => r.dataset.id).includes(posId());   // around you: not a row
+      o.youStrip = document.getElementById("nearStrip").hidden;
+      data.near_around = {around: "lock", name: "Smojooe GW-W c1-4", id: "9001", x: C, y: p.y, z: p.z, from_you: 30, why: null, refreshing: false, refresh_gap_s: 120};
+      render();
+      const strip = document.getElementById("nearStrip");
+      o.strip = [strip.hidden, strip.textContent.replace(/\\s+/g, " ").trim()];
+      o.select = sel.value;
+      o.around = document.getElementById("nearTable").classList.contains("around");
+      const cells = id => { const tr = document.querySelector('#rows tr[data-id="' + id + '"]'); return tr && [tr.querySelector("td.dist").textContent,
+        tr.querySelector("td.fromcol").textContent, tr.querySelector("td.fromcol").nextElementSibling.textContent.trim()]; };
+      o.rows = [cells("9001"), cells("9002"), cells(posId())];
+      o.sub = document.getElementById("subAround").textContent;
+      o.distTitle = document.getElementById("nearDistTh").title;
+      strip.querySelector(".nscentre").click();
+      oneJump.checked = true; render();
+      o.oneJump = [...document.querySelectorAll("#rows tr[data-id]")].map(r => r.dataset.id).length;   // only your own (0 ly from you)
+      oneJump.checked = false; render();
+      sortKeys.near = "from"; render();
+      o.fromSort = [...document.querySelectorAll("#rows tr[data-id]")].map(r => r.dataset.id === posId() ? "you" : r.dataset.id);
+      sortKeys.near = "distance";
+      // filters: mass code c, then the systems nobody reported a scan of; ⧉ Copy visible copies what is shown
+      const mass = document.getElementById("nearMass"), ns = document.getElementById("nearNoScan");
+      mass.value = "c"; mass.dispatchEvent(new Event("change"));
+      o.mass = [[...document.querySelectorAll("#rows tr[data-id]")].map(r => r.dataset.id), localStorage.getItem("nearMass")];
+      mass.value = ""; mass.dispatchEvent(new Event("change"));
+      ns.checked = true; ns.dispatchEvent(new Event("change"));
+      o.noScan = [[...document.querySelectorAll("#rows tr[data-id]")].map(r => r.dataset.name || r.querySelector("td.name").dataset.name), localStorage.getItem("nearNoScan")];
+      document.getElementById("nearCopy").click();
+      ns.checked = false; ns.dispatchEvent(new Event("change"));
+      // a centre that names nothing now: why, and the list around you
+      data.near_around = {around: "carrier", why: "you have no fleet carrier", refreshing: false};
+      render();
+      o.why = [strip.textContent.replace(/\\s+/g, " ").trim(), document.getElementById("nearTable").classList.contains("around"), document.getElementById("subAround").textContent];
+      // Spansh's cut sphere, said plainly in the strip (and the tile's hover)
+      data.near_around = {around: "here"}; data.sphere_cut = 11.5; render();
+      o.cut = [strip.hidden, strip.textContent.trim(), document.querySelector("#subCut .warn").title];
+      // Boxel mode: the Around select goes (stdonly), a hint says the Around is for Standard
+      data.near_around = {around: "lock", name: "Smojooe GW-W c1-4", id: "9001", x: C, y: p.y, z: p.z, from_you: 30, why: null};
+      store.set("nearMode", "boxel"); render();
+      const bx = document.getElementById("nearAroundBx");
+      o.boxel = [document.getElementById("nearWrap").classList.contains("boxel") && !!sel.closest(".stdonly"), bx.hidden, bx.textContent];
+      store.set("nearMode", "standard"); render();
+      return JSON.stringify(o); })()`));
+    // the select and the strip's buttons post; "a system…" finds the name first
+    w.eval(`(() => { const sel = document.getElementById("nearAround"); sel.value = "lock"; sel.dispatchEvent(new Event("change")); })()`);
+    await settle(800);
+    w.eval(`(() => { data.near_around = {around: "lock", name: "Smojooe GW-W c1-4", id: "9001", x: data.position.x + 30, y: data.position.y,
+      z: data.position.z, from_you: 30, why: null}; render(); document.querySelector("#nearStrip [data-nearrefresh]").click(); })()`);
+    await settle(800);
+    w.eval(`(() => { data.near_around = {around: "lock", name: "Smojooe GW-W c1-4", id: "9001", x: data.position.x + 30, y: data.position.y,
+      z: data.position.z, from_you: 30, why: null}; render(); document.querySelector("#nearStrip [data-nearback]").click(); })()`);
+    await settle(800);
+    got.typed = JSON.parse(w.eval(`(() => { const sel = document.getElementById("nearAround"), nm = document.getElementById("nearAroundName");
+      sel.value = "system"; sel.dispatchEvent(new Event("change")); const shown = !nm.hidden;
+      nm.value = "Far Water"; nm.dispatchEvent(new Event("change")); return JSON.stringify(shown); })()`));
+    await settle(800);
+    got.sent = sent;
+    got.copied = JSON.parse(w.eval("JSON.stringify(window.__naCopied)"));
+    got.toast = d.getElementById("toast").textContent;
+    w.eval(`(() => { const k = window.__na; Object.assign(data, {systems: k.sys, near_around: k.na, sphere_cut: k.cut, jump_range: k.range,
+      jump_range_now: k.now, boost: k.boost}); copyText = k.copy; view = k.view; NA.typing = false; render(); })()`);
+    w.fetch = realFetch;
+    const want = {options: ["here", "destination", "carrier", "next_stop", "lock", "system"], lockName: true, youRows: false, youStrip: true,
+      strip: [false, `⌖ Around Smojooe GW-W c1-4 (locked) · 30 ly from you · ${w.eval("data.radius")} ly sphere · ↻ refresh · ✕ back to you`], select: "lock", around: true,
+      rows: [["0.00", "30.00", "3"], ["2.00", "32.00", "4"], ["30.00", "0.00", "1"]], sub: " around Smojooe GW-W c1-4",
+      distTitle: "ly from Smojooe GW-W c1-4 (the system Nearby is around)", oneJump: 1, fromSort: ["you", "9001", "9002"],
+      mass: [["9001"], '"c"'], noScan: [["Smojooe GW-W c1-4", got.noScan && got.noScan[0][1]], "true"],
+      why: ["⌖ your carrier: you have no fleet carrier; Nearby is around you meanwhile · ✕ back to you", false, ""],
+      cut: [false, "Spansh returned its maximum: the list is complete only to 11.5 ly — a smaller radius shows them all",
+            "Spansh returned its maximum: the list is complete only to 11.5 ly — a smaller radius shows them all"],
+      boxel: [true, false, "Nearby's Around (Smojooe GW-W c1-4, locked) is for Standard: a boxel has its own centre"],
+      typed: true,
+      sent: [["nearby/around", {around: "lock"}], ["nearby/refresh", null], ["nearby/around", {around: "here"}], ["nearby/around", {around: "77"}]],
+      copied: [["Smojooe GW-W c1-4", null], [got.noScan ? got.noScan[0].join("\n") : "", "2 system names"]], toast: "Spansh was asked 5 s ago: again in 115 s"};
+    const good = JSON.stringify(got) === JSON.stringify(want) && got.noScan[0][1] === w.eval("data.position.name") && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| nearby around |", good ? "Around saved on the server, the strip (copy, ↻, ✕), Dist from the centre with From you and Jumps from you, why, the cut sphere in words, mass and no-scan filters, Copy visible, Boxel's hint" : JSON.stringify({got, want}), errors.slice(before));
     await releasePayloads();
   }
   // One rule for every 🎯 (the author, 2026-10-14): on the game PC with auto-target available and no binding missing,

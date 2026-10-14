@@ -258,6 +258,16 @@ body.viewwin .views { display: none; }
 .nearmode { display: inline-flex; gap: 2px; border: 1px solid var(--line); border-radius: 6px; padding: 1px 4px; }
 .nearmode label { display: inline-flex; align-items: center; gap: 3px; padding: 1px 4px; }
 #nearWrap.boxel .stdonly { display: none; }
+/* Nearby's Around and filters (2026-10-14, Rainmangames' PR #8's ideas): From you only while the list is around another
+   system; the strip above the list names that centre (and Spansh's cut sphere) */
+#nearTable:not(.around) .fromcol { display: none; }
+.nearAround { display: inline-flex; align-items: center; gap: 6px; }
+.nearAround .lbl { color: var(--muted); }
+#nearFilters { padding-top: 2px; gap: 12px; }
+#nearStrip { margin-top: 6px; font-size: 13px; }
+#nearStrip .nsline { padding: 3px 8px; border-left: 3px solid var(--accent); margin-top: 2px; }
+#nearStrip .nsline.warn { border-left-color: var(--warn); color: var(--warn); }
+#nearStrip .nscentre { font-weight: 600; cursor: pointer; }
 .bxhead { margin: 6px 0; } .bxhead .bxname { font-weight: 600; } .bxhead .bxkind { color: var(--muted); }
 /* a green gas giant (sure) or the ladder model's guess (?) */
 .ggg { display: inline-flex; align-items: center; gap: 1px; color: #3FBF6A; font-weight: 700; font-size: .95em; white-space: nowrap; cursor: help; }
@@ -1113,6 +1123,7 @@ body.app .pane thead th { position: sticky; top: 0; z-index: 1; background: var(
 body.app #bodyPanel thead th, body.app #sBodyPanel thead th { position: static; box-shadow: none; }
 body.app .pane .hint { margin-top: 8px; }
 body.app .tablebar { padding-top: 0; }
+body.app #nearWrap > .tablebar, body.app #nearStrip { flex: 0 0 auto; }
 /* Overview: Nearby and This system side by side (or stacked), each the full height; Nearby's list scrolls under its
    options, the system's body table scrolls under its heading and to-do line, and the lower half (surface map or body
    panel) stays put */

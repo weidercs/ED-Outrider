@@ -376,6 +376,11 @@ UNSOLD_LOG = 3             # recent unsold estimates kept to stamp a sale with t
 NO_DUMP_RETRY = 3600       # s: a dump 404 for a system whose search lists bodies is asked again after this
 DUMP_MAX_TRIES = 5         # body-detail fetches for one system before we stop asking (this stay)
 RETRY_SAY_S = 1.0          # s: a Nearby retry says "asking Spansh again" only once its search has been out this long
+# Nearby's Around (2026-10-14, the ideas of Rainmangames' PR #8): where its sphere is. "here" follows you; "destination",
+# "carrier" and "next_stop" follow what they name (a new sphere when that changes); "lock" pins where you were when you
+# chose it, "system" a system by name (both kept with their coordinates). Saved in meta near_around (live-only)
+NEAR_AROUND_KINDS = ("here", "destination", "carrier", "next_stop", "lock", "system")
+NEAR_REFRESH_GAP_S = 120   # s: Nearby's ↻ refresh asks Spansh again no sooner than this after its last ask (a free service)
 REPORTED_MAX_AGE = 86400   # s: the species reported on your system's bodies (S23) are asked for again after a day
 REPORTED_RETRY_S = 600     # s: ...and after a failed ask, not before this
 ROUTE_LOOKUP_MAX = 24      # hops of the game's route asked of Spansh at once (the In-Game Route strip shows 24 chips)
@@ -5172,6 +5177,18 @@ def dist(a, b):
     return math.sqrt((a["x"] - b["x"]) ** 2 + (a["y"] - b["y"]) ** 2 + (a["z"] - b["z"]) ** 2)
 
 
+def near_choice(c):
+    """Nearby's Around as saved in meta near_around, checked: {around} for a kind that moves, {around, id64, name, x, y,
+    z} for "lock" and "system"; anything else (none saved, an old or broken value) is {"around": "here"}."""
+    if isinstance(c, dict) and c.get("around") in NEAR_AROUND_KINDS:
+        if c["around"] not in ("lock", "system"):
+            return {"around": c["around"]}
+        if isinstance(c.get("id64"), int) and isinstance(c.get("name"), str) \
+                and all(isinstance(c.get(k), (int, float)) and not isinstance(c.get(k), bool) for k in "xyz"):
+            return {k: c[k] for k in ("around", "id64", "name", "x", "y", "z")}
+    return {"around": "here"}
+
+
 def with_id(d):
     """A system dict for the page with `id`, its id64 as a string: JavaScript numbers hold 53 bits, and an id64
     above 2^53 (a high in-boxel index) would lose its last digits there and no longer match the exact ids."""
@@ -6594,7 +6611,12 @@ class State:
         self.systems = {}          # id64 -> row dict for the page
         self.visited = set()
         self.status = "starting"
-        self.center = None
+        self.center = None         # where the sphere is: your position, or Nearby's chosen centre (nearby_centre)
+        self.near_choice = near_choice(meta_get(db, "near_around"))   # Nearby's Around, saved (set_near_around)
+        self.near_why = None       # why the chosen centre cannot be used now (no target...): the sphere is around you
+        self._near_miss = None     # ((kind, id64), why): that failure, not worked out again every tick
+        self.near_asked = 0.0      # time.time() of the last Spansh sphere search started (↻ refresh's pace)
+        self.sphere_failed = True  # the last sphere search failed (or none answered yet): nothing claimed about Spansh
         self.refresh_task = None
         self.target = None         # classified FSD target for the page
         self.target_key = None
@@ -6909,6 +6931,7 @@ class State:
             "health": self.health.summary(),   # the lookups down (S42): the Data tile's "Spansh unavailable"
             "radius_choices": sorted({float(x) for x in RADIUS_CHOICES} | {self.radius}),
             "sphere_cut": self.sphere_cut,
+            "near_around": self.near_around_summary(),   # Nearby's Around: its centre when not you (the strip)
             "tts": self.speaker.info() if self.speaker else None,
             "style_picks": self.style_picks(),   # S40: each personality's voice and speaker picked in Settings
             "crew": self.crew_summary(),          # the crew: who speaks each alert row, and who cannot (the XO speaks for it)
@@ -11211,6 +11234,8 @@ class State:
         s.update(id64=id64, id=str(id64), name=base["name"], source=source,
                  in_spansh=True if source == "spansh" else None if source == "edsm" or base.get("unasked") else False,
                  visited=id64 in self.visited, distance=round(dist(self.center or base, base), 2),   # (no sphere yet: 0)
+                 # where it is: the page's "From you" while Nearby is around another system (near_around)
+                 xyz=[round(base[k], 3) for k in "xyz"] if all(isinstance(base.get(k), (int, float)) for k in "xyz") else None,
                  own_scans=len(own), firsts=own_firsts(self.db, id64, base["name"]),
                  mapped=self.db.execute(
                      """SELECT count(*) FROM own_firsts f LEFT JOIN own_mapped m
@@ -11358,19 +11383,23 @@ class State:
                 self.bump()
 
     def maybe_refresh(self):
-        pos = self.journals.pos
-        if not pos:
+        """Every tick: Spansh's sphere is asked when its centre changes (you moved, or Nearby's chosen centre did), or
+        again when a failed search's retry is due. Nothing else asks it: no timer (↻ refresh_nearby is the player's)."""
+        pos = self.nearby_centre()
+        if not pos or pos.get("x") is None:
             return
         retry = False
         if self.center and self.center["id64"] == pos["id64"]:
             if not (self.retry_at and time.time() >= self.retry_at
                     and (not self.refresh_task or self.refresh_task.done())):
+                self.near_add_here()
                 return
             retry = True
         self.center = pos
         self.retry_at = None
         if self.refresh_task and not self.refresh_task.done():
             self.refresh_task.cancel()
+        self.near_asked = time.time()
         self.refresh_task = asyncio.create_task(self.refresh(pos, retry))
 
     def set_radius(self, r):
@@ -11380,9 +11409,130 @@ class State:
         self.radius = r
         meta_set(self.db, "radius_choice", r)
         self.db.commit()
-        self.center = None          # forces a fresh Spansh sphere around where you are
+        self.center = None          # forces a fresh Spansh sphere around its centre
         self.maybe_refresh()
         self.bump()
+
+    # ---- Nearby's Around (2026-10-14: Rainmangames' PR #8, "Lock System" and filters, its ideas built on S49's Around) ----
+    def _around_id(self, kind):
+        """The id64 a moving Around names now (destination, carrier, next_stop), cheaply: None when it names nothing."""
+        if kind == "destination":
+            return (self.game_target() or {}).get("id64")
+        if kind == "carrier":
+            return (self.journals.carrier or {}).get("id64")
+        return (meta_get(self.db, "next_stop") or {}).get("id64")
+
+    def nearby_centre(self):
+        """Where Nearby's sphere is: your position, or the Around saved by POST /api/nearby/around ({id64, name, x, y,
+        z, around}). "lock" and "system" are fixed points; destination, carrier and next_stop are worked out through
+        search_origin (read only) when what they name changes. One that names nothing now (no target, no carrier, a
+        system Outrider cannot place) leaves the sphere around you, and near_why says why."""
+        pos, c = self.journals.pos, self.near_choice
+        kind = c["around"]
+        self.near_why = None
+        if kind == "here":
+            return pos
+        if kind in ("lock", "system"):
+            return {"id64": c["id64"], "name": c["name"], "x": c["x"], "y": c["y"], "z": c["z"], "around": kind}
+        id64, cur = self._around_id(kind), self.center
+        if id64 is not None and cur and cur.get("id64") == id64 and cur.get("around") == kind:
+            return cur
+        if self._near_miss and self._near_miss[0] == (kind, id64):
+            self.near_why = self._near_miss[1]
+            return pos
+        o, why = self.search_origin(kind)
+        if o:
+            self._near_miss = None
+            return o
+        self._near_miss, self.near_why = ((kind, id64), why), why
+        return pos
+
+    def near_pinned(self):
+        """Nearby's sphere is around a chosen centre, not around you (its rows' distance is from there)."""
+        return self.near_choice["around"] != "here" and not self.near_why
+
+    def near_add_here(self):
+        """A sphere around a chosen centre is not asked again when you arrive in it (Spansh learns of your scans later,
+        through uploads): the system you are in, inside the sphere and not listed (Spansh had no record of it), joins
+        the list at once as your own; your scans then fill its row as anywhere (apply_own_changes)."""
+        here, c = self.journals.pos, self.center
+        if not here or not c or here.get("x") is None or here["id64"] == c["id64"] or here["id64"] in self.bases \
+                or not self.near_pinned() or (self.refresh_task and not self.refresh_task.done()):
+            return
+        d = dist(c, here)
+        if d > self.radius:
+            return
+        unasked = self.sphere_failed or (self.sphere_cut is not None and d > self.sphere_cut)
+        self.visited.add(here["id64"])
+        self.bases[here["id64"]] = ("own", {"name": here["name"], "x": here["x"], "y": here["y"], "z": here["z"],
+                                            "body_count": None, "records": [], "unasked": unasked})
+        if self.safe_row(here["id64"]):
+            self.bump()
+
+    def set_near_around(self, around):
+        """POST /api/nearby/around: "here" (you), "destination", "carrier", "next_stop", "lock" (the system you are in,
+        kept where it is) or a system's id64 as a string (a typed name found by GET /api/find first, as Search's
+        Around). Saved in meta near_around (live-only: a restart and a journal re-read keep it), so every window and
+        the tablet agree. A new centre asks Spansh at once (maybe_refresh). (summary, None) or (None, why)."""
+        if around == "lock":
+            pos = self.journals.pos
+            if not pos or pos.get("x") is None:
+                return None, "your position is not known yet"
+            c = {"around": "lock", "id64": pos["id64"], "name": pos["name"], "x": pos["x"], "y": pos["y"], "z": pos["z"]}
+        elif around in NEAR_AROUND_KINDS and around != "system":
+            c = {"around": around}
+        else:
+            o, why = self.search_origin(around)
+            if not o or o.get("around") != "system":
+                return None, why or AROUND_BAD
+            c = {"around": "system", "id64": o["id64"], "name": o["name"], "x": o["x"], "y": o["y"], "z": o["z"]}
+        c = near_choice(c)
+        self.near_choice, self._near_miss = c, None
+        meta_set(self.db, "near_around", c)
+        self.db.commit()
+        self.maybe_refresh()
+        self.bump()
+        return self.near_around_summary(), None
+
+    def refresh_nearby(self, now=None):
+        """↻ refresh (POST /api/nearby/refresh): Spansh's sphere around Nearby's chosen centre asked again. Only while
+        it is not around you (there each arrival asks), never while a search runs, and no sooner than
+        NEAR_REFRESH_GAP_S after the last ask. (True, None) or (False, why)."""
+        now = time.time() if now is None else now
+        if not self.near_pinned():
+            return False, "Nearby is around you: it asks Spansh again at each arrival"
+        if self.refresh_task and not self.refresh_task.done():
+            return False, "Spansh is being asked already"
+        wait = NEAR_REFRESH_GAP_S - (now - self.near_asked)
+        if wait > 0:
+            return False, f"Spansh was asked {int(now - self.near_asked)} s ago: again in {math.ceil(wait)} s"
+        self.center = None
+        self.maybe_refresh()
+        self.bump()
+        return True, None
+
+    def near_around_summary(self):
+        """The payload's near_around: {around} around you; else the centre ({around, name, id, x, y, z, from_you}), or
+        `why` it is around you meanwhile, and whether a search runs (↻)."""
+        kind = self.near_choice["around"]
+        if kind == "here":
+            return {"around": "here"}
+        out = {"around": kind, "why": self.near_why, "refresh_gap_s": NEAR_REFRESH_GAP_S,
+               "refreshing": bool(self.refresh_task and not self.refresh_task.done())}
+        c, pos = self.center, self.journals.pos
+        if c and not self.near_why:
+            out.update(name=c.get("name"), id=str(c["id64"]), x=c["x"], y=c["y"], z=c["z"],
+                       from_you=round(dist(c, pos), 1) if pos and pos.get("x") is not None else None)
+        return out
+
+    def near_from_you(self, row):
+        """A Nearby row's distance from you (ly): its own distance while the sphere is around you, else from its xyz."""
+        pos, xyz = self.journals.pos, row.get("xyz")
+        if not self.near_pinned():
+            return row.get("distance")
+        if not pos or pos.get("x") is None or not xyz:
+            return None
+        return round(math.dist(xyz, (pos["x"], pos["y"], pos["z"])), 2)
 
     def health_changed(self):
         """A lookup source went down or came back (outrider.health.Health's on_change): the banner, then the page."""
@@ -11538,10 +11688,12 @@ class State:
             # only complete out to the last system returned; say so rather than call it every system
             self.sphere_cut = round(results[-1]["distance"], 1) \
                 if len(results) >= SPANSH_PAGE * SPANSH_MAX_PAGES and results else None
+            self.sphere_failed = False
         except Exception as e:  # network trouble shouldn't kill the server
             spansh_failed = e
             results = []
             self.sphere_cut = None   # the last good search's limit was for another position or radius
+            self.sphere_failed = True
             try:  # second opinion: EDSM's list has no body data but says what exists
                 edsm = await self.spansh.edsm_sphere(pos, r)
             except Exception:
@@ -15710,7 +15862,7 @@ class State:
             return None, "your jump range is not known yet (no Loadout seen)"
         best = None
         for key, row in self.systems.items():
-            d, id64 = row.get("distance"), row.get("id64", key)
+            d, id64 = self.near_from_you(row), row.get("id64", key)   # from you, also while Nearby is around elsewhere
             try:
                 id64 = int(id64)
             except (TypeError, ValueError):
@@ -18654,6 +18806,23 @@ def make_app(state, hosts=None):
         state.set_radius(r)
         return web.json_response({"radius": state.radius})
 
+    async def near_around_view(request):
+        """Nearby's Around {around: here | destination | carrier | next_stop | lock | a system's id64 string}: saved on the
+        server for every window (State.set_near_around)."""
+        around = (await json_object(request) or {}).get("around")
+        if not isinstance(around, str) or not 0 < len(around) <= 24:
+            return web.json_response({"error": "expected {around: " + ", ".join(NEAR_AROUND_KINDS[:5]) + " or a system's id64}"},
+                                     status=400)
+        out, why = state.set_near_around(around)
+        if why:
+            return web.json_response({"error": why}, status=400 if why == AROUND_BAD else 409)
+        return web.json_response({"near_around": out})
+
+    async def near_refresh_view(_):
+        """↻ refresh: Spansh asked again for the sphere around Nearby's chosen centre, paced (State.refresh_nearby)."""
+        ok, why = state.refresh_nearby()
+        return web.json_response({"ok": True} if ok else {"error": why}, status=200 if ok else 409)
+
     def commander_view(fn):
         async def view(_):
             return web.json_response(fn())
@@ -18773,6 +18942,8 @@ def make_app(state, hosts=None):
     app.router.add_get("/api/nearest", nearest_view)
     app.router.add_get("/api/ggg", ggg_view)
     app.router.add_post("/api/radius", radius_view)
+    app.router.add_post("/api/nearby/around", near_around_view)
+    app.router.add_post("/api/nearby/refresh", near_refresh_view)
     app.router.add_get("/api/say", say_view)
     app.router.add_post("/api/say/play", pc_only(say_play_view))
     app.router.add_post("/api/say/prefetch", say_prefetch_view)

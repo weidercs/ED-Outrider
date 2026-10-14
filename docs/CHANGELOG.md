@@ -2,6 +2,33 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · Nearby around another system ("Lock System") and Nearby's filters
+The ideas of Rainmangames' pull request #8 ("Nearby exploration: area locking, filters, auto-refresh"; closed, not
+merged), rebuilt on 2026.10.23's Around (S49). Thanks to Rainmangames, PR #8.
+- **Around on Nearby's bar**: you (the default: Nearby follows your ship as before), your destination, your carrier, your
+  next stop (followed: a new sphere when they change), lock this system (the sphere stays where you are now) or a
+  system by name (GET `/api/find` first, as Search's). Saved on the server (POST `/api/nearby/around`, meta
+  `near_around`, live-only: a restart and a journal re-read keep it), so every window, the Overview and the tablet agree.
+  One that names nothing now (no target, no carrier) says why and leaves the list around you.
+- **Away from you**: a strip above the list, "⌖ Around Smojooe GW-W c1-4 (locked) · 31.2 ly from you · 25 ly sphere ·
+  ↻ refresh · ✕ back to you" (the name copies); Dist is from the centre, a **From you** column and **Jumps** from you
+  (S49 kept "from you" apart); the Where tile says "known within 25 ly around …". The target line, the scoop hints and
+  the auto-target test's nearest system stay from you; the horizon line and the AI's nearest unvisited say nothing then
+  (their claim holds only around you), the AI's nearby systems measure from you and say where the list is.
+- **Spansh is asked when the centre changes, and on ↻ refresh only** (POST `/api/nearby/refresh`: never while a search
+  runs, no sooner than 2 minutes after the last ask): no timed refresh (the PR's every 10 minutes). A system you visit
+  inside a pinned sphere joins the list at once as your own; your scans fill the rows as always.
+- **Filters on Nearby's second row**, per device: Mass (all, a … h), No scan data only, ⧉ Copy visible (the names of the
+  rows shown, one per line).
+- **Spansh's cut sphere in plain words**: "Spansh returned its maximum: the list is complete only to N ly — a smaller
+  radius shows them all", in the strip above the list (and the Where tile's "complete to N ly" hover).
+- Boxel mode: Around is for Standard (the select goes; a hint says so while one is set). Not built: the PR's 75 and
+  100 ly radii (until Spansh's maintainer agrees; `[server] radius_choices` can still offer them) and its timed refresh.
+- Tests: `tests/test_nearby_around.py` (the saved choice and its checks, the centre per option, no Spansh ask without a
+  change, ↻'s pace, Dist and From you, the routes, the AI's tools); smoke blocks (the strip, the columns, the filters,
+  Copy visible, the posts, Boxel's hint; the tablet's strip and row sheet). Docs: the Views guide, DESIGN_NOTES,
+  AGENT_GUIDE.
+
 ## 2026-10-14 · No route lookups in the bubble
 - The game route's hops are no longer looked up on Spansh within 1,000 ly of Sol or 500 ly of Colonia (the author's
   ask): Spansh knows every system there and their records are heavy (Sol and Colonia alone ~190 KB), so a route

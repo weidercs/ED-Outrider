@@ -90,7 +90,7 @@ const SHORT_FORMS = {
   // Nearby's status badges: the words become marks, the meaning stays in the title
   status: {"no scan data": "—", "fully scanned": "✓", "unreported": "?", "not looked up": "…", "partly scanned": "part", "yours only": "own"},
   // headings
-  head: {"Main star": "Star", "Value now / max": "Value", "Dist ls": "ls", "Atmosphere": "Atm", "Bio / Geo": "Bio",
+  head: {"Main star": "Star", "Value now / max": "Value", "From you": "From", "Dist ls": "ls", "Atmosphere": "Atm", "Bio / Geo": "Bio",
     "System tag": "Tag", "Seen by others": "Seen", "Lost: scan (FSS)": "FSS", "Lost: map (DSS)": "DSS", "Lost total": "Lost",
     "Unsold value": "Unsold", "Max from Sol": "Sol", "🏁 systems": "🏁", "ship losses": "losses", "Samples": "Samp",
     "Bookmarked system": "System", "Jump ly": "ly", "Fuel used": "Used", "Fuel left": "Fuel", "Remaining ly": "Left",
@@ -517,7 +517,8 @@ function lookupsDown(d, short) {
 }
 function horizon() {
   const p = data && data.position;
-  if (!p || SPHERE_INCOMPLETE.test(data.status || "")) return null;
+  // its claim (nothing closer is reported) holds only for a sphere around you, not one Nearby's Around put elsewhere
+  if (!p || SPHERE_INCOMPLETE.test(data.status || "") || nearElsewhere()) return null;
   const cut = data.sphere_cut, r = cut != null ? Math.min(cut, data.radius) : data.radius;
   const n = (Array.isArray(data.systems) ? data.systems : []).filter(s => sysId(s) !== sysId(p) && !s.visited && s.source !== "route")
     .sort((a, b) => a.distance - b.distance)[0];
@@ -3142,24 +3143,32 @@ function render() {
   } else M.open = false;
   if (view === "hwy") { loadHwy(); loadRich(); }
   refreshPop();
-  const jr = effRange();
-  let rows = data.systems.filter(s => sysId(s) !== sysId(p))
+  const jr = effRange(), elsewhere = nearElsewhere(), na = data.near_around || {around: "here"};
+  // around another system (Nearby's Around) your own system is one of its rows; around you it is the header's
+  let rows = data.systems.filter(s => elsewhere || sysId(s) !== sysId(p))
     .filter(s => showVisited.checked || !s.visited)
     .filter(s => showExplored.checked || s.status !== "explored")
-    .filter(s => !oneJump.checked || !jr || s.distance <= jr);
+    .filter(s => !oneJump.checked || !jr || lyFromYou(s) <= jr)
+    .filter(nearFilter);
+  const far0 = x => x == null ? Infinity : x;
   rows.sort(sortWith("near", sortKey("near") === "name"
     ? (a, b) => a.name.localeCompare(b.name, undefined, {numeric: true})
     : sortKey("near") === "value" ? (a, b) => (b.value_max || 0) - (a.value_max || 0) || a.distance - b.distance
+    : sortKey("near") === "from" ? (a, b) => far0(lyFromYou(a)) - far0(lyFromYou(b)) || a.distance - b.distance
     : (a, b) => a.distance - b.distance));
+  nearShown = rows.map(s => s.name);   // ⧉ Copy visible: what the list shows, in its order
   // Fuel: the nearest scoopable star you can reach (visited or not) gets a tag when the tank is low.
   const fuel = data.fuel, lowFuel = fuel && fuel.live && fuel.pct != null && fuel.pct < 30;
-  const scoopNext = lowFuel && data.systems.filter(s => sysId(s) !== sysId(p) && s.main_scoopable && (!jr || s.distance <= jr))
-    .sort((a, b) => a.distance - b.distance)[0];
+  const scoopNext = lowFuel && data.systems.filter(s => sysId(s) !== sysId(p) && s.main_scoopable && (!jr || lyFromYou(s) <= jr))
+    .sort((a, b) => far0(lyFromYou(a)) - far0(lyFromYou(b)))[0];
   const unvisited = data.systems.filter(s => !s.visited).length;
   document.getElementById("subKnown").textContent = data.systems.length;
   document.getElementById("subUnvisited").textContent = unvisited;
+  const subAround = elsewhere ? ` around <b class="copy" data-name="${esc(na.name)}" title="click to copy">${esc(na.name)}</b>` : "";
+  if (document.getElementById("subAround").innerHTML !== subAround) document.getElementById("subAround").innerHTML = subAround;
   document.getElementById("subCut").innerHTML = data.sphere_cut != null
-    ? ` · <span class="warn" title="Spansh knows more systems in range than Outrider fetches; the list is complete only out to ${data.sphere_cut} ly. A smaller radius shows them all.">complete to ${data.sphere_cut} ly</span>` : "";
+    ? ` · <span class="warn" title="${esc(SPHERE_CUT_WORDS(data.sphere_cut))}">complete to ${data.sphere_cut} ly</span>` : "";
+  renderNearAround();
   const rs = document.getElementById("radiusSel"), choices = data.radius_choices || [data.radius];
   if (rs.dataset.opts !== choices.join(",")) {   // rebuilt only when the choices change, so an open list stays open
     rs.innerHTML = choices.map(r => `<option value="${r}">${r}</option>`).join(""); rs.dataset.opts = choices.join(",");
@@ -3185,7 +3194,8 @@ function render() {
     const src = t.source === "edsm" ? " (known to EDSM only)" : "";
     const hz = hazardNote(t.star_class);
     const hop = t.hop;
-    tEl.innerHTML = `Target: <b>${esc(t.name)}</b>${hop ? ` · ${hopCostHtml(hop)}` : row ? ` · ${row.distance.toFixed(2)} ly` : ""}${sc}` +
+    const rowLy = row && lyFromYou(row);   // from you, also while Nearby is around another system
+    tEl.innerHTML = `Target: <b>${esc(t.name)}</b>${hop ? ` · ${hopCostHtml(hop)}` : rowLy != null ? ` · ${rowLy.toFixed(2)} ly` : ""}${sc}` +
       ` · <span class="t-${t.status.replace(" ", "")}">${label}${src}</span>${targetCounts(t)}` + (hz ? ` · <span class="hazard">⚠ ${hz}</span>` : "");
   }
   renderLeaving(t && t.leaving);
@@ -3199,10 +3209,13 @@ function render() {
   // the 🎯 (nearAimBtn) left of each name, in a column of its own width (the author, 2026-10-14): your own system's row
   // keeps the space, so the names stay in line; no column where auto-target cannot work
   const aimCol = canAim();
+  document.getElementById("nearTable").classList.toggle("around", elsewhere);   // its From you column
+  const distTh = document.getElementById("nearDistTh"), distTitle = elsewhere ? `ly from ${na.name} (the system Nearby is around)` : "ly from you";
+  if (distTh.title !== distTitle) distTh.title = distTitle;
   document.getElementById("rows").innerHTML = rows.map(s => {
     const isPrev = prev && sysId(s) === sysId(prev);
-    const far = jr && s.distance > jr;
-    const jumps = jr ? jumpsFor(s.distance) : null;
+    const ly = lyFromYou(s), far = jr && ly != null && ly > jr;
+    const jumps = jr && ly != null ? jumpsFor(ly) : null;   // from you, wherever the list is around
     const cls = [s.visited && "visited", far && "far", isPrev && "prev", scoopNext && sysId(s) === sysId(scoopNext) && "scoopnext",
                  data.next_stop && s.id === data.next_stop.id && "nextstop",
                  pinnedSystem === s.id && "pinned",
@@ -3219,12 +3232,13 @@ function render() {
       <td class="bmcell">${bmIcon(s.id, s.name, bms)}</td>
       <td class="name" data-name="${esc(s.name)}" title="click to copy">${aimCol ? `<span class="nearaim">${nearAimBtn(s)}</span>` : ""}${isPrev
         ? `<span class="prevmark" title="you just came from here">↩</span>` : ""}${nameWords(s.name)}${firstsIcon(s.firsts)}<div class="sf2 sub2">${status}</div></td>
-      <td class="num dist"${far ? ` title="beyond your max jump range"` : ""}>${s.distance.toFixed(2)}</td>
+      <td class="num dist"${far && !elsewhere ? ` title="beyond your max jump range"` : ""}>${s.distance.toFixed(2)}</td>
+      <td class="num fromcol"${far ? ` title="beyond your max jump range"` : ""}>${elsewhere && ly != null ? ly.toFixed(2) : ""}</td>
       <td class="num hide-sm c2hide">${jumps == null ? "" : jumps === 1 ? "1" : `<span class="unk">${jumps}</span>`}</td>
       <td class="c2hide">${status}</td>
       <td>${star(s)}</td><td class="bodies" data-pop data-id="${esc(s.id)}">${bodies(s)}${nb ? `<div class="sf2 sub2 notable">${nb}</div>` : ""}</td>
       <td class="notable c2hide">${nb}</td><td class="num hide-sm" title="${valueTitle(s)}">${valueCell(s)}</td><td class="num hide-sm c2hide">${known}</td></tr>`;
-  }).join("") || `<tr><td colspan="10" class="unk">${emptyMessage(rows)}</td></tr>`;
+  }).join("") || `<tr><td colspan="11" class="unk">${emptyMessage(rows)}</td></tr>`;
   refocus("rows", fkRows);
   renderBoxelMode();
   document.getElementById("updateLine").hidden = !data.restart_needed;
@@ -3242,6 +3256,99 @@ function render() {
   if (TABLET) tabRender();
   // the strips drawn above may have grown the header past what app mode leaves room for (or shrunk it back)
   if (applyAppMode()) { renderSurface(); drawMap(); drawHwyMap(); }
+}
+// ---- Nearby's Around and filters (2026-10-14: the ideas of Rainmangames' PR #8, "Lock System", built on S49's Around).
+// Around is saved on the server (POST api/nearby/around, meta near_around) so every window and the tablet agree: you (the
+// list follows your ship), your destination, carrier or next stop (it follows them), this system (locked where you are
+// now) or a system by name (GET api/find first, as Search's). Away from you Dist is from there, From you and Jumps from
+// you, and a strip above the list names the centre. Spansh is asked when the centre changes and on ↻ (paced), nothing on a
+// timer. The filters are this device's (store): one mass code, the systems nobody reported a scan of; ⧉ Copy visible.
+const NEAR_AROUND = [["here", "you"], ["destination", "your destination"], ["carrier", "your carrier"], ["next_stop", "your next stop"],
+                     ["lock", "lock this system"], ["system", "a system…"]];
+const NEAR_AROUND_WHAT = {lock: "locked", system: "", destination: "your destination", carrier: "your carrier", next_stop: "your next stop"};
+// the list is around another system (not you, and placed): its rows' distance is from there
+const nearElsewhere = () => { const na = data && data.near_around; return !!(na && na.around !== "here" && !na.why && na.x != null); };
+// a row's distance from you: its own around you, else from its coordinates (null when either is unknown)
+const lyFromYou = s => {
+  if (!nearElsewhere()) return s.distance;
+  const p = data.position;
+  return p && p.x != null && Array.isArray(s.xyz) ? Math.hypot(p.x - s.xyz[0], p.y - s.xyz[1], p.z - s.xyz[2]) : null;
+};
+const SPHERE_CUT_WORDS = cut => `Spansh returned its maximum: the list is complete only to ${cut} ly — a smaller radius shows them all`;
+// a procedural name's mass code ("Smojooe GW-W c1-4": c); null for a named system
+const massOf = name => { const m = /\b[A-Z]{2}-[A-Z] ([a-h])\d+(?:-\d+)?$/.exec(String(name || "")); return m ? m[1] : null; };
+const NO_SCAN = new Set(["no bodies", "unreported", "unasked"]);   // nobody has reported a scan of it
+const nearMassSel = document.getElementById("nearMass"), nearNoScan = document.getElementById("nearNoScan");
+nearMassSel.value = /^[a-h]$/.test(store.get("nearMass", "")) ? store.get("nearMass", "") : "";
+nearNoScan.checked = store.get("nearNoScan", false) === true;
+nearMassSel.onchange = () => { store.set("nearMass", nearMassSel.value); render(); };
+nearNoScan.onchange = () => { store.set("nearNoScan", nearNoScan.checked); render(); };
+const nearFilter = s => (!nearMassSel.value || massOf(s.name) === nearMassSel.value) && (!nearNoScan.checked || NO_SCAN.has(s.status));
+let nearShown = [];   // the names of the rows the list shows, in its order
+document.getElementById("nearCopy").onclick = () => nearShown.length
+  ? copyText(nearShown.join("\n"), `${nearShown.length} system name${nearShown.length === 1 ? "" : "s"}`) : toast("no systems shown to copy");
+const NA = {typing: false, busy: false, strip: null};   // typing: "a system…" picked, its name not sent yet
+const nearAroundSel = document.getElementById("nearAround"), nearAroundName = document.getElementById("nearAroundName");
+async function setNearAround(kind, name) {
+  if (NA.busy) return;
+  NA.busy = true;
+  const a = kind === "system" ? await aroundParam("system", name) : {around: kind};
+  let r = a.error ? {error: a.error} : null;
+  if (!r) try {
+    r = await apiJson("api/nearby/around", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({around: a.around})});
+  } catch (err) { r = {error: err.message}; }
+  NA.busy = false;
+  if (r.error) toast(r.error);
+  else { NA.typing = false; if (data) data.near_around = r.near_around; }
+  if (data) render();
+}
+nearAroundSel.onchange = () => {
+  NA.typing = nearAroundSel.value === "system";
+  nearAroundName.hidden = !NA.typing;
+  if (NA.typing) return nearAroundName.focus();
+  setNearAround(nearAroundSel.value);
+};
+nearAroundName.onchange = () => { if (nearAroundName.value.trim()) setNearAround("system", nearAroundName.value); };
+async function nearRefresh() {
+  let r;
+  try { r = await apiJson("api/nearby/refresh", {method: "POST"}); } catch (err) { r = {error: err.message}; }
+  toast(r.error || "asking Spansh again…");
+}
+document.getElementById("nearStrip").addEventListener("click", e => {
+  if (e.target.closest("[data-nearback]")) setNearAround("here");
+  else if (e.target.closest("[data-nearrefresh]")) nearRefresh();
+});
+// the Around select, the strip above the list and the Boxel mode's hint, from the payload's near_around
+function renderNearAround() {
+  const na = data.near_around || {around: "here"}, p = data.position;
+  const kind = NA.typing ? "system" : NEAR_AROUND.some(([v]) => v === na.around) ? na.around : "here";
+  aroundOptions(nearAroundSel, NEAR_AROUND, {lock: na.around === "lock" && na.name || p && p.name,
+                                             system: na.around === "system" && na.name, destination: na.around === "destination" && na.name});
+  if (document.activeElement !== nearAroundSel && !NA.busy) nearAroundSel.value = kind;
+  nearAroundName.hidden = kind !== "system";
+  if (kind === "system" && !NA.typing && document.activeElement !== nearAroundName && na.name) nearAroundName.value = na.name;
+  const bx = document.getElementById("nearAroundBx"), bxText = na.around !== "here"
+    ? `Nearby's Around (${[na.name, NEAR_AROUND_WHAT[na.around]].filter(Boolean).join(", ")}) is for Standard: a boxel has its own centre` : "";
+  bx.hidden = nearMode() !== "boxel" || !bxText;
+  if (bx.textContent !== bxText) bx.textContent = bxText;
+  const parts = [];
+  if (na.around !== "here") {
+    const back = `<button type="button" class="mini" data-nearback title="Nearby around you again: it follows your ship">✕ back to you</button>`;
+    if (!nearElsewhere()) {
+      parts.push(`<div class="nsline">⌖ ${esc((NEAR_AROUND.find(([v]) => v === na.around) || [])[1] || na.around)}: ` +
+                 `${esc(na.why || "not placed yet")}; Nearby is around you meanwhile · ${back}</div>`);
+    } else {
+      const what = NEAR_AROUND_WHAT[na.around];
+      parts.push(`<div class="nsline">⌖ Around <span class="copy nscentre" data-name="${esc(na.name)}" title="click to copy">${esc(na.name)}</span>` +
+        `${what ? ` (${what})` : ""}${na.from_you != null ? ` · ${na.from_you.toLocaleString("en-US", {maximumFractionDigits: 1})} ly from you` : ""}` +
+        ` · ${data.radius} ly sphere · <button type="button" class="mini" data-nearrefresh${na.refreshing ? " disabled" : ""} ` +
+        `title="ask Spansh again for this sphere (at most every ${Math.round((na.refresh_gap_s || 120) / 60)} minutes; it is asked by itself only when the centre changes)">↻ refresh</button> · ${back}</div>`);
+    }
+  }
+  if (data.sphere_cut != null) parts.push(`<div class="nsline warn">${esc(SPHERE_CUT_WORDS(data.sphere_cut))}</div>`);
+  const html = parts.join(""), strip = document.getElementById("nearStrip");
+  if (NA.strip !== html) { strip.innerHTML = html; NA.strip = html; }
+  strip.hidden = !html;
 }
 // ---- boxel exploration (2026-10-11): Nearby's Standard / Boxel switch (one choice per browser, the Overview pane and
 // the Nearby tab alike). Boxel lists the boxel you are in, or one kept (📌, or picked below), by number: your visits
@@ -3427,7 +3534,7 @@ document.getElementById("boxelPane").addEventListener("change", e => {
   else if (e.target.id === "bxSkip") boxelPost({skip_known: e.target.checked});
 });
 function emptyMessage(rows) {
-  const others = data.systems.filter(s => sysId(s) !== posId()).length;
+  const others = data.systems.filter(s => nearElsewhere() || sysId(s) !== posId()).length;
   if (/^asking|^fetching/.test(data.status)) return "loading…";
   if (/^(Spansh unavailable|No internet connection|refresh failed)/.test(data.status)) return `${/^refresh/.test(data.status) ? "The lookup failed" : esc(data.status)} — the list is incomplete, so no conclusions about undiscovered systems yet.`;
   if (others > rows.length) return `${others - rows.length} system${others - rows.length === 1 ? "" : "s"} hidden by the filters above.`;
@@ -4752,13 +4859,14 @@ const saveNearest = () => store.set("nearest", {stations: NR.stations, carriers:
 const AROUND_KINDS = [["here", "you"], ["destination", "your destination"], ["carrier", "your carrier"], ["next_stop", "your next stop"],
                       ["system", "a system…"]];
 // an Around select's options, named from the payload; your carrier and the next stop greyed out while there is none
-function aroundOptions(sel) {
+// `kinds`: the select's own list (Nearby's adds "lock this system"), `extra`: names for its other options
+function aroundOptions(sel, kinds = AROUND_KINDS, extra = {}) {
   if (!sel) return;
   const p = data && data.position, cr = data && data.carrier, ns = data && data.next_stop;
-  const named = {here: p && p.name, carrier: cr && cr.system, next_stop: ns && ns.name}, none = {carrier: !cr, next_stop: !ns};
-  if (!sel.options.length) sel.innerHTML = AROUND_KINDS.map(([v, t]) => `<option value="${v}">${t}</option>`).join("");
+  const named = Object.assign({here: p && p.name, carrier: cr && cr.system, next_stop: ns && ns.name}, extra), none = {carrier: !cr, next_stop: !ns};
+  if (!sel.options.length) sel.innerHTML = kinds.map(([v, t]) => `<option value="${v}">${t}</option>`).join("");
   for (const o of sel.options) {
-    const base = (AROUND_KINDS.find(([v]) => v === o.value) || [])[1], t = named[o.value] ? `${base} (${named[o.value]})` : base;
+    const base = (kinds.find(([v]) => v === o.value) || [])[1], t = named[o.value] ? `${base} (${named[o.value]})` : base;
     if (o.textContent !== t) o.textContent = t;
     o.disabled = !!none[o.value] && sel.value !== o.value;
   }
@@ -8195,8 +8303,9 @@ const hullBand = h => !h || h.pct == null ? 0 : h.pct < 25 ? 2 : h.pct < 50 ? 1 
 // so the absence of a known one is not a reason to panic, and the text says so
 function scoopHint() {
   const p = data.position, jr = effRange(), sr = data.fuel && data.fuel.scoop_rate;
-  const s = (data.systems || []).filter(x => sysId(x) !== sysId(p) && x.main_scoopable).sort((a, b) => a.distance - b.distance)[0];
-  return s ? `nearest known scoopable: ${s.name} · ${s.distance.toFixed(1)} ly${jr && s.distance > jr ? " (beyond one jump)" : ""}`
+  const s = (data.systems || []).filter(x => sysId(x) !== sysId(p) && x.main_scoopable && lyFromYou(x) != null)
+    .sort((a, b) => lyFromYou(a) - lyFromYou(b))[0], d = s && lyFromYou(s);   // from you, wherever Nearby is around
+  return s ? `nearest known scoopable: ${s.name} · ${d.toFixed(1)} ly${jr && d > jr ? " (beyond one jump)" : ""}`
            : `no known scoopable star nearby (${sr ? scoopRateText(sr) : "most unreported stars are scoopable"}: check the galaxy map)`;
 }
 // Jumps of fuel left: at your pace (the fuel model's, else your recent burn), else at max range.
