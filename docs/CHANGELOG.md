@@ -2,6 +2,17 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · The system strip: security and your reputation
+- The overlay's system strip shows, in a populated system, its security level and your reputation with its controlling
+  faction on the top row's right, in the region's font (the author's ask; Hostile in red): `system_standing` keeps
+  them with the position (`pos.standing` {security, faction, rep}) from FSDJump / Location / CarrierJump
+  (`SystemSecurity_Localised`, else `SECURITY_WORDS`; the `SystemFaction`'s `MyReputation` in `Factions`);
+  `overlay.rep_level` gives the game's words (Hostile to -90, Unfriendly -35, Neutral +4, Cordial +35, Friendly +90,
+  Allied); nothing in an unpopulated system (Anarchy everywhere in the black). The window right-aligns a `runs` item
+  (`align: "right"`). Shown from the next arrival (no re-read needed).
+- Tests: the strip with and without it, Hostile's colour, the levels' edges, `system_standing` and the position.
+  Guide: overlay.md.
+
 ## 2026-10-14 · The launcher's header at every start
 - `launch_outrider.sh` opens every start, and Settings' Restart (which runs it again), with a blank line and a header:
   "ED Outrider v2026.10.23" and the GitHub address between two rules (the author's layout), the version read from

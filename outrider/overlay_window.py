@@ -376,6 +376,8 @@ def paint(painter, data, win_w, win_h, arrange=False, override=None, all_pct=Non
                 fm_x = it["x"]
                 if it.get("align") == "center":   # x is the line's middle: measured with the real fonts
                     fm_x -= sum(fm.horizontalAdvance(s_) for s_, _, _, fm in fonts) / 2
+                elif it.get("align") == "right":   # x is the line's right end
+                    fm_x -= sum(fm.horizontalAdvance(s_) for s_, _, _, fm in fonts)
                 for s_, c_, f, fm in fonts:
                     painter.setFont(f)
                     painter.setPen(colour(c_))

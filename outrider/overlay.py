@@ -423,7 +423,7 @@ def marker(x, y, kind, c, r=6, rot=0):
 
 def runs(x, y, parts, align="left"):
     """A line of (text, colour, size, bold) parts set one after another by the window, with the font's real widths;
-    align "center": x is the line's middle."""
+    align "center": x is the line's middle, "right" its right end."""
     out = {"t": "runs", "x": round(x, 1), "y": round(y, 1), "runs": [[str(s), c, size, bool(b)] for s, c, size, b in parts]}
     if align != "left":
         out["align"] = align
@@ -794,12 +794,26 @@ def star_words(code):
     return words + (" ⛽" if c[:1] in "KGBFOAM" and len(c.split("_")[0]) == 1 else "")
 
 
+# your reputation with a faction by the journal's MyReputation (-100..100), as the game's levels (Inara's thresholds)
+REP_LEVELS = ((-90, "Hostile"), (-35, "Unfriendly"), (4, "Neutral"), (35, "Cordial"), (90, "Friendly"))
+
+
+def rep_level(rep):
+    """The game's word for a MyReputation figure: Hostile, Unfriendly, Neutral, Cordial, Friendly or Allied; None
+    without one."""
+    if not isinstance(rep, (int, float)) or isinstance(rep, bool):
+        return None
+    return next((word for top, word in REP_LEVELS if rep <= top), "Allied")
+
+
 def strip_panel(info, pal, size="normal"):
     """The system strip: two short lines across the top, centred in their box. Line 1: the system, its region, the
     star. Line 2: the distance from Sol, now and max, your first discovery; then bodies, found of total, discovered by
-    you, mapped of planets, whether Spansh knows the system (the author, 2026-10-10). info: {name, region, star, sol_ly,
-    total, found, all_found, honked, value_now, value_max, first, firsts, mapped, planets, in_spansh}. Its width follows
-    its text."""
+    you, mapped of planets, whether Spansh knows the system (the author, 2026-10-10). In a populated system the top
+    row's right side has its security and your reputation with its controlling faction, in the region's font, Hostile
+    in red (the author, 2026-10-14). info: {name, region, star, sol_ly, total, found, all_found, honked, value_now,
+    value_max, first, firsts, mapped, planets, in_spansh, standing: {security, faction, rep}}. Its width follows its
+    text."""
     if not info or not info.get("name"):
         return None
     sep = ("  ·  ", pal["muted"], size, False)
@@ -827,10 +841,20 @@ def strip_panel(info, pal, size="normal"):
         rest.append(("Spansh ✓" if info["in_spansh"] else "Spansh ✗ (new to it)", "muted" if info["in_spansh"] else "warn"))
     two = line(None, rest)
     lines = [one] + ([two] if two else [])
-    width = round(min(CANVAS_W - 40, PAD * 2 + 10 + max(sum(text_width(t, s) for t, _, s, _ in ln) for ln in lines)))
+    st = info.get("standing") or {}
+    level = rep_level(st.get("rep"))
+    right = [(x, pal["bad"] if x == "Hostile" else pal["muted"], size, False)
+             for x in ([st["security"]] if st.get("security") else []) + ([level] if level else [])]
+    right = [p for i, part in enumerate(right) for p in ([sep, part] if i else [part])]
+    wide = lambda ln: sum(text_width(t, s) for t, _, s, _ in ln)
+    # the top row stays centred: room for the right side on both sides of it, so the two never meet
+    need = max([wide(ln) for ln in lines] + ([wide(one) + 2 * (wide(right) + 24)] if right else []))
+    width = round(min(CANVAS_W - 40, PAD * 2 + 10 + need))
     items, y = [], PAD - 2
     for i, ln in enumerate(lines):
         items.append(runs(width / 2, y, ln, align="center"))
+        if i == 0 and right:   # level with the region's line: the large name's row, its baseline lower
+            items.append(runs(width - PAD - 4, y + (LINE_H["large"] - LINE_H.get(size, 20)) / 2 + 1, right, align="right"))
         y += LINE_H["large"] if i == 0 else LINE_H.get(size, 20)
     return {"id": "strip", "w": round(width), "h": round(y + PAD - 4), "bg": pal["panel"], "frame": pal["frame"],
             "style": pal.get("style", "rounded"), "accent": pal["title"], "items": items}

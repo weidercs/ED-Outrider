@@ -1967,6 +1967,27 @@ def away_text(seconds):
     return f"{days} day{'' if days == 1 else 's'}"
 
 
+SECURITY_WORDS = {"$system_security_high;": "High Security", "$system_security_medium;": "Medium Security",
+                  "$system_security_low;": "Low Security", "$galaxy_map_info_state_anarchy;": "Anarchy",
+                  "$galaxy_map_info_state_lawless;": "Lawless"}
+
+
+def system_standing(ev):
+    """A populated system's security and your reputation with its controlling faction, from an FSDJump, Location or
+    CarrierJump: {security, faction, rep (the journal's MyReputation, -100..100, or None)}; None for an unpopulated
+    system (in the black every one is "Anarchy" with no faction: nothing worth showing). The overlay's system strip
+    shows it (the author, 2026-10-14)."""
+    sf = ev.get("SystemFaction")
+    faction = sf.get("Name") if isinstance(sf, dict) else sf if isinstance(sf, str) else None
+    if not faction and not ev.get("Population"):
+        return None
+    sec = ev.get("SystemSecurity_Localised") or SECURITY_WORDS.get(str(ev.get("SystemSecurity") or "").lower())
+    rep = next((f.get("MyReputation") for f in ev.get("Factions") or []
+                if isinstance(f, dict) and f.get("Name") == faction), None)
+    rep = rep if isinstance(rep, (int, float)) and not isinstance(rep, bool) else None
+    return {"security": sec, "faction": faction, "rep": rep} if sec or faction else None
+
+
 def live_event(ts, now=None):
     """Whether a journal event happened just now (within SHUTDOWN_LIVE_S), not in a journal being caught up on."""
     try:
@@ -3576,6 +3597,9 @@ class Journals:
             # a relog keeps the arrival's ts: the briefing and the FSS warning are once per arrival, not per login
             self.pos = {"name": ev.get("StarSystem"), "id64": id64, "x": x, "y": y, "z": z,
                         "ts": self.pos["ts"] if relog else ts}
+            standing = system_standing(ev)
+            if standing:   # a populated system's security and your standing with its controlling faction (the strip)
+                self.pos["standing"] = standing
             meta_set(self.db, "pos", self.pos)
         if ev.get("event") == "FSDJump" and current and not ride:
             self.jump_arrival = {"id64": id64, "name": ev.get("StarSystem"), "ts": ts}
@@ -8489,7 +8513,8 @@ class State:
                 "first": bool(firsts.get("system")), "firsts": firsts.get("bodies") or 0,
                 "mapped": sum(1 for b in bodies if b.get("mapped") or b.get("first_mapped")),
                 "planets": row.get("planets") or len(bodies) or None,
-                "in_spansh": row.get("in_spansh") if "in_spansh" in row else self.spansh_knows(pos["id64"])}
+                "in_spansh": row.get("in_spansh") if "in_spansh" in row else self.spansh_knows(pos["id64"]),
+                "standing": pos.get("standing")}
 
     def overlay_route(self):
         """The route Now's panel gives the next stop of: the unfinished one plotted last (route_newest: the page

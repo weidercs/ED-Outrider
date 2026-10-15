@@ -944,6 +944,47 @@ class Strip(unittest.TestCase):
         self.assertNotIn("first discovered", "".join(r[0] for r in new["items"][0]["runs"]))
         self.assertIsNone(O.strip_panel({}, pal))
 
+    def test_security_and_reputation(self):
+        """A populated system: its security and your reputation with its controlling faction on the top row's right, in
+        the region's font; Hostile in red; none in an unpopulated system (the author, 2026-10-14)."""
+        pal = O.palette()
+        info = {"name": "Shinrarta Dezhra", "region": "Inner Orion Spur", "star": "K", "sol_ly": 47.0}
+        plain = O.strip_panel(info, pal)
+        p = O.strip_panel(dict(info, standing={"security": "High Security", "faction": "Pilots' Federation", "rep": 95}), pal)
+        right = [i for i in p["items"] if i.get("align") == "right"]
+        self.assertEqual(len(right), 1)
+        self.assertEqual(["".join(r[0] for r in i["runs"]) for i in right], ["High Security  ·  Allied"])
+        region = next(r for r in p["items"][0]["runs"] if r[0] == "Inner Orion Spur")
+        self.assertTrue(all(r[1:] == region[1:] for r in right[0]["runs"]))   # the region's colour, size, weight
+        self.assertEqual(right[0]["x"], p["w"] - O.PAD - 4)
+        self.assertGreater(p["w"], plain["w"])                                 # room for it, the row still centred
+        self.assertEqual([i for i in plain["items"] if i.get("align") == "right"], [])
+        hostile = O.strip_panel(dict(info, standing={"security": "Anarchy", "faction": "X", "rep": -95}), pal)
+        word = next(r for i in hostile["items"] if i.get("align") == "right" for r in i["runs"] if r[0] == "Hostile")
+        self.assertEqual(word[1], pal["bad"])
+        self.assertEqual([O.rep_level(x) for x in (-100, -90, -89.9, -35, 0, 4, 4.1, 35, 89.9, 90, 90.1, None)],
+                         ["Hostile", "Hostile", "Unfriendly", "Unfriendly", "Neutral", "Neutral", "Cordial", "Cordial",
+                          "Friendly", "Friendly", "Allied", None])
+
+    def test_standing_from_the_journal(self):
+        """system_standing: an FSDJump's security and the controlling faction's MyReputation; None in the black."""
+        ev = {"SystemSecurity": "$SYSTEM_SECURITY_high;", "SystemSecurity_Localised": "High Security", "Population": 22780919531,
+              "SystemFaction": {"Name": "Pilots' Federation Local Branch"},
+              "Factions": [{"Name": "Other", "MyReputation": -50.0}, {"Name": "Pilots' Federation Local Branch", "MyReputation": 100.0}]}
+        self.assertEqual(ed_outrider.system_standing(ev),
+                         {"security": "High Security", "faction": "Pilots' Federation Local Branch", "rep": 100.0})
+        self.assertEqual(ed_outrider.system_standing(dict(ev, SystemSecurity_Localised=None))["security"], "High Security")
+        self.assertIsNone(ed_outrider.system_standing({"SystemSecurity": "$GAlAXY_MAP_INFO_state_anarchy;", "Population": 0}))
+        db = ed_outrider.open_db(":memory:")
+        self.addCleanup(db.close)
+        j = ed_outrider.Journals(db)
+        j.handle(dict(ev, event="FSDJump", timestamp="2026-10-14T20:00:00Z", StarSystem="Shinrarta Dezhra",
+                      SystemAddress=3932277478106, StarPos=[55.7, 17.6, 27.2], StarClass="K"))
+        self.assertEqual(j.pos["standing"]["rep"], 100.0)
+        j.handle({"event": "FSDJump", "timestamp": "2026-10-14T20:10:00Z", "StarSystem": "Empty", "SystemAddress": 77,
+                  "StarPos": [60.0, 17.6, 27.2], "StarClass": "M", "Population": 0})
+        self.assertNotIn("standing", j.pos)
+
     def test_star_words(self):
         self.assertEqual([O.star_words(c) for c in ("K", "M", "N", "DA", "H", "Y", "TTS", "B_BlueWhiteSuperGiant", "")],
                          ["K star ⛽", "M star ⛽", "neutron star ⚡", "white dwarf ⚡", "black hole", "Y dwarf", "T Tauri star",
