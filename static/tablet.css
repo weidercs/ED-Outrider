@@ -295,3 +295,7 @@ body.tablet #bioView.check .clgrid, body.tablet #bioView.check .clside { min-hei
 body.tablet #cmdrTabs .seg label { padding: 8px 12px; }
 body.tablet .emchart text { font-size: 13px; }
 body.tablet .emlegend, body.tablet .cmfig .emsub, body.tablet .emnotes { font-size: 14px; }
+/* Inventory's ship pictures: no hover here, a tap on the ship's name opens the card (dotted underline: tappable), and a
+   tap on the card itself closes it rather than reaching what lies under it */
+body.tablet #cmdrBody .cmshipname { text-decoration: underline dotted; text-underline-offset: 3px; cursor: pointer; }
+body.tablet #shipCard { pointer-events: auto; }

@@ -289,6 +289,12 @@ const SHIP_NAMES = {sidewinder: "Sidewinder", eagle: "Eagle", hauler: "Hauler", 
   panthermkii: "Panther Clipper Mk II", explorer_nx: "Caspian Explorer", lakonminer: "Type-11 Prospector", smallcombat01_nx: "Kestrel Mk II",
   mediumtransport01: "Lynx Highliner"};
 const shipName = t => SHIP_NAMES[(t || "").toLowerCase()] || (t || "").replace(/_/g, " ");
+// A ship type's picture (the CMDR tab's Inventory, 2026-10-15): static/ships/<symbol>.webp, one per SHIP_NAMES key
+// (test_tablet checks both ways), Frontier's ship rendered from Elite Dangerous Almanac's illustration by
+// scripts/build_ship_images.py (static/ships/CREDITS.txt); a type not in the table (a hull newer than it) has none
+const shipPicture = t => { const k = String(t || "").toLowerCase(); return Object.prototype.hasOwnProperty.call(SHIP_NAMES, k) ? `static/ships/${k}.webp` : null; };
+const SHIP_CARD_MS = 2000;   // a hover this long on an Inventory ship row shows its picture
+const SC = {timer: null, key: null};   // the ship card: the hover's pending timer, the ship shown ("symbol|name") or null
 // what to call a ship: its own name, or its type's proper name when it has none (the journal gives an unnamed
 // ship its type id as the name, "krait_mkii", which reads and speaks badly)
 const shipLabel = (name, type) => { const n = String(name || "").trim();
@@ -10404,6 +10410,49 @@ function cmdrGo(el) {
 }
 document.getElementById("cmdrBody").addEventListener("click", e => cmdrGo(e.target));
 document.getElementById("cmdrBody").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.dataset && e.target.dataset.cmmat != null && cmdrGo(e.target)) e.preventDefault(); });
+// Inventory's ship pictures (2026-10-15): a mouse resting SHIP_CARD_MS on a ship's row shows its type's picture in a
+// card beside the row (#shipCard: fixed, kept inside the window, never scrolling the page), gone when the pointer leaves
+// it; on the tablet (no hover) a tap on the ship's name opens or closes it and a tap anywhere else closes it; Escape
+// closes it. Only rows of a type with a picture (data-shipimg) take part. pointerenter / pointerleave do not bubble: the
+// listeners catch them on the way down (capture) and keep the row's own, not its cells'
+const shipCardKey = row => `${row.dataset.shipimg}|${(row.querySelector(".cmshipname") || {}).textContent || ""}`;
+function shipCardHide() {
+  clearTimeout(SC.timer); SC.timer = null; SC.key = null;
+  const card = document.getElementById("shipCard");
+  if (!card.hidden) { card.hidden = true; card.innerHTML = ""; }
+}
+function shipCardShow(row) {
+  const src = shipPicture(row && row.dataset.shipimg), card = document.getElementById("shipCard");
+  if (!src || !row.isConnected || view !== "cmdr" || CM.tab !== "inventory") return shipCardHide();
+  const type = shipName(row.dataset.shipimg), name = (row.querySelector(".cmshipname") || {}).textContent || type;
+  card.innerHTML = `<img src="${esc(src)}" width="300" height="200" loading="lazy" decoding="async" alt="${esc(type)}">` +
+    `<div class="shipcardname"><b>${esc(name)}</b>${type !== name ? ` <span class="unk">${esc(type)}</span>` : ""}</div>`;
+  card.querySelector("img").addEventListener("error", shipCardHide);   // no picture after all: no empty card
+  card.hidden = false; SC.key = shipCardKey(row);
+  // below the row, from its name; above it when there is no room below; always inside the window
+  const r = row.getBoundingClientRect(), c = card.getBoundingClientRect(), gap = 6;
+  let top = r.bottom + gap;
+  if (top + c.height > innerHeight - 8) top = r.top - c.height - gap;
+  card.style.left = Math.max(8, Math.min(r.left + 12, innerWidth - c.width - 8)) + "px";
+  card.style.top = Math.max(8, Math.min(top, innerHeight - c.height - 8)) + "px";
+}
+document.getElementById("cmdrBody").addEventListener("pointerenter", e => {
+  const row = e.target;
+  if (e.pointerType === "touch" || !row.matches || !row.matches("tr[data-shipimg]")) return;   // a tap: the tablet's own
+  if (SC.key && SC.key === shipCardKey(row)) return;   // the same ship (its row drawn again under the pointer)
+  shipCardHide();
+  SC.timer = setTimeout(() => { SC.timer = null; shipCardShow(row); }, SHIP_CARD_MS);
+}, true);
+document.getElementById("cmdrBody").addEventListener("pointerleave", e => {
+  if (e.pointerType !== "touch" && e.target.matches && e.target.matches("tr[data-shipimg]")) shipCardHide();
+}, true);
+document.addEventListener("click", e => {
+  if (!TABLET) return;
+  const name = e.target.closest && e.target.closest("#cmdrBody tr[data-shipimg] .cmshipname");
+  if (name && SC.key !== shipCardKey(name.closest("tr"))) shipCardShow(name.closest("tr"));
+  else if (SC.key || SC.timer) shipCardHide();
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape" && (SC.key || SC.timer)) shipCardHide(); });
 // small pure helpers
 const cmNum = v => v == null ? "" : esc(Number(v).toLocaleString());
 const cmCr = v => v == null || v === 0 ? "" : `${esc(credits(v))} cr`;
@@ -10498,7 +10547,9 @@ function cmdrInventoryHtml(d) {
     const where = x.current ? `<span class="ok">you fly it</span>` : x.in_transit ? `<span class="warnc">in transit</span>`
       : esc([x.system, x.station].filter(Boolean).join(" · ") || "?");
     const move = x.transfer_cost ? `${cmCr(x.transfer_cost)}${x.transfer_s ? ` · ${cmSpan(x.transfer_s)}` : ""}` : "";
-    return `<tr><td><b>${esc(label)}</b>${type !== label ? ` <span class="unk">${esc(type)}</span>` : ""}${x.ident ? ` <span class="unk">${esc(x.ident)}</span>` : ""}` +
+    // a type with a picture: the row shows it on a hover, its name on a tap on the tablet (shipCardShow)
+    const pic = shipPicture(x.type) ? ` data-shipimg="${esc(String(x.type).toLowerCase())}"` : "";
+    return `<tr${pic}><td><b${pic ? ` class="cmshipname"` : ""}>${esc(label)}</b>${type !== label ? ` <span class="unk">${esc(type)}</span>` : ""}${x.ident ? ` <span class="unk">${esc(x.ident)}</span>` : ""}` +
       `${cmHot(x)}${cmBuild(x)}</td><td>${where}</td><td class="num">${cmCr(x.value)}</td><td class="num">${move}</td></tr>`;
   };
   const modRow = x => `<tr><td><span class="cmcls">${cmCls(x)}</span> <b>${esc(x.name)}</b>${x.mount ? ` <span class="unk">${esc(x.mount)}</span>` : ""}` +
@@ -10797,6 +10848,7 @@ function cmdrDrawBody() {
 // the controls above the pane (the tab switch, Engineering's filter, the status), then the pane
 function renderCmdr() {
   const tab = CM.tab, st = document.getElementById("cmdrStatus");
+  if (tab !== "inventory" && (SC.key || SC.timer)) shipCardHide();   // a ship's picture is Inventory's own
   document.querySelectorAll("[name=cmdrTab]").forEach(x => { x.checked = x.value === tab; });
   document.getElementById("cmEngCtl").hidden = tab !== "engineering";
   document.getElementById("cmEarnCtl").hidden = tab !== "earnings";

@@ -475,6 +475,10 @@ Engineering's filter and Earnings' period sit above the list:
   engineering, the ship locker, and your suit loadouts. The game writes the list of stored ships when you open a
   shipyard: ships bought, sold, swapped, sent for or renamed since are followed, and each ship's value is its latest.
   Each ship has the same EDSY ↗ and Coriolis ↗ links as on the CMDR tab (in the Android app they open in your browser).
+  Rest the mouse on a ship for 2 seconds to see a picture of its type, with its name; it goes when you move away (or
+  press Escape). On the tablet, tap the ship's name (underlined with dots) to open the picture and tap anywhere to close
+  it. The pictures are Frontier's ship designs, rendered from Elite Dangerous Almanac's illustrations; a ship type newer
+  than Outrider has none yet.
   Stored modules are as outfitting last listed them, with the modules stored, taken back, sent for or sold from
   storage since (one stored since shows its value once outfitting lists it again; one sent for is in transit until
   it arrives). A red ⚖ marks a ship or module the game says is hot (wanted). The ship locker is as the game last wrote it, in the journal or in

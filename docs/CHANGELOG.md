@@ -2,6 +2,24 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-15 · CMDR Inventory: a ship's picture on a 2 s hover (tap on the tablet)
+- The CMDR tab's **Inventory**: a mouse resting 2 s on a ship's row shows a card with its type's three-quarter picture,
+  its name and type, beside the row and inside the window (`#shipCard`, fixed: the page never scrolls); it goes when the
+  pointer leaves the row, on Escape or on another sub-tab. On the tablet (no hover) a tap on the ship's name (dotted
+  underline) opens or closes it and a tap anywhere else closes it. A finger's pointer never starts the hover. A type
+  with no picture (a hull newer than `SHIP_NAMES`) shows nothing. Inventory only. `shipPicture`, `SHIP_CARD_MS`, `SC`,
+  `shipCardShow`/`shipCardHide`; the row's `data-shipimg`, the name's `.cmshipname`; a fade-in, none with reduced motion.
+- The pictures: `static/ships/<symbol>.webp`, one per `SHIP_NAMES` key (48, about 2.1 MB in all), rendered by
+  `scripts/build_ship_images.py` from Elite Dangerous Almanac's `illustration.svg` (Almanac-Core at its pinned commit
+  `5da3bfc`) with PyQt6 offscreen, 600 x 400, transparent, WebP: the SVGs themselves (up to 2 MB each) are never shipped,
+  nor any of Almanac's data. Frontier's ship designs, used under Frontier's media usage rules with its notice;
+  Almanac's MIT notice kept: `static/ships/CREDITS.txt`, not under the GPL; a row in the README's credits.
+- Tests: test_tablet's `test_ship_pictures` (a picture for every `SHIP_NAMES` type and none other, WebP, each under
+  100 kB and 4 MB in all, the credits naming Frontier, Almanac and the build's commit, served as image/webp); smoke
+  "ship pictures" (nothing before 2 s, the card after, gone on leaving, nothing for a touch or an unknown hull, Escape
+  and another sub-tab) and the tablet's `tabShip` (tap to open and close, a tap elsewhere). Docs: views.md (Inventory),
+  AGENT_GUIDE.
+
 ## 2026-10-15 · Checked in game: the starport pad's place, the auto-dock silence, 📋 paste, Earnings
 - DESIGN_NOTES' "Not yet tried in a live game": the author checked at a station that the pad's words and diagram are
   right and that the pad is said or kept quiet with the docking computer on or off; 📋 paste and the Earnings tab work

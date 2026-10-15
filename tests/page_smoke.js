@@ -4995,6 +4995,23 @@ const releasePayloads = async () => {
       tw.eval(`apiJson = __emKeep; CM.data = {}; CM.key = {}; setCmdrTab("profile");`);
       return o;
     })();
+    // Inventory's ship pictures on the tablet (2026-10-15): no hover here; a tap on the ship's name opens its card, a tap
+    // on it again closes it, a tap anywhere else closes it; the name shows it can be tapped
+    got.tabShip = await (async () => {
+      tw.eval(`window.__scKeep = apiJson; apiJson = async (u, o) => String(u) !== "api/commander/inventory" ? __scKeep(u, o) : {ships: {ts: "2026-10-12T09:01:00Z", ships: [
+        {id: 7, type: "mediumtransport01", name: "Long Haul", current: true, value: 1}, {id: 9, type: "new_hull_x", name: "Prototype", system: "Sol", value: 1}]},
+        modules: {modules: []}, locker: {kinds: []}, suits: []}; CM.data = {}; CM.key = {};`);
+      td.querySelector('[name=cmdrTab][value="inventory"]').click(); await settle(800);
+      const card = td.getElementById("shipCard"), name = td.querySelector("#cmdrBody tr[data-shipimg] .cmshipname");
+      const o = [td.querySelectorAll("#cmdrBody tr[data-shipimg]").length, tw.getComputedStyle(name).cursor];
+      name.click();
+      o.push(card.hidden ? null : [card.querySelector("img").getAttribute("src"), card.querySelector("img").alt, tw.getComputedStyle(card).pointerEvents]);
+      name.click(); o.push(card.hidden);
+      name.click(); td.getElementById("cmdrBody").querySelector("h3").click(); o.push(card.hidden);
+      [...td.querySelectorAll("#cmdrBody tr")].find(r => /Prototype/.test(r.textContent)).cells[0].querySelector("b").click(); o.push(card.hidden);
+      tw.eval(`apiJson = __scKeep; shipCardHide(); CM.data = {}; CM.key = {}; setCmdrTab("profile");`);
+      return o;
+    })();
     const want = {desk: [true, true, true, true], shell: [true, true, true, true, true], moved: [true, true, true], theme: "lcars", start: "now",
       quiet: [false, false, "never", false], status: [true, true], pages: [],
       mapSwitch: [["now", true], ["hwy", false], ["bm", false]],
@@ -5013,7 +5030,8 @@ const releasePayloads = async () => {
       appScreens: [true, false, [false, false, true], "ED Outrider for Android 1.2.0", ["voice"], false],
       tabletAudio: ["[false,false]", false, '[true,true,"always","true"]', false, [true, true, true, true, true], "[false,false]", ["A line here."], "🔇 Tap anywhere to let Outrider speak here",
                     '[false,false,"false"]'], prefs: ["lcars", true, "true", null, "here"],
-      voiceCmds: [true, true, false, true, true, true, true, "auto"], tabEarn: ["cmdr", false, 5, true, 5, "8px"]};
+      voiceCmds: [true, true, false, true, true, true, true, "auto"], tabEarn: ["cmdr", false, 5, true, 5, "8px"],
+      tabShip: [1, "pointer", ["static/ships/mediumtransport01.webp", "Lynx Highliner", "auto"], true, true, true]};
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
     const goodT = !bad.length && !terr.length;
     allOk = allOk && goodT;
@@ -8565,6 +8583,76 @@ const releasePayloads = async () => {
     allOk = allOk && goodCM;
     console.log(goodCM ? "OK" : "FAIL", "| commander |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))} asked ${JSON.stringify(asked)}`
       : "controls above the pane, the theme's green and red, the hot ⚖, the tiles' credits and carrier, the SRV's refinery apart; asked again only on a new version or Refresh; the real profile", errors.slice(before));
+  }
+  // Inventory's ship pictures (2026-10-15): a mouse resting 2 s on a ship's row shows its type's picture in a card (none
+  // before), gone when it leaves; a touch's pointer does nothing (the tablet's tap, in the tablet block); a type with no
+  // picture (a hull newer than SHIP_NAMES) shows nothing; Escape closes; another tab of the CMDR view closes it
+  {
+    holdPayloads();
+    const w = dom.window, d = w.document, before = errors.length, got = {};
+    w.eval(`window.__scKeep = {api: apiJson, ver: data.commander_version};
+      data.commander_version = 70;
+      apiJson = async (u, o) => String(u) !== "api/commander/inventory" ? __scKeep.api(u, o) : {ships: {ts: "2026-10-12T09:01:00Z", ships: [
+        {id: 7, type: "Explorer_NX", name: "Far Wanderer", current: true, value: 100000000},
+        {id: 8, type: "krait_light", name: null, system: "Sol", value: 90000000},
+        {id: 9, type: "new_hull_x", name: "Prototype", system: "Sol", value: 1}]}, modules: {modules: []}, locker: {kinds: []}, suits: []};
+      CM.data = {}; CM.key = {}; CM.error = {}; CM.loading = {};`);
+    const card = () => d.getElementById("shipCard"), body = () => d.getElementById("cmdrBody");
+    const row = name => [...body().querySelectorAll("table.cmtable tbody tr")].find(r => r.cells[0].querySelector("b").textContent === name);
+    const ptr = (el, type, pointerType = "mouse") => el.dispatchEvent(new w.PointerEvent(type, {bubbles: false, pointerType}));
+    const shown = () => card().hidden ? null : [card().querySelector("img").getAttribute("src"), card().querySelector("img").alt,
+      card().querySelector("img").getAttribute("loading"), card().querySelector("img").getAttribute("width"), card().querySelector("img").getAttribute("height"),
+      card().querySelector(".shipcardname").textContent, parseFloat(card().style.left) >= 8 && parseFloat(card().style.top) >= 8];
+    try {
+      d.querySelector('[data-view="cmdr"]').click(); await settle(400);
+      d.querySelector('[name=cmdrTab][value="inventory"]').click(); await settle(400);
+      got.marked = [...body().querySelectorAll("tr[data-shipimg]")].map(r => r.dataset.shipimg);
+      const cas = row("Far Wanderer");
+      ptr(cas, "pointerenter");
+      ptr(cas.cells[0], "pointerenter"); ptr(cas.cells[0], "pointerleave");   // moving over its cells: still the row's hover
+      await sleep(1500);
+      got.early = shown();
+      await sleep(800);
+      got.after = shown();
+      ptr(cas, "pointerleave");
+      got.left = card().hidden;
+      // a type with no picture: no card, however long
+      ptr(row("Prototype"), "pointerenter"); await sleep(2300);
+      got.unknown = card().hidden;
+      ptr(row("Prototype"), "pointerleave");
+      // a finger's pointer: nothing (the tablet's tap does it)
+      ptr(row("Krait Phantom"), "pointerenter", "touch"); await sleep(2300);
+      got.touch = card().hidden;
+      // Escape closes; another sub-tab closes it
+      ptr(row("Krait Phantom"), "pointerenter"); await sleep(2300);
+      got.krait = shown();
+      d.dispatchEvent(new w.KeyboardEvent("keydown", {key: "Escape", bubbles: true}));
+      got.escape = card().hidden;
+      ptr(row("Krait Phantom"), "pointerleave");
+      ptr(row("Krait Phantom"), "pointerenter"); await sleep(2300);
+      d.querySelector('[name=cmdrTab][value="profile"]').click(); await settle(400);
+      got.otherTab = card().hidden;
+      got.pure = w.eval(`[shipPicture("Krait_Light"), shipPicture("new_hull_x"), shipPicture("constructor")]`);
+    } finally {
+      w.eval(`apiJson = __scKeep.api; data.commander_version = __scKeep.ver; shipCardHide();
+        CM.data = {}; CM.key = {}; CM.tab = "profile"; store.set("cmdrTab", "profile");`);
+      d.querySelector('[data-view="overview"]').click();
+      await releasePayloads();
+    }
+    const want = {
+      marked: ["explorer_nx", "krait_light"],
+      early: null,
+      after: ["static/ships/explorer_nx.webp", "Caspian Explorer", "lazy", "300", "200", "Far Wanderer Caspian Explorer", true],
+      left: true, unknown: true, touch: true,
+      krait: ["static/ships/krait_light.webp", "Krait Phantom", "lazy", "300", "200", "Krait Phantom", true],
+      escape: true, otherTab: true,
+      pure: ["static/ships/krait_light.webp", null, null],
+    };
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    const goodSC = !bad.length && errors.length === before;
+    allOk = allOk && goodSC;
+    console.log(goodSC ? "OK" : "FAIL", "| ship pictures |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
+      : "a 2 s hover shows the type's picture, gone on leaving; nothing for a touch or an unknown hull; Escape and another tab close it", errors.slice(before));
   }
   // The CMDR tab's Earnings (NEXT-VERSION #7, batch C; made-up answers, EARN above): the 6th sub-tab; the figures row;
   // the period picker above the pane (the years and that year's months from the answer) asking again with ?year= /

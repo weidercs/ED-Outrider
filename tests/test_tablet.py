@@ -10,6 +10,7 @@ import unittest.mock
 
 from support import ed_outrider  # also puts the repository root on sys.path
 
+import outrider  # noqa: E402
 import outrider.auth  # noqa: E402
 
 
@@ -367,6 +368,43 @@ class Tablet(unittest.TestCase):
         with unittest.mock.patch.object(fr, "CONTENT_TYPES", bare):
             ed_outrider.register_static_types()
             self.assertEqual(self.client(go), [(200, "image/webp"), (200, "image/svg+xml")])
+
+    def test_ship_pictures(self):
+        """The CMDR tab's Inventory shows a ship type's picture (2026-10-15): one WebP per hull in static/ships/, named by
+        the journal's lower-case symbol, for every type in page.js's SHIP_NAMES and none for a type it does not name
+        (scripts/build_ship_images.py renders them from Elite Dangerous Almanac's illustrations), small (never the 1-2 MB
+        SVGs), credited with Frontier's notice and Almanac's terms, served as images."""
+        folder = os.path.join(ed_outrider.STATIC_DIR, "ships")
+        with open(os.path.join(ed_outrider.STATIC_DIR, "page.js"), encoding="utf-8") as f:
+            table = re.search(r"const SHIP_NAMES = \{(.*?)\};", f.read(), re.S).group(1)
+        names = set(re.findall(r"(\w+): \"", table))
+        self.assertGreaterEqual(len(names), 48)
+        pictures = {f[:-len(".webp")] for f in os.listdir(folder) if f.endswith(".webp")}
+        self.assertEqual(sorted(pictures - names), [], "a picture of a type SHIP_NAMES does not name")
+        self.assertEqual(sorted(names - pictures), [], "a type in SHIP_NAMES with no picture: run scripts/build_ship_images.py")
+        self.assertEqual(set(os.listdir(folder)) - {f"{p}.webp" for p in pictures}, {"CREDITS.txt"})
+        total = 0
+        for p in sorted(pictures):
+            with open(os.path.join(folder, f"{p}.webp"), "rb") as f:
+                b = f.read()
+            self.assertTrue(b[:4] == b"RIFF" and b[8:12] == b"WEBP", p)
+            self.assertLess(len(b), 100 * 1024, p)
+            total += len(b)
+        self.assertLess(total, 4 * 1024 * 1024)
+        with open(os.path.join(folder, "CREDITS.txt"), encoding="utf-8") as f:
+            credits = " ".join(f.read().split())   # the words, whatever the line breaks
+        for words in ("Frontier Developments plc", "Elite Dangerous Almanac", "https://github.com/Elite-Dangerous-Almanac/Almanac-Core",
+                      "not under the project's GPL", "non-commercial", "MIT License", "Copyright (c) 2026 Elite Dangerous Community",
+                      "with the permission of Frontier Developments plc"):
+            self.assertIn(words, credits)
+        with open(os.path.join(outrider.ROOT, "scripts", "build_ship_images.py"), encoding="utf-8") as f:
+            commit = re.search(r'^COMMIT = "([0-9a-f]{40})"', f.read(), re.M).group(1)
+        self.assertIn(commit, credits)   # the credits name the commit the pictures were built from
+
+        async def go(c):
+            r = await c.get("/static/ships/krait_light.webp")
+            return r.status, r.headers.get("Content-Type", "").split(";")[0]
+        self.assertEqual(self.client(go), (200, "image/webp"))
 
     def test_dark_theme_icons(self):
         """The dark theme's line icons are Lucide's (ISC: its licence ships beside them), inline as CSS masks written by
