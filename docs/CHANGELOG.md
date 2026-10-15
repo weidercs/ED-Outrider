@@ -2,6 +2,11 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-15 · The overview shot at 2560x1440
+- `docs/images/overview.png` retaken at 2560x1440 (the author's 27-inch monitors): at that width Nearby's rows keep their
+  Status, Notable and Known columns on one line, as the page really looks on a big monitor; still pinned on Lysood
+  TS-U d2-58.
+
 ## 2026-10-15 · The overview shot pinned on Lysood TS-U d2-58: a list with more in it
 - `docs/images/overview.png` retaken as before (Overview, Elite theme, 1600x1000, Here in its list view beside Nearby,
   the route line shown) but viewing Lysood TS-U d2-58: three bio bodies with sampled species (a Stratum among them),
