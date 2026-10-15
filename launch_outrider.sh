@@ -13,6 +13,27 @@ CALLER=$PWD
 cd "$(dirname "$0")"
 HERE=$PWD
 
+# a header at every start and Settings' Restart (which runs this script again), so each run stands out in the
+# terminal and in a service's log (the author, 2026-10-14); the version read from outrider/__init__.py in bash alone
+# (no sed or head: the launcher runs where only bash and Python can be counted on)
+banner() {
+    local version="" line bar="==============================================="
+    if [ -r outrider/__init__.py ]; then
+        while IFS= read -r line || [ -n "$line" ]; do
+            case $line in
+                '__version__ = "'*) version=${line#*\"}; version=${version%%\"*}; break ;;
+            esac
+        done < outrider/__init__.py
+    fi
+    echo
+    echo "$bar"
+    echo "#      ED Outrider v${version:-?}"
+    echo "#"
+    echo "#                       https://github.com/weslocke/ED-Outrider"
+    echo "$bar"
+}
+banner
+
 VENV=.venv
 STAMP="$VENV/.requirements.sha256"   # requirements.txt as it was when last installed
 

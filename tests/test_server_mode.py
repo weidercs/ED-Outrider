@@ -724,3 +724,25 @@ class CertifiWeekly(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LauncherBanner(unittest.TestCase):
+    """launch_outrider.sh opens every start and restart with a blank line and a header naming the version (the
+    author, 2026-10-14). Only its banner() function is run: never the launcher itself (it installs and starts)."""
+
+    def test_the_header(self):
+        import shutil
+        import subprocess
+        bash = shutil.which("bash")
+        if not bash:
+            self.skipTest("no bash")
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(root, "launch_outrider.sh"), encoding="utf-8") as f:
+            text = f.read()
+        fn = re.search(r"^banner\(\) \{\n.*?^\}\n", text, re.S | re.M)
+        self.assertIsNotNone(fn, "banner() in launch_outrider.sh")
+        self.assertRegex(text[fn.end():], r"^banner\n", "called at once, before the setup's own lines")
+        out = subprocess.run([bash, "-c", fn.group(0) + "banner"], cwd=root, capture_output=True, text=True, timeout=10).stdout
+        bar = "=" * 47
+        self.assertEqual(out.split("\n"), ["", bar, f"#      ED Outrider v{outrider.__version__}", "#",
+                                           "#                       https://github.com/weslocke/ED-Outrider", bar, ""])

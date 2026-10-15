@@ -2,6 +2,12 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · The launcher's header at every start
+- `launch_outrider.sh` opens every start, and Settings' Restart (which runs it again), with a blank line and a header:
+  "ED Outrider v2026.10.23" and the GitHub address between two rules (the author's layout), the version read from
+  `outrider/__init__.py`, so each run stands out in the terminal and a service's log. Test: `LauncherBanner` runs only
+  its `banner()` function.
+
 ## 2026-10-14 · No In-Game Route line for a route of one jump
 - The author: targeting a system next door showed "In-Game Route: 1 jump" (the game writes a one-jump route for it).
   `State.route_summary` gives no route when the plotted one has a single jump (NavRoute.json's Route lists where you
