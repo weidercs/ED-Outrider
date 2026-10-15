@@ -406,6 +406,50 @@ class Tablet(unittest.TestCase):
             return r.status, r.headers.get("Content-Type", "").split(";")[0]
         self.assertEqual(self.client(go), (200, "image/webp"))
 
+    def test_galaxy_map_markers(self):
+        """The game's galaxy-map markers as page icons (NEXT-VERSION #13, 2026-10-15): the files page.js's MARKERS names,
+        copied byte for byte from Elite Dangerous Almanac at a pinned commit into static/icons/elite/, each a small 64 x 64
+        SVG painted with currentColor (page.css draws it as a mask in the text's colour: a .mk-<symbol> rule each),
+        credited with Frontier's notice, Almanac's MIT notice and the commit, served as SVG, not page code (PAGE_FILES)."""
+        commit = "5da3bfca20aba4bb39332628e220ea2acb5dbcd9"   # a newer copy: here and in CREDITS.txt
+        folder = os.path.join(ed_outrider.STATIC_DIR, "icons", "elite")
+        with open(os.path.join(ed_outrider.STATIC_DIR, "page.js"), encoding="utf-8") as f:
+            js = f.read()
+        markers = re.findall(r'"([a-z-]+)"', re.search(r"^const MARKERS = \[(.*?)\];", js, re.M).group(1))
+        self.assertEqual(sorted(markers), ["destination", "engineer", "fleet-carrier", "mission", "squadron-carrier", "titan", "waypoint"])
+        self.assertEqual(sorted(os.listdir(folder)), sorted([f"{m}.svg" for m in markers] + ["CREDITS.txt"]))
+        with open(os.path.join(ed_outrider.STATIC_DIR, "page.css"), encoding="utf-8") as f:
+            css = f.read()
+        for m in markers:
+            with open(os.path.join(folder, f"{m}.svg"), encoding="utf-8") as f:
+                svg = f.read()
+            self.assertLess(len(svg.encode()), 2048, m)
+            self.assertTrue(svg.startswith('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"'), m)
+            self.assertIn("currentColor", svg, m)
+            self.assertNotIn("<script", svg, m)
+            self.assertNotRegex(svg, r"(?:href|url)\(?=?\"?(?:https?:|data:)", m)   # nothing fetched from outside
+            self.assertEqual(len(re.findall(rf"^\.mk-{m} \{{ -webkit-mask-image: url\(icons/elite/{m}\.svg\); mask-image: url\(icons/elite/{m}\.svg\); \}}$",
+                                            css, re.M)), 1, m)
+            if m not in ("engineer", "mission"):   # those two are page.html's only (below)
+                self.assertIn(f'mk("{m}"', js, m)
+        with open(os.path.join(ed_outrider.STATIC_DIR, "page.html"), encoding="utf-8") as f:
+            html = f.read()
+        for m in ("engineer", "mission", "destination"):
+            self.assertIn(f'<span class="mk mk-{m} mkg" aria-hidden="true"></span>', html)
+        self.assertNotIn("🎯", html)   # every target button the destination marker
+        self.assertFalse([p for p in ed_outrider.PAGE_FILES if "icons" in p])   # pictures, not page code
+        with open(os.path.join(folder, "CREDITS.txt"), encoding="utf-8") as f:
+            credits = " ".join(f.read().split())
+        for words in ("Frontier Developments plc", "Elite Dangerous Almanac", "https://github.com/Elite-Dangerous-Almanac/Almanac-Core",
+                      commit, "not under the project's GPL", "non-commercial", "MIT License", "Copyright (c) 2026 Elite Dangerous Community",
+                      "with the permission of Frontier Developments plc", "media usage rules"):
+            self.assertIn(words, credits)
+
+        async def go(c):
+            r = await c.get("/static/icons/elite/destination.svg")
+            return r.status, r.headers.get("Content-Type", "").split(";")[0]
+        self.assertEqual(self.client(go), (200, "image/svg+xml"))
+
     def test_dark_theme_icons(self):
         """The dark theme's line icons are Lucide's (ISC: its licence ships beside them), inline as CSS masks written by
         scripts/dark_icons.py (no request per icon), and only under data-theme="dark"."""

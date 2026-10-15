@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" color="#FF2800" role="img">
+  <title>Destination</title>
+  <rect x="2" y="2" width="60" height="60" fill="none" stroke="currentColor" stroke-width="4"/>
+  <g fill="none" stroke="currentColor">
+    <path stroke-width="3.3" d="M18,42.1 L48,33.3"/>
+    <path stroke-width="2" d="M48,32 L36.2,15"/>
+  </g>
+  <g fill="currentColor">
+    <circle cx="18" cy="42" r="9.5"/>
+    <circle cx="48" cy="31.5" r="7"/>
+    <circle cx="36" cy="15" r="4.5"/>
+  </g>
+</svg>

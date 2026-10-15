@@ -81,7 +81,7 @@ tr.main td { font-weight: 500; }
 #histRows tr.sess { cursor: pointer; } #histRows tr.sess td:first-child::before { content: "▸ "; color: var(--muted); }
 #histRows tr.sess.open td:first-child::before { content: "▾ "; }
 #histRows td.systems { white-space: normal; font-size: 12px; color: var(--muted); }
-#histRows td.systems span { display: inline-block; margin: 1px 8px 1px 0; }
+#histRows td.systems span { display: inline-block; margin: 1px 8px 1px 0; } #histRows td.systems .mk { margin: 0; }
 #histRows td.systems .name { cursor: copy; color: var(--text); }
 #bmTools { margin-top: 8px; } #bmTools .exports a { color: var(--info); }
 #bmImportMsg { color: var(--muted); font-size: 0.9em; } #bmImportMsg.err { color: var(--bad); }
@@ -368,6 +368,22 @@ dialog input[type=number] { background: var(--bg); color: var(--text); border: 1
 #pop .flags { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; }
 #pop .unk { font-style: italic; }
 @media (max-width: 640px) { .hide-sm { display: none; } th, td { padding: 6px 4px; } }
+
+/* ---- the game's galaxy-map markers as icons (NEXT-VERSION #13; static/icons/elite/, its CREDITS.txt): page.js mk(),
+   an empty span painted in the text's own colour through the marker as a mask, so each theme colours it as the words
+   beside it (contrast as theirs) and it grows with the font. A file per marker (url() from this sheet's folder), not in
+   PAGE_FILES: pictures, not page code. forced-color-adjust keeps it drawn in a forced-colours (high contrast) mode ---- */
+.mk { display: inline-block; flex: 0 0 auto; width: 1.15em; height: 1.15em; vertical-align: -0.22em; background: currentColor;
+      -webkit-mask-position: center; mask-position: center; -webkit-mask-size: contain; mask-size: contain;
+      -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; forced-color-adjust: none; }
+.mk.mkg { margin-right: .3em; }
+.mk-destination { -webkit-mask-image: url(icons/elite/destination.svg); mask-image: url(icons/elite/destination.svg); }
+.mk-fleet-carrier { -webkit-mask-image: url(icons/elite/fleet-carrier.svg); mask-image: url(icons/elite/fleet-carrier.svg); }
+.mk-squadron-carrier { -webkit-mask-image: url(icons/elite/squadron-carrier.svg); mask-image: url(icons/elite/squadron-carrier.svg); }
+.mk-titan { -webkit-mask-image: url(icons/elite/titan.svg); mask-image: url(icons/elite/titan.svg); }
+.mk-waypoint { -webkit-mask-image: url(icons/elite/waypoint.svg); mask-image: url(icons/elite/waypoint.svg); }
+.mk-engineer { -webkit-mask-image: url(icons/elite/engineer.svg); mask-image: url(icons/elite/engineer.svg); }
+.mk-mission { -webkit-mask-image: url(icons/elite/mission.svg); mask-image: url(icons/elite/mission.svg); }
 
 /* ---- header: title + tabs, then tiles ---- */
 .topbar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
@@ -789,8 +805,10 @@ tr.nextstop td.name::after { content: " ⚑ next stop"; color: var(--info); font
 #hwyLine { margin-top: 4px; font-size: 13px; cursor: pointer; } #hwyLine:empty { display: none; }
 #hwyLine:hover { color: var(--text); } #hwyLine .copy { cursor: copy; }
 #hwyLine .hwyaim, #hwyRows .hwyretry, #hwyDone .hwyretry { margin-left: 6px; padding: 0 6px; font-size: 12px; }
-/* 🎯 beside each route system in the lists: small, brighter on the row you point at */
+/* the target button (the game's destination marker) beside each route system in the lists: small, brighter on the row
+   you point at */
 .hwyaim.icon { margin-left: 6px; padding: 0 4px; font-size: 11px; opacity: .55; }
+.hwyaim.icon .mk { width: 1.4em; height: 1.4em; vertical-align: -0.3em; }
 tr:hover .hwyaim.icon, .hwyaim.icon:focus-visible, .hwyaim.icon:disabled { opacity: 1; }
 /* Nearby's 🎯 before the name: a fixed-width slot, empty on your own system's row, so the names stay in line */
 td.name .nearaim { display: inline-block; width: 2.1em; } td.name .nearaim .hwyaim.icon { margin-left: 0; }
@@ -883,6 +901,7 @@ body.nowmode header, body.nowmode main { display: none; }
 /* #3: the pad the station gave you, in large letters, the station under it */
 #nowView .now-pad { font-size: clamp(48px, 11vw, 140px); font-weight: 800; color: var(--good); line-height: 1; margin: 1vh 0 2vh; }
 #nowView .now-pad span { display: block; font-size: clamp(16px, 2.4vw, 28px); font-weight: 400; color: var(--muted); margin-top: .6vh; }
+#nowView .now-pad .mk { display: inline-block; margin-top: 0; }   /* a carrier's marker before its name, not a line */
 #nowView .now-pad .now-where { color: var(--text); font-size: clamp(18px, 3vw, 34px); }
 /* #12: the pad diagram under it (padMapSvg) */
 #nowView .now-padmap { display: block; width: min(60vw, 42vh, 360px); height: auto; margin-top: 1.4vh; }

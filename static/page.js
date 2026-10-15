@@ -71,6 +71,15 @@ const REQ_GEN = {};
 const newRequest = kind => (REQ_GEN[kind] = (REQ_GEN[kind] || 0) + 1);
 const isNewest = (kind, g) => REQ_GEN[kind] === g;
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+// The game's galaxy-map markers as page icons (NEXT-VERSION #13, 2026-10-15): static/icons/elite/<symbol>.svg (Elite
+// Dangerous Almanac's redrawings of Frontier's markers: CREDITS.txt there), drawn by page.css's .mk as a mask filled with
+// the text's own colour, so every theme colours them as the words beside them and they grow with the font. On-page
+// only: speech, notifications, toasts, the Log, CSV and titles keep their emoji and words. Beside words the span is
+// aria-hidden (the words, or the button's aria-label, say what it is); with `label` it stands alone and says it (role
+// img). `gap`: a little room before the words that follow. MARKERS: the symbols shipped (test_tablet checks the files)
+const MARKERS = ["destination", "fleet-carrier", "squadron-carrier", "titan", "waypoint", "engineer", "mission"];
+const mk = (sym, {gap = true, label = null} = {}) => `<span class="mk mk-${sym}${gap ? " mkg" : ""}"` +
+  (label ? ` role="img" aria-label="${esc(label)}" title="${esc(label)}"` : ` aria-hidden="true"`) + `></span>`;
 // ---- Compact forms for the screen tables (never for speech or notifications) ----
 // A table that does not fit its box gets the class compact (and, if that is not enough, compact2 too: see fitTable).
 // Its cells hold both forms, so switching costs no redraw: .lf the full form (shown while the table fits), .sf the
@@ -264,7 +273,15 @@ function poiText(list) {
   return Object.keys(POI_NAMES).filter(k => by[k]).map(k => k === "titan" || k === "generation_ship" ? by[k].join(", ")
     : by[k].length === 1 ? `a ${POI_NAMES[k][0]}` : `${by[k].length} ${POI_NAMES[k][1]}`).join(" · ");
 }
-const poiTag = list => !list || !list.length ? "" : `<span class="nb poi" title="${esc(poiText(list))}">📍${list.length > 1 ? " " + list.length : ""}</span>`;
+// a Titan has the game's Titan marker (#13, 2026-10-15) in place of 📍; the other signals keep 📍
+const poiGlyphs = list => (list.some(p => p.kind === "titan") ? mk("titan", {gap: false}) : "") + (list.some(p => p.kind !== "titan") ? "📍" : "");
+const poiTag = list => !list || !list.length ? "" : `<span class="nb poi" title="${esc(poiText(list))}">${poiGlyphs(list)}${list.length > 1 ? " " + list.length : ""}</span>`;
+// Now's line of them: each Titan by name after its marker, then 📍 before the rest ("Titan Cocijo · 📍 a listening post")
+function poiLineHtml(list) {
+  const titans = list.filter(p => p.kind === "titan"), rest = list.filter(p => p.kind !== "titan");
+  return [titans.length ? `${mk("titan")}${esc(poiText(titans))}` : "",
+          rest.length ? `📍 ${esc(titans.length ? poiText(rest) : poiText(rest).replace(/^./, c => c.toUpperCase()))}` : ""].filter(Boolean).join(" · ");
+}
 // ⭐ rare stars in a system (a black hole, a Wolf-Rayet...: from Spansh's records too, before you go), what on hover
 const rareStarText = list => (list || []).map(r => r.main || !r.body ? `${r.what} (main star)` : `${r.what} at ${r.body}`).join(", ");
 const rareStarTag = list => !list || !list.length ? "" :
@@ -350,6 +367,9 @@ let carrierWarned = null;
 // galaxy map, as 🎯 on a route's row does; where auto-target can work (hwyAimBtn: canAim)
 const carrierAim = c => c && !c.aboard && !c.here && c.system && !(c.decommission && c.decommission.done)
   ? hwyAimBtn(c.system, "carrier", null, true) : "";
+// a carrier's marker (#13) by the pad layout's kind (outrider.pads.layout: "fleet", "squadron" for a four-letter name);
+// anything else is no carrier: none
+const carrierMk = kind => kind === "squadron" ? mk("squadron-carrier") : kind === "fleet" ? mk("fleet-carrier") : "";
 // 🛣 beside the carrier's 🎯 (the author, 2026-10-14): an exact route to your carrier's system plotted at once, without
 // Plot Route's screen (its form's saved exact options: injections, no neutron boosts, conservative range...); shown
 // only from CARRIER_PLOT_MIN_LY away; a Highway route you follow is replaced only once you say so (CP.ask). While the
@@ -481,7 +501,7 @@ function renderCarrier() {
   const tr = c.tritium;
   const dcLine = dc ? `<span class="noscoop" title="cancel it in the carrier's management until then">Decommissioning: scrapped ${esc(shortDay(dc.scrap_ts || ""))}` +
     `${dc.refund ? ` · ${credits(dc.refund)} cr back` : ""}</span>` : "";
-  cl.innerHTML = val(esc(c.name), esc(c.callsign || "")) + ln(dcLine) + ln(where) + ln(meet) + ln(plan) +
+  cl.innerHTML = val(mk("fleet-carrier") + esc(c.name), esc(c.callsign || "")) + ln(dcLine) + ln(where) + ln(meet) + ln(plan) +
     ln(carrierServicesHtml(c) +
        (tr ? ` · Tritium in Depot: <b>${tr.depot.toLocaleString()} t</b>` : c.fuel != null ? ` · ${c.fuel} t tritium` : "")) +
     ln(carrierFinanceHtml(c.finance)) +
@@ -818,7 +838,7 @@ function tilesLineHtml() {
     const pl = c.planned, left = pl && pl.departure ? (Date.parse(pl.departure) - Date.now()) / 1000 : null;
     const where = c.aboard ? "aboard" : c.here ? "here" : c.distance != null ? ly(c.distance) : esc(c.system || "");
     const dep = left != null && left > 0 ? ` · departs in ${left >= 3600 ? `${Math.floor(left / 3600)} h ${Math.floor(left % 3600 / 60)} min` : `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, "0")}`}` : "";
-    out.push(bit(`carrier ${where}${dep}`, dep && left < 300 && !c.aboard ? "urgent" : "", c.name || "your fleet carrier") + carrierAim(c));
+    out.push(bit(`${mk("fleet-carrier")}carrier ${where}${dep}`, dep && left < 300 && !c.aboard ? "urgent" : "", c.name || "your fleet carrier") + carrierAim(c));
   }
   const dl = tileLevel("tData");
   if (on("data") && dl) out.push(bit(dataBit, dl, "the Data tile: unfold the tiles for the detail"));
@@ -1136,7 +1156,7 @@ function renderNow() {
   const lines = [`<div class="now-sys">${esc(p.name)}</div>`];
   // #3: docking: the pad in large letters (the author, 2026-10-14), or why the station refused; gone once docked
   const dk = data.docking;
-  if (dk && dk.pad != null) lines.push(`<div class="now-pad">PAD ${esc(dk.pad)}<span>${esc(dk.station || "")}</span>` +
+  if (dk && dk.pad != null) lines.push(`<div class="now-pad">PAD ${esc(dk.pad)}<span>${carrierMk(dk.layout)}${esc(dk.station || "")}</span>` +
     (dk.where ? `<span class="now-where">${esc(dk.where)}</span>` : "") + (dk.map ? padMapSvg(dk.map) : "") + `</div>`);
   else if (dk && dk.words && Date.now() - Date.parse(dk.ts) < 60000)
     lines.push(`<div class="now-card alert">🛬 Docking denied${dk.station ? ` at ${esc(dk.station)}` : ""}: ${esc(dk.words)}</div>`);
@@ -1189,7 +1209,7 @@ function renderNow() {
     if (siteBodies.length)   // Guardian or Thargoid sites, an anomaly, on this system's bodies
       lines.push(`<div class="now-line now-sites"><span class="ok">${esc(siteText(siteBodies.map(b => ({body: b.name, sites: b.sites}))))}</span></div>`);
     if (hd && hd.pois && hd.pois.length)   // FSS signals worth a detour: Titans, beacons, listening posts...
-      lines.push(`<div class="now-line now-poi"><span class="ok">📍 ${esc(poiText(hd.pois).replace(/^./, c => c.toUpperCase()))}</span></div>`);
+      lines.push(`<div class="now-line now-poi"><span class="ok">${poiLineHtml(hd.pois)}</span></div>`);
     // green gas giants here: the model's guesses (check them in the system map) and any your codex confirms
     const gggs = hd && hd.bodies ? hd.bodies.filter(b => b.ggg) : [];
     if (gggs.length) {
@@ -1959,7 +1979,7 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["highway", "the Neutron Highway (a route plotted in Plot Route): the next stop on arriving at a route system (with the boost and refuel stops), off route, back on the highway, and highway complete", null],
   ["refuelshort", "a Highway route plotted with the exact plotter: the fuel aboard won't reach the next refuel stop (once per system; at a refuel stop itself the route's line only shows how much to scoop)", "alert"],
   ["lastscoop", "any route Outrider follows (the game's plotted route, the Highway, a survey route's legs): at the last scoopable star before stars you can't scoop, when the fuel aboard won't cover them (once per stretch, not while scooping)", "alert"],
-  ["autotarget", "auto-target (after a supercharge when it is on, a test, Target next, 🎯, the co-pilot button's tap): whether the system was targeted, and nothing to target when the button found none", null],
+  ["autotarget", "auto-target (after a supercharge when it is on, a test, Target next, a target button, the co-pilot button's tap): whether the system was targeted, and nothing to target when the button found none", null],
   ["wrongtarget", "a route you follow (the Highway, a survey or trade route): the system targeted in game is not its next stop (once per target, after the galaxy map closes; never off the route, nor for a later stop of the route, which the line shows as stops ahead)", "alert"],
   ["find", "a valuable body just scanned (over your highlight levels); one someone else mapped is not named, but said once per system (\"already mapped, still worth mapping\")", "find"],
   ["jumponium", "a landable body just scanned has a material your FSD injections are short of (premium or standard at 2 or fewer): said with the FSS debrief, or alone when the FSS never completes", "find"],
@@ -3578,7 +3598,7 @@ function drawBoxel() {
       (d.done ? `<button type="button" class="try" data-bxdone="0" title="take the done mark back">undo done</button>`
         : !d.complete ? `<button type="button" class="try" data-bxdone="1" title="finished with this boxel, complete or not: it leaves the recommendations (a kept boxel is let go)">✓ Done with this boxel</button>` : "") +
       (d.end != null ? `<button type="button" class="try" data-bxretry="1" title="a failed search is not always a missing name: offer the numbers above it again">retry above -${d.end}</button>` : "") +
-      (!b.standard ? `<span class="unk">a hand-made sector: 🎯 cannot check its systems</span>` : "") + `</div>`;
+      (!b.standard ? `<span class="unk">a hand-made sector: ${mk("destination")}target cannot check its systems</span>` : "") + `</div>`;
     const rowHtml = r => { const s = r.summary;
       return `<tr class="${[r.visited && "visited", r.n === d.next && "next", !r.visited && !r.spansh && "try", d.skip_known && r.scanned && !r.visited && "skipped"].filter(Boolean).join(" ")}">` +
         `<td class="n">-${r.n}</td><td class="name copy" data-name="${esc(r.name)}" title="click to copy">${nameWords(r.name)}${s ? firstsIcon(s.firsts) : ""}</td>` +
@@ -5050,7 +5070,7 @@ async function loadNearest() {
   renderNearest();
 }
 function nearRowHtml(r) {
-  const who = r.kind === "carrier" ? `<b>${esc(r.name || r.callsign)}</b>${r.name ? ` <span class="unk">${esc(r.callsign)}</span>` : ""}` : `<b>${esc(r.name)}</b>`;
+  const who = r.kind === "carrier" ? `${mk("fleet-carrier")}<b>${esc(r.name || r.callsign)}</b>${r.name ? ` <span class="unk">${esc(r.callsign)}</span>` : ""}` : `<b>${esc(r.name)}</b>`;
   const badge = r.dssa ? ` <span class="dssabadge" title="Deep Space Support Array carrier: stationed for explorers, open to all${r.until ? `, until ${esc(r.until)}` : ""}">🛰 DSSA</span>` : "";
   const kind = r.kind === "carrier" ? `Fleet carrier${r.own ? " · yours" : r.dssa && r.until ? ` · stationed until ${esc(r.until)}` : ""}` : esc(r.station_type || "Station");
   const sv = r.services || [], tk = TRADER_KINDS.find(k => sv.includes(k));
@@ -6141,7 +6161,7 @@ function renderHistory() {
       <td class="num">${s.firsts}</td><td class="num hide-sm c2hide">${s.bodies_first}</td><td class="num">${s.mapped}</td>
       <td class="num hide-sm">${s.footfalls}</td><td class="num">${s.samples}</td>${soldCell(s.sold)}<td class="num hide-sm c2hide">${s.codex_new}</td></tr>` +
       (open ? `<tr><td colspan="11" class="systems">${s.systems.map(x => `<span><span class="name" data-name="${esc(x.name)}" title="click to copy">${esc(x.name)}</span>` +
-        `${x.kind === "CarrierJump" ? " 🚢" : x.kind === "Location" ? " ⟳" : ""} <span class="unk">${x.ts.slice(11, 16)}</span></span>`).join("")}</td></tr>` : "");
+        `${x.kind === "CarrierJump" ? " " + mk("fleet-carrier", {gap: false, label: "a carrier jump"}) : x.kind === "Location" ? " ⟳" : ""} <span class="unk">${x.ts.slice(11, 16)}</span></span>`).join("")}</td></tr>` : "");
   }).join("") || `<tr><td colspan="11" class="unk">No jumps in this period.</td></tr>`;
 }
 document.getElementById("histRows").addEventListener("click", e => {
@@ -6489,7 +6509,7 @@ function mapPopHtml(pt, touch = false) {
     (pt.onroute ? `<div class="unk">${esc(pt.onroute)}</div>` : "") +
     (b ? `<div class="sec">★ ${esc(b.note) || "bookmarked"}</div>` : "") +
     (!touch ? `<div class="sec unk">${mapClickWords(pt)}</div>` : `<div class="sec mapacts">` +
-      (mapAimable(pt) && canAim() ? `<button type="button" class="mini" data-aim="next" data-route="system" data-aimid="${esc(String(pt.id))}">🎯 Target</button> ` : "") +
+      (mapAimable(pt) && canAim() ? `<button type="button" class="mini" data-aim="next" data-route="system" data-aimid="${esc(String(pt.id))}">${mk("destination")}Target</button> ` : "") +
       `<button type="button" class="mini" data-mapcopy="${esc(pt.name)}">Copy name</button></div>`);
 }
 // S72: a mouse click on a system: target it (canAim) or copy its name; a run under way is said, not doubled
@@ -6606,7 +6626,7 @@ function hwyLineHtml(s, {short = false, glyph = true} = {}) {
                  (short ? hwyAimBtn(s.nearest.name) : "") : "");
   const n = s.next;
   if (!n) return `${g}To ${hwyName(s.destination)}`;
-  const bits = [`${s.index === 0 && s.at == null ? "Start" : "Next"}: ${hwyName(n.name)}${short ? hwyAimBtn(n.name) : ""}`];
+  const bits = [`${mk("waypoint")}${s.index === 0 && s.at == null ? "Start" : "Next"}: ${hwyName(n.name)}${short ? hwyAimBtn(n.name) : ""}`];
   if (s.target_check) bits.push(targetCheckHtml(s.target_check));   // S11
   if (n.neutron) bits.push(`<span class="hwyn" title="a neutron star: supercharge your FSD there">⚡ neutron</span>`);
   if (n.jumps > 1) bits.push(`${n.jumps} jumps`);
@@ -6666,8 +6686,10 @@ const canAim = () => !!(data && data.game_pc !== false && data.autotarget && dat
 function hwyAimBtn(name, route = null, index = null, icon = false) {
   if (!canAim()) return "";
   const key = route ? `${route}:${index ?? ""}` : "next", r = hwyRun, mine = r && r.kind === "next" && !r.done && (r.key || "next") === key;
-  const label = !mine ? (icon ? "🎯" : "🎯 target") : r.n > 0 ? `🎯 in ${r.n} s` : "🎯 targeting…";
-  return ` <button type="button" class="mini hwyaim${icon ? " icon" : ""}" data-aim="next"` +
+  // the game's destination marker (#13) where 🎯 was; an icon alone is named by its aria-label
+  const bare = icon && !mine, aim = mk("destination", {gap: !bare});
+  const label = !mine ? (icon ? aim : `${aim}target`) : r.n > 0 ? `${aim}in ${r.n} s` : `${aim}targeting…`;
+  return ` <button type="button" class="mini hwyaim${icon ? " icon" : ""}" data-aim="next"${bare ? ` aria-label="target ${esc(name)}"` : ""}` +
     (route ? ` data-route="${route}"${index != null ? ` data-${route === "system" ? "aimid" : "index"}="${esc(String(index))}"` : ""}` : "") + `${mine ? " disabled" : ""}` +
     ` title="target ${esc(name)} in the galaxy map${hwyFront() ? " (Outrider brings the game to the front)" : TABLET ? ""
       : ", 5 s from now: click back into the game meanwhile"}">${label}</button>`;
@@ -6762,7 +6784,7 @@ function surveyLineHtml(s, {short = false, glyph = true} = {}) {
   if (s.off_route) return `${g}<span class="hwyoff">Off Route: Detour</span>${short ? "" : ` · ${k.name}`}`;
   const n = s.next;
   if (!n) return `${g}${k.name} to ${hwyName(s.destination)}${left}`;
-  const bits = [`${s.index === 0 && s.at == null ? "Start" : "Next"}: ${n.station ? `${esc(n.station)}, ` : ""}${hwyName(n.name)}${short ? hwyAimBtn(n.name, "survey", s.index) : ""}`];
+  const bits = [`${mk("waypoint")}${s.index === 0 && s.at == null ? "Start" : "Next"}: ${n.station ? `${esc(n.station)}, ` : ""}${hwyName(n.name)}${short ? hwyAimBtn(n.name, "survey", s.index) : ""}`];
   if (s.target_check) bits.push(targetCheckHtml(s.target_check));   // S11
   if (n.jumps > 1) bits.push(`${n.jumps} jumps`);
   if (n.distance != null) bits.push(`${Number(n.distance).toFixed(1)} ly`);
@@ -12651,7 +12673,7 @@ function tabSetup() {
   // before the page's own handlers (a name's click copies it, which means nothing on a tablet)
   document.addEventListener("click", tabRowTap, true);
   const hint = document.querySelector("#mapView .hint");   // the galaxy map by touch
-  if (hint) hint.textContent = "One finger rotates · two fingers move · pinch to zoom · tap a system for its card (🎯 Target when auto-target works here, Copy name). " +
+  if (hint) hint.textContent = "One finger rotates · two fingers move · pinch to zoom · tap a system for its card (Target when auto-target works here, Copy name). " +
     "The grid is the galactic plane through your position; stalks drop each system onto it.";
   tabDrawNav(); tabDrawCaption(); tabDrawAsk();
 }
@@ -12791,7 +12813,7 @@ function tabOpenRow(table, tr) {
     (id ? `<button type="button" class="tb-btn" data-act="here" data-id="${esc(id)}">Show in Here</button>` : "") +
     (bm ? `<button type="button" class="tb-btn" data-act="bm" data-id="${esc(bm.dataset.bm)}" data-name="${esc(bm.dataset.name || name)}">Bookmark…</button>` : "") +
     (aim && data && data.game_pc !== false ? `<button type="button" class="tb-btn" data-act="aim" data-route="${esc(aim.dataset.route)}"` +
-      ["index", "aimid"].filter(k => aim.dataset[k] != null).map(k => ` data-${k}="${esc(aim.dataset[k])}"`).join("") + `>🎯 Target</button>` : "");
+      ["index", "aimid"].filter(k => aim.dataset[k] != null).map(k => ` data-${k}="${esc(aim.dataset[k])}"`).join("") + `>${mk("destination")}Target</button>` : "");
   tabShow(document.getElementById("tabSheet"));
 }
 // ---- the settings sheet: the theme, dim, this screen's size (CSS px), the app's version, sign out, and the app's own

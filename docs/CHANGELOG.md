@@ -2,6 +2,36 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-15 · Game-style icons: the galaxy map's destination, carrier, Titan, waypoint, engineer and mission markers
+- NEXT-VERSION #13 (the author's list): the page draws the game's own galaxy-map markers where it had emoji. Every
+  target button (a route's rows and line, Nearby's rows, bookmarks, the next stop, the Carrier tile, Nearest, a
+  checklist find, a boxel's, the Map's card, the tablet's row sheet, Plot Route's Target next) shows the **destination**
+  marker instead of 🎯, its words ("target", "Target", "in 5 s") kept; an icon-only one is named by an `aria-label`
+  ("target <system>"), where 🎯 alone was its name before. The **fleet carrier** marker before the Carrier tile's name,
+  in the folded tiles' line, on Nearest's carrier rows and on History's carrier jumps; Now's pad line names a carrier
+  after the fleet or **squadron carrier** marker by the pad layout's kind. A **Titan** among the signals worth a detour
+  (Here's and Nearby's tag, Now's line) shows the Titan marker; the other signals keep 📍. The route lines' "Next:" (and
+  "Start:") follow the **waypoint** marker; the kind glyphs (🛣 💰 🧬...) stay. The CMDR tab's Engineering and Missions
+  switch labels carry the **engineer** and **mission** markers. ☆/★ stay; speech, notifications, toasts, the Log, CSV,
+  titles and the overlay keep their emoji (the Map's canvas keeps its 🚢 too: it is drawn, not markup). The Settings
+  alert row's words say "a target button", and the Map's touch hint "Target", without the emoji.
+- How: `mk(symbol, {gap, label})` (page.js, `MARKERS`), an empty span page.css's `.mk` paints in `currentColor` through
+  the marker file as a CSS mask (`mask-image: url(icons/elite/<symbol>.svg)` and `-webkit-`), so it takes the text's
+  colour in every theme and the tablet's, and grows with the font; `aria-hidden` beside words, `role="img"` with a label
+  alone (History's carrier jump). `carrierMk(layout)`, `poiGlyphs`, `poiLineHtml`.
+- The markers: Elite Dangerous Almanac's `assets/galaxy-map/` (hand-drawn 64 x 64 vectors of the in-game markers),
+  seven of them copied unchanged at the ship pictures' pinned commit `5da3bfc` into `static/icons/elite/`; Frontier's
+  designs under its media usage rules with its notice, Almanac's MIT notice kept: `static/icons/elite/CREDITS.txt`, not
+  under the GPL; a row in the README's credits. Not in `PAGE_FILES` (pictures, not page code).
+- Tests: test_tablet's `test_galaxy_map_markers` (the seven files and `MARKERS` agree, each a small 64 x 64 SVG with
+  currentColor and nothing fetched, a `.mk-<symbol>` rule each, page.html's labels and no 🎯 left there, the credits
+  naming Almanac, Frontier, MIT and the commit, served as SVG). Smoke: `markText` reads a marker as `[symbol]`; the
+  route line, Highway tab, target next, too heavy and batch 25 checks now expect the waypoint and destination markers
+  where they had 🎯; new: the riches rows' and Nearby's buttons (the marker, no words, the aria-label), the tablet
+  sheet's and the Map card's Target, the one-rule block (every kind of target button, Target next), the Carrier tile,
+  tiles line and Nearest's carrier rows, Now's pad (fleet and squadron), History's carrier jump, the Titan's tag and
+  Now line, the CMDR switch's labels. Docs: plot-route.md, views.md, tablet.md, AGENT_GUIDE (`static/icons/`).
+
 ## 2026-10-15 · The route line on every tab
 - The "🛣 Next:" / survey route line under the tiles shows on every tab (History, Plot Route, Materials, CMDR...), as the
   target and arrival lines do: the header is the header (the author). It showed on Overview, Nearby and Here only

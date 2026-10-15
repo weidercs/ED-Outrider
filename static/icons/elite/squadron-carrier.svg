@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" color="#63FFF7" role="img">
+  <title>Squadron carrier</title>
+  <rect x="2" y="2" width="60" height="60" fill="none" stroke="currentColor" stroke-width="4"/>
+  <path fill="none" stroke="currentColor" stroke-width="1.6" stroke-opacity="0.18" d="M13,9 H51 V36 L32,55 13,36 Z"/>
+  <g transform="translate(32 27) scale(0.613 0.636) translate(-32 -31.75)" fill="none" stroke="currentColor" stroke-width="3.1" stroke-linejoin="round">
+    <path d="M28,10 H36 L53.5,43 44.5,53.5 H39.5 L32,47 24.5,53.5 H19.5 L10.5,43 Z"/>
+    <circle cx="32" cy="34" r="9.9"/>
+    <path stroke-width="2.4" d="M28,34 H36"/>
+  </g>
+</svg>

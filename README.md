@@ -113,6 +113,7 @@ The project's history is in the [changelog](docs/CHANGELOG.md). Contributors and
 | EDDN, EDSM and Inara upload rules | [EDMarketConnector](https://github.com/EDCD/EDMarketConnector) (EDCD) | GPL v2 or later | followed, with EDCD's notice in `outrider/eddn.py` |
 | Landing pad layouts (starports, carriers) | [LandingPad](https://github.com/bgol/LandingPad) by Bernd Gollesch | GPL v2 or later | its tables, with its notice: `outrider/pads.py` |
 | Ship pictures (CMDR → Inventory) | Frontier's ship designs, rendered from [Elite Dangerous Almanac](https://github.com/Elite-Dangerous-Almanac/Almanac-Core)'s illustrations, commit `5da3bfc` | Frontier's media usage rules (non-commercial); Almanac's own work MIT | `static/ships/`, built by `scripts/build_ship_images.py`; its terms in `static/ships/CREDITS.txt`, not the GPL |
+| Galaxy-map markers (the page's target, carrier, Titan, waypoint, engineer and mission icons) | Frontier's marker designs, redrawn as vectors by [Elite Dangerous Almanac](https://github.com/Elite-Dangerous-Almanac/Almanac-Core), commit `5da3bfc` | Frontier's media usage rules (non-commercial); Almanac's own work MIT | `static/icons/elite/`, copied unchanged; its terms in `static/icons/elite/CREDITS.txt`, not the GPL |
 | The overlay window's code | [EDMC Modern Overlay](https://github.com/SweetJonnySauce/EDMCModernOverlay) | GPL v3 | adapted, with its notice: `outrider/overlay_tracking.py`, `outrider/overlay_window.py` |
 
 The tablet themes' emblems (`static/emblems/`, each under the terms in its `CREDITS.txt`, not the GPL): the Explorer

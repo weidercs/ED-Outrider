@@ -72,6 +72,13 @@ const releasePayloads = async () => {
       data.autotarget = Object.assign({}, data.autotarget, {available: true, missing: []});`);
     return () => dom.window.eval(`(() => { const k = __aimKeep.pop(); data.game_pc = k.pc; data.autotarget = k.at; })()`);
   };
+  // The game's galaxy-map markers (#13: page.js mk(), empty spans page.css draws) read into an element's text as
+  // [symbol], so a check comparing a line's words sees each marker where it stands (and that no 🎯 is left); the
+  // page's window has it too, for checks inside w.eval
+  const markText = el => { const c = el.cloneNode(true);
+    c.querySelectorAll(".mk").forEach(m => m.replaceWith(`[${[...m.classList].find(k => k.startsWith("mk-")).slice(3)}]`));
+    return c.textContent; };
+  dom.window.markText = markText;
   // The CMDR tab's Earnings (GET api/commander/earnings, outrider/earnings.py's shape), made up: five months of all
   // time (one empty), a carto sale, a mining one (20 t mined of 30 sold), a bio one at a carrier with no ship known; the
   // period's own label per answer; and a database with no sale at all. Used by the desktop block and the tablet's.
@@ -1440,6 +1447,8 @@ const releasePayloads = async () => {
     got.marks = [...d.querySelectorAll("#richRows td.richmark")].map(e => e.textContent).join("|");
     // 🎯 beside every route system but the one you are in (row 1 here)
     got.aims = [...d.querySelectorAll("#richRows [data-aim]")].map(b => b.dataset.route + ":" + b.dataset.index).join();
+    // #13: each the game's destination marker, no words and no 🎯, named by its aria-label ("target Rich A")
+    got.aimLook = [...d.querySelectorAll("#richRows [data-aim]")].map(b => markText(b) + "|" + b.getAttribute("aria-label")).join();
     got.head = d.getElementById("hwyHead").textContent.replace(/\s+/g, " ");
     got.formFolded = !d.getElementById("hwyPlot").open;
     // the plotter switch: Road to Riches' options, the neutron-only and exact-only ones hidden, To optional
@@ -1506,7 +1515,7 @@ const releasePayloads = async () => {
       elwForm: ["true,true", "true,true,true,false,false,true,true", "optional: where to end", "radius,max_results,max_distance,avoid_thargoids,loop"],
       awAsking: "Asking Spansh for an ammonia world route from Rich B…",
       exoRows: "✓ Frutexa Flammasis 10.3M · Tubus Rosarium 2.6M ✦", exoHead: true,
-      aims: "survey:0,survey:2", formFolded: true, form: ["true,true", "false,false", "false", "false", "optional: where to end"],
+      aims: "survey:0,survey:2", aimLook: "[destination]|target Rich A,[destination]|target Rich C", formFolded: true, form: ["true,true", "false,false", "false", "false", "optional: where to end"],
       plotBody: {to: "Far Away", range: 61.5, radius: 25, max_results: 25, max_distance: 50000, min_value: 100000,
                  use_mapping_value: true, avoid_thargoids: true, loop: false, kind: "riches"},
       both: ["hwy,rich*", true], picked: ["hwy*,rich", true, true, '"hwy"'], clearFirst: [0, "Click again to clear"],
@@ -1579,7 +1588,7 @@ const releasePayloads = async () => {
   {
     const aimBack = aimReady();   // its 🎯 need auto-target to work (canAim)
     const w = dom.window, d = w.document, before = errors.length, got = {};
-    const line = () => d.getElementById("hwyLine").textContent.replace(/\s+/g, " ").trim();
+    const line = () => markText(d.getElementById("hwyLine")).replace(/\s+/g, " ").trim();
     const keep = w.eval("[data.highway, data.survey, view]");
     w.localStorage.removeItem("hwyShow");
     w.eval(`view = "near"; data.highway = null; data.survey = {kind: "riches", id: "s1", created_ts: "2026-10-07T10:00:00Z", destination: "Rich Z",
@@ -1600,7 +1609,8 @@ const releasePayloads = async () => {
     got.done = line();
     w.localStorage.removeItem("hwyShow");
     w.__keep = keep; w.eval("[data.highway, data.survey, view] = window.__keep; renderHwyLine()");
-    const want = {riches: "💰 Next: Rich C 🎯 target · 12.3 ly · 2 of 5 · 2 bodies to do here", exo: "🧬 Next: Rich C 🎯 target · 12.3 ly · 2 of 5 · 3 species to sample here",
+    // the next stop after the game's waypoint marker, its target button the destination marker (#13)
+    const want = {riches: "💰 [waypoint]Next: Rich C [destination]target · 12.3 ly · 2 of 5 · 2 bodies to do here", exo: "🧬 [waypoint]Next: Rich C [destination]target · 12.3 ly · 2 of 5 · 3 species to sample here",
       both: "🧬", picked: "🛣", views: "🛣🛣🛣🛣🛣🛣", done: "🧬 Exomastery complete", aim: "survey:2"};
     const bad = Object.keys(want).filter(k => !String(got[k]).startsWith(want[k]));
     const goodRL = !bad.length && errors.length === before;
@@ -1733,7 +1743,7 @@ const releasePayloads = async () => {
       const o = {}, said = [], told = [], d0 = JSON.stringify({docking: data.docking ?? null}), m0 = data.moments, lib = speechLib;
       const realSpeak = speak, realNotify = notify, flags = [speechOn, isSpeaker, alertSpeak.docking, lastMomentSeq];
       data.docking = {pad: 34, station: "Jameson Memorial", type: "Orbis", ts: new Date().toISOString()}; renderNow();
-      const pad = document.querySelector("#nowBody .now-pad"); o.now = pad ? pad.textContent : null;
+      const pad = document.querySelector("#nowBody .now-pad"); o.now = pad ? markText(pad) : null;
       data.docking = {denied: "NoSpace", words: "no pad free for your ship: try again shortly", station: "Jameson Memorial", ts: new Date().toISOString()};
       renderNow(); o.denied = (document.querySelector("#nowBody .now-card.alert") || {}).textContent || null;
       data.docking = null; renderNow(); o.gone = !document.querySelector("#nowBody .now-pad");
@@ -1743,9 +1753,13 @@ const releasePayloads = async () => {
       const svg = document.querySelector("#nowBody .now-pad svg.now-padmap");
       o.map = [(document.querySelector("#nowBody .now-where") || {}).textContent || null, !!svg && svg.querySelectorAll("circle.pm-pad").length,
                !!svg && svg.querySelectorAll("circle.pm-me").length, !!svg && !!svg.querySelector(".pm-green") && !!svg.querySelector(".pm-red")];
-      data.docking = {pad: 7, station: "G0X-85Z", where: "port side, toward the bow", map: {kind: "fleet", pad: 7,
+      data.docking = {pad: 7, station: "G0X-85Z", where: "port side, toward the bow", layout: "fleet", map: {kind: "fleet", pad: 7,
         pads: Array.from({length: 16}, (_, i) => [i, i, 10, 16])}, ts: new Date().toISOString()}; renderNow();
       o.carrier = [...document.querySelectorAll("#nowBody svg.now-padmap rect")].map(r => r.getAttribute("class")).filter(c => c === "pm-me").length;
+      // #13: a carrier's marker before its name, by the layout's kind (a squadron carrier's own)
+      const station = () => markText(document.querySelector("#nowBody .now-pad > span"));
+      o.marker = [station()];
+      data.docking = Object.assign({}, data.docking, {station: "ABCD", layout: "squadron", map: null}); renderNow(); o.marker.push(station());
       data.docking = {pad: 2, station: "Outpost", where: null, map: null, ts: new Date().toISOString()}; renderNow();
       o.plain = !document.querySelector("#nowBody svg.now-padmap") && !document.querySelector("#nowBody .now-where");
       o.setting = (() => { const box = document.createElement("div");
@@ -1770,7 +1784,8 @@ const releasePayloads = async () => {
       data.docking = JSON.parse(d0).docking; data.moments = m0; renderNow();
       return JSON.stringify(o); })()`));
     const want = {now: "PAD 34Jameson Memorial", denied: "🛬 Docking denied at Jameson Memorial: no pad free for your ship: try again shortly",
-                  gone: true, map: ["at the back · up on your right", 44, 1, true], carrier: 1, plain: true, setting: true,
+                  gone: true, map: ["at the back · up on your right", 44, 1, true], carrier: 1, marker: ["[fleet-carrier]G0X-85Z", "[squadron-carrier]ABCD"],
+                  plain: true, setting: true,
                   said: ["Pad 7. Port side, toward the bow.", "Denied: your ship is too big for this station's pads."], row: true};
     const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
@@ -1857,6 +1872,11 @@ const releasePayloads = async () => {
       const pc0 = data.game_pc, inside = aim();
       data.carrier = Object.assign({}, data.carrier, {aboard: false, here: false, system: "Far Away", distance: 120.5});
       data.game_pc = true; renderCarrier(); const away = aim();
+      // #13: the fleet carrier's marker before its name (the tile and the folded tiles' line), the target button the
+      // game's destination marker, named by its aria-label (no words beside it)
+      const ab = document.querySelector('#carrierLine button[data-route="carrier"]');
+      o.look = [markText(document.querySelector("#carrierLine .val")), !!ab && !!ab.querySelector(".mk.mk-destination"), ab && ab.getAttribute("aria-label"),
+                ab && ab.textContent, markText(Object.assign(document.createElement("div"), {innerHTML: tilesLineHtml()})).includes("[fleet-carrier]carrier ")];
       data.game_pc = false; renderCarrier(); const noPc = aim();
       data.game_pc = pc0;
       o.aim = [inside, away, noPc];
@@ -1897,6 +1917,7 @@ const releasePayloads = async () => {
     if (!/UC ✓ · Vista ✓ · 668 t tritium/.test(got.without) || !got.tritGone) bad.push("tile without");
     if (JSON.stringify(got.noTile) !== "[true,true]" || !got.tileBack) bad.push("no carrier tile");
     if (JSON.stringify(got.aim) !== "[0,1,0]") bad.push("carrier 🎯 " + JSON.stringify(got.aim));
+    if (JSON.stringify(got.look) !== JSON.stringify(["[fleet-carrier]Out Of The Blue", true, "target Far Away", "", true])) bad.push("carrier markers " + JSON.stringify(got.look));
     if (!/Decommissioning: scrapped (Oct 9|9 Oct) · 4\.85B cr back/.test(got.pending[0]) || !/aboard/.test(got.pending[0]) || !got.pending[1] || !got.pending[2]) bad.push("decommissioning");
     if (!/Out Of The Blue.*Decommissioned (Oct 9|9 Oct)/.test(got.gone[0]) || /aboard/.test(got.gone[0]) || !got.gone[1]) bad.push("decommissioned");
     if (JSON.stringify(got.noCarrier) !== "[false,false]") bad.push("no carrier cargo");
@@ -2119,7 +2140,8 @@ const releasePayloads = async () => {
         firsts: 1, bodies_first: 2, mapped: 1, footfalls: 0, samples: 2, codex_new: 0, sold, died: deaths.length, lost: 0, deaths, systems: []});
       histData = {sessions: [sess("2026-10-02T14:00:00Z", [{ts: "2026-10-02T14:32:00Z", option: "rebuy", ship: true},
                                                           {ts: "2026-10-02T15:10:00Z", option: "recover", ship: false}], 52300000),
-                             sess("2026-10-01T14:00:00Z", [], 0)],
+                             Object.assign(sess("2026-10-01T14:00:00Z", [], 0), {systems: [{name: "Cj Sys", kind: "CarrierJump", ts: "2026-10-01T15:00:00Z"},
+                                                                                         {name: "Fsd Sys", kind: "FSDJump", ts: "2026-10-01T15:10:00Z"}]})],
                   all_time: {jumps: 6, ly: 80, max_sol: 100, sessions: 2, since: "2026-10-01T14:00:00Z", firsts: 2, bodies_first: 4, mapped: 2,
                              footfalls: 0, samples: 4, codex_new: 0, sold: 52300000, died: 2, lost: 1}, ledger: {trips: [], losses: []}};
       openSessions.clear(); openSessions.add("2026-10-01T14:00:00Z"); renderHistory();
@@ -2127,6 +2149,9 @@ const releasePayloads = async () => {
       o.heads = [...document.querySelectorAll("#histTable thead th")].map(t => t.textContent);
       o.cells = rows.map(r => r.cells.length);
       o.colspan = rows[2].cells[0].colSpan;
+      // #13: a carrier jump's system after the game's fleet carrier marker, which says what it is (role img)
+      const cj = rows[2].querySelector(".mk");
+      o.carrierJump = [markText(rows[2].cells[0]).replace(/\\s+/g, " "), cj && cj.getAttribute("role"), cj && cj.getAttribute("aria-label")];
       o.x = (rows[0].querySelector(".lost") || {}).title || null;
       o.xText = (rows[0].querySelector(".lost") || {}).textContent || null;
       o.none = !rows[1].querySelector(".lost");
@@ -2140,6 +2165,7 @@ const releasePayloads = async () => {
     if (JSON.stringify(got.cells) !== "[11,11,1]" || got.colspan !== 11) bad.push("cells");
     if (got.x !== "died 14:32: ship lost (rebuy)\ndied 15:10: the ship survived (recover)" || got.xText !== "✗2" || !got.none) bad.push("✗");
     if (JSON.stringify(got.sold) !== '["52.3M",""]') bad.push("sold");
+    if (JSON.stringify(got.carrierJump) !== JSON.stringify(["Cj Sys [fleet-carrier] 15:00Fsd Sys 15:10", "img", "a carrier jump"])) bad.push("carrier jump " + JSON.stringify(got.carrierJump));
     if (got.all[0] !== 11 || got.all[1] !== "52.3M" || got.all[2] !== "2 deaths, 1 ship lost") bad.push("all time");
     const goodS63 = !bad.length && errors.length === before;
     allOk = allOk && goodS63;
@@ -2173,6 +2199,8 @@ const releasePayloads = async () => {
     got.open = dlg.open;
     got.rows = [...d.querySelectorAll("#nearRows tr")].map(t => t.textContent.replace(/\s+/g, " ").trim());
     got.badge = !!d.querySelector("#nearRows .dssabadge");
+    // #13: each carrier row's name after the game's fleet carrier marker
+    got.marks = [...d.querySelectorAll("#nearRows tr")].map(t => markText(t.cells[0]).slice(0, 17));
     got.foot = d.getElementById("nearFoot").textContent;
     const uc = dlg.querySelector('[data-nneed="UC"]'); uc.checked = true; uc.dispatchEvent(new w.Event("change", {bubbles: true})); await sleep(60);
     got.stored = w.localStorage.getItem("nearest");
@@ -2186,6 +2214,7 @@ const releasePayloads = async () => {
     if (!got.open || got.rows.length !== 3 || !/yours/.test(got.rows[0]) || !/aboard/.test(got.rows[0])) bad.push("rows");
     if (!/⚠ docking not reported/.test(got.rows[1]) || !/≈ 10 jumps/.test(got.rows[1]) || !got.badge || !/stationed until September 1, 2032/.test(got.rows[2])) bad.push("row details");
     if (!/Hidden: 6 reported more than 30 days ago/.test(got.foot) || !/101 carriers/.test(got.foot)) bad.push("foot");
+    if (JSON.stringify(got.marks) !== JSON.stringify(["[fleet-carrier]OU", "[fleet-carrier]JB", "[fleet-carrier][I"])) bad.push("carrier markers");
     const q = got.asked.filter(u => u.startsWith("api/nearest")).map(u => new URLSearchParams(u.split("?")[1]));
     if (q.length !== 2 || q[1].get("need") !== "UC" || !/"need":\["UC"\]/.test(got.stored || "")) bad.push("filter");
     if (got.to !== "Smojooe CX-A c27-15" || !got.closed || !got.asked.some(u => u.startsWith("api/highway/plot") && /Smojooe CX-A c27-15/.test(u))) bad.push("plot");
@@ -3876,14 +3905,14 @@ const releasePayloads = async () => {
     w.copyText = t => copied.push(t);
     const line = () => d.getElementById("hwyLine");
     w.eval(`data.highway = ${JSON.stringify(fx.summary)}; view = "overview"; render()`);
-    got.lineNext = line().textContent.replace(/\s+/g, " ").trim();
+    got.lineNext = markText(line()).replace(/\s+/g, " ").trim();
     line().querySelector(".copy").click();
     w.eval(`view = "map"; render()`);
-    got.lineOnMap = line().textContent.replace(/\s+/g, " ").trim();   // every tab now (the author, 2026-10-15)
+    got.lineOnMap = markText(line()).replace(/\s+/g, " ").trim();   // every tab now (the author, 2026-10-15)
     w.eval(`data.highway = ${JSON.stringify(hwyFixture({off: true}).summary)}; view = "near"; render()`);
-    got.lineOff = line().textContent.replace(/\s+/g, " ").trim();
+    got.lineOff = markText(line()).replace(/\s+/g, " ").trim();
     w.eval(`data.highway = ${JSON.stringify(hwyFixture({complete: true}).summary)}; view = "here"; render()`);
-    got.lineDone = line().textContent.replace(/\s+/g, " ").trim();
+    got.lineDone = markText(line()).replace(/\s+/g, " ").trim();
     line().click(); await sleep(300);
     got.opened = w.eval("view");
     w.eval(`data.highway = null; view = "overview"; render()`);
@@ -3896,8 +3925,8 @@ const releasePayloads = async () => {
       suggest: "Colonia|Col 285 Sector AA-A c1", suggestFrom: ["hwyFromNames", "Sol|Solati", "Colonia|Col 285 Sector AA-A c1"],
       clearFirst: [0, "Click again to clear"],
       cleared: ["api/highway/clear POST,api/highway GET", "No route yet.", true],
-      lineNext: "🛣 Next: Hwy Stop 38 🎯 target · 4.2 ly · 38 of 399 · refuel in 3 jumps", lineOnMap: "🛣 Next: Hwy Stop 38 🎯 target · 4.2 ly · 38 of 399 · refuel in 3 jumps",
-      lineOff: "🛣 Off Route: Detour · nearest Hwy Stop 39 12.0 ly 🎯 target", lineDone: "🛣 Highway complete", opened: "hwy", lineGone: "",
+      lineNext: "🛣 [waypoint]Next: Hwy Stop 38 [destination]target · 4.2 ly · 38 of 399 · refuel in 3 jumps", lineOnMap: "🛣 [waypoint]Next: Hwy Stop 38 [destination]target · 4.2 ly · 38 of 399 · refuel in 3 jumps",
+      lineOff: "🛣 Off Route: Detour · nearest Hwy Stop 39 12.0 ly [destination]target", lineDone: "🛣 Highway complete", opened: "hwy", lineGone: "",
       copied: ["Hwy Stop 38"], exactRefuel: [true, true, false], neutronRefuel: [false, false, true],
       doneTo: [30, 35, 99, -1]};
     got.doneTo = JSON.parse(w.eval(`JSON.stringify([hwyDoneTo({at: 30, furthest: 35}, {complete: false}, 100),
@@ -4372,9 +4401,9 @@ const releasePayloads = async () => {
     w.eval(`hwyRun = null; data.autotarget = ${JSON.stringify(at)}; data.highway = ${JSON.stringify(fx.summary)}; view = "overview"; render()`);
     const aim = () => d.querySelector("#hwyLine [data-aim]");
     aim().click(); await sleep(150);
-    got.lineRun = [calls.join(), w.eval("view"), copied.length, aim().textContent, aim().disabled];
+    got.lineRun = [calls.join(), w.eval("view"), copied.length, markText(aim()), aim().disabled];
     w.eval(`data.autotarget = Object.assign({}, data.autotarget, {test: {seq: 7, kind: "next", state: "done", system: "Hwy Stop 38", why: null}}); render()`);
-    got.lineDone = [aim().textContent, aim().disabled];
+    got.lineDone = [markText(aim()), aim().disabled];
     // the box's button, refused in its words
     answer = () => json({error: "you are at the end of the route"}, 400);
     d.querySelector('[data-view="hwy"]').click(); await sleep(700);
@@ -4401,7 +4430,7 @@ const releasePayloads = async () => {
     got.welcome = w.eval(`welcomeText("3 days", false)`);
     w.fetch = realFetch; w.copyText = realCopy;
     w.eval(`hwyRun = null; data.autotarget = null; data.highway = null`);
-    const want = {lineRun: ["POST", "overview", 0, "🎯 in 5 s", true], lineDone: ["🎯 target", false],
+    const want = {lineRun: ["POST", "overview", 0, "[destination]in 5 s", true], lineDone: ["[destination]target", false],
       boxRefused: "cannot target: you are at the end of the route", retryRows: ["38"],
       retried: ["POST", 0, "click into the game: targeting Hwy Stop 38 in 5 s"], noRetry: [[], [], [], []],
       spoken: ["Highway: then Hwy Stop 38, 4.2 light-years, refuel in 3 jumps",
@@ -4480,7 +4509,7 @@ const releasePayloads = async () => {
     };
     const txt = id => d.getElementById(id).textContent.replace(/\s+/g, " ").trim();
     w.eval(`data.highway = ${JSON.stringify(fx.summary)}; view = "overview"; render()`);
-    got.strip = txt("hwyLine");
+    got.strip = markText(d.getElementById("hwyLine")).replace(/\s+/g, " ").trim();
     d.querySelector('[data-view="hwy"]').click(); await sleep(700);
     got.head = txt("hwyHead");
     const cons = d.getElementById("hwyCons"), ly = d.getElementById("hwyConsLy"), sel = d.getElementById("hwyShip");
@@ -4504,7 +4533,7 @@ const releasePayloads = async () => {
     got.plain = [cons.checked, ly.value, ly.disabled];
     w.fetch = realFetch;
     w.eval(`localStorage.removeItem("highway"); data.highway = null; H.shipSel = null; view = "overview"; render()`);
-    const want = {strip: "🛣 Next: Hwy Stop 38 🎯 target · 4.2 ly · 38 of 399 · refuel in 3 jumps · ⚠ too much fuel for the next jump: ≤ 36 t, you have 140 t",
+    const want = {strip: "🛣 [waypoint]Next: Hwy Stop 38 [destination]target · 4.2 ly · 38 of 399 · refuel in 3 jumps · ⚠ too much fuel for the next jump: ≤ 36 t, you have 140 t",
       off: [false, "5", true, ""], noteX4: "≈ 4 ly shorter jumps, about 16 ly on a ×4 neutron jump",
       noteX6: "≈ 4 ly shorter jumps, about 24 ly on a ×6 neutron jump",
       body: {plotter: "exact", to: "Colonia", ship_id: 3, cargo: 0, injections: true, exclude_secondary: false, supercharged: false, no_neutrons: false,
@@ -5132,10 +5161,19 @@ const releasePayloads = async () => {
       const pt = poiText([{kind: "titan", name: "Titan Cocijo"}, {kind: "tourist", name: "A"}, {kind: "tourist", name: "B"}, {kind: "listening_post", name: "Listening Post"}]);
       return JSON.stringify([s.textContent, s.title, head.length === 1 && /^Discoveries/.test(head[0]), rows,
                              st.textContent, nb.firstChild.textContent, nb.firstChild.title, pt]); })()`));
+    // #13: a Titan has the game's Titan marker in place of 📍 (Here's and Nearby's tag, Now's line); the other signals
+    // keep 📍; the tag still says what it holds in its title
+    got.titan = JSON.parse(await w.eval(`(() => {
+      const tag = list => { const d = document.createElement("div"); d.innerHTML = poiTag(list); return [markText(d.firstChild), d.firstChild.title]; };
+      const line = list => { const d = document.createElement("div"); d.innerHTML = poiLineHtml(list); return markText(d); };
+      const ti = {kind: "titan", name: "Titan Cocijo"}, lp = {kind: "listening_post", name: "Listening Post"};
+      return JSON.stringify([tag([ti]), tag([ti, lp]), tag([lp]), line([ti, lp, {kind: "tourist", name: "A"}]), line([lp]), line([ti])]); })()`));
     const want = {what: ["three notable stellar phenomena, all in rings", "a notable stellar phenomenon, in a cloud",
                          "three notable stellar phenomena: two in rings and one in a cloud", ""], tag: "🌀 3", now: true, nowOne: true, allDone: true, said: true,
                   rare: ["⭐ 2", "rare: a black hole (main star), a Wolf-Rayet star at B", true, true,
-                         "🏛❔", "🏛👾", "🏛👾 Guardian sites, Thargoid sites on 10 b", "Titan Cocijo · a listening post · 2 tourist beacons"]};
+                         "🏛❔", "🏛👾", "🏛👾 Guardian sites, Thargoid sites on 10 b", "Titan Cocijo · a listening post · 2 tourist beacons"],
+                  titan: [["[titan]", "Titan Cocijo"], ["[titan]📍 2", "Titan Cocijo · a listening post"], ["📍", "a listening post"],
+                          "[titan]Titan Cocijo · 📍 a listening post · a tourist beacon", "📍 A listening post", "[titan]Titan Cocijo"]};
     const ok = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && ok;
     console.log(ok ? "OK" : "FAIL", "| stellar phenomena |", ok ? "counted, in Now and the 🌀, said from its lines" : JSON.stringify(got), errors.slice(before));
@@ -6219,7 +6257,8 @@ const releasePayloads = async () => {
     const got = JSON.parse(w.eval(`(() => {
       const o = {}, said = [], told = [], realSpeak = speak, realNotify = notify, m0 = data.moments, d0 = JSON.stringify(data);
       const flags = [speechOn, isSpeaker, alertSpeak.wrongtarget, lastMomentSeq], lib = speechLib;
-      const plain = h => h.replace(/<[^>]+>/g, "").replace(/\\s+/g, " ").trim();
+      // the game's markers (#13) as [symbol], the rest of the markup dropped
+      const plain = h => h.replace(/<span class="mk mk-([a-z-]+)[^>]*><\\/span>/g, "[$1]").replace(/<[^>]+>/g, "").replace(/\\s+/g, " ").trim();
       const hw = {id: "hw-s11", plotter: "exact", destination: "Colonia", total: 40, index: 5, at: 4, complete: false, off_route: false,
                   next: {name: "Neu A", id: "101", neutron: false, refuel: false, jumps: 1, distance: 50}};
       const tc = (ok, name, ahead) => ({ok, name, id: "9", next: "Neu A", ahead});
@@ -6254,12 +6293,12 @@ const releasePayloads = async () => {
       data = JSON.parse(d0); data.moments = m0;
       return JSON.stringify(o); })()`));
     const want = {
-      hw: ["🛣 Next: Neu A 🎯 target · ✓ targeted · 50.0 ly · 5 of 40",
-           "🛣 Next: Neu A 🎯 target · ↷ targeted Scoop C, 2 stops ahead · 50.0 ly · 5 of 40",
-           "🛣 Next: Neu A 🎯 target · ⚠ targeted Elsewhere, not the next stop Neu A · 50.0 ly · 5 of 40"],
-      hwTab: "Next: Neu A · ⚠ targeted Elsewhere, not the next stop Neu A · 50.0 ly · 5 of 40",
-      wrongCls: true, none: "🛣 Next: Neu A 🎯 target · 50.0 ly · 5 of 40",
-      sv: "💰 Next: Pru Aim XY-Z d1 🎯 target · ✓ targeted · 3 jumps · 6 of 22 · skipping 2 done",
+      hw: ["🛣 [waypoint]Next: Neu A [destination]target · ✓ targeted · 50.0 ly · 5 of 40",
+           "🛣 [waypoint]Next: Neu A [destination]target · ↷ targeted Scoop C, 2 stops ahead · 50.0 ly · 5 of 40",
+           "🛣 [waypoint]Next: Neu A [destination]target · ⚠ targeted Elsewhere, not the next stop Neu A · 50.0 ly · 5 of 40"],
+      hwTab: "[waypoint]Next: Neu A · ⚠ targeted Elsewhere, not the next stop Neu A · 50.0 ly · 5 of 40",
+      wrongCls: true, none: "🛣 [waypoint]Next: Neu A [destination]target · 50.0 ly · 5 of 40",
+      sv: "💰 [waypoint]Next: Pru Aim XY-Z d1 [destination]target · ✓ targeted · 3 jumps · 6 of 22 · skipping 2 done",
       svHover: "finished already, passed over: Done One, Done Two",
       svMore: "finished already, passed over: Done One, Done Two and 10 more",
       head: "Next: Pru Aim XY-Z d1 · ✓ targeted · skipping 2 done · 2 to do there", headOther: false,
@@ -6400,7 +6439,7 @@ const releasePayloads = async () => {
         await new Promise(r => setTimeout(r, 50));
         const side = document.getElementById("clSide");
         o.open = CL.open;
-        o.rows = [...side.querySelectorAll(".clfindt tr")].map(tr => [...tr.cells].map(c => c.textContent.trim()));
+        o.rows = [...side.querySelectorAll(".clfindt tr")].map(tr => [...tr.cells].map(c => markText(c).trim()));
         o.head = side.querySelector(".clfindh span").textContent;
         o.foot = (side.querySelector(".clfind > .unk") || {}).textContent;
         side.querySelector("[data-bm]").click(); o.bm = opened;
@@ -6420,7 +6459,7 @@ const releasePayloads = async () => {
       return JSON.stringify(o); })()`));
     const want = {here: "likeliest by value: Acies / Informem\nyours on bodies like this (Icy body, thin N2, 75–100 K, Inner Orion Spur): Informem 11 of 14, Acies 3 of 14",
                   grid: ["🔍", false], open: "ves",
-                  rows: [["Eol Prou LW-L c8-324", "4 b", "7.2 ly", "0.34 g", "Mulberry", "✓", "☆", "Copy 🎯"]],   // S29's 🎯 (S31)
+                  rows: [["Eol Prou LW-L c8-324", "4 b", "7.2 ly", "0.34 g", "Mulberry", "✓", "☆", "Copy [destination]"]],   // S29's target button (S31)
                   head: "Nearest reported: Bacterium Vesicula", foot: "143 more further away · reported to Spansh by commanders' uploads; distances from Colonia",
                   bm: ["89128321720906", "Eol Prou LW-L c8-324"], copied: "Eol Prou LW-L c8-324", colourBtn: "🔍 nearby",
                   asked: ["species=ves", "species=ves&colour=Mulberry"], head2: "Nearest reported: Bacterium Vesicula - Mulberry", closed: true};
@@ -6488,6 +6527,10 @@ const releasePayloads = async () => {
       tabOpenRow(document.getElementById("nearTable"), tr);
       const t = document.querySelector('#tabSheetActs [data-act="aim"]');
       o.sheet = t && [t.dataset.route, t.dataset.aimid === other.id];
+      // #13: the game's destination marker in place of 🎯, the row's button named by its aria-label (it has no words),
+      // the sheet's keeping its word
+      o.look = !!aim && [!!aim.querySelector(".mk.mk-destination[aria-hidden=true]"), aim.textContent, aim.getAttribute("aria-label") === "target " + other.name,
+                         !!t && markText(t), !/🎯/.test(document.getElementById("rows").textContent)];
       tabClose(document.getElementById("tabSheet"));
       aim.click();
       return JSON.stringify(o); })()`));
@@ -6503,7 +6546,8 @@ const releasePayloads = async () => {
     w.fetch = realFetch;
     got.sent = sent;
     const id = w.eval("window.__nearAimId");
-    const want = {aim: true, own: [false, ""], left: true, sheet: ["system", true], clicked: [null, null], unavailable: false, server: false,
+    const want = {aim: true, own: [false, ""], left: true, sheet: ["system", true], look: [true, "", true, "[destination]Target", true],
+                  clicked: [null, null], unavailable: false, server: false,
                   sent: [{route: "system", id}]};
     const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
@@ -6638,10 +6682,14 @@ const releasePayloads = async () => {
       for (const [k, [pc, at]] of Object.entries(states)) {
         data.game_pc = pc; data.autotarget = Object.assign({}, keep.at || {}, at);
         out[k] = each();
+        // #13: every one the game's destination marker, never 🎯; Plot Route's Target next (page.html) too, with its words
+        if (k === "ready") out.look = [hwyAimBtn("A", "highway", 1, true), hwyAimBtn("B"), carrierAim(car), sysAimBtn("C", "555"), nearAimBtn(other),
+                                       document.getElementById("hwyAutoNext").outerHTML].map(h => /class="mk mk-destination/.test(h) && !/🎯/.test(h) ? 1 : 0).join("") +
+          " " + markText(document.getElementById("hwyAutoNext"));
       }
       data.game_pc = keep.pc; data.autotarget = keep.at; hwyRun = keep.run;
       return JSON.stringify(out); })()`));
-    const want = {ready: "111111", missing: "000000", unavailable: "000000", server: "000000"};   // the Map's: S72's block
+    const want = {ready: "111111", look: "111111 [destination]target next", missing: "000000", unavailable: "000000", server: "000000"};   // the Map's: S72's block
     const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| one 🎯 rule |", good ? "every 🎯 only where auto-target can work" : JSON.stringify(got), errors.slice(before));
@@ -7383,7 +7431,9 @@ const releasePayloads = async () => {
       const last = h => { const m = h.match(/<div class="sec unk">([^<]*)<\\/div>$/); return m && m[1]; };
       o.cardOn = [last(mapPopHtml(pt)), last(mapPopHtml(here))];
       const touch = mapPopHtml(pt, true);
-      o.touchOn = [/data-aim="next" data-route="system" data-aimid="9007199254740993"/.test(touch), /data-mapcopy="Far Out"/.test(touch)];
+      // its Target with the game's destination marker (#13) before the word, no 🎯
+      o.touchOn = [/data-aim="next" data-route="system" data-aimid="9007199254740993"/.test(touch), /data-mapcopy="Far Out"/.test(touch),
+                   /data-aimid="9007199254740993"><span class="mk mk-destination mkg" aria-hidden="true"><\\/span>Target<\\/button>/.test(touch) && !/🎯/.test(touch)];
       mapClick(pt); mapClick(here);
       hwyRun = {done: false}; mapClick(pt); hwyRun = null;   // a run under way: said, not started again
       data.autotarget = Object.assign({}, data.autotarget, {available: false});
@@ -7407,7 +7457,7 @@ const releasePayloads = async () => {
     const big = "9007199254740993";
     const want = {bmAim: big, bmPlot: true, nsAim: "4242", nsPlot: true, nearAim: [true, false, false], findAim: true, serverNoAim: true,
                   plotView: "hwy", plotTo: "Chosen", followTo: "Far Out", formOpen: true,
-                  cardOn: ["click to target it in game (5 s)", "click to copy its name"], touchOn: [true, true],
+                  cardOn: ["click to target it in game (5 s)", "click to copy its name"], touchOn: [true, true, true],
                   cardOff: "click to copy its name", touchOff: false, copied: ["Home", "Far Out"],
                   hintOn: "target it in game (5 s) (your own system: copy its name)", hintOff: "copy its name",
                   sent: [["highway/target", {route: "system", id: big}], ["highway/plot", "Chosen"], ["highway/target", {route: "system", id: big}]]};
@@ -8426,7 +8476,9 @@ const releasePayloads = async () => {
       d.querySelector('[data-view="cmdr"]').click();
       await settle(400);
       const pane = d.getElementById("cmdrPane");
-      got.shown = [d.getElementById("cmdrView").hidden, [...d.querySelectorAll("#cmdrTabs .seg label")].map(l => text(l) + (l.querySelector("input").checked ? "*" : "")),
+      // the sub-tabs' words, Engineering's and Missions' after the game's engineer and mission markers (#13, aria-hidden)
+      got.shown = [d.getElementById("cmdrView").hidden, [...d.querySelectorAll("#cmdrTabs .seg label")].map(l => markText(l).trim() + (l.querySelector("input").checked ? "*" : "") +
+                     (l.querySelector(".mk") ? l.querySelector(".mk").getAttribute("aria-hidden") : "")),
                    // the controls above the pane, not in it
                    ["cmFilter", "cmCraft", "cmRefresh", "cmdrStatus"].every(id => !pane.contains(d.getElementById(id))) &&
                      !pane.querySelector(".seg") && !!(d.getElementById("cmdrTabs").compareDocumentPosition(pane) & w.Node.DOCUMENT_POSITION_FOLLOWING),
@@ -8528,7 +8580,7 @@ const releasePayloads = async () => {
       await releasePayloads();
     }
     const want = {
-      shown: [false, ["CMDR*", "Inventory", "Engineering", "Missions", "Sessions", "Earnings"], true, true],
+      shown: [false, ["CMDR*", "Inventory", "[engineer]Engineeringtrue", "[mission]Missionstrue", "Sessions", "Earnings"], true, true],
       profile: ["CMDR Tester · Sample Wing · pledged to Aisling Duval, rank NaN, 4,500 merits as of 2026-10-12 08:00",
                 ["Exobiology | Geneticist | 64% | next: Elite in about 1.59B cr", "Combat | Expert | 0% | next: Master",
                  "Exploration | Elite III | 10% | next: Elite IV in about 4.00B cr (uncertain)", "Federal Navy | Admiral |  | the top",

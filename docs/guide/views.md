@@ -13,14 +13,14 @@ classes such as water giants, helium giants, Sudarsky class V and green gas gian
 hide visited and fully scanned systems, or keep only those one jump away. A dashed <i>old data</i> mark flags Spansh
 records from before Odyssey (thin-atmosphere planets there may hold unsampled life). Click a row to see that system
 body by body beside the list (click it again to close it); its name copies it, ☆ bookmarks it, and where auto-target
-can work (the game PC, see [Plot Route](plot-route.md)) the 🎯 left of the name, in a column of its own, targets it in
+can work (the game PC, see [Plot Route](plot-route.md)) the target button (the galaxy map's destination marker) left of the name, in a column of its own, targets it in
 the galaxy map (not on your own system's row). ⛏ N counts planetary mining
 locations on ground worth a Rhino. 🌀 N counts the notable stellar phenomena your FSS found there (life in clouds or rings; hover
 for what they are), dimmed once you have been to them. ⭐ marks a rare star (a black hole, a Wolf-Rayet, a carbon,
 MS, S or O-type star, a Herbig Ae/Be star, a supergiant, a rare white dwarf, an exotic star), from Spansh's records
 too, so you see it before you go. 🏛 👾 ❔ mark Guardian sites, Thargoid sites and planetary anomalies on a system's bodies (your own scans: an anomaly shows once
 the FSS finds it, Guardian and Thargoid sites only once the DSS has mapped the body); Here tags the body itself. 📍
-counts FSS signals worth a detour: Titans, Guardian beacons, generation ships, listening posts, number stations, tourist
+counts FSS signals worth a detour (a Titan shows the galaxy map's Titan marker instead): Titans, Guardian beacons, generation ships, listening posts, number stations, tourist
 beacons and memorials (hover for which).
 <br><br><img src="../images/nearby.png" alt="Nearby systems">
 </td>
@@ -59,7 +59,7 @@ your first discoveries in gold, visited systems in blue (or colour them by star 
 pinch zooms); tick <i>boost stars</i> for neutron stars and white dwarfs. The route ahead is dashed: the one plotted in
 game, and the route Outrider follows (Plot Route's) from where you are, with ◎ on its next stop (else your next stop);
 hover a stop for which it is. A click on a system targets it in the galaxy
-map when auto-target can work on this PC, else copies its name (the card says which; a tap shows the card with 🎯 Target
+map when auto-target can work on this PC, else copies its name (the card says which; a tap shows the card with **Target**
 and Copy name).
 <br><br><img src="../images/map.png" alt="The 3D map">
 </td>
@@ -188,9 +188,10 @@ follows your system's light mode. Each browser keeps its own choice, and the tab
 </p>
 
 **Now** is the cockpit view for a second monitor or a tablet, in big text: the system (and, from a docking grant until you
-touch down, **PAD 34** in very large letters under it, where it is and, at a starport or carrier, its diagram; a
+touch down, **PAD 34** in very large letters under it, where it is and, at a starport or carrier, its diagram (a carrier's
+name after the galaxy map's fleet or squadron carrier marker); a
 refusal's reason for a minute), the target, fuel,
-what to do next, the body you have targeted, signals worth a detour ("📍 Titan Cocijo · 2 tourist beacons"), any surface sites ("🏛 Guardian sites on 10 b"), any rare star here ("⭐ A black hole (main star)"), the notable stellar phenomena here ("🌀 Three notable stellar phenomena,
+what to do next, the body you have targeted, signals worth a detour ("Titan Cocijo · 📍 2 tourist beacons", a Titan after the galaxy map's Titan marker), any surface sites ("🏛 Guardian sites on 10 b"), any rare star here ("⭐ A black hole (main star)"), the notable stellar phenomena here ("🌀 Three notable stellar phenomena,
 all in rings · 1 of 3 visited": each drop at one counts, since the journal cannot tell which of a kind's sites it was)
 and the nearest unvisited system. Under the target, the jump's cost ("56.7 ly · 0.9 t · leaves 20 max jumps"); under the
 fuel, "scoopable: 9 of last 20" (amber as on the fuel tile), and at the last scoopable star before a dry stretch "⛽ last
@@ -217,7 +218,7 @@ with different reporters.
 
 The **header** shows the galactic region, ranks, fuel, hull, any core module under your level (`module_warn`,
 80%; as of the last Loadout or repair, since the journal logs nothing in between), your carrier's jump countdown
-(and its tritium while it is on a sell order: see [Cargo and trading](cargo-and-trading.md); where auto-target can work
+(its name after the galaxy map's fleet carrier marker, and its tritium while it is on a sell order: see [Cargo and trading](cargo-and-trading.md); where auto-target can work
 🎯 beside its system, when it is elsewhere, puts it in the galaxy map; the tritium for its trip to you, a suspended
 service as its name and a red ✗
 and its balance in weeks of upkeep: "~96 wks upkeep"), the nearest places to sell (your carrier among them while its UC or Vista is on),
@@ -459,8 +460,9 @@ always uses the config file's `rig_warn`.
 ## 🧑‍🚀 CMDR
 
 What you are, what you own and what you have been doing, from all your journals: Outrider keeps it as it reads them
-(nothing is asked of anyone), and a list updates as soon as the game writes something new for it. The tabs, Refresh,
-Engineering's filter and Earnings' period sit above the list:
+(nothing is asked of anyone), and a list updates as soon as the game writes something new for it. The tabs (Engineering
+and Missions with the galaxy map's engineer and mission markers), Refresh, Engineering's filter and Earnings' period sit
+above the list:
 
 - **CMDR**: who you are in the game, as of your last login (the game writes ranks and statistics then): your
   credits as the Commander tile shows them (the login's plus what you sold since), net worth, the value of your fleet
