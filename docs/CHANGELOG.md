@@ -2,6 +2,11 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-15 · The overview shot pinned on Lysood TS-U d2-58: a list with more in it
+- `docs/images/overview.png` retaken as before (Overview, Elite theme, 1600x1000, Here in its list view beside Nearby,
+  the route line shown) but viewing Lysood TS-U d2-58: three bio bodies with sampled species (a Stratum among them),
+  ringed bodies and a 17.5M max, where the old shot's list had little in it.
+
 ## 2026-10-15 · The docking pad shot, cropped
 - `docs/images/overlay-pad-crop.png` (760x465: the starport and carrier pad panels side by side) and
   `overlay-pad-starport.png` (the starport panel alone), cut from overlay-pad.png, for listings that crop or shrink.
