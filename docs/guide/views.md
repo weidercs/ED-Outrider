@@ -464,6 +464,10 @@ What you are, what you own and what you have been doing, from all your journals:
 and Missions with the galaxy map's engineer and mission markers), Refresh, Engineering's filter and Earnings' period sit
 above the list:
 
+<p align="center">
+  <img src="../images/cmdr.png" alt="The CMDR tab: credits, net worth, fleet, stored modules and carrier balance, every rank with a bar to the next, reputation, and the fleet with each ship's EDSY and Coriolis links" width="900">
+</p>
+
 - **CMDR**: who you are in the game, as of your last login (the game writes ranks and statistics then): your
   credits as the Commander tile shows them (the login's plus what you sold since), net worth, the value of your fleet
   and stored modules, your carrier as the Carrier tile shows it (its balance and weeks of upkeep); every rank with a
@@ -485,6 +489,11 @@ above the list:
   storage since (one stored since shows its value once outfitting lists it again; one sent for is in transit until
   it arrives). A red ⚖ marks a ship or module the game says is hot (wanted). The ship locker is as the game last wrote it, in the journal or in
   its own file. A suit loadout is listed once you create or wear one, and goes when you delete it.
+
+  <p align="center">
+    <img src="../images/ship-card.png" alt="Inventory: the ship list with a mouse resting on the Asp Explorer ASPLORER-X, its picture and name in a card beside the row" width="900">
+  </p>
+
 - **Engineering**: every ship-module blueprint by kind of module, grade by grade, with the materials one roll takes
   against what you hold (green: enough, red: short), how many rolls you could make now, and the engineers offering it
   for that kind of module (green: unlocked up to that grade). A material you are short of opens the Materials tab on
@@ -522,6 +531,10 @@ above the list:
   - Each trip's figures (sale to sale, with what deaths lost) are History's Ledger: **History › Trips**.
   - The first start after updating reads all your journals again once (a few minutes): that fills in where and with
     which ship you made every sale, and what you mined.
+
+<p align="center">
+  <img src="../images/earnings.png" alt="Earnings, all time: the total, cartography, exobiology, mining and the data lost, the monthly chart stacked by kind, and the first sales with where, ship, what, base, bonus and total" width="900">
+</p>
 
 ---
 

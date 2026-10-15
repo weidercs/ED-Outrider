@@ -58,6 +58,10 @@ before.
   **Show the pad diagram while docking** (Settings → In-game overlay, `pad_diagram`) turns the drawing off; the words
   stay. Pad positions come from bgol's LandingPad plugin.
 
+  <p align="center">
+    <img src="../images/overlay-pad.png" alt="Two docking panels over a starfield: PAD 34 at Jameson Memorial, at the back, up on your right, with the starport seen from the slot; PAD 7 at a fleet carrier, port side, toward the bow, with the deck seen from above" width="900">
+  </p>
+
 - **The system strip** (optional, off until you tick it), made for the top of the screen: two short lines, centred.
   The first says where you are: the system, its region and the star (⛽ scoopable, ⚡ a neutron star or white dwarf),
   and in a populated system, on its right, the security level and your reputation with the controlling faction
