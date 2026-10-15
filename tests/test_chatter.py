@@ -10,6 +10,7 @@ import unittest
 from support import ed_outrider
 
 import outrider.chatter as chatter
+import outrider.speech_fork as speech_fork
 
 
 class Lines(unittest.TestCase):
@@ -20,7 +21,7 @@ class Lines(unittest.TestCase):
         rocky = chatter.lines()["rocky"]
         self.assertGreaterEqual(len(rocky), 50)                               # enough that an evening does not repeat
         with open(os.path.join(os.path.dirname(chatter.CHATTER_FILE), "speech.json"), encoding="utf-8") as f:
-            styles = json.load(f)["styles"]
+            styles = speech_fork.merge(json.load(f))["styles"]   # Rocky is the fork's own (resources/speech.fork.json)
         self.assertLessEqual(set(doc["lines"]), set(styles))                  # only personalities the voice has
         marked = sum(("question?" in x) or any(f"{w} {w} {w}" in x.lower() for w in x.lower().rstrip(".").split()) for x in rocky)
         self.assertGreater(marked, 15)                                        # his way of talking, often

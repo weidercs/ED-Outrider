@@ -5,7 +5,8 @@
 ## 🔔 Alerts
 
 Alerts fire only for something out of the ordinary. Each can play a sound (🔊), show a desktop
-notification and be spoken (🗣), chosen per alert in **⚙ Settings → Alerts**:
+notification and be spoken (🗣), chosen per alert in **⚙ Settings → Alerts**. On the game PC the
+[in-game overlay](overlay.md)'s Alerts panel can show them over the game too, for a few seconds each:
 
 - a new discovery targeted, or arriving somewhere nobody has been
 - leaving with mapping or bio over your levels undone, or a first-discovered Earth-like, water, ammonia or
@@ -26,15 +27,28 @@ notification and be spoken (🗣), chosen per alert in **⚙ Settings → Alerts
     only then) or an unknown planetary anomaly (said when the FSS finds it)
   - an FSS signal worth a detour, new to the system: a Titan, a Guardian beacon, a generation ship, a listening post
     (tourist beacons, number stations and memorials are shown on the page, not said)
-  - curiosities (the 🔭 marks: rare planet classes, odd orbits, ringed landables...) in the system you are in, once per
+  - curiosities (the 🔭 marks: rare planet classes, odd orbits, ringed landables...; planets sharing a centre are not one) in the system you are in, once per
     system: one line to check your panels ("You might be interested in some curious things I found here"), not the list
 - low fuel where you cannot scoop, and a top-up worth taking before a dry stretch
+- on a Neutron Highway route from the exact plotter, fuel that won't reach the next refuel stop (its own row, **Short
+  of the refuel stop**; see [Plot Route](plot-route.md))
+- on any route Outrider follows, the last scoopable star before stars you can't scoop that the fuel won't cover (its
+  own row, **Last scoopable star**)
+- on a route you follow in Outrider, a system targeted in game that is not the next stop (its own row, **Wrong target**;
+  spoken once per target, no notification by default; see [Plot Route](plot-route.md))
 - docking where the station buys your data, and what you banked when you sold
 - a sale that left data aboard (Universal Cartographics sells 50 systems a page; at Vista Genomics, the species
   you kept back), said 90 seconds after the last page
 - hull damage, heat damage, interdiction, and unsold data past a threshold
+- someone else's scans of a system holding your unsold first discoveries reached Spansh (the firsts watch, see
+  [My firsts](views.md)): a card and a notification each time, "👁 Someone else scanned your unsold Drojau LL-O
+  b26-3: 3 bodies reached Spansh 12 days after you (your scan 15 days ago) · 14.2M cr at stake", and spoken at most
+  once in 30 minutes ("Heads up, someone else is scanning your unsold systems. Time to head back to sell before they
+  poach your discoveries!"); a first look through many systems adds "3 systems so far today"
 - your carrier arriving somewhere new or leaving without you
 - a Rhino mining rig nearing the 5 km leash (see The surface map)
+- an upload (EDDN, EDSM, Inara) failing for 15 minutes with messages waiting, and sending again: a card at the top of
+  the page and a notification, never spoken (see [Uploads](uploads.md#status))
 
 Spoken but not notified unless you tick it: the arrival briefing, the FSS debrief, leaving a body with
 sampling unfinished, each species completed, tank full, a high-gravity approach with a lot aboard, the
@@ -72,7 +86,8 @@ as docked. A carrier jump booked just before you quit shows as "not yet confirme
 
 Alerts are spoken when 🗣 in the header is on. **Piper**, a neural voice running on your CPU, sounds far
 better than the browser's own voice. The voice is Cori (`en_GB-cori-medium`) unless you pick another, and it
-downloads into `data/piper-voices/` the first time. ⚙ Settings → Voice switches between installed voices.
+downloads into `data/piper-voices/` the first time. ⚙ Settings → Voice's **Main voice** switches between installed
+voices.
 
 **🎙 Voice lab** (⚙ Settings → Voice) is where you try them out first. It plays in the browser you are using, wherever
 Outrider runs (a Docker server too):
@@ -81,14 +96,18 @@ Outrider runs (a Docker server too):
 - **Speakers**: some Piper voices are many people in one download (`en_GB-vctk-medium` has 109, `en_US-libritts_r-medium`
   about 900). The lab shows a speaker list for those: **‹ ›** step through them and **🎲** picks one at random, each
   played as you go. The speaker you use is kept for that voice, and Settings → Voice shows it beside the voice, where
-  you can change it too.
+  you can change it too. **Give to this personality** (beside Use this voice) makes the voice and speaker picked
+  there one personality's own instead (see Personality voices below), and **Assign to a crew member** one crew
+  member's (see The crew below).
 - **More voices** lists every Piper voice by language, sorted by name, quality or size. **▶ sample** plays Piper's own
   recording of a voice (from its website) before you download anything. **Download** fetches it without switching:
   when it is ready it is picked above, so you can ▶ Hear it (and its speakers) and press Use this voice if you like it.
   **Select** picks one you already have.
 - **Lines**: pick an alert and a personality for **▶ Random line** (filled with made-up values), or **▶ Audition** for
-  eight key alerts in a row. A personality with a voice of its own (speech.json) speaks in it. **✂ Cut this line**
-  bans the line just played, like 👎.
+  eight key alerts in a row. A personality with a voice or speaker of its own speaks in it. **▶ Audition: by crew**
+  has each crew member say one of its own lines in its own voice and personality. **▶ Audition: crew lines** plays one
+  line where a crew member mentions another for each alert that has them, in each personality (or the one picked),
+  with your crew's names and made-up ones for a member without. **✂ Cut this line** bans the line just played, like 👎.
 - **Your own words**: type anything for **▶ Speak**, or **⬇ Save WAV** to keep it.
 - **How is it said**: a word the voice says wrong, said your way. Pick or type the word, write how it sounds as
   syllables joined by "-" with the stressed one in capitals (**fon-TIK-yoo-loo-uh**; "uh", "eh", "ih" are short
@@ -138,9 +157,82 @@ Sound: Allow; Firefox: Autoplay: Allow Audio and Video).
   **Call me** (default "Boss, Hefay, Sir").
 - **Speed.** 1× is the voice's own pace. Some Piper voices respond to it less than others.
 - **Your own lines.** Edit `resources/speech.json` (or a copy named by `speech_file`) to change lines or add a personality; no restart needed.
-- **A voice per personality.** In `speech.json`, a personality can name its own installed Piper voice and
-  speed: `"sarcastic": {"label": "Sarcastic", "voice": "en_US-ryan-high", "speed": 1.1}`. Each extra voice
-  takes 60–100 MB of memory.
+- **A voice per personality.** ⚙ Settings → Voice → **Personality voices** gives each personality a voice of its own,
+  or another person of a several-person voice: pick the voice (and the speaker, for a voice of many people), **▶** to
+  hear one of its lines, **reset** for what the lines file says again. Outrider keeps them, so every browser and the
+  tablet say each personality the same way. In `speech.json`, a personality can also name its own installed Piper voice,
+  speaker and speed: `"sarcastic": {"label": "Sarcastic", "voice": "en_US-ryan-high", "speed": 1.1}`, or
+  `"sweet": {"label": "Sweet", "speaker": 12}` for person 12 of the main voice; a pick in Settings wins over the file's
+  voice and speaker. Each extra voice takes memory: see Voices kept loaded below.
+- **Voices kept loaded.** Every different voice besides the main one is loaded on its own: about 100 MB of memory for
+  a medium voice, 170 MB for a high one (the people of one many-speaker voice, vctk's 109 say, share a single load).
+  Whenever such a voice is in use (a personality's or a crew member's), ⚙ Settings → Voice says how many and what they
+  cost on the machine that speaks (amber above 500 MB, red above 1 GB). **Keep loaded** picks how many stay loaded
+  beside the main voice (1 up to the voices in use, or all; by default the voices in use, up to 4): a voice set aside
+  waits about a second when it speaks again. **Load them at start** (off by default) loads them when Outrider starts,
+  so even the first line of each has no delay. Both are written into the config file (`[speech] voices_loaded` and
+  `voices_preload`), since they are about that machine, and take effect at once.
+
+**The crew**
+
+Off by default: one voice for everything. Tick **Split the alerts among a crew** in ⚙ Settings → Voice → Crew and each
+alert is said by a crew member in its own personality and voice, so you know who is talking (and what about) before
+the sentence ends:
+
+| Crew member | Speaks for |
+|---|---|
+| XO / Co-pilot | the main voice: voice answers, the status report, the co-pilot, the hush and speech on |
+| Navigator | jumps and every route line (the Highway, survey and trade routes), fuel short of a refuel, last scoop, auto-target, wrong target, supercharges |
+| Science Officer | arrivals, briefings, the FSS, mapped planets, leaving with work left, codex, phenomena, rare stars, signals, curiosities |
+| Exobiologist | valuable bodies, sampling, Exomastery routes |
+| Chief Engineer | fuel, tank full, scooping stopped, jumponium, hull and heat |
+| Quartermaster | sales, unsold data, your carrier, losses |
+| Comms Officer | the game's start and exit, someone scanning your firsts |
+| Tactical | every danger line (while Danger lines always in Tactical's voice is on) |
+| Mining Officer | the Rhino's rigs |
+
+- **The table.** A row per crew member: an optional **Name** (shown in Settings and the voice lab, and said when another
+  crew member mentions it: see Crew lines below), its
+  **Personality** (whose lines it says) and **Voice** (and **Speaker**, for a voice of many people), what it **speaks
+  for**, **▶** to hear one of its lines and **↺** to put it back to "as the XO". The XO row is the main voice and the
+  personalities you ticked: changing its voice changes the main voice.
+- **The XO stands in.** A new crew starts with everyone "as the XO", so switching it on changes nothing you hear until
+  you give a member a voice of its own. A member left "as the personality" speaks in that personality's voice
+  (Personality voices). Whenever a member cannot speak (its voice not installed or failing to load), the XO says the
+  line instead, so no line is ever lost; the table says why under its name, and Show log says it once.
+- **Danger lines always in Tactical's voice** (on by default): hull, heat, interdiction, the fuel warnings, your carrier
+  leaving without you, a ship lost, a rig too far, so a danger line is never mistaken for chatter. Off, they stay with
+  their alert's crew member. Danger still comes first either way.
+- **Who says which alert:** ⚙ Settings → Alerts has a **Crew** column while the crew is on: move any alert to another
+  member there. A danger alert says "spoken by Tactical (danger)" while that switch is on.
+- Outrider keeps the crew, so every browser and the tablet (with Play alerts here) speak with it. The tablet's own
+  Settings has none of this: the crew is set on the PC.
+- **Crew lines.** With the crew on, some lines have one crew member mention another: "Fuel 18 percent. Ask the Navigator
+  for the nearest scoopable star." (about 3 per alert in each personality, for 26 alerts: arrivals, briefings, bodies,
+  biology, fuel, the hull, sales, your carrier, the session's end). A member with a name is called by it ("Ask Mira");
+  without one, by its role. They are said only while the crew is on (with it off you hear exactly the lines you heard
+  before), and never by the member they mention: move the fuel alerts to the Navigator and the lines that mention the
+  Navigator are left out for them. **▶ Audition: crew lines** (here and in the voice lab) plays them.
+- **Writing your own** (in `speech.json`): any line may name a crew member with these placeholders. Each says the
+  member's name when it has one, else its role, with a capital when it starts a sentence (the line's start, or after
+  ". ", "! ", "? " or "... "):
+
+  | Placeholder | Says (mid-sentence) | At a sentence's start |
+  |---|---|---|
+  | `{navigator}` | the Navigator | The Navigator |
+  | `{science}` | the Science Officer | The Science Officer |
+  | `{exobiologist}` | the Exobiologist | The Exobiologist |
+  | `{engineer}` | the Engineer | The Engineer |
+  | `{quartermaster}` | the Quartermaster | The Quartermaster |
+  | `{comms}` | Comms | Comms |
+  | `{tactical}` | Tactical | Tactical |
+  | `{mining}` | the Mining Officer | The Mining Officer |
+  | `{xo}` | the XO (said "ex-OH") | The XO |
+
+  Talk about the member, never to it ("ask {navigator}", not "{navigator}, plot a course": that would be "the
+  Navigator, plot a course"). A line may not mention the member who says its alert (the Engineer never says
+  `{engineer}`; danger lines, Tactical's, never `{tactical}`), and every alert keeps lines that mention nobody, for when
+  the crew is off: Settings → Voice reports either mistake, and a 👎 that would leave an alert only crew lines is refused.
 
 **What it says**
 
@@ -156,7 +248,10 @@ Sound: Allow; Firefox: Autoplay: Allow Audio and Video).
   a plant you tagged where the next sample would count, it says so ("Tagged Tussock, 80 metres").
 - **Approach:** "2.6 g. 480 million aboard, 3.2 rebuys. Land gently." (no rebuys for a ship bought with Arx, whose
   hull has no credit value)
-- **Fuel:** low fuel where you can't scoop, and the **top-up warning** before a likely dry stretch.
+- **Fuel:** low fuel where you can't scoop, and the **top-up warning** before a likely dry stretch; on a Highway
+  route, "Fuel won't reach Hwy Stop 42, 4 jumps out. Scoop to at least 25 tonnes." (a danger line: business wording
+  unless you untick that); at the last scoopable star before a dry stretch, "The next 3 stars on your route are not
+  scoopable. This is your last chance to top off before you need to call the Fuel Rats." (a danger line too).
 - **Jumponium** (off by default): the best landable body with a material your FSD injections are short
   of ("B 4 has polonium, 1.3 percent.").
 - **Mapped** (off by default: **Say when a planet is mapped**, or `speak_mapped`): after each DSS mapping,
@@ -173,8 +268,8 @@ Sound: Allow; Firefox: Autoplay: Allow Audio and Video).
 - **No repeats too soon.** Each alert goes through every line in your personalities before any comes round
   again. The browser remembers what you have heard across reloads.
 - **Hush.** The **▾** beside 🗣 hushes for 10 minutes, 30 minutes or until the next jump. Danger and anything
-  you ask for still speak. The hush is kept by Outrider, so a hush from a tablet or the co-pilot button
-  quiets the PC too.
+  you ask for still speak. The hush is kept by Outrider, so a hush from a tablet, the co-pilot button or a
+  [question by voice](#-ask-outrider-by-voice) ("hush for ten minutes") quiets the PC too.
 - **One window speaks.** With the page open in several windows, only one speaks and plays sounds, so nothing
   is said twice. **Speak from this window** takes over; **This screen speaks: auto / always / never** sets it
   per browser. A tablet with **Play alerts here** speaks as well, whatever the PC does (see On a tablet).
@@ -196,7 +291,7 @@ Sound: Allow; Firefox: Autoplay: Allow Audio and Video).
 
 **Spoken lines: what was said, and banning lines**
 
-Open ⚙ Settings and its **Spoken lines** section (the last one). It lists this
+Open ⚙ Settings and its **Spoken lines** section. It lists this
 window's last 100 alerts and what became of each: said, cut short, dropped or silent, and why. **copy**
 puts it on the clipboard.
 
@@ -213,9 +308,25 @@ puts it on the clipboard.
 The Android app asks Outrider a question out loud, after its wake word or a tap on Ask. The answer is said in your
 Piper voice by the window that speaks (a PC browser, or the tablet with Play alerts here) and shown as a caption on
 every open page. Outrider knows these without any AI: **status report, fuel, unsold, next jump, what's left here,
-nearest unvisited, nearest station** (or carrier, Vista, cartographics, repair, refuel, shipyard, "where can I
-sell": see
-[Nearest place to dock](plot-route.md#-nearest-place-to-dock)), **hush** and **unhush**. Their phrases are in `resources/ask.json`; edit them freely.
+nearest unvisited, nearest station** (or carrier, Vista, cartographics, repair, refuel, shipyard, material trader,
+raw material trader, "where can I sell": see
+[Nearest place to dock](plot-route.md#-nearest-place-to-dock); a place further than 500 ly also gets a neutron route
+plotted there while you follow none), **nearest green gas giant** (a guess from what
+Outrider has cached: see [Potential green gas giants](views.md#-potential-green-gas-giants)), **FSD injections**
+("can I still make an FSD injection?": how many of each grade, and what runs out first when it is two or fewer),
+**how far today** (jumps, light years, first discoveries, maps and samples since midnight; "how far this session"
+for the latest session), **this body** (the body you are on, fly near or have targeted: its type, gravity, value,
+biology and geology), **left behind** (the nearest one or two systems within 100 ly with work over your
+`body_highlight_level` and `bio_min`), **hush** and **unhush**. A hush can take a time: "hush for ten minutes",
+"quiet until the next jump" (30 minutes when you say none; another time gets the nearest of 10, 30 minutes or the
+next jump). Their phrases are in `resources/ask.json`; edit them freely.
+
+**Questions asked** (⚙ Settings, the last section) shows what the voice heard, newest first: the words, which phrase
+they matched and what that asks for ("matched “status report” → a status report"), or "no phrase matched (AI off)",
+or what the AI did (its rounds and the tools it looked at, or why it failed), then the answer. A misheard word or two
+phrases that clash show up there; **copy** puts it on the clipboard. Outrider keeps the last 50 questions from every
+device in its memory only (a restart clears them), behind the password like the rest of the page, and never the AI's
+key.
 
 Anything else goes to an optional AI layer, off by default (`[assistant] enabled = false`, also in ⚙ Settings →
 Server). It sends nothing anywhere until you set it up: an OpenAI-compatible endpoint (`base_url`: Ollama on your PC,

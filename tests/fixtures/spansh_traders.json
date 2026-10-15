@@ -1,0 +1,4013 @@
+{
+ "note": "Spansh's station search for material traders (scripts/trader_probe.py, S54), 2026-10-12, trimmed to the fields Outrider reads plus material_trader and the economies. The kind is Spansh's material_trader field (Raw / Manufactured / Encoded), and the search filters on it; 7 of the galaxy's 1,639 traders (Colonia's outposts, a megaship) list the Material Trader service with no kind. Searches took 50-90 s that day.",
+ "sol_by_service": {
+  "count": 477,
+  "results": [
+   {
+    "name": "Patterson Enterprise",
+    "carrier_name": null,
+    "type": "Coriolis Starport",
+    "system_name": "Sirius",
+    "system_id64": 121569805492,
+    "system_x": 6.25,
+    "system_y": -1.28125,
+    "system_z": -5.75,
+    "distance": 8.58874854460765,
+    "distance_to_arrival": 952.814065,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 9,
+    "medium_pads": 18,
+    "small_pads": 17,
+    "updated_at": "2026-10-13T00:02:23Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Tuning"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Powerplay"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Bartender"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     },
+     {
+      "name": "Apex Interstellar"
+     },
+     {
+      "name": "Frontline Solutions"
+     }
+    ],
+    "material_trader": "Manufactured",
+    "primary_economy": "Industrial",
+    "economies": [
+     {
+      "name": "Extraction",
+      "share": 30.0
+     },
+     {
+      "name": "Industrial",
+      "share": 70.0
+     }
+    ]
+   },
+   {
+    "name": "Magnus Gateway",
+    "carrier_name": null,
+    "type": "Coriolis Starport",
+    "system_name": "EZ Aquarii",
+    "system_id64": 22661186987433,
+    "system_x": -4.4375,
+    "system_y": -9.3125,
+    "system_z": 4.09375,
+    "distance": 11.0983265208093,
+    "distance_to_arrival": 414.918114,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 5,
+    "medium_pads": 11,
+    "small_pads": 9,
+    "updated_at": "2026-10-12T22:54:27Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Tuning"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Powerplay"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Technology Broker"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Bartender"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     },
+     {
+      "name": "Apex Interstellar"
+     },
+     {
+      "name": "Frontline Solutions"
+     },
+     {
+      "name": "System Colonisation"
+     }
+    ],
+    "material_trader": "Encoded",
+    "primary_economy": "High Tech",
+    "economies": [
+     {
+      "name": "High Tech",
+      "share": 80.0
+     },
+     {
+      "name": "Refinery",
+      "share": 20.0
+     }
+    ]
+   },
+   {
+    "name": "Broglie Terminal",
+    "carrier_name": null,
+    "type": "Ocellus Starport",
+    "system_name": "61 Cygni",
+    "system_id64": 5856288576210,
+    "system_x": -11.21875,
+    "system_y": -1.1875,
+    "system_z": 1.40625,
+    "distance": 11.3687311022383,
+    "distance_to_arrival": 24.073675,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 6,
+    "medium_pads": 12,
+    "small_pads": 10,
+    "updated_at": "2026-10-12T21:57:52Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Tuning"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Powerplay"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Bartender"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     },
+     {
+      "name": "Apex Interstellar"
+     },
+     {
+      "name": "Frontline Solutions"
+     },
+     {
+      "name": "System Colonisation"
+     }
+    ],
+    "material_trader": "Raw",
+    "primary_economy": "Refinery",
+    "economies": [
+     {
+      "name": "Industrial",
+      "share": 12.0
+     },
+     {
+      "name": "Refinery",
+      "share": 88.0
+     }
+    ]
+   },
+   {
+    "name": "Clement Orbital",
+    "carrier_name": null,
+    "type": "Coriolis Starport",
+    "system_name": "YZ Ceti",
+    "system_id64": 2869977687465,
+    "system_x": -1.1875,
+    "system_y": -11.8125,
+    "system_z": -2.15625,
+    "distance": 12.0662639852814,
+    "distance_to_arrival": 1246.624329,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 6,
+    "medium_pads": 13,
+    "small_pads": 7,
+    "updated_at": "2026-10-12T21:56:12Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Tuning"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Powerplay"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Bartender"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     },
+     {
+      "name": "Apex Interstellar"
+     },
+     {
+      "name": "Frontline Solutions"
+     },
+     {
+      "name": "System Colonisation"
+     }
+    ],
+    "material_trader": "Encoded",
+    "primary_economy": "High Tech",
+    "economies": [
+     {
+      "name": "High Tech",
+      "share": 80.0
+     },
+     {
+      "name": "Refinery",
+      "share": 20.0
+     }
+    ]
+   },
+   {
+    "name": "Kepler Gateway",
+    "carrier_name": null,
+    "type": "Coriolis Starport",
+    "system_name": "Kruger 60",
+    "system_id64": 22660918617513,
+    "system_x": -12.625,
+    "system_y": 0.0,
+    "system_z": -3.40625,
+    "distance": 13.0764354494067,
+    "distance_to_arrival": 3360.302507,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 5,
+    "medium_pads": 12,
+    "small_pads": 11,
+    "updated_at": "2026-10-12T19:27:31Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Tuning"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Powerplay"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Fleet Carrier Vendor"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Fleet Carrier Administration"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Bartender"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     },
+     {
+      "name": "Apex Interstellar"
+     },
+     {
+      "name": "Frontline Solutions"
+     },
+     {
+      "name": "System Colonisation"
+     }
+    ],
+    "material_trader": "Encoded",
+    "primary_economy": "High Tech",
+    "economies": [
+     {
+      "name": "High Tech",
+      "share": 80.0
+     },
+     {
+      "name": "Refinery",
+      "share": 20.0
+     }
+    ]
+   }
+  ]
+ },
+ "sol_raw_by_kind": {
+  "count": 292,
+  "results": [
+   {
+    "name": "Broglie Terminal",
+    "carrier_name": null,
+    "type": "Ocellus Starport",
+    "system_name": "61 Cygni",
+    "system_id64": 5856288576210,
+    "system_x": -11.21875,
+    "system_y": -1.1875,
+    "system_z": 1.40625,
+    "distance": 11.3687311022383,
+    "distance_to_arrival": 24.073675,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 6,
+    "medium_pads": 12,
+    "small_pads": 10,
+    "updated_at": "2026-10-12T21:57:52Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Tuning"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Powerplay"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Bartender"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     },
+     {
+      "name": "Apex Interstellar"
+     },
+     {
+      "name": "Frontline Solutions"
+     },
+     {
+      "name": "System Colonisation"
+     }
+    ],
+    "material_trader": "Raw",
+    "primary_economy": "Refinery",
+    "economies": [
+     {
+      "name": "Industrial",
+      "share": 12.0
+     },
+     {
+      "name": "Refinery",
+      "share": 88.0
+     }
+    ]
+   },
+   {
+    "name": "Bresnik Port",
+    "carrier_name": null,
+    "type": "Coriolis Starport",
+    "system_name": "82 Eridani",
+    "system_id64": 79196850539,
+    "system_x": 10.40625,
+    "system_y": -16.3125,
+    "system_z": -3.75,
+    "distance": 19.709139892763,
+    "distance_to_arrival": 94.913896,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 6,
+    "medium_pads": 14,
+    "small_pads": 10,
+    "updated_at": "2026-10-12T22:22:05Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Tuning"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Powerplay"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Bartender"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     },
+     {
+      "name": "Apex Interstellar"
+     },
+     {
+      "name": "Frontline Solutions"
+     },
+     {
+      "name": "System Colonisation"
+     }
+    ],
+    "material_trader": "Raw",
+    "primary_economy": "Refinery",
+    "economies": [
+     {
+      "name": "Industrial",
+      "share": 12.0
+     },
+     {
+      "name": "Refinery",
+      "share": 88.0
+     }
+    ]
+   },
+   {
+    "name": "Hooper Relay",
+    "carrier_name": null,
+    "type": "Coriolis Starport",
+    "system_name": "Delta Pavonis",
+    "system_id64": 633608344274,
+    "system_x": 8.375,
+    "system_y": -10.84375,
+    "system_z": 14.46875,
+    "distance": 19.9266722165293,
+    "distance_to_arrival": 195.464851,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 9,
+    "medium_pads": 18,
+    "small_pads": 17,
+    "updated_at": "2026-10-12T04:39:36Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Tuning"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Powerplay"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Bartender"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     },
+     {
+      "name": "Apex Interstellar"
+     },
+     {
+      "name": "Frontline Solutions"
+     },
+     {
+      "name": "System Colonisation"
+     }
+    ],
+    "material_trader": "Raw",
+    "primary_economy": "Refinery",
+    "economies": [
+     {
+      "name": "Extraction",
+      "share": 24.0
+     },
+     {
+      "name": "Refinery",
+      "share": 76.0
+     }
+    ]
+   },
+   {
+    "name": "Apt Station",
+    "carrier_name": null,
+    "type": "Ocellus Starport",
+    "system_name": "Struve 1321",
+    "system_id64": 18262872106401,
+    "system_x": -14.46875,
+    "system_y": -3.09375,
+    "system_z": -13.65625,
+    "distance": 20.134775382097,
+    "distance_to_arrival": 43582.309776,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 6,
+    "medium_pads": 14,
+    "small_pads": 8,
+    "updated_at": "2026-10-11T05:24:25Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Tuning"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Powerplay"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Bartender"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     },
+     {
+      "name": "Apex Interstellar"
+     },
+     {
+      "name": "Frontline Solutions"
+     },
+     {
+      "name": "System Colonisation"
+     }
+    ],
+    "material_trader": "Raw",
+    "primary_economy": "Refinery",
+    "economies": [
+     {
+      "name": "Industrial",
+      "share": 12.0
+     },
+     {
+      "name": "Refinery",
+      "share": 88.0
+     }
+    ]
+   },
+   {
+    "name": "Horowitz Hub",
+    "carrier_name": null,
+    "type": "Ocellus Starport",
+    "system_name": "LTT 3572",
+    "system_id64": 22661455488425,
+    "system_x": 18.90625,
+    "system_y": -4.21875,
+    "system_z": 5.875,
+    "distance": 20.2425236970344,
+    "distance_to_arrival": 391.597971,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 7,
+    "medium_pads": 12,
+    "small_pads": 9,
+    "updated_at": "2026-10-12T21:52:49Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Tuning"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Powerplay"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Bartender"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     },
+     {
+      "name": "Apex Interstellar"
+     },
+     {
+      "name": "Frontline Solutions"
+     },
+     {
+      "name": "System Colonisation"
+     }
+    ],
+    "material_trader": "Raw",
+    "primary_economy": "Refinery",
+    "economies": [
+     {
+      "name": "Industrial",
+      "share": 12.0
+     },
+     {
+      "name": "Refinery",
+      "share": 88.0
+     }
+    ]
+   },
+   {
+    "name": "Gell-Mann Station",
+    "carrier_name": null,
+    "type": "Coriolis Starport",
+    "system_name": "LHS 3836",
+    "system_id64": 16064117220777,
+    "system_x": 9.46875,
+    "system_y": -16.0,
+    "system_z": 12.09375,
+    "distance": 22.1791797780035,
+    "distance_to_arrival": 290.625578,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 6,
+    "medium_pads": 12,
+    "small_pads": 11,
+    "updated_at": "2026-10-12T19:55:39Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Tuning"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Powerplay"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Bartender"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     },
+     {
+      "name": "Apex Interstellar"
+     },
+     {
+      "name": "Frontline Solutions"
+     },
+     {
+      "name": "System Colonisation"
+     }
+    ],
+    "material_trader": "Raw",
+    "primary_economy": "Refinery",
+    "economies": [
+     {
+      "name": "Industrial",
+      "share": 12.0
+     },
+     {
+      "name": "Refinery",
+      "share": 88.0
+     }
+    ]
+   },
+   {
+    "name": "Zamka Platform",
+    "carrier_name": null,
+    "type": "Coriolis Starport",
+    "system_name": "George Pantazis",
+    "system_id64": 2832631599826,
+    "system_x": -12.09375,
+    "system_y": -16.0,
+    "system_z": -14.21875,
+    "distance": 24.5851914905091,
+    "distance_to_arrival": 45.831572,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 8,
+    "medium_pads": 14,
+    "small_pads": 12,
+    "updated_at": "2026-10-12T12:35:14Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Powerplay"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Bartender"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     },
+     {
+      "name": "Apex Interstellar"
+     },
+     {
+      "name": "Frontline Solutions"
+     },
+     {
+      "name": "System Colonisation"
+     }
+    ],
+    "material_trader": "Raw",
+    "primary_economy": "Refinery",
+    "economies": [
+     {
+      "name": "Extraction",
+      "share": 19.0
+     },
+     {
+      "name": "Refinery",
+      "share": 81.0
+     }
+    ]
+   },
+   {
+    "name": "Tsunenaga Port",
+    "carrier_name": null,
+    "type": "Coriolis Starport",
+    "system_name": "LHS 200",
+    "system_id64": 358730437330,
+    "system_x": 10.84375,
+    "system_y": -12.71875,
+    "system_z": -22.96875,
+    "distance": 28.406284378417,
+    "distance_to_arrival": 654.765888,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 6,
+    "medium_pads": 13,
+    "small_pads": 10,
+    "updated_at": "2026-10-07T23:27:08Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Tuning"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Powerplay"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Bartender"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     },
+     {
+      "name": "Apex Interstellar"
+     },
+     {
+      "name": "Frontline Solutions"
+     },
+     {
+      "name": "System Colonisation"
+     }
+    ],
+    "material_trader": "Raw",
+    "primary_economy": "Refinery",
+    "economies": [
+     {
+      "name": "Industrial",
+      "share": 12.0
+     },
+     {
+      "name": "Refinery",
+      "share": 88.0
+     }
+    ]
+   },
+   {
+    "name": "Underwood Dock",
+    "carrier_name": null,
+    "type": "Coriolis Starport",
+    "system_name": "WISE 1800+0134",
+    "system_id64": 5366025177952,
+    "system_x": -13.40625,
+    "system_y": 5.96875,
+    "system_z": 24.65625,
+    "distance": 28.692929088671,
+    "distance_to_arrival": 4.04517,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 7,
+    "medium_pads": 14,
+    "small_pads": 10,
+    "updated_at": "2026-10-12T22:02:08Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Tuning"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Powerplay"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Bartender"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     },
+     {
+      "name": "Apex Interstellar"
+     },
+     {
+      "name": "Frontline Solutions"
+     },
+     {
+      "name": "System Colonisation"
+     }
+    ],
+    "material_trader": "Raw",
+    "primary_economy": "Refinery",
+    "economies": [
+     {
+      "name": "Industrial",
+      "share": 12.0
+     },
+     {
+      "name": "Refinery",
+      "share": 88.0
+     }
+    ]
+   },
+   {
+    "name": "Acaba Dock",
+    "carrier_name": null,
+    "type": "Coriolis Starport",
+    "system_name": "LHS 2429",
+    "system_id64": 13865362466217,
+    "system_x": 24.71875,
+    "system_y": 13.375,
+    "system_z": 6.875,
+    "distance": 28.9339394407761,
+    "distance_to_arrival": 27.245357,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 7,
+    "medium_pads": 13,
+    "small_pads": 8,
+    "updated_at": "2026-10-12T20:11:39Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Black Market"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Tuning"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Powerplay"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Bartender"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     },
+     {
+      "name": "Apex Interstellar"
+     },
+     {
+      "name": "Frontline Solutions"
+     },
+     {
+      "name": "System Colonisation"
+     }
+    ],
+    "material_trader": "Raw",
+    "primary_economy": "Refinery",
+    "economies": [
+     {
+      "name": "Industrial",
+      "share": 12.0
+     },
+     {
+      "name": "Refinery",
+      "share": 88.0
+     }
+    ]
+   }
+  ]
+ },
+ "colonia_by_service": {
+  "count": 12,
+  "results": [
+   {
+    "name": "Colonia Dream",
+    "carrier_name": null,
+    "type": "Coriolis Starport",
+    "system_name": "Ratraii",
+    "system_id64": 20958600798794,
+    "system_x": -9530.96875,
+    "system_y": -918.03125,
+    "system_z": 19803.8125,
+    "distance": 9.10903998097494,
+    "distance_to_arrival": 26.002904,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 6,
+    "medium_pads": 13,
+    "small_pads": 6,
+    "updated_at": "2026-10-12T18:38:49Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Black Market"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Tuning"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Powerplay"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Fleet Carrier Administration"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Bartender"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     },
+     {
+      "name": "Apex Interstellar"
+     },
+     {
+      "name": "Frontline Solutions"
+     }
+    ],
+    "material_trader": "Manufactured",
+    "primary_economy": "Industrial",
+    "economies": [
+     {
+      "name": "Industrial",
+      "share": 60.0
+     },
+     {
+      "name": "Refinery",
+      "share": 40.0
+     }
+    ]
+   },
+   {
+    "name": "The Divine Apparatus",
+    "carrier_name": null,
+    "type": "Planetary Outpost",
+    "system_name": "Deriso",
+    "system_id64": 71536135676490,
+    "system_x": -9520.3125,
+    "system_y": -909.5,
+    "system_z": 19808.75,
+    "distance": 9.72934510899886,
+    "distance_to_arrival": 2424.205219,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 2,
+    "medium_pads": 4,
+    "small_pads": 4,
+    "updated_at": "2026-10-12T23:31:42Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Interstellar Factors Contact"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "On Dock Mission"
+     },
+     {
+      "name": "Powerplay"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Technology Broker"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     }
+    ],
+    "material_trader": null,
+    "primary_economy": "Colony",
+    "economies": [
+     {
+      "name": "Colony",
+      "share": 100.0
+     }
+    ]
+   },
+   {
+    "name": "Bresa Modifications",
+    "carrier_name": null,
+    "type": "Planetary Outpost",
+    "system_name": "Desy",
+    "system_id64": 38001031029322,
+    "system_x": -9534.21875,
+    "system_y": -912.21875,
+    "system_z": 19792.375,
+    "distance": 16.3358907968008,
+    "distance_to_arrival": 3661.757484,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 2,
+    "medium_pads": 4,
+    "small_pads": 4,
+    "updated_at": "2026-10-13T00:02:24Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "On Dock Mission"
+     },
+     {
+      "name": "Powerplay"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Technology Broker"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     }
+    ],
+    "material_trader": null,
+    "primary_economy": "Colony",
+    "economies": [
+     {
+      "name": "Colony",
+      "share": 100.0
+     }
+    ]
+   },
+   {
+    "name": "Rosa's Shop",
+    "carrier_name": null,
+    "type": "Planetary Outpost",
+    "system_name": "Kojeara",
+    "system_id64": 59166629864010,
+    "system_x": -9513.09375,
+    "system_y": -908.84375,
+    "system_z": 19814.28125,
+    "distance": 18.0724183408724,
+    "distance_to_arrival": 2531.054477,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 2,
+    "medium_pads": 4,
+    "small_pads": 4,
+    "updated_at": "2026-10-12T11:57:58Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "On Dock Mission"
+     },
+     {
+      "name": "Powerplay"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Technology Broker"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     }
+    ],
+    "material_trader": null,
+    "primary_economy": "Colony",
+    "economies": [
+     {
+      "name": "Colony",
+      "share": 100.0
+     }
+    ]
+   },
+   {
+    "name": "TolaGarf's Junkyard",
+    "carrier_name": null,
+    "type": "Asteroid base",
+    "system_name": "Kojeara",
+    "system_id64": 59166629864010,
+    "system_x": -9513.09375,
+    "system_y": -908.84375,
+    "system_z": 19814.28125,
+    "distance": 18.0724183408724,
+    "distance_to_arrival": 224.444013,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 6,
+    "medium_pads": 8,
+    "small_pads": 4,
+    "updated_at": "2026-10-13T00:00:45Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Bartender"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     },
+     {
+      "name": "Apex Interstellar"
+     },
+     {
+      "name": "Frontline Solutions"
+     }
+    ],
+    "material_trader": "Raw",
+    "primary_economy": "Refinery",
+    "economies": [
+     {
+      "name": "Refinery",
+      "share": 100.0
+     }
+    ]
+   },
+   {
+    "name": "Foster Terminal",
+    "carrier_name": null,
+    "type": "Mega ship",
+    "system_name": "Coeus",
+    "system_id64": 77508721788073,
+    "system_x": -9531.71875,
+    "system_y": -885.3125,
+    "system_z": 19839.21875,
+    "distance": 39.8376343345711,
+    "distance_to_arrival": 1590.604216,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 1,
+    "medium_pads": 2,
+    "small_pads": 4,
+    "updated_at": "2026-10-12T21:06:11Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Tuning"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Bartender"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     },
+     {
+      "name": "Apex Interstellar"
+     },
+     {
+      "name": "Frontline Solutions"
+     }
+    ],
+    "material_trader": null,
+    "primary_economy": "Service",
+    "economies": [
+     {
+      "name": "Service",
+      "share": 100.0
+     }
+    ]
+   },
+   {
+    "name": "Eidolon Hold",
+    "carrier_name": null,
+    "type": "Planetary Outpost",
+    "system_name": "Einheriar",
+    "system_id64": 13736779007129,
+    "system_x": -9557.8125,
+    "system_y": -880.1875,
+    "system_z": 19801.5625,
+    "distance": 41.2766485891236,
+    "distance_to_arrival": 163.474605,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 2,
+    "medium_pads": 4,
+    "small_pads": 4,
+    "updated_at": "2026-10-13T00:19:02Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Interstellar Factors Contact"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "On Dock Mission"
+     },
+     {
+      "name": "Powerplay"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Technology Broker"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     }
+    ],
+    "material_trader": null,
+    "primary_economy": "Colony",
+    "economies": [
+     {
+      "name": "Colony",
+      "share": 100.0
+     }
+    ]
+   },
+   {
+    "name": "Venatores Hub",
+    "carrier_name": null,
+    "type": "Ocellus Starport",
+    "system_name": "Eoch Flyuae QK-E d12-2118",
+    "system_id64": 72782591152235,
+    "system_x": -8633.78125,
+    "system_y": -700.8125,
+    "system_z": 17942.1875,
+    "distance": 2080.43835360822,
+    "distance_to_arrival": 3327.99524,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 6,
+    "medium_pads": 13,
+    "small_pads": 8,
+    "updated_at": "2026-10-12T07:29:47Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Interstellar Factors Contact"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Technology Broker"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     }
+    ],
+    "material_trader": "Raw",
+    "primary_economy": "Refinery",
+    "economies": [
+     {
+      "name": "Agriculture",
+      "share": 100.0
+     },
+     {
+      "name": "Refinery",
+      "share": 100.0
+     }
+    ]
+   },
+   {
+    "name": "Promium Relay",
+    "carrier_name": null,
+    "type": "Ocellus Starport",
+    "system_name": "Blua Eaec WW-E c14-1293",
+    "system_id64": 355489242029690,
+    "system_x": -6989.375,
+    "system_y": -180.71875,
+    "system_z": 14895.8125,
+    "distance": 5578.19079696839,
+    "distance_to_arrival": 1788.276287,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 6,
+    "medium_pads": 12,
+    "small_pads": 10,
+    "updated_at": "2026-10-12T22:38:34Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Interstellar Factors Contact"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Technology Broker"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     }
+    ],
+    "material_trader": "Raw",
+    "primary_economy": "Refinery",
+    "economies": [
+     {
+      "name": "Refinery",
+      "share": 100.0
+     }
+    ]
+   },
+   {
+    "name": "Canonn Complex",
+    "carrier_name": null,
+    "type": "Ocellus Starport",
+    "system_name": "Prua Phoe MI-B b17-5",
+    "system_id64": 11590101710481,
+    "system_x": -5652.84375,
+    "system_y": -561.0625,
+    "system_z": 10815.34375,
+    "distance": 9799.07977294217,
+    "distance_to_arrival": 909.563271,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 9,
+    "medium_pads": 18,
+    "small_pads": 17,
+    "updated_at": "2026-10-12T09:52:36Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Interstellar Factors Contact"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Technology Broker"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     }
+    ],
+    "material_trader": "Raw",
+    "primary_economy": "Refinery",
+    "economies": [
+     {
+      "name": "Refinery",
+      "share": 100.0
+     },
+     {
+      "name": "Tourism",
+      "share": 100.0
+     }
+    ]
+   },
+   {
+    "name": "Vladmir McDoogle's Triumph",
+    "carrier_name": null,
+    "type": "Ocellus Starport",
+    "system_name": "Flyiedge VN-W c4-51",
+    "system_id64": 14096048986410,
+    "system_x": -3944.3125,
+    "system_y": -160.875,
+    "system_z": 8119.59375,
+    "distance": 12976.1293835381,
+    "distance_to_arrival": 129.209124,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 6,
+    "medium_pads": 14,
+    "small_pads": 6,
+    "updated_at": "2026-10-12T15:49:20Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Interstellar Factors Contact"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Technology Broker"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     }
+    ],
+    "material_trader": "Raw",
+    "primary_economy": "Refinery",
+    "economies": [
+     {
+      "name": "Extraction",
+      "share": 100.0
+     },
+     {
+      "name": "Refinery",
+      "share": 100.0
+     }
+    ]
+   },
+   {
+    "name": "Helgrind Gateway",
+    "carrier_name": null,
+    "type": "Ocellus Starport",
+    "system_name": "NGC 6530 Sector ZE-X b2-0",
+    "system_id64": 665854159929,
+    "system_x": -382.78125,
+    "system_y": -20.40625,
+    "system_z": 4198.09375,
+    "distance": 18114.4185949806,
+    "distance_to_arrival": 748.522746,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 8,
+    "medium_pads": 15,
+    "small_pads": 13,
+    "updated_at": "2026-10-11T09:54:51Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Interstellar Factors Contact"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Technology Broker"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     }
+    ],
+    "material_trader": "Raw",
+    "primary_economy": "Refinery",
+    "economies": [
+     {
+      "name": "Refinery",
+      "share": 100.0
+     }
+    ]
+   }
+  ]
+ },
+ "author_raw_by_kind": {
+  "count": 370,
+  "results": [
+   {
+    "name": "Helgrind Gateway",
+    "carrier_name": null,
+    "type": "Ocellus Starport",
+    "system_name": "NGC 6530 Sector ZE-X b2-0",
+    "system_id64": 665854159929,
+    "system_x": -382.78125,
+    "system_y": -20.40625,
+    "system_z": 4198.09375,
+    "distance": 3893.61902581386,
+    "distance_to_arrival": 748.522746,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 8,
+    "medium_pads": 15,
+    "small_pads": 13,
+    "updated_at": "2026-10-11T09:54:51Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Interstellar Factors Contact"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Technology Broker"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     }
+    ],
+    "material_trader": "Raw",
+    "primary_economy": "Refinery",
+    "economies": [
+     {
+      "name": "Refinery",
+      "share": 100.0
+     }
+    ]
+   },
+   {
+    "name": "Zerreiss Station",
+    "carrier_name": null,
+    "type": "Ocellus Starport",
+    "system_name": "Pru Euq WO-D b53-8",
+    "system_id64": 18259650815945,
+    "system_x": -256.34375,
+    "system_y": -5.15625,
+    "system_z": 1363.125,
+    "distance": 4383.99110461325,
+    "distance_to_arrival": 876.02776,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 6,
+    "medium_pads": 13,
+    "small_pads": 14,
+    "updated_at": "2026-10-08T23:34:52Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Technology Broker"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     }
+    ],
+    "material_trader": "Raw",
+    "primary_economy": "Refinery",
+    "economies": [
+     {
+      "name": "Agriculture",
+      "share": 100.0
+     },
+     {
+      "name": "Refinery",
+      "share": 100.0
+     }
+    ]
+   },
+   {
+    "name": "Vladmir McDoogle's Triumph",
+    "carrier_name": null,
+    "type": "Ocellus Starport",
+    "system_name": "Flyiedge VN-W c4-51",
+    "system_id64": 14096048986410,
+    "system_x": -3944.3125,
+    "system_y": -160.875,
+    "system_z": 8119.59375,
+    "distance": 4803.37191425933,
+    "distance_to_arrival": 129.209124,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 6,
+    "medium_pads": 14,
+    "small_pads": 6,
+    "updated_at": "2026-10-12T15:49:20Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Interstellar Factors Contact"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Technology Broker"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     }
+    ],
+    "material_trader": "Raw",
+    "primary_economy": "Refinery",
+    "economies": [
+     {
+      "name": "Extraction",
+      "share": 100.0
+     },
+     {
+      "name": "Refinery",
+      "share": 100.0
+     }
+    ]
+   },
+   {
+    "name": "Evans Port",
+    "carrier_name": null,
+    "type": "Coriolis Starport",
+    "system_name": "Tarakah",
+    "system_id64": 3377714956659,
+    "system_x": -119.1875,
+    "system_y": 17.40625,
+    "system_z": 94.125,
+    "distance": 5186.75505046945,
+    "distance_to_arrival": 706.680522,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 7,
+    "medium_pads": 13,
+    "small_pads": 9,
+    "updated_at": "2026-10-11T05:52:32Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Tuning"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Powerplay"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Bartender"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     },
+     {
+      "name": "Apex Interstellar"
+     },
+     {
+      "name": "Frontline Solutions"
+     },
+     {
+      "name": "System Colonisation"
+     }
+    ],
+    "material_trader": "Raw",
+    "primary_economy": "Extraction",
+    "economies": [
+     {
+      "name": "Extraction",
+      "share": 100.0
+     }
+    ]
+   },
+   {
+    "name": "Jones City",
+    "carrier_name": null,
+    "type": "Coriolis Starport",
+    "system_name": "Akba Atacab",
+    "system_id64": 6405843096290,
+    "system_x": -119.46875,
+    "system_y": 42.75,
+    "system_z": 80.34375,
+    "distance": 5195.2813875324,
+    "distance_to_arrival": 31.620511,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 7,
+    "medium_pads": 15,
+    "small_pads": 13,
+    "updated_at": "2026-10-10T04:14:22Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Black Market"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Tuning"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Powerplay"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Bartender"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     },
+     {
+      "name": "Apex Interstellar"
+     },
+     {
+      "name": "Frontline Solutions"
+     },
+     {
+      "name": "System Colonisation"
+     }
+    ],
+    "material_trader": "Raw",
+    "primary_economy": "Refinery",
+    "economies": [
+     {
+      "name": "Industrial",
+      "share": 12.0
+     },
+     {
+      "name": "Refinery",
+      "share": 88.0
+     }
+    ]
+   },
+   {
+    "name": "Koch City",
+    "carrier_name": null,
+    "type": "Ocellus Starport",
+    "system_name": "Mendego",
+    "system_id64": 669612516801,
+    "system_x": -102.9375,
+    "system_y": 59.5,
+    "system_z": 56.03125,
+    "distance": 5223.54888193916,
+    "distance_to_arrival": 176.316531,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 7,
+    "medium_pads": 13,
+    "small_pads": 10,
+    "updated_at": "2026-08-18T01:47:23Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Black Market"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Tuning"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Powerplay"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Bartender"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     },
+     {
+      "name": "Apex Interstellar"
+     },
+     {
+      "name": "Frontline Solutions"
+     },
+     {
+      "name": "System Colonisation"
+     }
+    ],
+    "material_trader": "Raw",
+    "primary_economy": "Refinery",
+    "economies": [
+     {
+      "name": "Industrial",
+      "share": 12.0
+     },
+     {
+      "name": "Refinery",
+      "share": 88.0
+     }
+    ]
+   },
+   {
+    "name": "Scheerbart Orbital",
+    "carrier_name": null,
+    "type": "Coriolis Starport",
+    "system_name": "Talantas",
+    "system_id64": 7266950850001,
+    "system_x": -67.78125,
+    "system_y": 108.6875,
+    "system_z": 101.3125,
+    "distance": 5223.75160232462,
+    "distance_to_arrival": 18.891128,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 7,
+    "medium_pads": 12,
+    "small_pads": 10,
+    "updated_at": "2026-10-12T19:24:11Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Tuning"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Powerplay"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Bartender"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     },
+     {
+      "name": "Apex Interstellar"
+     },
+     {
+      "name": "Frontline Solutions"
+     },
+     {
+      "name": "System Colonisation"
+     }
+    ],
+    "material_trader": "Raw",
+    "primary_economy": "Extraction",
+    "economies": [
+     {
+      "name": "Extraction",
+      "share": 100.0
+     }
+    ]
+   },
+   {
+    "name": "Stewart Port",
+    "carrier_name": null,
+    "type": "Ocellus Starport",
+    "system_name": "Canezti",
+    "system_id64": 670149191121,
+    "system_x": -60.84375,
+    "system_y": -4.9375,
+    "system_z": 96.4375,
+    "distance": 5231.06871328427,
+    "distance_to_arrival": 145.410572,
+    "carrier_docking_access": null,
+    "has_large_pad": true,
+    "large_pads": 6,
+    "medium_pads": 14,
+    "small_pads": 10,
+    "updated_at": "2026-10-10T14:13:51Z",
+    "services": [
+     {
+      "name": "Dock"
+     },
+     {
+      "name": "Autodock"
+     },
+     {
+      "name": "Black Market"
+     },
+     {
+      "name": "Market"
+     },
+     {
+      "name": "Contacts"
+     },
+     {
+      "name": "Universal Cartographics"
+     },
+     {
+      "name": "Missions"
+     },
+     {
+      "name": "Outfitting"
+     },
+     {
+      "name": "Crew Lounge"
+     },
+     {
+      "name": "Restock"
+     },
+     {
+      "name": "Refuel"
+     },
+     {
+      "name": "Repair"
+     },
+     {
+      "name": "Shipyard"
+     },
+     {
+      "name": "Tuning"
+     },
+     {
+      "name": "Workshop"
+     },
+     {
+      "name": "Missions Generated"
+     },
+     {
+      "name": "Interstellar Factors Contact"
+     },
+     {
+      "name": "Flight Controller"
+     },
+     {
+      "name": "Station Operations"
+     },
+     {
+      "name": "Powerplay"
+     },
+     {
+      "name": "Search and Rescue"
+     },
+     {
+      "name": "Material Trader"
+     },
+     {
+      "name": "Station Menu"
+     },
+     {
+      "name": "Shop"
+     },
+     {
+      "name": "Livery"
+     },
+     {
+      "name": "Social Space"
+     },
+     {
+      "name": "Bartender"
+     },
+     {
+      "name": "Vista Genomics"
+     },
+     {
+      "name": "Pioneer Supplies"
+     },
+     {
+      "name": "Apex Interstellar"
+     },
+     {
+      "name": "Frontline Solutions"
+     },
+     {
+      "name": "System Colonisation"
+     }
+    ],
+    "material_trader": "Raw",
+    "primary_economy": "Refinery",
+    "economies": [
+     {
+      "name": "Industrial",
+      "share": 12.0
+     },
+     {
+      "name": "Refinery",
+      "share": 88.0
+     }
+    ]
+   }
+  ],
+  "position": {
+   "x": -4177.09,
+   "y": -1.0,
+   "z": 3324.53
+  }
+ },
+ "author_by_service_kinds": {
+  "Manufactured": 38,
+  "Encoded": 7,
+  "Raw": 5
+ },
+ "galaxy_by_service": {
+  "count": 1639
+ },
+ "galaxy_by_kind": {
+  "count": 1632
+ }
+}

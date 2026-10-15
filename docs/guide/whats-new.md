@@ -11,6 +11,166 @@ Outrider behaves. When a new release is out, a small **⬆ Update** pill appears
 
 ---
 
+## 2026.10.23 · 14 October 2026
+
+**The Massive Tweak Update: a crew of voices, 🎯 on every system, a Target and an Alerts panel over the game, fuel
+warnings that look ahead, and a lot of small things you asked for.**
+
+> [!IMPORTANT]
+> **The first start re-reads your journals once** (to pick up your carrier's jumps and your synthesis recipes): a
+> few seconds, or a few minutes for years of journals. Outrider **backs up your database first**, and the page now
+> shows how far it has got. Your bookmarks, sample points, routes and settings are kept.
+>
+> **Without a server password, any device on your network can do whatever the page does**: change the settings (the
+> password and journal folders too), restart Outrider, use your stored EDSM and Inara keys and, on the game PC, press
+> keys. If other people share your network, set `[server] password` ([Other devices on your
+> network](install.md#-other-devices-on-your-network)).
+
+### 🎙 A crew of voices
+
+Tick **Split the alerts among a crew** in ⚙ Settings → Voice → Crew and the alerts are shared among nine crew
+members, so you know who is talking before the words land: the **XO** (your main voice: answers, status reports, the
+co-pilot), the Navigator, Science Officer, Exobiologist, Chief Engineer, Quartermaster, Comms Officer, Tactical (every
+danger line, while that switch is on) and the Mining Officer. More in [The voice](voice-and-alerts.md#-the-voice).
+
+- Give each one a **name**, a **personality** and a **voice** (and a speaker for a several-person voice). Everyone
+  starts "as the XO", so switching the crew on changes nothing until you change a row; a member whose voice is missing
+  never drops a line: the XO says it.
+- ⚙ Settings → Alerts gains a **Crew** column to move any alert to another member.
+- **Crew lines**: with the crew on, some lines mention another member ("Fuel 18 percent. Ask the Navigator for the
+  nearest scoopable star."), by name when you gave one. With the crew off you hear exactly the lines you did.
+- **▶ Audition: by crew** and **▶ Audition: crew lines**, in Settings and the voice lab, which can also **Assign to a
+  crew member**. "XO" is said "ex-OH" now.
+- **Voices kept loaded**: Settings says how much memory your extra voices take, lets you choose how many stay loaded
+  and whether to **load them at start**. Applied at once, no restart.
+- **A voice per personality**: Settings → Voice → **Personality voices** gives each personality its own voice and
+  speaker, for every browser and the tablet.
+
+### 🎯 Target anything
+
+- 🎯 now **brings the game to the front itself** and targets at once: no more 5 s countdown to click back into Elite.
+  No key is pressed unless Elite's window is the active one; click away and the run stops. Where Outrider cannot see
+  the game's window (no `wmctrl`, a native Wayland window) it counts down as before.
+- 🎯 beside **Nearby's rows** (left of the name), **bookmarks**, the header's **next stop**, the **Nearest finder**'s
+  rows and the Exo-Biology checklist's finds. A **click on the Map** targets that system. **Plot route** sits beside a
+  bookmark and the next stop.
+- A 🎯 shows only where it can work: on the game PC, with auto-target's keyboard and bindings in place.
+- The **co-pilot button** also targets a boxel's Next, then the header's next stop. Its order is in
+  [The co-pilot button](automation.md#-the-co-pilot-button).
+- Ask "nearest station" (or carrier, Vista…) by voice and a place further than 500 ly gets a neutron route plotted
+  (`[highway] voice_plot_ly`), unless you are following a route you have not finished.
+
+### 🖥 The overlay
+
+- **One Target panel** (the old body panel): the body you are near, else the body or system you target, with the
+  verdict, the star's ⛽ / ✕ / ⚠ and the jump's cost. It also shows over the galaxy map.
+- **An Alerts panel** (off by default): the alerts the page shows, three at most, danger ones framed in red.
+- **Hide when** columns in ⚙ Settings → In-game overlay: per panel, hide it in **combat** mode and/or while
+  **docked** (by default System, Target, Now and Bio hide while docked). The panel table is narrower too.
+- **Keep showing when Elite is not the active window** (off by default), for a second monitor; it still hides when
+  the game is minimised, on another desktop or mostly covered ([details](overlay.md#keep-showing)).
+- An **overlay pill** beside the link pill: "overlay ✓", "…" or "✗" with the reason on hover.
+- Here's schematic and the overlay's system panel **number the stops** ①②③ in the suggested order; tap a number on
+  the schematic to make that body the first stop, "↺ order" to undo. More in the [In-game overlay](overlay.md) page.
+
+### ⛽ Routes and fuel
+
+- **Fuel won't reach the refuel stop**: on an exact-plotter Highway route one line says how much to scoop, "scoop to
+  ≥ A t, at most B t", too little and too much from one sum.
+- **Last scoopable star**: when the stars ahead on any route don't scoop and your fuel won't carry you over them,
+  "⛽ last scoop before 3 dry" with how much to take, and the voice says it (its own alerts row).
+- **Wrong target**: the route line says "✓ targeted", "⚠ targeted X, not the next stop Y" or "↷ 2 stops ahead"; the
+  voice says a new wrong target once (its own alerts row, spoken but not notified).
+- **Survey routes skip finished systems**: "Next: … · skipping 2 done", everywhere a next stop shows.
+- **Earth-like** and **ammonia world** routes, and **🧹 a sweep**: tick systems in Left behind, My firsts or
+  Bookmarks and plot one route through them.
+- Search and the Nearest finder search **Around** another system (your destination, carrier, next stop, a name);
+  **the Map draws your route** (the game's and Outrider's, dashed, ◎ on the next stop).
+- Now shows the targeted jump's cost ("56.7 ly · 0.9 t · leaves 20 max jumps") and how many of your last jumps had a
+  scoopable star. Find by name asks Spansh when EDSM doesn't know it.
+- **"In-Game Route:"** names the game's own route line. When the game skips writing the route file (it happens), the
+  line says "2 jumps left to … · the game didn't write the route's stars" instead of showing an older route; if it
+  stays so, clear the route and plot a different destination. More in [Plot Route](plot-route.md).
+
+### 🧬 Exobiology
+
+- A sample run says what it pays **from sample 1**: "1.0M (×5: 5.0M) · sample 1/3".
+- **✦ on geology** new to your codex, on Here's bodies.
+- **👥 Species other commanders reported** to Spansh on a body, beside the guess.
+- The guess's hover adds **your own runs** on bodies like this ("Informem 11 of 14").
+- The [Exo-Biology checklist](views.md#-the-exobiology-checklist)'s **🔍 nearby** lists the nearest bodies with a
+  species or colour you still need, with 🎯.
+- Search → Planets: **Potential green gas giant**; or ask by voice "nearest green gas giant".
+- Missing colour tables say so, with **Retry**, instead of quietly guessing without them.
+- **Someone else scanned your unsold firsts**: a card, a notification and a line once in a while, "see My firsts".
+
+### 📦 Carrier, cargo and materials
+
+- The Carrier tile: **balance and weeks of upkeep** (amber under 4; from the community's published rates), a
+  **suspended service** as its name with a red ✗, and **the trip to you** ("≈ 3 carrier jumps · ≈ 340 t tritium ·
+  depot 200 t: 140 t short"). The tritium sum is checked against your carrier's own past jumps.
+- **Your carrier as a place to sell**: in the nearest Universal Cartographics / Vista list while that service is on.
+- **One shipload or all of it** in Sell / Buy lookups bigger than your hold; a sell order's count says how old it is.
+- **Recount refuses typos** ("Did you mean: Titanium, Tritium").
+- History gains a **sold** column and ✗ for a death.
+- Materials: the FSD injections stay open and the other recipes fold into groups, with the ones **you have made** ✓;
+  **⇄ nearest raw trader** beside a short material. The Nearest finder's Must have gains **material traders** (any,
+  raw, manufactured, encoded), and the voice answers "nearest raw material trader". More in [Cargo and
+  trading](cargo-and-trading.md).
+
+### 📡 Uploads
+
+- ⚙ Settings → Uploads shows each service's **Recent** sends and failures, what was caught up at start, and **Try
+  again** on anything on hold. A **Check** button beside the EDSM and Inara keys.
+- A **card and a notification** when an upload has been down for 15 minutes, and again when it is back.
+- The Data tile says just **"Spansh unavailable"** (or EDSM, or "No internet connection"), with a card if it lasts.
+- **Upload marks in the Log** ("✓ EDDN · ⏳ EDSM") for the last 7 days, and a "not sent" filter.
+- **Fill gaps in EDSM's flight log**, and **import your EDSM flight log from before your journals** (it now rides out
+  EDSM not answering instead of stopping). More in the [Uploads](uploads.md) page.
+
+### ⚙ Server and setup
+
+- **Show log** and **Restart** in ⚙ Settings → Server's top row; start-up problems show on a **banner** under the
+  header (✕ hides it).
+- **Backups** in Settings → Server, with **Back up now** and the command to restore each one; a backup is taken before
+  every journal re-read ([Backups](install.md#-backups)).
+- **Start with this computer**: Settings → Server, or `./launch_outrider.sh --install-service`
+  ([how](install.md#start-with-your-computer)).
+- The page answers while Outrider starts ("Reading your journals: March 2024, 41%").
+- A first run with no journals says how to set the journal folder.
+- ⚙ Settings → Auto honk says whether it **can work here** and what to fix.
+- Journals on a network share cost much less work every second.
+
+### 🗣 Voice and Settings
+
+- **Sector names said naturally** ("SMOH-joo", "sigh-NOO-fee") for every procedural sector; the voice lab's How is it
+  said box has **▶ as a sector** and your most-visited sectors.
+- **Hush for a set time** by voice: "hush for ten minutes", "quiet for half an hour", "hush until the next jump".
+- **New questions without AI**: "can I still make an FSD injection", "how far today", "this body", "what did I leave
+  behind".
+- ⚙ Settings → **Questions asked**: what the voice heard, what it matched and the answer.
+- **Find a setting**: a box at the top of Settings; type a word and only the matching rows (or whole blocks and
+  tables) stay.
+- **Any view in its own window**: the small ↗ on a tab's corner.
+- **Bookmarks → Import…**: adds a file's bookmarks to yours, keeping your own names and notes.
+
+### 🛠 Also
+
+- Header tiles: the jump range sits under your ship; "from X (Y ly)" beside the system's name.
+- A click anywhere on a Nearby row shows that system beside the list.
+- Planets sharing a centre no longer count as a 🔭 curiosity.
+- The link pill says only "linked", "linked · no game" or "unlinked · retrying".
+- The **Babylon 5 - Shadows** theme, for the desktop page, the tablet and the overlay.
+- Many fixes from code reviews (the overlay on a workspace per monitor, the first stop, routes, uploads, the hush
+  answer, the voice handed back by a view window).
+
+### Before you update
+
+- The first start re-reads your journals once and takes a backup first (see the note at the top).
+- Nothing else to do, Docker included.
+
+---
+
 ## 2026.10.22 · 12 October 2026
 
 **Boxel by boxel, rare finds called out, Inara uploads, and a voice lab in the page.**

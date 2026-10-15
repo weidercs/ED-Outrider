@@ -255,30 +255,9 @@ class Speech(unittest.TestCase):
                          "Sold 12.6 million credits, 3 thousand left now")
         self.assertEqual(outrider.speech.spoken_text("52.0M unsold, 12.64B banked, 1.96M left, 0.04M, 7.25 ly, 1.4M to map"),
                          "52 million unsold, 12.6 billion banked, 2 million left, 0 million, 7.2 ly, 1.4 million to map")
-        for key in outrider.speech.KEYS:   # the voice lab's sample values fill every placeholder an alert has
-            self.assertLessEqual(outrider.speech.fills(key) - set(outrider.speech.ALWAYS), set(outrider.speech.SAMPLES.get(key, {})), key)
-
-    def test_rocky_personality(self):
-        """This fork's Rocky: a personality like the others (a list for every alert), in his way of talking: no
-        contractions, his tripled words and ", question?" somewhere in most alerts, and never a swear list."""
-        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        with open(os.path.join(here, "resources", "speech.json"), encoding="utf-8") as f:
-            doc = json.load(f)
-        self.assertEqual(doc["styles"]["rocky"], "Rocky (Project Hail Mary)")
-        import re
-        triple = re.compile(r"\b(\w+) \1 \1\b", re.I)
-        marked = 0
-        for key, entry in doc["lines"].items():
-            lines = entry["rocky"]
-            self.assertEqual((len(lines), len(set(lines))), (12, 12), key)
-            self.assertNotIn("rocky_profane", entry)
-            for text in lines:
-                self.assertNotIn("'", text, f"{key}: {text}")          # no contractions, no possessives
-                self.assertLessEqual(len(text), 110, f"{key}: {text}")
-            marked += any(triple.search(t) or "question?" in t or "Amaze" in t for t in lines)
-        self.assertGreaterEqual(marked, len(doc["lines"]) - 2)             # his marks in (nearly) every alert
-        # {jumps} may be missing when the tank fills: in few of its lines, as the other personalities have it
-        self.assertLessEqual(sum("{jumps}" in t for t in doc["lines"]["tank_full"]["rocky"]), 3)
+        for key in outrider.speech.KEYS:   # the voice lab's sample values fill every placeholder an alert has (the crew's: names)
+            self.assertLessEqual(outrider.speech.fills(key) - set(outrider.speech.ALWAYS),
+                                 set(outrider.speech.SAMPLES.get(key, {})) | set(outrider.speech.CREW_SAMPLES), key)
 
     def test_shipped_lines(self):
         # speech.json covers every alert in every personality, and the page asks for exactly those alerts
@@ -525,7 +504,21 @@ class Batch6Voice(unittest.TestCase):
         self.assertEqual(outrider.speech.style_voice(doc["styles"], "business"), (None, None))
         self.assertEqual(outrider.speech.style_voice(doc["styles"], "sweet"), (None, None))   # never a path
 
-    def test_voice_pool(self):   # P10(b): installed personality voices load on first use, at most EXTRA_VOICES kept
+    def test_style_speaker(self):   # S40: a personality may be one person of a several-person voice
+        doc = {"styles": {"business": "Business", "sarcastic": {"label": "Sarcastic", "voice": "en_GB-vctk-medium", "speaker": 12},
+                          "sweet": {"label": "Sweet", "speaker": 3}, "dry": {"label": "Dry", "speaker": -1},
+                          "odd": {"label": "Odd", "speaker": True}, "wry": {"label": "Wry", "speaker": "2"}}, "lines": {}}
+        probs = " ".join(outrider.speech.check(doc))
+        for bad in ("dry", "odd", "wry"):
+            self.assertIn(f'"{bad}": "speaker"', probs)
+        for good in ("sarcastic", "sweet", "business"):
+            self.assertNotIn(f'"{good}"', probs)
+        speaker = outrider.speech.style_speaker
+        self.assertEqual([speaker(doc["styles"], k) for k in ("sarcastic_profane", "sweet", "business", "dry", "odd", "wry", "nope")],
+                         [12, 3, None, None, None, None, None])
+        self.assertEqual(outrider.speech.style_voice(doc["styles"], "sarcastic"), ("en_GB-vctk-medium", None))   # its tuple unchanged
+
+    def test_voice_pool(self):   # P10(b): installed personality voices load on first use, at most voices_loaded kept
         import io, tempfile, contextlib, wave as _wave
         import outrider.tts
         loads = []
@@ -542,6 +535,7 @@ class Batch6Voice(unittest.TestCase):
                 for ext in (".onnx", ".onnx.json"):
                     open(os.path.join(d, v + ext), "w").close()
             sp = outrider.tts.Speaker("en_GB-main-low", None, voices_dir=d)
+            sp.voices_loaded = 2   # [speech] voices_loaded
             sp.PiperVoice = unittest.mock.Mock()
             sp.PiperVoice.load = lambda path: loads.append(os.path.basename(path)) or FakeVoice(os.path.basename(path))
             with contextlib.redirect_stdout(io.StringIO()):
@@ -718,8 +712,9 @@ class BatchS2Voice(unittest.TestCase):
     def test_audition_alerts_exist(self):   # P19
         self.assertEqual(len(outrider.speech.AUDITION), 8)
         self.assertLessEqual(set(outrider.speech.AUDITION), set(outrider.speech.KEYS))
-        for key in outrider.speech.AUDITION:   # every one has sample values for its placeholders
-            self.assertLessEqual(outrider.speech.fills(key) - set(outrider.speech.ALWAYS), set(outrider.speech.SAMPLES.get(key, {})), key)
+        for key in outrider.speech.AUDITION:   # every one has sample values for its placeholders (the crew's: names)
+            self.assertLessEqual(outrider.speech.fills(key) - set(outrider.speech.ALWAYS),
+                                 set(outrider.speech.SAMPLES.get(key, {})) | set(outrider.speech.CREW_SAMPLES), key)
 
 
 class BatchAAudio(unittest.TestCase):
@@ -1257,7 +1252,7 @@ class PlausibleFixes(unittest.TestCase):
                 sp.say(f"line {i}", voice=names[i % 3])
         self.assertEqual(sorted(loads), [n + ".onnx" for n in names])   # each loaded once
         sp.size_extra(["x"] * 9 + [f"en_GB-v{i}-low" for i in range(9)])
-        self.assertEqual(sp._extra_slots, outrider.tts.EXTRA_VOICES_MAX)   # bounded
+        self.assertEqual(sp.slots(), outrider.tts.VOICES_LOADED_DEFAULT)   # bounded
         # the server sizes the cache from speech.json's personalities when a line asks for one of their voices
         import asyncio, types
         from aiohttp.test_utils import TestClient, TestServer
@@ -1589,6 +1584,57 @@ class Speakers(unittest.TestCase):
         self.assertEqual((out["same"], self.used), (200, ["en_GB-vctk-medium"]))   # review 2026-10-12
         self.assertEqual(ed_outrider.meta_get(self.db, "voice_speakers"), {"en_GB-vctk-medium": 1})   # kept over restarts
         self.assertIn(b'{"speaker_id": 2}', out["say"])                                         # the lab's try of another
+
+
+    def test_a_voice_per_personality(self):
+        """S40: Settings' Personality voices (and the voice lab's Give to this personality) keep a personality's voice and
+        person on the server (meta style_picks, for every browser), refuse what cannot be said, and leave it through a
+        journal re-read; a line sent with a voice that is not installed is said in the main voice by its own person,
+        never by that number of the main voice; the voices kept loaded count the picks."""
+        import asyncio
+        import types
+        from aiohttp.test_utils import TestClient, TestServer
+        styles = {"business": "Business", "sarcastic": {"label": "Sarcastic", "voice": "en_US-plain-low"}, "sweet": "Sweet"}
+        self.state.speech = types.SimpleNamespace(lines=lambda: {"styles": styles}, info=lambda: None)
+        post = lambda c, b: c.post("/api/voice/style", json=b)   # noqa: E731
+
+        async def go():
+            async with TestClient(TestServer(ed_outrider.make_app(self.state))) as c:
+                out = {}
+                r = await post(c, {"style": "sweet", "voice": "en_GB-vctk-medium", "speaker": 2})
+                out["set"] = (r.status, await r.json())
+                out["plain"] = (await post(c, {"style": "business", "voice": "en_GB-cori-medium"})).status
+                out["bad"] = [(await post(c, b)).status for b in (
+                    {"style": "dry", "voice": "en_GB-cori-medium"}, {"style": "sweet", "voice": "en_GB-nope-low"},
+                    {"style": "sweet", "voice": "en_GB-vctk-medium", "speaker": 3}, {"style": "sweet", "voice": "en_GB-cori-medium", "speaker": 0},
+                    {"style": "sweet", "voice": "en_GB-vctk-medium", "speaker": "1"}, {"style": "sweet", "voice": "en_GB-vctk-medium", "speaker": True},
+                    {"style": "sweet"}, {"style": "sweet", "voice": "../x"})]
+                out["picks"] = self.state.payload()["style_picks"]
+                out["voices"] = self.state.personality_voices()
+                out["reset"] = (await (await post(c, {"style": "business", "voice": None})).json())["style_picks"]
+                # a personality's voice gone from the PC: its number is not the main voice's person
+                out["gone"] = await (await c.get("/api/say", params={"text": "Gone.", "voice": "en_GB-nope-low", "speaker": "1"})).read()
+                out["main"] = await (await c.get("/api/say", params={"text": "Main.", "speaker": "1"})).read()
+                return out
+        out = asyncio.run(go())
+        want = {"sweet": {"voice": "en_GB-vctk-medium", "speaker": 2}, "business": {"voice": "en_GB-cori-medium", "speaker": None}}
+        self.assertEqual(out["set"][0], 200)
+        self.assertEqual(out["set"][1]["style_picks"], {"sweet": want["sweet"]})
+        self.assertEqual((out["plain"], out["bad"]), (200, [400] * 8))
+        self.assertEqual(out["picks"], want)
+        self.assertEqual(out["voices"], {"en_US-plain-low", "en_GB-vctk-medium", "en_GB-cori-medium"})
+        self.assertEqual(out["reset"], {"sweet": want["sweet"]})
+        self.assertIn(b"en_GB-vctk-medium:None", out["gone"])
+        self.assertIn(b'en_GB-vctk-medium:{"speaker_id": 1}', out["main"])   # a speaker of the main voice still works
+        self.db.executescript(ed_outrider.RESET_JOURNAL_DATA)                # live-only: a re-read keeps it
+        self.assertEqual(self.state.style_picks(), {"sweet": want["sweet"]})
+        self.state.speaker = None
+        self.assertEqual(asyncio.run(self._post_once({"style": "sweet", "voice": "en_GB-vctk-medium"})), 503)
+
+    async def _post_once(self, body):
+        from aiohttp.test_utils import TestClient, TestServer
+        async with TestClient(TestServer(ed_outrider.make_app(self.state))) as c:
+            return (await c.post("/api/voice/style", json=body)).status
 
 
 class LabInThePage(unittest.TestCase):

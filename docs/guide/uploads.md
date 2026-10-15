@@ -22,8 +22,11 @@ switch them (they are not among the Server settings).
     per in-game commander, set in Settings → Uploads. The key stays on this Outrider: the page shows only its first
     and last four characters, to compare with edsm.net.
   - A commander with no key sends nothing, and Settings says so.
-  - A key EDSM refuses stops the sending (not the recording) until you change the key or switch EDSM off and on:
-    what you played meanwhile then goes.
+  - A key EDSM refuses stops the sending (not the recording) until you change the key, press **Try again** in
+    Settings → Uploads, or switch EDSM off and on: what you played meanwhile then goes.
+  - **Check** beside the key asks EDSM whether it takes that name and key (the one typed, else the one saved), without
+    sending anything: "✓ EDSM accepts CMDR … with this key", or "✗ EDSM: 203 commander name or API key not found". A
+    check that works with the saved key ends a hold at once. One check every 10 seconds.
   - If EDSM keeps refusing a key you know is right, make a new key on edsm.net and paste that one.
 - **Inara**: keeps your commander profile there current, as EDMC's Inara upload does, so a player who uses Outrider
   alone loses nothing on it:
@@ -48,7 +51,10 @@ switch them (they are not among the Server settings).
   - **Switch Inara off in any other app first** (EDMC, EDDI, EDDiscovery, EDDLite): two apps sending can get your key
     revoked. Outrider sees EDMC's setting on this PC and holds its own while EDMC sends; it cannot see the others.
   - A key or app Inara refuses stops the sending (not the recording) with Inara's words in Settings, until you change
-    the key or switch Inara off and on. A refusal for sending too often waits an hour by itself.
+    the key, press **Try again** or switch Inara off and on. A refusal for sending too often waits an hour by itself.
+  - **Check** beside the key asks Inara for that commander's profile with the key (the one typed, else the one saved),
+    without sending anything: "✓ Inara: CMDR …" with a link to the profile, "✗ Inara refused the key: …", or "Couldn't
+    reach Inara: timeout". It keeps to the same 35-second pace as the sending, so it can take a moment.
 
 ## Catching up, and what is never sent
 
@@ -67,7 +73,8 @@ Status.json.
 
 Never sent:
 
-- Anything older than a week (an hour for EDDN), or from a legacy folder (journals imported once).
+- Anything older than a week (an hour for EDDN), or from a legacy folder (journals imported once). The one exception
+  is a range you send to EDSM yourself ([Fill gaps in EDSM's flight log](#fill-gaps-in-edsms-flight-log)).
 - Anything from the game's beta, or from the Legacy game (3.8): Settings says so ("unavailable: the Legacy game").
 - Anything while you are crew in another commander's ship.
 - Anything under `--simulate`.
@@ -110,11 +117,27 @@ twice: EDDN has no way to tell. So:
 
 The header's Data tile shows, live, a line per upload in use: what it sent, has waiting and had refused in the last
 day. Settings → Uploads shows the same per service, with why nothing can be sent now (held by another uploader, a key
-EDSM or Inara refused, the beta or Legacy game) and the last message (a refusal, "saved").
+EDSM or Inara refused, the beta or Legacy game) and the last message (a refusal, "saved"). Under each service:
+
+- **Recent**: its last sends, newest first. Sends in a row are one line ("12:04 sent 37 (11:58–12:04)"); a failure says
+  what kind and the service's or the network's own words, and when it tries again ("11:58 ✗ no network: Cannot connect
+  to host … · trying again at 12:00"). Kept until Outrider stops.
+- **At start**: what it did when Outrider started: "12 messages from while Outrider was off", "nothing missed", "EDMC
+  was sending EDSM" (then nothing of that stretch is sent), or "nothing from before" (no earlier mark: it starts from
+  your journals' end).
+- **On hold**, with **Try again**: a key EDSM or Inara refused (Try again sends with the stored key now), or a kind of
+  EDDN message (below).
 
 If EDDN refuses one kind of message (markets, say) three times within an hour, or once with 426 (a version it no
-longer takes), Outrider stops sending that kind until it restarts: usually a game update EDDN does not take yet.
-The other kinds still go.
+longer takes), Outrider stops sending that kind until it restarts or you press Try again: usually a game update EDDN
+does not take yet. The other kinds still go. The refused ones are gone; Try again lets new ones go.
+
+**When a service is down.** If an upload that is on has failed for 15 minutes with messages waiting, a card says so at
+the top of the page ("EDDN unreachable for 15 min: 42 messages waiting, they drop after an hour (the oldest in 38
+min)"; for EDSM and Inara "kept until it answers") and, with notifications on, a desktop notification. It is never
+spoken. ✕ hides the card; it goes by itself when the service takes messages again, with a notification ("EDDN sending
+again after 37 min: sending the 40 waiting (2 were over an hour old and dropped)"). Its row in Settings → Alerts
+switches the notification. Inara asking Outrider to slow down (its hour's pause) is said that way.
 
 A developer's switch shows next to the service in Settings → Uploads: "(test schemas only)" when `OUTRIDER_EDDN_TEST`
 is set, "(dry run: nothing sent)" when `OUTRIDER_EDSM_DRYRUN` or `OUTRIDER_INARA_DRYRUN` is (the requests go to
@@ -124,3 +147,64 @@ is (Inara's `isBeingDeveloped`: for a test account).
 ---
 
 [ED Outrider](../../README.md) · [What's new](whats-new.md) · [Install and run](install.md) · [The views](views.md) · [Plot Route](plot-route.md) · [Cargo and trading](cargo-and-trading.md) · [Voice and alerts](voice-and-alerts.md) · [Automation](automation.md) · [On a tablet](tablet.md) · [In-game overlay](overlay.md) · **Uploads** · [Settings and good to know](settings.md) · [For the curious](for-developers.md)
+
+## Upload marks in the Log
+
+With an upload on, each line of the **Log** says what the uploads made of it, beside its summary: **✓ EDDN · ✓ EDSM**
+(sent), **⏳** (waiting: for the next jump or docking, or to try again), **⏸** (on hold: a key refused, a kind of
+message EDDN keeps refusing, the upload switched off) and **✗** (not taken, or dropped). Hover a mark for why, in the
+service's own words. A line with no mark had nothing to send; a line sent as several messages shows the worst of them.
+
+- Marks cover the last 7 days: Outrider forgets what it sent after a week.
+- **not sent** (beside "show noise", while an upload is in use) shows only the lines with a message waiting, on hold or
+  not taken, whatever the category boxes say: some "noise" (a signal source, a market) goes to EDDN too.
+
+## Fill gaps in EDSM's flight log
+
+EDSM's flight log has what was sent to it. If you played before you switched EDSM on in Outrider, or while it was off,
+that stretch is missing there. Settings → Uploads → **Fill gaps in EDSM's flight log** sends it, once you have looked:
+
+- **Check EDSM's log** asks EDSM (reading only) where its flight log ends before Outrider took over: "EDSM's flight log
+  ends 2026-10-09 21:14 UTC at …; Outrider has sent since 2026-10-11 08:00 UTC; your journals have 412 jumps between".
+  It fills **From** and **To** with that stretch. If EDSM was switched on in Outrider before this version, when it
+  started sending is not known ("unknown"): then the range runs to now, and you set the end yourself.
+- **Preview** rebuilds, from your journals (the live folders, the legacy ones and the backups' journal archive), what
+  Outrider would send EDSM for that range, sending nothing: "312 events (41 jumps) in 2 requests, about 1 min". Times
+  are UTC.
+- **Send** (only for the range just previewed, after you confirm) first asks EDSM for its flight log over the range:
+  if EDSM has anything there, nothing is sent (never twice what EDSM has); pick a range around it. Then it sends one
+  request every 10 seconds. Its line counts what EDSM did with each event: stored, already
+  there, older than its log (not taken). If EDSM takes none of the first request because each event is older than what
+  its log has, the backfill stops by itself: EDSM does not take back-dated events then.
+- **Stop** ends it (what still waits is not sent). A key EDSM refuses holds it until you fix the key and press **Go on**.
+  It waits ("paused") under `--simulate` and while another Outrider uploads to EDSM: only one talks to EDSM.
+- If EDSM does not answer the Check or Send's first look at its log (a timeout, no connection, EDSM failing or asking
+  to slow down), Outrider asks again after 30 seconds, 1, 2, 5 and 10 minutes, and the line says when ("EDSM not
+  answering: trying again at 21:30 (attempt 2 of 6)"); only then does it give up. **Stop** on that line ends the wait.
+  A refused key stops it at once.
+- What EDSM stores cannot be taken back from here. Try a small range first (a jump or two), and look at your flight
+  log on edsm.net before sending a long one.
+
+## Import your EDSM flight log from before your journals
+
+If EDSM has your travels from before your oldest journal (sent by another app, or journals since deleted), Outrider can
+bring them in once, reading only: Settings → Uploads → **Import your EDSM flight log from before your journals**, pick
+the commander (one with an EDSM key saved) and press **Import**.
+
+- It reads EDSM's flight log one week at a time, back from your first journal to the game's launch, one read every
+  10 seconds: several years take an hour or more. Nothing is sent to EDSM. **Stop** keeps what was read; **Go on**
+  carries on from there (also after Outrider was stopped).
+- A week EDSM does not answer (a timeout, no connection, EDSM failing) is asked again after 30 seconds, then 1, 2, 5
+  and 10 minutes: "EDSM not answering: trying week 203 again at 21:30 (attempt 2 of 6)". Only when EDSM stays silent
+  through all of that (about 20 minutes) does the import stop, saying why; **Go on** then carries on from that week.
+  The same goes for the lookups of places at the end (Spansh or EDSM). A refused key (EDSM's "commander name or API key
+  not found") or an answer Outrider cannot read stops it at once, with no retry.
+- Then: "1,288 visits from EDSM, 2016-03-02 to 2019-11-30 · **Remove them**". Remove forgets them all (your journals'
+  visits are not touched) and you can import again.
+- Those systems count as **visited**: Nearby's marks, Search's visited filter, the target's verdict, Find ("visited 3×
+  by your EDSM flight log"), the boxel lists, the Map (its hover says so) and History, whose sessions show "from EDSM"
+  with a From EDSM line beside All time.
+- They never count as first discoveries, sales, scans or anything else you did there: EDSM's log says where you went,
+  your journals say what you did. Your journals always win: an entry within a minute of a journal arrival, or from after
+  your first journal, is left out (and if you add an older journal folder later, what it covers becomes the journal's).
+- Every commander whose log you import counts as you.

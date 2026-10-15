@@ -36,7 +36,9 @@
 
 [server]
 # host = "127.0.0.1"   # "0.0.0.0" makes the page reachable from other devices on your network
-                       # (without a password below, anyone on it can read your journals' contents and edit bookmarks)
+                       # (without a password below, anyone on it can read your journals' contents and do whatever
+                       # the page does: change these settings, restart Outrider, use your EDSM and Inara keys, and
+                       # on the game PC press keys in the game)
 # port = 8025
 # password = ""        # devices on your network (a tablet, the Android app) sign in with it once; this PC itself
 #                      # never needs it. "" = no sign-in. It crosses your network unencrypted (plain http), so use
@@ -62,7 +64,8 @@
 # backup_keep = 7          # dated database zips kept (outrider-<database name>-*.zip; older ones are deleted
 #                          # after a new one is written); the journal archive is never pruned
 # backup_every_days = 1    # an automatic backup at start when the last one is older than this, and when the game
-#                          # quits (its Shutdown event); 0 turns automatic backups off ("back up now" still works)
+#                          # quits (its Shutdown event); 0 turns automatic backups off ("back up now" still works,
+#                          # and the database is still backed up before a journal re-read)
 # speech_file = "resources/speech.json"   # the spoken alerts' lines, per personality (edit it, or point this at
 #                          # your own copy; lines banned with the page's 👎 go in data/speech_banned.json, or next
 #                          # to a copy of your own)
@@ -151,7 +154,7 @@
 #                       # Your own EDDN uploads (EDMC and the like) are told apart by their time. false: never asks
 
 [speech]
-# Sounds and the PC's player. server_player is for the page's "Play speech and sounds on this PC" tick (in ⚙
+# Sounds, the PC's player and the voices kept loaded. server_player is for the page's "Play speech and sounds on this PC" tick (in ⚙
 # Settings → Voice, per browser, off until ticked): the PC running Outrider then plays the spoken lines and the alert
 # sounds itself (Linux only). sound_dir is used in the browser and on the PC.
 # server_player = "auto"   # "auto" (the first of pw-play, paplay, aplay and ffplay installed), one of those
@@ -159,6 +162,14 @@
 # sound_dir = "my-sounds"  # your own alert sounds, played in the browser and on the PC: a folder of <name>.wav
 #                          # files (fanfare, thud, chime, alert... the names in static/sounds.json), WAV only,
 #                          # up to 3 seconds each; a sound with no file keeps Outrider's own
+# Voices besides the main one (a personality's own voice, a crew member's) are loaded the first time they speak and
+# stay loaded, least recently used set aside first. Each takes about 1.6 times its .onnx file's size in memory (about
+# 100 MB for a medium voice, 170 MB for a high one; the people of one several-person voice share a single load); the
+# main voice is always loaded and not counted. A voice set aside waits about a second while it loads again.
+# voices_loaded = 4        # how many to keep loaded beside the main one: a number, or "all"; unset, the voices in use
+#                          # up to 4 (a value Outrider cannot read: 4, said at start)
+# voices_preload = false   # true: load them when Outrider starts (one at a time, after the journals are read), so
+#                          # even the first line of each starts at once; false: each loads the first time it speaks
 
 [copilot]
 # One HOTAS (or keyboard) button (Linux; outrider/button.py). Tap, flying the ship: target the next route system in the
@@ -214,6 +225,9 @@
 # conservative = false      # the plot form starts with "Conservative range" ticked: jumps planned a margin shorter
 #                           # than the ship's range, so a jump at the limit still has room for more fuel or cargo
 # conservative_ly = 5       # that margin (ly, 0.5 to 50); on a neutron jump it is multiplied by the supercharge
+# voice_plot = true        # the voice's "nearest station" (or carrier, Vista, trader...) also plots a neutron route
+#                           # there when it is further than voice_plot_ly; never while you follow a route or one is plotted
+# voice_plot_ly = 500       # that distance (ly)
 # The Highway map draws the galactic regions; it can also show a top-down galaxy image of your own under them.
 # Outrider ships none: point this at one you downloaded (PNG, JPEG, WebP or GIF; a path relative to this folder, or
 # absolute). Only that file is served to the page.
@@ -229,14 +243,23 @@
 # theme = "default"         # the panels' colours: default, lcars, elite, babylon5, narn, minbari, centauri, vorlon, shadow, sith, alliance, dark
 # text_size = "normal"      # small, normal or large
 # system_panel = true       # the bodies worth your time, in supercruise
-# body_panel = true         # the body you are heading to or near
+# body_panel = true         # the Target panel: the body you are near or have targeted, else the system targeted (also over the galaxy map)
 # radar = true              # on a body's surface: samples, colony rings, the ship
 # strip_panel = false       # the system strip: two short lines across the top (where you are, the star, bodies found, mapped, Spansh)
 # now_panel = false         # Now (To-Do & Info): Now condensed, the target, fuel, data at risk, what to do next, this session
 # bio_panel = false         # every bio signal in the system, the ones over bio_min highlighted, with samples and values
 # route_panel = false       # the route ahead: the game's own route (jumps, ly, the next jumps and stars, the next scoop), the Highway's next stop
+# alerts_panel = false      # the page's alerts for a few seconds (8 s, danger 15 s): every kind switched on in Settings ->
+#                           # Alerts (notify, sound or speak); worded by the page, so only while a page is open somewhere
 # system_seconds = 0        # how long the system panel stays after arriving (0: while in supercruise in that system)
 # radar_range = 800         # metres from the radar's centre to its edge (it widens to fit a colony ring)
+# analysis_only = []        # panels shown in your ship only while the HUD is in analysis mode, e.g. ["system", "bio"]
+#                           # (any of system, body, radar, strip, now, bio, alerts; not in the SRV, on foot or over the galaxy map)
+# hide_docked = ["system", "body", "now", "bio"]   # panels hidden while docked (the ship, or on foot in a station,
+#                           # hangar or social space): any of system, body, strip, now, bio, alerts; the Target panel
+#                           # still shows over the galaxy map
+# show_inactive = false     # keep showing when Elite is not the active window (Settings -> In-game overlay); it still
+#                           # hides while other windows cover the game, or the game is minimised or on another desktop
 
 [mcp]
 # The MCP bridge, for asking an AI client (Claude Code, the Claude desktop app) about your game: the client starts

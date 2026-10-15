@@ -13,12 +13,16 @@ rem relative paths in the arguments are the caller's: Outrider runs from the fol
 set "CALLER=%CD%"
 cd /d "%~dp0"
 set "HERE=%CD%"
+rem Settings -> Server's Restart: Outrider exits with 75 and this starts it again (below), setup included
+set "OUTRIDER_LAUNCHER=%~f0"
+set "PP0=%PYTHONPATH%"
 
 set "VENV=.venv"
 rem requirements.txt as it was when last installed
 set "STAMP=%VENV%\.requirements.txt"
 set "VPY=%VENV%\Scripts\python.exe"
 
+:check
 if not exist "%VPY%" goto create
 rem installs again when requirements.txt changed since (or the stamp is missing), or the environment is broken
 rem (no aiohttp); compared in Python, not with fc, which is unreliable outside Windows (Wine)
@@ -76,12 +80,19 @@ rem the in-game overlay's PyQt6, installed when [overlay] enabled is true in the
 rem caller's folder like Outrider, so a relative --config is the same file
 cd /d "%CALLER%"
 set "PP=%HERE%"
-if defined PYTHONPATH set "PP=%HERE%;%PYTHONPATH%"
+if defined PP0 set "PP=%HERE%;%PP0%"
 set "PYTHONPATH=%PP%"
 "%HERE%\%VPY%" -m outrider.overlay_runner --setup %*
 "%HERE%\%VPY%" "%HERE%\ed_outrider.py" %*
+rem 75: Settings -> Server's Restart asked to be started again (checked before the error's pause)
+if %errorlevel% equ 75 goto again
 if errorlevel 1 goto stopped
 exit /b 0
+
+:again
+echo Restarting ED Outrider
+cd /d "%HERE%"
+goto check
 
 :stopped
 echo.

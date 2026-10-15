@@ -23,6 +23,10 @@ you tick it in ⚙ Settings.
 
 Setting it up:
 
+- **Is it ready?** ⚙ Settings → Auto honk says it at the top, before you tick anything: "Ready: evdev ✓ ·
+  /dev/uinput ✓ · /dev/uinput writable ✓ · Primary Fire: Left Alt + K ✓", or what is missing with the fix and its
+  commands to copy (load the `uinput` module, a udev rule that lets you write `/dev/uinput`, a keyboard binding for
+  Primary Fire). It only looks: nothing is pressed. **check again** after a fix.
 - **The Discovery Scanner must be on primary fire** in the fire group active when you jump.
 - **Primary Fire needs a keyboard binding** in Elite's controls (as its second binding, if your trigger is
   the first). Outrider reads it from your active controls preset, modifiers too. A built-in preset can't be
@@ -43,8 +47,12 @@ On Linux, one button on your HOTAS (or a spare key) talks to the voice. It needs
 Docker), where the HOTAS is plugged in:
 
 - **Tap, flying your ship:** target the next route system in the galaxy map (the same run as 🎯 and Target next,
-  half a second after the press, so keep your hands off the controls). It targets the next system of your Road to
-  Riches, Exomastery or trade route first, then the Highway's. Success or failure is said as for auto-target; with
+  half a second after the press, so keep your hands off the controls; it brings the game to the front first where it can, and with
+  Elite not the active window it says so and presses nothing). It targets the next system of your survey
+  route (Road to Riches, Exomastery, a world route, a sweep) or trade route first, then the Highway's while you are on it, then the Next of the boxel you
+  explore (as 🎯 beside it does: a name the galaxy map cannot find is probably the boxel's end), then, off the Highway,
+  its closest system, and last your chosen next stop (the header's, from a bookmark; a finished route counts as none).
+  Success or failure is said as for auto-target; with
   nothing to target, the voice says so in its personality. Out of the ship (the SRV, on foot, a fighter) a tap does
   nothing. A press during that half second cancels it before any key (a double tap that came a little slow) and
   gives the status report instead; so does a press while the run is still waiting with no key pressed (waiting out

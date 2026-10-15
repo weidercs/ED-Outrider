@@ -127,6 +127,36 @@ class Arranging(unittest.TestCase):
         self.assertFalse(W.should_show(None, {"test": True}))                       # no game window: nowhere to draw
         self.assertFalse(W.should_show(T.WindowState(0, 0, 0, 0, True, False), {"test": True}))   # minimised
 
+    def test_keep_showing_when_not_active(self):
+        """S25: with show_inactive the overlay stays over the game while another window is in front, unless other
+        windows cover the game (S25b) or it is minimised / on another desktop (not visible)."""
+        behind = T.WindowState(0, 0, 1920, 1080, False, True)
+        covered = T.WindowState(0, 0, 1920, 1080, False, True, covered=True)
+        hidden = T.WindowState(0, 0, 1920, 1080, False, False)
+        self.assertTrue(W.should_show(behind, {"show_inactive": True}))
+        self.assertFalse(W.should_show(behind, {"show_inactive": False}))
+        self.assertFalse(W.should_show(covered, {"show_inactive": True}))
+        self.assertFalse(W.should_show(hidden, {"show_inactive": True}))
+        self.assertTrue(W.should_show(covered, {"show_inactive": True, "test": True}))   # the test panels: whatever is in front
+
+    def test_track_code(self):
+        """S8: what the window sees, sent with its GET for the page's overlay pill."""
+        class Tr:
+            missing = xprop_missing = False
+        tr, front = Tr(), T.WindowState(0, 0, 10, 10, True, True)
+        self.assertEqual(W.track_code(None, None, False), "no_tracker")
+        self.assertEqual(W.track_code(tr, None, False), "no_window")
+        self.assertEqual(W.track_code(tr, front, True), "drawing")
+        self.assertEqual(W.track_code(tr, T.WindowState(0, 0, 10, 10, False, True), False), "behind")
+        self.assertEqual(W.track_code(tr, T.WindowState(0, 0, 10, 10, False, False), False), "hidden")
+        self.assertEqual(W.track_code(tr, T.WindowState(0, 0, 10, 10, False, True, covered=True), False), "covered")
+        tr.xprop_missing = True
+        self.assertEqual(W.track_code(tr, front, False), "no_xprop")
+        tr.missing = True
+        self.assertEqual(W.track_code(tr, None, False), "no_wmctrl")
+        self.assertTrue(set(O.TRACK_CODES) >= {"drawing", "behind", "hidden", "covered", "no_window", "no_wmctrl",
+                                               "no_xprop", "no_tracker"})
+
     def test_windows_click_through_both_ways(self):
         """On Windows the click-through style is taken away for Arrange mode as well as added (it was only added)."""
         through = W.win_exstyle(0x100, True)
@@ -201,6 +231,157 @@ class Tracking(unittest.TestCase):
         self.assertIsInstance(T.create_tracker(LOG, platform="linux"), T.X11Tracker)
         self.assertIsNone(T.create_tracker(LOG, platform="darwin"))
 
+    def test_xprop_missing(self):
+        """Without xprop the game could never be in front (the overlay never shows): said, for the pill (S8)."""
+        def run(cmd, **kw):
+            if cmd[0] == "xprop":
+                raise FileNotFoundError("xprop")
+            return subprocess.CompletedProcess(cmd, 0, stdout=self.WMCTRL, stderr="")
+        t = T.X11Tracker(LOG, run=run)
+        self.assertFalse(t.poll().is_foreground)
+        self.assertTrue(t.xprop_missing)
+
+
+class Desktop:
+    """An X desktop's answers to wmctrl and xprop for the out-of-sight and covered checks (S25, S25b): windows
+    [(id, desktop, x, y, w, h, title)], the active one, the stacking order (bottom to top), minimised ids, the current
+    desktop, and xwininfo's map state for every window (None: no Map State line, as when it cannot be read). Records
+    every command."""
+    GAME, BROWSER, CHAT = 0x04400003, 0x03000007, 0x02a00001
+
+    def __init__(self, windows, active, stacking, minimised=(), current=0, map_state=None):
+        self.windows, self.active, self.stacking = windows, active, stacking
+        self.minimised, self.current, self.calls = set(minimised), current, []
+        self.map_state = map_state
+
+    def run(self, cmd, **kw):
+        self.calls.append(list(cmd))
+        if cmd[0] == "wmctrl":
+            out = "".join(f"0x{i:08x}  {d} {x} {y} {w} {h} cls pc {t}\n" for i, d, x, y, w, h, t in self.windows)
+        elif cmd[:2] == ["xprop", "-root"]:
+            out = {"_NET_ACTIVE_WINDOW": f"_NET_ACTIVE_WINDOW(WINDOW): window id # 0x{self.active:x}\n",
+                   "_NET_CURRENT_DESKTOP": f"_NET_CURRENT_DESKTOP(CARDINAL) = {self.current}\n",
+                   "_NET_CLIENT_LIST_STACKING": "_NET_CLIENT_LIST_STACKING(WINDOW): window id # " +
+                                                ", ".join(f"0x{i:x}" for i in self.stacking) + "\n"}[cmd[2]]
+        elif cmd[:2] == ["xprop", "-id"]:
+            hidden = int(cmd[2], 16) in self.minimised
+            out = "_NET_WM_STATE(ATOM) = " + ("_NET_WM_STATE_HIDDEN" if hidden else "_NET_WM_STATE_MAXIMIZED_VERT") + "\n"
+        elif cmd[0] == "xwininfo" and self.map_state:
+            out = f"  Width: 2560\n  Height: 1440\n  Map State: {self.map_state}\n"
+        else:
+            out = ""
+        return subprocess.CompletedProcess(cmd, 0, stdout=out, stderr="")
+
+    def poll(self, checks=True):
+        t = T.X11Tracker(LOG, run=self.run, min_interval=0)
+        t.inactive_checks = checks
+        return t.poll()
+
+
+class OutOfSight(unittest.TestCase):
+    D = Desktop
+    GAME = (D.GAME, 0, 0, 0, 2560, 1440, "Elite - Dangerous (CLIENT)")
+
+    def test_covered_share(self):
+        self.assertEqual(T.covered_share((0, 0, 100, 100), []), 0.0)
+        self.assertEqual(T.covered_share((0, 0, 100, 100), [(0, 0, 100, 100)]), 1.0)
+        self.assertEqual(T.covered_share((0, 0, 100, 100), [(50, 0, 100, 100), (0, 50, 100, 100)]), 0.75)   # overlap once
+        self.assertEqual(T.covered_share((0, 0, 100, 100), [(200, 200, 50, 50)]), 0.0)
+        self.assertEqual(T.covered_share((0, 0, 0, 0), [(0, 0, 10, 10)]), 0.0)
+
+    def test_a_window_over_the_game(self):
+        d = self.D([self.GAME, (self.D.BROWSER, 0, 0, 0, 1920, 1080, "Mozilla Firefox")], self.D.BROWSER, [self.D.GAME, self.D.BROWSER])
+        st = d.poll()
+        self.assertEqual((st.is_foreground, st.is_visible, st.covered), (False, True, True))   # 56% of it
+        # the same browser beneath the game in the stacking order (a second screen's window last clicked): not covering
+        d.stacking = [self.D.BROWSER, self.D.GAME]
+        self.assertFalse(d.poll().covered)
+        # a small window over it (a chat in a corner, under a quarter): the overlay stays
+        d = self.D([self.GAME, (self.D.CHAT, 0, 0, 0, 600, 800, "Chat")], self.D.CHAT, [self.D.GAME, self.D.CHAT])
+        self.assertFalse(d.poll().covered)
+        # minimised, or on another desktop: no cover
+        d = self.D([self.GAME, (self.D.BROWSER, 0, 0, 0, 2560, 1440, "Mozilla Firefox")], self.D.BROWSER,
+                   [self.D.GAME, self.D.BROWSER], minimised=[self.D.BROWSER])
+        self.assertFalse(d.poll().covered)
+        d = self.D([self.GAME, (self.D.BROWSER, 1, 0, 0, 2560, 1440, "Mozilla Firefox")], self.D.BROWSER, [self.D.GAME, self.D.BROWSER])
+        self.assertFalse(d.poll().covered)
+
+    def test_the_game_out_of_sight(self):
+        d = self.D([self.GAME], self.D.CHAT, [self.D.GAME], minimised=[self.D.GAME])
+        self.assertFalse(d.poll().is_visible)                         # minimised
+        d = self.D([(self.D.GAME, 1, 0, 0, 2560, 1440, "Elite - Dangerous (CLIENT)")], self.D.CHAT, [self.D.GAME], current=0)
+        self.assertFalse(d.poll().is_visible)                         # on another desktop
+        d.current = 1
+        self.assertTrue(d.poll().is_visible)
+
+    def test_one_workspace_per_monitor(self):
+        """A window manager with a workspace per monitor (i3 and the like): the browser clicked on the second monitor
+        makes its workspace the current desktop while the game stays in sight on the first. The map state decides:
+        viewable stays shown; unmapped (a workspace not on any monitor, as GNOME and KDE unmap) is hidden."""
+        d = self.D([(self.D.GAME, 1, 0, 0, 2560, 1440, "Elite - Dangerous (CLIENT)"),
+                    (self.D.BROWSER, 2, 2560, 0, 1920, 1080, "Mozilla Firefox")], self.D.BROWSER,
+                   [self.D.GAME, self.D.BROWSER], current=2, map_state="IsViewable")
+        self.assertTrue(d.poll().is_visible)
+        d.map_state = "IsUnMapped"
+        self.assertFalse(d.poll().is_visible)
+        d.map_state = "IsUnviewable"
+        self.assertFalse(d.poll().is_visible)
+        d.map_state, d.current = "IsUnMapped", 1   # the desktop's own: the map state is not asked
+        d.calls.clear()
+        self.assertTrue(d.poll().is_visible)
+        self.assertNotIn("xwininfo", [c[0] for c in d.calls if c[1:2] == ["-id"]])
+
+    def test_only_when_asked(self):
+        """The extra xprop calls run only with inactive_checks on and the game not in front."""
+        d = self.D([self.GAME, (self.D.BROWSER, 0, 0, 0, 2560, 1440, "Mozilla Firefox")], self.D.BROWSER, [self.D.GAME, self.D.BROWSER])
+        st = d.poll(checks=False)
+        self.assertEqual((st.covered, [c[2] for c in d.calls if c[0] == "xprop"]), (False, ["_NET_ACTIVE_WINDOW"]))
+        d.calls.clear()
+        d.active = self.D.GAME
+        st = d.poll()
+        self.assertEqual((st.is_foreground, st.covered, [c[2] for c in d.calls if c[0] == "xprop"]), (True, False, ["_NET_ACTIVE_WINDOW"]))
+
+    def test_kept_a_while(self):
+        """The answer is kept INACTIVE_EVERY_S: a poll twice a second does not ask xprop four more times each."""
+        d = self.D([self.GAME, (self.D.BROWSER, 0, 0, 0, 2560, 1440, "Mozilla Firefox")], self.D.BROWSER, [self.D.GAME, self.D.BROWSER])
+        t = T.X11Tracker(LOG, run=d.run, min_interval=0)
+        t.inactive_checks = True
+        t.poll()
+        n = len(d.calls)
+        t.poll()
+        self.assertEqual(len(d.calls) - n, 2)   # wmctrl and the active window only
+
+    def test_windows_z_order(self):
+        """S25b on Windows: the windows above the game that can hide it (a fake user32: never Windows itself)."""
+        class R:
+            def __init__(self, l, t, r, b):
+                self.left, self.top, self.right, self.bottom = l, t, r, b
+        # z-order, top first: a click-through overlay, a tool window, a minimised one, ours, a cloaked one, a browser
+        wins = {1: dict(ex=0x20), 2: dict(ex=0x80), 3: dict(iconic=True), 4: dict(pid=99), 5: dict(cloaked=True),
+                6: dict(), 7: dict(game=True)}
+        order = [1, 2, 3, 4, 5, 6, 7]
+
+        class U32:
+            def GetWindow(self, h, how):
+                assert how == T.GW_HWNDPREV
+                i = order.index(h)
+                return order[i - 1] if i > 0 else 0
+
+            def IsWindowVisible(self, h):
+                return True
+
+            def IsIconic(self, h):
+                return wins[h].get("iconic", False)
+
+            def GetWindowLongW(self, h, idx):
+                return wins[h].get("ex", 0)
+
+            def GetWindowThreadProcessId(self, h, ref):
+                ref._obj.value = wins[h].get("pid", 5)
+                return 1
+        got = T.win_rects_above(U32(), 7, lambda h: R(0, 0, 1920 + h, 1080), lambda h: wins[h].get("cloaked", False), 99)
+        self.assertEqual(got, [(0, 0, 1926, 1080)])   # the browser alone
+
 
 class FakeResponse(io.BytesIO):
     def __enter__(self):
@@ -230,6 +411,10 @@ class ClientAndFeed(unittest.TestCase):
         self.assertEqual(c.view()["version"], "v1")
         self.assertEqual(c.view("v1"), {"same": True, "version": "v1"})
         self.assertEqual(op.seen[0], ("GET", "http://127.0.0.1:8025/api/overlay", "outrider-overlay"))   # the window's own UA
+        c.view("v1", "behind")
+        c.view(None, "no_window")
+        self.assertEqual([u for _, u, _ in op.seen[2:]], ["http://127.0.0.1:8025/api/overlay?since=v1&w=behind",
+                                                          "http://127.0.0.1:8025/api/overlay?w=no_window"])
 
     def test_feed_keeps_the_last_answer_and_drops_it_when_gone(self):
         op = FakeOpener()
@@ -238,6 +423,9 @@ class ClientAndFeed(unittest.TestCase):
         self.assertEqual((feed.data["version"], feed.seq), ("v1", 1))
         feed.fetch_once()   # unchanged: the same data, no repaint
         self.assertEqual(feed.seq, 1)
+        feed.track = "covered"   # what the window sees goes with the next GET (S8)
+        feed.fetch_once()
+        self.assertTrue(op.seen[-1][1].endswith("?since=v1&w=covered"))
 
         class Gone:
             def open(self, req, timeout=None):

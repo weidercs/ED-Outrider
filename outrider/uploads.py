@@ -1,4 +1,4 @@
-"""Uploads (EDDN, EDSM; Inara later): the shared foundation. Opt-in, off by default (PLAN-edmc-functionality part A).
+"""Uploads (EDDN, EDSM, Inara): the shared foundation. Opt-in, off by default (PLAN-edmc-functionality part A).
 
 Pure where it can be; the server (ed_outrider.py) owns the database, the sender tasks and the settings.
 
@@ -15,6 +15,8 @@ Pure where it can be; the server (ed_outrider.py) owns the database, the sender 
 - The outbox (`upload_queue`, live only): a message is queued in the same transaction as the line that made it, so a
   tick rolled back drops it too; UNIQUE(service, source) keeps a line handled twice (a retried tick, a twin folder)
   from being queued twice. Senders take rows after the commit.
+- Recent: each service's last sending rounds and the outage under way (in memory), for Settings -> Uploads and the
+  outage alert.
 """
 import copy
 import json
@@ -24,6 +26,7 @@ import sqlite3
 import time
 
 from outrider.core import ts_seconds
+from outrider.health import classify
 
 MAX_AGE_S = 7 * 86400    # a line older than this (by this machine's clock) is never uploaded, even on a catch-up (the
 #                          author's cap: a forgotten instance must not send months of play; listeners may refuse old data)
@@ -60,6 +63,8 @@ CREATE TABLE IF NOT EXISTS upload_queue (
     attempts INTEGER NOT NULL DEFAULT 0, next_try REAL NOT NULL DEFAULT 0, last_status TEXT, done_at REAL,
     UNIQUE (service, source));
 CREATE INDEX IF NOT EXISTS upload_queue_state ON upload_queue (service, state, id);
+-- the Log's upload marks look a journal file's rows up by source (S68)
+CREATE INDEX IF NOT EXISTS upload_queue_source ON upload_queue (source);
 -- The "New to EDSM" badge's table, gone (EDDN's copy of a jump usually reaches EDSM first, so EDSM's systemCreated
 -- seldom names your upload): dropped from databases that had it.
 DROP TABLE IF EXISTS edsm_new_systems;
@@ -321,6 +326,72 @@ def counts(db, service):
                              now - 86400),
             "dry_24h": q("SELECT count(*) FROM upload_queue WHERE service=? AND state='dry' AND done_at > ?", now - 86400),
             "last_sent": last[0] if last else None}
+
+
+# ---- the Log's upload marks (S68) ----
+
+MARK_DAYS = 7    # the Log marks lines of the last week only: the outbox keeps what was sent about that long (prune)
+MARK_RANK = {"sent": 0, "dry": 1, "queued": 2, "held": 3, "dropped": 4}   # a line's worst message is its mark
+MARK_SERVICE = {"eddn": "eddn", "edsm": "edsm", "inara": "inara", "edsm_bf": "edsm"}   # the backfill's rows are EDSM's
+
+
+def _source_line(source, name):
+    """The byte offset in an outbox source ("<file>:<offset>", "#<i>" for a line's later messages), or None."""
+    try:
+        return int(source[len(name) + 1:].split("#", 1)[0])
+    except ValueError:
+        return None
+
+
+def line_marks(db, keys, held=None, now=None):
+    """What the uploads made of journal lines (the Log's marks): keys, an iterable of (file name, byte offset) ->
+    {(file name, offset): {service: {"state", "why"}}} for the lines with outbox rows (a line with none had nothing to
+    send). Per service the worst of the line's messages wins (MARK_RANK); the backfill's rows count as EDSM's. held(service,
+    schema) -> the reason a queued row's service is on hold, or None: such a row shows "held"."""
+    now = time.time() if now is None else now
+    by_file = {}
+    for name, off in keys:
+        by_file.setdefault(name, set()).add(off)
+    out = {}
+    for name, offs in by_file.items():
+        # every row of that file (the source index): "<file>:" up to "<file>;" (";" follows ":")
+        for service, schema, source, state, status, attempts, next_try in db.execute(
+                "SELECT service, schema, source, state, last_status, attempts, next_try FROM upload_queue "
+                "WHERE source >= ? AND source < ?", (name + ":", name + ";")):
+            off = _source_line(source, name)
+            shown = MARK_SERVICE.get(service)
+            if off not in offs or not shown:
+                continue
+            why = status or ""
+            if state == "queued":
+                reason = held(service, schema) if held else None
+                if reason:
+                    state, why = "held", reason
+                elif attempts:
+                    why = f"trying again: {status}" if status else "trying again"
+                else:
+                    why = "waiting for the next jump or docking" if next_try > now else "waiting to be sent"
+            elif state == "dry":
+                why = "dry run: built, not sent"
+            if service == "edsm_bf":
+                why = "flight log backfill: " + why
+            line = out.setdefault((name, off), {})
+            if shown not in line or MARK_RANK.get(state, 0) > MARK_RANK.get(line[shown]["state"], 0):
+                line[shown] = {"state": state, "why": why[:200]}
+    return out
+
+
+def unsent_lines(db, since):
+    """The Log's "not sent": {file name: {byte offsets}} of the lines with a message waiting or refused (rows queued or
+    dropped), from journal time `since` (an ISO timestamp) on."""
+    out = {}
+    for source, in db.execute("SELECT source FROM upload_queue WHERE state IN ('queued', 'dropped') AND created >= ?",
+                              (since,)):
+        name = source.rsplit(":", 1)[0] if ":" in source else None
+        off = _source_line(source, name) if name else None
+        if off is not None:
+            out.setdefault(name, set()).add(off)
+    return out
 
 
 def position(path_or_name, offset):
@@ -649,30 +720,79 @@ IDLE_S = 2.0             # how often an empty or switched-off queue is looked at
 BACKOFF_S = (60, 120, 300, 600, 1800)   # after a network failure or a 5xx: at least a minute (EDDN's rule), growing
 
 
-async def upload_loop(service, db, send, on, clock=time.time, sleep=None, report=None, batch=50, min_gap=0):
+class Gate:
+    """At least `min_gap` seconds from one request to the next, for every caller that waits on it: Inara's sender and
+    its key Check share one (G3: Inara's limit is about two requests a minute, whoever makes them), EDSM's account reads
+    another. `await gate.wait()` returns when the next request may go, and counts it as made then."""
+
+    def __init__(self, min_gap, clock=time.time, sleep=None):
+        import asyncio
+        self.min_gap, self.clock, self.sleep = min_gap, clock, sleep
+        self.last = None
+        self.lock = asyncio.Lock()
+
+    def due_in(self):
+        """Seconds until the next request may go (0: now)."""
+        return 0 if self.last is None else max(0, self.min_gap - (self.clock() - self.last))
+
+    async def wait(self):
+        import asyncio
+        async with self.lock:
+            gap = self.due_in()
+            if gap > 0:
+                await (self.sleep or asyncio.sleep)(gap)
+            self.last = self.clock()
+
+
+async def upload_loop(service, db, send, on, clock=time.time, sleep=None, report=None, batch=50, min_gap=0, wake=None,
+                      gate=None):
     """Drain `service`'s outbox while it is on: send(rows) -> [(row id, state, status text, retry_in or None)] for
     each row it settled (state: sent, dropped, queued (retry after retry_in), held (stop until the player acts)); a raised
     exception is a network failure: those rows wait BACKOFF_S. report(service, outcome dict) after each round (the
-    status view). min_gap: at least this many seconds from one request to the next (Inara's rate). Runs until
-    cancelled."""
+    status view and Recent: {error, results, at, raised (the exception, or None), wait (s until the next round)}).
+    min_gap: at least this many seconds from one request to the next (Inara's rate); gate: a Gate shared with other
+    callers (Inara's key Check, G3) instead, its min_gap the pace. wake: an asyncio.Event that ends any wait at once
+    (Settings' Try again on a held key: S16). Runs until cancelled."""
     import asyncio
     sleep = sleep or asyncio.sleep
+    if gate is None and min_gap:
+        gate = Gate(min_gap, clock, sleep)
+    min_gap = gate.min_gap if gate else 0
+
+    async def nap(secs):
+        if wake is None:
+            return await sleep(secs)
+        if wake.is_set():
+            wake.clear()
+            return
+        waiter, sleeper = asyncio.ensure_future(wake.wait()), asyncio.ensure_future(sleep(secs))
+        try:
+            done, _ = await asyncio.wait({waiter, sleeper}, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            for t in (waiter, sleeper):
+                if not t.done():
+                    t.cancel()
+        wake.clear()
+        if sleeper in done:
+            sleeper.result()   # a test's sleep may end the loop by raising
     fails = 0
     while True:
         try:
             if not on(service):
-                await sleep(IDLE_S)
+                await nap(IDLE_S)
                 continue
             rows = due(db, service, clock(), batch)
         except sqlite3.Error as e:   # the database busy or broken for a moment: the sender stays alive
             print(f"{service}: outbox not read ({e})")
-            await sleep(IDLE_S)
+            await nap(IDLE_S)
             continue
         if not rows:
-            await sleep(IDLE_S)
+            await nap(IDLE_S)
             continue
+        if gate:
+            await gate.wait()   # woken early (Try again), or a key Check just asked: the service's pace still holds
         now = clock()
-        wait = 0
+        wait, raised = 0, None
         try:
             results = await send(rows)
             error = None
@@ -684,6 +804,7 @@ async def upload_loop(service, db, send, on, clock=time.time, sleep=None, report
             else:
                 fails = 0
         except Exception as e:   # unreachable, a timeout, a 5xx raised by the sender: wait, then again
+            raised = e
             wait = BACKOFF_S[min(fails, len(BACKOFF_S) - 1)]
             fails += 1
             results = [(r["id"], "queued", f"{type(e).__name__}: {e}"[:300], wait) for r in rows]
@@ -702,12 +823,95 @@ async def upload_loop(service, db, send, on, clock=time.time, sleep=None, report
                 pass
             error = f"outbox not updated ({e})"
             wait = max(wait, IDLE_S)
+        held = any(state == "held" for _, state, _, _ in results)
+        pause = max(IDLE_S * 15, min_gap) if held else max(wait or GAP_S, min_gap)
         if report:
-            report(service, {"error": error, "results": results, "at": now})
-        if any(state == "held" for _, state, _, _ in results):
-            await sleep(max(IDLE_S * 15, min_gap))   # waiting on the player (a refused key): look again now and then
+            report(service, {"error": error, "results": results, "at": now, "raised": raised, "wait": pause})
+        # held: waiting on the player (a refused key); on() says no until the key changes or Try again
+        await nap(pause)
+
+
+# ---- Recent: what each service's last rounds did (S16's list in Settings -> Uploads, S3's outage alert), in memory ----
+
+RECENT_KEEP = 50      # rounds kept per service (merged ones count once)
+MERGE_GAP_S = 600     # back-to-back successes within this of each other are one entry ("sent 37, 11:58-12:04")
+
+
+def local_status(status):
+    """A row settled here without asking the service: no account or key, over an hour old, a schema on hold, a dry run."""
+    return str(status or "").startswith(("not sent", "dry run"))
+
+
+class Recent:
+    """Per service the last RECENT_KEEP sending rounds, newest last: {state: ok | fail | held, first, at, rounds, sent,
+    dropped, dry, retry, held, error, kind, user_fix, next, note}. Back-to-back successes are merged, and so are the
+    same failure repeated (each backoff's try). `outage(service)`: a raised round or one the service only asked to retry
+    starts it or carries it on, any round the service answered (a row sent, or refused by the service itself) ends it,
+    a held round (a key refused) and one settled here alone (local_status) are neither. `catchup`: what each service
+    did at start (catch_up_uploads). Pure: nothing stored, gone at a restart."""
+
+    def __init__(self, keep=RECENT_KEEP):
+        self.keep = keep
+        self.rounds = {}    # service -> [entry], oldest first
+        self.out = {}       # service -> the outage under way: {since, last, rounds, kind, user_fix, error, next}
+        self.catchup = {}   # service -> {at, why: caught_up | other | fresh, count, since, who}
+
+    def add(self, service, outcome):
+        """One round (upload_loop's report). Returns the outage it ended (with `until`), else None."""
+        at = outcome.get("at") or time.time()
+        res = outcome.get("results") or []
+        count = lambda state: sum(1 for _, st, _, _ in res if st == state)
+        held = next((text for _, st, text, _ in res if st == "held"), None)
+        answered = count("sent") > 0 or any(st == "dropped" and not local_status(text) for _, st, text, _ in res)
+        raised = outcome.get("raised")
+        e = {"first": at, "at": at, "rounds": 1, "sent": count("sent"), "dropped": count("dropped"), "dry": count("dry"),
+             "retry": count("queued"), "held": held, "error": None, "kind": None, "user_fix": False, "next": None,
+             "note": None}
+        if raised is not None or (e["retry"] and not answered and not held):
+            e["error"] = str(outcome.get("error") or next((text for _, st, text, _ in res if st == "queued"), ""))[:300]
+            e["kind"], e["user_fix"] = classify(raised) if raised is not None else classify(text=e["error"])
+            e.update(state="fail", next=at + (outcome.get("wait") or 0))
+        elif held:
+            e["state"] = "held"
         else:
-            await sleep(max(wait or GAP_S, min_gap))
+            e.update(state="ok", error=outcome.get("error"),   # only an outbox not updated: the rest went fine
+                     note=next((text for _, st, text, _ in res if st == "dropped"), None))
+        rounds = self.rounds.setdefault(service, [])
+        last = rounds[-1] if rounds else None
+        if last and last["state"] == e["state"] == "ok" and at - last["at"] <= MERGE_GAP_S and not e["error"]:
+            for k in ("sent", "dropped", "dry", "retry"):
+                last[k] += e[k]
+            last.update(at=at, rounds=last["rounds"] + 1, note=e["note"] or last["note"])
+        elif last and last["state"] == e["state"] != "ok" and (last["kind"], last["error"], last["held"]) == \
+                (e["kind"], e["error"], e["held"]):
+            last.update(at=at, rounds=last["rounds"] + 1, next=e["next"], retry=last["retry"] + e["retry"])
+        else:
+            rounds.append(e)
+            del rounds[:-self.keep]
+        if e["state"] == "fail":
+            o = self.out.setdefault(service, {"since": at, "rounds": 0})
+            o.update(last=at, rounds=o["rounds"] + 1, kind=e["kind"], user_fix=e["user_fix"], error=e["error"], next=e["next"])
+        elif answered and service in self.out:
+            return dict(self.out.pop(service), until=at)
+        return None
+
+    def outage(self, service):
+        """The outage under way for `service` (a copy), or None."""
+        o = self.out.get(service)
+        return dict(o) if o else None
+
+    def end(self, service):
+        """Forget an outage (the service switched off or on: a later failure starts a new one)."""
+        self.out.pop(service, None)
+
+    def recent(self, service, n=10):
+        """The last n entries, newest first (copies)."""
+        return [dict(e) for e in reversed(self.rounds.get(service, [])[-n:])]
+
+    def note_catchup(self, service, at, why, count=0, since=None, who=None):
+        """At start: `service` caught up `count` messages from its mark (stamped `since`), or another uploader (`who`)
+        had it (other), or it had no mark and starts from now (fresh)."""
+        self.catchup[service] = {"at": at, "why": why, "count": count, "since": since, "who": who}
 
 
 # ---- one uploader at a time: lease files in the journal folder (the author's idea, 2026-10-08) ----

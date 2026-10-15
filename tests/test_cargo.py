@@ -35,6 +35,12 @@ def real():
     return fx, events, [(fx["market"]["timestamp"], fx["market"]["Items"])]
 
 
+def spansh_commodity_names():
+    """Spansh's commodity names as its field_values answered on 2026-10-13 (tests/fixtures/spansh_commodities.json)."""
+    with open(os.path.join(os.path.dirname(__file__), "fixtures", "spansh_commodities.json"), encoding="utf-8") as f:
+        return sorted(json.load(f)["min_max"])
+
+
 def ev(ts, name, **kw):
     return dict({"timestamp": ts, "event": name}, **kw)
 
@@ -337,6 +343,8 @@ class CargoState(unittest.TestCase):
         self.write_market(fx)
         self.assertTrue(self.j.read_market(self.dir))
         self.assertFalse(self.j.read_market(self.dir))   # read once
+        # names your journal has not given: known from Spansh's list (S57)
+        self.state.spansh_commodities = {"ts": time.time(), "norm": {"metaalloys": "Meta-Alloys", "modularterminals": "Modular Terminals"}}
         out, status = self.state.cargo_recount({"Meta-Alloys": 3, "Modular Terminals": 6, "Tritium": 5})
         self.assertEqual(status, 200)
         self.assertEqual(out["skipped"], ["tritium"])   # confirmed by the market: left as it says
@@ -400,6 +408,35 @@ class CargoState(unittest.TestCase):
                          BlackMarket=False, Commodity="tritium", CancelTrade=True))
         self.assertIsNone(self.state.carrier_tritium())
 
+    def test_the_carrier_is_folded_again_only_when_its_history_changes(self):   # S66
+        """The carrier's fold is keyed on its own history (carrier_version), not on every change to the ship's hold:
+        mining, scooping or buying moved cargo_version and folded the whole carrier history again each time."""
+        fx, _, _ = real()
+        self.feed(self.j, fx)
+        folds, fold = [], cargo.carrier_fold
+        with unittest.mock.patch.object(cargo, "carrier_fold", lambda *a: folds.append(1) or fold(*a)):
+            first = self.state.carrier_cargo()
+            self.assertIs(self.state.carrier_cargo(), first)
+            self.assertEqual(len(folds), 1)
+            before = self.j.cargo_version
+            self.j.line_source = "Journal.test.log:9000"
+            self.j.handle(ev("2026-10-07T10:30:00Z", "CollectCargo", Type="gold", Stolen=False))   # the ship's hold only
+            self.assertGreater(self.j.cargo_version, before)
+            self.state.carrier_cargo()
+            self.assertEqual(len(folds), 1)
+            self.write_market(fx)
+            self.assertTrue(self.j.read_market(self.dir))   # a Market.json read at your carrier
+            self.state.carrier_cargo()
+            self.assertEqual(len(folds), 2)
+            self.j.line_source = "Journal.test.log:9999"   # one of the carrier's own events
+            self.j.handle(ev("2026-10-07T11:00:00Z", "CarrierTradeOrder", CarrierID=CARRIER, CarrierType="FleetCarrier",
+                             BlackMarket=False, Commodity="tritium", CancelTrade=True))
+            self.state.carrier_cargo()
+            self.assertEqual(len(folds), 3)
+            self.j.reload()                                # a rolled-back tick: folded from what the database holds
+            self.state.carrier_cargo()
+            self.assertEqual(len(folds), 4)
+
     def test_market_elsewhere_ignored(self):
         fx, _, _ = real()
         self.feed(self.j, fx)
@@ -428,6 +465,392 @@ class CargoState(unittest.TestCase):
         self.feed(self.j, fx)
         for bad in (None, {}, {"gold": -1}, {"gold": 1.5}, {"gold": True}, {"": 3}, {"gold": 10 ** 6}):
             self.assertEqual(self.state.cargo_recount(bad)[1], 400, bad)
+
+    def test_recount_refuses_typos(self):   # S57
+        """A name that is no commodity is refused with up to three close names (it made a line of its own, never moved
+        again); Spansh's list (the copy kept: its real names) adds the commodities your journal has not named, by
+        Spansh's spelling under the journal's id (Occupied Escape Pod: occupiedcryopod, not occupiedescapepod, which no
+        journal event would move). Without that list only your journal's."""
+        fx, _, _ = real()
+        self.feed(self.j, fx)
+        out, status = self.state.cargo_recount({"Tritum": 5})
+        self.assertEqual(status, 400)
+        self.assertEqual(out["suggestions"][0], "Tritium")
+        self.assertIn("Did you mean: Tritium", out["error"])
+        self.assertIn("only names from your journal", out["error"])   # no Spansh list yet
+        self.assertEqual(self.state.cargo_recount({"Grandidierite": 5})[1], 400)   # not in this journal
+        self.state.spansh_commodities = {"ts": time.time(), "norm": {cargo.norm(n): n for n in spansh_commodity_names()}}
+        out, status = self.state.cargo_recount({"Titanum": 5, "Grandidierite": 2})
+        self.assertEqual(status, 400)   # nothing saved: one bad name refuses the lot
+        self.assertEqual(out["name"], "Titanum")
+        self.assertEqual(out["suggestions"][:2], ["Titanium", "Tritium"])
+        self.assertLessEqual(len(out["suggestions"]), 3)
+        self.assertNotIn("only names from your journal", out["error"])
+        self.assertEqual(self.db.execute("SELECT count(*) FROM carrier_counts").fetchone()[0], 0)
+        out, status = self.state.cargo_recount({"grandidierite": 2, "Low Temperature Diamonds": 3, "void opal": 4,
+                                                "Occupied Escape Pod": 1, "Agri-Medicines": 6, "Micro-Weave Cooling Hoses": 7})
+        self.assertEqual(status, 200)
+        rows = {r[0]: r[1] for r in self.db.execute("SELECT commodity, name FROM carrier_counts")}
+        # Spansh's spelling kept, under the journal's id (outrider.cargo.SPANSH_IDS where the letters differ)
+        self.assertEqual(rows, {"grandidierite": "Grandidierite", "lowtemperaturediamond": "Low Temperature Diamonds",
+                                "opal": "Void Opal", "occupiedcryopod": "Occupied Escape Pod",
+                                "agriculturalmedicines": "Agri-Medicines", "coolinghoses": "Micro-weave Cooling Hoses"})
+        lines = {x["id"]: x["name"] for x in self.state.cargo_summary()["carrier"]["lines"]}
+        self.assertEqual(lines["lowtemperaturediamond"], "Low Temperature Diamonds")
+
+    def test_spansh_ids_name_real_commodities(self):
+        """SPANSH_IDS' names are Spansh's own (its list, kept as a fixture), each one's letters differ from its id, and
+        spansh_id gives the letters for every other name."""
+        real_names = {cargo.norm(n) for n in spansh_commodity_names()}
+        for name, i in cargo.SPANSH_IDS.items():
+            self.assertIn(cargo.norm(name), real_names, name)
+            self.assertNotEqual(cargo.norm(name), cargo.norm(i), name)
+        self.assertEqual(cargo.spansh_id("Occupied Escape Pod"), "occupiedcryopod")
+        self.assertEqual(cargo.spansh_id("Void Opal"), "opal")
+        self.assertEqual(cargo.spansh_id("Meta-Alloys"), "metaalloys")
+
+    def test_recount_route_fetches_spansh_list_once(self):   # S57
+        """POST /api/cargo/recount: a name your journal does not know and no copy of Spansh's list yet: the list is
+        fetched and the counts asked again; a typo is still refused, with its suggestions."""
+        from aiohttp.test_utils import TestClient, TestServer
+        fx, _, _ = real()
+        self.feed(self.j, fx)
+        fetched = []
+
+        async def commodity_list():
+            fetched.append(1)
+            self.state.spansh_commodities = {"ts": time.time(), "norm": {"grandidierite": "Grandidierite", "tritium": "Tritium"}}
+            return self.state.spansh_commodities["norm"]
+        self.state.commodity_list = commodity_list
+
+        async def go():
+            async with TestClient(TestServer(ed_outrider.make_app(self.state))) as c:
+                r1 = await c.post("/api/cargo/recount", json={"counts": {"Grandidierite": 2}})
+                r2 = await c.post("/api/cargo/recount", json={"counts": {"Grandiderite": 2}})
+                return r1.status, r2.status, await r2.json()
+        s1, s2, body = asyncio.run(go())
+        self.assertEqual((s1, s2, len(fetched)), (200, 400, 1))
+        self.assertEqual(body["suggestions"], ["Grandidierite"])
+
+
+STATS_FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "carrier_stats.json")
+
+
+def real_stats():
+    """The author's CarrierStats of 2026-10-12 (in-game data): Finance and Crew whole, the Redemption office suspended."""
+    with open(STATS_FIXTURE, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def crew_service(ts, role, op, carrier=CARRIER):
+    return ev(ts, "CarrierCrewServices", CarrierID=carrier, CrewRole=role, Operation=op, CrewName="Someone")
+
+
+class CarrierStatsFold(unittest.TestCase):
+    """The carrier's balance, crew and the trip's tritium (S61, S55 B, S13 A): carrier_fold's finance and crew,
+    carrier_upkeep, carrier_trip. Pure."""
+
+    def test_finance_and_crew(self):
+        s = real_stats()
+        st = cargo.carrier_fold(CARRIER, [(s["timestamp"], s)])
+        self.assertEqual(st["finance"], {"balance": 1328648923, "reserve": 1000001263, "available": 328647660,
+                                         "ts": "2026-10-12T20:11:21Z"})
+        roles = st["crew"]["roles"]
+        self.assertEqual((roles["Exploration"], roles["VistaGenomics"], roles["VoucherRedemption"], roles["Shipyard"]),
+                         ("on", "on", "suspended", "off"))   # Activated without Enabled would be on; not Activated, off
+        # the core 5M + refuel, repair, rearm 1.5M each + UC 1.85M + Vista 1.5M + the suspended Redemption office 0.85M
+        # (published rates; the balance fell 13,579,218 cr over the author's upkeep day of 2026-10-08)
+        self.assertEqual(cargo.carrier_upkeep(roles), 13_700_000)
+        self.assertEqual(cargo.upkeep_weeks(st["finance"]["balance"], 13_700_000), 96.9)
+        self.assertEqual(cargo.upkeep_weeks(-5, 13_700_000), 0.0)   # AvailableBalance can be negative: the balance too
+        self.assertIsNone(cargo.upkeep_weeks(None, 13_700_000))
+
+    def test_crew_services_between_stats(self):
+        """CarrierCrewServices (paused, resumed, removed, installed) changes the crew until the next CarrierStats; another
+        carrier's says nothing about yours."""
+        s = real_stats()
+        events = [(s["timestamp"], s), ("2026-10-12T21:00:00Z", crew_service("2026-10-12T21:00:00Z", "Exploration", "Pause")),
+                  ("2026-10-12T21:01:00Z", crew_service("2026-10-12T21:01:00Z", "VistaGenomics", "Pause", carrier=999)),
+                  ("2026-10-12T21:02:00Z", crew_service("2026-10-12T21:02:00Z", "Shipyard", "Activate")),
+                  ("2026-10-12T21:03:00Z", crew_service("2026-10-12T21:03:00Z", "Refuel", "Replace"))]
+        st = cargo.carrier_fold(CARRIER, events)
+        roles = st["crew"]["roles"]
+        self.assertEqual((roles["Exploration"], roles["VistaGenomics"], roles["Shipyard"], roles["Refuel"]),
+                         ("suspended", "on", "on", "on"))
+        self.assertEqual(st["crew"]["ts"], "2026-10-12T21:02:00Z")   # Replace (another crew member) changes nothing
+        self.assertEqual(cargo.carrier_upkeep(roles), 13_700_000 - 1_850_000 + 700_000 + 6_500_000)
+        later = dict(s, timestamp="2026-10-13T00:00:00Z")   # the next CarrierStats says it whole again
+        st = cargo.carrier_fold(CARRIER, events + [(later["timestamp"], later)])
+        self.assertEqual((st["crew"]["roles"]["Exploration"], st["crew"]["roles"]["Shipyard"]), ("on", "off"))
+
+    def test_trip(self):
+        # one leg: the author's recorded jump of 491.8 ly (121 t burned, 21,504 t used, a depot of 509 t)
+        self.assertEqual(cargo.carrier_trip(491.8, 509, 21504),
+                         {"jumps": 1, "burn": 121, "depot": 509, "short": 0, "depot_after": 388})
+        # 1,200 ly: three equal legs of 400 ly, each lighter than the last by what it burned
+        t = cargo.carrier_trip(1200, 600, 20000)
+        self.assertEqual((t["jumps"], t["burn"], t["short"], t["depot_after"]), (3, 288, 0, 312))
+        self.assertLess(cargo.carrier_trip(3000, 1000, 20000)["burn"], 6 * cargo.carrier_burn(500, 20000, 1000))
+        t = cargo.carrier_trip(3000, 300, 20000)   # six 500 ly jumps on a 300 t depot
+        self.assertEqual((t["jumps"], t["short"], t["depot_after"]), (6, t["burn"] - 300, 0))
+        self.assertEqual(cargo.carrier_trip(500, 1000, 0)["jumps"], 1)   # exactly one jump's reach is one jump
+        self.assertEqual(cargo.carrier_trip(491.8, 509, 21504, k=1.1)["burn"], round(1.1 * 121))   # scaled by history
+        self.assertIsNone(cargo.carrier_trip(0, 509, 21504))
+        self.assertIsNone(cargo.carrier_trip(100, 509, None))
+
+    def test_trip_top_up(self):
+        """The hold's tritium covers what the depot lacks before the jumps only while the depot (1,000 t) can take it all;
+        past that, only topped up again on the way; with too little in the hold, not at all."""
+        t = cargo.carrier_trip(3000, 300, 20000)   # six 500 ly jumps on a 300 t depot: a few hundred t short
+        self.assertEqual(cargo.trip_top_up(t, 3000, 2000, 22000), "before")
+        self.assertIsNone(cargo.trip_top_up(t, 3000, t["short"] - 1, 22000))
+        self.assertIsNone(cargo.trip_top_up(cargo.carrier_trip(500, 1000, 0), 500, 2000, 2000))   # nothing short
+        t = cargo.carrier_trip(9000, 40, 22000)   # eighteen jumps: short well over the 960 t one top-up gives
+        self.assertGreater(t["short"], cargo.CARRIER_DEPOT_MAX - 40)
+        self.assertEqual(cargo.trip_top_up(t, 9000, 4000, 22000), "on_the_way")
+        self.assertIsNone(cargo.trip_top_up(t, 9000, t["short"] // 2, 22000))
+
+
+class CarrierTile(unittest.TestCase):
+    """State.carrier_summary's trip, booked jump, services and finance, and your carrier among the nearest places to
+    sell (S13 A, S55, S61)."""
+
+    def setUp(self):
+        self.db = ed_outrider.open_db(":memory:")
+        self.addCleanup(self.db.close)
+        self.j = ed_outrider.Journals(self.db)
+        self.state = ed_outrider.State(self.db, self.j, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        self.n = 0
+        self.feed(real_stats())
+        self.feed(ev("2026-10-12T20:12:00Z", "CarrierLocation", CarrierType="FleetCarrier", CarrierID=CARRIER,
+                     StarSystem="Home", SystemAddress=111))
+        self.j.carrier.update(x=0.0, y=0.0, z=0.0)
+        self.j.pos = {"id64": 9, "name": "Here", "x": 1200.0, "y": 0.0, "z": 0.0, "ts": "2026-10-12T20:13:00Z"}
+
+    def feed(self, e):
+        self.n += 1
+        self.j.line_source = f"Journal.test.log:{self.n}"
+        self.j.handle(e)
+        self.j.line_source = ""
+
+    def test_trip_to_you(self):
+        """'it → you ≈ 3 carrier jumps · ≈ T t tritium · depot 668 t: X t short': the capacity used is the CarrierStats'
+        (25,000 − 7,645 free, nothing reserved), the depot its FuelLevel."""
+        c = self.state.carrier_summary()
+        want = cargo.carrier_trip(1200.0, 668, 25000 - 7645)
+        self.assertEqual(c["trip"], dict(want, hold=None, covered=False, top_up=None))
+        self.assertEqual(c["trip"]["jumps"], 3)
+        self.j.pos = dict(self.j.pos, x=4000.0)   # far: the depot runs short, and nothing confirmed in the hold covers it
+        t = self.state.carrier_summary()["trip"]
+        self.assertTrue(t["short"] > 0 and not t["covered"])
+        self.j.pos = dict(self.j.pos, id64=111, x=0.0)   # in its system: no trip
+        self.assertIsNone(self.state.carrier_summary()["trip"])
+
+    def test_trip_covered_by_the_hold(self):
+        """A confirmed tritium line (a sell order at your carrier) that covers what the depot lacks: amber, 'enough
+        after topping up'."""
+        self.j.pos = dict(self.j.pos, x=4000.0)
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        with open(os.path.join(d, "Market.json"), "w", encoding="utf-8") as f:
+            json.dump({"timestamp": "2026-10-12T20:20:00Z", "event": "Market", "MarketID": CARRIER, "StationType": "FleetCarrier",
+                       "Items": [item("tritium", stock=5000, buy=50000)]}, f)
+        self.assertTrue(self.j.read_market(d))
+        t = self.state.carrier_summary()["trip"]
+        self.assertEqual((t["hold"], t["covered"], t["top_up"]), (5000, True, "before"))
+        self.assertGreater(t["short"], 0)
+        # the depot holds 1,000 t: a 40 t depot 5,000 ly away lacks more than one top-up gives; the hold still covers it,
+        # topped up again on the way
+        self.j.carrier.update(fuel=40)
+        self.j.pos = dict(self.j.pos, x=5000.0)
+        t = self.state.carrier_summary()["trip"]
+        self.assertGreater(t["short"], cargo.CARRIER_DEPOT_MAX - 40)
+        self.assertEqual((t["covered"], t["top_up"]), (True, "on_the_way"))
+
+    def test_booked_jump_burn(self):
+        """'(432 ly jump ≈ T t; depot after ≈ D t)': the booked jump's burn from the carrier's place to its destination."""
+        self.state.bases[222] = ("spansh", {"name": "Far", "x": 432.0, "y": 0.0, "z": 0.0})
+        self.feed(ev("2026-10-12T20:14:00Z", "CarrierJumpRequest", CarrierID=CARRIER, SystemName="Far", SystemAddress=222,
+                     DepartureTime="2026-10-12T20:30:00Z"))
+        pl = self.state.carrier_summary()["planned"]
+        self.assertEqual((pl["jump_ly"], pl["burn"], pl["depot_after"]),
+                         (432.0, cargo.carrier_burn(432.0, 25000 - 7645, 668), 668 - cargo.carrier_burn(432.0, 25000 - 7645, 668)))
+
+    def test_services_and_finance(self):
+        c = self.state.carrier_summary()
+        self.assertEqual((c["has_uc"], c["has_vista"], c["suspended"]), (True, True, ["Redemption office"]))
+        f = c["finance"]
+        self.assertEqual((f["balance"], f["upkeep"], f["weeks"], f["warn"], f["rates"]),
+                         (1328648923, 13_700_000, 96.9, False, "published"))
+        # UC paused in the carrier's management: suspended, in red, and gone from the services
+        self.feed(crew_service("2026-10-12T21:00:00Z", "Exploration", "Pause"))
+        c = self.state.carrier_summary()
+        self.assertEqual((c["has_uc"], c["suspended"]), (False, ["UC", "Redemption office"]))
+        # a newer Docked listing it (resumed since) wins over the crew's older word
+        self.feed(ev("2026-10-12T22:00:00Z", "Docked", StationName="OUT OF THE BLUE", StationType="FleetCarrier",
+                     MarketID=CARRIER, StarSystem="Home", SystemAddress=111, StationServices=["dock", "exploration", "vistagenomics"]))
+        c = self.state.carrier_summary()
+        self.assertEqual((c["has_uc"], c["suspended"]), (True, ["Redemption office"]))
+        # under four weeks of upkeep: amber
+        low = dict(real_stats(), timestamp="2026-10-12T23:00:00Z")
+        low["Finance"] = dict(low["Finance"], CarrierBalance=40_000_000)
+        self.feed(low)
+        f = self.state.carrier_summary()["finance"]
+        self.assertEqual((f["weeks"], f["warn"]), (2.9, True))
+
+    def sellers(self):
+        uc = [{"name": "G0X-85Z", "type": "Drake-Class Carrier", "system": "Old Place", "updated_at": "2026-01-01T00:00:00Z",
+               "x": 1190.0, "y": 0.0, "z": 0.0, "distance": 10},   # Spansh's stale report of your carrier
+              {"name": "Far Port", "type": "Coriolis Starport", "system": "Far", "updated_at": "2026-10-01T00:00:00Z",
+               "x": 2500.0, "y": 0.0, "z": 0.0, "distance": 1300}]
+        ed_outrider.meta_set(self.db, "sellers", {"pos": {"x": 1200.0, "y": 0.0, "z": 0.0, "name": "Here"},
+                                                  "fetched": time.time(), "uc": uc, "vista": []})
+        return self.state.sellers_summary()
+
+    def test_your_carrier_among_the_sellers(self):
+        """S55 A: your carrier from the journal (where it is now, 1,200 ly away: 3 carrier jumps), never Spansh's stale
+        report of it; in the Vista list too while Vista is on."""
+        s = self.sellers()
+        uc = s["uc"]
+        self.assertEqual([x["name"] for x in [uc["nearest"]]], ["G0X-85Z"])
+        self.assertEqual((uc["nearest"]["distance"], uc["nearest"]["system"], uc["nearest"]["yours"],
+                          uc["nearest"]["carrier_jumps"]), (1200.0, "Home", True, 3))
+        self.assertEqual(uc["fresh"]["name"], "G0X-85Z")
+        self.assertEqual(s["vista"]["nearest"]["name"], "G0X-85Z")
+        # UC paused: neither your carrier nor Spansh's report of it sells UC
+        self.feed(crew_service("2026-10-12T21:00:00Z", "Exploration", "Pause"))
+        s = self.sellers()
+        self.assertEqual(s["uc"]["nearest"]["name"], "Far Port")
+        self.assertEqual(s["vista"]["nearest"]["name"], "G0X-85Z")
+        # decommissioned: gone from both
+        self.feed(ev("2026-10-13T10:00:00Z", "CarrierDecommission", CarrierID=CARRIER, ScrapRefund=1, ScrapTime=1000))
+        s = self.sellers()
+        self.assertIsNone(s["vista"]["nearest"])
+        self.assertEqual(s["uc"]["nearest"]["name"], "Far Port")
+
+    def test_your_carrier_without_spansh(self):
+        """No Spansh answer yet (offline): your carrier is still a place to sell."""
+        s = self.state.sellers_summary()
+        self.assertEqual((s["uc"]["nearest"]["name"], s["vista"]["nearest"]["name"]), ("G0X-85Z", "G0X-85Z"))
+
+
+MOVES_FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "carrier_moves.json")
+
+
+def real_moves():
+    """The author's carrier on 2026-09-26/27 (in-game data, its CarrierStats cut to the fields used): eleven jumps booked
+    and made, nine of them aboard (CarrierJump with StarPos), a deposit before the ninth, a squadron carrier's line."""
+    with open(MOVES_FIXTURE, encoding="utf-8") as f:
+        return json.load(f)
+
+
+SMOJOO = 16013114550881   # the tenth jump's system: reached while not aboard (no StarPos in the carrier's lines)
+
+
+class CarrierBurns(unittest.TestCase):
+    """S13 B: the carrier's measured jumps (carrier_burns) and its factor on the formula (burn_factor). Pure."""
+
+    def test_real_jumps(self):
+        """The author's nine jumps aboard, each between two depot readings: burned exactly what the formula says; the
+        ninth's reading before it is the deposit's Total (the depot filled from the ship)."""
+        events = [(e["timestamp"], e) for e in real_moves()]
+        s = cargo.carrier_burns(CARRIER, events)
+        self.assertEqual([(x["burned"], x["formula"]) for x in s],
+                         [(115, 115), (112, 112), (113, 113), (114, 114), (114, 114), (113, 113), (112, 112), (113, 113), (111, 111)])
+        self.assertEqual((s[0]["ts"], s[0]["ly"]), ("2026-09-26T20:26:10Z", 496.29))   # the departure time
+        # the tenth system known elsewhere (where: the server's locate), its jump measured too
+        s = cargo.carrier_burns(CARRIER, events, lambda i: (-3791.21875, -2.4375, 3026.75) if i == SMOJOO else None)
+        self.assertEqual((len(s), s[-1]["burned"], s[-1]["formula"]), (10, 111, 111))
+        self.assertEqual(cargo.burn_factor(s), {"k": 1.0, "n": 10, "raw": 1.0})
+        self.assertEqual(cargo.carrier_burns(999, events), [])   # another carrier's history says nothing
+
+    def jump(self, ts, frm, to, ly=None):
+        """A booked jump from `frm` to `to` (positions on the x axis, ids = x), confirmed by a CarrierLocation."""
+        return [(ts + ":00Z", ev(ts + ":00Z", "CarrierJumpRequest", CarrierID=CARRIER, SystemAddress=to,
+                                 DepartureTime=ts + ":30Z")),
+                (ts + ":30Z", ev(ts + ":30Z", "CarrierLocation", CarrierID=CARRIER, CarrierType="FleetCarrier", SystemAddress=to))]
+
+    def test_what_is_not_a_sample(self):
+        where = lambda i: (float(i), 0.0, 0.0)   # noqa: E731
+        burn = cargo.carrier_burn(400, 1000, 900)
+        start = [("2026-01-01T00:00:00Z", ev("2026-01-01T00:00:00Z", "CarrierLocation", CarrierID=CARRIER, SystemAddress=1000))]
+        one = start + [("2026-01-01T00:01:00Z", stats("2026-01-01T00:01:00Z", 0, fuel=900, used=1000))] + \
+            self.jump("2026-01-01T00:02", 1000, 1400) + [("2026-01-01T00:03:00Z", stats("2026-01-01T00:03:00Z", 0, fuel=900 - burn, used=1000))]
+        self.assertEqual([(x["ly"], x["burned"]) for x in cargo.carrier_burns(CARRIER, one, where)], [(400.0, burn)])
+        # cancelled before it left: no move, no sample
+        cancelled = one[:3] + [("2026-01-01T00:02:10Z", ev("2026-01-01T00:02:10Z", "CarrierJumpCancelled", CarrierID=CARRIER))] + one[3:]
+        self.assertEqual(cargo.carrier_burns(CARRIER, cancelled, where), [])
+        # two jumps between the same two readings: neither is one jump's burn
+        two = one[:-1] + self.jump("2026-01-01T00:02:40", 1400, 1700) + one[-1:]
+        two.sort(key=lambda x: x[0])
+        self.assertEqual(cargo.carrier_burns(CARRIER, two, where), [])
+        # no reading after it yet, or a system nowhere known: nothing measured
+        self.assertEqual(cargo.carrier_burns(CARRIER, one[:-1], where), [])
+        self.assertEqual(cargo.carrier_burns(CARRIER, one), [])
+        # longer than a carrier jumps (a move missed between): not a sample
+        far = lambda i: (float(i) * 2, 0.0, 0.0)   # noqa: E731
+        self.assertEqual(cargo.carrier_burns(CARRIER, one, far), [])
+        # your own cargo moved aboard before the jump weighs: the mass is the stats' plus it
+        moved = one[:2] + [("2026-01-01T00:01:30Z", ev("2026-01-01T00:01:30Z", "CargoTransfer", _at=CARRIER,
+                                                         Transfers=[{"Type": "gold", "Count": 2000, "Direction": "tocarrier"}]))] + one[2:]
+        self.assertEqual(cargo.carrier_burns(CARRIER, moved, where)[0]["formula"], cargo.carrier_burn(400, 3000, 900))
+
+    def test_factor(self):
+        mk = lambda ks: [{"k": k} for k in ks]   # noqa: E731
+        self.assertIsNone(cargo.burn_factor(mk([1.1, 1.1])))   # fewer than three: the formula alone
+        self.assertEqual(cargo.burn_factor(mk([1.0, 1.1, 1.2])), {"k": 1.1, "n": 3, "raw": 1.1})
+        self.assertEqual(cargo.burn_factor(mk([1.0, 1.1, 1.2, 1.3])), {"k": 1.15, "n": 4, "raw": 1.15})
+        self.assertEqual(cargo.burn_factor(mk([0.3, 0.4, 0.5])), {"k": 0.8, "n": 3, "raw": 0.4})   # held to 0.8-1.2
+        self.assertEqual(cargo.burn_factor(mk([2.0] * 3 + [1.05] * 12)), {"k": 1.05, "n": 12, "raw": 1.05})   # the last 12
+        # scaled: the trip and the jumps all the tritium gives
+        self.assertEqual((cargo.carrier_jumps(1000, 0, 20000), cargo.carrier_jumps(1000, 0, 20000, k=1.2)), (8, 6))
+        self.assertEqual((cargo.carrier_jumps(1000, 3000, 20000), cargo.carrier_jumps(1000, 3000, 20000, k=1.2)), (34, 28))
+
+
+class CarrierHistory(unittest.TestCase):
+    """S13 B through the reader: the carrier's movements and deposits kept in cargo_events (CarrierJump by its MarketID,
+    never a squadron carrier's or a station's), and State.carrier_summary's tritium scaled by its own jumps."""
+
+    def setUp(self):
+        self.db = ed_outrider.open_db(":memory:")
+        self.addCleanup(self.db.close)
+        self.j = ed_outrider.Journals(self.db)
+        self.state = ed_outrider.State(self.db, self.j, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        for n, e in enumerate(real_moves()):
+            self.j.line_source = f"Journal.test.log:{n}"
+            self.j.handle(e)
+        self.j.line_source = ""
+
+    def test_kept_and_measured(self):
+        rows = self.db.execute("SELECT event, count(*) FROM cargo_events WHERE market = ? GROUP BY event", (CARRIER,)).fetchall()
+        self.assertEqual(dict((r[0], r[1]) for r in rows),
+                         {"CarrierStats": 23, "CarrierJumpRequest": 11, "CarrierLocation": 11, "CarrierJump": 10,
+                          "CarrierDepositFuel": 2})
+        self.assertEqual(self.db.execute("SELECT count(*) FROM cargo_events WHERE market != ?", (CARRIER,)).fetchone()[0], 0)
+        self.assertEqual(self.state.carrier_burn_factor(), {"k": 1.0, "n": 9, "raw": 1.0})
+        # a squadron carrier's line and a jump at a station that is not a fleet carrier: not stored
+        self.j.handle(ev("2026-09-28T00:00:00Z", "CarrierLocation", CarrierType="SquadronCarrier", CarrierID=5, SystemAddress=7))
+        self.j.handle(ev("2026-09-28T00:01:00Z", "CarrierJump", Docked=True, StationType="Coriolis", MarketID=6,
+                         StarSystem="X", SystemAddress=8, StarPos=[0, 0, 0]))
+        self.assertEqual(self.db.execute("SELECT count(*) FROM cargo_events WHERE market IN (5, 6)").fetchone()[0], 0)
+
+    def test_summary_scaled(self):
+        """The trip to you, a booked jump's burn and the tile's jumps all scaled by the carrier's factor."""
+        self.j.carrier.update(x=0.0, y=0.0, z=0.0)
+        self.j.pos = {"id64": 9, "name": "Here", "x": 1200.0, "y": 0.0, "z": 0.0, "ts": "2026-09-28T00:00:00Z"}
+        self.assertEqual(self.state.carrier_summary()["burn_factor"], {"k": 1.0, "n": 9, "raw": 1.0})
+        self.state._carrier_k = ((CARRIER, self.j.carrier_version), {"k": 1.1, "n": 12, "raw": 1.1})
+        c = self.state.carrier_summary()
+        used = self.state.carrier_cargo()["stats"]["used"]
+        self.assertEqual(c["trip"]["burn"], cargo.carrier_trip(1200.0, c["fuel"], used, k=1.1)["burn"])
+        self.assertGreater(c["trip"]["burn"], cargo.carrier_trip(1200.0, c["fuel"], used)["burn"])
+        self.assertEqual(c["burn_factor"]["k"], 1.1)
+        self.state.bases[222] = ("spansh", {"name": "Far", "x": 432.0, "y": 0.0, "z": 0.0})
+        self.j.handle(ev("2026-09-28T00:10:00Z", "CarrierJumpRequest", CarrierID=CARRIER, CarrierType="FleetCarrier",
+                         SystemName="Far", SystemAddress=222, DepartureTime="2026-09-28T00:30:00Z"))
+        self.state._carrier_k = ((CARRIER, self.j.carrier_version), {"k": 1.1, "n": 12, "raw": 1.1})
+        pl = self.state.carrier_summary()["planned"]
+        self.assertEqual(pl["burn"], round(1.1 * cargo.carrier_burn(432.0, used, c["fuel"])))
 
 
 class Lookup(unittest.TestCase):

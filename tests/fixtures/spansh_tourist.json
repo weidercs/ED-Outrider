@@ -1,0 +1,156 @@
+{
+ "_note": "Spansh's tourist router (2026-10-13, scripts/route_probe.py): POST /api/tourist/route with source, range, loop, final_destination (optional) and destination (a repeated form field), as spansh.co.uk/tourist sends it; the result's system_jumps are the destinations in the order to visit, each with the jumps from the one before (a loop ends back at the source). An unknown destination is refused when the job is asked for: `unknown` is that HTTP 400 answer.",
+ "short": {
+  "created_at": "2026-10-13T06:34:25",
+  "job": "222BDD9A-C6D0-11F1-BB88-CD8C4AF8833D",
+  "parameters": {
+   "destinations": [
+    "Alpha Centauri",
+    "Barnard's Star",
+    "Wolf 359"
+   ],
+   "final_destination": null,
+   "loop": "0",
+   "range": "30",
+   "source": "Sol"
+  },
+  "result": {
+   "destination_systems": [
+    "Alpha Centauri",
+    "Barnard's Star",
+    "Wolf 359"
+   ],
+   "job": "222BDD9A-C6D0-11F1-BB88-CD8C4AF8833D",
+   "range": "30",
+   "source_system": "Sol",
+   "system_jumps": [
+    {
+     "distance": 0,
+     "id64": 10477373803,
+     "jumps": 0,
+     "system": "Sol",
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    {
+     "distance": 4.37712002205788,
+     "id64": 1178708478315,
+     "jumps": 1,
+     "system": "Alpha Centauri",
+     "x": 3.03125,
+     "y": -0.09375,
+     "z": 3.15625
+    },
+    {
+     "distance": 6.4872169976809,
+     "id64": 18263140541865,
+     "jumps": 1,
+     "system": "Barnard's Star",
+     "x": -3.03125,
+     "y": 1.375,
+     "z": 4.9375
+    },
+    {
+     "distance": 10.9763150550401,
+     "id64": 24860210308521,
+     "jumps": 1,
+     "system": "Wolf 359",
+     "x": 3.875,
+     "y": 6.46875,
+     "z": -1.90625
+    }
+   ]
+  },
+  "state": "completed",
+  "status": "ok",
+  "updated_at": "2026-10-13T06:34:25"
+ },
+ "loop": {
+  "created_at": "2026-10-13T06:34:35",
+  "job": "2866A262-C6D0-11F1-BB88-CD8C4AF8833D",
+  "parameters": {
+   "destinations": [
+    "Wolf 359",
+    "Alpha Centauri",
+    "Barnard's Star"
+   ],
+   "final_destination": null,
+   "loop": "1",
+   "range": "5",
+   "source": "Sol"
+  },
+  "result": {
+   "destination_systems": [
+    "Wolf 359",
+    "Alpha Centauri",
+    "Barnard's Star"
+   ],
+   "job": "2866A262-C6D0-11F1-BB88-CD8C4AF8833D",
+   "range": "5",
+   "source_system": "Sol",
+   "system_jumps": [
+    {
+     "distance": 0,
+     "id64": 10477373803,
+     "jumps": 0,
+     "system": "Sol",
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    {
+     "distance": 4.37712002205788,
+     "id64": 1178708478315,
+     "jumps": 1,
+     "system": "Alpha Centauri",
+     "x": 3.03125,
+     "y": -0.09375,
+     "z": 3.15625
+    },
+    {
+     "distance": 6.4872169976809,
+     "id64": 18263140541865,
+     "jumps": 2,
+     "system": "Barnard's Star",
+     "x": -3.03125,
+     "y": 1.375,
+     "z": 4.9375
+    },
+    {
+     "distance": 10.9763150550401,
+     "id64": 24860210308521,
+     "jumps": 3,
+     "system": "Wolf 359",
+     "x": 3.875,
+     "y": 6.46875,
+     "z": -1.90625
+    },
+    {
+     "distance": 7.77779792904136,
+     "id64": "10477373803",
+     "jumps": 2,
+     "system": "Sol",
+     "x": 0,
+     "y": 0,
+     "z": 0
+    }
+   ]
+  },
+  "state": "completed",
+  "status": "ok",
+  "updated_at": "2026-10-13T06:34:36"
+ },
+ "unknown": {
+  "status": 400,
+  "body": {
+   "error": "Could not find destination systems [Nonexistent Zzyzx 12]"
+  }
+ },
+ "unknown_two": {
+  "status": 400,
+  "body": {
+   "error": "Could not find destination systems [Nonexistent Zzyzx 12, Qqqq Imaginary 7]"
+  }
+ }
+}

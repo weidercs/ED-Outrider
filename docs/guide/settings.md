@@ -9,12 +9,42 @@
 <br>
 
 **⚙ Settings** (top right) holds everything, in folding sections: Alerts, Voice, What is said, Sounds, Values, Risk
-& warnings, Surface map, Auto honk, Uploads, In-game overlay, Display, Sharing, **Server** and Spoken lines. Most are this browser's
+& warnings, Surface map, Auto honk, Uploads, In-game overlay, Display, Sharing, **Server**, Spoken lines and Questions asked.
+**Find a setting…** at the top leaves only what matches the words typed (a setting's name, its help or its config key,
+`speech_speed` finds the Speed slider too), in every section at once, Server's keys included; clear it and every
+section is back as it was. A section's name shows all of it, and so does a block's heading inside one: "crew" shows the
+whole Crew block (every member, the switches, the note on the XO), "backups" the whole Backups fold, "inara" all of
+Inara's part of Uploads. A table is never cut down to one row: when a row of it matches, the whole table shows with the
+matching rows marked ("tactical" shows every crew member, Tactical's row marked). Most are this browser's
 own (Sharing exports them or makes them the defaults for new browsers). **Server** is the config file
 itself, every key of it but the upload switches (`[eddn]`, `[edsm]`, `[inara]`: Settings → Uploads): the network and the client password, the journal folders, paths, backups, Spansh, the
 Highway, the voice's AI layer and more. Saving there writes `ed_outrider.toml` (only the keys you changed; its
-comments stay, and the previous file is kept as `ed_outrider.toml.bak`), and Outrider uses them from its next start.
+comments stay, and the previous file is kept as `ed_outrider.toml.bak`), and Outrider uses them from its next start:
+**Restart now** beside "Saved" does that at once. Two keys take effect at once instead, and Settings → Voice writes
+them too: `[speech] voices_loaded` and `voices_preload` (**Keep loaded** and **Load them at start** under Voices kept
+loaded, shown whenever a voice besides the main one is in use). **Find a setting** finds them by those words, by
+"memory" or by their keys, and the crew by "crew" (all of it), "xo" or a role's name ("navigator").
 The passwords (`[server]`'s and `[mcp]`'s) and the AI key are never shown, only whether they are set.
+
+**Server**'s top row says which Outrider is running and has **Restart** and **Show log**. **Restart** stops Outrider
+cleanly (a backup running finishes first) and starts it again, from any device the page answers (signed in when a
+password is set); every window reconnects by itself (and says "starting" while it reads the journals). It works when
+Outrider was started by `launch_outrider.sh` (started again in the same window, its setup included), `python
+ed_outrider.py`, `launch_outrider.bat`, as a service (systemd starts it again) or in Docker (compose's restart policy);
+otherwise the button is greyed out and says why. "Outrider has been updated: restart it"
+under the header has the same button. **Show log** shows what Outrider has printed in its terminal
+since it started (its last 2,000 lines, newest at the bottom, following along while it is open; problems in amber),
+with **Copy** for a bug report. It works from any device, a server's too. The same lines are saved beside the database
+in `outrider.log` (`data/outrider.log` by default; the older part in `outrider.log.1`). Passwords and API keys never
+appear in it. Below it, **Backups** lists the backup zips with the command that restores one, and **Start with this
+computer** installs Outrider as a service (a systemd user service on Linux, a Startup entry on Windows; see [Install
+and run](install.md#start-with-your-computer)), or removes it; only from the browser on that PC, elsewhere it shows
+the command.
+
+**Notices.** What Outrider finds wrong when it starts (a journal folder not found, problems in the config file or the
+spoken lines file, listening on your network with no password, journals on a share that shows them late, the in-game
+overlay's address taken) shows as a line under the header, in every window and on the tablet, with a button where one
+helps (Server settings, Show log). ✕ hides it everywhere until Outrider restarts, or until the message changes.
 
 You can also edit the file by hand: copy `ed_outrider.toml.example` to `ed_outrider.toml` next to the script and
 edit the lines you need. The example explains every key. Relative paths in it (`db`, `backup_dir`, `speech_file`, `sound_dir`,
@@ -36,13 +66,13 @@ and `resources/speech.json`.
 | `[defaults]` | What a new browser starts with: the thresholds `unsold_warn` (50000000), `unsold_urgent` (250000000), `bio_min` (10000000), `body_highlight_level` (500000), `biology_highlight_value` (10000000), `body_max_value_include_bonus` (true), `high_gravity` (2.0 g), `module_warn` (80 %); `sounds` (true), `voice` ("en_GB-cori-medium"), `voice_fallback` ("en_GB-jenny_dioco-medium"), `speech_styles` (["business"]), `speech_profanity` (false), `speech_profanity_pct` (50), `speech_danger_business` (true), `speak_bio_signals` (true), `speak_geo_signals` (true), `speak_mapped` (false), `codex_interesting` (true), `speech_speed` (1.0), `speech_names` ("Boss, Hefay, Sir"); the surface map's `surface_alt` (1000 m), `rig_spacing` (50 m), `surface_map_min` (500 m), `surface_map_strip` (false), `rig_warn` (3500 m) |
 | `[spansh]` | `concurrency` (4), `map_max_radius` (250 ly), `map_max_pages` (6), `watch_firsts` (true) |
 | `[autohonk]` | `enabled` (false), `key` ("auto": read from your controls preset), `delay` (2.0 s), `hold` (6.0 s), `skip_honked` (true), `announce` (true) |
-| `[speech]` | `server_player` ("auto"), for **Play speech and sounds on this PC**; `sound_dir` (none), your own alert sounds |
+| `[speech]` | `server_player` ("auto"), for **Play speech and sounds on this PC**; `sound_dir` (none), your own alert sounds; `voices_loaded` (unset: the voices in use up to 4; a number, or "all"), how many voices besides the main one stay loaded (each about 1.6 times its file's size in memory, about 100 MB for a medium voice; one set aside waits about a second the next time it speaks); `voices_preload` (false), load them when Outrider starts instead of on their first line (both also in Settings → Voice → Voices kept loaded, used at once) |
 | `[copilot]` | `enabled` (false), `device` (""), `button` (""), `hold_ms` (600), `double_ms` (400) |
 | `[assistant]` | `enabled` (false), `base_url` (""), `api_key` (""), `model` (""), `timeout` (20 s), `max_rounds` (4): the voice's optional AI layer |
 | `[mcp]` | `url` (this PC at `[server] port`), `max_rows` (25), `password` (""): for the MCP bridge (see Ask an AI about your game) |
 | `[eddn]`, `[edsm]`, `[inara]` | `enabled` (false): written by the switches in Settings → Uploads (the only place to change them) |
-| `[overlay]` | `enabled` (false), `theme` ("default"; or lcars, elite, babylon5, narn, minbari, centauri, vorlon, shadow, sith, alliance, dark), `text_size` ("normal"), `system_panel` (true), `body_panel` (true), `radar` (true), `strip_panel` (false), `now_panel` (false), `bio_panel` (false), `system_seconds` (0: while in supercruise there), `radar_range` (800 m) (the overlay is a game-PC feature: see In-game overlay) |
-| `[highway]` | `clipboard` (true), `efficiency` (60 %), `conservative` (false), `conservative_ly` (5 ly), `background_image` ("": none), `background_extent` ([-45000, 45000, -20000, 70000]), `background_opacity` (0.6); auto-target: `autotarget` (false), `autotarget_delay` (5 s), `autotarget_entry` ("type"), `autotarget_map_wait` (5 s), `autotarget_search_wait` (2 s), `autotarget_key_delay` (0.05 s), `autotarget_keys` ({}: read from your controls preset), `autotarget_search`, `autotarget_submit`, `autotarget_plot` (the galaxy map's steps: see the example file), `autotarget_dry_run` (false) |
+| `[overlay]` | `enabled` (false), `theme` ("default"; or lcars, elite, babylon5, narn, minbari, centauri, vorlon, shadow, sith, alliance, dark), `text_size` ("normal"), `system_panel` (true), `body_panel` (true: the Target panel), `radar` (true), `strip_panel` (false), `now_panel` (false), `bio_panel` (false), `alerts_panel` (false: the page's alerts for a few seconds), `system_seconds` (0: while in supercruise there), `radar_range` (800 m), `analysis_only` ([]: the panels shown in your ship only while the HUD is in analysis mode), `hide_docked` (["system", "body", "now", "bio"]: the panels hidden while docked), `show_inactive` (false: keep showing when Elite is not the active window) (the overlay is a game-PC feature: see In-game overlay) |
+| `[highway]` | `clipboard` (true), `efficiency` (60 %), `conservative` (false), `conservative_ly` (5 ly), `voice_plot` (true: the voice's "nearest station"... also plots a neutron route there past `voice_plot_ly`, 500 ly), `background_image` ("": none), `background_extent` ([-45000, 45000, -20000, 70000]), `background_opacity` (0.6); auto-target: `autotarget` (false), `autotarget_delay` (5 s), `autotarget_entry` ("type"), `autotarget_map_wait` (5 s), `autotarget_search_wait` (2 s), `autotarget_key_delay` (0.05 s), `autotarget_keys` ({}: read from your controls preset), `autotarget_search`, `autotarget_submit`, `autotarget_plot` (the galaxy map's steps: see the example file), `autotarget_dry_run` (false) |
 
 Command-line flags override the file for a single run:
 

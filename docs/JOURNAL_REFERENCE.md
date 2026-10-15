@@ -24,7 +24,7 @@ the code; the constants named are in `ed_outrider.py` unless another file is giv
 |---|---|
 | `FSDJump`, `CarrierJump`, `Location` | `Population` (`system_population`: no x5 bio bonus where people live). Visits, the jump path (`jumps`), current and previous position, region crossings. `FSDJump` `JumpDist`/`FuelUsed`/`FuelLevel` feed the fuel model (not when `BoostUsed`). `Taxi`/`Multicrew` mark rides that are not your ship's fuel or honk. A `Location` in the system you are already in is a relog, not an arrival (an older line, from a legacy folder read late, is judged against the arrival before it, not today's position). A session that starts docked (a login, a respawn) writes no `Docked`: its `Location` has `Docked: true` with `StationName`, `StationType`, `MarketID` and `StationServices`, and counts as the dock (the docked state, the hold's market for `CargoTransfer`). `FSDJump`/`CarrierJump`, and a `Location` that moves you (a respawn, a login elsewhere; not a relog), also move the Neutron Highway along its route (`highway_arrival`). |
 | `Fileheader` | A game launch (its `part` 1; a later part continues the session): from it, or a `LoadGame`, until the session's `Location` the game is loading (meta `game_load`, `Journals.loading`) and the overlay shows nothing. Never counts as play (`LOGIN_EVENTS`). |
-| `FSDTarget` | The targeted system (sound verdict, "leaving unfinished work" check) and its star class. |
+| `FSDTarget` | The targeted system (sound verdict, "leaving unfinished work" check) and its star class. `RemainingJumpsInRoute`: the route plotted in game's jumps left, this one included (1 for a lone target): the overlay's Target panel says "next jump of your route · N to go" above 1. |
 | `StartJump` | Star class of the destination. `JumpType: Hyperspace` is written as the FSD starts charging, at the start of the countdown (before the game's own countdown call): the jump card and the speech queue clearing happen here, but the jump line's words wait for Status.json's FsdJump flag (bit 30, the tunnel: a "hyperspace" moment) or 8 s. |
 | `Scan` | Bodies (`own_bodies`, the record used everywhere; rare stars and rare planet classes from `StarType`/`PlanetClass`; the green gas giant model from `PlanetClass`, `SurfaceTemperature` at full precision, `MassEM` and `Radius`: `outrider/ggg.py`), the arrival star's `WasDiscovered` (discovery streak verdict), first-scan `WasDiscovered`/`WasMapped`/`WasFootfalled` (`own_firsts`), landable `Materials` (jumponium), valuable finds. Nav-beacon scans (`ScanType` NavBeaconDetail/NavBeacon) never count as your discoveries. The arrival star can be scanned twice (the auto scan, then a Detailed one after the honk, or a nav beacon's): one arrival per visit. |
 | `FSSDiscoveryScan` | The honk: `BodyCount`, `Progress`; triggers the arrival briefing. |
@@ -55,10 +55,11 @@ the code; the constants named are in `ed_outrider.py` unless another file is giv
 | `HullDamage`, `Repair`, `RepairAll`, `RepairDrone`, `AfmuRepairs`, `HeatDamage`, `Interdicted`, `JetConeBoost` | Hull and module health, danger alerts. A `Repair` lists what was repaired (`Items`; older lines `Item`): "Wear" is the ship's integrity, not the hull, so only "Hull" (or "All", or a `RepairAll`) sets the hull to 100 %. `JetConeBoost` is the FSD supercharge signal (neutron or white dwarf cone, `BoostValue` the multiplier): the next jump's range, the "supercharged" moment, and the Highway's auto-target trigger. |
 | `Docked`, `Undocked` | Docked state and services (`exploration` = Universal Cartographics, `vistagenomics`), dock/undock alerts. |
 | `CarrierBuy`, `CarrierDecommission`, `CarrierCancelDecommission` | A new carrier (`CarrierID`, `Callsign`, `Location`, `SystemAddress`: its state starts afresh), and giving one up (`ScrapRefund`, `ScrapTime` in epoch seconds; the scrapping writes nothing). Per Frontier's manual; not yet seen in a real journal. |
-| `CarrierStats`, `CarrierLocation`, `CarrierJumpRequest`, `CarrierJumpCancelled` | Your fleet carrier. `CarrierStats` also gives its cargo total (`SpaceUsage.Cargo`: the cargo check), the capacity in use (`TotalCapacity - FreeSpace - CargoSpaceReserved`: a buy order's reserved space weighs nothing) and the depot (`FuelLevel`): the tritium's jumps. |
+| `CarrierStats`, `CarrierLocation`, `CarrierJumpRequest`, `CarrierJumpCancelled` | Your fleet carrier. `CarrierStats` also gives its cargo total (`SpaceUsage.Cargo`: the cargo check), the capacity in use (`TotalCapacity - FreeSpace - CargoSpaceReserved`: a buy order's reserved space weighs nothing) and the depot (`FuelLevel`): the tritium's jumps. These, `CarrierJump` (keyed by its `MarketID`) and `CarrierDepositFuel` are kept in `cargo_events` for the carrier's measured jumps (S13 B). |
 | `NavRouteClear` | The plotted route was cleared. |
+| `NavRoute` | A route was plotted: NavRoute.json should follow, with the same timestamp. **The game does not always write it** (2026-10-14: three plots in a row left the file as the NavRouteClear before them wrote it; clearing and plotting a different destination wrote it again). Kept as meta `navroute_event` {ts, written}: an older NavRoute.json is not that route (`Journals.game_route`). |
 | `FSSSignalDiscovered`, `SupercruiseDestinationDrop` | Notable stellar phenomena (`$Fixed_Event_Life_*`): the FSS lists a system's phenomena as identical lines in one second, so a kind keeps the most one listing had (`phenomena.n`, `NSP_BURST_S`); a drop names only the kind ("a ring phenomenon"), not which site, so each drop is one site visited (`phenomena_sites`). `FSSSignalDiscovered` also gives the signals worth a detour (`poi`, `poi_kind`): a Titan (`SignalType` `Titan`), Guardian beacons, generation ships, listening posts, number stations, tourist beacons, memorials; ordinary megaships are left out. Two listening posts in one system are both "Listening Post" in the game's words (`#index=` in `SignalName` tells them apart), and some are named ("Listening Post Pollux D568"). |
-| `Materials`, `MaterialCollected`, `MaterialDiscarded`, `Synthesis`, `MaterialTrade`, `TechnologyBroker`, `ScientificResearch`, `MissionCompleted`, `EngineerContribution` | The materials inventory (`outrider.materials.apply`; each login's `Materials` is a full snapshot). |
+| `Materials`, `MaterialCollected`, `MaterialDiscarded`, `Synthesis`, `MaterialTrade`, `TechnologyBroker`, `ScientificResearch`, `MissionCompleted`, `EngineerContribution` | The materials inventory (`outrider.materials.apply`; each login's `Materials` is a full snapshot). `Synthesis` also teaches its recipe (`Name`, `Materials`: a list of `{Name, Count}`, in the oldest journals a `{name: count}` object), kept in the state's `recipes` (S15). Names seen: Limpet Basic, Fuel Basic and Repair Basic (the SRV's), Ammo Basic/Standard (multi-cannon), AX Remote Flak Ammo Basic. |
 | `CrewHire`, `CrewFire`, `Statistics.Crew` | `outrider/unsold.py`: an NPC crew member's cut of payouts. |
 
 ## Companion files
@@ -67,15 +68,17 @@ the code; the constants named are in `ed_outrider.py` unless another file is giv
   `BodyName`, `Latitude`, `Longitude`, `Altitude`, `PlanetRadius`, `Heading`, `Cargo`, `Destination`,
   `GuiFocus`, `FireGroup`, `timestamp`. Flags used: docked (bit 0; the overlay's Now panel hides, `FLAG_DOCKED`),
   landed (1), supercruise (4, `FLAG_SUPERCRUISE`: the overlay's system panel shows only then), scooping (11), FSD
-  charging (17), in your main ship (24, `FLAG_IN_MAIN_SHIP`: the overlay's body panel shows only then), in SRV
-  (26), HUD analysis mode (27), altitude from average radius (29), in the hyperspace tunnel (30, FsdJump: the jump line is said once it
+  charging (17), in your main ship (24, `FLAG_IN_MAIN_SHIP`: the overlay's Target panel shows only then, outside the galaxy map), in SRV
+  (26), HUD analysis mode (27, `FLAG_HUD_ANALYSIS`: the overlay's analysis-only panels show only then), altitude from average radius (29), in the hyperspace tunnel (30, FsdJump: the jump line is said once it
   comes on after a hyperspace StartJump; auto honk waits while it is set; the overlay hides every panel); `GuiFocus`
-  6-11 (galaxy map, system map, orrery, FSS, SAA, codex) hide the overlay too (`OVERLAY_HIDE_FOCUS`); Flags2
+  7-11 (system map, orrery, FSS, SAA, codex) hide the overlay too (`OVERLAY_HIDE_FOCUS`), 6 (the galaxy map) all but
+  its Target panel; `BodyName` with `Altitude` is the Target panel's near-body zone (the point ApproachBody is written); Flags2
   bit 0 on foot, bits 3/13/14 on foot in a station, hangar or social space (counted as docked). In the SRV, the
   Nomad or a fighter (bits 25, 26), `Fuel` and `Cargo` are the vehicle's, not the ship's: the fuel tile keeps the
   ship's last figures and shows the vehicle's separately.
 - **NavRoute.json** (`read_navroute`): `Route[]` of `StarSystem`, `SystemAddress`, `StarPos`, `StarClass`; the
-  route strip, star classes and "unreported" systems. An empty route means it was cleared. The last hop is the
+  route strip, star classes and "unreported" systems. An empty route means it was cleared, unless it is older than the
+  journal's last `NavRoute` line: then the game has not written the new route (late, or never). The last hop is the
   system plotted to (`navroute_end`: auto-target's check for a waypoint beyond one jump).
 - **Cargo.json** (`read_cargo_file`): the ship's whole hold (`Inventory[]` of `Name`, `Name_Localised`, `Count`,
   `Stolen`, `MissionID`), rewritten with every `Cargo` event (whose own line then has only the count).
@@ -104,6 +107,23 @@ the code; the constants named are in `ed_outrider.py` unless another file is giv
   jumps. **Reserved space is not cargo:** a buy order holds space that weighs nothing. The 27 jumps all had none
   reserved; CarrierStats' own `JumpRangeCurr` (the jump the depot pays for in full) matches the formula on every line
   under 500 ly only with the reserved space left out (4,500 t reserved: 198.6 ly, not 180.7).
+- `CarrierStats.Finance`: `CarrierBalance`, `ReserveBalance`, `AvailableBalance` (balance less reserve: can be
+  negative, seen -1,051,595,783), `ReservePercent` (sometimes missing). No upkeep figure anywhere in the journal. The
+  weekly upkeep comes out of the balance: on the author's carrier the balance fell 13,579,218 cr over a Thursday and the
+  reserve stayed put.
+- `CarrierStats.Crew`: one entry per role (`CrewRole`: Captain, Refuel, Repair, Rearm, Commodities, CarrierFuel,
+  Exploration (Universal Cartographics), VistaGenomics, VoucherRedemption, BlackMarket, Shipyard, Outfitting,
+  PioneerSupplies, Bartender); `Activated` false = not installed (no `Enabled`, no `CrewName`); `Activated` true with
+  `Enabled` false = suspended. A suspended service is also left out of the next `Docked`'s `StationServices`.
+  `CarrierCrewServices` (`CrewRole`, `Operation`: Activate, Deactivate, Pause, Resume, Replace) says a change between two
+  CarrierStats; none in the author's journals yet.
+- A carrier's jump in the journal (S13 B): `CarrierJumpRequest` (`SystemAddress`, `DepartureTime`), then at the
+  departure time a `CarrierLocation` (only while the game runs; otherwise the next login's) and, only when you are
+  aboard, a `CarrierJump` a minute later. `CarrierJump` has **no CarrierID** (its `MarketID` is the carrier's, with
+  `StationType` FleetCarrier) and carries `StarPos`; `CarrierLocation` has none. Of the author's 248 requests, 172 have
+  a CarrierJump. A squadron's carrier writes `CarrierLocation` too (`CarrierType` SquadronCarrier, at every login).
+  The depot changes only by a jump and a `CarrierDepositFuel` (`Amount`, `Total` the depot after) or tritium donated by
+  other players (not in your journal).
 
 **Status.json**
 - It is rewritten only when something in it changes. A player standing still (a stopped Rhino included)

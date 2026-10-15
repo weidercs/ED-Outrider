@@ -4,9 +4,11 @@ Read straight from the journal files on request, not from the database: the file
 of truth, they are already local, and their names carry the time they were started, so a time
 window only opens the files that can hold it.
 
-    read_log(dirs, days=7, before=None, after=None, limit=200, cats=None, q=None, noise=False)
+    read_log(dirs, days=7, before=None, after=None, limit=200, cats=None, q=None, noise=False, only=None)
 
-A cursor is "<file name>|<line index>": stable while the newest file is still being written.
+A cursor is "<file name>|<line index>": stable while the newest file is still being written. Each row also has `at`,
+its line's byte offset in the file: with the file's name, the key the uploads' outbox keeps (the server's upload marks,
+S68). `only` ({file name: set of offsets}) keeps just those lines, whatever `cats` says (the Log's "not sent").
 """
 import json
 import os
@@ -276,6 +278,9 @@ LOG_FORMAT = {
                               + (f" · balance {_num((e.get('Finance') or {}).get('CarrierBalance'))} cr" if e.get("Finance") else ""),
     "CarrierLocation": lambda e: f"Carrier at {e.get('StarSystem')}",
     "CarrierDepositFuel": lambda e: f"Deposited {e.get('Amount')} t tritium · {e.get('Total')} t aboard",
+    "CarrierCrewServices": lambda e: f"Carrier service {e.get('CrewRole')}: "
+                                     + {"Activate": "installed", "Deactivate": "removed", "Pause": "suspended",
+                                        "Resume": "resumed", "Replace": "crew replaced"}.get(e.get("Operation"), str(e.get("Operation"))),
 }
 
 
@@ -377,7 +382,7 @@ def _load(path):
     try:
         size = os.path.getsize(path)
     except OSError:
-        return {"lines": [], "bodies": {}}
+        return {"lines": [], "offsets": [], "bodies": {}}
     key = (path, size)
     with _LOCK:
         if key in _CACHE:
@@ -387,9 +392,16 @@ def _load(path):
         with open(path, "rb") as f:
             data = f.read(size)
     except OSError:     # unreadable (permissions, a legacy folder gone): no rows from it, not a failed Log
-        return {"lines": [], "bodies": {}}
+        return {"lines": [], "offsets": [], "bodies": {}}
     end = data.rfind(b"\n") + 1       # the game may be mid-write on the last line
-    lines = data[:end].splitlines()
+    # split on "\n" only, as the journal reader does (Journals.read_file), so each line's byte offset (its start) is
+    # the uploader's source key ("<file>:<offset>"): the Log's upload marks join on it (S68). splitlines() would also
+    # break on a stray "\r" and the offsets would drift. A "\r\n" line keeps its "\r": JSON allows it as whitespace.
+    lines = data[:end].split(b"\n")[:-1] if end else []
+    offsets, at = [], 0
+    for line in lines:
+        offsets.append(at)
+        at += len(line) + 1
     for line in lines:
         if any(e in line for e in _SYSTEM_EVENTS):
             try:
@@ -412,7 +424,7 @@ def _load(path):
         with _LOCK:
             _BODIES.update(bodies)
     # a session that starts on the planet names the body in an older file: fall back to what we know
-    entry = {"lines": lines, "bodies": ChainMap(bodies, _BODIES)}
+    entry = {"lines": lines, "offsets": offsets, "bodies": ChainMap(bodies, _BODIES)}
     with _LOCK:
         for k in [k for k in _CACHE if k[0] == path]:
             del _CACHE[k]
@@ -474,8 +486,9 @@ def _row(ev, cursor, bodies):
             "raw": ev}
 
 
-def read_log(dirs, days=7, before=None, after=None, limit=200, cats=None, q=None, noise=False, now=None):
-    """Journal events newest first. `before`/`after` are cursors; `cats` a set of categories."""
+def read_log(dirs, days=7, before=None, after=None, limit=200, cats=None, q=None, noise=False, now=None, only=None):
+    """Journal events newest first. `before`/`after` are cursors; `cats` a set of categories; `only` {file name: set of
+    byte offsets}: those lines alone, in any category (the search still applies)."""
     files = journal_files(dirs)
     order = {os.path.basename(p): k for k, p in files}
     want = set(cats) if cats is not None else set(CATEGORIES) - {"noise"}
@@ -489,17 +502,21 @@ def read_log(dirs, days=7, before=None, after=None, limit=200, cats=None, q=None
     seen_newest = None
     rows, truncated = [], False
 
-    def accept(line, cursor, entry):
+    def accept(entry, base, i):
+        line, cursor, at = entry["lines"][i], f"{base}|{i}", entry["offsets"][i]
+        if only is not None and at not in only.get(base, ()):
+            return None
         name = _event_name(line)
         # notable stellar phenomena ride on FSS signal lines, which are otherwise noise
         cat = "phenomena" if b"Fixed_Event_Life" in line else category(name)
-        if cat not in want:
+        if only is None and cat not in want:
             return None
         try:
             ev = json.loads(line)
         except ValueError:
             return None
         r = _row(ev, cursor, entry["bodies"])
+        r["at"] = at
         if cat == "phenomena":
             r["cat"] = cat
             kind = re.search(r"Fixed_Event_Life_(\w+?);?\"", line.decode("utf-8", "replace"))
@@ -527,7 +544,7 @@ def read_log(dirs, days=7, before=None, after=None, limit=200, cats=None, q=None
             seen_newest = _cursor_of(p, entry) or seen_newest    # files run oldest to newest
             start = cur[1] + 1 if base == cur[0] else 0
             for i in range(start, len(entry["lines"])):
-                r = accept(entry["lines"][i], f"{base}|{i}", entry)
+                r = accept(entry, base, i)
                 if r:
                     rows.append(r)
         if len(rows) > cap:
@@ -550,7 +567,7 @@ def read_log(dirs, days=7, before=None, after=None, limit=200, cats=None, q=None
         lines = entry["lines"]
         top = max(0, min(cur[1], len(lines))) if cur and base == cur[0] else len(lines)
         for i in range(top - 1, -1, -1):
-            r = accept(lines[i], f"{base}|{i}", entry)
+            r = accept(entry, base, i)
             if not r:
                 continue
             if r["ts"] and r["ts"] < since:

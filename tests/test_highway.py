@@ -4,13 +4,14 @@ Run all: python3 -m unittest discover tests (or scripts/verify.sh).
 """
 import argparse
 import json
+import math
 import os
 import time
 import unittest
 import unittest.mock
 
 from support import (  # also puts the repository root on sys.path
-    AUTHOR_BINDS, FakeGame, HWY_EXACT, _HwSession, _fake_evdev, hwy_jump, hwy_plot_exact, hwy_ts, make_controls,
+    AUTHOR_BINDS, FakeDesktop, FakeGame, HWY_EXACT, _HwSession, _fake_evdev, hwy_jump, hwy_plot_exact, hwy_ts, make_controls,
     outrider_honk, types_ns, use_fake_time, user_docs,
 )
 import outrider.bio  # noqa: E402
@@ -18,6 +19,7 @@ import ed_outrider  # noqa: E402
 import outrider.honk  # noqa: E402
 import outrider.fsd  # noqa: E402
 import outrider.highway  # noqa: E402
+import outrider.target  # noqa: E402
 
 
 
@@ -748,14 +750,14 @@ class HighwayH1(unittest.TestCase):
         self.assertIsNone(ed_outrider.max_fuel_for_jump(m, 80, cap=5))
         self.assertEqual(ed_outrider.max_fuel_for_jump(m, 60, cap=5), 5.0)
 
-    def heavy_route(self, rows_at, plotter="exact", ship_id=39, start=-100):
+    def heavy_route(self, rows_at, plotter="exact", ship_id=39, start=-100, options=None):
         """A route through the Caspian's long neutron jump, you at its start (arrived `start` s ago, plotted now):
         Start (neutron) -487.9 ly-> Neu Far (not neutron) -40 ly-> Plain -60 ly-> End."""
         self.j.handle(self.caspian_loadout(self.ts(-1000), ship_id=39))
         self.jump(start, 300, "Start", 0)
-        rows = [dict(system=n, id64=i, x=x, y=0.0, z=0.0, distance=d, fuel_used=None, fuel_left=None, neutron=nu, refuel=0,
-                     jumps=jm, remaining=627.9 - x) for n, i, x, d, nu, jm in rows_at]
-        return self.state.highway_store(rows, {"plotter": plotter, "options": {},
+        rows = [dict(system=n, id64=i, x=x, y=0.0, z=0.0, distance=d, fuel_used=None, fuel_left=None, neutron=nu,
+                     refuel=rest[0] if rest else 0, jumps=jm, remaining=627.9 - x) for n, i, x, d, nu, jm, *rest in rows_at]
+        return self.state.highway_store(rows, {"plotter": plotter, "options": options or {},
                                                "ship": {"ship_id": ship_id, "name": "Wanderer II", "type": "explorer_nx"}})
 
     ROUTE_HEAVY = [("Start", 300, 0.0, 0, 1, 0), ("Neu Far", 301, 487.9, 487.9, 0, 1), ("Plain", 302, 527.9, 40.0, 0, 1),
@@ -863,6 +865,283 @@ class HighwayH1(unittest.TestCase):
             self.state.tick({})
             self.state.tick({})
         self.assertEqual(self.heavy_moments(), ["Too much fuel for the next jump. It needs about 36 tons aboard; you have 160."])
+
+    # S1: four 70 ly hops to a refuel stop (about 5 t each for the Caspian), and the same after its long neutron jump
+    ROUTE_SHORT = [("Start", 300, 0.0, 0, 0, 0), ("Dry A", 301, 70.0, 70.0, 0, 1), ("Dry B", 302, 140.0, 70.0, 0, 1),
+                   ("Dry C", 303, 210.0, 70.0, 0, 1), ("Refuel D", 304, 280.0, 70.0, 0, 1, 1), ("End", 305, 300.0, 20.0, 0, 1)]
+    ROUTE_WINDOW = [("Start", 300, 0.0, 0, 1, 0), ("Neu Far", 301, 487.9, 487.9, 0, 1), ("Dry B", 302, 557.9, 70.0, 0, 1),
+                    ("Dry C", 303, 627.9, 70.0, 0, 1), ("Refuel D", 304, 697.9, 70.0, 0, 1, 1), ("End", 305, 717.9, 20.0, 0, 1)]
+
+    def short_moments(self):
+        return [m for m in self.j.moments if m["kind"] == "highway" and m["what"] == "short"]
+
+    def test_short_of_the_refuel_stop(self):
+        self.heavy_route(self.ROUTE_SHORT)
+        model = ed_outrider.fuel_model(self.j.ship, self.j.fuel_hist)
+        lo, hi = outrider.fsd.fuel_window(model, 1.14, [(70.0, 1)] * 4, 160)
+        self.assertEqual(hi, 160)   # a full tank reaches it: no upper end
+        self.fuel(10)
+        self.assertTrue(self.state.highway_heavy_check(self.now))
+        s = self.state.highway_summary()
+        self.assertIsNone(s["heavy"])
+        self.assertEqual({k: s["short"][k] for k in ("max_t", "have_t", "refuel_at", "jumps", "end", "here_refuel")},
+                         {"max_t": None, "have_t": 10, "refuel_at": "Refuel D", "jumps": 4, "end": "refuel", "here_refuel": False})
+        self.assertAlmostEqual(s["short"]["need_t"], math.ceil(lo * 10) / 10)
+        self.assertGreater(s["short"]["need_t"], 15)
+        m = self.short_moments()
+        self.assertEqual([(x["refuel_at"], x["jumps"], x["need_t"]) for x in m], [("Refuel D", 4, s["short"]["need_t"])])
+        self.assertEqual(self.heavy_moments(), [])
+        # scooping: still short (not said again), then enough: cleared
+        self.fuel(14)
+        self.state.highway_heavy_check(self.now + 5)
+        self.assertEqual(self.state.highway_summary()["short"]["have_t"], 14)
+        self.fuel(lo + 0.2)
+        self.assertTrue(self.state.highway_heavy_check(self.now + 10))
+        self.assertIsNone(self.state.highway_summary()["short"])
+        self.assertEqual(len(self.short_moments()), 1)
+        # the next system (a dry star, three hops to go): short again, said again (a new system)
+        self.fuel(4)
+        self.jump(20, 301, "Dry A", 70.0)
+        self.state.highway_heavy_check(self.now + 30)
+        self.assertEqual(self.state.highway_summary()["short"]["jumps"], 3)
+        self.assertEqual(len(self.short_moments()), 2)
+        # at the refuel stop: how much to scoop is shown, never said (the plan scoops there anyway); the run now goes
+        # to the route's end
+        for k, (n, i, x) in enumerate((("Dry B", 302, 140.0), ("Dry C", 303, 210.0), ("Refuel D", 304, 280.0))):
+            self.jump(40 + 10 * k, i, n, x)
+        self.fuel(0.1)
+        self.state.highway_heavy_check(self.now + 80)
+        s = self.state.highway_summary()["short"]
+        self.assertEqual((s["here_refuel"], s["end"], s["refuel_at"], s["jumps"]), (True, "end", "End", 1))
+        self.assertEqual(len(self.short_moments()), 2)
+
+    def test_one_fuel_window_never_two_lines(self):
+        """The Fable review's case: a neutron jump at the limit, where a full tank fails and a part one passes, then
+        three dry hops. Too much fuel and too little come from one window, so heavy and short never show together."""
+        self.heavy_route(self.ROUTE_WINDOW)
+        model = ed_outrider.fuel_model(self.j.ship, self.j.fuel_hist)
+        hops = [(487.9, 6), (70.0, 1), (70.0, 1), (70.0, 1)]
+        lo, hi = outrider.fsd.fuel_window(model, 1.14, hops, 160)
+        self.assertAlmostEqual(hi, ed_outrider.max_fuel_for_jump(model, 487.9, 1.14, 6, 160), delta=0.01)   # about 36 t
+        self.assertLess(lo, hi)
+        for k, (fuel, heavy, short) in enumerate(((140, True, False), (hi + 0.3, False, False), ((lo + hi) / 2, False, False),
+                                                  (lo - 2, False, True))):
+            self.fuel(fuel)
+            self.state.highway_heavy_check(self.now + 5 * k)
+            s = self.state.highway_summary()
+            self.assertEqual((bool(s["heavy"]), bool(s["short"])), (heavy, short), fuel)
+        self.assertEqual(s["short"]["max_t"], math.floor(hi * 10) / 10)   # too little, and at most the high end: one line
+        self.assertEqual(s["short"]["need_t"], math.ceil(lo * 10) / 10)
+        self.assertEqual(len(self.heavy_moments()), 1)
+        self.assertEqual(len(self.short_moments()), 1)
+
+    def test_heavy_on_a_later_hop_and_no_amount(self):
+        # the dry hops first, then the neutron jump at the limit: a full tank is too heavy for the jump two hops on
+        rows = [("Start", 300, 0.0, 0, 0, 0), ("Dry A", 301, 70.0, 70.0, 0, 1), ("Neu B", 302, 140.0, 70.0, 1, 1),
+                ("Far C", 303, 627.9, 487.9, 0, 1, 1)]
+        self.heavy_route(rows)
+        self.fuel(160)
+        self.state.highway_heavy_check(self.now)
+        h = self.state.highway_summary()["heavy"]
+        self.assertEqual((h["next"], h["hop"], h["boost"], h["distance"]), ("Far C", 3, 6, 487.9))
+        self.assertEqual(self.heavy_moments(), ["Too much fuel for the jump to Far C. It needs about "
+                                                f"{int(h['need_t'])} tons aboard; you have 160."])
+        # a jump no fuel level reaches (cargo since the plot): short with no amount to scoop
+        self.state.highway_clear()
+        self.heavy_route(rows)
+        self.fuel(30, cargo=400)
+        self.state.highway_heavy_check(self.now)
+        s = self.state.highway_summary()
+        self.assertIsNone(s["heavy"])
+        self.assertEqual((s["short"]["need_t"], s["short"]["max_t"], s["short"]["refuel_at"]), (None, None, "Far C"))
+
+    def test_short_only_on_an_exact_route(self):
+        # the neutron plotter has no fuel plan, and a route plotted with injections has boosted jumps the rows don't mark
+        for plotter, options in (("neutron", None), ("exact", {"injections": True})):
+            self.state.highway_clear()
+            self.heavy_route(self.ROUTE_SHORT, plotter=plotter, options=options)
+            self.fuel(5)
+            self.state.highway_heavy_check(self.now)
+            self.assertIsNone(self.state.highway_summary()["short"])
+        self.assertEqual(self.short_moments(), [])
+        # another ship, or the fuel model not complete yet: nothing claimed
+        self.state.highway_clear()
+        self.heavy_route(self.ROUTE_SHORT, ship_id=40)
+        self.fuel(5)
+        self.state.highway_heavy_check(self.now)
+        self.assertIsNone(self.state.highway_summary()["short"])
+
+    def test_spansh_exact_answer_scoopable_is_its_refuel(self):
+        """P1 (2026-10-13): Spansh's exact plotter sends is_scoopable on every jump, but on every jump seen it equals
+        must_refuel (the plan tops up at every scoopable star) and the ends say False for scoopable stars (Sol, Polaris):
+        the refuel flag already says it, so highway_route keeps no scoopable column."""
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "spansh_exact.json"), encoding="utf-8") as f:
+            answers = json.load(f)
+        self.assertEqual(len(answers), 3)
+        for name, a in answers.items():
+            jumps = a["result"]["jumps"]
+            self.assertTrue(all("is_scoopable" in x for x in jumps), name)
+            self.assertEqual([x["is_scoopable"] for x in jumps], [x["must_refuel"] for x in jumps], name)
+            rows = ed_outrider.highway_rows("exact", a["result"])
+            self.assertEqual([r["refuel"] for r in rows], [int(x["must_refuel"]) for x in jumps])
+            self.assertNotIn("scoopable", rows[0])
+        cols = [r[1] for r in self.db.execute("PRAGMA table_info(highway_route)")]
+        self.assertNotIn("scoopable", cols)
+
+    # ---- S2: the last scoopable star before a stretch the fuel won't cover (route_ahead, F2) ----
+
+    def classes(self, **by_id):
+        for i, c in by_id.items():
+            self.db.execute("INSERT OR REPLACE INTO star_classes VALUES (?, ?)", (int(i[1:]), c))
+
+    def navroute(self, hops, ts=-50):
+        """The game's plotted route: [(id64, name, star class, x)], the first where it was plotted from."""
+        ed_outrider.meta_set(self.db, "route", {"ts": self.ts(ts), "hops": [
+            {"id64": i, "name": n, "star_class": c, "x": x, "y": 0.0, "z": 0.0} for i, n, c, x in hops]})
+        self.j.navroute_end = hops[-1][0]
+
+    def last_scoops(self):
+        return [m for m in self.j.moments if m["kind"] == "last_scoop"]
+
+    # from Start (a K star): a white dwarf, a neutron star and a black hole 70 ly apart, then two scoopable stars
+    DRY_NAV = [(300, "Start", "K", 0.0), (401, "Dwarf A", "DA", 70.0), (402, "Neutron B", "N", 140.0),
+               (403, "Hole C", "H", 210.0), (404, "Kay D", "K", 280.0), (405, "Em E", "M", 350.0)]
+
+    def test_route_ahead(self):
+        """F2: the game's route from where you are, then the Highway's rows after its end; scoopable from the game's star
+        class, else the row's facts; a multiplier only for facts (the held charge, an exact route's neutron rows)."""
+        self.classes(s300="K")
+        self.heavy_route(self.ROUTE_HEAVY)   # Start (neutron) -487.9-> Neu Far -40-> Plain -60-> End, exact
+        self.state.highway_clear()
+        self.assertEqual(self.state.route_ahead(), [])   # no route followed
+        self.navroute(self.DRY_NAV)
+        ahead = self.state.route_ahead()
+        self.assertEqual([(h["name"], h["scoopable"], h["mult"], h["source"], round(h["ly"], 1)) for h in ahead],
+                         [("Dwarf A", False, 1, "navroute", 70.0), ("Neutron B", False, 1, "navroute", 70.0),
+                          ("Hole C", False, 1, "navroute", 70.0), ("Kay D", True, 1, "navroute", 70.0),
+                          ("Em E", True, 1, "navroute", 70.0)])
+        self.j.boost = {"value": 4.0, "ts": self.ts(-5)}   # a charge held: the first hop only
+        self.assertEqual([h["mult"] for h in self.state.route_ahead()], [4.0, 1, 1, 1, 1])
+        self.j.boost = None
+        self.jump(-40, 402, "Neutron B", 140.0)   # further along: from where you are on it
+        self.assertEqual([h["name"] for h in self.state.route_ahead()], ["Hole C", "Kay D", "Em E"])
+        # an exact Highway route: the game plotted to its next row, the route's rows follow; a neutron row False, a
+        # refuel row True (Spansh's plan scoops there), the game's own class first; a hop leaving a neutron row x6
+        self.jump(-30, 300, "Start", 0.0)
+        rows = [("Start", 300, 0.0, 0, 1, 0), ("Ay", 301, 300.0, 300.0, 0, 1), ("Neu B", 302, 340.0, 40.0, 1, 1),
+                ("Fuel C", 303, 580.0, 240.0, 0, 1, 1), ("Dee", 304, 620.0, 40.0, 0, 1, 1), ("Plain E", 305, 660.0, 40.0, 0, 1)]
+        self.heavy_route(rows, start=-30)
+        self.navroute([(300, "Start", "K", 0.0), (301, "Ay", "F", 300.0)])
+        self.classes(s304="DA")
+        ahead = self.state.route_ahead()
+        self.assertEqual([(h["name"], h["scoopable"], h["mult"], h["source"]) for h in ahead],
+                         [("Ay", True, 6, "navroute"), ("Neu B", False, 1, "highway"), ("Fuel C", True, 6, "highway"),
+                          ("Dee", False, 1, "highway"), ("Plain E", None, 1, "highway")])
+        self.assertEqual([round(h["ly"], 1) for h in ahead], [300.0, 40.0, 240.0, 40.0, 40.0])
+        # no plotted route: the Highway's rows from where you are; off the route: nothing
+        ed_outrider.meta_set(self.db, "route", None)
+        self.assertEqual([h["name"] for h in self.state.route_ahead()], ["Ay", "Neu B", "Fuel C", "Dee", "Plain E"])
+        self.jump(-20, 999, "Elsewhere", 5.0)
+        self.assertEqual(self.state.route_ahead(), [])
+        # the neutron plotter: no refuel or neutron multiplier from its rows, and a waypoint several jumps away ends it
+        self.state.highway_clear()
+        self.jump(-10, 300, "Start", 0.0)
+        self.heavy_route([("Start", 300, 0.0, 0, 1, 0), ("Ay", 301, 60.0, 60.0, 0, 1, 1), ("Far", 302, 400.0, 340.0, 1, 5)],
+                         plotter="neutron", start=-10)
+        self.assertEqual([(h["name"], h["scoopable"], h["mult"]) for h in self.state.route_ahead()], [("Ay", None, 1)])
+
+    def test_last_scoopable_star(self):
+        """S2 on the game's own route: here a K star, three stars after it known not to scoop, and too little fuel for
+        the four hops to the next one that does: warned once per stretch, with how much to scoop."""
+        self.classes(s300="K")
+        self.j.handle(self.caspian_loadout(self.ts(-1000)))
+        self.jump(-100, 300, "Start", 0)
+        self.navroute(self.DRY_NAV)
+        model = ed_outrider.fuel_model(self.j.ship, self.j.fuel_hist)
+        lo, hi = outrider.fsd.fuel_window(model, 1.14, [(70.0, 1)] * 4, 160)
+        self.fuel(10)
+        self.assertTrue(self.state.last_scoop_check(self.now))
+        w = self.state.payload()["dry_stretch"]
+        self.assertEqual({k: w[k] for k in ("count", "system", "next", "full", "have_t", "source")},
+                         {"count": 3, "system": "Start", "next": "Kay D", "full": False, "have_t": 10, "source": "navroute"})
+        self.assertEqual(w["need_t"], math.ceil(lo * 10) / 10)
+        self.assertEqual([(m["count"], m["system"], m["next"], m["need_t"], m["full"]) for m in self.last_scoops()],
+                         [(3, "Start", "Kay D", w["need_t"], False)])
+        # scooping: nothing looked at or said; it stops a little short: still warned, not said again
+        self.j.status_json = dict(self.j.status_json, fuel_main=12, flags=ed_outrider.FLAG_SCOOPING)
+        self.assertFalse(self.state.last_scoop_check(self.now + 5))
+        self.assertEqual(self.state.dry_stretch_summary()["have_t"], 10)
+        self.fuel(12)
+        self.assertTrue(self.state.last_scoop_check(self.now + 10))
+        self.assertEqual(self.state.dry_stretch_summary()["have_t"], 12)
+        self.assertEqual(len(self.last_scoops()), 1)
+        # enough fuel: cleared; the fuel changes again within HIGHWAY_HEAVY_EVERY_S: not looked at yet
+        self.fuel(lo + 0.3)
+        self.assertTrue(self.state.last_scoop_check(self.now + 15))
+        self.assertIsNone(self.state.dry_stretch_summary())
+        self.fuel(5)
+        self.assertFalse(self.state.last_scoop_check(self.now + 16))
+        self.assertTrue(self.state.last_scoop_check(self.now + 20))
+        self.assertEqual(len(self.last_scoops()), 1)   # the same stretch: said once
+        self.assertTrue(self.state.dry_stretch_summary()["said"])   # said on this stay: the page's top-up card stays quiet
+        # a later arrival (a detour and back): the same stretch is said again, not left to a silenced top-up card
+        self.jump(-9, 999, "Elsewhere", 5.0)
+        self.state.last_scoop_check(self.now + 20.5)
+        self.jump(-8, 300, "Start", 0)
+        self.state.last_scoop_check(self.now + 21)
+        self.assertEqual((len(self.last_scoops()), self.state.dry_stretch_summary()["said"]), (2, True))
+        # the next star unknown (no class from the game or Spansh): no claim; nor at a star you can't scoop
+        self.navroute([(300, "Start", "K", 0.0), (401, "Dwarf A", None, 70.0), (402, "Neutron B", "N", 140.0)])
+        self.state.last_scoop_check(self.now + 25)
+        self.assertIsNone(self.state.dry_stretch_summary())
+        self.navroute(self.DRY_NAV)
+        self.classes(s300="DA")
+        self.jump(-5, 300, "Start", 0)   # here_star is the arrival's class
+        self.state.last_scoop_check(self.now + 30)
+        self.assertIsNone(self.state.dry_stretch_summary())
+        # a hop out of reach whatever the fuel (a neutron jump the game's route alone does not promise): not a fuel matter
+        self.classes(s300="K")
+        self.jump(-4, 300, "Start", 0)
+        self.navroute([(300, "Start", "K", 0.0), (401, "Dwarf A", "DA", 70.0), (402, "Far B", "N", 470.0),
+                       (403, "Kay C", "K", 540.0)])
+        self.state.last_scoop_check(self.now + 35)
+        self.assertIsNone(self.state.dry_stretch_summary())
+        # a stretch no tank-full covers: said, with no amount (a new stretch: its first dry star is another)
+        far = [(300, "Start", "K", 0.0)] + [(500 + k, f"Dry {k}", "DA", 75.0 * (k + 1)) for k in range(40)]
+        self.navroute(far + [(600, "Kay Z", "K", 75.0 * 41)])
+        self.fuel(160)
+        self.assertIsNone(outrider.fsd.fuel_window(model, 1.14, [(75.0, 1)] * 41, 160))
+        self.state.last_scoop_check(self.now + 40)
+        w = self.state.dry_stretch_summary()
+        self.assertEqual((w["count"], w["full"], w["need_t"], w["first"]), (40, True, None, "500"))
+        self.assertEqual([m["full"] for m in self.last_scoops()], [False, False, True])
+        # you away from the ship, or the game not running: nothing
+        self.j.status_json = dict(self.j.status_json, away="SRV")
+        self.state.last_scoop_check(self.now + 45)
+        self.assertIsNone(self.state.dry_stretch_summary())
+        self.fuel(160, live=False)
+        self.state.last_scoop_check(self.now + 50)
+        self.assertIsNone(self.state.dry_stretch_summary())
+
+    def test_last_scoop_on_the_highway_and_s1_first(self):
+        """S2 follows the Highway too. On an exact-plotter route S1 already says the same stretch (the plan's default:
+        S1 suppresses S2 there); on a neutron-plotter route, which has no fuel plan, S2 says it."""
+        self.classes(s300="K", s301="DA", s302="N", s303="H", s304="K")
+        self.heavy_route(self.ROUTE_SHORT)
+        self.fuel(10)
+        self.state.highway_heavy_check(self.now)
+        self.state.last_scoop_check(self.now)
+        self.assertTrue(self.state.highway_summary()["short"])
+        self.assertIsNone(self.state.dry_stretch_summary())
+        self.assertEqual(self.last_scoops(), [])
+        self.state.highway_clear()
+        self.heavy_route(self.ROUTE_SHORT, plotter="neutron")
+        self.state.highway_heavy_check(self.now + 5)
+        self.state.last_scoop_check(self.now + 5)
+        self.assertIsNone(self.state.highway_summary()["short"])
+        w = self.state.dry_stretch_summary()
+        self.assertEqual((w["count"], w["next"], w["source"]), (3, "Refuel D", "highway"))
+        self.assertEqual(len(self.last_scoops()), 1)
 
     def test_plot_from_a_system_spansh_does_not_know(self):
         """A fresh discovery Spansh does not know yet (where you are): the route is plotted from the Spansh system near
@@ -1003,7 +1282,8 @@ class HighwayH1(unittest.TestCase):
               "autotarget_search_wait": 2.0, "autotarget_key_delay": 0.05, "autotarget_keys": {},
               "autotarget_plot": ["hold CamZoomOut 0.2", "hold UI_Select 1"],
               "autotarget_search": ["hold CamYawRight 0.3", "press UI_Up", "press UI_Select"],
-              "autotarget_submit": ["wait 1.5", "press Enter", "wait 0.5", "press Enter"], "autotarget_dry_run": False}
+              "autotarget_submit": ["wait 1.5", "press Enter", "wait 0.5", "press Enter"], "autotarget_dry_run": False,
+              "voice_plot": True, "voice_plot_ly": 500.0}
         self.assertEqual(st["highway"], dict({"clipboard": True, "autotarget": False, "autotarget_delay": 5.0, "efficiency": 60}, **bg))
         back = tomllib.loads(ed_outrider.config_text(st))["highway"]
         self.assertEqual(back, dict({"clipboard": True, "autotarget": False, "autotarget_delay": 5, "efficiency": 60}, **bg))
@@ -1027,6 +1307,110 @@ class HighwayH1(unittest.TestCase):
             self.assertIn(f"# {key} = ", example[example.index("[highway]"):])
             self.assertIn(f"`{key}`", readme[readme.index("| `[highway]`"):].split("\n")[0])
 
+
+class WrongTarget(unittest.TestCase):
+    """F3 (game_target: the game's jump target) and S11 (the wrong-jump check): the followed route's next stop against
+    what the game targets, on the line (the summaries' target_check), the overlay's Target panel, and said once per
+    new wrong target (the `wrong_target` moment). Fakes only: Status.json and NavRoute.json as Journals holds them."""
+    setUp = HighwayH1.setUp
+    EXACT = HWY_EXACT
+    ts = hwy_ts
+    jump = hwy_jump
+    plot_exact = hwy_plot_exact
+
+    def aim(self, system, name=None, route=None, focus=0, live=True):
+        """The game targets `system` (Status.json's Destination), with NavRoute.json's hops `route` (id64s)."""
+        self.j.status_json = {"live": live, "ts": self.ts(0), "flags": 0, "gui_focus": focus,
+                              "destination": {"System": system, "Name": name or f"Sys {system}"} if system else None}
+        ed_outrider.meta_set(self.db, "route", {"ts": self.ts(0), "hops": [{"id64": h, "name": f"Hop {h}"} for h in route]}
+                             if route else None)
+
+    def said(self):
+        return [(m["system"], m["next"], m["route"]) for m in self.j.moments if m["kind"] == "wrong_target"]
+
+    def test_game_target(self):
+        G = outrider.target.game_target
+        live = lambda d: {"live": True, "destination": d}
+        self.assertIsNone(G(live(None), 1))
+        self.assertIsNone(G(live({"System": 1, "Name": "A 1", "Body": 3}), 1))      # a body here: no jump target
+        self.assertEqual(G(live({"System": 5, "Name": "Five"}), 1), {"id64": 5, "name": "Five", "via": "destination"})
+        hops = [{"id64": 1, "name": "One"}, {"id64": 5, "name": "Five"}, {"id64": 9, "name": "Nine"}]
+        # a route plotted in game: the Destination is its first hop, the target its end (review F2)
+        self.assertEqual(G(live({"System": 5, "Name": "Five"}), 1, hops), {"id64": 9, "name": "Nine", "via": "route"})
+        # a Destination off that route (targeted since): the Destination, the route is stale
+        self.assertEqual(G(live({"System": 7, "Name": "Seven"}), 1, hops)["id64"], 7)
+        self.assertEqual(G(live({"System": 5}), 9, hops)["via"], "destination")   # at the route's end already
+        # no live Status.json: the journal's FSDTarget, unless it is where you are
+        self.assertEqual(G({"live": False}, 1, hops, {"id64": 4, "name": "Four"}), {"id64": 4, "name": "Four", "via": "fsd"})
+        self.assertIsNone(G({"live": False}, 4, None, {"id64": 4}))
+        self.assertIsNone(G(None))
+
+    def test_highway_check(self):
+        self.plot_exact()
+        self.assertIsNone(self.state.highway_summary()["target_check"])                 # nothing targeted
+        self.aim(101, "Neu A")
+        self.assertEqual(self.state.highway_summary()["target_check"],
+                         {"ok": True, "name": "Neu A", "id": "101", "next": "Neu A", "ahead": 0})
+        self.aim(101, "Neu A", route=[100, 101, 103])   # plotted in game through the next stop: its first hop is it
+        self.assertTrue(self.state.highway_summary()["target_check"]["ok"])
+        self.aim(102, "Bridge B", route=[100, 102, 104])  # plotted in game to Neu D, three stops after the next
+        self.assertEqual(self.state.highway_summary()["target_check"],
+                         {"ok": False, "name": "Neu D", "id": "104", "next": "Neu A", "ahead": 3})
+        self.aim(999, "Elsewhere")
+        tc = self.state.highway_summary()["target_check"]
+        self.assertEqual((tc["ok"], tc["name"], tc["ahead"], tc["next"]), (False, "Elsewhere", 0, "Neu A"))
+        self.aim(100, "Start A 1")                                                       # a body in this system
+        self.assertIsNone(self.state.highway_summary()["target_check"])
+        self.aim(999, live=False)                                                        # the game not running
+        self.assertIsNone(self.state.highway_summary()["target_check"])
+        self.aim(999)
+        self.jump(-10, 555, "Somewhere Else", 99)                                        # off the route: silent
+        self.assertTrue(self.state.highway_summary()["off_route"])
+        self.assertIsNone(self.state.highway_summary()["target_check"])
+
+    def test_said_once_per_new_target(self):
+        self.plot_exact()
+        self.aim(999, "Elsewhere", focus=outrider.target.GUI_GALAXY_MAP)
+        self.assertFalse(self.state.wrong_target_watch())        # the galaxy map still open: not yet
+        self.aim(999, "Elsewhere")
+        self.assertTrue(self.state.wrong_target_watch())
+        self.assertFalse(self.state.wrong_target_watch())        # once
+        self.aim(101, "Neu A")
+        self.assertFalse(self.state.wrong_target_watch())        # right: nothing to say
+        self.aim(999, "Elsewhere")
+        self.assertFalse(self.state.wrong_target_watch())        # the same wrong target again: said already
+        self.aim(103, "Scoop C")
+        self.assertFalse(self.state.wrong_target_watch())        # a later stop of the route: on purpose
+        self.aim(998, "Other")
+        self.assertTrue(self.state.wrong_target_watch())         # a new wrong target
+        self.assertEqual(self.said(), [("Elsewhere", "Neu A", "highway"), ("Other", "Neu A", "highway")])
+        # the next stop moves on: the same wrong target is new for it
+        self.jump(-5, 101, "Neu A", 50)
+        self.aim(998, "Other")
+        self.assertTrue(self.state.wrong_target_watch())
+        self.assertEqual(self.said()[-1], ("Other", "Bridge B", "highway"))
+        # off the route: silent
+        self.jump(-4, 555, "Somewhere Else", 99)
+        self.aim(997, "Third")
+        self.assertFalse(self.state.wrong_target_watch())
+
+    def test_survey_route_and_overlay(self):
+        """A survey route has the same check against its next stop (past the systems you finished, S12), and the
+        overlay's Target panel shows the followed route's check."""
+        import outrider.riches as riches
+        from test_riches import RESULT
+        self.jump(-100, 1001, "Alpha Rich", 0)
+        self.state.riches_store(riches.riches_rows(RESULT), {"options": {"use_mapping_value": True}})
+        self.aim(1003, "Gamma Rich")
+        tc = self.state.survey_summary()["target_check"]
+        self.assertEqual((tc["ok"], tc["ahead"], tc["next"]), (False, 1, "Beta Rich"))
+        self.assertFalse(self.state.wrong_target_watch())        # one stop ahead: shown, not said
+        self.aim(42, "Nowhere")
+        self.assertTrue(self.state.wrong_target_watch())
+        self.assertEqual(self.said(), [("Nowhere", "Beta Rich", "riches")])
+        self.j.target = {"id64": 42, "name": "Nowhere", "star_class": "K", "ts": self.ts(0), "remaining": 1}
+        info = self.state.overlay_target_info(self.j.pos)
+        self.assertEqual((info["route_check"]["ok"], info["route_check"]["next"]), (False, "Beta Rich"))
 
 class HighwayMap(unittest.TestCase):
     """The Highway map's background: the region layer (GET /api/regions, from the shipped bio_rules.json, read only)
@@ -1193,6 +1577,92 @@ class HighwayMap(unittest.TestCase):
         for key in ("background_image", "background_extent", "background_opacity"):
             self.assertIn(f"# {key} = ", example[example.index("[highway]"):])
             self.assertIn(f"`{key}`", readme[readme.index("| `[highway]`"):].split("\n")[0])
+
+
+class MapRoute(unittest.TestCase):
+    """S50: the Map draws the route ahead (State.map_route, api/map's `route`): the game's plotted route after you, the
+    followed route's rows from where you are with its next stop, else the header's next stop; at most MAP_ROUTE_MAX
+    points; never cached with the map's systems."""
+
+    def setUp(self):
+        import types
+        self.db = ed_outrider.open_db(":memory:")
+        self.addCleanup(self.db.close)
+        self.j = ed_outrider.Journals(self.db)
+        self.state = ed_outrider.State(self.db, self.j, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        self.now = time.time()
+
+    ts = hwy_ts
+    jump = hwy_jump
+    EXACT = HWY_EXACT
+    plot_exact = hwy_plot_exact
+
+    def names(self, pts):
+        return [p["name"] for p in pts]
+
+    def test_route_ahead_on_the_map(self):
+        self.jump(-200, 100, "Start", 0)
+        self.assertIsNone(self.state.map_route())   # nothing to draw
+        # the game's plotted route: its hops after you, ids as exact strings
+        ed_outrider.meta_set(self.db, "route", {"ts": self.ts(-150), "hops": [
+            {"id64": 100, "name": "Start", "x": 0.0, "y": 0.0, "z": 0.0}, {"id64": 101, "name": "Neu A", "x": 50.0, "y": 0.0, "z": 0.0},
+            {"id64": 9007199254740993, "name": "Big Id", "x": 70.0, "y": 0.0, "z": 0.0}, {"id64": 103, "name": "No Place"}]})
+        r = self.state.map_route()
+        self.assertEqual(self.names(r["navroute"]), ["Neu A", "Big Id"])   # a hop without a position is left out
+        self.assertEqual(r["navroute"][1]["id"], "9007199254740993")
+        self.assertEqual((r["rows"], r["kind"], r["next"]), ([], None, None))
+        ed_outrider.meta_set(self.db, "route", None)
+        # a Highway route: its rows from where you are, the next stop
+        self.plot_exact(start=-100)
+        r = self.state.map_route()
+        self.assertEqual(self.names(r["rows"]), ["Start", "Neu A", "Bridge B", "Scoop C", "Neu D", "End"])
+        self.assertEqual((r["kind"], r["next"]["name"], r["next"]["id"], r["next"]["via"]), ("highway", "Neu A", "101", "route"))
+        self.jump(-90, 101, "Neu A", 50)
+        r = self.state.map_route()
+        self.assertEqual((self.names(r["rows"])[0], r["next"]["name"]), ("Neu A", "Bridge B"))
+        # off the route: from its next stop on
+        self.jump(-80, 999, "Elsewhere", 60)
+        self.assertTrue(ed_outrider.meta_get(self.db, "highway")["off_route"])
+        r = self.state.map_route()
+        self.assertEqual((self.names(r["rows"]), r["next"]["name"]), (["Bridge B", "Scoop C", "Neu D", "End"], "Bridge B"))
+        # at most MAP_ROUTE_MAX points, the game's route first; the next stop kept
+        ed_outrider.meta_set(self.db, "route", {"ts": self.ts(-70), "hops": [
+            {"id64": 999, "name": "Elsewhere", "x": 60.0, "y": 0.0, "z": 0.0}, {"id64": 102, "name": "Bridge B", "x": 80.0, "y": 0.0, "z": 0.0}]})
+        with unittest.mock.patch.object(ed_outrider, "MAP_ROUTE_MAX", 2):
+            r = self.state.map_route()
+        self.assertEqual((self.names(r["navroute"]), self.names(r["rows"]), r["next"]["name"]), (["Bridge B"], ["Bridge B"], "Bridge B"))
+        # a finished route draws nothing of its own: the header's next stop instead
+        ed_outrider.meta_set(self.db, "route", None)
+        self.state.highway_clear()
+        self.assertIsNone(self.state.map_route())
+        self.assertTrue(self.state.set_next_stop(101))
+        r = self.state.map_route()
+        self.assertEqual((r["rows"], r["kind"], r["next"]["name"], r["next"]["via"]), ([], None, "Neu A", "next_stop"))
+
+    def test_survey_route_and_the_payload(self):
+        """A survey route plotted after the Highway is the one drawn (route_newest), its next stop past the systems you
+        finished (S12); api/map carries it outside the cached systems, so a new plot shows at the next fetch."""
+        import asyncio
+        import outrider.riches as riches
+        self.plot_exact(start=-100)
+        hw = ed_outrider.meta_get(self.db, "highway")
+        ed_outrider.meta_set(self.db, "highway", dict(hw, created_ts=self.ts(-100)))   # plotted before the survey route
+        spheres = []
+
+        async def sphere(pos, radius, pages):
+            spheres.append(radius)
+            return []
+        self.state.spansh = types_ns(cached=lambda i: (None, None), sphere=sphere)
+        m = asyncio.run(self.state.map_payload(50, 10))
+        self.assertEqual(m["route"]["kind"], "highway")
+        rows = riches.riches_rows([{"name": "Start", "id64": 100, "x": 0, "y": 0, "z": 0, "jumps": 0, "bodies": []},
+                                   {"name": "Rich One", "id64": 301, "x": 20, "y": 0, "z": 0, "jumps": 1, "bodies": []},
+                                   {"name": "Rich Two", "id64": 302, "x": 40, "y": 0, "z": 0, "jumps": 1, "bodies": []}])
+        self.state.riches_store(rows, {"options": {}, "kind": "exo"})
+        m = asyncio.run(self.state.map_payload(50, 10))
+        self.assertEqual(len(spheres), 1)   # the systems from the cache, the route fresh
+        self.assertEqual((m["route"]["kind"], self.names(m["route"]["rows"]), m["route"]["next"]["name"]),
+                         ("exo", ["Start", "Rich One", "Rich Two"], "Rich One"))
 
 
 class HighwayAutoTarget(unittest.TestCase):
@@ -1545,6 +2015,37 @@ class HighwayAutoTarget(unittest.TestCase):
         self.assertEqual((r["ok"], r["dry_run"], self.game.writes), (True, True, []))
         self.assertTrue(r["log"][0].startswith("would press Left Alt + Right Alt + T"))
         self.assertEqual(len(r["log"]), 16)
+
+    # ---- S74: no key unless Elite's window is the one in front ----
+
+    def test_no_key_unless_the_game_is_in_front(self):
+        """The window check (run's `front`) is asked before the first key and before every key after it: not in front
+        at the start, nothing is pressed; lost mid-way (you clicked into the browser), nothing more is pressed, not even
+        the key that would close the map it opened."""
+        import outrider.game_window as G
+        self.fake_time()
+        r = self.run_target(front=lambda: G.NOT_FRONT)
+        self.assertEqual((r["ok"], r["phase"], r["code"], r["why"], self.game.writes), (False, 0, "window", G.NOT_FRONT, []))
+        self.assertIsNone(self.targeter.run_front)   # the check belongs to that run only
+        desk = FakeDesktop(active=FakeDesktop.GAME)
+        gw = desk.window()
+        self.assertTrue(gw.bring_forward()["front"])
+        switched = []
+
+        def click_away(game):
+            if len(game.text) == 2:
+                desk.active = FakeDesktop.BROWSER
+                switched.append(len(game.writes))
+        self.game.on_type = click_away
+        r = self.run_target(front=gw.front_why)
+        self.assertEqual((r["ok"], r["phase"], r["code"], r["why"]), (False, 3, "window", G.NOT_FRONT))
+        self.assertEqual([v for _n, v in self.game.writes[switched[0]:]], [0])   # only the typed key let go: no key after
+        self.assertEqual(self.game.text, "Br")
+        self.assertTrue(self.released())
+        self.assertEqual(self.status["gui_focus"], 6)   # the map stays open: closing it would be a key into the browser
+        # in front all the way: the run as ever
+        self.game.on_type, desk.active, self.status["gui_focus"] = None, FakeDesktop.GAME, 0
+        self.assertTrue(self.run_target(front=gw.front_why)["ok"])
 
     # ---- review batch 4: cancelling, the checks under the lock, multi-hop plots, the wrong system ----
 
@@ -1966,7 +2467,7 @@ class HighwayAutoTarget(unittest.TestCase):
         self.assertEqual(out["binds"][0], 400)
         self.assertIn("no keyboard binding for GalaxyMapOpen", out["binds"][1]["error"])
         self.assertEqual(out["guard"], 403)
-        self.assertEqual(out["started"], (200, {"system": "Bridge B", "in": 0.05, "seq": 1, "dry_run": False, "kind": "test"}))
+        self.assertEqual(out["started"], (200, {"system": "Bridge B", "in": 0.05, "seq": 1, "dry_run": False, "kind": "test", "front": False}))
         self.assertEqual(out["busy"], 409)
         self.assertEqual((out["test"]["state"], out["test"]["system"]), ("done", "Bridge B"))
         self.assertEqual(self.moments(), [(True, "Successfully targeted neutron jump target Bridge B")])
@@ -2012,7 +2513,7 @@ class HighwayAutoTarget(unittest.TestCase):
         out = asyncio.run(go())
         self.assertEqual(out["noroute"], (400, {"error": "no route is plotted"}))
         self.assertEqual((out["bad"], out["badjson"], out["guard"]), ([400, 400, 400], 400, 403))
-        self.assertEqual(out["started"], (200, {"system": "Bridge B", "in": 0, "seq": 1, "dry_run": False, "kind": "next"}))
+        self.assertEqual(out["started"], (200, {"system": "Bridge B", "in": 0, "seq": 1, "dry_run": False, "kind": "next", "front": False}))
         self.assertEqual(out["busy"], 409)
         last = out["last"]
         self.assertEqual((last["done"], last["kind"], last["test"], last["index"], last["system"]), (True, "next", False, 2, "Bridge B"))
@@ -2064,6 +2565,82 @@ class HighwayAutoTarget(unittest.TestCase):
         self.assertIn(said[0]["secs"], (54, 55))
         self.assertEqual(said[0]["text"], "Not targeting due to danger. I will keep trying until you are out of danger, "
                                           f"for up to {said[0]['secs']} seconds.")
+
+    def test_runs_bring_the_game_forward(self):
+        """S74: where this PC can bring Elite's window to the front (a fake desktop here: nothing real is activated), the
+        page's 🎯 runs at once, no countdown; the activation ignored, it counts down after all, saying why, and still
+        checks before the first key; with no wmctrl, the countdown as before; the automatic run and the co-pilot's
+        bring it forward too and stop, said, when it does not come."""
+        import asyncio
+        import outrider.game_window as G
+        self.state.honker, self.state.targeter = self.honker, self.targeter
+        self.j.status_json = self.status
+        hwy_plot_exact(self)
+        hwy_jump(self, 1, 101, "Neu A", 50)
+        self.state.autotarget_test_countdown = 0.3
+        p = unittest.mock.patch.object(G, "FRONT_WAIT_S", 0.05)
+        p.start()
+        self.addCleanup(p.stop)
+        desk = FakeDesktop()
+        self.state.game_window = desk.window()
+        self.assertEqual(self.state.autotarget_info()["front"], {"front": True, "why": None})
+
+        async def run(**kw):
+            self.status["destination"] = None
+            out = self.state.start_autotarget_run("next", **kw)
+            await self.state.autotarget_test_task
+            return out
+        # brought forward: no countdown
+        body, status = asyncio.run(run())
+        self.assertEqual((status, body["in"], body["front"]), (200, 0, True))
+        self.assertEqual((desk.activations(), desk.active), (["0x03c00007"], FakeDesktop.GAME))
+        self.assertEqual((self.state.autotarget_last["done"], self.status["destination"]["System"]), (True, 102))
+        # the tablet's 0 s too
+        desk.active = FakeDesktop.BROWSER
+        body, status = asyncio.run(run(countdown=0))
+        self.assertEqual((body["in"], body["front"], self.state.autotarget_last["done"]), (0, True, True))
+        # the activation ignored: the countdown after all, with the reason; you click into the game meanwhile
+        desk.obeys, desk.active = False, FakeDesktop.BROWSER
+
+        async def click_in():
+            self.status["destination"] = None
+            body, _ = self.state.start_autotarget_run("next")
+            await asyncio.sleep(0.15)
+            seen = dict(self.state.autotarget_test)
+            desk.active = FakeDesktop.GAME
+            await self.state.autotarget_test_task
+            return body, seen
+        body, seen = asyncio.run(click_in())
+        self.assertEqual((body["in"], seen["state"], seen["in"], seen["note"]), (0, "counting", 0.3, G.NOT_FRONT))
+        self.assertTrue(self.state.autotarget_last["done"])
+        # ...or you do not: nothing pressed
+        desk.active, writes = FakeDesktop.BROWSER, len(self.game.writes)
+        asyncio.run(run())
+        last = self.state.autotarget_last
+        self.assertEqual((last["done"], last["phase"], last["why"]), (False, 0, G.NOT_FRONT))
+        self.assertEqual(len(self.game.writes), writes)
+        # the automatic run after a supercharge: refused before any key, and said
+        self.state.highway_cfg.update(autotarget=True, autotarget_delay=0.01)
+
+        async def boost():
+            self.status["destination"] = None
+            self.j.handle({"event": "JetConeBoost", "timestamp": self.ts(5), "BoostValue": 4})
+            self.assertTrue(self.state.maybe_autotarget())
+            await self.state.autotarget_task
+        asyncio.run(boost())
+        self.assertEqual(len(self.game.writes), writes)
+        self.assertEqual(self.moments()[-1], (False, "Not targeting Bridge B: Elite is not the active window. Click into the game."))
+        # the co-pilot's run keeps its short wait (for a cancelling press) and brings the game forward too
+        desk.obeys, n = True, len(desk.activations())
+        body, _ = asyncio.run(run(countdown=0.01, fallback=False))
+        self.assertEqual((body["in"], body["front"], len(desk.activations()), self.state.autotarget_last["done"]),
+                         (0.01, False, n + 1, True))
+        # no wmctrl: the countdown as before, nothing checked or run on the desktop
+        desk = FakeDesktop()
+        self.state.game_window = desk.window(tools=("xprop",))
+        body, _ = asyncio.run(run())
+        self.assertEqual((body["in"], body["front"], desk.calls, self.state.autotarget_last["done"]), (0.3, False, [], True))
+        self.assertEqual(self.state.autotarget_info()["front"], {"front": False, "why": "wmctrl is not installed"})
 
     def test_danger_wait_after_supercruise_entry_and_a_restart(self):
         """The flag comes on for entering supercruise too (lifting off a planet 15 min after the arrival, logged in game
@@ -2172,6 +2749,55 @@ class HighwayAutoTarget(unittest.TestCase):
         asyncio.run(press())
         self.assertEqual(len(moments()), n)
 
+    def test_copilot_button_targets_the_boxel(self):
+        """S76 (the author, 2026-10-12): the button targets the boxel's next system too, as 🎯 does: after a route you
+        are on, before one you left (a detour into the boxel); a name the galaxy map cannot find marks the boxel's
+        probable end as 🎯's run does; with nothing, the last reason found."""
+        import asyncio
+        self.state.honker, self.state.targeter = self.honker, self.targeter
+        self.status["flags"] |= ed_outrider.FLAG_IN_MAIN_SHIP
+        self.j.status_json = self.status
+        self.state.COPILOT_TARGET_DELAY_S = 0.01
+        self.fake_time()
+        N = self.state.copilot_next
+
+        def boxel_jump(s):   # Drojau TF-H c13-0, real (in-game data)
+            self.j.handle({"event": "FSDJump", "timestamp": self.ts(s), "StarSystem": "Drojau TF-H c13-0",
+                           "SystemAddress": 76873176434, "StarPos": [-4179.0625, -64.25, 3339.21875]})
+
+        async def press():
+            self.state.copilot_gesture("status")
+            if self.state.autotarget_test_task:
+                await self.state.autotarget_test_task
+        boxel_jump(-200)
+        self.state.boxel_set("Drojau TF-H c13-", self.state.boxel_active()["sector_index"])   # 📌 kept
+        self.assertEqual(N(), (("next", ("boxel", None)), None))   # no route: the boxel's next
+        nxt = self.state.boxel_target()[0]
+        self.game.systems[nxt["name"]] = nxt["id64"]
+        asyncio.run(press())
+        self.assertEqual((self.state.autotarget_last["system"], self.state.autotarget_last["done"]), ("Drojau TF-H c13-1", True))
+        # the galaxy map cannot find it: probably the boxel's end, marked as 🎯's run marks it; then nothing to target
+        del self.game.systems[nxt["name"]]
+        self.status["destination"] = None
+        asyncio.run(press())
+        self.assertEqual(self.state.autotarget_last["why"], "Drojau TF-H c13-1 was not found: probably the end of the boxel")
+        self.assertEqual(self.state.boxel_view()["end"], 1)
+        self.assertEqual(N(), (None, "Drojau TF-H c13 is complete"))
+        self.state.boxel_clear_end()
+        # a Highway route you are on (at its start) stays first, the boxel kept or not
+        hwy_plot_exact(self)
+        self.assertEqual(N(), (("next", None), None))
+        # off the route, in the boxel: the boxel's next; the route's closest system once the boxel is done
+        boxel_jump(-50)
+        self.assertTrue(ed_outrider.meta_get(self.db, "highway")["off_route"])
+        self.assertEqual(N(), (("next", ("boxel", None)), None))
+        self.state.boxel_mark_done()
+        self.assertEqual(N(), (("next", None), None))
+        self.assertEqual(self.state.autotarget_target(manual=True)[0]["name"], "Start")
+        # neither: the boxel's reason, the last found
+        self.state.highway_clear()
+        self.assertEqual(N(), (None, "Drojau TF-H c13 is marked done"))
+
     def test_target_next_targets(self):
         T = self.state.autotarget_target
         self.assertEqual(T(manual=True), (None, "no route is plotted"))
@@ -2271,6 +2897,83 @@ class HighwayAutoTarget(unittest.TestCase):
         started, last = asyncio.run(go())
         self.assertEqual((started[0], started[1]["system"]), (200, "Bridge B"))
         self.assertEqual((last["done"], last["system"]), (True, "Bridge B"))
+
+    def test_aim_at_any_system(self):
+        """S31: 🎯 on any system the page lists, route "system" by its id64 (the request's id a string: over 2^53 a JSON
+        number would round): located where Outrider knows it (locate), else a Map point (S72: Spansh's systems around you,
+        the boost stars), your next stop or your carrier's system; never the system you are in; the same run as 🎯."""
+        import asyncio
+        from aiohttp.test_utils import TestClient, TestServer
+        self.state.honker, self.state.targeter = self.honker, self.targeter
+        self.j.status_json = self.status
+        R = self.state.route_target
+        self.assertEqual(R("system", 102), (None, "your position is not known yet"))
+        hwy_jump(self, 1, 101, "Neu A", 50)
+        self.assertEqual(R("system", 102), (None, "that system is not known here"))
+        self.assertEqual(R("system", 101), (None, "you are in Neu A already"))
+        self.assertEqual(R("system", "102")[1], "id must be a system's id64")
+        big = 2 ** 53 + 1   # a JavaScript number would read it as 2^53
+        self.state.map_cache[(101, 50)] = ({102: {"name": "Bridge B", "x": 70, "y": 0, "z": 0},
+                                            big: {"name": "Far Out", "x": 90, "y": 0, "z": 0}}, None)
+        self.state.map_cache[("boost", 101, 50)] = {"points": [{"id": "555", "name": "Col 285 Sector AB-C d13-5", "x": 60,
+                                                                "y": 0, "z": 0, "boost": "N"}], "complete_to": None}
+        self.assertEqual(R("system", 102)[0], {"name": "Bridge B", "id64": 102, "here": 101, "route": None})
+        self.assertEqual(R("system", big)[0]["name"], "Far Out")
+        self.assertEqual(R("system", 555)[0]["name"], "Col 285 Sector AB-C d13-5")
+        ed_outrider.meta_set(self.db, "next_stop", {"id64": 777, "name": "Chosen", "x": 1, "y": 2, "z": 3})
+        self.assertEqual(R("system", 777)[0]["name"], "Chosen")
+        self.j.carrier = {"id": 3700000001, "id64": 778, "system": "Carrier Place"}
+        self.assertEqual(R("system", 778)[0]["name"], "Carrier Place")
+
+        async def go():
+            out = {}
+            async with TestClient(TestServer(ed_outrider.make_app(self.state))) as c:
+                async def post(body):
+                    r = await c.post("/api/highway/target", json=body)
+                    return r.status, await r.json()
+                out["bad"] = [await post(b) for b in ({"route": "system"}, {"route": "system", "id": "x"},
+                                                      {"route": "system", "id": True}, {"route": "system", "id": "999"})]
+                out["big"] = await post({"route": "system", "id": str(big), "countdown": 10})
+                self.state.autotarget_test_task.cancel()
+                await asyncio.sleep(0)
+                self.state.autotarget_test = None
+                out["started"] = await post({"route": "system", "id": "102", "countdown": 0})
+                await self.state.autotarget_test_task
+                out["last"] = dict(self.state.autotarget_last)
+            return out
+        out = asyncio.run(go())
+        self.assertEqual([b[0] for b in out["bad"]], [400] * 4)
+        self.assertEqual(out["bad"][3][1]["error"], "that system is not known here")
+        self.assertEqual((out["big"][0], out["big"][1]["system"]), (200, "Far Out"))
+        self.assertEqual((out["started"][0], out["started"][1]["system"]), (200, "Bridge B"))
+        self.assertEqual((out["last"]["done"], out["last"]["system"]), (True, "Bridge B"))
+
+    def test_copilot_button_falls_back_to_the_next_stop(self):
+        """S31: after the survey route, the Highway and the boxel, the co-pilot button targets the header's next stop (a
+        system you chose); a complete route counts as none, so it comes through; a route you follow stays first."""
+        import asyncio
+        self.state.honker, self.state.targeter = self.honker, self.targeter
+        self.status["flags"] |= ed_outrider.FLAG_IN_MAIN_SHIP
+        self.j.status_json = self.status
+        self.state.COPILOT_TARGET_DELAY_S = 0.01
+        N = self.state.copilot_next
+        hwy_jump(self, 1, 101, "Neu A", 50)
+        self.assertEqual(N(), (None, "no route is plotted"))
+        ed_outrider.meta_set(self.db, "next_stop", {"id64": 102, "name": "Bridge B", "x": 70, "y": 0, "z": 0})
+        self.assertEqual(N(), (("next", ("system", 102)), None))
+
+        async def press():
+            self.state.copilot_gesture("status")
+            await self.state.autotarget_test_task
+        asyncio.run(press())
+        self.assertEqual((self.state.autotarget_last["system"], self.state.autotarget_last["done"]), ("Bridge B", True))
+        hwy_plot_exact(self)   # a route you are on (its start): first
+        self.assertEqual(N(), (("next", None), None))
+        hw = ed_outrider.meta_get(self.db, "highway")
+        ed_outrider.meta_set(self.db, "highway", dict(hw, done_ts=self.ts(0)))   # complete: as none
+        self.assertEqual(N(), (("next", ("system", 102)), None))
+        self.state.set_next_stop(None)
+        self.assertEqual(N(), (None, "the highway is complete"))
 
     def test_supercharge_during_a_manual_run_starts_no_second(self):
         """Review 2026-10-08 #1: a supercharge while Target next (or 🎯, or the co-pilot's tap) is counting down or

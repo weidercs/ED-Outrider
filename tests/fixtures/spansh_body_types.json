@@ -1,0 +1,255 @@
+{
+ "_note": "Spansh's Road to Riches router asked for one body type (2026-10-13, scripts/route_probe.py): POST /api/riches/route with body_types (a repeated form field) and min_value 1, as spansh.co.uk/earth and /ammonia send it; there is no /api/earth/route or /api/ammonia/route (404). The answers are Road to Riches' shape.",
+ "elw": {
+  "created_at": "2026-10-13T06:34:12",
+  "job": "1A3465DA-C6D0-11F1-8441-F44B233821C1",
+  "parameters": {
+   "avoid_thargoids": 1,
+   "body_types": [
+    "Earth-like world"
+   ],
+   "loop": "0",
+   "max_distance": "50000",
+   "max_results": "4",
+   "min_value": "1",
+   "radius": "50",
+   "range": "50",
+   "source": "Colonia",
+   "use_mapping_value": null
+  },
+  "result": [
+   {
+    "bodies": [],
+    "id64": "3238296097059",
+    "jumps": 1,
+    "name": "Colonia",
+    "x": -9530.5,
+    "y": -910.28125,
+    "z": 19808.125
+   },
+   {
+    "bodies": [
+     {
+      "distance_to_arrival": 2765.933431,
+      "estimated_mapping_value": 1061009,
+      "estimated_scan_value": 292021,
+      "id": 720592682052571435,
+      "id64": "720592682052571435",
+      "is_terraformable": false,
+      "landmark_value": null,
+      "name": "Eol Prou TD-S d4-487 AB 2",
+      "subtype": "Earth-like world",
+      "type": "Planet"
+     }
+    ],
+    "id64": "16741673292075",
+    "jumps": 1,
+    "name": "Eol Prou TD-S d4-487",
+    "x": -9515.53125,
+    "y": -887.84375,
+    "z": 19817.53125
+   },
+   {
+    "bodies": [
+     {
+      "distance_to_arrival": 665.955225,
+      "estimated_mapping_value": 1077994,
+      "estimated_scan_value": 296696,
+      "id": 252262395030053458,
+      "id64": "252262395030053458",
+      "is_terraformable": false,
+      "landmark_value": null,
+      "name": "Eol Prou PC-K c9-221 3",
+      "subtype": "Earth-like world",
+      "type": "Planet"
+     }
+    ],
+    "id64": "60815897305682",
+    "jumps": 1,
+    "name": "Eol Prou PC-K c9-221",
+    "x": -9528.90625,
+    "y": -915.1875,
+    "z": 19815.4375
+   },
+   {
+    "bodies": [
+     {
+      "distance_to_arrival": 2205.414164,
+      "estimated_mapping_value": 1062095,
+      "estimated_scan_value": 292320,
+      "id": 216174886538531115,
+      "id64": "216174886538531115",
+      "is_terraformable": false,
+      "landmark_value": null,
+      "name": "Eol Prou TD-S d4-61 5",
+      "subtype": "Earth-like world",
+      "type": "Planet"
+     }
+    ],
+    "id64": "2104424747307",
+    "jumps": 1,
+    "name": "Eol Prou TD-S d4-61",
+    "x": -9563.0625,
+    "y": -898.5625,
+    "z": 19817.375
+   },
+   {
+    "bodies": [
+     {
+      "distance_to_arrival": 624.906783,
+      "estimated_mapping_value": 1090620,
+      "estimated_scan_value": 300171,
+      "id": 216214631368401482,
+      "id64": "216214631368401482",
+      "is_terraformable": false,
+      "landmark_value": null,
+      "name": "Eol Prou KW-L c8-152 1",
+      "subtype": "Earth-like world",
+      "type": "Planet"
+     }
+    ],
+    "id64": "41849254617674",
+    "jumps": 1,
+    "name": "Eol Prou KW-L c8-152",
+    "x": -9557.125,
+    "y": -926.28125,
+    "z": 19784.71875
+   }
+  ],
+  "state": "completed",
+  "status": "ok",
+  "updated_at": "2026-10-13T06:34:12"
+ },
+ "aw": {
+  "created_at": "2026-10-13T06:34:15",
+  "job": "1C3AE84A-C6D0-11F1-BB88-CD8C4AF8833D",
+  "parameters": {
+   "avoid_thargoids": 1,
+   "body_types": [
+    "Ammonia world"
+   ],
+   "loop": "0",
+   "max_distance": "50000",
+   "max_results": "4",
+   "min_value": "1",
+   "radius": "50",
+   "range": "50",
+   "source": "Colonia",
+   "use_mapping_value": null
+  },
+  "result": [
+   {
+    "bodies": [],
+    "id64": "3238296097059",
+    "jumps": 1,
+    "name": "Colonia",
+    "x": -9530.5,
+    "y": -910.28125,
+    "z": 19808.125
+   },
+   {
+    "bodies": [
+     {
+      "distance_to_arrival": 23410.109357,
+      "estimated_mapping_value": 517404,
+      "estimated_scan_value": 142405,
+      "id": 324270932698665251,
+      "id64": "324270932698665251",
+      "is_terraformable": false,
+      "landmark_value": null,
+      "name": "Eol Prou SS-T d3-342 B 2",
+      "subtype": "Ammonia world",
+      "type": "Planet"
+     },
+     {
+      "distance_to_arrival": 23455.5788,
+      "estimated_mapping_value": 505047,
+      "estimated_scan_value": 139004,
+      "id": 396328526736593187,
+      "id64": "396328526736593187",
+      "is_terraformable": false,
+      "landmark_value": null,
+      "name": "Eol Prou SS-T d3-342 B 3",
+      "subtype": "Ammonia world",
+      "type": "Planet"
+     }
+    ],
+    "id64": "11759527989539",
+    "jumps": 1,
+    "name": "Eol Prou SS-T d3-342",
+    "x": -9504.96875,
+    "y": -942.625,
+    "z": 19811.28125
+   },
+   {
+    "bodies": [
+     {
+      "distance_to_arrival": 3634.741462,
+      "estimated_mapping_value": 840480,
+      "estimated_scan_value": 231325,
+      "id": 1729395047213633827,
+      "id64": "1729395047213633827",
+      "is_terraformable": false,
+      "landmark_value": null,
+      "name": "Eol Prou RS-T d3-372 8",
+      "subtype": "Ammonia world",
+      "type": "Planet"
+     }
+    ],
+    "id64": "12790303363363",
+    "jumps": 1,
+    "name": "Eol Prou RS-T d3-372",
+    "x": -9508.875,
+    "y": -912.96875,
+    "z": 19790.0625
+   },
+   {
+    "bodies": [
+     {
+      "distance_to_arrival": 5139.471477,
+      "estimated_mapping_value": 751220,
+      "estimated_scan_value": 206758,
+      "id": 2522023908706423083,
+      "id64": "2522023908706423083",
+      "is_terraformable": false,
+      "landmark_value": null,
+      "name": "Eol Prou VY-R d4-236 11",
+      "subtype": "Ammonia world",
+      "type": "Planet"
+     }
+    ],
+    "id64": "8117378945323",
+    "jumps": 2,
+    "name": "Eol Prou VY-R d4-236",
+    "x": -9539.3125,
+    "y": -906.6875,
+    "z": 19844
+   },
+   {
+    "bodies": [
+     {
+      "distance_to_arrival": 7756.693828,
+      "estimated_mapping_value": 891706,
+      "estimated_scan_value": 245424,
+      "id": 576468909505333396,
+      "id64": "576468909505333396",
+      "is_terraformable": false,
+      "landmark_value": null,
+      "name": "Eol Prou IW-W e1-1899 11",
+      "subtype": "Ammonia world",
+      "type": "Planet"
+     }
+    ],
+    "id64": "8157201909908",
+    "jumps": 1,
+    "name": "Eol Prou IW-W e1-1899",
+    "x": -9514,
+    "y": -900.25,
+    "z": 19846.6875
+   }
+  ],
+  "state": "completed",
+  "status": "ok",
+  "updated_at": "2026-10-13T06:34:15"
+ }
+}

@@ -79,6 +79,7 @@ tr.main td { font-weight: 500; }
 #histRows td.systems span { display: inline-block; margin: 1px 8px 1px 0; }
 #histRows td.systems .name { cursor: copy; color: var(--text); }
 #bmTools { margin-top: 8px; } #bmTools .exports a { color: var(--info); }
+#bmImportMsg { color: var(--muted); font-size: 0.9em; } #bmImportMsg.err { color: var(--bad); }
 .mapbar .boost { color: #5ce1e6; }
 #arrival .yes { color: var(--good); } #arrival .no { color: var(--warn); }
 tr.far td.name { font-weight: 400; }
@@ -116,6 +117,8 @@ td.bodies { cursor: help; }
 #pop { position: fixed; z-index: 5; max-width: 380px; background: var(--panel); border: 1px solid var(--line);
   border-radius: 8px; padding: 10px 12px; box-shadow: 0 6px 24px rgba(0,0,0,.35); font-size: 13px;
   pointer-events: none; display: none; }
+#pop.taps { pointer-events: auto; }   /* the Map's tapped card (S72): its buttons take the tap */
+#pop .mapacts { display: flex; gap: 6px; flex-wrap: wrap; }
 #pop h3 { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--accent); }
 #pop .sec { margin-top: 6px; }
 #pop .lbl { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
@@ -285,6 +288,14 @@ dialog .reset { color: var(--info); cursor: pointer; font-size: 11px; margin-lef
   background: transparent; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); }
 .views button:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: var(--accent); }
 .views button.on { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
+/* S37: a view in a window of its own: the ↗ in a tab's corner, only where there is a pointer that hovers (a hover-only
+   reveal would eat a phone's first tap), drawn over the padding so the row keeps its width; a view window has no tabs */
+.views button { position: relative; }
+.views .tabpop { position: absolute; top: 0; right: 2px; font-size: 9px; line-height: 1; font-weight: 400; visibility: hidden; opacity: .75; }
+@media (hover: hover) { .views button:hover .tabpop, .views button:focus-visible .tabpop { visibility: visible; } }
+.views .tabpop:hover { opacity: 1; }
+body.viewwin .views { display: none; }
+.viewback { margin-left: auto; }
 #nearOpts { display: inline-flex; gap: 16px; }
 /* boxel exploration (2026-10-11): the switch, and the boxel pane in Nearby's place */
 .nearmode { display: inline-flex; gap: 2px; border: 1px solid var(--line); border-radius: 6px; padding: 1px 4px; }
@@ -412,6 +423,7 @@ button.icon.hushbtn.on { border-color: var(--warn); }
 .linkpill { font-size: 11px; padding: 0 6px; border-radius: 9px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
 .linkpill.stale { color: var(--warn); border-color: var(--warn); }
 .linkpill.none { color: var(--bad, #e05555); border-color: var(--bad, #e05555); }
+.linkpill.ok { color: var(--good); border-color: var(--good); }   /* the overlay pill drawing (S8) */
 /* the last line said (review S18): muted, on the icons' own row (no new line: a short window keeps its layout) */
 .lastsaid { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; min-width: 0; }
 .lastsaid #lastSaidText { max-width: 32ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -438,7 +450,7 @@ button.icon.hushbtn.on { border-color: var(--warn); }
 .tile.warn .val { color: var(--warn); } .tile.urgent .val { color: var(--bad); }
 .tile.urgent .lbl::after { content: " ⚠"; color: var(--bad); }
 #tUnsold, #tFuel { cursor: help; }
-#tWhere .val .sol { color: var(--muted); font-size: 12px; font-weight: 400; }
+#tWhere .val .sol, #tWhere .val .from { color: var(--muted); font-size: 12px; font-weight: 400; }
 #tWhere .copy { cursor: copy; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--good); margin-right: 5px; vertical-align: 0; }
 .dot.warn { background: var(--warn); } .dot.bad { background: var(--bad); }
@@ -465,6 +477,9 @@ th[data-sort].on.rev::after { content: " ▴"; }
 #hereHead .unpin:hover { border-color: var(--accent); color: var(--accent); }
 #hereHead .pintag { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; margin-right: 4px; }
 #rows td.bodies { cursor: pointer; }
+/* a click anywhere on a Nearby row but its name and ☆ shows the system (S73); not the tablet (its tap opens the sheet) */
+body:not(.tablet) #rows tr[data-id] { cursor: pointer; } #rows td.bmcell { cursor: auto; }
+body:not(.tablet) #rows tr[data-id]:not(.pinned):hover td { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 /* Nearby with a pinned system: list on the left, panel on the right at 40 % */
 main.nearPinned { display: flex; align-items: flex-start; gap: 16px; }
 main.nearPinned > #nearWrap { flex: 1 1 60%; min-width: 0; }
@@ -512,6 +527,10 @@ h3.subhead { font-size: 13px; font-weight: 600; color: var(--muted); text-transf
 #logRows tr.raw td { background: var(--panel); }
 #logRows pre { margin: 0; font-size: 11.5px; white-space: pre-wrap; word-break: break-all; max-height: 360px; overflow: auto; }
 #logRows .name { cursor: copy; } #logRows .fresh td { animation: fresh 2s ease-out; }
+/* S68: what the uploads made of a line (✓ EDDN · ⏳ EDSM...), the reason in each mark's hover */
+#logRows .upm { margin-left: 8px; font-size: 11px; white-space: nowrap; color: var(--muted); }
+#logRows .upm .sent { color: var(--good); } #logRows .upm .held { color: var(--warn); } #logRows .upm .dropped { color: var(--bad); }
+#lCats.dim { opacity: .45; }
 @keyframes fresh { from { background: color-mix(in srgb, var(--accent) 25%, transparent); } to { background: transparent; } }
 .btns { display: flex; gap: 8px; margin-top: 8px; }
 .btns button, #lMore { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 3px 12px; cursor: pointer; font: inherit; }
@@ -524,6 +543,11 @@ h3.subhead { font-size: 13px; font-weight: 600; color: var(--muted); text-transf
 .synth .n.zero { color: var(--bad); }
 .synth .mats { color: var(--muted); margin-top: 2px; } .synth .mats .short { color: var(--bad); font-weight: 600; }
 .synth .mats .limit { color: var(--warn); }
+.synth .mats .trbtn, #matSources .trbtn { margin-left: 3px; vertical-align: 1px; }   /* "⇄ nearest raw trader" (S54) */
+/* S15: the groups past the FSD injections, folded to one line each (a details row across the whole grid) */
+.synth .learned { color: var(--good); }
+.synthGroup { grid-column: 1 / -1; font-size: 12.5px; } .synthGroup > summary { cursor: pointer; padding: 4px 2px; }
+.synthGroup > summary .short { color: var(--bad); } .synthGroup .synthGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; margin: 4px 0 6px; }
 #matGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 12px; }
 #matGrid h4 { margin: 0 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 #matGrid .grade { font-size: 11px; color: var(--muted); margin: 8px 0 2px; }
@@ -570,6 +594,18 @@ h3.subhead { font-size: 13px; font-weight: 600; color: var(--muted); text-transf
 .badges .nb.ELW { color: var(--good); } .badges .nb.WW { color: var(--info); } .badges .nb.AW { color: #c77dff; } .badges .nb.T { color: var(--warn); }
 .sval { font-size: 11px; font-variant-numeric: tabular-nums; } .sdist { font-size: 10.5px; color: var(--muted); }
 main.nearPinned #hereSchematic .sbody { width: 64px; }
+/* S30: the suggested order's stops on the schematic (a tap: that body first), the faint path between them below the
+   bodies (the isolated box keeps it above the pane's background), its rough leg times */
+#hereSchematic { position: relative; isolation: isolate; }
+.splan { font-size: 12px; margin: 0 0 4px; }
+.stops { position: absolute; left: -6px; top: -6px; z-index: 2; display: flex; gap: 1px; }
+.sstop { color: var(--accent); font-size: 15px; line-height: 1; cursor: pointer; border-radius: 50%; background: var(--bg); }
+.sstop.first { color: var(--warn); }
+.sstop.skip { color: var(--muted); }
+.stopn { color: var(--accent); }
+svg.spath { position: absolute; left: 0; top: 0; z-index: -1; pointer-events: none; overflow: visible; }
+svg.spath polyline { fill: none; stroke: var(--accent); stroke-opacity: .35; stroke-width: 1.5; stroke-dasharray: 4 4; }
+svg.spath text { fill: var(--muted); font-size: 10px; text-anchor: middle; }
 /* eleven views: let the strip wrap on narrow screens instead of running off the edge */
 .views { flex-wrap: wrap; row-gap: 4px; max-width: 100%; }
 @media (max-width: 720px) {
@@ -671,6 +707,7 @@ table .sub2 { margin-top: 2px; font-weight: 400; font-size: 12px; }
 .alerttable td:not(:first-child), .alerttable th:not(:first-child) { text-align: center; }
 #sell.ok { color: var(--good); }
 .warnc { color: var(--warn); }
+.colnote { color: var(--warn); }   /* S7: the colour tables missing, with its Retry */
 
 .cxnew { color: var(--accent); font-weight: 700; cursor: help; }
 .cxnew.cxgal { color: var(--good); }   /* ✪: new to your codex anywhere */
@@ -728,9 +765,12 @@ tr.nextstop td.name::after { content: " ⚑ next stop"; color: var(--info); font
 /* 🎯 beside each route system in the lists: small, brighter on the row you point at */
 .hwyaim.icon { margin-left: 6px; padding: 0 4px; font-size: 11px; opacity: .55; }
 tr:hover .hwyaim.icon, .hwyaim.icon:focus-visible, .hwyaim.icon:disabled { opacity: 1; }
+/* Nearby's 🎯 before the name: a fixed-width slot, empty on your own system's row, so the names stay in line */
+td.name .nearaim { display: inline-block; width: 2.1em; } td.name .nearaim .hwyaim.icon { margin-left: 0; }
 .hwyoff { color: var(--warn); font-weight: 600; } .hwydone { color: var(--good); font-weight: 600; }
 .hwyk-own { color: var(--good); } .hwyk-yes { color: var(--info); } .hwyk-new { color: var(--warn); font-weight: 600; }
 .hwyn { color: var(--info); } .hwyfuel { color: var(--good); } .hwyheavy { color: var(--warn); font-weight: 600; }
+.hwytgt { color: var(--good); } .hwytgt.ahead { color: var(--info); } .hwytgt.wrong { color: var(--warn); font-weight: 600; }
 #hwyConsNote { font-size: 12px; }
 #hwyView { margin-top: 12px; }
 #hwyPanes { display: flex; flex-direction: column; gap: 8px; }
@@ -774,6 +814,9 @@ tr:hover .hwyaim.icon, .hwyaim.icon:focus-visible, .hwyaim.icon:disabled { opaci
 #hwyForm button.mini { padding: 0 6px; font-size: 11px; color: var(--info); }
 #hwyStatus { color: var(--muted); } #hwyStatus.err { color: var(--bad); } #hwyStatus.ok { color: var(--good); }
 #hwyStatus.warnc { color: var(--warn); }
+/* S51: a sweep's ticks in Left behind, My firsts and Bookmarks, and its button (shown once something is ticked) */
+.swtick { margin: 0 0 0 4px; vertical-align: middle; } .swbar { display: inline-flex; gap: 6px; align-items: center; font-weight: normal; }
+.swmsg { color: var(--muted); font-size: 0.9em; } .swmsg.err { color: var(--bad); }
 #hwyStatus.busy::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 8px;
   border: 2px solid var(--accent); border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
 #hwyMapWrap { position: relative; height: min(60vh, 520px); min-height: 260px; border: 1px solid var(--line); border-radius: 8px;
@@ -838,6 +881,7 @@ body.nowmode header, body.nowmode main { display: none; }
 .cargoTable td.num { white-space: nowrap; } .cargoTable .cact { width: 1%; }
 .st { display: inline-block; width: 16px; text-align: center; cursor: help; }
 .st.c { color: var(--good); } .st.l { color: var(--warn); } .st.e { color: var(--info); }
+.cargoTable .cage { font-size: 11px; cursor: help; } /* a confirmed count's age, "✓ 9 d" (S58) */
 .clegend { margin-bottom: 4px; }
 .cargoTable .cact button { margin-left: 4px; } .cargoTable tr.sel td { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .cfind { display: flex; gap: 6px; align-items: center; } .cfind input { width: 12em; } .cfind input[type=number] { width: 6em; }
@@ -870,6 +914,7 @@ body.nowmode header, body.nowmode main { display: none; }
   border: 1px solid var(--info); background: color-mix(in srgb, var(--info) 14%, transparent); vertical-align: 1px; }
 #recountDlg { width: min(560px, 94vw); } #recountRows { width: 100%; font-size: 13px; } #recountRows td { padding: 3px 6px; }
 #recountRows input.qn { width: 7em; text-align: right; } #recountRows input.rcname { width: 14em; text-align: left; }
+#recountRows input.rcname.bad { border-color: var(--warn); } #recountMsg button { margin: 0 2px; }   /* S57: a name that is no commodity */
 #matTables > div { flex: 1 1 440px; min-width: 0; }
 #matTables > div:empty { display: none; }
 /* Settings' head: the title, the sections as chips (review S43), open/close all and Done, kept in view while it scrolls */
@@ -878,6 +923,56 @@ body.nowmode header, body.nowmode main { display: none; }
 #alertDialog .sethead h3 { margin: 0; font-size: 17px; }
 #alertDialog .sethead .setfold { margin-left: auto; display: inline-flex; gap: 6px; }
 #alertDialog .sethead .setfold button { font-size: 12px; padding: 2px 8px; }
+/* Find a setting (S39): what does not match is left out while a word is typed (a class, not [hidden]: a .pcOnly part
+   stays hidden on a server whatever the filter says) */
+#alertDialog .sethead .setfind { display: inline-flex; align-items: center; gap: 6px; flex: 1 1 220px; min-width: 0; }
+#alertDialog .sethead .setfind input { flex: 1 1 auto; min-width: 0; max-width: 260px; font: inherit; font-size: 13px; padding: 3px 8px;
+  background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; }
+#alertDialog .sethead .setfind .hint { white-space: nowrap; }
+#alertDialog .sfhide { display: none !important; }
+/* a table shown whole for the rows that matched: those rows marked, in the theme's accent (its cells, so a grid row too) */
+#alertDialog tr.sfmark > th, #alertDialog tr.sfmark > td { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+#alertDialog tr.sfmark > :first-child { box-shadow: inset 3px 0 0 var(--accent); }
+/* Personality voices (S40): a row per personality */
+.stylevoices { margin: 4px 0 2px; font-size: 13px; border-collapse: collapse; }
+.stylevoices th, .stylevoices td { padding: 2px 6px; text-align: left; font-weight: 400; }
+.stylevoices thead th { color: var(--muted); font-size: 12px; }
+.stylevoices select { max-width: 20em; }
+/* Voices kept loaded and the crew (crew batch 2): the memory note amber over 500 MB, red over 1 GB; the XO row tinted */
+.vmbox, .crewbox { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 13px; }
+.vmhead, .crewhead { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.vmnote { padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; margin: 4px 0; }
+.vmnote b { font-weight: 600; }
+.vmnote.warn { border-color: var(--warn); color: var(--warn); background: color-mix(in srgb, var(--warn) 8%, transparent); }
+.vmnote.bad { border-color: var(--bad); color: var(--bad); background: color-mix(in srgb, var(--bad) 8%, transparent); }
+.vmnote .vmwhy { font-size: 12px; opacity: .85; }
+.vmkeep { margin: 4px 0; } .vmkeep select { margin: 0 6px; }
+.vmpre { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 2px 0; } .vmpre .hint { margin: 0 0 0 4px; }
+/* a member per row as a grid, so the table fits the dialog's column: its selects on the first line, Speaks for under them */
+.crewtable { width: 100%; margin: 6px 0 2px; font-size: 13px; border-collapse: collapse; }
+.crewtable tr { display: grid; grid-template-columns: 8.5em 6.5em minmax(0, 1fr) minmax(0, 1.3fr) 6.5em 2.2em 2.2em;
+  column-gap: 6px; align-items: center; padding: 3px 4px; border-bottom: 1px solid var(--line); }
+.crewtable th, .crewtable td { padding: 0; text-align: left; font-weight: 400; min-width: 0; white-space: normal; border: 0; }
+.crewtable thead th { color: var(--muted); font-size: 12px; }
+.crewtable thead th.cfor { display: none; }
+.crewtable td.crole { grid-row: 1 / span 2; align-self: start; padding-top: 3px; }
+.crewtable td.crole small { display: block; font-size: 11px; color: var(--muted); }
+.crewtable td.crole small.warnc { color: var(--warn); }
+.crewtable td.cfor { grid-column: 2 / -1; grid-row: 2; font-size: 12px; color: var(--muted); padding-top: 2px; }
+.crewtable tr.xo { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.crewtable input[type=text] { width: 100%; box-sizing: border-box; background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: 6px; padding: 2px 6px; font: inherit; }
+.crewtable input[type=text]::placeholder { font-style: italic; }
+.crewtable select { width: 100%; max-width: 100%; }
+.crewtable button { padding: 1px 6px; }
+.crewtable .asxo { font-style: italic; color: var(--muted); }
+.crewnote { margin: 6px 0 2px; padding: 5px 10px; border-left: 3px solid var(--info); color: var(--info); font-size: 12px;
+  background: color-mix(in srgb, var(--info) 6%, transparent); }
+#alertDialog .alerttable td.acrew { text-align: left; width: 1%; }
+#alertDialog .alerttable td.acrew select { max-width: 10em; font-size: 12px; }
+.alerttable .crewdanger { display: block; font-weight: 400; font-size: 11px; }
+@media (max-width: 700px) { .crewtable thead { display: none; } .crewtable tr { grid-template-columns: 1fr 1fr; }
+  .crewtable td.crole, .crewtable td.cfor { grid-column: 1 / -1; grid-row: auto; } }
 #alertDialog .chips { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px; }
 #alertDialog .setsec { border: 1px solid var(--line); border-radius: 8px; padding: 0 12px; margin: 0 0 10px; background: var(--bg); }
 #alertDialog .setsec > summary { cursor: pointer; padding: 9px 0; font-size: 14px; font-weight: 600; color: var(--accent); list-style-position: inside; }
@@ -917,7 +1012,7 @@ body.nowmode header, body.nowmode main { display: none; }
 .streak .sk.visited { background: var(--muted); border-color: var(--muted); opacity: .6; }
 .streak .sk.known { border-color: var(--muted); }                            /* known, Spansh had nothing then */
 .streak .sk.none { border-style: dashed; }
-#horizonLn { cursor: help; } #streakLn:empty, #horizonLn:empty { display: none; }
+#streakLn:empty { display: none; }
 .skipq { font-style: italic; }
 #nowView .now-small { font-size: clamp(16px, 2.2vw, 26px); color: var(--muted); } #nowView .now-small b { color: var(--text); }
 .lastsession { margin: 0 0 10px; padding: 6px 10px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 6px; font-size: 13px; background: var(--panel); }
@@ -929,6 +1024,11 @@ details.speechlog { margin-top: 12px; } details.speechlog summary { cursor: poin
 #speechLog .said b { color: var(--good); } #speechLog .cut b { color: var(--warn); }
 #speechLog .dropped b { color: var(--bad); } #speechLog .silent b, #speechLog .wait b { color: var(--muted); }
 #speechLog button.ban { padding: 0 4px; font-size: 12px; }
+/* S35: Settings' "Questions asked", newest first: what was heard, what it matched, the answer */
+#askLog { max-height: 360px; overflow-y: auto; font-size: 12px; margin-top: 6px; }
+#askLog .alog { padding: 3px 0; border-bottom: 1px solid var(--line, rgba(128,128,128,.2)); overflow-wrap: anywhere; }
+#askLog .alog .match { color: var(--muted); } #askLog .alog.fixed .match b, #askLog .alog.ai .match b { color: var(--good); }
+#askLog .alog.none .match b { color: var(--warn); } #askLog .alog.error .match b { color: var(--bad); }
 .spacing.elsewhere { color: var(--warn); }
 #refLn .regionnew { color: var(--good); font-weight: 600; }
 #tripRows tr.hasnote td { border-bottom: none; padding-bottom: 1px; }
@@ -1088,6 +1188,54 @@ body.app #hwyPanes.noroute #hwyAuto { grid-row: 3; align-self: start; }
 /* Outrider updated on disk but still running the old code */
 .updline { margin-top: 4px; font-size: 13px; color: var(--warn); font-weight: 600; }
 .updline::before { content: "⟳ "; }
+/* the notices banner (S5a): start-up problems the server keeps, one row each, until fixed or hidden (✕) */
+.noticebar { margin-top: 4px; display: flex; flex-direction: column; gap: 3px; }
+.noticebar .notice { display: flex; align-items: baseline; gap: 8px; padding: 4px 8px; border: 1px solid var(--line);
+  border-left: 3px solid var(--warn); border-radius: 6px; background: var(--panel); font-size: 13px; color: var(--text); }
+.noticebar .notice.info { border-left-color: var(--info); } .noticebar .notice.bad { border-left-color: var(--bad); }
+.noticebar .nmark { color: var(--warn); flex: none; } .noticebar .info .nmark { color: var(--info); } .noticebar .bad .nmark { color: var(--bad); }
+.noticebar .ntext { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.noticebar button { flex: none; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
+  padding: 1px 8px; font: inherit; font-size: 12px; cursor: pointer; }
+.noticebar .nclose { border: none; color: var(--muted); padding: 1px 4px; }
+/* Settings > Server's top row, and Show log's dialog: Outrider's own log, the error stream amber */
+.srvtop { margin: 4px 0 8px; font-size: 13px; color: var(--muted); } .srvtop b { color: var(--text); }
+/* Settings -> Server -> Backups (S44) and the field the Data tile's "set the journal folder" focuses (S43) */
+.srvbk { border-top: 1px solid var(--line); margin-bottom: 4px; }
+.srvbk > summary { cursor: pointer; padding: 7px 0; font-weight: 600; color: var(--text); }
+.srvbk > summary .sum-note { font-weight: 400; font-size: 12px; color: var(--muted); margin-left: 6px; }
+.bklist { width: 100%; border-collapse: collapse; font-size: 13px; margin: 6px 0; }
+.bklist th { text-align: left; color: var(--muted); font-weight: 400; font-size: 12px; padding: 2px 6px; }
+.bklist td { padding: 3px 6px; border-top: 1px dashed var(--line); }
+.bklist td.num { text-align: right; white-space: nowrap; }
+.bklist tbody tr { cursor: pointer; }
+.bklist tbody tr:hover { background: var(--panel); }
+.bklist tbody tr.sel { outline: 1px solid var(--accent); outline-offset: -1px; }
+.bklist code { overflow-wrap: anywhere; }
+.bkkind { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 0 6px; white-space: nowrap; }
+.bkkind.pre-reread { color: var(--info); border-color: var(--info); }
+.bkcmd { margin-top: 6px; }
+.bkcmd .bkline { display: flex; gap: 8px; align-items: flex-start; }
+.bkcmd .bkline code { flex: 1; min-width: 0; overflow-wrap: anywhere; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 6px; padding: 4px 8px; font-size: 12px; user-select: all; }
+.srvset .srvin .srvfocus { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Settings -> Server -> Start with this computer (S70): what Install / Remove said */
+#srvServiceBody .btns { margin: 6px 0; } .svclines { margin: 4px 0; } .svclines .hint { overflow-wrap: anywhere; }
+/* Restart (S10): the top row's button and what it is doing; the update line's own button */
+#srvRestartMsg.warnc { color: var(--warn); } .updline .try { margin-left: 6px; font-weight: 400; }
+/* Settings -> Auto honk's readiness (S69): each check ✓ or ✗, a failed one's fix with its commands and Copy */
+.honkready { margin: 4px 0 8px; font-size: 13px; }
+.honkready .hrhead { font-weight: 600; } .honkready .hrhead.ok { color: var(--good); } .honkready .hrhead.no { color: var(--warn); }
+.honkready .hrok { color: var(--good); } .honkready .hrno { color: var(--warn); }
+.honkready .hrfix { margin: 4px 0 0 12px; color: var(--muted); }
+.honkready .bkline { display: flex; gap: 8px; align-items: flex-start; margin-top: 3px; }
+.honkready .bkline code { flex: 1; min-width: 0; overflow-wrap: anywhere; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 6px; padding: 3px 8px; font-size: 12px; user-select: all; }
+.logdlg { width: min(960px, 96vw); }
+.logdlg .loglines { height: min(60vh, 560px); overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+  padding: 6px 8px; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.logdlg .logln.err { color: var(--warn); }
+.logdlg .logt { color: var(--muted); }
 /* a server away from the game PC (payload game_pc false): what needs that PC is left out, not shown broken */
 body.notgamepc .pcOnly, body.notgamepc [data-aim] { display: none !important; }
 /* Settings > Voice > More voices: Piper's catalogue, one language at a time */
@@ -1192,6 +1340,15 @@ body.app #richPane { grid-column: 1; grid-row: 2; }
 .clbox tr.clvar .cvs { flex: 0 0 auto; }
 .clbox tr.clvar { cursor: default; } .clbox tr.clvar.climgrow { cursor: pointer; }
 .clbox tr.clvar.on { background: rgba(127, 127, 127, .24); }
+/* S29: 🔍 on a species or colour not found (a link-like button), and the nearest reported bodies in the side panel */
+.clfindb { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: var(--info); cursor: pointer; }
+.clfindb:hover { text-decoration: underline; }
+.clfind { margin: 8px 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }
+.clfindh { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
+.clfindt { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+.clfindt td { padding: 1px 4px; white-space: nowrap; }
+.clfindt td:first-child { max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+.clfindt td.num { text-align: right; }
 .clmapbox { position: relative; }
 .cltip { position: absolute; pointer-events: none; z-index: 5; padding: 3px 7px; border-radius: 4px; font-size: 12px; white-space: nowrap;
   background: var(--bg); color: var(--text); border: 1px solid var(--line); box-shadow: 0 2px 6px rgba(0, 0, 0, .35); }
@@ -1209,11 +1366,26 @@ table.ovlay tr.ovoff td { opacity: .55; }   /* a panel switched off: its row dim
 /* the overlay's placement table: compact, and scrolled sideways inside its section on a narrow window rather than
    spilling out of it */
 .ovwrap { overflow-x: auto; max-width: 100%; }
-table.ovlay { border-collapse: collapse; margin: 6px 0; font-size: 13px; } table.ovlay th, table.ovlay td { padding: 2px 4px; text-align: left; }
-table.ovlay input[type=number] { width: 3.4em; appearance: textfield; -moz-appearance: textfield; }   /* no spin arrows: room for "100" (typing and the arrow keys still work) */
+table.ovlay { border-collapse: collapse; margin: 6px 0; font-size: 13px; } table.ovlay th, table.ovlay td { padding: 2px 3px; text-align: left; }
+table.ovlay td.ovana, table.ovlay th.ovgrp { text-align: center; }   /* the Hide when mode boxes (combat, docked) under their headings */
+table.ovlay input[type=number] { width: 2.6em; padding: 3px; text-align: right; appearance: textfield; -moz-appearance: textfield; }   /* no spin arrows: room for "100" (typing and the arrow keys still work) */
+/* narrow enough for the Settings dialog (the author, 2026-10-14): short headings (the full words on hover), the panels'
+   names in plain case and wrapped when the dialog is narrow, a smaller corner list; the table never wider than its box */
+table.ovlay { max-width: 100%; } table.ovlay thead th { letter-spacing: 0; }
+table.ovlay tbody th { text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--text); white-space: normal; }
+table.ovlay select { font-size: 12px; padding-left: 2px; padding-right: 0; }
 table.ovlay input[type=number]::-webkit-inner-spin-button, table.ovlay input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; } table.ovlay th { white-space: nowrap; }
 /* Settings → Alerts: a heading over a group of alerts (the discoveries) */
 #alertOpts tr.agroup th { text-align: left; padding-top: .7em; font-weight: 600; }
 .pronbox { margin-top: 8px; } .pronbox input { width: 12em; } #pronList a { color: var(--accent); }
 .pronsectors { display: flex; flex-wrap: wrap; gap: 2px 14px; max-height: 9.5em; overflow-y: auto; }
 .pronsectors a { color: var(--accent); } .pronsec { white-space: nowrap; }
+/* Settings -> Uploads' Recent list (S16): each service's last rounds, what it did at start, what is on hold */
+.uprecent { margin: 2px 0 8px 22px; font-size: 12px; color: var(--muted); max-height: 12em; overflow-y: auto; }
+.uprecent .uprow { padding: 1px 0; overflow-wrap: anywhere; }
+.uprecent .uprow.fail, .uprecent .upraw { color: var(--text); }
+.uprecent .upraw { font-family: ui-monospace, monospace; font-size: 11px; }
+.uprecent button.try { margin-left: 4px; }
+/* S47: Fill gaps in EDSM's flight log (Settings -> Uploads) */
+.bfill { margin: 4px 0 10px; } .bfill > summary { cursor: pointer; font-weight: 600; }
+.bfill .bfrow { margin: 4px 0; } .bfill .bfrow input { width: 11.5em; } .bfill button.try { margin-left: 4px; }

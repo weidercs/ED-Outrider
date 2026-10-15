@@ -11,10 +11,13 @@ import os
 import time
 import types
 import unittest
+import unittest.mock
 
 from support import ed_outrider  # also puts the repository root on sys.path
 import outrider.ask as ask  # noqa: E402
 import outrider.dock as dock  # noqa: E402
+import outrider.materials as materials  # noqa: E402
+import outrider.tools as tools  # noqa: E402
 
 FIX = os.path.join(os.path.dirname(__file__), "fixtures")
 NOW = calendar.timegm(time.strptime("2026-10-08T15:30:00", "%Y-%m-%dT%H:%M:%S"))
@@ -74,6 +77,10 @@ class Rows(unittest.TestCase):
         own = dock.own_row({"id": 1, "callsign": "g0x-85z", "name": "OUT OF THE BLUE", "system": "Here", "x": 1, "y": 2, "z": 3,
                             "services": ["dock", "exploration", "vistagenomics", "refuel"]})
         self.assertEqual(own["services"], {"UC", "Vista", "Refuel"})   # what its last Docked listed
+        # UC paused since (the carrier summary's word, from its crew: S55 B): not offered, though its last Docked listed it
+        paused = dock.own_row({"id": 1, "callsign": "g0x-85z", "x": 1, "y": 2, "z": 3, "has_uc": False, "has_vista": True,
+                               "services": ["dock", "exploration", "vistagenomics"]})
+        self.assertEqual(paused["services"], {"Vista"})
         rows = dock.merge(spansh(), [], own)
         self.assertEqual([r["access"] for r in rows if r["callsign"] == "G0X-85Z"], ["yours"])   # not Spansh's copy
         self.assertIsNone(dock.own_row({"id": 1, "x": 1, "y": 2, "z": 3, "decommission": {"done": True}}))
@@ -158,6 +165,75 @@ class Nearest(unittest.TestCase):
         self.assertEqual(dock.spoken({"rows": []}, [], "carrier"), "No carrier is known nearby with recent enough reports.")
 
 
+class Traders(unittest.TestCase):
+    """S54: material traders, from Spansh's real answers (scripts/trader_probe.py, tests/fixtures/spansh_traders.json):
+    the kind is the station's `material_trader` field; a few traders (Colonia's outposts) have none."""
+    SOL = {"id64": 10477373803, "name": "Sol", "x": 0.0, "y": 0.0, "z": 0.0}
+    SEEN = calendar.timegm(time.strptime("2026-10-12T23:00:00", "%Y-%m-%dT%H:%M:%S"))
+
+    def rows(self, which):
+        return dock.spansh_rows(fixture("spansh_traders.json")[which]["results"])
+
+    def test_kinds(self):
+        rows = {r["name"]: r for r in self.rows("sol_by_service")}
+        self.assertTrue({"Trader", "Manufactured"} <= rows["Patterson Enterprise"]["services"])
+        self.assertTrue({"Trader", "Raw"} <= rows["Broglie Terminal"]["services"])
+        self.assertNotIn("Raw", rows["Patterson Enterprise"]["services"])
+        col = {r["name"]: r for r in self.rows("colonia_by_service")}
+        self.assertIn("Trader", col["The Divine Apparatus"]["services"])   # the service listed, no kind: never guessed
+        self.assertFalse(set(dock.TRADER_KINDS) & col["The Divine Apparatus"]["services"])
+        self.assertIn("Raw", col["TolaGarf's Junkyard"]["services"])
+        self.assertTrue(all(r["services"] >= {"Trader", "Raw"} for r in self.rows("sol_raw_by_kind")))
+        # a carrier never has one, whatever a report says
+        carrier = dict(fixture("spansh_traders.json")["sol_by_service"]["results"][0], type="Drake-Class Carrier", name="X1X-11X")
+        self.assertFalse({"Trader", "Manufactured"} & dock.spansh_rows([carrier])[0]["services"])
+
+    def test_nearest_of_a_kind(self):
+        rows = self.rows("sol_by_service")
+        out = dock.nearest(rows, self.SOL, need={"Raw"}, age_days=30, now=self.SEEN)
+        self.assertEqual([r["name"] for r in out["rows"]], ["Broglie Terminal"])
+        self.assertEqual(out["rows"][0]["services"][-2:], ["Trader", "Raw"])   # in SERVICES' order
+        self.assertEqual(out["hidden"]["service"], 4)
+        col = self.rows("colonia_by_service")
+        colonia = {"x": -9530.5, "y": -910.28125, "z": 19808.125}
+        anyk = dock.nearest(col, colonia, need={"Trader"}, age_days=30, now=self.SEEN)["rows"]
+        self.assertEqual(anyk[1]["name"], "The Divine Apparatus")   # a trader of no reported kind: still a trader
+        self.assertNotIn("The Divine Apparatus", [r["name"] for r in dock.nearest(col, colonia, need={"Encoded"},
+                                                                                 age_days=30, now=self.SEEN)["rows"]])
+
+    def test_spoken(self):
+        out = dock.nearest(self.rows("sol_by_service"), self.SOL, need={"Raw"}, age_days=30, now=self.SEEN)
+        self.assertEqual(dock.spoken(out, ["Raw"]),
+                         "Nearest raw material trader: Broglie Terminal, an ocellus starport, 11 light years away, in 61 Cygni.")
+        out = dock.nearest(self.rows("sol_by_service"), self.SOL, need={"Trader"}, age_days=30, now=self.SEEN)
+        self.assertEqual(dock.spoken(out, ["Trader"]), "Nearest material trader: Patterson Enterprise, a coriolis starport "
+                                                       "trading manufactured materials, 9 light years away, in Sirius.")
+        col = self.rows("colonia_by_service")
+        out = dock.nearest(col[1:], {"x": -9530.5, "y": -910.28125, "z": 19808.125}, need={"Trader"}, age_days=30, now=self.SEEN)
+        self.assertIn("a planetary outpost whose trader's kind is not reported", dock.spoken(out, ["Trader"]))
+        self.assertEqual(dock.spoken({"rows": []}, ["Encoded"]), "No encoded material trader is known nearby with recent enough reports.")
+        self.assertEqual(dock.spoken({"rows": []}, ["UC", "Trader"], "station"),
+                         "No material trader with Universal Cartographics is known nearby with recent enough reports.")
+
+    def test_short_materials_carry_their_kind(self):
+        """The Materials tab's "⇄ nearest raw trader" needs each recipe material's category (None for a commodity)."""
+        inv = materials.inventory({"counts": {"iron": 10}, "names": {},
+                                   "recipes": {"Odd Basic": {"materials": {"tritium": 1}, "ts": "2026-10-12T00:00:00Z", "n": 1}}})
+        cats = {m["id"]: m["category"] for r in inv["synthesis"] for m in r["materials"]}
+        self.assertEqual((cats["iron"], cats["mechanicalequipment"], cats["tritium"]), ("Raw", "Manufactured", None))
+
+    def test_ai_tool(self):
+        spec = tools.TOOLS["nearest_dock"]["schema"]["properties"]
+        self.assertTrue({"Trader", "Raw", "Manufactured", "Encoded"} <= set(spec["need"]["items"]["enum"]))
+        seen = []
+
+        async def get(path, params=None):
+            seen.append(dict(params or {}))
+            return {"rows": [], "hidden": {}}
+        asyncio.run(tools.call("nearest_dock", {"need": ["Raw"]}, get, 5))
+        self.assertEqual(seen[0]["need"], "Raw")
+
+
 class FakeSpansh:
     """dock_search / permit_ids / get_if_changed without a network: each call recorded."""
 
@@ -194,6 +270,20 @@ class Endpoint(unittest.TestCase):
 
     def ask(self, **q):
         return asyncio.run(self.state.nearest_dock({k: str(v) for k, v in q.items()}))
+
+    def test_rows_can_be_targeted(self):
+        """S31: 🎯 on a Nearest row targets its system by id64: the systems the finder listed are located (route "system"),
+        those without an id64 (a DSSA carrier Spansh has not placed) have no 🎯; the list kept is bounded."""
+        self.j.pos = dict(HERE)
+        out, _ = self.ask(age=3650)
+        row = next(r for r in out["rows"] if r["id64"] and not r.get("here"))
+        tgt, why = self.state.route_target("system", int(row["id64"]))
+        self.assertIsNone(why)
+        self.assertEqual((tgt["name"], tgt["id64"], tgt["route"]), (row["system"], int(row["id64"]), None))
+        self.assertTrue(any(r["id64"] is None for r in out["rows"]))   # the DSSA list's: nothing to aim at
+        with unittest.mock.patch.object(ed_outrider, "NEAREST_FOUND_KEEP", 2):
+            self.ask(age=3650, need="repair")
+        self.assertEqual(len(self.state.nearest_found), 2)
 
     def test_validation(self):
         self.assertEqual(self.ask()[1], 409)   # no position yet
@@ -242,6 +332,8 @@ class Endpoint(unittest.TestCase):
                                            self.state.dock_cache["search"][2])
         self.ask(need="vista")   # stale: asked again
         self.assertEqual(self.sp.calls.count("search"), 3)
+        out, _ = self.ask(need="raw,uc")   # S54: the trader kinds are needs like the services
+        self.assertEqual((self.sp.needs[-1], out["need"]), (["Raw", "UC"], ["Raw", "UC"]))
 
     def test_dssa_odd_answer_is_a_failed_check(self):
         """Review 2026-10-08 #14: a 200 that is not a list (an error object, a notice) was stamped as a fresh check
@@ -280,6 +372,24 @@ class SpanshRequests(unittest.TestCase):
         asyncio.run(self.sp.dock_search(HERE))
         self.assertNotIn("services", self.sp.session.calls[0][2]["filters"])
 
+    def test_trader_search(self):
+        """S54: a trader of one kind is Spansh's material_trader filter, any kind the Material Trader service; stations
+        only (carriers never have one); two kinds at once can match nothing and are not asked."""
+        def bodies(need):
+            self.sp.session = self.Session([(200, {"results": []})])
+            out = asyncio.run(self.sp.dock_search(HERE, need))
+            return out, [c[2]["filters"] for c in self.sp.session.calls]
+        _, f = bodies(["Raw"])
+        self.assertEqual(len(f), 1)
+        self.assertEqual((f[0]["material_trader"], f[0].get("services")), ({"value": ["Raw"]}, None))
+        self.assertNotIn(ed_outrider.outrider.cargo.CARRIER_TYPE, f[0]["type"]["value"])
+        _, f = bodies(["Trader"])
+        self.assertEqual((len(f), f[0]["services"], "material_trader" in f[0]), (1, [{"name": "Material Trader"}], False))
+        _, f = bodies(["UC", "Trader", "Encoded"])
+        self.assertEqual((f[0]["services"], f[0]["material_trader"]), ([{"name": "Universal Cartographics"}], {"value": ["Encoded"]}))
+        out, f = bodies(["Raw", "Encoded"])
+        self.assertEqual((out, f), ([], []))
+
     def test_sellers_offer_the_service(self):
         uc = {"name": "Has UC", "system_name": "A", "system_id64": 1, "distance": 5, "services": [{"name": "Universal Cartographics"}]}
         none = {"name": "Settlement", "system_name": "B", "system_id64": 2, "distance": 3, "services": [{"name": "Refuel"}]}
@@ -300,6 +410,14 @@ class Voice(unittest.TestCase):
         self.assertEqual(ask.nearest_query("nearest carrier with vista genomics and repair"), (["Vista", "Repair"], "carrier"))
         self.assertEqual(ask.nearest_query("nearest station"), ([], "station"))
         self.assertEqual(ask.nearest_query("nearest UC"), (["UC"], None))
+        # S54: material traders
+        for text in ("nearest raw material trader", "Vespa, nearest material trader", "where's an encoded trader",
+                     "nearest data trader", "nearest manufactured material traders"):
+            self.assertEqual(ask.match(text, phrases), "nearest_dock", text)
+        self.assertEqual(ask.nearest_query("nearest raw material trader"), (["Raw"], None))
+        self.assertEqual(ask.nearest_query("nearest material trader"), (["Trader"], None))
+        self.assertEqual(ask.nearest_query("nearest data trader"), (["Encoded"], None))
+        self.assertEqual(ask.nearest_query("nearest station with raw materials"), ([], "station"))   # no trader asked
 
     def test_answer(self):
         seen = []
@@ -314,6 +432,60 @@ class Voice(unittest.TestCase):
                                 "in Smojooe QI-T d3-37.")
         self.assertEqual(seen[0][0], "/api/nearest")
         self.assertEqual((seen[0][1]["cached"], seen[0][1]["need"], seen[0][1]["stations"]), ("1", "Vista", "0"))
+
+    def test_far_places_get_a_route(self):
+        """D4 (option A): the voice's "nearest ..." also plots a neutron route to the place it named when that is further
+        than [highway] voice_plot_ly (on, 500 ly by default): to its system; never while a route you have not finished is
+        followed or a plot runs; the answer's shape unchanged, a sentence added."""
+        db = ed_outrider.open_db(":memory:")
+        self.addCleanup(db.close)
+        state = ed_outrider.State(db, ed_outrider.Journals(db), None, 25)
+        plots, answer = [], [({"ok": True}, 202)]
+        state.highway_start_plot = lambda body: plots.append(body) or answer[0]
+
+        def ask_at(ly, text="nearest carrier with vista"):
+            async def get(path, params=None):
+                return {"rows": [{"kind": "carrier", "name": "", "callsign": "KBT-B8Z", "system": "Smojooe QI-T d3-37", "ly": ly,
+                                  "ls": 235, "services": ["UC", "Vista"], "pads": "L M", "dssa": False, "own": False, "warn": [],
+                                  "age_s": 86400}], "hidden": {}, "pad": "L"}
+            body, status = asyncio.run(state.ask(text, get))
+            self.assertEqual((status, set(body), body["command"]), (200, {"answer", "spoken", "matched", "command"}, "nearest_dock"))
+            return body["answer"]
+        said = "Nearest carrier with Vista Genomics: KBT-B8Z, a fleet carrier, 712 light years away, in Smojooe QI-T d3-37."
+        self.assertEqual(ask_at(711.5), said + " Plotting a neutron route there.")
+        self.assertEqual(plots, [{"plotter": "neutron", "to": "Smojooe QI-T d3-37"}])   # the system, never the station
+        self.assertEqual(ask_at(420), said.replace("712", "420"))   # within 500 ly: nothing plotted
+        state.highway_cfg = dict(state.highway_cfg, voice_plot_ly=1000.0)
+        self.assertEqual(ask_at(711.5), said)
+        state.highway_cfg = dict(state.highway_cfg, voice_plot_ly=500.0, voice_plot=False)
+        self.assertEqual(ask_at(711.5), said)
+        state.highway_cfg = dict(state.highway_cfg, voice_plot=True)
+        self.assertEqual(len(plots), 1)
+        # a route you follow (the Highway, or the survey / trade slot): never replaced by voice; a finished one is
+        with unittest.mock.patch.object(state, "highway_state", lambda: ({"id": 1}, [{}])):
+            self.assertEqual(ask_at(711.5), said + " You're following a route, so I didn't plot one.")
+        with unittest.mock.patch.object(state, "riches_state", lambda: ({"id": 2}, [{}])):
+            self.assertEqual(ask_at(711.5), said + " You're following a route, so I didn't plot one.")
+        with unittest.mock.patch.object(state, "highway_state", lambda: ({"id": 1, "done_ts": "2026-10-13T00:00:00Z"}, [{}])):
+            self.assertTrue(ask_at(711.5).endswith("Plotting a neutron route there."))
+        self.assertEqual(len(plots), 2)
+        # the plot refused: a plot under way (409), no ship's range known (400), anything else said as it is
+        answer[0] = ({"error": "a route is being plotted already"}, 409)
+        self.assertTrue(ask_at(711.5).endswith("A route is being plotted already, so I didn't plot another."))
+        answer[0] = ({"error": "give the jump range (ly), or pick a ship you have flown"}, 400)
+        self.assertTrue(ask_at(711.5).endswith("I didn't plot a route there: I don't know your ship's jump range yet."))
+        answer[0] = ({"error": "to is too long"}, 400)
+        self.assertTrue(ask_at(711.5).endswith("I didn't plot a route there: to is too long."))
+
+    def test_voice_plot_config(self):
+        import argparse
+        import tomllib
+        args = argparse.Namespace(journals=None, legacy=None, host=None, port=None, radius=None, db=None)
+        st = ed_outrider.settings_from({}, args, None, ([], []))
+        self.assertEqual((st["highway"]["voice_plot"], st["highway"]["voice_plot_ly"]), (True, 500.0))
+        st = ed_outrider.settings_from({"highway": {"voice_plot": False, "voice_plot_ly": 800}}, args, None, ([], []))
+        back = tomllib.loads(ed_outrider.config_text(st))["highway"]
+        self.assertEqual((back["voice_plot"], back["voice_plot_ly"]), (False, 800))
 
 
 if __name__ == "__main__":
