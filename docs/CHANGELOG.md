@@ -2,6 +2,11 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-15 · Checked in game: the starport pad's place, the auto-dock silence, 📋 paste, Earnings
+- DESIGN_NOTES' "Not yet tried in a live game": the author checked at a station that the pad's words and diagram are
+  right and that the pad is said or kept quiet with the docking computer on or off; 📋 paste and the Earnings tab work
+  on his setup. Still to see: a carrier's pad (its bow), a live mining run through Earnings.
+
 ## 2026-10-14 · 🛣 on the Carrier tile: a route to your carrier at once
 - Beside the carrier's 🎯 (the author's ask): **🛣** plots an exact route to its system at once (POST
   `api/highway/plot`, Plot Route's saved exact options: injections, no neutron boosts, conservative range), without
