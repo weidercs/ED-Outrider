@@ -205,8 +205,8 @@ knowing, so it draws over that window too; an XWayland window (most games, Steam
 - **Proton's native Wayland mode** (`PROTON_ENABLE_WAYLAND=1`) makes Elite a native Wayland window, which the overlay
   cannot find or follow: leave it off. Fractional display scaling on Wayland (125%, 150%) may put the panels a little
   off or blur them: not tried yet.
-- **Windows**: the same window (finding Elite's with the Windows API, letting clicks through, always on top), not yet
-  tried against the game. Play borderless; tell us how it goes.
+- **Windows**: the same window (finding Elite's with the Windows API, letting clicks through, always on top), seen
+  working over the game by players on Windows (October 2026). Play borderless or windowed.
 - Exclusive fullscreen and gamescope (the Steam Deck's game mode) are not supported: nothing can draw over them. The
   overlay pill turns red when the game's DisplaySettings.xml says exclusive fullscreen.
 - The window's code for finding and following the game's window, and drawing over it, is adapted from

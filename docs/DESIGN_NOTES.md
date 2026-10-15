@@ -551,7 +551,8 @@ upstream project's choices, not rules of the game.
   Arrange mode writes it on every drag, which would rewrite the toml again and again; copying the toml does not carry
   it, copying the database does. A panel's place is kept from the window corner nearest it, or from the middle of the
   top or bottom edge, as a share of the window, so a resolution change keeps the arrangement. Linux is where it is
-  tried (X11, and XWayland on a Wayland session, as Modern Overlay runs on GNOME); Windows has the code, untried;
+  tried (X11, and XWayland on a Wayland session, as Modern Overlay runs on GNOME); Windows works too, seen over the game
+  by two players (Kurbo26 and weidercs, reported 2026-10-15);
   native Wayland compositors, gamescope and exclusive fullscreen are out of scope.
 - **The overlay's sizes have a floor in pixels, not a percentage** (a GitHub report, 2026-10-14: too large on a 4K TV,
   and a size under 50 % was put back to 50 %). Panels scale with the game window's height, so a panel takes the same
@@ -1402,8 +1403,8 @@ confirmed while playing. Treat reports about them as likely real.
 - EDDN: ApproachSettlement, CarrierJump and FCMaterials messages have not been seen live on EDDN's relay yet, nor a
   planetary station's Docked with its Body.
 - The in-game overlay's real panels in live play (only the test panels have been seen over the game), Arrange mode
-  over the game, PyQt6 installed by the launcher and by Outrider, the window's restart after a crash, and the overlay
-  on Windows. The overlay pill's states over a real game (and whether, under Proton and XWayland, the active window's id
+  over the game, PyQt6 installed by the launcher and by Outrider, and the window's restart after a crash (on Windows the
+  overlay itself is confirmed by two players, 2026-10-15). The overlay pill's states over a real game (and whether, under Proton and XWayland, the active window's id
   matches wmctrl's: a mismatch would show as "not the active window" while playing), DisplaySettings.xml's
   `<FullScreen>` values, and "keep showing" with a window over the game (X11 stacking, and Windows' z-order walk).
   The Alerts panel over a real game (its timing beside the voice, and how much a busy arrival puts on it).

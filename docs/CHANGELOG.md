@@ -2,6 +2,11 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-15 · The overlay on Windows: confirmed by players
+- Kurbo26 and weidercs report the in-game overlay working over the game on Windows: overlay.md's Windows line and
+  DESIGN_NOTES no longer call it untried ("keep showing when Elite is not the active window"'s Windows z-order walk
+  stays marked not yet tried).
+
 ## 2026-10-15 · Checked in game: a carrier's pad
 - The author landed at his carrier (2026-10-15): the pad's words and the carrier diagram (bow at the top) are right,
   as the starport's were. DESIGN_NOTES' "Not yet tried in a live game" line for the pad's place goes.
