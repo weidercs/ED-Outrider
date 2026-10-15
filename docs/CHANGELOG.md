@@ -2,6 +2,15 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · The carrier's mined stock capped at what it holds
+- When mined ore comes back aboard from your carrier, the carrier's mined stock of it is first capped at what the
+  carrier held then (`Journals.carrier_holding`: `outrider.cargo.carrier_fold` over its events, your Market.json reads
+  and Recounts up to that moment). Other players' purchases from your carrier write nothing in your journal, so the
+  stock ran high (the author's platinum: about 5,006 t counted, about 1,018 t on the carrier): bought tons taken back
+  aboard could have counted as mined. Re-read on the author's journals: osmium's 176 t capped to the 34 t his market
+  showed; the income figures unchanged (1.72B: no affected sale yet).
+- Test: no market read (no cap), a read showing others bought most, one showing a little gone.
+
 ## 2026-10-14 · Mined ore stored on your carrier still counts; the Lynx and Kestrel's pads
 - **Your carrier keeps a mined stock of its own** (meta `mined_carrier`, the author's call after the real-data check:
   about half his mined ore went through the carrier, so Earnings and Sessions showed 0.89B of about 1.72B): a transfer

@@ -109,9 +109,11 @@ upstream project's choices, not rules of the game.
   (your own money changing pockets); cartographic and exobiology data sold at your carrier counts (the game pays it).
   Known gaps: ore handed in to a mission (`MissionCompleted`, `CargoDepot`) or lost with a destroyed SRV stays counted
   as mined, so bought tons of that commodity sold later can count as mined up to it; ore other players buy from your
-  carrier is not in your journal, so it stays in the carrier's mined stock (a later transfer of bought tons of that
-  commodity back aboard would count them as mined, up to it); a line read out of order (a legacy folder read late)
-  changes nothing (what was aboard then is not known).
+  carrier is not in your journal, so the carrier's mined stock is capped, when ore comes back aboard, at what the
+  carrier held of it then (`Journals.carrier_holding`: the carrier fold up to that moment, your Market.json reads and
+  Recounts included; on the author's journals osmium's 176 t fell to the 34 t his market showed). Between two market
+  reads the cap can be too high, and the stock shown between transfers is not capped. A line read out of order (a legacy
+  folder read late) changes nothing (what was aboard then is not known).
 - **Green gas giants are a guess, said as one** (2026-10-12, `outrider/ggg.py`). The seven-layer ladder model is a
   community reconstruction (Canonn's issue 222, 2026-10-05), not the game's code: a match is "potential", never a fact,
   and a codex entry replaces it. It needs the journal's own temperature (green windows can be 0.00002 K wide): yours

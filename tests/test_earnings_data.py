@@ -2,6 +2,7 @@
 station, market_id, station_type, ship_id), each jump, first scan and sample run's ship, and the mined stock (meta
 mined_stock) that tells a sale's mining income (mining_sales) and the Sessions' "sold". Made-up journal lines fed to
 Journals.handle on a scratch database."""
+import json
 import os
 import sqlite3
 import tempfile
@@ -226,6 +227,24 @@ class MinedStock(unittest.TestCase):
         self.assertEqual((self.stock(j), self.kept(j)), ({}, {}))
         self.assertEqual([(s[0], s[1], s[2], s[5]) for s in self.sales(j)], [("painite", 6, 4, 800000)])   # 4 of the 6 t mined
         self.assertEqual(state.commander_sessions(now=NOW)["sessions"][0]["mining"]["sold"], 800000)
+
+    def test_capped_at_what_the_carrier_holds(self):
+        """Ore others bought from your carrier is not journaled, but a Market.json read shows the hold going down: the
+        carrier's mined stock is capped at what it held when ore comes back aboard (the author, 2026-10-14)."""
+        def run(market_stock):
+            j, _ = setup(self, [carrier_stats(T("08:00:00"))] + [refined(T("08:01:%02d" % i)) for i in range(10)] + [
+                docked(T("08:20:00"), name="ABC-123", market=CARRIER, kind="FleetCarrier"),
+                ev(T("08:21:00"), "CargoTransfer", Transfers=[{"Type": "painite", "Count": 10, "Direction": "tocarrier"}])])
+            if market_stock is not None:   # a later read of the carrier's market: a sell order of what is left
+                j.db.execute("INSERT INTO carrier_markets VALUES (?, ?, ?)", (T("09:00:00"), CARRIER, json.dumps(
+                    [{"Name": "$painite_name;", "Name_Localised": "Painite", "Stock": market_stock, "BuyPrice": 5000000}])))
+            for e in (ev(T("10:00:00"), "CargoTransfer", Transfers=[{"Type": "painite", "Count": 5, "Direction": "toship"}]),
+                      undocked(T("10:05:00"), "ABC-123", CARRIER), docked(T("10:30:00")), sell(T("10:31:00"), "painite", 5, 1000000)):
+                j.handle(e)
+            return self.sales(j)[0][2], self.kept(j)
+        self.assertEqual(run(None), (5, {"painite": 5}))   # no market read: the carrier still holds all 10 mined
+        self.assertEqual(run(3), (3, {}))                  # others bought 7: 3 left, all of them mined, all taken back
+        self.assertEqual(run(8), (5, {"painite": 3}))      # others bought 2: 8 held, 5 back aboard
 
     def test_part_kept_on_the_carrier(self):
         j, _ = setup(self, [refined(T("08:01:0%d" % i)) for i in range(5)] + [

@@ -4267,9 +4267,9 @@ class Journals:
         tons off (never below 0); a death empties it (the hold is lost). Your carrier keeps a mined stock of its own (meta
         mined_carrier; the author, 2026-10-14: ore stored on the carrier and sold later is still what you mined): a
         CargoTransfer to the carrier moves the mined part of its tons there, one back to the ship or SRV moves up to what
-        the carrier holds back aboard, and mined ore sold to your own carrier goes into its stock too; a new carrier
-        (CarrierBuy) starts empty. Ore other players buy from your carrier is not in the journal: it stays counted
-        there until it comes back aboard, which it never will. A MarketSell
+        the carrier's mined stock holds back aboard, first capped at what the carrier held of it then (carrier_holding:
+        ore other players bought from it is not in the journal, but its Market.json reads show the hold going down), and
+        mined ore sold to your own carrier goes into its stock too; a new carrier (CarrierBuy) starts empty. A MarketSell
         counts as mining up to what the stock holds of it, min(Count, stock): when that is over 0 it gets a mining_sales
         row (own_carrier 1 at your own carrier's market) and comes off the stock; the rest of the sale was trade.
         Returns, for a MarketSell, the credits that count as mining income (0 when none was mined, and at your own
@@ -4295,6 +4295,10 @@ class Journals:
                     moved = min(n, stock.get(k, 0))
                     stock[k], kept[k] = stock.get(k, 0) - moved, kept.get(k, 0) + moved
                 elif t.get("Direction") in ("toship", "tosrv"):
+                    if kept.get(k):   # never more than the carrier holds of it (ore others bought is not journaled)
+                        held = self.carrier_holding(k, ts)
+                        if held is not None:
+                            kept[k] = min(kept[k], held)
                     moved = min(n, kept.get(k, 0))
                     kept[k], stock[k] = kept.get(k, 0) - moved, stock.get(k, 0) + moved
         elif name == "EjectCargo":
@@ -4329,6 +4333,25 @@ class Journals:
             self.mined_carrier = kept
             meta_set(self.db, "mined_carrier", kept)
         return out
+
+    def carrier_holding(self, commodity, ts):
+        """What your carrier held of a commodity just before `ts` (outrider.cargo.carrier_fold over its history up to
+        then: its events, your Market.json reads and Recounts), for the cap on its mined stock (the author, 2026-10-14:
+        about 4,000 t of platinum counted as mined on the carrier had gone to other players' purchases, which the journal
+        never shows). None when no carrier is known or the fold has no figure: no cap."""
+        cid = (self.carrier or {}).get("id")
+        if cid is None:
+            return None
+        events = [(r[0], json.loads(r[1])) for r in self.db.execute(
+            "SELECT ts, data FROM cargo_events WHERE market = ? AND ts < ? ORDER BY ts", (cid, ts))]
+        markets = [(r[0], json.loads(r[1])) for r in self.db.execute(
+            "SELECT ts, items FROM carrier_markets WHERE market_id = ? AND ts < ?", (cid, ts))]
+        counts = [(r[0], r[1], r[2], r[3]) for r in self.db.execute(
+            "SELECT ts, commodity, count, name FROM carrier_counts WHERE carrier = ? AND ts < ?", (cid, ts))]
+        if not events and not markets and not counts:
+            return None
+        line = outrider.cargo.carrier_fold(cid, events, markets, counts)["lines"].get(commodity)
+        return line["count"] if line else 0
 
     def add_earnings(self, ts, amount):
         c = self.commander
