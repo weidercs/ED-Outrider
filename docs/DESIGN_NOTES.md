@@ -34,7 +34,7 @@ upstream project's choices, not rules of the game.
   page reads it), **Coriolis's sends it as a query parameter** (`/import?data=`: it reaches coriolis.io with the page
   request, as with EDMC). Either way only the ship's modules and engineering go, never the commander's name. In the
   Android app a `target="_blank"` link opens in the browser (its WebView hands every other-origin navigation over).
-- **The Commander view is journal-derived** (2026-10-12, `outrider/commander.py`; read from the database since
+- **The CMDR tab is journal-derived** (2026-10-12, `outrider/commander.py`; read from the database since
   2026-10-14, PARSER_VERSION 51). `Journals.handle_commander` folds its lines as the reader meets them, like every other
   part: meta keys (`COMMANDER_META`: reputation, Powerplay, squadron, the stored ships, stored modules, ship locker,
   suit loadouts, engineers, missions), each `fresh()`-guarded so a legacy folder read late cannot put back a sold ship

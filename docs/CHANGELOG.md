@@ -2,6 +2,22 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-15 · Docs: every route in the agent guide, checked by a test; the CMDR tab by its name
+- NEXT-VERSION #11 (small docs debt). `docs/AGENT_GUIDE.md` now names every path `make_app` registers (107, the
+  Commander loop's `/api/commander/<part>` as one): 23 were missing or written only as a relative shorthand
+  ("`/api/highway` (+ `/systems`)"). Its "How data flows" step 6 has each with its body and the State method behind
+  it: `/api/radius`, `/api/hush`, `/api/copilot`, `/api/nextstop`, `/api/bookmark`, `/api/backup`, `/api/defaults`
+  (GET and POST), `/api/rigs/remove`, `/api/sites/forget`, `/api/speech/ban` and `/unban`, `/api/say/stop`,
+  `/api/sound/play`, `/api/autohonk/forget`, `/api/rail`, `/api/rail/press`, `/api/rail/sets`, `/api/riches/clear`
+  and the Highway's `systems`, `background`, `plot`, `clear` and `autotarget` written whole; then which routes are
+  `pc_only`. The Commander parts are listed by name.
+- `tests/test_docs.py` `RoutesInTheGuide` reads the registered paths from `make_app`'s source (every
+  `add_get`/`add_post`/`add_route`/`add_static`; the Commander loop's f-string read explicitly, any other f-string or
+  non-literal path refused) and fails naming each one the guide does not name whole (placeholders `{x}`/`<x>`
+  normalised; a family only as `<prefix>/*`); `test_the_rule` pins the rule.
+- "The Commander view" is "the CMDR tab" in the agent guide and the design notes, and the tab's sub-tab switch is
+  labelled "CMDR tab" for screen readers, as the tab reads. Code names (`commander_view`, `cmdrTab`, meta keys) unchanged.
+
 ## 2026-10-15 · Game-style icons: the galaxy map's destination, carrier, Titan, waypoint, engineer and mission markers
 - NEXT-VERSION #13 (the author's list): the page draws the game's own galaxy-map markers where it had emoji. Every
   target button (a route's rows and line, Nearby's rows, bookmarks, the next stop, the Carrier tile, Nearest, a
