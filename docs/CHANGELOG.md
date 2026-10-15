@@ -2,6 +2,15 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-15 · Screenshots at 2560x1440: every page view as on a 27-inch monitor
+- Every full-page desktop shot in `docs/images/` retaken at 2560x1440 to match overview.png (Elite theme, the Highway's
+  route line, a route to Colonia plotted): nearby, here, schematic, map, highway, history, samples, log, materials,
+  firsts, search, cargo (Sell on the carrier's platinum), trade, cmdr, earnings, ship-card, boxel, boxel-grid, nearest
+  and checklist. here.png and schematic.png now view Lysood TS-U d2-58 as the overview does (here.png with body 6 g's
+  panel open); boxel-grid.png folds Boxels nearby so whole rows of the boxel table sit above the sector map.
+- Not retaken: tablet.png (1920x1200, LCARS), themes.png (the 2x2 composite), overlay.png and the overlay-pad shots
+  (Qt renders), and the crops (overlay-settings, nearest-dssa, surface, banner, datatile, uploads).
+
 ## 2026-10-15 · The overview shot at 2560x1440
 - `docs/images/overview.png` retaken at 2560x1440 (the author's 27-inch monitors): at that width Nearby's rows keep their
   Status, Notable and Known columns on one line, as the page really looks on a big monitor; still pinned on Lysood
