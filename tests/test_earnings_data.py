@@ -206,10 +206,47 @@ class MinedStock(unittest.TestCase):
                                                           {"Type": "gold", "Count": 1, "Direction": "toship"}]),
             ev(T("08:11:00"), "EjectCargo", Type="painite", Count=1, Abandoned=True)])
         self.assertEqual(self.stock(j), {"painite": 2, "gold": 1})   # 5 - 2 to the carrier - 1 ejected; a transfer to the ship adds none
+        self.assertEqual(self.kept(j), {"painite": 2})                # kept on the carrier; the gold taken back was never mined
         j.handle(ev(T("08:12:00"), "EjectCargo", Type="painite", Count=9, Abandoned=True))
         self.assertEqual(self.stock(j), {"gold": 1})                  # never below 0
         j.handle(ev(T("08:13:00"), "Died"))
         self.assertEqual(self.stock(j), {})                           # the hold is lost
+
+    def kept(self, j):
+        return ed_outrider.meta_get(j.db, "mined_carrier")
+
+    def test_stored_on_your_carrier_and_sold_later(self):
+        """Ore moved to your carrier keeps counting as mined: back aboard, it is sold as mining (the author, 2026-10-14:
+        about half his mining income went through the carrier); bought ore taken from the carrier is not."""
+        j, state = setup(self, [ev(T("08:00:00"), "LoadGame", Commander="Tester", Ship="python"), loadout(T("08:00:05"), 7)]
+                         + [refined(T("08:01:0%d" % i)) for i in range(4)] + [
+            ev(T("08:10:00"), "CargoTransfer", Transfers=[{"Type": "painite", "Count": 4, "Direction": "tocarrier"}]),
+            ev(T("09:00:00"), "CargoTransfer", Transfers=[{"Type": "painite", "Count": 6, "Direction": "toship"}]),
+            docked(T("09:30:00")), sell(T("09:31:00"), "painite", 6, 1200000)])
+        self.assertEqual((self.stock(j), self.kept(j)), ({}, {}))
+        self.assertEqual([(s[0], s[1], s[2], s[5]) for s in self.sales(j)], [("painite", 6, 4, 800000)])   # 4 of the 6 t mined
+        self.assertEqual(state.commander_sessions(now=NOW)["sessions"][0]["mining"]["sold"], 800000)
+
+    def test_part_kept_on_the_carrier(self):
+        j, _ = setup(self, [refined(T("08:01:0%d" % i)) for i in range(5)] + [
+            ev(T("08:10:00"), "CargoTransfer", Transfers=[{"Type": "painite", "Count": 5, "Direction": "tocarrier"}]),
+            ev(T("09:00:00"), "CargoTransfer", Transfers=[{"Type": "painite", "Count": 2, "Direction": "toship"}])])
+        self.assertEqual((self.stock(j), self.kept(j)), ({"painite": 2}, {"painite": 3}))
+        j.handle(ev(T("09:10:00"), "Died"))   # the ship's hold is lost, the carrier's is not
+        self.assertEqual((self.stock(j), self.kept(j)), ({}, {"painite": 3}))
+        j.handle(ev(T("09:20:00"), "CarrierBuy", CarrierID=99, Callsign="XYZ-987", Location="Sol", Price=5000000000))
+        self.assertEqual(self.kept(j), {})   # a new carrier holds none of it
+
+    def test_sold_to_your_carrier_then_taken_back(self):
+        """Mined ore sold to your own carrier (left out: your own money) is still yours, in its hold: taken back and sold
+        elsewhere, it counts."""
+        j, _ = setup(self, [carrier_stats(T("08:00:10"))] + [refined(T("08:01:0%d" % i)) for i in range(3)] + [
+            docked(T("08:20:00"), name="ABC-123", market=CARRIER, kind="FleetCarrier"),
+            sell(T("08:21:00"), "painite", 3, 600000, market=CARRIER),
+            ev(T("08:25:00"), "CargoTransfer", Transfers=[{"Type": "painite", "Count": 3, "Direction": "toship"}]),
+            undocked(T("08:30:00"), "ABC-123", CARRIER), docked(T("08:40:00")), sell(T("08:41:00"), "painite", 3, 750000)])
+        self.assertEqual([(s[2], s[5], s[9]) for s in self.sales(j)], [(3, 600000, 1), (3, 750000, 0)])
+        self.assertEqual((self.stock(j), self.kept(j)), ({}, {}))
 
     def test_a_partial_sale(self):
         """2 t mined and 3 t bought: a sale of 5 is mining for 2 of them, its share of the total, the rest trade."""
@@ -265,11 +302,19 @@ class MinedStock(unittest.TestCase):
         self.assertEqual(j.mined_stock, {"painite": 1})
 
     def test_a_reread_clears_the_table_and_the_stock(self):
-        j, _ = setup(self, [refined(T("08:00:00")), refined(T("08:01:00")), docked(T("08:02:00")),
-                            sell(T("08:03:00"), "painite", 1, 5)])
-        self.assertTrue(self.sales(j) and self.stock(j) and ed_outrider.meta_get(j.db, "sale_dock"))
+        j, _ = setup(self, [refined(T("08:00:00")), refined(T("08:01:00")), refined(T("08:01:30")), docked(T("08:02:00")),
+                            sell(T("08:03:00"), "painite", 1, 5),
+                            ev(T("08:04:00"), "CargoTransfer", Transfers=[{"Type": "painite", "Count": 1, "Direction": "tocarrier"}])])
+        self.assertTrue(self.sales(j) and self.stock(j) and self.kept(j) and ed_outrider.meta_get(j.db, "sale_dock"))
         j.db.executescript(ed_outrider.RESET_JOURNAL_DATA)
-        self.assertEqual((self.sales(j), self.stock(j), ed_outrider.meta_get(j.db, "sale_dock")), ([], None, None))
+        self.assertEqual((self.sales(j), self.stock(j), self.kept(j), ed_outrider.meta_get(j.db, "sale_dock")),
+                         ([], None, None, None))
+
+    def test_the_newer_ships_pads(self):
+        """The Lynx Highliner (medium: the author checked) and the Kestrel Mk II (small: Frontier's ship page)."""
+        import outrider.cargo
+        self.assertEqual((outrider.cargo.SHIP_PAD["mediumtransport01"], outrider.cargo.SHIP_PAD["smallcombat01_nx"]),
+                         (outrider.cargo.MEDIUM, outrider.cargo.SMALL))
 
 
 if __name__ == "__main__":

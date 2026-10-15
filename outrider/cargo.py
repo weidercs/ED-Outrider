@@ -35,11 +35,13 @@ LARGE, MEDIUM, SMALL = "L", "M", "S"
 SHIP_PAD = {
     **dict.fromkeys(("anaconda", "belugaliner", "cutter", "federation_corvette", "type7", "type9", "type9_military",
                      "panthermkii", "empire_trader", "orca", "explorer_nx"), LARGE),
+    "mediumtransport01": MEDIUM,   # Lynx Highliner (the author checked, 2026-10-14)
     **dict.fromkeys(("python", "python_nx", "krait_mkii", "krait_light", "mandalay", "corsair", "typex", "typex_2",
                      "typex_3", "federation_gunship", "federation_dropship", "federation_dropship_mkii", "ferdelance",
                      "mamba", "asp", "asp_scout", "independant_trader", "type6", "type8", "lakonminer"), MEDIUM),
     **dict.fromkeys(("adder", "eagle", "hauler", "sidewinder", "viper", "viper_mkiv", "cobramkiii", "cobramkiv",
-                     "cobramkv", "diamondback", "diamondbackxl", "vulture", "empire_courier", "empire_eagle", "dolphin"),
+                     "cobramkv", "diamondback", "diamondbackxl", "vulture", "empire_courier", "empire_eagle", "dolphin",
+                     "smallcombat01_nx"),   # Kestrel Mk II (Frontier's ship page: small pad)
                     SMALL),
 }
 

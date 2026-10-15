@@ -2,6 +2,19 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · Mined ore stored on your carrier still counts; the Lynx and Kestrel's pads
+- **Your carrier keeps a mined stock of its own** (meta `mined_carrier`, the author's call after the real-data check:
+  about half his mined ore went through the carrier, so Earnings and Sessions showed 0.89B of about 1.72B): a transfer
+  to the carrier moves the mined tons there, one back to the ship or SRV moves them back aboard (then sold: mining),
+  mined ore sold to your own carrier joins it (still left out of the income), a death empties only the ship's, a new
+  carrier (CarrierBuy) starts empty. Ore other players buy from your carrier is not in the journal. PARSER_VERSION 54
+  (still unreleased: one re-read for players; the author's database re-reads again if it ran 53).
+- `outrider/cargo.SHIP_PAD`: the Lynx Highliner `mediumtransport01` medium (the author checked), the Kestrel Mk II
+  `smallcombat01_nx` small (Frontier's ship page): the nearest-place-to-dock filter knows their pads.
+- Tests: stored and sold later, part kept on the carrier through a death and a new carrier, sold to your carrier then
+  taken back and sold elsewhere, the re-read clearing the carrier's stock, the two pads. Docs: views.md, DESIGN_NOTES,
+  JOURNAL_REFERENCE.
+
 ## 2026-10-14 · Earnings: the guide, design notes, and fixes from a check on real data
 NEXT-VERSION #7, batch D. A copy of the author's database, rebuilt from his journals (read only), through the summary:
 the cartography and exobiology totals equal History's Ledger (its trips' paid figures summed) and the raw sales, mining

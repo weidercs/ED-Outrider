@@ -1352,11 +1352,12 @@ CARRIER_CARGO_EVENTS = ("CarrierStats", "CarrierTradeOrder", "CargoTransfer", "M
                         "CarrierCrewServices", "CarrierDepositFuel") + CARRIER_MOVE_EVENTS
 # Earnings (the CMDR tab's, NEXT-VERSION #7), all of them read for other things too: where you are docked, followed line
 # by line for each sale's station (Journals.note_sale_dock, meta sale_dock), and the tons you mined still aboard
-# (Journals.note_mined, meta mined_stock): MiningRefined adds 1 t (the ship's refinery or the SRV's), a transfer to your
-# carrier and a jettison take off, a death empties it, and a MarketSell counts as mining up to what it holds
-# (mining_sales; the rest of the sale is trade)
+# (Journals.note_mined, meta mined_stock): MiningRefined adds 1 t (the ship's refinery or the SRV's), a jettison takes
+# off, a death empties it, a transfer to your carrier moves it to the carrier's own mined stock (meta mined_carrier) and
+# one back to the ship moves it back, and a MarketSell counts as mining up to what it holds (mining_sales; the rest of
+# the sale is trade)
 SALE_DOCK_EVENTS = ("Docked", "Undocked", "Location")
-MINED_EVENTS = ("MiningRefined", "CargoTransfer", "EjectCargo", "Died", "MarketSell")
+MINED_EVENTS = ("MiningRefined", "CargoTransfer", "EjectCargo", "Died", "MarketSell", "CarrierBuy")
 _OTHER_EVENTS = (POSITION_EVENTS + STAR_CLASS_EVENTS + SCAN_EVENTS + DATA_EVENTS + SHIP_EVENTS + CMDR_EVENTS + MATERIAL_EVENTS
                  + BODY_EVENTS + SRV_EVENTS + CARGO_ONLY + DOCKING_EVENTS + ("Loadout", "Shutdown", "Fileheader"))
 # The Commander view (outrider/commander.py): Journals.handle_commander folds these into the meta keys of
@@ -1386,7 +1387,9 @@ WANTED = tuple(f'"event":"{e}"'.encode() for e in dict.fromkeys(_OTHER_EVENTS + 
 #     were dropped; the SRV's refinery and scoop stay out of the ship's hold; an older Location's relog is judged
 #     against the arrival before it (a legacy folder read late counted every login as a visit).
 # 43: a system's population (system_population) and own_firsts.bio_x5: no x5 bio bonus in populated systems.
-PARSER_VERSION = 53
+PARSER_VERSION = 54
+# 54: ore you mined keeps counting as mined through your carrier (meta mined_carrier: moved there and back, then sold;
+#     the author, 2026-10-14: about half of his mining income went through it)
 # 53: a Vista Genomics sale keeps what each species paid and its name (bio_sales.bio_data: the Earnings' species, exact);
 #     still unreleased, so not bumped again for each mining sale's station type (mining_sales.station_type: a station
 #     where you only ever sold ore had none; NULL in a database read by 52 or 53 until its next re-read)
@@ -1410,6 +1413,7 @@ PARSER_VERSION = 53
 # Why each version reads the journals again, in the player's words: said at the start that re-reads (reread_message).
 # Every bump adds its line here too (a test checks PARSER_VERSION has one).
 PARSER_CHANGES = {
+    54: "ore you mined still counts as mined after a trip through your carrier (the Commander tab's Earnings)",
     53: "each exobiology sale keeps what every species in it paid (the Commander tab's Earnings)",
     52: "each sale keeps where it was made and with which ship, as do your jumps, scans and samples, and the ore you "
         "mined is followed until you sell it (mining income)",
@@ -1786,7 +1790,7 @@ DELETE FROM own_barycentres; DELETE FROM phenomena; DELETE FROM phenomena_sites;
 DELETE FROM own_mined; DELETE FROM meta WHERE key IN ('srv_state', 'vehicle', 'ship_marker', 'body_here');
 DELETE FROM fleet_loadouts; DELETE FROM cargo_events; DELETE FROM system_population;
 DELETE FROM meta WHERE key IN ('ship_cargo', 'cargo_dock');
-DELETE FROM mining_sales; DELETE FROM meta WHERE key IN ('mined_stock', 'sale_dock');
+DELETE FROM mining_sales; DELETE FROM meta WHERE key IN ('mined_stock', 'mined_carrier', 'sale_dock');
 DELETE FROM play_activity;
 DELETE FROM meta WHERE key IN ('reputation', 'powerplay', 'squadron', 'stored_ships', 'stored_modules', 'ship_locker',
                                'suit_loadouts', 'engineers', 'missions');
@@ -3106,6 +3110,7 @@ class Journals:
         # ({commodity: t}, see note_mined)
         self.sale_dock = meta_get(db, "sale_dock")
         self.mined_stock = meta_get(db, "mined_stock") or {}
+        self.mined_carrier = meta_get(db, "mined_carrier") or {}   # the mined ore moved to your carrier (note_mined)
         self.commodity_names = meta_get(db, "commodity_names", {})
         # the Commander view's folds (outrider/commander.py, handle_commander): meta key -> its state
         self.cmdr_view = {k: meta_get(db, k) for k in outrider.commander.COMMANDER_META}
@@ -4258,8 +4263,13 @@ class Journals:
 
     def note_mined(self, name, ev, ts):
         """The tons you mined still aboard (meta mined_stock {commodity: t}, the journal's lower-case name: the ship's
-        hold and the SRV's together). MiningRefined adds 1 t, the ship's refinery's or the SRV's; a CargoTransfer to your
-        carrier and an EjectCargo take theirs off (never below 0); a death empties it (the hold is lost). A MarketSell
+        hold and the SRV's together). MiningRefined adds 1 t, the ship's refinery's or the SRV's; an EjectCargo takes its
+        tons off (never below 0); a death empties it (the hold is lost). Your carrier keeps a mined stock of its own (meta
+        mined_carrier; the author, 2026-10-14: ore stored on the carrier and sold later is still what you mined): a
+        CargoTransfer to the carrier moves the mined part of its tons there, one back to the ship or SRV moves up to what
+        the carrier holds back aboard, and mined ore sold to your own carrier goes into its stock too; a new carrier
+        (CarrierBuy) starts empty. Ore other players buy from your carrier is not in the journal: it stays counted
+        there until it comes back aboard, which it never will. A MarketSell
         counts as mining up to what the stock holds of it, min(Count, stock): when that is over 0 it gets a mining_sales
         row (own_carrier 1 at your own carrier's market) and comes off the stock; the rest of the sale was trade.
         Returns, for a MarketSell, the credits that count as mining income (0 when none was mined, and at your own
@@ -4267,22 +4277,30 @@ class Journals:
         line older than the stock (a legacy folder read late: what was aboard then is not known)."""
         if not self.fresh("mined_stock", ts):
             return None
-        stock, cid, out = dict(self.mined_stock), outrider.cargo.cid, None
+        stock, kept, cid, out = dict(self.mined_stock), dict(self.mined_carrier), outrider.cargo.cid, None
         count = lambda x: x.get("Count") if isinstance(x.get("Count"), int) and x.get("Count") > 0 else 0
         if name == "MiningRefined":
             if cid(ev.get("Type")):
                 stock[cid(ev["Type"])] = stock.get(cid(ev["Type"]), 0) + 1
         elif name == "Died":
             stock = {}
-        elif name in ("CargoTransfer", "EjectCargo"):
-            # a transfer to the ship or the SRV keeps what you mined aboard (and what comes back from the carrier is
-            # not counted as mined again: it went to the carrier)
-            gone = [t for t in ev.get("Transfers") or [] if isinstance(t, dict) and t.get("Direction") == "tocarrier"] \
-                if name == "CargoTransfer" else [ev]
-            for t in gone:
-                k = cid(t.get("Type"))
-                if k in stock:
-                    stock[k] = max(0, stock[k] - count(t))
+        elif name == "CarrierBuy":
+            kept = {}   # a new carrier: what the old one held is gone with it
+        elif name == "CargoTransfer":
+            for t in ev.get("Transfers") or []:
+                if not isinstance(t, dict) or not cid(t.get("Type")):
+                    continue
+                k, n = cid(t.get("Type")), count(t)
+                if t.get("Direction") == "tocarrier":
+                    moved = min(n, stock.get(k, 0))
+                    stock[k], kept[k] = stock.get(k, 0) - moved, kept.get(k, 0) + moved
+                elif t.get("Direction") in ("toship", "tosrv"):
+                    moved = min(n, kept.get(k, 0))
+                    kept[k], stock[k] = kept.get(k, 0) - moved, stock.get(k, 0) + moved
+        elif name == "EjectCargo":
+            k = cid(ev.get("Type"))
+            if k in stock:
+                stock[k] = max(0, stock[k] - count(ev))
         else:   # MarketSell
             k, tons, total = cid(ev.get("Type")), count(ev), ev.get("TotalSale")
             mined = min(tons, stock.get(k, 0))
@@ -4299,11 +4317,17 @@ class Journals:
                                 (ts, self.line_source or f"MarketSell:{k}", k, tons, mined, ev.get("SellPrice"), total,
                                  mined_total, station, market, self.ship_at(ts), own, station_type))
                 stock[k] -= mined
+                if own:   # your own carrier bought it: still your mined ore, now in its hold
+                    kept[k] = kept.get(k, 0) + mined
                 out = 0 if own else mined_total
         stock = {k: n for k, n in stock.items() if n > 0}
+        kept = {k: n for k, n in kept.items() if n > 0}
         if stock != self.mined_stock:
             self.mined_stock = stock
             meta_set(self.db, "mined_stock", stock)
+        if kept != self.mined_carrier:
+            self.mined_carrier = kept
+            meta_set(self.db, "mined_carrier", kept)
         return out
 
     def add_earnings(self, ts, amount):

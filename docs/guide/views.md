@@ -506,8 +506,9 @@ Engineering's filter and Earnings' period sit above the list:
     scans (the game pays per page of systems, not per system) and the data lost to deaths. Each estimate says so.
   - **⬇ CSV** saves every sale (in the Android app too).
   - Mining counts only ore you mined, from the refinery to its sale. Tons you bought and sell with it are trade, left
-    out; ore you move to your carrier or jettison comes off the count, so ore taken back from your carrier and sold later
-    is not counted. Mined ore sold to your own carrier is left out: it is your own money changing pockets. Cartographic
+    out. Ore you store on your carrier keeps counting as mined: taken back aboard and sold, it is mining; ore you
+    jettison comes off the count. Mined ore sold to your own carrier is left out: it is your own money changing pockets
+    (taken back and sold elsewhere later, it counts then). Cartographic
     and exobiology data sold at your carrier counts (the game pays it).
   - Months are counted in UTC, as the game's journal times are: west of Greenwich, a sale late on a month's last
     evening counts in the next month.
