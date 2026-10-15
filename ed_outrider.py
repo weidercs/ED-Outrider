@@ -1349,6 +1349,13 @@ CARGO_EVENTS = frozenset(CARGO_ONLY) | {"Cargo", "Docked", "Undocked", "CarrierS
 # you deposit for the jumps it measured (outrider.cargo.carrier_burns, S13 B)
 CARRIER_CARGO_EVENTS = ("CarrierStats", "CarrierTradeOrder", "CargoTransfer", "MarketBuy", "MarketSell",
                         "CarrierCrewServices", "CarrierDepositFuel") + CARRIER_MOVE_EVENTS
+# Earnings (the CMDR tab's, NEXT-VERSION #7), all of them read for other things too: where you are docked, followed line
+# by line for each sale's station (Journals.note_sale_dock, meta sale_dock), and the tons you mined still aboard
+# (Journals.note_mined, meta mined_stock): MiningRefined adds 1 t (the ship's refinery or the SRV's), a transfer to your
+# carrier and a jettison take off, a death empties it, and a MarketSell counts as mining up to what it holds
+# (mining_sales; the rest of the sale is trade)
+SALE_DOCK_EVENTS = ("Docked", "Undocked", "Location")
+MINED_EVENTS = ("MiningRefined", "CargoTransfer", "EjectCargo", "Died", "MarketSell")
 _OTHER_EVENTS = (POSITION_EVENTS + STAR_CLASS_EVENTS + SCAN_EVENTS + DATA_EVENTS + SHIP_EVENTS + CMDR_EVENTS + MATERIAL_EVENTS
                  + BODY_EVENTS + SRV_EVENTS + CARGO_ONLY + DOCKING_EVENTS + ("Loadout", "Shutdown", "Fileheader"))
 # The Commander view (outrider/commander.py): Journals.handle_commander folds these into the meta keys of
@@ -1378,7 +1385,10 @@ WANTED = tuple(f'"event":"{e}"'.encode() for e in dict.fromkeys(_OTHER_EVENTS + 
 #     were dropped; the SRV's refinery and scoop stay out of the ship's hold; an older Location's relog is judged
 #     against the arrival before it (a legacy folder read late counted every login as a visit).
 # 43: a system's population (system_population) and own_firsts.bio_x5: no x5 bio bonus in populated systems.
-PARSER_VERSION = 51
+PARSER_VERSION = 52
+# 52: the CMDR tab's Earnings (NEXT-VERSION #7): each sale keeps where you were docked and the ship you flew
+#     (sale_events' station, market_id, station_type, ship_id), each jump, first body scan and sample run its ship
+#     (jumps, own_bodies, own_organic ship_id), and mining income (mining_sales, from the mined stock: meta mined_stock)
 # 51: the Commander view reads the database (outrider/commander.py's folds: meta reputation, powerplay, squadron,
 #     stored_ships, stored_modules, ship_locker, suit_loadouts, engineers, missions; play_activity per login), the
 #     statistics keep the career's sections, and fleet_loadouts each ship's value; still unreleased, so not bumped again
@@ -1396,6 +1406,8 @@ PARSER_VERSION = 51
 # Why each version reads the journals again, in the player's words: said at the start that re-reads (reread_message).
 # Every bump adds its line here too (a test checks PARSER_VERSION has one).
 PARSER_CHANGES = {
+    52: "each sale keeps where it was made and with which ship, as do your jumps, scans and samples, and the ore you "
+        "mined is followed until you sell it (mining income)",
     51: "the Commander tab's ships (each with its build, for its EDSY and Coriolis links), modules, locker, suit loadouts, "
         "engineers, missions and combat and mining sessions are kept from your journals, all of them, instead of read from "
         "the last weeks' files each time",
@@ -1531,9 +1543,10 @@ CREATE TABLE IF NOT EXISTS visits (
 -- for a login/respawn somewhere new, which breaks the path). star_class comes from StartJump.
 -- verdict (the discovery streak): new / visited / known, fixed by the arrival star's scan (see note_verdict).
 -- ride is 1 for an Apex shuttle or multicrew jump: not your ship's tank (no scoop count, no scoopable share).
+-- ship_id: the ShipID of the ship flown (Journals.ship_at; NULL on a ride, before any Loadout or on an older row).
 CREATE TABLE IF NOT EXISTS jumps (
     ts TEXT, id64 INTEGER, name TEXT, x REAL, y REAL, z REAL, star_class TEXT, kind TEXT, verdict TEXT, ride INTEGER,
-    PRIMARY KEY (ts, id64));
+    ship_id INTEGER, PRIMARY KEY (ts, id64));
 -- What Spansh knew about a known system when you arrived (partial / complete): the streak strip's amber and
 -- blue. Live only, so it is kept through a journal re-read (not in RESET_JOURNAL_DATA): colours never change.
 CREATE TABLE IF NOT EXISTS arrival_verdicts (ts TEXT, id64 INTEGER, verdict TEXT, PRIMARY KEY (ts, id64));
@@ -1552,11 +1565,12 @@ CREATE TABLE IF NOT EXISTS spansh_systems (
 -- {body_id: [{genus, species, variant, value}]}. Live-only, like the Spansh cache (never in RESET_JOURNAL_DATA).
 CREATE TABLE IF NOT EXISTS spansh_reported (
     id64 INTEGER PRIMARY KEY, fetched_ts REAL, bodies TEXT);
--- Your own scans, straight from the journal.
+-- Your own scans, straight from the journal. own_bodies' ts is the latest scan's; ship_id the ship of the first scan
+-- (a rescan keeps it; NULL when that ship was not known).
 CREATE TABLE IF NOT EXISTS own_systems (
     id64 INTEGER PRIMARY KEY, name TEXT, body_count INTEGER, all_found INTEGER);
 CREATE TABLE IF NOT EXISTS own_bodies (
-    system INTEGER, body_id INTEGER, name TEXT, record TEXT, ts TEXT, raw TEXT,
+    system INTEGER, body_id INTEGER, name TEXT, record TEXT, ts TEXT, raw TEXT, ship_id INTEGER,
     PRIMARY KEY (system, body_id));
 -- Barycentres (the Null entries in a body's Parents): their orbit, from ScanBaryCentre.
 CREATE TABLE IF NOT EXISTS own_barycentres (
@@ -1592,13 +1606,14 @@ CREATE INDEX IF NOT EXISTS sales_name ON sales (name);
 CREATE TABLE IF NOT EXISTS logins (ts TEXT PRIMARY KEY);
 -- option is the Resurrect choice that followed: "rebuy" means the ship (and its data) was lost.
 CREATE TABLE IF NOT EXISTS deaths (ts TEXT PRIMARY KEY, option TEXT);
--- Exobiology: genera a DSS found on a body, and your sampling progress per species.
+-- Exobiology: genera a DSS found on a body, and your sampling progress per species (own_organic's ship_id: the ship
+-- flown at the run's latest sample, the one that completed it once done; on foot or in the SRV, the ship you came in).
 CREATE TABLE IF NOT EXISTS own_genera (
     system INTEGER, body_id INTEGER, genus TEXT, genus_name TEXT, ts TEXT,
     PRIMARY KEY (system, body_id, genus));
 CREATE TABLE IF NOT EXISTS own_organic (
     system INTEGER, body_id INTEGER, species TEXT, genus_name TEXT, species_name TEXT, variant_name TEXT,
-    samples INTEGER NOT NULL DEFAULT 0, done_ts TEXT, ts TEXT,
+    samples INTEGER NOT NULL DEFAULT 0, done_ts TEXT, ts TEXT, ship_id INTEGER,
     PRIMARY KEY (system, body_id, species));
 -- Codex entries: is_new = new to your codex for that region; voucher = codex credits paid (not a galactic first).
 CREATE TABLE IF NOT EXISTS codex (
@@ -1649,9 +1664,20 @@ CREATE TABLE IF NOT EXISTS mining_locations (
 -- MultiSellExplorationData per page, often in the same second, so source (journal file name:byte offset of
 -- the line) tells the pages apart while a line handled twice still hits the same key. x5_check (bio sales): JSON
 -- {sold, predicted, matched, paid, unknown, used}, the runs aboard predicted x5 against the entries paid the bonus (sale_check).
+-- station, market_id, station_type: where you were docked (Journals.sale_place), ship_id: the ship flown (ship_at);
+-- NULL when not known (a line read out of order, a row from before PARSER_VERSION 52). Journal-derived.
 CREATE TABLE IF NOT EXISTS sale_events (
     ts TEXT, kind TEXT, base INTEGER, bonus INTEGER, total INTEGER, systems INTEGER, species INTEGER, source TEXT,
-    x5_check TEXT, PRIMARY KEY (ts, kind, source));
+    x5_check TEXT, station TEXT, market_id INTEGER, station_type TEXT, ship_id INTEGER, PRIMARY KEY (ts, kind, source));
+-- Mining income (Journals.note_mined): each MarketSell that sold tons you mined, one row per journal line (source
+-- "file:offset"). commodity: the journal's lower-case name; tons, price (SellPrice) and total (TotalSale): the whole
+-- sale; mined_tons: the part that was mined (at most what the mined stock, meta mined_stock, held), mined_total its
+-- share of the total (total x mined_tons / tons, rounded); the rest of the sale was trade and is left out. own_carrier
+-- 1: sold to your own carrier (your own money: left out of the earnings). Journal-derived: cleared by
+-- RESET_JOURNAL_DATA.
+CREATE TABLE IF NOT EXISTS mining_sales (
+    ts TEXT, source TEXT, commodity TEXT, tons INTEGER, mined_tons INTEGER, price INTEGER, total INTEGER,
+    mined_total INTEGER, station TEXT, market_id INTEGER, ship_id INTEGER, own_carrier INTEGER, PRIMARY KEY (ts, source));
 -- Outrider's estimate just before a sale (recorded live, none for sales before the tool saw them). Live only,
 -- so a journal re-read keeps it (not in RESET_JOURNAL_DATA); the ledger joins it to sale_events by (ts, kind).
 CREATE TABLE IF NOT EXISTS sale_estimates (ts TEXT, kind TEXT, estimate INTEGER, PRIMARY KEY (ts, kind));
@@ -1752,6 +1778,7 @@ DELETE FROM own_barycentres; DELETE FROM phenomena; DELETE FROM phenomena_sites;
 DELETE FROM own_mined; DELETE FROM meta WHERE key IN ('srv_state', 'vehicle', 'ship_marker', 'body_here');
 DELETE FROM fleet_loadouts; DELETE FROM cargo_events; DELETE FROM system_population;
 DELETE FROM meta WHERE key IN ('ship_cargo', 'cargo_dock');
+DELETE FROM mining_sales; DELETE FROM meta WHERE key IN ('mined_stock', 'sale_dock');
 DELETE FROM play_activity;
 DELETE FROM meta WHERE key IN ('reputation', 'powerplay', 'squadron', 'stored_ships', 'stored_modules', 'ship_locker',
                                'suit_loadouts', 'engineers', 'missions');
@@ -3066,6 +3093,11 @@ class Journals:
         # cleared: a re-read only learns them again).
         self.ship_cargo = meta_get(db, "ship_cargo") or outrider.cargo.new_ship()
         self.cargo_dock = meta_get(db, "cargo_dock")
+        # Earnings: where you are docked for each sale's station ({station, market_id, type, ts}; station None once you
+        # leave), followed line by line like cargo_dock (see note_sale_dock), and the tons you mined still aboard
+        # ({commodity: t}, see note_mined)
+        self.sale_dock = meta_get(db, "sale_dock")
+        self.mined_stock = meta_get(db, "mined_stock") or {}
         self.commodity_names = meta_get(db, "commodity_names", {})
         # the Commander view's folds (outrider/commander.py, handle_commander): meta key -> its state
         self.cmdr_view = {k: meta_get(db, k) for k in outrider.commander.COMMANDER_META}
@@ -3239,12 +3271,16 @@ class Journals:
             self.note_loading(name, ev, ts)
             if name == "Fileheader":
                 return
+        if name in SALE_DOCK_EVENTS:
+            self.note_sale_dock(name, ev, ts)
+        # before the Commander view's fold: its Sessions count a sale's mined part as this works it out (one rule)
+        mined = self.note_mined(name, ev, ts) if name in MINED_EVENTS else None
         if name in DOCKING_WATCH:
             self.handle_docking(name, ev, ts)
             if name in DOCKING_EVENTS:
                 return
         if name in COMMANDER_EVENTS:
-            self.handle_commander(name, ev, ts)
+            self.handle_commander(name, ev, ts, mined)
             if name in COMMANDER_ONLY:
                 return
         if name in ("FSSSignalDiscovered", "SupercruiseDestinationDrop"):
@@ -3395,10 +3431,9 @@ class Journals:
                 self.bio_sales_changed = True
                 paid = sum((b.get("Value") or 0) + (b.get("Bonus") or 0) for b in ev.get("BioData") or [])
                 self.add_earnings(ts, paid)
-                self.db.execute("INSERT OR IGNORE INTO sale_events VALUES (?, 'bio', ?, ?, ?, 0, ?, ?, ?)",
-                                (ts, sum(b.get("Value") or 0 for b in ev.get("BioData") or []),
-                                 sum(b.get("Bonus") or 0 for b in ev.get("BioData") or []), paid, len(ev.get("BioData") or []),
-                                 self.line_source, check and json.dumps(check)))
+                self.note_sale_event(ts, "bio", sum(b.get("Value") or 0 for b in ev.get("BioData") or []),
+                                     sum(b.get("Bonus") or 0 for b in ev.get("BioData") or []), paid, 0,
+                                     len(ev.get("BioData") or []), check and json.dumps(check), ev.get("MarketID"))
                 self.new_sales.append((ts, "bio"))
                 self.note_sale(ts, bio=paid, species=len(ev.get("BioData") or []))
                 self.note_live_sale(ts, "bio", bio=paid, species=len(ev.get("BioData") or []))
@@ -3422,9 +3457,8 @@ class Journals:
             elif name == "MultiSellExplorationData":
                 self.add_earnings(ts, ev.get("TotalEarnings") or 0)
                 # one row per page (source): 'Sell all' writes several pages in the same second
-                self.db.execute("INSERT OR IGNORE INTO sale_events VALUES (?, 'carto', ?, ?, ?, ?, 0, ?, NULL)",
-                                (ts, ev.get("BaseValue"), ev.get("Bonus"), ev.get("TotalEarnings"), len(ev.get("Discovered") or []),
-                                 self.line_source))
+                self.note_sale_event(ts, "carto", ev.get("BaseValue"), ev.get("Bonus"), ev.get("TotalEarnings"),
+                                     len(ev.get("Discovered") or []), 0)
                 self.new_sales.append((ts, "carto"))
                 self.note_sale(ts, carto=ev.get("TotalEarnings") or 0, systems=len(ev.get("Discovered") or []))
                 self.note_live_sale(ts, "carto", carto=ev.get("TotalEarnings") or 0, systems=len(ev.get("Discovered") or []))
@@ -3433,9 +3467,8 @@ class Journals:
                                     (d.get("SystemName"), ts, d.get("NumBodies")))
             else:  # the pre-3.3 sale event: just a list of system names
                 self.add_earnings(ts, ev.get("TotalEarnings") or 0)
-                self.db.execute("INSERT OR IGNORE INTO sale_events VALUES (?, 'carto', ?, ?, ?, ?, 0, ?, NULL)",
-                                (ts, ev.get("BaseValue"), ev.get("Bonus"), ev.get("TotalEarnings"), len(ev.get("Systems") or []),
-                                 self.line_source))
+                self.note_sale_event(ts, "carto", ev.get("BaseValue"), ev.get("Bonus"), ev.get("TotalEarnings"),
+                                     len(ev.get("Systems") or []), 0)
                 self.new_sales.append((ts, "carto"))
                 self.note_live_sale(ts, "carto", carto=ev.get("TotalEarnings") or 0, systems=len(ev.get("Systems") or []))
                 for sysname in ev.get("Systems") or []:
@@ -3502,9 +3535,10 @@ class Journals:
             if name in ("FSDJump", "CarrierJump") and self.db.execute(
                     "SELECT 1 FROM jumps WHERE id64=? AND ts < ? LIMIT 1", (id64, ts)).fetchone():
                 verdict = "visited"
-            self.db.execute("INSERT OR IGNORE INTO jumps (ts, id64, name, x, y, z, star_class, kind, verdict, ride) "
-                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                            (ts, id64, ev.get("StarSystem"), x, y, z, star, ev.get("event"), verdict, 1 if ride else None))
+            self.db.execute("INSERT OR IGNORE INTO jumps (ts, id64, name, x, y, z, star_class, kind, verdict, ride, ship_id) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            (ts, id64, ev.get("StarSystem"), x, y, z, star, ev.get("event"), verdict, 1 if ride else None,
+                             None if ride else self.ship_at(ts)))
         if self.target and self.target["id64"] == id64 and current:
             self.target = None
         ns = meta_get(self.db, "next_stop")
@@ -4064,10 +4098,11 @@ class Journals:
                 if mo.get("seq") == b["seq"]:
                     self.moments[i] = dict(mo, **fields)
 
-    def handle_commander(self, name, ev, ts):
+    def handle_commander(self, name, ev, ts, mined=None):
         """The Commander view (outrider/commander.py): a fold's line into its meta key (fresh()-guarded per key: a line
         older than the newest folded, from a legacy folder read late, is ignored), a login's play_activity row, a
-        fighting or mining line into its login's row. Every line it is given moves commander_version."""
+        fighting or mining line into its login's row (mined: a MarketSell's mining income, note_mined's answer). Every
+        line it is given moves commander_version."""
         self.commander_version += 1
         key = outrider.commander.FOLD_OF.get(name)
         if key:
@@ -4082,18 +4117,19 @@ class Journals:
             self.db.execute("INSERT OR IGNORE INTO play_activity (login_ts, commander, ship) VALUES (?, ?, ?)",
                             (ts, ev.get("Commander"), ship))
         elif name in outrider.commander.ACTIVITY_EVENTS:
-            self.note_activity(ev, ts)
+            self.note_activity(ev, ts, mined)
 
-    def note_activity(self, ev, ts):
+    def note_activity(self, ev, ts, mined=None):
         """A fighting or mining line: into the counts of the login it follows (play_activity, its login the latest at
         or before it, so a legacy folder read late counts in its own sessions). None before any login on record. The
-        SRV's refinery apart from the ship's: the vehicle you are in (track_srv keeps it)."""
+        SRV's refinery apart from the ship's: the vehicle you are in (track_srv keeps it). A MarketSell counts as sold
+        only its mining income (`mined`, from note_mined: the same rule as mining_sales)."""
         row = self.db.execute("SELECT * FROM play_activity WHERE login_ts <= ? ORDER BY login_ts DESC LIMIT 1", (ts,)).fetchone()
         if not row:
             return
         acts = {k: json.loads(row[k]) if row[k] else None for k in ("combat", "mining")}
         srv = bool(self.vehicle) and ts >= (self.vehicle.get("ts") or "")
-        if outrider.commander.activity_apply(acts, ev, srv):
+        if outrider.commander.activity_apply(acts, ev, srv, mined):
             self.db.execute("UPDATE play_activity SET combat=?, mining=? WHERE login_ts=?",
                             (acts["combat"] and json.dumps(acts["combat"]), acts["mining"] and json.dumps(acts["mining"]),
                              row["login_ts"]))
@@ -4173,6 +4209,93 @@ class Journals:
         r = self.sale_run or {"carto": 0, "systems": 0, "bio": 0, "species": 0, "kinds": []}
         self.sale_run = dict(r, carto=r["carto"] + carto, systems=r["systems"] + systems, bio=r["bio"] + bio,
                              species=r["species"] + species, kinds=sorted(set(r["kinds"]) | {kind}), read_at=time.time())
+
+    def ship_at(self, ts):
+        """The ShipID of the ship you fly at a line at ts (on foot, in the SRV or the Nomad: the ship you came in): the
+        latest Loadout's, which a re-read replays in order (meta ship is journal-derived). None before any Loadout, and
+        for a line older than that Loadout (a legacy folder read late), whose ship is not known."""
+        s = self.ship or {}
+        return s.get("ship_id") if ts >= (s.get("ts") or "") else None
+
+    def note_sale_dock(self, name, ev, ts):
+        """Where you are docked, for the sales' station (sale_events, mining_sales): meta sale_dock {station, market_id,
+        type, ts}, its station None once you leave or log in in space. Not self.docked: meta docked is kept through a
+        re-read, so the re-read's older docks leave it at its newest; this one is journal-derived and replayed in order,
+        as cargo_dock is. A dock by Apex shuttle counts (you are there, and can sell your data there)."""
+        if not self.fresh("sale_dock", ts, (self.sale_dock or {}).get("ts")):
+            return   # an older dock or undock read late (a legacy folder) does not move it back
+        here = name == "Docked" or (name == "Location" and ev.get("Docked"))
+        self.sale_dock = {"station": ev.get("StationName") if here else None, "market_id": ev.get("MarketID") if here else None,
+                          "type": ev.get("StationType") if here else None, "ts": ts}
+        meta_set(self.db, "sale_dock", self.sale_dock)
+
+    def sale_place(self, ts, market=None):
+        """(station, market_id, station_type) where you were docked at a line at ts: all None when not docked, or for a
+        line older than the dock state (read out of order). `market`: the line's own MarketID, when it has one: a dock
+        at another market is not this sale's place (its station and type are then unknown)."""
+        d = self.sale_dock or {}
+        if ts < (d.get("ts") or "") or d.get("station") is None:
+            return None, market, None
+        if market is not None and market != d.get("market_id"):
+            return None, market, None
+        return d.get("station"), d.get("market_id"), d.get("type")
+
+    def note_sale_event(self, ts, kind, base, bonus, total, systems, species, x5_check=None, market=None):
+        """A sale's sale_events row (one per journal line: source), with where you were docked and the ship flown."""
+        station, market_id, station_type = self.sale_place(ts, market)
+        self.db.execute("INSERT OR IGNORE INTO sale_events (ts, kind, base, bonus, total, systems, species, source, x5_check,"
+                        " station, market_id, station_type, ship_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (ts, kind, base, bonus, total, systems, species, self.line_source, x5_check, station, market_id,
+                         station_type, self.ship_at(ts)))
+
+    def note_mined(self, name, ev, ts):
+        """The tons you mined still aboard (meta mined_stock {commodity: t}, the journal's lower-case name: the ship's
+        hold and the SRV's together). MiningRefined adds 1 t, the ship's refinery's or the SRV's; a CargoTransfer to your
+        carrier and an EjectCargo take theirs off (never below 0); a death empties it (the hold is lost). A MarketSell
+        counts as mining up to what the stock holds of it, min(Count, stock): when that is over 0 it gets a mining_sales
+        row (own_carrier 1 at your own carrier's market) and comes off the stock; the rest of the sale was trade.
+        Returns, for a MarketSell, the credits that count as mining income (0 when none was mined, and at your own
+        carrier: your own money), which the Commander view's Sessions count as sold; None for the other lines and for a
+        line older than the stock (a legacy folder read late: what was aboard then is not known)."""
+        if not self.fresh("mined_stock", ts):
+            return None
+        stock, cid, out = dict(self.mined_stock), outrider.cargo.cid, None
+        count = lambda x: x.get("Count") if isinstance(x.get("Count"), int) and x.get("Count") > 0 else 0
+        if name == "MiningRefined":
+            if cid(ev.get("Type")):
+                stock[cid(ev["Type"])] = stock.get(cid(ev["Type"]), 0) + 1
+        elif name == "Died":
+            stock = {}
+        elif name in ("CargoTransfer", "EjectCargo"):
+            # a transfer to the ship or the SRV keeps what you mined aboard (and what comes back from the carrier is
+            # not counted as mined again: it went to the carrier)
+            gone = [t for t in ev.get("Transfers") or [] if isinstance(t, dict) and t.get("Direction") == "tocarrier"] \
+                if name == "CargoTransfer" else [ev]
+            for t in gone:
+                k = cid(t.get("Type"))
+                if k in stock:
+                    stock[k] = max(0, stock[k] - count(t))
+        else:   # MarketSell
+            k, tons, total = cid(ev.get("Type")), count(ev), ev.get("TotalSale")
+            mined = min(tons, stock.get(k, 0))
+            out = 0
+            if mined > 0:
+                total = total if isinstance(total, (int, float)) else 0
+                mined_total = round(total * mined / tons)
+                market = ev.get("MarketID")
+                own = int(market is not None and market == (self.carrier or {}).get("id"))
+                station = self.sale_place(ts, market)[0]
+                self.db.execute("INSERT OR IGNORE INTO mining_sales (ts, source, commodity, tons, mined_tons, price, total,"
+                                " mined_total, station, market_id, ship_id, own_carrier) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                (ts, self.line_source or f"MarketSell:{k}", k, tons, mined, ev.get("SellPrice"), total,
+                                 mined_total, station, market, self.ship_at(ts), own))
+                stock[k] -= mined
+                out = 0 if own else mined_total
+        stock = {k: n for k, n in stock.items() if n > 0}
+        if stock != self.mined_stock:
+            self.mined_stock = stock
+            meta_set(self.db, "mined_stock", stock)
+        return out
 
     def add_earnings(self, ts, amount):
         c = self.commander
@@ -4480,10 +4603,13 @@ class Journals:
                 samples = min(3, samples + 1)
             else:                        # Analyse: the run is complete
                 samples, done = 3, ts
+            # ship_id: the ship flown at this sample (on foot or in the SRV, the one you came in): the run's last, the
+            # Analyse that completes it, is the run's ship
             self.db.execute(
-                """INSERT OR REPLACE INTO own_organic VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                """INSERT OR REPLACE INTO own_organic (system, body_id, species, genus_name, species_name, variant_name,
+                                                     samples, done_ts, ts, ship_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (system, body, species, ev.get("Genus_Localised"), ev.get("Species_Localised"),
-                 ev.get("Variant_Localised"), samples, done, ts))
+                 ev.get("Variant_Localised"), samples, done, ts, self.ship_at(ts)))
             self.note_sample_point(system, body, species, ev.get("Genus"), kind, samples, ts)
             self.body_touched.add((system, body))
             if kind == "Analyse":   # "Stratum Tectonicas complete, 19.2 million; two left here" (priced by State)
@@ -4518,7 +4644,7 @@ class Journals:
             if record and ev.get("BodyID") is not None:
                 # A body is news once: the Detailed rescan the game writes after mapping it (SAAScanComplete)
                 # and AutoScans on a return visit replace the row but must not announce it again.
-                known = self.db.execute("SELECT record FROM own_bodies WHERE system=? AND body_id=?",
+                known = self.db.execute("SELECT record, ts, ship_id FROM own_bodies WHERE system=? AND body_id=?",
                                         (system, ev["BodyID"])).fetchone()
                 # an FSS (Detailed) of the body said its signals; a later AutoScan or nav-beacon read replacing the row
                 # must not make them "not counted" again (review: "bio possible" on a body already checked)
@@ -4529,9 +4655,12 @@ class Journals:
                         was = None
                     if was and was not in NO_SIGNAL_SCANS:
                         record["scan_type"] = was
-                self.db.execute("INSERT OR REPLACE INTO own_bodies (system, body_id, name, record, ts, raw) "
-                                "VALUES (?, ?, ?, ?, ?, ?)",
-                                (system, ev["BodyID"], ev["BodyName"], json.dumps(record), ts, json.dumps(ev)))
+                # the ship of the first scan: a rescan (the Detailed one after mapping, a return visit) keeps it; an older
+                # scan read late (a legacy folder) is the first, but with its ship unknown then (ship_at)
+                first_ship = known["ship_id"] if known and ts >= (known["ts"] or "") else self.ship_at(ts)
+                self.db.execute("INSERT OR REPLACE INTO own_bodies (system, body_id, name, record, ts, raw, ship_id) "
+                                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                                (system, ev["BodyID"], ev["BodyName"], json.dumps(record), ts, json.dumps(ev), first_ship))
                 flag = lambda k: None if k not in ev else int(bool(ev[k]))
                 undisc = ts if ev.get("WasDiscovered") is False else None
                 if record["type"] == "Star" and not known and live_event(ts):

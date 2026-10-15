@@ -1556,7 +1556,8 @@ class BatchEExobio(unittest.TestCase):
         m = [x for x in self.j.moments if x["seq"] > seq and x["kind"] == "bio_dropped"]
         self.assertEqual([(x["species"], x["body"], x["elsewhere"]) for x in m], [("Tussock Pennata", "4", False)])
         self.assertIsNone(self.db.execute("SELECT 1 FROM own_organic WHERE body_id = 4").fetchone())
-        self.db.execute("INSERT INTO own_organic VALUES (1, 4, 'x', 'Bacterium', 'Bacterium Aurasus', NULL, 2, NULL, '2026-01-01T00:30:00Z')")
+        self.db.execute("INSERT INTO own_organic (system, body_id, species, genus_name, species_name, variant_name, samples, done_ts, ts)"
+                        " VALUES (1, 4, 'x', 'Bacterium', 'Bacterium Aurasus', NULL, 2, NULL, '2026-01-01T00:30:00Z')")
         seq = self.j.moment_seq
         self.j.handle(self.organic("2026-01-01T00:40:00Z", 5, "Log", self.TUSSOCK, "Tussock Pennata"))
         self.assertEqual([x for x in self.j.moments if x["seq"] > seq and x["kind"] == "bio_dropped"], [])

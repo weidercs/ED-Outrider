@@ -2,6 +2,33 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · Earnings data: where and with which ship each sale, jump, scan and sample; mined stock
+NEXT-VERSION #7 (javeliuswt, GitHub discussion #7), batch A of the CMDR tab's Earnings: the data, nothing shown yet.
+PARSER_VERSION 51 → 52 (51 is unreleased: one journal re-read either way).
+- **Where and with which ship**: `sale_events` keeps `station`, `market_id`, `station_type` (where you were docked) and
+  `ship_id`; `jumps`, `own_bodies` (the first scan's ship: a rescan keeps it) and `own_organic` (the ship flown at the
+  run's last sample: on foot or in the SRV, the one you came in) keep `ship_id`. The ship is the latest `Loadout`'s
+  (`Journals.ship_at`); the place is meta `sale_dock` (`note_sale_dock`, `sale_place`), followed line by line and
+  journal-derived, not meta `docked`, which a re-read keeps at its newest. A line read out of order (a legacy folder read
+  late) gets NULL for both; old databases get the columns from `open_db`, NULL until the re-read. The sale_events,
+  own_organic and own_bodies writes name their columns.
+- **Mined stock** (meta `mined_stock` {commodity: t}, `Journals.note_mined`): every `MiningRefined` adds 1 t (the ship's
+  refinery or the SRV's), a `CargoTransfer` to your carrier and an `EjectCargo` take theirs off (never below 0), a death
+  empties it. A `MarketSell` counts as mining up to what it holds of that commodity: a new table **`mining_sales`** (ts,
+  source, commodity, tons, mined_tons, price, total, mined_total = total × mined_tons / tons, station, market_id,
+  ship_id, own_carrier: your own carrier's market, your own money), the rest of the sale is trade. Both journal-derived
+  (RESET_JOURNAL_DATA); lines older than the stock are left out (`fresh`).
+- **Sessions' Sold** (the CMDR tab) uses the same rule: the reader hands each sale's mining income to the fold
+  (`commander.activity_apply(..., mined)`), so ore mined in one session and sold in the next counts in the one it was
+  sold in (that login lists its mining with 0 t refined), bought tons sold with it no longer count, and sales to your own
+  carrier do not. Before, a sale counted whole when its commodity was refined in the same login.
+- Tests: `tests/test_earnings_data.py` (the place and ship of sales at a station, at your carrier after a docked login,
+  by Apex shuttle and out of order; a jump's and a ride's, a rescan keeping the first ship, a sample run's; the fixtures
+  read and read again; an old database's columns; the stock through refining by ship and SRV, a transfer, ejects, a
+  death; a partial sale, two sessions, your own carrier, Sessions' Sold, an older line read late, a rolled-back tick,
+  the re-read's clearing). Docs: JOURNAL_REFERENCE (MarketSell, MiningRefined, CargoTransfer, EjectCargo, the sales'
+  place), AGENT_GUIDE.
+
 ## 2026-10-14 · Where your pad is: words, diagrams, quiet on auto-dock
 NEXT-VERSION #12 (the author liked the mockup), on #3's pad number. After bgol's LandingPad plugin for EDMC (GPL-2+,
 credited in `outrider/pads.py` and the README).

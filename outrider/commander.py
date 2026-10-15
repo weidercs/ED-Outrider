@@ -604,11 +604,21 @@ def _seen(acc, ts, first="first", last="last"):
     acc[last] = max(acc[last] or ts, ts)
 
 
-def activity_apply(acts, ev, srv=False):
+def _mining_counts():
+    """A login's mining counts before its first mining line (play_activity's mining)."""
+    return {"n": 0, "refined": {}, "srv": {}, "prospected": 0, "content": {}, "motherlodes": 0, "cracked": 0,
+            "prospectors": 0, "collectors": 0, "sold": 0, "first": None, "last": None,
+            "srv_first": None, "srv_last": None, "seen": None}
+
+
+def activity_apply(acts, ev, srv=False, mined=None):
     """One fighting or mining line into a login's counts (play_activity's combat and mining, created when first
     needed): acts {combat, mining}, changed in place; True if it counted. srv: you are in an SRV (Journals.vehicle),
     whose refinery is kept apart from the ship's (`srv`; the Rhino's surface mining). first / last (and srv_first /
-    srv_last) are the earliest and latest such line, so a line read out of order still counts once at its place."""
+    srv_last) are the earliest and latest such line, so a line read out of order still counts once at its place.
+    mined: a MarketSell's mining income, as the reader's mined stock worked it out (Journals.note_mined, the rule
+    mining_sales follows: the tons you mined still aboard, whenever you mined them; nothing at your own carrier): it is
+    the sale's "sold", in the login the sale was made in, which may have no mining line of its own."""
     name, ts = ev["event"], ev["timestamp"]
     if name in _KILLS + ("Died", "Interdicted", "RedeemVoucher"):
         if name == "RedeemVoucher" and ev.get("Type") not in ("bounty", "CombatBond"):
@@ -637,19 +647,17 @@ def activity_apply(acts, ev, srv=False):
         return True
     m = acts.get("mining")
     if name == "MarketSell":
-        types = {k.lower() for k in list((m or {}).get("refined") or {}) + list((m or {}).get("srv") or {})}
-        if not types or (_text(ev, "Type") or "").lower() not in types:
+        if not mined:
             return False
-        m["sold"] += ev.get("TotalSale") or 0
+        m = acts["mining"] = m or _mining_counts()
+        m["sold"] += mined
         m["seen"] = max(m["seen"] or ts, ts)
         return True
     if name == "LaunchDrone" and ev.get("Type") not in ("Prospector", "Collection"):
         return False
     if name not in _MINING + ("LaunchDrone",):
         return False
-    m = acts["mining"] = m or {"n": 0, "refined": {}, "srv": {}, "prospected": 0, "content": {}, "motherlodes": 0, "cracked": 0,
-                               "prospectors": 0, "collectors": 0, "sold": 0, "first": None, "last": None,
-                               "srv_first": None, "srv_last": None, "seen": None}
+    m = acts["mining"] = m or _mining_counts()
     m["seen"] = max(m["seen"] or ts, ts)
     if name == "LaunchDrone":
         m["prospectors" if ev["Type"] == "Prospector" else "collectors"] += 1
@@ -677,9 +685,10 @@ def session(row):
     last such line), commander, ship, combat: {kills, bounties, bonds, by_ship, deaths, interdicted, redeemed,
     seconds, per_hour} or None, mining: {tons, refined: {name: t} (the ship's), srv_tons, srv_refined (the SRV's
     refinery), prospected, content: {High, Medium, Low}, motherlodes, cracked, prospectors, collectors, sold, seconds,
-    per_hour (the ship's), srv_seconds} or None}."""
+    per_hour (the ship's), srv_seconds} or None}. A login with nothing mined but ore sold that was mined before (sold
+    only) lists its mining too."""
     c = row.get("combat") if (row.get("combat") or {}).get("n") else None
-    m = row.get("mining") if (row.get("mining") or {}).get("n") else None
+    m = row.get("mining") if (row.get("mining") or {}).get("n") or (row.get("mining") or {}).get("sold") else None
     if not c and not m:
         return None
     combat = mining = None
