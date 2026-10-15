@@ -2,6 +2,36 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · Earnings tab: figures, period picker, monthly chart, sales, stations, species, ships, mining, estimates, CSV
+NEXT-VERSION #7, batch C: the page for batch B's answer. The CMDR tab's 6th sub-tab, **Earnings**, desktop and tablet.
+- **Figures**: total earned (and the sales), cartography and exobiology (each base + bonus), mining (tons mined), and
+  "Lost (estimate)": the data you died with, as History's Ledger values it, with the deaths. Exact figures are the
+  game's; the credits as the page writes them elsewhere (`credits()`), the exact sum in each one's title.
+- **Period** (above the pane): All time, a year with a sale, a month of that year; kept per device (store
+  `cmEarnPeriod`, in neither settings list, as `cmdrTab`). A change asks again (`?year=`, `&month=`); an older
+  period's answer arriving late is dropped (`newRequest`). Asked again too when the payload's `history_version` moves.
+- **Monthly chart** (inline SVG, no library): every month of all time, cartography / exobiology / mining stacked to one
+  scale, 3 or 4 axis steps reaching the highest month, the month labels thinned to the box's width (calendar-aligned:
+  every 2nd, 3rd... month, then years), the period's months highlighted and the rest dimmed, a title per bar with its
+  three figures; a bar picks its month. Sized to its box (bars in % of the width, a fixed height). Its colours are new
+  tokens `--earn-carto`/`--earn-bio`/`--earn-mine` (page.css: info, good, accent); Babylon 5, Centauri, Dark, Elite,
+  Minbari, Narn, Sith and Vorlon set their own where their info, accent and warn are one colour or too alike.
+- **Tables** (fitted: `FIT_TABLES`, compact short forms): Sales (when, kind, where, ship, what, base, bonus, total; "N
+  more not shown"), Where you sold, Species (exact), Ships (jumps, ly, bodies scanned, species sampled, earned, active
+  days), Mining (per commodity refined by ship / SRV, mined tons sold, earned, cr/t; where sold; best sales; the sales
+  to your own carrier left out, in a line), Most common (star classes, planet types, species found), Estimates (the
+  systems sold by Outrider's value of your scans and the data lost to deaths, the word "estimate" on every value).
+  Then the answer's notes and a line to History › Trips (the Ledger) for each trip's figures.
+- **⬇ CSV** above the pane: `api/export?what=earnings`, a server link (the Android app saves it).
+- **No sales at all**: said plainly, no chart, no figures.
+- Tablet: the same sub-tab; the CMDR sub-tabs finger-sized and wrapping, the chart's text larger (`body.tablet` rules in
+  tablet.css). The desktop's CMDR switch wraps on a narrow window instead of running off it.
+- Tests: the smoke block "earnings" (the sub-tab, the figures, the picker's years and months and their queries, kept
+  per device, an older answer overtaken, bars to scale and the empty month, the ticks, the labels, the highlight, a bar's
+  click, each table, the short forms, the CSV link, the estimates labelled, History's Trips, the empty database, the axis
+  and the labels' thinning); the tablet block (the sub-tab from Records, chart, tables, sub-tab size); `test_tablet`'s
+  chart colours (told apart in every theme, 3:1 on the background and panels). Docs: AGENT_GUIDE.
+
 ## 2026-10-14 · Earnings summary: totals, months, sales, species, stations, ships, mining, estimates; CSV
 NEXT-VERSION #7, batch B of the CMDR tab's Earnings: the answer the page will show (batch C), nothing on the page yet.
 PARSER_VERSION 52 → 53 (both unreleased: one journal re-read either way).

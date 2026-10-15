@@ -94,7 +94,9 @@ const SHORT_FORMS = {
     "System tag": "Tag", "Seen by others": "Seen", "Lost: scan (FSS)": "FSS", "Lost: map (DSS)": "DSS", "Lost total": "Lost",
     "Unsold value": "Unsold", "Max from Sol": "Sol", "🏁 systems": "🏁", "ship losses": "losses", "Samples": "Samp",
     "Bookmarked system": "System", "Jump ly": "ly", "Fuel used": "Used", "Fuel left": "Fuel", "Remaining ly": "Left",
-    "Expires in": "Left", "Bounties by ship": "By ship", "Fighting": "Time", "Mining": "Time", "Prospected": "Prosp"},
+    "Expires in": "Left", "Bounties by ship": "By ship", "Fighting": "Time", "Mining": "Time", "Prospected": "Prosp",
+    "Bodies scanned": "Bodies", "Species sampled": "Species", "Active days": "Days", "Refined by ship": "Ship t", "Refined by SRV": "SRV t",
+    "Mined t sold": "Sold t", "Value (estimate)": "Est.", "Star class": "Star", "Planet type": "Planet", "Species found": "Species"},
   state: {"in progress": "in prog"},
 };
 // the planet classes inside a longer text ("map 2 Water world T"), longest first so "Rocky Ice world" is not "Rocky"
@@ -1819,7 +1821,9 @@ const VIEW_PANE = {overview: "nearPane", near: "nearPane", here: "hereMain", bio
 // with each level's forms in turn; going back to a longer form needs COMPACT_SLACK px to spare, so a scrollbar that
 // comes and goes with the row heights cannot make it flap.
 const FIT_TABLES = ["nearTable", "hereTable", "firstsTable", "leftTable", "bioTable", "codexTable", "histTable", "tripTable",
-                    "topTable", "logTable", "sTable", "bmTable", "hwyTable", "cmMissions", "cmCombat", "cmMining"];
+                    "topTable", "logTable", "sTable", "bmTable", "hwyTable", "cmMissions", "cmCombat", "cmMining",
+                    "cmEarnSales", "cmEarnStations", "cmEarnSpecies", "cmEarnShips", "cmEarnOre", "cmEarnOreAt", "cmEarnOreBest",
+                    "cmEarnStars", "cmEarnBodies", "cmEarnFound", "cmEarnEst"];
 // boxes whose FIT_TABLES are drawn later, replaced whole at each draw (the CMDR tab's): watched, so a new table is fitted
 const FIT_HOSTS = ["cmdrBody"];
 const COMPACT_SLACK = 24;
@@ -6003,6 +6007,7 @@ function diedHtml(x) {
 }
 const openSessions = new Set();
 // the CMDR tab's "History ›" (its career block): History's Career row brought into view at the next draw with data
+// ("career"), or its Trips (Earnings' per-trip line: "trips"); false: nothing to bring
 let histReveal = false;
 function renderHistory() {
   renderLastSession();
@@ -6032,7 +6037,10 @@ function renderHistory() {
         <td class="num hide-sm">${(e.First_Footfalls || 0).toLocaleString()}</td><td class="num" title="organic species encountered">${(o.Organic_Species_Encountered || 0).toLocaleString()}</td>` +
         soldCell((e.Exploration_Profits || 0) + (o.Organic_Data_Profits || 0), "exploration profits and organic data profits, the game's statistics") +
         `<td class="num hide-sm c2hide"></td></tr>`); }
-  if (histReveal) { histReveal = false; const r = document.querySelector("#histAll tr.career"); if (r) revealIn(r, "start"); }
+  if (histReveal) {   // "career": its row; "trips": the Trips heading (the Ledger), from the CMDR tab's Earnings
+    const r = histReveal === "trips" ? document.getElementById("tripTable").previousElementSibling : document.querySelector("#histAll tr.career");
+    histReveal = false; if (r) revealIn(r, "start");
+  }
   const fmtD = t => t ? t.slice(0, 10) : "start";
   // compact: "✗ 09-01 −12.3M" (the split between carto and bio stays in the full form and the title)
   const lossHtml = ls => ls.map(l => {
@@ -10274,17 +10282,33 @@ function starWords(cls, lum) {
 }
 // ---- The Commander view (GET /api/commander/<tab>, outrider/commander.py): who you are in the game (CMDR), what you own (Inventory),
 // what engineering takes against your materials (Engineering), the missions you hold (Missions) and how your combat
-// and mining sessions went (Sessions), as Outrider keeps them from the journals (outrider/commander.py's folds, in the
+// and mining sessions went (Sessions) and what exploration, exobiology and mining paid you (Earnings: outrider/earnings.py,
+// for this device's period), as Outrider keeps them from the journals (outrider/commander.py's folds, in the
 // database). A tab is asked for when opened, and again when the payload's commander_version has moved since (a line
-// the view reads was handled; Engineering also on the materials' version),
+// the view reads was handled; Engineering also on the materials' version, Earnings on history_version (a jump, a sale,
+// a death) and its period),
 // as loadMat keys on its own; Refresh reads it again now. Credits and the carrier are the payload's (the Commander and
 // Carrier tiles' own figures), drawn at every render ----
 // CM: tab (the one shown), data / error / key (the versions it was read at) / loading per tab, q and craft
-// (Engineering's filter), open (its modules unfolded)
-const CM = {tab: "profile", data: {}, error: {}, key: {}, loading: {}, q: "", craft: false, open: {}};
-const CM_TABS = ["profile", "inventory", "engineering", "missions", "sessions"];
+// (Engineering's filter), open (its modules unfolded), period (Earnings': {year, month}, "" for none), chartW (the
+// box's width at the last draw: how many of the chart's months get a label)
+const CM = {tab: "profile", data: {}, error: {}, key: {}, loading: {}, q: "", craft: false, open: {}, period: {year: "", month: ""}, chartW: 0};
+const CM_TABS = ["profile", "inventory", "engineering", "missions", "sessions", "earnings"];
 const CM_SOON_S = 1800;   // a mission expiring within this is marked (outrider.commander.MISSION_SOON_S)
-const cmKey = tab => `${data && data.commander_version}` + (tab === "engineering" ? `|${data && data.materials && data.materials.version}` : "");
+const cmKey = tab => `${data && data.commander_version}` + (tab === "engineering" ? `|${data && data.materials && data.materials.version}` : "") +
+  (tab === "earnings" ? `|${data && data.history_version}|${emPeriodKey(CM.period)}` : "");
+// Earnings' period, this device's (store cmEarnPeriod: "" all time, "2026" a year, "2026-03" a month; per device like
+// cmdrTab, in neither settings list): the stored text read back (anything else is all time), the text, the query
+const emPeriodFrom = v => { const m = /^(\d{4})(?:-(0[1-9]|1[0-2]))?$/.exec(typeof v === "string" ? v : "");
+  return m ? {year: m[1], month: m[2] ? String(+m[2]) : ""} : {year: "", month: ""}; };
+const emPeriodKey = p => p.year ? p.year + (p.month ? "-" + String(p.month).padStart(2, "0") : "") : "";
+const emQuery = p => p.year ? `?year=${p.year}${p.month ? `&month=${p.month}` : ""}` : "";
+// a new period: kept for this device and asked for (newRequest in loadCmdr: an older period's late answer is dropped)
+function setEarnPeriod(year, month = "") {
+  CM.period = {year: year || "", month: year && month ? String(month) : ""};
+  store.set("cmEarnPeriod", emPeriodKey(CM.period));
+  if (view === "cmdr" && CM.tab === "earnings") loadCmdr(); else renderCmdr();
+}
 
 async function loadCmdr(force = false) {
   const tab = CM.tab, key = cmKey(tab);
@@ -10294,7 +10318,7 @@ async function loadCmdr(force = false) {
   CM.loading[tab] = true;
   renderCmdr();
   let d;
-  try { d = await apiJson("api/commander/" + tab); } catch (err) { d = {error: err.message}; }
+  try { d = await apiJson("api/commander/" + tab + (tab === "earnings" ? emQuery(CM.period) : "")); } catch (err) { d = {error: err.message}; }
   if (!isNewest("cmdr:" + tab, g)) return;
   CM.loading[tab] = false;
   if (!d || d.error) { CM.error[tab] = (d && d.error) || "no answer"; CM.key[tab] = null; }   // asked again at the next render
@@ -10308,19 +10332,29 @@ function setCmdrTab(t) {
 }
 // the controls sit above the pane, in the page from the start: wired once
 CM.tab = CM_TABS.includes(store.get("cmdrTab", "profile")) ? store.get("cmdrTab", "profile") : "profile";
+CM.period = emPeriodFrom(store.get("cmEarnPeriod", ""));
 document.querySelectorAll("[name=cmdrTab]").forEach(x => x.addEventListener("change", () => setCmdrTab(x.value)));
+document.getElementById("cmEarnYear").addEventListener("change", e => setEarnPeriod(e.target.value));
+document.getElementById("cmEarnMonth").addEventListener("change", e => setEarnPeriod(CM.period.year, e.target.value));
+// the chart's month labels are thinned to the box's width: drawn again when it changes (nothing is written when the
+// labels stay the same)
+if (typeof ResizeObserver === "function") new ResizeObserver(() => {
+  if (view === "cmdr" && CM.tab === "earnings") (window.requestAnimationFrame || setTimeout)(() => { if (view === "cmdr" && CM.tab === "earnings") cmdrDrawBody(); });
+}).observe(document.getElementById("cmdrBody"));
 document.getElementById("cmRefresh").addEventListener("click", () => loadCmdr(true));
 document.getElementById("cmFilter").addEventListener("input", e => { CM.q = e.target.value; cmdrDrawBody(); });
 document.getElementById("cmCraft").addEventListener("change", e => { CM.craft = e.target.checked; cmdrDrawBody(); });
 document.getElementById("cmdrBody").addEventListener("toggle", e => { const k = e.target.dataset && e.target.dataset.cmmod; if (k) CM.open[k] = e.target.open; }, true);
 // links out of the tab (should 5: the tiles stay informational, the links go from here): the career to History's
-// Career row; a material Engineering is short of to the Materials tab (filtered to it) and its ⇄ to the nearest trader
+// Career row, Earnings' per-trip line to History's Trips (the Ledger); a material Engineering is short of to the
+// Materials tab (filtered to it) and its ⇄ to the nearest trader. In the tab: a month's bar in Earnings' chart picks that month
 function cmdrGo(el) {
-  const t = el.closest("[data-trader]"), m = el.closest("[data-cmmat]"), h = el.closest("[data-cmgo]");
+  const t = el.closest("[data-trader]"), m = el.closest("[data-cmmat]"), h = el.closest("[data-cmgo]"), e = el.closest("[data-emmonth]");
   if (t) openNearest({need: [t.dataset.trader]});
   else if (m) { mFilter.value = m.dataset.cmmat; mHeld.checked = false; const b = document.querySelector('[data-view="mat"]'); if (b) b.click(); }
-  else if (h) { histReveal = true; const b = document.querySelector('[data-view="hist"]'); if (b) b.click(); }
-  return !!(t || m || h);
+  else if (h) { histReveal = h.dataset.cmgo === "trips" ? "trips" : "career"; const b = document.querySelector('[data-view="hist"]'); if (b) b.click(); }
+  else if (e) { const [y, mo] = e.dataset.emmonth.split("-"); setEarnPeriod(y, String(+mo)); }
+  return !!(t || m || h || e);
 }
 document.getElementById("cmdrBody").addEventListener("click", e => cmdrGo(e.target));
 document.getElementById("cmdrBody").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.dataset && e.target.dataset.cmmat != null && cmdrGo(e.target)) e.preventDefault(); });
@@ -10528,11 +10562,187 @@ function cmdrSessionsHtml(d) {
       : `<div class="unk">No mining in the last ${cmNum(days)} days.</div>`);
 }
 
-const CM_HTML = {profile: cmdrProfileHtml, inventory: cmdrInventoryHtml, engineering: cmdrEngineeringHtml, missions: cmdrMissionsHtml, sessions: cmdrSessionsHtml};
+// Earnings (NEXT-VERSION #7, GET /api/commander/earnings?year=&month=, outrider/earnings.py): what exploration,
+// exobiology and mining paid you in the period. Exact figures are the game's (what each sale paid); Outrider's own
+// estimates (the systems sold by value, the data lost to deaths) only under Estimates and the Lost figure, always
+// labelled so. The chart is every month of all time, the period's months highlighted; a bar picks its month. Pure but
+// for CM.period (the picker above the pane) and CM.chartW (the box's width: the month labels that fit).
+const EM_KINDS = [["carto", "Cartography", "Carto"], ["bio", "Exobiology", "Exo"], ["mining", "Mining", "Mining"]];
+const EM_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const EM_PH = 150, EM_TOP = 10, EM_LH = 20, EM_YAX = 52;   // the chart: plot height, room above it, the labels' row, the y axis (px)
+const EM_STEPS = [1, 2, 3, 4, 6, 12, 24, 36, 60, 120];      // a month label every so many months (calendar-aligned)
+const emExact = v => `${Math.round(v || 0).toLocaleString()} cr`;
+const emCr = v => `<span title="${esc(emExact(v))}">${esc(credits(v || 0))} cr</span>`;
+// in a fitted table: "12.3M cr" / "12.3M", the exact sum in the title; nothing for no value (a mining sale's base and bonus)
+const emCrS = v => v == null ? "" : dual(`<span title="${esc(emExact(v))}">${esc(credits(v))} cr</span>`, esc(credits(v)), {title: emExact(v)});
+const emPlural = (n, one, many = one + "s") => `${cmNum(n)} ${n === 1 ? one : many}`;
+// a station's type as the journal names it ("FleetCarrier", "CraterOutpost") in words
+const emType = t => !t ? "" : /^(Coriolis|Orbis|Ocellus|Bernal|Dodec)$/.test(t) ? t : t === "MegaShip" ? "megaship"
+  : t.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+// a ship (the answer's {id, name, type, type_name}) as the rest of the tab names it; unknown: a line from before Outrider
+// kept the ship, or a ride
+function emShip(s) {
+  if (!s) return `<span class="unk" title="not known: from before Outrider kept the ship, or a ride">?</span>`;
+  const label = shipLabel(s.name, s.type) || `ship ${s.id}`, type = s.type_name || shipLabel(null, s.type);
+  return `<b>${esc(label)}</b>${type && type !== label ? ` <span class="unk c1hide">${esc(type)}</span>` : ""}`;
+}
+const emWhat = w => w.systems != null ? emPlural(w.systems, "system") : w.species != null ? emPlural(w.species, "species", "species")
+  : `${cmNum(w.tons)} t ${esc(w.commodity || "")}${w.of > w.tons ? ` <span class="unk c2hide" title="the rest was bought, not mined: trade, left out">of ${cmNum(w.of)} t</span>` : ""}`;
+const emKind = k => { const x = EM_KINDS.find(e => e[0] === k) || [k, k, k];
+  return `<span class="emsw ${esc(x[0])}"></span>${dual(esc(x[1]), esc(x[2]))}`; };
+const emDay = ts => ts ? dual(esc(String(ts).slice(0, 10)), esc(shortForm("day", String(ts).slice(0, 10)))) : "";
+// the y axis: steps of 1, 2, 2.5 or 5 × 10^n, 3 or 4 of them, the top one reaching the highest month: [step, top]
+function emAxis(max) {
+  if (!(max > 0)) return [1, 3];
+  for (let p = 10 ** Math.max(0, Math.floor(Math.log10(max)) - 1); ; p *= 10)
+    for (const f of [1, 2, 2.5, 5]) {
+      const step = f * p, n = Math.ceil(max / step);
+      if (step === Math.round(step) && n <= 4) return [step, Math.max(3, n) * step];
+    }
+}
+// the months labelled: every one that fits, else every 2nd, 3rd... month of the calendar (Jan, Apr, Jul, Oct), then years
+function emLabelStep(n, width) {
+  const fit = Math.max(1, Math.floor(Math.max(0, width - EM_YAX - 14) / (TABLET ? 62 : 52)));
+  return EM_STEPS.find(s => Math.ceil(n / s) <= fit) || EM_STEPS[EM_STEPS.length - 1];
+}
+// The monthly bars (all time): cartography, exobiology, mining stacked, to one scale; the period's months highlighted (the
+// others dimmed under a band) when the period is a year or a month; a title per bar with its three figures. Sized to its
+// box: the bars in % of the width, the height fixed (never the window's)
+function emChartHtml(months, p, width) {
+  const n = months.length, tot = m => (m.carto || 0) + (m.bio || 0) + (m.mining || 0);
+  const [step, top] = emAxis(Math.max(...months.map(tot)));
+  const y = v => +(EM_TOP + EM_PH - v / top * EM_PH).toFixed(2), H = EM_TOP + EM_PH + EM_LH;
+  const pc = x => (x * 100 / n).toFixed(3) + "%";
+  const pre = p.year ? (p.month ? `${p.year}-${String(p.month).padStart(2, "0")}` : `${p.year}-`) : null;
+  const inP = m => pre != null && m.month.startsWith(pre);
+  const ticks = []; for (let i = 1; i * step <= top; i++) ticks.push(i * step);
+  const ls = emLabelStep(n, width || 640);
+  let first = true;
+  const label = (m, i) => {
+    const [yy, mm] = m.month.split("-").map(Number);
+    if (ls <= 12 ? (mm - 1) % ls : mm !== 1 || yy % (ls / 12)) return "";
+    const t = ls >= 12 ? String(yy) : EM_MONTHS[mm - 1].slice(0, 3) + (mm === 1 || first ? ` ’${String(yy).slice(2)}` : "");
+    first = false;
+    return `<text class="emlbl" x="${pc(i + 0.5)}" y="${H - 5}" text-anchor="middle">${esc(t)}</text>`;
+  };
+  const on = months.map(inP), a = on.indexOf(true), b = on.lastIndexOf(true);
+  const bars = months.map((m, i) => {
+    const [yy, mm] = m.month.split("-").map(Number);
+    let base = 0, segs = "";
+    for (const [k] of EM_KINDS) {
+      const v = m[k] || 0; if (!(v > 0)) continue;
+      segs += `<rect class="emseg ${k}" x="${pc(i + 0.15)}" width="${pc(0.7)}" y="${y(base + v)}" height="${(v / top * EM_PH).toFixed(2)}"/>`;
+      base += v;
+    }
+    const tip = `${EM_MONTHS[mm - 1]} ${yy}: cartography ${emExact(m.carto)}, exobiology ${emExact(m.bio)}, mining ${emExact(m.mining)}; ` +
+      `total ${emExact(tot(m))}${tot(m) ? " (click: this month)" : ""}`;
+    return `<g class="embar${pre == null ? "" : on[i] ? " on" : " dim"}"${tot(m) ? ` data-emmonth="${esc(m.month)}"` : ""} data-total="${tot(m)}"><title>${esc(tip)}</title>` +
+      `<rect class="emhit" x="${pc(i)}" width="${pc(1)}" y="0" height="${EM_TOP + EM_PH}"/>${segs}</g>`;
+  }).join("");
+  return `<div class="emlegend">${EM_KINDS.map(([k, full]) => `<span><span class="emsw ${k}"></span>${full}</span>`).join("")}` +
+    `<span class="unk">· every month${pre != null ? ", this period's highlighted" : ""}; a bar shows its month's figures</span></div>` +
+    `<div class="emchart"><svg class="emyax" width="${EM_YAX}" height="${H}" aria-hidden="true">` +
+    ticks.map(v => `<text x="${EM_YAX - 6}" y="${y(v) + 4}" text-anchor="end">${esc(credits(v))}</text>`).join("") + `</svg>` +
+    `<svg class="emplot" width="100%" height="${H}" role="img" aria-label="credits earned each month: cartography, exobiology and mining">` +
+    (a >= 0 ? `<rect class="emband" x="${pc(a)}" width="${pc(b - a + 1)}" y="0" height="${EM_TOP + EM_PH}"/>` : "") +
+    ticks.map(v => `<line class="emgrid" x1="0" x2="100%" y1="${y(v)}" y2="${y(v)}"/>`).join("") + bars +
+    `<line class="embase" x1="0" x2="100%" y1="${y(0)}" y2="${y(0)}"/>` + months.map(label).join("") + `</svg></div>`;
+}
+// the period picker above the pane: All time, the years with a sale (newest first), the months of the chosen year with
+// one (the period asked for is always listed, even with nothing in it)
+function cmdrEarnPicker() {
+  const d = CM.data.earnings, p = CM.period, ys = document.getElementById("cmEarnYear"), ms = document.getElementById("cmEarnMonth");
+  const years = [...new Set([...((d && d.years) || []).map(String), ...(p.year ? [p.year] : [])])].sort().reverse();
+  const yh = `<option value="">All time</option>` + years.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join("");
+  const had = new Set(((d && d.months) || []).filter(m => m.carto || m.bio || m.mining).map(m => m.month));
+  const mons = !p.year ? [] : EM_MONTHS.map((_, i) => i + 1).filter(m => had.has(`${p.year}-${String(m).padStart(2, "0")}`) || String(m) === p.month);
+  const mh = `<option value="">Whole year</option>` + mons.map(m => `<option value="${m}">${EM_MONTHS[m - 1]}</option>`).join("");
+  if (ys._drawn !== yh) { ys.innerHTML = yh; ys._drawn = yh; }
+  if (ms._drawn !== mh) { ms.innerHTML = mh; ms._drawn = mh; }
+  ys.value = p.year; ms.value = p.month; ms.hidden = !p.year;
+}
+function cmdrEarningsHtml(d) {
+  const t = d.totals || {}, c = t.carto || {}, b = t.bio || {}, mi = t.mining || {}, months = d.months || [];
+  const p = d.period || {kind: "all", label: "All time"}, est = d.estimates || {}, lost = est.lost || {}, mn = d.mining || {};
+  const notes = (d.notes || []).length ? `<ul class="emnotes unk">${d.notes.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : "";
+  if (!months.length && !t.sales)
+    return `<div class="hwyttl">No sales yet</div><div class="unk cmnote">Nothing sold to Universal Cartographics, Vista Genomics or a ` +
+      `market for ore you mined is in your journals yet. Once you sell, this shows what it paid, month by month, where and with which ship.</div>` + notes;
+  const sub = (base, bonus) => `<span class="unk emsub">${emCr(base)} + ${emCr(bonus)} bonus</span>`;
+  const figs = `<div class="cmfigs emfigs">` +
+    cmTile("Total earned", `${emCr(t.total)}<span class="unk emsub">${emPlural(t.sales || 0, "sale")}</span>`, "cartography, exobiology and mining: exactly what each sale paid") +
+    cmTile("Cartography", emCr(c.total) + sub(c.base, c.bonus), "Universal Cartographics: the base and the bonus the game paid") +
+    cmTile("Exobiology", emCr(b.total) + sub(b.base, b.bonus), "Vista Genomics: the base and the first-logged bonus the game paid") +
+    cmTile("Mining", `${emCr(mi.total)}<span class="unk emsub">${cmNum(mi.tons || 0)} t mined</span>`, "the ore you mined and sold (bought tons and your own carrier left out)") +
+    cmTile("Lost (estimate)", lost.deaths ? `~${emCr(lost.value)}<span class="unk emsub">${emPlural(lost.deaths, "death")} · estimate</span>` : `<span class="unk">no deaths</span>`,
+      "an estimate: the data you died with, as History's Ledger values it") + `</div>`;
+  const sold = d.sales || [];
+  const saleRow = s => `<tr><td>${cmWhenDual(s.ts)}</td><td>${emKind(s.kind)}</td>` +
+    `<td>${s.station ? `${esc(s.station)}${s.station_type ? ` <span class="unk c1hide">${esc(emType(s.station_type))}</span>` : ""}` : `<span class="unk">?</span>`}</td>` +
+    `<td class="c2hide">${emShip(s.ship)}</td><td>${emWhat(s.what || {})}</td><td class="num c2hide">${emCrS(s.base)}</td>` +
+    `<td class="num c2hide">${emCrS(s.bonus)}</td><td class="num"><b>${emCrS(s.total)}</b></td></tr>`;
+  const sales = `<h3 class="subhead">Sales <span class="cmcount">${cmNum((t.sales || 0))}</span></h3>` +
+    (sold.length ? cmTable([["When"], ["Kind"], ["Where"], ["Ship", 0, "c2hide"], ["What"], ["Base", 1, "c2hide"], ["Bonus", 1, "c2hide"], ["Total", 1]], sold.map(saleRow), "cmEarnSales") +
+      (d.more ? `<div class="unk cmnote">${emPlural(d.more, "more sale")} not shown: the ⬇ CSV above has every one.</div>` : "")
+      : `<div class="unk cmnote">No sales in ${esc(p.kind === "all" ? "your journals" : p.label)}.</div>`);
+  const st = d.stations || [];
+  const stations = !st.length ? "" : `<h3 class="subhead">Where you sold</h3>` +
+    cmTable([["Station"], ["Type", 0, "c2hide"], ["Sales", 1], ["Earned", 1]], st.map(x =>
+      `<tr><td><b>${esc(x.name)}</b></td><td class="c2hide">${esc(emType(x.type))}</td><td class="num">${cmNum(x.sales)}</td><td class="num">${emCrS(x.total)}</td></tr>`), "cmEarnStations");
+  const sp = d.species || [];
+  const species = !sp.length ? "" : `<h3 class="subhead">Species <span class="unk">· what each paid, exact</span></h3>` +
+    cmTable([["Species"], ["Sold", 1], ["Value", 1, "c2hide"], ["Bonus", 1, "c2hide"], ["Total", 1]], sp.map(x =>
+      `<tr><td><b>${esc(x.name)}</b></td><td class="num">${cmNum(x.count)}</td><td class="num c2hide">${emCrS(x.value)}</td><td class="num c2hide">${emCrS(x.bonus)}</td>` +
+      `<td class="num">${emCrS(x.total)}</td></tr>`), "cmEarnSpecies");
+  const sh = d.ships || [];
+  const ships = !sh.length ? "" : `<h3 class="subhead">Ships <span class="unk">· jumps, scans, samples and sales made flying each</span></h3>` +
+    cmTable([["Ship"], ["Jumps", 1], ["ly", 1], ["Bodies scanned", 1], ["Species sampled", 1], ["Earned", 1], ["Active days", 1]], sh.map(x =>
+      `<tr><td>${emShip(x)}</td><td class="num">${cmNum(x.jumps)}</td><td class="num">${cmNum(Math.round(x.ly || 0))}</td><td class="num">${cmNum(x.bodies)}</td>` +
+      `<td class="num">${cmNum(x.species)}</td><td class="num">${emCrS(x.earnings)}</td><td class="num">${cmNum(x.days)}</td></tr>`), "cmEarnShips");
+  const own = mn.own_carrier || {}, ore = mn.commodities || [], at = mn.stations || [], best = mn.best || [];
+  const ownLine = own.sales ? `<div class="unk cmnote">Left out: ${emPlural(own.sales, "sale")} of mined ore to your own carrier (${cmNum(own.tons)} t, ` +
+    `${emCr(own.total)}): your own money.</div>` : "";
+  const mining = `<h3 class="subhead">Mining</h3>` + (!ore.length && !mn.sales ? `<div class="unk cmnote">No mining in this period.</div>` :
+    `<div class="cmfigs">${cmTile("Earned", emCr(mn.earned))}${cmTile("Mined tons sold", `${cmNum(mn.tons)} t`)}${cmTile("Sales", cmNum(mn.sales))}</div>` +
+    (ore.length ? cmTable([["Commodity"], ["Refined by ship", 1], ["Refined by SRV", 1, "c2hide"], ["Mined t sold", 1], ["Earned", 1], ["cr/t", 1]], ore.map(x =>
+      `<tr><td><b>${esc(x.name)}</b></td><td class="num">${x.refined ? `${cmNum(x.refined)} t` : ""}</td><td class="num c2hide">${x.refined_srv ? `${cmNum(x.refined_srv)} t` : ""}</td>` +
+      `<td class="num">${x.sold ? `${cmNum(x.sold)} t` : ""}</td><td class="num">${x.earned ? emCrS(x.earned) : ""}</td><td class="num">${cmNum(x.per_ton)}</td></tr>`), "cmEarnOre") : "") +
+    (at.length ? `<h4 class="cmbp">Where you sold it</h4>` + cmTable([["Station"], ["Sales", 1], ["Tons", 1], ["Earned", 1], ["cr/t", 1]], at.map(x =>
+      `<tr><td><b>${esc(x.name)}</b>${x.type ? ` <span class="unk c1hide">${esc(emType(x.type))}</span>` : ""}</td><td class="num">${cmNum(x.sales)}</td>` +
+      `<td class="num">${cmNum(x.tons)} t</td><td class="num">${emCrS(x.earned)}</td><td class="num">${cmNum(x.per_ton)}</td></tr>`), "cmEarnOreAt") : "") +
+    (best.length ? `<h4 class="cmbp">Best sales</h4>` + cmTable([["When"], ["Commodity"], ["Tons", 1], ["Earned", 1], ["cr/t", 1], ["Where", 0, "c2hide"]], best.map(x =>
+      `<tr><td>${cmWhenDual(x.ts)}</td><td><b>${esc(x.commodity)}</b></td><td class="num">${cmNum(x.tons)} t</td><td class="num">${emCrS(x.earned)}</td>` +
+      `<td class="num">${cmNum(x.per_ton)}</td><td class="c2hide">${esc(x.station || "")}</td></tr>`), "cmEarnOreBest") : "")) + ownLine;
+  const cm = d.common || {}, stars = cm.stars || [], bodies = cm.bodies || [], found = cm.species || [];
+  const common = `<h3 class="subhead">Most common <span class="unk">· in this period</span></h3>` + (!stars.length && !bodies.length && !found.length
+    ? `<div class="unk cmnote">Nothing found in this period.</div>` : `<div class="emtrio">` +
+    (stars.length ? `<div>${cmTable([["Star class"], ["Systems", 1]], stars.map(x => `<tr><td>${sfText("star", x.name || x.class || "?")}</td><td class="num">${cmNum(x.count)}</td></tr>`), "cmEarnStars")}</div>` : "") +
+    (bodies.length ? `<div>${cmTable([["Planet type"], ["Bodies", 1]], bodies.map(x => `<tr><td>${sfText("planet", x.type || "?")}</td><td class="num">${cmNum(x.count)}</td></tr>`), "cmEarnBodies")}</div>` : "") +
+    (found.length ? `<div>${cmTable([["Species found"], ["Runs", 1]], found.map(x => `<tr><td>${esc(x.name)}</td><td class="num">${cmNum(x.count)}</td></tr>`), "cmEarnFound")}</div>` : "") + `</div>`);
+  const tops = est.top_systems || [];
+  const estimate = v => dual(`~${esc(credits(v || 0))} cr <span class="unk">estimate</span>`, `~${esc(credits(v || 0))}`, {title: `~${emExact(v)}: an estimate`});
+  const estimates = `<h3 class="subhead">Estimates <span class="unk">· Outrider's, not the game's</span></h3>` +
+    `<div class="cmrep">Data lost to deaths: ${lost.deaths ? `<b>~${emCr(lost.value)}</b> <span class="unk">estimate</span>` +
+      `${lost.bio ? ` <span class="unk">(cartography ~${emCr(lost.carto)}, exobiology ~${emCr(lost.bio)})</span>` : ""} · ${emPlural(lost.deaths, "death")}` +
+      `${lost.ships ? `, ${emPlural(lost.ships, "ship")} lost` : ""} <span class="unk">(History's Ledger)</span>` : `<span class="unk">none: no deaths in this period</span>`}</div>` +
+    (tops.length ? `<div class="unk cmnote">The systems you sold by Outrider's value of your scans of them (an estimate: the game pays per page of systems, ` +
+      `not per system), ${emPlural(est.systems || 0, "system")} sold in this period:</div>` +
+      cmTable([["System"], ["Bodies", 1], ["Value (estimate)", 1], ["Sold", 0, "c2hide"]], tops.map(x =>
+        `<tr><td><b>${esc(x.name)}</b></td><td class="num">${cmNum(x.bodies)}</td><td class="num">${estimate(x.value)}</td><td class="c2hide">${emDay(x.sold)}</td></tr>`), "cmEarnEst") : "");
+  const ledger = `<div class="cmrep">Each trip's figures, sale to sale, with what it paid and what deaths lost: ` +
+    `<button type="button" class="mini" data-cmgo="trips" title="History's Trips: the Ledger">History › Trips</button></div>`;
+  return `<div class="hwyttl">${esc(p.label || "All time")}</div>` + figs +
+    (months.length ? emChartHtml(months, {year: p.year ? String(p.year) : "", month: p.month ? String(p.month) : ""}, CM.chartW) : "") +   // the answer's own period
+    sales + stations + species + ships + mining + common + estimates + notes + ledger;
+}
+
+const CM_HTML = {profile: cmdrProfileHtml, inventory: cmdrInventoryHtml, engineering: cmdrEngineeringHtml, missions: cmdrMissionsHtml, sessions: cmdrSessionsHtml,
+                 earnings: cmdrEarningsHtml};
 // the tab's own content (the pane); drawn only when it changed, so a <details> keeps its state and the pane its place
 function cmdrDrawBody() {
   const el = document.getElementById("cmdrBody");
   const tab = CM.tab, d = CM.data[tab];
+  CM.chartW = el.clientWidth;   // Earnings' chart: its month labels thinned to fit
   const h = CM.error[tab] && !d ? `<div class="short">Could not be read: ${esc(CM.error[tab])}</div>`
     : !d ? `<div class="unk">${CM.loading[tab] ? "Reading your journals…" : ""}</div>` : CM_HTML[tab](d);
   if (el.innerHTML !== h) el.innerHTML = h;
@@ -10542,6 +10752,8 @@ function renderCmdr() {
   const tab = CM.tab, st = document.getElementById("cmdrStatus");
   document.querySelectorAll("[name=cmdrTab]").forEach(x => { x.checked = x.value === tab; });
   document.getElementById("cmEngCtl").hidden = tab !== "engineering";
+  document.getElementById("cmEarnCtl").hidden = tab !== "earnings";
+  if (tab === "earnings") cmdrEarnPicker();
   const s = CM.loading[tab] ? "reading…" : CM.error[tab] && CM.data[tab] ? `could not be read again: ${CM.error[tab]}` : "from your journals";
   if (st.textContent !== s) st.textContent = s;
   cmdrDrawBody();

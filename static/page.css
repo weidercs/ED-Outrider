@@ -2,6 +2,8 @@
   --bg: #0d0f12; --panel: #161a20; --line: #262c35; --text: #d8dde4; --muted: #7d8794;
   --accent: #ff8c1a; --good: #5cc98a; --warn: #e3b341; --bad: #e05d5d; --info: #6aa8ff;
   --hot: #9df0b4; --biohot: #d9a8ff;
+  /* the CMDR tab's Earnings chart: cartography, exobiology, mining (a theme whose own colours are too alike sets its own) */
+  --earn-carto: var(--info); --earn-bio: var(--good); --earn-mine: var(--accent);
 }
 @media (prefers-color-scheme: light) { :root {
   --bg: #f5f6f8; --panel: #ffffff; --line: #dde1e6; --text: #1d2228; --muted: #69727d;
@@ -496,6 +498,24 @@ h3.subhead { font-size: 13px; font-weight: 600; color: var(--muted); text-transf
 .cmbar { display: inline-block; width: 120px; height: 8px; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; vertical-align: middle; }
 .cmbar > span { display: block; height: 100%; background: var(--info, var(--muted)); } .cmbarcell { white-space: nowrap; } .cmrep { margin-top: 8px; }
 .cmranks { width: auto; } .cmranks td { padding-right: 18px; }
+/* the Earnings tab: a figure's parts under it, the chart (its colours --earn-*: each theme's own, told apart), the three
+   most-common lists side by side; the sub-tabs wrap rather than run off a narrow window */
+#cmdrTabs .seg { flex-wrap: wrap; max-width: 100%; }
+#cmdrView .exports a { color: var(--info); }
+.cmfig .emsub { display: block; font-weight: 400; font-size: 12px; }
+.emlegend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--muted); margin: 12px 0 4px; }
+.emsw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.emsw.carto { background: var(--earn-carto); } .emsw.bio { background: var(--earn-bio); } .emsw.mining { background: var(--earn-mine); }
+.emchart { display: flex; align-items: flex-start; max-width: 100%; padding-right: 14px; }
+.emchart svg { overflow: visible; } .emyax { flex: 0 0 auto; } .emplot { flex: 1 1 0; min-width: 0; }
+.emchart text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.emgrid { stroke: var(--line); stroke-width: 1; } .embase { stroke: var(--muted); stroke-width: 1; }
+.emseg { stroke: var(--bg); stroke-width: 1px; }   /* a hair of the background between the stacked parts */
+.emseg.carto { fill: var(--earn-carto); } .emseg.bio { fill: var(--earn-bio); } .emseg.mining { fill: var(--earn-mine); }
+.emhit { fill: transparent; } .embar { cursor: pointer; } .embar:hover .emhit { fill: var(--line); fill-opacity: .45; }
+.embar.dim { opacity: .35; } .emband { fill: var(--line); fill-opacity: .45; }
+.emtrio { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 0 24px; }
+.emnotes { margin: 16px 0 0; padding-left: 18px; font-size: 13px; } .emnotes li { margin: 2px 0; }
 
 /* ---- Commander tile, all-time row ---- */
 #whereLn { font-variant-numeric: tabular-nums; }

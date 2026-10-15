@@ -118,6 +118,57 @@ class Tablet(unittest.TestCase):
                 for ground in ("--bg", "--panel"):
                     self.assertGreaterEqual(round(ratio(c[k], c[ground]), 2), 4.5, f"{t}: {k} {c[k]} on {ground} {c[ground]}")
 
+    def test_earnings_chart_colours(self):
+        """The CMDR tab's Earnings chart (batch C) stacks cartography, exobiology and mining in --earn-carto / -bio /
+        -mine: in every theme, light and dark Default too, the three are told apart (OKLab distance, x100, at least 14:
+        Centauri's and Narn's own info, accent and warn are one gold) and each shows on the background and the panels
+        (3:1, a graphic's minimum)."""
+        def rgb(h):
+            h = h.strip().lstrip("#")
+            return [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+
+        def lin(c):
+            return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+        def lum(h):
+            r, g, b = (lin(c) for c in rgb(h))
+            return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+        def oklab(h):
+            r, g, b = (lin(c) for c in rgb(h))
+            lms = [(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b) ** (1 / 3),
+                   (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b) ** (1 / 3),
+                   (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b) ** (1 / 3)]
+            l_, m_, s_ = lms
+            return (0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_, 1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_,
+                    0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_)
+
+        def resolved(*blocks):
+            d = {}
+            for block in blocks:
+                d.update(re.findall(r"(--[\w-]+):\s*([^;]+);", block))
+            def res(v, n=0):
+                m = re.fullmatch(r"var\((--[\w-]+)\)", v.strip())
+                return res(d[m.group(1)], n + 1) if m and n < 10 else v.strip()
+            return {k: res(v) for k, v in d.items()}
+        with open(os.path.join(ed_outrider.STATIC_DIR, "page.css"), encoding="utf-8") as f:
+            css = f.read()
+        dark = re.search(r"^:root \{(.*?)\n\}", css, re.S | re.M).group(1)
+        light = re.search(r"prefers-color-scheme: light\) \{ :root \{(.*?)\n\}\}", css, re.S).group(1)
+        themes = {"default": resolved(dark), "default light": resolved(dark, light)}
+        for t in ed_outrider.TABLET_THEMES:
+            with open(os.path.join(ed_outrider.STATIC_DIR, "themes", f"{t}.css"), encoding="utf-8") as f:
+                themes[t] = resolved(dark, re.search(r':root\[data-theme="%s"\]\s*\{(.*?)\n\}' % t, f.read(), re.S).group(1))
+        for t, c in themes.items():
+            three = [c[k] for k in ("--earn-carto", "--earn-bio", "--earn-mine")]
+            for i in range(3):
+                for ground in ("--bg", "--panel"):
+                    la, lb = sorted((lum(three[i]), lum(c[ground])), reverse=True)
+                    self.assertGreaterEqual(round((la + 0.05) / (lb + 0.05), 2), 3, f"{t}: {three[i]} on {ground}")
+                for j in range(i + 1, 3):
+                    a, b = oklab(three[i]), oklab(three[j])
+                    self.assertGreaterEqual(100 * sum((x - y) ** 2 for x, y in zip(a, b)) ** 0.5, 14, f"{t}: {three[i]} and {three[j]}")
+
     def test_desktop_theme_sections(self):
         """Each theme has its desktop section (body:not(.tablet): the shapes and the pills' size), and the view pill
         that is on reads on its fill (4.5:1): white on Dark's blue and black on Sith's crimson did not."""

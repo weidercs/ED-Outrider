@@ -16,6 +16,7 @@
   --bg: var(--vl-bg); --panel: var(--vl-panel); --line: var(--vl-line); --text: #E2EFE6; --muted: var(--vl-muted);
   --accent: var(--vl-gold); --good: #8EDBA8; --warn: var(--vl-gold); --bad: var(--vl-rose); --info: var(--vl-sea);
   --hot: #A6EFC4; --biohot: #E7B8F0;
+  --earn-bio: var(--biohot); --earn-mine: var(--warn);   /* the Earnings chart: page.css's pairs are too alike here */
   --tb-font: "Inter", system-ui, sans-serif; --tb-font-display: "Vorlon Display", "Marcellus", serif;
   --tb-case: none; --tb-track: .6px; --tb-size: 17px;
   --tb-title: var(--vl-gold);

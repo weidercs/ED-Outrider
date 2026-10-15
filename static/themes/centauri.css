@@ -18,6 +18,7 @@
   --bg: var(--ct-bg); --panel: var(--ct-panel); --line: var(--ct-line); --text: var(--ct-cream); --muted: var(--ct-muted);
   --accent: var(--ct-gold); --good: #B8D88A; --warn: var(--ct-amber); --bad: var(--ct-alert); --info: var(--ct-gold);
   --hot: #B8D88A; --biohot: #E7A3E0;
+  --earn-carto: #4A7FB5; --earn-bio: var(--biohot);   /* the Earnings chart's three colours, told apart in this palette */
   --tb-font: "Cormorant Garamond", Georgia, serif; --tb-font-display: "Centauri Display", "Cinzel", serif;
   --tb-case: none; --tb-track: .3px; --tb-size: 19px;
   --tb-title: var(--ct-gold);

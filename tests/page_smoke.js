@@ -72,6 +72,47 @@ const releasePayloads = async () => {
       data.autotarget = Object.assign({}, data.autotarget, {available: true, missing: []});`);
     return () => dom.window.eval(`(() => { const k = __aimKeep.pop(); data.game_pc = k.pc; data.autotarget = k.at; })()`);
   };
+  // The CMDR tab's Earnings (GET api/commander/earnings, outrider/earnings.py's shape), made up: five months of all
+  // time (one empty), a carto sale, a mining one (20 t mined of 30 sold), a bio one at a carrier with no ship known; the
+  // period's own label per answer; and a database with no sale at all. Used by the desktop block and the tablet's.
+  const EARN = (() => {
+    const all = {period: {kind: "all", label: "All time", year: null, month: null},
+      totals: {carto: {base: 6000000, bonus: 1000000, total: 7000000, sales: 3, systems: 40}, bio: {base: 6000000, bonus: 4000000, total: 10000000, sales: 2, species: 6},
+               mining: {total: 1500000, tons: 60, sales: 2}, total: 18500000, sales: 7},
+      months: [{month: "2025-11", carto: 4000000, bio: 0, mining: 0}, {month: "2025-12", carto: 0, bio: 0, mining: 0},
+               {month: "2026-01", carto: 1000000, bio: 2000000, mining: 500000}, {month: "2026-02", carto: 0, bio: 8000000, mining: 0},
+               {month: "2026-03", carto: 2000000, bio: 0, mining: 1000000}],
+      years: [2025, 2026],
+      sales: [{ts: "2026-03-02T10:00:00Z", kind: "carto", station: "Sample Port", station_type: "Coriolis", market_id: 1,
+               ship: {id: 7, name: "Sample Ship", type: "krait_light", type_name: null}, what: {systems: 12}, base: 1500000, bonus: 500000, total: 2000000},
+              {ts: "2026-03-01T09:00:00Z", kind: "mining", station: "Sample Port", station_type: "Coriolis", market_id: 1,
+               ship: {id: 9, name: null, type: "type9", type_name: "Type-9 Heavy"}, what: {commodity: "Platinum", tons: 20, of: 30}, base: null, bonus: null, total: 1000000},
+              {ts: "2026-02-10T12:30:00Z", kind: "bio", station: "X1X-X1X", station_type: "FleetCarrier", market_id: 2, ship: null, what: {species: 4},
+               base: 4000000, bonus: 4000000, total: 8000000}],
+      more: 4,
+      species: [{name: "Stratum Tectonicas", count: 2, value: 3000000, bonus: 3000000, total: 6000000}],
+      stations: [{name: "X1X-X1X", type: "FleetCarrier", sales: 1, total: 8000000}, {name: "Sample Port", type: "Coriolis", sales: 2, total: 3000000}],
+      ships: [{id: 7, name: "Sample Ship", type: "krait_light", type_name: null, jumps: 120, ly: 5432.6, bodies: 300, species: 5, earnings: 9000000, days: 6}],
+      mining: {earned: 1500000, tons: 60, sales: 2, commodities: [{name: "Platinum", refined: 40, refined_srv: 5, sold: 60, earned: 1500000, per_ton: 25000}],
+               stations: [{name: "Sample Port", type: "Coriolis", sales: 2, tons: 60, earned: 1500000, per_ton: 25000}],
+               best: [{ts: "2026-03-01T09:00:00Z", commodity: "Platinum", tons: 20, earned: 1000000, per_ton: 50000, station: "Sample Port"}],
+               own_carrier: {sales: 1, tons: 10, total: 300000}},
+      common: {stars: [{class: "K", name: "K (Yellow-Orange) Star", count: 9}], bodies: [{type: "High metal content body", count: 12}],
+               species: [{name: "Bacterium Aurasus", count: 3}]},
+      estimates: {label: "estimate", top_systems: [{name: "Smoke Sys", id: 1, value: 25000000, bodies: 9, sold: "2026-03-02T10:00:00Z"}], systems: 40,
+                  lost: {deaths: 2, ships: 1, value: 12000000, carto: 9000000, bio: 3000000}},
+      notes: ["Exact: what each sale paid, as the journal says.", "Months are UTC, as the journal's times."]};
+    const at = period => Object.assign({}, all, {period});
+    const none = {sales: 0, tons: 0, total: 0};
+    return {all, year: at({kind: "year", label: "2026", year: 2026, month: null}), month: at({kind: "month", label: "February 2026", year: 2026, month: 2}),
+      y2025: at({kind: "year", label: "2025", year: 2025, month: null}),
+      empty: {period: all.period, totals: {carto: {base: 0, bonus: 0, total: 0, sales: 0, systems: 0}, bio: {base: 0, bonus: 0, total: 0, sales: 0, species: 0},
+                                           mining: {total: 0, tons: 0, sales: 0}, total: 0, sales: 0},
+              months: [], years: [], sales: [], more: 0, species: [], stations: [], ships: [],
+              mining: {earned: 0, tons: 0, sales: 0, commodities: [], stations: [], best: [], own_carrier: none},
+              common: {stars: [], bodies: [], species: []}, estimates: {label: "estimate", top_systems: [], systems: 0, lost: {deaths: 0, ships: 0, value: 0, carto: 0, bio: 0}},
+              notes: ["Exact: what each sale paid, as the journal says."]}};
+  })();
   for (let i = 0; i < 60 && !d.querySelector("#sub") ; i++) await sleep(500);
   await settle(3000);
   const ok = errors.length === 0 && /known within/.test(d.querySelector("#sub").textContent);
@@ -4890,6 +4931,19 @@ const releasePayloads = async () => {
       tw.eval('tabClose(document.getElementById("tabCmds"))');
       got.voiceCmds = vc;
     }
+    // the CMDR tab's Earnings on the tablet (batch C): the same sub-tab from the Records group, its picker above the pane,
+    // the chart and the tables drawn, the sub-tabs finger-sized (tablet.css)
+    got.tabEarn = await (async () => {
+      tw.__emAnswer = JSON.stringify(EARN.all);
+      tw.eval(`window.__emKeep = apiJson; apiJson = async (u, o) => String(u).startsWith("api/commander/earnings") ? JSON.parse(__emAnswer) : __emKeep(u, o);`);
+      td.querySelector('#tabNav [data-group="records"]').click();
+      td.querySelector('#tabNav [data-view="cmdr"]').click(); await settle(1500);
+      td.querySelector('[name=cmdrTab][value="earnings"]').click(); await settle(800);
+      const o = [tw.eval("view"), td.getElementById("cmEarnCtl").hidden, td.querySelectorAll("#cmdrBody g.embar").length, !!td.getElementById("cmEarnSales"),
+                 td.querySelectorAll("#cmdrBody .emfigs .cmfig").length, tw.getComputedStyle(td.querySelector("#cmdrTabs .seg label")).paddingTop];
+      tw.eval(`apiJson = __emKeep; CM.data = {}; CM.key = {}; setCmdrTab("profile");`);
+      return o;
+    })();
     const want = {desk: [true, true, true, true], shell: [true, true, true, true, true], moved: [true, true, true], theme: "lcars", start: "now",
       quiet: [false, false, "never", false], status: [true, true], pages: [],
       mapSwitch: [["now", true], ["hwy", false], ["bm", false]],
@@ -4908,7 +4962,7 @@ const releasePayloads = async () => {
       appScreens: [true, false, [false, false, true], "ED Outrider for Android 1.2.0", ["voice"], false],
       tabletAudio: ["[false,false]", false, '[true,true,"always","true"]', false, [true, true, true, true, true], "[false,false]", ["A line here."], "🔇 Tap anywhere to let Outrider speak here",
                     '[false,false,"false"]'], prefs: ["lcars", true, "true", null, "here"],
-      voiceCmds: [true, true, false, true, true, true, true, "auto"]};
+      voiceCmds: [true, true, false, true, true, true, true, "auto"], tabEarn: ["cmdr", false, 5, true, 5, "8px"]};
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
     const goodT = !bad.length && !terr.length;
     allOk = allOk && goodT;
@@ -8403,7 +8457,7 @@ const releasePayloads = async () => {
       await releasePayloads();
     }
     const want = {
-      shown: [false, ["CMDR*", "Inventory", "Engineering", "Missions", "Sessions"], true, true],
+      shown: [false, ["CMDR*", "Inventory", "Engineering", "Missions", "Sessions", "Earnings"], true, true],
       profile: ["CMDR Tester · Sample Wing · pledged to Aisling Duval, rank NaN, 4,500 merits as of 2026-10-12 08:00",
                 ["Exobiology | Geneticist | 64% | next: Elite in about 1.59B cr", "Combat | Expert | 0% | next: Master",
                  "Exploration | Elite III | 10% | next: Elite IV in about 4.00B cr (uncertain)", "Federal Navy | Admiral |  | the top",
@@ -8460,6 +8514,165 @@ const releasePayloads = async () => {
     allOk = allOk && goodCM;
     console.log(goodCM ? "OK" : "FAIL", "| commander |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))} asked ${JSON.stringify(asked)}`
       : "controls above the pane, the theme's green and red, the hot ⚖, the tiles' credits and carrier, the SRV's refinery apart; asked again only on a new version or Refresh; the real profile", errors.slice(before));
+  }
+  // The CMDR tab's Earnings (NEXT-VERSION #7, batch C; made-up answers, EARN above): the 6th sub-tab; the figures row;
+  // the period picker above the pane (the years and that year's months from the answer) asking again with ?year= /
+  // &month= (per device), a slow older answer never drawn over a newer one; the monthly chart to one scale (3-4 ticks the
+  // axis reaches, a zero month with no bar, the period's months highlighted, a bar picks its month); each table; the CSV
+  // link (a server link: the Android app saves it); the estimates labelled; History's Trips; a database with no sale
+  {
+    holdPayloads();
+    const w = dom.window, d = w.document, before = errors.length, got = {}, asked = [];
+    w.__emAsked = asked; w.__emAnswers = JSON.stringify(EARN);
+    w.eval(`window.__emKeep = {api: apiJson, period: localStorage.getItem("cmEarnPeriod")};
+      apiJson = async (u, o) => {
+        const s = String(u);
+        if (!s.startsWith("api/commander/earnings")) return __emKeep.api(u, o);
+        __emAsked.push(s);
+        const A = JSON.parse(__emAnswers), q = s.split("?")[1] || "";
+        if (window.__emEmpty) return A.empty;
+        if (q === "year=2025") await new Promise(r => setTimeout(r, 600));   // slow: overtaken by the next choice
+        return q === "year=2026&month=2" ? A.month : q === "year=2026" ? A.year : q === "year=2025" ? A.y2025 : A.all;
+      };
+      CM.data = {}; CM.key = {}; CM.error = {}; CM.loading = {}; CM.period = {year: "", month: ""}; localStorage.removeItem("cmEarnPeriod");`);
+    const text = el => el ? el.textContent.replace(/\s+/g, " ").trim() : "", body = () => d.getElementById("cmdrBody");
+    const full = el => { const c = el.cloneNode(true); c.querySelectorAll(".sf, .sf1, .sf2").forEach(x => x.remove()); return text(c); };
+    const rows = id => { const t = d.getElementById(id); return t ? [...t.tBodies[0].rows].map(r => [...r.cells].map(full).join(" | ")) : null; };
+    const heads = id => [...d.getElementById(id).tHead.rows[0].cells].map(full);
+    const pick = async (id, v) => { const x = d.getElementById(id); x.value = v; x.dispatchEvent(new w.Event("change", {bubbles: true})); await settle(400); };
+    // each bar: [month, total, the stacked parts' heights summed, parts, class]
+    const bars = () => [...body().querySelectorAll("g.embar")].map(g => [g.dataset.emmonth || null, +g.dataset.total,
+      +[...g.querySelectorAll("rect.emseg")].reduce((n, r) => n + +r.getAttribute("height"), 0).toFixed(2), g.querySelectorAll("rect.emseg").length,
+      g.getAttribute("class")]);
+    try {
+      d.querySelector('[data-view="cmdr"]').click(); await settle(400);
+      d.querySelector('[name=cmdrTab][value="earnings"]').click(); await settle(400);
+      const pane = d.getElementById("cmdrPane"), csv = d.getElementById("cmEarnCsv");
+      got.tab = [[...d.querySelectorAll("#cmdrTabs .seg label")].map(l => text(l) + (l.querySelector("input").checked ? "*" : "")).pop(),
+                 d.getElementById("cmEarnCtl").hidden, d.getElementById("cmEngCtl").hidden, w.eval(`store.get("cmdrTab")`), text(body().querySelector(".hwyttl"))];
+      got.csv = [csv.getAttribute("href"), csv.hasAttribute("download"), pane.contains(csv), !d.getElementById("cmEarnCtl").contains(csv) ? "outside" : "in the controls"];
+      got.figs = [...body().querySelectorAll(".emfigs .cmfig")].map(text);
+      got.legend = [...body().querySelectorAll(".emlegend > span:not(.unk)")].map(text);
+      // to scale: every part's height is its credits over the axis' top (8M: four 2M steps reaching the highest month) of
+      // the 150 px plot; the empty month draws no part
+      const b = bars();
+      got.bars = b.map(x => [x[0], x[3], x[4]]);
+      got.scale = b.every(x => Math.abs(x[2] - x[1] / 8e6 * 150) < 0.05) && b[3][2] === 150;
+      got.ticks = [...body().querySelectorAll("svg.emyax text")].map(text);
+      got.tickTop = +body().querySelector("svg.emyax text:last-child").getAttribute("y") - 4 === +body().querySelector('g.embar[data-emmonth="2026-02"] rect.emseg').getAttribute("y");
+      got.labels = [...body().querySelectorAll("text.emlbl")].map(text);
+      got.title = text(body().querySelector('g.embar[data-emmonth="2026-01"] > title'));
+      got.band = !!body().querySelector("rect.emband");
+      got.years = [[...d.querySelectorAll("#cmEarnYear option")].map(o => o.value + ":" + text(o)), d.getElementById("cmEarnMonth").hidden];
+      got.sales = [rows("cmEarnSales"), heads("cmEarnSales"), text(body().querySelector("#cmEarnSales + .cmnote"))];
+      got.salesShort = [...d.querySelectorAll("#cmEarnSales th .sf")].map(text).concat(text(d.querySelector("#cmEarnSales tbody tr:nth-child(1) td:nth-child(2) .sf")));
+      got.stations = rows("cmEarnStations");
+      got.species = rows("cmEarnSpecies");
+      got.ships = [rows("cmEarnShips"), [...d.querySelectorAll("#cmEarnShips th .sf")].map(text)];
+      got.mining = [rows("cmEarnOre"), rows("cmEarnOreAt"), rows("cmEarnOreBest"), [...body().querySelectorAll(".cmnote")].map(text).filter(x => /own carrier/.test(x))];
+      got.common = [rows("cmEarnStars"), rows("cmEarnBodies"), rows("cmEarnFound"), text(d.querySelector("#cmEarnStars tbody td .sf"))];
+      got.fit = ["cmEarnSales", "cmEarnStations", "cmEarnSpecies", "cmEarnShips", "cmEarnOre", "cmEarnOreAt", "cmEarnOreBest", "cmEarnStars", "cmEarnBodies", "cmEarnFound", "cmEarnEst"]
+        .every(id => w.eval(`FIT_TABLES.includes("${id}")`) && !!d.getElementById(id));
+      // the estimates: headed Estimates, the word on every value, the lost figure too
+      const subs = [...body().querySelectorAll("h3.subhead")].map(text);
+      got.subheads = subs;
+      got.estimates = [rows("cmEarnEst"), heads("cmEarnEst"), [...d.querySelectorAll("#cmEarnEst tbody td:nth-child(3) .lf")].every(x => /estimate/.test(text(x))),
+                       text([...body().querySelectorAll(".cmrep")].find(x => /lost to deaths/.test(text(x))))];
+      got.notes = [...body().querySelectorAll(".emnotes li")].map(text);
+      got.noNaN = !/NaN|undefined/.test(body().textContent);
+      // pure: the axis (3-4 steps of 1, 2, 2.5, 5 × 10^n reaching the top month), the month labels thinned to the width
+      // (30 months: every 2nd at 1200 px, Jan and Jul at 400, the even years at 200)
+      got.pure = JSON.parse(w.eval(`(() => {
+        const ms = []; for (let i = 0; i < 30; i++) ms.push({month: (2024 + Math.floor(i / 12)) + "-" + String(i % 12 + 1).padStart(2, "0"), carto: 1000, bio: 0, mining: 0});
+        const labels = width => { const x = document.createElement("div"); x.innerHTML = emChartHtml(ms, {year: "", month: ""}, width);
+          return [...x.querySelectorAll("text.emlbl")].map(t => t.textContent); };
+        return JSON.stringify([emAxis(4.1e6), emAxis(1e7), emAxis(10.1e6), emAxis(1), labels(1200).length, labels(400), labels(200)]); })()`));
+      // the picker: a year, then a month of it; each asks with its query and is kept for this device
+      await pick("cmEarnYear", "2026");
+      got.year = [asked[asked.length - 1], text(body().querySelector(".hwyttl")), [...d.querySelectorAll("#cmEarnMonth option")].map(o => text(o)),
+                  d.getElementById("cmEarnMonth").hidden, bars().map(x => x[4]), w.eval(`store.get("cmEarnPeriod")`)];
+      await pick("cmEarnMonth", "2");
+      got.month = [asked[asked.length - 1], text(body().querySelector(".hwyttl")), bars().filter(x => /\bon\b/.test(x[4])).map(x => x[0]),
+                   bars().filter(x => /\bdim\b/.test(x[4])).length, w.eval(`store.get("cmEarnPeriod")`), d.getElementById("cmEarnMonth").value];
+      // asked again only when the payload's history moves, the same period drawn from what it has
+      const n0 = asked.length;
+      w.eval(`render(); render();`); await settle(300);
+      got.unchanged = asked.length - n0;
+      w.eval(`data.history_version = (data.history_version || 0) + 1000; render();`); await settle(300);
+      got.moved = asked.slice(n0);
+      // a bar picks its month
+      body().querySelector('g.embar[data-emmonth="2026-03"] rect.emhit').dispatchEvent(new w.MouseEvent("click", {bubbles: true}));
+      await settle(300);
+      got.barClick = [asked[asked.length - 1], d.getElementById("cmEarnYear").value, d.getElementById("cmEarnMonth").value];
+      // a slow answer for 2025 overtaken by All time: the newer one stays drawn
+      await pick("cmEarnYear", "2025");
+      await pick("cmEarnYear", "");
+      await sleep(900); await settle(300);
+      got.overtaken = [asked.slice(-2), text(body().querySelector(".hwyttl")), d.getElementById("cmEarnYear").value, d.getElementById("cmEarnMonth").hidden,
+                       w.eval(`store.get("cmEarnPeriod")`), bars().every(x => x[4] === "embar")];
+      // the per-trip line: History's Trips (the Ledger)
+      body().querySelector('[data-cmgo="trips"]').click(); await settle(1500);
+      got.toTrips = [w.eval("view"), w.eval("histReveal")];
+      d.querySelector('[data-view="cmdr"]').click(); await settle(400);
+      // a database with no sale: said plainly, no chart, no figures, no NaN
+      w.eval(`window.__emEmpty = true;`);
+      d.getElementById("cmRefresh").click(); await settle(400);
+      got.empty = [text(body().querySelector(".hwyttl")), !!body().querySelector("svg"), !!body().querySelector(".cmfig, table"), /NaN|undefined/.test(body().textContent),
+                   [...d.querySelectorAll("#cmEarnYear option")].map(o => text(o))];
+    } finally {
+      w.eval(`apiJson = __emKeep.api; delete window.__emEmpty;
+        if (__emKeep.period == null) localStorage.removeItem("cmEarnPeriod"); else localStorage.setItem("cmEarnPeriod", __emKeep.period);
+        CM.data = {}; CM.key = {}; CM.error = {}; CM.loading = {}; CM.period = {year: "", month: ""}; CM.tab = "profile"; store.set("cmdrTab", "profile");`);
+      d.querySelector('[data-view="overview"]').click();
+      await releasePayloads();
+    }
+    const want = {
+      tab: ["Earnings*", false, true, "earnings", "All time"],
+      csv: ["api/export?what=earnings", true, false, "in the controls"],
+      figs: ["Total earned18.5M cr7 sales", "Cartography7.0M cr6.0M cr + 1.0M cr bonus", "Exobiology10.0M cr6.0M cr + 4.0M cr bonus",
+             "Mining1.5M cr60 t mined", "Lost (estimate)~12.0M cr2 deaths · estimate"],
+      legend: ["Cartography", "Exobiology", "Mining"],
+      bars: [["2025-11", 1, "embar"], [null, 0, "embar"], ["2026-01", 3, "embar"], ["2026-02", 1, "embar"], ["2026-03", 2, "embar"]],
+      scale: true, ticks: ["2.0M", "4.0M", "6.0M", "8.0M"], tickTop: true,
+      labels: ["Nov ’25", "Dec", "Jan ’26", "Feb", "Mar"],
+      title: "January 2026: cartography 1,000,000 cr, exobiology 2,000,000 cr, mining 500,000 cr; total 3,500,000 cr (click: this month)",
+      band: false,
+      years: [[":All time", "2026:2026", "2025:2025"], true],
+      sales: [["2026-03-02 10:00 | Cartography | Sample Port Coriolis | Sample Ship Krait Phantom | 12 systems | 1.5M cr | 500k cr | 2.0M cr",
+               "2026-03-01 09:00 | Mining | Sample Port Coriolis | Type-9 Heavy | 20 t Platinum of 30 t |  |  | 1.0M cr",
+               "2026-02-10 12:30 | Exobiology | X1X-X1X fleet carrier | ? | 4 species | 4.0M cr | 4.0M cr | 8.0M cr"],
+              ["When", "Kind", "Where", "Ship", "What", "Base", "Bonus", "Total"], "4 more sales not shown: the ⬇ CSV above has every one."],
+      salesShort: ["Carto"],
+      stations: ["X1X-X1X | fleet carrier | 1 | 8.0M cr", "Sample Port | Coriolis | 2 | 3.0M cr"],
+      species: ["Stratum Tectonicas | 2 | 3.0M cr | 3.0M cr | 6.0M cr"],
+      ships: [["Sample Ship Krait Phantom | 120 | 5,433 | 300 | 5 | 9.0M cr | 6"], ["Bodies", "Species", "Days"]],
+      mining: [["Platinum | 40 t | 5 t | 60 t | 1.5M cr | 25,000"], ["Sample Port Coriolis | 2 | 60 t | 1.5M cr | 25,000"],
+               ["2026-03-01 09:00 | Platinum | 20 t | 1.0M cr | 50,000 | Sample Port"],
+               ["Left out: 1 sale of mined ore to your own carrier (10 t, 300k cr): your own money."]],
+      common: [["K (Yellow-Orange) Star | 9"], ["High metal content body | 12"], ["Bacterium Aurasus | 3"], "K star"],
+      fit: true,
+      subheads: ["Sales 7", "Where you sold", "Species · what each paid, exact", "Ships · jumps, scans, samples and sales made flying each", "Mining",
+                 "Most common · in this period", "Estimates · Outrider's, not the game's"],
+      estimates: [["Smoke Sys | 9 | ~25.0M cr estimate | 2026-03-02"], ["System", "Bodies", "Value (estimate)", "Sold"], true,
+                  "Data lost to deaths: ~12.0M cr estimate (cartography ~9.0M cr, exobiology ~3.0M cr) · 2 deaths, 1 ship lost (History's Ledger)"],
+      notes: ["Exact: what each sale paid, as the journal says.", "Months are UTC, as the journal's times."],
+      noNaN: true,
+      pure: [[2000000, 6000000], [2500000, 10000000], [5000000, 15000000], [1, 3], 15, ["Jan ’24", "Jul", "Jan ’25", "Jul", "Jan ’26"], ["2024", "2026"]],
+      year: ["api/commander/earnings?year=2026", "2026", ["Whole year", "January", "February", "March"], false,
+             ["embar dim", "embar dim", "embar on", "embar on", "embar on"], "2026"],
+      month: ["api/commander/earnings?year=2026&month=2", "February 2026", ["2026-02"], 4, "2026-02", "2"],
+      unchanged: 0, moved: ["api/commander/earnings?year=2026&month=2"],
+      barClick: ["api/commander/earnings?year=2026&month=3", "2026", "3"],
+      overtaken: [["api/commander/earnings?year=2025", "api/commander/earnings"], "All time", "", true, "", true],
+      toTrips: ["hist", false],
+      empty: ["No sales yet", false, false, false, ["All time"]],
+    };
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    if (asked[0] !== "api/commander/earnings") bad.push("asked");
+    const goodEM = !bad.length && errors.length === before;
+    allOk = allOk && goodEM;
+    console.log(goodEM ? "OK" : "FAIL", "| earnings |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))} asked ${JSON.stringify(asked)}`
+      : "the 6th sub-tab: figures, the period picker asking again (an older answer never drawn over a newer one), bars to scale with the period highlighted, every table, the CSV link, estimates labelled, History's Trips, no sales said plainly", errors.slice(before));
   }
   // Which header tiles this device shows (the author, 2026-10-14): Settings → Display ticks them; an unticked one is
   // left out (tile and one line), the wide grid has a column per tile shown, at least one stays, per device (not a

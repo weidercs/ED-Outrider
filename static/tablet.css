@@ -290,3 +290,8 @@ body.tablet #bioView.check .clgrid, body.tablet #bioView.check .clside { min-hei
   body.tablet #bioView.check .clgrid { flex: 1 1 55%; }
   body.tablet #bioView.check .clside { flex: 1 1 45%; }
 }
+/* the CMDR tab: its sub-tabs (six with Earnings) finger-sized, wrapping on a narrow tablet; Earnings' chart text and the
+   figures' parts at arm's length (the month labels are thinned for this size: emLabelStep) */
+body.tablet #cmdrTabs .seg label { padding: 8px 12px; }
+body.tablet .emchart text { font-size: 13px; }
+body.tablet .emlegend, body.tablet .cmfig .emsub, body.tablet .emnotes { font-size: 14px; }

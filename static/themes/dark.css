@@ -13,6 +13,7 @@
   --bg: var(--dk-bg); --panel: var(--dk-card); --line: var(--dk-line); --text: var(--dk-text); --muted: var(--dk-muted);
   --accent: var(--dk-accent); --good: var(--dk-good); --warn: var(--dk-warn); --bad: var(--dk-bad); --info: var(--dk-accent);
   --hot: var(--dk-good); --biohot: #B69CFF;
+  --earn-mine: var(--warn);   /* the Earnings chart's mining: page.css's accent is the blue of cartography here */
   --tb-font: "Inter", system-ui, sans-serif; --tb-font-display: "Dark Display", "Inter", sans-serif;
   --tb-case: none; --tb-track: 0; --tb-size: 16px; --tb-gap: 12px;
   --tb-title: var(--dk-text);

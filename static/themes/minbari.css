@@ -16,6 +16,7 @@
   --bg: var(--mb-bg); --panel: var(--mb-panel); --line: var(--mb-line); --text: var(--mb-pearl); --muted: var(--mb-muted);
   --accent: var(--mb-lilac); --good: var(--mb-glass); --warn: var(--mb-gold); --bad: var(--mb-rose); --info: var(--mb-glass);
   --hot: var(--mb-glass); --biohot: #E3A8F0;
+  --earn-carto: var(--accent); --earn-mine: var(--warn);   /* the Earnings chart's three colours, told apart in this palette */
   --tb-font: "Inter", system-ui, sans-serif; --tb-font-display: "Minbari Display", "Marcellus", serif;
   --tb-case: none; --tb-track: .5px; --tb-size: 17px;
   --tb-title: var(--mb-lilac);
