@@ -46,7 +46,7 @@ earnings idea (discussion #7), and the report of a too-large overlay on a 4K TV.
 ### 🛬 Docking
 
 - **Your pad, said and shown**: "Pad 34." every time a station or carrier gives you one (by Comms, even while
-  hushed), in very large letters on **Now** and in the overlay (in the Surface radar's place, which is free in space).
+  hushed, 5 seconds after the grant so it doesn't talk over the station), in very large letters on **Now** and in the overlay (in the Surface radar's place, which is free in space).
 - **Where it is**, at a starport or a carrier: "at the back, up on your right", "port side, toward the bow", and a
   diagram with your pad filled in. Now and then the voice reminds you the words assume **the green lights on your
   right** as you come through the slot.
@@ -66,8 +66,9 @@ earnings idea (discussion #7), and the report of a too-large overlay on a 4K TV.
 
 - **🛣 on the Carrier tile**: an exact route to your carrier at once, from 250 ly away; it asks before replacing a
   route you follow.
-- **The In-Game Route strip**: click a chip to copy its system; **⛽** marks how far your tank goes without scooping
-  (⛽✓ when it makes the whole route), and moves as you scoop. A system targeted one jump away no longer gets a line.
+- **The In-Game Route strip**: click a chip to copy its system; **⛽** marks how far your tank goes without scooping,
+  keeping 5 % of the tank in reserve (⛽✓ when it makes the whole route, ⛽ ? while Outrider learns a ship's fuel use),
+  and moves as you scoop. A system targeted one jump away no longer gets a line.
 - **The route line** ("🛣 Next:") now shows on **every tab**, as the target line does.
 - **📋 paste**: beside Plot Route's From, To and Station, Search's Find, and the "a system…" boxes, it fills the field
   from the game PC's clipboard (for a touchscreen window that never takes focus, and the Android app).

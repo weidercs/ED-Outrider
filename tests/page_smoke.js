@@ -1666,14 +1666,22 @@ const releasePayloads = async () => {
       const mark = () => { const f = el.querySelector(".freach"); if (!f) return null;
         const nx = f.nextElementSibling; return [f.className, f.textContent, nx ? nx.dataset.name : null]; };
       const show = (k, fr) => { data.route = {hops: hops(k), ly: 50 * k, next_scoop: 1, longest_dry: 0, fuel_reach: fr}; renderRoute(); return mark(); };
-      o.mid = show(3, {hops: 1, whole: false}); el.querySelectorAll(".hop")[2].click();
-      o.none = show(3, {hops: 0, whole: false}); o.whole = show(3, {hops: 3, whole: true}); o.unknown = show(3, null);
-      o.past = show(30, {hops: 26, whole: false}); o.wholeLong = show(30, {hops: 30, whole: true});
+      o.mid = show(3, {hops: 1, whole: false, spare: 9.2, reserve: 8}); el.querySelectorAll(".hop")[2].click();
+      o.midTip = el.querySelector(".freach").title;
+      o.none = show(3, {hops: 0, whole: false, spare: 6, reserve: 8}); o.whole = show(3, {hops: 3, whole: true, spare: 31.4, reserve: 8});
+      o.wholeTip = el.querySelector(".freach").title; o.unknown = show(3, null);
+      o.past = show(30, {hops: 26, whole: false, spare: 8.3, reserve: 8}); o.wholeLong = show(30, {hops: 30, whole: true, spare: 12, reserve: 8});
+      // the fuel model still learning this ship: said, not silent (Kurbo26)
+      o.learn = show(3, {learning: 3}); o.learnTip = el.querySelector(".freach").title;
       data.route = saved; renderRoute(); return JSON.stringify(o); })()`));
     w.copyText = realCopy;
     got.copied = copied;
-    const want = {mid: ["freach", "⛽", "Hop 1"], none: ["freach", "⛽", "Hop 0"], whole: ["freach whole", "⛽✓", null], unknown: null,
-                  past: ["freach past", "⛽ 26", null], wholeLong: ["freach whole", "⛽✓", null], copied: ["Hop 2"]};
+    const want = {mid: ["freach", "⛽", "Hop 1"],
+                  midTip: "the fuel in your tank makes 1 jump of this route without scooping, keeping 8.0 t in reserve: scoop or refuel by here",
+                  none: ["freach", "⛽", "Hop 0"], whole: ["freach whole", "⛽✓", null],
+                  wholeTip: "the fuel in your tank makes the whole route without scooping, with 31.4 t to spare", unknown: null,
+                  past: ["freach past", "⛽ 26", null], wholeLong: ["freach whole", "⛽✓", null], learn: ["freach past unk", "⛽ ?", null],
+                  learnTip: "how far your fuel goes shows once Outrider has learned this ship's fuel use: 3 more jumps in it", copied: ["Hop 2"]};
     const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| route chips copy, fuel reach |", good ? "a chip copies its name; ⛽ where the tank runs out, ⛽✓ when it makes the route" : JSON.stringify(got), errors.slice(before));

@@ -1096,9 +1096,13 @@ function renderRoute() {
   // a chip copies its system's name (the page-wide .copy handler); ⛽ marks how far the fuel in the tank goes without
   // scooping (the server's fuel_reach, worked out from the fuel aboard now: a scoop on the way moves it), ⛽✓ at the end
   // when it makes the whole route (Kurbo26, GitHub discussion #3)
-  const fr = r.fuel_reach, shown = Math.min(n, 24);
-  const reachMark = k => `<span class="freach" title="${k ? `the fuel in your tank makes ${k} jump${k === 1 ? "" : "s"} of this route without scooping: scoop or refuel by here`
-    : "the fuel in your tank does not make the next jump: scoop or refuel here"}">⛽</span>`;
+  // a hop counts only while it keeps fr.reserve t aboard (5 % of the tank: the author, 2026-10-15); fr.learning: the fuel
+  // model is not complete yet, said rather than nothing (Kurbo26 saw no ⛽ at all in a ship Outrider had not learned)
+  const fr = r.fuel_reach && r.fuel_reach.hops != null ? r.fuel_reach : null, shown = Math.min(n, 24);
+  const learning = r.fuel_reach && r.fuel_reach.learning;
+  const keep = fr ? `, keeping ${fuelT(fr.reserve)} t in reserve` : "";
+  const reachMark = k => `<span class="freach" title="${k ? `the fuel in your tank makes ${k} jump${k === 1 ? "" : "s"} of this route without scooping${keep}: scoop or refuel by here`
+    : `the fuel in your tank does not make the next jump${keep}: scoop or refuel here`}">⛽</span>`;
   const chips = r.hops.slice(0, 24).map((h, k) => (fr && !fr.whole && fr.hops === k ? reachMark(k) : "") +
     `<span class="hop copy${h.scoopable ? " sc" : h.scoopable === false ? " dry" : ""}${h.visited ? " vis" : ""}" data-name="${esc(h.name)}" ` +
     `title="${esc(h.name)} · ${esc(h.star_class || "?")}${h.scoopable ? " (scoopable)" : h.scoopable === false ? " (not scoopable)" : ""} · ${h.ly} ly${h.visited ? " · visited" : ""}${h.known === false ? " · not reported to Spansh" : ""}">` +
@@ -1108,8 +1112,9 @@ function renderRoute() {
     (r.longest_dry > 1 ? ` · <span class="${r.longest_dry >= 4 ? "warnc" : ""}">longest dry stretch ${r.longest_dry}</span>` : "") +
     (dryStretchHere() ? ` · ${dryStretchHtml()}` : "") +
     ` <span class="hops">${chips}${n > 24 ? ` <span class="unk">+${n - 24}</span>` : ""}` +
-    (fr && fr.whole ? `<span class="freach whole" title="the fuel in your tank makes the whole route without scooping">⛽<span class="good">✓</span></span>`
-      : fr && fr.hops >= shown ? `<span class="freach past" title="the fuel in your tank makes ${fr.hops} jumps of this route without scooping">⛽ ${fr.hops}</span>` : "") +
+    (fr && fr.whole ? `<span class="freach whole" title="the fuel in your tank makes the whole route without scooping, with ${fuelT(fr.spare)} t to spare">⛽<span class="good">✓</span></span>`
+      : fr && fr.hops >= shown ? `<span class="freach past" title="the fuel in your tank makes ${fr.hops} jumps of this route without scooping${keep}">⛽ ${fr.hops}</span>`
+      : learning ? `<span class="freach past unk" title="how far your fuel goes shows once Outrider has learned this ship's fuel use: ${learning} more jump${learning === 1 ? "" : "s"} in it">⛽ ?</span>` : "") +
     `</span>`;
 }
 // #12: the pad diagram (overlay.pad_map_items' twin, from the payload's docking.map: outrider.pads.where): a starport seen

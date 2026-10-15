@@ -23,6 +23,10 @@ class Docking(unittest.TestCase):
     def ev(self, name, offset=0.0, **kw):
         self.j.handle(dict({"timestamp": ts(offset), "event": name}, **kw))
 
+    def say(self):
+        """Let the held grant be said (GRANT_SAY_DELAY_S after it, or the docking computer's wait)."""
+        return self.state.docking_release(time.time() + 60)
+
     def moments(self):
         return [(m["what"], m.get("pad"), m.get("words")) for m in self.j.moments if m["kind"] == "docking"]
 
@@ -36,6 +40,8 @@ class Docking(unittest.TestCase):
         d = self.state.docking_summary()
         self.assertEqual((d["pad"], d["station"], d["type"]), (34, "Jameson Memorial", "Orbis"))
         self.assertEqual(self.state.payload()["docking"]["pad"], 34)
+        self.assertEqual(self.moments(), [])   # shown at once, said after the station's own voice
+        self.assertTrue(self.say())
         self.assertEqual(self.moments(), [("granted", 34, None)])
         self.ev("Docked", -1, StationName="Jameson Memorial", StationType="Orbis", MarketID=128666762)
         self.assertIsNone(self.state.docking_summary())
@@ -46,6 +52,7 @@ class Docking(unittest.TestCase):
         for end in ("DockingCancelled", "DockingTimeout", "SupercruiseEntry", "FSDJump"):
             self.ev("DockingGranted", -5, LandingPad=7, StationName="G0X-85Z", StationType="FleetCarrier")
             self.assertEqual(self.state.docking_summary()["pad"], 7)
+            self.say()
             self.ev(end, -1, StationName="G0X-85Z")
             self.assertIsNone(self.state.docking_summary(), end)
         self.assertEqual([m[0] for m in self.moments()], ["granted", "clear"] * 4)
@@ -87,6 +94,7 @@ class Docking(unittest.TestCase):
         d = self.state.docking_summary()
         self.assertEqual((d["layout"], d["where"], d["map"]["kind"], d["map"]["pad"]),
                          ("starport", "at the back · up on your right", "starport", 34))
+        self.say()
         m = [x for x in self.j.moments if x["kind"] == "docking"][-1]
         self.assertEqual((m["where"], m["say_where"]),
                          ("at the back · up on your right",
@@ -96,6 +104,7 @@ class Docking(unittest.TestCase):
         self.ev("DockingGranted", -3, LandingPad=2, StationName="Outpost", StationType="Outpost")
         d = self.state.docking_summary()
         self.assertEqual((d["pad"], d["where"], d["map"]), (2, None, None))
+        self.say()
         self.assertIsNone([x for x in self.j.moments if x["kind"] == "docking"][-1]["say_where"])
 
     def test_the_green_lights_now_and_then(self):
@@ -105,9 +114,11 @@ class Docking(unittest.TestCase):
                     if x["kind"] == "docking" and x["what"] == "granted"]
         for k in range(6):
             self.ev("DockingGranted", -20 + k, LandingPad=34, StationName="Jameson Memorial", StationType="Orbis")
+            self.say()
         self.assertEqual(said(), [True, False, False, False, True, False])
         self.ev("LoadGame", -10, Commander="Sample Pilot")
         self.ev("DockingGranted", -5, LandingPad=34, StationName="Jameson Memorial", StationType="Orbis")
+        self.say()
         self.assertEqual(said()[-1], True)
 
     def test_the_plugins_test_commands(self):
@@ -181,10 +192,14 @@ class Docking(unittest.TestCase):
         self.assertFalse(self.state.docking_release(time.time() + 60))
         self.assertEqual([(m["pad"], m["say_where"]) for m in self.granted()], [(7, "Port side, toward the bow.")])
 
-    def test_said_at_once_without_a_docking_computer(self):
+    def test_said_after_the_station_without_a_docking_computer(self):
+        """No docking computer: said GRANT_SAY_DELAY_S after the grant, not over the station's own voice (Kurbo26)."""
         self.fit("int_fuelscoop_size5_class5")
         self.assertFalse(self.j.docking_computer())
         self.ev("DockingGranted", -2, LandingPad=7, StationName="G0X-85Z", StationType="FleetCarrier")
+        self.assertEqual(len(self.granted()), 0)
+        self.assertFalse(self.state.docking_release(time.time()))                                    # 2 s after it
+        self.assertTrue(self.state.docking_release(time.time() - 2 + ed_outrider.GRANT_SAY_DELAY_S))  # its 5 s
         self.assertEqual(len(self.granted()), 1)
         self.fit("int_dockingcomputer_advanced")
         self.ev("SendText", -1, To="local", Message="!sppad 3", Sent=True)   # a test: said at once whatever is fitted

@@ -1322,6 +1322,12 @@ DOCKING_WATCH = frozenset(DOCKING_EVENTS) | {"Docked", "SupercruiseEntry", "FSDJ
 # the docking computer takes over 2-10 s after the grant (the author's journals: its Music line); with one fitted, the pad
 # is shown at once but said only if it has not taken over within this many seconds (the author: no audio on auto-dock)
 AUTO_DOCK_WAIT_S = 12
+# with no docking computer fitted the pad is said this long after the grant, so it does not talk over the station's
+# own voice reading the grant out (Kurbo26, GitHub discussion #3; the author, 2026-10-15)
+GRANT_SAY_DELAY_S = 5
+# the In-Game Route's ⛽: a hop counts as made only while it leaves this share of the tank aboard (the author,
+# 2026-10-15: his Caspian "made" a 27-jump route with 0.1 t left)
+FUEL_REACH_RESERVE = 0.05
 # a refusal's Reason in words, said only when it is not obvious (the author, 2026-10-14): Distance (you can see you are
 # too far, and the game says so) and any other reason are left out. From the author's journals: NoSpace 50, Distance
 # 16, RestrictedAccess 4, TooLarge 2, Hostile 1
@@ -3699,12 +3705,14 @@ class Journals:
             meta_set(self.db, "docking", d)
             said = {"what": "granted", "pad": d["pad"], "station": station, "station_type": d["type"],
                     "where": place and place["words"], "say_where": outrider.pads.spoken(place, green)}
-            if not test and self.docking_computer():
-                # held: said by State.docking_release unless the docking computer takes over first (a Music line)
-                self.docking_hold = {"until": ts_seconds(ts) + AUTO_DOCK_WAIT_S, "moment": said}
-            else:
+            if test:   # the chat command: said at once
                 self.docking_hold = None
                 self.moment("docking", ts, **said)
+            else:
+                # held: said by State.docking_release after the station's own voice (GRANT_SAY_DELAY_S), or with a
+                # docking computer fitted after AUTO_DOCK_WAIT_S unless it takes over first (a Music line: never said)
+                wait = AUTO_DOCK_WAIT_S if self.docking_computer() else GRANT_SAY_DELAY_S
+                self.docking_hold = {"until": ts_seconds(ts) + wait, "moment": said}
             return
         if name == "DockingDenied" and DENIED_WORDS.get(ev.get("Reason")):
             words = DENIED_WORDS[ev["Reason"]]
@@ -8582,8 +8590,9 @@ class State:
         return None
 
     def docking_release(self, now=None):
-        """A follow-up (#12): a grant held while the docking computer might take over is said once AUTO_DOCK_WAIT_S have
-        passed without it (its Music line drops the hold, as a dock, a cancel or leaving do). True when said."""
+        """A follow-up (#12): a grant held is said once its wait is over: GRANT_SAY_DELAY_S (after the station's own
+        voice), or AUTO_DOCK_WAIT_S with a docking computer fitted unless it took over (its Music line drops the hold, as
+        a dock, a cancel or leaving do). True when said."""
         h = self.journals.docking_hold
         now = time.time() if now is None else now
         if not h or now < h["until"]:
@@ -14154,30 +14163,37 @@ class State:
         """How many of the game's route hops (`lys`, their ly in order from where you are) the fuel in the main tank makes
         without scooping (Kurbo26, GitHub discussion #3: a ship with no scoop sees where it must refuel): burned hop by
         hop as the ship lightens (fsd.fuel_run), a charge you hold counted on the first hop only. Worked out with each
-        payload from the fuel aboard now, so a scoop on the way moves it. {hops, whole}: whole when every hop goes. None
-        when nothing can be claimed: the fuel model not complete, no fuel or cargo reading, every one of more than
-        FUEL_RUN_MAX_HOPS hops looked at going, or the first hop the fuel fails out of the drive's reach at any fuel level
-        (a range matter, not fuel)."""
+        payload from the fuel aboard now, so a scoop on the way moves it. A hop counts only when it leaves
+        FUEL_REACH_RESERVE of the tank aboard (the author, 2026-10-15: a 27-jump route "made" with 0.1 t to spare is no
+        promise; the model is a fit, a little cargo or a longer hop undoes it). {hops, whole, spare (t left after the
+        last hop counted), reserve (t)}: whole when every hop goes with the reserve kept. {learning: jumps} while the fuel
+        model is not complete (the strip says so rather than nothing). None when nothing can be claimed: no fuel or cargo
+        reading, every one of more than FUEL_RUN_MAX_HOPS hops looked at going, or the first hop the fuel fails out of the
+        drive's reach at any fuel level (a range matter, not fuel)."""
         now, tank = self.fuel_now(), (self.journals.ship or {}).get("fuel_main")
         if not now or not lys:
             return None
         model, fuel, cargo = now
         if not model.get("max_fuel") or not model.get("power"):
-            return None   # the fuel model is not complete yet (model["need"] > 0): nothing to claim
+            return {"learning": model.get("need") or 1}   # the fuel model is not complete yet: no figure, said so
         other = cargo + (self.shown_status().get("fuel_reservoir") or 0)
         boost = (self.journals.boost or {}).get("value") or 1
         hops = [(d, boost if k == 0 else 1) for k, d in enumerate(lys[:FUEL_RUN_MAX_HOPS])]
         ran = fuel_run(model, fuel, other, hops)
         if ran is None:
             return None
-        k = ran[0]
-        if k == len(hops):
-            return {"hops": k, "whole": True} if len(lys) <= FUEL_RUN_MAX_HOPS else None
-        d, mult = hops[k]
-        mf = min(model["max_fuel"], tank or model["max_fuel"])
-        if d / mult > fsd_range(model, model["unladen"] + other + mf, mf) + 1e-6:
-            return None   # too long at any fuel level: not the tank's doing
-        return {"hops": k, "whole": False}
+        made, after = ran
+        if made < len(hops):
+            d, mult = hops[made]
+            mf = min(model["max_fuel"], tank or model["max_fuel"])
+            if d / mult > fsd_range(model, model["unladen"] + other + mf, mf) + 1e-6:
+                return None   # too long at any fuel level: not the tank's doing
+        reserve = FUEL_REACH_RESERVE * (tank or fuel)
+        k = sum(1 for a in after if a >= reserve - 1e-9)   # the fuel only falls: the hops that keep the reserve
+        if k == len(hops) and len(lys) > FUEL_RUN_MAX_HOPS:
+            return None   # every hop looked at goes: where it ends is not known
+        return {"hops": k, "whole": k == len(hops), "spare": round(after[k - 1] if k else fuel, 1),
+                "reserve": round(reserve, 1)}
 
     def spansh_knows(self, id64):
         """Whether Spansh has a record of this system: True; False when it was asked and has none (the Nearby search

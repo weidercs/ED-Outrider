@@ -1019,34 +1019,39 @@ class HighwayH1(unittest.TestCase):
 
     def test_route_fuel_reach(self):
         """The In-Game Route's fuel reach (Kurbo26, GitHub discussion #3): the hops the tank makes without scooping, from
-        the fuel aboard now (a scoop on the way moves it), the whole route said as such; nothing claimed without a
-        complete fuel model, for a hop too long at any fuel, or past the hops looked at."""
+        the fuel aboard now (a scoop on the way moves it), each keeping FUEL_REACH_RESERVE of the tank aboard (the author,
+        2026-10-15: a route "made" with 0.1 t to spare is no promise), the whole route said as such; "learning" while
+        the fuel model is not complete; nothing for a hop too long at any fuel, or past the hops looked at."""
+        reach = lambda: self.state.route_summary()["fuel_reach"]
         self.jump(-100, 300, "Start", 0)
         self.navroute(self.DRY_NAV)   # five hops of 70 ly
         self.fuel(10)
-        self.assertIsNone(self.state.route_summary()["fuel_reach"])   # no Loadout: no fuel model, no claim
-        self.j.handle(self.caspian_loadout(self.ts(-1000)))
-        self.assertEqual(self.state.route_summary()["fuel_reach"], {"hops": 2, "whole": False})
-        self.fuel(15)   # scooped a little: further
-        self.assertEqual(self.state.route_summary()["fuel_reach"], {"hops": 3, "whole": False})
-        self.fuel(3)
-        self.assertEqual(self.state.route_summary()["fuel_reach"], {"hops": 0, "whole": False})
+        self.assertIsNone(reach())   # no Loadout: no ship at all, nothing to say
+        self.j.handle(self.loadout(self.ts(-1000), fsd="int_hyperdrive_size9_class9_unknown"))
+        self.assertEqual(reach(), {"learning": 5})   # a drive the tables lack: five of its jumps teach the model
+        self.j.handle(self.caspian_loadout(self.ts(-900)))
+        self.assertEqual(ed_outrider.FUEL_REACH_RESERVE * 160, 8.0)   # 5 % of the Caspian's 160 t
+        self.assertEqual(reach(), {"hops": 0, "whole": False, "spare": 10, "reserve": 8.0})   # one hop would leave < 8 t
+        self.fuel(20)   # scooped a little: further
+        self.assertEqual(reach(), {"hops": 2, "whole": False, "spare": 10.9, "reserve": 8.0})
+        self.fuel(30)   # every hop but the last: the fifth would dip under the reserve
+        self.assertEqual((reach()["hops"], reach()["whole"]), (4, False))
         self.fuel(40)
-        self.assertEqual(self.state.route_summary()["fuel_reach"], {"hops": 5, "whole": True})
+        self.assertEqual(reach(), {"hops": 5, "whole": True, "spare": 16.8, "reserve": 8.0})
         self.jump(-40, 402, "Neutron B", 140.0)   # further along: from where you are on it
-        self.assertEqual(self.state.route_summary()["fuel_reach"], {"hops": 3, "whole": True})
+        self.assertEqual((reach()["hops"], reach()["whole"]), (3, True))
         # a hop beyond the drive at any fuel: a range matter, not the tank's: nothing said
         self.jump(-30, 300, "Start", 0)
         self.navroute([(300, "Start", "K", 0.0), (401, "Far", "K", 200.0), (402, "Farther", "K", 210.0)])
         self.fuel(10)
-        self.assertIsNone(self.state.route_summary()["fuel_reach"])
+        self.assertIsNone(reach())
         # more hops than FUEL_RUN_MAX_HOPS, every one looked at going: the end is not known
         n = ed_outrider.FUEL_RUN_MAX_HOPS + 5
         self.navroute([(300, "Start", "K", 0.0)] + [(500 + k, f"Hop {k}", "K", 2.0 * (k + 1)) for k in range(n)])
         self.fuel(160)
-        self.assertIsNone(self.state.route_summary()["fuel_reach"])
+        self.assertIsNone(reach())
         self.navroute([(300, "Start", "K", 0.0)] + [(500 + k, f"Hop {k}", "K", 2.0 * (k + 1)) for k in range(3)])
-        self.assertEqual(self.state.route_summary()["fuel_reach"], {"hops": 3, "whole": True})
+        self.assertEqual((reach()["hops"], reach()["whole"]), (3, True))
 
     def test_last_scoopable_star(self):
         """S2 on the game's own route: here a K star, three stars after it known not to scoop, and too little fuel for

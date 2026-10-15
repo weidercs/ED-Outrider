@@ -37,7 +37,7 @@ notification and be spoken (🗣), chosen per alert in **⚙ Settings → Alerts
 - on a route you follow in Outrider, a system targeted in game that is not the next stop (its own row, **Wrong target**;
   spoken once per target, no notification by default; see [Plot Route](plot-route.md))
 - **docking** (its own row, **Docking**, spoken by Comms): the pad the station gave you, said every time, even while
-  hushed ("Pad 34."), and why it refused when that isn't obvious: no pad free, ship too big, access restricted, hostile,
+  hushed ("Pad 34."), 5 seconds after the grant so it doesn't talk over the station's own voice, and why it refused when that isn't obvious: no pad free, ship too big, access restricted, hostile,
   your offences, a fighter still out (too far away is not said). No notification by default. The pad also shows large on
   Now and in the overlay (where the Surface radar goes). At a starport or carrier the pad's place follows: "Pad 34. At the back, up on
   your right." The words assume you come through the slot with the **green lights on your right**, and the first docking

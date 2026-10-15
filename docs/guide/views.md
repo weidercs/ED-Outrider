@@ -231,8 +231,10 @@ has reported to Spansh (Outrider asks Spansh about the first 24 hops once you pl
 500 ly of Colonia, where Spansh knows every system); one without it is known there, or was not or could not be checked.
 Click a chip to copy its system's name. A **⛽** between two chips marks how far the fuel in your tank goes without
 scooping (for a ship with no fuel scoop: where you must refuel); it moves as your fuel changes, so scooping on the way
-pushes it further. **⛽✓** at the end: your fuel makes the whole route; **⛽ 30** after the chips: it makes 30 jumps, past
-the ones shown. No mark until Outrider has learned your ship's fuel use from a few jumps. The game sometimes logs a plot but
+pushes it further. A jump counts only while it leaves **5 % of the tank** aboard (8 t in a 160 t tank), since the fuel
+figures are a fit to your own jumps, not the game's sums; the mark's hover says what is kept or spare. **⛽✓** at the end:
+your fuel makes the whole route; **⛽ 30** after the chips: it makes 30 jumps, past the ones shown; **⛽ ?**: Outrider
+is still learning this ship's fuel use (the hover says how many more jumps). The game sometimes logs a plot but
 never writes the route's file (NavRoute.json); Outrider then waits a minute for it and says what the game does tell:
 "In-Game Route: 2 jumps left to Smojooe SJ-I b23-0 · the game didn't write the route's stars", without stars, distances
 or fuel figures. If the line stays like that, clear the route in the galaxy map and plot a different destination: the

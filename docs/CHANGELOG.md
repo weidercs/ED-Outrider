@@ -2,6 +2,18 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-15 · ⛽ keeps a 5 % reserve and says when it is learning; the pad said after the station's voice
+- **The In-Game Route's ⛽** counts a hop only while it leaves `FUEL_REACH_RESERVE` (5 %) of the tank aboard: the
+  author's Caspian "made" a 27-jump route with 0.1 t left (the fuel figures are a fit to his jumps, and a little cargo
+  or a longer hop undoes 0.1 t); now "⛽ 25", 9.9 t left after it. `route_fuel_reach` gives `spare` and `reserve`, the
+  hovers say them ("keeping 8.0 t in reserve", "with 31.4 t to spare"). While the fuel model is not complete it gives
+  `{learning: n}` and the strip shows **⛽ ?** with how many more jumps (Kurbo26 saw no ⛽ at all in such a ship).
+- **The pad is said 5 s after the grant** with no docking computer fitted (`GRANT_SAY_DELAY_S`, the author; Kurbo26: it
+  talked over the station's own voice); with one fitted the 12 s hold stays (silent when it takes over); the chat
+  test commands at once. Both through `docking_hold` / `State.docking_release`.
+- Tests: the reach with the reserve, spare, learning; the delay, the test command at once; the strip's hovers and ⛽ ?.
+  Guides: views.md, voice-and-alerts.md; What's new.
+
 ## 2026-10-15 · The pad's diagram sized to fit Now; the tablet to Now while docking
 From Kurbo26's try of the build (discussion #3).
 - Now's pad diagram is sized by its **height** (`min(32vh, 300px)`, width following): a carrier, drawn tall, ran off a
