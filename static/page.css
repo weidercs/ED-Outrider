@@ -240,6 +240,9 @@ main > #hereView.detail > #bodyPanel { position: sticky; top: calc(var(--head-h,
 .cmitem { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid var(--line); padding: 2px 0; }
 .cmfilter { align-items: center; gap: 10px; flex-wrap: wrap; margin: 6px 0; }
 .cmmod { border-top: 1px solid var(--line); padding: 5px 0; } .cmmod > summary { cursor: pointer; }
+.cmengs { padding: 5px 0 8px; } .cmengs > summary { cursor: pointer; } .cmengtable { border-collapse: collapse; margin-top: 4px; }
+.cmengtable td, .cmengtable th { padding: 3px 14px 3px 0; text-align: left; border-top: 1px solid var(--line); } .cmengtable th { color: var(--muted); font-weight: 600; border-top: 0; }
+.cmengtable .num { text-align: right; white-space: nowrap; }
 .cmbp { margin: 10px 0 0; font-size: 13px; } .cmmat { white-space: nowrap; }
 .cmbar { display: inline-block; width: 120px; height: 8px; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; vertical-align: middle; }
 .cmbar > span { display: block; height: 100%; background: var(--info, var(--muted)); } .cmbarcell { white-space: nowrap; } .cmrep { margin-top: 8px; }

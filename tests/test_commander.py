@@ -130,6 +130,27 @@ class Engineering(unittest.TestCase):
         self.assertEqual([(e["progress"], e["rank"], e["ready"]) for e in g5["engineers"]], [("Unlocked", 4, True), ("Unlocked", 3, False)])
         self.assertEqual(C.blueprints({}, rows=self.ROWS)[0]["grades"][1]["rolls"], 0)
 
+    def test_where_the_engineers_are(self):
+        """Every engineer with the system of their workshop, by any spelling the journal uses; one the table does not
+        know is still listed, with no system."""
+        self.assertEqual(C.engineer_system("Tod 'The Blaster' McQuinn"), ("Wolf 397", "ship", "bubble"))
+        self.assertEqual(C.engineer_system("felicity farseer")[0], "Deciat")
+        self.assertIsNone(C.engineer_system("Nobody"))
+        rows = C.engineer_list({"Felicity Farseer": {"progress": "Unlocked", "rank": 5}, "Domino Green": {"progress": "Invited", "rank": None},
+                                "New Engineer": {"progress": "Known", "rank": None}})
+        by = {r["name"]: r for r in rows}
+        self.assertEqual(len(rows), len(C.ENGINEER_SYSTEMS) + 1)
+        self.assertEqual((by["Felicity Farseer"]["system"], by["Felicity Farseer"]["progress"], by["Felicity Farseer"]["rank"]), ("Deciat", "Unlocked", 5))
+        self.assertEqual((by["Domino Green"]["kind"], by["Domino Green"]["progress"]), ("suit & weapon", "Invited"))
+        self.assertEqual((by["New Engineer"]["system"], by["Petra Olmanova"]["region"], by["Bill Turner"]["progress"]), (None, "Colonia", None))
+        kinds = [r["kind"] for r in rows]
+        self.assertEqual(kinds[:kinds.index("suit & weapon")], ["ship"] * len([k for k in kinds if k == "ship"]))   # the ship engineers first
+        self.assertEqual(len({v[0] for v in C.ENGINEER_SYSTEMS.values()}), len(C.ENGINEER_SYSTEMS))                 # one workshop a system
+        for b in C.load_blueprints():                                    # every engineer a blueprint names has a system
+            for g in b["grades"].values():
+                for e in g["engineers"]:
+                    self.assertIsNotNone(C.engineer_system(e), e)
+
     def test_the_shipped_table(self):
         import outrider.materials as M
         rows = C.load_blueprints()
@@ -295,7 +316,10 @@ class Server(unittest.TestCase):
         self.assertEqual((len(inv["ships"]["ships"]), len(inv["modules"]["modules"]), len(inv["suits"])), (4, 3, 1))
         fsd = next(b for b in eng["blueprints"] if b["id"] == "FSD_LongRange")
         self.assertEqual([m["have"] for m in fsd["grades"][-1]["materials"] if m["id"] == "arsenic"], [4])
-        self.assertEqual(eng["engineers"], [{"name": "Felicity Farseer", "progress": "Unlocked", "rank": 5}])
+        ff = next(e for e in eng["engineers"] if e["name"] == "Felicity Farseer")
+        self.assertEqual((ff["progress"], ff["rank"], ff["system"]), ("Unlocked", 5, "Deciat"))
+        self.assertEqual(len(eng["engineers"]), len(C.ENGINEER_SYSTEMS))
+        self.assertEqual({e["system"] for g in fsd["grades"] for e in g["engineers"] if e["name"] == "Felicity Farseer"}, {"Deciat"})
         self.assertTrue(all(e["ready"] for g in fsd["grades"] for e in g["engineers"] if e["name"] == "Felicity Farseer"))
         self.assertEqual([m["name"] for m in mis["missions"]], ["A job"])
         self.assertEqual((ses["sessions"][0]["combat"]["kills"], ses["totals"]["combat"]["sessions"]), (3, 1))

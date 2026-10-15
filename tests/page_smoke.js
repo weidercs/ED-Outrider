@@ -8092,7 +8092,11 @@ const releasePayloads = async () => {
               level: 5, value: 5103953, transfer_cost: 0, transfer_s: 0, in_transit: false, hot: false}]},
             locker: {ts: "2026-10-12T09:03:00Z", kinds: [{name: "Goods", items: [{name: "Weapon <Schematic>", count: 3, mission: false}]}, {name: "Data", items: []}]},
             suits: [{loadout: "Bio", suit: "Artemis Suit", class: 3, mods: ["Increased sprint duration"], weapons: [{name: "TK Aphelion", class: 2, slot: "PrimaryWeapon1", mods: []}]}]},
-          engineering: {engineers: [{name: "Felicity Farseer", progress: "Unlocked", rank: 5}, {name: "Elvira Martuuk", progress: "Known", rank: null}],
+          engineering: {engineers: [{name: "Felicity Farseer", system: "Deciat", kind: "ship", region: "bubble", progress: "Unlocked", rank: 5},
+                                    {name: "Elvira Martuuk", system: "Khun", kind: "ship", region: "bubble", progress: "Known", rank: null},
+                                    {name: "Petra Olmanova", system: "Asura", kind: "ship", region: "Colonia", progress: null, rank: null},
+                                    {name: "Yi Shen", system: "Einheriar", kind: "suit & weapon", region: "Colonia", progress: null, rank: null},
+                                    {name: "New One", system: null, kind: null, region: null, progress: "Known", rank: null}],
             blueprints: [
               {id: "FSD_LongRange", module: "Frame shift drive", name: "Increased range", grades: [
                 {grade: 1, rolls: 7, materials: [{id: "a", name: "Atypical Disrupted Wake Echoes", need: 1, have: 7}], engineers: [{name: "Felicity Farseer", progress: "Unlocked", rank: 5, ready: true}]},
@@ -8129,6 +8133,16 @@ const releasePayloads = async () => {
       got.locker = [...body().querySelectorAll(".cmitem")].map(text);
       await tab("engineering");
       got.engineering = [[...body().querySelectorAll("details.cmmod")].map(x => text(x.querySelector("summary")) + (x.open ? " open" : "")), text(body().querySelector(".cmfilter .unk"))];
+      // the engineers: where each works, with Copy (the system to the clipboard) and Plot route (S31's button)
+      const engRows = [...body().querySelectorAll(".cmengtable tbody tr")];
+      got.engineers = [body().querySelector("details.cmengs").open, engRows.map(t => [...t.cells].slice(0, 3).map(text).join(" | ")),
+                       engRows.map(t => t.querySelectorAll("[data-cmcopy]").length + t.querySelectorAll("[data-plotto]").length).join("")];
+      const cmCopied = [];
+      w.eval("window.__cmCopy = copyText"); w.__cmCopied = cmCopied;
+      w.eval("copyText = (t, what) => __cmCopied.push(t)");
+      engRows[0].querySelector("[data-cmcopy]").click();
+      w.eval("copyText = __cmCopy");
+      got.engCopy = [cmCopied, engRows[0].querySelector("[data-plotto]").dataset.plotto];
       const f = d.getElementById("cmFilter");
       f.focus(); f.value = "wake"; f.dispatchEvent(new w.Event("input", {bubbles: true}));
       got.filtered = [[...body().querySelectorAll("details.cmmod")].map(x => text(x.querySelector("summary")) + (x.open ? " open" : "")), rows(),
@@ -8157,7 +8171,10 @@ const releasePayloads = async () => {
                   "5A Frame Shift Drive | Long Range G5 | Sol | 5.1M cr | ", "Bio | Artemis Suit G3Increased sprint duration | TK Aphelion G2"],
       heads: ["Ships 2 as of 2026-10-12 09:01", "Stored modules 1 as of 2026-10-12 09:02", "Ship locker as of 2026-10-12 09:03", "Suit loadouts 1"],
       locker: ["Weapon <Schematic>3"],
-      engineering: [["Frame shift drive 1 blueprint", "Sensors 1 blueprint"], "1 of 2 engineers unlocked · ship modules only: no experimental effects, suits or weapons"],
+      engineering: [["Frame shift drive 1 blueprint", "Sensors 1 blueprint"], "1 of 3 engineers unlocked · ship modules only: no experimental effects, suits or weapons"],
+      engineers: [true, ["Felicity Farseer | unlocked, grade 5 | Deciat", "Elvira Martuuk | known | Khun", "Petra Olmanova | not met | Asura Colonia",
+                         "Yi Shen suit & weapon | not met | Einheriar Colonia", "New One | known | not known"], "22220"],
+      engCopy: [["Deciat"], "Deciat"],
       filtered: [["Frame shift drive 1 blueprint open"], ["G1 | Atypical Disrupted Wake Echoes 7/1 | ×7 | Felicity Farseer",
                  "G5 | Arsenic 0/1Datamined Wake Exceptions 5/2 | – | Elvira Martuuk"], "cmFilter", 2, 1],
       craft: 1,

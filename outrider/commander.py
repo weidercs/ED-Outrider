@@ -200,6 +200,52 @@ def engineers(events):
     return out
 
 
+# Where each engineer works: (system, what they engineer, region). Their workshops have not moved since 2020 (Professor
+# Palin's to Arque); the journal never says where an engineer is.
+ENGINEER_SYSTEMS = {
+    "Bill Turner": ("Alioth", "ship", "bubble"), "Broo Tarquin": ("Muang", "ship", "bubble"),
+    "Chloe Sedesi": ("Shenve", "ship", "bubble"), "Colonel Bris Dekker": ("Sol", "ship", "bubble"),
+    "Didi Vatermann": ("Leesti", "ship", "bubble"), "Elvira Martuuk": ("Khun", "ship", "bubble"),
+    "Felicity Farseer": ("Deciat", "ship", "bubble"), "Hera Tani": ("Kuwemaki", "ship", "bubble"),
+    "Juri Ishmaak": ("Giryak", "ship", "bubble"), "Lei Cheung": ("Laksak", "ship", "bubble"),
+    "Liz Ryder": ("Eurybia", "ship", "bubble"), "Lori Jameson": ("Shinrarta Dezhra", "ship", "bubble"),
+    "Marco Qwent": ("Sirius", "ship", "bubble"), "Professor Palin": ("Arque", "ship", "bubble"),
+    "Ram Tah": ("Meene", "ship", "bubble"), "Selene Jean": ("Kuk", "ship", "bubble"),
+    "The Dweller": ("Wyrd", "ship", "bubble"), "The Sarge": ("Beta-3 Tucani", "ship", "bubble"),
+    "Tiana Fortune": ("Achenar", "ship", "bubble"), 'Tod "The Blaster" McQuinn': ("Wolf 397", "ship", "bubble"),
+    "Zacariah Nemo": ("Yoru", "ship", "bubble"),
+    "Etienne Dorn": ("Los", "ship", "Colonia"), "Marsha Hicks": ("Tir", "ship", "Colonia"),
+    "Mel Brandon": ("Luchtaine", "ship", "Colonia"), "Petra Olmanova": ("Asura", "ship", "Colonia"),
+    "Domino Green": ("Orishis", "suit & weapon", "bubble"), "Hero Ferrari": ("Siris", "suit & weapon", "bubble"),
+    "Jude Navarro": ("Aurai", "suit & weapon", "bubble"), "Kit Fowler": ("Capoya", "suit & weapon", "bubble"),
+    "Oden Geiger": ("Candiaei", "suit & weapon", "bubble"), "Terra Velasquez": ("Shou Xing", "suit & weapon", "bubble"),
+    "Uma Laszlo": ("Xuane", "suit & weapon", "bubble"), "Wellington Beck": ("Jolapa", "suit & weapon", "bubble"),
+    "Yarden Bond": ("Bayan", "suit & weapon", "bubble"),
+    "Baltanos": ("Deriso", "suit & weapon", "Colonia"), "Eleanor Bresa": ("Desy", "suit & weapon", "Colonia"),
+    "Rosa Dayette": ("Kojeara", "suit & weapon", "Colonia"), "Yi Shen": ("Einheriar", "suit & weapon", "Colonia"),
+}
+
+
+def engineer_system(name):
+    """(system, kind, region) of an engineer by any spelling of the name ("Tod 'The Blaster' McQuinn"), or None."""
+    want = _plain(name)
+    return next((v for k, v in ENGINEER_SYSTEMS.items() if _plain(k) == want), None)
+
+
+def engineer_list(known):
+    """Every engineer the table knows, and any other the journal names: [{name, system, kind, region, progress,
+    rank}], the ship engineers first, then by name. known: engineers()."""
+    mine = {_plain(k): (k, v) for k, v in (known or {}).items()}
+    out = []
+    for name, (system, kind, region) in ENGINEER_SYSTEMS.items():
+        st = (mine.pop(_plain(name), (None, {}))[1]) or {}
+        out.append({"name": name, "system": system, "kind": kind, "region": region,
+                    "progress": st.get("progress"), "rank": st.get("rank")})
+    for name, st in mine.values():   # one the table does not have yet: listed, no system to go to
+        out.append({"name": name, "system": None, "kind": None, "region": None, "progress": st.get("progress"), "rank": st.get("rank")})
+    return sorted(out, key=lambda e: (e["kind"] != "ship", e["name"].lower()))
+
+
 def blueprints(counts, known=None, name=None, rows=None):
     """Every blueprint with what each grade takes against the materials you hold: [{id, module, name, grades:
     [{grade, materials: [{id, name, need, have}], rolls (how many times you could craft it now), engineers:
@@ -217,7 +263,7 @@ def blueprints(counts, known=None, name=None, rows=None):
                 st = known.get(_plain(e)) or {}
                 rank = st.get("rank")
                 # an engineer crafts up to one grade past the rank reached (rank 0: grade 1)
-                who.append({"name": e, "progress": st.get("progress"), "rank": rank,
+                who.append({"name": e, "progress": st.get("progress"), "rank": rank, "system": (engineer_system(e) or (None,))[0],
                             "ready": st.get("progress") == "Unlocked" and (rank or 0) + 1 >= int(g)})
             grades.append({"grade": int(g), "materials": need, "engineers": who,
                            "rolls": min((m["have"] // m["need"] for m in need if m["need"]), default=0)})
@@ -229,7 +275,7 @@ def engineering(dirs, material_state, days=INVENTORY_DAYS, now=None):
     known = engineers(jscan.events(dirs, ("EngineerProgress",), days, now))
     counts = (material_state or {}).get("counts") or {}
     return {"blueprints": blueprints(counts, known, lambda mid: materials.display_name(material_state, mid)),
-            "engineers": [dict(v, name=k) for k, v in sorted(known.items())]}
+            "engineers": engineer_list(known)}
 
 
 # ---- missions ----

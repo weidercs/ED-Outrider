@@ -35,6 +35,8 @@ function cmdrWire() {
     const t = e.target.closest("[data-cmtab]");
     if (t) { CM.tab = t.dataset.cmtab; try { localStorage.setItem("cmdrTab", CM.tab); } catch {} loadCmdr(); return; }
     if (e.target.closest("#cmRefresh")) loadCmdr(true);
+    const cp = e.target.closest("[data-cmcopy]");
+    if (cp) copyText(cp.dataset.cmcopy);
   });
   el.addEventListener("input", e => { if (e.target.id === "cmFilter") { CM.q = e.target.value; cmdrDrawBody(); } });
   el.addEventListener("change", e => { if (e.target.id === "cmCraft") { CM.craft = e.target.checked; cmdrDrawBody(); } });
@@ -122,13 +124,26 @@ function cmdrInventoryHtml(d) {
       : `<div class="unk">The journal names a loadout only when you put it on: those worn in the last year are listed.</div>`);
 }
 
+// the engineers: where each works, with Copy and Plot route (and how far you are with them). Pure.
+function cmdrEngineersHtml(eng) {
+  if (!eng.length) return "";
+  const status = e => e.progress === "Unlocked" ? `<span class="ok">unlocked${e.rank != null ? `, grade ${e.rank}` : ""}</span>`
+    : e.progress ? `<span class="warnc">${esc(e.progress.toLowerCase())}</span>` : `<span class="unk">not met</span>`;
+  const row = e => `<tr><td><b>${esc(e.name)}</b>${e.kind && e.kind !== "ship" ? ` <span class="unk">${esc(e.kind)}</span>` : ""}</td><td>${status(e)}</td>` +
+    `<td>${e.system ? `${esc(e.system)}${e.region === "Colonia" ? ` <span class="unk">Colonia</span>` : ""}` : `<span class="unk">not known</span>`}</td>` +
+    `<td class="num">${e.system ? `<button type="button" class="mini" data-cmcopy="${esc(e.system)}" title="copy ${esc(e.system)} for the galaxy map">Copy</button>${plotBtn(e.system)}` : ""}</td></tr>`;
+  const open = CM.open.__engineers !== false;
+  return `<details class="cmengs" data-cmmod="__engineers"${open ? " open" : ""}><summary><b>Engineers</b> <span class="unk">where each works: copy the system or plot a route there</span></summary>` +
+    `<table class="cmengtable"><thead><tr><th>Engineer</th><th>With you</th><th>System</th><th></th></tr></thead><tbody>${eng.map(row).join("")}</tbody></table></details>`;
+}
+
 // Engineering: the blueprints by module, each grade's materials against what you hold. Pure (CM.q, CM.craft, CM.open).
 function cmdrEngineeringHtml(d) {
   const q = CM.q.trim().toLowerCase();
-  const eng = d.engineers || [], unlocked = eng.filter(e => e.progress === "Unlocked").length;
+  const all = d.engineers || [], eng = all.filter(e => e.progress), unlocked = eng.filter(e => e.progress === "Unlocked").length;
   const gradeRow = g => {
     const mats = g.materials.map(x => `<span class="cmmat ${x.have >= x.need ? "ok" : "noscoop"}" title="you hold ${cmNum(x.have)}">${esc(x.name)} ${cmNum(x.have)}/${x.need}</span>`).join("");
-    const who = g.engineers.map(e => `<span class="${e.ready ? "ok" : "unk"}" title="${esc(e.progress ? `${e.progress}${e.rank != null ? `, rank ${e.rank}` : ""}` : "not met yet")}">${esc(e.name)}</span>`).join(", ");
+    const who = g.engineers.map(e => `<span class="${e.ready ? "ok" : "unk"}" title="${esc((e.progress ? `${e.progress}${e.rank != null ? `, rank ${e.rank}` : ""}` : "not met yet") + (e.system ? ` · in ${e.system}` : ""))}">${esc(e.name)}</span>`).join(", ");
     return `<tr><td><b>G${g.grade}</b></td><td><div class="cmstats">${mats}</div></td>` +
       `<td class="num ${g.rolls ? "ok" : "unk"}" title="how many times you could craft this grade now">${g.rolls ? `×${cmNum(g.rolls)}` : "–"}</td><td>${who}</td></tr>`;
   };
@@ -144,6 +159,7 @@ function cmdrEngineeringHtml(d) {
   return `<div class="srow cmfilter"><input type="search" id="cmFilter" placeholder="filter: module, blueprint or material" value="${esc(CM.q)}" size="34">` +
     ` <label title="only the grades you hold every material for"><input type="checkbox" id="cmCraft"${CM.craft ? " checked" : ""}> only what I can craft now</label>` +
     ` <span class="unk">${eng.length ? `${unlocked} of ${eng.length} engineers unlocked` : "no engineer on record yet"} · ship modules only: no experimental effects, suits or weapons</span></div>` +
+    cmdrEngineersHtml(all) +
     ([...groups].map(([mod, list]) => `<details class="cmmod" data-cmmod="${esc(mod)}"${open(mod) ? " open" : ""}><summary><b>${esc(mod)}</b> <span class="unk">${list.length} blueprint${list.length === 1 ? "" : "s"}</span></summary>${list.join("")}</details>`).join("")
       || `<div class="unk">Nothing matches.</div>`);
 }
