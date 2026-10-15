@@ -5515,6 +5515,75 @@ const settle = async maxMs => {
     allOk = allOk && goodD;
     console.log(goodD ? "OK" : "FAIL", "| discoverer names |", goodD ? "a name after the Known mark, nothing without one" : JSON.stringify(got), errors.slice(before));
   }
+  // Space chatter (this fork, static/fork.js): a line of a ticked personality that has chatter, at a random moment
+  // between the two times after the last thing said; nothing while it cannot be said; its settings row
+  {
+    const w = dom.window, d = w.document, before = errors.length;
+    const got = JSON.parse(w.eval(`(() => {
+      const o = {}, said = [], say = (st, t) => said.push([st, t]);
+      const lines = {rocky: ["One.", "Two.", "Three."], sweet: []}, cfg = {on: true, min: 2, max: 10};
+      const env = (over = {}) => Object.assign({cfg, can: true, lines, ticked: ["business", "rocky"], shift: null, said: 0}, over);
+      const keep = Object.assign({}, CH, {recent: CH.recent.slice()});
+      o.clean = [chatterClean(null), chatterClean({on: false, min: 5, max: 3}), chatterClean({min: 0, max: 999}), chatterClean({min: "4", max: "4"})];
+      o.due = [chatterDue(1000, 0, cfg) - 1000, chatterDue(1000, 1, cfg) - 1000, chatterDue(1000, 0.5, cfg) - 1000, chatterDue(1000, 7, cfg) - 1000];
+      o.styles = [chatterStyles(lines, ["business", "rocky", "sweet"], null), chatterStyles(lines, ["rocky"], "sarcastic"), chatterStyles(lines, ["business"], null),
+                  chatterStyles(null, ["rocky"], null)];
+      o.pick = [chatterPick(["a", "b", "c"], ["a", "b"], () => 0.99), chatterPick(["a", "b"], ["a", "b"], () => 0), chatterPick(["a"], ["a"]), chatterPick([], [])];
+      const T = 1000000;
+      CH.quiet = T; CH.last = 0; CH.frac = 0.5; CH.recent = [];
+      o.early = [chatterTick(T + 119000, env(), say), chatterTick(T + 359000, env(), say), said.length];     // before min; before this quiet's moment (6 min)
+      const first = chatterTick(T + 361000, env(), say);
+      o.first = [first && first[0], lines.rocky.includes(first && first[1]), said.length, CH.quiet === T + 361000];
+      CH.frac = 0;
+      o.again = [chatterTick(T + 361000 + 119000, env(), say), !!chatterTick(T + 361000 + 121000, env(), say)];   // from its own line: min again
+      CH.frac = 0;
+      const t3 = T + 1000000;
+      o.afterTalk = [chatterTick(t3, env({said: t3 - 60000}), say), CH.quiet === t3 - 60000];               // an alert a minute ago: the quiet starts there
+      o.blocked = [chatterTick(t3 + 900000, env({can: false}), say), CH.quiet === t3 + 900000,               // could not be said: not quiet either
+                   chatterTick(t3 + 900000 + 60000, env(), say)];
+      o.none = [chatterTick(t3 + 9e6, env({ticked: ["business"]}), say), chatterTick(t3 + 9.9e6, env({shift: "sarcastic"}), say)];
+      CH.quiet = 0; CH.frac = 0; CH.recent = [];
+      const three = [1, 2, 3].map(i => chatterTick(5e6 + i * 700000, env(), say)[1]);
+      o.noRepeat = new Set(three).size >= 2 && three[0] !== three[1] && three[1] !== three[2];
+      o.said = said.length;
+      Object.assign(CH, keep);
+      // the settings row, under Personality
+      chatterWire();
+      const had = localStorage.getItem("chatter");
+      localStorage.removeItem("chatter"); chatterDraw();
+      const on = document.getElementById("chatterOn"), mn = document.getElementById("chatterMin"), mx = document.getElementById("chatterMax");
+      o.row = [!!document.getElementById("chatterRow"), document.getElementById("chatterRow").previousElementSibling.contains(document.getElementById("speechStyles")),
+               on.checked, mn.value, mx.value];
+      mn.value = "15"; mn.dispatchEvent(new Event("change", {bubbles: true}));
+      on.checked = false; on.dispatchEvent(new Event("change", {bubbles: true}));
+      o.saved = [JSON.parse(localStorage.getItem("chatter")), mx.value];
+      mx.value = "999"; mx.dispatchEvent(new Event("change", {bubbles: true}));
+      o.refused = [JSON.parse(localStorage.getItem("chatter")).max, mx.value];
+      const savedLines = CH.lines, styles0 = store.get("speechStyles", null);
+      CH.lines = {rocky: ["One."]}; store.set("speechStyles", ["business"]); chatterDraw();
+      o.note = [document.getElementById("chatterNote").textContent];
+      store.set("speechStyles", ["business", "rocky"]); chatterDraw();
+      o.note.push(document.getElementById("chatterNote").textContent);
+      CH.lines = savedLines; if (styles0 == null) localStorage.removeItem("speechStyles"); else store.set("speechStyles", styles0);
+      if (had == null) localStorage.removeItem("chatter"); else localStorage.setItem("chatter", had);
+      chatterDraw();
+      return JSON.stringify(o);
+    })()`));
+    const want = {
+      clean: [{on: true, min: 2, max: 10}, {on: false, min: 5, max: 10}, {on: true, min: 2, max: 10}, {on: true, min: 4, max: 4}],
+      due: [120000, 600000, 360000, 600000],
+      styles: [["rocky"], [], [], []], pick: ["c", "a", "a", null],
+      early: [null, null, 0], first: ["rocky", true, 1, true], again: [null, true],
+      afterTalk: [null, true], blocked: [null, true, null], none: [null, null], noRepeat: true, said: 5,
+      row: [true, true, true, "2", "10"], saved: [{on: false, min: 15, max: 15}, "15"], refused: [15, "15"],
+    };
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    if (!(got.note && /^tick .*rocky.* above to hear it$/i.test(got.note[0]) && /^chatting: .*rocky/i.test(got.note[1]))) bad.push("note");
+    const goodCH = !bad.length && errors.length === before;
+    allOk = allOk && goodCH;
+    console.log(goodCH ? "OK" : "FAIL", "| space chatter |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
+      : "a line between the two times after the last thing said, none while it cannot be said, no repeats, its settings row", errors.slice(before));
+  }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",
     headers: Object.assign({"Content-Type": "application/json"}, origin ? {Origin: origin} : {})}).then(r => r.status);

@@ -198,6 +198,7 @@ import outrider.config_edit  # the Settings dialog's Server settings: every conf
 import outrider.mcp        # the MCP bridge's [mcp] settings (the bridge itself runs as python3 -m outrider.mcp)
 import outrider.uploads    # EDDN / EDSM uploads (opt-in): the session, the live gate, the outbox
 import outrider.galnet     # the fork's GalNet News: Frontier's feed as articles, and the systems they mention
+import outrider.chatter    # the fork's space chatter: what the co-pilot says unprompted (the page does the timing)
 import outrider.commander  # the fork's Commander view: inventory, engineering, missions, combat and mining sessions
 import outrider.navroute   # the fork's Game Route list: the game's own route, jump by jump (pure)
 import outrider.shipinfo   # the fork's Ship view: the Loadout as figures and modules with their engineering
@@ -15582,6 +15583,7 @@ def make_app(state, hosts=None):
     app.router.add_get("/api/nearest", nearest_view)
     app.router.add_get("/api/ship", ship_view)
     outrider.commander.add_routes(app, state, lambda: LIVE_DIRS)   # this fork's Commander view: /api/commander/*
+    outrider.chatter.add_routes(app)                               # this fork's space chatter: /api/chatter
     app.router.add_get("/api/navroute", navroute_view)
     app.router.add_get("/api/galnet", galnet_view)
     app.router.add_get("/api/galnet/systems", galnet_systems_view)
