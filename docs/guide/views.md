@@ -223,7 +223,8 @@ service as its name and a red ✗
 and its balance in weeks of upkeep: "~96 wks upkeep"), the nearest places to sell (your carrier among them while its UC or Vista is on),
 and the last backup.
 
-The **In-Game Route:** line under the tiles is the route the game plotted in the galaxy map: its jumps and light years,
+The **In-Game Route:** line under the tiles is the route the game plotted in the galaxy map (a route of more than one
+jump: a system targeted next door has no line, the target says it; a longer route keeps its line to its last jump): its jumps and light years,
 the next scoopable star, the longest stretch without one, and each star as a chip. A chip marked ✦ is a system nobody
 has reported to Spansh (Outrider asks Spansh about the first 24 hops once you plot, except within 1,000 ly of Sol or
 500 ly of Colonia, where Spansh knows every system); one without it is known there, or was not or could not be checked.

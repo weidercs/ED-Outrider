@@ -1037,7 +1037,7 @@ class HighwayH1(unittest.TestCase):
         self.assertEqual(self.state.route_summary()["fuel_reach"], {"hops": 3, "whole": True})
         # a hop beyond the drive at any fuel: a range matter, not the tank's: nothing said
         self.jump(-30, 300, "Start", 0)
-        self.navroute([(300, "Start", "K", 0.0), (401, "Far", "K", 200.0)])
+        self.navroute([(300, "Start", "K", 0.0), (401, "Far", "K", 200.0), (402, "Farther", "K", 210.0)])
         self.fuel(10)
         self.assertIsNone(self.state.route_summary()["fuel_reach"])
         # more hops than FUEL_RUN_MAX_HOPS, every one looked at going: the end is not known

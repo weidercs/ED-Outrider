@@ -14100,6 +14100,8 @@ class State:
             return None
         if not route:
             return self.route_minimal()
+        if len(route.get("hops") or []) <= 2:
+            return None   # a route of one jump (the game writes one for any system targeted next door): the target's, no line (the author)
         left = self.summary_hops()
         if not left:
             return None
@@ -14219,12 +14221,15 @@ class State:
         after that line (RemainingJumpsInRoute, this jump included) and the route's end from Status.json's Destination
         when it is another system; {minimal: True, hops: [], jumps_left, destination, ts}. No stars, distances or fuel:
         the game gave none. None when nothing was plotted since the last NavRouteClear, no FSDTarget came after the
-        plot, or it was reached (the FSDTarget is dropped on arriving there)."""
+        plot, it was reached (the FSDTarget is dropped on arriving there), or it is a route of one jump (one left and no
+        jump since the plot; a longer route down to its last jump still shows)."""
         wait, t, pos = self.journals.navroute_waiting(), self.journals.target, self.journals.pos
         left = (t or {}).get("remaining")
         if not wait or not t or not pos or (t.get("ts") or "") < wait or not isinstance(left, int) or isinstance(left, bool) \
                 or left < 1:
             return None
+        if left == 1 and (pos.get("ts") or "") < wait:
+            return None   # one jump left with no jump since the plot: a route of one jump, no line (the author)
         dest = (self.journals.status_json or {}).get("destination")
         end = dest.get("Name") if isinstance(dest, dict) and dest.get("System") and dest["System"] != pos["id64"] \
             and isinstance(dest.get("Name"), str) and not dest["Name"].startswith("$") else None

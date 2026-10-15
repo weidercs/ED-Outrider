@@ -106,10 +106,33 @@ class LateNavRoute(unittest.TestCase):
         self.assertIsNone(self.state.route_summary())   # no FSDTarget since this plot: nothing to say yet
         self.j.handle({"event": "FSDTarget", "timestamp": "2026-10-14T09:15:01Z", "Name": "Smojooe SJ-I b23-0",
                        "SystemAddress": 904, "StarClass": "K", "RemainingJumpsInRoute": 1})
-        self.assertEqual(self.state.route_summary()["jumps_left"], 1)
+        self.assertIsNone(self.state.route_summary())   # a route of one jump: the target says it, no line (the author)
         self.j.handle({"event": "FSDJump", "timestamp": "2026-10-14T09:16:00Z", "StarSystem": "Smojooe SJ-I b23-0",
                        "SystemAddress": 904, "StarPos": [220.0, 0.0, 0.0], "StarClass": "K"})
         self.assertIsNone(self.state.route_summary())
+
+    def test_one_jump_routes_have_no_line(self):
+        """A system targeted one jump away (the game writes a one-jump route for it): no In-Game Route line, written file
+        or not; a longer route down to its last jump keeps its line (the author, 2026-10-14)."""
+        self.assertEqual(self.state.route_summary()["jumps_left"], 2)   # the fixture: 3 at the plot, a jump, 2 left
+        self.j.handle({"event": "FSDTarget", "timestamp": "2026-10-14T09:13:30Z", "Name": "Smojooe SJ-I b23-0",
+                       "SystemAddress": 904, "StarClass": "K", "RemainingJumpsInRoute": 1})
+        self.assertEqual(self.state.route_summary()["jumps_left"], 1)   # jumped since the plot: the route's last jump
+        # the file: a one-jump route (where you are, then the target) gives no line; two jumps do
+        here = self.j.pos
+        self.write_route("2026-10-14T09:20:00Z", [hop(here["id64"], here["name"], here["x"]), hop(950, "Next Door", here["x"] + 9)])
+        self.j.handle({"event": "NavRoute", "timestamp": "2026-10-14T09:20:00Z"})
+        self.assertTrue(self.j.read_navroute(self.d))
+        self.assertIsNone(self.state.route_summary())
+        self.write_route("2026-10-14T09:21:00Z", [hop(here["id64"], here["name"], here["x"]), hop(950, "Next Door", here["x"] + 9),
+                                                  hop(951, "Beyond", here["x"] + 18)])
+        self.j.handle({"event": "NavRoute", "timestamp": "2026-10-14T09:21:00Z"})
+        self.assertTrue(self.j.read_navroute(self.d))
+        self.assertEqual([h["name"] for h in self.state.route_summary()["hops"]], ["Next Door", "Beyond"])
+        # flown down to its last jump: still shown
+        self.j.handle({"event": "FSDJump", "timestamp": "2026-10-14T09:25:00Z", "StarSystem": "Next Door",
+                       "SystemAddress": 950, "StarPos": [here["x"] + 9, 0.0, 0.0], "StarClass": "K"})
+        self.assertEqual([h["name"] for h in self.state.route_summary()["hops"]], ["Beyond"])
 
     def test_reread_late_for_a_minute(self):
         """State.navroute_retry: read again at once, then every NAVROUTE_RETRY_S up to NAVROUTE_LATE_S after the line;

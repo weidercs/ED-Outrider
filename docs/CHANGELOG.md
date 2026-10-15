@@ -2,6 +2,14 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · No In-Game Route line for a route of one jump
+- The author: targeting a system next door showed "In-Game Route: 1 jump" (the game writes a one-jump route for it).
+  `State.route_summary` gives no route when the plotted one has a single jump (NavRoute.json's Route lists where you
+  were plus one), and `route_minimal` none for one jump left with no jump since the plot; a longer route keeps its line
+  down to its last jump. The target line says the rest.
+- Tests: test_navroute (a one-jump file, a two-jump one, flown to its last jump; the unwritten file's one jump left
+  with and without a jump since the plot). Guide: views.md.
+
 ## 2026-10-14 · The carrier's mined stock capped at what it holds
 - When mined ore comes back aboard from your carrier, the carrier's mined stock of it is first capped at what the
   carrier held then (`Journals.carrier_holding`: `outrider.cargo.carrier_fold` over its events, your Market.json reads
