@@ -1387,8 +1387,6 @@ confirmed while playing. Treat reports about them as likely real.
 - Earth-like and ammonia world routes (S52) and a sweep (S51) flown in game: the plots were probed against Spansh
   (2026-10-13, the answers in tests/fixtures), the following tested on them and on made-up routes; a sweep through more
   than a handful of systems, and Spansh's answer when more than one is unknown, only as probed.
-- Inara uploads: not yet tried live (a refusal shows in Settings in Inara's words). Built from Inara's API
-  documentation, tested with fakes (`tests/test_inara.py`).
 - The EDSM and Inara key Checks (S45): built from the APIs' documentation with their documented example answers
   (`tests/fixtures/account_checks.json`), never sent with a real key: get-credits' 203 for a wrong name or key, the
   fields of getCommanderProfile's answer (its `inaraURL`), and whether a read counts against Inara's limit are still to

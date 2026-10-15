@@ -2,6 +2,10 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-15 · Inara uploads: confirmed live
+- The author's live trial on his test account works (2026-10-15): DESIGN_NOTES' "Inara uploads: not yet tried live"
+  line goes.
+
 ## 2026-10-15 · The overlay on Windows: confirmed by players
 - Kurbo26 and weidercs report the in-game overlay working over the game on Windows: overlay.md's Windows line and
   DESIGN_NOTES no longer call it untried ("keep showing when Elite is not the active window"'s Windows z-order walk
