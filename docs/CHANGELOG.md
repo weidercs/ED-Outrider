@@ -2,6 +2,24 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-15 · Sweep fixes: the CMDR tab's places after a re-read, Nearby's Focus/Lock, crew checks, two page fixes
+A Fable sweep of everything since the last one (70156ee..c5ea3c2, 7 areas, each finding verified): 6 confirmed, 0
+refuted; all fixed here, with the Nearest dialog's labels.
+- **Commander folds** (a ship stored by ShipyardSwap/Buy/Transfer, a module fetched) took their place from the live dock
+  state, which a journal re-read keeps: a re-read run while docked (the v54 one) stamped them with that station.
+  They now use the dock state replayed in order (meta sale_dock, which also keeps the Docked line's system) and the
+  position; the next StoredShips/StoredModules list corrected them anyway, so no re-read for it.
+- **Nearby's Focus/Lock** on a carrier or target Outrider could not place yet kept saying "doesn't know where" after it
+  learnt the place under the same id64 (a carrier that jumped without you): the failure is now worked out again after
+  `NEAR_MISS_RETRY_S` (10 s).
+- POST /api/voice/crew with a row that is not a string answers 400 (was a 500); /api/say notes a crew voice that is
+  not installed in the log only for a well-formed voice name (any text a caller sent was kept and printed).
+- CMDR → Engineering: a short material's link now filters a Materials tab drawn already (its grid kept every material);
+  the held-only switch it clears is saved too.
+- Overview in Boxel mode: Focus/Lock on the Overview's bar is hidden there as on Nearby (picking it moved Nearby's
+  centre for every window, unseen).
+- The Nearest dialog's Must have labels are spaced ("shipyardmaterial trader" ran together).
+
 ## 2026-10-15 · Screenshots at 2560x1440: every page view as on a 27-inch monitor
 - Every full-page desktop shot in `docs/images/` retaken at 2560x1440 to match overview.png (Elite theme, the Highway's
   route line, a route to Colonia plotted): nearby, here, schematic, map, highway, history, samples, log, materials,

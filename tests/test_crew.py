@@ -273,8 +273,9 @@ class CrewState(unittest.TestCase):
                         {"role": "engineer", "voice": "en_GB-vctk-medium", "speaker": 3}, {"role": "engineer", "voice": "en_US-plain-low", "speaker": 0},
                         {"role": "science", "speaker": 1},                       # "as the personality" has no speaker
                         {"role": "engineer", "speaker": True}, {"role": "engineer", "name": "x" * 41}, {"role": "engineer", "name": 5},
-                        {"role": "xo", "personality": "sweet"}, {"role": "xo", "voice": None}, {})
-        self.assertEqual([s for s, _ in bad], [400] * 15)
+                        {"role": "xo", "personality": "sweet"}, {"role": "xo", "voice": None}, {},
+                        {"row": ["fuel"], "role": "xo"})                         # not a row's name (was a 500)
+        self.assertEqual([s for s, _ in bad], [400] * 16)
         self.db.executescript(ed_outrider.RESET_JOURNAL_DATA)
         self.assertEqual(self.state.crew_summary()["members"]["engineer"]["name"], "Mira")
         self.state.speaker = None
@@ -336,7 +337,8 @@ class CrewState(unittest.TestCase):
                           {"voice": "en_GB-broken-low", "role": "science"},
                           {"voice": "en_GB-vctk-medium", "speaker": "9", "role": "engineer"},
                           {"voice": "en_GB-vctk-medium", "speaker": "9"},           # no role: the voice's own pick (S40)
-                          {"voice": "en_GB-vctk-medium", "speaker": "1", "role": "xo"}):
+                          {"voice": "en_GB-vctk-medium", "speaker": "1", "role": "xo"},
+                          {"voice": "not a voice " * 50, "role": "engineer"}):       # any text a caller sends: not logged
                     r = await c.get("/api/say", params=dict(q, text=f"Line {len(out)}."))
                     out.append((await r.read())[44:].decode())
             return out
@@ -344,7 +346,8 @@ class CrewState(unittest.TestCase):
         with contextlib.redirect_stdout(log), contextlib.redirect_stderr(io.StringIO()):
             got = asyncio.run(go())
         self.assertEqual(got, ['en_GB-vctk-medium:{"speaker_id": 2}', "en_GB-cori-medium:None", "en_GB-cori-medium:None",
-                               "en_GB-cori-medium:None", "en_GB-vctk-medium:None", 'en_GB-vctk-medium:{"speaker_id": 1}'])
+                               "en_GB-cori-medium:None", "en_GB-vctk-medium:None", 'en_GB-vctk-medium:{"speaker_id": 1}',
+                               "en_GB-cori-medium:None"])
         self.assertEqual(log.getvalue().splitlines(), [
             "crew: Engineer's voice en_GB-gone-medium not installed: the XO speaks for it",
             "crew: Science Officer's voice en_GB-broken-low failed to load: the XO speaks for it",

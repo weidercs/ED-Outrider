@@ -701,6 +701,28 @@ class Reader(unittest.TestCase):
         self.assertIn(51, ed_outrider.PARSER_CHANGES)
         self.assertGreaterEqual(ed_outrider.PARSER_VERSION, 51)
 
+    def test_reread_stores_ships_where_they_were(self):
+        """A fold's place (a ship stored by ShipyardSwap) comes from the lines replayed in order, not the live dock
+        state a re-read keeps: docked elsewhere now, the re-read still stores the ship where it was swapped."""
+        lines = [ev(T("08:00:00"), "LoadGame", Commander="Tester", Ship="krait_light", ShipID=7),
+                 ev(T("08:00:05"), "Location", StarSystem="Sol", SystemAddress=10477373803, StarPos=[0, 0, 0], Docked=True,
+                    StationName="Abraham Lincoln", StationType="Orbis", MarketID=100),
+                 ev(T("08:10:00"), "ShipyardSwap", ShipType="anaconda", ShipID=5, StoreOldShip="krait_light", StoreShipID=7, MarketID=100),
+                 ev(T("08:10:02"), "Loadout", Ship="anaconda", ShipID=5, ShipName="", ShipIdent="AN-05", Modules=[]),
+                 ev(T("08:20:00"), "Undocked", StationName="Abraham Lincoln", MarketID=100),
+                 ev(T("08:40:00"), "FSDJump", StarSystem="Alpha Centauri", SystemAddress=1, StarPos=[3, 0, 0]),
+                 ev(T("09:00:00"), "Docked", StarSystem="Alpha Centauri", SystemAddress=1, StationName="Hutton Orbital",
+                    StationType="Outpost", MarketID=200)]
+        j, _ = setup(self, lines)
+        want = ("Sol", "Abraham Lincoln")
+        got = lambda jj: (jj.cmdr_view["stored_ships"]["ships"]["7"]["system"], jj.cmdr_view["stored_ships"]["ships"]["7"]["station"])
+        self.assertEqual(got(j), want)
+        ed_outrider.reset_journal_data(j.db)     # the re-read a PARSER_VERSION bump runs: meta docked is kept
+        again = ed_outrider.Journals(j.db)
+        for e in lines:
+            again.handle(e)
+        self.assertEqual(got(again), want)
+
     def test_other_handlers_still_see_shared_lines(self):
         """A line both the Commander view and another handler read (a MissionCompleted's materials, a Died) still
         reaches the other."""

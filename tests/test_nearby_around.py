@@ -107,6 +107,23 @@ class NearbyAround(unittest.TestCase):
         self.assertIn("doesn't know where", st.set_near_around("123456")[1])
         self.assertEqual(st.near_choice, {"around": "destination"})
 
+    def test_carrier_placed_later_is_used(self):
+        """A carrier (or target) Outrider cannot place yet is tried again after NEAR_MISS_RETRY_S, under the same id64:
+        its place is often learnt a moment later (a carrier that jumped without you), and Nearby then moves there."""
+        st = self.state
+        self.j.carrier = {"id64": 1234, "system": "Far Away"}
+        self.run_ticks(lambda: st.set_near_around("carrier"))
+        self.assertEqual(st.near_around_summary()["why"], "Outrider doesn't know where Far Away is")
+        base = {"name": "Far Away", "x": 500.0, "y": 0.0, "z": 0.0, "records": []}
+        self.db.execute("INSERT INTO spansh_systems (id64, updated_at, summary, fetched_ts, x, y, z) VALUES (1234, 'x', ?, ?, 500, 0, 0)",
+                        (json.dumps(base), self.now))
+        self.run_ticks(None)
+        self.assertEqual(st.center["name"], "Home Port")   # not worked out again every tick
+        st._near_miss = st._near_miss[:2] + (st._near_miss[2] - ed_outrider.NEAR_MISS_RETRY_S,)
+        self.run_ticks(None)
+        self.assertEqual((st.center["name"], st.near_why), ("Far Away", None))
+        self.assertTrue(st.near_pinned())
+
     def test_lock_needs_a_position(self):
         db = ed_outrider.open_db(":memory:")
         self.addCleanup(db.close)

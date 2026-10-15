@@ -382,6 +382,8 @@ RETRY_SAY_S = 1.0          # s: a Nearby retry says "asking Spansh again" only o
 # "carrier" and "next_stop" follow what they name (a new sphere when that changes); "lock" pins where you were when you
 # chose it, "system" a system by name (both kept with their coordinates). Saved in meta near_around (live-only)
 NEAR_AROUND_KINDS = ("here", "destination", "carrier", "next_stop", "lock", "system")
+NEAR_MISS_RETRY_S = 10     # s: Nearby's Around that cannot be placed is worked out again after this (the carrier's
+                           # or a target's place is often learnt a moment later, under the same id64)
 NEAR_REFRESH_GAP_S = 120   # s: Nearby's ↻ refresh asks Spansh again no sooner than this after its last ask (a free service)
 REPORTED_MAX_AGE = 86400   # s: the species reported on your system's bodies (S23) are asked for again after a day
 REPORTED_RETRY_S = 600     # s: ...and after a failed ask, not before this
@@ -4153,8 +4155,11 @@ class Journals:
         if key:
             if not self.fresh("cmdr:" + key, ts):
                 return
-            here = {"system": (self.docked or {}).get("system") or (self.pos or {}).get("name"), "station": (self.docked or {}).get("station"),
-                    "market": (self.docked or {}).get("market_id"), "login": (self.commander or {}).get("login_ts")}
+            # the place from journal-derived state replayed in order (pos, sale_dock), not self.docked: meta docked is
+            # kept through a re-read, so the re-read's older folds would be stamped with the live station
+            d = self.sale_dock or {}
+            here = {"system": d.get("system") or (self.pos or {}).get("name"), "station": d.get("station"), "market": d.get("market_id"),
+                    "login": (self.commander or {}).get("login_ts")}
             self.cmdr_view[key] = outrider.commander.apply(key, self.cmdr_view.get(key), ev, here)
             meta_set(self.db, key, self.cmdr_view[key])
         elif name == "LoadGame":
@@ -4263,15 +4268,16 @@ class Journals:
         return s.get("ship_id") if ts >= (s.get("ts") or "") else None
 
     def note_sale_dock(self, name, ev, ts):
-        """Where you are docked, for the sales' station (sale_events, mining_sales): meta sale_dock {station, market_id,
-        type, ts}, its station None once you leave or log in in space. Not self.docked: meta docked is kept through a
+        """Where you are docked, for the sales' station (sale_events, mining_sales) and the Commander folds' place: meta
+        sale_dock {station, market_id, type, system, ts}, its station None once you leave or log in in space. Not self.docked: meta docked is kept through a
         re-read, so the re-read's older docks leave it at its newest; this one is journal-derived and replayed in order,
         as cargo_dock is. A dock by Apex shuttle counts (you are there, and can sell your data there)."""
         if not self.fresh("sale_dock", ts, (self.sale_dock or {}).get("ts")):
             return   # an older dock or undock read late (a legacy folder) does not move it back
         here = name == "Docked" or (name == "Location" and ev.get("Docked"))
         self.sale_dock = {"station": ev.get("StationName") if here else None, "market_id": ev.get("MarketID") if here else None,
-                          "type": ev.get("StationType") if here else None, "ts": ts}
+                          "type": ev.get("StationType") if here else None, "system": ev.get("StarSystem") if here else None,
+                          "ts": ts}
         meta_set(self.db, "sale_dock", self.sale_dock)
 
     def sale_place(self, ts, market=None):
@@ -6928,7 +6934,7 @@ class State:
         self.center = None         # where the sphere is: your position, or Nearby's chosen centre (nearby_centre)
         self.near_choice = near_choice(meta_get(db, "near_around"))   # Nearby's Around, saved (set_near_around)
         self.near_why = None       # why the chosen centre cannot be used now (no target...): the sphere is around you
-        self._near_miss = None     # ((kind, id64), why): that failure, not worked out again every tick
+        self._near_miss = None     # ((kind, id64), why, time.monotonic()): that failure, not worked out again every tick
         self.near_asked = 0.0      # time.time() of the last Spansh sphere search started (↻ refresh's pace)
         self.sphere_failed = True  # the last sphere search failed (or none answered yet): nothing claimed about Spansh
         self.refresh_task = None
@@ -11912,14 +11918,15 @@ class State:
         id64, cur = self._around_id(kind), self.center
         if id64 is not None and cur and cur.get("id64") == id64 and cur.get("around") == kind:
             return cur
-        if self._near_miss and self._near_miss[0] == (kind, id64):
-            self.near_why = self._near_miss[1]
+        miss = self._near_miss
+        if miss and miss[0] == (kind, id64) and time.monotonic() - miss[2] < NEAR_MISS_RETRY_S:
+            self.near_why = miss[1]
             return pos
         o, why = self.search_origin(kind)
         if o:
             self._near_miss = None
             return o
-        self._near_miss, self.near_why = ((kind, id64), why), why
+        self._near_miss, self.near_why = ((kind, id64), why, time.monotonic()), why
         return pos
 
     def near_pinned(self):
@@ -14452,7 +14459,7 @@ class State:
                     crew[k] = body[k]
         elif "row" in body:
             row, role = body["row"], body.get("role")
-            if row not in outrider.speech.CREW_ROW_ROLE:
+            if not isinstance(row, str) or row not in outrider.speech.CREW_ROW_ROLE:
                 return bad(f"no alert row {row!r}")
             if role is not None and role not in ids:
                 return bad(f"no crew role {role!r}")
@@ -18682,7 +18689,7 @@ def make_app(state, hosts=None):
         voice = str(voice) if voice else None
         role = role if role in outrider.speech.CREW_IDS and role != "xo" and voice else None
         if voice and voice not in sp.installed():   # its speaker is that voice's person: not the main voice's (S40)
-            if role:
+            if role and outrider.tts.VOICE_NAME.fullmatch(voice):   # a voice name, not any text a caller sends
                 state.crew_note(role, voice, f"voice {voice} not installed")
             voice = speaker = role = None
         own = state.voices_in_use() if voice else ()

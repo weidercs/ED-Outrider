@@ -3510,6 +3510,7 @@ function renderBoxelMode() {
   const on = nearMode() === "boxel";
   document.querySelectorAll("input[name=nearMode]").forEach(r => { r.checked = r.value === nearMode(); });
   document.getElementById("nearWrap").classList.toggle("boxel", on);
+  document.getElementById("overView").classList.toggle("boxel", on);   // Focus/Lock sits on the Overview's bar there
   document.getElementById("nearPane").hidden = on;
   document.getElementById("boxelPane").hidden = !on;
   if (!on || !data) return;
@@ -10431,7 +10432,11 @@ document.getElementById("cmdrBody").addEventListener("toggle", e => { const k = 
 function cmdrGo(el) {
   const t = el.closest("[data-trader]"), m = el.closest("[data-cmmat]"), h = el.closest("[data-cmgo]"), e = el.closest("[data-emmonth]");
   if (t) openNearest({need: [t.dataset.trader]});
-  else if (m) { mFilter.value = m.dataset.cmmat; mHeld.checked = false; const b = document.querySelector('[data-view="mat"]'); if (b) b.click(); }
+  else if (m) {   // the grid redrawn here: a Materials tab drawn already is not fetched again on the switch
+    mFilter.value = m.dataset.cmmat; mHeld.checked = false; store.set("mHeld", false);
+    const b = document.querySelector('[data-view="mat"]'); if (b) b.click();
+    if (matData && !matData.error) renderMat();
+  }
   else if (h) { histReveal = h.dataset.cmgo === "trips" ? "trips" : "career"; const b = document.querySelector('[data-view="hist"]'); if (b) b.click(); }
   else if (e) { const [y, mo] = e.dataset.emmonth.split("-"); setEarnPeriod(y, String(+mo)); }
   return !!(t || m || h || e);

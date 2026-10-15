@@ -269,7 +269,7 @@ body.viewwin .views { display: none; }
 .nearhead { display: inline-flex; gap: 16px; align-items: center; flex-wrap: wrap; }
 .nearmode { display: inline-flex; gap: 2px; border: 1px solid var(--line); border-radius: 6px; padding: 1px 4px; }
 .nearmode label { display: inline-flex; align-items: center; gap: 3px; padding: 1px 4px; }
-#nearWrap.boxel .stdonly { display: none; }
+#nearWrap.boxel .stdonly, #overView.boxel .stdonly { display: none; }
 /* Nearby's Around and filters (2026-10-14, Rainmangames' PR #8's ideas): From you only while the list is around another
    system; the strip above the list names that centre (and Spansh's cut sphere) */
 #nearTable:not(.around) .fromcol { display: none; }
@@ -959,7 +959,7 @@ body.nowmode header, body.nowmode main { display: none; }
 .nearbtn { margin-left: 4px; }
 #nearDlg { width: min(1400px, calc(100vw - 32px)); max-width: none; } #nearDlg h3 span { color: var(--muted); font-weight: 400; font-size: 13px; }
 .nearbar { display: flex; gap: 8px 16px; flex-wrap: wrap; align-items: center; margin: 6px 0 8px; font-size: 13px; }
-.nearbar .grp { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .nearbar label { display: inline; color: var(--text); font-size: 13px; margin: 0; }
+.nearbar .grp, #nearNeeds { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .nearbar label { display: inline; color: var(--text); font-size: 13px; margin: 0; }
 .nearbar .lbl { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
 .nearbar input[type=number] { width: 4.5em; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; text-align: right; }
 .nearscroll { max-height: min(62vh, 640px); overflow: auto; }

@@ -2212,6 +2212,9 @@ const releasePayloads = async () => {
     // #13: each carrier row's name after the game's fleet carrier marker
     got.marks = [...d.querySelectorAll("#nearRows tr")].map(t => markText(t.cells[0]).slice(0, 17));
     got.foot = d.getElementById("nearFoot").textContent;
+    // the Must have labels spaced apart ("shipyard" and "material trader" ran together)
+    const nn = w.getComputedStyle(d.getElementById("nearNeeds"));
+    if (nn.display !== "flex" || nn.gap !== "8px") throw new Error(`Nearest: Must have labels not spaced: ${nn.display} ${nn.gap}`);
     const uc = dlg.querySelector('[data-nneed="UC"]'); uc.checked = true; uc.dispatchEvent(new w.Event("change", {bubbles: true})); await sleep(60);
     got.stored = w.localStorage.getItem("nearest");
     d.querySelector('#nearRows [data-nplot="Smojooe CX-A c27-15"]').click(); await sleep(80);
@@ -5991,7 +5994,8 @@ const releasePayloads = async () => {
       const bar = document.querySelector("#overView .ovbar"), nh = bar.firstElementChild;
       o.place = [nh.classList.contains("nearhead") && !!nh.querySelector(".nearmode + .nearAround #nearAround") &&
                    nh.querySelector(".nearAround .lbl").textContent === "Focus/Lock",
-                 !document.getElementById("ovCollapse"), document.getElementById("nearHead").hidden];
+                 !document.getElementById("ovCollapse"), document.getElementById("nearHead").hidden,
+                 getComputedStyle(nh.querySelector(".nearAround")).display === "none"];   // Boxel: Focus/Lock hidden there too
       view = "near"; render();
       const head = document.getElementById("nearHead"), opts = document.getElementById("nearOpts");
       o.place.push(!head.hidden && head.firstElementChild.classList.contains("nearhead"));
@@ -6023,7 +6027,7 @@ const releasePayloads = async () => {
       o.back = !document.getElementById("nearPane").hidden;
       return o; })()`);
     w.fetch = realFetch;
-    const want = {shown: [true, true, true], warning: true, place: [true, true, true, true], opts: "Mass|visited|fully explored|1 jump|no scan data|nearCopy|click a column heading to sort", rows: ["visited", "next", "try"], next: true, aims: "1,2", near: [true, true, true, true, true], doneBtn: true,
+    const want = {shown: [true, true, true], warning: true, place: [true, true, true, true, true], opts: "Mass|visited|fully explored|1 jump|no scan data|nearCopy|click a column heading to sort", rows: ["visited", "next", "try"], next: true, aims: "1,2", near: [true, true, true, true, true], doneBtn: true,
                   known: ["known · 3 of 14 bodies", "known · all 9 bodies", "known · honked only", "known · nothing reported"],
                   grid: [1024, "bxc v you", "2", "bxc k", "bxc c", "bxc", "layer 32 of 32 (yours)"],
                   gridTitle: "Drojau TF-H c13 · you visited 2 · tap to explore this boxel",
@@ -8541,8 +8545,11 @@ const releasePayloads = async () => {
       body().querySelector('.cmshort [data-trader]').click();
       got.trader = w.eval(`JSON.stringify(window.__cmNear)`);
       w.eval(`openNearest = __cmNearKeep;`);
+      // the Materials tab drawn once already (not fetched again on the switch): the link still filters its grid
+      d.querySelector('[data-view="mat"]').click(); await settle(400);
+      d.querySelector('[data-view="cmdr"]').click(); await settle(400);
       body().querySelector('[data-cmmat="Arsenic"]').click(); await settle(400);
-      got.toMat = [w.eval("view"), d.getElementById("mFilter").value];
+      got.toMat = [w.eval("view"), d.getElementById("mFilter").value, [...d.querySelectorAll("#matGrid .mrow > span:first-child")].map(text)];
       d.getElementById("mFilter").value = ""; d.getElementById("mFilter").dispatchEvent(new w.Event("input"));
       d.querySelector('[data-view="cmdr"]').click(); await settle(400);
       // should 8: a blueprint table that cannot be read says so
@@ -8625,7 +8632,7 @@ const releasePayloads = async () => {
       filtered: [["Frame shift drive 1 blueprint open"], ["G1 | Atypical Disrupted Wake Echoes 7/1 | ×7 | Felicity Farseer",
                  "G5 | Arsenic 0/1⇄Datamined Wake Exceptions 5/2 | – | Elvira Martuuk"], "cmFilter", 2, 1],
       trader: JSON.stringify({need: ["Raw"]}),
-      toMat: ["mat", "Arsenic"],
+      toMat: ["mat", "Arsenic", ["Arsenic"]],
       unreadable: "Blueprint table unreadable: resources/blueprints.json is missing or damaged (a fresh copy of Outrider brings it back).",
       fitMissions: [true, ["Left"], "2.5M", "Alpha Centauri", false, false, "20m"],
       fitSessions: [["cmCombat", [true, ["By ship", "Time"], "10-12 08:00"]], ["cmMining", [true, ["Prosp", "Time"], "10-12 11:00"]]].map(x => x[1]),
