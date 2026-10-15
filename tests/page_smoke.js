@@ -1756,6 +1756,8 @@ const releasePayloads = async () => {
       data.docking = {pad: 7, station: "G0X-85Z", where: "port side, toward the bow", layout: "fleet", map: {kind: "fleet", pad: 7,
         pads: Array.from({length: 16}, (_, i) => [i, i, 10, 16])}, ts: new Date().toISOString()}; renderNow();
       o.carrier = [...document.querySelectorAll("#nowBody svg.now-padmap rect")].map(r => r.getAttribute("class")).filter(c => c === "pm-me").length;
+      // sized by its height, never its width (Kurbo26: a carrier overflowed a 1920x1200 tablet's Now)
+      o.size = (st => [st.height, st.width])(getComputedStyle(document.querySelector("#nowBody svg.now-padmap")));
       // #13: a carrier's marker before its name, by the layout's kind (a squadron carrier's own)
       const station = () => markText(document.querySelector("#nowBody .now-pad > span"));
       o.marker = [station()];
@@ -1784,7 +1786,7 @@ const releasePayloads = async () => {
       data.docking = JSON.parse(d0).docking; data.moments = m0; renderNow();
       return JSON.stringify(o); })()`));
     const want = {now: "PAD 34Jameson Memorial", denied: "🛬 Docking denied at Jameson Memorial: no pad free for your ship: try again shortly",
-                  gone: true, map: ["at the back · up on your right", 44, 1, true], carrier: 1, marker: ["[fleet-carrier]G0X-85Z", "[squadron-carrier]ABCD"],
+                  gone: true, map: ["at the back · up on your right", 44, 1, true], carrier: 1, size: ["245.76px", "auto"], marker: ["[fleet-carrier]G0X-85Z", "[squadron-carrier]ABCD"],
                   plain: true, setting: true,
                   said: ["Pad 7. Port side, toward the bow.", "Denied: your ship is too big for this station's pads."], row: true};
     const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
@@ -4741,6 +4743,13 @@ const releasePayloads = async () => {
       document.querySelector('#tabNav [data-view="hwy"]').click();
       on(); o.push([view, tag()]); off(); o.push([view, tag()]);
       on(); document.querySelector('#tabNav [data-view="bm"]').click(); off(); o.push([view, tag()]);
+      // a pad granted: to Now, back once docked (the author, 2026-10-15); a refusal does not switch
+      const dk0 = data.docking ?? null;
+      document.querySelector('#tabNav [data-view="hist"]').click();
+      data.docking = {denied: "NoSpace", words: "no pad free", station: "X", ts: new Date().toISOString()}; render(); o.push([view]);
+      data.docking = {pad: 7, station: "G0X-85Z", ts: new Date().toISOString()}; render(); o.push([view]);
+      data.docking = null; render(); o.push([view]);
+      data.docking = dk0; render();
       return JSON.stringify(o); })()`));
     // the link in words (linkState's states), and the pill drawn with them
     got.link = tw.eval(`(() => { const fr0 = data.freshness, d0 = disconnected, h0 = lastHeard; data.freshness = Object.assign({}, fr0, {live: true});
@@ -5045,7 +5054,7 @@ const releasePayloads = async () => {
     })();
     const want = {desk: [true, true, true, true], shell: [true, true, true, true, true], moved: [true, true, true], theme: "lcars", start: "now",
       quiet: [false, false, "never", false], status: [true, true], pages: [],
-      mapSwitch: [["now", true], ["hwy", false], ["bm", false]],
+      mapSwitch: [["now", true], ["hwy", false], ["bm", false], ["hist"], ["now"], ["hist"]],
       themes: [["elite", "babylon5", "lcars", "lcars"], ["elite", "babylon5", "lcars", "lcars"], ["lcars", "elite", "babylon5", "narn", "minbari", "centauri", "vorlon", "shadow", "sith", "alliance", "dark"]],
       bodies: [true, true, ["gas", "elw", "water", "ammonia", "ice", "ice", "metal", "metal", "rock", "gas"], true, null, null, "star", true, true, true, 2, true, true, true],
       schemArt: [true, true, 2, true, false, true, true, false],

@@ -12610,8 +12610,8 @@ document.addEventListener("click", async e => {
 // the page nav (three groups of four pages), the main column (the header's strips, Now and the views, moved into it),
 // the game-button rail (the control rail) and the footer with the PC's voice controls. A theme stylesheet
 // (static/themes/<name>.css, data-theme on <html>, chosen per device) dresses them. An alert is a banner here; the tablet
-// speaks and plays sounds only with Play alerts here ticked (tabletSpeaks). The one page switch it makes by itself: to Now when the surface map shows, and
-// back to the page you were on when it hides. A tap on a table row opens a sheet with all its facts (no hover here).
+// speaks and plays sounds only with Play alerts here ticked (tabletSpeaks). The one page switch it makes by itself: to Now when the surface map shows or a pad is granted, and
+// back to the page you were on when that is over. A tap on a table row opens a sheet with all its facts (no hover here).
 const tabGroupOf = v => Object.keys(TB.groups).find(g => TB.groups[g].includes(v)) || "explore";
 // a sheet opened and closed (the open attribute where a browser has no modal dialogs: the smoke test's jsdom)
 const tabShow = d => { if (!d.open) { if (d.showModal) d.showModal(); else d.setAttribute("open", ""); } };
@@ -12698,10 +12698,12 @@ function tabTheme(name) {
   if (app && typeof app.setTheme === "function") { try { app.setTheme(t); } catch {} }
 }
 function tabDim(on) { document.documentElement.classList.toggle("tb-dim", !!on); document.getElementById("tabDim").checked = !!on; }
-// the surface map's switch: to Now when it shows, back to where you were when it hides (only if you are still on Now
-// and chose no page meanwhile). A pinned system belongs to the page it was pinned in: Now shows where you are.
+// the switch to Now and back: when the surface map shows or a station has given you a pad (the author, 2026-10-15:
+// Kurbo26's idea; PAD 34 and its diagram are on Now), back to where you were once both are over (docked, cancelled,
+// the map hidden), only if you are still on Now and chose no page meanwhile. A pinned system belongs to the page it was
+// pinned in: Now shows where you are.
 function tabAutoView() {
-  const shown = surfaceShows(data.surface);
+  const shown = surfaceShows(data.surface) || !!(data.docking && data.docking.pad != null);
   if (shown && !TB.mapWas) {
     TB.beforeMap = view !== "now" ? view : null;
     if (view !== "now") { pinnedSystem = null; view = "now"; saveView(); }

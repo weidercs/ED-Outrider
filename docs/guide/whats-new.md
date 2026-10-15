@@ -50,6 +50,7 @@ earnings idea (discussion #7), and the report of a too-large overlay on a 4K TV.
 - **Where it is**, at a starport or a carrier: "at the back, up on your right", "port side, toward the bow", and a
   diagram with your pad filled in. Now and then the voice reminds you the words assume **the green lights on your
   right** as you come through the slot.
+- **The tablet switches to Now** when you are given a pad, and back to your page once you have docked.
 - **Quiet on auto-dock**: with a docking computer fitted, the pad is shown at once but only said if the computer has
   not taken over within 12 seconds.
 - **Why a station refused**, when it isn't obvious: no pad free, ship too big, access restricted, hostile, your

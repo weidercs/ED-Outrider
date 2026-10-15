@@ -899,12 +899,14 @@ body.nowmode header, body.nowmode main { display: none; }
 #nowView .now-card.yes { border-color: var(--good); color: var(--good); } #nowView .now-card.no { color: var(--muted); }
 #nowView .now-card.alert { border-color: var(--warn); color: var(--warn); }
 /* #3: the pad the station gave you, in large letters, the station under it */
-#nowView .now-pad { font-size: clamp(48px, 11vw, 140px); font-weight: 800; color: var(--good); line-height: 1; margin: 1vh 0 2vh; }
+#nowView .now-pad { font-size: clamp(40px, 7vw, 96px); font-weight: 800; color: var(--good); line-height: 1; margin: 1vh 0 2vh; }
 #nowView .now-pad span { display: block; font-size: clamp(16px, 2.4vw, 28px); font-weight: 400; color: var(--muted); margin-top: .6vh; }
 #nowView .now-pad .mk { display: inline-block; margin-top: 0; }   /* a carrier's marker before its name, not a line */
 #nowView .now-pad .now-where { color: var(--text); font-size: clamp(18px, 3vw, 34px); }
 /* #12: the pad diagram under it (padMapSvg) */
-#nowView .now-padmap { display: block; width: min(60vw, 42vh, 360px); height: auto; margin-top: 1.4vh; }
+/* sized by its height (Kurbo26, 2026-10-15: a carrier, drawn tall, overflowed a 1920x1200 tablet's Now when sized by
+   width): a starport square, a carrier narrower, both the same height */
+#nowView .now-padmap { display: block; height: min(32vh, 300px); width: auto; max-width: 70vw; margin-top: 1.4vh; }
 .now-padmap polygon, .now-padmap line, .now-padmap rect, .now-padmap circle { fill: none; stroke-width: 1.2; }
 .now-padmap .pm-out { stroke: var(--muted); } .now-padmap .pm-wall, .now-padmap .pm-box { stroke: var(--line); }
 .now-padmap .pm-pad { stroke: var(--muted); }

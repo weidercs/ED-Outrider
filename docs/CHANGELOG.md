@@ -2,6 +2,16 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-15 · The pad's diagram sized to fit Now; the tablet to Now while docking
+From Kurbo26's try of the build (discussion #3).
+- Now's pad diagram is sized by its **height** (`min(32vh, 300px)`, width following): a carrier, drawn tall, ran off a
+  1920x1200 tablet's Now when it was sized by width; PAD's number a little smaller (`clamp(40px, 7vw, 96px)`).
+- **The tablet switches to Now when a pad is granted** and back to the page you were on once docked (the author: yes
+  to Kurbo26's idea, and back after): `tabAutoView`, the surface map's switch, now also for `data.docking.pad`; a
+  refusal does not switch, a page chosen meanwhile stays.
+- Smoke: the diagram's height rule; the tablet's switch to Now and back on a grant, none on a refusal. Guide: tablet.md;
+  What's new.
+
 ## 2026-10-15 · Version 2026.10.24
 - The CMDR tab (weidercs's PR #5, reworked) with **Earnings** (exploration, exobiology and mining income by month and
   year, every sale's place and ship, species, stations, ships, mining from the mined stock, labelled estimates, CSV) and
