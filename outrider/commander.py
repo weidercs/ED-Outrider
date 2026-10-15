@@ -572,6 +572,62 @@ def profile_now(dirs, days=INVENTORY_DAYS, now=None):
     return {"profile": profile(jscan.events(dirs, PROFILE_EVENTS, days, now))}
 
 
+# ---- the engineers' systems: where they lie, and how far from you ----
+
+PLACES_KEY = "engineer_places"   # meta: {system: [x, y, z]}, kept for good (the workshops do not move)
+PLACES_GAP_S = 0.3               # s between two Spansh lookups of a system not known here
+
+
+def _places(db):
+    row = db.execute("SELECT value FROM meta WHERE key=?", (PLACES_KEY,)).fetchone()
+    try:
+        got = json.loads(row["value"]) if row else {}
+    except (ValueError, TypeError):
+        got = {}
+    return got if isinstance(got, dict) else {}
+
+
+def ly(a, b):
+    return round(sum((p - q) ** 2 for p, q in zip(a, b)) ** 0.5, 1)
+
+
+async def engineer_distances(state, gap=PLACES_GAP_S):
+    """GET /api/commander/engineer_distances: {from (where you are), distances {system: ly}, missing [systems not
+    found], error}. Each system's place is found once: a system known here (your visits, bookmarks, Spansh's cached
+    records: State.find_local), else Spansh by its exact name; then kept (meta engineer_places). Without a position
+    yet, no distances."""
+    import asyncio
+    places, asked, err = _places(state.db), False, None
+    for system in sorted({v[0] for v in ENGINEER_SYSTEMS.values()}):
+        if system in places:
+            continue
+        local = state.find_local(system)
+        if local and None not in local[2:5]:
+            places[system] = list(local[2:5])
+            continue
+        if err:
+            continue   # Spansh failed once: the rest only from what is known here, Spansh asked again next time
+        try:
+            if asked:
+                await asyncio.sleep(gap)
+            asked = True
+            rec = await state.spansh.system_record(system)
+        except Exception as e:   # Spansh down or slow
+            err = f"Spansh could not be asked where every engineer is ({type(e).__name__})"
+            continue
+        if rec and None not in (rec.get("x"), rec.get("y"), rec.get("z")):
+            places[system] = [rec["x"], rec["y"], rec["z"]]
+    if places != _places(state.db):
+        state.db.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (PLACES_KEY, json.dumps(places)))
+        state.db.commit()
+    pos = state.journals.pos
+    here = (pos["x"], pos["y"], pos["z"]) if pos and None not in (pos.get("x"), pos.get("y"), pos.get("z")) else None
+    systems = sorted({v[0] for v in ENGINEER_SYSTEMS.values()})
+    return {"from": pos.get("name") if here else None,
+            "distances": {s: ly(here, places[s]) for s in systems if here and s in places},
+            "missing": [s for s in systems if s not in places], "error": err}
+
+
 # ---- the server's routes ----
 
 def add_routes(app, state, dirs):
@@ -592,3 +648,7 @@ def add_routes(app, state, dirs):
     route("engineering", lambda: engineering(dirs(), state.journals.materials))
     route("missions", lambda: missions_now(dirs()))
     route("sessions", lambda: sessions_now(dirs()))
+
+    async def distances(_):
+        return web.json_response(await engineer_distances(state))
+    app.router.add_get("/api/commander/engineer_distances", distances)

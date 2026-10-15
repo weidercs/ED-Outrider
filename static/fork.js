@@ -6,7 +6,7 @@
 // what engineering takes against your materials (Engineering), the missions you hold (Missions) and how your combat
 // and mining sessions went (Sessions). Each tab is read from the journals when opened, and again when stale ----
 // CM: tab (the one shown), data / error / at / loading per tab, q and craft (Engineering's filter), open (its modules)
-const CM = {tab: "profile", data: {}, error: {}, at: {}, loading: {}, q: "", craft: false, open: {}, wired: false};
+const CM = {dist: null, distKey: null, tab: "profile", data: {}, error: {}, at: {}, loading: {}, q: "", craft: false, open: {}, wired: false};
 const CM_TABS = [["profile", "CMDR", "your ranks and the way to the next, credits and assets, your fleet, your career"],
                  ["inventory", "Inventory", "your ships, stored modules, ship locker and suit loadouts"],
                  ["engineering", "Engineering", "every ship-module blueprint against the materials you hold"],
@@ -124,6 +124,25 @@ function cmdrInventoryHtml(d) {
       : `<div class="unk">The journal names a loadout only when you put it on: those worn in the last year are listed.</div>`);
 }
 
+// how far each engineer's system is from you (GET /api/commander/engineer_distances): asked when the Engineering tab
+// is drawn, again after a jump
+async function cmdrLoadDistances() {
+  const key = typeof posId === "function" ? posId() : null;
+  if (CM.distKey === key) return;
+  CM.distKey = key;
+  let d;
+  try { d = await apiJson("api/commander/engineer_distances"); } catch (err) { d = {error: err.message}; }
+  CM.dist = d && typeof d === "object" ? d : {error: "no answer"};
+  if (view === "cmdr" && CM.tab === "engineering") cmdrDrawBody();
+}
+// one engineer's distance cell: the light years, else why there are none. Pure.
+function cmdrDistHtml(system, dist) {
+  if (!system) return "";
+  if (!dist) return `<span class="unk">…</span>`;
+  const v = (dist.distances || {})[system];
+  if (v != null) return `${Number(v).toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})} ly`;
+  return `<span class="unk" title="${esc(!dist.from ? "no position yet: after your first jump" : dist.error || "Spansh does not know this system")}">?</span>`;
+}
 // the engineers: where each works, with Copy and Plot route (and how far you are with them). Pure.
 function cmdrEngineersHtml(eng) {
   if (!eng.length) return "";
@@ -131,10 +150,11 @@ function cmdrEngineersHtml(eng) {
     : e.progress ? `<span class="warnc">${esc(e.progress.toLowerCase())}</span>` : `<span class="unk">not met</span>`;
   const row = e => `<tr><td><b>${esc(e.name)}</b>${e.kind && e.kind !== "ship" ? ` <span class="unk">${esc(e.kind)}</span>` : ""}</td><td>${status(e)}</td>` +
     `<td>${e.system ? `${esc(e.system)}${e.region === "Colonia" ? ` <span class="unk">Colonia</span>` : ""}` : `<span class="unk">not known</span>`}</td>` +
+    `<td class="num">${cmdrDistHtml(e.system, CM.dist)}</td>` +
     `<td class="num">${e.system ? `<button type="button" class="mini" data-cmcopy="${esc(e.system)}" title="copy ${esc(e.system)} for the galaxy map">Copy</button>${plotBtn(e.system)}` : ""}</td></tr>`;
   const open = CM.open.__engineers !== false;
   return `<details class="cmengs" data-cmmod="__engineers"${open ? " open" : ""}><summary><b>Engineers</b> <span class="unk">where each works: copy the system or plot a route there</span></summary>` +
-    `<table class="cmengtable"><thead><tr><th>Engineer</th><th>With you</th><th>System</th><th></th></tr></thead><tbody>${eng.map(row).join("")}</tbody></table></details>`;
+    `<table class="cmengtable"><thead><tr><th>Engineer</th><th>With you</th><th>System</th><th class="num" title="light years from where you are">Distance</th><th></th></tr></thead><tbody>${eng.map(row).join("")}</tbody></table></details>`;
 }
 
 // Engineering: the blueprints by module, each grade's materials against what you hold. Pure (CM.q, CM.craft, CM.open).
@@ -159,7 +179,7 @@ function cmdrEngineeringHtml(d) {
   return `<div class="srow cmfilter"><input type="search" id="cmFilter" placeholder="filter: module, blueprint or material" value="${esc(CM.q)}" size="34">` +
     ` <label title="only the grades you hold every material for"><input type="checkbox" id="cmCraft"${CM.craft ? " checked" : ""}> only what I can craft now</label>` +
     ` <span class="unk">${eng.length ? `${unlocked} of ${eng.length} engineers unlocked` : "no engineer on record yet"} · ship modules only: no experimental effects, suits or weapons</span></div>` +
-    cmdrEngineersHtml(all) +
+    (cmdrLoadDistances(), "") + cmdrEngineersHtml(all) +
     ([...groups].map(([mod, list]) => `<details class="cmmod" data-cmmod="${esc(mod)}"${open(mod) ? " open" : ""}><summary><b>${esc(mod)}</b> <span class="unk">${list.length} blueprint${list.length === 1 ? "" : "s"}</span></summary>${list.join("")}</details>`).join("")
       || `<div class="unk">Nothing matches.</div>`);
 }

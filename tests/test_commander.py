@@ -293,6 +293,46 @@ class Profile(unittest.TestCase):
         self.assertEqual((bare["ranks"], bare["fleet"], bare["career"], bare["power"], bare["carrier"]), ([], [], [], None, None))
 
 
+class Distances(unittest.TestCase):
+    """How far each engineer's system is: known here (find_local), else asked of Spansh once and kept."""
+
+    def setUp(self):
+        self.db = ed_outrider.open_db(":memory:")
+        self.addCleanup(self.db.close)
+        self.asked = []
+        self.down = None
+
+        async def system_record(name):
+            self.asked.append(name)
+            if self.down:
+                raise self.down
+            return {"name": name, "id64": 1, "x": 100.0, "y": 0.0, "z": 0.0} if name != "Wyrd" else None
+        here = {"Sol": (10, "Sol", 0.0, 0.0, 0.0, "visited"), "Deciat": (11, "Deciat", 3.0, 4.0, 0.0, "visited")}
+        self.state = types.SimpleNamespace(db=self.db, find_local=lambda n: here.get(n),
+                                           spansh=types.SimpleNamespace(system_record=system_record),
+                                           journals=types.SimpleNamespace(pos={"name": "Sol", "x": 0.0, "y": 0.0, "z": 0.0}))
+
+    def test_distances(self):
+        out = asyncio.run(C.engineer_distances(self.state, gap=0))
+        systems = {v[0] for v in C.ENGINEER_SYSTEMS.values()}
+        self.assertEqual((out["from"], out["error"], out["missing"]), ("Sol", None, ["Wyrd"]))   # Spansh has no such system here
+        self.assertEqual((out["distances"]["Sol"], out["distances"]["Deciat"], out["distances"]["Khun"]), (0.0, 5.0, 100.0))
+        self.assertEqual(set(self.asked), systems - {"Sol", "Deciat"})              # the ones known here are not asked
+        self.asked.clear()
+        self.state.journals.pos = {"name": "Far", "x": 100.0, "y": 0.0, "z": 0.0}
+        again = asyncio.run(C.engineer_distances(self.state, gap=0))
+        self.assertEqual((self.asked, again["distances"]["Khun"], again["distances"]["Sol"]), (["Wyrd"], 0.0, 100.0))   # kept: only the missing one again
+        self.state.journals.pos = None
+        self.assertEqual(asyncio.run(C.engineer_distances(self.state, gap=0))["distances"], {})   # no position yet
+
+    def test_spansh_down(self):
+        self.down = OSError("no route to host")
+        out = asyncio.run(C.engineer_distances(self.state, gap=0))
+        self.assertIn("Spansh could not be asked", out["error"])
+        self.assertEqual(len(self.asked), 1)                                          # stopped at the first failure
+        self.assertEqual(set(out["distances"]), {"Sol", "Deciat"})
+
+
 class Server(unittest.TestCase):
     def test_routes(self):
         from aiohttp import web
@@ -329,7 +369,7 @@ class Server(unittest.TestCase):
         self.addCleanup(db.close)
         state = ed_outrider.State(db, ed_outrider.Journals(db), types.SimpleNamespace(cached=lambda i: (None, None)), 25)
         paths = {r.resource.canonical for r in ed_outrider.make_app(state).router.routes()}
-        for part in ("profile", "inventory", "engineering", "missions", "sessions"):
+        for part in ("profile", "inventory", "engineering", "missions", "sessions", "engineer_distances"):
             self.assertIn(f"/api/commander/{part}", paths)
 
 

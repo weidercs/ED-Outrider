@@ -8092,6 +8092,7 @@ const releasePayloads = async () => {
               level: 5, value: 5103953, transfer_cost: 0, transfer_s: 0, in_transit: false, hot: false}]},
             locker: {ts: "2026-10-12T09:03:00Z", kinds: [{name: "Goods", items: [{name: "Weapon <Schematic>", count: 3, mission: false}]}, {name: "Data", items: []}]},
             suits: [{loadout: "Bio", suit: "Artemis Suit", class: 3, mods: ["Increased sprint duration"], weapons: [{name: "TK Aphelion", class: 2, slot: "PrimaryWeapon1", mods: []}]}]},
+          engineer_distances: {from: "Sol", distances: {Deciat: 122.6, Khun: 1234.56}, missing: ["Einheriar"], error: null},
           engineering: {engineers: [{name: "Felicity Farseer", system: "Deciat", kind: "ship", region: "bubble", progress: "Unlocked", rank: 5},
                                     {name: "Elvira Martuuk", system: "Khun", kind: "ship", region: "bubble", progress: "Known", rank: null},
                                     {name: "Petra Olmanova", system: "Asura", kind: "ship", region: "Colonia", progress: null, rank: null},
@@ -8133,8 +8134,10 @@ const releasePayloads = async () => {
       got.locker = [...body().querySelectorAll(".cmitem")].map(text);
       await tab("engineering");
       got.engineering = [[...body().querySelectorAll("details.cmmod")].map(x => text(x.querySelector("summary")) + (x.open ? " open" : "")), text(body().querySelector(".cmfilter .unk"))];
-      // the engineers: where each works, with Copy (the system to the clipboard) and Plot route (S31's button)
+      // the engineers: where each works, how far, with Copy (the system to the clipboard) and Plot route (S31's button)
+      await sleep(60);
       const engRows = [...body().querySelectorAll(".cmengtable tbody tr")];
+      got.engDist = engRows.map(t => text(t.cells[3]));
       got.engineers = [body().querySelector("details.cmengs").open, engRows.map(t => [...t.cells].slice(0, 3).map(text).join(" | ")),
                        engRows.map(t => t.querySelectorAll("[data-cmcopy]").length + t.querySelectorAll("[data-plotto]").length).join("")];
       const cmCopied = [];
@@ -8174,7 +8177,7 @@ const releasePayloads = async () => {
       engineering: [["Frame shift drive 1 blueprint", "Sensors 1 blueprint"], "1 of 3 engineers unlocked · ship modules only: no experimental effects, suits or weapons"],
       engineers: [true, ["Felicity Farseer | unlocked, grade 5 | Deciat", "Elvira Martuuk | known | Khun", "Petra Olmanova | not met | Asura Colonia",
                          "Yi Shen suit & weapon | not met | Einheriar Colonia", "New One | known | not known"], "22220"],
-      engCopy: [["Deciat"], "Deciat"],
+      engCopy: [["Deciat"], "Deciat"], engDist: ["122.6 ly", "1,234.6 ly", "?", "?", ""],
       filtered: [["Frame shift drive 1 blueprint open"], ["G1 | Atypical Disrupted Wake Echoes 7/1 | ×7 | Felicity Farseer",
                  "G5 | Arsenic 0/1Datamined Wake Exceptions 5/2 | – | Elvira Martuuk"], "cmFilter", 2, 1],
       craft: 1,
@@ -8186,7 +8189,7 @@ const releasePayloads = async () => {
       pure: ["2 h 0 min", "2 d 7 h", "9 min"],
     };
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
-    if (JSON.stringify(asked) !== JSON.stringify(["api/commander/profile", "api/commander/inventory", "api/commander/engineering", "api/commander/missions", "api/commander/sessions",
+    if (JSON.stringify(asked) !== JSON.stringify(["api/commander/profile", "api/commander/inventory", "api/commander/engineering", "api/commander/engineer_distances", "api/commander/missions", "api/commander/sessions",
                                                  "api/commander/missions"])) bad.push("asked");
     const goodCM = !bad.length && errors.length === before;
     allOk = allOk && goodCM;

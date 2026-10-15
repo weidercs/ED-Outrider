@@ -156,6 +156,9 @@ Newest first. Upstream's is [CHANGELOG.md](CHANGELOG.md).
 - **Engineers' systems** in Commander → Engineering: every engineer (ship, and suit and weapon) with the system of
   their workshop, Copy and Plot route; the grade rows say where on hover (`commander.ENGINEER_SYSTEMS`,
   `engineer_list`). The journal never says where an engineer is: the table is the fork's, as the workshops stand.
+- A **Distance** column: light years from where you are to each engineer's system (GET
+  `/api/commander/engineer_distances`, `commander.engineer_distances`): each system's place found once, here
+  (`find_local`) or from Spansh, and kept (meta `engineer_places`); asked again after a jump.
 
 ## 2026-10-14 · This fork: Rocky removed
 - The Rocky personality is gone at the player's wish: his lines (`resources/speech.fork.json`, `outrider/speech_fork.py`),
