@@ -2,6 +2,31 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · Earnings summary: totals, months, sales, species, stations, ships, mining, estimates; CSV
+NEXT-VERSION #7, batch B of the CMDR tab's Earnings: the answer the page will show (batch C), nothing on the page yet.
+PARSER_VERSION 52 → 53 (both unreleased: one journal re-read either way).
+- **`outrider/earnings.py`**: `period` (all time, a year or a month, UTC as the journal), `read` (the period's rows, SQL
+  only) and the pure folds: `totals` (cartography and exobiology base, bonus, total; mining; sales), `month_series` (all
+  time whatever the period, the empty months between included), `sales` (every sale, the newest first; a mining sale is
+  its mined part), `species` (exact), `stations`, `per_ship` (its own jumps and ly, measured from the arrival before each;
+  bodies first scanned, sample runs, sales, active days), `mining` (refined per commodity by ship and SRV, sold, cr/t,
+  where, the best sales, and your own carrier's sales as the line left out), `common` (star classes, planet types,
+  species), `estimates` (labelled: the systems sold by Outrider's value of your scans, `State.sold_system_values` with
+  `outrider.unsold.body_value` as the Ledger's top finds; the data lost to deaths taken from the Ledger's losses, not
+  counted again) and `notes`.
+- **GET `/api/commander/earnings?year=&month=`** (`State.commander_earnings`, kept per period until the reader's data
+  moves): year four digits, month 1 to 12 only with a year, else 400 `{error, code: bad_request}`. At most 500 sales
+  listed, `more` says how many were left out. Not an AI tool yet.
+- **`/api/export?what=earnings`**: every sale as CSV (when, kind, station, station type, ship, what, base, bonus,
+  total), sales of mined ore to your own carrier left out.
+- **Exact species pay**: `bio_sales`' bio_data kept only each species and whether it paid the bonus; it now keeps each
+  entry's Value, Bonus and name (`sale_species`), so the species list is the game's figures, not an estimate. Its readers
+  (`organic_replay`, `sale_check`) take the first two by position, so an older row still reads.
+- Tests: `tests/test_earnings.py` (a year of made-up lines: the totals, a year and a month, the months with a gap, the
+  years, the sales and the cap, species, stations, ships, mining with a partial sale and one to your own carrier, the
+  most common, the estimates labelled with the Ledger's loss, the cache, an older bio sale, the route's good and bad
+  queries, the CSV); `test_spansh`'s bio_data check. Docs: AGENT_GUIDE.
+
 ## 2026-10-14 · Earnings data: where and with which ship each sale, jump, scan and sample; mined stock
 NEXT-VERSION #7 (javeliuswt, GitHub discussion #7), batch A of the CMDR tab's Earnings: the data, nothing shown yet.
 PARSER_VERSION 51 → 52 (51 is unreleased: one journal re-read either way).

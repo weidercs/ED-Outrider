@@ -207,6 +207,7 @@ import outrider.eddn       # EDDN's messages from journal events, and what its a
 import outrider.edsm       # EDSM's journal upload: the events with where you were, and what its answers mean
 import outrider.inara      # Inara's commander profile: travel, ranks, ships, inventory..., and what its answers mean
 import outrider.commander  # the Commander view: the commander, inventory, engineering, missions, sessions (folds of the journal)
+import outrider.earnings   # the Commander view's Earnings: what exploration, exobiology and mining paid (pure, + its SQL)
 import outrider.readclient  # EDSM's and Inara's account reads (G3): the key checks, EDSM's flight log
 import outrider.backfill   # filling a gap in EDSM's flight log (S47): the events rebuilt from the journals (pure)
 import outrider.edsmlog    # your EDSM flight log from before your journals (S67): kept entries, which count as visits
@@ -1385,7 +1386,8 @@ WANTED = tuple(f'"event":"{e}"'.encode() for e in dict.fromkeys(_OTHER_EVENTS + 
 #     were dropped; the SRV's refinery and scoop stay out of the ship's hold; an older Location's relog is judged
 #     against the arrival before it (a legacy folder read late counted every login as a visit).
 # 43: a system's population (system_population) and own_firsts.bio_x5: no x5 bio bonus in populated systems.
-PARSER_VERSION = 52
+PARSER_VERSION = 53
+# 53: a Vista Genomics sale keeps what each species paid and its name (bio_sales.bio_data: the Earnings' species, exact)
 # 52: the CMDR tab's Earnings (NEXT-VERSION #7): each sale keeps where you were docked and the ship you flew
 #     (sale_events' station, market_id, station_type, ship_id), each jump, first body scan and sample run its ship
 #     (jumps, own_bodies, own_organic ship_id), and mining income (mining_sales, from the mined stock: meta mined_stock)
@@ -1406,6 +1408,7 @@ PARSER_VERSION = 52
 # Why each version reads the journals again, in the player's words: said at the start that re-reads (reread_message).
 # Every bump adds its line here too (a test checks PARSER_VERSION has one).
 PARSER_CHANGES = {
+    53: "each exobiology sale keeps what every species in it paid (the Commander tab's Earnings)",
     52: "each sale keeps where it was made and with which ship, as do your jumps, scans and samples, and the ore you "
         "mined is followed until you sell it (mining income)",
     51: "the Commander tab's ships (each with its build, for its EDSY and Coriolis links), modules, locker, suit loadouts, "
@@ -1597,8 +1600,9 @@ CREATE TABLE IF NOT EXISTS own_mined (
 CREATE TABLE IF NOT EXISTS own_mapped (system INTEGER, body_id INTEGER, ts TEXT, first_ts TEXT, PRIMARY KEY (system, body_id));
 CREATE TABLE IF NOT EXISTS own_footfall (system INTEGER, body_id INTEGER, ts TEXT, PRIMARY KEY (system, body_id));
 CREATE TABLE IF NOT EXISTS sales (name TEXT, ts TEXT, bodies INTEGER);
--- Vista Genomics sales: bio_data the species each BioData entry named with whether it paid the bonus, JSON
--- [[species, bonus], ...] (lower case codex keys), for organic_replay; NULL on a row stored before it was kept.
+-- Vista Genomics sales: bio_data the species each BioData entry named with whether it paid the bonus, what it paid
+-- and its name, JSON [[species, bonus paid, value, bonus, name], ...] (lower case codex keys; sale_species), for
+-- organic_replay and the CMDR tab's Earnings; NULL on a row stored before it was kept, [[species, bonus], ...] before 53.
 -- source: the journal line ("file:offset"), so two Vista Genomics sales in one second stay two (Codex C1)
 CREATE TABLE IF NOT EXISTS bio_sales (ts TEXT, species INTEGER, bio_data TEXT, source TEXT, PRIMARY KEY (ts, source));
 CREATE INDEX IF NOT EXISTS sales_name ON sales (name);
@@ -4972,8 +4976,11 @@ SALE_SESSION_S = 300   # s: Vista Genomics sales this close together are one vis
 
 
 def sale_species(bio_data):
-    """A SellOrganicData's BioData as bio_sales keeps it: [[species (lower case codex key), bonus paid], ...]."""
-    return [[(b.get("Species") or "").lower(), bool(b.get("Bonus"))] for b in bio_data]
+    """A SellOrganicData's BioData as bio_sales keeps it: [[species (lower case codex key), bonus paid, value, bonus,
+    name], ...]: what each entry paid (Value, Bonus: the CMDR tab's Earnings, exact) and the species' localised name
+    (PARSER_VERSION 53; a row from before has the first two only). Readers take the first two by position."""
+    return [[(b.get("Species") or "").lower(), bool(b.get("Bonus")), int(b.get("Value") or 0), int(b.get("Bonus") or 0),
+             b.get("Species_Localised") or None] for b in bio_data]
 
 
 def organic_replay(db, until=None):
@@ -5006,7 +5013,7 @@ def organic_replay(db, until=None):
                 fates[key(r)] = ("lost" if kind == 0 else "sold", ts)
             aboard = []
         else:
-            for sp, bonus in x:
+            for sp, bonus, *_paid in x:
                 order = (0, None, 1) if bonus else (1, None, 0)
                 runs = [r for r in aboard if (r["species"] or "").lower() == sp]
                 if runs:   # min keeps the earliest of equals; an entry with no run on record takes nothing
@@ -5069,7 +5076,7 @@ def sale_check(db, ts, bio_data, source=None):
     def tally(entries):
         """Per species: [sold, paid, predicted, matched, unknown] for these [species, bonus] entries."""
         sold, paid = collections.Counter(), collections.Counter()
-        for sp, bonus in entries:
+        for sp, bonus, *_paid in entries:
             sold[sp] += 1
             paid[sp] += bool(bonus)
         out = {}
@@ -5083,7 +5090,7 @@ def sale_check(db, ts, bio_data, source=None):
     add = {sp: [a - b for a, b in zip(v, before.get(sp, [0] * 5))] for sp, v in after.items()}
     total = lambda i: sum(v[i] for v in add.values())
     return {"sold": total(0), "predicted": total(2), "matched": total(3), "paid": total(1), "unknown": total(4),
-            "used": {sp: [add[sp][2], add[sp][4]] for sp, _b in mine}}
+            "used": {sp: [add[sp][2], add[sp][4]] for sp, *_rest in mine}}
 
 
 def organic_state(db, done_ts, run=None):
@@ -9163,6 +9170,65 @@ class State:
         return {"sessions": out, "totals": outrider.commander.totals(out), "max": outrider.commander.SESSIONS_MAX,
                 "days": outrider.commander.SESSIONS_DAYS}
 
+    def commander_earnings(self, year=None, month=None):
+        """GET /api/commander/earnings?year=&month=: what exploration, exobiology and mining paid in the period (all time,
+        a year or a month; outrider.earnings.period raises ValueError for a bad one), with the all-time monthly series.
+        Kept per period until the reader's data moves: data_seq (jumps, scans, samples, sales, deaths, reload()) and
+        commander_version (a MarketSell, a Loadout: every line the Commander view folds)."""
+        p = outrider.earnings.period(year, month)
+        key = (self.journals.data_seq, self.journals.commander_version)
+        if getattr(self, "_earnings", (None,))[0] != key:
+            self._earnings = (key, {})
+        kept = self._earnings[1]
+        if (p["year"], p["month"]) not in kept:
+            names = self.journals.commodity_names
+            kept[p["year"], p["month"]] = outrider.earnings.summary(
+                p, outrider.earnings.read(self.db, p), self.earnings_ships(), lambda i: outrider.cargo.display(i, names),
+                journal_star, self.sold_system_values(), self.ledger()["losses"])
+        return kept[p["year"], p["month"]]
+
+    def earnings_ships(self):
+        """{ShipID: {name, type, type_name}} for the Earnings: every ship you have flown (fleet_loadouts: its name and the
+        game's symbol for its type), the type's own name where the stored ships' list gave one."""
+        stored = {s.get("id"): s for s in ((self.journals.cmdr_view.get("stored_ships") or {}).get("ships") or {}).values()}
+        out = {sid: {"name": s.get("name"), "type": s.get("type"), "type_name": s.get("type_name")} for sid, s in stored.items()}
+        for r in self.db.execute("SELECT ship_id, name, ship_type FROM fleet_loadouts"):
+            s = stored.get(r["ship_id"]) or {}
+            out[r["ship_id"]] = {"name": r["name"] or s.get("name"), "type": r["ship_type"] or s.get("type"),
+                                 "type_name": s.get("type_name")}
+        return out
+
+    def sold_system_values(self):
+        """Outrider's estimate of each system you sold data from (the sales table's names): your scans of its bodies
+        valued as top_finds values them (outrider.unsold.body_value with your first discovery and first mapping flags,
+        mapped or not), summed: {name: {id, value, bodies}}. An estimate: the game pays per page of systems. Kept until a
+        sale, a scan or a map is added (their counts)."""
+        if not outrider.unsold:
+            return {}
+        key = tuple(self.db.execute("SELECT (SELECT count(*) FROM sales), (SELECT count(*) FROM own_bodies), "
+                                    "(SELECT count(*) FROM own_mapped)").fetchone())
+        if getattr(self, "_sold_values", (None,))[0] == key:
+            return self._sold_values[1]
+        sold = "SELECT v.id64 FROM visits v WHERE v.name IN (SELECT name FROM sales)"
+        ids = {r[0]: r[1] for r in self.db.execute("SELECT name, id64 FROM visits WHERE name IN (SELECT name FROM sales)")}
+        mapped = {(r[0], r[1]) for r in self.db.execute(f"SELECT system, body_id FROM own_mapped WHERE system IN ({sold})")}
+        firsts = {(r[0], r[1]): r for r in self.db.execute(
+            f"SELECT system, body_id, was_discovered, was_mapped FROM own_firsts WHERE system IN ({sold})")}
+        per = {}
+        for r in self.db.execute(f"SELECT system, body_id, record FROM own_bodies WHERE system IN ({sold})"):
+            rec = json.loads(r["record"])
+            if not rec.get("ed"):
+                continue
+            f = firsts.get((r["system"], r["body_id"]))
+            body = dict(rec["ed"], first_discovered=bool(f and f["was_discovered"] == 0),
+                        first_mapped=bool(f and f["was_mapped"] == 0))
+            t = per.setdefault(r["system"], [0, 0])
+            t[0] += outrider.unsold.body_value(body, (r["system"], r["body_id"]) in mapped, False, True)
+            t[1] += 1
+        out = {name: {"id": str(i), "value": per[i][0], "bodies": per[i][1]} for name, i in ids.items() if i in per}
+        self._sold_values = (key, out)
+        return out
+
     def materials_summary(self):
         m = self.journals.materials
         if not m or not m.get("snapshot_ts"):
@@ -11325,6 +11391,11 @@ class State:
             return ["id64", "name", "x", "y", "z", "system_first_discovered", "system_state", "system_state_ts",
                     "bodies_first_discovered", "bodies_sold", "bodies_unsold", "bodies_lost", "first_mapped",
                     "first_footfalls"], rows
+        if what == "earnings":   # every sale the CMDR tab's Earnings counts, all time (outrider.earnings)
+            names = self.journals.commodity_names
+            sold = outrider.earnings.sales(outrider.earnings.read(self.db, outrider.earnings.period()), self.earnings_ships(),
+                                           lambda i: outrider.cargo.display(i, names))
+            return outrider.earnings.CSV_COLUMNS, outrider.earnings.csv_rows(sold)
         if what == "unsold" and outrider.unsold:
             rows = self._unsold_rows()
             return ["system", "body", "type", "first_discovered", "first_mapped", "mapped", "efficient", "value"], rows
@@ -19186,6 +19257,16 @@ def make_app(state, hosts=None):
             return web.json_response(fn())
         return view
 
+    async def commander_earnings_view(request):
+        """GET /api/commander/earnings?year=&month=: the Commander view's Earnings (State.commander_earnings); year four
+        digits, month 1 to 12 with a year, else 400 {error, code: bad_request}."""
+        year, month = request.query.get("year"), request.query.get("month")
+        try:
+            outrider.earnings.period(year, month)
+        except ValueError as e:
+            return web.json_response({"error": str(e), "code": "bad_request"}, status=400)
+        return web.json_response(state.commander_earnings(year, month))
+
     async def materials_view(_):
         inv = outrider.materials.inventory(state.journals.materials)
         inv["stale"] = bool((state.materials_summary() or {}).get("stale"))
@@ -19295,6 +19376,7 @@ def make_app(state, hosts=None):
                      ("engineering", state.commander_engineering), ("missions", state.commander_missions),
                      ("sessions", state.commander_sessions)):   # the Commander view's tabs, read from the database
         app.router.add_get(f"/api/commander/{part}", commander_view(fn))
+    app.router.add_get("/api/commander/earnings", commander_earnings_view)   # its period in the query (not an AI tool yet)
     app.router.add_post("/api/cargo/recount", cargo_recount_view)
     app.router.add_get("/api/cargo/lookup", cargo_lookup_view)
     app.router.add_get("/api/nearest", nearest_view)
