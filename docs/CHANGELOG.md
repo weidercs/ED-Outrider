@@ -2,6 +2,10 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-15 · Checked in game: a carrier's pad
+- The author landed at his carrier (2026-10-15): the pad's words and the carrier diagram (bow at the top) are right,
+  as the starport's were. DESIGN_NOTES' "Not yet tried in a live game" line for the pad's place goes.
+
 ## 2026-10-15 · ⛽ keeps a 5 % reserve and says when it is learning; the pad said after the station's voice
 - **The In-Game Route's ⛽** counts a hop only while it leaves `FUEL_REACH_RESERVE` (5 %) of the tank aboard: the
   author's Caspian "made" a 27-jump route with 0.1 t left (the fuel figures are a fit to his jumps, and a little cargo

@@ -1336,10 +1336,6 @@ upstream project's choices, not rules of the game.
 These were built and tested with synthetic events, recorded files, fakes or headless browsers, but not
 confirmed while playing. Treat reports about them as likely real.
 
-- The pad's place at carriers (#12): the carrier's bow at the top of the diagram and "port side, toward the bow" are
-  the LandingPad plugin's reading, not yet checked in game (`!fcpad 7` in Solo helps). At a starport the author checked
-  the words and the diagram in game (2026-10-15): right, and the pad said or kept quiet as the docking computer
-  takes over or not.
 
 - `CarrierBuy`, `CarrierDecommission` and `CarrierCancelDecommission`: written to Frontier's journal manual, never seen
   in the author's journals (the carrier was bought before them).
