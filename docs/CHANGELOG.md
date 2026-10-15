@@ -2,6 +2,10 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-15 · The docking pad shot, cropped
+- `docs/images/overlay-pad-crop.png` (760x465: the starport and carrier pad panels side by side) and
+  `overlay-pad-starport.png` (the starport panel alone), cut from overlay-pad.png, for listings that crop or shrink.
+
 ## 2026-10-15 · Inara uploads: confirmed live
 - The author's live trial on his test account works (2026-10-15): DESIGN_NOTES' "Inara uploads: not yet tried live"
   line goes.
