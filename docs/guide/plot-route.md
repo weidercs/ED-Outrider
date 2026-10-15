@@ -102,7 +102,7 @@ route's heading name it. A sweep takes up to 100 systems and replaces the survey
 **Trade.** The last plotter: Spansh's trade planner, station-to-station hops from where you are docked, in the
 same place as the survey routes (one of them at a time). See [Trading](cargo-and-trading.md#-trading).
 
-**The route line and 🎯.** The line under the tiles shows the next stop of whichever route the tab shows (🛣 the
+**The route line and 🎯.** The line under the tiles (on every tab) shows the next stop of whichever route the tab shows (🛣 the
 Highway, 💰 Road to Riches, 🧬 Exomastery, 🌍 Earth-like worlds, 🧪 ammonia worlds, 🧹 a sweep, 💱 a trade route). The
 **In-Game Route:** line above it is the game's own
 route, the one plotted in the galaxy map: it can differ from Outrider's until 🎯 targets the next stop, which has the
@@ -164,7 +164,7 @@ targeted neutron jump target Hwy Stop 38" (or "Failed to…") under its own aler
     **the keys go to whichever window has focus**: stay in the game until it is done.
 - The log gets one line per run ("highway auto-target: targeted Hwy Stop 38"); every step is printed only when it
   fails.
-- **🎯 Target next** (in the box, and beside "Next:" in the route line on Overview, Nearby, Here and Now) does the same
+- **🎯 Target next** (in the box, and beside "Next:" in the route line under the tiles, on every tab, and on Now) does the same
   on demand, whether or not auto-target is on: the next route system, or off the route the closest one, at once when
   it brings the game to the front, else after a 5-second countdown to click back into the game. A failed run puts
   **⟳ Retry** on its route row.

@@ -6716,8 +6716,9 @@ function hwyFront() {
 // the strip under the header: only on Overview, Nearby and Here, only with a route
 function renderHwyLine() {
   const el = hEl("hwyLine"), hw = data && data.highway, sv = data && data.survey, kind = lineKind(hw, sv);
-  const line = !["overview", "near", "here"].includes(view) ? "" : kind === "rich" ? surveyLineHtml(sv, {short: true})
-    : hw ? hwyLineHtml(hw, {short: true}) : "";
+  // on every view, as the target and arrival lines are: the header is the header (the author, 2026-10-15; it used to
+  // show on Overview, Nearby and Here only)
+  const line = kind === "rich" ? surveyLineHtml(sv, {short: true}) : hw ? hwyLineHtml(hw, {short: true}) : "";
   // S2's bit rides on the In-Game Route strip when there is one, else here
   const html = line && dryStretchHere() && !(data.route && data.route.hops && data.route.hops.length) ? `${line} · ${dryStretchHtml()}` : line;
   if (el.innerHTML !== html) el.innerHTML = html;

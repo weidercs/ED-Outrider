@@ -2,6 +2,11 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-15 · The route line on every tab
+- The "🛣 Next:" / survey route line under the tiles shows on every tab (History, Plot Route, Materials, CMDR...), as the
+  target and arrival lines do: the header is the header (the author). It showed on Overview, Nearby and Here only
+  (`renderHwyLine`). Smoke: the line on six other views. Guide: plot-route.md.
+
 ## 2026-10-15 · CMDR Inventory: a ship's picture on a 2 s hover (tap on the tablet)
 - The CMDR tab's **Inventory**: a mouse resting 2 s on a ship's row shows a card with its type's three-quarter picture,
   its name and type, beside the row and inside the window (`#shipCard`, fixed: the page never scrolls); it goes when the

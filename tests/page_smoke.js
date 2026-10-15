@@ -1594,12 +1594,14 @@ const releasePayloads = async () => {
     got.both = line().slice(0, 2);   // the survey route: plotted after the Highway's
     w.localStorage.setItem("hwyShow", JSON.stringify("hwy")); w.eval("renderHwyLine()");
     got.picked = line().slice(0, 2);
-    w.eval(`data.survey.complete = true; data.highway = null; renderHwyLine()`);
+    // every view shows it, Plot Route's included: the header is the header (the author, 2026-10-15)
+    got.views = ["hist", "hwy", "mat", "cmdr", "log", "search"].map(v => { w.eval(`view = "${v}"; renderHwyLine()`); return line().slice(0, 2); }).join("");
+    w.eval(`view = "near"; data.survey.complete = true; data.highway = null; renderHwyLine()`);
     got.done = line();
     w.localStorage.removeItem("hwyShow");
     w.__keep = keep; w.eval("[data.highway, data.survey, view] = window.__keep; renderHwyLine()");
     const want = {riches: "💰 Next: Rich C 🎯 target · 12.3 ly · 2 of 5 · 2 bodies to do here", exo: "🧬 Next: Rich C 🎯 target · 12.3 ly · 2 of 5 · 3 species to sample here",
-      both: "🧬", picked: "🛣", done: "🧬 Exomastery complete", aim: "survey:2"};
+      both: "🧬", picked: "🛣", views: "🛣🛣🛣🛣🛣🛣", done: "🧬 Exomastery complete", aim: "survey:2"};
     const bad = Object.keys(want).filter(k => !String(got[k]).startsWith(want[k]));
     const goodRL = !bad.length && errors.length === before;
     allOk = allOk && goodRL;
@@ -3877,7 +3879,7 @@ const releasePayloads = async () => {
     got.lineNext = line().textContent.replace(/\s+/g, " ").trim();
     line().querySelector(".copy").click();
     w.eval(`view = "map"; render()`);
-    got.lineOnMap = line().innerHTML;
+    got.lineOnMap = line().textContent.replace(/\s+/g, " ").trim();   // every tab now (the author, 2026-10-15)
     w.eval(`data.highway = ${JSON.stringify(hwyFixture({off: true}).summary)}; view = "near"; render()`);
     got.lineOff = line().textContent.replace(/\s+/g, " ").trim();
     w.eval(`data.highway = ${JSON.stringify(hwyFixture({complete: true}).summary)}; view = "here"; render()`);
@@ -3894,7 +3896,7 @@ const releasePayloads = async () => {
       suggest: "Colonia|Col 285 Sector AA-A c1", suggestFrom: ["hwyFromNames", "Sol|Solati", "Colonia|Col 285 Sector AA-A c1"],
       clearFirst: [0, "Click again to clear"],
       cleared: ["api/highway/clear POST,api/highway GET", "No route yet.", true],
-      lineNext: "🛣 Next: Hwy Stop 38 🎯 target · 4.2 ly · 38 of 399 · refuel in 3 jumps", lineOnMap: "",
+      lineNext: "🛣 Next: Hwy Stop 38 🎯 target · 4.2 ly · 38 of 399 · refuel in 3 jumps", lineOnMap: "🛣 Next: Hwy Stop 38 🎯 target · 4.2 ly · 38 of 399 · refuel in 3 jumps",
       lineOff: "🛣 Off Route: Detour · nearest Hwy Stop 39 12.0 ly 🎯 target", lineDone: "🛣 Highway complete", opened: "hwy", lineGone: "",
       copied: ["Hwy Stop 38"], exactRefuel: [true, true, false], neutronRefuel: [false, false, true],
       doneTo: [30, 35, 99, -1]};
