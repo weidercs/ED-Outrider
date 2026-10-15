@@ -1774,6 +1774,54 @@ const releasePayloads = async () => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| docking |", good ? "PAD 34 on Now, the pad and a refusal said on their own row, a clear quiet" : JSON.stringify(got), errors.slice(before));
   }
+  // 🛣 beside the carrier's 🎯 (the author, 2026-10-14): an exact route there at once, from 250 ly away only; a Highway
+  // route you follow is replaced only after Replace; the tile says it is plotting; a failed plot's reason is a toast
+  {
+    holdPayloads();
+    const w = dom.window, d = w.document, realFetch = w.fetch, before = errors.length, posted = [];
+    let plotting = {state: "running", plotter: "exact", to: "Smojooe AR-E b25-8"};
+    const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), {status, headers: {"Content-Type": "application/json"}}));
+    w.fetch = (u, o) => {
+      const s = String(u);
+      if (s === "api/highway/plot") { posted.push(JSON.parse(o.body)); return json({ok: true, plotting}, 202); }
+      if (s === "api/highway") return json({route: null, plotting, fleet: [], defaults: {}});
+      return realFetch(u, o);
+    };
+    const tick = () => new Promise(r => setTimeout(r, 60)), o = {};
+    const c0 = w.eval("JSON.stringify({c: data.carrier ?? null, h: data.highway ?? null})"), line = d.getElementById("carrierLine");
+    const show = (dist, hw) => w.eval(`data.carrier = Object.assign({}, data.carrier || {name: "OUT OF THE BLUE", callsign: "G0X-85Z"},
+      {system: "Smojooe AR-E b25-8", distance: ${dist}, here: false, aboard: false, decommission: null}); data.highway = ${JSON.stringify(hw)};
+      CP.ask = false; CP.to = null; H.data = null; renderCarrier();`);
+    show(200, null); o.near = !!line.querySelector(".cpbtn");
+    show(2111.4, null); o.far = !!line.querySelector(".cpbtn");
+    line.querySelector(".cpbtn").click(); await tick(); await tick();
+    o.sent = posted.map(b => b.plotter + " " + b.to).join("|");
+    o.wait = !!line.querySelector(".cpwait") && !line.querySelector(".cpbtn");
+    plotting = {state: "failed", plotter: "exact", to: "Smojooe AR-E b25-8", error: "Spansh did not answer"};
+    await w.eval("loadHwy(true)"); await tick();
+    o.failed = d.getElementById("toast").textContent;
+    o.back = !!line.querySelector(".cpbtn");
+    posted.length = 0;
+    show(2111.4, {destination: "Colonia", complete: false});
+    line.querySelector(".cpbtn").click(); await tick();
+    o.ask = (line.querySelector(".cpask") || {}).textContent || null;
+    line.querySelector('[data-carrierplot="no"]').click(); await tick();
+    o.kept = [posted.length, !!line.querySelector(".cpbtn")];
+    line.querySelector(".cpbtn").click(); await tick();
+    plotting = {state: "running", plotter: "exact", to: "Smojooe AR-E b25-8"};
+    line.querySelector('[data-carrierplot="yes"]').click(); await tick(); await tick();
+    o.replaced = posted.length;
+    w.fetch = realFetch;
+    w.eval(`clearTimeout(H.poll); H.poll = null; H.data = null; CP.ask = false; CP.to = null;
+      { const x = JSON.parse(${JSON.stringify(c0)}); data.carrier = x.c; data.highway = x.h; } renderCarrier();`);
+    await releasePayloads();
+    const want = {near: false, far: true, sent: "exact Smojooe AR-E b25-8", wait: true,
+                  failed: "No route to Smojooe AR-E b25-8: Spansh did not answer", back: true,
+                  ask: "replace your route to Colonia? Replace Keep", kept: [0, true], replaced: 1};
+    const good = JSON.stringify(o) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| carrier route |", good ? "🛣 from 250 ly, an exact plot, ask before replacing, plotting shown, a failure said" : JSON.stringify(o), errors.slice(before));
+  }
   // Settings links to the project on GitHub, with the version running (desktop at the top; the tablet's sheet too)
   {
     const w = dom.window, d = w.document, before = errors.length;

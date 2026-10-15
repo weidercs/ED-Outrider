@@ -344,6 +344,46 @@ let carrierWarned = null;
 // galaxy map, as 🎯 on a route's row does; where auto-target can work (hwyAimBtn: canAim)
 const carrierAim = c => c && !c.aboard && !c.here && c.system && !(c.decommission && c.decommission.done)
   ? hwyAimBtn(c.system, "carrier", null, true) : "";
+// 🛣 beside the carrier's 🎯 (the author, 2026-10-14): an exact route to your carrier's system plotted at once, without
+// Plot Route's screen (its form's saved exact options: injections, no neutron boosts, conservative range...); shown
+// only from CARRIER_PLOT_MIN_LY away; a Highway route you follow is replaced only once you say so (CP.ask). While the
+// plot runs (Plot Route's own poll, hwyPoll) the tile says so; a failed plot's reason is a toast
+const CARRIER_PLOT_MIN_LY = 250;
+const CP = {ask: false, to: null};
+function carrierPlot(c) {
+  if (!c || c.aboard || c.here || !c.system || (c.decommission && c.decommission.done) || !(c.distance >= CARRIER_PLOT_MIN_LY)) return "";
+  const p = H.data && H.data.plotting, hw = data && data.highway;
+  if (p && p.state === "running") return p.to === c.system ? ` <span class="unk cpwait">⏳ plotting a route there…</span>` : "";
+  if (CP.ask && hw && !hw.complete)
+    return ` <span class="cpask">replace your route to ${esc(hw.destination || "its end")}? ` +
+      `<button type="button" class="mini" data-carrierplot="yes">Replace</button> <button type="button" class="mini" data-carrierplot="no">Keep</button></span>`;
+  return ` <button type="button" class="mini cpbtn" data-carrierplot="go" title="plot an exact route to your carrier's system now (Plot Route's exact options)">🛣</button>`;
+}
+async function plotToCarrier() {
+  const c = data && data.carrier;
+  if (!c || !c.system) return;
+  const b = {plotter: "exact", to: c.system, injections: !!hwyCfg.injections, exclude_secondary: !!hwyCfg.exclude_secondary,
+             supercharged: !!hwyCfg.supercharged, no_neutrons: !!hwyCfg.no_neutrons};
+  if (hwyCfg.conservative != null) b.conservative = !!hwyCfg.conservative;
+  if (b.conservative && hwyCfg.conservative_ly != null) b.conservative_ly = hwyCfg.conservative_ly;
+  let r;
+  try { r = await apiJson("api/highway/plot", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(b)}); }
+  catch (err) { r = {error: err.message}; }
+  if (r.error) return toast(`No route plotted: ${r.error}`);
+  CP.to = c.system;
+  toast(`⏳ Plotting an exact route to ${c.system}`);
+  await loadHwy(true);   // starts Plot Route's poll while it runs
+  renderCarrier();
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest && e.target.closest("[data-carrierplot]");
+  if (!b) return;
+  e.preventDefault();
+  const act = b.dataset.carrierplot, hw = data && data.highway;
+  CP.ask = act === "go" && !!hw && !hw.complete;   // a route you follow: ask first (the author)
+  if (act === "go" && !CP.ask || act === "yes") plotToCarrier();
+  renderCarrier();
+});
 // the tritium for the trip to you (S13 A): red when the depot lacks it, amber when a confirmed tritium line in the hold
 // covers what it lacks (moved into the depot first, or, past the depot's 1,000 t, topped up again on the way)
 const CARRIER_BURN_TITLE = "the game's fuel formula, checked against real carrier jumps: round(5 + ly × (25000 + capacity used + depot) / 200000) t a jump; a buy order's reserved space weighs nothing";
@@ -400,7 +440,7 @@ function renderCarrier() {
   const fmtLy = d => d.toLocaleString("en-US", {maximumFractionDigits: 1});
   let where = c.aboard ? "<b>aboard</b>" : c.here ? "<b>in this system</b>"
     : `<span class="copy" data-name="${esc(c.system)}" title="click to copy">${esc(c.system)}</span>` + (c.distance != null ? ` · <b>${fmtLy(c.distance)} ly</b>` : "")
-      + carrierAim(c);
+      + carrierAim(c) + carrierPlot(c);
   // the game was not running when a booked jump left: this is where it was booked to go
   if (c.assumed) where += ` <span class="unk" title="the booked jump's destination: the journal confirms it at your next login">(booked jump, not yet confirmed)</span>`;
   // straight-line lower bounds: the real route is never shorter
@@ -6744,6 +6784,11 @@ async function loadHwy(force = false) {
   if (d.error) { H.error = d.error; H.key = null; }
   else { H.error = null; H.data = d; }
   if (d.plotting && d.plotting.state === "running" && !H.poll) hwyPoll();
+  if (CP.to && d.plotting && d.plotting.state !== "running") {   // the carrier's 🛣 plot has ended
+    if (d.plotting.state === "failed") toast(`No route to ${CP.to}: ${d.plotting.error || "the plot failed"}`);
+    CP.to = null;
+    renderCarrier();
+  }
   renderHwy();
   if (!d.error && view === "hwy" && hwyKey() !== H.key) loadHwy();   // the route moved while this was asked: again
 }

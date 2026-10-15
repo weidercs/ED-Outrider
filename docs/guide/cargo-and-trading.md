@@ -50,6 +50,10 @@ The **Materials** tab starts with your **Cargo**.
 - **🎯 beside your carrier's system** on the Carrier tile, when it is elsewhere: auto-target puts that system in the
   galaxy map, as 🎯 on a route's row does (see [the Neutron Highway](plot-route.md#-the-neutron-highway)). On the
   game PC only; none while you are aboard or in its system.
+- **🛣 beside it**, when your carrier is 250 ly or more away: plots an exact route to its system at once, with Plot
+  Route's exact options, without leaving the page you are on; the tile says "⏳ plotting a route there…" until it is in,
+  then the route line and its 🎯 take over. Following a Highway route already, it asks "replace your route to …?"
+  first (Replace / Keep).
 
 ## 💱 Trading
 

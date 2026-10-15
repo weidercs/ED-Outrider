@@ -2,6 +2,16 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · 🛣 on the Carrier tile: a route to your carrier at once
+- Beside the carrier's 🎯 (the author's ask): **🛣** plots an exact route to its system at once (POST
+  `api/highway/plot`, Plot Route's saved exact options: injections, no neutron boosts, conservative range), without
+  opening Plot Route; shown only from 250 ly away (`CARRIER_PLOT_MIN_LY`, the author), not aboard, in its system or
+  for a decommissioned carrier. A Highway route you follow is replaced only after "replace your route to …?" →
+  Replace (`CP.ask`; Keep leaves it). While it runs the tile says "⏳ plotting a route there…" (Plot Route's own poll,
+  `loadHwy`/`hwyPoll`); a failed plot's reason is a toast. `carrierPlot`, `plotToCarrier`.
+- Smoke: hidden under 250 ly, the exact plot sent, plotting shown, a failure said, the ask with Keep and Replace.
+  Guide: cargo-and-trading.md.
+
 ## 2026-10-14 · The pad in the Surface radar's place; the launcher's version line once
 - The overlay's pad (#3, #12: PAD 34, where it is, its diagram, or a refusal's words) takes the **Surface radar's**
   place, size and switch instead of the Target panel's (the author: the radar's place is free in space); at a
