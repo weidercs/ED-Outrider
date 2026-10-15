@@ -2,6 +2,17 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-15 · Version 2026.10.24
+- The CMDR tab (weidercs's PR #5, reworked) with **Earnings** (exploration, exobiology and mining income by month and
+  year, every sale's place and ship, species, stations, ships, mining from the mined stock, labelled estimates, CSV) and
+  ship pictures on Inventory; **docking** (the pad said and shown, where it is and a diagram at starports and carriers,
+  quiet on auto-dock, non-obvious refusals); **routes** (🛣 to the carrier, the In-Game Route's copying chips and ⛽
+  reach, no line for one jump, the route line on every tab, 📋 paste); **Nearby's Focus/Lock** and filters (PR #8's
+  ideas); the **overlay** for big screens (All Panels, down to 20 %, a 9 px text floor, text per panel), the strip's
+  security and reputation; the game's own **icons**; certifi and plain certificate errors (issue #9); the header tile
+  picker, upkeep weeks, the voice commands list, the launcher's header; docs (every route in the agent guide).
+  What's new has its section; the first start re-reads the journals once (PARSER_VERSION 54), after a backup.
+
 ## 2026-10-15 · Docs: every route in the agent guide, checked by a test; the CMDR tab by its name
 - NEXT-VERSION #11 (small docs debt). `docs/AGENT_GUIDE.md` now names every path `make_app` registers (107, the
   Commander loop's `/api/commander/<part>` as one): 23 were missing or written only as a relative shorthand

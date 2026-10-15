@@ -11,6 +11,102 @@ Outrider behaves. When a new release is out, a small **⬆ Update** pill appears
 
 ---
 
+## 2026.10.24 · 15 October 2026
+
+**Every credit you earned exploring, sampling and mining, the CMDR tab, your landing pad big and spoken (and where it
+is), the game's own icons, and a smaller overlay for big screens.**
+
+> [!IMPORTANT]
+> **The first start re-reads your journals once** (each sale's station and ship, and the ore you mined, for the new
+> Earnings): a few seconds, or a few minutes for years of journals. Outrider **backs up your database first**, and the
+> page shows how far it has got. Your bookmarks, sample points, routes and settings are kept.
+
+Thanks to **weidercs** for the Commander tab (pull request #5), **Rainmangames** for the ideas behind Focus/Lock
+(pull request #8), **Kurbo26** for docking help, the route strip and paste (discussion #3), **javeliuswt** for the
+earnings idea (discussion #7), and the report of a too-large overlay on a 4K TV.
+
+### 💰 The CMDR tab and your earnings
+
+- A new **CMDR** tab: who you are (credits, ranks with their progress, reputation, your ships and career), your
+  **Inventory** (ships with their builds in EDSY and Coriolis, stored modules, the ship locker, suits), **Engineering**
+  (blueprints against the materials you hold), **Missions** and **Sessions** (fighting and mining by login). Rest the
+  mouse on a ship in Inventory for 2 seconds to see a **picture of it** (tap its name on the tablet).
+- **Earnings**: what exploration, exobiology and mining paid you, all time, by year or by month, with a monthly chart.
+  Every sale with where you sold it and the ship you flew, the species that paid most, your best stations, each
+  ship's jumps, scans, samples and earnings, and the star classes, planet types and species you met most. **⬇ CSV**
+  saves every sale.
+- **Mining counts the ore you mined**, from the refinery to the sale, also when you store it on your carrier first;
+  bought tons are trade and left out, and so are sales to your own carrier (your own money). A hired crew member's cut
+  of your cartography is shown. Estimates (top systems by value, data lost to deaths) say they are estimates.
+
+<p align="center">
+  <img src="../images/earnings.png" alt="CMDR, Earnings: total, cartography, exobiology, mining and the data lost, a monthly bar chart, the latest sales with where and which ship" width="900">
+</p>
+
+### 🛬 Docking
+
+- **Your pad, said and shown**: "Pad 34." every time a station or carrier gives you one (by Comms, even while
+  hushed), in very large letters on **Now** and in the overlay (in the Surface radar's place, which is free in space).
+- **Where it is**, at a starport or a carrier: "at the back, up on your right", "port side, toward the bow", and a
+  diagram with your pad filled in. Now and then the voice reminds you the words assume **the green lights on your
+  right** as you come through the slot.
+- **Quiet on auto-dock**: with a docking computer fitted, the pad is shown at once but only said if the computer has
+  not taken over within 12 seconds.
+- **Why a station refused**, when it isn't obvious: no pad free, ship too big, access restricted, hostile, your
+  offences, a fighter still out.
+- Try a pad without docking: type `!sppad 34` (a starport), `!fcpad 7` (a fleet carrier) in the game's chat, best in
+  Solo. Pad layouts come from bgol's LandingPad plugin. More in [Voice and alerts](voice-and-alerts.md).
+
+<p align="center">
+  <img src="../images/overlay-pad.png" alt="The overlay while docking: PAD 34 under the station's name with where it is and a diagram of the starport seen from the slot; a carrier's pad seen from above" width="900">
+</p>
+
+### 🛣 Routes
+
+- **🛣 on the Carrier tile**: an exact route to your carrier at once, from 250 ly away; it asks before replacing a
+  route you follow.
+- **The In-Game Route strip**: click a chip to copy its system; **⛽** marks how far your tank goes without scooping
+  (⛽✓ when it makes the whole route), and moves as you scoop. A system targeted one jump away no longer gets a line.
+- **The route line** ("🛣 Next:") now shows on **every tab**, as the target line does.
+- **📋 paste**: beside Plot Route's From, To and Station, Search's Find, and the "a system…" boxes, it fills the field
+  from the game PC's clipboard (for a touchscreen window that never takes focus, and the Android app).
+- The route's ✦ "not reported" is only claimed where Outrider actually asked, and nothing is asked inside the bubble
+  or around Colonia.
+
+### 🔭 Nearby
+
+- **Focus/Lock**, beside Standard / Boxel: list the systems around your destination, your carrier, your next stop,
+  **this system** (locked while you fly about) or one you name; a **From you** column keeps your own distance.
+- One row of filters: **Mass** (a to h), visited, fully explored, 1 jump, **no scan data**, and **⧉ Copy visible**.
+- The Overview's ▾ This system fold is gone: the system pane always shows.
+
+### 🖥 The overlay
+
+- **Smaller for big screens**: **All Panels: Theme · Text Size · Scale** in Settings → In-game overlay, panels down to
+  20 %, a **Text** column per panel, and text never drawn under 9 px; Settings shows each panel's text height. **Ctrl
+  + wheel** in Arrange mode sizes them all.
+- **The system strip** shows a populated system's **security** and your **reputation** with its controlling faction
+  (Hostile in red).
+- **Show the pad diagram while docking** turns the diagram off; the number and its words stay.
+
+<p align="center">
+  <img src="../images/overlay-settings.png" alt="Settings, In-game overlay: the All Panels row with theme, text size and scale, the panel table with Size and Text columns" width="900">
+</p>
+
+### 🎨 And more
+
+- **The game's own icons**: the target button, carriers, Titans, the next stop, engineers and missions use the galaxy
+  map's markers, in your theme's colours.
+- Choose **which header tiles** show (Settings → Display); the Carrier tile says how many **weeks of upkeep** the
+  balance covers.
+- Settings → Voice → **Voice commands** lists what you can say without the AI.
+- **HTTPS that works on more machines**: the system's certificates plus certifi's (kept current by the launchers once a
+  week), and a plain "couldn't verify …'s certificate: check this PC's date and time" when it still fails.
+- The Android app no longer offers file pickers or saves it cannot do; it says so instead.
+- `launch_outrider.sh` opens each start with a header naming the version.
+
+---
+
 ## 2026.10.23 · 14 October 2026
 
 **The Massive Tweak Update: a crew of voices, 🎯 on every system, a Target and an Alerts panel over the game, fuel
