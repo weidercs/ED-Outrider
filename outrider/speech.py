@@ -23,7 +23,6 @@ import os
 import re
 
 from . import DATA_DIR, RESOURCES_DIR
-from . import speech_fork   # this fork: Rocky's lines, apart from speech.json
 
 # every line the page speaks, and the {placeholders} it fills for it. Always available: {name} (one of the
 # names you asked to be called, at random: game commander names are often unpronounceable), {cmdr} (the
@@ -311,6 +310,13 @@ def apply_bans(lines, bans):
     return out, whole
 
 
+def _stamp(path):
+    """When a file last changed, as far as a re-read goes: its time and its size (this fork: on Windows two writes in
+    one timestamp tick have the same time, and the second was missed). OSError when it is not there."""
+    st = os.stat(path)
+    return st.st_mtime_ns, st.st_size
+
+
 class SpeechLines:
     """speech.json, re-read when its modification time changes. A broken edit keeps the last good copy
     in use and reports what is wrong, so a typo never silences the alerts. Its speech_banned.json (see banned_path) is
@@ -324,7 +330,7 @@ class SpeechLines:
 
     def _refresh_bans(self):
         try:
-            mtime = os.stat(self.bans_path).st_mtime_ns
+            mtime = _stamp(self.bans_path)
         except OSError:
             mtime = None
         if mtime != self._bans_mtime:
@@ -334,7 +340,7 @@ class SpeechLines:
     def refresh(self):
         self._refresh_bans()
         try:
-            mtime = os.stat(self.path).st_mtime_ns
+            mtime = _stamp(self.path)
         except OSError:
             self.doc, self.error, self.problems, self._mtime = None, f"{self.path} not found: plain wording is used", [], None
             return
@@ -349,7 +355,6 @@ class SpeechLines:
                 ("the last good copy is still in use" if self.doc else "plain wording is used")
             return
         self.problems = check(doc)
-        doc = speech_fork.merge(doc)   # this fork's personalities (resources/speech.fork.json), the file's own checked
         if shape_ok(doc):
             self.doc, self.error = doc, None
         else:   # the last good document stays in use, and the bans keep working on it
@@ -425,7 +430,7 @@ class SpeechLines:
             return 500, {"error": f"{BANNED_FILE} could not be written ({e.strerror or e})"}
         self.bans, self._bans_gen = bans, self._bans_gen + 1
         try:
-            self._bans_mtime = os.stat(self.bans_path).st_mtime_ns
+            self._bans_mtime = _stamp(self.bans_path)
         except OSError:
             pass
         return 200, {"ok": True, "banned": sum(len(v) for v in self.banned().values())}

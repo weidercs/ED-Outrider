@@ -16,8 +16,6 @@ gets its changelog entry, code-map row, design note and settings at the bottom o
   (`outrider/biohunt.py`).
 - **Auto honk** can then target the next route system (`[autohonk] target_next`, `target_delay`).
 - **In-game overlay**: a Route panel (`[overlay] route_panel`).
-- **Voice**: the Rocky personality (`resources/speech.fork.json`, style `rocky`, merged into upstream's speech file as it loads; the wake words "vespa" and "rocky"), and
-  **space chatter**: with Rocky ticked the voice says something of its own when it has been quiet (`outrider/chatter.py`).
 - Sell / Buy results name the fleet carrier.
 - `scripts/verify.sh` and the tests pass on Windows (Git Bash).
 
@@ -37,11 +35,6 @@ runs `scripts/verify.sh`; with a PASS, `git push`. What to expect:
 - **The Commander view is offered upstream** (branch `commander-view`, a pull request). If upstream takes it, its page
   code arrives in `page.js`: delete the Commander part of `static/fork.js` and the fork's own hooks and styles for it
   then, or the page declares `CM` twice and does not load.
-- **A new alert upstream** has no Rocky lines: `tests/test_speech_fork.py` fails until
-  `resources/speech.fork.json` has twelve for it (no apostrophes, at most 110 characters, his tripled words and
-  ", question?", only the placeholders the alert's other lines use). Rocky is not in `resources/speech.json`: that
-  file is upstream's word for word (`outrider/speech_fork.py` merges him in, one line in `outrider/speech.py`), so
-  it merges without conflicts and upstream's tests of it (50 lines per personality) do not count him.
 - **A new upstream test that fails on Windows only**: a symlink (`@unittest.skipUnless(can_symlink(), ...)`), a file
   mode or a path Git Bash names its own way (`@unittest.skipIf(os.name == "nt", ...)`).
 - `resources/bio_rules.json` is rewritten by Outrider at start-up and marked `--skip-worktree` in this checkout. If
@@ -83,14 +76,6 @@ In the route lists:
   discovery (this fork; asked in the background, 40 systems a pass, the main star's discoverer). No name: EDSM
   credits nobody, or does not know the system.
 
-## Space chatter
-
-With spoken alerts on and a personality that has chatter ticked (Rocky is the first), the voice says something of
-its own when it has been quiet for a while: at a random moment between two times after the last line said, 2 and 10
-minutes unless you change them. It keeps quiet while the game is not running, the voice is hushed or another
-window speaks. The switch and the two times are under Personality in the voice dialog, per browser. The lines
-are `resources/chatter.json`: add a list for another personality and it chatters too.
-
 ## Settings
 
 Beside upstream's ([guide/settings.md](guide/settings.md)), all in `ed_outrider.toml.example`:
@@ -106,8 +91,6 @@ Beside upstream's ([AGENT_GUIDE.md](AGENT_GUIDE.md)):
 
 | File | What |
 |---|---|
-| `outrider/speech_fork.py` | This fork's personalities apart from upstream's speech file: `load()` (`resources/speech.fork.json`: {styles, lines: {alert: {rocky: [...]}}}), `merge(doc)` (adds a style the file does not name and its lists for the alerts the file has), called by `SpeechLines.refresh` after `check(doc)`. Tests: `tests/test_speech_fork.py` |
-| `outrider/chatter.py` | This fork's space chatter: `lines()` (`resources/chatter.json`: {personality: [sentences]}, `check`; read again when the file changes), `add_routes(app)` (GET `/api/chatter`). The timing is the page's, in `static/fork.js`: `chatterTick(now, env, say)` (pure but for `CH`: `chatterEnv` gathers what the page is doing, `chatterDue`, `chatterStyles`, `chatterPick`), a 5 s interval, `chatterWire` makes the settings row under `#speechStyles` (localStorage `chatter`: not in `SETTINGS_KEYS`, so not exported). Said with `speak(..., {kind: "chatter"})` and the personality's `styleVoice`. Tests: `tests/test_chatter.py`, the smoke test's "space chatter" batch |
 | `outrider/commander.py` | This fork's Commander view, pure functions over journal events: `profile` (`rank_rows` with `RANKS` and `RANK_CREDITS`, the money, the fleet, `CAREER`), `ships`, `stored_modules`, `locker`, `suits` (`inventory`), `engineers` and `blueprints(counts, known, name)` (`engineering`; `load_blueprints` reads `resources/blueprints.json`, built by `scripts/build_blueprints.py`), `missions(events, now)` (the login's `Missions` line decides what is still held), `sessions(events)` and `totals` (a session: LoadGame to the next or Shutdown; only those with fighting or mining). `add_routes(app, state, dirs)` serves GET `/api/commander/<part>` in an executor (one line in `make_app`). The page: view `cmdr` in `static/fork.js` (`CM`, `loadCmdr`, `cmdr<Tab>Html`), hooked from page.js's `render()`. Tests: `tests/test_commander.py` |
 | `outrider/jscan.py` | This fork's journal reader for the Commander view: `events(dirs, names, days)` (the files that can hold the window, by `outrider.log`'s `journal_files` / `window`; a line is parsed only when it names one of the events; a file that has not grown is read once: `_CACHE` by path, size and names) |
 | `static/fork.js` | This fork's own page code, loaded before page.js (definitions only; page.js's helpers are used when called). New fork page code goes here, with a one-line hook in page.js where upstream's code must call it |
@@ -164,14 +147,20 @@ Beside upstream's ([DESIGN_NOTES.md](DESIGN_NOTES.md)):
 - **Discoverer names are EDSM's, and best effort.** Spansh has no discoverer; EDSM credits whoever first uploaded
   a body there, which is not always who the game credits. Asked only for listed systems somebody has been to,
   slowly (EDSM limits requests), and kept for this run only.
-- **Space chatter is the page's, not a speech key** (this fork, `outrider/chatter.py`). The window that speaks is the
-  one that knows what was said and when, so it does the timing; the server only serves the lines. They are a file of
-  their own, not alerts in speech.json: an alert there needs lines in every personality (upstream's tests say so),
-  and chatter starts with one. Its settings are this browser's alone and are not in the settings export.
 
 ## Changelog
 
 Newest first. Upstream's is [CHANGELOG.md](CHANGELOG.md).
+
+## 2026-10-14 · This fork: Rocky removed
+- The Rocky personality is gone at the player's wish: his lines (`resources/speech.fork.json`, `outrider/speech_fork.py`),
+  the "Rocky" wake word and the AI layer's Rocky persona (`outrider/ask.py` is upstream's again), and space chatter,
+  which had his lines alone (`outrider/chatter.py`, `resources/chatter.json`, its part of `static/fork.js`).
+  `outrider/speech.py` and `docs/guide/voice-and-alerts.md` are upstream's again. A browser that had only Rocky
+  ticked speaks the plain wording until another personality is ticked.
+- The speech file and its bans are read again when their size changes too, not only their time (`outrider/speech.py`
+  `_stamp`): two writes in one timestamp tick, common on Windows, kept the old bans (upstream's
+  `test_a_ban_leaves_a_plain_line` failed one run in three). Test: `tests/test_fork_fixes.py`.
 
 ## 2026-10-14 · This fork: upstream's tweak-update merged in; Rocky in a file of his own
 - Upstream up to its 2026.10.23 release (the `tweak-update` branch): the crew, a voice per personality, Find a
