@@ -17,7 +17,7 @@ HERE=$PWD
 # terminal and in a service's log (the author, 2026-10-14); the version read from outrider/__init__.py in bash alone
 # (no sed or head: the launcher runs where only bash and Python can be counted on)
 banner() {
-    local version="" line bar="==============================================="
+    local version="" line bar="======================================================================"
     if [ -r outrider/__init__.py ]; then
         while IFS= read -r line || [ -n "$line" ]; do
             case $line in

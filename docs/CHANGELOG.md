@@ -2,6 +2,18 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · The pad in the Surface radar's place; the launcher's version line once
+- The overlay's pad (#3, #12: PAD 34, where it is, its diagram, or a refusal's words) takes the **Surface radar's**
+  place, size and switch instead of the Target panel's (the author: the radar's place is free in space); at a
+  planetary port the pad comes first until you touch down. `overlay.pad_panel(..., pid="radar")`, `State.overlay_panels`;
+  the Target panel keeps to your target.
+- Started by `launch_outrider.sh`, whose header names the version, Outrider's own "ED Outrider 2026.10.x" first line goes
+  into the log only (Show log, outrider.log), not the terminal again (the author: the same line twice); started any
+  other way it is printed as before. The header's rules run past the address's end.
+- Tests: the radar's place showing the pad (its switch, not over the galaxy map, the Target panel without it), the
+  version line under the launcher, the banner's width. Docs: overlay.md (Docking under the radar), voice-and-alerts,
+  settings, the example config.
+
 ## 2026-10-14 · The system strip: security and your reputation
 - The overlay's system strip shows, in a populated system, its security level and your reputation with its controlling
   faction on the top row's right, in the region's font (the author's ask; Hostile in red): `system_standing` keeps

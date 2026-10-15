@@ -1920,7 +1920,7 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["sampling", "leaving a body with exobiology unfinished (untouched genera only if you landed there); a species completed; within 100 m of a plant you tagged where the next sample would count", "alert"],
   ["approach", "approaching a landable body at or over your high-gravity level with unsold data over the amber level or rebuy multiple", "alert"],
   ["bodybrief", "approaching a body with biological signals: what they could be (the FSS already said so, so off by default)", null],
-  ["docking", "docking: the pad the station gave you (said every time, shown big on Now and the overlay's Target panel), and why one refused when it is not obvious (no pad free, ship too big, access restricted, hostile, your offences, a fighter out)", null],
+  ["docking", "docking: the pad the station gave you (said every time, shown big on Now and in the overlay's Surface radar place), and why one refused when it is not obvious (no pad free, ship too big, access restricted, hostile, your offences, a fighter out)", null],
   ["sell", "docked where you can sell, and what you banked", "cash"],
   ["saleleft", "a sale left data aboard: Universal Cartographics sells 50 systems a page, so a sale that stops after one page leaves the rest unsold (said once the pages stop and the estimate has caught up); likewise completed samples still unsold after a Vista Genomics sale", "alert"],
   ["unsold", "unsold data crosses a threshold", "cash"],
@@ -11246,9 +11246,9 @@ function overlayHtml(o) {
     // S25: with it on the overlay stays over the game while another window is active, unless other windows cover it
     `<label class="mod"><input type="checkbox" data-ov="show_inactive"${o.show_inactive ? " checked" : ""}> Keep showing when Elite is not the active window ` +
     `<span class="hint">still hidden while other windows cover the game (a native Wayland window is not seen)</span></label>` +
-    // #12: the pad diagram while docking at a starport or carrier, in the Target panel and on Now
+    // #12: the pad diagram while docking at a starport or carrier, in the Surface radar's place and on Now
     `<label class="mod"><input type="checkbox" data-ov="pad_diagram"${o.pad_diagram !== false ? " checked" : ""}> Show the pad diagram while docking ` +
-    `<span class="hint">at a starport or carrier, under PAD 34 in the Target panel and on Now (off: the number and where it is, in words)</span></label>` +
+    `<span class="hint">at a starport or carrier, under PAD 34 in the Surface radar's place and on Now (off: the number and where it is, in words)</span></label>` +
     // one control row (the author, 2026-10-14): "All Panels: Theme [ ] Text Size [ ] Scale [100 %]", the two buttons on
     // a line of their own under it, at its left (page.css .ovbtns)
     `<div class="mod ovctl" data-find="overlay.theme overlay.text_size overlay.panel_scale text size all panels"><b>All Panels:</b> <label>Theme <select data-ov="theme">${opt(OV_THEMES, o.theme)}</select></label>` +

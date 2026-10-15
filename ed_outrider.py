@@ -1233,7 +1233,7 @@ radar_range = {st["overlay"]["radar_range"]}   # metres from the radar's centre 
 analysis_only = [{", ".join(q(x) for x in st["overlay"]["analysis_only"])}]   # panels shown in your ship only while the HUD is in analysis mode: any of system, body, radar, strip, now, bio, alerts (not in the SRV, on foot or over the galaxy map)
 hide_docked = [{", ".join(q(x) for x in st["overlay"]["hide_docked"])}]   # panels hidden while docked (the ship, or on foot in a station, hangar or social space): any of system, body, strip, now, bio, alerts (the Target panel still shows over the galaxy map)
 show_inactive = {"true" if st["overlay"]["show_inactive"] else "false"}   # keep showing when Elite is not the active window (still hidden while other windows cover the game, minimised or on another desktop)
-pad_diagram = {"true" if st["overlay"]["pad_diagram"] else "false"}   # while docking at a starport or carrier, a diagram of where your pad is under PAD 34, in the Target panel and on Now (false: the number and its words only)
+pad_diagram = {"true" if st["overlay"]["pad_diagram"] else "false"}   # while docking at a starport or carrier, a diagram of where your pad is under PAD 34, in the overlay's Surface radar place and on Now (false: the number and its words only)
 
 [assistant]
 enabled = {"true" if st["assistant"]["enabled"] else "false"}   # the voice's AI layer for questions the fixed phrases do not match (resources/ask.json); nothing is sent anywhere while false
@@ -8616,11 +8616,8 @@ class State:
     def overlay_target_panel(self, st, pos, now, pal, size, galaxy):
         """The Target panel (D1, id "body"): inside a body's near-body zone (and TARGET_ZONE_LINGER_S after leaving it)
         that body, even over a target; outside it the body targeted in game in this system, else the system targeted.
-        Over the galaxy map always the system targeted. A body with nothing to say gives way to the system. While docking
-        (#3: a pad given, or a refusal's words), the pad in large letters instead (the author, 2026-10-14)."""
-        dock = None if galaxy else self.docking_shown(now)
-        if dock:
-            return outrider.overlay.pad_panel(dock, pal, size)
+        Over the galaxy map always the system targeted. A body with nothing to say gives way to the system. (The pad
+        while docking is the Surface radar's place now: overlay_panels.)"""
         if not galaxy:
             bodies = (self.overlay_detail(pos["id64"]) or {}).get("bodies") or []
             zone, dest = self.overlay_zone_body(st, pos, now), self.destination()
@@ -8691,13 +8688,17 @@ class State:
                                            CODEX_INTERESTING)
             if p:
                 out.append(p)
-        # the surface radar: on a body (landed, in the SRV, on foot) or low over it, as the surface map shows
+        # the Surface radar's place: while docking the pad (#3, #12: PAD 34, where it is, its diagram, or why a station
+        # refused; the author, 2026-10-14: the radar's place, free in space, rather than the Target panel's), even at a
+        # planetary port; else the radar on a body (landed, in the SRV, on foot) or low over it, as the surface map shows
         if cfg.get("radar"):
-            surf = self.surface_summary(now)
-            if surf and (surf.get("down") or surf.get("show")):
-                p = outrider.overlay.radar_panel(surf, pal, size["radar"], cfg["radar_range"])
-                if p:
-                    out.append(p)
+            dock = self.docking_shown(now)
+            surf = None if dock else self.surface_summary(now)
+            p = outrider.overlay.pad_panel(dock, pal, size["radar"], pid="radar") if dock else \
+                outrider.overlay.radar_panel(surf, pal, size["radar"], cfg["radar_range"]) \
+                if surf and (surf.get("down") or surf.get("show")) else None
+            if p:
+                out.append(p)
         # the page's alerts (S26): anywhere, for ALERT_SECONDS each
         if cfg.get("alerts_panel"):
             p = outrider.overlay.alerts_panel(self.overlay_alerts, pal, size["alerts"], now)
@@ -20611,9 +20612,14 @@ def main(argv=None):
 
 def main_with(args, serving):
     # the log's first line says which Outrider this is (the author, 2026-10-10): before the config is read, so before any
-    # of its warnings; not for the commands that print something and exit
+    # of its warnings; not for the commands that print something and exit. Started by launch_outrider.sh, whose header
+    # has just said it on the terminal, it goes into the log only (the author, 2026-10-14: the same line twice)
     if serving:
-        print(f"ED Outrider {outrider.__version__}")
+        line = f"ED Outrider {outrider.__version__}"
+        if os.environ.get("OUTRIDER_LAUNCHER") and outrider.serverlog.ACTIVE:
+            outrider.serverlog.ACTIVE.feed("out", line + "\n")
+        else:
+            print(line)
     detected = (outrider.unsold.LIVE_DIRS, outrider.unsold.LEGACY_DIRS) if outrider.unsold else ([], [])
     st = settings_from(load_config(args.config), args, os.environ.get("ED_JOURNALS"), detected)
     if serving:   # the config's secrets never appear in the log, whatever prints them

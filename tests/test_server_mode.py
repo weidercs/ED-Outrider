@@ -743,6 +743,6 @@ class LauncherBanner(unittest.TestCase):
         self.assertIsNotNone(fn, "banner() in launch_outrider.sh")
         self.assertRegex(text[fn.end():], r"^banner\n", "called at once, before the setup's own lines")
         out = subprocess.run([bash, "-c", fn.group(0) + "banner"], cwd=root, capture_output=True, text=True, timeout=10).stdout
-        bar = "=" * 47
+        bar = "=" * 70   # past the address's end (the author)
         self.assertEqual(out.split("\n"), ["", bar, f"#      ED Outrider v{outrider.__version__}", "#",
                                            "#                       https://github.com/weslocke/ED-Outrider", bar, ""])

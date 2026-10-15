@@ -39,7 +39,7 @@ notification and be spoken (🗣), chosen per alert in **⚙ Settings → Alerts
 - **docking** (its own row, **Docking**, spoken by Comms): the pad the station gave you, said every time, even while
   hushed ("Pad 34."), and why it refused when that isn't obvious: no pad free, ship too big, access restricted, hostile,
   your offences, a fighter still out (too far away is not said). No notification by default. The pad also shows large on
-  Now and the overlay's Target panel. At a starport or carrier the pad's place follows: "Pad 34. At the back, up on
+  Now and in the overlay (where the Surface radar goes). At a starport or carrier the pad's place follows: "Pad 34. At the back, up on
   your right." The words assume you come through the slot with the **green lights on your right**, and the first docking
   of each game session (then every fourth) says so: "With the green lights on your right, it's at the back, up on your
   right." **With a docking computer fitted** the pad is shown at once but said only if the computer hasn't taken over

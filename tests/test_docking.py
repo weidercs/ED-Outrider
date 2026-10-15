@@ -210,11 +210,11 @@ class Docking(unittest.TestCase):
         self.ev("DockingGranted", -86400, LandingPad=12, StationName="Old", StationType="Orbis")
         self.assertIsNone(ed_outrider.meta_get(self.db, "docking_said"))   # the cadence counts live grants only
 
-    def test_the_overlay_target_panel(self):
+    def test_the_pad_panel(self):
         pal = outrider.overlay.palette("default")
         p = outrider.overlay.pad_panel({"pad": 34, "station": "Jameson Memorial"}, pal)
         texts = [r[0] for it in p["items"] if it["t"] == "runs" for r in it["runs"]]
-        self.assertEqual(p["id"], "body")   # the Target panel: its place, size, its switch and hide-when-docked
+        self.assertEqual(p["id"], "radar")   # the Surface radar's place, size and switch (the author, 2026-10-14)
         self.assertIn("PAD 34", texts)
         big = next(it for it in p["items"] if it["t"] == "runs" and it["runs"][0][0] == "PAD 34")
         self.assertEqual((big["runs"][0][2], big.get("align")), ("huge", "center"))
@@ -234,14 +234,23 @@ class Docking(unittest.TestCase):
             self.assertNotIn("…", said, size)
         self.assertIsNone(outrider.overlay.pad_panel(None, pal))
 
-    def test_the_target_panel_shows_the_pad_while_docking(self):
-        """overlay_target_panel: the pad in place of the target while a grant holds, never over the galaxy map."""
+    def test_the_radars_place_shows_the_pad_while_docking(self):
+        """overlay_panels: while a grant holds, the pad in the Surface radar's place (switched with the radar), the
+        Target panel left to the target; never over the galaxy map (the author, 2026-10-14)."""
         self.j.pos = {"id64": 1, "name": "Shinrarta Dezhra", "x": 0, "y": 0, "z": 0, "ts": ts(-60)}
-        self.ev("DockingGranted", -5, LandingPad=34, StationName="Jameson Memorial")
-        pal, now = outrider.overlay.palette("default"), time.time()
-        p = self.state.overlay_target_panel({}, self.j.pos, now, pal, "normal", galaxy=False)
-        self.assertIn("PAD 34", [r[0] for it in p["items"] if it["t"] == "runs" for r in it["runs"]])
-        self.assertIsNone(self.state.overlay_target_panel({}, self.j.pos, now, pal, "normal", galaxy=True))   # no FSD target
+        self.state.overlay_cfg = dict(outrider.overlay.DEFAULTS, enabled=True)
+        self.j.status_json = {"live": True, "flags": ed_outrider.FLAG_IN_MAIN_SHIP, "gui_focus": 0, "ts": ts(-1)}
+        texts = lambda ps: {p["id"]: [r[0] for it in p["items"] if it["t"] == "runs" for r in it["runs"]] for p in ps}
+        self.assertNotIn("radar", texts(self.state.overlay_panels()))   # in space, no grant: the radar has nothing
+        self.ev("DockingGranted", -5, LandingPad=34, StationName="Jameson Memorial", StationType="Orbis")
+        shown = texts(self.state.overlay_panels())
+        self.assertIn("PAD 34", shown["radar"])
+        self.assertFalse(any("PAD 34" in t for pid, ts_ in shown.items() if pid != "radar" for t in ts_))
+        self.state.overlay_cfg = dict(self.state.overlay_cfg, radar=False)
+        self.assertNotIn("radar", texts(self.state.overlay_panels()))   # the radar's switch is the pad's too
+        self.state.overlay_cfg = dict(self.state.overlay_cfg, radar=True)
+        self.j.status_json = dict(self.j.status_json, gui_focus=ed_outrider.OVERLAY_GALAXY_MAP)
+        self.assertNotIn("radar", texts(self.state.overlay_panels()))   # over the galaxy map: the Target panel only
 
 
 if __name__ == "__main__":

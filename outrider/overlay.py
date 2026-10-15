@@ -997,8 +997,9 @@ def pad_map_items(m, pal, x0, y0, w):
     return items, LINE_H["small"] + 84 * u + 4
 
 
-def pad_panel(d, pal, size="normal"):
-    """The Target panel while docking (#3, the author 2026-10-14: the pad number in large letters): the station's name,
+def pad_panel(d, pal, size="normal", pid="radar"):
+    """The Surface radar's place while docking (#3, the author 2026-10-14: the pad number in large letters; at first the
+    Target panel's, moved the same day: the radar's place is free in space), panel id `pid`: the station's name,
     then "PAD 34" (FONT_PX huge); #12: where it is ("at the back · up on your right") and, at a starport or carrier
     with [overlay] pad_diagram on, the diagram (pad_map_items). A refusal: "Docking denied" and its words. d:
     State.docking_shown's. None without either."""
@@ -1006,7 +1007,7 @@ def pad_panel(d, pal, size="normal"):
         return None
     station = d.get("station") or "Docking"
     if d.get("pad") is not None:
-        p = text_panel("body", "🛬 " + station, [], pal, width=PAD_W, size=size)
+        p = text_panel(pid, "🛬 " + station, [], pal, width=PAD_W, size=size)
         y = p["h"] - PAD + 2
         p["items"].append(runs(PAD_W / 2, y, [(f"PAD {d['pad']}", pal["good"], "huge", True)], align="center"))
         y += LINE_H["huge"]
@@ -1025,7 +1026,7 @@ def pad_panel(d, pal, size="normal"):
         words = d["words"].split()   # word by word, so the reason wraps rather than being cut with …
         rows = [[("Docking denied", "bad")]] + flow([((" " if i else "") + w, "warn") for i, w in enumerate(words)],
                                                     PAD_W - 2 * PAD, size)
-        return text_panel("body", "🛬 " + station, rows, pal, width=PAD_W, size=size)
+        return text_panel(pid, "🛬 " + station, rows, pal, width=PAD_W, size=size)
     return None
 
 
