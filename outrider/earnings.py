@@ -58,14 +58,15 @@ def read(db, p):
     {sales: sale_events newest first, mining: mining_sales newest first, bio: bio_sales, jumps: in time order, before:
     the arrival before the period's first (where its first jump started), bodies: your first scans (own_firsts' first_ts,
     else the scan's), organic: completed sample runs, refined: play_activity's mining by login, systems: the systems sold
-    (sales: name, latest sale), names: {species key: name} from your runs, markets: {market_id: station type}, months:
-    [(month, kind, total)]}."""
+    (sales: name, latest sale), names: {species key: name} from your runs, markets: {market_id: station type} from the
+    data sales (a mining sale's own type is NULL in a database read before it was kept), months: [(month, kind,
+    total)]}."""
     a, b = p["start"], p["end"]
     return {
         "sales": _rows(db, "SELECT ts, kind, base, bonus, total, systems, species, station, market_id, station_type, ship_id "
                            "FROM sale_events WHERE ts >= ? AND ts < ? ORDER BY ts DESC, source DESC", a, b),
-        "mining": _rows(db, "SELECT ts, commodity, tons, mined_tons, price, total, mined_total, station, market_id, ship_id, "
-                            "own_carrier FROM mining_sales WHERE ts >= ? AND ts < ? ORDER BY ts DESC, source DESC", a, b),
+        "mining": _rows(db, "SELECT ts, commodity, tons, mined_tons, price, total, mined_total, station, market_id, station_type, "
+                            "ship_id, own_carrier FROM mining_sales WHERE ts >= ? AND ts < ? ORDER BY ts DESC, source DESC", a, b),
         "bio": _rows(db, "SELECT ts, bio_data FROM bio_sales WHERE ts >= ? AND ts < ?", a, b),
         "jumps": _rows(db, "SELECT ts, id64, x, y, z, star_class, kind, ship_id FROM jumps WHERE ts >= ? AND ts < ? "
                            "ORDER BY ts", a, b),
@@ -110,13 +111,19 @@ def month_series(months):
         y, m = (y + 1, 1) if m == 12 else (y, m + 1)
 
 
+def _station_type(data, r):
+    """A mining sale's station type: its own, else the one a data sale at that market recorded."""
+    return r.get("station_type") or data["markets"].get(r["market_id"])
+
+
 def _ship(ships, sid):
     """A sale's or a row's ship: {id, name, type (the game's symbol), type_name} from `ships` (by ShipID), None when the
-    ship was not known (a ride, a line from before PARSER_VERSION 52, one read out of order)."""
+    ship was not known (a ride, a line from before PARSER_VERSION 52, one read out of order). A blank name (the game keeps
+    " " for a ship whose name was cleared) is no name."""
     if sid is None:
         return None
     s = ships.get(sid) or {}
-    return {"id": sid, "name": s.get("name") or None, "type": s.get("type") or None, "type_name": s.get("type_name") or None}
+    return {"id": sid, "name": (s.get("name") or "").strip() or None, "type": s.get("type") or None, "type_name": s.get("type_name") or None}
 
 
 def sales(data, ships=None, commodity=None):
@@ -129,7 +136,7 @@ def sales(data, ships=None, commodity=None):
             "market_id": r["market_id"], "ship": _ship(ships, r["ship_id"]),
             "what": {"systems": r["systems"] or 0} if r["kind"] == "carto" else {"species": r["species"] or 0},
             "base": r["base"], "bonus": r["bonus"], "total": r["total"] or 0} for r in data["sales"]]
-    out += [{"ts": r["ts"], "kind": "mining", "station": r["station"], "station_type": data["markets"].get(r["market_id"]),
+    out += [{"ts": r["ts"], "kind": "mining", "station": r["station"], "station_type": _station_type(data, r),
              "market_id": r["market_id"], "ship": _ship(ships, r["ship_id"]),
              "what": {"commodity": commodity(r["commodity"]), "tons": r["mined_tons"], "of": r["tons"]},
              "base": None, "bonus": None, "total": r["mined_total"] or 0} for r in data["mining"] if not r["own_carrier"]]
@@ -137,14 +144,23 @@ def sales(data, ships=None, commodity=None):
     return out
 
 
+def crew_share(r):
+    """What your NPC crew took of one data sale: base + bonus - total, the game's own figures (a hired crew member takes a
+    share of every cartographic sale: 9 % in the author's journals until the crew was fired), 0 when none."""
+    if r.get("base") is None or r.get("total") is None:
+        return 0
+    return max(0, (r["base"] or 0) + (r["bonus"] or 0) - (r["total"] or 0))
+
+
 def totals(data):
-    """{carto: {base, bonus, total, sales, systems}, bio: {base, bonus, total, sales, species}, mining: {total, tons,
-    sales}, total, sales}: what the period's sales paid (mining: the mined part, your own carrier left out)."""
+    """{carto: {base, bonus, crew, total, sales, systems}, bio: {base, bonus, crew, total, sales, species}, mining: {total,
+    tons, sales}, total, sales}: what the period's sales paid (mining: the mined part, your own carrier left out). total
+    is what you were paid: base + bonus less your NPC crew's share (crew)."""
     out = {}
     for kind, count in (("carto", "systems"), ("bio", "species")):
         rows = [r for r in data["sales"] if r["kind"] == kind]
         out[kind] = {k: sum(r[k] or 0 for r in rows) for k in ("base", "bonus", "total")}
-        out[kind].update({"sales": len(rows), count: sum(r[count] or 0 for r in rows)})
+        out[kind].update({"crew": sum(crew_share(r) for r in rows), "sales": len(rows), count: sum(r[count] or 0 for r in rows)})
     mined = [r for r in data["mining"] if not r["own_carrier"]]
     out["mining"] = {"total": sum(r["mined_total"] or 0 for r in mined), "tons": sum(r["mined_tons"] or 0 for r in mined),
                      "sales": len(mined)}
@@ -258,7 +274,7 @@ def mining(data, commodity=None):
     for r in mine:
         if not r["station"]:
             continue
-        w = where.setdefault(r["market_id"] or r["station"], {"name": r["station"], "type": data["markets"].get(r["market_id"]),
+        w = where.setdefault(r["market_id"] or r["station"], {"name": r["station"], "type": _station_type(data, r),
                                                               "sales": 0, "tons": 0, "earned": 0})
         w["sales"] += 1
         w["tons"] += r["mined_tons"] or 0
@@ -317,8 +333,12 @@ def estimates(data, p, systems=None, losses=()):
 
 def notes(t, m):
     """The short lines the page shows under the figures (t: totals(), m: mining())."""
-    out = ["Exact: what each sale paid, as the journal says.",
-           "Mining counts the ore you mined, from refining to its sale; tons bought and sold with it are trade, left out."]
+    out = ["Exact: what each sale paid, as the journal says."]
+    crew = t["carto"]["crew"] + t["bio"]["crew"]
+    if crew:
+        out.append(f"Your NPC crew's share of your data sales ({crew:,} cr) went to them: a total is the base and bonus "
+                   f"less that share, what you were paid.")
+    out += ["Mining counts the ore you mined, from refining to its sale; tons bought and sold with it are trade, left out."]
     if m["own_carrier"]["sales"]:
         out.append(f"Mined ore sold to your own carrier is left out (your own money): {m['own_carrier']['sales']} "
                    f"sale{'s' if m['own_carrier']['sales'] != 1 else ''}, {m['own_carrier']['total']:,} cr.")

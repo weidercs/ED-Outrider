@@ -1387,7 +1387,9 @@ WANTED = tuple(f'"event":"{e}"'.encode() for e in dict.fromkeys(_OTHER_EVENTS + 
 #     against the arrival before it (a legacy folder read late counted every login as a visit).
 # 43: a system's population (system_population) and own_firsts.bio_x5: no x5 bio bonus in populated systems.
 PARSER_VERSION = 53
-# 53: a Vista Genomics sale keeps what each species paid and its name (bio_sales.bio_data: the Earnings' species, exact)
+# 53: a Vista Genomics sale keeps what each species paid and its name (bio_sales.bio_data: the Earnings' species, exact);
+#     still unreleased, so not bumped again for each mining sale's station type (mining_sales.station_type: a station
+#     where you only ever sold ore had none; NULL in a database read by 52 or 53 until its next re-read)
 # 52: the CMDR tab's Earnings (NEXT-VERSION #7): each sale keeps where you were docked and the ship you flew
 #     (sale_events' station, market_id, station_type, ship_id), each jump, first body scan and sample run its ship
 #     (jumps, own_bodies, own_organic ship_id), and mining income (mining_sales, from the mined stock: meta mined_stock)
@@ -1676,12 +1678,14 @@ CREATE TABLE IF NOT EXISTS sale_events (
 -- Mining income (Journals.note_mined): each MarketSell that sold tons you mined, one row per journal line (source
 -- "file:offset"). commodity: the journal's lower-case name; tons, price (SellPrice) and total (TotalSale): the whole
 -- sale; mined_tons: the part that was mined (at most what the mined stock, meta mined_stock, held), mined_total its
--- share of the total (total x mined_tons / tons, rounded); the rest of the sale was trade and is left out. own_carrier
--- 1: sold to your own carrier (your own money: left out of the earnings). Journal-derived: cleared by
--- RESET_JOURNAL_DATA.
+-- share of the total (total x mined_tons / tons, rounded); the rest of the sale was trade and is left out. station,
+-- station_type: where you were docked (Journals.sale_place, as sale_events'; the type added after 53 was written,
+-- not bumped: NULL until the next re-read). own_carrier 1: sold to your own carrier (your own money: left out of the
+-- earnings). Journal-derived: cleared by RESET_JOURNAL_DATA.
 CREATE TABLE IF NOT EXISTS mining_sales (
     ts TEXT, source TEXT, commodity TEXT, tons INTEGER, mined_tons INTEGER, price INTEGER, total INTEGER,
-    mined_total INTEGER, station TEXT, market_id INTEGER, ship_id INTEGER, own_carrier INTEGER, PRIMARY KEY (ts, source));
+    mined_total INTEGER, station TEXT, market_id INTEGER, ship_id INTEGER, own_carrier INTEGER, station_type TEXT,
+    PRIMARY KEY (ts, source));
 -- Outrider's estimate just before a sale (recorded live, none for sales before the tool saw them). Live only,
 -- so a journal re-read keeps it (not in RESET_JOURNAL_DATA); the ledger joins it to sale_events by (ts, kind).
 CREATE TABLE IF NOT EXISTS sale_estimates (ts TEXT, kind TEXT, estimate INTEGER, PRIMARY KEY (ts, kind));
@@ -4288,11 +4292,12 @@ class Journals:
                 mined_total = round(total * mined / tons)
                 market = ev.get("MarketID")
                 own = int(market is not None and market == (self.carrier or {}).get("id"))
-                station = self.sale_place(ts, market)[0]
+                station, _, station_type = self.sale_place(ts, market)
                 self.db.execute("INSERT OR IGNORE INTO mining_sales (ts, source, commodity, tons, mined_tons, price, total,"
-                                " mined_total, station, market_id, ship_id, own_carrier) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                " mined_total, station, market_id, ship_id, own_carrier, station_type)"
+                                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                                 (ts, self.line_source or f"MarketSell:{k}", k, tons, mined, ev.get("SellPrice"), total,
-                                 mined_total, station, market, self.ship_at(ts), own))
+                                 mined_total, station, market, self.ship_at(ts), own, station_type))
                 stock[k] -= mined
                 out = 0 if own else mined_total
         stock = {k: n for k, n in stock.items() if n > 0}
@@ -9189,13 +9194,18 @@ class State:
 
     def earnings_ships(self):
         """{ShipID: {name, type, type_name}} for the Earnings: every ship you have flown (fleet_loadouts: its name and the
-        game's symbol for its type), the type's own name where the stored ships' list gave one."""
+        game's symbol for its type), the type's own name where the stored ships' list gave one, for that ship or another
+        of its type (the CSV's words; the page names types itself)."""
         stored = {s.get("id"): s for s in ((self.journals.cmdr_view.get("stored_ships") or {}).get("ships") or {}).values()}
         out = {sid: {"name": s.get("name"), "type": s.get("type"), "type_name": s.get("type_name")} for sid, s in stored.items()}
         for r in self.db.execute("SELECT ship_id, name, ship_type FROM fleet_loadouts"):
             s = stored.get(r["ship_id"]) or {}
             out[r["ship_id"]] = {"name": r["name"] or s.get("name"), "type": r["ship_type"] or s.get("type"),
                                  "type_name": s.get("type_name")}
+        # a ship sold before the stored ships' list named its type: the name another ship of that type has
+        named = {str(s["type"]).lower(): s["type_name"] for s in out.values() if s["type"] and s["type_name"]}
+        for s in out.values():
+            s["type_name"] = s["type_name"] or named.get(str(s["type"] or "").lower())
         return out
 
     def sold_system_values(self):

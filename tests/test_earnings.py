@@ -130,8 +130,9 @@ class Summary(unittest.TestCase):
 
     def test_totals(self):
         t = self.state.commander_earnings()["totals"]
-        self.assertEqual(t["carto"], {"base": 1400, "bonus": 200, "total": 1600, "sales": 2, "systems": 2})
-        self.assertEqual(t["bio"], {"base": 1500000, "bonus": 4000000, "total": 5500000, "sales": 1, "species": 2})
+        self.assertEqual(t["carto"], {"base": 1400, "bonus": 200, "crew": 0, "total": 1600, "sales": 2, "systems": 2})
+        self.assertEqual(t["bio"], {"base": 1500000, "bonus": 4000000, "crew": 0, "total": 5500000, "sales": 1, "species": 2})
+        self.assertFalse(any("crew" in n for n in self.state.commander_earnings()["notes"]))   # no crew, no line
         self.assertEqual(t["mining"], {"total": 600000, "tons": 3, "sales": 1})   # the mined part; your carrier's left out
         self.assertEqual((t["total"], t["sales"]), (1600 + 5500000 + 600000, 4))
 
@@ -251,6 +252,44 @@ class Summary(unittest.TestCase):
         self.j.data_seq += 1
         self.assertEqual(self.state.commander_earnings()["species"],
                          [{"name": "Bacterium Aurasus", "count": 1, "value": 0, "bonus": 0, "total": 0}])
+
+
+class FromRealData(unittest.TestCase):
+    """What a check on a real database found (2026-10-14)."""
+
+    def test_the_crews_share_is_counted(self):
+        """A hired NPC crew member takes a share of each cartographic sale: TotalEarnings under BaseValue + Bonus (91 % in
+        that database while a crew member was hired). The totals carry the share, so base + bonus - crew is the total
+        shown, and a note says it."""
+        sale = dict(carto(T(AUG, "10:01:00"), "S101", 1000000, 100000), TotalEarnings=1001000)
+        _, state = setup(self, [docked(T(AUG, "10:00:00")), sale, carto(T(AUG, "10:02:00"), "S102", 500, 0)])
+        out = state.commander_earnings()
+        self.assertEqual(out["totals"]["carto"], {"base": 1000500, "bonus": 100000, "crew": 99000, "total": 1001500,
+                                                  "sales": 2, "systems": 2})
+        self.assertEqual(out["totals"]["bio"]["crew"], 0)
+        self.assertTrue(any("crew" in n and "99,000 cr" in n for n in out["notes"]), out["notes"])
+
+    def test_a_station_where_you_only_sold_ore_keeps_its_type(self):
+        """The station's type was taken from the data sales at that market only: one where you only sold ore had none."""
+        hub = 3228000777
+        _, state = setup(self, [loadout(T(OCT, "08:00:00"), 9, "python", "Digger"), refined(T(OCT, "08:10:00"), "painite"),
+                                docked(T(OCT, "09:00:00"), "Ore Hub", hub, "Outpost"), sell(T(OCT, "09:01:00"), "painite", 1, 300000, hub)])
+        out = state.commander_earnings()
+        self.assertEqual((out["sales"][0]["station"], out["sales"][0]["station_type"]), ("Ore Hub", "Outpost"))
+        self.assertEqual(out["stations"][0]["type"], "Outpost")
+        self.assertEqual(out["mining"]["stations"][0]["type"], "Outpost")
+
+    def test_the_csv_names_a_blank_named_ship_by_its_type(self):
+        """The game keeps " " for a ship whose name was cleared: the CSV said "  (corsair)". A ship gone from the stored
+        ships' list takes its type's name from another of its type."""
+        _, state = setup(self, [loadout(T(AUG, "08:00:00"), 7, "corsair", " "),
+                                ev(T(AUG, "08:05:00"), "StoredShips", StationName="Keller Relay", StarSystem="S101", ShipsHere=[
+                                    {"ShipID": 3, "ShipType": "corsair", "ShipType_Localised": "Corsair", "Name": "Other", "Value": 1}]),
+                                docked(T(AUG, "10:00:00")), carto(T(AUG, "10:01:00"), "S101", 500, 0)])
+        p = E.period()
+        rows = E.csv_rows(E.sales(E.read(state.db, p), state.earnings_ships()))
+        self.assertEqual(rows[0]["ship"], "Corsair")
+        self.assertIsNone(state.commander_earnings()["sales"][0]["ship"]["name"])
 
 
 class Period(unittest.TestCase):

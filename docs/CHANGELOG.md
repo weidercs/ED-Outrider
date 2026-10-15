@@ -2,6 +2,27 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-14 · Earnings: the guide, design notes, and fixes from a check on real data
+NEXT-VERSION #7, batch D. A copy of the author's database, rebuilt from his journals (read only), through the summary:
+the cartography and exobiology totals equal History's Ledger (its trips' paid figures summed) and the raw sales, mining
+equals the Sessions' Sold, the species add up to exobiology, the months, years, ships and sales to the total. Fixes:
+- **The crew's share**: a hired NPC crew member takes a share of each cartographic sale (`TotalEarnings` 91 % of
+  `BaseValue` + `Bonus` in those journals until the crew was fired), so Cartography's base and bonus did not add up to
+  its total. `totals` carries each data kind's `crew` (`crew_share`); the figure says "− … crew", a note says why.
+- **A mining sale's station type** came only from data sales at that market: a station where you only sold ore had
+  none (8 of 10 in that database). `mining_sales.station_type`, from `sale_place`. PARSER_VERSION stays 53 (unreleased:
+  the release's one re-read fills it; until then the data sales' type, as before).
+- **The CSV's ships**: a ship whose name was cleared (the game keeps " ") was written "  (corsair)": now its type; a
+  ship gone from the stored ships' list takes its type's name from another ship of that type.
+- **The Lynx Highliner** read "MediumTransport01" in the ship lists (the author, in game): page.js' `SHIP_NAMES` gains
+  `mediumtransport01`.
+- Docs: the guide's CMDR section (Earnings; Sessions' Sold in its new meaning), the README's CMDR line, DESIGN_NOTES
+  (Earnings' scope, exact figures and labelled estimates, UTC months, the Ledger's ownership; the mined-stock rule and
+  its gaps; not yet tried live), JOURNAL_REFERENCE (`TotalEarnings` and the crew), AGENT_GUIDE (and its scratch server:
+  never a real journal folder as `live`, since every server writes its uploads lease there).
+- Tests: test_earnings' `FromRealData` (each fix; `crew` 0 without crew); the smoke block "earnings" (the year's
+  Cartography figure with a crew's share); test_pages' `ShipNames` (the newer ships' symbols named, the Lynx's too).
+
 ## 2026-10-14 · Earnings tab: figures, period picker, monthly chart, sales, stations, species, ships, mining, estimates, CSV
 NEXT-VERSION #7, batch C: the page for batch B's answer. The CMDR tab's 6th sub-tab, **Earnings**, desktop and tablet.
 - **Figures**: total earned (and the sales), cartography and exobiology (each base + bonus), mining (tons mined), and

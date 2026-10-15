@@ -51,7 +51,7 @@ also run 24/7 on a home server in Docker.
 | 📍 **Nearest place to dock** | The nearest stations and fleet carriers you can land at and use (UC, Vista, repair, material traders...), from Spansh and the Deep Space Support Array's carriers, with how old each report is; one click plots there, or ask "nearest Vista" out loud. |
 | 💱 **Trading, kept small** | Where to sell or buy what you carry, from Spansh's markets, and Spansh's trade planner as a route Outrider follows and talks you through. |
 | 📜 **Your logbook** | Every journal event in a searchable log, every exobiology sample and what became of it, and a schematic of the system. |
-| 🧑‍🚀 **Your CMDR** | The CMDR tab: ranks with the way to the next, credits and assets, every ship (its build one click from EDSY or Coriolis) and stored module, engineering blueprints against your materials, the missions you hold, and how your combat and mining sessions went. |
+| 🧑‍🚀 **Your CMDR** | The CMDR tab: ranks with the way to the next, credits and assets, every ship (its build one click from EDSY or Coriolis) and stored module, engineering blueprints against your materials, the missions you hold, how your combat and mining sessions went, and what exploration, exobiology and mining earned you, month by month. |
 | 📈 **The long view** | Each trip from sale to sale with what it actually paid, what each ship loss cost, your best finds, ranks and career statistics. |
 | 🗣 **A voice with personality** | A natural neural voice, down to business, sarcastic or sweet, briefing you on arrival and warning before you leave something unfinished. |
 | ⛏️ **Rhino mining** | A heading-up surface map on Now with your rigs, sample points and ship, and every collection kept per body. |

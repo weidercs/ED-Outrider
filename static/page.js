@@ -286,7 +286,8 @@ const SHIP_NAMES = {sidewinder: "Sidewinder", eagle: "Eagle", hauler: "Hauler", 
   orca: "Orca", ferdelance: "Fer-de-Lance", mamba: "Mamba", python: "Python", python_nx: "Python Mk II", type9: "Type-9 Heavy",
   belugaliner: "Beluga Liner", type9_military: "Type-10 Defender", anaconda: "Anaconda", federation_corvette: "Federal Corvette",
   cutter: "Imperial Cutter", mandalay: "Mandalay", type8: "Type-8 Transporter", cobramkv: "Cobra Mk V", corsair: "Corsair",
-  panthermkii: "Panther Clipper Mk II", explorer_nx: "Caspian Explorer", lakonminer: "Type-11 Prospector", smallcombat01_nx: "Kestrel Mk II"};
+  panthermkii: "Panther Clipper Mk II", explorer_nx: "Caspian Explorer", lakonminer: "Type-11 Prospector", smallcombat01_nx: "Kestrel Mk II",
+  mediumtransport01: "Lynx Highliner"};
 const shipName = t => SHIP_NAMES[(t || "").toLowerCase()] || (t || "").replace(/_/g, " ");
 // what to call a ship: its own name, or its type's proper name when it has none (the journal gives an unnamed
 // ship its type id as the name, "krait_mkii", which reads and speaks badly)
@@ -10668,11 +10669,12 @@ function cmdrEarningsHtml(d) {
   if (!months.length && !t.sales)
     return `<div class="hwyttl">No sales yet</div><div class="unk cmnote">Nothing sold to Universal Cartographics, Vista Genomics or a ` +
       `market for ore you mined is in your journals yet. Once you sell, this shows what it paid, month by month, where and with which ship.</div>` + notes;
-  const sub = (base, bonus) => `<span class="unk emsub">${emCr(base)} + ${emCr(bonus)} bonus</span>`;
+  // base + bonus, less the NPC crew's share when one was hired (the total is what you were paid)
+  const sub = (base, bonus, crew) => `<span class="unk emsub">${emCr(base)} + ${emCr(bonus)} bonus${crew ? ` − ${emCr(crew)} crew` : ""}</span>`;
   const figs = `<div class="cmfigs emfigs">` +
     cmTile("Total earned", `${emCr(t.total)}<span class="unk emsub">${emPlural(t.sales || 0, "sale")}</span>`, "cartography, exobiology and mining: exactly what each sale paid") +
-    cmTile("Cartography", emCr(c.total) + sub(c.base, c.bonus), "Universal Cartographics: the base and the bonus the game paid") +
-    cmTile("Exobiology", emCr(b.total) + sub(b.base, b.bonus), "Vista Genomics: the base and the first-logged bonus the game paid") +
+    cmTile("Cartography", emCr(c.total) + sub(c.base, c.bonus, c.crew), "Universal Cartographics: the base and the bonus the game paid, less your NPC crew's share") +
+    cmTile("Exobiology", emCr(b.total) + sub(b.base, b.bonus, b.crew), "Vista Genomics: the base and the first-logged bonus the game paid, less your NPC crew's share") +
     cmTile("Mining", `${emCr(mi.total)}<span class="unk emsub">${cmNum(mi.tons || 0)} t mined</span>`, "the ore you mined and sold (bought tons and your own carrier left out)") +
     cmTile("Lost (estimate)", lost.deaths ? `~${emCr(lost.value)}<span class="unk emsub">${emPlural(lost.deaths, "death")} · estimate</span>` : `<span class="unk">no deaths</span>`,
       "an estimate: the data you died with, as History's Ledger values it") + `</div>`;

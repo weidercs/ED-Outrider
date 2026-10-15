@@ -458,8 +458,8 @@ always uses the config file's `rig_warn`.
 ## 🧑‍🚀 CMDR
 
 What you are, what you own and what you have been doing, from all your journals: Outrider keeps it as it reads them
-(nothing is asked of anyone), and a list updates as soon as the game writes something new for it. The tabs, Refresh
-and Engineering's filter sit above the list:
+(nothing is asked of anyone), and a list updates as soon as the game writes something new for it. The tabs, Refresh,
+Engineering's filter and Earnings' period sit above the list:
 
 - **CMDR**: who you are in the game, as of your last login (the game writes ranks and statistics then): your
   credits as the Commander tile shows them (the login's plus what you sold since), net worth, the value of your fleet
@@ -490,7 +490,30 @@ and Engineering's filter sit above the list:
   the next. Combat:
   kills, by ship, bounties and bonds, kills an hour, deaths. Mining: tons refined and of what (what the SRV's refinery
   collected on a planet is shown apart, and is not in the tons an hour), asteroids prospected and their content,
-  limpets launched, and what the haul sold for.
+  limpets launched, and **Sold**: what the ore you mined sold for in that login, wherever and whenever you mined it (a
+  login where you only sold shows 0 t refined). Tons you bought and sold with it, and sales to your own carrier, are
+  not counted, the same rule as Earnings below.
+- **Earnings**: what exploration, exobiology and mining paid you, from every sale in your journals.
+  - The figures: the total, cartography and exobiology (each its base and bonus, less your NPC crew's share while you
+    had crew hired: the total is what you were paid), mining (the tons you mined and sold), and the data you lost to
+    deaths (an estimate, from History's Ledger).
+  - Above the list: **All time**, a year or a month of it, kept on this device. The chart shows every month,
+    cartography, exobiology and mining stacked, the chosen ones highlighted; click a bar for that month.
+  - Then: every sale (when, where, the ship, what, base, bonus, total), where you sold most, the species that paid
+    most (the game's own figures), each ship's jumps, distance, bodies scanned, species sampled, earnings and active
+    days, mining (refined by ship and by SRV, what the mined tons sold for, per ton, where, the best sales), the star
+    classes, planet types and species you met most, and Outrider's estimates: the systems you sold by its value of your
+    scans (the game pays per page of systems, not per system) and the data lost to deaths. Each estimate says so.
+  - **⬇ CSV** saves every sale (in the Android app too).
+  - Mining counts only ore you mined, from the refinery to its sale. Tons you bought and sell with it are trade, left
+    out; ore you move to your carrier or jettison comes off the count, so ore taken back from your carrier and sold later
+    is not counted. Mined ore sold to your own carrier is left out: it is your own money changing pockets. Cartographic
+    and exobiology data sold at your carrier counts (the game pays it).
+  - Months are counted in UTC, as the game's journal times are: west of Greenwich, a sale late on a month's last
+    evening counts in the next month.
+  - Each trip's figures (sale to sale, with what deaths lost) are History's Ledger: **History › Trips**.
+  - The first start after updating reads all your journals again once (a few minutes): that fills in where and with
+    which ship you made every sale, and what you mined.
 
 ---
 

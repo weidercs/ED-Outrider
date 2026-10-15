@@ -81,6 +81,33 @@ upstream project's choices, not rules of the game.
   mission, whose `Expires` is the time itself (a Unix time). Links go from the CMDR tab outward only (the career to
   History, a short material to the Materials tab and the nearest trader); the header tiles stay informational. No
   voice lines: a mission about to expire is marked on the page only.
+- **The CMDR tab's Earnings: exploration, exobiology and mining, exact** (2026-10-14, NEXT-VERSION #7 from javeliuswt's
+  GitHub discussion #7; the author's choices of that day; `outrider/earnings.py`). What Universal Cartographics, Vista
+  Genomics and a market for ore you mined paid you: trade, missions and bounties are left out (an explorer's and a
+  miner's income; Cargo and trading and the Sessions tab cover the rest). Every figure is the game's own, from each sale
+  line, per sale, month, species, station and ship. Outrider's estimates only where nothing else answers, always under
+  Estimates or "Lost (estimate)" and labelled: the systems sold by its value of your scans (the game pays per page of
+  50 systems, never per system) and the data lost to deaths. A total is `TotalEarnings`, what you were paid: a hired NPC
+  crew member's share comes off it (base + bonus − total, the totals' `crew`, said on the figure and in a note; 9 % of
+  every cartographic sale in the author's journals until the crew was fired, none of Vista Genomics'). Months are UTC,
+  as the journal's times (a local month would move sales across months with the clock and differ between devices).
+  History's Ledger stays the owner of per-trip figures and of the losses: Earnings links to History › Trips and takes
+  the Ledger's `losses` as they are, never counting them again. The ship of every jump, first scan, sample run and
+  sale is the latest `Loadout`'s (a line from before PARSER_VERSION 52 or read out of order has none: "?"). Kept per
+  period until the reader's data moves (`data_seq`, `commander_version`): on the author's three years of journals
+  (2026-10-14) the first answer took 0.7 s (most of it the Ledger), another period 30 to 80 ms, a repeat nothing.
+- **Mining income is the ore you mined, followed until it is sold** (2026-10-14, the author's rule; `Journals.note_mined`,
+  meta `mined_stock`, `mining_sales`). The journal's `MarketSell` never says whether the tons were mined or bought, so
+  the reader keeps the mined tons aboard: every `MiningRefined` adds 1 t (the ship's refinery or the SRV's), a sale
+  counts as mining up to what that holds of its commodity (its share of `TotalSale`) and the rest is trade, left out; a
+  transfer to your carrier and a jettison take theirs off, a death empties it. One rule, two places: the Sessions tab's
+  Sold reads the same figure, in the login the sale was made in. Sales of mined ore to your own carrier are left out
+  (your own money changing pockets); cartographic and exobiology data sold at your carrier counts (the game pays it).
+  Known gaps: ore handed in to a mission (`MissionCompleted`, `CargoDepot`) or lost with a destroyed SRV stays counted
+  as mined, so bought tons of that commodity sold later can count as mined up to it; ore moved to your carrier and
+  taken back to sell is not counted (the carrier keeps no mined stock: on the author's journals, where most ore went
+  through the carrier, about half of what a carrier-side stock would count); a line read out of order (a legacy folder
+  read late) changes nothing (what was aboard then is not known).
 - **Green gas giants are a guess, said as one** (2026-10-12, `outrider/ggg.py`). The seven-layer ladder model is a
   community reconstruction (Canonn's issue 222, 2026-10-05), not the game's code: a match is "potential", never a fact,
   and a codex entry replaces it. It needs the journal's own temperature (green windows can be 0.00002 K wide): yours
@@ -1394,6 +1421,11 @@ confirmed while playing. Treat reports about them as likely real.
 - **certifi on Windows** (issue #9): the fix on a PC that had the error (none was tried), and the .bat's weekly certifi
   check on a real Windows (its lines checked as text, its Python run on Linux); Docker's `CERTIFI_CHECKED` rebuild
   only through `scripts/docker_bundle.sh`.
+- The CMDR tab's **Earnings** while playing: a sale made with the tab open (asked again when History's data moves), the
+  mined stock through a live mining run (ship and SRV refinery, a transfer to the carrier, a sale), and its ⬇ CSV saved
+  from the Android app. Checked on a copy of the author's database rebuilt from his journals (2026-10-14): the
+  cartography and exobiology totals equal History's Ledger and the raw sales, mining equals the Sessions' Sold, and
+  the species add up to exobiology; the crew's share seen in the journals only.
 - The In-Game Route's **hop lookups**: Spansh's search by id64 was probed (2026-10-14, `tests/fixtures/spansh_ids.json`),
   but not a real plotted route's ✦ chips out in the black, nor the bubble and Colonia skip (`ROUTE_LOOKUP_SKIP`) on a
   route crossing its edge.

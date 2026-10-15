@@ -104,7 +104,10 @@ const releasePayloads = async () => {
       notes: ["Exact: what each sale paid, as the journal says.", "Months are UTC, as the journal's times."]};
     const at = period => Object.assign({}, all, {period});
     const none = {sales: 0, tons: 0, total: 0};
-    return {all, year: at({kind: "year", label: "2026", year: 2026, month: null}), month: at({kind: "month", label: "February 2026", year: 2026, month: 2}),
+    // 2026: a hired NPC crew member took 630k of the cartography (TotalEarnings under BaseValue + Bonus)
+    const year = Object.assign(at({kind: "year", label: "2026", year: 2026, month: null}), {totals: Object.assign({}, all.totals,
+      {carto: Object.assign({}, all.totals.carto, {crew: 630000, total: 6370000})})});
+    return {all, year, month: at({kind: "month", label: "February 2026", year: 2026, month: 2}),
       y2025: at({kind: "year", label: "2025", year: 2025, month: null}),
       empty: {period: all.period, totals: {carto: {base: 0, bonus: 0, total: 0, sales: 0, systems: 0}, bio: {base: 0, bonus: 0, total: 0, sales: 0, species: 0},
                                            mining: {total: 0, tons: 0, sales: 0}, total: 0, sales: 0},
@@ -8590,7 +8593,8 @@ const releasePayloads = async () => {
       // the picker: a year, then a month of it; each asks with its query and is kept for this device
       await pick("cmEarnYear", "2026");
       got.year = [asked[asked.length - 1], text(body().querySelector(".hwyttl")), [...d.querySelectorAll("#cmEarnMonth option")].map(o => text(o)),
-                  d.getElementById("cmEarnMonth").hidden, bars().map(x => x[4]), w.eval(`store.get("cmEarnPeriod")`)];
+                  d.getElementById("cmEarnMonth").hidden, bars().map(x => x[4]), w.eval(`store.get("cmEarnPeriod")`),
+                  text(body().querySelectorAll(".emfigs .cmfig")[1])];
       await pick("cmEarnMonth", "2");
       got.month = [asked[asked.length - 1], text(body().querySelector(".hwyttl")), bars().filter(x => /\bon\b/.test(x[4])).map(x => x[0]),
                    bars().filter(x => /\bdim\b/.test(x[4])).length, w.eval(`store.get("cmEarnPeriod")`), d.getElementById("cmEarnMonth").value];
@@ -8659,7 +8663,7 @@ const releasePayloads = async () => {
       noNaN: true,
       pure: [[2000000, 6000000], [2500000, 10000000], [5000000, 15000000], [1, 3], 15, ["Jan ’24", "Jul", "Jan ’25", "Jul", "Jan ’26"], ["2024", "2026"]],
       year: ["api/commander/earnings?year=2026", "2026", ["Whole year", "January", "February", "March"], false,
-             ["embar dim", "embar dim", "embar on", "embar on", "embar on"], "2026"],
+             ["embar dim", "embar dim", "embar on", "embar on", "embar on"], "2026", "Cartography6.4M cr6.0M cr + 1.0M cr bonus − 630k cr crew"],
       month: ["api/commander/earnings?year=2026&month=2", "February 2026", ["2026-02"], 4, "2026-02", "2"],
       unchanged: 0, moved: ["api/commander/earnings?year=2026&month=2"],
       barClick: ["api/commander/earnings?year=2026&month=3", "2026", "3"],
