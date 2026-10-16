@@ -2,6 +2,19 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-16 · Two naval personalities: US Navy and Royal Navy, by the book
+- `resources/personalities/naval_us.json` ("US Navy: by the book") and `naval_rn.json` ("Royal Navy: by the book",
+  British usage and spelling, for English voices): every alert, ~50 clean and ~50 swearing versions each (5,946 and
+  6,001 lines), after research into US and Royal Navy usage and the author's brief:
+  - **Alerts:** completely professional in both lists. No swearing in the danger alerts; a rare "damn" in the less
+    urgent ones.
+  - **Reports:** crisp, with light swearing.
+  - **Conversation:** game start and exit, welcome back, the recap, streaks and the voice switched on are friendly
+    and call you "Skipper", and are saltier; the f-word appears now and then (21 and 22 lines in all).
+  - **How they address you:** Captain or Sir (`"names"`).
+- Naval words: Bravo Zulu, plank owner, crossing the line, scuttlebutt, general quarters (US); show a leg, splice the
+  mainbrace, a brew, action stations (RN). The style sheet is in the author's notes.
+
 ## 2026-10-16 · Personalities as drop-in files, and the speech lines compressed
 - A personality can now be a file of its own (speech.json's format, one personality): `resources/personalities/` for
   Outrider's, `data/personalities/` (beside the bans) for your own; merged into the lines (`merge_personalities`),
