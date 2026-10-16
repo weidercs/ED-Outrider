@@ -11,12 +11,15 @@ The **Materials** tab starts with your **Cargo**.
 - **Your fleet carrier's hold** is not written anywhere whole, so Outrider tracks it:
   - ✓ **confirmed**: a commodity on a **sell order** at your carrier. Opening its commodity market lists every sell
     order with its stock, and that stock is the count. Put a sell order (at a price nobody will pay) on everything
-    you want counted.
+    you want counted. From a day on the mark says how old that count is ("✓ 9 d", amber after a week), and after a
+    week the carrier's heading asks you to open its commodity market while docked there to refresh them.
   - ◷ **last seen**: everything else, followed from your journal (transfers, your own buying and selling there,
     orders set and cancelled). Other players' trades with your carrier are written nowhere in your journal: a buy
     order's filled part is worked out the next time you open the market.
   - ✎ **entered**: a count you typed in. **Recount…** lists the lines Outrider cannot confirm; the game's Inventory
-    screen at your carrier shows them all.
+    screen at your carrier shows them all. **+ Add a commodity** takes the names your journal has given and those
+    Spansh lists; anything else (a typo) is refused with the closest names: "Not a commodity: “Titanum”. Did you mean:
+    Titanium Tritium", a click puts one in.
   - The total is checked against the carrier's own ("✓ in sync: 16,085 t", or the tons not accounted for).
   - This is the only way to track a carrier's cargo without signing in to Frontier's servers (their companion API,
     as EDMC and Inara do). Outrider deliberately never does that: it reads your own journal files and queries only
@@ -26,6 +29,24 @@ The **Materials** tab starts with your **Cargo**.
   fuel formula: the carrier's cargo weighs, the space a buy order only reserves does not). Without one the tile is as
   before. No carrier, no tile; a carrier being decommissioned says so in red with the scrap date, and once it is gone,
   "Decommissioned" and the date (a carrier bought since takes its place).
+- **The trip to you:** while your carrier is elsewhere, the tile says what bringing it to you takes: "it → you ≈ 3
+  carrier jumps · ≈ 340 t tritium", and when the depot holds less, "depot 200 t: 140 t short" in red (amber, "enough
+  after topping up", when tritium on a sell order in its hold covers it; "enough if topped up on the way" when it
+  needs more than the 1,000 t depot takes at once, so you top it up again part way). Equal jumps of up to 500 ly in a straight
+  line, each lighter than the last (the real trip is never shorter). A booked jump says its own: "(432 ly jump ≈ 96 t;
+  depot after ≈ 572 t)". The game's fuel formula is checked against your carrier's own jumps (what the depot held
+  before and after each one, from its stats and your tritium deposits): once three are measured, their median scales
+  the figures (at most ±20%), and the hover says so ("checked against your carrier's last 12 jumps: no correction
+  needed"). Tritium other players donate is not in your journal, so such a jump reads low; the median rides over it.
+- **Services and upkeep:** a service suspended in the carrier's management shows as its name and a red ✗ ("UC ✗",
+  "Redemption office ✗"; "suspended" on hover), beside "Vista ✓" for one that is on, from its last stats or the newer of them and your last docking there. Under them,
+  "balance 1.33B · ~96 weeks of upkeep" (amber under 4 weeks; "as of" a date when the stats are over a day old). The
+  journal has no upkeep figure: the week's upkeep is worked out from the services installed at the **published rates**
+  (the core and each service, a suspended one at its lower rate), not yet checked against the game's Finance screen;
+  hover for the figure. Opening the carrier's management refreshes the stats.
+- **Your carrier among the nearest places to sell** (the Unsold tile's "sell:" line and its details): while it has
+  Universal Cartographics (or Vista Genomics) on, where it is now from your journal, never an old report of it, with
+  "≈ 3 carrier jumps to you"; not while the service is suspended, nor once it is decommissioned.
 - **🎯 beside your carrier's system** on the Carrier tile, when it is elsewhere: auto-target puts that system in the
   galaxy map, as 🎯 on a route's row does (see [the Neutron Highway](plot-route.md#-the-neutron-highway)). On the
   game PC only; none while you are aboard or in its system.
@@ -46,11 +67,15 @@ players last reported, so the newer the data, the safer the trip.
   what your load earns and the profit over what you paid. Opened, it lists what else it buys from your hold and its
   services (and whether it buys exploration data and samples too), with Copy, Bookmark and **Plot route here**.
   **Buy something else** looks up any commodity.
+- **One shipload or all of it:** when a line is more than your ship's hold (its size, not what is free), the bar
+  switches between "All 16,000 t" and "One shipload 720 t" ("≈ 23 shiploads for all of it"); a shipload asks for
+  stations that take (or have) that much: "Sell 720 t of 16,000 t". Not shown before the game has written your ship's
+  loadout.
 - **Trade routes.** Plot Route's **Trade** plotter asks Spansh's [trade planner](https://spansh.co.uk/trade) for
   station-to-station hops from the station you are docked at, with your credits and hold (from the journal), and its
   options: hops, hop distance, distance from the star, data age, pad, planetary and player-owned stations,
-  prohibited goods, permit systems, unique stops (no station twice). It can take a few minutes to plot. It shares a place with Road to Riches and
-  Exomastery (one of the three at a time).
+  prohibited goods, permit systems, unique stops (no station twice). It can take a few minutes to plot. It shares a
+  place with the survey routes (Road to Riches, Exomastery, the world routes, a sweep: one of them at a time).
 
 <p align="center">
   <img src="../images/trade.png" alt="Plot Route with a trade route: each stop with what to sell and buy there, and the route on the map" width="900">

@@ -121,10 +121,17 @@ def confirmed(codex_names):
 
 def predict_record(r):
     """predict() for one of Outrider's body records (yours from the journal, or Spansh's from someone else's scan:
-    both keep the journal's own temperature): the class from ed.PlanetClass (or subtype), radius_km back to metres."""
+    both keep the journal's own temperature): the class from ed.PlanetClass (or subtype), the mass from ed.MassEM (a
+    Spansh body search's record: mass_em), radius_km back to metres."""
     if not isinstance(r, dict) or r.get("type") != "Planet":
         return None
     ed = r.get("ed") if isinstance(r.get("ed"), dict) else {}
     km = r.get("radius_km")
     return predict({"PlanetClass": ed.get("PlanetClass") or r.get("subtype"), "SurfaceTemperature": r.get("temperature"),
-                    "MassEM": ed.get("MassEM"), "Radius": km * 1000 if isinstance(km, (int, float)) else None})
+                    "MassEM": ed.get("MassEM") if ed.get("MassEM") is not None else r.get("mass_em"),
+                    "Radius": km * 1000 if isinstance(km, (int, float)) else None})
+
+
+def searchable_classes():
+    """The classes a prediction can be made for (a rule other than "nudged" somewhere in their temperatures)."""
+    return sorted({c for c, _, _, rule in RULES if isinstance(rule, dict)})

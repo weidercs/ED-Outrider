@@ -179,6 +179,42 @@ class BatchDFuel(unittest.TestCase):
         self.j.boost = {"value": 4.0, "ts": "x"}                         # a neutron charge reaches it
         self.assertTrue(self.state.target_hop(t)["reach"])
 
+    def test_fuel_run_and_window(self):   # the fuel plan's groundwork (S1): hop by hop, then a grid of starting levels
+        m = ed_outrider.fuel_model(self.MANDALAY, self.MANDALAY_JUMPS)
+        self.assertIsNone(outrider.fsd.fuel_run(dict(m, max_fuel=None), 32, 0, [(30, 1)]))   # no per-hop fuel
+        self.assertIsNone(outrider.fsd.fuel_window(dict(m, max_fuel=None), 0, [(30, 1)], 32))
+        # the ship lightens as it burns: the same 60 ly hop costs less each time, and the run stops where the tank does
+        n, after = outrider.fsd.fuel_run(m, 32.0, 0, [(60, 1)] * 20)
+        burns = [a - b for a, b in zip([32.0] + after, after)]
+        self.assertTrue(all(x > y for x, y in zip(burns, burns[1:])))
+        self.assertEqual((n, round(after[-1], 6)), (len(after), round(32.0 - sum(burns), 6)))
+        self.assertLess(n, 20)
+        self.assertLess(after[-1], ed_outrider.hop_fuel(m, 60, m["unladen"] + after[-1]))   # the next one unpaid
+        # a supercharge divides the hop: 240 ly at x4 costs what 60 ly does
+        self.assertAlmostEqual(outrider.fsd.fuel_run(m, 32.0, 0, [(240, 4)])[1][0], after[0], places=9)
+        # past the range at any fuel: no window; a run the full tank makes has no upper end
+        self.assertIsNone(outrider.fsd.fuel_window(m, 0, [(200, 1)], 32))
+        lo, hi = outrider.fsd.fuel_window(m, 0, [(60, 1)] * 4, 32)
+        self.assertEqual(hi, 32)
+        self.assertEqual(outrider.fsd.fuel_run(m, lo, 0, [(60, 1)] * 4)[0], 4)
+        self.assertEqual(outrider.fsd.fuel_run(m, lo - 0.01, 0, [(60, 1)] * 4)[0], 3)
+        # a supercharged jump right at the limit: a full tank fails, a part one passes. The window finds both ends; a
+        # bisection of the whole tank for "the least that works" would start from a failing full tank and say none does
+        far = outrider.fsd.fsd_range(m, m["unladen"] + 12) * 4
+        hops = [(far, 4), (40, 1), (40, 1)]
+        self.assertLess(outrider.fsd.fuel_run(m, 32.0, 0, hops)[0], 3)
+        lo, hi = outrider.fsd.fuel_window(m, 0, hops, 32)
+        self.assertAlmostEqual(hi, 12, delta=0.01)
+        self.assertLess(lo, hi)
+        for f in (lo + 0.01, (lo + hi) / 2, hi - 0.01):
+            self.assertEqual(outrider.fsd.fuel_run(m, f, 0, hops)[0], 3)
+        self.assertLess(outrider.fsd.fuel_run(m, hi + 0.05, 0, hops)[0], 3)
+        # cargo weighs like fuel: 5 t in the hold takes 5 t off the high end
+        self.assertAlmostEqual(outrider.fsd.fuel_window(m, 5, hops, 32)[1], 7, delta=0.01)
+        # at most FUEL_RUN_MAX_HOPS hops are looked at
+        many = [(1, 1)] * (outrider.fsd.FUEL_RUN_MAX_HOPS + 10)
+        self.assertEqual(outrider.fsd.fuel_run(m, 32.0, 0, many)[0], outrider.fsd.FUEL_RUN_MAX_HOPS)
+
 
 class ReviewFuel(unittest.TestCase):
     """Review 2026-10-01, batch C: the fuel model for any drive (R3), engineering between Loadouts (R4), a tank

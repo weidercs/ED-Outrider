@@ -191,6 +191,18 @@ function codexTypeMark(t, region) {
   const st = codexTypeState(t, region);
   return !st ? "" : ` <span class="cxnew cxtype${st === "galaxy" ? " cxgal" : ""}" title="${esc(t.name)}: new to your codex ${st === "galaxy" ? "anywhere" : "in this region"} (logged when you scan it)">${st === "galaxy" ? "✪" : "✦"}</span>`;
 }
+// geology a body's volcanism could log (S22: a set per volcanism, outrider/codex_geo.py): ✦ when any of them is not in
+// your codex for the region, ✪ when one is in it nowhere; each new one named in the title
+function codexGeoNew(list, region) {
+  return (list || []).map(t => ({t, st: codexTypeState(t, region)})).filter(x => x.st);
+}
+function codexGeoMark(list, region) {
+  const fresh = codexGeoNew(list, region);
+  if (!fresh.length) return "";
+  const gal = fresh.some(x => x.st === "galaxy");
+  return ` <span class="cxnew cxgeo${gal ? " cxgal" : ""}" title="its volcanism could show geology new to your codex: ${fresh.map(x =>
+    esc(x.t.name) + (x.st === "galaxy" ? " (anywhere)" : "")).join(", ")} (logged when you scan one)">${gal ? "✪" : "✦"}</span>`;
+}
 // Nearby: the types here new to your codex, one tag ("✦2"), each named in its title
 function codexTypesTag(s) {
   const fresh = (s.codex_types || []).map(t => ({t, st: codexTypeState(t, s.region)})).filter(x => x.st);
@@ -327,9 +339,46 @@ setInterval(() => { if (data) renderStrip(); }, 30000);
 // ---- carrier tile: where it is, the rendezvous maths, and a live countdown to a booked jump ----
 let carrierWarned = null;
 // 🎯 beside your carrier when it is in another system (the author, 2026-10-11): auto-target puts its system in the
-// galaxy map, as 🎯 on a route's row does; on the game PC only (it presses keys there)
-const carrierAim = c => c && !c.aboard && !c.here && c.system && !(c.decommission && c.decommission.done) && data.game_pc !== false
+// galaxy map, as 🎯 on a route's row does; where auto-target can work (hwyAimBtn: canAim)
+const carrierAim = c => c && !c.aboard && !c.here && c.system && !(c.decommission && c.decommission.done)
   ? hwyAimBtn(c.system, "carrier", null, true) : "";
+// the tritium for the trip to you (S13 A): red when the depot lacks it, amber when a confirmed tritium line in the hold
+// covers what it lacks (moved into the depot first, or, past the depot's 1,000 t, topped up again on the way)
+const CARRIER_BURN_TITLE = "the game's fuel formula, checked against real carrier jumps: round(5 + ly × (25000 + capacity used + depot) / 200000) t a jump; a buy order's reserved space weighs nothing";
+// ...scaled by the carrier's own measured jumps (S13 B: the median of its last 12, held to 0.8-1.2), said in the title
+const carrierBurnTitle = f => CARRIER_BURN_TITLE + (!f ? "; your carrier's own jumps check it once 3 are measured (your journals hold none yet)" :
+  `; checked against your carrier's last ${f.n} jumps: ${f.k === 1 ? "no correction needed" : `scaled ×${f.k}`}${f.raw !== f.k ? ` (they measured ×${f.raw}, held to 0.8–1.2)` : ""}` +
+  " (tritium other players donate is not in your journal: such a jump reads low)");
+const carrierTripHtml = (t, f) => !t ? "" :
+  ` · <span title="equal jumps of up to 500 ly in a straight line (the real trip is never shorter), each lighter than the last; ${esc(carrierBurnTitle(f))}">≈ <b>${t.burn.toLocaleString()} t</b> tritium</span>` +
+  (t.short ? ` · <span class="${t.covered ? "warnc" : "noscoop"}" title="${!t.covered ? "the depot and the confirmed tritium in its hold (a sell order) do not cover the trip"
+    : t.top_up === "on_the_way" ? `the ${t.hold.toLocaleString()} t of tritium on a sell order in its hold covers it, but the depot holds 1,000 t: fill it before the jumps and top it up again on the way`
+    : `the ${t.hold.toLocaleString()} t of tritium on a sell order in its hold covers it: move it into the depot before the jumps`}">depot ${t.depot.toLocaleString()} t: ${t.short.toLocaleString()} t short${
+    !t.covered ? "" : t.top_up === "on_the_way" ? ", enough if topped up on the way" : ", enough after topping up"}</span>` : "");
+// a booked jump's burn and the depot after it (S13 A)
+const carrierPlanBurn = (pl, f) => pl.burn == null ? "" : ` ≈ <span title="${esc(carrierBurnTitle(f))}">${pl.burn} t</span>; ` +
+  (pl.depot_after < 0 ? `<span class="noscoop">depot ${-pl.depot_after} t short</span>` : `depot after ≈ ${pl.depot_after.toLocaleString()} t`);
+// UC and Vista on, off or suspended, and any other service suspended (S55 B: CarrierStats' crew, newer than its last
+// Docked or not): a suspended one is its name and a red ✗, as "UC ✓" beside it (the author, 2026-10-14), "suspended" on hover
+function carrierServicesHtml(c) {
+  const sus = c.suspended || [], title = "suspended in the carrier's management: it costs less upkeep, but serves no one";
+  const off = label => `${esc(label)} <span class="noscoop" title="${title}">✗</span>`;
+  const one = (on, label) => on ? `${label} ✓` : sus.includes(label) ? off(label) : `no ${label}`;
+  const others = sus.filter(x => x !== "UC" && x !== "Vista");
+  return `${one(c.has_uc, "UC")} · ${one(c.has_vista, "Vista")}` + others.map(x => ` · ${off(x)}`).join("");
+}
+// the carrier's balance and the weeks of upkeep it pays (S61): amber under UPKEEP_WARN_WEEKS (outrider.cargo); the
+// rates are the published ones until checked against the game's Finance screen, and the title says so
+const crSign = n => n == null ? "?" : (n < 0 ? "−" : "") + credits(Math.abs(n));
+function carrierFinanceHtml(fi) {
+  if (!fi) return "";
+  const old = Date.now() - Date.parse(fi.ts) > 86400e3, w = fi.weeks;
+  const title = `balance ${crSign(fi.balance)} cr · reserve ${crSign(fi.reserve)} cr · available ${crSign(fi.available)} cr, from the carrier's last stats (${(fi.ts || "").slice(0, 10)}: opening its management writes them).` +
+    (fi.upkeep ? ` Upkeep ≈ ${credits(fi.upkeep)} cr a week at the published rates (the core and each service, a suspended one at its lower rate), not yet checked against the game's carrier Finance screen: the journal has no upkeep figure. Upkeep is drawn from the balance each week.` : "");
+  return `<span id="carrierFin" class="${fi.warn ? "warnc" : ""}" title="${esc(title)}">balance <b>${crSign(fi.balance)}</b>` +
+    (w != null ? ` · ~<b>${w < 10 ? w.toFixed(1) : Math.floor(w).toLocaleString()}</b> week${w === 1 ? "" : "s"} of upkeep` : "") + `</span>` +
+    (old ? ` <span class="unk">(as of ${esc(shortDay(fi.ts))})</span>` : "");
+}
 function renderCarrier() {
   const c = data && data.carrier, cl = document.getElementById("carrierLine");
   const val = (v, title) => `<div class="val"${title ? ` title="${title}"` : ""}>${v}</div>`, ln = v => v ? `<div class="ln">${v}</div>` : "";
@@ -355,11 +404,11 @@ function renderCarrier() {
   let meet = "";
   if (!c.here && c.distance) {
     const jr = effRange(), f = data.fuel;
-    const mine = jr ? jumpsFor(c.distance) : null, theirs = Math.ceil(c.distance / (c.jump_range || 500));
+    const mine = jr ? jumpsFor(c.distance) : null, theirs = c.trip ? c.trip.jumps : Math.ceil(c.distance / (c.jump_range || 500));
     const tank = f && f.jumps_max != null ? f.jumps_max : null;
     meet = (mine != null ? `you → it ≈ <b>${mine}</b> jump${mine === 1 ? "" : "s"}` +
              (tank != null ? ` <span class="${tank < mine ? "warnc" : "unk"}" title="jumps at max range your tank covers now">(tank ${tank})</span>` : "") : "") +
-           ` · it → you ≈ <b>${theirs}</b> carrier jump${theirs === 1 ? "" : "s"}`;
+           ` · it → you ≈ <b>${theirs}</b> carrier jump${theirs === 1 ? "" : "s"}` + carrierTripHtml(c.trip, c.burn_factor);
   }
   let plan = "";
   const pl = c.planned;
@@ -368,7 +417,7 @@ function renderCarrier() {
     const mmss = t => t >= 3600 ? `${Math.floor(t / 3600)} h ${Math.floor(t % 3600 / 60)} min` : `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
     const urgent = left > 0 && left < 300 && !c.aboard;
     plan = `<span class="${urgent ? "noscoop" : ""}">${left > 0 ? `departs for <b>${esc(pl.system)}</b> in <b>${mmss(left)}</b>` : `jumping to <b>${esc(pl.system)}</b>`}</span>` +
-      (pl.jump_ly ? ` <span class="unk">(${fmtLy(pl.jump_ly)} ly jump${pl.distance_from_you != null ? `, then ${fmtLy(pl.distance_from_you)} ly from you` : ""})</span>` : "");
+      (pl.jump_ly ? ` <span class="unk">(${fmtLy(pl.jump_ly)} ly jump${carrierPlanBurn(pl, c.burn_factor)}${pl.distance_from_you != null ? `${pl.burn != null ? ";" : ","} then ${fmtLy(pl.distance_from_you)} ly from you` : ""})</span>` : "");
     if (urgent && carrierWarned !== pl.departure) {   // once per booking, only if you are not aboard
       carrierWarned = pl.departure;
       // the last minute: one plain line (speech.json's lines say "{minutes} minutes", which cannot be singular: F37)
@@ -384,15 +433,16 @@ function renderCarrier() {
   const dcLine = dc ? `<span class="noscoop" title="cancel it in the carrier's management until then">Decommissioning: scrapped ${esc(shortDay(dc.scrap_ts || ""))}` +
     `${dc.refund ? ` · ${credits(dc.refund)} cr back` : ""}</span>` : "";
   cl.innerHTML = val(esc(c.name), esc(c.callsign || "")) + ln(dcLine) + ln(where) + ln(meet) + ln(plan) +
-    ln(`${c.has_uc ? "UC ✓" : "no UC"} · ${c.has_vista ? "Vista ✓" : "no Vista"}` +
+    ln(carrierServicesHtml(c) +
        (tr ? ` · Tritium in Depot: <b>${tr.depot.toLocaleString()} t</b>` : c.fuel != null ? ` · ${c.fuel} t tritium` : "")) +
+    ln(carrierFinanceHtml(c.finance)) +
     (tr ? `<div class="ln" id="carrierTrit" title="Total 500 ly Jumps Available: the jumps all your tritium gives at 500 ly, if the depot is topped up from the hold as it runs low">` +
           `Total Tritium: <b>${tr.total.toLocaleString()} t</b>${tr.jumps != null ? ` (<b>${tr.jumps.toLocaleString()}</b> jumps)` : ""}</div>` : "");
 }
 // the countdown ticks without new data
 setInterval(() => { if (data && data.carrier && data.carrier.planned) { renderCarrier(); if (tilesFolded) renderTilesLine(); } }, 1000);
 document.addEventListener("click", async e => {
-  if (!e.target.closest || !e.target.closest("#backupBtn")) return;
+  if (!e.target.closest || !e.target.closest("#backupBtn, #srvBackupBtn")) return;
   let r;
   try { r = await apiJson("api/backup", {method: "POST"}); }
   catch (err) { r = {error: err.message}; }   // the server is not answering (restarting, stopped)
@@ -414,7 +464,8 @@ function backupHtml(bk) {
     (warning && !error ? `the last backup worked, but: ${warning}\n` : "") +
     (bk.path ? `latest: ${bk.path}${bk.verified ? " (read back: the database passed quick_check, the zip testzip)" : ""}` : "no backup made yet") +
     // what that zip holds (the database, and your browser defaults, lines and settings when they exist)
-    (bk.path && Array.isArray(bk.files) && bk.files.length ? `\nholds: ${bk.files.join(", ")}` : "") + (bk.journals_dir ? `\njournals archived in ${bk.journals_dir} (restore: --legacy that folder)` : "") + (bk.path ? "\nrestore the database: stop Outrider, then ed_outrider.py --restore" : "") +
+    (bk.path && Array.isArray(bk.files) && bk.files.length ? `\nholds: ${bk.files.join(", ")}` : "") + (bk.journals_dir ? `\njournals archived in ${bk.journals_dir} (restore: --legacy that folder)` : "") + (bk.path && bk.restore ? `\nrestore the newest: ${data && data.freshness && data.freshness.install === "docker" ? "" : "stop Outrider, then "}${bk.restore}` +
+      " (another: Settings → Server → Backups)" : "") +
     (every > 0 ? `\nautomatic: at start when the last is over ${every} day${every === 1 ? "" : "s"} old, and when the game quits` : "\nautomatic backups are off (backup_every_days = 0)");
   // the warning's detail (which file, why) is in the title: the line keeps "1 journal not archived (…)"
   const warnShort = warning && !error ? warning.replace(/\s*\(.*$/s, "") + (/\(/.test(warning) ? " (…)" : "") : "";
@@ -422,6 +473,15 @@ function backupHtml(bk) {
                 bk.journals_to && !warnShort ? `journals to ${bk.journals_to}` : "", warnShort].filter(Boolean);
   return `<span class="${cls}" title="${esc(title)}">${esc(bits.join(" · "))}${error ? " · last one failed" : ""}</span> <button type="button" id="backupBtn" class="mini">back up now</button>`;
 }
+// No position yet (S43): no journals at all (the Data tile says where to set the folder), or journals without a jump
+const noJumpText = () => data && data.freshness && data.freshness.missing ? "no journals yet: see the Data tile"
+  : "No FSD jump yet: the page fills in after your first jump";
+document.addEventListener("click", e => {   // the Data tile's "set the journal folder" (S43)
+  const a = e.target.closest && e.target.closest("[data-openjournals]");
+  if (!a) return;
+  e.preventDefault();
+  openServerSettings("journals", "live");
+});
 // The discovery streak: the last 20 arrivals as dots, each coloured when its arrival star was scanned and never
 // again: gold new (nobody had discovered it), amber known with bodies Spansh had not heard of, blue fully
 // reported, grey visited before, hollow known but Spansh had nothing on it at the time, blank not scanned.
@@ -437,9 +497,22 @@ function streakHtml(sk) {
 // on the galaxy map closer than that is one nobody has reported. Never "undiscovered": the game may know it.
 // Only once the sphere search has come back (while it runs the list is empty or partial); honours sphere_cut
 // (the list is complete only to there, so the claim stops there).
+// The server's status while the sphere search has not come back whole: starting, asking, or failed (S42's short forms,
+// "Spansh unavailable" / "No internet connection", or "refresh failed")
+const SPHERE_INCOMPLETE = /^(starting|asking|Spansh unavailable|No internet connection|refresh failed)/;
+// S42: the lookups down (data.health, the Spansh session's trace) in the Data tile's words: "No internet connection",
+// else "Spansh unavailable" per source; a failed search's own status too (the list stays incomplete until it answers)
+function lookupsDown(d) {
+  const h = (d && d.health) || {}, out = [];
+  if (h.offline) out.push("No internet connection");
+  else for (const x of h.down || []) out.push(`${x.name} unavailable`);
+  if (/^(Spansh unavailable|No internet connection)$/.test((d && d.status) || "") && !out.includes(d.status)
+      && !out.includes("No internet connection")) out.unshift(d.status);
+  return out;
+}
 function horizon() {
   const p = data && data.position;
-  if (!p || /^(starting|asking|Spansh search failed|refresh failed)/.test(data.status || "")) return null;
+  if (!p || SPHERE_INCOMPLETE.test(data.status || "")) return null;
   const cut = data.sphere_cut, r = cut != null ? Math.min(cut, data.radius) : data.radius;
   const n = (Array.isArray(data.systems) ? data.systems : []).filter(s => sysId(s) !== sysId(p) && !s.visited && s.source !== "route")
     .sort((a, b) => a.distance - b.distance)[0];
@@ -459,24 +532,29 @@ function renderStrip() {
   document.getElementById("cmdrLbl").textContent = cm && cm.name ? `Cmdr ${cm.name}` : "Commander";
   const shipLine = sh ? `<span title="${esc(shipName(sh.type))}${data.jump_range ? ` · ${data.jump_range.toFixed(1)} ly max jump` : ""}">${esc(shipLabel(sh.name, sh.type))}` +
     `${sh.type && shipName(sh.type) !== shipLabel(sh.name, sh.type) ? ` <span class="unk">· ${esc(shipName(sh.type))}</span>` : ""}</span>` : "";
-  cmEl.innerHTML = !cm ? val(`<span class="unk">no login seen</span>`) + ln(shipLine) :
+  // the jump range, right under the ship (S75, 2026-10-12: it was the Where tile's): max, laden, a jet-cone charge's reach
+  const jr = effRange();
+  const jumpLine = jr ? `<span title="Loadout MaxJumpRange: the best case with a near-empty tank">max jump ${(data.jump_range || jr).toFixed(1)} ly</span>` +
+    (data.jump_range_now ? ` <span title="the range with the fuel and cargo aboard now (jumps counted here use it)">· ${data.jump_range_now.toFixed(1)} laden</span>` : "") +
+    (data.boost ? ` <b class="boosted" title="jet-cone charge: your next jump reaches this far">boosted ×${data.boost} → ${jr.toFixed(0)} ly</b>` : "") : "";
+  cmEl.innerHTML = !cm ? val(`<span class="unk">no login seen</span>`) + ln(shipLine) + ln(jumpLine) :
     val(cm.credits != null ? `≈ ${credits(cm.credits)} cr` : `<span class="unk">credits unknown</span>`,
         `Credits at login (${esc((cm.login_ts || "").replace("T", " ").slice(0, 16))} UTC)${cm.credits_login != null ? ": " + cm.credits_login.toLocaleString() : ""}` +
         ` plus exploration and exobiology sales since. Other spending and income (market, repairs, missions) is not tracked.`) +
-    ln(shipLine) + ln(cm.earned ? `+${credits(cm.earned)} cr sold since login` : "") +
+    ln(shipLine) + ln(jumpLine) + ln(cm.earned ? `+${credits(cm.earned)} cr sold since login` : "") +
     ["Explore", "Exobiologist"].filter(k => cm.ranks && cm.ranks[k]).map(k => { const r = cm.ranks[k];
       return ln(`<span title="${k === "Explore" ? "exploration" : "exobiology"} rank${r.progress != null ? `, ${r.progress}% to the next` : ""}">${k === "Explore" ? "Explorer" : "Exobiologist"}: <b>${esc(r.name)}</b>${r.progress != null ? ` <span class="unk">${r.progress}%</span>` : ""}</span>`); }).join("");
-  const ns = data.next_stop, nsEl = document.getElementById("nextStopLn"), jr0 = effRange();
+  const ns = data.next_stop, nsEl = document.getElementById("nextStopLn");
+  // S31: 🎯 and Plot route beside it
   nsEl.innerHTML = ns ? `<span title="your chosen next stop (clears when you arrive)">next stop:</span> <span class="copy" data-name="${esc(ns.name)}" title="click to copy">${esc(ns.name)}</span>` +
-    (ns.distance != null ? ` · <b>${ns.distance.toLocaleString("en-US", {maximumFractionDigits: 1})} ly</b>${jr0 ? ` ≈ ${jumpsFor(ns.distance)} jump${jumpsFor(ns.distance) === 1 ? "" : "s"}` : ""}` : "") +
+    (ns.distance != null ? ` · <b>${ns.distance.toLocaleString("en-US", {maximumFractionDigits: 1})} ly</b>${jr ? ` ≈ ${jumpsFor(ns.distance)} jump${jumpsFor(ns.distance) === 1 ? "" : "s"}` : ""}` : "") +
+    sysAimBtn(ns.name, ns.id) + plotBtn(ns.name) +
     ` <span class="unk" id="nsClear" title="clear the next stop" style="cursor:pointer">✕</span>` : "";
   const p0 = data.position, wl = document.getElementById("whereLn");
   wl.innerHTML = p0 ? `<span title="galactic coordinates (x / y / z)">Coord: ${[p0.x, p0.y, p0.z].map(v => v.toFixed(2)).join(" / ")}</span>` +
     (p0.visits ? ` · <span title="arrivals in this system, from your journals">visit ${p0.visits}</span>` : "") : "";
   document.getElementById("streakLn").innerHTML = streakHtml(data.streak);
-  const hz = horizon();
-  // the line keeps just the star; what "unreported" means is in the tooltip
-  document.getElementById("horizonLn").innerHTML = hz ? `<span title="${esc(hz.text + ".\n" + hz.why)}">${esc(hz.text.split(" — ")[0])}</span>` : "";
+  // the unreported horizon ("nearest known unvisited") left this tile (S75): Now and the voice keep it
   // fuel tile
   const f = data.fuel, tf = document.getElementById("tFuel"), el = document.getElementById("fuelLine");
   tf.className = "tile"; tf.title = "";
@@ -488,15 +566,14 @@ function renderStrip() {
       ln(`<span class="unk">read when you are back aboard</span>`) + hullLine() + moduleLine() + boostLine();
   else {
     tf.className = "tile " + (f.pct == null ? "" : f.pct < 15 ? "urgent" : f.pct < 30 ? "warn" : "");   // null < 15 is true
-    const md = f.model, sr = f.scoop_rate, j = fuelJumps(f), hsc = fuelLow(f) ? hereScoopText(f) : "";
-    const srWarn = sr && j != null && j < 2 * expectedGap(sr);   // amber: fewer jumps aboard than two usual gaps
+    const md = f.model, hsc = fuelLow(f) ? hereScoopText(f) : "";
     el.innerHTML = val(`${f.main.toFixed(1)}${f.capacity ? " / " + f.capacity + " t" : " t"}${f.pct != null ? ` · ${f.pct}%` : ""}`) +
       (f.vehicle ? ln(`Current vehicle: <b>${esc(f.vehicle.label)}</b>${f.vehicle.fuel != null ? ` · ${f.vehicle.fuel.toFixed(2)} t fuel` : ""}` +
                       ` <span class="unk" title="the figures above are your ship's, as last read before you left it">(ship's tank above)</span>`) : "") + hullLine() + moduleLine() +
       ln((f.jumps_max != null ? `≈<b>${f.jumps_max}</b> ${jumpsWord(f.jumps_max)} at max range` : "") + (md && md.ly_max ? ` (${Math.round(md.ly_max).toLocaleString("en-US")} ly)` : "") +
          (f.jumps_recent != null ? (f.jumps_max != null ? ", " : "") + `<b>${f.jumps_recent}</b> at your pace` : "")) +
       ln([f.since_scoop != null ? `${f.since_scoop} jump${f.since_scoop === 1 ? "" : "s"} since the last scoop` : "",
-          sr ? `<span class="${srWarn ? "warnc" : ""}" title="arrival stars of your last ${sr.of} jumps with a known star${srWarn ? `: fewer jumps of fuel aboard than two of your usual gaps between scoopable stars (1 in ${expectedGap(sr).toFixed(1)})` : ""}">scoopable: ${sr.scoopable} of last ${sr.of}${sr.dry_run ? ` · ${sr.dry_run} dry in a row` : ""}</span>` : ""].filter(Boolean).join(" · ")) +
+          scoopRateWarn(f)].filter(Boolean).join(" · ")) +
       (hsc ? ln(hsc) : "") + boostLine();
     tf.title = "From Status.json. " + (md && md.max_fuel
       ? `Jumps are simulated one by one, the ship lightening as it burns: ${md.range_now != null ? `${md.range_now.toFixed(1)} ly range laden now, ` : ""}` +
@@ -515,19 +592,28 @@ function renderStrip() {
     const stale = fr.live && !fr.simulated, cls = stale && age > 10 ? "bad" : stale && age > 3 ? "warn" : "";
     dot = cls; tcls = cls === "bad" ? "urgent" : cls;
     text = `journal ${esc(fr.journal.slice(11, 16))} UTC` + (age >= 1 ? ` · ${age < 90 ? Math.round(age) + " min" : Math.round(age / 60) + " h"} ago` : "") + (fr.live ? "" : " · game off");
-  } else text = fr && !fr.dirs.length ? "no journal folder — pass --journals" : "waiting for a journal";
-  const failed = /failed|error/.test(data.status || "");
+  } else if (fr && fr.missing) {
+    // S43: a first run on an empty or wrong folder (or none): where to set it. Docker's folder is the /journals mount,
+    // set in .env; the tablet has no Server settings
+    dot = "warn"; tcls = "warn";
+    text = fr.install === "docker" ? esc(DOCKER_NO_JOURNALS) : TABLET ? "no journals found: set the journal folder in Server settings on the PC"
+      : `no journals found · <a href="#" data-openjournals title="Settings → Server → [journals] live">set the journal folder</a>`;
+  } else text = "waiting for a journal";
+  // S42: an outside lookup down says only "Spansh unavailable" (the author's choice: no detail; the log has the error);
+  // "refresh failed" is Outrider's own trouble, said as a server error
+  const down = lookupsDown(data), failed = /^refresh failed/.test(data.status || "");
   const problems = [disconnected && `NOT CONNECTED since ${disconnected}`, data.tail_error && "journal tailing error — see the terminal",
                     pageError && `page error (${esc(pageError)}) — see the browser console`,
-                    failed && esc(data.status)].filter(Boolean);
+                    ...down.map(esc), failed && esc(data.status)].filter(Boolean);
   if (problems.length) { dot = disconnected || data.tail_error || pageError ? "bad" : "warn"; tcls = dot === "bad" ? "urgent" : "warn"; }
-  td.className = "tile " + tcls; td.title = data.tail_error || data.status || "";
+  td.className = "tile " + tcls; td.title = data.tail_error || (down.length ? "" : data.status) || "";
   // the folded tiles' line names it, in a few words, when the tile is coloured (the tile has the detail)
   dataBit = disconnected ? `not connected since ${disconnected}` : data.tail_error ? "journal tailing error" : pageError ? "page error"
-    : failed ? (/spansh/i.test(data.status || "") ? "Spansh failed" : "server error") : text;
+    : down.length ? down[0] : failed ? "server error" : fr && !fr.journal && fr.missing ? "no journals found" : text;
   fl.innerHTML = val(`<span class="dot ${dot}"></span>${text}`);
-  sl.innerHTML = problems.length ? problems.join(" · ") : /^asking|^fetching/.test(data.status || "") ? esc(data.status) : "Spansh ok";
+  sl.innerHTML = problems.length ? problems.join(" · ") : /^asking|^fetching|^ok \(/.test(data.status || "") ? esc(data.status) : "Spansh ok";
   document.getElementById("backupLine").innerHTML = backupHtml(data.backup || {});
+  backupsFollow(data.backup || {});
   document.getElementById("uploadLine").innerHTML = uploadLineHtml(data.uploads);
   // docked somewhere that buys data with a worthwhile amount aboard: say so plainly
   const dk = data.docked, sellHere = sellableHere(dk, data.unsold), se = document.getElementById("sell");
@@ -553,7 +639,7 @@ function renderStrip() {
   } else se.innerHTML = "";
   // tab title: what a background tab needs to know
   const p = data.position;
-  document.title = (audioIsBlocked ? "🔇 " : "") + (disconnected ? "⚠ " : "") + (p ? p.name : "ED Outrider") +
+  document.title = (audioIsBlocked ? "🔇 " : "") + (disconnected ? "⚠ " : "") + (viewWindow ? `${viewName(viewWindow)} · ` : "") + (p ? p.name : "ED Outrider") +
     (f && f.live && f.pct != null && f.pct < 30 ? ` · ⛽${f.pct}%` : "") +
     (unsoldLevel(data.unsold) === "urgent" ? " · 💰 sell!" : "");
   renderTilesLine();
@@ -632,7 +718,7 @@ function tilesLineHtml() {
   const p = data.position, f = data.fuel, cm = data.commander, u = data.unsold, c = data.carrier;
   const bit = (html, lvl, title) => `<span class="tl${lvl ? " tl-" + lvl : ""}"${title ? ` title="${esc(title)}"` : ""}>${html}</span>`;
   const ly = d => `${d.toLocaleString("en-US", {maximumFractionDigits: d < 10 ? 1 : 0})} ly`;
-  const out = [p ? `<span class="copy tl-sys" data-name="${esc(p.name)}" title="click to copy">${esc(p.name)}</span>` : `<span class="unk">waiting for your first jump…</span>`];
+  const out = [p ? `<span class="copy tl-sys" data-name="${esc(p.name)}" title="click to copy">${esc(p.name)}</span>` : `<span class="unk">${esc(noJumpText())}</span>`];
   if (f && f.live && f.main != null) out.push(bit(`⛽ ${f.pct != null ? f.pct + "%" : f.main.toFixed(1) + " t"}`, tileLevel("tFuel"), "fuel in the main tank"));
   if (cm && cm.credits != null) out.push(bit(`${credits(cm.credits)} cr`, "", "credits at login plus exploration and exobiology sales since"));
   if (u && !u.error && u.total != null) out.push(bit(`unsold ${credits(u.total)}`, tileLevel("tUnsold"), "unsold data on board (estimate): hover the tiles for the detail"));
@@ -713,8 +799,14 @@ const colonyTxt = g => colonyM(g) ? ` <span class="unk" title="samples of one sp
 // how you are on the body, naming the vehicle the journal says you launched ("in the Rhino", "in the Nomad")
 const howOnBody = ob => ob.how === "in the SRV" && ob.vehicle ? `in the ${ob.vehicle}` : ob.how === "flying low" ? `flying low, ${surfDist(ob.alt)}` : ob.how;
 const onOrOver = ob => ob.how === "flying low" ? "Over" : "On";
+// S30: the body you made the first stop in the system you are in (Here's schematic: a tap on its number), or null.
+// One for every window, the overlay and the voice (the server's meta plan_first); l: a leaving summary (its id64).
+const planFirstFor = l => { const pf = data && data.plan_first; return pf && l && l.id64 && pf.id64 === String(l.id64) ? pf.body : null; };
+// a stop's number in the suggested order: ① to ⑳, then (21) (the overlay's stop_glyph)
+const stopGlyph = n => n >= 1 && n <= 20 ? String.fromCodePoint(0x245F + n) : `(${n})`;
 // the map and bio items worth doing by your thresholds, nearest to the arrival star first, value per minute of
-// supercruise breaking ties, a body with no distance last (in the server's order).
+// supercruise breaking ties, a body with no distance last (in the server's order); the first stop you picked leads
+// (its items get `first`).
 // The overlay's Now panel has a Python copy (outrider/overlay.py plan_items): change both together.
 function planItems(l) {
   const w = worthLeavingFor(l);
@@ -727,8 +819,12 @@ function planItems(l) {
     it.perMin = it.sec && it.value ? it.value / (it.sec / 60) : null;
     it.skip = !it.keep && it.perMin != null && it.perMin < skipFloor();   // started samples and specials never
   }
-  return items.map((it, i) => [it, i]).sort(([a, i], [b, j]) => (a.dist == null) - (b.dist == null) || (a.dist || 0) - (b.dist || 0)
+  const order = items.map((it, i) => [it, i]).sort(([a, i], [b, j]) => (a.dist == null) - (b.dist == null) || (a.dist || 0) - (b.dist || 0)
     || (b.perMin ?? -1) - (a.perMin ?? -1) || i - j).map(([it]) => it);
+  const first = planFirstFor(l);
+  if (!first) return order;
+  for (const it of order) it.first = it.body === first;
+  return [...order.filter(it => it.first), ...order.filter(it => !it.first)];
 }
 // A body's mapped value as the "Next" lines give it (the author's choice, review Q5): the whole value once mapped,
 // without and with your first-discovery / first-mapped bonuses; one number when no bonus applies. Screen "771k/2.2M",
@@ -773,8 +869,9 @@ function checklistHtml(l) {
   const items = [item(l.honked, l.honked ? "honked" : "honk (FSS discovery scan)"),
     item(!l.unscanned && l.honked, (l.unscanned ? `${l.unscanned} bod${l.unscanned === 1 ? "y" : "ies"} left to find in the FSS` : l.all_found ? "all bodies found" : "bodies found") + spanshNoteHtml(l))];
   const plan = planItems(l);
-  if (plan.length > 1) items.push(`<li class="unk" title="nearest to the arrival star first, then the best value per minute of supercruise; a rough guide, not a route">suggested order:</li>`);
-  for (const it of plan) items.push(item(false, planText(it) + planCost(it)));
+  if (plan.length > 1) items.push(`<li class="unk" title="nearest to the arrival star first, then the best value per minute of supercruise; a rough guide, not a route">${plan[0].first ? "your first stop, then the suggested order:" : "suggested order:"}${plan[0].first ? planResetHtml(l) : ""}</li>`);
+  // numbered as on the schematic (S30), when there is an order to number
+  plan.forEach((it, i) => items.push(item(false, (plan.length > 1 ? `<span class="stopn">${stopGlyph(i + 1)}</span> ` : "") + planText(it) + planCost(it))));
   const smallMaps = (l.unmapped || []).length - w.maps.length;
   if (!w.maps.length) items.push(item(true, "no mapping worth doing" + (smallMaps ? ` <span class="unk">(${smallMaps} small, under your ${credits(hlLevel("body"))} level)</span>` : "")));
   const smallBio = l.bio_pending.length - w.bio_pending.length;
@@ -809,11 +906,21 @@ function elsewhereText(e) {
   if (!e || !e.species || !(e.samples === 2 || (e.value || 0) >= bioMinNow())) return "";
   return `In progress elsewhere: ${e.species} ${e.samples}/3 on ${e.body || "another body"}${e.system ? ` (${e.system})` : ""}. A new species discards it.`;
 }
+// what a sample run pays, known from sample 1 (S62): "1.0M (×5: 5.0M)" with the first footfall bonus, else "1.0M"; `value`
+// is the species' own (the sampling summary's), never one with the ×5 already in (the run elsewhere's): no double ×5.
+// The overlay's run_pays says the same.
+function runPays(value, factor) {
+  if (!value) return "";
+  return factor > 1 ? `${credits(value)} (×${factor}: ${credits(value * factor)})` : credits(value);
+}
 function samplingHtml() {
   const sm = data.sampling;
   if (sm && sm.elsewhere) { const t = elsewhereText(sm.elsewhere); return t ? `<div class="spacing elsewhere">${esc(t)}</div>` : ""; }
   if (!sm || !sm.samples || sm.samples >= 3) return "";
-  const head = `<b>${esc(sm.genus || "")}</b> <span class="unk">${esc((sm.species || "").split(" ").slice(1).join(" "))}</span> · sample ${sm.samples}/3`;
+  const pays = runPays(sm.value, sm.factor);
+  const head = `🧬 <b>${esc(sm.genus || "")}</b> <span class="unk">${esc((sm.species || "").split(" ").slice(1).join(" "))}</span>` +
+    (pays ? ` · <span class="pays" title="what the run pays once its three samples are analysed${sm.factor > 1 ? ", with the ×5 first footfall bonus" : ""}">${esc(pays)}</span>` : "") +
+    ` · sample ${sm.samples}/3`;
   // no colony distance for this genus (one outrider.bio does not know): the positions may well be recorded
   if (sm.need == null && sm.points > 0) return `<div class="spacing unk">${head} · spacing unknown for this genus${tagText(sm)}</div>`;
   if (sm.to_go == null) return `<div class="spacing unk">${head} · ${sm.need ? `need ${sm.need} m from the last sample` : "spacing unknown"}` +
@@ -862,6 +969,13 @@ function renderOnBody() {
 // 2026-10-12): Outrider's own route is the "Next:" line, and the two differ until 🎯 targets its next stop ----
 function renderRoute() {
   const r = data.route, el = document.getElementById("routeStrip");
+  // the game plotted a route but wrote no NavRoute.json for it (2026-10-14): what FSDTarget and Status.json tell, no stars
+  if (r && r.minimal) {
+    el.innerHTML = `In-Game Route: <b>${r.jumps_left}</b> jump${r.jumps_left === 1 ? "" : "s"} left` +
+      (r.destination ? ` to <b>${esc(r.destination)}</b>` : "") +
+      ` · <span class="unk" title="the game logged the plot but did not write NavRoute.json: no stars, distances or fuel figures until it does (clearing the route and plotting another destination makes it write the file)">the game didn't write the route's stars</span>`;
+    return;
+  }
   if (!r || !r.hops.length) { el.innerHTML = ""; return; }
   const n = r.hops.length;
   const chips = r.hops.slice(0, 24).map(h => `<span class="hop${h.scoopable ? " sc" : h.scoopable === false ? " dry" : ""}${h.visited ? " vis" : ""}" ` +
@@ -870,13 +984,14 @@ function renderRoute() {
   el.innerHTML = `In-Game Route: <b>${n}</b> jump${n === 1 ? "" : "s"} · <b>${Math.round(r.ly).toLocaleString()}</b> ly` +
     (r.next_scoop ? ` · next scoop in <b>${r.next_scoop}</b>` : ` · <span class="warnc">no scoopable star on the route</span>`) +
     (r.longest_dry > 1 ? ` · <span class="${r.longest_dry >= 4 ? "warnc" : ""}">longest dry stretch ${r.longest_dry}</span>` : "") +
+    (dryStretchHere() ? ` · ${dryStretchHtml()}` : "") +
     ` <span class="hops">${chips}${n > 24 ? ` <span class="unk">+${n - 24}</span>` : ""}</span>`;
 }
 // ---- Now mode: five big lines for a second monitor, readable from the chair ----
 function renderNow() {
   drawNowBar();
   const el = document.getElementById("nowBody"), p = data.position, f = data.fuel, t = data.target, a = data.arrival;
-  if (!p) { el.innerHTML = `<div class="now-sys">waiting for your first jump…</div>`; renderSurface(); return; }
+  if (!p) { el.innerHTML = `<div class="now-sys">${esc(noJumpText())}</div>`; renderSurface(); return; }
   const lines = [`<div class="now-sys">${esc(p.name)}</div>`];
   // the arrival verdict, for twenty seconds after a jump
   if (a && a.id64 === posId() && Date.now() - Date.parse(a.ts) < 20000)
@@ -887,7 +1002,8 @@ function renderNow() {
     const hz = hazardNote(t.star_class);
     lines.push(`<div class="now-line">➜ <b>${esc(t.name)}</b> <span class="t-${t.status.replace(" ", "")}">${esc(label)}</span>${targetCounts(t)}` +
       (t.star_class ? ` <span class="${/^[OBAFGKM](_|$)/.test(t.star_class) ? "ok" : "noscoop"}">${esc(t.star_class)}${/^[OBAFGKM](_|$)/.test(t.star_class) ? " ⛽" : " ✕"}</span>` : "") +
-      (hz ? ` <span class="hazard">⚠ ${esc(hz)}</span>` : "") + `</div>`);
+      (hz ? ` <span class="hazard">⚠ ${esc(hz)}</span>` : "") +
+      (t.hop ? `<div class="now-small now-hop">${hopCostHtml(t.hop)}</div>` : "") + `</div>`);   // S19: the jump's cost
   }
   // where the next jump goes: the route's next stop (as the strip says it), the kept boxel's Next
   const nr = nowRouteHtml(), nb = nowBoxelHtml();
@@ -897,6 +1013,8 @@ function renderNow() {
     lines.push(`<div class="now-line ${f.pct < 15 ? "urgent" : f.pct < 30 ? "warn" : ""}">⛽ <b>${f.pct}%</b>` +
       (f.jumps_max != null ? ` · ${f.jumps_max} ${jumpsWord(f.jumps_max)}` : "") + (f.since_scoop != null ? ` · ${f.since_scoop} since scoop` : "") +
       (data.boost ? ` · <span class="boosted">boosted ×${data.boost}</span>` : "") +
+      (f.scoop_rate ? `<div class="now-small now-rate">${scoopRateWarn(f)}</div>` : "") +   // S19: the scoopable share
+      (dryStretchHere() ? `<div class="now-small now-dry">${dryStretchHtml()}: ${esc(dryStretchText(dryStretchHere()))}</div>` : "") +   // S2
       (fuelLow(f) && hereScoopText(f) ? `<div class="now-small">${hereScoopText(f)}</div>` : "") + `</div>`);
   const risk = nowRiskLine();
   if (risk) lines.push(`<div class="now-line now-risk ${risk.cls}">${risk.html}</div>`);
@@ -973,7 +1091,7 @@ function nowBoxelHtml() {
   if (bx.complete || bx.done) return `${head}${esc(bx.label)} <span class="ok">✓ ${bx.complete ? "complete" : "done"}</span>`;
   if (!bx.name) return `${head}${esc(bx.label)} <span class="unk">every system known is visited</span>`;
   return `${head}<span class="warnc">Boxel: next</span> <span class="copy" data-name="${esc(bx.name)}" title="click to copy">${esc(bx.name)}</span>` +
-    (data.game_pc !== false && bx.standard ? hwyAimBtn(bx.name, "boxel", null) : "") +
+    (bx.standard ? hwyAimBtn(bx.name, "boxel", null) : "") +
     ` · ${bx.spansh ? boxelKnown(bx) : `<span class="unk">to try</span>`}`;
 }
 // Now's at-risk line, under fuel: what the data aboard stands to lose, shown only once it matters (your amber level
@@ -1361,7 +1479,7 @@ function drawLastSaid() {
 document.getElementById("lastSaidBtn").onclick = () => {
   const c = captions[captions.length - 1];
   const same = c && lastSaid && lastSaid.words === c.said;
-  if (c) speak(same ? lastSaid.words : c.words, {kind: "manual", voice: same ? lastSaid.voice : null, pace: same ? lastSaid.pace || 1 : 1});
+  if (c) speak(same ? lastSaid.words : c.words, {kind: "manual", voice: same ? lastSaid.voice : null, speaker: same ? lastSaid.speaker : null, pace: same ? lastSaid.pace || 1 : 1});
 };
 const agoText = at => { const s = Math.max(0, Math.round((Date.now() - at) / 1000));
   return s < 10 ? "just now" : s < 90 ? `${s} s ago` : s < 5400 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`; };
@@ -1497,11 +1615,39 @@ const TABLET_VIEWS = ["now", "near", "here", "bio", "bm", "search", "map", "hwy"
 let view = TABLET ? store.get("tabletView", "now") : store.get("view", "near");
 if (view === "rich" || view === "navroute") view = "hwy";   // Road to Riches had a tab of its own for a day (PR #1): it is a route type of Plot Route now
 if (TABLET && !TABLET_VIEWS.includes(view)) view = "now";
-const saveView = () => store.set(TABLET ? "tabletView" : "view", view);
+// a view window (S37) never saves its view: the main window's stays as it was
+const saveView = () => { if (!viewWindow) store.set(TABLET ? "tabletView" : "view", view); };
 let viewBeforeNow = view === "now" ? "overview" : view;
-// the only URL parameter the page reads: a window opened at ?mode=now (the ↗ beside Now) shows Now and nothing else
+// the URL parameters the page reads: a window opened at ?mode=now (the ↗ beside Now) shows Now and nothing else
 const nowWindow = new URLSearchParams(location.search).get("mode") === "now";
 if (nowWindow) view = "now";
+// S37: any other view in a window of its own (?view=bm, the ↗ in a tab's corner): it shows that view without the tab
+// row and never saves it; a jump to Here (⌖, a body) goes to the main window while it is open, else this window shows
+// it (unsaved) with ↩ back. It is not the Now window (leaveNow, nowWindow) and claims the voice only after the main one.
+// Not on the tablet (its own shell) and never Now (?mode=now is that window).
+const POP_VIEWS = [...document.querySelectorAll(".views [data-view]")].map(b => b.dataset.view).filter(v => v !== "now");
+const viewWindow = (() => { const v = new URLSearchParams(location.search).get("view");
+  return !TABLET && !nowWindow && POP_VIEWS.includes(v) ? v : null; })();
+if (viewWindow) { view = viewWindow; document.body.classList.add("viewwin"); }
+const viewName = v => { const b = document.querySelector(`.views [data-view="${v}"]`); return b ? b.dataset.name || b.textContent.trim() : v; };
+const popWins = {};
+function popView(v) {
+  const w = popWins[v];
+  if (w && !w.closed) { w.focus(); return; }
+  popWins[v] = window.open(`${location.pathname}?view=${v}`, `ed-outrider-view-${v}`, "popup,width=1100,height=800");
+  if (!popWins[v]) toast("The browser blocked the new window");
+}
+// a jump to another view from a view window: the main window does it (and comes forward) while it is open; false when
+// there is none, and this window switches itself
+function inMainWindow(fn, ...args) {
+  if (!viewWindow) return false;
+  let o = null;
+  try { o = window.opener && !window.opener.closed && typeof window.opener[fn] === "function" ? window.opener : null; } catch { o = null; }
+  if (!o) return false;
+  o[fn](...args);
+  try { o.focus(); } catch { /* the browser decides */ }
+  return true;
+}
 // ---- app mode: on a window at least APP_MIN_W x APP_MIN_H the page fits the window (body.app): the header stays, the
 // view fills the rest and each of its panes (.pane: a bordered box) scrolls on its own, its table headings sticky.
 // Smaller windows (phones, narrow or short ones) scroll the page as before, and Now keeps its own fit-to-screen layout.
@@ -1648,10 +1794,13 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["scoopstop", "fuel scooping stopped early (not above 90%, nor when you jump)", null],
   ["supercharge", "the frame shift drive supercharged in a neutron star or white dwarf cone", null],
   ["exo", "Expressway to Exomastery (a route plotted in Plot Route): on arriving at a route system, the species still to sample there and the best of them, and once they are sampled the next stop, and route complete", null],
-  ["riches", "Road to Riches (a route plotted in Plot Route): on arriving at a route system, the bodies still worth scanning or mapping there and the next stop, and route complete", null],
+  ["riches", "Road to Riches and the Earth-like and ammonia world routes (plotted in Plot Route), and a sweep (plotted from ticks in Left behind, My firsts or Bookmarks): on arriving at a route system, the bodies still worth scanning or mapping there (a sweep: none) and the next stop, and route complete", null],
   ["trade", "a trade route (plotted in Plot Route): on arriving at a stop, what to sell and buy there; once that is done, the hop's profit and the next stop; and route complete", null],
   ["highway", "the Neutron Highway (a route plotted in Plot Route): the next stop on arriving at a route system (with the boost and refuel stops), off route, back on the highway, and highway complete", null],
+  ["refuelshort", "a Highway route plotted with the exact plotter: the fuel aboard won't reach the next refuel stop (once per system; at a refuel stop itself the route's line only shows how much to scoop)", "alert"],
+  ["lastscoop", "any route Outrider follows (the game's plotted route, the Highway, a survey route's legs): at the last scoopable star before stars you can't scoop, when the fuel aboard won't cover them (once per stretch, not while scooping)", "alert"],
   ["autotarget", "auto-target (after a supercharge when it is on, a test, Target next, 🎯, the co-pilot button's tap): whether the system was targeted, and nothing to target when the button found none", null],
+  ["wrongtarget", "a route you follow (the Highway, a survey or trade route): the system targeted in game is not its next stop (once per target, after the galaxy map closes; never off the route, nor for a later stop of the route, which the line shows as stops ahead)", "alert"],
   ["find", "a valuable body just scanned (over your highlight levels); one someone else mapped is not named, but said once per system (\"already mapped, still worth mapping\")", "find"],
   ["jumponium", "a landable body just scanned has a material your FSD injections are short of (premium or standard at 2 or fewer): said with the FSS debrief, or alone when the FSS never completes", "find"],
   ["sampling", "leaving a body with exobiology unfinished (untouched genera only if you landed there); a species completed; within 100 m of a plant you tagged where the next sample would count", "alert"],
@@ -1659,7 +1808,9 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["bodybrief", "approaching a body with biological signals: what they could be (the FSS already said so, so off by default)", null],
   ["sell", "docked where you can sell, and what you banked", "cash"],
   ["saleleft", "a sale left data aboard: Universal Cartographics sells 50 systems a page, so a sale that stops after one page leaves the rest unsold (said once the pages stop and the estimate has caught up); likewise completed samples still unsold after a Vista Genomics sale", "alert"],
-  ["unsold", "unsold data crosses a threshold", "cash"], ["hull", "hull damage, heat damage, interdiction", "danger"],
+  ["unsold", "unsold data crosses a threshold", "cash"],
+  ["firstsseen", "someone else's scans of a system holding your unsold first discoveries reached Spansh (the firsts watch): a card and a notification each time, spoken at most once in 30 minutes", "alert"],
+  ["hull", "hull damage, heat damage, interdiction", "danger"],
   ["carrier", "your carrier arrives somewhere", "chime"], ["codex", "a new codex entry", "chime"],
   ["phenomena", "notable stellar phenomena (life in clouds or rings) the FSS finds in a system where you have none on record: how many", "find"],
   ["ggg", "a potential green gas giant: one of your own scans fits the community's seven-layer ladder model (a guess: check it in the system map)", "find"],
@@ -1670,12 +1821,16 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["loss", "your ship was destroyed with data aboard (or samples died with you): what was lost, and the nearest system to rescan", "danger"],
   ["rigs", "Rhino mining rigs: the co-pilot button's confirmation (rig placed, picked up, six out) and what a rig collected", null],
   ["rigleash", "a Rhino mining rig too far from you (over the rig warning distance, again at 4.5 km; the game destroys it at 5 km)", "danger"],
-  ["rigsout", "docking the Rhino with rigs still marked out on the body, and which are probably full (Outrider's own record: a rig picked up without a tap still counts until you mark it on the surface map)", null]];
-const UNSPOKEN = new Set(["discovery"]);   // a target's verdict: the arrival is what gets spoken
+  ["rigsout", "docking the Rhino with rigs still marked out on the body, and which are probably full (Outrider's own record: a rig picked up without a tap still counts until you mark it on the surface map)", null],
+  ["uploads", "an upload (EDDN, EDSM, Inara) failing for 15 minutes with messages waiting, and sending again after it: a card at the top of the page too, never spoken", null]];
+// never spoken, and why: a target's verdict (the arrival is what gets spoken); an upload outage (the card and the
+// notification say it: the author's choice, S3)
+const UNSPOKEN_WHY = {discovery: "the arrival is", uploads: "a card and a notification only"};
+const UNSPOKEN = new Set(Object.keys(UNSPOKEN_WHY));
 // the defaults, as functions: another window's import that resets a setting rebuilds from them (ALERT_STORES)
 const alertCfgBase = () => Object.assign({enabled: false}, Object.fromEntries(ALERTS.map(([k]) => [k, true])),
   // a notification on every jump (or scoop, or FSS) would be noise: these are spoken by default, not notified
-  {jump: false, honk: false, brief: false, fss: false, mapped: false, scoop: false, scoopstop: false, supercharge: false, highway: false, autotarget: false,
+  {jump: false, honk: false, brief: false, fss: false, mapped: false, scoop: false, scoopstop: false, supercharge: false, highway: false, autotarget: false, wrongtarget: false,
    sampling: false, approach: false, bodybrief: false, jumponium: false, rigs: false, rigsout: false});
 const alertCfg = Object.assign(alertCfgBase(), store.get("alerts", {}));
 // off until you tick them (the whole row): the jumponium call-out
@@ -1697,8 +1852,24 @@ function notify(kind, title, body) {
     const n = new Notification(title, {body, tag: "ed-" + kind});
     // the jumponium call-out opens the Materials tab at its "where to find" list
     if (kind === "jumponium") n.onclick = () => { try { window.focus(); } catch {} openMatSources(); };
+    // someone else scanned your unsold firsts (S6): My firsts, where the system is marked 👁
+    if (kind === "firstsseen") n.onclick = () => { try { window.focus(); } catch {} const t = document.querySelector('[data-view="firsts"]'); if (t) t.click(); };
     return true;
   } catch { return false; }
+}
+// S6's card: "👁 Someone else scanned your unsold Drojau LL-O b26-3" over "3 bodies reached Spansh 12 days after you (your
+// scan 15 days ago) · 14.2M cr at stake · see My firsts", "· 3 systems so far today" when a first run through finds more.
+// Their scans reached Spansh: never "stolen". The days from the moment's timestamps (nothing ticking in the payload)
+function firstsSeenText(m, now = Date.now()) {
+  const day = 86400000, first = m.first_ts ? Date.parse(m.first_ts) : NaN, rep = m.reported_ts ? Date.parse(m.reported_ts) : NaN;
+  const days = n => `${n} day${n === 1 ? "" : "s"}`, n = m.bodies || 0;
+  const after = isFinite(first) && isFinite(rep) ? ` ${days(Math.max(0, Math.round((rep - first) / day)))} after you` : "";
+  const ago = isFinite(first) ? ` (your scan ${days(Math.max(0, Math.round((now - first) / day)))} ago)` : "";
+  const bits = [`${n} ${n === 1 ? "body" : "bodies"} reached Spansh${after}${ago}`];
+  if (m.value) bits.push(`${credits(m.value)} cr at stake`);
+  if (m.today > 1) bits.push(`${m.today} systems so far today`);
+  bits.push("see My firsts");
+  return {title: `👁 Someone else scanned your unsold ${m.system}`, body: bits.join(" · ")};
 }
 // The "mapped" call-out's words, from the facts alone (no personality lines): "A 2 mapped efficiently, 3.4M. Next:
 // biology on C 2, up to 19.0M." The efficiency is ProbesUsed against EfficiencyTarget; the value is the body's data
@@ -1724,15 +1895,33 @@ function mappedText(m) {
 // can make this browser always speak or never.
 let isSpeaker = !TABLET && !(typeof navigator !== "undefined" && navigator.locks && navigator.locks.request);
 let speakerWait = null;   // this window's place in the queue for the lock (an AbortController)
+// A Now or view window (S37) given the voice while the main window that opened it is waiting in line (that window
+// reloaded: F5, or an update's reload, let the voice pass here) hands it back within SPEAKER_YIELD_MS and queues again,
+// so the main window keeps the voice; unless the voice was taken here on purpose (Speak from this window).
+const SPEAKER_YIELD_MS = 1000;
+const sideWindow = () => nowWindow || !!viewWindow;
+// this window waits in line for the voice: what a Now or view window it opened asks before keeping the voice
+function speakerQueued() { return !sideWindow() && !isSpeaker && !!speakerWait; }
+function openerQueued() {
+  try { const o = window.opener; return !!(o && !o.closed && typeof o.speakerQueued === "function" && o.speakerQueued()); }
+  catch { return false; }   // the opener is another site now
+}
 function claimSpeaker(steal = false) {
   if (TABLET || !(typeof navigator !== "undefined" && navigator.locks && navigator.locks.request)) return;   // never in line
   if (speakerWait) { const w = speakerWait; speakerWait = null; w.abort(); }   // stealing: leave the queue first
   const ac = steal ? null : new AbortController();
   speakerWait = ac;
+  let yielded = false;
   navigator.locks.request("ed-speaker", steal ? {steal: true} : {signal: ac.signal}, () => {
     if (speakerWait === ac) speakerWait = null;
     isSpeaker = true; drawSpeaker();
-    return new Promise(() => {});   // held for the life of the window (or until another window takes it)
+    if (steal || !sideWindow()) return new Promise(() => {});   // held for the life of the window (or until another window takes it)
+    return new Promise(resolve => {   // a side window: held until the main window that opened it is in line for it
+      const t = setInterval(() => { if (openerQueued()) { clearInterval(t); yielded = true; resolve(); } }, SPEAKER_YIELD_MS);
+    });
+  }).then(() => {
+    if (!yielded) return;
+    isSpeaker = false; drawSpeaker(); claimSpeaker();   // handed back: in line again, behind the main window
   }).catch(() => {
     if (ac && ac.signal.aborted) return;   // we left the queue ourselves, to steal it
     isSpeaker = false; drawSpeaker(); claimSpeaker();   // another window took it: wait in line again
@@ -1802,8 +1991,27 @@ function uncool(it) {
 }
 // how long each sound plays before the voice starts (the fanfare's held chord runs to 1.7 s); others 900 ms
 const SOUND_LEAD = {fanfare: 1700, chime: 1000};
+// Is this alert kind switched on in this browser: any of its ticks in Settings → Alerts (notify with notifications on,
+// its sound, speak), whatever the 🗣 and 🔊 buttons or a hush say right now
+const alertOn = kind => {
+  const snd = (ALERTS.find(a => a[0] === kind) || [])[2];
+  return !!((alertCfg.enabled && alertCfg[kind]) || ((snd || kind === "arrival") && alertSound[kind]) || (alertSpeak[kind] && !UNSPOKEN.has(kind)));
+};
+// The overlay's Alerts panel (S26): an alert this page shows, posted to the game PC's Outrider while the overlay and
+// its Alerts panel are on and the kind is switched on here (the author: every alert switched on). Every window posts
+// it, the tablet too: the server keeps one of the same title and text within 10 s. Danger (as the speech queue ranks
+// it, or the danger sound) stays 15 s there, the rest 8 s. Returns whether it was posted.
+function overlayAlert(kind, title, body, tag) {
+  const o = data && data.overlay;
+  if (!o || !data.game_pc || !o.enabled || !(o.panels || {}).alerts || !alertOn(kind)) return false;
+  const danger = speechPrio(kind, tag) === 0 || (ALERTS.find(a => a[0] === kind) || [])[2] === "danger";
+  fetch("api/overlay/alert", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({kind, title: String(title || "").slice(0, 200), body: String(body || "").slice(0, 300), danger})}).catch(() => {});
+  return true;
+}
 function alertOut(kind, title, body, {sound, say, delay = 0, tag = null, still = null, quiet = false} = {}) {
   lastAlert = {kind, title, body, at: Date.now()};
+  overlayAlert(kind, title, body, tag);
   if (TABLET) tabBanner(kind, title, body, tag);   // the tablet shows it; the PC says it (and the tablet too with Play alerts here)
   const entry = logSpeech({kind, tag, words: title});
   const snd = sound === undefined ? (ALERTS.find(a => a[0] === kind) || [])[2] : sound;
@@ -1812,11 +2020,14 @@ function alertOut(kind, title, body, {sound, say, delay = 0, tag = null, still =
   if (plays) setTimeout(() => play(snd), delay);
   const notified = notify(kind, title, body);
   if (loud && speechOn && alertSpeak[kind] && !UNSPOKEN.has(kind) && !quiet && !hush) {
-    lineStyle = lineKey = lineTemplate = null;
-    const words = (typeof say === "function" ? say() : say) || title;
+    lineStyle = lineKey = lineTemplate = null; lineCrew = undefined; lineRow = kind;   // line() resolves this row's crew member
+    let words;
+    try { words = (typeof say === "function" ? say() : say) || title; } finally { lineRow = null; }
     // the line's alert and its speech.json wording, for the 👎 in Spoken lines
     entry.style = lineStyle; entry.key = lineKey; entry.template = lineTemplate;
-    speak(words, {delay: plays ? delay + soundLead(snd) : delay, kind, tag, still, log: entry, ...styleVoice(lineStyle)});
+    // who says it (the crew, when on): the member line() picked the words for, else the row's by the line's tag
+    const crew = lineCrew !== undefined ? lineCrew : crewMember(kind, tag || lineKey);
+    speak(words, {delay: plays ? delay + soundLead(snd) : delay, kind, tag, still, log: entry, ...crewVoice(crew, lineStyle)});
     addCaption(words);
     return true;
   }
@@ -1826,7 +2037,7 @@ function alertOut(kind, title, body, {sound, say, delay = 0, tag = null, still =
     linePlain = true;
     try { addCaption((typeof say === "function" ? say() : say) || title); } catch { addCaption(title); } finally { linePlain = false; }
   }
-  setFate(entry, !loud ? `silent: ${hushReason()}` : !speechOn ? "silent: speech off" : UNSPOKEN.has(kind) ? "not spoken (the arrival is)"
+  setFate(entry, !loud ? `silent: ${hushReason()}` : !speechOn ? "silent: speech off" : UNSPOKEN.has(kind) ? `not spoken (${UNSPOKEN_WHY[kind]})`
     : quiet ? (typeof quiet === "string" ? quiet : "merged into another line (quiet)")
     : hush && alertSpeak[kind] ? "silent: hushed" : "silent: not ticked to speak");
   return notified;
@@ -1844,7 +2055,7 @@ const JUMP_LINE_WAIT = 8000;   // ms: the jump line's latest start after the cha
 // ms after Status.json says "in the tunnel" (it says so about 2 s before the countdown ends): the line then starts
 // with the tunnel itself (the author's timing, in game 2026-10-03)
 const JUMP_TUNNEL_DELAY = 2500;
-const SPEECH_SYS_BOUND = new Set(["find", "signals", "jump", "honk", "brief", "fss", "mapped", "approach", "bodybrief", "jumponium", "phenomena", "ggg", "rare_star", "surface_site", "signal_poi", "curious", "highway", "riches", "exo", "trade", "autotarget"]);
+const SPEECH_SYS_BOUND = new Set(["find", "signals", "jump", "honk", "brief", "fss", "mapped", "approach", "bodybrief", "jumponium", "phenomena", "ggg", "rare_star", "surface_site", "signal_poi", "curious", "highway", "refuelshort", "lastscoop", "riches", "exo", "trade", "autotarget", "wrongtarget"]);
 // a rig confirmation answers your own press, like a line asked for
 const speechPrio = (kind, tag) => DANGER.has(tag) || kind === "hull" || kind === "fuel" ? 0 : kind === "manual" || kind === "rigs" ? 1
   : ["find", "signals", "codex", "phenomena", "ggg", "rare_star", "surface_site", "signal_poi", "bodybrief", "supercharge", "jumponium"].includes(kind) ? 3 : 2;
@@ -1885,17 +2096,19 @@ async function runningAudio() {
 // play first); `kind` is the alert kind ("manual" for a click in this window), `tag` its speech.json key.
 // `log` is the transcript entry alertOut made for it (a line spoken some other way gets its own). `piperOnly`: said in
 // Piper or not at all, never the browser's own voice (the co-pilot channel's lines: the author's choice).
-function speak(text, {delay = 0, kind = "manual", tag = null, still = null, voice = null, pace = 1, log = null, piperOnly = false} = {}) {
+function speak(text, {delay = 0, kind = "manual", tag = null, still = null, voice = null, speaker = null, pace = 1, log = null, piperOnly = false,
+                      role = null, crew = null} = {}) {
   const words = spokenText(text);
   const entry = log || logSpeech({kind, tag});
   if (words) entry.words = words;
-  if (voice) entry.voice = voice;
+  if (voice || speaker != null) entry.voice = (voice || "the main voice") + (speaker != null ? ` #${speaker}` : "");
+  if (crew) entry.crew = crewWords(crew);
   if (!words) return setFate(entry, "nothing to say");
   const now = Date.now();
   if (tag && !speechCooled(speechLast, tag, now)) return setFate(entry, `refused: said under ${SPEECH_COOLDOWN[tag] / 1000} s ago`);
   const prevLast = tag ? speechLast[tag] : undefined;
   if (tag) speechLast[tag] = now;
-  const item = {words, kind, tag, still, voice, pace, piperOnly, prio: speechPrio(kind, tag), at: now, notBefore: now + delay, prevLast,
+  const item = {words, kind, tag, still, voice, speaker, pace, piperOnly, role: voice ? role : null, prio: speechPrio(kind, tag), at: now, notBefore: now + delay, prevLast,
                 sys: SPEECH_SYS_BOUND.has(kind) && data && data.position ? posId() : null, log: entry};
   const before = speechItems;
   speechItems = speechAdd(speechItems, item);
@@ -1970,7 +2183,7 @@ async function speechWorker() {
         e.took = Date.now() - t0; e.engine = item.engine || null;
         setFate(e, item.unsaid ? `not said: ${item.unsaid}` : item.timedOut ? "timed out (the browser voice hung)"
           : item.capped ? "cut short: the PC's player ran past the line's length" : "said");
-        if (e.fate === "said") lastSaid = {words: item.words, voice: item.voice, pace: item.pace};   // "say again"
+        if (e.fate === "said") lastSaid = {words: item.words, voice: item.voice, speaker: item.speaker ?? null, pace: item.pace};   // "say again"
       }
       if (item.unsaid || item.timedOut) uncool(item);
     }
@@ -1989,7 +2202,7 @@ addEventListener("pagehide", () => {
 const lineSpeed = it => Math.min(2, Math.max(0.5, speechSpeed() * (it.pace || 1)));
 function nextLine() {
   const i = speechPick(speechItems), it = i < 0 ? null : speechItems[i];
-  return it ? {text: it.words, voice: it.voice || null, speed: lineSpeed(it)} : null;
+  return it ? {text: it.words, voice: it.voice || null, speaker: it.speaker ?? null, speed: lineSpeed(it), role: it.role || null} : null;
 }
 async function sayNow(item) {
   const cur = speechNow = {prio: item.prio, kind: item.kind, stopped: false, halt: null, stop() { this.stopped = true; if (this.halt) this.halt(); }};
@@ -2002,7 +2215,7 @@ async function sayNow(item) {
       try {
         const speed = Math.min(2, Math.max(0.5, speechSpeed() * (item.pace || 1)));
         const r = await fetch("api/say/play", {method: "POST", headers: {"Content-Type": "application/json"},
-                                               body: JSON.stringify({text: item.words, voice: item.voice || null, speed, id, next: nextLine(),
+                                               body: JSON.stringify({text: item.words, voice: item.voice || null, speaker: item.speaker ?? null, role: item.role || null, speed, id, next: nextLine(),
                                                                      volume: outVolume()})});
         if (r.ok) {
           item.engine = "Piper on the PC";
@@ -2031,7 +2244,8 @@ async function sayNow(item) {
     if (ctx) {
       try {
         const speed = Math.min(2, Math.max(0.5, speechSpeed() * (item.pace || 1)));
-        const r = await fetch(`api/say?text=${encodeURIComponent(item.words)}&speed=${speed}${item.voice ? `&voice=${encodeURIComponent(item.voice)}` : ""}`);
+        const r = await fetch(`api/say?text=${encodeURIComponent(item.words)}&speed=${speed}${item.voice ? `&voice=${encodeURIComponent(item.voice)}` : ""}`
+                              + (item.speaker != null ? `&speaker=${item.speaker}` : "") + (item.role ? `&role=${encodeURIComponent(item.role)}` : ""));
         if (r.ok) {
           const buf = await ctx.decodeAudioData(await r.arrayBuffer());
           if (cur.stopped) return;
@@ -2124,15 +2338,30 @@ function lineVars(vars) {
   const all = {name: () => names.length ? names[Math.floor(Math.random() * names.length)] : "Commander",
                cmdr: data && data.commander && data.commander.name, ship: data && data.ship ? shipLabel(data.ship.name, data.ship.type) : null,
                here: data && data.position && data.position.name};
+  // the crew's ({engineer}...): a member's name when Settings gives it one, else its words ("the Engineer")
+  for (const r of crewRoles()) all[r.id] = crewName(r.id) || r.words;
   for (const [k, v] of Object.entries(vars)) if (v != null && v !== "") all[k] = v;
   return all;
 }
-const fillLine = (text, all) => text.replace(/\{(\w+)\}/g, (_, k) => all[k] == null ? "" : String(typeof all[k] === "function" ? all[k]() : all[k]));
+// A crew placeholder that opens a sentence (the line's start, or after ". ", "! ", "? ", "... ", as filled so far: a
+// {text} ending in a full stop counts) starts with a capital: "The Engineer" (outrider.speech.fill, the same rule)
+const CREW_START = /(?:^\s*|[.!?…] )$/;
+function fillLine(text, all) {
+  let out = "", last = 0;
+  for (const m of text.matchAll(/\{(\w+)\}/g)) {
+    out += text.slice(last, m.index); last = m.index + m[0].length;
+    const k = m[1];
+    if (all[k] == null) continue;
+    const v = String(typeof all[k] === "function" ? all[k]() : all[k]);
+    out += isCrewKey(k) && CREW_START.test(out) ? v.charAt(0).toUpperCase() + v.slice(1) : v;
+  }
+  return out + text.slice(last);
+}
 const allFilled = (text, all) => [...text.matchAll(/\{(\w+)\}/g)].every(m => all[m[1]] != null);
 // Danger lines: a joke at 20% hull costs clarity, so with "Danger alerts always down to business" ticked (the
 // default) these come only from the business lists and never swear, whatever personalities are ticked.
 // (ship_lost too: a debrief after a rebuy is no time for a joke; it also jumps the queue like the others)
-const DANGER = new Set(["hull", "heat", "interdicted", "fuel_low", "fuel_star", "fuel_target", "fuel_topup", "carrier_departs", "ship_lost", "rig_leash"]);
+const DANGER = new Set(["hull", "heat", "interdicted", "fuel_low", "fuel_star", "fuel_target", "fuel_topup", "fuel_short", "fuel_last_scoop", "carrier_departs", "ship_lost", "rig_leash"]);
 const speechDangerBusiness = () => !!(store.get("speechDangerBusiness", null) ?? (data && data.defaults && data.defaults.speech_danger_business) ?? true);
 // "One personality per system": the personality is drawn at game start and at each arrival and says every line
 // until the next one, so a character (and its own voice) holds through a system. In memory only: a reload draws
@@ -2151,15 +2380,20 @@ let linePlain = false;   // set while a window that is not speaking words a capt
 function line(key, vars = {}, plain = "") {
   if (linePlain) return plain;
   const entry = speechLib.lines && speechLib.lines[key];
+  // the crew (when on): the row's crew member speaks in its own personality, when it has lines for this alert (else
+  // as the XO: the ticked ones); "as the XO" is the ticked ones too, the shift included. A line naming a crew member
+  // ({engineer}) only while the crew is on, and never by the member it names (crewLineOk)
+  const crew = lineCrew = crewMember(lineRow, key), mine = crew && crew.personality;
   const listOf = name => !entry || typeof entry !== "object" || !Array.isArray(entry[name]) ? []
-    : entry[name].filter(x => typeof x === "string" && x.trim());
+    : entry[name].filter(x => typeof x === "string" && x.trim() && crewLineOk(x, crew));
   // a danger line: business alone (a custom speech.json without business lines falls back to the ticked ones)
   const serious = DANGER.has(key) && speechDangerBusiness();
   const ticked = speechStyles(), shift = speechShift();
   if (shift && !(shiftStyle && ticked.includes(shiftStyle))) pickShift();   // first line, or its personality unticked
   // the personality on shift, unless it has nothing for this alert (then every ticked one, as without the tick)
   const onShift = shift && shiftStyle && (listOf(shiftStyle).length || (speechProfane() && listOf(shiftStyle + "_profane").length));
-  const styles = serious && listOf("business").length ? ["business"] : onShift ? [shiftStyle] : ticked;
+  const own = mine && (listOf(mine).length || (speechProfane() && listOf(mine + "_profane").length)) ? mine : null;
+  const styles = serious && listOf("business").length ? ["business"] : own ? [own] : onShift ? [shiftStyle] : ticked;
   const lists = suffix => styles.flatMap(st => listOf(st + suffix).map(x => [st, x]));   // [personality, line]
   // with profanity on, roll first: the swearing versions this share of the time, the clean ones otherwise
   // (whichever side has nothing for this alert gives way to the other)
@@ -2188,14 +2422,77 @@ function line(key, vars = {}, plain = "") {
   return fillLine(pick, all);
 }
 // The personality of the line line() picked last, and the voice it asks for: a style in speech.json may be
-// {label, voice, speed}, a Piper voice of its own (only if installed; it wins over the dialog's voice) and a
-// pace multiplying yours. The browser's own speech ignores the voice.
+// {label, voice, speed, speaker}, a Piper voice of its own (only if installed; it wins over the dialog's voice), one
+// person of a several-person voice (its own, else the main voice's) and a pace multiplying yours. A pick in Settings →
+// Voice → Personality voices (the server's data.style_picks, S40: every browser's) wins over the file's voice and
+// speaker; the pace stays the file's. The browser's own speech ignores the voice.
 let lineStyle = null;
 let lineKey = null, lineTemplate = null;   // and its alert and speech.json wording (the 👎 bans that wording)
+// ---- the crew (crew batch 1; outrider.speech.CREW_ROLES, sent as speechLib.crew_roles; the server's data.crew): each
+// alert row's lines are said by a crew member in its own personality and voice, so you know who is talking before the
+// sentence ends. Off (the default): one voice for everything, exactly as before. The XO / Co-pilot is the main voice and
+// personality: every member left "as the XO" speaks so (a new crew sounds the same until a role gets a voice of its
+// own), and the XO says the line of any member who cannot speak (data.crew's `fill`: a voice not installed, failing to
+// load, a speaker it lacks, a personality gone) and of any alert row no role covers, so no line is ever lost. Danger
+// lines (DANGER) are Tactical's while the Danger switch is on. The voice lab never goes through it.
+let lineRow = null;   // the alert row whose line line() is picking (alertOut sets it): its crew member chooses
+let lineCrew = null;  // the crew member line() picked the last line for (crewMember), null with the crew off
+let crewUi = false;   // Settings' crew table and memory note are set up (drawCrew may run: crew batch 2, further down)
+const crewRoles = () => Array.isArray(speechLib.crew_roles) ? speechLib.crew_roles : [];
+const crewTitle = id => (crewRoles().find(r => r.id === id) || {}).short || id;
+// The crew's placeholders (crew batch 3): one per role, {engineer} and the like (a role's id), naming another crew
+// member in a line. Filled with its name when Settings gives it one, else crew_roles' words ("the Engineer"; lineVars,
+// fillLine). Such a line is said only while the crew is on, and never by a member it names (a row moved to it, a danger
+// line in Tactical's voice, the XO standing in): outrider.speech's checks reject that on the default table.
+const isCrewKey = k => crewRoles().some(r => r.id === k);
+const crewName = role => { const m = data && data.crew && data.crew.members && data.crew.members[role];
+  return m && typeof m.name === "string" && m.name.trim() ? m.name.trim() : null; };
+const crewNamed = t => [...String(t).matchAll(/\{(\w+)\}/g)].map(m => m[1]).filter(isCrewKey);
+const crewLineOk = (t, crew) => { const n = crewNamed(t); return !n.length || !!(crew && !n.includes(crew.role)); };
+// the crew member who says a line of alert row `row` with speech key `key`: {role, personality, voice, speaker, fill,
+// for}; null with the crew off. `row` null (a line that is no alert's: speech on, the ▶ try) is the XO's.
+function crewMember(row, key) {
+  const c = data && data.crew;
+  if (!c || !c.on) return null;
+  const xo = (why, of) => ({role: "xo", personality: null, voice: null, speaker: null, fill: why || null, for: of || null});
+  if (row == null) return xo();
+  const role = c.danger !== false && key && DANGER.has(key) ? "tactical"
+    : (c.rows && c.rows[row]) || (crewRoles().find(r => Array.isArray(r.rows) && r.rows.includes(row)) || {}).id;
+  if (!role) return xo(`no crew member for the alert row ${row}`);
+  if (role === "xo") return xo();
+  const m = (c.members && c.members[role]) || {};
+  if (m.fill) return xo(m.fill, role);
+  const styles = speechLib.styles || {};
+  if (m.personality && !(m.personality in styles)) return xo(`personality ${m.personality} is not in the lines file`, role);
+  return {role, personality: m.personality || null, voice: m.voice || null, speaker: spkNum(m.speaker), fill: null, for: null};
+}
+// the voice a crew member says a line of personality `style` in: its own (with its person), else "as the personality"
+// (styleVoice: S40's pick, speech.json's, the main voice); `role` rides to the server, which has the XO say it when that
+// voice cannot. No crew: styleVoice alone, as before.
+function crewVoice(crew, style) {
+  const sv = styleVoice(style);
+  if (!crew) return sv;
+  return crew.voice ? {voice: crew.voice, speaker: crew.speaker, pace: sv.pace, role: crew.role, crew} : Object.assign({}, sv, {crew});
+}
+// a crew member in Spoken lines' facts: "Navigator", "XO for Engineer: voice en_GB-x not installed"
+const crewWords = m => m.role !== "xo" ? crewTitle(m.role) : m.fill ? `XO${m.for ? " for " + crewTitle(m.for) : ""}: ${m.fill}` : "XO";
+const spkNum = v => Number.isInteger(v) && v >= 0 ? v : null;
 function styleVoice(style) {
-  const st = style && speechLib.styles && speechLib.styles[style];
-  return st && typeof st === "object" ? {voice: typeof st.voice === "string" ? st.voice : null,
-                                         pace: Number(st.speed) >= 0.5 && Number(st.speed) <= 2 ? Number(st.speed) : 1} : {voice: null, pace: 1};
+  const base = String(style || "").replace(/_profane$/, ""), st = base && speechLib.styles && speechLib.styles[base];
+  const own = st && typeof st === "object" ? st : {}, pick = base && data && data.style_picks && data.style_picks[base];
+  const pace = Number(own.speed) >= 0.5 && Number(own.speed) <= 2 ? Number(own.speed) : 1;
+  if (pick && typeof pick.voice === "string") return {voice: pick.voice, speaker: spkNum(pick.speaker), pace, picked: true};
+  return {voice: typeof own.voice === "string" ? own.voice : null, speaker: spkNum(own.speaker), pace, picked: false};
+}
+// a voice and person in words: "en_GB-vctk-medium #12", "the main voice #3"
+const voiceWords = v => `${v.voice || "the main voice"}${v.speaker != null ? ` #${v.speaker}` : ""}`;
+let styleVoicesDrawn = "";   // Settings > Voice > Personality voices as last drawn (drawStyleVoices)
+// the voice and person a personality is really heard in: its own (picked or speech.json's) when installed, else the
+// main voice (a speech.json speaker with no voice of its own is the main voice's person; an uninstalled voice's is not)
+function heardVoice(style) {
+  const sv = styleVoice(style), t = data && data.tts, inst = (t && t.voices) || [];
+  if (sv.voice && inst.includes(sv.voice)) return sv;
+  return Object.assign({}, sv, {voice: (t && t.voice) || null, speaker: sv.voice ? null : sv.speaker, fallback: !!sv.voice});
 }
 // a star class as words, for {star}
 const spokenStar = c => !c ? "star" : /^D/.test(c) ? "white dwarf" : c === "N" ? "neutron star"
@@ -2213,9 +2510,12 @@ const LINE_SAMPLES = {
   find_bio: {body: "B 7", value: "19.0M"}, sample_clear: {genus: "Stratum"},
   codex: {entry: "Stratum Tectonicas", what: "new to your codex for this region"},
   phenomena: {what: "three notable stellar phenomena, all in rings"}, ggg: {body: "B 3"}, rare_star: {what: "a black hole at B"},
+  firsts_seen: {system: "Drojau LL-O b26-3", value: "14.2M"},
   surface_site: {what: "Guardian sites on B 3"}, signal_poi: {what: "a Guardian beacon"}, curious: {},
   fuel_low: {pct: 18}, fuel_star: {pct: 22, star: "white dwarf"}, fuel_target: {pct: 22, system: "Drojau LL-O b26-3"},
   fuel_topup: {rate: "8 of the last 20 stars were scoopable", jumps: "about 6 jumps"}, hull: {pct: 42}, interdicted: {by: "someone"},
+  fuel_short: {system: "Smojooe AR-E b25-8", jumps: "4 jumps", need: "24 tonnes"},
+  fuel_last_scoop: {count: 3}, wrong_target: {system: "Smojooe AR-E b25-8", next: "Pru Aim XY-Z d1"},
   docked_sell: {value: "114.1M", station: "Jaques Station"}, undocked_unsold: {value: "260.4M"},
   sold: {sold: "12.6M cr cartographics and 4.1M cr exobiology", still: ""},
   unsold_warn: {value: "52.0M"}, unsold_urgent: {value: "251.3M"},
@@ -2352,6 +2652,14 @@ function bodyBriefText(m) {
     `${credits(m.bio_options.low)} to ${credits(m.bio_options.high)}${x}`;
   return n + (m.bio_value ? `, up to ${credits(m.bio_value)}` : "") + x;
 }
+// S22: the geology the approached body's volcanism could show that is new to your codex (from Here's answer for that
+// system), for the approach card: "could show geology new to your codex: Water Ice Geyser, Water Ice Fumarole"
+function approachGeoText(m) {
+  const h = hereData && !hereData.error && String(hereData.id64) === String(m.system) ? hereData : null;
+  const b = h && (h.bodies || []).find(x => x.body_id != null && x.body_id === m.body_id);
+  const fresh = b ? codexGeoNew(b.codex_geo, h.region) : [];
+  return fresh.length ? `could show geology new to your codex: ${fresh.map(x => x.t.name).join(", ")}` : "";
+}
 // the approach's stakes: a landable body at or over the high-g level while the data aboard is over the amber
 // level or the rebuy multiple; null when it is not worth a word
 const highGravity = () => { const v = Number(store.get("highG", null) ?? (data && data.defaults && data.defaults.high_gravity) ?? 2); return isFinite(v) && v > 0 ? v : 2; };
@@ -2397,7 +2705,7 @@ function sayRegion(m) {
 }
 // "B 4 has polonium, 1.3 percent": a jumponium body, in the FSS debrief or alone
 const jumponiumSaid = j => `${j.body} has ${(j.name || j.material || "").toLowerCase()}, ${j.pct} percent.`;
-const jumponiumOn = () => !!(alertSpeak.jumponium || (alertCfg.enabled && alertCfg.jumponium) || alertSound.jumponium);
+const jumponiumOn = () => alertOn("jumponium");
 // Notable stellar phenomena in words: {ring: 3} -> "three notable stellar phenomena, all in rings"; {ring: 2, cloud: 1}
 // -> "three notable stellar phenomena: two in rings and one in a cloud"; {cloud: 1} -> "a notable stellar phenomenon, in a cloud"
 const NSP_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
@@ -2440,7 +2748,11 @@ const spokenTime = sec => sec < 90 ? `about ${Math.max(10, Math.round(sec / 5) *
 function hwySpoken(s) {
   if (!s || s.complete) return "";
   const ly = v => `${Math.round(v * 10) / 10} light-years`, bits = [], hv = s.heavy;
-  if (hv) bits.push(`too much fuel for the next jump, ${Math.floor(hv.need_t)} tonnes at most, you have ${Math.round(hv.have_t)}`);
+  if (hv) bits.push(`too much fuel for ${hv.hop > 1 ? `the jump to ${hv.next}` : "the next jump"}, ${Math.floor(hv.need_t)} tonnes at most, you have ${Math.round(hv.have_t)}`);
+  const sh = s.short;   // S1: too little to reach the refuel stop (at a refuel stop: how much to scoop)
+  if (sh) bits.push(sh.need_t == null ? `fuel won't reach ${sh.refuel_at}, and no amount of fuel makes it`
+    : `${sh.here_refuel ? "scoop to" : `fuel won't reach ${sh.refuel_at}, scoop to`} at least ${Math.ceil(sh.need_t)} tonnes` +
+      (sh.max_t != null ? `, at most ${Math.floor(sh.max_t)}` : ""));
   if (s.off_route) {
     if (s.nearest) bits.push(`off the route, the closest route system is ${s.nearest.name}, ${ly(s.nearest.distance)}`);
     else bits.push("off the route");
@@ -2633,8 +2945,10 @@ function firstsSeenLine(w) {
   return ` · <span class="seen" title="Someone else has scanned ${w.seen === 1 ? "one system" : w.seen + " systems"} holding your unsold first discoveries since you were there (their scans reached Spansh). Sell to keep your name on what you found first. See My firsts.${w.on ? ` Checked ${w.checked} of ${w.of}; each is looked at once a day.` : " (the firsts watch is off: this is from before)"}">👁 <b>${w.seen}</b> scanned by someone else</span>`;
 }
 // The nearest places to sell (Spansh station search): the nearest trustworthy one of each kind.
+// Your own carrier is the journal's (where it is now, S55): with how many carrier jumps would bring it to you
 const sellerTxt = x => !x ? "" : `${esc(x.name)}${x.yours ? " (your carrier)" : x.carrier ? " (carrier)" : ""} · ${esc(x.system)} · ${x.distance.toLocaleString("en-US", {maximumFractionDigits: 0})} ly` +
-  (effRange() ? ` ≈ ${jumpsFor(x.distance)} jump${jumpsFor(x.distance) > 1 ? "s" : ""}` : "") +
+  (effRange() && x.distance ? ` ≈ ${jumpsFor(x.distance)} jump${jumpsFor(x.distance) > 1 ? "s" : ""}` : "") +
+  (x.yours && x.carrier_jumps ? ` · ≈ ${x.carrier_jumps} carrier jump${x.carrier_jumps === 1 ? "" : "s"} to you` : "") +
   (x.carrier && !x.yours && x.age_days != null ? ` <span class="unk">(seen ${x.age_days < 1 ? "today" : Math.round(x.age_days) + " d ago"})</span>` : "");
 function sellersLine() {
   const s = data.sellers; if (!s || !s.uc) return "";
@@ -2706,10 +3020,12 @@ function render() {
   document.getElementById("refLn").innerHTML = p ? (rg && rg.name ? `<span${flash ? ` class="regionnew"` : ""} title="galactic region (codex entries are per region)${rg.nebula ? "; inside a nebula zone" : ""}${flash ? "; just entered" : ""}">${esc(rg.name)}${rg.nebula ? " · nebula" : ""}</span> · ` : "") +
     `Sol <b>${lyTo(0, 0, 0)}</b> ly · Colonia <b>${lyTo(-9530.5, -910.28125, 19808.125)}</b> ly` : "";
   const fkHere = focusKey("here");
-  document.getElementById("here").innerHTML = !p ? "waiting for your first jump…" :
+  // where you jumped from, beside the name in the lines' smaller font (S75: it had a line of its own, "came from")
+  const prev = data.previous, from = prev && p ? `from ${prev.name} (${Math.hypot(prev.x - p.x, prev.y - p.y, prev.z - p.z).toFixed(1)} ly)` : "";
+  document.getElementById("here").innerHTML = !p ? esc(noJumpText()) :
     `<span class="copy" data-name="${esc(p.name)}" title="click to copy"` +
     (known ? ` data-pop data-id="${esc(here.id)}"` : "") + `>${esc(p.name)}</span>` + (here ? firstsIcon(here.firsts) : "") +
-    (here ? bmIcon(here.id, here.name, bms) : "");
+    (here ? bmIcon(here.id, here.name, bms) : "") + (from ? ` <span class="from" title="${esc(from)}">${esc(from)}</span>` : "");
   refocus("here", fkHere);
   applyAppMode();
   placeOverview();
@@ -2735,21 +3051,26 @@ function render() {
   document.getElementById("matView").hidden = view !== "mat";
   if (view === "mat") loadMat();
   document.getElementById("logView").hidden = view !== "log";
-  if (view === "log") { if (L.key === null) loadLog(); else tailLog(); }
+  if (view === "log") { logUnsentShow(); if (L.key === null) loadLog(); else tailLog(); }
   document.getElementById("bioView").hidden = view !== "bio";
-  if (view === "bio") { if (bioMode !== "runs") loadChecklist(); else loadBio(); }
+  if (view === "bio") { if (bioMode !== "runs") { loadChecklist(); if (CL.find) clDrawSide(); } else loadBio(); }   // a ☆ set from the find's list
   if (view === "here" || nearPinned || (view === "overview" && !ovState.collapsed) || view === "now") {   // Now reads Here's data
     loadHere();
     // tab and pane keep different modes; and the in-game target moves without a scan (review F4): redraw, no refetch
-    if (hereData && (lastHereCtx !== hereCtx() || lastHereDest !== hereDestKey())) renderHere();
+    if (hereData && (lastHereCtx !== hereCtx() || lastHereDest !== hereDestKey() || lastHerePlan !== herePlanKey())) renderHere();
   }
   if (view === "hist") { renderLastSession(); loadHistory(); }
   renderStrip();
   loadOnBody();
   document.getElementById("searchView").hidden = view !== "search";
   document.querySelectorAll("[data-view]").forEach(b => b.classList.toggle("on", b.dataset.view === view));
-  document.getElementById("bmViewBtn").textContent = `Bookmarks${(data.bookmarks || []).length ? ` (${data.bookmarks.length})` : ""}`;
-  document.getElementById("sFrom").textContent = p ? p.name : "—";
+  // the tab's own words (its first child), so the ↗ in its corner (S37) stays
+  document.getElementById("bmViewBtn").firstChild.textContent = `Bookmarks${(data.bookmarks || []).length ? ` (${data.bookmarks.length})` : ""}`;
+  if (viewWindow) {   // S37: ↩ back to this window's own view after a jump it made itself (the main window gone)
+    const back = document.getElementById("viewWinBack");
+    back.hidden = view === viewWindow; back.textContent = `↩ ${viewName(viewWindow)}`;
+  }
+  aroundOptions(document.getElementById("sAround"));   // S49: "you (where you are)", your carrier's and the next stop's names
   renderBookmarks(bms);
   renderSearch(bms);
   document.getElementById("mapView").hidden = view !== "map";
@@ -2761,7 +3082,12 @@ function render() {
   if (view === "now") renderNow(); else renderSurface();   // Now's map, or the on-body strip's copy
   nowWake();
   // opening the map asks again (Codex F5: the system's own history and scans changed while it was closed, A -> B -> A)
-  if (view === "map") { if (!M.open) M.key = null; M.open = true; loadMap(); drawMap(); } else M.open = false;
+  if (view === "map") {
+    if (!M.open) M.key = null; M.open = true; loadMap(); drawMap();
+    // S72: what a click does here (the card under the pointer says it per system)
+    const cw = document.getElementById("mClickWhat");   // the tablet's hint is its own (a tap shows the card)
+    if (cw) cw.textContent = canAim() ? `target it in game${hwyFront() ? "" : " (5 s)"} (your own system: copy its name)` : "copy its name";
+  } else M.open = false;
   if (view === "hwy") { loadHwy(); loadRich(); loadNavRoute(); }
   refreshPop();
   const jr = effRange();
@@ -2777,7 +3103,6 @@ function render() {
   const fuel = data.fuel, lowFuel = fuel && fuel.live && fuel.pct != null && fuel.pct < 30;
   const scoopNext = lowFuel && data.systems.filter(s => sysId(s) !== sysId(p) && s.main_scoopable && (!jr || s.distance <= jr))
     .sort((a, b) => a.distance - b.distance)[0];
-  const prev = data.previous;
   const unvisited = data.systems.filter(s => !s.visited).length;
   document.getElementById("subKnown").textContent = data.systems.length;
   document.getElementById("subUnvisited").textContent = unvisited;
@@ -2789,10 +3114,6 @@ function render() {
     rs.title = `how far around you Nearby lists systems (radius_choices in ed_outrider.toml sets these; bigger spheres take longer to fill in)`;
   }
   if (document.activeElement !== rs && !rs.dataset.pending) rs.value = String(data.radius);
-  document.getElementById("subJump").innerHTML = (jr ? `<span title="Loadout MaxJumpRange: the best case with a near-empty tank">max jump ${(data.jump_range || jr).toFixed(1)} ly</span>` +
-    (data.jump_range_now ? ` <span title="the range with the fuel and cargo aboard now (jumps counted here use it)">· ${data.jump_range_now.toFixed(1)} laden</span>` : "") +
-    (data.boost ? ` <b class="boosted" title="jet-cone charge: your next jump reaches this far">boosted ×${data.boost} → ${jr.toFixed(0)} ly</b>` : "") : "") +
-    (prev && p ? `${jr ? " · " : ""}came from ${esc(prev.name)} (${Math.hypot(prev.x - p.x, prev.y - p.y, prev.z - p.z).toFixed(1)} ly)` : "");
   document.body.classList.toggle("disconnected", !!disconnected);
   document.querySelectorAll("table th[data-sort]").forEach(b => {   // "-key": that column reversed (Here's table)
     const k = String(sortKeys[SORT_TABLES[b.closest("table").id]] || "");
@@ -2811,13 +3132,8 @@ function render() {
                                            : ` <span class="noscoop" title="not scoopable">✕</span>`) : "";
     const src = t.source === "edsm" ? " (known to EDSM only)" : "";
     const hz = hazardNote(t.star_class);
-    // the jump's cost from the fuel model: "38.2 ly · 2.9 t · leaves 3 max jumps"
-    // out of range first: a tank under one max jump's fuel can know the cost of a jump it can't pay for
-    const hop = t.hop, cost = !hop ? "" : hop.reach === false
-      ? ` · <span class="noscoop" title="further than one jump with the fuel and cargo aboard">out of range${hop.fuel != null ? ` (needs ${fuelT(hop.fuel)} t)` : ""}</span>`
-      : hop.fuel != null
-      ? ` · <span title="fuel this jump burns, and the max-range jumps the tank holds after it">${fuelT(hop.fuel)} t · leaves ${hop.left} max jump${hop.left === 1 ? "" : "s"}</span>` : "";
-    tEl.innerHTML = `Target: <b>${esc(t.name)}</b>${hop ? ` · ${hop.ly.toFixed(1)} ly` : row ? ` · ${row.distance.toFixed(2)} ly` : ""}${cost}${sc}` +
+    const hop = t.hop;
+    tEl.innerHTML = `Target: <b>${esc(t.name)}</b>${hop ? ` · ${hopCostHtml(hop)}` : row ? ` · ${row.distance.toFixed(2)} ly` : ""}${sc}` +
       ` · <span class="t-${t.status.replace(" ", "")}">${label}${src}</span>${targetCounts(t)}` + (hz ? ` · <span class="hazard">⚠ ${hz}</span>` : "");
   }
   renderLeaving(t && t.leaving);
@@ -2828,6 +3144,9 @@ function render() {
       ? `<span class="yes">arrival star undiscovered — first discovery is yours to sell</span>`
       : `<span class="no">already discovered by someone` + (a.announced === "unreported" ? " — Spansh just hadn't heard of it" : "") + `</span>`);
   const fkRows = focusKey("rows");
+  // the 🎯 (nearAimBtn) left of each name, in a column of its own width (the author, 2026-10-14): your own system's row
+  // keeps the space, so the names stay in line; no column where auto-target cannot work
+  const aimCol = canAim();
   document.getElementById("rows").innerHTML = rows.map(s => {
     const isPrev = prev && sysId(s) === sysId(prev);
     const far = jr && s.distance > jr;
@@ -2843,9 +3162,9 @@ function render() {
       (s.source === "own" ? statusBadge("s-own", "yours only", "Spansh doesn't have this system; data is from your own scans") : "") +
       (s.source === "edsm" ? `<span class="badge s-edsm" title="Spansh is unreachable; this comes from EDSM (no body data)">EDSM</span>` : "");
     const nb = notable(s);
-    return `<tr class="${cls}">
+    return `<tr class="${cls}" data-id="${esc(s.id)}">
       <td class="bmcell">${bmIcon(s.id, s.name, bms)}</td>
-      <td class="name" data-name="${esc(s.name)}" title="click to copy">${isPrev
+      <td class="name" data-name="${esc(s.name)}" title="click to copy">${aimCol ? `<span class="nearaim">${nearAimBtn(s)}</span>` : ""}${isPrev
         ? `<span class="prevmark" title="you just came from here">↩</span>` : ""}${nameWords(s.name)}${firstsIcon(s.firsts)}<div class="sf2 sub2">${status}</div></td>
       <td class="num dist"${far ? ` title="beyond your max jump range"` : ""}>${s.distance.toFixed(2)}</td>
       <td class="num hide-sm c2hide">${jumps == null ? "" : jumps === 1 ? "1" : `<span class="unk">${jumps}</span>`}</td>
@@ -2856,9 +3175,13 @@ function render() {
   refocus("rows", fkRows);
   renderBoxelMode();
   document.getElementById("updateLine").hidden = !data.restart_needed;
+  drawRestart();
+  renderNotices();
   drawUpdatePill();
   for (const id of ["setVersion", "tabOutVer"]) { const el = document.getElementById(id), v = data.outrider ? `version ${data.outrider}` : "";
     if (el && el.textContent !== v) el.textContent = v; }
+  const srvVer = document.getElementById("srvVersion");
+  if (srvVer.textContent !== (data.outrider || "")) srvVer.textContent = data.outrider || "";
   // a server away from the game PC ([server] game_pc false): what needs that PC is left out (body.notgamepc hides every
   // .pcOnly: Settings' Auto honk, "play on this PC", the Highway's auto-target box and 🎯 / Retry, the tablet's rail)
   document.body.classList.toggle("notgamepc", data.game_pc === false);
@@ -3053,11 +3376,53 @@ document.getElementById("boxelPane").addEventListener("change", e => {
 function emptyMessage(rows) {
   const others = data.systems.filter(s => sysId(s) !== posId()).length;
   if (/^asking|^fetching/.test(data.status)) return "loading…";
-  if (/failed/.test(data.status)) return "Spansh lookup failed — the list is incomplete, so no conclusions about undiscovered systems yet.";
+  if (/^(Spansh unavailable|No internet connection|refresh failed)/.test(data.status)) return `${/^refresh/.test(data.status) ? "The lookup failed" : esc(data.status)} — the list is incomplete, so no conclusions about undiscovered systems yet.`;
   if (others > rows.length) return `${others - rows.length} system${others - rows.length === 1 ? "" : "s"} hidden by the filters above.`;
   return "Nothing known nearby — everything here is undiscovered.";
 }
 
+// ---- S51: a sweep: the systems ticked in Left behind, My firsts (lost ones) and Bookmarks, in the order Spansh's tourist
+// router flies them (POST api/riches/plot {kind: "sweep", systems}: the survey slot's route, so it replaces the one
+// there). One set of ticks across the three lists, kept by this page only; a successful plot unticks them.
+const SW = {names: new Set(), busy: false};
+const sweepTick = name => `<input type="checkbox" class="swtick" data-sweep="${esc(name)}"${SW.names.has(name) ? " checked" : ""} ` +
+  `title="tick to plot a sweep through it" aria-label="sweep ${esc(name)}">`;
+function drawSweep(msg) {
+  const n = SW.names.size, sv = data && data.survey, slot = sv && !sv.complete ? ` It replaces your ${surveyOf(sv.kind).what}.` : "";
+  document.querySelectorAll(".swbtn").forEach(b => {
+    b.hidden = !n; b.disabled = SW.busy; b.textContent = `🧹 Plot a sweep (${n})`;
+    b.title = `a route through the ${n} system${n === 1 ? "" : "s"} ticked, in the order Spansh's tourist router flies them, from where you are.${slot}`;
+  });
+  document.querySelectorAll(".swclear").forEach(b => { b.hidden = !n; });
+  if (msg !== undefined) document.querySelectorAll(".swmsg").forEach(e => { e.textContent = msg.text || ""; e.className = `swmsg ${msg.cls || ""}`; });
+  document.querySelectorAll(".swtick").forEach(c => { c.checked = SW.names.has(c.dataset.sweep); });
+}
+document.addEventListener("change", e => {
+  const t = e.target.closest && e.target.closest(".swtick");
+  if (!t) return;
+  if (t.checked) SW.names.add(t.dataset.sweep); else SW.names.delete(t.dataset.sweep);
+  drawSweep({});
+});
+document.addEventListener("click", e => {
+  if (e.target.closest(".swclear")) { SW.names.clear(); drawSweep({}); return; }
+  if (e.target.closest(".swbtn")) plotSweep();
+});
+async function plotSweep() {
+  if (SW.busy || !SW.names.size) return;
+  SW.busy = true; drawSweep({text: "Asking Spansh…", cls: "busy"});
+  let r;
+  try { r = await apiJson("api/riches/plot", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({kind: "sweep", systems: [...SW.names]})}); }
+  catch (err) { r = {error: err.message}; }
+  SW.busy = false;
+  if (r.error) return drawSweep({text: `Could not plot the sweep: ${hwyErr(r.error)}.`, cls: "err"});
+  SW.names.clear(); drawSweep({});
+  // Plot Route shows it once Spansh has answered (as a plot from its own form does)
+  store.set("hwyShow", "rich"); H.status = null; R.watch = true;
+  if (R.data) R.data.plotting = r.plotting;
+  const v = document.querySelector('[data-view="hwy"]'); if (v && view !== "hwy") v.click();
+  drawHwyStatus();
+  richPoll();
+}
 function renderBookmarks(bms) {
   const list = Object.values(bms);
   list.sort(sortWith("bm", sortKey("bm") === "name"
@@ -3065,13 +3430,14 @@ function renderBookmarks(bms) {
     : (a, b) => (a.distance ?? 1e9) - (b.distance ?? 1e9)));
   const fk = focusKey("bmRows");
   document.getElementById("bmRows").innerHTML = list.map(b => `<tr>
-      <td class="bmcell">${bmIcon(b.id, b.name, bms)}</td>
-      <td class="name" data-name="${esc(b.name)}" title="click to copy">${nameWords(b.name)}</td>
+      <td class="bmcell">${bmIcon(b.id, b.name, bms)}${sweepTick(b.name)}</td>
+      <td class="name" data-name="${esc(b.name)}" title="click to copy">${nameWords(b.name)}${sysAimBtn(b.name, b.id)}${plotBtn(b.name)}</td>
       <td class="num dist">${b.distance == null ? "?" : b.distance.toLocaleString("en-US", {maximumFractionDigits: 2})}</td>
       <td class="note">${esc(b.note) || `<span class="unk">no note</span>`}</td>
       <td class="hide-sm unk c2hide">${esc((b.created || "").slice(0, 10))}</td></tr>`).join("") ||
     `<tr><td colspan="5" class="unk">No bookmarks yet. Click ☆ beside any system to add one.</td></tr>`;
   refocus("bmRows", fk);
+  drawSweep();
 }
 
 // ---- Bookmark dialog ----
@@ -3111,7 +3477,45 @@ bmDialog.addEventListener("close", async () => {
     poll(true);
   } catch (err) { toast("bookmark failed: " + err.message); }
 });
-document.querySelectorAll("[data-view]").forEach(b => b.onclick = () => {
+// ---- S53: Import… beside Bookmarks' Export: the file goes to the server as text (an id64 above 2^53 survives only
+// there) and is merged into yours, nothing replaced; what came of it is said beside the button
+const BM_IMPORT_MAX = 8 * 1024 * 1024;   // ed_outrider.BOOKMARK_IMPORT_BYTES
+const bmFile = document.getElementById("bmFile");
+function bmImportSay(text, err, problems) {
+  const m = document.getElementById("bmImportMsg");
+  m.textContent = text; m.className = err ? "err" : "";
+  m.title = (problems || []).join("\n");
+}
+async function bmImport(text) {
+  bmImportSay("Importing…");
+  let r;
+  try { r = await apiJson("api/bookmarks/import", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({text})}); }
+  catch (err) { r = {error: err.message}; }   // the server is not answering
+  if (r.error) return bmImportSay(`Not imported: ${r.error}.`, true);
+  const n = v => v.toLocaleString("en-US"), p = r.problems || [];
+  bmImportSay(`${n(r.added)} added, ${n(r.already)} already there` + (r.bad ? `, ${n(r.bad)} left out: ${p.slice(0, 2).join("; ")}${r.bad > 2 ? "…" : ""}` : ""),
+    false, p.concat(r.bad > p.length ? [`and ${n(r.bad - p.length)} more`] : []));
+  if (r.added) { version = -1; poll(true); }   // the new rows at once
+}
+document.getElementById("bmImport").onclick = () => bmFile.click();
+bmFile.onchange = async () => {
+  const f = bmFile.files && bmFile.files[0];
+  bmFile.value = "";
+  if (!f) return;
+  if (f.size > BM_IMPORT_MAX) return bmImportSay("Not imported: the file is over 8 MB.", true);
+  bmImport(await f.text());
+};
+// S37: a ↗ in each tab's corner (shown on hover or focus, the row's width unchanged; Shift+Enter on a focused tab too)
+// opens that view in a window of its own, or brings forward the one already open
+if (!TABLET) document.querySelectorAll(".views [data-view]").forEach(b => {
+  if (!POP_VIEWS.includes(b.dataset.view)) return;
+  b.dataset.name = b.textContent.trim();
+  b.insertAdjacentHTML("beforeend", `<span class="tabpop" data-popview="${b.dataset.view}" aria-hidden="true" title="open ${esc(b.dataset.name)} in a window of its own">↗</span>`);
+  b.addEventListener("keydown", e => { if (e.key === "Enter" && e.shiftKey) { e.preventDefault(); popView(b.dataset.view); } });
+});
+if (viewWindow) document.getElementById("viewWinBack").onclick = () => document.querySelector(`.views [data-view="${viewWindow}"]`).click();
+document.querySelectorAll("[data-view]").forEach(b => b.onclick = ev => {
+  if (ev && ev.target && ev.target.closest && ev.target.closest("[data-popview]")) { popView(b.dataset.view); return; }
   if (b.dataset.view !== view && pinnedSystem) { pinnedSystem = null; if (selectedBody) closeBody(); }  // a pin belongs to the view it was made in
   if (b.dataset.view === "now" && view !== "now") viewBeforeNow = view;
   if (b.dataset.view === "hist" && view !== "hist") histKey = null;   // fresh numbers each time the tab opens
@@ -3259,7 +3663,7 @@ function renderHere() {
   const firstsBlock = h.firsts ? firstsHtml(h.firsts).replace(/<div class="lbl">Your firsts<\/div>/, "") : "";
   lv.innerHTML = firstsBlock + (pinned ? (!h.firsts ? `<span class="unk">${row ? esc(row.status) : ""}${row && row.visited ? " · you have been here" : ""}</span>` : "")
     : !l ? `<span class="unk">Nothing of yours scanned here yet.</span>` : checklistHtml(l));
-  lastHereCtx = hereCtx(); lastHereDest = hereDestKey();
+  lastHereCtx = hereCtx(); lastHereDest = hereDestKey(); lastHerePlan = herePlanKey();
   const hm = h.tree ? hereMode() : {top: "list", split: false};
   document.getElementById("hereTable").classList.toggle("nosort", hm.top === "text");   // the tree is never sorted
   const showTable = hm.top !== "schematic", showSch = hm.top === "schematic" || hm.split;
@@ -3275,7 +3679,7 @@ function renderHere() {
   }
   const sEl = document.getElementById("hereSchematic");
   sEl.hidden = !showSch; sEl.classList.toggle("split", showTable && showSch);
-  if (showSch) sEl.innerHTML = schematicHtml(h);
+  if (showSch) { sEl.innerHTML = schematicHtml(h); drawSchemPath(sEl); }
   const dest = data.destination && posId() === h.id64 ? data.destination : null;
   const destBody = dest && h.bodies.find(b => b.body_id === dest.body_id);
   // one cell per heading of #hereTable, in its order: Rings before ⛏ (the author, 2026-10-11: an empty Rings cell, the
@@ -3286,13 +3690,19 @@ function renderHere() {
     const bio = [], f = bioFactor(b), atm = b.type === "Planet" && b.atmosphere && b.atmosphere !== "None" ? b.atmosphere : "";
     const guessOf = g => (b.bio_guess || []).find(x => x.genus === g), hb = hereBio();
     if (hb.minSig && b.bio && b.bio < hb.minSig) bio.push(`<span class="unk" title="fewer than ${hb.minSig} signals: left out (Settings, Display)">${b.bio} sig</span>`);
-    const guessTxt = x => !x || !x.best ? "" : ` <span class="unk" title="likeliest by value: ${esc(x.species.join(" / "))}">(${esc(x.best.split(" ").slice(1).join(" "))}? ${credits(x.value * f)})</span>` + codexMark(x, h.region);
+    const guessTxt = x => !x || !x.best ? "" : ` <span class="unk" title="likeliest by value: ${esc(x.species.join(" / ") + historyTip(x))}">(${esc(x.best.split(" ").slice(1).join(" "))}? ${credits(x.value * f)})</span>` + codexMark(x, h.region);
+    // S23: the species commanders' uploads reported to Spansh here, with the colour they reported: facts, beside the guess
+    const rep = b.reported || [], repShown = new Set();
+    const repTxt = g => rep.filter(x => g === null ? !repShown.has(x) : x.genus === g).map(x => { repShown.add(x);
+      return ` <span class="sp rep" title="reported to Spansh by commanders' uploads">👥 ${dual(colourName(x.species + (x.variant ? " - " + x.variant : "")),
+        esc(x.species.split(" ").slice(1).join(" ") || x.species), {title: false})} <span class="unk">${credits(x.value * f)}</span></span>`; }).join("");
     // a finished species is one line: its codex entry with what it pays ("📖 Bacterium Alcyoneum - Red ✦ 8.3M"), not
     // "Bacterium 3/3 ✓ 8.3M" and the codex line again (the author, 2026-10-11)
     const codexOf = o => b.codex.find(c => c.name === o.variant) || (o.species ? b.codex.find(c => c.name.startsWith(o.species + " - ")) : null);
     const merged = new Set();
     for (const g of hb.minSig && b.bio && b.bio < hb.minSig ? [] : bioGenera(b)) {
       const o = b.organics.find(o => o.genus === g);
+      if (o && o.done && !o.lost) rep.forEach(x => { if (x.genus === g) repShown.add(x); });   // analysed: yours says it
       if (hb.hideDone && o && o.done && !o.lost) continue;
       if (o && o.done && !o.lost) {
         const c = codexOf(o), name = c ? c.name : o.variant || o.species || g;
@@ -3305,9 +3715,12 @@ function renderHere() {
       bio.push(o ? `<span class="sp ${o.lost ? "lost" : o.done ? "done" : "part"}" title="${esc(o.species || "")}${o.variant ? " · " + esc(o.variant) : ""}${o.lost ? " · lost with the ship, sample again" : ""}${colonyM(g) ? ` · samples ${colonyM(g)} m apart` : ""}">${esc(g)} ${o.lost ? "lost ✗" : `${o.samples}/3${o.done ? " ✓" : ""}`}${!o.lost && o.value ? ` <span class="unk">${credits(o.value * f)}</span>` : ""}</span>` +
                    // a run under way prices the species you logged (known from its first sample), like the pop-up and
                    // the panel; the predictor's guess is only for a lost run or one whose species has no price
-                   (o.lost || (!o.done && !o.value) ? guessTxt(guessOf(g)) : "")
-                 : `<span class="sp"${ct(g)}>${esc(g)} 0/3</span>` + guessTxt(guessOf(g)));
+                   (o.lost || (!o.done && !o.value) ? guessTxt(guessOf(g)) : "") + repTxt(g)
+                 : `<span class="sp"${ct(g)}>${esc(g)} 0/3</span>` + guessTxt(guessOf(g)) + repTxt(g));
     }
+    // reported species of a genus not named here yet (before the DSS): a line of their own
+    const repRest = hb.minSig && b.bio && b.bio < hb.minSig ? "" : repTxt(null);
+    if (repRest) bio.push((bio.length ? "<br>" : "") + repRest.trim());
     // signals no genus accounts for: before a DSS, and after a sample taken without one (that genus is listed above)
     const unk = hb.minSig && b.bio && b.bio < hb.minSig ? null : bioUnknown(b);
     if (unk) {
@@ -3317,7 +3730,7 @@ function renderHere() {
       const range = opt ? ` · ${credits(opt.low * f)}–${credits(opt.high * f)}` : "", colon = gl.length ? ":" : "";
       const unkShort = (bioGenera(b).length ? `+${unk.n} sig` : `${unk.n} sig, no DSS`) + range + colon;
       bio.push((bio.length ? "<br>" : "") + `<span class="unk">${dual(unk.label + range + colon, unkShort)}</span>` + (gl.length
-        ? `<br>${opt ? "" : `<span class="unk">${dual("likely: ", "", {title: false})}</span>`}${gl.map(x => `<span class="sp" title="${esc(x.species.join(" / "))}">${esc(x.genus)} <span class="unk">≤${credits((x.value || 0) * f)}</span>${codexMark(x, h.region)}</span>`).join("")}` : ""));
+        ? `<br>${opt ? "" : `<span class="unk">${dual("likely: ", "", {title: false})}</span>`}${gl.map(x => `<span class="sp" title="${esc(x.species.join(" / ") + historyTip(x))}">${esc(x.genus)} <span class="unk">≤${credits((x.value || 0) * f)}</span>${codexMark(x, h.region)}</span>`).join("")}` : ""));
     }
     // the codex name ("Bacterium Volu - Gold") repeats the run's species: a compact table shows only 📖 and its mark
     const codex = b.codex.filter(c => !merged.has(c)).map(c =>
@@ -3325,7 +3738,7 @@ function renderHere() {
     const firsts = [b.first_discovered && `<span class="fl" title="first discovered">🏁</span>`, b.first_mapped && `<span class="fl" title="first mapped">🗺</span>`,
                     !b.first_mapped && b.mapped && `<span class="fl unk" title="mapped (not first)">🗺</span>`,
                     b.first_footfall && `<span class="fl" title="first footfall">👣</span>`, !b.scanned && `<span class="unk" title="known to Spansh, not scanned by you">—</span>`].filter(Boolean).join("");
-    return `<tr class="${b.main ? "main" : ""}${selectedBody === b.name ? " sel" : ""}${destBody === b ? " dest" : ""}${hotClasses(b)}" data-body="${esc(b.name)}" data-bodypop="${esc(b.name)}"><td class="name" data-name="${esc(b.name)}">${ind}${esc(b.name)}${codexTypeMark(b.codex_type, h.region)}${b.ggg ? " " + gggIcon(!!b.ggg.confirmed, gggTitle(b.ggg)) : ""}${(b.curiosities || []).length ? ` <span class="cur" title="${b.curiosities.map(c => esc(c.tag + ": " + c.why)).join("&#10;")}">🔭</span>` : ""}${b.notable ? ` <span class="nb ${b.notable}">${b.notable}</span>` : ""}${b.terraformable ? ` <span class="nb T">T</span>` : ""}${firsts ? `<div class="sf2 sub2">${firsts}</div>` : ""}</td>
+    return `<tr class="${b.main ? "main" : ""}${selectedBody === b.name ? " sel" : ""}${destBody === b ? " dest" : ""}${hotClasses(b)}" data-body="${esc(b.name)}" data-bodypop="${esc(b.name)}"><td class="name" data-name="${esc(b.name)}">${ind}${esc(b.name)}${codexTypeMark(b.codex_type, h.region)}${codexGeoMark(b.codex_geo, h.region)}${b.ggg ? " " + gggIcon(!!b.ggg.confirmed, gggTitle(b.ggg)) : ""}${(b.curiosities || []).length ? ` <span class="cur" title="${b.curiosities.map(c => esc(c.tag + ": " + c.why)).join("&#10;")}">🔭</span>` : ""}${b.notable ? ` <span class="nb ${b.notable}">${b.notable}</span>` : ""}${b.terraformable ? ` <span class="nb T">T</span>` : ""}${firsts ? `<div class="sf2 sub2">${firsts}</div>` : ""}</td>
       <td>${sfText(b.type === "Star" ? "star" : "planet", b.subtype || "")}${b.type === "Star" ? (b.scoopable ? ` <span class="scoop">⛽</span>` : "") : ""}${b.rings ? `<span class="sf2"> ${icon("ring", "i-ring", b.rings, ringsText(b))}</span>` : ""}${b.dist_ls != null ? `<div class="sf2 sub2 unk">${Math.round(b.dist_ls).toLocaleString()} ls</div>` : ""}</td>
       <td class="num c2hide">${b.dist_ls != null ? Math.round(b.dist_ls).toLocaleString() : ""}</td>
       <td class="num${b.gravity >= highGravity() ? " noscoop" : ""}">${b.gravity != null && b.type === "Planet" ? b.gravity.toFixed(2) : ""}${atm ? `<div class="sf2 atm2" title="${esc(atm)}">${esc(shortForm("atmosphere", atm))}</div>` : ""}</td>
@@ -3379,6 +3792,8 @@ const HERE_LEGEND = [
   [q => q(".nb.AW"), `<span class="nb AW">AW</span>`, "ammonia world"],
   [q => q(".nb.T"), `<span class="nb T">T</span>`, "terraformable"],
   [q => q(".scoop"), "⛽", "scoopable star"],
+  [q => q(".sstop"), `<span class="sstop">${stopGlyph(1)}</span>`, "a stop in the suggested order"],
+  [q => q(".sstop.skip"), `<span class="sstop skip">${stopGlyph(2)}</span>`, "a stop not worth the trip"],
   [q => q(".ic.ring, .ringmark"), icon("ring", "i-ring", "", "rings"), "rings"],
   [q => q(".belt"), "⋯", "asteroid belts"],
   [(q, s) => q('.fl[title="first discovered"]') || s("🏁"), "🏁", "first discovered by you"],
@@ -3392,11 +3807,13 @@ const HERE_LEGEND = [
   [(q, s, has) => has(".sp.done", "✓"), "✓", "species analysed"],
   [q => q(".sp.lost"), "✗", "samples lost with the ship: sample again"],
   [q => q('span.unk[title^="likeliest by value"]'), "?", "the likeliest species, not yet known"],
+  [q => q(".sp.rep"), "👥", "species reported to Spansh by other commanders"],
   [(q, s, has) => has("td.bio .sp", "≤"), "≤", "the most the likely species could pay"],
-  [q => q(".cxgal:not(.cxtype)"), `<span class="cxnew cxgal">✪</span>`, "new to your codex anywhere"],
-  [(q, s, has) => q(".cxnew:not(.cxgal):not(.cxtype)") || has('.sp[title^="codex:"]', "✦"),
+  [q => q(".cxgal:not(.cxtype):not(.cxgeo)"), `<span class="cxnew cxgal">✪</span>`, "new to your codex anywhere"],
+  [(q, s, has) => q(".cxnew:not(.cxgal):not(.cxtype):not(.cxgeo)") || has('.sp[title^="codex:"]', "✦"),
    `<span class="cxnew">✦</span>`, "new to your codex in this region"],
   [q => q(".cxtype"), `<span class="cxnew cxtype">✦</span>`, "a star or planet type new to your codex (✪: anywhere)"],
+  [q => q(".cxgeo"), `<span class="cxnew cxgeo">✦</span>`, "geology its volcanism could show, new to your codex (✪: anywhere)"],
   [q => q('.sp[title^="codex:"]'), "📖", "a codex entry you logged here"],
   [(q, s, has) => has('.sp[title^="codex:"]', "💰"), "💰", "the codex paid for it"],
   [(q, s) => q(".sp.geo") || s("🪨"), "🪨", "geological signals"],
@@ -3420,10 +3837,19 @@ function drawHereLegend() {
   // a glyph in a badge's own text (not inside a span: the dim map, the volcano's title)
   const s = g => badges.some(b => [...b.childNodes].some(n => n.nodeType === 3 && n.textContent.includes(g)));
   const has = (sel, text) => roots.some(r => [...r.querySelectorAll(sel)].some(e => e.textContent.includes(text)));
-  const html = roots.length ? HERE_LEGEND.filter(([t]) => t(q, s, has))
-    .map(([, icon, what]) => `<span class="lg"><span class="lgi badges">${icon}</span> ${what}</span>`).join("") : "";
+  const shown = roots.length ? HERE_LEGEND.filter(([t]) => t(q, s, has)) : [];
+  // S7: with bio on show and the colour tables missing, the note (and its Retry) closes the legend
+  const cn = shown.length && (q(".sp") || s("🧬")) ? bioColoursNote() : "";
+  const html = shown.map(([, icon, what]) => `<span class="lg"><span class="lgi badges">${icon}</span> ${what}</span>`).join("") +
+    (cn ? `<span class="lg">${cn}</span>` : "");
   el.hidden = !html;
   if (el.innerHTML !== html) el.innerHTML = html;
+}
+// S24: which species of a genus your own completed runs found on bodies like this one (class, atmosphere, 25 K band,
+// the region once it holds 5 such runs), for the guess's hover only: the pick stays the likeliest by value
+function historyTip(x) {
+  return x && x.history ? `\nyours on bodies like this (${x.history.label}): ` +
+    x.history.species.map(([s, n]) => `${s} ${n} of ${x.history.total}`).join(", ") : "";
 }
 // what the body targeted in-game is (plain text bits): Here's heading-to line and Now's
 function destBits(b) {
@@ -3458,7 +3884,9 @@ function setHereMode(mode) {
   else m.top = mode;   // list or tree: swaps the top half, split stays as it was
   store.set("hereModes", hereModes);
 }
-let lastHereCtx = null, lastHereDest = null;
+let lastHereCtx = null, lastHereDest = null, lastHerePlan = null;
+// S30: the first stop picked (in another window, by the overlay's player): Here's order and numbers follow it
+const herePlanKey = () => JSON.stringify((data && data.plan_first) || null);
 // the body targeted in-game, as Here last drew it (its heading-to line and highlighted row follow the target)
 const hereDestKey = () => { const d = data && data.destination; return d ? `${posId()}|${d.body_id ?? ""}` : ""; };
 // Tree mode: the same table rows in orbital order, each child indented under its parent. A barycentre
@@ -3552,13 +3980,84 @@ function discHtml(b, depth) {
     b.type === "Star" && b.scoopable && `<span class="scoop">⛽</span>`].filter(Boolean).join("");
   const belts = (b.belts || []).length ? `<span class="belt" title="${b.belts.length} belt${b.belts.length === 1 ? "" : "s"}">⋯</span>` : "";
   return `<div class="sbody${hotClasses(b)}" data-body="${esc(b.name)}" data-bodypop="${esc(b.name)}">` +
-    `<div class="discwrap" style="width:${size + 14}px;height:${size + 14}px">${ring}<span class="${cls}" style="width:${size}px;height:${size}px;--c:${col}"></span></div>` +
+    `<div class="discwrap" style="width:${size + 14}px;height:${size + 14}px">${ring}<span class="${cls}" style="width:${size}px;height:${size}px;--c:${col}"></span>${stopsHtml(b)}</div>` +
     `<div class="sname" title="${esc(b.name)}">${esc(b.name)}${belts}</div><div class="badges">${badges}</div>` +
     `<div class="sval${maxOf(b) ? "" : " unk"}">${maxOf(b) ? credits(maxOf(b)) : "—"}</div>` +
     (b.type === "Planet" && b.dist_ls != null ? `<div class="sdist">${Math.round(b.dist_ls).toLocaleString()} ls</div>` : "") + `</div>`;
 }
+// S30: the suggested order on Here's schematic, for the system you are in: each stop's number on its body (two on a
+// body with both mapping and bio to do), a stop under your credits per minute of supercruise tinted (Here's "skip?").
+// A tap on a number makes that body the first stop, for every window, Now, the voice and the overlay (POST
+// api/plan/first); "↺ order" puts the suggested order back. The path between the stops: drawSchemPath.
+let schemPlanNow = [];                 // the order the schematic shows (planItems), for its path
+const schemStops = new Map();          // body name -> [{n, it}]: its numbers in that order
+function schemPlan(h) {
+  schemPlanNow = h.leaving && String(h.id64) === posId() ? planItems(h.leaving) : [];
+  schemStops.clear();
+  schemPlanNow.forEach((it, i) => { if (!schemStops.has(it.body)) schemStops.set(it.body, []); schemStops.get(it.body).push({n: i + 1, it}); });
+}
+const planResetHtml = l => ` <button type="button" class="mini" data-planfirst="" data-plansys="${esc(l.id64)}" title="back to the suggested order: nearest to the arrival star first">↺ order</button>`;
+const stopTitle = (n, it) => `stop ${n}: ${it.kind === "map" ? "map" : "bio"}` +
+  (it.sec != null ? ` · ${scText(it.sec)} of supercruise from the arrival star (rough)` : "") + (it.perMin ? ` · ${credits(it.perMin)}/min` : "") +
+  (it.skip ? ` · under your ${credits(skipFloor())} cr per minute of supercruise` : "") +
+  (it.first ? "\nyour first stop: ↺ order puts the suggested order back" : "\ntap: make this body the first stop");
+function stopsHtml(b) {
+  const st = schemStops.get(b.name);
+  return st ? `<span class="stops">${st.map(({n, it}) => `<span class="sstop${it.skip ? " skip" : ""}${it.first ? " first" : ""}" data-firststop="${esc(b.name)}" title="${esc(stopTitle(n, it))}">${stopGlyph(n)}</span>`).join("")}</span>` : "";
+}
+// The faint path between the stops in their order, from the arrival star, each leg with a rough supercruise time: from
+// the two bodies' distances to the arrival star (scSeconds of the difference), not a route, which the journal cannot
+// give. Drawn over the laid-out schematic, below its bodies; again when its box changes size (jsdom lays nothing out:
+// every point is 0, 0 there).
+function drawSchemPath(sEl) {
+  const old = sEl.querySelector("svg.spath"); if (old) old.remove();
+  const h = hereData; if (!schemPlanNow.length || !h || !h.bodies || sEl.hidden) return;
+  const box = sEl.getBoundingClientRect(), discs = [...sEl.querySelectorAll(".sbody")];
+  const at = name => { const el = discs.find(d => d.dataset.body === name), w = el && el.querySelector(".discwrap"); if (!w) return null;
+    const r = w.getBoundingClientRect(); return [r.left + r.width / 2 - box.left - sEl.clientLeft + sEl.scrollLeft, r.top + r.height / 2 - box.top - sEl.clientTop + sEl.scrollTop]; };
+  const star = h.bodies.find(b => b.type === "Star" && b.dist_ls === 0) || h.bodies.find(b => b.type === "Star");
+  const by = Object.fromEntries(h.bodies.map(b => [b.name, b]));
+  const pts = [], labels = [];
+  let prev = star ? {p: at(star.name), d: 0} : null;
+  if (prev && !prev.p) prev = null;
+  for (const it of schemPlanNow) {
+    if (prev && prev.name === it.body) continue;   // map and bio on one body: no leg between them
+    const p = at(it.body); if (!p) continue;
+    const d = it.dist ?? (by[it.body] || {}).dist_ls;
+    if (prev) {
+      const sec = prev.d != null && d != null ? scSeconds(Math.abs(d - prev.d)) : null;
+      if (sec != null) labels.push(`<text x="${((prev.p[0] + p[0]) / 2).toFixed(1)}" y="${((prev.p[1] + p[1]) / 2 - 3).toFixed(1)}">${scText(sec)}</text>`);
+    }
+    pts.push(...(prev && !pts.length ? [prev.p] : []), p);
+    prev = {name: it.body, p, d};
+  }
+  if (pts.length < 2) return;
+  const W = Math.max(sEl.scrollWidth, 1), H = Math.max(sEl.scrollHeight, 1);
+  sEl.insertAdjacentHTML("afterbegin", `<svg class="spath" width="${W}" height="${H}" aria-hidden="true">` +
+    `<polyline points="${pts.map(p => p.map(v => v.toFixed(1)).join(",")).join(" ")}"/>${labels.join("")}</svg>`);
+}
+if (typeof ResizeObserver === "function") {
+  let schemW = 0;
+  new ResizeObserver(([e]) => { const w = Math.round(e.contentRect.width); if (w !== schemW) { schemW = w; drawSchemPath(e.target); } })
+    .observe(document.getElementById("hereSchematic"));
+}
+async function setPlanFirst(sys, body) {
+  let r;
+  try { r = await apiJson("api/plan/first", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({id64: sys, body: body || null})}); }
+  catch (err) { r = {error: err.message}; }
+  if (r.error) { toast(`could not change the order: ${r.error}`); return; }
+  data.plan_first = r.plan_first || null;
+  render(); if (hereData) renderHere();
+}
+document.addEventListener("click", e => {
+  const s = e.target.closest("[data-firststop]"), r = e.target.closest("[data-planfirst]");
+  if (r) { e.preventDefault(); setPlanFirst(r.dataset.plansys, null); return; }
+  if (!s || s.classList.contains("first") || !hereData || String(hereData.id64) !== posId()) return;
+  e.preventDefault(); setPlanFirst(String(hereData.id64), s.dataset.firststop);
+});
 function schematicHtml(h) {
   schemSystem = String(h.id64 || "");
+  schemPlan(h);
   const by = Object.fromEntries(h.bodies.map(b => [b.name, b]));
   const isStar = n => n.kind === "body" && by[n.name] && by[n.name].type === "Star";
   // a barycentre with a star anywhere under it, (A+B)+(C+D) too: it gets star rows, not one flat column (review F40)
@@ -3593,13 +4092,18 @@ function schematicHtml(h) {
     }
     return `<div class="srowS"><div class="splanets">${col(n, 1)}</div></div>`;
   };
-  return h.tree.map(top).join("") || `<div class="unk">No bodies known here.</div>`;
+  const n = schemPlanNow.length, first = n && schemPlanNow[0].first;
+  const head = n > 1 ? `<div class="splan unk" title="rough: from distances to the arrival star, not a route">${first ? "your first stop, then " : ""}` +
+    `the suggested order ${stopGlyph(1)}–${stopGlyph(n)} · the times are rough supercruise from the arrival star · tap a number to go there first` +
+    `${first ? planResetHtml(h.leaving) : ""}</div>` : "";
+  return h.tree.length ? head + h.tree.map(top).join("") : `<div class="unk">No bodies known here.</div>`;
 }
 document.getElementById("hereHead").addEventListener("click", e => {
   const m = e.target.closest("[data-mode]"); if (!m) return;
   setHereMode(m.dataset.mode); renderHere();
 });
 document.getElementById("hereSchematic").addEventListener("click", e => {
+  if (e.target.closest("[data-firststop], [data-planfirst]")) return;   // a stop's number, ↺ order: the order, not the body
   const b = e.target.closest("[data-body]"); if (!b) return;
   b.dataset.body === selectedBody ? closeBody() : openBody(b.dataset.body);
 });
@@ -3634,7 +4138,7 @@ function bodyPopHtml(b, region) {
       // a logged species pays its own price (a lost one again once resampled); the best guess only bounds the rest
       const price = o ? (o.value ? (o.lost ? `<span class="unk">${credits(o.value * f)}</span>` : credits(o.value * f)) : "")
                       : x && x.value ? "≤" + credits(x.value * f) : "";
-      lines.push(`<li><span>${esc(g)}${colonyTxt(g)}${o ? ` · ${esc(o.species || "")} ${o.lost ? "lost ✗" : `${o.samples}/3${o.done ? " ✓" : ""}`}` : x && x.best ? ` · likely ${esc(x.best.split(" ").slice(1).join(" "))}${variantTxt(x)}` : ""}</span><b>${price}</b></li>`);
+      lines.push(`<li><span>${esc(g)}${colonyTxt(g)}${o ? ` · ${esc(o.species || "")} ${o.lost ? "lost ✗" : `${o.samples}/3${o.done ? " ✓" : ""}`}` : x && x.best ? ` · <span${x.history ? ` title="${esc(historyTip(x).trim())}"` : ""}>likely ${esc(x.best.split(" ").slice(1).join(" "))}</span>${variantTxt(x)}` : ""}</span><b>${price}</b></li>`);
     }
     const unk = bioUnknown(b);   // signals no genus above accounts for, and what they could be
     if (unk) {
@@ -3776,7 +4280,9 @@ function renderBodyInto(panel, d, bodyName, closeJs) {
     const ro = row.ruled_out || [];
     const why = ro.length ? `<details class="ruledout"><summary class="unk">Why not the other ${ro.length} genera</summary><ul>` +
       ro.map(r => `<li><span>${esc(r.genus)}</span><span class="unk">${esc(r.why)}</span></li>`).join("") + `</ul></details>` : "";
-    bioSec = sec("bio", `🧬 Exobiology${row.bio ? ` · ${row.bio} signal${row.bio === 1 ? "" : "s"}` : ""}${bioRange(row)}`, `<ul>${lines.join("")}</ul>${why}`);
+    const cn = bioColoursNote();   // S7: no colour variants without the tables: said, with Retry
+    bioSec = sec("bio", `🧬 Exobiology${row.bio ? ` · ${row.bio} signal${row.bio === 1 ? "" : "s"}` : ""}${bioRange(row)}`,
+                 `<ul>${lines.join("")}</ul>${cn ? `<div class="unk">${cn}</div>` : ""}${why}`);
   }
   const curSec = (row.curiosities || []).length ? sec("curiosities", "🔭 Curiosities", row.curiosities.map(c => `<div><b>${esc(c.tag)}</b> · ${esc(c.why)}</div>`).join("")) : "";
   const mineSec = row.mining || (row.mined || []).length ? sec("mining", row.mining ? `⛏ ${mineCount(row.mining)}` : "⛏ Mining",
@@ -3967,7 +4473,7 @@ function renderFirsts() {
   const by = b => dual(byKeys(b).map(k => `<span class="${k}">${b[k]} ${k}</span>`).join(" · "), byShort(b),
                        {title: byKeys(b).map(k => `${b[k]} ${k}`).join(" · ")});
   document.getElementById("firstsRows").innerHTML = list.map(x => { const rs = rescanNote(x); return `<tr${rs ? ` class="${rs.cls}"` : ""}>
-      <td class="bmcell">${bmIcon(x.id, x.name, bms)}</td>
+      <td class="bmcell">${bmIcon(x.id, x.name, bms)}${x.state === "lost" ? sweepTick(x.name) : ""}</td>
       <td class="name" data-name="${esc(x.name)}" title="click to copy">${nameWords(x.name)}${rs ? `<div class="rescan"${rs.pop ? ` data-rescanpop="${esc(rs.pop)}"` : ` title="${esc(rs.title)}"`}>${esc(rs.text)}</div>` : ""}${x.seen ? `<div class="seen seen-sub${lostCols ? "" : " sf2"}">${seenCell(x.seen)}</div>` : ""}</td>
       <td class="num dist">${x.distance == null ? "?" : x.distance.toLocaleString("en-US", {maximumFractionDigits: 1})}</td>
       <td class="f-unsold">${x.system ? `<span class="${x.system_state}">${dual(`🏁 ${x.system_state}`, "🏁", {title: `system tag ${x.system_state}`})}</span>` : ""}</td>
@@ -3978,6 +4484,7 @@ function renderFirsts() {
     `<tr><td colspan="11" class="unk">${within != null ? `Nothing lost to rescan within ${within} ly.`
       : lost.length && !fShowLost.checked ? `Nothing unsold. ${lost.length} systems with lost data are hidden — tick "show lost" to see them.`
       : "Nothing unsold or lost: every first you have found is banked."}</td></tr>`;
+  drawSweep();
 }
 // the rescan checklist's progress for a system that lost data with a ship: green once every lost body and map is
 // scanned again ("rescanned"), amber part-way ("rescanned 5 of 12 · 2 maps to redo"), whose hover (tap) pop-up names
@@ -4055,9 +4562,10 @@ function renderLeft() {
       r.old_data ? `<span class="unk old" title="${oldDataTitle(r.old_data)}">old data: ${r.old_data.bodies} bod${r.old_data.bodies === 1 ? "y" : "ies"}</span>` : ""].filter(Boolean);
     return {r, bits, worth, keep: maps.length || bio.length || r.unfound || r.old_data};
   }).filter(x => x.keep && x.bits.length);
-  el.innerHTML = rows.map(({r, bits, worth}) => `<tr><td><span class="name" data-name="${esc(r.name)}" title="click to copy">${esc(r.name)}</span><span class="goto" data-goto="${esc(r.id)}" title="open in Here">⌖</span></td>
+  el.innerHTML = rows.map(({r, bits, worth}) => `<tr><td>${sweepTick(r.name)}<span class="name" data-name="${esc(r.name)}" title="click to copy">${esc(r.name)}</span><span class="goto" data-goto="${esc(r.id)}" title="open in Here">⌖</span></td>
       <td class="num">${r.distance.toFixed(1)}</td><td class="left-what">${bits.join(" · ")}</td><td class="num">${worth ? credits(worth) : ""}</td></tr>`).join("")
     || `<tr><td colspan="4" class="unk">Nothing worth going back for within ${d.radius} ly.</td></tr>`;
+  drawSweep();
 }
 document.getElementById("leftRows").addEventListener("click", e => {
   const g = e.target.closest("[data-goto]"); if (g) return showInHere(g.dataset.goto);
@@ -4105,16 +4613,14 @@ function renderMat() {
     (m.stale ? ` · <span class="noscoop">your last login wrote no Materials line: these counts predate it</span>` : "");
   // every material that runs out at the craftable count limits it (ties included, e.g. all three at 4)
   const limiting = r => r.materials.filter(x => Math.floor(x.have / x.need) === r.craftable).map(x => x.name);
-  document.getElementById("matSynth").innerHTML = m.synthesis.map(r => `<div class="synth" title="${r.verified ? "recipe checked against a real synthesis in your journals" : "published in-game recipe"}">
-      <span class="n${r.craftable ? "" : " zero"}">×${r.craftable}</span><b>${esc(r.name)}</b>${r.boost ? `<div class="unk boostline">${esc(r.boost)} range</div>` : ""}
-      <div class="mats">${r.materials.map(x => `<span class="${x.have < x.need ? "short" : r.craftable < 10 && limiting(r).includes(x.name) ? "limit" : ""}">${esc(x.name)} ${x.have}/${x.need}</span>`).join(" · ")}</div></div>`).join("");
+  document.getElementById("matSynth").innerHTML = synthHtml(m.synthesis, limiting);
   // where to find the FSD-injection materials: the nearest landable bodies you have scanned that carry them
   // only a recipe you are short of (under 10, the grid's threshold) has a limiting material worth fetching
   const src = m.sources || {}, limits = new Set(m.synthesis.filter(r => /^FSD/.test(r.name) && r.craftable < 10).flatMap(limiting));
   const have = Object.fromEntries(m.rows.map(r => [r.id, r]));
   document.getElementById("matSources").innerHTML = Object.keys(src).length ? `<h3 class="subhead">Where to find FSD-injection materials <span class="unk">· scanned landable bodies within 300 ly, nearest first</span></h3>` +
     `<table class="srcTable"><tbody>` + Object.entries(src).map(([mat, list]) => { const h = have[mat] || {};
-      return `<tr class="${limits.has(h.name) ? "limiting" : ""}"><td><b>${esc(h.name || mat)}</b>${limits.has(h.name) ? ` <span class="noscoop" title="limits how many injections you can make">limiting</span>` : ""}</td>` +
+      return `<tr class="${limits.has(h.name) ? "limiting" : ""}"><td><b>${esc(h.name || mat)}</b>${limits.has(h.name) ? ` <span class="noscoop" title="limits how many injections you can make">limiting</span> ${traderBtn(h.category)}` : ""}</td>` +
         `<td class="num">${h.count ?? 0}${h.cap ? " / " + h.cap : ""}</td><td>` +
         (list.map(x => `<span class="name" data-name="${esc(x.system)}" title="click to copy the system">${esc(x.body)}</span> <span class="unk">${x.pct}% · ${x.distance} ly</span>`).join(" · ") || `<span class="unk">none scanned nearby</span>`) + `</td></tr>`; }).join("") +
     `</tbody></table>` : "";
@@ -4136,30 +4642,116 @@ function renderMat() {
   }).join("") || `<div class="unk">No materials match.</div>`;
 }
 
+// The Materials tab's synthesis (S15): the FSD injections' cards open, every other group folded into one line that says
+// what you can make ("Ship upkeep ▸ AFMU refill B×4 S×1 P×0 · Heat sink B×12 S×0 P×0 · Life support ×7"), open or
+// folded per device (store "synthOpen": the open groups). A recipe your own Synthesis made is ✓ with its date.
+const SYNTH_GROUPS = [["fsd", "FSD injections"], ["ship", "Ship upkeep"], ["srv", "SRV"], ["other", "Other recipes you have made"]];
+const synthTitle = r => r.learned ? `✓ checked against your synthesis on ${(r.learned.ts || "").slice(0, 10)} (made ${r.learned.n}×)` +
+    (r.learned.differs ? "; the published recipe said otherwise: yours is shown" : "") :
+  r.verified ? "recipe checked against a real synthesis (another commander's journal); not made by you yet" :
+  "published recipe (EDEngineer's and EDDiscovery's tables), not yet checked against a synthesis of yours";
+const synthCard = (r, limiting) => `<div class="synth" title="${esc(synthTitle(r))}">
+      <span class="n${r.craftable ? "" : " zero"}">×${r.craftable}</span><b>${esc(r.name)}</b>${r.learned ? ` <span class="learned">✓</span>` : ""}${r.boost ? `<div class="unk boostline">${esc(r.boost)} range</div>` : ""}
+      <div class="mats">${r.materials.map(x => `<span class="${x.have < x.need ? "short" : r.craftable < 10 && limiting(r).includes(x.name) ? "limit" : ""}">${esc(x.name)} ${x.have}/${x.need}</span>` +
+        (x.have < x.need ? traderBtn(x.category, true) : "")).join(" · ")}</div></div>`;
+// a folded group's line: each family once, its grades as B×4 S×1 P×0 (a family of one recipe: ×7)
+function synthSummary(list) {
+  const fams = [];
+  for (const r of list) { const f = fams.find(x => x.name === (r.family || r.name)); if (f) f.items.push(r); else fams.push({name: r.family || r.name, items: [r]}); }
+  return fams.map(f => `${esc(f.name)} ` + (f.items.length > 1 || f.items[0].grade
+    ? f.items.map(r => `<span class="${r.craftable ? "" : "short"}">${(r.grade || "?")[0].toUpperCase()}×${r.craftable}</span>`).join(" ")
+    : `<span class="${f.items[0].craftable ? "" : "short"}">×${f.items[0].craftable}</span>`)).join(" · ");
+}
+function synthHtml(all, limiting) {
+  const open = (v => Array.isArray(v) ? v : [])(store.get("synthOpen", []));
+  return SYNTH_GROUPS.map(([g, label]) => {
+    const list = all.filter(r => (r.group || "other") === g);
+    if (!list.length) return "";
+    if (g === "fsd") return list.map(r => synthCard(r, limiting)).join("");
+    return `<details class="synthGroup" data-sgroup="${g}"${open.includes(g) ? " open" : ""}><summary><b>${label}</b> ▸ ${synthSummary(list)}</summary>` +
+      `<div class="synthGrid">${list.map(r => synthCard(r, limiting)).join("")}</div></details>`;
+  }).join("");
+}
+document.getElementById("matSynth").addEventListener("toggle", e => {
+  const g = e.target.dataset && e.target.dataset.sgroup;
+  if (!g) return;
+  const open = new Set((v => Array.isArray(v) ? v : [])(store.get("synthOpen", [])));
+  if (e.target.open) open.add(g); else open.delete(g);
+  store.set("synthOpen", [...open]);
+}, true);
+
 // ---- Nearest place to dock (GET api/nearest, outrider/dock.py): a finder beside Plot Route's To. Stations and
 // fleet carriers you can land at and use, from Spansh, the DSSA list and your own carrier; "Plot here" fills To and
 // plots with the plotter chosen. The filters are this device's (store "nearest", not a shared setting). ----
 const NEAR_NEEDS = [["UC", "Universal Cartographics"], ["Vista", "Vista Genomics"], ["Repair", "repair"], ["Refuel", "refuel"], ["Shipyard", "shipyard"]];
-const NR = Object.assign({stations: true, carriers: true, need: [], age: 30, permit: false},
-                         (v => v && typeof v === "object" && !Array.isArray(v) ? v : {})(store.get("nearest", {})), {answer: null, busy: false});
-const saveNearest = () => store.set("nearest", {stations: NR.stations, carriers: NR.carriers, need: NR.need, age: NR.age, permit: NR.permit});
+// a material trader (S54): "Trader" any kind, else the kind (Spansh's material_trader); stations only, carriers never have one
+const TRADER_KINDS = ["Raw", "Manufactured", "Encoded"];
+const traderWords = k => TRADER_KINDS.includes(k) ? `${k.toLowerCase()} material trader` : "material trader";
+const nearNeedWord = n => n === "Trader" || TRADER_KINDS.includes(n) ? `a ${traderWords(n)}` : (NEAR_NEEDS.find(([k]) => k === n) || [n, n])[1];
+const NR = Object.assign({stations: true, carriers: true, need: [], age: 30, permit: false, around: "here", aroundName: ""},
+                         (v => v && typeof v === "object" && !Array.isArray(v) ? v : {})(store.get("nearest", {})), {answer: null, busy: false, over: null});
+const saveNearest = () => store.set("nearest", {stations: NR.stations, carriers: NR.carriers, need: NR.need, age: NR.age, permit: NR.permit,
+                                                around: NR.around, aroundName: NR.aroundName});
+// ---- S49: Search and the Nearest finder around another system: where you are, the game's destination (the end of its
+// plotted route), your carrier, the header's next stop, or a system by name (found by GET api/find first, so
+// api/nearest stays read-only for the AI's tools). The distances are from there, a row's hover says how far from you.
+// The choice is this device's: Search's in store "search", the finder's in "nearest" ----
+const AROUND_KINDS = [["here", "you"], ["destination", "your destination"], ["carrier", "your carrier"], ["next_stop", "your next stop"],
+                      ["system", "a system…"]];
+// an Around select's options, named from the payload; your carrier and the next stop greyed out while there is none
+function aroundOptions(sel) {
+  if (!sel) return;
+  const p = data && data.position, cr = data && data.carrier, ns = data && data.next_stop;
+  const named = {here: p && p.name, carrier: cr && cr.system, next_stop: ns && ns.name}, none = {carrier: !cr, next_stop: !ns};
+  if (!sel.options.length) sel.innerHTML = AROUND_KINDS.map(([v, t]) => `<option value="${v}">${t}</option>`).join("");
+  for (const o of sel.options) {
+    const base = (AROUND_KINDS.find(([v]) => v === o.value) || [])[1], t = named[o.value] ? `${base} (${named[o.value]})` : base;
+    if (o.textContent !== t) o.textContent = t;
+    o.disabled = !!none[o.value] && sel.value !== o.value;
+  }
+}
+// what a request sends as `around`: the kind, or for a typed name its id64 from GET api/find; {error} when there is none
+async function aroundParam(kind, name) {
+  if (kind !== "system") return {around: AROUND_KINDS.some(([v]) => v === kind) ? kind : "here"};
+  name = String(name || "").trim();
+  if (!name) return {error: "type the name of the system to look around"};
+  let d;
+  try { d = await apiJson(`api/find?name=${encodeURIComponent(name)}`); } catch (err) { d = {error: err.message}; }
+  return d && !d.error && d.id ? {around: String(d.id), name: d.name} : {error: (d && d.error) || "no answer"};
+}
+// what is asked for: the finder's own filter, or the need a Materials link opened it with (NR.over: never saved)
+const nearNeed = () => NR.over || NR.need;
 const nearAgo = s => s == null ? "" : s < 3600 ? `${Math.max(1, Math.round(s / 60))} min ago` : s < 172800 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} d ago`;
-function openNearest() {
+// opts.need: open with these services asked for instead of the saved filter (Materials' "⇄ nearest raw trader"); the
+// dialog's own changes to them then stay with that opening, the saved filter is left as it was
+function openNearest(opts) {
   const d = document.getElementById("nearDlg");
+  NR.over = opts && Array.isArray(opts.need) ? opts.need.slice() : null;
+  const need = nearNeed(), tr = need.find(n => n === "Trader" || TRADER_KINDS.includes(n)) || "";
   document.getElementById("nearNeeds").innerHTML = NEAR_NEEDS.map(([k, t]) =>
-    `<label><input type="checkbox" data-nneed="${k}"${NR.need.includes(k) ? " checked" : ""}> ${t}</label>`).join("");
+    `<label><input type="checkbox" data-nneed="${k}"${need.includes(k) ? " checked" : ""}> ${t}</label>`).join("") +
+    `<label title="a station with a material trader (Spansh says its kind; fleet carriers never have one)">material trader <select data-ntrader>` +
+    [["", "—"], ["Trader", "any"], ...TRADER_KINDS.map(k => [k, k.toLowerCase()])].map(([v, t]) =>
+      `<option value="${v}"${v === tr ? " selected" : ""}>${t}</option>`).join("") + `</select></label>`;
   d.querySelector('[data-nf="stations"]').checked = NR.stations; d.querySelector('[data-nf="carriers"]').checked = NR.carriers;
   d.querySelector('[data-nf="age"]').value = NR.age; d.querySelector('[data-nf="permit"]').checked = NR.permit;
+  const sel = d.querySelector('[data-nf="around"]'), nm = d.querySelector('[data-nf="aroundName"]');
+  aroundOptions(sel); sel.value = NR.around; if (sel.selectedIndex < 0) sel.value = NR.around = "here";
+  aroundOptions(sel); nm.value = NR.aroundName || ""; nm.hidden = NR.around !== "system";
   tabShow(d);
   loadNearest();
 }
 async function loadNearest() {
   NR.busy = true; renderNearest();
   const g = newRequest("near");
-  const params = new URLSearchParams({stations: NR.stations ? "1" : "0", carriers: NR.carriers ? "1" : "0", need: NR.need.join(","),
+  const params = new URLSearchParams({stations: NR.stations ? "1" : "0", carriers: NR.carriers ? "1" : "0", need: nearNeed().join(","),
                                       age: NR.age, permit: NR.permit ? "1" : "0", pad: "auto"});
+  const a = await aroundParam(NR.around, NR.aroundName);   // S49: a typed name is found first
+  if (!isNewest("near", g)) return;
+  if (a.around && a.around !== "here") params.set("around", a.around);
   let r;
-  try { r = await apiJson(`api/nearest?${params}`); } catch (err) { r = {error: err.message}; }
+  if (a.error) r = {error: a.error};
+  else try { r = await apiJson(`api/nearest?${params}`); } catch (err) { r = {error: err.message}; }
   if (!isNewest("near", g)) return;
   NR.busy = false; NR.answer = r;
   renderNearest();
@@ -4168,14 +4760,17 @@ function nearRowHtml(r) {
   const who = r.kind === "carrier" ? `<b>${esc(r.name || r.callsign)}</b>${r.name ? ` <span class="unk">${esc(r.callsign)}</span>` : ""}` : `<b>${esc(r.name)}</b>`;
   const badge = r.dssa ? ` <span class="dssabadge" title="Deep Space Support Array carrier: stationed for explorers, open to all${r.until ? `, until ${esc(r.until)}` : ""}">🛰 DSSA</span>` : "";
   const kind = r.kind === "carrier" ? `Fleet carrier${r.own ? " · yours" : r.dssa && r.until ? ` · stationed until ${esc(r.until)}` : ""}` : esc(r.station_type || "Station");
-  const has = NEAR_NEEDS.map(([k]) => `<span class="tagx${(r.services || []).includes(k) ? " on" : ""}">${k}</span>`).join(" ");
+  const sv = r.services || [], tk = TRADER_KINDS.find(k => sv.includes(k));
+  const has = NEAR_NEEDS.map(([k]) => `<span class="tagx${sv.includes(k) ? " on" : ""}">${k}</span>`).join(" ") +
+    (sv.includes("Trader") ? ` <span class="tagx on" title="${tk ? `a ${traderWords(tk)}` : "a material trader: Spansh does not say which kind"}">⇄ ${tk ? tk.toLowerCase() : "trader"}</span>` : "");
   const dock = r.own ? `<span class="good">yours</span>` : r.warn && r.warn.length ? `<span class="warnc">⚠ ${esc(r.warn.join(", "))}</span>` : "open to all";
   const src = r.own ? "your journal" : r.dssa ? `<span class="dssa">DSSA</span><br>docked there ${nearAgo(r.age_s)}` : `${esc(r.source)}<br>reported ${nearAgo(r.age_s)}`;
   return `<tr><td>${who}${badge}<div class="unk">${kind} · ${esc(r.system || "")}</div></td>` +
-    `<td class="num">${r.here ? "here" : `${Math.round(r.ly).toLocaleString()} ly`}${r.jumps ? `<div class="unk">≈ ${r.jumps} jump${r.jumps === 1 ? "" : "s"}</div>` : ""}</td>` +
+    `<td class="num"${r.from_you != null ? ` title="${Math.round(r.from_you).toLocaleString()} ly from you"` : ""}>${r.here ? "here" : `${Math.round(r.ly).toLocaleString()} ly`}${r.jumps ? `<div class="unk">≈ ${r.jumps} jump${r.jumps === 1 ? "" : "s"}</div>` : ""}</td>` +
     `<td class="num${r.far ? " warnc" : ""}">${r.ls == null ? `<span class="unk">?</span>` : `${r.ls.toLocaleString()} ls`}${r.far ? `<div class="small">⚠ far from the star</div>` : ""}</td>` +
     `<td class="has">${has}</td><td class="num">${esc(r.pads || "")}</td><td class="dk">${dock}</td><td class="src unk">${src}</td>` +
-    `<td class="num">${r.here ? `<span class="unk">${r.own ? "aboard" : "here"}</span>` : `<button type="button" class="mini go" data-nplot="${esc(r.system || "")}">Plot here</button>`}</td></tr>`;
+    `<td class="num">${r.here ? `<span class="unk">${r.own ? "aboard" : "here"}</span>` : `<button type="button" class="mini go" data-nplot="${esc(r.system || "")}">Plot here</button>` +
+      sysAimBtn(r.system, r.id64)}</td></tr>`;
 }
 function renderNearest() {
   const a = NR.answer, rows = document.getElementById("nearRows"), foot = document.getElementById("nearFoot");
@@ -4190,10 +4785,11 @@ function renderNearest() {
   if (h.old) hid.push(`${h.old} reported more than ${a.age} days ago (carriers move; raise Data under to see them)`);
   if (h.pad) hid.push(`${h.pad} without a pad for your ship`);
   if (h.permit) hid.push(`${h.permit} in permit systems`);
-  if (h.service) hid.push(`${h.service} without ${a.need.join(" and ")}`);
+  if (h.service) hid.push(`${h.service} without ${a.need.map(nearNeedWord).join(" and ")}`);
   const d = a.dssa || {}, checked = d.checked ? nearAgo(Date.now() / 1000 - d.checked) : null;
   foot.innerHTML = (NR.busy ? "asking again… " : "") + (hid.length ? `Hidden: ${esc(hid.join("; "))}. ` : "") +
-    `Distances are straight lines${a.laden ? `; jumps at your laden range (${a.laden} ly)` : ""}.` +
+    `Distances are straight lines${a.around && a.around !== "here" ? ` from ${esc(a.where || "")} (hover one for how far it is from you)` : ""}` +
+    `${a.laden ? `; jumps at your laden range (${a.laden} ly)` : ""}.` +
     (a.more ? ` ${a.more} more further away.` : "") + `<br>Sources: Spansh (stations and carriers, as players last reported them) · ` +
     `the DSSA carrier list from EDAstro${d.count ? ` (${d.count} carriers${checked ? `, checked ${checked}` : ""})` : ""} · your own carrier from your journal.` +
     ((a.errors || []).length ? `<br><span class="warnc">${esc(a.errors.join("; "))}</span>` : "") +
@@ -4202,8 +4798,18 @@ function renderNearest() {
 document.getElementById("hwyNearest").onclick = openNearest;
 document.getElementById("nearDlg").addEventListener("change", e => {
   const t = e.target, f = t.dataset && t.dataset.nf;
-  if (t.dataset && t.dataset.nneed) NR.need = [...document.querySelectorAll("#nearNeeds [data-nneed]")].filter(x => x.checked).map(x => x.dataset.nneed);
-  else if (f === "age") { const v = parseInt(t.value, 10); if (!(v >= 1 && v <= 3650)) return; NR.age = v; }
+  if (t.dataset && (t.dataset.nneed || t.dataset.ntrader !== undefined)) {
+    const tr = document.querySelector("#nearNeeds [data-ntrader]");
+    const need = [...document.querySelectorAll("#nearNeeds [data-nneed]")].filter(x => x.checked).map(x => x.dataset.nneed)
+      .concat(tr && tr.value ? [tr.value] : []);
+    if (NR.over) NR.over = need; else NR.need = need;
+  } else if (f === "age") { const v = parseInt(t.value, 10); if (!(v >= 1 && v <= 3650)) return; NR.age = v; }
+  else if (f === "around") {   // S49: a system by name waits for its name
+    NR.around = t.value;
+    const nm = document.querySelector('#nearDlg [data-nf="aroundName"]'); nm.hidden = NR.around !== "system";
+    aroundOptions(t);
+    if (NR.around === "system" && !NR.aroundName.trim()) { saveNearest(); nm.focus(); return; }
+  } else if (f === "aroundName") { NR.aroundName = t.value.trim(); if (NR.around !== "system") return; }
   else if (f) NR[f] = t.checked;
   else return;
   saveNearest(); loadNearest();
@@ -4211,9 +4817,23 @@ document.getElementById("nearDlg").addEventListener("change", e => {
 document.getElementById("nearRows").addEventListener("click", e => {
   const b = e.target.closest("[data-nplot]"); if (!b) return;
   hEl("hwyTo").value = b.dataset.nplot;
-  if (!["exact", "neutron", "riches", "exo"].includes(hwyPlotter())) { const x = hForm.querySelector('[name=hwyPlotter][value="exact"]'); x.checked = true; x.dispatchEvent(new Event("change", {bubbles: true})); }
+  if (!["exact", "neutron"].includes(hwyPlotter()) && !(SURVEY[hwyPlotter()] && SURVEY[hwyPlotter()].form)) { const x = hForm.querySelector('[name=hwyPlotter][value="exact"]'); x.checked = true; x.dispatchEvent(new Event("change", {bubbles: true})); }
   tabClose(document.getElementById("nearDlg"));
+  // opened from Materials: Plot Route comes forward to show the plot
+  if (NR.over && view !== "hwy") { const v = document.querySelector('[data-view="hwy"]'); if (v) v.click(); }
+  NR.over = null;
   hForm.dispatchEvent(new Event("submit", {cancelable: true, bubbles: true}));
+});
+document.getElementById("nearDlg").addEventListener("close", () => { NR.over = null; });
+// Enter in the Around name box looks there (the dialog's form would close on it)
+document.getElementById("nearDlg").addEventListener("keydown", e => {
+  if (e.key === "Enter" && e.target.dataset && e.target.dataset.nf === "aroundName") { e.preventDefault(); e.target.dispatchEvent(new Event("change", {bubbles: true})); }
+});
+// Materials' "⇄ nearest raw trader" (on a material you are short of): the finder with that trader asked for
+const traderBtn = (cat, short) => TRADER_KINDS.includes(cat) ? `<button type="button" class="mini trbtn" data-trader="${cat}" ` +
+  `title="the nearest station with a ${esc(traderWords(cat))}: opens the Nearest finder (your saved filters are left as they are)">⇄${short ? "" : ` nearest ${cat.toLowerCase()} trader`}</button>` : "";
+document.getElementById("matView").addEventListener("click", e => {
+  const b = e.target.closest("[data-trader]"); if (b) openNearest({need: [b.dataset.trader]});
 });
 
 // ---- Cargo (the Materials tab): the ship's hold (exact) and your carrier's (tracked: outrider/cargo.py) ----
@@ -4235,6 +4855,14 @@ function cargoLineTitle(x) {
   const mark = CARGO_MARK[x.state] || CARGO_MARK.seen;
   return [mark[2] + (x.ts ? ` (${shortDay(x.ts)})` : ""), ...(x.moves || [])].join("\n");
 }
+// how fresh a confirmed count is (S58): whole days since the market read, shown from a day on ("✓ 9 d"), amber over
+// CONFIRM_STALE_D; past that the carrier's heading asks for a market read
+const CONFIRM_STALE_D = 7;
+const cargoDays = ts => ts ? Math.max(0, Math.floor((Date.now() - Date.parse(ts)) / 86400000)) : 0;
+function cargoAgeHtml(x) {
+  const d = x.state === "confirmed" ? cargoDays(x.ts) : 0;
+  return d >= 1 ? ` <span class="cage ${d > CONFIRM_STALE_D ? "warnc" : "unk"}" title="the sell order's count, read from your carrier's market ${d} day${d === 1 ? "" : "s"} ago">${d} d</span>` : "";
+}
 function renderCargo(cg) {
   cargoData = cg || null;
   const el = document.getElementById("cargoList");
@@ -4252,9 +4880,13 @@ function renderCargo(cg) {
       `<div class="unk clegend">${Object.values(CARGO_MARK).map(m => `<span class="st ${m[1]}">${m[0]}</span> ${m[1] === "c" ? "confirmed (sell order)" : m[1] === "l" ? "last seen" : "entered by you"}`).join(" · ")}` +
       ` <button type="button" class="mini" id="recountBtn" title="enter the counts Outrider cannot confirm (the game's Inventory screen at your carrier lists them all)">Recount…</button></div>`;
     if (!c.market_ts) h += `<div class="hint">Open your carrier's commodity market once while docked there: its sell orders confirm what it holds.</div>`;
+    else if (c.lines.some(x => x.state === "confirmed") && cargoDays(c.market_ts) > CONFIRM_STALE_D) {
+      const d = cargoDays(c.market_ts);
+      h += `<div class="hint warnc cstale">Sell-order counts read ${d} days ago: open your carrier's commodity market while docked there to refresh them.</div>`;
+    }
     h += c.lines.length ? `<table class="cargoTable"><tbody>` + c.lines.map(x => {
       const mark = CARGO_MARK[x.state] || CARGO_MARK.seen;
-      return `<tr data-cid="${esc(x.id)}" data-from="carrier"><td><span class="st ${mark[1]}" title="${esc(cargoLineTitle(x))}">${mark[0]}</span> ${esc(x.name)}</td>` +
+      return `<tr data-cid="${esc(x.id)}" data-from="carrier"><td><span class="st ${mark[1]}" title="${esc(cargoLineTitle(x))}">${mark[0]}</span>${cargoAgeHtml(x)} ${esc(x.name)}</td>` +
         `<td class="num">${tons(x.count)}</td><td class="num cact">${LOOK_BTNS}</td></tr>`;
     }).join("") + `</tbody></table>` : `<div class="unk">Nothing tracked at your carrier yet.</div>`;
   }
@@ -4280,6 +4912,7 @@ function openRecount() {
   document.getElementById("recountRows").innerHTML = c.lines.filter(x => x.state !== "confirmed").map(x =>
     `<tr><td>${esc(x.name)}</td><td class="num"><input type="number" min="0" max="100000" step="1" class="qn" data-rc="${esc(x.id)}" data-was="${x.count}" value="${x.count}"></td>` +
     `<td class="unk">${x.state === "entered" ? "entered" : "last seen"}</td></tr>`).join("");
+  recountSuggest(null);
   recountTotal();
   tabShow(document.getElementById("recountDlg"));
 }
@@ -4292,6 +4925,25 @@ function recountTotal() {
     (total === c.reported ? `<span class="good">✓ in sync</span>` : `<span class="warnc">${tons(Math.abs(c.reported - total))} ${total < c.reported ? "short" : "over"}</span>`) : "");
 }
 document.getElementById("recountRows").addEventListener("input", recountTotal);
+// Recount refuses a name that is no commodity (S57): "Not a commodity: “Titanum”. Did you mean: [Titanium] [Tritium]";
+// a click puts that name in the row. null clears it
+function recountSuggest(r) {
+  const el = document.getElementById("recountMsg");
+  document.querySelectorAll("#recountRows .rcname.bad").forEach(i => i.classList.remove("bad"));
+  el.hidden = !r;
+  if (!r) { el.innerHTML = ""; return; }
+  const row = [...document.querySelectorAll("#recountRows .rcname")].find(i => i.value.trim() === r.name);
+  if (row) { row.classList.add("bad"); row.focus(); }
+  el.innerHTML = `Not a commodity: “${esc(r.name)}”.` + (r.suggestions.length ? ` Did you mean: ` +
+    r.suggestions.map(n => `<button type="button" class="mini" data-rcfix="${esc(n)}" data-rcwas="${esc(r.name)}">${esc(n)}</button>`).join(" ") : "") +
+    (r.journal_only ? ` <span class="unk">Spansh's commodity list is not to hand: only names from your journal are known.</span>` : "");
+}
+document.getElementById("recountMsg").addEventListener("click", e => {
+  const b = e.target.closest("[data-rcfix]"); if (!b) return;
+  const row = [...document.querySelectorAll("#recountRows .rcname")].find(i => i.value.trim() === b.dataset.rcwas);
+  if (row) row.value = b.dataset.rcfix;
+  recountSuggest(null);
+});
 document.getElementById("recountAdd").onclick = () => {
   const tr = document.createElement("tr");
   tr.innerHTML = `<td><input type="text" class="qn rcname" placeholder="commodity" maxlength="80" spellcheck="false"></td>` +
@@ -4312,6 +4964,7 @@ document.getElementById("recountSave").onclick = async () => {
   let r;
   try { r = await apiJson("api/cargo/recount", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({counts})}); }
   catch (err) { r = {error: err.message}; }
+  if (r.error && r.suggestions) return recountSuggest(r);
   if (r.error) return toast(`could not save the counts: ${r.error}`);
   tabClose(document.getElementById("recountDlg"));
   if (matData) { matData.cargo = r.cargo; renderCargo(r.cargo); }
@@ -4555,7 +5208,11 @@ function lookStationHtml(r) {
 }
 // LK: what is asked (commodity, label, mode, tons, from: ship | carrier | here, key: the line it came from) and how
 // (sort, within, age, carriers); answer: the server's; open: the station row opened
-const LK = {q: null, sort: "price", within: 500, age: 14, carriers: false, answer: null, open: null, busy: false};
+const LK = {q: null, sort: "price", within: 500, age: 14, carriers: false, load: "all", answer: null, open: null, busy: false};
+// One shipload or all of it (S56): more than the ship's hold (its capacity, not what is free) can be asked as one
+// shipload; none before a Loadout says the hold
+const lookCap = q => { const c = cargoData && cargoData.ship && cargoData.ship.capacity; return q && c > 0 && q.tons > c ? c : null; };
+const lookTons = q => LK.load === "ship" && lookCap(q) ? lookCap(q) : q.tons;
 // a carrier with no name yet (bought, no CarrierStats since): its callsign, else "your carrier" (it said "null")
 const carrierName = c => (c && (c.name || c.callsign)) || "your carrier";
 function startLook(q) { LK.q = q; LK.open = null; LK.answer = null; loadLook(); }   // not the last lookup's heading
@@ -4566,7 +5223,7 @@ async function loadLook() {
   LK.busy = true; renderLook();
   markLookRow();
   const g = newRequest("look");
-  const params = new URLSearchParams({commodity: q.commodity, mode: q.mode, tons: q.tons, from: q.from, sort: LK.sort,
+  const params = new URLSearchParams({commodity: q.commodity, mode: q.mode, tons: lookTons(q), from: q.from, sort: LK.sort,
                                       within: LK.within, age: LK.age, carriers: LK.carriers ? "1" : "0", pad: "auto"});
   let r;
   try { r = await apiJson(`api/cargo/lookup?${params}`); } catch (err) { r = {error: err.message}; }
@@ -4586,7 +5243,8 @@ function renderLook() {
   if (!q) { el.hidden = true; el.innerHTML = ""; return; }
   const sell = q.mode === "sell";
   const avg = a && !a.error && a.avg;
-  let h = `<h3 class="subhead lookhead">${sell ? "Sell" : "Buy"} ${tons(q.tons)} ${esc(a && a.commodity || q.label)}` +
+  const cap = lookCap(q), n = lookTons(q);
+  let h = `<h3 class="subhead lookhead">${sell ? "Sell" : "Buy"} ${n !== q.tons ? `${tons(n)} of ${tons(q.tons)}` : tons(q.tons)} ${esc(a && a.commodity || q.label)}` +
     (avg ? ` <span class="unk">· you paid ${q.tons ? "Avg " : ""}${Math.round(avg).toLocaleString()} cr/t</span>` : "") +
     `<button type="button" class="mini lookclose" data-lk="close" title="close the lookup">✕</button></h3>`;
   h += `<div class="lookbar"><span class="seg2"><button type="button" class="mini${LK.sort === "price" ? " on" : ""}" data-lk="price">Best price</button>` +
@@ -4594,14 +5252,17 @@ function renderLook() {
     `<label>within <select data-lk="within">${[50, 100, 250, 500, 1000, 2500, 10000].map(v => `<option value="${v}"${v === LK.within ? " selected" : ""}>${v.toLocaleString()} ly</option>`).join("")}</select></label>` +
     `<label>data under <select data-lk="age">${[1, 3, 7, 14, 30, 90].map(v => `<option value="${v}"${v === LK.age ? " selected" : ""}>${v} d</option>`).join("")}</select></label>` +
     `<label title="fleet carriers' orders are often years old: left out unless ticked"><input type="checkbox" data-lk="carriers"${LK.carriers ? " checked" : ""}> carriers</label>` +
+    (cap ? `<span class="seg2 lookload" title="your ship's hold is ${tons(cap)}"><button type="button" class="mini${n === q.tons ? " on" : ""}" data-lk="all">All ${tons(q.tons)}</button>` +
+      `<button type="button" class="mini${n !== q.tons ? " on" : ""}" data-lk="ship">One shipload ${tons(cap)}</button></span>` +
+      `<span class="unk">≈ ${Math.ceil(q.tons / cap).toLocaleString()} shiploads for all of it</span>` : "") +
     (a && !a.error ? `<span class="unk">${a.pad === "L" ? "large pad" : a.pad === "M" ? "medium pad" : a.pad_known ? "" : "any pad (your ship's size is not known)"}` +
-      ` · ${sell ? `where they take all ${tons(q.tons)}` : `where they have ${tons(q.tons)}`}</span>` : "") + `</div>`;
+      ` · ${sell ? `where they take all ${tons(n)}` : `where they have ${tons(n)}`}</span>` : "") + `</div>`;
   if (LK.busy) h += `<div class="unk">asking Spansh…</div>`;
   else if (!a || a.error) h += `<div class="noscoop">${esc(a ? a.error : "")}</div>`;
-  else if (!a.rows.length) h += `<div class="unk">No station within ${a.within.toLocaleString()} ly ${sell ? "takes" : "has"} ${tons(q.tons)} with data under ${a.age} days. Try further, or older data.</div>`;
+  else if (!a.rows.length) h += `<div class="unk">No station within ${a.within.toLocaleString()} ly ${sell ? "takes" : "has"} ${tons(n)} with data under ${a.age} days. Try further, or older data.</div>`;
   else {
     h += `<table class="lookTable"><thead><tr><th>Station</th><th class="num">Distance</th><th class="num">From star</th><th class="num">Price</th>` +
-      `<th class="num">${sell ? "Demand" : "Supply"}</th><th class="num">${sell ? `Your ${tons(q.tons)}` : "Cost"}</th><th class="num">Data</th></tr></thead><tbody>` +
+      `<th class="num">${sell ? "Demand" : "Supply"}</th><th class="num">${sell ? `Your ${tons(n)}` : "Cost"}</th><th class="num">Data</th></tr></thead><tbody>` +
       a.rows.map((r, n) => {
         const open = LK.open === n;
         let row = `<tr class="lookrow${open ? " open" : ""}" data-n="${n}"><td><span class="tw">${open ? "▾" : "▸"}</span> ${lookStationHtml(r)}` +
@@ -4632,6 +5293,7 @@ document.getElementById("cargoLook").addEventListener("click", e => {
     const k = b.dataset.lk;
     if (k === "close") { LK.q = null; LK.answer = null; renderLook(); return markLookRow(); }
     if (k === "price" || k === "near") { if (LK.sort !== k) { LK.sort = k; LK.open = null; loadLook(); } return; }
+    if (k === "all" || k === "ship") { if (LK.load !== k) { LK.load = k; LK.open = null; loadLook(); } return; }
     if (k === "copy") return copyText(b.dataset.name);
     if (k === "bm") return openBookmark(b.dataset.id, b.dataset.name);
     if (k === "plot") {
@@ -4691,10 +5353,12 @@ const LOG_MAX_ROWS = 1000;   // tailing keeps the newest this many; "more" conti
 // what the tail keys on: freshness.read moves with every journal line consumed (the journal time is to the second)
 const logMark = () => data && data.freshness ? data.freshness.read ?? data.freshness.journal : null;
 const lDays = document.getElementById("lDays"), lNoise = document.getElementById("lNoise"), lFilter = document.getElementById("lFilter");
+const lUnsent = document.getElementById("lUnsent");
 const lCatBoxes = [...document.querySelectorAll("#lCats input")];
 const lSaved = store.get("log", {});
 if (lSaved.days && (typeof lSaved.days === "string" || typeof lSaved.days === "number")) lDays.value = lSaved.days;
 lNoise.checked = !!lSaved.noise;
+lUnsent.checked = !!lSaved.unsent;
 // a category added since the filters were saved starts ticked
 // (a hand-edited import or server copy may hold anything there: a list that is not a list reads as unset)
 const lKnown = Array.isArray(lSaved.known) ? lSaved.known : ["travel", "exploration", "bio", "ship", "carrier", "other"];   // saves from before "known"
@@ -4703,11 +5367,31 @@ const CAT_GLYPH = {travel: "🚀", exploration: "🔭", phenomena: "🌀", bio: 
 function logQuery() {
   const cats = lCatBoxes.filter(b => b.checked).map(b => b.value);
   if (lNoise.checked) cats.push("noise");
-  return `days=${lDays.value}&cat=${cats.join(",") || "none"}&q=${encodeURIComponent(lFilter.value.trim())}&noise=${lNoise.checked ? 1 : 0}`;
+  return `days=${lDays.value}&cat=${cats.join(",") || "none"}&q=${encodeURIComponent(lFilter.value.trim())}&noise=${lNoise.checked ? 1 : 0}` +
+    (lUnsent.checked ? "&unsent=1" : "");
 }
 function saveLog() {
   store.set("log", {days: lDays.value, noise: lNoise.checked, cats: lCatBoxes.filter(b => b.checked).map(b => b.value),
-                    known: lCatBoxes.map(b => b.value)});
+                    known: lCatBoxes.map(b => b.value), unsent: lUnsent.checked});
+}
+// S68: "not sent" is offered while an upload is in use (switched on, or rows still waiting), and kept while ticked;
+// ticked, it shows every category (some "noise" goes to EDDN), so the category boxes are dimmed
+function logUnsentShow() {
+  const u = data && data.uploads;
+  const inUse = !!u && ["eddn", "edsm", "inara"].some(s => u[s] && (u[s].wanted || u[s].queued));
+  document.getElementById("lUnsentBox").hidden = !(inUse || lUnsent.checked);
+  document.getElementById("lCats").classList.toggle("dim", lUnsent.checked);
+}
+// the Log's upload marks (S68): each service's worst state for the line, the reason in its hover
+const UP_MARK = {sent: "✓", dry: "◌", queued: "⏳", held: "⏸", dropped: "✗"};
+const UP_WORD = {sent: "sent", dry: "dry run", queued: "waiting", held: "on hold", dropped: "not taken"};
+const UP_LABEL = {eddn: "EDDN", edsm: "EDSM", inara: "Inara"};
+function logMarksHtml(up) {
+  if (!Array.isArray(up) || !up.length) return "";
+  return ` <span class="upm">` + up.map(m => {
+    const name = UP_LABEL[m.service] || m.service;
+    return `<span class="${esc(m.state)}" title="${esc(`${name}: ${UP_WORD[m.state] || m.state}${m.why ? ` · ${m.why}` : ""}`)}">${UP_MARK[m.state] || "?"} ${esc(name)}</span>`;
+  }).join(" · ") + `</span>`;
 }
 async function loadLog(force = false) {
   const key = logQuery();
@@ -4764,6 +5448,7 @@ async function tailLog() {   // new journal lines since the newest row: prepend 
   } catch { if (gen === L.gen) { L.loading = false; L.journal = null; } }
 }
 function openBodyIn(id, name) {
+  if (viewWindow !== "here" && inMainWindow("openBodyIn", id, name)) return;   // S37: from a view window, the main one
   id = String(id);
   view = "here"; saveView();
   pinnedSystem = posId() === id ? null : id;
@@ -4778,7 +5463,8 @@ const localTime = ts => { const d = new Date(ts); return isNaN(d) ? ts : d.toLoc
 const localDay = ts => { const d = new Date(ts); return isNaN(d) ? "" : d.toLocaleDateString([], {weekday: "short", year: "numeric", month: "short", day: "numeric"}); };
 function renderLog() {
   const st = document.getElementById("lStatus");
-  st.textContent = L.error ? L.error : L.loading ? "loading…" : `${L.rows.length} events${L.next ? " (more below)" : ""}`;
+  st.textContent = L.error ? L.error : L.loading ? "loading…" : `${L.rows.length} ${lUnsent.checked ? "not sent" : "events"}${L.next ? " (more below)" : ""}`;
+  logUnsentShow();
   let day = null, h = "";
   for (const r of L.rows) {
     const d = localDay(r.ts);
@@ -4787,7 +5473,7 @@ function renderLog() {
       (r.id64 ? `<span class="goto" data-goto="${esc(r.id64)}" title="open in Here">⌖</span>` : "") : "";
     const body = r.body && r.id64 ? ` <span class="goto" data-body="${esc(r.body)}" data-bsys="${esc(r.id64)}" title="open ${esc(r.body)} in Here">🔍</span>` : "";
     h += `<tr class="ln ${r.cat}${L.fresh.has(r.id) ? " fresh" : ""}" data-id="${esc(r.id)}"><td class="t" title="${esc(r.ts)}">${localTime(r.ts)}</td>` +
-      `<td title="${r.cat} · ${esc(r.event)}">${CAT_GLYPH[r.cat] || ""}</td><td class="ev hide-sm c2hide">${esc(r.event)}</td><td class="sum">${esc(r.summary)}${body}</td><td>${sys}</td></tr>`;
+      `<td title="${r.cat} · ${esc(r.event)}">${CAT_GLYPH[r.cat] || ""}</td><td class="ev hide-sm c2hide">${esc(r.event)}</td><td class="sum">${esc(r.summary)}${body}${logMarksHtml(r.up)}</td><td>${sys}</td></tr>`;
     if (L.open.has(r.id)) h += `<tr class="raw"><td colspan="5"><pre>${esc(JSON.stringify(r.raw, null, 2))}</pre></td></tr>`;
   }
   document.getElementById("logRows").innerHTML = h || `<tr><td colspan="5" class="unk">${L.loading ? "" : "No events match."}</td></tr>`;
@@ -4795,6 +5481,7 @@ function renderLog() {
 }
 lCatBoxes.forEach(b => b.onchange = () => { saveLog(); loadLog(); });
 lNoise.onchange = () => { saveLog(); loadLog(); };
+lUnsent.onchange = () => { saveLog(); logUnsentShow(); loadLog(); };
 lDays.onchange = () => { saveLog(); loadLog(); };
 let lTimer = null;
 lFilter.oninput = () => { clearTimeout(lTimer); lTimer = setTimeout(() => loadLog(), 350); };
@@ -4821,7 +5508,10 @@ let bioSort = store.get("bioSort", {key: "ts", dir: -1});
 bDays.onchange = () => { store.set("bDays", bDays.value); bioKey = null; loadBio(); };
 bState.onchange = () => { store.set("bState", bState.value); renderBio(); };
 bFilter.oninput = () => renderBio();
-function showInHere(id) { view = "here"; saveView(); pinSystem(id); }
+function showInHere(id) {
+  if (viewWindow !== "here" && inMainWindow("showInHere", id)) return;   // S37: ⌖ in a view window: the main one shows it
+  view = "here"; saveView(); pinSystem(id);
+}
 // ---- Find a system by name (Search's top row): the server resolves it, Here shows it ----
 const foundSys = {};   // id -> the last /api/find answer: the pinned Here heading's distance for a system not nearby
 document.getElementById("findForm").addEventListener("submit", async e => {
@@ -4837,7 +5527,7 @@ document.getElementById("findForm").addEventListener("submit", async e => {
   foundSys[d.id] = d;
   const v = d.visited;
   st.textContent = [d.name, d.distance != null ? `${d.distance.toLocaleString("en-US", {maximumFractionDigits: 2})} ly` : null,
-    v ? `visited ${v.count}× (last ${day(v.last_ts)})` : "never visited", d.bookmarked && "bookmarked", d.next_stop && "the next stop",
+    v ? `visited ${v.count}× (last ${day(v.last_ts)})${v.edsm ? " by your EDSM flight log" : ""}` : "never visited", d.bookmarked && "bookmarked", d.next_stop && "the next stop",
     d.source === "edsm" && "found on EDSM"].filter(Boolean).join(" · ");
   showInHere(d.id);
 });
@@ -4892,7 +5582,7 @@ function renderBio() {
 // ---- the exobiology checklist (Bio/Geo -> Exo-Biology; GET api/checklist, outrider/checklist.py): every species the
 // rules know, by galactic region, with your best there and its colours found / possible; a species' panel with its
 // colours, what gives each, and a galaxy map of where it can grow with your samples as dots ----
-const CL = {data: null, key: null, open: null, species: null, map: null, colour: null};
+const CL = {data: null, key: null, open: null, species: null, map: null, colour: null, find: null};
 // an entry's picture: Canonn's screenshot (linked, never copied), credited to the commander who took it
 function clFigure(img, alt, colour) {
   if (!img || !img.url) return "";
@@ -4915,7 +5605,7 @@ function setBioMode(m) {
   bv.classList.toggle("check", bioMode !== "runs");
   bv.classList.toggle("geo", bioMode === "geo");
   document.querySelectorAll("[name=bioMode]").forEach(x => { x.checked = x.value === bioMode; });
-  if (clKind() !== was) { CL.data = null; CL.key = null; CL.open = null; CL.species = null; }   // the other list
+  if (clKind() !== was) { CL.data = null; CL.key = null; CL.open = null; CL.species = null; CL.find = null; }   // the other list
   if (view === "bio") { if (bioMode !== "runs") loadChecklist(true); else loadBio(); }
 }
 document.querySelectorAll("[name=bioMode]").forEach(x => x.addEventListener("change", () => setBioMode(x.value)));
@@ -4924,7 +5614,9 @@ clRegionEl.addEventListener("change", () => { store.set("clRegion", clRegionEl.v
 async function loadChecklist(force = false) {
   const want = clRegionEl.value || store.get("clRegion", "here") || "here";
   const kind = clKind();
-  const key = `${kind}|${want}|${data && data.scan_version}|${want === "here" ? posId() : ""}`;
+  // the colour tables' state too (S7): the note's "downloading…" / "failed", and the colours once they are in
+  const br = data && data.bio_rules, colKey = br ? `${br.colours}|${(br.colours_job || {}).state}` : "";
+  const key = `${kind}|${want}|${data && data.scan_version}|${want === "here" ? posId() : ""}|${colKey}`;
   if (!force && key === CL.key) return;
   // every change (region, list, a scan) asks, and only the newest answer is drawn: a region picked while an answer
   // was on its way was dropped (the Fable review of 2026-10-10, #6); a list switched meanwhile asks anew (setBioMode)
@@ -4990,7 +5682,8 @@ function renderChecklist() {
     ` · <span class="cl-sold">${s.sold} sold</span>` +
     ` · <span class="cl-aboard" title="species you carry unsold samples of (a colour of one may be sold already)">${s.aboard} aboard</span>` + (s.lost ? ` · <span class="cl-lost">${s.lost} lost</span>` : "") +
     (s.logged ? ` · <span class="cl-logged">${s.logged} logged</span>` : "") + ` · colours ${s.colours_found} of ${s.colours}` +
-    (s.elsewhere ? ` · <span class="clelse">${s.elsewhere} more found in other regions</span>` : "");
+    (s.elsewhere ? ` · <span class="clelse">${s.elsewhere} more found in other regions</span>` : "") +
+    (bioColoursNote() ? ` · ${bioColoursNote()}` : "");   // S7: the colour tables missing, with Retry
   const html = d.genera.map(g => {
     const found = g.species.filter(r => r.state && r.possible).length, poss = g.species.filter(r => r.possible).length;
     // complete (the author, 2026-10-10): every species that can grow here has all its colours found (one with no colour
@@ -5008,7 +5701,8 @@ function renderChecklist() {
         (r.elsewhere ? ` · found in another region: ${CL_WORD[r.elsewhere]}` : "");
       return `<tr class="${cls}${CL.open === r.id ? " on" : ""}" data-cl="${esc(r.id)}" title="${esc(tip)}"><td>${esc(r.short)}` +
         `${r.possible === "parts" ? ' <span class="clparts">◐</span>' : ""}</td><td>${r.state ? CL_WORD[r.state]
-          : r.elsewhere ? `<span class="clelse" title="${esc(`found in another region: ${CL_WORD[r.elsewhere]}`)}">elsewhere</span>` : ""}</td>` +
+          : r.elsewhere ? `<span class="clelse" title="${esc(`found in another region: ${CL_WORD[r.elsewhere]}`)}">elsewhere</span>`
+          : geo ? "" : clFindBtn(r, null, "🔍")}</td>` +
         `<td class="num">${geo ? (r.sites ? r.sites.toLocaleString() : "—") : `${r.variants.found} / ${r.variants.total}`}</td></tr>` +
         (!geo && CL.open === r.id ? clVariantRows(r) : "");
     }).join("") + "</table></div>";
@@ -5024,10 +5718,12 @@ function clVariantRows(r) {
     const k = (v.colour || "").toLowerCase(), img = v.colour && imgs[k];
     return `<tr class="clvar${v.state ? ` cl-${v.state}` : ""}${img ? " climgrow" : ""}${img && k === pick ? " on" : ""}" data-colour="${esc(k)}"` +
       `${img ? ' title="show its picture"' : ""}><td colspan="3"><div class="cvrow"><span class="cvc">${v.colour ? esc(v.colour) : "its one variant"}</span>` +
-      `<span class="cvw">${esc(v.where || "")}</span><span class="cvs">${v.state ? CL_WORD[v.state] : ""}</span></div></td></tr>`;
+      `<span class="cvw">${esc(v.where || "")}</span><span class="cvs">${v.state ? CL_WORD[v.state] : v.colour ? clFindBtn(r, v.colour, "🔍 nearby") : ""}</span></div></td></tr>`;
   }).join("");
 }
 document.getElementById("clGrid").addEventListener("click", e => {
+  const fb = e.target.closest("[data-clfind]");
+  if (fb) return clFind(fb.dataset.clfind, fb.dataset.clcolour || null);
   const vr = e.target.closest("tr.clvar");
   if (vr) {   // a colour: its picture
     if (vr.classList.contains("climgrow")) { CL.colour = vr.dataset.colour; renderChecklist(); }
@@ -5049,6 +5745,50 @@ async function clLoadSpecies(id) {
   CL.species = d;
   renderChecklist();   // the dropped-down colours learn which have a picture
 }
+// ---- S29: "🔍 nearby" on a species (or a colour of one) you have not found: the nearest bodies where commanders'
+// uploads reported it to Spansh (GET api/checklist/find), in the side panel with ly, gravity, visited, ☆ and Copy.
+// 🎯 on its rows waits for S31's route "system" ----
+function clFindBtn(r, colour, label) {
+  const what = r.name + (colour ? ` - ${colour}` : "");
+  return `<button type="button" class="clfindb" data-clfind="${esc(r.id)}" data-clcolour="${esc(colour || "")}"` +
+    ` title="${esc(`nearby: the nearest bodies where commanders reported ${what} to Spansh`)}">${label}</button>`;
+}
+async function clFind(id, colour) {
+  if (CL.open !== id) { CL.open = id; CL.colour = null; renderChecklist(); clLoadSpecies(id); }
+  const f = CL.find = {id, colour, busy: true, answer: null};
+  clDrawSide();
+  let a;
+  try { a = await apiJson(`api/checklist/find?species=${encodeURIComponent(id)}${colour ? `&colour=${encodeURIComponent(colour)}` : ""}`); }
+  catch (err) { a = {error: err.message}; }
+  if (CL.find !== f) return;   // another find (or ✕) meanwhile
+  f.busy = false; f.answer = a;
+  clDrawSide();
+}
+function clFindHtml(r) {
+  const f = CL.find && CL.find.id === r.id ? CL.find : null;
+  if (!f) return r.state ? "" : `<p>${clFindBtn(r, null, "🔍 nearby")}</p>`;
+  const a = f.answer, bms = bmMap();
+  const head = `<div class="clfind"><div class="clfindh"><span>Nearest reported: <b>${esc(r.name + (f.colour ? ` - ${f.colour}` : ""))}</b></span>` +
+    `<button type="button" class="mini" data-clfindclose title="close the list">✕</button></div>`;
+  if (f.busy) return head + `<div class="unk">asking Spansh…</div></div>`;
+  if (!a || a.error) return head + `<div class="noscoop">${esc(a ? a.error : "")}</div></div>`;
+  if (!a.rows.length) return head + `<div class="unk">No body within ${a.radius.toLocaleString()} ly has it reported to Spansh.</div></div>`;
+  const rows = a.rows.map(x => `<tr><td title="${esc(x.system)}">${esc(x.system)}</td><td>${esc(x.body || "")}</td>` +
+    `<td class="num">${x.ly == null ? "" : `${x.ly.toLocaleString(undefined, {maximumFractionDigits: 1})} ly`}</td>` +
+    `<td class="num">${x.gravity == null ? "" : `${x.gravity.toFixed(2)} g`}</td>` +
+    `<td>${f.colour ? "" : esc(x.colours.join(", "))}</td><td>${x.visited ? '<span class="good" title="you have been to this system">✓</span>' : ""}</td>` +
+    `<td>${bmIcon(x.id, x.system, bms)}</td>` +
+    `<td><button type="button" class="mini" data-clcopy="${esc(x.system)}" title="copy the system's name">Copy</button>${sysAimBtn(x.system, x.id)}</td></tr>`).join("");
+  const more = a.count > a.rows.length ? `${(a.count - a.rows.length).toLocaleString()} more further away · ` : "";
+  return head + `<table class="clfindt">${rows}</table><div class="unk">${more}reported to Spansh by commanders' uploads; distances from ${esc(a.where || "you")}</div></div>`;
+}
+document.getElementById("clSide").addEventListener("click", e => {
+  const fb = e.target.closest("[data-clfind]");
+  if (fb) return clFind(fb.dataset.clfind, fb.dataset.clcolour || null);
+  if (e.target.closest("[data-clfindclose]")) { CL.find = null; return clDrawSide(); }
+  const c = e.target.closest("[data-clcopy]");
+  if (c) copyText(c.dataset.clcopy);
+});
 function clDrawSide() {
   const side = document.getElementById("clSide"), r = clRow(CL.open);
   let html;
@@ -5074,6 +5814,7 @@ function clDrawSide() {
     const {imgs, pick, shown} = clPick(r);   // its colours are dropped down under its row in the box
     html = `<h4>${esc(r.name)}</h4><div class="unk">${r.value ? `${credits(r.value)} cr` : ""}` +
       `${CL.data.region != null ? ` · ${esc(where)}` : ""}${r.runs ? ` · ${r.runs} run${r.runs === 1 ? "" : "s"}` : ""}</div>` +
+      clFindHtml(r) +   // S29: 🔍 nearby, and its list
       (pick != null ? clFigure(imgs[pick], `${r.name}${shown && shown.colour ? ` - ${shown.colour}` : ""}`, shown && shown.colour) : "") +
       `<div class="clmapbox"><canvas id="clMap" width="880" height="880" aria-label="${esc(`the galaxy: where ${r.name} can grow`)}"></canvas>` +
       `<div id="clMapTip" class="cltip" hidden></div></div>` +
@@ -5217,6 +5958,23 @@ function tripBioText(t) {
   }
   return parts.join(" · ");
 }
+// History's sold column and its ✗ (S63): what the sales paid, and each death with what it was ("died 14:32: ship lost
+// (rebuy)"; a death with no Resurrect in the journal yet counts as a loss, as everywhere else)
+const soldCell = (n, title = "what Universal Cartographics and Vista Genomics paid") =>
+  `<td class="num c2hide"${n ? ` title="${esc(title)}"` : ""}>${n ? credits(n) : ""}</td>`;
+function deathWhat(d) {
+  return d.ship ? `ship lost${d.option ? ` (${d.option})` : ""}` : `the ship survived (${d.option})`;
+}
+function deathsHtml(ds) {
+  if (!ds || !ds.length) return "";
+  const title = ds.map(d => `died ${d.ts.slice(11, 16)}: ${deathWhat(d)}`).join("\n");
+  return ` <span class="lost" title="${esc(title)}">✗${ds.length > 1 ? ds.length : ""}</span>`;
+}
+function diedHtml(x) {
+  if (!x || !x.died) return "";
+  const title = `${x.died} death${x.died === 1 ? "" : "s"}, ${x.lost || 0} ship${x.lost === 1 ? "" : "s"} lost`;
+  return ` <span class="lost" title="${esc(title)}">✗${x.died > 1 ? x.died : ""}</span>`;
+}
 const openSessions = new Set();
 function renderHistory() {
   renderLastSession();
@@ -5227,23 +5985,25 @@ function renderHistory() {
   const fmt = ts => ts.slice(0, 10) + " " + ts.slice(11, 16);
   const a = h.all_time;
   document.getElementById("histAll").innerHTML = !a ? "" : `<tr class="alltime" title="every session in your journals${a.since ? ", since " + a.since.slice(0, 10) : ""}">
-      <td><b>All time</b> <span class="unk c1hide">${a.sessions.toLocaleString()} sessions</span></td>
+      <td><b>All time</b> <span class="unk c1hide">${a.sessions.toLocaleString()} sessions</span>${diedHtml(a)}</td>
       <td class="num">${a.jumps.toLocaleString()}</td><td class="num">${Math.round(a.ly).toLocaleString()}</td><td class="num hide-sm c2hide">${a.max_sol.toLocaleString()}</td>
       <td class="num">${a.firsts.toLocaleString()}</td><td class="num hide-sm c2hide">${a.bodies_first.toLocaleString()}</td><td class="num">${a.mapped.toLocaleString()}</td>
-      <td class="num hide-sm">${a.footfalls.toLocaleString()}</td><td class="num">${a.samples.toLocaleString()}</td><td class="num hide-sm c2hide">${a.codex_new.toLocaleString()}</td></tr>`;
+      <td class="num hide-sm">${a.footfalls.toLocaleString()}</td><td class="num">${a.samples.toLocaleString()}</td>${soldCell(a.sold)}<td class="num hide-sm c2hide">${a.codex_new.toLocaleString()}</td></tr>`;
   const L = h.ledger || {}, ss = L.since_last_sale, car = L.career;
   if (ss && ss.since) document.getElementById("histAll").insertAdjacentHTML("beforeend",
-    `<tr class="alltime sincesale" title="everything since your last sale to Universal Cartographics"><td><b>${dual("Since your last sale", "Since sale")}</b> <span class="unk">${ss.days} d<span class="c1hide"> · ${esc(ss.since.slice(0, 10))}</span></span></td>
+    `<tr class="alltime sincesale" title="everything since your last sale to Universal Cartographics"><td><b>${dual("Since your last sale", "Since sale")}</b> <span class="unk">${ss.days} d<span class="c1hide"> · ${esc(ss.since.slice(0, 10))}</span></span>${diedHtml(ss)}</td>
       <td class="num">${ss.jumps.toLocaleString()}</td><td class="num">${Math.round(ss.ly).toLocaleString()}</td><td class="num hide-sm c2hide">${ss.max_sol.toLocaleString()}</td>
       <td class="num">${ss.firsts}</td><td class="num hide-sm c2hide">${ss.bodies_first}</td><td class="num">${ss.mapped}</td>
-      <td class="num hide-sm">${ss.footfalls}</td><td class="num">${ss.samples}</td><td class="num hide-sm c2hide">${ss.codex_new}</td></tr>`);
+      <td class="num hide-sm">${ss.footfalls}</td><td class="num">${ss.samples}</td>${soldCell(ss.sold, "since your last sale to Universal Cartographics: what Vista Genomics paid")}<td class="num hide-sm c2hide">${ss.codex_new}</td></tr>`);
   if (car && car.Exploration) { const e = car.Exploration, o = car.Exobiology || {};
     document.getElementById("histAll").insertAdjacentHTML("beforeend",
       `<tr class="alltime career" title="the game's own statistics (your whole career, including journals Outrider never saw), as of ${esc((car.ts || "").slice(0, 10))}">
         <td><b>Career</b> <span class="unk c1hide">game statistics</span></td><td class="num">${(e.Total_Hyperspace_Jumps || 0).toLocaleString()}</td>
         <td class="num">${Math.round(e.Total_Hyperspace_Distance || 0).toLocaleString()}</td><td class="num hide-sm c2hide" title="greatest distance from your start">${Math.round(e.Greatest_Distance_From_Start || 0).toLocaleString()}</td>
         <td class="num" title="systems visited">${(e.Systems_Visited || 0).toLocaleString()}</td><td class="num hide-sm c2hide"></td><td class="num" title="planets mapped (surface scans)">${(e.Planets_Scanned_To_Level_3 || 0).toLocaleString()}</td>
-        <td class="num hide-sm">${(e.First_Footfalls || 0).toLocaleString()}</td><td class="num" title="organic species encountered">${(o.Organic_Species_Encountered || 0).toLocaleString()}</td><td class="num hide-sm c2hide"></td></tr>`); }
+        <td class="num hide-sm">${(e.First_Footfalls || 0).toLocaleString()}</td><td class="num" title="organic species encountered">${(o.Organic_Species_Encountered || 0).toLocaleString()}</td>` +
+        soldCell((e.Exploration_Profits || 0) + (o.Organic_Data_Profits || 0), "exploration profits and organic data profits, the game's statistics") +
+        `<td class="num hide-sm c2hide"></td></tr>`); }
   const fmtD = t => t ? t.slice(0, 10) : "start";
   // compact: "✗ 09-01 −12.3M" (the split between carto and bio stays in the full form and the title)
   const lossHtml = ls => ls.map(l => {
@@ -5278,15 +6038,27 @@ function renderHistory() {
   document.getElementById("topRows").innerHTML = (L.top_finds || []).map(f => `<tr><td><span class="name" data-name="${esc(f.body)}" title="click to copy">${esc(f.body)}</span></td>
       <td>${sfText("body", f.type || "")}${f.first_discovered ? " 🏁" : ""}${f.mapped ? " 🗺" : ""}</td><td class="num">${credits(f.value)}</td>
       <td class="${f.state === "lost" ? "lost" : f.state === "sold" ? "sold" : "unsold"}">${f.state === "unsold" ? "aboard" : f.state}</td><td class="hide-sm c2hide">${esc((f.ts || "").slice(0, 10))}</td></tr>`).join("");
+  // S67: your imported EDSM flight log's line (where you went before your journals: no counts of what you did)
+  if (h.edsm) document.getElementById("histAll").insertAdjacentHTML("beforeend",
+    `<tr class="alltime fromedsm" title="sessions from your EDSM flight log, before your first journal (Settings → Uploads): where you went, not what you did there">
+      <td><b>${dual("From EDSM", "EDSM")}</b> <span class="unk c1hide">${h.edsm.sessions.toLocaleString()} sessions · ${esc(h.edsm.since.slice(0, 10))} to ${esc(h.edsm.until.slice(0, 10))}</span></td>
+      <td class="num">${h.edsm.jumps.toLocaleString()}</td><td class="num">${Math.round(h.edsm.ly).toLocaleString()}</td><td class="num hide-sm c2hide"></td>
+      <td class="num"></td><td class="num hide-sm c2hide"></td><td class="num"></td><td class="num hide-sm"></td><td class="num"></td><td class="num c2hide"></td><td class="num hide-sm c2hide"></td></tr>`);
   document.getElementById("histRows").innerHTML = h.sessions.map((s, i) => {
     const open = openSessions.has(s.start);
-    return `<tr class="sess${open ? " open" : ""}" data-sess="${esc(s.start)}"><td>${dual(`${fmt(s.start)} → ${s.end.slice(11, 16)}`, `${fmt(s.start).slice(5)} → ${s.end.slice(11, 16)}`, {s2: esc(fmt(s.start).slice(5))})}</td>
+    if (s.edsm) return `<tr class="sess fromedsm${open ? " open" : ""}" data-sess="${esc(s.start)}" title="from your EDSM flight log: where you went, not what you did there">` +
+      `<td>${dual(`${fmt(s.start)} → ${s.end.slice(11, 16)}`, `${fmt(s.start).slice(5)} → ${s.end.slice(11, 16)}`, {s2: esc(fmt(s.start).slice(5))})} <span class="unk">from EDSM</span></td>` +
+      `<td class="num">${s.jumps}</td><td class="num">${s.ly.toLocaleString()}</td><td class="num hide-sm c2hide">${s.max_sol.toLocaleString()}</td>` +
+      `<td class="num"></td><td class="num hide-sm c2hide"></td><td class="num"></td><td class="num hide-sm"></td><td class="num"></td><td class="num c2hide"></td><td class="num hide-sm c2hide"></td></tr>` +
+      (open ? `<tr><td colspan="11" class="systems">${s.systems.map(x => `<span><span class="name" data-name="${esc(x.name)}" title="click to copy">${esc(x.name)}</span>` +
+        ` <span class="unk">${x.ts.slice(11, 16)}</span></span>`).join("")}</td></tr>` : "");
+    return `<tr class="sess${open ? " open" : ""}" data-sess="${esc(s.start)}"><td>${dual(`${fmt(s.start)} → ${s.end.slice(11, 16)}`, `${fmt(s.start).slice(5)} → ${s.end.slice(11, 16)}`, {s2: esc(fmt(s.start).slice(5))})}${deathsHtml(s.deaths)}</td>
       <td class="num">${s.jumps}</td><td class="num">${s.ly.toLocaleString()}</td><td class="num hide-sm c2hide">${s.max_sol.toLocaleString()}</td>
       <td class="num">${s.firsts}</td><td class="num hide-sm c2hide">${s.bodies_first}</td><td class="num">${s.mapped}</td>
-      <td class="num hide-sm">${s.footfalls}</td><td class="num">${s.samples}</td><td class="num hide-sm c2hide">${s.codex_new}</td></tr>` +
-      (open ? `<tr><td colspan="10" class="systems">${s.systems.map(x => `<span><span class="name" data-name="${esc(x.name)}" title="click to copy">${esc(x.name)}</span>` +
+      <td class="num hide-sm">${s.footfalls}</td><td class="num">${s.samples}</td>${soldCell(s.sold)}<td class="num hide-sm c2hide">${s.codex_new}</td></tr>` +
+      (open ? `<tr><td colspan="11" class="systems">${s.systems.map(x => `<span><span class="name" data-name="${esc(x.name)}" title="click to copy">${esc(x.name)}</span>` +
         `${x.kind === "CarrierJump" ? " 🚢" : x.kind === "Location" ? " ⟳" : ""} <span class="unk">${x.ts.slice(11, 16)}</span></span>`).join("")}</td></tr>` : "");
-  }).join("") || `<tr><td colspan="10" class="unk">No jumps in this period.</td></tr>`;
+  }).join("") || `<tr><td colspan="11" class="unk">No jumps in this period.</td></tr>`;
 }
 document.getElementById("histRows").addEventListener("click", e => {
   const name = e.target.closest(".name"); if (name) return copyText(name.dataset.name);
@@ -5310,9 +6082,17 @@ for (const [id, key, prop] of [["mRadius", "radius", "value"], ["mPath", "path",
 mEl("mTop").onclick = () => { M.yaw = 0; M.pitch = Math.PI / 2; M.panX = M.panY = 0; drawMap(); };
 mEl("mReset").onclick = () => { M.yaw = -0.5; M.pitch = 0.45; M.zoom = 1; M.panX = M.panY = 0; drawMap(); };
 
+// S50: what the map's route depends on: a new plot (the game's, the Highway's, a survey route's), the next stop, or the
+// header's next stop asks again (where you are is in the key already)
+function mapRouteKey() {
+  const hw = data && data.highway, sv = data && data.survey, rt = data && data.route, ns = data && data.next_stop;
+  return [hw && `${hw.id}:${hw.index}:${hw.complete ? 1 : 0}:${hw.off_route ? 1 : 0}`, sv && `${sv.id}:${sv.index}:${sv.complete ? 1 : 0}:${sv.off_route ? 1 : 0}`,
+          rt && rt.ts, ns && ns.id].map(x => x || "").join(",");
+}
 async function loadMap() {
   const p = data && data.position; if (!p) return;
-  const key = `${posId()}|${mSettings.radius}|${mSettings.path}|${mSettings.boost ? 1 : 0}`;   // the exact id, not a rounded number
+  // the exact id, not a rounded number
+  const key = `${posId()}|${mSettings.radius}|${mSettings.path}|${mSettings.boost ? 1 : 0}|${mapRouteKey()}`;
   if (key === M.key) return;
   M.key = key; M.loading = true;
   // a request of its own: the map reopened while one was on its way asks again with the same key, and the older one's
@@ -5356,6 +6136,22 @@ const STAR_NAMES = {O: "O", B: "B", A: "A", F: "F", G: "G", K: "K", M: "M", L: "
   Y: "Y dwarf", D: "White dwarf", N: "Neutron", BH: "Black hole", W: "Wolf-Rayet", C: "Carbon",
   S: "MS/S-type", TTS: "T Tauri", AeBe: "Herbig Ae/Be"};
 
+// S50: the route the map draws (pure, from api/map's `route`): dashed legs [a, b, kind], kind "navroute" (the game's
+// plotted route, from you) or "route" (the followed route's rows: from you to its first while you are off it or before
+// it, with no route plotted in game), the points along it with what to say of them, and the next stop
+const mapRouteWords = k => k === "highway" ? "Neutron Highway route" : SURVEY[k] ? SURVEY[k].what : null;
+function mapRouteMarks(d) {
+  const r = d && d.route; if (!r) return null;
+  const nav = r.navroute || [], rows = r.rows || [], c = d.center, cid = c && (c.id ?? String(c.id64)), legs = [], points = [];
+  let prev = c;
+  nav.forEach((p, i) => { legs.push([prev, p, "navroute"]); prev = p;
+    points.push({pt: p, what: `hop ${i + 1} of the route plotted in game`}); });
+  const kind = mapRouteWords(r.kind) || "your route";
+  if (rows.length && !nav.length && rows[0].id !== cid) legs.push([c, rows[0], "route"]);
+  rows.forEach((p, i) => { if (i) legs.push([rows[i - 1], p, "route"]); if (p.id !== cid) points.push({pt: p, what: `on your ${kind}`}); });
+  const next = r.next ? {pt: r.next, what: r.next.via === "next_stop" ? "your next stop" : `next stop of your ${kind}`} : null;
+  return {legs, points, next, kind, rows: rows.length, nav: nav.length};
+}
 function drawMap() {
   if (view !== "map" || !M.data || M.data.error) return;
   const cs = getComputedStyle(document.documentElement), col = v => cs.getPropertyValue(v).trim();
@@ -5373,7 +6169,10 @@ function drawMap() {
        dot(C.text, "your route plots only", true), `<span style="color:${C.accent}">— your path</span>`,
        `<span style="color:${C.accent}">◌ previous / target</span>`, `<span style="color:${C.gold}">★ bookmark</span>`]
        .concat(M.data.boost ? [`<span style="color:#5ce1e6">▵ neutron · □ white dwarf · ┄ boosted range</span>`] : []).join("");
-  if (M.legend !== legend) { M.legend = legend; mEl("mLegend").innerHTML = legend; }   // not on every drag frame
+  const rm = mapRouteMarks(M.data);   // S50: the route's entries, whichever the colouring
+  const routeLegend = !rm ? "" : (rm.nav ? `<span style="color:${C.accent}">┄ route plotted in game</span>` : "") +
+    (rm.rows ? `<span style="color:${C.good}">┄ ${esc(rm.kind)}</span>` : "") + (rm.next ? `<span style="color:${C.good}">◎ next stop</span>` : "");
+  if (M.legend !== legend + routeLegend) { M.legend = legend + routeLegend; mEl("mLegend").innerHTML = M.legend; }   // not on every drag frame
   const dpr = window.devicePixelRatio || 1;
   const w = mEl("mapWrap").clientWidth;
   if (appOn()) {
@@ -5477,6 +6276,35 @@ function drawMap() {
     }
   }
 
+  // S50: the route ahead, dashed (the game's plotted route in the path's colour, the followed route's rows in green), its
+  // points that are no system dot of their own carry the card, and ◎ on the next stop
+  const routeOf = {};
+  if (rm) {
+    for (const [kind, colour] of [["navroute", C.accent], ["route", C.good]]) {
+      g.strokeStyle = colour; g.lineWidth = 1.5; g.globalAlpha = .85; g.setLineDash([6, 4]); g.beginPath();
+      for (const [a, b, k] of rm.legs) if (k === kind) line(proj(...rel(a)), proj(...rel(b)));
+      g.stroke(); g.setLineDash([]); g.globalAlpha = 1;
+    }
+    const inView = new Set(d.points.map(pt => pt.id));
+    for (const {pt, what} of rm.points) {
+      if (pt.id) routeOf[pt.id] = routeOf[pt.id] || what;
+      const q = proj(...rel(pt)); if (!q.ok || (pt.id && inView.has(pt.id))) continue;
+      g.fillStyle = C.good; g.beginPath(); g.arc(q.sx, q.sy, 2, 0, 2 * Math.PI); g.fill();
+      M.proj.push({sx: q.sx, sy: q.sy, pt: {name: pt.name, id: pt.id, x: pt.x, y: pt.y, z: pt.z, onroute: what}});
+    }
+    if (rm.next) {
+      const n = rm.next.pt, q = proj(...rel(n));
+      if (n.id) routeOf[n.id] = rm.next.what;
+      if (q.ok) {
+        g.strokeStyle = C.good; g.lineWidth = 1.5;
+        for (const rr of [5, 9]) { g.beginPath(); g.arc(q.sx, q.sy, rr, 0, 2 * Math.PI); g.stroke(); }
+        if (!n.id || !d.points.some(pt => pt.id === n.id))
+          M.proj.push({sx: q.sx, sy: q.sy, pt: {name: n.name, id: n.id, x: n.x, y: n.y, z: n.z, onroute: rm.next.what}});
+        if (mSettings.labels) labels.push([q, `${n.name} (next stop)`]);
+      }
+    }
+  }
+
   // Boost stars (neutron / white dwarf arrival stars) and your carrier.
   const boostOf = {};
   if (d.boost) for (const b of d.boost.points) boostOf[b.id] = b.boost;
@@ -5527,7 +6355,8 @@ function drawMap() {
       g.beginPath(); g.arc(q.sx, q.sy, r + 4, 0, 2 * Math.PI); g.stroke(); g.setLineDash([]);
     }
     if (bms[id]) { g.fillStyle = C.gold; g.font = "12px system-ui"; g.fillText("★", q.sx + r + 1, q.sy - r); }
-    M.proj.push({sx: q.sx, sy: q.sy, pt: boostOf[id] || id === carrierAt ? {...pt, boost: boostOf[id], carrier: id === carrierAt ? carrierName(cr) : undefined} : pt});
+    M.proj.push({sx: q.sx, sy: q.sy, pt: boostOf[id] || id === carrierAt || routeOf[id]
+      ? {...pt, boost: boostOf[id], carrier: id === carrierAt ? carrierName(cr) : undefined, onroute: routeOf[id]} : pt});
     if (mSettings.labels && (id === hereId || id === prevId || id === targetId || bms[id]))
       labels.push([q, pt.name + (id === prevId ? " (previous)" : id === targetId ? " (target)" : "")]);
   }
@@ -5554,18 +6383,38 @@ function mapHit(e) {
   for (const q of M.proj) { const dd = (q.sx - x) ** 2 + (q.sy - y) ** 2; if (dd < bd) { bd = dd; best = q; } }
   return best;
 }
-function mapPopHtml(pt) {
+// S72: a click on a Map system targets it in game when auto-target can work on this PC (canAim, the rule every 🎯
+// follows), else copies its name; your own system and a point without an id64 are copied only. `touch`: the tapped
+// card's buttons (🎯 Target, Copy name)
+const mapAimable = pt => !!pt.id && /^\d+$/.test(String(pt.id)) && String(pt.id) !== String(M.data.center.id ?? M.data.center.id64);
+function mapClickWords(pt) {
+  if (!mapAimable(pt) || !canAim()) return "click to copy its name";
+  return `click to target it in game${hwyFront() ? "" : " (5 s)"}`;
+}
+function mapPopHtml(pt, touch = false) {
   const c = M.data.center, dd = Math.hypot(pt.x - c.x, pt.y - c.y, pt.z - c.z);
   const boost = pt.boost ? (pt.boost === "N" ? "neutron star: jet-cone boost ×4" : "white dwarf: jet-cone boost ×1.5") : "";
-  const what = (c.id ?? String(c.id64)) === pt.id ? "you are here" : pt.first ? "you discovered it" : pt.visited ? "visited"
+  const what = (c.id ?? String(c.id64)) === pt.id ? "you are here" : pt.first ? "you discovered it" : pt.visited ? (pt.edsm ? "visited (your EDSM flight log)" : "visited")
     : pt.kind === "route" ? "only in your route plots" : pt.scanned ? "known, has scanned bodies"
     : pt.kind === undefined ? (pt.carrier ? `your carrier ${esc(pt.carrier)} is here` : boost) : "no scan data";
   const what2 = what + (pt.carrier && !what.includes("carrier") ? ` · your carrier ${esc(pt.carrier)} is here` : "") + (boost && what !== boost ? " · " + boost : "");
   const b = bmMap()[pt.id];
-  return `<h3>${esc(pt.name)}</h3><div>${dd.toFixed(2)} ly away · ${what2}</div>` +
+  return `<h3>${esc(pt.name)}</h3><div>${dd.toFixed(2)} ly away${what2 ? ` · ${what2}` : ""}</div>` +
     (pt.star ? `<div>main star: <span class="mono">${esc(pt.star)}</span></div>` : "") +
     (pt.arrived ? `<div class="unk">on your path: arrived ${esc(pt.arrived.replace("T", " ").replace("Z", ""))}</div>` : "") +
-    (b ? `<div class="sec">★ ${esc(b.note) || "bookmarked"}</div>` : "") + `<div class="sec unk">click to copy name</div>`;
+    (pt.onroute ? `<div class="unk">${esc(pt.onroute)}</div>` : "") +
+    (b ? `<div class="sec">★ ${esc(b.note) || "bookmarked"}</div>` : "") +
+    (!touch ? `<div class="sec unk">${mapClickWords(pt)}</div>` : `<div class="sec mapacts">` +
+      (mapAimable(pt) && canAim() ? `<button type="button" class="mini" data-aim="next" data-route="system" data-aimid="${esc(String(pt.id))}">🎯 Target</button> ` : "") +
+      `<button type="button" class="mini" data-mapcopy="${esc(pt.name)}">Copy name</button></div>`);
+}
+// S72: a mouse click on a system: target it (canAim) or copy its name; a run under way is said, not doubled
+function mapClick(pt) {
+  if (!mapAimable(pt) || !canAim()) return copyText(pt.name);
+  const a = data.autotarget || {}, t = a.test;
+  if ((hwyRun && !hwyRun.done) || a.running || (t && ["counting", "running"].includes(t.state)))
+    return toast("auto-target is already running: wait for it to finish");
+  hwyAutoStart("next", {route: "system", id: String(pt.id)});
 }
 // Two fingers on a map (pure): from where they were (a) to where they are (b), each [{x, y}, {x, y}], the move of their
 // midpoint (dx, dy), the ratio of their spread (scale: a pinch), and the midpoint now (x, y)
@@ -5609,7 +6458,7 @@ mapCanvas.addEventListener("pointermove", e => {
   }
   const q = mapHit(e);
   if ((q && q.pt) !== (M.hover && M.hover.pt)) { M.hover = q; drawMap(); }
-  if (q) { popId = "map"; pop.innerHTML = mapPopHtml(q.pt); pop.style.display = "block"; placePop(e.clientX, e.clientY); }
+  if (q) { popId = "map"; pop.innerHTML = mapPopHtml(q.pt); pop.style.display = "block"; pop.classList.remove("taps"); placePop(e.clientX, e.clientY); }
   else if (popId === "map") hidePop();
 });
 function mapPointerEnd(e) {
@@ -5623,8 +6472,9 @@ function mapPointerEnd(e) {
   const click = e.type === "pointerup" && M.drag && !M.drag.moved && !M.drag.pan; M.drag = null; mapCanvas.classList.remove("dragging");
   if (!click) return;
   const q = mapHit(e); if (!q) return;
-  if (e.pointerType === "touch") { popId = "map"; pop.innerHTML = mapPopHtml(q.pt); pop.style.display = "block"; placePop(e.clientX, e.clientY); }
-  else copyText(q.pt.name);
+  if (e.pointerType === "touch") {   // the card, with its buttons (it takes taps: .taps)
+    popId = "map"; pop.innerHTML = mapPopHtml(q.pt, true); pop.style.display = "block"; pop.classList.add("taps"); placePop(e.clientX, e.clientY);
+  } else mapClick(q.pt);
 }
 mapCanvas.addEventListener("pointerup", mapPointerEnd);
 mapCanvas.addEventListener("pointercancel", mapPointerEnd);
@@ -5674,34 +6524,119 @@ function hwyLineHtml(s, {short = false, glyph = true} = {}) {
   const n = s.next;
   if (!n) return `${g}To ${hwyName(s.destination)}`;
   const bits = [`${s.index === 0 && s.at == null ? "Start" : "Next"}: ${hwyName(n.name)}${short ? hwyAimBtn(n.name) : ""}`];
+  if (s.target_check) bits.push(targetCheckHtml(s.target_check));   // S11
   if (n.neutron) bits.push(`<span class="hwyn" title="a neutron star: supercharge your FSD there">⚡ neutron</span>`);
   if (n.jumps > 1) bits.push(`${n.jumps} jumps`);
   if (n.distance != null) bits.push(`${Number(n.distance).toFixed(1)} ly`);
   bits.push(`${s.index} of ${s.total}`);
   if (s.refuel_here) bits.push(`<span class="hwyfuel">⛽ refuel here</span>`);
   else if (s.refuel_in != null) bits.push(`refuel in ${s.refuel_in} jump${s.refuel_in === 1 ? "" : "s"}`);
-  const hv = s.heavy;   // the next jump is out of range with the fuel aboard (the plan expects a lighter ship)
-  if (hv) bits.push(`<span class="hwyheavy" title="the next jump (${Number(hv.distance).toFixed(1)} ly${hv.boost > 1 ? `, ×${hv.boost} supercharged` : ""}) ` +
-    `is in range only with at most ${Number(hv.need_t).toFixed(1)} t in the main tank: jettison or burn some">⚠ too much fuel for the next jump: ` +
+  const hv = s.heavy;   // a jump is out of range with the fuel aboard (the plan expects a lighter ship)
+  if (hv) bits.push(`<span class="hwyheavy" title="${hv.hop > 1 ? `the jump to ${esc(hv.next)}` : "the next jump"} (${Number(hv.distance).toFixed(1)} ly${hv.boost > 1 ? `, ×${hv.boost} supercharged` : ""}) ` +
+    `is in range only with at most ${Number(hv.need_t).toFixed(1)} t in the main tank: jettison or burn some">⚠ too much fuel for ${hv.hop > 1 ? `the jump to ${esc(hv.next)}` : "the next jump"}: ` +
     `≤ ${Math.floor(hv.need_t)} t, you have ${Math.round(hv.have_t)} t</span>`);
+  const sh = s.short;   // S1: the fuel won't reach the next refuel stop (one window with the heavy check: never both)
+  if (sh) bits.push(`<span class="${sh.here_refuel ? "hwyfuel" : "hwyheavy"}" title="${esc(hwyShortTitle(sh))}">${sh.here_refuel ? "⛽" : "⚠"} ${esc(hwyShortText(sh))}</span>`);
   return g + bits.join(" · ");
 }
-let hwyRun = null;   // the run this page started (test now, Target next, Retry): {seq, kind, system, n, dry, done, msg}
+// S11, the wrong-jump check on the route's line (every copy: under the tiles, Now, Plot Route): the game's target against
+// the next stop (the summary's target_check). "✓ targeted", "↷ targeted X, 2 stops ahead" (a later stop on purpose: the
+// plan's default, not wrong), "⚠ targeted X, not the next stop Y". The overlay's Target panel words it the same
+// (overlay.py route_check_parts)
+function targetCheckHtml(tc) {
+  if (!tc) return "";
+  if (tc.ok) return `<span class="hwytgt" title="the system targeted in game is this next stop">✓ targeted</span>`;
+  if (tc.ahead > 0) return `<span class="hwytgt ahead" title="the system targeted in game is a later stop of this route">↷ targeted ${esc(tc.name)}, ${tc.ahead} stop${tc.ahead === 1 ? "" : "s"} ahead</span>`;
+  return `<span class="hwytgt wrong" title="the system targeted in game is not on the route ahead: target the next stop (🎯)">⚠ targeted ${esc(tc.name)}, not the next stop ${esc(tc.next)}</span>`;
+}
+// S12: a survey route's next stop passes over the systems after where you are that you have finished (their names in
+// the hover): "skipping 2 done"
+function surveySkipHtml(s) {
+  if (!s || !s.skipped) return "";
+  const names = s.skipped_names || [], more = s.skipped - names.length;
+  return `<span class="unk" title="${esc(`finished already, passed over: ${names.join(", ")}${more > 0 ? ` and ${more} more` : ""}`)}">skipping ${s.skipped} done</span>`;
+}
+// S1's words, shared by the line, the alert and the overlay's copy (route_parts): "fuel won't reach the refuel stop: Hwy
+// Stop 42 in 4 jumps · scoop to ≥ 24.3 t, at most 36.0 t". At a refuel stop the plan scoops anyway: how much, not a warning
+function hwyShortText(sh) {
+  const where = sh.end === "refuel" ? "the refuel stop" : sh.end === "end" ? "the destination" : "the stretch ahead";
+  const fix = sh.need_t == null ? "no amount of fuel makes it"
+    : `scoop to ≥ ${Number(sh.need_t).toFixed(1)} t${sh.max_t != null ? `, at most ${Number(sh.max_t).toFixed(1)} t` : ""}`;
+  return sh.here_refuel && sh.need_t != null ? `${fix} to reach ${sh.refuel_at} in ${sh.jumps} jump${sh.jumps === 1 ? "" : "s"}`
+    : `fuel won't reach ${where}: ${sh.refuel_at} in ${sh.jumps} jump${sh.jumps === 1 ? "" : "s"} · ${fix}`;
+}
+const hwyShortTitle = sh => `${sh.have_t} t aboard. The exact plotter's jumps to ${sh.refuel_at} burned one by one, the ship lightening as it goes` +
+  (sh.need_t == null ? ": no fuel level the tank holds makes them all (more cargo than the plan had?)"
+    : `: they all go with ${Number(sh.need_t).toFixed(1)} t${sh.max_t != null ? ` to ${Number(sh.max_t).toFixed(1)} t (more is too heavy for a jump planned at the limit)` : " or more"} in the main tank`);
+let hwyRun = null;   // the run this page started (test now, Target next, Retry): {seq, kind, system, n, dry, done, msg,
+// front: Outrider brings the game to the front itself (no countdown), note: why it counts down after all (S74)}
+// One rule for every 🎯 (the author, 2026-10-14): it shows only where auto-target can work, on the game PC with the
+// virtual keyboard and the bindings it needs (not the "target automatically" switch): a route's rows, its line, the
+// carrier, a boxel, S31's (bookmarks, the next stop, Nearby, Nearest, a checklist find), the Map's click and card, the
+// Retry, and Plot Route's "target next" (disabled). Anywhere else a 🎯 would be a button that cannot work.
+const canAim = () => !!(data && data.game_pc !== false && data.autotarget && data.autotarget.available &&
+                        !(data.autotarget.missing || []).length);
 // Target next (review Q4): beside the line's next system; the run's countdown shows on it while this page's run counts
 // 🎯 on a route system (the author, 2026-10-07): route "highway" | "survey" and its row, or (no route) the Highway's
-// Target next as before (the next system, off the route the nearest); `icon`: just 🎯 (a list's rows)
+// Target next as before (the next system, off the route the nearest); `icon`: just 🎯 (a list's rows). Route "system"
+// (S31): any system known here, `index` its id64 as the exact string (data-aimid: over 2^53 a Number would round it)
 function hwyAimBtn(name, route = null, index = null, icon = false) {
+  if (!canAim()) return "";
   const key = route ? `${route}:${index ?? ""}` : "next", r = hwyRun, mine = r && r.kind === "next" && !r.done && (r.key || "next") === key;
   const label = !mine ? (icon ? "🎯" : "🎯 target") : r.n > 0 ? `🎯 in ${r.n} s` : "🎯 targeting…";
   return ` <button type="button" class="mini hwyaim${icon ? " icon" : ""}" data-aim="next"` +
-    (route ? ` data-route="${route}"${index != null ? ` data-index="${index}"` : ""}` : "") + `${mine ? " disabled" : ""}` +
-    ` title="target ${esc(name)} in the galaxy map${TABLET ? "" : ", 5 s from now: click back into the game meanwhile"}">${label}</button>`;
+    (route ? ` data-route="${route}"${index != null ? ` data-${route === "system" ? "aimid" : "index"}="${esc(String(index))}"` : ""}` : "") + `${mine ? " disabled" : ""}` +
+    ` title="target ${esc(name)} in the galaxy map${hwyFront() ? " (Outrider brings the game to the front)" : TABLET ? ""
+      : ", 5 s from now: click back into the game meanwhile"}">${label}</button>`;
+}
+// S31: 🎯 on any system the page lists (a bookmark, the header's next stop, a Nearest row, a checklist find), by its id64
+// string; where auto-target can work (hwyAimBtn: canAim), never for the system you are in
+const sysAimBtn = (name, id) => id != null && data && String(id) !== posId() ? hwyAimBtn(name, "system", String(id), true) : "";
+// 🎯 on a Nearby row (the Overview's too: the author, 2026-10-14): S31's, by the row's id64 string, never your own
+// system's row
+const nearAimBtn = s => /^\d+$/.test(String(s.id)) ? sysAimBtn(s.name, s.id) : "";
+// the request's aim from a 🎯 button's data (the page-wide handler, the tablet's row sheet): {route, index} or {route, id}
+const aimOf = d => !d.route ? null : d.route === "system" ? {route: "system", id: d.aimid}
+  : Object.assign({route: d.route}, d.index != null && d.index !== "" ? {index: Number(d.index)} : {});
+// S31: "Plot route" beside a system (a bookmark, the header's next stop): it goes in Plot Route's To and the tab opens on
+// the form; plotted at once only when no route is followed (the plan's default: with one, Plot replaces it, your click)
+const routeFollowed = () => !!data && [data.highway, data.survey].some(s => s && !s.complete);
+const plotBtn = name => ` <button type="button" class="mini plotto" data-plotto="${esc(name)}" title="${esc(`put ${name} in Plot Route's To` +
+  (routeFollowed() ? " (you follow a route: press Plot there to replace it)" : " and plot a route there"))}">Plot route</button>`;
+// redraw where S31's 🎯 shows, so the one clicked counts down
+function renderSysAims() {
+  if (!data) return;
+  if (view === "near" || view === "overview") render();   // Nearby's rows count down too (render draws the strip, ☆s)
+  else { renderStrip(); renderBookmarks(bmMap()); }
+  if (document.getElementById("nearDlg").open) renderNearest();
+  if (CL.find) clDrawSide();
+}
+function plotRouteTo(name) {
+  hEl("hwyTo").value = name;
+  if (!["exact", "neutron"].includes(hwyPlotter())) { const x = hForm.querySelector('[name=hwyPlotter][value="exact"]'); x.checked = true; x.dispatchEvent(new Event("change", {bubbles: true})); }
+  H.openForm = true;   // renderHwy opens the form (it folds away while a route is followed)
+  if (view !== "hwy") { const v = document.querySelector('[data-view="hwy"]'); if (v) v.click(); } else renderHwy();
+  if (routeFollowed()) { toast(`Plot Route: to ${name} · press Plot to replace the route you follow`); return; }
+  hForm.dispatchEvent(new Event("submit", {cancelable: true, bubbles: true}));
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest && e.target.closest("[data-plotto]");
+  if (!b) return;
+  e.stopPropagation(); e.preventDefault();
+  plotRouteTo(b.dataset.plotto);
+}, true);
+// S74: whether a run brings Elite's window to the front itself (no countdown), from data.autotarget.front
+function hwyFront() {
+  const f = data && data.autotarget && data.autotarget.front;
+  return !!(f && f.front);
 }
 // the strip under the header: only on Overview, Nearby and Here, only with a route
 function renderHwyLine() {
   const el = hEl("hwyLine"), hw = data && data.highway, sv = data && data.survey, kind = lineKind(hw, sv);
-  const html = !["overview", "near", "here"].includes(view) ? "" : kind === "rich" ? surveyLineHtml(sv, {short: true})
+  const line = !["overview", "near", "here"].includes(view) ? "" : kind === "rich" ? surveyLineHtml(sv, {short: true})
     : hw ? hwyLineHtml(hw, {short: true}) : "";
+  // S2's bit rides on the In-Game Route strip when there is one, else here
+  const html = line && dryStretchHere() && !(data.route && data.route.hops && data.route.hops.length) ? `${line} · ${dryStretchHtml()}` : line;
   if (el.innerHTML !== html) el.innerHTML = html;
 }
 // the route the line shows: the one Plot Route shows (this device's choice with both, else the one plotted last)
@@ -5713,24 +6648,42 @@ function lineKind(hw, sv) {
   }
   return sv ? "rich" : "hwy";
 }
-// a survey route's line (Road to Riches 💰, Exomastery 🧬): the next system, how far, where you are on it, and what is
+// The survey slot's route kinds (G4): outrider.riches.SURVEY_KINDS' page half, each kind on one line and kept in step
+// with it by a test (glyph, name, what, a, work, left). what: the route as "Plot (replaces your …)" and the Map name it;
+// a: as "Asking Spansh for …" and "Plotted: …" say it; work: what a stop asks of you (bodies, species, trade, null: only
+// arriving); left: [one, many, what] for "2 bodies to do here"; form: the plot form's fields it shows (RICH_FIELDS),
+// null for one plotted elsewhere (a sweep, from the lists' ticks) or with a form of its own (trade)
+const SURVEY = {
+  riches: {glyph: "💰", name: "Road to Riches", what: "Road to Riches route", a: "a Road to Riches route", work: "bodies", left: ["body", "bodies", "to do here"],
+           form: ["radius", "max_results", "max_distance", "min_value", "use_mapping_value", "avoid_thargoids", "loop"]},
+  exo: {glyph: "🧬", name: "Exomastery", what: "Exomastery route", a: "an Exomastery route", work: "species", left: ["species", "species", "to sample here"],
+        form: ["radius", "max_results", "max_distance", "min_value", "loop"]},
+  elw: {glyph: "🌍", name: "Earth-like worlds", what: "Earth-like route", a: "an Earth-like world route", work: "bodies", left: ["body", "bodies", "to do here"],
+        form: ["radius", "max_results", "max_distance", "avoid_thargoids", "loop"]},
+  aw: {glyph: "🧪", name: "Ammonia worlds", what: "ammonia route", a: "an ammonia world route", work: "bodies", left: ["body", "bodies", "to do here"],
+       form: ["radius", "max_results", "max_distance", "avoid_thargoids", "loop"]},
+  sweep: {glyph: "🧹", name: "Sweep", what: "sweep", a: "a sweep", work: null, left: ["stop", "stops", "here"], form: null},
+  trade: {glyph: "💱", name: "Trade route", what: "trade route", a: "a trade route", work: "trade", left: ["trade", "trades", "to make here"], form: null},
+};
+const surveyOf = kind => SURVEY[kind] || SURVEY.riches;
+const surveyLeft = (kind, n) => { const [one, many, what] = surveyOf(kind).left; return `${n} ${n === 1 ? one : many} ${what}`; };
+// a survey route's line (Road to Riches 💰, Exomastery 🧬, …): the next system, how far, where you are on it, and what is
 // left to do where you are
-const SURVEY = {riches: {glyph: "💰", name: "Road to Riches", what: "Road to Riches route", left: n => `${n} ${n === 1 ? "body" : "bodies"} to do here`},
-                exo: {glyph: "🧬", name: "Exomastery", what: "Exomastery route", left: n => `${n} species to sample here`},
-                trade: {glyph: "💱", name: "Trade route", what: "trade route", left: n => `${n} trade${n === 1 ? "" : "s"} to make here`}};
 function surveyLineHtml(s, {short = false, glyph = true} = {}) {
   if (!s) return "";
-  const k = SURVEY[s.kind] || SURVEY.riches;
+  const k = surveyOf(s.kind);
   const g = glyph ? `<span class="hwyg" aria-hidden="true" title="${k.name}">${k.glyph}</span> ` : "";
   if (s.complete) return `${g}<span class="hwydone">${k.name} complete</span>`;
-  const left = s.left_here ? ` · ${k.left(s.left_here)}` : "";
+  const left = s.left_here ? ` · ${surveyLeft(s.kind, s.left_here)}` : "";
   if (s.off_route) return `${g}<span class="hwyoff">Off Route: Detour</span>${short ? "" : ` · ${k.name}`}`;
   const n = s.next;
   if (!n) return `${g}${k.name} to ${hwyName(s.destination)}${left}`;
   const bits = [`${s.index === 0 && s.at == null ? "Start" : "Next"}: ${n.station ? `${esc(n.station)}, ` : ""}${hwyName(n.name)}${short ? hwyAimBtn(n.name, "survey", s.index) : ""}`];
+  if (s.target_check) bits.push(targetCheckHtml(s.target_check));   // S11
   if (n.jumps > 1) bits.push(`${n.jumps} jumps`);
   if (n.distance != null) bits.push(`${Number(n.distance).toFixed(1)} ly`);
   bits.push(`${s.index} of ${s.total}`);
+  if (s.skipped) bits.push(surveySkipHtml(s));   // S12
   return g + bits.join(" · ") + left;
 }
 hEl("hwyLine").addEventListener("click", e => {   // the name copies (the page's copy handler); anywhere else opens the tab
@@ -5784,7 +6737,7 @@ function hwyRowHtml(r, cls, retry = false) {
   return `<tr class="${cls}" data-i="${r.i}"><td class="num">${r.i}</td>` +
     `<td class="name" data-name="${esc(r.system)}" title="click to copy">${nameWords(r.system)}` +
     (/\bat\b/.test(cls) ? "" : hwyAimBtn(r.system, "highway", r.i, true)) +
-    (retry ? ` <button type="button" class="mini hwyretry" data-aim="next" title="auto-target failed here: try again, 5 s from now (click back into the game meanwhile)">⟳ Retry</button>` : "") +
+    (retry && canAim() ? ` <button type="button" class="mini hwyretry" data-aim="next" title="auto-target failed here: try again, 5 s from now (click back into the game meanwhile)">⟳ Retry</button>` : "") +
     `</td>` +
     `<td class="hwyc hwyk">${hwyKnownHtml(r.known)}${hwyDiscovererHtml(r.discoverer)}</td>` +
     `<td class="num">${r.i > 0 && r.distance != null ? r.distance.toFixed(1) : ""}</td>` +
@@ -5903,9 +6856,9 @@ function hwyFormShow() {
   hForm.querySelector(".hwy-xopt").hidden = p !== "exact";
   const unscanned = p === "unscanned";   // this fork's: unscanned systems likely to hold life, a jump range apart
   hForm.querySelector(".hwy-uopt").hidden = !unscanned;
-  const trade = p === "trade", survey = p === "riches" || p === "exo", slot = survey || trade;
+  const k = SURVEY[p], trade = p === "trade", survey = !!(k && k.form), slot = !!k;
   hForm.querySelectorAll(".hwy-ropt").forEach(e => { e.hidden = !survey; });
-  hForm.querySelectorAll(".rich-only").forEach(e => { e.hidden = p !== "riches"; });
+  hForm.querySelectorAll(".hwy-ropt [data-field]").forEach(e => { e.hidden = !survey || !k.form.includes(e.dataset.field); });
   // a trade route starts at a station with your capital and hold: no destination, ship, cargo or range
   hForm.querySelectorAll(".trade-opt").forEach(e => { e.hidden = !trade; });
   hForm.querySelector(".hwyto").hidden = trade;
@@ -5913,9 +6866,9 @@ function hwyFormShow() {
   if (trade) hForm.querySelector(".hwy-nopt").hidden = true;
   hForm.querySelector(".hwy-cons").hidden = slot || unscanned;   // Spansh's survey and trade routes take the range as it is
   hEl("hwyTo").placeholder = survey ? "optional: where to end" : unscanned ? "optional: a system to head towards" : "destination system";
-  // one slot: a Road to Riches, an Exomastery or a trade plot replaces the route there is
+  // one slot: a survey or a trade plot replaces the route there is
   const rr = R.data && R.data.route;
-  hEl("hwyGo").textContent = slot && rr ? `Plot (replaces your ${(SURVEY[rr.kind] || SURVEY.riches).what})` : "Plot";
+  hEl("hwyGo").textContent = slot && rr ? `Plot (replaces your ${surveyOf(rr.kind).what})` : "Plot";
   // the neutron plotter can do without a ship (type the range); the exact one needs a Loadout
   const none = hEl("hwyShip").querySelector('option[value=""]');
   if (none) { none.disabled = p === "exact"; none.hidden = p === "exact"; }
@@ -5952,7 +6905,8 @@ function fillHwyForm(hd) {
   hwyFormShow();
 }
 {
-  const p = hForm.querySelector(`[name=hwyPlotter][value="${["neutron", "riches", "exo", "trade", "unscanned"].includes(hwyCfg.plotter) ? hwyCfg.plotter : "exact"}"]`); if (p) p.checked = true;
+  const radios = [...hForm.querySelectorAll("[name=hwyPlotter]")], p = radios.find(r => r.value === hwyCfg.plotter) || radios.find(r => r.value === "exact");
+  if (p) p.checked = true;
   hEl("hwyInject").checked = !!hwyCfg.injections; hEl("hwyNoSec").checked = !!hwyCfg.exclude_secondary; hEl("hwySuper").checked = !!hwyCfg.supercharged;
   hEl("hwyNoNeu").checked = !!hwyCfg.no_neutrons;
   hEl("hwyRefuel").checked = !!hwyCfg.refuel_every_scoopable;
@@ -6021,7 +6975,7 @@ function drawHwyStatus() {
   let text = "", cls = "";
   if (rp && rp.state === "running") {
     const secs = rp.started ? Math.max(0, Math.round((Date.now() - new Date(rp.started)) / 1000)) : null;
-    text = `Asking Spansh for ${rp.kind === "exo" ? "an Exomastery route" : rp.kind === "trade" ? "a trade route" : "a Road to Riches route"} from ${rp.from}…${secs != null ? ` ${secs} s` : ""}`; cls = "busy";
+    text = `Asking Spansh for ${surveyOf(rp.kind).a} from ${rp.from}…${secs != null ? ` ${secs} s` : ""}`; cls = "busy";
   } else if (p && p.state === "running") {
     const secs = p.started ? Math.max(0, Math.round((Date.now() - new Date(p.started)) / 1000)) : null;
     text = p.plotter === "unscanned"
@@ -6034,7 +6988,7 @@ function drawHwyStatus() {
 }
 hForm.addEventListener("submit", async e => {
   e.preventDefault();
-  if (["riches", "exo", "trade"].includes(hwyPlotter())) return richSubmit(hwyPlotter());
+  if (SURVEY[hwyPlotter()]) return richSubmit(hwyPlotter());
   const b = hwyBody();
   if (!b.to && b.plotter !== "unscanned") return setHwyStatus("Type the destination system.", "err");
   if (b.plotter === "neutron" && b.range == null) return setHwyStatus("Give the jump range (ly) for the neutron plotter.", "err");
@@ -6073,7 +7027,8 @@ document.addEventListener("click", e => {
   if (H.data) renderHwyList(H.data);
 });
 // ---- auto-target (the server presses the keys; this is its toggle, delay, test and last result) ----
-// data.autotarget: {enabled, delay, available, status, last, test, running, missing: [{key, why}], steps, dry_run, countdown}
+// data.autotarget: {enabled, delay, available, status, last, test, running, missing: [{key, why}], steps, dry_run, countdown,
+// front: {front, why}: whether a run brings the game to the front itself, or why not (S74)}
 const hwyHm = ts => { const d = new Date(ts); return isNaN(d) ? "" : d.toTimeString().slice(0, 5); };
 function hwyAutoLastText(l) {
   if (!l) return "";
@@ -6089,7 +7044,7 @@ function drawHwyAuto() {
   if (document.activeElement !== dl) dl.value = a.delay ?? "";
   const busy = !a.available || !!a.running || !!(a.test && ["counting", "running"].includes(a.test.state));
   hEl("hwyAutoTest").disabled = busy;
-  hEl("hwyAutoNext").disabled = busy || !(data.highway && !data.highway.complete);
+  hEl("hwyAutoNext").disabled = busy || !canAim() || !(data.highway && !data.highway.complete);   // a key without a binding: no 🎯
   hEl("hwyAutoState").textContent = a.running ? "· pressing keys…" : a.enabled ? `· ${a.status || "on"}` : a.available ? "· off" : `· ${a.status || "not available"}`;
   const last = hEl("hwyAutoLast"), lt = hwyAutoLastText(a.last);
   last.textContent = lt ? "Last: " + lt : ""; last.className = a.last && !a.last.done ? "warnc" : "unk";
@@ -6098,6 +7053,10 @@ function drawHwyAuto() {
   miss.textContent = m.length ? "Missing keyboard bindings (auto-target will not run): " + m.map(x => `${x.key}: ${x.why}`).join("; ") : "";
   const steps = (a.steps || []).map(x => `<li>${esc(x)}</li>`).join("");   // "5 plot the route: hold …": the step numbers results use
   if (hEl("hwyAutoSteps").innerHTML !== steps) hEl("hwyAutoSteps").innerHTML = steps;
+  const fr = a.front, frEl = hEl("hwyAutoFront");
+  frEl.textContent = !fr ? "" : fr.front ? "Brings the game to the front itself: no countdown, and no key unless Elite is the active window."
+    : `Does not bring the game to the front (${fr.why || "?"}): click into the game during the countdown.`;
+  frEl.className = fr && !fr.front ? "warnc" : "unk";
   hwyRunTrack();
   hEl("hwyAutoTestMsg").textContent = hwyRun ? hwyRun.msg : "";
 }
@@ -6109,6 +7068,10 @@ function hwyRunTrack() {
   // superseded: a newer run (another device's), or no run at all long after this one's countdown (Outrider restarted)
   if ((t && typeof r.seq === "number" && t.seq > r.seq) || (!t && r.at && Date.now() - r.at > ((r.n || 0) + 120) * 1000)) {
     r.done = true; r.msg = `${w0}: no result (Outrider restarted, or another device started a run)`; return;
+  }
+  // the game did not come to the front (S74): the server counts down after all, saying why; the page follows it
+  if (t && t.seq === r.seq && t.state === "counting" && t.note && !r.note && r.tick) {
+    r.note = t.note; r.n = t.in; clearTimeout(r.timer); r.tick(); return;
   }
   if (!t || t.seq !== r.seq || !["done", "failed"].includes(t.state)) return;
   r.done = true;
@@ -6127,14 +7090,16 @@ async function hwyAutoStart(kind, aim = null) {
   try { r = await fetch(url, opts); j = await r.json(); }
   catch { show("could not reach Outrider"); return; }
   if (!r.ok) { show(`cannot ${w}: ${j.error || "?"}`); return; }
-  const mine = hwyRun = {seq: j.seq, kind, key: aim ? `${aim.route}:${aim.index ?? ""}` : "next", system: j.system, n: j.in, dry: j.dry_run, done: false, msg: "",
-                         at: Date.now()};
-  const tick = () => {
+  const mine = hwyRun = {seq: j.seq, kind, key: aim ? `${aim.route}:${aim.index ?? aim.id ?? ""}` : "next", system: j.system, n: j.in, dry: j.dry_run, done: false, msg: "",
+                         at: Date.now(), front: !!j.front, note: null, timer: null};
+  const tick = mine.tick = () => {
     if (mine.done || mine !== hwyRun) return;
-    mine.msg = mine.n > 0 ? `click into the game: targeting ${j.system} in ${mine.n} s${j.dry_run ? " (dry run)" : ""}` : `targeting ${j.system}…`;
+    mine.msg = mine.n > 0 ? `${mine.note ? `${mine.note} ·` : "click into the game:"} targeting ${j.system} in ${mine.n} s${j.dry_run ? " (dry run)" : ""}`
+      : mine.front && !mine.note ? `bringing the game to the front: targeting ${j.system}…` : `targeting ${j.system}…`;
     drawHwyAuto(); renderHwyLine(); renderCarrier(); renderTilesLine(); drawBoxel();   // the carrier's and the boxel's 🎯 count down too
     if (view === "hwy") renderHwy();   // the list's 🎯 counts down too
-    if (mine.n > 0) { mine.n--; setTimeout(tick, 1000); }
+    if (mine.key.startsWith("system:")) renderSysAims();   // S31's 🎯 (a bookmark, the next stop, Nearby, Nearest, a find)
+    if (mine.n > 0) { mine.n--; mine.timer = setTimeout(tick, 1000); }
   };
   tick();
 }
@@ -6158,8 +7123,7 @@ document.addEventListener("click", e => {
   const b = e.target.closest("[data-aim]");
   if (!b) return;
   e.stopPropagation(); e.preventDefault();
-  if (!b.disabled) hwyAutoStart(b.dataset.aim, b.dataset.route ? Object.assign({route: b.dataset.route},
-    b.dataset.index != null ? {index: Number(b.dataset.index)} : {}) : null);
+  if (!b.disabled) hwyAutoStart(b.dataset.aim, aimOf(b.dataset));
 }, true);
 function renderHwy() {
   if (view !== "hwy") return;
@@ -6186,6 +7150,7 @@ function renderHwy() {
     H.watch = false;
     hEl("hwyPlot").open = !rid; H.routeId = rid; HM.auto = true;
   }
+  if (H.openForm) { H.openForm = false; hEl("hwyPlot").open = true; }   // S31's Plot route: the form, To filled
   const p = hd.plotting;
   if (p && p.state !== "running" && H.status && H.status.cls === "busy") H.status = null;
   drawHwyStatus();
@@ -6215,7 +7180,7 @@ async function loadRich(force = false) {
     R.watch = false;
     const rt = R.data.route;
     setHwyStatus(p.state === "done" && rt ? (rt.kind === "trade" ? `Plotted: a trade route of ${rt.count - 1} hop${rt.count === 2 ? "" : "s"}.`
-      : `Plotted: ${rt.kind === "exo" ? "an Exomastery route" : "a Road to Riches"} of ${rt.count} systems.`) + (p.note ? " " + p.note : "")
+      : `Plotted: ${surveyOf(rt.kind).a} of ${rt.count} systems.`) + (p.note ? " " + p.note : "")
       : `Could not plot the route: ${p.error || "?"}.`, p.state !== "done" ? "err" : p.note ? "warnc" : "ok");
   }
   renderHwy();
@@ -6241,7 +7206,7 @@ function routeKind() {
 }
 // with both routes: a switch above the heading
 const routeKindHtml = kind => `<div class="seg hwykind" role="radiogroup" aria-label="the route shown">` +
-  [["hwy", "Highway"], ["rich", (SURVEY[(R.data && R.data.route && R.data.route.kind) || "riches"] || SURVEY.riches).name]].map(([k, t]) =>
+  [["hwy", "Highway"], ["rich", surveyOf(R.data && R.data.route && R.data.route.kind).name]].map(([k, t]) =>
     `<label><input type="radio" name="hwyKind" value="${k}"${k === kind ? " checked" : ""}>${t}</label>`).join("") + `</div>`;
 hEl("hwyGame").addEventListener("change", e => {
   if (e.target.name !== "hwyGame") return;
@@ -6257,15 +7222,21 @@ function richHeadHtml(d) {
   const where = rt.at != null ? `you are at system ${rt.at + 1} of ${rt.count}`
     : rt.off_route ? `off the route (last on it: system ${(rt.furthest ?? 0) + 1} of ${rt.count})` : `not on the route yet (${rt.count} systems)`;
   const nx = rt.next != null ? sy.find(s => s.i === rt.next) : null;
-  const exo = rt.kind === "exo", what = exo ? "species" : left === 1 ? "body" : "bodies";
-  const how = `${exo ? "Exomastery (known life: first footfall unlikely)" : "Road to Riches"} · ${o.range != null ? `${o.range} ly range · ` : ""}` +
-    `within ${o.radius ?? "?"} ly · ${exo ? "life" : "bodies"} from ${credits(o.min_value ?? 0)} cr${o.use_mapping_value ? ", mapping counted" : ""}${o.loop ? " · loop" : ""}`;
+  const live = data && data.survey && data.survey.id === rt.id ? data.survey : null;   // S11 / S12: the live line's facts
+  const k = surveyOf(rt.kind), exo = k.work === "species", what = exo ? "species" : left === 1 ? "body" : "bodies";
+  // the kind's options as plotted: a sweep's are its systems (and those Spansh did not know yet, left out)
+  const opts = !k.work ? [`${o.systems ?? rt.count - 1} systems ticked`, o.unknown && o.unknown.length ? `left out (not known to Spansh yet): ${o.unknown.join(", ")}` : ""]
+    : [`within ${o.radius ?? "?"} ly`, `${exo ? "life" : "bodies"}${(k.form || []).includes("min_value") ? ` from ${credits(o.min_value ?? 0)} cr` : ""}` +
+       `${rt.mapping ?? o.use_mapping_value ? ", mapping counted" : ""}`];
+  const how = [exo ? "Exomastery (known life: first footfall unlikely)" : k.name, o.range != null ? `${o.range} ly range` : "", ...opts, o.loop ? "loop" : ""]
+    .filter(Boolean).join(" · ");
   return `<div class="hwyttl">To ${esc(rt.to)} <span class="unk">from ${esc(rt.from)}</span></div>` +
-    `<div class="hwystats">${where} · <b>${left}</b> ${what} left, <b>≈${credits(sum("value_left"))} cr</b>` +
-    ` · done <b>${credits(Math.max(0, sum("value") - sum("value_left")))} cr</b> of <b>${credits(sum("value"))} cr</b>` +
-    `${rt.count > sy.length ? " (the systems listed)" : ""}</div>` +
-    (rt.done_ts ? `<div class="hwystate hwydone">${exo ? "Exomastery" : "Road to Riches"} complete.</div>`
+    (k.work ? `<div class="hwystats">${where} · <b>${left}</b> ${what} left, <b>≈${credits(sum("value_left"))} cr</b>` +
+      ` · done <b>${credits(Math.max(0, sum("value") - sum("value_left")))} cr</b> of <b>${credits(sum("value"))} cr</b>` +
+      `${rt.count > sy.length ? " (the systems listed)" : ""}</div>` : `<div class="hwystats">${where}</div>`) +
+    (rt.done_ts ? `<div class="hwystate hwydone">${k.name} complete.</div>`
       : nx ? `<div class="hwystate">Next: <b class="copy" data-name="${esc(nx.system)}" title="click to copy">${esc(nx.system)}</b>` +
+             `${live && live.target_check ? ` · ${targetCheckHtml(live.target_check)}` : ""}${live && live.skipped ? ` · ${surveySkipHtml(live)}` : ""}` +
              `${nx.left ? ` · ${nx.left} ${exo ? "species to sample" : "to do"} there` : ""}</div>` : "") +
     `<div class="unk hwyhow">${esc(how)}${rt.created_ts ? ` · plotted ${esc(when(rt.created_ts))}` : ""}</div>`;
 }
@@ -6296,10 +7267,12 @@ function tradeHeadHtml(d) {
   const rt = d.route, sy = rt.systems, o = rt.options || {}, last = sy[sy.length - 1];
   const where = rt.at != null ? `you are at stop ${rt.at} of ${rt.count - 1}` : rt.off_route ? "off the route" : `not on the route yet`;
   const nx = rt.next != null ? sy.find(s => s.i === rt.next) : null;
+  const live = data && data.survey && data.survey.id === rt.id ? data.survey : null;   // S11: the live line's check
   return `<div class="hwyttl">Trade route from ${esc(sy[0] ? sy[0].station : rt.from)} <span class="unk">${esc(rt.from)}</span></div>` +
     `<div class="hwystats">${where} · ${rt.count - 1} hop${rt.count === 2 ? "" : "s"} · <b>≈${credits((last && last.cumulative) || 0)} cr</b> profit in all (Spansh's prices)</div>` +
     (rt.done_ts ? `<div class="hwystate hwydone">Trade route complete.</div>`
       : nx ? `<div class="hwystate">Next: <b>${esc(nx.station || "")}</b>, <b class="copy" data-name="${esc(nx.system)}" title="click to copy">${esc(nx.system)}</b>` +
+             `${live && live.target_check ? ` · ${targetCheckHtml(live.target_check)}` : ""}` +
              `${nx.sell.length ? ` · sell ${esc(nx.sell.map(c => c.name).join(", "))}` : ""}</div>` : "") +
     `<div class="unk hwyhow">${o.max_cargo != null ? `${o.max_cargo} t hold · ` : ""}${o.capital != null ? `${credits(o.capital)} cr capital · ` : ""}` +
     `hops up to ${o.max_hop_distance ?? "?"} ly · stations within ${(o.max_system_distance ?? 0).toLocaleString()} ls · data under ${o.max_price_age_days ?? "?"} d` +
@@ -6366,12 +7339,15 @@ function fillRichForm(d) {
   for (const [id, k] of Object.entries(flags)) hEl(id).checked = !!(to[k] ?? t[k]);
   R.filled = true;
 }
-// the request a Road to Riches plot makes (from, to, ship and range are the form's shared fields; the server checks it all)
-function richBody() {
+// the survey form's fields (SURVEY[kind].form) by the option each one is
+const RICH_FIELDS = {radius: "richRadius", max_results: "richMax", max_distance: "richDist", min_value: "richMin",
+                     use_mapping_value: "richMapping", avoid_thargoids: "richThargoid", loop: "richLoop"};
+// the request a survey plot makes (from, to, ship and range are the form's shared fields, then the kind's own; the
+// server checks it all)
+function richBody(kind = "riches") {
   const num = id => hEl(id).value.trim() === "" ? undefined : Number(hEl(id).value);
-  const b = {from: hEl("hwyFrom").value.trim() || undefined, to: hEl("hwyTo").value.trim() || undefined, range: num("hwyRange"),
-             radius: num("richRadius"), max_results: num("richMax"), max_distance: num("richDist"), min_value: num("richMin"),
-             use_mapping_value: hEl("richMapping").checked, avoid_thargoids: hEl("richThargoid").checked, loop: hEl("richLoop").checked};
+  const b = {from: hEl("hwyFrom").value.trim() || undefined, to: hEl("hwyTo").value.trim() || undefined, range: num("hwyRange")};
+  for (const f of surveyOf(kind).form || []) { const e = hEl(RICH_FIELDS[f]); b[f] = e.type === "checkbox" ? e.checked : num(RICH_FIELDS[f]); }
   for (const k of Object.keys(b)) if (b[k] === undefined) delete b[k];
   return b;
 }
@@ -6387,8 +7363,7 @@ function tradeBody() {
   return b;
 }
 async function richSubmit(kind = "riches") {
-  const b = kind === "trade" ? tradeBody() : Object.assign(richBody(), {kind});
-  if (kind === "exo") { delete b.use_mapping_value; delete b.avoid_thargoids; }
+  const b = kind === "trade" ? tradeBody() : Object.assign(richBody(kind), {kind});
   H.status = null;
   setHwyStatus("Asking Spansh…", "busy");
   let r;
@@ -6876,7 +7851,9 @@ const box = (group, value, label) =>
   `<label><input type="checkbox" data-group="${group}" value="${esc(value)}"> ${esc(label)}</label>`;
 document.getElementById("sScoopOpts").innerHTML = OPTS.scoopable.map(k => box("stars", k, k)).join("");
 document.getElementById("sOtherStars").innerHTML = OPTS.other_stars.map(([k, l]) => box("stars", k, l)).join("");
-document.getElementById("sPlanets").innerHTML = OPTS.planets.map(t => box("planets", t, t)).join("");
+// S27: a potential green gas giant, the ladder model's guess over each giant (Local: your cache; Spansh: its giants checked)
+document.getElementById("sPlanets").innerHTML = OPTS.planets.map(t => box("planets", t, t)).join("") + (OPTS.ggg
+  ? box("planets", OPTS.ggg[0], OPTS.ggg[1]).replace("<label>", `<label class="gggopt" title="the community's ladder model on each giant's temperature, mass and radius: a guess, check it in the system map">`) : "");
 document.getElementById("sRings").innerHTML = OPTS.rings.map(t => box("rings", t, t)).join("");
 document.getElementById("sHotspots").innerHTML = OPTS.hotspots.map(t => box("hotspots", t, t)).join("");
 document.getElementById("sBio").innerHTML = (OPTS.bio || []).map(([k, l]) => box("bio", k, l)).join("");
@@ -6898,6 +7875,7 @@ function formParams() {
     main_only: document.getElementById("sMainOnly").checked,
     stars: ticked("stars"), planets: ticked("planets"), rings: ticked("rings"), hotspots: ticked("hotspots"), bio: ticked("bio"),
     mining: document.getElementById("sMining").checked, mining_mineral: document.getElementById("sMineral").value || null,
+    around: sAround.value || "here", around_name: document.getElementById("sAroundName").value.trim(),   // S49
   };
 }
 function loadForm(p) {
@@ -6909,8 +7887,16 @@ function loadForm(p) {
     sForm.querySelectorAll(`input[data-group="${g}"]`).forEach(b => b.checked = (p[g] || []).includes(b.value));
   document.getElementById("sMining").checked = p.mining === true;
   const mn = document.getElementById("sMineral"); mn.value = p.mining_mineral || ""; if (mn.selectedIndex < 0) mn.value = "";
+  sAround.value = p.around || "here"; if (sAround.selectedIndex < 0) sAround.value = "here";
+  document.getElementById("sAroundName").value = p.around_name || "";
+  syncAround();
   syncScoop();
 }
+// S49: the system Search looks around (AROUND_KINDS); a name box for "a system…"
+const sAround = document.getElementById("sAround");
+function syncAround() { aroundOptions(sAround); document.getElementById("sAroundName").hidden = sAround.value !== "system"; }
+sAround.addEventListener("change", () => { syncAround(); if (sAround.value === "system") document.getElementById("sAroundName").focus(); });
+aroundOptions(sAround);
 function saveForm() { store.set("search", formParams()); }
 sForm.addEventListener("change", saveForm);
 document.getElementById("sClear").onclick = () => {
@@ -6985,7 +7971,7 @@ function renderSearch(bms) {
       <td class="bmcell">${bmIcon(r.id, r.name, bms || bmMap())}</td>
       <td class="name" data-name="${esc(r.name)}" title="click to copy">${nameWords(r.name)}${firstsIcon(r.firsts)}${r.visited
         ? `<span class="badge s-visited">visited</span>` : ""}</td>
-      <td class="num dist">${r.distance.toFixed(2)}</td>
+      <td class="num dist"${r.from_you != null ? ` title="${r.from_you.toFixed(2)} ly from you"` : ""}>${r.distance.toFixed(2)}</td>
       <td class="matches">${Object.entries(r.matches).map(([k, hits]) =>
         `<div><span class="mlbl">${sLabels[k] || k}</span>${hits.map(h => hitHtml(h, r.id)).join("; ")}</div>`).join("")}</td></tr>`).join("");
 }
@@ -7025,10 +8011,15 @@ sForm.addEventListener("submit", async e => {
   e.preventDefault(); saveForm();
   search = {running: true, status: "searching…", results: []}; render();
   for (const id of Object.keys(sysDetail)) if (!(sysDetail[id] instanceof Promise)) delete sysDetail[id];   // bodies may have been scanned since
+  const body = formParams(), want = newRequest("searchAround");
+  const a = await aroundParam(body.around, body.around_name);   // S49: a typed name is found first (api/find)
+  if (!isNewest("searchAround", want)) return;   // submitted again meanwhile
+  delete body.around_name;
   let r;
-  try {
+  if (a.error) r = {error: a.error};
+  else try {
     r = await apiJson("api/search", {method: "POST", headers: {"Content-Type": "application/json"},
-                                     body: JSON.stringify(formParams())});
+                                     body: JSON.stringify(Object.assign(body, {around: a.around}))});
   } catch (err) { r = {error: err.message}; }
   // A refused search (403 through a proxy, 400, 500) must say so, not fall back to showing the previous results.
   if (!r || r.error) { searchRefused = true; search = {running: false, status: "search failed: " + ((r && r.error) || "no answer"), results: []}; render(); return; }
@@ -7057,6 +8048,11 @@ function toast(msg) {
   const t = document.getElementById("toast"); t.textContent = msg;
   t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 1400);
 }
+// whether a drag has just selected text inside el (its click then opens nothing)
+function selectingIn(el) {
+  const sel = window.getSelection && window.getSelection();
+  return !!(sel && !sel.isCollapsed && sel.toString().trim() && (el.contains(sel.anchorNode) || el.contains(sel.focusNode)));
+}
 function copyText(text, what = text) {   // `what`: the toast's name for it (a long text is not repeated)
   const fallback = () => {
     try {
@@ -7079,8 +8075,12 @@ document.addEventListener("click", e => {
     fWithin.disabled = false;   // as ticking it by hand does (a scripted tick fires no change event: F23)
     return document.querySelector('[data-view="firsts"]').click();
   }
-  const cell = e.target.closest("#rows td.bodies[data-id]");
-  if (cell) return cell.dataset.id === pinnedSystem ? unpinSystem() : pinSystem(cell.dataset.id);  // same system again closes it
+  // a click anywhere on a Nearby row (the Overview's too) but its name (copies), ☆ or a control shows the system in
+  // Here beside the list; the same system again closes it (S73). Not after a drag that selected text. The tablet's
+  // tap opens the row's sheet instead (tabRowTap, which stops this click)
+  const row = e.target.closest("#rows tr[data-id]");
+  if (row && !e.target.closest("td.name, td.bmcell, [data-bm], button, a, input, select, label") && !selectingIn(row))
+    return row.dataset.id === pinnedSystem ? unpinSystem() : pinSystem(row.dataset.id);
   const bm = e.target.closest("[data-bm]");
   if (bm) return openBookmark(bm.dataset.bm, bm.dataset.name);
   // every "click to copy" name outside the views that handle their own (.name spans in Log, Bio, History,
@@ -7200,7 +8200,12 @@ function showPop(td, x, y) {
   popId = td.dataset.id;
   pop.innerHTML = popHtml(s); pop.style.display = "block"; placePop(x, y);
 }
-function hidePop() { popId = null; pop.style.display = "none"; }
+function hidePop() { popId = null; pop.style.display = "none"; pop.classList.remove("taps"); }
+// the Map's tapped card (S72): Copy name (its 🎯 Target goes through the page-wide [data-aim] handler)
+pop.addEventListener("click", e => {
+  const b = e.target.closest("[data-mapcopy]");
+  if (b) { copyText(b.dataset.mapcopy); hidePop(); }
+});
 let lastPointer = null;
 document.addEventListener("mousemove", e => {
   if (e.target === mapCanvas) return;  // the map draws its own hover
@@ -7419,6 +8424,39 @@ const fuelJumpsCfg = () => { const v = store.get("fuelJumps", null), n = Number(
 const fuelUnderJumps = f => { const n = fuelJumpsCfg(), j = fuelJumps(f); return n != null && j != null && j < n; };
 const fuelLow = f => !!(f && f.live && ((f.pct != null && f.pct < 30) || f.low_flag || fuelUnderJumps(f)));
 const scoopRateText = r => `${r.scoopable} of the last ${r.of} stars ${r.scoopable === 1 ? "was" : "were"} scoopable`;
+// S2: the last scoopable star before stars on the route you can't scoop that the fuel won't cover (the payload's
+// dry_stretch, the last_scoop moment). Its words, shared by the alert, the route strip and Now: "the fuel aboard (10.0 t)
+// won't cover them · scoop to ≥ 18.0 t to reach Kay D"
+function dryStretchText(w) {
+  const them = w.count === 1 ? "it" : "them";
+  return w.full || w.need_t == null ? `even a full tank won't cover ${them}`
+    : `the fuel aboard (${Number(w.have_t).toFixed(1)} t) won't cover ${them} · scoop to ≥ ${Number(w.need_t).toFixed(1)} t${w.next ? ` to reach ${w.next}` : ""}`;
+}
+const dryStretchHere = () => { const w = data && data.dry_stretch; return w && w.count > 0 ? w : null; };
+// the strip's bit: "⛽ last scoop before 3 dry"
+function dryStretchHtml() {
+  const w = dryStretchHere();
+  return w ? `<span class="hwyheavy" title="${esc(`${w.count} star${w.count === 1 ? "" : "s"} ahead on your route can't be scooped: ${dryStretchText(w)}`)}">⛽ last scoop before ${w.count} dry</span>` : "";
+}
+// The targeted jump's cost from the fuel model, shared by the header's target line and Now (S19): "38.2 ly · 2.9 t ·
+// leaves 3 max jumps". Out of range first: a tank under one max jump's fuel can know the cost of a jump it can't pay for
+function hopCostHtml(hop) {
+  if (!hop) return "";
+  const ly = `${hop.ly.toFixed(1)} ly`;
+  if (hop.reach === false)
+    return `${ly} · <span class="noscoop" title="further than one jump with the fuel and cargo aboard">out of range${hop.fuel != null ? ` (needs ${fuelT(hop.fuel)} t)` : ""}</span>`;
+  return hop.fuel == null ? ly
+    : `${ly} · <span title="fuel this jump burns, and the max-range jumps the tank holds after it">${fuelT(hop.fuel)} t · leaves ${hop.left} max jump${hop.left === 1 ? "" : "s"}</span>`;
+}
+// The scoopable share of your last arrivals, shared by the fuel tile and Now (S19): "scoopable: 9 of last 20 · 3 dry in
+// a row", amber when the tank holds fewer jumps than two of your usual gaps between scoopable stars; "" without a rate
+function scoopRateWarn(f) {
+  const sr = f && f.scoop_rate;
+  if (!sr) return "";
+  const j = fuelJumps(f), warn = j != null && j < 2 * expectedGap(sr);
+  return `<span class="${warn ? "warnc" : ""}" title="arrival stars of your last ${sr.of} jumps with a known star${warn ? `: fewer jumps of fuel aboard than two of your usual gaps between scoopable stars (1 in ${expectedGap(sr).toFixed(1)})` : ""}">` +
+    `scoopable: ${sr.scoopable} of last ${sr.of}${sr.dry_run ? ` · ${sr.dry_run} dry in a row` : ""}</span>`;
+}
 const expectedGap = r => r.of / Math.max(r.scoopable, 1);   // jumps between scoopable stars, as they have come lately
 // Another star here to scoop at when the arrival star cannot be (the server's here_scoop): "none here" only once every
 // star is known; the travel time only where it is short enough for the rough curve to mean something.
@@ -7438,8 +8476,11 @@ function onHush(first) {
   const before = hushKey;
   takeHush(data.hush);
   hushKey = hushState ? `${hushState.mode}|${hushState.until}|${hushState.sys}` : null;
+  // a hush asked by voice (S32): its answer, in the same payload's co-pilot channel, says it (copilotDo), with the
+  // three lengths first when another time was asked for
+  const cp = data.copilot, asked = !!(cp && hushState && cp.hush === hushState.mode && cp.seq > lastCopilotSeq);
   if (!first && hushKey !== before) {
-    if (hushState && hushed()) { cutForHush(); hushNews(HUSH_SAID[hushState.mode] || "Quiet."); }
+    if (hushState && hushed()) { cutForHush(); if (!asked) hushNews(HUSH_SAID[hushState.mode] || "Quiet."); }
     else if (!hushState && before !== null) hushNews("Voice back on.");
   }
   drawHush();
@@ -7485,10 +8526,10 @@ function copilotDo(cp) {
     speak(text, {kind: "manual", piperOnly: true}); addCaption(text);
   } else if (cp.action === "again") {
     const text = lastSaid ? lastSaid.words : "Nothing said yet.";
-    speak(text, {kind: "manual", voice: lastSaid && lastSaid.voice, pace: lastSaid ? lastSaid.pace || 1 : 1, piperOnly: true}); addCaption(text);
+    speak(text, {kind: "manual", voice: lastSaid && lastSaid.voice, speaker: lastSaid ? lastSaid.speaker : null, pace: lastSaid ? lastSaid.pace || 1 : 1, piperOnly: true}); addCaption(text);
   } else if (cp.action === "replay" && cp.words) { speak(cp.words, {kind: "manual", piperOnly: true}); addCaption(cp.words); }
-  // an answer to a question by voice (POST api/ask): said here, as a line you asked for; "caption": shown only (a hush's
-  // answer: the hush itself is announced)
+  // an answer to a question by voice (POST api/ask): said here, as a line you asked for (a hush's answer too, onHush
+  // leaving it the news); "caption": shown only (unhush's: the end of the hush is announced)
   else if (cp.action === "say" && cp.words) { speak(cp.words, {kind: "manual", piperOnly: true}); addCaption(cp.words); }
   else if (cp.action === "caption" && cp.words) addCaption(cp.words);
 }
@@ -7503,9 +8544,11 @@ function onData() {
   if (brEl) brEl.textContent = br
     ? `Species guesses use the BioScan spawn rules (${br.species} species, updated ${(br.generated || "").slice(0, 10)}); each start fetches newer rules from GitHub when there are any.`
     : "Spawn rules missing (bio_rules.json) and could not be downloaded: bodies get no species guesses. Run python3 -m outrider.bio --update-rules once online.";
+  { const cn = bioColoursNote(); if (cn !== bioColoursDrawn) { bioColoursDrawn = cn; drawHereLegend(); } }   // S7's note in Here's legend
   // first payload, the server was restarted, or this window slept (see poll): no sounds for old state
   const firstNews = data.run_id !== runId || woke;
   onHush(firstNews); takeCopilot(data.copilot, firstNews); nowStakesTick();
+  if (data.ask_seq !== AL.seq) loadAskLog();   // S35: a new question while Questions asked is open
   const cpl = document.getElementById("copilotLine"), btn = data.copilot && data.copilot.button;
   cpl.hidden = !btn; cpl.textContent = btn ? `Co-pilot button: ${btn}` : "";
   if (firstNews) {
@@ -7753,13 +8796,15 @@ function onData() {
                  {sound: null, quiet: "a card only: never spoken"});
       }
       else if (m.kind === "approach") {   // orbital cruise at a body: the stakes of a high-g landing, and (if ticked) its bio
-        const hg = highGStakes(m), bt = bodyBriefText(m);
+        const hg = highGStakes(m), bt = bodyBriefText(m), geo = approachGeoText(m);
         nowStakes = hg ? {sys: String(m.system), body_id: m.body_id, hg, landed: false} : null;   // Now's at-risk line
         const brief = () => line("body_brief", {body: m.body, text: bt}, `${m.body}: ${bt}.`);
         // with both spoken, one utterance: the bio briefing leads into the high-g warning. Otherwise each alert
         // follows its own ticks (the approach alert off must not swallow the body briefing).
         const merge = !!(hg && bt && alertSpeak.approach && alertSpeak.bodybrief);
-        if (bt) alertOut("bodybrief", `Approaching ${m.body}`, bt, {tag: "body_brief", say: brief, quiet: merge});
+        // S22: geology new to your codex rides on the card only, never spoken
+        if (bt || geo) alertOut("bodybrief", `Approaching ${m.body}`, [bt, geo].filter(Boolean).join(" · "),
+                                {tag: "body_brief", say: brief, quiet: merge || (!bt && "geology on the card only: never spoken")});
         if (hg)
           alertOut("approach", `${m.body}: ${hg.gravity} g with ${hg.value} cr aboard`, hg.rebuys ? `${hg.rebuys}× your rebuy · land gently` : "land gently",
                    {tag: "high_g", say: () => [merge ? brief() : "", line("high_g", hg, `${hg.gravity} g. ${hg.value} credits aboard. Land gently.`)].filter(Boolean).join(" ")});
@@ -7789,6 +8834,23 @@ function onData() {
       }
       else if ((m.kind === "riches" || m.kind === "exo" || m.kind === "trade") && m.text)   // the slot's route: what is left where you arrived, and where next
         alertOut(m.kind, m.text.replace(/\.$/, ""), "", {tag: m.kind, say: m.text});
+      else if (m.kind === "highway" && m.what === "short") {   // S1: the fuel aboard won't reach the next refuel stop
+        const t = hwyShortText(m), jumps = `${m.jumps} jump${m.jumps === 1 ? "" : "s"}`;
+        alertOut("refuelshort", `Fuel won't reach ${m.refuel_at}`, t, {tag: "fuel_short",
+                 say: () => m.need_t == null ? `Fuel won't reach ${m.refuel_at}, ${jumps} away, and no amount of fuel makes it.`
+                   : line("fuel_short", {system: m.refuel_at, jumps, need: `${Math.ceil(m.need_t)} tonnes`},
+                          `Fuel won't reach ${m.refuel_at}, ${jumps} away. Scoop to at least ${Math.ceil(m.need_t)} tonnes.`)});
+      }
+      else if (m.kind === "last_scoop" && m.count > 0) {   // S2: the last scoopable star before stars the fuel won't cover
+        const one = m.count === 1;   // the lines are plural: one star (and no amount at all) in plain words
+        alertOut("lastscoop", `Last scoopable star: ${m.count} unscoopable ahead`, dryStretchText(m), {tag: "fuel_last_scoop",
+                 say: () => m.full ? `${one ? "The next star on your route is" : `The next ${m.count} stars on your route are`} not scoopable, and even a full tank won't cover ${one ? "it" : "them"}.`
+                   : one ? "The next star on your route is not scoopable. This is your last chance to top off before you need to call the Fuel Rats."
+                   : line("fuel_last_scoop", {count: m.count}, `The next ${m.count} stars on your route are not scoopable. This is your last chance to top off before you need to call the Fuel Rats.`)});
+      }
+      else if (m.kind === "wrong_target" && m.system && m.next)   // S11: the game targets another system than the next stop
+        alertOut("wrongtarget", `Targeted ${m.system}, not the next stop`, `the next stop is ${m.next}`, {tag: "wrong_target",
+                 say: () => line("wrong_target", {system: m.system, next: m.next}, `You've targeted ${m.system}. The next stop is ${m.next}.`)});
       else if (m.kind === "highway" && m.text)   // the Neutron Highway's arrival line, detour, back on it, complete: plain words for now
         alertOut("highway", m.text.replace(/\.$/, ""), "", {tag: "highway", say: m.text});
       else if (m.kind === "autotarget" && m.what === "nothing")   // the co-pilot button's press with no route system to target
@@ -7801,6 +8863,15 @@ function onData() {
         alertOut("autotarget", m.text, m.ok ? "" : `step ${m.phase ?? "?"}: ${m.why || "?"}`, {tag: m.ok ? "ok" : "failed", say: m.text});
       else if (m.kind === "rig" && m.text)   // the co-pilot's rig marking and a rig's collection: plain words, no personality
         alertOut("rigs", m.text.replace(/\.$/, ""), "", {tag: m.what === "collected" ? "rig_collected" : "rig", say: m.text});
+      else if (m.kind === "firsts_seen" && m.system) {   // S6: someone else's scans of your unsold firsts reached Spansh
+        const t = firstsSeenText(m);
+        alertOut("firstsseen", t.title, t.body, {tag: "firsts_seen",
+                 quiet: m.speak === false ? "said at most once in 30 minutes (a card and a notification this time)" : false,
+                 say: () => m.value ? line("firsts_seen", {system: m.system, value: credits(m.value)}, `Someone else has scanned your unsold ${m.system}. Time to sell.`)
+                                    : `Someone else has scanned your unsold ${m.system}. Time to sell.`});
+      }
+      else if ((m.kind === "upload_down" || m.kind === "upload_back") && m.text)   // S3: the banner has the card; this notifies
+        alertOut("uploads", m.text, m.kind === "upload_down" ? "Settings → Uploads has the detail" : "", {tag: m.kind});
       else if (m.kind === "rig_leash" && m.text)   // a rig past the leash warning, or lost at 5 km: danger
         alertOut("rigleash", m.text.replace(/\.$/, ""), "", {tag: "rig_leash", say: m.text});
       else if (m.kind === "rigs_out" && m.text) {   // the Rhino docked with rigs still marked out: spoken, and a card
@@ -7872,7 +8943,10 @@ function onData() {
       const topup = !!data.here_star && /^[OBAFGKM](_|$)/.test(data.here_star) && f.pct < 90 && j != null && j < need
         && (unscoop || !!(sr && sr.scoopable / sr.of < 0.5));
       if (low || topup) fuelTargetSys = fsys;
-      if (topup) {
+      // S2 says it here (the last scoopable star before a dry stretch): only when the server gave its moment on this
+      // stay (`said`) and its row speaks, else the top-up card is all the player gets
+      if (topup && dryStretchHere() && dryStretchHere().said && alertSpeak.lastscoop) { /* said by S2 */ }
+      else if (topup) {
         const jt = `about ${j} jump${j === 1 ? "" : "s"}`, rt = sr ? scoopRateText(sr) : "";
         const rate = unscoop ? `the target cannot be scooped${rt ? `, and ${rt}` : ""}` : rt;
         alertOut("fuel", `Top up here: ${jt} of fuel left`, [unscoop && `${t.name} is a ${t.star_class} star you cannot scoop`, rt,
@@ -7938,15 +9012,15 @@ function fateGroup(f) {   // hoisted: setFate counts by it
     : /^(dropped|replaced|refused|not said|nothing)/.test(f) ? "dropped" : "silent";
 }
 const hms = t => new Date(t).toTimeString().slice(0, 8);
-const speechLogFacts = e => [e.kind + (e.tag ? "/" + e.tag : ""), e.style, e.voice, e.engine,
+const speechLogFacts = e => [e.kind + (e.tag ? "/" + e.tag : ""), e.crew, e.style, e.voice, e.engine,
   e.waited != null ? `waited ${(e.waited / 1000).toFixed(1)} s` : "", e.took != null && /^said/.test(e.fate || "") ? `${(e.took / 1000).toFixed(1)} s long` : ""].filter(Boolean);
 // the tally's short names (the alerts table has only the long descriptions)
 const ALERT_SHORT = {arrival: "Arrival", game: "Game start and quit", jump: "FSD charge", honk: "Honk", brief: "Arrival brief", fss: "FSS",
   leaving: "Leaving", fuel: "Fuel", scoop: "Tank full", scoopstop: "Scooping stopped", supercharge: "Supercharge", find: "Find",
   jumponium: "Jumponium", sampling: "Sampling", approach: "High-g approach", bodybrief: "Body brief", sell: "Selling", saleleft: "Sale left data",
-  unsold: "Unsold", hull: "Hull and danger", carrier: "Carrier", codex: "Codex", phenomena: "Stellar phenomena", ggg: "Green gas giant?", rare_star: "Rare star", surface_site: "Surface sites", signal_poi: "Signals worth a detour", curious: "Curiosities", loss: "Ship lost", rigs: "Rigs", rigleash: "Rig leash",
-  rigsout: "Rigs out", mapped: "Mapped", signals: "Signals", highway: "Neutron Highway", autotarget: "Auto-target", manual: "Asked for",
-  exo: "Exomastery route", riches: "Road to Riches", trade: "Trade route"};
+  unsold: "Unsold", firstsseen: "Firsts scanned by others", hull: "Hull and danger", carrier: "Carrier", codex: "Codex", phenomena: "Stellar phenomena", ggg: "Green gas giant?", rare_star: "Rare star", surface_site: "Surface sites", signal_poi: "Signals worth a detour", curious: "Curiosities", loss: "Ship lost", rigs: "Rigs", rigleash: "Rig leash",
+  rigsout: "Rigs out", mapped: "Mapped", signals: "Signals", highway: "Neutron Highway", refuelshort: "Short of the refuel stop", lastscoop: "Last scoopable star", autotarget: "Auto-target", wrongtarget: "Wrong target", manual: "Asked for",
+  exo: "Exomastery route", riches: "Survey routes", trade: "Trade route", uploads: "Uploads failing"};
 const speechMuted = new Set();   // kinds turned off from the tally this session (each shows an undo)
 // "This session: Arrival brief 42 🔇 · FSD charge 40 (3 dropped) 🔇 · …": every kind that was said or queued (not the
 // silent ones: a kind already off would only inflate), noisiest first. 🔇 turns that alert's speech off (its 🗣 tick
@@ -8030,15 +9104,60 @@ function drawSpeechLogSoon() { if (!speechLogTimer) speechLogTimer = setTimeout(
 const speechLogText = () => [...speechLog].reverse().map(e => `${hms(e.t)}  ${e.fate || "waiting"}  [${speechLogFacts(e).join(", ")}]  ${e.words}`).join("\n");
 document.getElementById("speechLogBox").addEventListener("toggle", drawSpeechLog);
 document.getElementById("speechLogCopy").onclick = () => copyText(speechLogText() || "(nothing yet)", `${speechLog.length} lines`);
+// ---- Questions asked (S35, Settings' last section): what the voice heard on any device, what it matched and the answer,
+// from GET api/ask/log (the server keeps the last 50 in memory). Fetched when the section opens and again when the
+// payload's ask_seq moves while it is open.
+const AL = {seq: null, data: null};
+const ASK_HUSH = {"10m": "for 10 minutes", "30m": "for 30 minutes", jump: "until the next jump"};   // S32's three
+// what a question matched, in words: the ask.json phrase and its command, "no phrase matched (AI off)", the AI's rounds
+// and tools, or why it was refused
+function askMatchText(q) {
+  const ai = q.ai ? ` (${q.ai.rounds} round${q.ai.rounds === 1 ? "" : "s"}${q.ai.tools.length ? `: ${q.ai.tools.join(", ")}` : ", no tools"})` : "";
+  const hush = q.hush ? ` · ${ASK_HUSH[q.hush] || q.hush}` : "";
+  if (q.matched === "fixed") return `matched “${esc(q.phrase)}” → <b>${esc(q.label || q.command)}</b>${esc(hush)}`;
+  if (q.matched === "ai") return `no phrase matched → <b>the AI answered</b>${esc(ai)}`;
+  if (q.matched === "none") return `<b>no phrase matched</b> (AI off): the answer lists what it knows`;
+  if (q.code === "ai_off") return `no phrase matched → <b>the AI is switched on but not set up</b>: ${esc(q.error)}`;
+  if (/^ai_/.test(q.code || "")) return `no phrase matched → <b>the AI failed</b>${esc(ai)}: ${esc(q.error)}`;
+  if (q.command) return `matched “${esc(q.phrase)}” → ${esc(q.label || q.command)}, <b>but the answer failed</b>: ${esc(q.error)}`;
+  return `<b>refused</b>: ${esc(q.error)}`;
+}
+const askLogFacts = q => [q.source, q.ms != null ? `${q.ms} ms` : "", q.matched === "fixed" || q.matched === "ai" || q.matched === "none"
+  ? (q.spoken ? "said on the PC" : "shown, not said: no window speaks") : ""].filter(Boolean);
+function drawAskLog() {
+  const el = document.getElementById("askLog"), qs = AL.data && AL.data.questions;
+  if (!el) return;
+  el.innerHTML = !AL.data ? `<div class="unk">loading…</div>` : AL.data.error ? `<div class="unk">Could not load the questions: ${esc(AL.data.error)}</div>`
+    : !qs.length ? `<div class="unk">Nothing asked since Outrider started.</div>`
+    : qs.map(q => `<div class="alog ${esc(q.matched)}"><span class="unk">${hms(q.ts * 1000)}</span> heard “${esc(q.text == null ? "(no text)" : q.text)}”` +
+        `${askLogFacts(q).length ? ` <span class="unk">· ${esc(askLogFacts(q).join(" · "))}</span>` : ""}<br><span class="match">${askMatchText(q)}</span>` +
+        (q.answer ? `<br>“${esc(q.answer)}”` : "") + `</div>`).join("");
+}
+async function loadAskLog() {
+  const box = document.getElementById("askLogBox");
+  if (!box || !box.open || !document.getElementById("alertDialog").open) return;
+  const want = data ? data.ask_seq : null;
+  if (AL.data && !AL.data.error && want != null && want === AL.seq) return;
+  AL.seq = want;
+  try { AL.data = await apiJson("api/ask/log"); } catch (e) { AL.data = {error: e.message}; }
+  if (AL.data && !AL.data.error) AL.seq = AL.data.seq;
+  drawAskLog();
+}
+const htmlText = h => { const e = document.createElement("div"); e.innerHTML = h; return e.textContent; };
+const askLogText = () => ((AL.data && AL.data.questions) || []).map(q => `${hms(q.ts * 1000)}  heard: ${q.text == null ? "(no text)" : q.text}` +
+  `${askLogFacts(q).length ? `  [${askLogFacts(q).join(", ")}]` : ""}\n    ${htmlText(askMatchText(q))}` + (q.answer ? `\n    answer: ${q.answer}` : "")).join("\n");
+document.getElementById("askLogBox").addEventListener("toggle", () => { drawAskLog(); loadAskLog(); });
+document.getElementById("askLogCopy").onclick = () => copyText(askLogText() || "(nothing asked yet)", `${((AL.data && AL.data.questions) || []).length} questions`);
 // ---- alert settings ----
 const alertDialog = document.getElementById("alertDialog");
 // a heading over a group of alerts in the list, before its first one: the discoveries together, each still its own row
 const ALERT_GROUPS = {phenomena: "Discoveries: the rare and curious things the FSS finds, said with delight (each has its own switches)"};
 document.getElementById("alertOpts").innerHTML = ALERTS.map(([k, label, snd]) =>
-  (ALERT_GROUPS[k] ? `<tr class="agroup"><th colspan="4">${esc(ALERT_GROUPS[k])}</th></tr>` : "") +
+  (ALERT_GROUPS[k] ? `<tr class="agroup"><th colspan="5">${esc(ALERT_GROUPS[k])}</th></tr>` : "") +
   `<tr><td>${esc(label)}</td><td><input type="checkbox" data-alert="${k}" aria-label="notify"></td>` +
   `<td>${snd || k === "arrival" ? `<input type="checkbox" data-asound="${k}" aria-label="sound">` : `<span class="unk" title="${k === "discovery" ? "the target sound" : "no sound"}">·</span>`}</td>` +
-  `<td>${UNSPOKEN.has(k) ? `<span class="unk" title="not spoken: arriving there is">·</span>` : `<input type="checkbox" data-aspeak="${k}" aria-label="speak">`}</td></tr>`).join("");
+  `<td>${UNSPOKEN.has(k) ? `<span class="unk" title="not spoken: ${esc(UNSPOKEN_WHY[k])}">·</span>` : `<input type="checkbox" data-aspeak="${k}" aria-label="speak">`}</td>` +
+  `<td class="acrew" data-acrew="${k}" hidden></td></tr>`).join("");
 for (const [attr, cfg, key] of [["asound", alertSound, "alertSound"], ["aspeak", alertSpeak, "alertSpeak"]])
   alertDialog.querySelectorAll(`[data-${attr}]`).forEach(cb => {
     cb.checked = !!cfg[cb.dataset[attr]];
@@ -8093,7 +9212,7 @@ document.getElementById("trySpeak").onclick = () => {
     text = line(key, LINE_SAMPLES[key], "Leaving with unfinished work: A 2, a class two gas giant, plus 1.4M to map.");
   } finally { lineNoRecord = false; }
   const sv = styleVoice(lineStyle);
-  document.getElementById("speechTried").textContent = `${key}: “${spokenText(text)}”${sv.voice ? ` (${sv.voice})` : ""}`;
+  document.getElementById("speechTried").textContent = `${key}: “${spokenText(text)}”${sv.voice || sv.speaker != null ? ` (${voiceWords(sv)})` : ""}`;
   // in Spoken lines with its wording, so a line you dislike can be banned straight from trying it
   speak(text, {...sv, log: logSpeech({kind: "manual", style: lineStyle, key: lineKey, template: lineTemplate})});
 };
@@ -8101,8 +9220,10 @@ document.getElementById("trySpeak").onclick = () => {
 function drawSpeechStyles() {
   const box = document.getElementById("speechStyles"), on = speechStyles();
   const styles = Object.entries(speechLib.styles || {});
-  box.innerHTML = styles.map(([k, v]) => `<label${v && v.voice ? ` title="this personality speaks in its own voice when it is installed (set in speech.json)"` : ""}><input type="checkbox" data-sstyle="${esc(k)}"${on.includes(k) ? " checked" : ""}> ${esc(typeof v === "string" ? v : (v && v.label) || k)}` +
-    `${v && typeof v.voice === "string" ? ` <span class="unk">(${esc(v.voice)}${data && data.tts && data.tts.voices && !data.tts.voices.includes(v.voice) ? ", not installed" : ""})</span>` : ""}</label>`).join(" ");
+  const inst = data && data.tts && data.tts.voices;
+  box.innerHTML = styles.map(([k, v]) => { const sv = styleVoice(k), own = sv.voice || sv.speaker != null;
+    return `<label${own ? ` title="this personality speaks in its own voice when it is installed (${sv.picked ? "picked in Personality voices below" : "set in speech.json"})"` : ""}><input type="checkbox" data-sstyle="${esc(k)}"${on.includes(k) ? " checked" : ""}> ${esc(typeof v === "string" ? v : (v && v.label) || k)}` +
+    `${own ? ` <span class="unk">(${esc(voiceWords(sv))}${sv.voice && inst && !inst.includes(sv.voice) ? ", not installed" : ""})</span>` : ""}</label>`; }).join(" ");
   box.querySelectorAll("[data-sstyle]").forEach(cb => cb.onchange = () => {
     store.set("speechStyles", [...box.querySelectorAll("[data-sstyle]:checked")].map(x => x.dataset.sstyle)); shiftStyle = null; drawSpeechStyles();
   });
@@ -8123,6 +9244,8 @@ function drawSpeechStyles() {
   document.getElementById("speechProfanityWho").textContent = swear.length ? `(${swear.join(", ")})` : "";
   document.getElementById("speechDangerBusiness").checked = speechDangerBusiness();
   document.getElementById("speechShift").checked = speechShift();
+  drawStyleVoices();
+  if (crewUi) drawCrew();   // the XO's personality is the ones ticked
   const err = speechLib.error || (speechLib.problems || []).slice(0, 3).join("; ");
   document.getElementById("speechHint").innerHTML =
     (err ? `<span class="noscoop">${esc(err)}</span><br>` : "") +
@@ -8172,8 +9295,8 @@ window.addEventListener("storage", e => { if (e.key === "speakMode") drawSpeaker
   // 🗣 in another window of this browser (a ?mode=now window's bar): the window speaking follows it
   if (e.key === "speech" && !TABLET) { speechOn = store.get("speech", false); drawSpeechBtn(); if (!speechOn) hushSpeech(true); if (view === "now") drawNowBar(); } if (e.key === "speakOnServer") { drawServerPlay(); drawSoundBtn(); } });
 drawSpeaker(); drawServerPlay();
-// a window opened at ?mode=now (the second screen) waits a moment, so a main window opened with it speaks
-if (view === "now") setTimeout(() => claimSpeaker(), 1000); else claimSpeaker();
+// a window opened at ?mode=now (the second screen) or at ?view= (S37) waits a moment, so a main window opened with it speaks
+if (view === "now" || viewWindow) setTimeout(() => claimSpeaker(), 1000); else claimSpeaker();
 // auto honk: the server holds Primary Fire on arrival; this is its on/off and status
 const honkBox = document.getElementById("autoHonk"), honkSayBox = document.getElementById("autoHonkSay");
 // say the body count when an auto honk completes: per browser, the config's [autohonk] announce by default
@@ -8280,6 +9403,8 @@ function drawTts() {
   document.getElementById("soundFiles").textContent = !sf ? "" : (own.length ? `Your own sounds: ${own.join(", ")}.` : "No sound files of your own found.")
     + ((sf.problems || []).length ? ` Not used: ${sf.problems.join("; ")}.` : "");
   drawServerPlay();
+  drawStyleVoices();
+  if (crewUi) { drawCrew(); drawVoiceMemory(); }
   drawSpeechBtn();
   drawHonk();
 }
@@ -8315,6 +9440,366 @@ document.getElementById("ttsSpk").onchange = e => {
   const t = data && data.tts; if (t && t.voice) speakerPicked[t.voice] = Number(e.target.value);
   apiJson("api/voice", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({speaker: Number(e.target.value)})});
 };
+// ---- Personality voices (Settings > Voice, S40): each personality's voice and person, kept by the server (POST
+// api/voice/style -> data.style_picks) for every browser and the tablet. "as the lines file says" is speech.json's own
+// voice and speaker (else the main voice); a several-person voice picked gets its people; ▶ plays one of that
+// personality's lines as it is heard, through the voice lab's player (here, whatever the speech settings).
+function drawStyleVoices(force = false) {
+  const row = document.getElementById("styleVoicesRow"), tb = document.querySelector("#styleVoices tbody");
+  const t = data && data.tts, styles = Object.entries(speechLib.styles || {}), picks = (data && data.style_picks) || {};
+  row.hidden = !(t && t.available) || !styles.length;
+  if (row.hidden) return;
+  const key = JSON.stringify([styles, picks, t.voices, t.voice]);
+  if (!force && (key === styleVoicesDrawn || (tb.contains(document.activeElement) && document.activeElement.tagName === "SELECT"))) return;
+  styleVoicesDrawn = key;
+  const voices = t.voices || [];
+  tb.innerHTML = styles.map(([k, v]) => {
+    const own = v && typeof v === "object" ? v : {}, p = picks[k], file = typeof own.voice === "string" ? own.voice : null, name = labStyleName(k);
+    const asFile = `as the lines file says: ${file ? file + (voices.includes(file) ? "" : " (not installed: the main voice)") : "the main voice"}`
+      + (spkNum(own.speaker) != null ? ` #${own.speaker}` : "");
+    const opts = [...voices, ...(p && !voices.includes(p.voice) ? [p.voice] : [])];
+    return `<tr data-svstyle="${esc(k)}"><th>${esc(name)}</th><td><select data-svvoice data-sfone aria-label="${esc(name)}: voice"><option value="">${esc(asFile)}</option>` +
+      opts.map(n => `<option value="${esc(n)}"${p && p.voice === n ? " selected" : ""}>${esc(n)}${voices.includes(n) ? "" : " (not installed)"}</option>`).join("") +
+      `</select></td><td><select data-svspk data-sfone aria-label="${esc(name)}: speaker" hidden></select></td>` +
+      `<td><button type="button" class="try" data-svplay title="one of ${esc(name)}'s lines as it is heard (here, in this browser)">▶</button></td>` +
+      `<td>${p ? `<a href="#" data-svreset title="as the lines file says again">reset</a>` : ""}</td></tr>`;
+  }).join("");
+  for (const tr of tb.querySelectorAll("tr[data-svstyle]")) {   // a several-person voice picked: which of its people
+    const p = picks[tr.dataset.svstyle], sel = tr.querySelector("[data-svspk]");
+    if (!p) continue;
+    const cur = p.speaker ?? (p.voice === t.voice ? t.speaker : speakerPicked[p.voice]) ?? 0;
+    fillSpeakers(sel, p.voice, cur).then(list => { sel.hidden = list.length < 2; });
+  }
+}
+async function styleVoicePost(body) {
+  let r;
+  try { r = await apiJson("api/voice/style", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}); }
+  catch { r = {error: "Outrider not reachable"}; }
+  r = r || {error: "?"};
+  const m = document.getElementById("styleVoicesMsg");
+  if (!r.error && data) data.style_picks = r.style_picks || {};
+  m.textContent = r.error ? `Not kept: ${r.error}` : `${labStyleName(body.style)}: ${body.voice ? voiceWords(body) : "as the lines file says"}`;
+  m.className = r.error ? "hint warnc" : "hint";
+  drawSpeechStyles(); drawStyleVoices(true);
+  return r;
+}
+async function styleVoicePlay(style) {
+  if (!Object.keys(speechLib.lines || {}).length) await loadSpeechLib();
+  const keys = AUDITION_KEYS.filter(k => labLine(k, style)), ln = keys.length ? labLine(keys[Math.floor(Math.random() * keys.length)], style) : null;
+  const m = document.getElementById("styleVoicesMsg");
+  if (!ln) { m.textContent = `No lines for ${labStyleName(style)}`; m.className = "hint warnc"; return false; }
+  const hv = heardVoice(style);
+  m.textContent = `${labStyleName(style)} in ${voiceWords(hv)}: “${spokenText(ln.text)}”`; m.className = "hint";
+  const ok = await labSay(ln.text, {voice: hv.voice, speaker: hv.speaker, speed: speechSpeed() * hv.pace});
+  if (!ok && labEl("labMsg").className === "warnc") { m.textContent = labEl("labMsg").textContent; m.className = "hint warnc"; }
+  return ok;
+}
+{
+  const tb = document.querySelector("#styleVoices tbody");
+  tb.addEventListener("change", e => {
+    const tr = e.target.closest("tr[data-svstyle]"); if (!tr) return;
+    const voice = tr.querySelector("[data-svvoice]").value || null, body = {style: tr.dataset.svstyle, voice};
+    if (voice && e.target.matches("[data-svspk]")) body.speaker = Number(e.target.value);
+    styleVoicePost(body);
+  });
+  tb.addEventListener("click", e => {
+    const tr = e.target.closest("tr[data-svstyle]"); if (!tr) return;
+    if (e.target.closest("[data-svplay]")) styleVoicePlay(tr.dataset.svstyle);
+    else if (e.target.closest("[data-svreset]")) { e.preventDefault(); styleVoicePost({style: tr.dataset.svstyle, voice: null}); }
+  });
+}
+// ---- Settings > Voice: the voices kept loaded (crew batch 2; the plan's approved screen). The memory note and Keep
+// loaded read the server's data.voice_memory (each voice's memory is the server's figure from the installed files, never
+// guessed here), shown whenever a voice besides the main one is in use (a crew member's or a personality's). Keep loaded
+// and Load them at start are [speech] voices_loaded / voices_preload, written into the config file (POST api/config,
+// which applies these two at once): they are about the machine that speaks, not this browser.
+const VM_WARN_MB = 500, VM_BAD_MB = 1000;   // the note amber above the first, red above the second
+const vmChoice = vm => vm.loaded === "all" ? "all" : Number.isInteger(vm.loaded) ? String(vm.loaded) : "";
+// how many of the voices in use stay loaded for a Keep loaded choice ("": unset, the voices in use up to the default)
+function vmKept(vm, choice) {
+  if (choice === "all") return vm.count;
+  const n = Number(choice);
+  return Math.min(vm.count, choice !== "" && Number.isInteger(n) && n >= 1 ? n : Math.max(1, vm.default || 4));
+}
+// the memory of the `n` largest voices in use: the worst case (which ones are loaded depends on what was said last)
+const vmMb = (vm, n) => (vm.voices || []).map(v => Number(v.mb) || 0).sort((a, b) => b - a).slice(0, n).reduce((a, b) => a + b, 0);
+const mbText = mb => `${Math.round(mb).toLocaleString("en-US")} MB`;
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+function drawVoiceMemory() {
+  const box = document.getElementById("vmBox"), vm = data && data.voice_memory;
+  box.hidden = !(vm && vm.count > 0);
+  if (box.hidden) return;
+  const level = vm.mb > VM_BAD_MB ? "bad" : vm.mb > VM_WARN_MB ? "warn" : "";
+  const note = document.getElementById("vmNote");
+  note.className = "vmnote" + (level ? " " + level : "");
+  note.innerHTML = `This setup uses <b>${plural(vm.count, "different voice", "different voices")}</b> besides ${crewOn() ? "the XO" : "the main voice"}: ` +
+    `about <b>${mbText(vm.mb)}</b> of memory ${vm.on_server ? "on the server" : "on this PC"} (each different voice is loaded on its own: ` +
+    `about 100 MB for a medium voice, 170 MB for a high one; the people of one many-speaker voice share a single load).` +
+    (level ? `<br><span class="vmwhy">More than ${level === "bad" ? "1 GB" : "500 MB"} · Several people of one voice (e.g. vctk's 109) cost no more than one voice.</span>` : "");
+  const sel = document.getElementById("vmKeep"), cur = vmChoice(vm);
+  const top = Math.min(20, Math.max(vm.count, Number(cur) || 0));   // up to the voices in use (20: the config's pick-list)
+  const opts = [...(cur === "" ? [["", `${vmKept(vm, "")} (the default)`]] : []),
+    ...Array.from({length: top}, (_, i) => [String(i + 1), String(i + 1)]), ["all", "all"]];
+  const okey = JSON.stringify(opts);
+  if (sel.dataset.opts !== okey) { sel.innerHTML = opts.map(([v, t]) => `<option value="${v}">${esc(t)}</option>`).join(""); sel.dataset.opts = okey; }
+  sel.value = cur;
+  drawVmKeep();
+  document.getElementById("vmPreload").checked = !!vm.preload;
+}
+// "of the 6 voices in use · about 620 MB" and what fewer costs, for the number picked (before the server has it too)
+function drawVmKeep() {
+  const vm = data && data.voice_memory;
+  if (!vm) return;
+  const n = vmKept(vm, document.getElementById("vmKeep").value), aside = vm.count - n;
+  document.getElementById("vmKeepOf").innerHTML = `of the ${plural(vm.count, "voice", "voices")} in use · about <b>${mbText(vmMb(vm, n))}</b>`;
+  document.getElementById("vmCost").textContent = aside > 0
+    ? `${plural(aside, "voice is", "voices are")} set aside when not in use: ${aside === 1 ? "its" : "their"} next line waits about a second while it loads again`
+    : "nothing waits: every voice in use stays loaded";
+}
+async function vmPost(key, value) {
+  let r;
+  try { r = await apiJson("api/config", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({speech: {[key]: value}})}); }
+  catch { r = {error: "Outrider not reachable"}; }
+  r = r || {error: "?"};
+  const vm = data && data.voice_memory;
+  if (!r.error && vm) {   // the next payload brings the server's own figures; meanwhile what was chosen
+    if (key === "voices_loaded") vm.loaded = value === "all" ? "all" : Number(value);
+    else vm.preload = !!value;
+  }
+  const m = document.getElementById("vmMsg");
+  m.textContent = r.error ? `Not saved: ${r.error}`
+    : `Saved in the config file ([speech] ${key})${(r.live || []).includes("speech." + key) ? "" : ": used from Outrider's next start"}`;
+  m.className = r.error ? "hint warnc" : "hint";
+  drawVoiceMemory();
+  return r;
+}
+document.getElementById("vmKeep").onchange = e => { if (e.target.value) vmPost("voices_loaded", e.target.value); else drawVmKeep(); };
+document.getElementById("vmPreload").onchange = e => vmPost("voices_preload", e.target.checked);
+
+// ---- the crew in Settings (crew batch 2): its switches, the table (Role · Name · Personality · Voice · Speaker · Speaks
+// for · ▶ · ↺, the XO first), the XO note, Settings > Alerts' Crew column and the voice lab's Assign and "by crew"
+// audition. Each change is one POST to api/voice/crew (data.crew comes back), checked by the server against the lines
+// file and the voices installed. The XO row is the main voice (its voice select switches it) and the main personality.
+// an alert row in a few words, for a crew member's "Speaks for" and the messages (test_crew keeps it in step with ALERTS;
+// the Spoken lines tally has its own capitalised names, ALERT_SHORT)
+const ROW_WORDS = {discovery: "target verdicts", arrival: "arrivals", game: "start and exit", jump: "jumps", honk: "the honk",
+  brief: "arrival briefings", fss: "the FSS", mapped: "mapped planets", leaving: "leaving with work left", fuel: "fuel",
+  scoop: "tank full", scoopstop: "scooping stopped", supercharge: "supercharges", exo: "Exomastery routes", riches: "survey routes",
+  trade: "trade routes", highway: "the Highway", refuelshort: "fuel short of a refuel", lastscoop: "last scoop", autotarget: "auto-target",
+  wrongtarget: "wrong target", find: "valuable bodies", jumponium: "jumponium", sampling: "sampling", approach: "high-g approaches",
+  bodybrief: "bio bodies ahead", sell: "sales", saleleft: "data left after a sale", unsold: "unsold data", firstsseen: "someone scanning your firsts",
+  hull: "hull, heat, interdiction", carrier: "your carrier", codex: "codex", phenomena: "phenomena", ggg: "green gas giants",
+  rare_star: "rare stars", surface_site: "surface sites", signal_poi: "signals", curious: "curiosities", loss: "losses",
+  rigs: "rigs", rigleash: "the rig leash", rigsout: "rigs out", uploads: "uploads"};
+// the speech keys each alert row says (a crew member's ▶, the by-crew audition, which rows hold danger lines)
+const ROW_KEYS = {arrival: ["arrival_undiscovered", "arrival_discovered", "region", "streak_new", "streak_known"],
+  game: ["game_start", "welcome_back", "game_exit", "session_recap"], jump: ["fsd_charge"], brief: ["arrival_brief"],
+  fss: ["fss_done", "fss_nothing", "fss_unfinished"], leaving: ["leaving"], fuel: ["fuel_low", "fuel_star", "fuel_target", "fuel_topup"],
+  scoop: ["tank_full"], scoopstop: ["scoop_stopped"], supercharge: ["supercharged"], refuelshort: ["fuel_short"], lastscoop: ["fuel_last_scoop"],
+  autotarget: ["autotarget_nothing"], wrongtarget: ["wrong_target"], find: ["find_body", "find_bio", "mapped_before", "sample_clear"],
+  jumponium: ["jumponium"], sampling: ["bio_done_last", "bio_done_more", "bio_tag_near", "left_body"], approach: ["high_g"],
+  bodybrief: ["body_brief"], sell: ["docked_sell", "sold", "undocked_unsold"], saleleft: ["sale_left"], unsold: ["unsold_warn", "unsold_urgent"],
+  firstsseen: ["firsts_seen"], hull: ["hull", "heat", "interdicted"], carrier: ["carrier_arrived", "carrier_departs"], codex: ["codex"],
+  phenomena: ["phenomena"], ggg: ["ggg"], rare_star: ["rare_star"], surface_site: ["surface_site"], signal_poi: ["signal_poi"],
+  curious: ["curious"], loss: ["ship_lost"], rigleash: ["rig_leash"]};
+const XO_SPEAKS = "voice answers, the status report, the co-pilot, the hush and speech on";
+const crewOn = () => !!(data && data.crew && data.crew.on);
+const crewDangerOn = () => !!(data && data.crew && data.crew.danger !== false);
+// the crew member an alert row is said by: moved in Settings > Alerts, else the table's (a row no role covers: the XO)
+const crewRowRole = row => (data && data.crew && data.crew.rows && data.crew.rows[row]) || (crewRoles().find(r => (r.rows || []).includes(row)) || {}).id || "xo";
+const crewRowsOf = role => ALERTS.map(a => a[0]).filter(k => !UNSPOKEN.has(k) && crewRowRole(k) === role);
+// an alert row's danger lines (DANGER): "all" of its lines, "some" (your carrier's departure warning) or none
+function dangerRow(row) {
+  const ks = ROW_KEYS[row] || [], d = ks.filter(k => DANGER.has(k)).length;
+  return !d ? null : d === ks.length ? "all" : "some";
+}
+// "Chief Engineer (Mira)"
+const crewLabel = (role, short = false) => { const r = crewRoles().find(x => x.id === role), m = data && data.crew && data.crew.members && data.crew.members[role];
+  return `${r ? (short ? r.short : r.title) : role}${m && m.name ? ` (${m.name})` : ""}`; };
+// what a crew member speaks for, in words (HTML): Tactical's danger lines in red while the switch is on
+function crewSpeaksFor(role) {
+  const rows = crewRowsOf(role), words = rows.map(r => ROW_WORDS[r] || r), parts = [];
+  if (role === "xo") parts.push(XO_SPEAKS);
+  if (role === "tactical" && crewDangerOn()) parts.push(`<span class="badc">every danger line</span>`);
+  const shown = words.slice(0, 6), more = words.length - shown.length;
+  if (words.length) parts.push(esc(shown.join(", ")) + (more > 0 ? ` <span class="unk" title="${esc(words.join(", "))}">and ${more} more</span>` : ""));
+  if (role === "xo") parts.push("and any line a crew member cannot say");
+  const tact = role !== "tactical" && crewDangerOn() && rows.some(r => dangerRow(r));
+  return (parts.join(", ") || `<span class="unk">nothing yet: give it an alert in Settings → Alerts</span>`) +
+    (tact ? ` <span class="unk">(their danger lines: Tactical)</span>` : "");
+}
+let crewDrawn = "";   // the crew table as last drawn
+function drawCrew(force = false) {
+  const c = data && data.crew, roles = crewRoles(), on = crewOn() && roles.length > 0;
+  document.getElementById("crewBox").hidden = !c || !roles.length;
+  document.getElementById("crewOn").checked = crewOn();
+  document.getElementById("crewDanger").checked = crewDangerOn();
+  for (const id of ["crewDangerWrap", "crewAudition", "crewLinesAudition", "crewTable", "crewXoNote", "ttsXo", "ttsXoHint", "styleVoicesCrew"])
+    document.getElementById(id).hidden = !on;
+  drawAlertCrew(force);
+  if (!on) { crewDrawn = ""; return; }
+  const t = (data && data.tts) || {}, voices = t.voices || [], styles = Object.keys(speechLib.styles || {});
+  const tb = document.querySelector("#crewTable tbody");
+  const key = JSON.stringify([c, roles, voices, t.voice, t.speaker, t.speakers, styles, speechStyles()]);
+  const busy = tb.contains(document.activeElement) && /^(SELECT|INPUT)$/.test(document.activeElement.tagName);
+  if (!force && (key === crewDrawn || busy)) return;
+  crewDrawn = key;
+  const main = speechStyles().filter(st => styles.includes(st)).map(labStyleName).join(", ") || "none ticked";
+  const opt = (v, label, sel) => `<option value="${esc(v)}"${sel ? " selected" : ""}>${esc(label)}</option>`;
+  tb.innerHTML = roles.map(r => {
+    const m = (c.members && c.members[r.id]) || {}, xo = r.id === "xo", nm = `${esc(r.title)}`;
+    const pers = xo ? `<span class="asxo" title="the personalities ticked above">${esc(main)} (main)</span>`
+      : `<select data-cpers data-sfone aria-label="${nm}: personality"${m.personality ? "" : ` class="asxo"`}>${opt("", "as the XO", !m.personality)}` +
+        styles.map(st => opt(st, labStyleName(st), m.personality === st)).join("") +
+        (m.personality && !styles.includes(m.personality) ? opt(m.personality, `${m.personality} (not in the lines file)`, true) : "") + `</select>`;
+    const vs = [...voices, ...(m.voice && !voices.includes(m.voice) ? [m.voice] : [])];
+    const voice = `<select data-cvoice data-sfone aria-label="${nm}: voice"${!xo && !m.voice ? ` class="asxo"` : ""}>` +
+      (xo ? (vs.length ? "" : opt("", "(none installed)", true)) : opt("", m.personality ? "as the personality" : "as the XO", !m.voice)) +
+      vs.map(v => opt(v, v + (voices.includes(v) ? "" : " (not installed)"), m.voice === v || (xo && t.voice === v))).join("") + `</select>`;
+    return `<tr data-crole="${esc(r.id)}"${xo ? ` class="xo"` : ""}><td class="crole"><b>${nm}</b>${xo ? `<small>the main voice</small>` : ""}` +
+      (m.fill ? `<small class="warnc" title="the XO says its lines meanwhile">the XO speaks for it: ${esc(m.fill)}</small>` : "") + `</td>` +
+      `<td><input type="text" data-cname maxlength="40" placeholder="no name" aria-label="${nm}: name" value="${esc(m.name || "")}"></td>` +
+      `<td>${pers}</td><td>${voice}</td>` +
+      `<td><select data-cspk data-sfone aria-label="${nm}: speaker" hidden></select><span data-cnospk class="unk">—</span></td>` +
+      `<td class="cfor">${crewSpeaksFor(r.id)}</td>` +
+      `<td><button type="button" class="try" data-cplay title="one of ${nm}'s lines, in its voice and personality (here, in this browser)">▶</button></td>` +
+      `<td>${xo ? "" : `<button type="button" class="try" data-creset title='back to "as the XO" (its name kept)'${m.personality || m.voice ? "" : " disabled"}>↺</button>`}</td></tr>`;
+  }).join("");
+  for (const tr of tb.querySelectorAll("tr[data-crole]")) {   // a several-person voice: which of its people
+    const xo = tr.dataset.crole === "xo", m = (c.members && c.members[tr.dataset.crole]) || {};
+    const v = xo ? t.voice : m.voice, sel = tr.querySelector("[data-cspk]"), dash = tr.querySelector("[data-cnospk]");
+    if (!v || (xo && !(t.speakers > 1))) continue;
+    fillSpeakers(sel, v, xo ? t.speaker : m.speaker ?? speakerPicked[v] ?? 0).then(list => { sel.hidden = list.length < 2; dash.hidden = !sel.hidden; });
+  }
+}
+// Settings > Alerts' Crew column: who says each row (a select), and a danger row's "spoken by Tactical" while that
+// switch is on; hidden with the crew off (its cells emptied, so Find a setting finds no role names there)
+let alertCrewDrawn = "";
+function drawAlertCrew(force = false) {
+  const on = crewOn() && crewRoles().length > 0, c = data && data.crew, tb = document.getElementById("alertOpts");
+  document.querySelectorAll("#alertTable .acrew").forEach(el => { el.hidden = !on; });
+  const key = on ? JSON.stringify([c.rows, c.danger, crewRoles().map(r => r.id), Object.values(c.members || {}).map(m => m.name)]) : "";
+  if (!force && (key === alertCrewDrawn || (tb.contains(document.activeElement) && document.activeElement.matches("[data-arole]")))) return;
+  alertCrewDrawn = key;
+  for (const td of tb.querySelectorAll("td[data-acrew]")) {
+    const row = td.dataset.acrew;
+    if (!on) { td.innerHTML = ""; continue; }
+    if (UNSPOKEN.has(row)) { td.innerHTML = `<span class="unk" title="not spoken: nobody says it">·</span>`; continue; }
+    const cur = crewRowRole(row), d = crewDangerOn() && cur !== "tactical" && dangerRow(row);
+    td.innerHTML = `<select data-arole="${esc(row)}" data-sfone aria-label="crew member">` + crewRoles().map(r =>
+      `<option value="${esc(r.id)}"${r.id === cur ? " selected" : ""}>${esc(crewLabel(r.id, true))}</option>`).join("") + `</select>` +
+      (d ? ` <span class="badc crewdanger">· ${d === "all" ? "spoken by Tactical (danger)" : "its danger lines by Tactical"}</span>` : "");
+  }
+}
+// what a change said, for the line under the table
+function crewSaid(b) {
+  if ("on" in b) return b.on ? "The crew speaks from now on: every member starts as the XO" : "One voice for everything again";
+  if ("danger" in b) return b.danger ? "Danger lines in Tactical's voice" : "Danger lines in their alert's crew member's voice";
+  if ("row" in b) return `${ROW_WORDS[b.row] || b.row}: said by ${crewLabel(crewRowRole(b.row))}`;
+  return `${crewLabel(b.role)}: ${b.reset ? "as the XO again" : "kept"}`;
+}
+async function crewPost(body) {
+  let r;
+  try { r = await apiJson("api/voice/crew", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}); }
+  catch { r = {error: "Outrider not reachable"}; }
+  r = r || {error: "?"};
+  if (!r.error && data && r.crew) data.crew = r.crew;
+  const m = document.getElementById("crewMsg");
+  m.textContent = r.error ? `Not kept: ${r.error}` : crewSaid(body);
+  m.className = r.error ? "hint warnc" : "hint";
+  drawCrew(true); drawVoiceMemory();
+  return r;
+}
+// one line of a crew member's own, as the alerts would say it: an alert row it speaks for (Tactical: the danger lines
+// while that switch is on; the XO: speech on), in its personality (else the ones ticked: "as the XO") and its voice (else
+// the personality's as heard), the XO standing in for one who cannot speak. {ln, voice, fill}, or null with no line.
+function crewSample(role) {
+  const c = data && data.crew, m = (c && c.members && c.members[role]) || {}, lib = speechLib.styles || {};
+  const keys = [...(role === "tactical" && crewDangerOn() ? [...DANGER] : []), ...crewRowsOf(role).flatMap(r => ROW_KEYS[r] || []),
+    ...(role === "xo" ? ["speech_on"] : [])];
+  const fill = m.fill || (m.personality && !(m.personality in lib) ? `personality ${m.personality} is not in the lines file` : null);
+  const ticked = speechStyles().filter(st => st in lib);
+  const styles = !fill && m.personality ? [m.personality] : ticked.length ? ticked : Object.keys(lib);
+  const lns = keys.flatMap(k => styles.map(st => labLine(k, st))).filter(Boolean);
+  if (!lns.length) return null;
+  const ln = lns[Math.floor(Math.random() * lns.length)], sv = styleVoice(ln.style);
+  const voice = !fill && role !== "xo" && m.voice ? {voice: m.voice, speaker: spkNum(m.speaker), pace: sv.pace} : heardVoice(ln.style);
+  return {ln, voice, fill};
+}
+// ▶: a crew member's sample through the voice lab's player (never the alert queue); `out(text, bad)` shows what is said.
+// true once played to the end, false when stopped or failed, null when it has no line
+async function crewPlay(role, out) {
+  if (!Object.keys(speechLib.lines || {}).length) await loadSpeechLib();
+  const s = crewSample(role);
+  if (!s) { out(`No lines for ${crewLabel(role)} yet`, true); return null; }
+  out(`${crewLabel(role)}${s.fill ? ` (the XO stands in: ${s.fill})` : ""} · ${labStyleName(s.ln.style)} · in ${voiceWords(s.voice)}: “${spokenText(s.ln.text)}”`, false);
+  const ok = await labSay(s.ln.text, {voice: s.voice.voice, speaker: s.voice.speaker, speed: speechSpeed() * (s.voice.pace || 1)});
+  if (!ok && labEl("labMsg").className === "warnc") out(labEl("labMsg").textContent, true);
+  return ok;
+}
+// Audition: by crew: each role (the XO first) says one of its own lines in its own voice, a pause between
+async function crewAudition(out) {
+  labStop();
+  for (const r of crewRoles()) {
+    const ok = await crewPlay(r.id, out);
+    if (ok === null) continue;   // nothing for that member to say
+    if (!ok) return;             // stopped (or failed): the audition ends
+    const token = labToken;
+    await new Promise(res => setTimeout(res, 1500));
+    if (token !== labToken) return;
+  }
+  out("Audition done", false);
+}
+// Audition: crew lines (crew batch 3): one line naming another crew member for each alert that has them, in each
+// personality (or the one picked in the lab), with the names Settings gives and made-up ones (crew_roles' sample) for
+// a member without, so the author hears how they sound; through the voice lab's player, as Audition does
+async function crewLinesAudition(out, chosen = null) {
+  if (!Object.keys(speechLib.lines || {}).length) await loadSpeechLib();
+  labStop();
+  const names = Object.fromEntries(crewRoles().map(r => [r.id, crewName(r.id) || r.sample]));
+  const styles = chosen ? [chosen] : Object.keys(speechLib.styles || {});
+  let n = 0;
+  for (const k of Object.keys(speechLib.lines || {})) for (const st of styles) {
+    const ln = labLine(k, st, {crew: "only", names});
+    if (!ln) continue;   // no crew lines for this alert in that personality
+    n++;
+    out(`${k} · ${labStyleName(st)}: “${spokenText(ln.text)}”`, false);
+    if (!(await labPlayLine(ln))) return;   // stopped (or failed): the audition ends
+    const token = labToken;
+    await new Promise(res => setTimeout(res, 1500));
+    if (token !== labToken) return;
+  }
+  out(n ? "Audition done" : "No lines naming a crew member in the lines file", !n);
+}
+const crewOut = (t, bad) => { const m = document.getElementById("crewMsg"); m.textContent = t; m.className = bad ? "hint warnc" : "hint"; };
+document.getElementById("crewOn").onchange = e => crewPost({on: e.target.checked});
+document.getElementById("crewDanger").onchange = e => crewPost({danger: e.target.checked});
+document.getElementById("crewAudition").onclick = () => crewAudition(crewOut);
+document.getElementById("crewLinesAudition").onclick = () => crewLinesAudition(crewOut);
+crewUi = true;
+{
+  const tb = document.querySelector("#crewTable tbody");
+  tb.addEventListener("change", e => {
+    const tr = e.target.closest("tr[data-crole]"); if (!tr) return;
+    const role = tr.dataset.crole, xo = role === "xo", m = (data && data.crew && data.crew.members && data.crew.members[role]) || {};
+    if (e.target.matches("[data-cname]")) crewPost({role, name: e.target.value});
+    else if (e.target.matches("[data-cpers]")) crewPost({role, personality: e.target.value || null});
+    else if (e.target.matches("[data-cvoice]")) crewPost({role, voice: e.target.value || null});
+    else if (e.target.matches("[data-cspk]")) {
+      const spk = Number(e.target.value);
+      if (!xo) speakerPicked[m.voice] = spk;
+      crewPost(xo ? {role, speaker: spk} : {role, voice: m.voice, speaker: spk});
+    }
+  });
+  tb.addEventListener("click", e => {
+    const tr = e.target.closest("tr[data-crole]"); if (!tr) return;
+    if (e.target.closest("[data-cplay]")) crewPlay(tr.dataset.crole, crewOut);
+    else if (e.target.closest("[data-creset]")) crewPost({role: tr.dataset.crole, reset: true});
+  });
+  document.getElementById("alertOpts").addEventListener("change", e => {
+    if (e.target.matches("[data-arole]")) crewPost({row: e.target.dataset.arole, role: e.target.value});
+  });
+}
 // ---- More voices (Settings > Voice): Piper's catalogue, from the server (GET api/voices/catalogue). Picking one
 // downloads it where Outrider runs and switches to it (POST api/voice, as the voice list does), so a Docker install has
 // every voice too. It sits in the voice lab's dialog. The download's progress shows in the status beside Voice.
@@ -8437,25 +9922,32 @@ async function labPlayUrl(url, failed) {
 }
 const labStyleName = st => { const base = st.replace(/_profane$/, ""), v = (speechLib.styles || {})[base];
   return (typeof v === "string" ? v : (v && v.label) || base) + (st.endsWith("_profane") ? ", swearing" : ""); };
-// a random line of alert `key` in personality `style` (null: any, clean lines only), filled with sample values
-function labLine(key, style) {
+// a random line of alert `key` in personality `style` (null: any, clean lines only), filled with sample values. The
+// lines naming a crew member ({engineer}) as the alerts take them: only while the crew is on, never one naming the
+// member who says this alert now (`opts.crew` "only": those lines alone, whatever the switch; `opts.names`: {role: name}
+// over the crew's own)
+function labLine(key, style, opts = {}) {
   const e = speechLib.lines && speechLib.lines[key];
   if (!e || typeof e !== "object") return null;
   const styles = style ? [style] : Object.keys(speechLib.styles || {});
-  const pool = styles.flatMap(st => (Array.isArray(e[st]) ? e[st] : []).filter(x => typeof x === "string" && x.trim()).map(x => [st, x]));
+  const row = Object.keys(ROW_KEYS).find(r => ROW_KEYS[r].includes(key)) ?? null, who = crewOn() ? crewMember(row, key) : null;
+  const keep = x => { const n = crewNamed(x);
+    return opts.crew === "only" ? n.length > 0 && !(who && n.includes(who.role)) : crewLineOk(x, who); };
+  const pool = styles.flatMap(st => (Array.isArray(e[st]) ? e[st] : []).filter(x => typeof x === "string" && x.trim() && keep(x)).map(x => [st, x]));
   if (!pool.length) return null;
   const [st, template] = pool[Math.floor(Math.random() * pool.length)];
-  return {key, style: st, template, text: fillLine(template, lineVars(LINE_SAMPLES[key] || {}))};
+  return {key, style: st, template, text: fillLine(template, lineVars({...(opts.names || {}), ...(LINE_SAMPLES[key] || {})}))};
 }
-// play a line: in its personality's own voice and pace when speech.json gives it one (and it is installed), else
-// the voice part's voice and speaker
+// play a line: as its personality is heard (S40) when it has a voice or speaker of its own (picked in Personality voices,
+// else speech.json's; an uninstalled voice is the main voice, as in the alerts), else in the voice part's voice and
+// speaker; its pace either way. The Audition goes through here, so each personality is heard in its own.
 async function labPlayLine(ln) {
-  const pick = labPick(), sv = styleVoice(ln.style.replace(/_profane$/, ""));
-  const own = sv.voice && ((data && data.tts && data.tts.voices) || []).includes(sv.voice) ? sv.voice : null;
+  const pick = labPick(), base = ln.style.replace(/_profane$/, ""), sv = styleVoice(base);
+  const hv = sv.voice || sv.speaker != null ? heardVoice(base) : null;
   labLast = {key: ln.key, template: ln.template};
   labEl("labCut").disabled = false;
-  labEl("labWords").textContent = `${ln.key} · ${labStyleName(ln.style)}${own ? ` · in ${own}` : ""}: “${spokenText(ln.text)}”`;
-  return labSay(ln.text, own ? {voice: own, speaker: null, speed: pick.speed * sv.pace} : {...pick, speed: pick.speed * sv.pace});
+  labEl("labWords").textContent = `${ln.key} · ${labStyleName(ln.style)}${hv ? ` · in ${voiceWords(hv)}` : ""}: “${spokenText(ln.text)}”`;
+  return labSay(ln.text, hv ? {voice: hv.voice, speaker: hv.speaker, speed: pick.speed * sv.pace} : {...pick, speed: pick.speed * sv.pace});
 }
 async function labDrawSpeakers() {
   const voice = labEl("labVoice").value, t = data && data.tts;
@@ -8470,8 +9962,17 @@ async function labDrawSpeakers() {
 function labDrawInUse() {
   const t = data && data.tts, p = labPick();
   const same = t && p.voice === t.voice && (p.speaker == null || p.speaker === (t.speaker ?? 0));
-  labEl("labInUse").textContent = same ? "✓ the voice in use" : "";
+  // the personalities given this voice and person (S40)
+  const given = Object.entries((data && data.style_picks) || {}).filter(([, k]) => k.voice === p.voice && (p.speaker == null || k.speaker === p.speaker))
+    .map(([st]) => labStyleName(st));
+  // and the crew members (crew batch 2)
+  const crew = Object.entries((data && data.crew && data.crew.members) || {}).filter(([r, m]) => r !== "xo" && m.voice === p.voice
+    && (p.speaker == null || m.speaker === p.speaker)).map(([r]) => crewLabel(r));
+  labEl("labInUse").textContent = [same ? "✓ the voice in use" : "", given.length ? `✓ ${given.join(", ")}` : "",
+    crew.length ? `✓ crew: ${crew.join(", ")}` : ""].filter(Boolean).join(" · ");
   labEl("labUse").disabled = !p.voice || (same && Math.abs(p.speed - speechSpeed()) < 0.001);
+  labEl("labGive").disabled = !p.voice || !labEl("labGiveStyle").value;
+  labEl("labAssign").disabled = !p.voice || !labEl("labCrewRole").value;
 }
 function labFillVoices() {
   const t = data && data.tts, voices = (t && t.voices) || [], sel = labEl("labVoice"), keep = sel.value;
@@ -8516,6 +10017,10 @@ async function labOpen() {
   const swear = styles.filter(k => lines.some(e => e && Array.isArray(e[k + "_profane"]) && e[k + "_profane"].length));
   labEl("labStyle").innerHTML = `<option value="">any personality</option>` +
     [...styles, ...swear.map(k => k + "_profane")].map(k => `<option value="${esc(k)}">${esc(labStyleName(k))}</option>`).join("");
+  const give = labEl("labGiveStyle"), gave = give.value;   // Give to this personality (S40)
+  give.innerHTML = styles.map(k => `<option value="${esc(k)}">${esc(labStyleName(k))}</option>`).join("");
+  give.value = styles.includes(gave) ? gave : styles[0] || "";
+  labFillCrew();
   labEl("labWords").textContent = ""; labEl("labCut").disabled = true; labLast = null; labMsg("");
   labDrawSpeakers();
   tabShow(labEl("labDlg"));
@@ -8547,6 +10052,43 @@ labEl("labUse").onclick = async () => {
   labMsg(`Outrider speaks in ${p.voice}${p.speaker != null ? `, speaker #${p.speaker}` : ""} at ${p.speed.toFixed(2)}× from now on`);
   labEl("labUse").disabled = true;
 };
+// S40: the voice part's voice and person for one personality from now on (POST api/voice/style, every browser); the
+// lab's speed is not part of it (the personality's pace is speech.json's)
+labEl("labGive").onclick = async () => {
+  const style = labEl("labGiveStyle").value, p = labPick();
+  if (!style || !p.voice) return;
+  const body = {style, voice: p.voice};
+  if (p.speaker != null) body.speaker = p.speaker;
+  const r = await styleVoicePost(body);
+  labMsg(r.error ? `Not given: ${r.error}` : `${labStyleName(style)} speaks in ${voiceWords(p)} from now on`, !!r.error);
+  labDrawInUse();
+};
+labEl("labGiveStyle").onchange = labDrawInUse;
+// Assign to a crew member (crew batch 2): the voice part's voice and person for one crew member from now on (POST
+// api/voice/crew, every browser); the XO is Use this voice. Its names as Settings > Voice > Crew shows them.
+function labFillCrew() {
+  const sel = labEl("labCrewRole"), keep = sel.value, roles = crewRoles().filter(r => r.id !== "xo");
+  sel.innerHTML = roles.map(r => `<option value="${esc(r.id)}">${esc(crewLabel(r.id))}</option>`).join("");
+  sel.value = roles.some(r => r.id === keep) ? keep : roles.length ? roles[0].id : "";
+}
+labEl("labAssign").onclick = async () => {
+  const role = labEl("labCrewRole").value, p = labPick();
+  if (!role || !p.voice) return;
+  const body = {role, voice: p.voice};
+  if (p.speaker != null) body.speaker = p.speaker;
+  const r = await crewPost(body);
+  labMsg(r.error ? `Not assigned: ${r.error}` : `${crewLabel(role)} speaks in ${voiceWords(p)} from now on` +
+    (crewOn() ? "" : " (once the crew is on: Settings → Voice → Crew)"), !!r.error);
+  labDrawInUse();
+};
+labEl("labCrewRole").onchange = labDrawInUse;
+labEl("labCrewAudition").onclick = () => crewAudition((t, bad) => { labEl("labWords").textContent = t; if (bad) labMsg(t, true); });
+labEl("labCrewLines").onclick = () => crewLinesAudition((t, bad) => { labEl("labWords").textContent = t; if (bad) labMsg(t, true); },
+  labEl("labStyle").value || null);
+labEl("labStyle").addEventListener("change", () => {   // the Lines' personality picked: Give follows it
+  const base = labEl("labStyle").value.replace(/_profane$/, "");
+  if (base && [...labEl("labGiveStyle").options].some(o => o.value === base)) { labEl("labGiveStyle").value = base; labDrawInUse(); }
+});
 labEl("labLine").onclick = () => {
   const ln = labLine(labEl("labAlert").value, labEl("labStyle").value || null);
   if (!ln) { labMsg("No lines for that alert in that personality", true); return; }
@@ -8751,6 +10293,17 @@ let uploadsDrawn = "";
 // the Uploads section's last message (a refusal, a saved key, "could not reach Outrider"): part of what is drawn, so the
 // redraw right after an answer keeps it (the bug check of 2026-10-09: it was wiped as soon as it was written)
 let uploadsNote = "";
+// S45: each account row's last Check ("edsm:CMDR" -> {ok, text, at, link}), kept over redraws until the page reloads;
+// a check under way shows "checking…" (Inara's may wait for its sender's pace)
+const keyChecks = {};
+function keyCheckHtml(service, cmdr) {
+  const c = keyChecks[`${service}:${cmdr}`];
+  if (!c) return "";
+  if (c.busy) return `<div class="hint keycheck">checking…</div>`;
+  const link = c.link ? ` · <a href="${esc(c.link)}" target="_blank" rel="noopener">profile</a>` : "";
+  return `<div class="hint keycheck"><span class="${c.ok ? "ok" : "bad"}">${c.ok ? "✓" : "✗"}</span> ${c.at ? upTime(c.at) + " " : ""}${esc(c.text)}${link}` +
+    `${c.cleared ? " · on hold no more: sending what waited" : ""}</div>`;
+}
 // the Data tile's line: per upload that is on (or sent anything in the last day), what it sent, what waits and what
 // was refused, live with each payload; nothing when no upload is in use
 function uploadLineHtml(u) {
@@ -8767,6 +10320,146 @@ function uploadLineHtml(u) {
     return `<div title="uploads in the last 24 hours (Settings → Uploads has the detail)"><b>${name}</b>${mode} ${bits.join(" · ")}${state}</div>`;
   }).filter(Boolean);
   return parts.join("");   // a line per service: the numbers can get long
+}
+// Settings -> Uploads' Recent list (S16): each service's last rounds from the server (uploads.Recent; times are epoch
+// seconds, never ticking text), newest first: "12:04 sent 37 (11:58–12:04)", "11:58 ✗ unreachable: <the raw error> ·
+// trying again at 12:00"; what it did at start; and what is on hold, with Try again
+const UPLOAD_KIND_WORDS = {dns: "address not found", offline: "no network", refused: "unreachable", timeout: "no answer in time",
+  tls: "secure connection failed", http5xx: "failing", rate: "asked to slow down", http4xx: "refused", bad_answer: "an odd answer", other: "failed"};
+const upTime = t => {
+  const d = new Date(t * 1000);
+  if (isNaN(d)) return "?";
+  const hm = d.toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+  return d.toDateString() === new Date().toDateString() ? hm : `${d.toLocaleDateString([], {day: "numeric", month: "short"})} ${hm}`;
+};
+const upN = n => Number(n || 0).toLocaleString("en-US");
+function uploadRecentLine(e, newest) {
+  const span = e.rounds > 1 && e.first !== e.at ? ` (${upTime(e.first)}–${upTime(e.at)})` : "";
+  if (e.state === "fail") {
+    const tries = e.rounds > 1 ? ` · ${e.rounds} tries since ${upTime(e.first)}` : "";
+    return `<div class="uprow fail">${upTime(e.at)} <span class="bad">✗ ${esc(UPLOAD_KIND_WORDS[e.kind] || "failed")}</span>: ` +
+      `<span class="upraw">${esc(e.error || "")}</span>${tries}${newest && e.next ? ` · trying again at ${upTime(e.next)}` : ""}</div>`;
+  }
+  if (e.state === "held") return `<div class="uprow">${upTime(e.at)} <span class="bad">⏸ held</span>: ${esc(e.held || "")}</div>`;
+  const bits = [];
+  if (e.sent) bits.push(`sent ${upN(e.sent)}${span}`);
+  if (e.dry) bits.push(`${upN(e.dry)} in a dry run${e.sent ? "" : span}`);
+  if (e.dropped) bits.push(`<span class="warnc">${upN(e.dropped)} not taken</span>${e.note ? `: <span class="upraw">${esc(e.note)}</span>` : ""}${e.sent || e.dry ? "" : span}`);
+  if (e.error) bits.push(`<span class="warnc">${esc(e.error)}</span>`);
+  return bits.length ? `<div class="uprow">${upTime(e.at)} ${bits.join(" · ")}</div>` : "";
+}
+function uploadCatchupLine(c, name) {
+  if (!c) return "";
+  const at = `At start ${upTime(c.at)}: `;
+  const text = c.why === "other" ? `${c.who === "EDMC" ? "EDMC" : c.who ? `the Outrider on ${c.who}` : "another uploader"} was sending ${name}`
+    : c.why === "fresh" ? "nothing from before (it starts from where your journals are)"
+    : c.count ? `${upN(c.count)} message${c.count === 1 ? "" : "s"} from while Outrider was off${c.since ? ` (since ${upTime(Date.parse(c.since) / 1000)})` : ""}`
+    : "nothing missed";
+  return `<div class="uprow unk">${esc(at + text)}</div>`;
+}
+function uploadHoldsHtml(s, x) {
+  const out = [];
+  // a key EDSM or Inara refused: nothing is tried until a new key or this (the recording goes on meanwhile)
+  if (x.key_held) out.push(`<div class="uprow">On hold: <span class="bad">${esc(x.key_held)}</span> ` +
+    `<button type="button" class="try" data-uretry="${s}" title="send again now with the stored key (what you played meanwhile is waiting)">Try again</button></div>`);
+  for (const h of (s === "eddn" && x.holds) || []) {
+    const n = h.refusals > 1 ? `refused ${h.refusals} times in an hour` : "refused";
+    out.push(`<div class="uprow">On hold: <b>${esc(h.schema)}</b>, ${n} (<span class="upraw">${esc(h.why || "")}</span>) ` +
+      `<button type="button" class="try" data-uretry="eddn" data-schema="${esc(h.schema)}" title="send this kind again: the ones refused are gone, so it affects new messages only">Try again</button></div>`);
+  }
+  return out.join("");
+}
+function uploadRecentHtml(s, x) {
+  const name = UPLOAD_NAMES[s][0], rec = Array.isArray(x.recent) ? x.recent : [];
+  const lines = uploadHoldsHtml(s, x) + rec.map((e, i) => uploadRecentLine(e, i === 0)).join("") + uploadCatchupLine(x.catchup, name);
+  return lines ? `<div class="uprecent">${lines}</div>` : "";
+}
+// S47: Fill gaps in EDSM's flight log. What is typed (the commander, from, to) and whether the block is open live here,
+// so a redraw of the counts never wipes them; a finished Check fills from / to once (BF.jobAt)
+const BF = {open: false, commander: "", start: "", end: "", jobAt: null, note: ""};
+const BF_WORDS = {stored: "stored", already: "already there", duplicate: "duplicates", older: "older than EDSM's log (not taken)",
+  crew: "crew (not taken)", refused: "refused", dry: "in a dry run"};
+const bfShow = iso => iso ? String(iso).replace("T", " ").replace(/Z$/, "") : "";
+const bfNorm = t => String(t || "").trim().replace("T", " ").replace(/Z$/, "").replace(/^(\d{4}-\d\d-\d\d \d\d:\d\d)$/, "$1:00");
+const bfMins = s => s < 90 ? `${Math.max(1, Math.round(s))} s` : `${Math.round(s / 60)} min`;
+function backfillHtml(u) {
+  const x = (u.edsm || {}).backfill;
+  if (!x) return "";
+  const cmdrs = ((u.edsm || {}).accounts || []).filter(a => a.set).map(a => a.commander);
+  if (!cmdrs.includes(BF.commander)) BF.commander = cmdrs[0] || "";
+  const job = x.job, pv = x.preview, pr = x.progress;
+  if (job && job.kind === "check" && job.state === "done" && job.result && job.at !== BF.jobAt) {
+    BF.jobAt = job.at;
+    if (job.result.start) BF.start = bfShow(job.result.start);
+    if (job.result.end) BF.end = bfShow(job.result.end);
+  }
+  const busy = !!(job && job.state === "running"), running = !!(pr && ["running", "held"].includes(pr.state));
+  const same = pv && pv.commander === BF.commander && bfNorm(pv.start) === bfNorm(BF.start) && bfNorm(pv.end) === bfNorm(BF.end);
+  const out = [`<div class="hint">For a stretch Outrider never sent to EDSM (before you switched EDSM on here, or while it was off). ` +
+    `<b>Check</b> asks EDSM where its flight log ends; <b>Preview</b> counts what your journals hold for the range, sending nothing; ` +
+    `<b>Send</b> first makes sure EDSM's log has nothing in the range, then sends one request every ${x.gap_s || 10} s.</div>`];
+  if (!cmdrs.length) return `<details class="bfill"${BF.open ? " open" : ""}><summary>Fill gaps in EDSM's flight log</summary>${out[0]}` +
+    `<div class="unk">save an EDSM key above first</div></details>`;
+  out.push(`<div class="bfrow">CMDR <select data-bf="commander">${cmdrs.map(c => `<option${c === BF.commander ? " selected" : ""}>${esc(c)}</option>`).join("")}</select>` +
+    ` <button type="button" class="try" data-bfact="check"${busy || running ? " disabled" : ""} title="reads EDSM's flight log (get-position, get-logs): nothing is sent">Check EDSM's log</button></div>`);
+  if (job) out.push(`<div class="hint">${job.state === "running" ? "…" : job.state === "failed" ? `<span class="bad">✗</span>` : `<span class="ok">✓</span>`} ` +
+    `${job.at ? upTime(job.at) + " " : ""}${esc(job.text || "")}` +
+    `${busy ? ` <button type="button" class="try" data-bfact="stop" title="stop asking EDSM: nothing was sent">Stop</button>` : ""}</div>`);
+  out.push(`<div class="bfrow">From <input type="text" data-bf="start" value="${esc(BF.start)}" placeholder="2026-10-09 21:14" spellcheck="false">` +
+    ` to <input type="text" data-bf="end" value="${esc(BF.end)}" placeholder="2026-10-11 08:00" spellcheck="false"> UTC` +
+    ` <button type="button" class="try" data-bfact="preview"${busy || running ? " disabled" : ""} title="rebuild what Outrider would send for this range from your journals: nothing is sent">Preview</button>` +
+    ` <button type="button" class="try" data-bfact="send"${same && pv.summary.events && !busy && !running ? "" : " disabled"} title="${same ? "send the previewed events to EDSM (its flight log is checked over the range first)" : "Preview this range first"}">Send</button></div>`);
+  if (pv) {
+    const sm = pv.summary, kinds = (sm.by_event || []).map(([n, c]) => `${esc(n)} ${upN(c)}`).join(" · ");
+    out.push(`<div class="hint">Preview ${esc(bfShow(pv.start))} to ${esc(bfShow(pv.end))} UTC: ` + (sm.events
+      ? `${upN(sm.events)} event${sm.events === 1 ? "" : "s"} (${upN(sm.jumps)} jump${sm.jumps === 1 ? "" : "s"}) in ${upN(sm.requests)} request${sm.requests === 1 ? "" : "s"}, about ${bfMins(sm.seconds)}` +
+        `${kinds ? `<br>${kinds}` : ""}` : "nothing EDSM would take in this range") + (same ? "" : ` <span class="unk">(another range than the one above)</span>`) + `</div>`);
+  }
+  if (pr) {
+    const c = pr.counts || {}, done = Object.values(c).reduce((a, b) => a + b, 0);
+    const tally = Object.keys(BF_WORDS).filter(k => c[k]).map(k => `${upN(c[k])} ${BF_WORDS[k]}`).join(" · ");
+    const head = pr.state === "running" ? `Sending ${upN(done)} of ${upN(pr.total)}` : pr.state === "held" ? `<span class="bad">On hold</span> after ${upN(done)} of ${upN(pr.total)}`
+      : pr.state === "done" ? `<span class="ok">Done</span>${pr.finished ? " " + upTime(pr.finished) : ""}: ${upN(pr.total)} event${pr.total === 1 ? "" : "s"}` : `Stopped after ${upN(done)} of ${upN(pr.total)}`;
+    const btns = (pr.state === "held" ? ` <button type="button" class="try" data-bfact="resume" title="send what waits again (after fixing the key)">Go on</button>` : "") +
+      (running ? ` <button type="button" class="try" data-bfact="stop" title="stop: what still waits is not sent">Stop</button>` : "");
+    out.push(`<div class="hint">${pr.dry ? "(dry run) " : ""}${head} (${esc(bfShow(pr.start))} to ${esc(bfShow(pr.end))}, CMDR ${esc(pr.commander || "")})` +
+      `${tally ? ": " + tally : ""}${pr.why ? ` · <span class="warnc">${esc(pr.why)}</span>` : ""}` +
+      `${pr.state === "running" && x.paused ? ` · <span class="warnc">paused: ${esc(x.paused)}</span>` : ""}${pr.unsent ? ` · ${upN(pr.unsent)} not sent` : ""}${btns}</div>`);
+  }
+  if (BF.note) out.push(`<div class="hint bad">${esc(BF.note)}</div>`);
+  return `<details class="bfill"${BF.open ? " open" : ""}><summary>Fill gaps in EDSM's flight log</summary>${out.join("")}</details>`;
+}
+// S67: Import your EDSM flight log from before your journals, once (the CMDR picked and the block's open state live here)
+const IM = {open: false, commander: "", note: ""};
+const imDay = iso => iso ? String(iso).slice(0, 10) : "?";
+function importHtml(u) {
+  const x = (u.edsm || {}).import;
+  if (!x) return "";
+  const cmdrs = ((u.edsm || {}).accounts || []).filter(a => a.set).map(a => a.commander);
+  if (!cmdrs.includes(IM.commander)) IM.commander = cmdrs[0] || "";
+  const pr = x.progress, c = x.counted, running = !!(pr && pr.state === "running");
+  const out = [`<div class="hint">Once: your systems from before your first journal, from EDSM's flight log. They count as visited ` +
+    `(Nearby, Search, the target's verdict, Find, boxels, the Map, History's sessions "from EDSM"), never as first discoveries, sales or scans. ` +
+    `Outrider reads one week of the log every ${x.gap_s || 10} s, so years take a while; nothing is sent.</div>`];
+  if (pr) {
+    const weeks = `week ${upN(pr.weeks_done || 0)} of ${upN(pr.weeks || 0)}`;
+    const head = running ? `Importing: ${weeks}, ${upN(pr.entries || 0)} entr${pr.entries === 1 ? "y" : "ies"} so far`
+      : pr.state === "failed" ? `<span class="bad">✗</span> Stopped at ${weeks}` : pr.state === "stopped" ? `Stopped at ${weeks}`
+      : `<span class="ok">✓</span> Imported${pr.finished ? " " + upTime(pr.finished) : ""}`;
+    const btns = running ? ` <button type="button" class="try" data-imact="stop" title="stop: what was read is kept, Go on carries on from here">Stop</button>`
+      : pr.state !== "done" && cmdrs.includes(pr.commander) ? ` <button type="button" class="try" data-imact="start" title="carry on from where it stopped">Go on</button>` : "";
+    out.push(`<div class="hint">${head} (CMDR ${esc(pr.commander || "")})${pr.why ? ` · <span class="warnc">${esc(pr.why)}</span>` : ""}${btns}</div>`);
+  }
+  if (c && c.visits) out.push(`<div class="hint imafter">${upN(c.visits)} visit${c.visits === 1 ? "" : "s"} from EDSM, ${esc(imDay(c.first))} to ${esc(imDay(c.last))}` +
+    ` <span class="unk">(${upN(c.systems)} system${c.systems === 1 ? "" : "s"})</span> · <a href="#" data-imact="remove">Remove them</a></div>`);
+  else if (x.stored && !running) out.push(`<div class="hint imafter">${upN(x.stored)} entr${x.stored === 1 ? "y" : "ies"} from EDSM, none from before your journals · <a href="#" data-imact="remove">Remove them</a></div>`);
+  if (!pr || (pr.state !== "done" && !running && !cmdrs.includes(pr.commander))) {
+    out.push(cmdrs.length ? `<div class="bfrow">CMDR <select data-im="commander">${cmdrs.map(n => `<option${n === IM.commander ? " selected" : ""}>${esc(n)}</option>`).join("")}</select>` +
+      ` <button type="button" class="try" data-imact="start" title="read EDSM's flight log from before your first journal (get-logs, a week at a time): nothing is sent">Import</button></div>`
+      : `<div class="unk">save an EDSM key above first</div>`);
+  }
+  if (IM.note) out.push(`<div class="hint bad">${esc(IM.note)}</div>`);
+  return `<details class="bfill imlog"${IM.open ? " open" : ""}><summary>Import your EDSM flight log from before your journals</summary>${out.join("")}</details>`;
 }
 function uploadsHtml(u) {
   if (!u) return `<div class="unk">not known yet</div>`;
@@ -8785,27 +10478,35 @@ function uploadsHtml(u) {
     // ticked by what the player switched (wanted), whatever holds or blocks it now
     const ticked = x.wanted ?? (x.on || !!x.held);
     return `<label class="mod"><input type="checkbox" data-upload="${s}"${ticked ? " checked" : ""}${x.available && !u.simulate ? "" : " disabled"}> ` +
-      `<b>${name}</b> <span class="hint">${esc(what)}</span></label><div class="hint">${state}${test}${nums ? " · " + esc(nums) : ""}` +
-      `${x.error && !x.held ? ` · <span class="bad" title="${esc(x.error)}">last error</span>` : ""}</div>`;
+      `<b>${name}</b> <span class="hint">${esc(what)}</span></label><div class="hint">${state}${test}${nums ? " · " + esc(nums) : ""}</div>` +
+      uploadRecentHtml(s, x);
   };
   const acc = ((u.edsm || {}).accounts || []).map(a =>
     `<div class="edsmacc" data-cmdr="${esc(a.commander)}"><b>${esc(a.commander)}</b> → EDSM <input type="text" class="edsmName" value="${esc(a.name)}" maxlength="64" size="14" title="your commander name on EDSM">` +
     ` key <input type="password" class="edsmKey" autocomplete="new-password" placeholder="${a.set ? "set (type to change)" : "API key"}" size="22">` +
-    ` <button type="button" class="try edsmSave">Save</button>${a.set ? ` <a href="#" class="edsmRemove">remove</a>` : ""}` +
+    ` <button type="button" class="try edsmSave">Save</button>` +
+    ` <button type="button" class="try" data-kcheck="edsm" title="ask EDSM whether it accepts this name and key (the typed key, else the stored one): nothing is uploaded">Check</button>` +
+    `${a.set ? ` <a href="#" class="edsmRemove">remove</a>` : ""}` +
     // never the key itself: its ends, to compare with edsm.net → Settings → API key
-    (a.hint ? `<div class="hint">stored key: <code title="its first and last four characters: compare them with your key on edsm.net">${esc(a.hint)}</code></div>` : "") + `</div>`).join("");
+    (a.hint ? `<div class="hint">stored key: <code title="its first and last four characters: compare them with your key on edsm.net">${esc(a.hint)}</code></div>` : "") +
+    keyCheckHtml("edsm", a.commander) + `</div>`).join("");
   // Inara: one API key per in-game commander (never served back: its ends only)
   const inacc = ((u.inara || {}).accounts || []).map(a =>
     `<div class="inaraacc" data-cmdr="${esc(a.commander)}"><b>${esc(a.commander)}</b> → Inara` +
     ` key <input type="password" class="inaraKey" autocomplete="new-password" placeholder="${a.set ? "set (type to change)" : "API key"}" size="22">` +
-    ` <button type="button" class="try inaraSave">Save</button>${a.set ? ` <a href="#" class="inaraRemove">remove</a>` : ""}` +
-    (a.hint ? `<div class="hint">stored key: <code title="its first and last four characters: compare them with your key on inara.cz">${esc(a.hint)}</code></div>` : "") + `</div>`).join("");
-  return row("eddn") + row("edsm") +
+    ` <button type="button" class="try inaraSave">Save</button>` +
+    ` <button type="button" class="try" data-kcheck="inara" title="ask Inara whether it accepts this key for this commander (the typed key, else the stored one): nothing is uploaded">Check</button>` +
+    `${a.set ? ` <a href="#" class="inaraRemove">remove</a>` : ""}` +
+    (a.hint ? `<div class="hint">stored key: <code title="its first and last four characters: compare them with your key on inara.cz">${esc(a.hint)}</code></div>` : "") +
+    keyCheckHtml("inara", a.commander) + `</div>`).join("");
+  // each service a block of its own: Find a setting shows all of it for its name (S39)
+  const block = (s, html) => `<div class="upsvc" data-find-block="${esc(UPLOAD_NAMES[s][0])}">${html}</div>`;
+  return block("eddn", row("eddn")) + block("edsm", row("edsm") +
     `<div class="hint">EDSM accounts, per in-game commander (your key is at <a href="https://www.edsm.net/en/settings/api" target="_blank" rel="noopener">edsm.net → Settings → API key</a>; it stays on this Outrider):</div>` +
-    (acc || `<div class="unk">no commander seen yet</div>`) + row("inara") +
+    (acc || `<div class="unk">no commander seen yet</div>`) + backfillHtml(u) + importHtml(u)) + block("inara", row("inara") +
     `<div class="hint">Inara API keys, per in-game commander (yours is at <a href="https://inara.cz/elite/cmdr-settings-api/" target="_blank" rel="noopener">inara.cz → Settings → API key</a>; it stays on this Outrider). ` +
     `Switch Inara off in EDMC, EDDI or EDDiscovery first: two apps sending can get the key revoked (Outrider sees only EDMC's setting).</div>` +
-    (inacc || `<div class="unk">no commander seen yet</div>`) + `<div class="hint" id="uploadsMsg">${esc(uploadsNote)}</div>` +
+    (inacc || `<div class="unk">no commander seen yet</div>`)) + `<div class="hint" id="uploadsMsg">${esc(uploadsNote)}</div>` +
     (u.simulate ? `<div class="unk">--simulate: nothing is uploaded</div>` : "");
 }
 function renderUploads() {
@@ -8848,9 +10549,94 @@ async function setUpload(service, on, confirmed) {
     uploadsDrawn = ""; renderUploads();   // the box shows the server's state again, whatever happened
   }
 }
+// Try again (S16): EDDN's kind on hold, or a refused EDSM / Inara key tried again now
+document.getElementById("uploadsBox").addEventListener("click", async e => {
+  const b = e.target.closest("[data-uretry]"); if (!b) return;
+  const body = {service: b.dataset.uretry};
+  if (b.dataset.schema) body.schema = b.dataset.schema;
+  b.disabled = true;
+  try {
+    const j = await apiJson("api/uploads/retry", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+    uploadsNote = j.error || (body.schema ? `${body.schema}: sending again` : `${UPLOAD_NAMES[body.service][0]}: trying again now`);
+    if (!j.error) data.uploads = j;
+  } catch (err) {
+    uploadsNote = `could not reach Outrider: ${err.message}`;
+  } finally {
+    uploadsDrawn = ""; renderUploads();
+  }
+});
+// Check (S45): EDSM's get-credits or Inara's profile with the typed key (else the stored one); the result stays under the row
+document.getElementById("uploadsBox").addEventListener("click", async e => {
+  const b = e.target.closest("[data-kcheck]"); if (!b) return;
+  const service = b.dataset.kcheck, row = b.closest("[data-cmdr]"), cmdr = row.dataset.cmdr, k = `${service}:${cmdr}`;
+  const body = {commander: cmdr, api_key: row.querySelector(service === "edsm" ? ".edsmKey" : ".inaraKey").value};
+  if (service === "edsm") body.name = row.querySelector(".edsmName").value;
+  keyChecks[k] = {busy: true};
+  uploadsDrawn = ""; renderUploads();
+  try {
+    const j = await apiJson(`api/uploads/${service}/check`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+    keyChecks[k] = j.error ? {ok: false, text: j.error} : j;
+  } catch (err) {
+    keyChecks[k] = {ok: false, text: `could not reach Outrider: ${err.message}`};
+  } finally {
+    uploadsDrawn = ""; renderUploads();
+  }
+});
 document.getElementById("uploadsBox").addEventListener("change", e => {
   const box = e.target.closest("[data-upload]");
   if (box) setUpload(box.dataset.upload, box.checked);
+});
+// S47's block: what is typed is kept in BF (a redraw draws it back), its open state too; each button posts its action
+document.getElementById("uploadsBox").addEventListener("input", e => {
+  const f = e.target.closest("[data-bf]"); if (f) BF[f.dataset.bf] = f.value;
+});
+document.getElementById("uploadsBox").addEventListener("toggle", e => {
+  if (e.target.classList && e.target.classList.contains("bfill")) BF.open = e.target.open;
+}, true);   // toggle does not bubble: caught on its way down
+document.getElementById("uploadsBox").addEventListener("click", async e => {
+  const b = e.target.closest("[data-bfact]"); if (!b) return;
+  const action = b.dataset.bfact, sel = document.querySelector("#uploadsBox [data-bf=commander]");
+  if (sel) BF.commander = sel.value;
+  const pv = (((data.uploads || {}).edsm || {}).backfill || {}).preview;
+  if (action === "send" && !confirm(`Send ${pv ? upN(pv.summary.events) + " events" : "the previewed events"} to EDSM for CMDR ${BF.commander}, ` +
+      `${BF.start} to ${BF.end} UTC? EDSM's flight log is checked over the range first; what EDSM stores cannot be taken back.`)) return;
+  const job = ((((data.uploads || {}).edsm || {}).backfill || {}).job || {});
+  if (action === "stop" && job.state !== "running" && !confirm("Stop the backfill? What still waits is not sent.")) return;
+  b.disabled = true; BF.note = "";
+  try {
+    const j = await apiJson("api/uploads/edsm/backfill", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({action, commander: BF.commander, start: bfNorm(BF.start), end: bfNorm(BF.end)})});
+    if (j.error) BF.note = j.error;
+    else if (data.uploads && data.uploads.edsm) data.uploads.edsm.backfill = j;
+  } catch (err) {
+    BF.note = `could not reach Outrider: ${err.message}`;
+  } finally {
+    uploadsDrawn = ""; renderUploads();
+  }
+});
+// S67's block: Import / Go on, Stop and Remove them, each a POST; the answer redraws it
+document.getElementById("uploadsBox").addEventListener("toggle", e => {
+  if (e.target.classList && e.target.classList.contains("imlog")) IM.open = e.target.open;
+}, true);
+document.getElementById("uploadsBox").addEventListener("click", async e => {
+  const b = e.target.closest("[data-imact]"); if (!b) return;
+  e.preventDefault();
+  const action = b.dataset.imact, sel = document.querySelector("#uploadsBox [data-im=commander]");
+  if (sel) IM.commander = sel.value;
+  const pr = ((((data.uploads || {}).edsm || {}).import) || {}).progress;
+  const commander = action === "start" && pr && pr.state !== "done" && !sel ? pr.commander : IM.commander;
+  if (action === "remove" && !confirm("Forget every visit imported from EDSM? Your journals' visits stay; you can import again.")) return;
+  b.disabled = true; IM.note = "";
+  try {
+    const j = await apiJson("api/uploads/edsm/import", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({action, commander})});
+    if (j.error) IM.note = j.error;
+    else if (data.uploads && data.uploads.edsm) data.uploads.edsm.import = j;
+  } catch (err) {
+    IM.note = `could not reach Outrider: ${err.message}`;
+  } finally {
+    uploadsDrawn = ""; renderUploads();
+  }
 });
 document.getElementById("uploadsBox").addEventListener("click", async e => {
   const row = e.target.closest(".inaraacc"); if (!row) return;
@@ -8897,17 +10683,37 @@ document.getElementById("uploadsBox").addEventListener("click", async e => {
 // Settings -> In-game overlay (data.overlay: State.overlay_info): the switches, whether a window is drawing, the test
 // panels and Arrange mode, and each panel's place, size and transparency (POST api/overlay, api/overlay/layout)
 const OV_THEMES = ["default", "lcars", "elite", "babylon5", "narn", "minbari", "centauri", "vorlon", "shadow", "sith", "alliance", "dark"];
-const OV_PANELS = [["system", "System", "the bodies worth your time, in supercruise"], ["body", "Body", "the body you are heading to or near"],
+// "body" is the Target panel (D1): its id stayed, so the Body panel's place and size carry over
+const OV_PANELS = [["system", "System", "the bodies worth your time, in supercruise"],
+                   ["body", "Target", "the body you are near or have targeted, else the system targeted (also over the galaxy map)"],
                    ["radar", "Surface radar", "on a body's surface: samples, colony rings, the ship"],
                    ["strip", "System strip", "two short lines across the top: where you are, the star, bodies found, values"],
                    ["now", "Now (To-Do & Info)", "Now, condensed: the target, fuel, data at risk, what to do next, this session"],
                    ["bio", "Bio signals", "every bio signal in the system, the ones worth it highlighted: samples, values"],
+                   ["alerts", "Alerts", "the page's alerts for a few seconds (8 s, danger 15 s in red): every kind switched on in Settings → Alerts; needs the page open"],
                    ["route", "Route", "the route ahead: the game's own route (jumps, light years, the next jumps with their stars, the next scoop) and the Highway's next stop"]];
+// the panel table's headings, short so the table fits the Settings dialog (the author, 2026-10-14); the full wording on
+// hover. Combat and Docked sit under "Hide when mode": a ticked box hides the panel in that mode
+const OV_HEADS = (() => {
+  const th = (text, title, attrs = "") => `<th${attrs} title="${title}">${text}</th>`, r2 = ` rowspan="2"`;
+  return `<tr>${th("Panel", "tick a panel to show it; hover its name for what it shows", r2)}` +
+    th("Hide when mode", "a ticked box hides the panel in that mode", ` colspan="2" class="ovgrp"`) +
+    th("Corner", "placed from: the corner of the game window (or the middle of its top or bottom edge) it is kept from", r2) +
+    th("X %", "across: how far in from that corner's side, in % of the game window's width", r2) +
+    th("Y %", "down: how far in from that corner's top or bottom, in % of the game window's height", r2) +
+    th("Size %", "its size, in %", r2) + th("BG %", "background: its background's opacity, in % (0: text only)", r2) +
+    th("Opac. %", "opacity: the whole panel's, in %", r2) + `<th${r2}></th></tr><tr>` +
+    th("Combat", "the HUD in combat mode (analysis only): ticked, hidden in your ship while the HUD is in combat mode, shown only in analysis mode (in the SRV, on foot and over the galaxy map it shows as the others)") +
+    th("Docked", "ticked: hidden while docked (the ship at a station, a carrier or a port, or you on foot in a station, hangar or social space); the Target panel still shows over the galaxy map") + `</tr>`;
+})();
 const OV_CORNERS = {nw: "top left", n: "top centre", ne: "top right", sw: "bottom left", s: "bottom centre", se: "bottom right"};
 let overlayDrawn = "", overlayNote = "";
 // the window's state: Outrider runs it on the game PC (o.runner); on a server it runs on the game PC by hand
 function overlayStatusHtml(o) {
   const r = o.runner;
+  // the window runs: what the header's pill says (S8), in words
+  const p = r && ["running", "off"].includes(r.state) ? ovPillState(o, true) : null;
+  if (p) return `<span class="${{ok: "ok", wait: "unk", bad: "bad"}[p.level]}">${p.text}: ${esc(p.why)}</span>`;
   if (o.window) return `<span class="ok">the overlay window is drawing</span>`;
   if (!r) return `<span class="unk">the overlay needs Outrider on the game PC</span>`;
   const st = r.state;
@@ -8927,23 +10733,32 @@ function overlayHtml(o) {
   const opt = (vals, cur, label = v => v) => vals.map(v => `<option value="${v}"${v === cur ? " selected" : ""}>${esc(label(v))}</option>`).join("");
   const pct = v => Math.round(v * 100);
   const lay = o.layout || {};
+  const ana = new Set(o.analysis_only || []), dock = new Set(o.hide_docked || []);
   const rows = OV_PANELS.map(([id, name, what]) => {
     const e = lay[id] || {}, on = !!(o.panels || {})[id];
     const num = (k, v, min, max, title) => `<td><input type="number" data-ovlay="${id}" data-k="${k}" min="${min}" max="${max}" step="1" value="${v}" title="${title}"></td>`;
     // each panel's own row: its on/off box (what it shows on hover), then where it goes; a panel switched off is dimmed
-    return `<tr class="${on ? "" : "ovoff"}"><th><label title="${esc(what)}"><input type="checkbox" data-ovpanel="${id}"${on ? " checked" : ""}> ${esc(name)}</label></th><td><select data-ovlay="${id}" data-k="corner" title="the corner of the game window it is placed from">${opt(Object.keys(OV_CORNERS), e.corner, c => OV_CORNERS[c])}</select></td>` +
+    // then whether it hides in your ship while the HUD is in combat mode (analysis only, D2a) and while docked (the author,
+    // 2026-10-14: the radar has no box, it shows only on a body's surface); data-find: Find a setting finds them by key
+    const docked = id === "radar" ? `<td class="ovana unk" title="the radar shows only on a body's surface">–</td>`
+      : `<td class="ovana"><input type="checkbox" data-ovdocked="${id}" data-find="overlay.hide_docked"${dock.has(id) ? " checked" : ""} title="${esc(name)}: hidden while docked${id === "body" ? " (still shown over the galaxy map)" : ""}"></td>`;
+    return `<tr class="${on ? "" : "ovoff"}"><th><label title="${esc(what)}"><input type="checkbox" data-ovpanel="${id}"${on ? " checked" : ""}> ${esc(name)}</label></th>` +
+      `<td class="ovana"><input type="checkbox" data-ovanalysis="${id}" data-find="overlay.analysis_only"${ana.has(id) ? " checked" : ""} title="${esc(name)}: hidden in your ship while the HUD is in combat mode (shown only in analysis mode)"></td>${docked}<td><select data-ovlay="${id}" data-k="corner" title="the corner of the game window it is placed from">${opt(Object.keys(OV_CORNERS), e.corner, c => OV_CORNERS[c])}</select></td>` +
       num("x", pct(e.x || 0), 0, 95, "how far in from that corner's side, in % of the game window's width") +
       num("y", pct(e.y || 0), 0, 95, "how far in from that corner's top or bottom, in % of the game window's height") +
       num("scale", pct(e.scale || 1), 50, 250, "its size, in %") + num("bg", pct(e.bg ?? 0.65), 0, 100, "its background's opacity, in % (0: text only)") +
       num("alpha", pct(e.alpha ?? 1), 10, 100, "the whole panel's opacity, in %") +
-      `<td><a href="#" data-ovreset="${id}" title="back to where it started">reset</a></td></tr>`;
+      `<td><a href="#" data-ovreset="${id}" title="reset: back to where it started" aria-label="reset">↺</a></td></tr>`;
   }).join("");
   return `<label class="mod"><input type="checkbox" data-ov="enabled"${o.enabled ? " checked" : ""}> <b>Show the overlay</b> <span class="hint">the panels below, when they have something to say</span></label>` +
     `<div class="hint">${overlayStatusHtml(o)}</div>` +
+    // S25: with it on the overlay stays over the game while another window is active, unless other windows cover it
+    `<label class="mod"><input type="checkbox" data-ov="show_inactive"${o.show_inactive ? " checked" : ""}> Keep showing when Elite is not the active window ` +
+    `<span class="hint">still hidden while other windows cover the game (a native Wayland window is not seen)</span></label>` +
     `<div class="mod">Theme <select data-ov="theme">${opt(OV_THEMES, o.theme)}</select> · text <select data-ov="text_size">${opt(["small", "normal", "large"], o.text_size)}</select></div>` +
     `<div class="mod"><button type="button" class="try" data-ovact="test">${o.test ? `test panels: ${o.test} s` : "▶ Show test panels"}</button> ` +
     `<button type="button" class="try" data-ovact="arrange">${o.arrange ? `✓ Done arranging (${Math.ceil(o.arrange / 60)} min left)` : "✥ Arrange panels"}</button></div>` +
-    `<div class="ovwrap"><table class="ovlay"><thead><tr><th title="tick a panel to show it; hover its name for what it shows">Panel</th><th>Placed from</th><th>Across %</th><th>Down %</th><th>Size %</th><th>Background %</th><th>Panel %</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` +
+    `<div class="ovwrap" data-find-block="panels"><table class="ovlay"><thead>${OV_HEADS}</thead><tbody>${rows}</tbody></table></div>` +
     `<div class="hint" id="overlayMsg">${esc(overlayNote)}</div>`;
 }
 // A popup while Outrider installs PyQt6 for the overlay window (the author, 2026-10-10), then its outcome for a few
@@ -8992,10 +10807,13 @@ async function overlayPost(path, body) {
 }
 document.getElementById("overlayBox").addEventListener("change", e => {
   const t = e.target;
-  if (t.dataset.ov === "enabled") overlayPost("api/overlay", {enabled: t.checked});
+  if (t.dataset.ov && t.type === "checkbox") overlayPost("api/overlay", {[t.dataset.ov]: t.checked});   // enabled, show_inactive
   // a select keeps the focus, which holds renderOverlay off: let go, so the server's answer (its note) is drawn
   else if (t.dataset.ov) { t.blur(); overlayPost("api/overlay", {[t.dataset.ov]: t.value}); }
   else if (t.dataset.ovpanel) overlayPost("api/overlay", {panels: {[t.dataset.ovpanel]: t.checked}});
+  // analysis only: the whole list, as the boxes now say
+  else if (t.dataset.ovanalysis) overlayPost("api/overlay", {analysis_only: [...e.currentTarget.querySelectorAll("[data-ovanalysis]:checked")].map(x => x.dataset.ovanalysis)});
+  else if (t.dataset.ovdocked) overlayPost("api/overlay", {hide_docked: [...e.currentTarget.querySelectorAll("[data-ovdocked]:checked")].map(x => x.dataset.ovdocked)});
   else if (t.dataset.ovlay) {
     const k = t.dataset.k, v = k === "corner" ? t.value : Number(t.value) / 100;
     if (k !== "corner" && !isFinite(v)) return;
@@ -9255,6 +11073,7 @@ function drawAlertsBtn() { document.getElementById("alertsBtn").classList.toggle
 // Settings (the dialog the 🔔 used to open): collapsible sections, each remembered open or closed on this device
 // (store "settingsOpen"; Alerts is open the first time), with chips that open one and scroll to it (review S43)
 const alertChips = document.getElementById("alertChips");
+const SF = {active: false, q: "", opened: null, folds: null, srvLoaded: false, timer: 0};   // Find a setting (S39, below)
 const setSecs = [...alertDialog.querySelectorAll("details.setsec")];
 function setSecsRestore() {
   const open = store.get("settingsOpen", null);
@@ -9262,8 +11081,13 @@ function setSecsRestore() {
 }
 setSecs.forEach(d => d.addEventListener("toggle", () => {
   const open = Object.fromEntries(setSecs.map(x => [x.dataset.secKey, x.open]));
-  store.set("settingsOpen", open);
-  if (d.id === "serverSettings" && d.open) loadServerSettings();
+  if (!SF.active) store.set("settingsOpen", open);   // what Find a setting opens is not remembered (S39)
+  if (d.id === "serverSettings" && d.open) {
+    loadServerSettings();
+    if (document.getElementById("srvBackups").open) loadBackups();
+    if (document.getElementById("srvService").open) loadService();
+  }
+  if (d.id === "honkSettings" && d.open) loadHonkCheck();
 }));
 document.getElementById("setOpenAll").onclick = () => setSecs.forEach(d => { d.open = true; });
 document.getElementById("setCloseAll").onclick = () => setSecs.forEach(d => { d.open = false; });
@@ -9281,12 +11105,140 @@ function showAlertSection(i, remember = true) {
 }
 alertChips.addEventListener("click", e => { const b = e.target.closest("[data-sec]"); if (b) showAlertSection(Number(b.dataset.sec)); });
 document.getElementById("alertsBtn").onclick = () => {
+  sfClear();
   setSecsRestore();
-  drawSpeechStyles(); fillThresholds(); alertDialog.showModal(); drawSpeechLog();
+  drawSpeechStyles(); fillThresholds(); alertDialog.showModal(); drawSpeechLog(); loadAskLog();
   const last = Number(store.get("alertSection", 0));
   if (last > 0) showAlertSection(last, false);
 };
 drawAlertsBtn();
+// ---- Find a setting (S39): a word typed at the top of Settings leaves only what matches it, in every section: a row
+// shows when each word is in its label, its help or the config key it defaults from (data-find="section.key" on a
+// browser row; a Server settings row has its key) or in its section's heading, at least one in the row itself; a word
+// naming a section (its chip) shows all of it, and a word naming a titled block in it (data-find-block="its words",
+// a folding block's summary too: Crew, Voices kept loaded, Personality voices, Backups, an upload service, the overlay's
+// panels) all of that block. A table is shown whole when any of its rows matches, the matching rows marked (.sfmark;
+// only those named in their first cell when there are such), so they keep their context. Rows are a section's children, a table's rows, the parts of a block or of the Uploads /
+// overlay / Server settings boxes and the Server settings' keys (loaded on the first word, so its section need not be
+// open). Matching sections open, the rest hide (.sfhide), and none of it is remembered (settingsOpen, the config
+// sections' and blocks' folds): clearing the box, or closing Settings, puts every section back as it was.
+// A section that redraws while filtering (the payload's Uploads, the overlay, Server settings arriving) is filtered again.
+const SF_CONTENT = new Set(["speechLog", "askLog", "speechTally", "speechBans"]);   // what a section holds, not settings: shown with it
+// (a select marked data-sfone counts by its choice alone: the crew's selects list every role, voice and personality)
+function sfWordsOf(el) {
+  let text = el.textContent;
+  for (const s of el.querySelectorAll("select[data-sfone]")) {
+    const o = s.options[s.selectedIndex];
+    text = text.replace(s.textContent, " " + (o ? o.textContent : "") + " ");
+  }
+  return (text + " " + [el, ...el.querySelectorAll("[data-find]")].map(x => x.dataset.find || "").join(" ")).replace(/\s+/g, " ").toLowerCase();
+}
+const sfLower = t => String(t || "").replace(/\s+/g, " ").trim().toLowerCase();
+// a section's rows for the filter: {el, own (its words), ctx (the headings above it), table (the table it is a row of)},
+// its titled blocks {el, words (its heading's), ctx} and the boxes holding rows (shown when one of their rows is)
+function sfRows(sec) {
+  const rows = [], boxes = [], blocks = [], sum = sec.querySelector(":scope > summary");
+  const walk = (el, ctx) => {
+    for (const c of el.children) {
+      if (c.tagName === "SUMMARY" || SF_CONTENT.has(c.id)) continue;
+      if (c.tagName === "H4" && el.dataset.findBlock != null) continue;   // a block's own heading: shown with any of it
+      if (c.tagName === "TABLE") {
+        boxes.push(c);
+        const head = c.tHead ? " " + c.tHead.textContent.toLowerCase() : "";
+        for (const tb of c.tBodies) for (const r of tb.rows) rows.push({el: r, own: sfWordsOf(r), ctx: ctx + head, table: c});
+      } else if (c.dataset.findBlock != null) {
+        const s = c.tagName === "DETAILS" ? c.querySelector(":scope > summary") : null;
+        const words = sfLower(c.dataset.findBlock + " " + (s ? s.textContent : ""));
+        boxes.push(c); blocks.push({el: c, words, ctx}); walk(c, ctx + " " + words);
+      } else if (c.matches("#uploadsBox, #overlayBox, #serverSettingsBody")) { boxes.push(c); walk(c, ctx); }
+      else if (c.matches("details.srvsec")) { boxes.push(c); walk(c, ctx + " " + c.querySelector(":scope > summary").textContent.toLowerCase()); }
+      else rows.push({el: c, own: sfWordsOf(c), ctx, table: null});
+    }
+  };
+  walk(sec, sum ? sum.textContent.toLowerCase() : "");
+  return {rows, boxes, blocks};
+}
+// (inside a hidden box counts as hidden: the crew table with the crew off)
+const sfLaidOut = el => !el.closest("[hidden]") && !(document.body.classList.contains("notgamepc") && el.closest(".pcOnly"));
+// filter by `q` now; the number of sections shown
+function sfApply() {
+  const words = SF.q.toLowerCase().split(/\s+/).filter(Boolean);
+  let shown = 0;
+  for (const sec of setSecs) {
+    const {rows, boxes, blocks} = sfRows(sec), sum = sec.querySelector(":scope > summary");
+    const name = ((sec.dataset.chip || "") + " " + (sum && sum.firstChild ? sum.firstChild.textContent : "")).toLowerCase();
+    const all = (text, ws = words) => ws.every(w => text.includes(w));
+    const says = (own, ctx) => all(own + " " + ctx) && words.some(w => own.includes(w));   // every word, one of its own
+    let hits = rows, marked = [];
+    if (!all(name)) {
+      const titled = blocks.filter(b => says(b.words, b.ctx)).map(b => b.el);
+      const whole = new Set(rows.filter(r => titled.some(b => b.contains(r.el))).map(r => r.el));
+      marked = rows.filter(r => !whole.has(r.el) && says(r.own, r.ctx));
+      const tables = new Set(marked.map(r => r.table).filter(Boolean));   // a table with a row matching: all of it
+      hits = rows.filter(r => whole.has(r.el) || marked.includes(r) || tables.has(r.table));
+      // marked: the rows a word names (in their first cell, "Tactical") when a table has any, else every row matching
+      // (the other members' "their danger lines: Tactical" stays unmarked)
+      const named = r => r.el.cells && r.el.cells[0] && words.some(w => sfWordsOf(r.el.cells[0]).includes(w));
+      const byName = new Set(marked.filter(named).map(r => r.table));
+      marked = marked.filter(r => r.table && (!byName.has(r.table) || named(r)));
+    }
+    if (!hits.length && all(sum ? sum.textContent.toLowerCase() : "")) hits = rows;   // its heading alone says it
+    hits = hits.filter(r => sfLaidOut(r.el));
+    const hit = new Set(hits.map(r => r.el)), mark = new Set(marked.map(r => r.el)), on = hits.length > 0 && sfLaidOut(sec);
+    for (const r of rows) {
+      r.el.classList.toggle("sfhide", !hit.has(r.el));
+      r.el.classList.toggle("sfmark", hit.has(r.el) && mark.has(r.el));
+    }
+    for (const b of boxes) {
+      const any = hits.some(r => b.contains(r.el));
+      b.classList.toggle("sfhide", !any);
+      if (any && b.tagName === "DETAILS") b.open = true;
+    }
+    sec.classList.toggle("sfhide", !on);
+    if (on) { sec.open = true; shown++; }
+  }
+  alertChips.querySelectorAll("[data-sec]").forEach(b => b.classList.toggle("sfhide", alertSections[Number(b.dataset.sec)].classList.contains("sfhide")));
+  const msg = document.getElementById("setFindMsg");
+  msg.textContent = shown ? `${shown} section${shown === 1 ? "" : "s"} match` : "Nothing matches";
+  msg.className = shown ? "hint" : "hint warnc";
+  return shown;
+}
+function sfSet(q) {
+  q = String(q || "").trim();
+  if (!q) { sfClear(); return 0; }
+  if (!SF.active) {   // the sections as they were, put back when the box is cleared
+    SF.opened = Object.fromEntries(setSecs.map(d => [d.dataset.secKey, d.open]));
+    SF.folds = [...alertDialog.querySelectorAll("details[data-find-block]")].map(d => [d, d.open]);   // Backups, Start with this computer
+    SF.active = true;
+    sfObserver.observe(alertDialog.querySelector(".setbody"), {childList: true, subtree: true});
+  }
+  SF.q = q;
+  if (!SF.srvLoaded) { SF.srvLoaded = true; loadServerSettings(); }   // its keys, without opening its section
+  return sfApply();
+}
+function sfClear() {
+  const box = document.getElementById("setFind");
+  if (box && box.value) box.value = "";
+  if (!SF.active) return;
+  SF.active = false; SF.q = ""; clearTimeout(SF.timer);
+  sfObserver.disconnect();
+  alertDialog.querySelectorAll(".sfhide, .sfmark").forEach(el => el.classList.remove("sfhide", "sfmark"));
+  setSecs.forEach(d => { d.open = !!(SF.opened || {})[d.dataset.secKey]; });
+  for (const [d, open] of SF.folds || []) d.open = open;
+  document.querySelectorAll("#serverSettingsBody details.srvsec").forEach(d => { d.open = !!SRV_SET_OPEN[d.dataset.srvsec]; });
+  document.getElementById("setFindMsg").textContent = "";
+}
+const sfObserver = new MutationObserver(() => {
+  if (!SF.active) return;
+  clearTimeout(SF.timer);
+  SF.timer = setTimeout(() => { if (SF.active) sfApply(); }, 120);
+});
+document.getElementById("setFind").addEventListener("input", e => sfSet(e.target.value));
+document.getElementById("setFind").addEventListener("keydown", e => {
+  if (e.key === "Enter") e.preventDefault();   // never the form's submit (it closes the dialog)
+  else if (e.key === "Escape" && e.target.value) { e.preventDefault(); e.stopPropagation(); sfClear(); }   // clears first, closes next
+});
+alertDialog.addEventListener("close", () => { sfClear(); SF.srvLoaded = false; });
 // ---- the desktop theme (Settings > Display; the author, 2026-10-04): the tablet's themes for this page too, per browser
 // ("desktopTheme", not shared), set on <html data-theme> (page.html's head sets it before the first paint). "" is
 // Default - Outrider, which alone keeps the light mode. The tablet chooses its own (tabTheme).
@@ -9309,6 +11261,8 @@ if (!TABLET) {
 // Outrider's next start. Grouped by the file's sections, each folding; the password and the AI key are never shown,
 // only whether they are set. Only the keys you change are written: the file keeps its comments and other keys.
 const SRV_SET_OPEN = {};   // which config sections are open in this window
+let srvFocus = null;       // the id of the field openServerSettings(section, key) asked for, focused once drawn
+const DOCKER_NO_JOURNALS = "no journals in /journals: is the game PC's journal folder mounted? (JOURNALS in .env)";
 async function loadServerSettings() {
   const box = document.getElementById("serverSettingsBody");
   let c;
@@ -9339,8 +11293,11 @@ async function loadServerSettings() {
         `${k.help ? `<div class="hint">${esc(k.help)}</div>` : ""}</div></div>`).join("") + `</details>`).join("") +
     `<div class="btns"><button type="button" id="srvSave" class="primary">Save server settings</button><span id="srvMsg" class="hint"></span></div>`;
   box.querySelectorAll("[data-key]").forEach(el => { el.dataset.orig = srvValue(el); });
-  box.querySelectorAll("details.srvsec").forEach(d => d.addEventListener("toggle", () => { SRV_SET_OPEN[d.dataset.srvsec] = d.open; }));
+  box.querySelectorAll("details.srvsec").forEach(d => d.addEventListener("toggle", () => { if (!SF.active) SRV_SET_OPEN[d.dataset.srvsec] = d.open; }));
   document.getElementById("srvSave").onclick = saveServerConfig;
+  const focus = srvFocus && document.getElementById(srvFocus);
+  srvFocus = null;
+  if (focus) { focus.classList.add("srvfocus"); focus.focus(); }
 }
 // a field's value as it is sent (and compared with what it was when drawn: only changes are saved)
 function srvValue(el) {
@@ -9369,17 +11326,365 @@ async function saveServerConfig() {
   catch { r = {error: "Outrider not reachable"}; }
   if (r.error) { msg.textContent = `Not saved: ${r.error}`; msg.className = "hint warnc"; return; }
   await loadServerSettings();
-  const m = document.getElementById("srvMsg");
-  m.textContent = `Saved ${r.changed} setting${r.changed === 1 ? "" : "s"}: restart Outrider to use ${r.changed === 1 ? "it" : "them"}.`; m.className = "hint ok";
+  const m = document.getElementById("srvMsg"), rs0 = data && data.restart, them = r.changed === 1 ? "it" : "them";
+  // S10: restart from here when Outrider can start itself again; else why not
+  // a key the server applies at once (its answer's `live`: Keep loaded, Load them at start) needs no restart
+  m.innerHTML = `Saved ${r.changed} setting${r.changed === 1 ? "" : "s"}` + (r.restart === false ? ": in use now." : rs0 && rs0.can
+    ? `. <button type="button" class="try" data-restart>Restart now</button> to use ${them}.`
+    : `: restart Outrider to use ${them}${rs0 && rs0.why ? ` (${esc(rs0.why)})` : ""}.`);
+  m.className = "hint ok";
+}
+// Settings opened on Server settings (a notice's button): `section`, a config section to unfold ("journals")
+// Settings at one of its sections (data-sec-key), opened
+function openSettingsSection(key) {
+  if (!alertDialog.open) document.getElementById("alertsBtn").click();
+  const i = alertSections.findIndex(s => s.dataset.secKey === key);
+  if (i >= 0) showAlertSection(i);
+}
+function openServerSettings(section, key) {
+  if (section) SRV_SET_OPEN[section] = true;
+  srvFocus = section && key ? `srv-${section}-${key}` : null;   // that key's field gets the focus once drawn (S43)
+  if (!alertDialog.open) document.getElementById("alertsBtn").click();
+  const i = alertSections.findIndex(s => s.id === "serverSettings"), d = alertSections[i];
+  const wasOpen = d.open;
+  showAlertSection(i);
+  if (wasOpen) loadServerSettings();   // already open: no toggle event to draw it again with that section open
 }
 
+// ---- Settings -> Server -> Backups (S44): this database's zips (GET api/backups), newest first, with what made each
+// when that is known (a re-read's is in its name; automatic or by hand only for the latest, from last_backup), Back up
+// now, and the command that restores the one picked (the newest unless another row is clicked) for this install, with
+// Copy. No restore button: Outrider must be stopped for it.
+const BK_KIND = {"pre-reread": ["before a re-read", "taken by itself before a journal re-read"],
+                 auto: ["automatic", "at start or when the game quit"], manual: ["by hand", "Back up now"]};
+const bk = {list: null, pick: null, seen: null, gen: 0};
+async function loadBackups() {
+  const gen = ++bk.gen;
+  let r;
+  try { r = await apiJson("api/backups"); } catch { r = {error: "Outrider not reachable"}; }
+  if (gen !== bk.gen) return;
+  bk.list = r || {error: "?"};
+  renderBackups();
+}
+function renderBackups() {
+  const box = document.getElementById("srvBackupsBody"), r = bk.list;
+  if (!box || !r) return;
+  const rows = Array.isArray(r.backups) ? r.backups : [];
+  if (!rows.some(b => b.name === bk.pick)) bk.pick = rows.length ? rows[0].name : null;
+  const pick = rows.find(b => b.name === bk.pick), docker = r.install === "docker";
+  const when = t => new Date(t * 1000).toLocaleString([], {year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"});
+  const every = Number(r.every_days) || 0;
+  box.innerHTML = (r.folder ? `<div class="hint">In <code>${esc(r.folder)}</code>, newest first: the newest ${esc(r.keep)} are kept. ` +
+      (every > 0 ? `Automatic at start when the last is over ${every} day${every === 1 ? "" : "s"} old, and when the game quits;` : "Automatic backups are off;") +
+      ` one is always taken before a journal re-read.</div>` : "") +
+    (r.error ? `<div class="hint warnc">Cannot list the backups: ${esc(r.error)}</div>` : "") +
+    (rows.length ? `<table class="bklist"><thead><tr><th>Backup</th><th>Made</th><th>Size</th></tr></thead><tbody>` + rows.map(b => {
+      const k = BK_KIND[b.kind];
+      return `<tr data-bk="${esc(b.name)}"${b.name === bk.pick ? ` class="sel" aria-selected="true"` : ""} tabindex="0" title="click: the command below restores this one">` +
+        `<td><code>${esc(b.name)}</code>${k ? ` <span class="bkkind ${esc(b.kind)}" title="${esc(k[1])}">${esc(k[0])}</span>` : ""}</td>` +
+        `<td>${esc(when(b.ts))}</td><td class="num">${(b.size / 1e6).toFixed(1)} MB</td></tr>`;
+    }).join("") + `</tbody></table>` : r.error ? "" : `<div class="hint">No backups yet.</div>`) +
+    `<div class="btns"><button type="button" id="srvBackupBtn"${r.running ? " disabled" : ""}>Back up now</button>` +
+    `<span class="hint">${r.running ? "backing up…" : ""}</span></div>` +
+    (pick ? `<div class="bkcmd"><div class="hint">To restore <b>${esc(pick.name)}</b>: ${docker ? "in the folder with docker-compose.yml, run" : "stop Outrider, then run"}</div>` +
+      `<div class="bkline"><code id="bkCmd">${esc(pick.command)}</code> <button type="button" id="bkCopy">Copy</button></div>` +
+      `<div class="hint">It checks the zip first and keeps the database it replaces beside it (<code>…pre-restore-&lt;date-time&gt;</code>).` +
+      `${docker ? "" : " It refuses while Outrider is running."}</div></div>` : "");
+}
+document.getElementById("srvBackupsBody").addEventListener("click", e => {
+  const row = e.target.closest("tr[data-bk]");
+  if (row) { bk.pick = row.dataset.bk; renderBackups(); return; }
+  if (e.target.closest("#bkCopy")) {
+    const pick = ((bk.list && bk.list.backups) || []).find(b => b.name === bk.pick);
+    if (pick) copyText(pick.command, "the restore command");
+  }
+});
+document.getElementById("srvBackupsBody").addEventListener("keydown", e => {
+  const row = e.target.closest("tr[data-bk]");
+  if (row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); bk.pick = row.dataset.bk; renderBackups(); }
+});
+document.getElementById("srvBackups").addEventListener("toggle", e => { if (e.target.open) loadBackups(); });
+// a backup started or finished (the payload's backup line): the list follows while it is open
+function backupsFollow(b) {
+  const key = `${b.ts || ""}|${!!b.running}`;
+  if (key === bk.seen) return;
+  const first = bk.seen === null;
+  bk.seen = key;
+  const d = document.getElementById("srvBackups");
+  if (!first && d && d.open && document.getElementById("serverSettings").open) loadBackups();
+}
+
+// ---- Settings -> Server -> Start with this computer (S70): Outrider as a service (GET api/service): a systemd user
+// unit on Linux (at login; Settings' Restart then goes through systemd), a Startup entry on Windows; refused with the
+// reason in Docker and on macOS. Install / Remove only from this PC's own browser (the service is the computer's);
+// elsewhere the launcher command that does it, with Copy. The service starts with the arguments Outrider has now.
+const SVC_KIND = {systemd: "a systemd user service: it starts when you log in to your desktop",
+                  startup: "a Startup entry: it starts, minimised, when you sign in to Windows"};
+const svc = {info: null, lines: null, busy: false, gen: 0};
+async function loadService() {
+  const gen = ++svc.gen;
+  let r;
+  try { r = await apiJson("api/service"); } catch { r = {error: "Outrider not reachable"}; }
+  if (gen !== svc.gen) return;
+  svc.info = r || {error: "?"};
+  renderService();
+}
+function renderService() {
+  const box = document.getElementById("srvServiceBody"), r = svc.info;
+  if (!box || !r) return;
+  if (r.error && !("can" in r)) { box.innerHTML = `<div class="hint warnc">Cannot tell: ${esc(r.error)}</div>`; return; }
+  if (!r.can) { box.innerHTML = `<div class="hint">Not here: ${esc(r.why || "?")}</div>`; return; }
+  const what = SVC_KIND[r.kind] || r.kind, cmd = r.installed ? r.remove : r.command;
+  box.innerHTML = `<div class="hint">${r.installed ? `<b>Installed</b> as ${esc(what)}. <code>${esc(r.path || "")}</code>` +
+      (r.running ? " This Outrider runs as that service now." : "")
+    : `Not installed: Outrider runs while you keep it started. Install it as ${esc(what)}, with the arguments this Outrider was started with.`}</div>` +
+    (r.this_pc ? `<div class="btns"><button type="button" id="svcBtn" data-svc="${r.installed ? "uninstall" : "install"}"${svc.busy ? " disabled" : ""}>` +
+      `${r.installed ? "Remove the service" : "Install as a service"}</button><span class="hint">${svc.busy ? "working…" : ""}</span></div>`
+      : `<div class="hint">Only from this PC's own browser (the service is the computer's), or run this there:</div>`) +
+    (svc.lines ? `<div class="svclines">${svc.lines.map(l => `<div class="hint${svc.lines.bad ? " warnc" : ""}">${esc(l)}</div>`).join("")}</div>` : "") +
+    (cmd ? `<div class="bkcmd"><div class="hint">${r.this_pc ? "The same from a terminal:" : ""}</div>` +
+      `<div class="bkline"><code id="svcCmd">${esc(cmd)}</code> <button type="button" id="svcCopy">Copy</button></div></div>` : "");
+}
+async function serviceAction(action) {
+  if (svc.busy) return;
+  if (action === "uninstall" && !confirm("Remove the service? Outrider then no longer starts with this computer.")) return;
+  svc.busy = true; svc.lines = null; renderService();
+  let j;
+  try { j = await apiJson("api/service", {method: "POST", body: JSON.stringify({action})}); } catch { j = {error: "Outrider not reachable"}; }
+  svc.busy = false;
+  if (j && j.service) svc.info = j.service;
+  svc.lines = j && j.ok ? j.lines || [] : [`Not done: ${(j && j.error) || "?"}`];
+  svc.lines.bad = !(j && j.ok);
+  renderService();
+}
+document.getElementById("srvServiceBody").addEventListener("click", e => {
+  const b = e.target.closest("[data-svc]");
+  if (b) { serviceAction(b.dataset.svc); return; }
+  if (e.target.closest("#svcCopy")) {
+    const c = document.getElementById("svcCmd");
+    if (c) copyText(c.textContent, "the command");
+  }
+});
+document.getElementById("srvService").addEventListener("toggle", e => { if (e.target.open) loadService(); });
+
+// ---- Restart (S10): Settings -> Server's top row, the "Saved N settings" line and the "updated: restart" line, from
+// any device (the same guard as saving the settings). POST api/restart stops Outrider cleanly (a backup running
+// finishes first) and it starts itself again (data.restart.how: the launcher again, ed_outrider.py again, the .bat's
+// loop, Docker's restart policy or the systemd service's, S70); the page waits for another run_id. data.restart.can false: the button is off and
+// says why (started some other way: start it again by hand).
+const RESTART_SLOW_MS = 120000;   // not back after this (plus RESTART_BACKUP_MS with a backup): say where to look
+const RESTART_BACKUP_MS = 300000;
+const rst = {asked: null, timer: null};   // asked: {run, at, backup} once this window asked
+function restartText() {
+  const r = data && data.restart, a = rst.asked;
+  if (a) {
+    if (data && data.run_id !== a.run) return "";
+    if (pageStarting) return `Restarting… ${pageStarting.text || ""}`.trim();   // back, reading the journals (S9)
+    const slow = Date.now() - a.at > RESTART_SLOW_MS + (a.backup ? RESTART_BACKUP_MS : 0);
+    // systemd stops starting a unit after StartLimitBurst starts inside StartLimitIntervalSec (outrider/service.py):
+    // many restarts in a row leave it failed until reset-failed
+    const where = {docker: " (docker compose logs)",
+                   systemd: " (journalctl --user -u ed-outrider; if systemd gave up after many restarts in a row: "
+                     + "systemctl --user reset-failed ed-outrider, then systemctl --user start ed-outrider)"}[r && r.how] || "";
+    return slow ? `Outrider is not back yet: look at its terminal${where}`
+      : `Restarting…${a.backup ? " (finishing a backup first)" : ""}`;
+  }
+  if (r && r.restarting) return "Restarting…";
+  return r && !r.can && r.why ? `cannot restart from here: ${r.why}` : "";
+}
+function drawRestart() {
+  const r = data && data.restart, a = rst.asked;
+  if (a && data && data.run_id !== a.run) {   // back, as another process
+    rst.asked = null; clearInterval(rst.timer); rst.timer = null;
+    toast("Outrider restarted");
+  }
+  const busy = !!(rst.asked || (r && r.restarting));
+  document.querySelectorAll("[data-restart]").forEach(b => {
+    b.disabled = !(r && r.can) || busy;
+    b.title = r && r.can ? "stop Outrider cleanly and start it again: saved settings and an update take effect"
+      + (r.note ? ` (${r.note})` : "") : (r && r.why) || "";
+  });
+  document.getElementById("updRestart").hidden = !(r && r.can);
+  const msg = document.getElementById("srvRestartMsg"), t = restartText();
+  if (msg.textContent !== t) msg.textContent = t;
+  msg.className = "hint" + (t && !busy ? " warnc" : "");
+}
+async function restartOutrider() {
+  const r = data && data.restart;
+  if (!r || !r.can || rst.asked) return;
+  const backup = !!(data.backup && data.backup.running);
+  if (!confirm(`Restart Outrider now? It stops cleanly${backup ? " (the backup running finishes first)" : ""} and starts again; `
+    + "every window reconnects by itself.")) return;
+  let j;
+  try { j = await apiJson("api/restart", {method: "POST"}); } catch { j = {error: "Outrider not reachable"}; }
+  if (!j || j.error) { toast(`Not restarted: ${(j && j.error) || "?"}`); return; }
+  rst.asked = {run: data.run_id, at: Date.now(), backup: !!j.backup};
+  clearInterval(rst.timer);
+  rst.timer = setInterval(drawRestart, 1000);   // no payloads while it is down: the words still move on
+  drawRestart();
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest && e.target.closest("[data-restart]");
+  if (b) { e.preventDefault(); restartOutrider(); }
+});
+
+// ---- Settings -> Auto honk's readiness (S69): whether it can work on this PC, said before you tick it, and the fix
+// for what stops it (GET api/autohonk/check: evdev, /dev/uinput there and writable, Primary Fire's keyboard binding).
+// It only looks: nothing is pressed and no device opened. Asked when the section opens; "check again" after a fix.
+let honkCheckGen = 0;
+async function loadHonkCheck() {
+  if (data && data.game_pc === false) return;   // a server: the section is hidden and the route refused
+  const gen = ++honkCheckGen;
+  let r;
+  try { r = await apiJson("api/autohonk/check"); } catch { r = {error: "Outrider not reachable"}; }
+  if (gen === honkCheckGen) drawHonkCheck(r);
+}
+function drawHonkCheck(r) {
+  const box = document.getElementById("autoHonkReady");
+  if (!r || r.error || !Array.isArray(r.checks)) {
+    box.innerHTML = `<span class="hint warnc">Cannot check auto honk: ${esc((r && r.error) || "?")}</span>`; return;
+  }
+  const bad = r.checks.filter(c => !c.ok);
+  box.innerHTML = `<span class="hrhead ${r.ready ? "ok" : "no"}">${r.ready ? "Ready" : "Not ready"}:</span> ` +
+    r.checks.map(c => `<span class="${c.ok ? "hrok" : "hrno"}">${esc(c.label)} ${c.ok ? "✓" : "✗"}</span>`).join(" · ") +
+    ` <a href="#" data-honkcheck>check again</a>` +
+    bad.map(c => `<div class="hrfix">Fix: ${esc(c.fix || "")}` + (c.commands || []).map(cmd =>
+      `<div class="bkline"><code>${esc(cmd)}</code> <button type="button" data-copycmd="${esc(cmd)}">Copy</button></div>`).join("") +
+      `</div>`).join("");
+}
+document.getElementById("autoHonkReady").addEventListener("click", e => {
+  const c = e.target.closest("[data-copycmd]");
+  if (c) { copyText(c.dataset.copycmd, "the command"); return; }
+  if (e.target.closest("[data-honkcheck]")) { e.preventDefault(); loadHonkCheck(); }
+});
+
+// ---- Outrider's own log (S5b): Settings -> Server's Show log. What the server printed in its terminal since it
+// started (GET api/serverlog?after=<seq>, its last 2,000 lines; the file beside the database keeps more), asked every
+// LOG_POLL_MS while the dialog is open. Newest at the bottom, followed only while you are at the bottom; the error
+// stream's lines amber. A restarted Outrider numbers its lines afresh: the dialog starts again.
+const LOG_POLL_MS = 2000, LOG_KEEP = 2000;
+const srvLog = {gen: 0, last: 0, lines: [], timer: null};
+const logTime = t => new Date(t * 1000).toTimeString().slice(0, 8);
+const logLineHtml = l => `<div class="logln${l.kind === "err" ? " err" : ""}"><span class="logt">${esc(logTime(l.t))}</span> ${esc(l.text)}</div>`;
+const logText = () => srvLog.lines.map(l => `${logTime(l.t)} ${l.kind === "err" ? "!" : "|"} ${l.text}`).join("\n");
+function logReset() {
+  srvLog.last = 0; srvLog.lines = [];
+  document.getElementById("logLines").innerHTML = "";
+}
+async function pollServerLog(gen) {
+  const dlg = document.getElementById("logDlg"), box = document.getElementById("logLines");
+  if (gen !== srvLog.gen || !dlg.open) return;
+  let r;
+  try { r = await apiJson(`api/serverlog?after=${srvLog.last}`); } catch { r = {error: "Outrider not reachable"}; }
+  if (gen !== srvLog.gen || !dlg.open) return;
+  const foot = document.getElementById("logFoot");
+  if (r && !r.error) {
+    if (r.last < srvLog.last) { logReset(); srvLog.timer = setTimeout(() => pollServerLog(gen), 0); return; }   // restarted
+    const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 24;
+    if (r.lines.length) {
+      srvLog.lines.push(...r.lines);
+      box.insertAdjacentHTML("beforeend", r.lines.map(logLineHtml).join(""));
+      const extra = srvLog.lines.length - LOG_KEEP;
+      if (extra > 0) { srvLog.lines.splice(0, extra); for (let i = 0; i < extra && box.firstElementChild; i++) box.firstElementChild.remove(); }
+      if (atBottom) box.scrollTop = box.scrollHeight;
+    }
+    srvLog.last = r.last;
+    foot.textContent = (r.path ? `Saved in ${r.path}${r.file_error ? ` (it cannot be written: ${r.file_error})` : ""}` : "Not saved to a file")
+      + " · the latest lines here, newest at the bottom";
+  } else foot.textContent = `Cannot read the log: ${(r && r.error) || "?"}`;
+  document.getElementById("logCount").textContent = `${srvLog.lines.length} line${srvLog.lines.length === 1 ? "" : "s"}`;
+  srvLog.timer = setTimeout(() => pollServerLog(gen), LOG_POLL_MS);
+}
+function openServerLog() {
+  clearTimeout(srvLog.timer);
+  logReset();
+  tabShow(document.getElementById("logDlg"));
+  return pollServerLog(++srvLog.gen);
+}
+document.getElementById("srvLogBtn").onclick = openServerLog;
+document.getElementById("logCopy").onclick = () => copyText(logText() || "(nothing yet)", `${srvLog.lines.length} lines`);
+document.getElementById("logDlg").addEventListener("close", () => { srvLog.gen++; clearTimeout(srvLog.timer); });
+
+// ---- the notices banner (S5a): what Outrider found wrong at start (a journal folder missing, the config's problems,
+// no password on the network...), kept by the server (data.notices) and shown at the top of every window and the
+// tablet. ✕ hides one in every window until Outrider restarts or its text changes (POST api/notices/dismiss). An
+// action is a name mapped here to a button; one this page does not know (or the tablet cannot do) is left out.
+const NOTICE_ACTIONS = {
+  "open:server": ["Server settings", () => openServerSettings()],
+  "open:server:journals": ["Journal folders", () => openServerSettings("journals", "live")],
+  "open:log": ["Show log", () => openServerLog()],
+  "open:uploads": ["Uploads", () => openSettingsSection("uploads")],
+  "retry:bio_colours": ["Retry", () => bioColoursRetry()],
+};
+// S7: ExploData's colour tables missing (the first start's download failed): a note where colour variants would show
+// (the Exo-Biology checklist, the body pop's Bio section, Here's legend) beside the banner's card, each with Retry
+// (POST api/bio/colours: the tables only). "" while they are loaded, or with no spawn rules at all.
+function bioColoursNote() {
+  const br = data && data.bio_rules;
+  if (!br || br.colours !== false) return "";
+  const job = br.colours_job || {};
+  const retry = `<button type="button" class="mini" data-biocolours>Retry</button>`;
+  const what = job.state === "running" ? "colours unavailable: downloading…"
+    : job.state === "failed" ? `colours unavailable: failed: ${esc(job.why || "?")} · ${retry}`
+    : `colours unavailable: tables not downloaded · ${retry}`;
+  return `<span class="colnote" title="ExploData's colour tables tell each species' colour variants; without them no colour is predicted">${what}</span>`;
+}
+let bioColoursDrawn = "";
+async function bioColoursRetry() {
+  let r;
+  try { r = await apiJson("api/bio/colours", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"}); }
+  catch { r = {error: "Outrider not reachable"}; }
+  if (r.error && r.code !== "running") toast(`Could not download the colour tables: ${r.error}`);
+  else if (data && data.bio_rules && r.colours_job) { data.bio_rules.colours_job = r.colours_job; render(); }   // "downloading…" at once
+}
+document.addEventListener("click", e => { if (e.target.closest("[data-biocolours]")) bioColoursRetry(); });
+const NOTICE_MARK = {info: "ⓘ", warn: "⚠", bad: "⛔"};
+const noticeGone = new Set();   // dismissed in this window, until the server's answer leaves them out
+let noticeDrawn = null;
+function noticeAction(a) {
+  if (!a || !Object.prototype.hasOwnProperty.call(NOTICE_ACTIONS, a)) return null;
+  // the tablet has no Server settings, nor Uploads
+  return TABLET && (a.startsWith("open:server") || a === "open:uploads") ? null : NOTICE_ACTIONS[a];
+}
+function renderNotices() {
+  const bar = document.getElementById("noticeBar");
+  const all = (data && Array.isArray(data.notices)) ? data.notices : [];
+  for (const id of noticeGone) if (!all.some(n => n.id === id)) noticeGone.delete(id);   // the server has it
+  const list = all.filter(n => !noticeGone.has(n.id));
+  const key = JSON.stringify(list.map(n => [n.id, n.action]));
+  if (key === noticeDrawn) return;
+  noticeDrawn = key;
+  bar.hidden = !list.length;
+  bar.innerHTML = list.map(n => {
+    const act = noticeAction(n.action);
+    return `<div class="notice ${NOTICE_MARK[n.level] ? n.level : "warn"}" data-nid="${esc(n.id)}"><span class="nmark" aria-hidden="true">${NOTICE_MARK[n.level] || "⚠"}</span>` +
+      `<span class="ntext">${esc(n.text)}</span>` +
+      (act ? `<button type="button" class="nact" data-naction="${esc(n.action)}">${esc(act[0])}</button>` : "") +
+      `<button type="button" class="nclose" data-ndismiss="${esc(n.id)}" title="hide until Outrider restarts" aria-label="hide until Outrider restarts">✕</button></div>`;
+  }).join("");
+}
+document.getElementById("noticeBar").addEventListener("click", async e => {
+  const act = e.target.closest("[data-naction]");
+  if (act) { const a = noticeAction(act.dataset.naction); if (a) a[1](); return; }
+  const x = e.target.closest("[data-ndismiss]");
+  if (!x) return;
+  const id = x.dataset.ndismiss;
+  noticeGone.add(id); noticeDrawn = null; renderNotices();
+  let r;
+  try { r = await apiJson("api/notices/dismiss", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({id})}); }
+  catch { r = {error: "Outrider not reachable"}; }
+  if (r.error) { noticeGone.delete(id); noticeDrawn = null; renderNotices(); toast(`Could not hide it: ${r.error}`); }
+});
+
 let disconnected = null, disconnectedAt = 0, lostSaid = false;
+let pageStarting = null;   // S9: Outrider's starting answer ({phase, text, pct}) while it starts again, else null (see poll)
 // The link pill: states only, no timer (the author, 2026-10-12): "linked", "linked · no game" (Outrider answers, the
 // game is not running), "unlinked · retrying" (no answer past what a long poll should take, 25 s plus a little, or
 // the link down: amber, then red). The page still dims when the link is down. linkState() is the tablet's too.
 const LINK_STALE_MS = 30000;
 function linkState(now = Date.now()) {
   if (disconnected) return {state: "none", text: "unlinked · retrying"};
+  if (pageStarting) return {state: "stale", text: `starting${typeof pageStarting.pct === "number" ? ` · ${pageStarting.pct}%` : "…"}`};
   if (!lastHeard) return {state: "stale", text: "connecting…"};
   if (now - lastHeard > LINK_STALE_MS) return {state: "stale", text: "unlinked · retrying"};
   const live = !!(data && data.freshness && data.freshness.live);
@@ -9390,7 +11695,34 @@ function drawLinkPill() {
   const l = linkState();
   if (el.textContent !== l.text) el.textContent = l.text;
   el.className = "linkpill " + l.state;
+  drawOvPill();
   if (TABLET) tabDrawLink(l);
+}
+// The overlay pill beside it (S8): data.overlay.pill (State.overlay_pill: {state ok | wait | bad, code, why}, null when
+// the overlay is off or no window runs here) as "overlay ✓" (drawing), "overlay …" (the game not running, loading,
+// behind this page) or "overlay ✗", the reason on hover. "Elite is not the active window" is only amber while this
+// page has the focus (the player is looking at it: the game is behind it on purpose); with another window in front, red.
+const OV_PILL = {ok: ["✓", "ok"], wait: ["…", "stale"], bad: ["✗", "none"]};
+function ovPillState(o, focused) {
+  const p = o && o.pill;
+  if (!p || !OV_PILL[p.state]) return null;
+  let level = p.state, why = p.why || "";
+  if (p.code === "behind") {
+    if (focused) why = "Elite is behind this page";
+    else level = "bad";
+  }
+  const [mark, cls] = OV_PILL[level];
+  return {text: `overlay ${mark}`, cls, why, level};
+}
+let ovPillNow = null;   // what the pill says now (the tablet's line adds it)
+function drawOvPill() {
+  const el = document.getElementById("ovPill"); if (!el) return;
+  const p = ovPillNow = data && data.game_pc !== false ? ovPillState(data.overlay, document.hasFocus()) : null;
+  el.hidden = !p;
+  if (!p) return;
+  if (el.textContent !== p.text) el.textContent = p.text;
+  el.className = `linkpill ovpill pcOnly ${p.cls}`;
+  el.title = `the in-game overlay: ${p.why}`;
 }
 setInterval(drawLinkPill, 1000);
 // Outrider gone quiet (stopped, crashed, the network down): after LOST_SAY_MS without it, the speaking window says
@@ -9492,8 +11824,16 @@ function signInAgain() {
 // the server answers a long poll within 25 s: one with no answer by this time is a hung link (the PC suspended, a path
 // that died without a reset), and becomes "no link" and, later, "Lost contact" (it stayed "stale" for good)
 const POLL_TIMEOUT_MS = 40000;
+// Outrider starting again (S9: a restart, an update, a crash brought back by its service) answers every /api/ call with
+// 503 {code: "starting", starting: {text, pct...}} while it reads the journals: the page says "starting", not "not
+// connected" (no "Lost contact" for a long re-read), and asks again every STARTING_POLL_MS until the real answer comes.
+const STARTING_POLL_MS = 1500;
+async function startingAnswer(r) {
+  if (r.status !== 503) return null;
+  try { const j = await r.json(); return j && j.code === "starting" ? (j.starting || {text: "starting"}) : null; } catch { return null; }
+}
 async function poll(once = false) {
-  let ok = false, fresh = false;
+  let ok = false, fresh = false, starting = null;
   heard(false);   // a request sent long after the last answer: timers were frozen, or the server was unreachable
   const ac = typeof AbortController === "function" ? new AbortController() : null,
         timer = ac && setTimeout(() => ac.abort(), POLL_TIMEOUT_MS);
@@ -9506,13 +11846,16 @@ async function poll(once = false) {
     if (r.status === 200) { data = await r.json(); version = data.version; fresh = true; }
     else if (r.status === 204 && woke) version = -1;   // no news, but come back with the whole payload to re-baseline on
     ok = r.status === 200 || r.status === 204;
+    starting = await startingAnswer(r);
+    if (starting) heard(true);
   } catch {} finally { if (timer) clearTimeout(timer); }
   if (fresh) pageError = null;
-  let drawn = guarded("drawing", () => setConnected(ok));
+  pageStarting = starting;
+  let drawn = guarded("drawing", () => setConnected(ok || !!starting));
   if (fresh) { const alerted = guarded("alerts", onData), rendered = guarded("drawing", render); drawn = drawn && alerted && rendered; }
   if (!drawn && data) guarded("drawing", renderStrip);   // at least the Data tile, which says what failed
   // the server holds the request until something changes, so ask again at once; back off if it failed
-  if (!once) setTimeout(poll, ok ? 0 : 2000);
+  if (!once) setTimeout(poll, ok ? 0 : starting ? STARTING_POLL_MS : 2000);
 }
 poll();
 
@@ -9662,7 +12005,7 @@ function tabSetup() {
     tabClose(document.getElementById("tabSheet"));
     if (b.dataset.act === "here") showInHere(b.dataset.id);
     else if (b.dataset.act === "updskip") skipUpdate();
-    else if (b.dataset.act === "aim") hwyAutoStart("next", {route: b.dataset.route, index: Number(b.dataset.index)});
+    else if (b.dataset.act === "aim") hwyAutoStart("next", aimOf(b.dataset));
     else if (b.dataset.act === "bm") openBookmark(b.dataset.id, b.dataset.name);
   });
   document.getElementById("tabBanner").onclick = () => tabBannerHide();
@@ -9678,7 +12021,7 @@ function tabSetup() {
   // before the page's own handlers (a name's click copies it, which means nothing on a tablet)
   document.addEventListener("click", tabRowTap, true);
   const hint = document.querySelector("#mapView .hint");   // the galaxy map by touch
-  if (hint) hint.textContent = "One finger rotates · two fingers move · pinch to zoom · tap a system for its card. " +
+  if (hint) hint.textContent = "One finger rotates · two fingers move · pinch to zoom · tap a system for its card (🎯 Target when auto-target works here, Copy name). " +
     "The grid is the galactic plane through your position; stalks drop each system onto it.";
   tabDrawNav(); tabDrawCaption(); tabDrawAsk();
 }
@@ -9754,7 +12097,7 @@ function tabDrawHush() {
   b.classList.toggle("on", on);
 }
 // the tablet's pill says what the desktop's does (linkState)
-const tabLinkText = l => l.text;
+const tabLinkText = l => l.text + (ovPillNow ? ` · ${ovPillNow.text}` : "");
 function tabDrawLink(l) {
   const el = document.getElementById("tabLink"), text = tabLinkText(l);
   if (el.textContent !== text) el.textContent = text;
@@ -9801,7 +12144,7 @@ function tabRowFacts(table, tr) {
     const th = heads[i], lf = th && th.querySelector(".lf");
     const label = ((lf || th || {}).textContent || "").trim().replace(/[▴▾]/g, "").trim();
     const c = td.cloneNode(true);
-    c.querySelectorAll(".sf, .sf1, .sf2, [data-bm]").forEach(x => x.remove());
+    c.querySelectorAll(".sf, .sf1, .sf2, [data-bm], .swtick").forEach(x => x.remove());
     const html = c.innerHTML.trim();
     if (html && c.textContent.trim()) out.push([label, html]);
   });
@@ -9817,7 +12160,8 @@ function tabOpenRow(table, tr) {
   document.getElementById("tabSheetActs").innerHTML =
     (id ? `<button type="button" class="tb-btn" data-act="here" data-id="${esc(id)}">Show in Here</button>` : "") +
     (bm ? `<button type="button" class="tb-btn" data-act="bm" data-id="${esc(bm.dataset.bm)}" data-name="${esc(bm.dataset.name || name)}">Bookmark…</button>` : "") +
-    (aim && data && data.game_pc !== false ? `<button type="button" class="tb-btn" data-act="aim" data-route="${esc(aim.dataset.route)}" data-index="${esc(aim.dataset.index)}">🎯 Target</button>` : "");
+    (aim && data && data.game_pc !== false ? `<button type="button" class="tb-btn" data-act="aim" data-route="${esc(aim.dataset.route)}"` +
+      ["index", "aimid"].filter(k => aim.dataset[k] != null).map(k => ` data-${k}="${esc(aim.dataset[k])}"`).join("") + `>🎯 Target</button>` : "");
   tabShow(document.getElementById("tabSheet"));
 }
 // ---- the settings sheet: the theme, dim, this screen's size (CSS px), the app's version, sign out, and the app's own
@@ -9848,14 +12192,14 @@ function tabSetAudio(on) {
 // Settings table (alertSpeak / alertSound, in this tablet's own storage; until changed here they come from the PC's
 // saved defaults, then Outrider's), as big toggles with a short name per alert
 const TAB_ALERT_NAMES = {discovery: "Targeting a system", arrival: "Arriving somewhere new", game: "Game start and quit",
-  exo: "Exomastery route", riches: "Road to Riches route", trade: "Trade route",
+  exo: "Exomastery route", riches: "Road to Riches, worlds, sweeps", trade: "Trade route",
   jump: "FSD charging", honk: "Auto honk", brief: "Arrival briefing", fss: "FSS finished", mapped: "Planet mapped",
   leaving: "Leaving work behind", fuel: "Fuel", scoop: "Tank full", scoopstop: "Scooping stopped early",
-  supercharge: "Supercharged", highway: "Highway next stop", autotarget: "Auto-target", find: "Valuable body",
+  supercharge: "Supercharged", highway: "Highway next stop", refuelshort: "Fuel short of the refuel stop", lastscoop: "Last scoopable star", autotarget: "Auto-target", wrongtarget: "Not the next stop targeted", find: "Valuable body",
   jumponium: "Jumponium materials", sampling: "Exobiology unfinished", approach: "High gravity", bodybrief: "Bio signals on approach",
-  sell: "Selling", saleleft: "Data left after a sale", unsold: "Unsold data", hull: "Hull, heat, interdiction",
+  sell: "Selling", saleleft: "Data left after a sale", unsold: "Unsold data", firstsseen: "Firsts scanned by others", hull: "Hull, heat, interdiction",
   carrier: "Carrier arrived", codex: "New codex entry", phenomena: "Stellar phenomena", ggg: "Green gas giant?", rare_star: "Rare star", surface_site: "Surface sites", signal_poi: "Signals worth a detour", curious: "Curiosities", loss: "Ship lost", rigs: "Mining rigs", rigleash: "Rig too far",
-  rigsout: "Rigs still out"};
+  rigsout: "Rigs still out", uploads: "Uploads failing"};
 function tabDrawAlerts() {
   const tog = (attr, k, on, what) => `<label class="tb-tog"><input type="checkbox" data-${attr}="${esc(k)}"${on ? " checked" : ""}> ${what}</label>`;
   document.getElementById("tabAlertList").innerHTML = ALERTS.map(([k, label, snd]) =>

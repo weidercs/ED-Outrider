@@ -156,16 +156,6 @@ function cmdrDistHtml(system, dist) {
   if (v != null) return `${Number(v).toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})} ly`;
   return `<span class="unk" title="${esc(!dist.from ? "no position yet: after your first jump" : dist.error || "Spansh does not know this system")}">?</span>`;
 }
-// "Plot route" beside a system: it goes in Plot Route's To and the tab opens there (press Plot to plot it). Pure.
-const forkPlotBtn = name => ` <button type="button" class="mini" data-plotto="${esc(name)}" title="put ${esc(name)} in Plot Route's To">Plot route</button>`;
-document.addEventListener("click", e => {
-  const b = e.target.closest && e.target.closest("[data-plotto]");
-  if (!b || typeof hEl !== "function") return;
-  e.preventDefault();
-  hEl("hwyTo").value = b.dataset.plotto;
-  const v = document.querySelector('[data-view="hwy"]'); if (v) v.click();
-  toast(`Plot Route: to ${b.dataset.plotto}`);
-});
 // the engineers: where each works, with Copy and Plot route (and how far you are with them). Pure.
 function cmdrEngineersHtml(eng, q = "", supports = null) {
   if (!eng.length) return q ? `<div class="unk cmnote">No engineer matches.</div>` : "";

@@ -13,7 +13,8 @@
 #
 # Safe by construction: it never reads or writes your own data/ (ed_outrider.sqlite, ...) or ed_outrider.toml, never uses
 # port 8025, never plays audio, never presses keys (auto honk off) or opens input devices (co-pilot off), makes
-# no backups, and stays offline (Spansh, EDSM, GitHub and voice downloads are pointed at a closed local port).
+# no backups, never writes a service (systemd user unit, Startup entry) where yours would go, and stays offline (Spansh,
+# EDSM, Inara, GitHub, EDAstro, Canonn and voice downloads are pointed at a closed local port).
 # Everything it makes goes in a mktemp folder that is deleted at the end; the server is stopped by its PID.
 #
 # Windows: run it from Git Bash (bash scripts/verify.sh). The scratch folder is then named the Windows way (C:/...),
@@ -121,7 +122,7 @@ import ed_outrider, outrider.tts
 OFF = "http://127.0.0.1:9/offline"
 for k in ("SPANSH_SEARCH", "SPANSH_BODY_SEARCH", "SPANSH_STATION_SEARCH", "EDSM_SYSTEM", "EDSM_SPHERE", "EDSM_BODIES",
           "SPANSH_ROUTE", "SPANSH_GENERIC_ROUTE", "SPANSH_SYSTEM_NAMES", "SPANSH_SYSTEM_SEARCH", "SPANSH_RICHES",
-          "SPANSH_EXO", "SPANSH_COMMODITIES", "SPANSH_TRADE"):
+          "SPANSH_EXO", "SPANSH_COMMODITIES", "SPANSH_TRADE", "SPANSH_TOURIST"):
     setattr(ed_outrider, k, OFF)
 ed_outrider.SPANSH_DUMP = OFF + "/{id64}"
 ed_outrider.SPANSH_RESULTS = OFF + "/{job}"
@@ -129,14 +130,23 @@ ed_outrider.RELEASES_LATEST = OFF   # the update check never asks GitHub from he
 import outrider.eddn
 outrider.eddn.UPLOAD_URL = OFF        # nor EDDN (uploads are off there anyway)
 outrider.edsm.UPLOAD_URL = outrider.edsm.DISCARD_URL = OFF   # nor EDSM's journal upload
-import outrider.inara
-outrider.inara.URL = OFF             # nor Inara (off in the scratch config anyway)
+import outrider.inara, outrider.readclient, outrider.codex_images
+outrider.inara.URL = OFF             # nor Inara (its upload and the key Check)
+for k in outrider.readclient.URLS:   # nor EDSM's account reads (the key Check, its flight log)
+    setattr(outrider.readclient, k, OFF)
+outrider.codex_images.REF = OFF      # nor Canonn for the checklists' pictures (the shipped list stays)
 ed_outrider.DSSA_URL = OFF          # nor EDAstro for the DSSA list
 import outrider.galnet
 outrider.galnet.URL = OFF            # nor Frontier's GalNet feed
 ed_outrider.Clipboard.TOOLS = ()   # the desktop clipboard is never touched by the smoke test
+import outrider.service   # nor your own ~/.config/systemd/user or Startup folder, nor systemctl (S70's service)
+outrider.service.TARGET_DIR = os.path.join(os.path.dirname(sys.argv[sys.argv.index("--db") + 1]), "service")
+def _no_systemctl(cmd, **kw):
+    raise OSError("verify.sh never runs systemctl")
+outrider.service.RUNNER = _no_systemctl
 if outrider.bio:
     outrider.bio.update_if_newer = lambda path=None, log=print: None
+    outrider.bio.EXPLODATA = OFF   # S7's Retry fails here, never writing resources/bio_colours.json
 outrider.tts.Speaker._download = lambda self, name, status=None: False
 if os.name == "nt":
     # Windows has no SIGTERM to send (Git Bash's kill ends the process outright): verify.sh makes this file instead
@@ -156,7 +166,9 @@ EOF
   up=0
   for _ in $(seq 1 60); do
     if ! kill -0 "$PID" 2>/dev/null; then break; fi
-    if "$PY" -c "import urllib.request,sys; urllib.request.urlopen('http://127.0.0.1:$PORT/', timeout=2)" 2>/dev/null; then up=1; break; fi
+    # ready = the real page is served: while it starts, a starting page answers on the port (S9) and /api/starting
+    # says what it is doing; the real app answers "ready"
+    if "$PY" -c "import json,urllib.request,sys; sys.exit(json.load(urllib.request.urlopen('http://127.0.0.1:$PORT/api/starting', timeout=2)).get('phase') != 'ready')" 2>/dev/null; then up=1; break; fi
     sleep 1
   done
   if [ "$up" != 1 ]; then

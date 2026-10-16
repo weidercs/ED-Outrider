@@ -1,0 +1,8 @@
+{ "timestamp":"2026-10-14T09:05:00Z", "event":"Fileheader", "part":1, "language":"English/UK", "Odyssey":true, "gameversion":"4.2.0.0", "build":"r000000/r0 " }
+{ "timestamp":"2026-10-14T09:05:01Z", "event":"Commander", "FID":"F0000000", "Name":"Sample Pilot" }
+{ "timestamp":"2026-10-14T09:06:00Z", "event":"FSDJump", "StarSystem":"Smojooe RO-Q c19-3", "SystemAddress":901, "StarPos":[100.0,0.0,0.0], "StarClass":"K", "JumpDist":40.0, "FuelUsed":2.0, "FuelLevel":20.0 }
+{ "timestamp":"2026-10-14T09:10:46Z", "event":"NavRouteClear" }
+{ "timestamp":"2026-10-14T09:11:58Z", "event":"NavRoute" }
+{ "timestamp":"2026-10-14T09:11:59Z", "event":"FSDTarget", "Name":"Smojooe AA-A h1", "SystemAddress":902, "StarClass":"M", "RemainingJumpsInRoute":3 }
+{ "timestamp":"2026-10-14T09:13:00Z", "event":"FSDJump", "StarSystem":"Smojooe AA-A h1", "SystemAddress":902, "StarPos":[140.0,0.0,0.0], "StarClass":"M", "JumpDist":40.0, "FuelUsed":2.0, "FuelLevel":18.0 }
+{ "timestamp":"2026-10-14T09:13:05Z", "event":"FSDTarget", "Name":"Smojooe BB-B h2", "SystemAddress":903, "StarClass":"F", "RemainingJumpsInRoute":2 }

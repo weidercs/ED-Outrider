@@ -1,0 +1,95 @@
+<!doctype html>
+<!-- ED Outrider's starting page (S9): served at / and /tablet while Outrider opens its database, backs it up before a
+     journal re-read and reads the journals (ed_outrider.make_starting_app). It asks api/starting every second and
+     reloads into the real page once Outrider serves it (phase "ready", or 401: the real page asks for a sign-in).
+     Self-contained: nothing else is served yet. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ED Outrider is starting</title>
+<style>
+  :root { --bg: #f4f5f7; --panel: #fff; --text: #1d2330; --muted: #5d6675; --line: #d5d9e0; --accent: #d9761a; --err: #a86400; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #11141a; --panel: #1a1f28; --text: #e3e7ee; --muted: #9aa3b2; --line: #2c3340; --accent: #f08a2c; --err: #e0a040; }
+  }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, sans-serif; }
+  main { max-width: 560px; margin: 12vh auto 0; padding: 0 16px; }
+  h1 { font-size: 20px; margin: 0 0 14px; font-weight: 600; }
+  .box { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+  #text { font-size: 16px; }
+  .bar { height: 8px; background: var(--line); border-radius: 4px; margin: 12px 0 4px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .4s; }
+  .bar.busy > i { width: 30%; animation: slide 1.6s ease-in-out infinite; }
+  @keyframes slide { 0% { margin-left: -30%; } 100% { margin-left: 100%; } }
+  .hint { color: var(--muted); font-size: 13px; margin-top: 8px; }
+  button { font: inherit; font-size: 13px; background: none; color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 2px 10px; cursor: pointer; margin-top: 10px; }
+  #log { display: none; margin-top: 10px; max-height: 45vh; overflow: auto; font: 12px/1.35 ui-monospace, monospace;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; white-space: pre-wrap;
+    overflow-wrap: anywhere; }
+  #log .err { color: var(--err); }
+</style>
+</head>
+<body>
+<main>
+  <h1>ED Outrider is starting</h1>
+  <div class="box">
+    <div id="text" role="status">Starting…</div>
+    <div class="bar busy" id="bar"><i></i></div>
+    <div class="hint" id="why"></div>
+    <div class="hint">The page opens by itself when Outrider is ready.</div>
+    <button type="button" id="logBtn" hidden>Show log</button>
+    <div id="log"></div>
+  </div>
+</main>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+let logOpen = false, logAfter = 0;
+let reloadPage = () => location.reload();   // the smoke test replaces it
+function draw(s) {
+  $("text").textContent = s.text || "Starting…";
+  const pct = typeof s.pct === "number" ? s.pct : null;
+  $("bar").classList.toggle("busy", pct === null);
+  $("bar").firstElementChild.style.width = pct === null ? "" : `${pct}%`;
+  $("why").textContent = s.why || "";
+  $("logBtn").hidden = s.since === null || s.since === undefined;   // details (and the log) only for a signed-in device
+}
+async function tick() {
+  try {
+    const r = await fetch("api/starting", {cache: "no-store"});
+    if (r.status === 401) { reloadPage(); return; }   // the real page answers, and asks for a sign-in
+    if (r.ok) {
+      const s = await r.json();
+      if (s.phase === "ready") { reloadPage(); return; }
+      draw(s);
+    }
+  } catch {}   // between the two apps for a moment, or Outrider stopped: ask again
+  if (logOpen) await pollLog();
+  setTimeout(tick, 1000);
+}
+async function pollLog() {
+  try {
+    const r = await fetch(`api/serverlog?after=${logAfter}`, {cache: "no-store"});
+    if (!r.ok) return;
+    const j = await r.json(), box = $("log"), atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 4;
+    for (const l of j.lines || []) {
+      box.insertAdjacentHTML("beforeend", `<div${l.kind === "err" ? ' class="err"' : ""}>${esc(l.text)}</div>`);
+      logAfter = Math.max(logAfter, l.seq);
+    }
+    while (box.childElementCount > 500) box.firstElementChild.remove();
+    if (atEnd) box.scrollTop = box.scrollHeight;
+  } catch {}
+}
+$("logBtn").addEventListener("click", () => {
+  logOpen = !logOpen;
+  $("log").style.display = logOpen ? "block" : "none";
+  $("logBtn").textContent = logOpen ? "Hide log" : "Show log";
+  if (logOpen) pollLog();
+});
+tick();
+</script>
+</body>
+</html>

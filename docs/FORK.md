@@ -42,7 +42,7 @@ runs `scripts/verify.sh`; with a PASS, `git push`. What to expect:
   resources/bio_rules.json`, merge, then `--skip-worktree` again.
 
 Where the fork still touches upstream's files (each a place a merge can conflict): `ed_outrider.py` (settings, State
-methods, routes), `static/page.html`, `page.js` (new page code: `static/fork.js`) and `page.css`, `tests/page_smoke.js`, `resources/speech.json`,
+methods, routes), `static/page.html`, `page.js` (new page code: `static/fork.js`) and `page.css`, `tests/page_smoke.js`,
 `outrider/overlay.py`, `outrider/ask.py`, the guide's pages for the features above and Windows fixes in a few tests.
 New fork code goes in its own module and its own test file wherever it can; in a shared file, add it as its own
 block (a new line, not an edit in the middle of upstream's line).

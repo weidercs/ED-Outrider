@@ -180,3 +180,37 @@ def answer(rows, reply):
         else:                                                 # 3xx, 4xx: EDSM will not take this one
             out.append((r["id"], "dropped", text, None))
     return out
+
+
+# The backfill's per-event codes (S47), counted apart: answer() above takes 100-104 as "sent", right for the live
+# stream (EDSM has the event either way) but not for back-dated events, where 102 "older than what EDSM has" means EDSM
+# did NOT take it, and whether it does is what the first live try finds out
+BACKFILL_CODES = {100: "stored", 101: "already", 102: "older", 103: "duplicate", 104: "crew"}
+BACKFILL_KINDS = ("stored", "already", "older", "duplicate", "crew", "refused")
+
+
+def backfill_answer(rows, reply):
+    """EDSM's reply for a backfill request -> (results as answer() gives them, {kind: count}). Per event only 100 is
+    stored; 101 (already stored) and 103 (a duplicate) mean EDSM has it (sent); 102 (older than what EDSM has), 104 (a
+    crew session) and the rest were not taken (dropped, with EDSM's words). A request-wide code is answer()'s."""
+    if not isinstance(reply, dict):
+        raise ValueError("EDSM's answer is not a JSON object")
+    try:
+        code = int(reply.get("msgnum"))
+    except (TypeError, ValueError):
+        raise ValueError(f"EDSM's answer has no msgnum: {str(reply)[:200]}")
+    if code != 100:
+        return answer(rows, reply), {}
+    events = reply.get("events") if isinstance(reply.get("events"), list) else []
+    out, tally = [], {}
+    for i, r in enumerate(rows):
+        e = events[i] if i < len(events) and isinstance(events[i], dict) else {}
+        try:
+            n = int(e.get("msgnum"))
+        except (TypeError, ValueError):
+            n = None
+        kind = BACKFILL_CODES.get(n, "refused")
+        tally[kind] = tally.get(kind, 0) + 1
+        text = f"{n} {e.get('msg') or ''}".strip() if n is not None else "no answer for this event"
+        out.append((r["id"], "sent" if kind in ("stored", "already", "duplicate") else "dropped", text, None))
+    return out, tally

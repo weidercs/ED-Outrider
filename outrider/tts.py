@@ -43,13 +43,16 @@ PRONOUNCE = pronounce.Table()
 DEFAULT_VOICE = "en_GB-cori-medium"   # the author's pick (2026-10-04); Southern English Female before
 DEFAULT_FALLBACK = "en_GB-jenny_dioco-medium"
 CACHE_PHRASES = 50
-# Personalities in speech.json may name a voice of their own ("sarcastic": {"label": ..., "voice": ...}). Up to
-# this many of those stay loaded beside the main voice (each is some 60-100 MB in memory), least recently used
-# dropped first: EXTRA_VOICES, or as many as speech.json's personalities name (Speaker.size_extra) up to
-# EXTRA_VOICES_MAX, so three personalities with a voice each do not reload one before every other line.
-# They are loaded on first use and never downloaded: a voice that is not installed is spoken in the main voice.
-EXTRA_VOICES = 2
-EXTRA_VOICES_MAX = 4
+# Lines may be spoken in voices besides the main one: a personality's (speech.json's "voice", or one picked in Settings,
+# S40) and a crew member's (the crew). Those stay loaded beside the main voice, least recently used dropped first, as
+# many as [speech] voices_loaded says (Speaker.voices_loaded: a number, exactly that many; "all"; unset: the voices in
+# use, Speaker.size_extra, up to VOICES_LOADED_DEFAULT), so a crew of four does not reload one before every other line.
+# The main voice is never among them, so never set aside. They are loaded on first use (or at start with [speech]
+# voices_preload) and never downloaded: a voice that is not installed is spoken in the main voice.
+VOICES_LOADED_DEFAULT = 4   # also what a [speech] voices_loaded the config cannot read falls back to
+# A loaded voice takes about this many times its .onnx file's size in memory (measured on the author's PC, 2026-10-13:
+# en_GB-cori-medium's 64 MB file ~100 MB per extra copy, cori-high's 114 MB ~170 MB): voice_memory_estimate
+VOICE_MEMORY_FACTOR = 1.6
 # A Piper voice name (language_REGION-name-quality). Piper's own pattern also lets '/' and '..' through,
 # which would write the download outside piper-voices/.
 VOICE_NAME = re.compile(r"^[a-z]{2,3}_[A-Z]{2}-[A-Za-z0-9_]+-(x_low|low|medium|high)$")
@@ -350,6 +353,33 @@ def _venv_site_packages(root=None, nt=None):
     return out
 
 
+def loaded_slots(choice, in_use):
+    """How many voices besides the main one stay loaded: `choice` as [speech] voices_loaded gives it (a number: exactly
+    that many, whatever is in use; "all": None, no limit; None: the `in_use` voices, up to VOICES_LOADED_DEFAULT), never
+    under 1 (a voice tried in the voice lab needs a place to load)."""
+    if choice == "all":
+        return None
+    if isinstance(choice, int) and not isinstance(choice, bool) and choice >= 1:
+        return choice
+    return max(1, min(VOICES_LOADED_DEFAULT, in_use))
+
+
+def voice_memory_estimate(names, voices_dir=VOICES_DIR):
+    """{voice: MB} each of `names` takes in memory once loaded: its installed .onnx file's size times
+    VOICE_MEMORY_FACTOR (a rule of thumb, measured; the speakers of one several-person voice share one load). A voice
+    that is not installed is left out: it never loads (the main voice speaks for it)."""
+    out = {}
+    for name in sorted({n for n in names if isinstance(n, str)}):
+        if not name or os.path.basename(name) != name or name.startswith("."):
+            continue   # a voice's own name only, never a path
+        try:
+            size = os.path.getsize(os.path.join(voices_dir, name + ".onnx"))
+        except OSError:
+            continue
+        out[name] = round(size * VOICE_MEMORY_FACTOR / 1e6)
+    return out
+
+
 class Speaker:
     """Turns short alert phrases into WAV audio. Loading and downloading happen on a background thread;
     `say()` returns None until a voice is ready, and the page uses browser speech meanwhile."""
@@ -383,7 +413,8 @@ class Speaker:
         self._extra = OrderedDict()  # personality voices: name -> (PiperVoice, its own lock), oldest use first
         self._extra_lock = threading.Lock()
         self._extra_bad = set()     # voices that failed to load (not tried again this run)
-        self._extra_slots = EXTRA_VOICES
+        self.voices_loaded = None   # [speech] voices_loaded: a number, "all" or None (the voices in use, up to the default)
+        self._in_use = 0            # how many voices besides the main one lines may ask for now (size_extra)
         self.fetching = set()       # voices downloading for the voice lab (fetch: not switched to)
         self.fetch_failed = {}      # voice -> why its last fetch failed (the lab says so)
         self.status = "Piper not installed" if not self.PiperVoice else "starting"
@@ -605,15 +636,33 @@ class Speaker:
             print(f"spoken alerts: could not download {name}: {type(e).__name__}: {e}", file=sys.stderr)
             return False
 
+    def slots(self):
+        """How many voices besides the main one stay loaded now (None: no limit), from voices_loaded and the voices in use."""
+        return loaded_slots(self.voices_loaded, self._in_use)
+
     def size_extra(self, names):
-        """Keep room for every personality voice speech.json names now (`names`), between EXTRA_VOICES and
-        EXTRA_VOICES_MAX; the main voice needs no slot."""
-        want = len({n for n in names if n and n != self.voice_name})
-        self._extra_slots = max(EXTRA_VOICES, min(EXTRA_VOICES_MAX, want))
+        """The voices besides the main one that lines may ask for now (`names`: the personalities', the crew's): with
+        voices_loaded unset, room for each of them up to VOICES_LOADED_DEFAULT. Sets aside any over the number kept."""
+        self._in_use = len({n for n in names if n and n != self.voice_name})
+        with self._extra_lock:
+            self._trim()
+
+    def _trim(self):
+        """Under _extra_lock: the main voice out of the LRU (it is loaded on its own, never counted, never set aside),
+        then the least recently used dropped until no more are loaded than slots() says."""
+        self._extra.pop(self.voice_name, None)
+        cap = self.slots()
+        while cap is not None and len(self._extra) > cap:
+            self._extra.popitem(last=False)
+
+    def failed(self, name):
+        """True for a voice that would not load this run (it is not tried again: the main voice speaks for it)."""
+        return name in self._extra_bad
 
     def extra_voice(self, name):
-        """(PiperVoice, lock) for a personality's own voice, loading it now if it is installed; None for the
-        main voice, a voice that is not installed (never downloaded from here) or one that will not load."""
+        """(PiperVoice, lock) for a voice besides the main one (a personality's, a crew member's), loading it now if it
+        is installed; None for the main voice, a voice that is not installed (never downloaded from here) or one that
+        will not load."""
         if not name or name == self.voice_name or name in self._extra_bad or name not in self.installed():
             return None
         with self._extra_lock:
@@ -624,14 +673,39 @@ class Speaker:
             voice = self.PiperVoice.load(os.path.join(self.dir, name + ".onnx"))
         except Exception as e:  # noqa: BLE001 -- a damaged file: the main voice speaks those lines instead
             self._extra_bad.add(name)
-            print(f"spoken alerts: could not load {name} for a personality: {type(e).__name__}: {e}", file=sys.stderr)
+            print(f"spoken alerts: could not load {name}: {type(e).__name__}: {e}", file=sys.stderr)
+            self.on_change()   # the payload says so: a crew member in it is spoken by the XO from now on
             return None
         with self._extra_lock:
             if name not in self._extra:
-                self._extra[name] = (voice, threading.Lock())
-                while len(self._extra) > self._extra_slots:
-                    self._extra.popitem(last=False)
+                self._extra[name] = (voice, threading.Lock())   # the newest: _trim keeps it (slots() is never under 1)
+                self._trim()
             return self._extra[name]
+
+    def preload(self, names, wait=600.0):
+        """[speech] voices_preload: load the voices in use (`names`) now, up to the number kept, one at a time on a thread
+        of their own once the main voice is ready (after the journals are read), so even the first line of each starts
+        at once. The thread, or None without Piper."""
+        if not self.available:
+            return None
+        t = threading.Thread(target=self._preload, args=(sorted(set(names)), wait), daemon=True, name="piper-preload")
+        t.start()
+        return t
+
+    def _preload(self, names, wait=600.0, step=0.5):
+        """The voices loaded (see preload), in order; [] when the main voice never became ready within `wait` s."""
+        end = time.monotonic() + wait
+        while not self.ready and time.monotonic() < end:
+            time.sleep(step)
+        if not self.ready:
+            return []
+        self.size_extra(names)
+        cap = self.slots()
+        todo = [n for n in names if n and n != self.voice_name and n in self.installed() and n not in self._extra_bad]
+        done = [n for n in todo[:cap if cap is not None else len(todo)] if self.extra_voice(n)]
+        if done:
+            print(f"spoken alerts: loaded at start ([speech] voices_preload): {', '.join(done)}")
+        return done
 
     def _synth(self, voice, text, speed, speaker=None):
         """WAV bytes, or None for a line with nothing to pronounce ('...', a lone dash): Piper skips a

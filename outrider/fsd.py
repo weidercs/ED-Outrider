@@ -232,6 +232,66 @@ def max_fuel_for_jump(model, d, other=0.0, mult=1, cap=None):
     return lo
 
 
+FUEL_RUN_MAX_HOPS = 50    # hops fuel_run and fuel_window look ahead at most (the refuel stops of a route come sooner)
+FUEL_GRID_STEP = 0.25     # t between two starting fuel levels fuel_window tries
+
+
+def fuel_run(model, fuel, other, hops):
+    """Burn `fuel` t (the main tank) hop by hop, the ship lightening as it goes: `hops` is [(d ly, mult)], mult a
+    neutron supercharge or a held jet-cone charge on that hop (1 for none); `other` the t aboard that does not burn
+    (cargo, the reservoir). A hop goes when its d / mult is in range at that mass with that fuel (fsd_range, capped
+    below one max jump's fuel as target_hop's reach is) and the tank pays its hop_fuel at d / mult. Returns
+    (hops_ok, fuel after each of them): hops_ok == len(hops) when the whole run goes. None without MaxFuelPerJump and
+    p (no per-hop fuel)."""
+    if not model or not model.get("max_fuel") or not model.get("power") or fuel is None:
+        return None
+    after = []
+    for d, mult in hops[:FUEL_RUN_MAX_HOPS]:
+        eff = d / (mult or 1)
+        mass = model["unladen"] + fuel + (other or 0)
+        need = hop_fuel(model, eff, mass)
+        if need is None or need > fuel + 1e-9 or eff > fsd_range(model, mass, fuel) + 1e-6:
+            break
+        fuel -= need
+        after.append(fuel)
+    return len(after), after
+
+
+def fuel_window(model, other, hops, tank, step=FUEL_GRID_STEP):
+    """The starting fuel (t in the main tank) with which every hop of the run goes: (low, high), or None when no amount
+    the tank holds does. The range falls as the mass rises, so a run succeeds on an interval: too little runs dry, too
+    much is too heavy for a jump planned at the limit (a full tank may fail where a part one passes). Every `step` t
+    from 0 to `tank` is tried (cheap: at most FUEL_RUN_MAX_HOPS hops each), never a bisection over the whole tank, which
+    that interval would fool; each end is then refined between its grid point and the failing one beside it. The
+    feasible levels are taken as one interval from the lowest to the highest. None without per-hop fuel or a tank."""
+    if not tank or tank <= 0 or fuel_run(model, 0.0, other, []) is None:
+        return None
+    n = len(hops[:FUEL_RUN_MAX_HOPS])
+
+    def goes(f):
+        return fuel_run(model, f, other, hops)[0] == n
+
+    grid = [min(tank, k * step) for k in range(int(tank / step) + 1)]
+    if grid[-1] < tank:
+        grid.append(float(tank))
+    ok = [i for i, f in enumerate(grid) if goes(f)]
+    if not ok:
+        return None
+
+    def edge(good, bad):
+        for _ in range(30):
+            mid = (good + bad) / 2
+            good, bad = (mid, bad) if goes(mid) else (good, mid)
+        return good
+
+    lo, hi = grid[ok[0]], grid[ok[-1]]
+    if ok[0] > 0:
+        lo = edge(lo, grid[ok[0] - 1])
+    if ok[-1] < len(grid) - 1:
+        hi = edge(hi, grid[ok[-1] + 1])
+    return lo, hi
+
+
 def conservative_range(full, margin, boost=0.0):
     """A range `margin` ly shorter than `full`, never cutting the drive's own part (the booster's ly apart) by more
     than half: the conservative plot's range. A booster at least as long as `full` (a typed range shorter than the

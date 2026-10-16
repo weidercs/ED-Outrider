@@ -47,7 +47,7 @@ FIX = {
     "/api/firsts": {"firsts": [{"name": "Unsold One", "state": "unsold", "value": 100, "distance": 3},
                                {"name": "Unsold Two", "state": "unsold", "value": 300, "distance": 9},
                                {"name": "Lost One", "state": "lost"}, {"name": "Sold One", "state": "sold"}]},
-    "/api/left": {"systems": [{"name": f"Left {i}", "distance": i, "unfound": 1, "bio": [], "maps_total": 0} for i in range(30)]},
+    "/api/left": {"systems": [{"name": f"Left {i}", "distance": i, "unfound": 1, "bio": [], "maps": [], "maps_total": 0} for i in range(30)]},
     "/api/highway": {"route": {"to": "Colonia", "summary": {"next": {"name": "Neu", "distance": 400.2, "neutron": True, "refuel": False},
                                                            "jumps_left": 42, "ly_left": 17301.3, "refuel_in": 3, "off_route": False},
                                "ahead": [{"system": f"Hop {i}", "distance": 100 + i, "neutron": i % 2 == 0, "refuel": False} for i in range(8)]}},
@@ -57,10 +57,17 @@ FIX = {
     "/api/materials": {"rows": [{"name": "Polonium", "grade": 4, "category": "Raw", "count": 30, "cap": 150},
                                 {"name": "Carbon", "grade": 1, "category": "Raw", "count": 290, "cap": 300},
                                 {"name": "Tellurium", "grade": 4, "category": "Raw", "count": 0, "cap": 150}],
-                       "synthesis": [{"name": "FSD injection premium", "craftable": 2, "limit": "Polonium"}]},
+                       "snapshot_ts": "2026-10-01T00:00:00Z",
+                       "synthesis": [{"name": "FSD injection premium", "group": "fsd", "grade": "premium", "craftable": 2, "limit": "Polonium"},
+                                     {"name": "FSD injection standard", "group": "fsd", "grade": "standard", "craftable": 5, "limit": "Cadmium"},
+                                     {"name": "FSD injection basic", "group": "fsd", "grade": "basic", "craftable": 31, "limit": "Vanadium"},
+                                     {"name": "AFMU refill premium", "group": "ship", "grade": "premium", "craftable": 0, "limit": "Ruthenium"}]},
     "/api/nearest": {"rows": [{"kind": "carrier", "name": "", "callsign": "KBT-B8Z", "system": "Smojooe QI-T d3-37", "ly": 711.5,
                                "ls": 235, "services": ["UC", "Vista"], "pads": "L M", "dssa": False, "own": False, "warn": [],
                                "age_s": 1000000}], "hidden": {"old": 6}, "pad": "L"},
+    "/api/ggg": {"origin": "Start", "radius": 500.0, "searched": 40, "more": 0,
+                 "bodies": [{"system": "Far Green", "id": "77", "body": "B 3", "chance": "likely", "distance": 30.04},
+                            {"system": "Further", "id": "78", "body": "1", "chance": "possible", "distance": 120.0}]},
 }
 ARGS = {"body_detail": {"name": "Start A 1"}, "left_behind": {"radius_ly": 50}, "travel_history": {"days": 2},
         "materials": {"name": "polo"}, "nearby_systems": {"sort": "value"}}
@@ -121,6 +128,7 @@ class Registry(unittest.TestCase):
     def test_answers(self):
         st = run("current_status")
         self.assertEqual((st["system"], st["fuel_jumps"], st["unsold"]), ("Start", 6, 1234567))
+        self.assertEqual((st["near_body"], st["target_body"]), (None, None))   # S14: asked for, none in the fixture
         self.assertNotIn("commander", st)
         ts = run("this_system")
         self.assertEqual([b["name"] for b in ts["bodies"]], ["A 2", "A 1", "A"])   # most valuable first
@@ -153,9 +161,31 @@ class Registry(unittest.TestCase):
                          ("Neu", 42, 3, 3, 5))   # leads with the next system (Vespa's "next jump")
         th = run("travel_history")
         self.assertEqual((th["days"], th["sessions"][0]["systems"], th["sessions"][0]["ly"]), (2, ["Start", "Next One"], 120.0))
+        gg = run("nearest_ggg", rows=1)   # S27
+        self.assertEqual((gg["giants"], gg["more"], gg["radius_ly"]),
+                         ([{"system": "Far Green", "body": "B 3", "distance_ly": 30.0, "chance": "likely"}], 1, 500.0))
         mt = run("materials")
         self.assertEqual(([r["name"] for r in mt["held"]], mt["synthesis"][0]["limited_by"]), (["Polonium"], "Polonium"))
+        # S14: the recipes' group and grade (the voice picks the injections by them) and when the counts were read
+        self.assertEqual((mt["synthesis"][0]["group"], mt["synthesis"][0]["grade"], mt["counts_from"]),
+                         ("fsd", "premium", "2026-10-01T00:00:00Z"))
         self.assertEqual([r["name"] for r in run("materials", {})["held"]], ["Carbon", "Polonium"])   # held only, fullest first
+
+    def test_left_behind_values(self):
+        """S14: the tool passes on what each item could pay (bio up to, what a map adds) and adds each system's worth;
+        it filters nothing (the voice does, at the server's thresholds)."""
+        left = {"systems": [{"name": "Back", "distance": 4.04, "unfound": 0, "maps_total": 2,
+                             "bio": [{"body": "B 1", "genera": ["Stratum"], "value": 19_000_000}, {"body": "B 2", "genera": None,
+                                                                                                 "signals": 1, "value": 0}],
+                             "maps": [{"body": "B 3", "subtype": "Water world", "terraformable": False, "increment": 700_000},
+                                      {"body": "B 4", "subtype": "Icy body", "increment": 1_200}]}]}
+
+        async def get(path, params):
+            return left
+        x = asyncio.run(tools.call("left_behind", {}, get))["systems"][0]
+        self.assertEqual((x["bio"], x["map"][0], x["worth"], x["worth_mapping"], "bodies_not_found" in x),
+                         ([{"body": "B 1", "up_to": 19_000_000}, {"body": "B 2", "up_to": 0}],
+                          {"body": "B 3", "type": "Water world", "adds": 700_000}, 19_701_200, 2, False))
 
     def test_lists_are_capped_and_arguments_clamped(self):
         calls = []

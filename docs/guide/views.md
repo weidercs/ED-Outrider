@@ -11,7 +11,10 @@
 is scanned, the main star and whether it scoops, notable bodies, curiosities (🔭: odd orbits, ringed landables, rare
 classes such as water giants, helium giants, Sudarsky class V and green gas giants) and a credit estimate. Sort,
 hide visited and fully scanned systems, or keep only those one jump away. A dashed <i>old data</i> mark flags Spansh
-records from before Odyssey (thin-atmosphere planets there may hold unsampled life). ⛏ N counts planetary mining
+records from before Odyssey (thin-atmosphere planets there may hold unsampled life). Click a row to see that system
+body by body beside the list (click it again to close it); its name copies it, ☆ bookmarks it, and where auto-target
+can work (the game PC, see [Plot Route](plot-route.md)) the 🎯 left of the name, in a column of its own, targets it in
+the galaxy map (not on your own system's row). ⛏ N counts planetary mining
 locations on ground worth a Rhino. 🌀 N counts the notable stellar phenomena your FSS found there (life in clouds or rings; hover
 for what they are), dimmed once you have been to them. ⭐ marks a rare star (a black hole, a Wolf-Rayet, a carbon,
 MS, S or O-type star, a Herbig Ae/Be star, a supergiant, a rare white dwarf, an exotic star), from Spansh's records
@@ -34,8 +37,16 @@ stays in view while the list scrolls.
 "🧬? check in the FSS" marks a landable body you have only from an AutoScan or a nav beacon, whose signals nobody
 counted, where life is possible. A finished species is one line, its codex entry with what it pays ("📖 Bacterium
 Alcyoneum - Red ✦ 8.3M"), the colour's word in that colour (Settings → Display can turn that off). The body panel lists
-why each other genus is not expected ("pressure too low"). Flying low over a body in your ship (under 5 km), the
-on-body strip already shows its bio card. A star's panel says its kind in words ("main sequence", "white dwarf (hydrogen-rich)"), a biology codex entry links to
+why each other genus is not expected ("pressure too low"). **👥** beside a genus is a species other commanders reported
+to Spansh on that body, with the colour they reported ("👥 Bacterium Vesicula - Mulberry 1.0M"): a fact, not a guess
+(asked once a day for the system you are in when its bodies have life; a genus you have analysed shows yours instead).
+Hover a genus's guess for its candidates and, once you have finished runs of that genus on bodies like it (the same
+class and atmosphere, within the same 25 K, in the same region once you have 5 such runs there), which species yours
+were: "yours on bodies like this (Icy body, thin N2, 75–100 K, Inner Orion Spur): Informem 11 of 14, Acies 3 of 14".
+The guess itself stays the likeliest by value. Flying low over a body in your ship (under 5 km), the
+on-body strip already shows its bio card. While you sample, the strip says what the run pays from the first sample on
+("🧬 Bacterium Aurasus · 1.0M (×5: 5.0M) · sample 1/3 · 500 m to go": the species' value, and with the first-footfall
+bonus). A star's panel says its kind in words ("main sequence", "white dwarf (hydrogen-rich)"), a biology codex entry links to
 Canonn's Bioforge (where it grows, and in what conditions), and **⬇ CSV** in the heading saves the system's bodies
 and values as a spreadsheet.
 <br><br><img src="../images/here.png" alt="The current system">
@@ -45,12 +56,17 @@ and values as a spreadsheet.
 <td width="50%" valign="top">
 <b>Map</b> — a 3D view: left-drag to rotate, right-drag to move, scroll to zoom. Your path in orange,
 your first discoveries in gold, visited systems in blue (or colour them by star class; by touch: one finger rotates, two move,
-pinch zooms); tick <i>boost stars</i> for neutron stars and white dwarfs.
+pinch zooms); tick <i>boost stars</i> for neutron stars and white dwarfs. The route ahead is dashed: the one plotted in
+game, and the route Outrider follows (Plot Route's) from where you are, with ◎ on its next stop (else your next stop);
+hover a stop for which it is. A click on a system targets it in the galaxy
+map when auto-target can work on this PC, else copies its name (the card says which; a tap shows the card with 🎯 Target
+and Copy name).
 <br><br><img src="../images/map.png" alt="The 3D map">
 </td>
 <td width="50%" valign="top">
-<b>History</b> — sessions (jumps, light-years, discoveries, mapping, samples), an all-time row, "since
-your last sale" and the game's career statistics. Below: every trip from sale to sale with what it paid
+<b>History</b> — sessions (jumps, light-years, discoveries, mapping, samples, what you sold, and ✗ for a
+death: its hover says when and whether the ship was lost), an all-time row, "since your last sale" and the game's
+career statistics. Below: every trip from sale to sale with what it paid
 against Outrider's estimate, the exobiology ×5 checked against the prediction, credits per hour and per jump,
 what each death cost, and your 25 most valuable finds.
 <br><br><img src="../images/history.png" alt="History">
@@ -66,7 +82,8 @@ checklists</a>.
 </td>
 <td width="50%" valign="top">
 <b>Log</b> — every journal event, newest first, one readable line each. Filter by category and time,
-search any text, click a row for the raw event.
+search any text, click a row for the raw event. With uploads on, each line shows what they made of it (✓ EDDN · ⏳ EDSM,
+<a href="uploads.md#upload-marks-in-the-log">upload marks</a>), and <b>not sent</b> lists what is waiting or was refused.
 <br><br><img src="../images/log.png" alt="The log">
 </td>
 </tr>
@@ -76,8 +93,13 @@ search any text, click a row for the raw event.
 
 <b>GalNet</b> (this fork) — the game's latest news article, the 30 latest listed beside it to pick from. Star systems it mentions are marked: click one to copy its name, or use Copy / Plot route under the title. A name is marked only when you know the system or Spansh does, and only where the article says "the … system" or gives a catalogue or sector name.
 
-<b>Materials</b> — your <b>Cargo</b> (the ship's hold and your carrier's, with Sell and Buy: see <a href="cargo-and-trading.md">Cargo and trading</a>), materials against their caps, and how many FSD injections, limpets, SRV refuels and
-repairs and Rhino rig restocks you can make now. <b>Mining sites</b> lists each body your SRV mined: minerals
+<b>Materials</b> — your <b>Cargo</b> (the ship's hold and your carrier's, with Sell and Buy: see <a href="cargo-and-trading.md">Cargo and trading</a>), materials against their caps, and how many of each synthesis you can make now: the FSD injections' cards,
+then Ship upkeep (AFMU refills, heat sinks, life support, limpets), SRV (refuel, repair, Rhino rig restocks) and Other
+recipes you have made, each folded into one line ("Ship upkeep ▸ AFMU refill B×4 S×1 P×0 · Heat sink B×12 S×0 P×0")
+that opens on a click (remembered on this device). A recipe you have synthesised is ✓, checked against your own
+synthesis and its date; the others are the published recipes. A material you are short of offers <b>⇄ nearest raw
+trader</b> (or manufactured, encoded): the <a href="plot-route.md#-nearest-place-to-dock">Nearest finder</a> with that
+trader asked for. <b>Mining sites</b> lists each body your SRV mined: minerals
 and tons, saved spots, the last date and the distance.
 <br><br><img src="../images/materials.png" alt="Materials">
 </td>
@@ -85,7 +107,11 @@ and tons, saved spots, the last date and the distance.
 <b>Schematic</b> — Here switches between <i>list</i>, <i>tree</i> (orbital order) and <i>schematic</i>: stars
 with their planets left to right, moons underneath, barycentres boxed, each scanned body drawn from its scan data (as
 in the body panel: class colours, bands, oceans, clouds, atmosphere, rings). <i>Split</i> (on the Here tab, on by
-default) keeps the schematic under the list or tree.
+default) keeps the schematic under the list or tree. In the system you are in, the suggested order's stops are
+numbered on the bodies (①②③, two on a body with both mapping and bio; a stop not worth the trip greyed), with a faint
+path between them and rough supercruise times (from each body's distance to the arrival star, not a route). Tap a
+number to go there first: Now, the voice, the to-do line and the overlay follow; <i>↺ order</i> puts the suggested
+order back.
 <br><br><img src="../images/schematic.png" alt="The system schematic">
 </td>
 </tr>
@@ -94,14 +120,19 @@ default) keeps the schematic under the list or tree.
 <b>Search</b> — systems with particular stars (or just <i>scoopable</i>), planets, rings, hotspots,
 unfinished exobiology or planetary mining locations (one mineral, if you like) within a radius, from what
 Outrider knows (<i>Local</i>) or everything reported (<i>Spansh</i>; mining locations are Local only, as Spansh cannot
-filter on them). The name box finds any system and opens
-it in Here, where ☆ bookmarks it or makes it the next stop.
+filter on them). Planets has <i>Potential green gas giant</i> too (see
+<a href="#-potential-green-gas-giants">below</a>). The name box finds any system (what Outrider knows,
+then EDSM, then Spansh when EDSM is down or doesn't know it) and opens it in Here, where ☆ bookmarks it or makes it the
+next stop. <i>Within N ly of</i> searches around you, your destination in game, your carrier, your next stop or a
+system you name: the distances are from there, and a result's hover says how far it is from you (remembered on this
+device).
 <br><br><img src="../images/search.png" alt="Search">
 </td>
 <td width="50%" valign="top">
 <b>My firsts</b> — visited systems with first-discovery data you haven't sold. The <b>firsts watch</b>
 checks them on Spansh in the background and marks any someone else has scanned since you ("👁 8 d after you");
-selling first still keeps your name if nobody sold before you. <b>Show lost</b> with <b>within N ly</b> is a
+the first time it finds someone in one, a card and a notification say so (see
+[Voice and alerts](voice-and-alerts.md#-alerts)); selling first still keeps your name if nobody sold before you. <b>Show lost</b> with <b>within N ly</b> is a
 rescan checklist for data lost with a ship, nearest first, priced by what is left to scan and map. <b>Left
 behind</b> lists nearby systems with work over your thresholds.
 <br><br><img src="../images/firsts.png" alt="My firsts">
@@ -112,8 +143,21 @@ behind</b> lists nearby systems with work over your thresholds.
 The **Overview** at the top shows Here and Nearby together: drag the divider, swap sides or stack them. Nearby's
 Standard / Boxel switch sits on its bar, left of ▾ This system.
 
+**Any view in a window of its own:** hover a tab and a small **↗** shows in its corner (or press Shift+Enter on the
+tab); it opens that view alone in a new window, to drag to another monitor (pressed again, it brings that window
+forward). Such a window has no tab row and leaves the main window's view as it was; ⌖ or a body opened from it shows
+in Here in the main window while that is open (otherwise the window shows Here itself, with ↩ back). The main window
+speaks, also after it reloads (**Speak from this window** makes such a window speak instead); Now has its own ↗
+(below). The address is `http://127.0.0.1:8025/?view=bm` (bm, near, here, bio, search,
+map, hwy, hist, log, mat, firsts, overview).
+
 **Bookmarks** is its own tab: the systems you have bookmarked (☆ beside any system), each with its note and distance.
-The same ☆ sets your **next stop**, shown in the header until you get there. **Plot Route** has its own page:
+The same ☆ sets your **next stop**, shown in the header until you get there. Where auto-target can work (the game PC) a **🎯** beside a bookmark
+or the next stop targets it in the galaxy map, and **Plot route** puts it in Plot Route's To (plotted at once when you
+follow no route). **Export** saves them as CSV or JSON; **Import…** beside it adds the bookmarks in such a file to yours
+("12 added, 3 already there"): a system you have already bookmarked keeps your own note, and a row it cannot read is
+left out with its line and the reason (a spreadsheet that turned a long id64 into 1.15292E+18 is the usual one; save
+that column as text). Up to 10,000 bookmarks a file. **Plot Route** has its own page:
 [Plot Route](plot-route.md).
 
 On a window of at least about 900 × 600 the page fits the window: the header stays put and each list scrolls
@@ -133,14 +177,16 @@ follows your system's light mode. Each browser keeps its own choice, and the tab
 **Now** is the cockpit view for a second monitor or a tablet, in big text: the system, the target, fuel,
 what to do next, the body you have targeted, signals worth a detour ("📍 Titan Cocijo · 2 tourist beacons"), any surface sites ("🏛 Guardian sites on 10 b"), any rare star here ("⭐ A black hole (main star)"), the notable stellar phenomena here ("🌀 Three notable stellar phenomena,
 all in rings · 1 of 3 visited": each drop at one counts, since the journal cannot tell which of a kind's sites it was)
-and the nearest unvisited system. The target says how much of it is
+and the nearest unvisited system. Under the target, the jump's cost ("56.7 ly · 0.9 t · leaves 20 max jumps"); under the
+fuel, "scoopable: 9 of last 20" (amber as on the fuel tile), and at the last scoopable star before a dry stretch "⛽ last
+scoop before 3 dry" with how much to scoop. The target says how much of it is
 known ("3/12 known", Spansh's bodies of its count) and what EDSM has ("EDSM 5/12", or "not logged"): two databases
 with different reporters.
 
 - **Where the next jump goes**, under the target: the route's next stop as the strip under the header says it ("🛣
   Next: Stop 38 · 4.2 ly · 38 of 120 · refuel in 3 jumps", or the Road to Riches / Exomastery one), and a kept boxel's
   Next (or the boxel followed, in Boxel mode): "▦ Boxel: next Smojooe KL-P d5-41 · to try" or "· known · 3 of 14
-  bodies", each with 🎯 on the game PC.
+  bodies", each with 🎯 where auto-target can work.
 - An **at-risk line** shows what is aboard against your rebuy ("🗺 380M · 🧬 412M aboard · 3.2× rebuy · 4 d
   unsold"), only once that is over your amber level or rebuy multiple; a ship bought with Arx (its hull has no credit
   value) gets no rebuy multiple. Docked where your data sells it says what
@@ -156,18 +202,37 @@ with different reporters.
 
 The **header** shows the galactic region, ranks, fuel, hull, any core module under your level (`module_warn`,
 80%; as of the last Loadout or repair, since the journal logs nothing in between), your carrier's jump countdown
-(and its tritium while it is on a sell order: see [Cargo and trading](cargo-and-trading.md); on the game PC 🎯 beside
-its system, when it is elsewhere, puts it in the galaxy map), the nearest places to sell, and the last backup.
+(and its tritium while it is on a sell order: see [Cargo and trading](cargo-and-trading.md); where auto-target can work
+🎯 beside its system, when it is elsewhere, puts it in the galaxy map; the tritium for its trip to you, a suspended
+service as its name and a red ✗
+and its balance in weeks of upkeep), the nearest places to sell (your carrier among them while its UC or Vista is on),
+and the last backup.
+
+The **In-Game Route:** line under the tiles is the route the game plotted in the galaxy map: its jumps and light years,
+the next scoopable star, the longest stretch without one, and each star as a chip. The game sometimes logs a plot but
+never writes the route's file (NavRoute.json); Outrider then waits a minute for it and says what the game does tell:
+"In-Game Route: 2 jumps left to Smojooe SJ-I b23-0 · the game didn't write the route's stars", without stars, distances
+or fuel figures. If the line stays like that, clear the route in the galaxy map and plot a different destination: the
+game writes the file again.
+
+The **Data tile** says how fresh your journal is, the last backup, the uploads in use, and whether the outside lookups
+answer: "Spansh ok", or just "Spansh unavailable" (EDSM, GitHub... the same) while one does not, and "No internet
+connection" when two or more fail because this PC has no network. Meanwhile the lists show what Outrider kept from
+earlier, and it asks again by itself. If Spansh or EDSM stays unavailable for 10 minutes, or this PC has no network,
+a card says so at the top of the page (✕ hides it); it goes when they answer. The error itself is in Show log.
 
 The **fuel tile** counts jumps as the ship gets lighter ("≈6 jumps at max range (484 ly), 3,500 at your pace"),
-for any drive, engineered or not, from your own Loadout and jumps. Nearby shows laden range and the targeted
+for any drive, engineered or not, from your own Loadout and jumps. Nearby (and Now) shows laden range and the targeted
 jump's cost ("38.2 ly · 0.9 t · leaves 5 max jumps"). "scoopable: 9 of last 20" turns amber when your fuel is
 short for the gaps between scoopable stars. In the SRV or the Nomad it keeps the ship's tank and adds the
 vehicle's own fuel.
 
-Under the Where tile, the **discovery streak** is a dot per arrival for your last 20 (gold: first discovery,
-amber: bodies nobody had reported, blue: known, grey: revisited), and the **unreported horizon**: "nearest
-known unvisited: Xyz 4.8 ly". Any unvisited star closer than that on the galaxy map is one nobody has reported.
+The Where tile names the system you are in and, beside it, the one you jumped from ("from Xyz AB-C d1-2 (75.9 ly)");
+the Commander tile has your jump range under the ship ("max jump 83.0 ly · 75.9 laden", and the boosted reach while a
+jet-cone charge holds). Under the Where tile, the **discovery streak** is a dot per arrival for your last 20 (gold:
+first discovery, amber: bodies nobody had reported, blue: known, grey: revisited). Now and the voice's status report
+give the **unreported horizon**: "nearest known unvisited: Xyz 4.8 ly". Any unvisited star closer than that on the
+galaxy map is one nobody has reported.
 
 ## 🟢 Potential green gas giants
 
@@ -182,8 +247,14 @@ journal's own figures for: your scans, and Spansh's records of other people's.
 - **"Potential green gas giant"** is said when one of your own scans fits (its own switch under Discoveries).
 - "likely" is a confirmed rule of the model, "possible" a derived one. It is a guess about where to look: some kinds
   (Class II, V, helium giants) and some temperatures cannot be predicted at all, and nothing is said for them.
+- **Finding one:** Search's *Potential green gas giant* (under Planets) runs the model over every giant in reach:
+  *Local* over what Outrider has cached, *Spansh* over every giant Spansh knows of the kinds it can judge. By voice
+  (the Android app): "nearest green gas giant" (Outrider's cache, within 500 ly). Expect few: the model calls very few
+  giants green.
 
-## ✦ Star and planet types new to your codex
+<a id="-star-and-planet-types-new-to-your-codex"></a>
+
+## ✦ Star and planet types and geology new to your codex
 
 The codex logs every star and planet type once per region, the first time you scan one there (a K-type giant, a
 terraformable water world, a rocky body with an atmosphere...). Outrider knows which entry each body would log and which
@@ -195,6 +266,13 @@ not count).
   tooltip names the type ("K-type giant: new to your codex in this region").
 - **On a Nearby row**, one tag for the system ("✦2"), each type and its bodies in the tooltip: Spansh's bodies count
   too, so a system can be picked for it before you go.
+
+**Geology** too: a landable body with geological signals and volcanism gets **✦** (✪: anywhere) when its volcanism
+could show a geological feature not in your codex for the region. One volcanism can show one of a few features (rocky
+magma: a sulphur dioxide fumarole or gas vent, a silicate magma lava spout, now and then a silicate vapour gas vent), so
+the tooltip names the new ones; the approach card says them too. Your codex's geology is its lines in your journals (a
+scan logs none), and combinations never seen on EDDN (water or CO2 features on a rocky body, anything on a rocky ice
+body) get no mark.
 
 Shown only, never spoken. A type the journals give no codex entry for (a class II giant star, a helium gas giant) gets
 no mark, nor does a body Spansh lists without its luminosity or atmosphere. With no body type in your journals at all
@@ -209,7 +287,7 @@ A boxel's systems are numbered 0, 1, 2… without gaps, so you can visit them in
 **Nearby → Boxel** (the switch on the Overview's bar, left of ▾ This system, and in Nearby's options on the Nearby tab;
 one choice for both) lists the boxel you are in by number: systems you visited show your scans as Nearby does, ones
 Spansh knows are marked "known" (someone has been there), the rest are "to try". Above the list: how many you have
-visited, how many Spansh knows and the **highest known** number (yours or Spansh's). On the game PC, **Next** (with 🎯)
+visited, how many Spansh knows and the **highest known** number (yours or Spansh's). On the game PC, **Next** (with 🎯 where auto-target can work)
 is the lowest number you have not visited, and every row has its own 🎯: auto-target types the name into the galaxy
 map and checks the game targeted it, even for a system nobody has visited (Outrider works out its address from the
 boxel).
@@ -266,6 +344,12 @@ picture and a map of the galaxy with the regions it can grow in lit and your sam
 for its name and your completion there. The line above the boxes counts it up: "Inner Orion Spur: 45 of 101 possible species found ·
 11.70% complete for the species in this region · 43 sold · …".
 
+**🔍** beside a species you have not found (and **🔍 nearby** beside a colour of it you have not found, and in its
+column) asks Spansh for the nearest bodies where commanders reported it, in that colour when you picked one: up to 25,
+nearest first, each with its distance, gravity, the colours reported there, ✓ if you have been to the system, ☆ to
+bookmark it, **Copy** for the name to paste into the galaxy map and, where auto-target can work, **🎯** to target it there. It needs the internet, and lists only what
+commanders' uploads reported to Spansh.
+
 **Completion** counts what you have done, not only what is finished: each species that can grow in the region scores
 the share of its colours you have found there (sold, aboard, lost or logged), averaged over those species, so half of
 every species is 50% with none complete. The region list shows each region's figure. The tablet's Bio/Geo page has it
@@ -289,6 +373,11 @@ list once a day, so new pictures appear as they are added.
 
 Journals from before a 2023 game update don't name a sample's colour, so those samples count the species but not a
 colour.
+
+The colour tables (which colours a species comes in, and what gives each) are downloaded on Outrider's first start. If
+that failed (offline at the time), the checklist's line, the body panel's Bio section and Here's footer say "colours
+unavailable: tables not downloaded · **Retry**", and a card at the top of the page has Retry too: it downloads only
+those tables, and the colours show at once.
 
 ## 🗺️ The surface map
 
