@@ -162,14 +162,22 @@ in analysis mode, so the screen stays clear in a fight. In the SRV and on foot (
 galaxy map it shows as the others. **Docked** hides a panel while you are docked (the ship at a station, a carrier or
 a port, or you on foot in a station, hangar or social space); ticked to start with for the system, Target, Now and
 Bio signals panels, not for the system strip and the alerts. The radar has no Docked box: it shows only on a body's
-surface. The Target panel still shows over the galaxy map while docked, so you see the system you pick. The system, Target and radar
+surface. The Target panel still shows over the galaxy map while docked, so you see the system you pick. **Foot** hides a
+panel on foot, anywhere (in a station or on a planet's surface); none is ticked to start with. The system, Target and radar
 panels start on; the system strip, Now, Bio signals
 and Alerts start off. The **theme** colours and frames the panels as the page's themes do (Elite's orange with
 cut corners, LCARS's bars, ...). In the config file (`[overlay]`):
 `system_seconds` keeps the system panel only that long after arriving (0: while you are in supercruise there), and
 `radar_range` is the radar's edge in metres (it widens to fit a colony ring); `analysis_only` lists the panels
-ticked Combat (`["system", "bio"]`; the Target panel is `body`) and `hide_docked` the ones ticked Docked
-(`["system", "body", "now", "bio"]` when the key is missing).
+ticked Combat (`["system", "bio"]`; the Target panel is `body`), `hide_docked` the ones ticked Docked
+(`["system", "body", "now", "bio"]` when the key is missing) and `hide_on_foot` the ones ticked Foot.
+
+<a id="mouse-lock"></a>**The mouse on foot and in the DSS.** There Elite locks the mouse to its window, and a window
+lying over the game can break that lock on some systems: the cursor runs off the screen while you look around. On
+Linux each panel has a window of its own, only as big as the panel, and none shows while there is nothing to draw (the
+DSS), so the middle of the screen stays Elite's (a panel you drag to the middle would be in the way again). If the
+lock still breaks for you, tick **Hide the overlay on foot and in the DSS** (`hide_mouse_lock`): no overlay at all
+there. The game asks for the lock as you step out or open the DSS, so a change counts from the next time.
 
 <a id="sizes"></a>**Sizes and text.** The row at the top reads **All Panels: Theme · Text Size** (small, normal or large,
 for every panel: `text_size`) **· Scale** (a %, 100 to start: `panel_scale`), with Show test panels and Arrange panels

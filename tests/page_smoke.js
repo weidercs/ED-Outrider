@@ -5276,6 +5276,16 @@ const releasePayloads = async () => {
     dk.checked = false; dk.dispatchEvent(new w.Event("change", {bubbles: true}));
     await sleep(50);
     got.dockedAfter = [...box.querySelectorAll("[data-ovdocked]:checked")].map(x => x.dataset.ovdocked).join(" ");
+    // the author, 2026-10-15: a Foot box on every panel's row (none ticked by default), and nothing at all on foot or
+    // in the DSS, said why
+    const ft = box.querySelector('[data-ovfoot="now"]');
+    got.foot = [box.querySelectorAll("[data-ovfoot]").length, box.querySelectorAll("[data-ovfoot]:checked").length, ft.dataset.find];
+    ft.checked = true; ft.dispatchEvent(new w.Event("change", {bubbles: true}));
+    await sleep(50);
+    const ml = box.querySelector('[data-ov="hide_mouse_lock"]');
+    got.mouseLock = [!ml.checked, /overlays can break mouse lock in these situations on some systems/i.test(ml.closest("label").textContent)];
+    ml.checked = true; ml.dispatchEvent(new w.Event("change", {bubbles: true}));
+    await sleep(50);
     box.querySelector('[data-ovact="test"]').click();
     await sleep(100);
     got.note = /cannot run yet/.test(w.eval("overlayNote"));   // nothing can draw yet: the button says why
@@ -5311,11 +5321,12 @@ const releasePayloads = async () => {
                   off: true, theme: "elite", nowin: true, nowName: true, inRows: true, tip: true,
                   target: true, analysis: "system body radar strip now bio✓ alerts",
                   docked: "system✓ body✓ –radar strip now✓ bio✓ alerts",
-                  heads: "Panel|Hide in mode|Corner|X %|Y %|Size %|Text|BG %|Opac. %||Combat|Docked", headTips: true,
+                  heads: "Panel|Hide in mode|Corner|X %|Y %|Size %|Text|BG %|Opac. %||Combat|Docked|Foot", headTips: true,
                   finds: "overlay.analysis_only overlay.hide_docked",
-                  dimmed: true, wrapped: true, help: true, alerts: true, analysisAfter: "system bio", dockedAfter: "system body now", note: true, themeNote: true,
+                  dimmed: true, wrapped: true, help: true, alerts: true, analysisAfter: "system bio", dockedAfter: "system body now", foot: [7, 0, "overlay.hide_on_foot"], mouseLock: [true, true], note: true, themeNote: true,
                   posted: [["overlay/layout", {radar: {x: 0.3}}], ["overlay", {analysis_only: ["system", "bio"]}],
-                           ["overlay", {hide_docked: ["system", "body", "now"]}], ["overlay", {test: true}],
+                           ["overlay", {hide_docked: ["system", "body", "now"]}], ["overlay", {hide_on_foot: ["now"]}],
+                           ["overlay", {hide_mouse_lock: true}], ["overlay", {test: true}],
                            ["overlay", {theme: "default"}], ["overlay/layout", {body: {text: "small"}}], ["overlay", {panel_scale: 40}]],
                   venv: true, popup: ["", "⟳Installing", "✓ installed", "⟳Installing", "Installing failed", ""]};
     const ok = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;

@@ -1235,6 +1235,8 @@ radar_range = {st["overlay"]["radar_range"]}   # metres from the radar's centre 
 analysis_only = [{", ".join(q(x) for x in st["overlay"]["analysis_only"])}]   # panels shown in your ship only while the HUD is in analysis mode: any of system, body, radar, strip, now, bio, alerts (not in the SRV, on foot or over the galaxy map)
 hide_docked = [{", ".join(q(x) for x in st["overlay"]["hide_docked"])}]   # panels hidden while docked (the ship, or on foot in a station, hangar or social space): any of system, body, strip, now, bio, alerts (the Target panel still shows over the galaxy map)
 show_inactive = {"true" if st["overlay"]["show_inactive"] else "false"}   # keep showing when Elite is not the active window (still hidden while other windows cover the game, minimised or on another desktop)
+hide_on_foot = [{", ".join(q(x) for x in st["overlay"]["hide_on_foot"])}]   # panels hidden on foot (in a station or on a planet's surface): any of system, body, radar, strip, now, bio, alerts
+hide_mouse_lock = {"true" if st["overlay"]["hide_mouse_lock"] else "false"}   # no overlay at all on foot and in the DSS, where Elite locks the mouse (an overlay can break that lock on some systems)
 pad_diagram = {"true" if st["overlay"]["pad_diagram"] else "false"}   # while docking at a starport or carrier, a diagram of where your pad is under PAD 34, in the overlay's Surface radar place and on Now (false: the number and its words only)
 
 [assistant]
@@ -1443,6 +1445,7 @@ NSP_BURST_S = 5   # s: the FSS's lines for a system's phenomena that count as on
 NAV_BEACON_SCANS = ("NavBeaconDetail", "NavBeacon")
 
 SCOOPABLE = set("OBAFGKM")
+FLAG2_ON_FOOT = 1 << 0    # Status.json Flags2: on foot (anywhere: a station, a planet's surface)
 ON_FOOT_DOCKED = (1 << 3) | (1 << 13) | (1 << 14)   # Status.json Flags2: on foot in a station, hangar, social space
 HEAT_QUIET = 30            # s: at most one heat alert in this long
 FUEL_HISTORY = 20          # recent jumps used to estimate fuel per jump
@@ -8651,7 +8654,8 @@ class State:
         SAA or the codex is open, or in the hyperspace tunnel; over the galaxy map only the Target panel, D1, and the
         alerts, S26). A panel in [overlay] analysis_only shows in your ship only while the HUD is in analysis mode (D2a);
         one in [overlay] hide_docked hides while docked (the ship docked, or on foot in a station, hangar or social space),
-        except the Target panel over the galaxy map."""
+        except the Target panel over the galaxy map; one in hide_on_foot hides on foot; with hide_mouse_lock none shows
+        on foot (nor in the DSS, as always), where Elite locks the mouse."""
         now = time.time() if now is None else now
         cfg, pal, size = self.overlay_cfg, self.overlay_palette(), self.overlay_sizes()   # size: each panel's text size
         if now < self.overlay_test_until or now < self.overlay_arrange_until:
@@ -8662,6 +8666,8 @@ class State:
                 or (st.get("flags") or 0) & FLAG_FSD_JUMP:   # nothing in the hyperspace tunnel: the system is changing
             return []
         flags, flags2, pos, out = st.get("flags") or 0, st.get("flags2") or 0, self.journals.pos, []
+        if cfg.get("hide_mouse_lock") and flags2 & FLAG2_ON_FOOT:
+            return []   # the window goes too (overlay_window.empty_hidden): nothing over the game while it locks the mouse
         if (st.get("gui_focus") or 0) == OVERLAY_GALAXY_MAP:
             # over the galaxy map (D1): the Target panel with the system you target there, docked or not, and the alerts
             # (S26); never analysis-only
@@ -8729,6 +8735,9 @@ class State:
         hide = set(cfg.get("hide_docked") or ())
         if hide and (flags & FLAG_DOCKED or flags2 & ON_FOOT_DOCKED):
             out = [p for p in out if p["id"] not in hide]
+        foot = set(cfg.get("hide_on_foot") or ())   # hidden on foot (the author, 2026-10-15), anywhere
+        if foot and flags2 & FLAG2_ON_FOOT:
+            out = [p for p in out if p["id"] not in foot]
         return out
 
     def overlay_view(self, since=None, now=None, window=True, track=None, height=None):
@@ -8847,6 +8856,7 @@ class State:
                 "panel_scale": cfg.get("panel_scale", 100), "win_h": win_h, "text_px": text_px, "min_text_px": O.MIN_TEXT_PX,
                 "panels": {p: bool(cfg.get(f"{p}_panel" if p != "radar" else "radar")) for p in outrider.overlay.PANELS},
                 "analysis_only": list(cfg.get("analysis_only") or []), "hide_docked": list(cfg.get("hide_docked") or []),
+                "hide_on_foot": list(cfg.get("hide_on_foot") or []), "hide_mouse_lock": bool(cfg.get("hide_mouse_lock")),
                 "show_inactive": bool(cfg.get("show_inactive")), "pad_diagram": bool(cfg.get("pad_diagram", True)),
                 "window": window, "layout": layout,
                 "test": max(0, round(self.overlay_test_until - now)), "arrange": max(0, round(self.overlay_arrange_until - now)),
@@ -8856,7 +8866,8 @@ class State:
 
     def overlay_set(self, body, now=None):
         """POST /api/overlay {enabled?, theme?, text_size?, panel_scale?: %, panels?: {system|body|radar|strip|now|bio|alerts: bool},
-        analysis_only?: [panel ids], hide_docked?: [panel ids but radar], show_inactive?: bool, pad_diagram?: bool, test?: bool,
+        analysis_only?: [panel ids], hide_docked?: [panel ids but radar], hide_on_foot?: [panel ids], show_inactive?: bool,
+        pad_diagram?: bool, hide_mouse_lock?: bool, test?: bool,
         arrange?: bool}: the
         switches, applied at once and written into [overlay] for the next start (panel_scale clamped to
         outrider.overlay.PANEL_SCALE_LIMITS); test panels for
@@ -8868,7 +8879,7 @@ class State:
             return {"error": "expected {enabled, theme, text_size, panels, test, arrange}"}, 400
         changes = {}
         for key, val in body.items():
-            if key in ("enabled", "show_inactive", "pad_diagram") and isinstance(val, bool):
+            if key in ("enabled", "show_inactive", "pad_diagram", "hide_mouse_lock") and isinstance(val, bool):
                 changes[key] = val
             elif key == "theme" and val in O.THEMES:
                 changes["theme"] = val
@@ -8884,6 +8895,8 @@ class State:
                 changes["analysis_only"] = O.analysis_list(val)   # the whole list, in PANELS' order
             elif key == "hide_docked" and isinstance(val, list) and all(isinstance(p, str) and p in O.DOCKED_PANELS for p in val):
                 changes["hide_docked"] = O.docked_list(val)   # the whole list too
+            elif key == "hide_on_foot" and isinstance(val, list) and all(isinstance(p, str) and p in O.PANELS for p in val):
+                changes["hide_on_foot"] = O.foot_list(val)    # and this one
             elif key in ("test", "arrange") and isinstance(val, bool):
                 pass
             else:

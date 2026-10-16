@@ -923,7 +923,8 @@ body.nowmode header, body.nowmode main { display: none; }
 /* Settings: a lot in it, so wider, and on a big screen wider still, in columns of folding sections */
 #alertDialog { width: min(860px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; padding-top: 0; }
 @media (min-width: 1280px) and (min-height: 700px) {
-  #alertDialog { width: min(1560px, calc(100vw - 64px)); max-height: calc(100vh - 48px); }
+  /* the author, 2026-10-15: 80 % of the screen's width on a big screen, for room for the options */
+  #alertDialog { width: max(80vw, min(1560px, calc(100vw - 64px))); max-height: calc(100vh - 48px); }
   #alertDialog .setbody { columns: 2 560px; column-gap: 28px; }
   #alertDialog .setsec { break-inside: avoid; }
   #alertDialog #serverSettings, #alertDialog #speechLogBox { column-span: all; }

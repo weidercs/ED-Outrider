@@ -2,6 +2,15 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-15 · Overlay: a window per panel on Linux, Foot boxes, "Hide the overlay on foot and in the DSS", wider Settings
+- On Linux every overlay panel has its own window, only as big as the panel (`window_plan`, `window_rect`), so panels at
+  opposite edges no longer make one window over the middle of the game, where Elite locks the mouse (#1); no window with
+  nothing to draw, on Windows too; the one window over the whole game only in Arrange mode (and on Windows).
+- Settings → In-game overlay: a **Foot** box per panel under Hide in mode (`[overlay] hide_on_foot`, none by default:
+  the author has no use for Now on foot, others may), and **Hide the overlay on foot and in the DSS** (`hide_mouse_lock`,
+  off): "overlays can break mouse lock in these situations on some systems".
+- Settings is 80 % of the screen's width on a big screen (it was at most 1560 px).
+
 ## 2026-10-15 · The overlay no longer breaks the game's mouse lock (DSS, on foot) on Linux (#1)
 - The author's trials (GNOME on Wayland) found it: on Linux the overlay window is now only as big as its panels
   together (`window_rect`: their bounding box plus 6 px; drawn at the game window's layout through an offset, following

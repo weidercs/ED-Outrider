@@ -48,10 +48,13 @@ ARRANGE_SECONDS = 600   # Arrange mode ends by itself after this, so the overlay
 # flying (System, Target, Now, Bio): the strip and the alerts still say where you are and what happened
 DOCKED_PANELS = tuple(p for p in PANELS if p != "radar")
 HIDE_DOCKED_DEFAULT = ("system", "body", "now", "bio")
+# [overlay] hide_on_foot (the author, 2026-10-15): the panels hidden on foot (anywhere: a station, a planet's surface), none
+# by default; hide_mouse_lock: the whole overlay off on foot and in the DSS, where Elite locks the mouse (#1: an overlay
+# window over the game broke that lock on the author's Linux PC; the windows only as big as their panels fixed it there)
 DEFAULTS = {"enabled": False, "theme": "default", "text_size": "normal", "system_panel": True, "body_panel": True,
             "radar": True, "strip_panel": False, "now_panel": False, "bio_panel": False, "alerts_panel": False, "system_seconds": 0,
             "radar_range": 800, "analysis_only": [], "hide_docked": list(HIDE_DOCKED_DEFAULT), "show_inactive": False,
-            "panel_scale": 100, "pad_diagram": True}
+            "panel_scale": 100, "pad_diagram": True, "hide_on_foot": [], "hide_mouse_lock": False}
 # [overlay] panel_scale (a GitHub report, 2026-10-14: too large on a 4K TV): all panels' size in %, on top of each panel's
 # own; Settings -> In-game overlay's All panels, Ctrl + wheel in Arrange mode
 PANEL_SCALE_LIMITS = (20, 250)
@@ -203,7 +206,7 @@ def overlay_settings(cfg):
         _warn("must be a section (a table of settings); ignored")
     out = dict(DEFAULTS)
     for key in ("enabled", "system_panel", "body_panel", "radar", "strip_panel", "now_panel", "bio_panel", "alerts_panel",
-                "show_inactive", "pad_diagram"):
+                "show_inactive", "pad_diagram", "hide_mouse_lock"):
         v = o.get(key)
         if v is None:
             continue
@@ -229,6 +232,7 @@ def overlay_settings(cfg):
             _warn(f"{key} = {v!r} must be a number; using {DEFAULTS[key]}")
     out["analysis_only"] = analysis_list(o.get("analysis_only"), _warn)
     out["hide_docked"] = docked_list(o.get("hide_docked"), _warn)
+    out["hide_on_foot"] = foot_list(o.get("hide_on_foot"), _warn)
     return {"overlay": out}
 
 
@@ -259,6 +263,11 @@ def docked_list(v, warn=None):
     is never one: it shows only on a body's surface); HIDE_DOCKED_DEFAULT when the key is missing, so a config written
     before it hides what Outrider hid then (Now and the Target panel) and the System and Bio panels too."""
     return panel_list("hide_docked", v, warn, HIDE_DOCKED_DEFAULT, DOCKED_PANELS)
+
+
+def foot_list(v, warn=None):
+    """[overlay] hide_on_foot (the author, 2026-10-15): the panels hidden on foot, any of PANELS; none when missing."""
+    return panel_list("hide_on_foot", v, warn)
 
 
 # ---- the page's overlay pill (S8): how the overlay is doing, in one word and a reason ----

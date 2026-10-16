@@ -11304,7 +11304,7 @@ const OV_PANELS = [["system", "System", "the bodies worth your time, in supercru
 const OV_HEADS = (() => {
   const th = (text, title, attrs = "") => `<th${attrs} title="${title}">${text}</th>`, r2 = ` rowspan="2"`;
   return `<tr>${th("Panel", "tick a panel to show it; hover its name for what it shows", r2)}` +
-    th("Hide in mode", "a ticked box hides the panel in that mode", ` colspan="2" class="ovgrp"`) +
+    th("Hide in mode", "a ticked box hides the panel in that mode", ` colspan="3" class="ovgrp"`) +
     th("Corner", "placed from: the corner of the game window (or the middle of its top or bottom edge) it is kept from", r2) +
     th("X %", "across: how far in from that corner's side, in % of the game window's width", r2) +
     th("Y %", "down: how far in from that corner's top or bottom, in % of the game window's height", r2) +
@@ -11313,7 +11313,8 @@ const OV_HEADS = (() => {
     th("BG %", "background: its background's opacity, in % (0: text only)", r2) +
     th("Opac. %", "opacity: the whole panel's, in %", r2) + `<th${r2}></th></tr><tr>` +
     th("Combat", "the HUD in combat mode (analysis only): ticked, hidden in your ship while the HUD is in combat mode, shown only in analysis mode (in the SRV, on foot and over the galaxy map it shows as the others)") +
-    th("Docked", "ticked: hidden while docked (the ship at a station, a carrier or a port, or you on foot in a station, hangar or social space); the Target panel still shows over the galaxy map") + `</tr>`;
+    th("Docked", "ticked: hidden while docked (the ship at a station, a carrier or a port, or you on foot in a station, hangar or social space); the Target panel still shows over the galaxy map") +
+    th("Foot", "ticked: hidden on foot (in a station or on a planet's surface)") + `</tr>`;
 })();
 const OV_CORNERS = {nw: "top left", n: "top centre", ne: "top right", sw: "bottom left", s: "bottom centre", se: "bottom right"};
 let overlayDrawn = "", overlayNote = "";
@@ -11342,7 +11343,7 @@ function overlayHtml(o) {
   const opt = (vals, cur, label = v => v) => vals.map(v => `<option value="${v}"${v === cur ? " selected" : ""}>${esc(label(v))}</option>`).join("");
   const pct = v => Math.round(v * 100);
   const lay = o.layout || {};
-  const ana = new Set(o.analysis_only || []), dock = new Set(o.hide_docked || []);
+  const ana = new Set(o.analysis_only || []), dock = new Set(o.hide_docked || []), foot = new Set(o.hide_on_foot || []);
   // the 4K TV report (2026-10-14): what each size comes to, from the game window's height the overlay window reports
   // (text_px: none without a window drawing), and when the floor holds it; one line under the table names those panels
   const tpx = o.text_px || {}, floor = o.min_text_px || 9, heldBy = [];
@@ -11361,8 +11362,9 @@ function overlayHtml(o) {
     // 2026-10-14: the radar has no box, it shows only on a body's surface); data-find: Find a setting finds them by key
     const docked = id === "radar" ? `<td class="ovana unk" title="the radar shows only on a body's surface">–</td>`
       : `<td class="ovana"><input type="checkbox" data-ovdocked="${id}" data-find="overlay.hide_docked"${dock.has(id) ? " checked" : ""} title="${esc(name)}: hidden while docked${id === "body" ? " (still shown over the galaxy map)" : ""}"></td>`;
+    const onFoot = `<td class="ovana"><input type="checkbox" data-ovfoot="${id}" data-find="overlay.hide_on_foot"${foot.has(id) ? " checked" : ""} title="${esc(name)}: hidden on foot"></td>`;
     return `<tr class="${on ? "" : "ovoff"}"><th><label title="${esc(what)}"><input type="checkbox" data-ovpanel="${id}"${on ? " checked" : ""}> ${esc(name)}</label></th>` +
-      `<td class="ovana"><input type="checkbox" data-ovanalysis="${id}" data-find="overlay.analysis_only"${ana.has(id) ? " checked" : ""} title="${esc(name)}: hidden in your ship while the HUD is in combat mode (shown only in analysis mode)"></td>${docked}<td><select data-ovlay="${id}" data-k="corner" title="the corner of the game window it is placed from">${opt(Object.keys(OV_CORNERS), e.corner, c => OV_CORNERS[c])}</select></td>` +
+      `<td class="ovana"><input type="checkbox" data-ovanalysis="${id}" data-find="overlay.analysis_only"${ana.has(id) ? " checked" : ""} title="${esc(name)}: hidden in your ship while the HUD is in combat mode (shown only in analysis mode)"></td>${docked}${onFoot}<td><select data-ovlay="${id}" data-k="corner" title="the corner of the game window it is placed from">${opt(Object.keys(OV_CORNERS), e.corner, c => OV_CORNERS[c])}</select></td>` +
       num("x", pct(e.x || 0), 0, 95, "how far in from that corner's side, in % of the game window's width") +
       num("y", pct(e.y || 0), 0, 95, "how far in from that corner's top or bottom, in % of the game window's height") +
       num("scale", pct(e.scale || 1), 20, 250, "its size, in % (multiplied with All Panels' Scale)").replace("</td>", sizeFig(id, name) + "</td>") +
@@ -11377,6 +11379,9 @@ function overlayHtml(o) {
     `<label class="mod"><input type="checkbox" data-ov="show_inactive"${o.show_inactive ? " checked" : ""}> Keep showing when Elite is not the active window ` +
     `<span class="hint">still hidden while other windows cover the game (a native Wayland window is not seen)</span></label>` +
     // #12: the pad diagram while docking at a starport or carrier, in the Surface radar's place and on Now
+    // #1 (the author, 2026-10-15): nothing over the game while it locks the mouse
+    `<label class="mod"><input type="checkbox" data-ov="hide_mouse_lock"${o.hide_mouse_lock ? " checked" : ""}> Hide the overlay on foot and in the DSS ` +
+    `<span class="hint">overlays can break mouse lock in these situations on some systems</span></label>` +
     `<label class="mod"><input type="checkbox" data-ov="pad_diagram"${o.pad_diagram !== false ? " checked" : ""}> Show the pad diagram while docking ` +
     `<span class="hint">at a starport or carrier, under PAD 34 in the Surface radar's place and on Now (off: the number and where it is, in words)</span></label>` +
     // one control row (the author, 2026-10-14): "All Panels: Theme [ ] Text Size [ ] Scale [100 %]", the two buttons on
@@ -11436,7 +11441,7 @@ async function overlayPost(path, body) {
 }
 document.getElementById("overlayBox").addEventListener("change", e => {
   const t = e.target;
-  if (t.dataset.ov && t.type === "checkbox") overlayPost("api/overlay", {[t.dataset.ov]: t.checked});   // enabled, show_inactive, pad_diagram
+  if (t.dataset.ov && t.type === "checkbox") overlayPost("api/overlay", {[t.dataset.ov]: t.checked});   // enabled, show_inactive, pad_diagram, hide_mouse_lock
   // a select keeps the focus, which holds renderOverlay off: let go, so the server's answer (its note) is drawn
   else if (t.dataset.ov === "panel_scale") {   // all panels' size, a number (the server clamps it)
     const v = Number(t.value);
@@ -11447,6 +11452,7 @@ document.getElementById("overlayBox").addEventListener("change", e => {
   else if (t.dataset.ovpanel) overlayPost("api/overlay", {panels: {[t.dataset.ovpanel]: t.checked}});
   // analysis only: the whole list, as the boxes now say
   else if (t.dataset.ovanalysis) overlayPost("api/overlay", {analysis_only: [...e.currentTarget.querySelectorAll("[data-ovanalysis]:checked")].map(x => x.dataset.ovanalysis)});
+  else if (t.dataset.ovfoot) overlayPost("api/overlay", {hide_on_foot: [...e.currentTarget.querySelectorAll("[data-ovfoot]:checked")].map(x => x.dataset.ovfoot)});
   else if (t.dataset.ovdocked) overlayPost("api/overlay", {hide_docked: [...e.currentTarget.querySelectorAll("[data-ovdocked]:checked")].map(x => x.dataset.ovdocked)});
   else if (t.dataset.ovlay) {
     const k = t.dataset.k, word = k === "corner" || k === "text", v = word ? t.value : Number(t.value) / 100;

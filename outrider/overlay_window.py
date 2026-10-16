@@ -166,16 +166,17 @@ def win_exstyle(style, through):
 # #1, the game's mouse lock (the author's trials in game, 2026-10-15, GNOME on Wayland): in the DSS and on foot Elite
 # locks the pointer, and XWayland/GNOME grant that only while no other window lies over the game where the pointer is.
 # A window over the whole game broke it, even click-through and even shaped down to one pixel (a window counts with its
-# whole rectangle); one only as big as its panels keeps it, and none at all when there is nothing to draw. Linux only:
-# the Windows overlay was confirmed working over the whole game window, and this was not tried there.
+# whole rectangle); one only as big as its panels kept it, and none at all when there is nothing to draw. So a window per
+# panel (window_plan), none in the middle unless a panel is put there. Linux only: the Windows overlay was confirmed
+# working with one window over the whole game, and this was not tried there (with nothing to draw it hides there too).
 FIT_WINDOW = sys.platform.startswith("linux")
 PANEL_PAD = 6   # px around the panels in the window's own rectangle, so a panel's edge is drawn whole
 
 
 def window_rect(geoms, win_w, win_h, pad=PANEL_PAD):
-    """The overlay window's own rectangle (x, y, w, h) inside the game window (FIT_WINDOW): just big enough for every
-    panel as drawn (geoms: [(id, (x, y, w, h))]), each grown by `pad`, kept inside the game window, in whole pixels; one
-    pixel in the corner when nothing is drawn."""
+    """A panel's window's own rectangle (x, y, w, h) inside the game window (FIT_WINDOW): just big enough for the panels
+    as drawn (geoms: [(id, (x, y, w, h))]: its one panel), each grown by `pad`, kept inside the game window, in whole
+    pixels; one pixel in the corner when nothing is drawn yet."""
     rs = []
     for _pid, (x, y, w, h) in geoms:
         x0, y0 = max(0, math.floor(x - pad)), max(0, math.floor(y - pad))
@@ -188,11 +189,19 @@ def window_rect(geoms, win_w, win_h, pad=PANEL_PAD):
     return x0, y0, max(r[2] for r in rs) - x0, max(r[3] for r in rs) - y0
 
 
-def empty_hidden(data, arranging):
-    """The window taken off the screen while it has no panel to draw (the DSS, the FSS...: FIT_WINDOW); never in Arrange
-    mode or with the test panels."""
-    d = data or {}
-    return not arranging and not d.get("test") and not d.get("panels")
+def window_plan(data, shown, arranging, fit=None):
+    """Which windows draw over the game: ("none", []) out of sight or with nothing to draw (no window over the game while
+    it locks the mouse: the DSS, the FSS...); ("all", []) one window over the whole game (Arrange mode, where it takes the
+    mouse; not FIT_WINDOW); ("panels", [ids]) one window per panel, each only as big as its panel (FIT_WINDOW)."""
+    fit = FIT_WINDOW if fit is None else fit
+    if not shown:
+        return "none", []
+    if arranging:
+        return "all", []
+    ids = [p.get("id") for p in (data or {}).get("panels") or [] if p.get("id")]
+    if not ids:
+        return "none", []
+    return ("panels", ids) if fit else ("all", [])
 
 
 def should_show(st, data, active=False):
@@ -587,26 +596,79 @@ def run_window(client, title_hint=None):   # pragma: no cover - needs a display;
                                                       round(g.height() * dpr)), dpr))
         return screen_for(infos, st.x + st.width / 2, st.y + st.height / 2)
 
+    def overlay_window(w, title):
+        """Modern Overlay's window: frameless, on top, translucent, never activated, clicks passed through."""
+        w.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Window
+        if sys.platform.startswith("linux"):
+            flags |= Qt.WindowType.X11BypassWindowManagerHint
+        else:
+            flags |= Qt.WindowType.Tool
+        w.setWindowFlags(flags)
+        w.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        w.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        w.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        w.setWindowTitle(title)
+
+    def set_click_through(w, through):
+        w.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, through)
+        handle = w.windowHandle()
+        if handle is not None:
+            handle.setFlag(Qt.WindowType.WindowTransparentForInput, through)
+        if sys.platform.startswith("win"):   # Modern Overlay's platform_integration, both ways
+            try:
+                import ctypes
+                user32 = ctypes.windll.user32
+                hwnd = int(w.winId())
+                style = user32.GetWindowLongW(hwnd, -20)   # GWL_EXSTYLE
+                user32.SetWindowLongW(hwnd, -20, win_exstyle(style, through))
+            except Exception as e:  # noqa: BLE001 -- best effort
+                log.debug("Windows click-through: %s", e)
+
+    def panel_of(pid):
+        return next((p for p in (feed.data or {}).get("panels") or [] if p.get("id") == pid), None)
+
+    class PanelWindow(QWidget):
+        """One panel's own window (FIT_WINDOW: window_plan's "panels"), only as big as the panel, always click-through:
+        the rest of the game window, its middle where the locked mouse lives, is not covered at all."""
+        def __init__(self, pid):
+            super().__init__()
+            overlay_window(self, f"ED Outrider overlay: {pid}")
+            self.pid, self.game, self.off, self.geoms = pid, None, (0, 0), []
+
+        def place(self):
+            """Around its panel as last drawn (window_rect), in the game window's rectangle."""
+            if not self.game:
+                return
+            x, y, w, h = self.game
+            ox, oy, ww, wh = window_rect(self.geoms, w, h)
+            if self.off != (ox, oy):
+                self.off = (ox, oy)
+                self.update()   # drawn again at the new offset
+            if (self.x(), self.y(), self.width(), self.height()) != (x + ox, y + oy, ww, wh):
+                self.setGeometry(x + ox, y + oy, ww, wh)
+
+        def paintEvent(self, _event):
+            panel = panel_of(self.pid)
+            p = QPainter(self)
+            try:
+                gw, gh = self.game[2:] if self.game else (self.width(), self.height())
+                p.translate(-self.off[0], -self.off[1])   # the panel laid out in the game window, this window a part of it
+                self.geoms = paint(p, dict(feed.data or {}, panels=[panel] if panel else []), gw, gh)
+            finally:
+                p.end()
+            QTimer.singleShot(0, self.place)   # grown, moved or new: the window follows (not inside the paint)
+
     class Overlay(QWidget):
+        """The window over the whole game: Arrange mode (it takes the mouse there), and every panel where not
+        FIT_WINDOW; it also follows the game's window for the panel windows (window_plan)."""
         def __init__(self):
             super().__init__()
-            # Modern Overlay's window: frameless, on top, translucent, never activated, clicks passed through
-            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-            flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Window
-            if sys.platform.startswith("linux"):
-                flags |= Qt.WindowType.X11BypassWindowManagerHint
-            else:
-                flags |= Qt.WindowType.Tool
-            self.setWindowFlags(flags)
-            self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-            self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
-            self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
-            self.setWindowTitle("ED Outrider overlay")
+            overlay_window(self, "ED Outrider overlay")
             self.seq = -1
             self.click_through = True
-            # the game window's rectangle (the panels are laid out in it) and where this window sits in it: (0, 0) when
-            # it covers the whole game (Arrange mode, or not FIT_WINDOW)
-            self.game, self.off = None, (0, 0)
+            self.game = None     # the game window's rectangle (x, y, w, h), in Qt's pixels: the panels are laid out in it
+            self.panes = {}      # panel id -> its PanelWindow (FIT_WINDOW), made as a panel first shows, kept hidden after
             # Arrange mode: the panels as drawn (for hit tests), the drag under way, the edits not saved yet
             # dirty: an edit not sent yet (kept over Outrider's answers until it is); saved_at: the feed's seq when the
             # last edit was sent (the next answer carries it, and the local copy can go)
@@ -645,7 +707,7 @@ def run_window(client, title_hint=None):   # pragma: no cover - needs a display;
             return dict(self.override.get(pid) or lay.get(pid) or O.LAYOUT_DEFAULT[pid])
 
         def panel(self, pid):
-            return next((p for p in (feed.data or {}).get("panels") or [] if p.get("id") == pid), None)
+            return panel_of(pid)
 
         def mousePressEvent(self, ev):
             if not self.arranging():
@@ -697,19 +759,7 @@ def run_window(client, title_hint=None):   # pragma: no cover - needs a display;
 
         def apply_click_through(self, through):
             self.click_through = through
-            self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, through)
-            handle = self.windowHandle()
-            if handle is not None:
-                handle.setFlag(Qt.WindowType.WindowTransparentForInput, through)
-            if sys.platform.startswith("win"):   # Modern Overlay's platform_integration, both ways
-                try:
-                    import ctypes
-                    user32 = ctypes.windll.user32
-                    hwnd = int(self.winId())
-                    style = user32.GetWindowLongW(hwnd, -20)   # GWL_EXSTYLE
-                    user32.SetWindowLongW(hwnd, -20, win_exstyle(style, through))
-                except Exception as e:  # noqa: BLE001 -- best effort
-                    log.debug("Windows click-through: %s", e)
+            set_click_through(self, through)
 
         def follow(self):
             if tracker:   # S25: asked whether the game is out of sight or covered only while it may show behind
@@ -722,29 +772,31 @@ def run_window(client, title_hint=None):   # pragma: no cover - needs a display;
             feed.track = track_code(tracker, st, shown)
             rect = overlay_tracking.native_rect_to_qt((st.x, st.y, st.width, st.height), screen_of(st)) if st else None
             feed.height = round(rect[3]) if rect else None   # the game window's height, as paint sees it
-            if not shown or (FIT_WINDOW and empty_hidden(feed.data, arranging)):
-                if self.isVisible():
-                    self.hide()
-                return
-            self.game = tuple(round(v) for v in rect)
-            self.place()
-            if not self.isVisible():
-                self.show()
-                self.apply_click_through(self.click_through)
-            self.raise_()
-
-        def place(self):
-            """Over the game window: only around the panels as last drawn (FIT_WINDOW: window_rect), the whole of it in
-            Arrange mode (it takes the mouse there)."""
-            if not self.game:
-                return
-            x, y, w, h = self.game
-            ox, oy, ww, wh = window_rect(self.geoms, w, h) if FIT_WINDOW and not self.arranging() else (0, 0, w, h)
-            if self.off != (ox, oy):
-                self.off = (ox, oy)
-                self.update()   # drawn again at the new offset
-            if (self.x(), self.y(), self.width(), self.height()) != (x + ox, y + oy, ww, wh):
-                self.setGeometry(x + ox, y + oy, ww, wh)
+            kind, ids = window_plan(feed.data, shown, arranging)
+            self.game = tuple(round(v) for v in rect) if rect else None
+            for pid, pane in self.panes.items():
+                if pane.isVisible() and (kind != "panels" or pid not in ids):
+                    pane.hide()
+            if kind != "all" and self.isVisible():
+                self.hide()
+            if kind == "all":
+                x, y, w, h = self.game
+                if (self.x(), self.y(), self.width(), self.height()) != (x, y, w, h):
+                    self.setGeometry(x, y, w, h)
+                if not self.isVisible():
+                    self.show()
+                    self.apply_click_through(self.click_through)
+                self.raise_()
+            for pid in ids:   # "panels": each its own window
+                pane = self.panes.get(pid)
+                if pane is None:
+                    pane = self.panes[pid] = PanelWindow(pid)
+                pane.game = self.game
+                pane.place()
+                if not pane.isVisible():
+                    pane.show()
+                    set_click_through(pane, True)
+                pane.raise_()
 
         def tick(self):
             if feed.seq != self.seq:
@@ -756,17 +808,17 @@ def run_window(client, title_hint=None):   # pragma: no cover - needs a display;
                 if not self.arranging():
                     self.override, self.drag, self.all_pct = {}, None, None
                 self.update()
+                for pane in self.panes.values():
+                    if pane.isVisible():
+                        pane.update()
 
         def paintEvent(self, _event):
             p = QPainter(self)
             try:
-                gw, gh = self.game[2:] if self.game else (self.width(), self.height())
-                p.translate(-self.off[0], -self.off[1])   # the panels laid out in the game window, this window a part of it
-                self.geoms = paint(p, feed.data, gw, gh, arrange=self.arranging(), override=self.override,
+                self.geoms = paint(p, feed.data, self.width(), self.height(), arrange=self.arranging(), override=self.override,
                                    all_pct=self.all_pct)
             finally:
                 p.end()
-            QTimer.singleShot(0, self.place)   # a panel grown, moved or new: the window follows (not inside the paint)
 
     win = Overlay()
     follow = QTimer(win)

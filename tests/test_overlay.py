@@ -84,11 +84,13 @@ class Settings(unittest.TestCase):
         args = types.SimpleNamespace(**{k: None for k in ("journals", "legacy", "host", "port", "db", "radius")})
         st = ed_outrider.settings_from({"overlay": {"enabled": True, "theme": "lcars", "radar_range": 1200,
                                                     "analysis_only": ["now", "bio"], "hide_docked": ["strip", "bio"],
-                                                    "panel_scale": 45}}, args)
+                                                    "panel_scale": 45, "hide_on_foot": ["Now", "radar"],
+                                                    "hide_mouse_lock": True}}, args)
         text = ed_outrider.config_text(st)
         back = tomllib.loads(text)["overlay"]
         self.assertEqual((back["enabled"], back["theme"], back["radar_range"], back["analysis_only"], back["hide_docked"],
-                          back["panel_scale"]), (True, "lcars", 1200, ["now", "bio"], ["strip", "bio"], 45))
+                          back["panel_scale"], back["hide_on_foot"], back["hide_mouse_lock"]),
+                         (True, "lcars", 1200, ["now", "bio"], ["strip", "bio"], 45, ["radar", "now"], True))
         # a config written before hide_docked: the default, written out as such
         back = tomllib.loads(ed_outrider.config_text(ed_outrider.settings_from({"overlay": {}}, args)))["overlay"]
         self.assertEqual(back["hide_docked"], ["system", "body", "now", "bio"])
@@ -1107,9 +1109,16 @@ class Server(unittest.TestCase):
         self.assertEqual((out["hide_docked"], self.state.overlay_cfg["hide_docked"]), (["now", "alerts"], ["now", "alerts"]))
         with open(self.state.config_path, encoding="utf-8") as f:
             self.assertIn('hide_docked = ["now", "alerts"]', f.read())
+        out, _ = self.state.overlay_set({"hide_on_foot": ["now", "radar"], "hide_mouse_lock": True}, now=253)
+        self.assertEqual((out["hide_on_foot"], out["hide_mouse_lock"]), (["radar", "now"], True))
+        with open(self.state.config_path, encoding="utf-8") as f:
+            text = f.read()
+        self.assertIn('hide_on_foot = ["radar", "now"]', text)
+        self.assertIn("hide_mouse_lock = true", text)
         for bad in (None, {}, {"enabled": "yes"}, {"theme": "neon"}, {"panels": {"map": True}}, {"panels": {}}, {"test": 1},
                     {"volume": 3}, {"analysis_only": ["map"]}, {"analysis_only": "bio"}, {"analysis_only": [True]},
-                    {"hide_docked": ["radar"]}, {"hide_docked": "now"}):
+                    {"hide_docked": ["radar"]}, {"hide_docked": "now"}, {"hide_on_foot": ["map"]}, {"hide_on_foot": "now"},
+                    {"hide_mouse_lock": "yes"}):
             self.assertEqual(self.state.overlay_set(bad, now=300)[1], 400, bad)
 
     def test_all_panels_size(self):
@@ -1404,6 +1413,30 @@ class Server(unittest.TestCase):
         self.assertEqual(shown(), ["strip"])
         self.state.overlay_set({"test": True}, now=1000)                            # the test panels: all of them
         self.assertEqual(shown(), list(O.PANELS))
+
+    def test_hidden_on_foot(self):
+        """[overlay] hide_on_foot (the author, 2026-10-15): each panel ticked hides on foot, anywhere (a station, a
+        planet's surface), none by default; hide_mouse_lock: nothing at all on foot (the DSS never had panels); in the
+        ship neither hides anything."""
+        st = self.target_setup()
+        self.state.overlay_cfg.update(strip_panel=True, now_panel=True, alerts_panel=True, hide_docked=[])
+        self.state.overlay_alert({"kind": "find", "title": "B 1: Earth-like world"}, now=1009)
+        shown = lambda: [p["id"] for p in self.state.overlay_panels(now=1010)]
+        self.assertEqual(O.DEFAULTS["hide_on_foot"], [])
+        flying = shown()
+        self.assertIn("now", flying)
+        st.update(flags=0, flags2=ed_outrider.FLAG2_ON_FOOT)                         # on foot on a surface: by default all
+        self.assertEqual(shown(), ["strip", "now", "alerts"])
+        self.state.overlay_cfg["hide_on_foot"] = ["now"]                               # Now ticked: hidden on foot
+        self.assertEqual(shown(), ["strip", "alerts"])
+        st.update(flags2=ed_outrider.FLAG2_ON_FOOT | (1 << 13))                        # on foot in a hangar: the same
+        self.assertEqual(shown(), ["strip", "alerts"])
+        self.state.overlay_cfg["hide_mouse_lock"] = True                               # nothing on foot
+        self.assertEqual(shown(), [])
+        st.update(flags=ed_outrider.FLAG_IN_MAIN_SHIP, flags2=0)                       # back in the ship: as before
+        self.assertEqual(shown(), flying)
+        st["gui_focus"] = 10                                                           # the DSS: never any
+        self.assertEqual(shown(), [])
 
     def test_hidden_while_docked(self):
         """[overlay] hide_docked (the author, 2026-10-14): each panel docked (the ship's flag, or on foot in a station)

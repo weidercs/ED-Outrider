@@ -258,6 +258,10 @@
 #                           # still shows over the galaxy map
 # show_inactive = false     # keep showing when Elite is not the active window (Settings -> In-game overlay); it still
 #                           # hides while other windows cover the game, or the game is minimised or on another desktop
+# hide_on_foot = []         # panels hidden on foot (in a station or on a planet's surface), e.g. ["now"]: any of
+#                           # system, body, radar, strip, now, bio, alerts
+# hide_mouse_lock = false   # no overlay at all on foot and in the DSS, where Elite locks the mouse: an overlay can
+#                           # break that lock on some systems
 # pad_diagram = true        # while docking at a starport or carrier: a diagram of where your pad is under PAD 34, in the
 #                           # Surface radar's place and on Now (false: the number and its words only)
 

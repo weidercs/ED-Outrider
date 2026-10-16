@@ -201,8 +201,8 @@ class Arranging(unittest.TestCase):
 
 
 class GameMouseLock(unittest.TestCase):
-    """#1: on Linux the window covers only its panels, and none of the game when it has nothing to draw (the game's
-    pointer lock is refused while a window lies over it). Pure parts; the window itself was checked in game."""
+    """#1: on Linux a window per panel, each only as big as its panel, and none when there is nothing to draw (the game's
+    pointer lock is refused while a window lies over it). Pure parts; the windows themselves are checked in game."""
 
     def test_linux_only(self):
         self.assertEqual(W.FIT_WINDOW, sys.platform.startswith("linux"))
@@ -217,13 +217,18 @@ class GameMouseLock(unittest.TestCase):
         self.assertEqual(W.window_rect([], 1920, 1080), (0, 0, 1, 1))
         self.assertEqual(W.window_rect([("x", (2000.0, 10.0, 50.0, 50.0))], 1920, 1080), (0, 0, 1, 1))
 
-    def test_empty_hidden(self):
-        """Off the screen with no panels, not while arranging or showing the test panels."""
-        self.assertTrue(W.empty_hidden({"panels": []}, False))
-        self.assertTrue(W.empty_hidden(None, False))
-        self.assertFalse(W.empty_hidden({"panels": [{"id": "radar"}]}, False))
-        self.assertFalse(W.empty_hidden({"panels": []}, True))
-        self.assertFalse(W.empty_hidden({"panels": [], "test": True}, False))
+    def test_window_plan(self):
+        """No window out of sight or with nothing to draw; one over the whole game in Arrange mode (it takes the mouse)
+        or where not FIT_WINDOW; else one per panel, in the feed's order."""
+        two = {"panels": [{"id": "radar"}, {"id": "strip"}]}
+        self.assertEqual(W.window_plan(two, True, False, fit=True), ("panels", ["radar", "strip"]))
+        self.assertEqual(W.window_plan(two, True, False, fit=False), ("all", []))
+        self.assertEqual(W.window_plan(two, True, True, fit=True), ("all", []))
+        self.assertEqual(W.window_plan({"panels": []}, True, True, fit=True), ("all", []))   # arranging: the frames and Done
+        self.assertEqual(W.window_plan(two, False, False, fit=True), ("none", []))
+        for empty in ({"panels": []}, None, {}):
+            for fit in (True, False):
+                self.assertEqual(W.window_plan(empty, True, False, fit=fit), ("none", []))
 
 
 class Tracking(unittest.TestCase):
