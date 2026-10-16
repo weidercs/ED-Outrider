@@ -163,42 +163,36 @@ def win_exstyle(style, through):
     return (style | WS_EX_LAYERED | WS_EX_TRANSPARENT) if through else (style & ~WS_EX_TRANSPARENT)
 
 
-MASK_PAD = 6   # px around each panel in the "fit" trial's window shape, so a panel's edge is drawn whole
+# #1, the game's mouse lock (the author's trials in game, 2026-10-15, GNOME on Wayland): in the DSS and on foot Elite
+# locks the pointer, and XWayland/GNOME grant that only while no other window lies over the game where the pointer is.
+# A window over the whole game broke it, even click-through and even shaped down to one pixel (a window counts with its
+# whole rectangle); one only as big as its panels keeps it, and none at all when there is nothing to draw. Linux only:
+# the Windows overlay was confirmed working over the whole game window, and this was not tried there.
+FIT_WINDOW = sys.platform.startswith("linux")
+PANEL_PAD = 6   # px around the panels in the window's own rectangle, so a panel's edge is drawn whole
 
 
-def trials(data):
-    """#1's mouse-lock trials switched on in Settings (outrider.overlay.TRIALS), from the feed."""
-    return {t for t in ((data or {}).get("trial") or []) if t in O.TRIALS}
-
-
-def fit_rects(geoms, win_w, win_h, pad=MASK_PAD):
-    """The "fit" trial: the window's shape, the panels as drawn (geoms: [(id, (x, y, w, h))]) each grown by `pad` and kept
-    inside the window, as whole pixels (x, y, w, h); one pixel in the corner when nothing is drawn (an empty shape is no
-    shape at all: the whole window). The middle of the game, where the locked cursor lives, is then Elite's alone."""
-    out = []
+def window_rect(geoms, win_w, win_h, pad=PANEL_PAD):
+    """The overlay window's own rectangle (x, y, w, h) inside the game window (FIT_WINDOW): just big enough for every
+    panel as drawn (geoms: [(id, (x, y, w, h))]), each grown by `pad`, kept inside the game window, in whole pixels; one
+    pixel in the corner when nothing is drawn."""
+    rs = []
     for _pid, (x, y, w, h) in geoms:
         x0, y0 = max(0, math.floor(x - pad)), max(0, math.floor(y - pad))
         x1, y1 = min(win_w, math.ceil(x + w + pad)), min(win_h, math.ceil(y + h + pad))
         if x1 > x0 and y1 > y0:
-            out.append((x0, y0, x1 - x0, y1 - y0))
-    return out or [(0, 0, 1, 1)]
-
-
-def small_rect(geoms, win_w, win_h, pad=MASK_PAD):
-    """The "small" trial: the window's own rectangle (x, y, w, h) inside the game window, just big enough for every panel
-    as drawn (fit_rects' bounding box): Elite's window is left uncovered, not merely shaped away (XWayland seems to count
-    a window's whole rectangle, whatever its shape)."""
-    rs = fit_rects(geoms, win_w, win_h, pad)
+            rs.append((x0, y0, x1, y1))
+    if not rs:
+        return 0, 0, 1, 1
     x0, y0 = min(r[0] for r in rs), min(r[1] for r in rs)
-    x1, y1 = max(r[0] + r[2] for r in rs), max(r[1] + r[3] for r in rs)
-    return x0, y0, x1 - x0, y1 - y0
+    return x0, y0, max(r[2] for r in rs) - x0, max(r[3] for r in rs) - y0
 
 
 def empty_hidden(data, arranging):
-    """The "hide_empty" trial: the window taken off the screen while it has no panel to draw (the DSS, the FSS...);
-    never in Arrange mode or with the test panels."""
+    """The window taken off the screen while it has no panel to draw (the DSS, the FSS...: FIT_WINDOW); never in Arrange
+    mode or with the test panels."""
     d = data or {}
-    return "hide_empty" in trials(d) and not arranging and not d.get("test") and not d.get("panels")
+    return not arranging and not d.get("test") and not d.get("panels")
 
 
 def should_show(st, data, active=False):
@@ -570,7 +564,7 @@ def render_png(data, path, win_w=1920, win_h=1080, arrange=False):
 def run_window(client, title_hint=None):   # pragma: no cover - needs a display; checked by hand
     """The overlay window: follows Elite's window, paints the feed's panels, passes clicks through."""
     from PyQt6.QtCore import Qt, QTimer
-    from PyQt6.QtGui import QGuiApplication, QPainter, QRegion
+    from PyQt6.QtGui import QGuiApplication, QPainter
     from PyQt6.QtWidgets import QApplication, QWidget
     from . import overlay_tracking
 
@@ -610,9 +604,8 @@ def run_window(client, title_hint=None):   # pragma: no cover - needs a display;
             self.setWindowTitle("ED Outrider overlay")
             self.seq = -1
             self.click_through = True
-            self.mask_now = None   # the "fit" trial's shape as set (fit_rects), None: no shape
-            # the game window's size (the panels' layout is in it) and where this window sits in it: (0, 0) and the same
-            # size but with the "small" trial, where the window holds only the panels
+            # the game window's rectangle (the panels are laid out in it) and where this window sits in it: (0, 0) when
+            # it covers the whole game (Arrange mode, or not FIT_WINDOW)
             self.game, self.off = None, (0, 0)
             # Arrange mode: the panels as drawn (for hit tests), the drag under way, the edits not saved yet
             # dirty: an edit not sent yet (kept over Outrider's answers until it is); saved_at: the feed's seq when the
@@ -729,41 +722,29 @@ def run_window(client, title_hint=None):   # pragma: no cover - needs a display;
             feed.track = track_code(tracker, st, shown)
             rect = overlay_tracking.native_rect_to_qt((st.x, st.y, st.width, st.height), screen_of(st)) if st else None
             feed.height = round(rect[3]) if rect else None   # the game window's height, as paint sees it
-            if not shown or empty_hidden(feed.data, arranging):
+            if not shown or (FIT_WINDOW and empty_hidden(feed.data, arranging)):
                 if self.isVisible():
                     self.hide()
                 return
-            x, y, w, h = (round(v) for v in rect)
-            self.game = (w, h)
-            ox, oy, ww, wh = small_rect(self.geoms, w, h) if "small" in trials(feed.data) and not arranging else (0, 0, w, h)
-            if self.off != (ox, oy):
-                self.off = (ox, oy)
-                self.update()
-            if (self.x(), self.y(), self.width(), self.height()) != (x + ox, y + oy, ww, wh):
-                self.setGeometry(x + ox, y + oy, ww, wh)
-            was = self.isVisible()
-            if not was:
+            self.game = tuple(round(v) for v in rect)
+            self.place()
+            if not self.isVisible():
                 self.show()
                 self.apply_click_through(self.click_through)
-            if not was or "no_raise" not in trials(feed.data):   # the "no_raise" trial: raised only as it shows
-                self.raise_()
+            self.raise_()
 
-        def apply_fit(self):
-            """The "fit" trial: the window shaped to the panels as last drawn (none in Arrange mode: it takes the mouse)."""
-            gw, gh = self.game or (self.width(), self.height())
-            rects = [(rx - self.off[0], ry - self.off[1], rw, rh) for rx, ry, rw, rh in fit_rects(self.geoms, gw, gh)] \
-                if "fit" in trials(feed.data) and not self.arranging() else None
-            if rects == self.mask_now:
+        def place(self):
+            """Over the game window: only around the panels as last drawn (FIT_WINDOW: window_rect), the whole of it in
+            Arrange mode (it takes the mouse there)."""
+            if not self.game:
                 return
-            self.mask_now = rects
-            if rects is None:
-                self.clearMask()
-            else:
-                region = QRegion()
-                for r in rects:
-                    region = region.united(QRegion(*r))
-                self.setMask(region)
-            self.update()   # drawn again inside the new shape (the last paint was clipped to the old one)
+            x, y, w, h = self.game
+            ox, oy, ww, wh = window_rect(self.geoms, w, h) if FIT_WINDOW and not self.arranging() else (0, 0, w, h)
+            if self.off != (ox, oy):
+                self.off = (ox, oy)
+                self.update()   # drawn again at the new offset
+            if (self.x(), self.y(), self.width(), self.height()) != (x + ox, y + oy, ww, wh):
+                self.setGeometry(x + ox, y + oy, ww, wh)
 
         def tick(self):
             if feed.seq != self.seq:
@@ -779,13 +760,13 @@ def run_window(client, title_hint=None):   # pragma: no cover - needs a display;
         def paintEvent(self, _event):
             p = QPainter(self)
             try:
-                gw, gh = self.game or (self.width(), self.height())
+                gw, gh = self.game[2:] if self.game else (self.width(), self.height())
                 p.translate(-self.off[0], -self.off[1])   # the panels laid out in the game window, this window a part of it
                 self.geoms = paint(p, feed.data, gw, gh, arrange=self.arranging(), override=self.override,
                                    all_pct=self.all_pct)
             finally:
                 p.end()
-            QTimer.singleShot(0, self.apply_fit)   # not inside the paint
+            QTimer.singleShot(0, self.place)   # a panel grown, moved or new: the window follows (not inside the paint)
 
     win = Overlay()
     follow = QTimer(win)

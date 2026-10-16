@@ -637,6 +637,17 @@ upstream project's choices, not rules of the game.
   checks run only while the setting is on and the game is not in front, kept a second (`INACTIVE_EVERY_S`). A native
   Wayland window is in no X11 list, so it is never seen covering the game (the overlay draws over it): said in the
   guide.
+- **The overlay window covers only its panels on Linux** (#1, the author's trials in game, 2026-10-15, GNOME on Wayland):
+  in the DSS and on foot Elite locks the pointer, and the lock was refused while the overlay window lay over the game,
+  although it lets every click through (its X input shape is empty). Shaping it down did not help, even to one pixel in
+  the DSS (the window counts with its whole rectangle); not raising it did not; taking it away when empty did, and a window
+  only as big as its panels did, on foot too (3 of 3 with it, 0 of 3 without). So `overlay_window.window_rect`: the
+  window's own rectangle is the panels' bounding box (plus 6 px), painted at the game window's layout through an offset,
+  and it is hidden when nothing is drawn (`empty_hidden`); the whole game in Arrange mode (it takes the mouse there).
+  The lock is asked for as the mode changes, so a window in the way at that moment loses it until the next change. A
+  panel placed where the pointer is (the middle of the screen) or panels at opposite corners (their box covers the
+  middle) would still be in the way. Linux only (`FIT_WINDOW`): the Windows overlay was confirmed working over the whole
+  game window and this was not tried there.
 - **The overlay's Alerts panel comes from the page** (S26, the author's defaults 2026-10-12): the alerts are worded
   and switched in the browser (speech.json's personality lines, each kind's notify / sound / speak ticks in
   localStorage), so the page posts each alert it shows (POST `/api/overlay/alert`, `pc_only`) and the server keeps the

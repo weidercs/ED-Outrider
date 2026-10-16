@@ -2,6 +2,13 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-15 · The overlay no longer breaks the game's mouse lock (DSS, on foot) on Linux (#1)
+- The author's trials (GNOME on Wayland) found it: on Linux the overlay window is now only as big as its panels
+  together (`window_rect`: their bounding box plus 6 px; drawn at the game window's layout through an offset, following
+  a panel that grows, moves or appears after each paint), and off the screen when it has nothing to draw (the DSS, the
+  FSS...); the whole game window only in Arrange mode. Windows unchanged. DESIGN_NOTES says what was tried and why.
+- The trial switches (Settings → In-game overlay → Mouse-lock trials, POST /api/overlay {trial}) are gone again.
+
 ## 2026-10-15 · Mouse lock (#1): a "small" trial, the window only as big as its panels
 - The author's first trial (in the DSS): only **hide_empty** keeps the lock; **fit** does not, although in the DSS it
   shaped the window to one corner pixel. So either XWayland counts a window's whole rectangle whatever its shape, or any

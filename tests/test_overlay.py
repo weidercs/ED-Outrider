@@ -1755,24 +1755,6 @@ class Pill(unittest.TestCase):
             self.assertIn("show_inactive = true", f.read())
         self.assertEqual(s.overlay_set({"show_inactive": "yes"}, now=4)[1], 400)
 
-    def test_mouse_lock_trials(self):
-        """#1: the mouse-lock trials, switched from Settings: in the window's answer (a new version) and Settings', in
-        TRIALS' order, never written to the config, forgotten by a new State; anything else refused."""
-        s = self.state
-        v0 = s.overlay_view(now=1)
-        self.assertEqual(v0["trial"], [])
-        out, status = s.overlay_set({"trial": ["hide_empty", "fit"]}, now=2)
-        self.assertEqual((status, out["trial"]), (200, ["fit", "hide_empty"]))
-        v1 = s.overlay_view(now=3)
-        self.assertEqual((v1["trial"], v1["version"] != v0["version"]), (["fit", "hide_empty"], True))
-        if os.path.exists(s.config_path):
-            with open(s.config_path, encoding="utf-8") as f:
-                self.assertNotIn("trial", f.read())
-        for bad in ("fit", ["fit", "nope"], [1]):
-            self.assertEqual(s.overlay_set({"trial": bad}, now=4)[1], 400, bad)
-        self.assertEqual(s.overlay_view(now=5)["trial"], ["fit", "hide_empty"])
-        self.assertEqual(s.overlay_set({"trial": []}, now=6)[0]["trial"], [])
-
     def test_show_inactive_setting(self):
         self.assertFalse(O.overlay_settings({})["overlay"]["show_inactive"])
         self.assertTrue(O.overlay_settings({"overlay": {"show_inactive": True}})["overlay"]["show_inactive"])
