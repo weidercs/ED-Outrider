@@ -2,6 +2,12 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-15 · A flaky uploads test made steady
+- tests/test_uploads.py made up system addresses with `hash(name) % 1000`, and Python seeds a str's hash per process: in
+  about one run in a thousand two names shared an address (seed 1311: "Before" and "There"), so a jump's signals
+  counted as the system you were in and went early, failing `test_signals_before_their_jump_go_with_the_live_jump`
+  (it failed verify once, 2026-10-15). Now `addr(name)`: crc32, the same in every run (the file's 17 names all differ).
+
 ## 2026-10-15 · Overlay: a window per panel on Linux, Foot boxes, "Hide the overlay on foot and in the DSS", wider Settings
 - On Linux every overlay panel has its own window, only as big as the panel (`window_plan`, `window_rect`), so panels at
   opposite edges no longer make one window over the middle of the game, where Elite locks the mouse (#1); no window with

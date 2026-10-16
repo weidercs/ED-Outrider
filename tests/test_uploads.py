@@ -11,10 +11,17 @@ import tempfile
 import time
 import unittest
 import unittest.mock
+import zlib
 
 from support import ed_outrider  # also puts the repository root on sys.path
 import outrider.uploads as U  # noqa: E402
 from outrider.core import iso_ts  # noqa: E402
+
+
+def addr(name):
+    """A made-up system's SystemAddress from its name: the same in every run (hash() of a str is seeded per process,
+    and two names once shared hash % 1000, so a jump's signals counted as the system you were in)."""
+    return zlib.crc32(name.encode())
 
 
 def now_ts(ago=0):
@@ -571,7 +578,7 @@ class MarksAndCatchUp(unittest.TestCase):
                 f.write(json.dumps(e) + "\n")
 
     def jump(self, ago, name="B"):
-        return {"timestamp": now_ts(ago), "event": "FSDJump", "StarSystem": name, "SystemAddress": hash(name) % 1000,
+        return {"timestamp": now_ts(ago), "event": "FSDJump", "StarSystem": name, "SystemAddress": addr(name),
                 "StarPos": [1, 2, 3]}
 
     def queued(self):
@@ -743,7 +750,7 @@ class CoreFixes(MarksAndCatchUp):
         self.j.scan_dir(self.dir, commit_each=True, upload="catchup")
         self.state.uploads_hub.builders = {"eddn": self.state.eddn_build}
         self.state.set_upload("eddn", True)
-        self.write({"timestamp": now_ts(700), "event": "FSSSignalDiscovered", "SystemAddress": hash("Here") % 1000, "SignalName": "X"})
+        self.write({"timestamp": now_ts(700), "event": "FSSSignalDiscovered", "SystemAddress": addr("Here"), "SignalName": "X"})
         self.j.scan_dir(self.dir, upload="live")
         self.assertIn("signals", self.state.uploads_hub.session.pending)
         self.state.edmc = {"running": True, "eddn": True, "edsm": False, "inara": False}
