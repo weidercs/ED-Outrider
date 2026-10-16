@@ -2,6 +2,17 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-16 · Two fixes from Kurbo26: a tagged plant walked away from, and the tablet's Map pill
+- **The surface map:** a plant tagged with the composition scanner, of a species you had not sampled yet, vanished
+  from the map (and its legend row) once you were over 3 km from it; it came back at the rim only after you sampled
+  that species by hand. Each species' nearest usable tag now stays, at the rim when off the map (`surfaceLayout`; the
+  overlay's radar always drew them).
+- **The tablet's Map pill on Now:** it swapped the selected page's colours, and in the Elite and Sith themes that
+  colour is see-through, so the text was faint on solid cyan (or steel). Those themes now set `--tb-maptag-bg` /
+  `--tb-maptag-fg`, and so does Dark (blue on white was 3.2:1). A test checks the pill in every theme (solid
+  colours, 4.5:1).
+- Kurbo26 also confirmed the mouse-lock fix on Fedora with KDE on Wayland.
+
 ## 2026-10-16 · Version 2026.10.25, a bug fix release
 - Released from d5c1f9d plus the install guide's Updating section (the personalities on main wait for the next release).
 - Since 2026.10.24:

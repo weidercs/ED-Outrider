@@ -5582,12 +5582,20 @@ const releasePayloads = async () => {
       const leg = document.createElement("div"); leg.innerHTML = surfaceLegend(s2, L2, surfaceCfg());
       const sw = leg.querySelector(".lg-bio .sw");
       const legendOk = !!sw && sw.getAttribute("style").includes(dot.colour) && !!leg.querySelector(".lg-tag");
+      // Kurbo26, 2026-10-16: a tag of a species not being sampled, walked over 3 km away, stays at the rim (the nearest
+      // one per species; farther ones of it may go), and the legend keeps it
+      const far = {lat: 0, lon: 0, radius: 1e6, heading: 0, bio: [], tags: [
+        {species: "Bacterium Acies", genus: "Bacterium", lat: 0.5, lon: 0, dist: 8727, current: false, usable: true},
+        {species: "Bacterium Acies", genus: "Bacterium", lat: 0.6, lon: 0, dist: 10472, current: false, usable: true}]};
+      const LF = surfaceLayout(far, surfaceCfg(), 400), ft = LF.items.filter(i => i.kind === "tag");
+      const legF = document.createElement("div"); legF.innerHTML = surfaceLegend(far, LF, surfaceCfg());
+      const farTag = [ft.length, !!(ft[0] && ft[0].off), !!legF.querySelector(".lg-tag")];
       return {n: tags.length, faint: tags.map(t => t.faint), coloured: tags.every(t => !!t.colour),
               right: tags.find(t => !t.faint && t.species === "Tussock Pennata").sx > L.c,
               strip: /tagged: 524 m, turn 90° right/.test(strip), ahead: tagText({genus: "X", tag: {dist: 40, turn: -4, way: "ahead"}}).includes("ahead"),
-              stripUnknown, calls: calls.filter(c => c.includes("Tagged")), legendOk}; })()`);
+              stripUnknown, calls: calls.filter(c => c.includes("Tagged")), legendOk, farTag}; })()`);
     const want = {n: 3, faint: [true, false, false], coloured: true, right: true, strip: true, ahead: true, stripUnknown: true,
-                  calls: ["sampling:Tagged Tussock nearby", "sampling:Tagged Tussock nearby"], legendOk: true};
+                  calls: ["sampling:Tagged Tussock nearby", "sampling:Tagged Tussock nearby"], legendOk: true, farTag: [1, true, true]};
     const goodT = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodT;
     console.log(goodT ? "OK" : "FAIL", "| bio tags |", goodT ? "tagged plants drawn (faint where a sample would not count), the strip's turn to the nearest" : JSON.stringify(got), errors.slice(before));

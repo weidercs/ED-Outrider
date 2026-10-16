@@ -119,6 +119,36 @@ class Tablet(unittest.TestCase):
                 for ground in ("--bg", "--panel"):
                     self.assertGreaterEqual(round(ratio(c[k], c[ground]), 2), 4.5, f"{t}: {k} {c[k]} on {ground} {c[ground]}")
 
+    def test_map_pill_reads_in_every_theme(self):
+        """Now's Map pill on the tablet (Kurbo26, 2026-10-16: cyan on cyan in the Elite theme): its colours are solid in
+        every theme and its text reads on it (WCAG 4.5:1). It swaps the selected page's colours unless a theme sets
+        --tb-maptag-bg / --tb-maptag-fg (needed where that page colour is see-through)."""
+        def lum(h):
+            h = h.strip().lstrip("#")
+            if len(h) == 3:
+                h = "".join(c * 2 for c in h)
+            r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+            f = lambda c: c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4   # noqa: E731
+            return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
+
+        def colours(block):
+            d = dict(re.findall(r"(--[\w-]+):\s*([^;]+);", block))
+            def res(v, n=0):
+                m = re.fullmatch(r"var\((--[\w-]+)\)", v.strip())
+                return res(d[m.group(1)], n + 1) if m and n < 10 else v.strip()
+            return {k: res(v) for k, v in d.items()}
+        with open(os.path.join(ed_outrider.STATIC_DIR, "tablet.css"), encoding="utf-8") as f:
+            self.assertIn("var(--tb-maptag-bg, var(--tb-page-on-fg))", f.read())
+        for t in ed_outrider.TABLET_THEMES:
+            with open(os.path.join(ed_outrider.STATIC_DIR, "themes", f"{t}.css"), encoding="utf-8") as f:
+                c = colours(re.search(r':root\[data-theme="%s"\]\s*\{(.*?)\n\}' % t, f.read(), re.S).group(1))
+            bg = c.get("--tb-maptag-bg", c.get("--tb-page-on-fg"))
+            fg = c.get("--tb-maptag-fg", c.get("--tb-page-on-bg"))
+            for v in (bg, fg):
+                self.assertRegex(v or "", r"^#[0-9A-Fa-f]{3}([0-9A-Fa-f]{3})?$", f"{t}: the Map pill's colour {v!r} is not solid")
+            la, lb = sorted((lum(bg), lum(fg)), reverse=True)
+            self.assertGreaterEqual(round((la + 0.05) / (lb + 0.05), 2), 4.5, f"{t}: Map pill {fg} on {bg}")
+
     def test_earnings_chart_colours(self):
         """The CMDR tab's Earnings chart (batch C) stacks cartography, exobiology and mining in --earn-carto / -bio /
         -mine: in every theme, light and dark Default too, the three are told apart (OKLab distance, x100, at least 14:

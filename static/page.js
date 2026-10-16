@@ -1346,9 +1346,14 @@ function surfaceLayout(s, cfg, S) {
   for (const l of s.locations || []) add({kind: "loc", tag: `L${l.n}`, n: l.n}, l.lat, l.lon);
   const colours = speciesColours([...(s.bio || []), ...(s.tags || [])]);
   // plants tagged with the composition scanner (BioScan's waypoints): a hollow ring in the species' colour, faint
-  // where a sample would not count (inside the colony of one taken already)
+  // where a sample would not count (inside the colony of one taken already). Kept on the map however far, at the rim
+  // when off it: the usable ones of the run in progress, and each species' nearest usable one (Kurbo26, 2026-10-16:
+  // a tag walked away from vanished, legend and all, until you sampled that species by hand). The server sends them
+  // nearest first.
+  const nearestTag = new Set(), tagSeen = new Set();
+  for (const t of s.tags || []) if (t.usable && !tagSeen.has(t.species)) { tagSeen.add(t.species); nearestTag.add(t); }
   for (const t of s.tags || []) add({kind: "tag", tag: "", species: t.species, colour: colours.get(t.species), faint: !t.usable,
-                                      keep: !!(t.current && t.usable)}, t.lat, t.lon);
+                                      keep: !!(t.usable && (t.current || nearestTag.has(t)))}, t.lat, t.lon);
   for (const b of s.bio || []) {
     const colour = colours.get(b.species);
     for (const p of b.points || []) add({kind: "bio", tag: "", species: b.species, colour, faint: !b.current, keep: !!b.current,

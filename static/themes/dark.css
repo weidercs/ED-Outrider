@@ -21,6 +21,7 @@
   --tb-group-bg: transparent; --tb-group-fg: var(--dk-muted); --tb-group-open-bg: var(--dk-raised); --tb-group-open-fg: var(--dk-text);
   --tb-group-radius: 10px; --tb-page-radius: 10px;
   --tb-page-bg: transparent; --tb-page-fg: var(--dk-text); --tb-page-on-bg: var(--dk-accent); --tb-page-on-fg: var(--dk-on-accent);
+  --tb-maptag-bg: var(--dk-accent); --tb-maptag-fg: var(--dk-bg);   /* white-on-blue swapped was 3.2:1 */
   --tb-fill: transparent;
   --tb-btn-bg: var(--dk-btn); --tb-btn-fg: var(--dk-text); --tb-btn-on-bg: var(--dk-accent); --tb-btn-on-fg: var(--dk-on-accent); --tb-btn-radius: 10px;
   --tb-link-ok: var(--dk-good); --tb-link-stale: var(--dk-warn); --tb-link-none: var(--dk-bad);
