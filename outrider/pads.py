@@ -89,6 +89,12 @@ def side_words(sector):
 
 # ---- carriers: 16 pads on the deck, seen from above with the bow up (the plugin's boxes, in its units) ----
 
+# the deck's outline around them (one per deck), bow up: Kurbo26 (2026-10-15) saw pads 7 and 8's outer corners poke
+# out of the old one (its bow ran from (0, -44) to (26, -30), crossing x = 12 at y = -37.5, above the pads' top at -38);
+# the peak higher and the shoulders flatter leave every pad inside with room for the line (tests/test_pads.py)
+CARRIER_OUTLINE = ((-26, 40), (-26, -34), (0, -46), (26, -34), (26, 40))
+
+
 def carrier_boxes(kind):
     """The pads' boxes [x, y, w, h], pad 1 first: 8 large, 4 medium, 4 small; a squadron carrier has two decks (pads
     1-16 on the starboard one as drawn, 17-32 on the port one)."""
@@ -135,7 +141,8 @@ def where(kind, n):
         w = carrier_words(kind, n)
         if not w:
             return None
-        return {"words": w, "say": w, "map": {"kind": kind, "pad": n, "pads": carrier_boxes(kind)}}
+        return {"words": w, "say": w, "map": {"kind": kind, "pad": n, "pads": carrier_boxes(kind),
+                                              "outline": [list(p) for p in CARRIER_OUTLINE]}}
     return None
 
 

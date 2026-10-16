@@ -1,5 +1,6 @@
 """#12: where your landing pad is (outrider/pads.py, after bgol's LandingPad plugin's tables): the layouts, the words, the
 spoken sentence with the green-lights assumption, the plugin's test commands."""
+import math
 import unittest
 
 from support import ed_outrider  # also puts the repository root on sys.path
@@ -62,6 +63,24 @@ class Pads(unittest.TestCase):
         self.assertIsNone(P.where(None, 3))
         # the colonisation ship's small pads in the squadron order (the plugin's)
         self.assertNotEqual(P.carrier_boxes("fleet")[13], P.carrier_boxes("colonisation")[13])
+
+    def test_every_pad_inside_the_deck(self):
+        """Kurbo26 (2026-10-15): pads 7 and 8's outer corners poked out of the fleet carrier's bow. Every corner of every
+        pad, on each layout and deck, lies inside the deck's outline (CARRIER_OUTLINE, a convex shape) by at least one
+        unit, room for the line (the old outline fails it); the map carries the outline the drawings use."""
+        def inside(outline, px, py, xo=0):   # on the inner side of every edge, going round, by the margin
+            pts = [(x + xo, y) for x, y in outline]
+            return all((bx - ax) * (py - ay) - (by - ay) * (px - ax) >= math.hypot(bx - ax, by - ay)
+                       for (ax, ay), (bx, by) in zip(pts, pts[1:] + pts[:1]))
+        for kind in ("fleet", "squadron", "colonisation"):
+            decks = (26, -26) if kind == "squadron" else (0,)
+            for n, (x, y, w, h) in enumerate(P.carrier_boxes(kind), 1):
+                xo = min(decks, key=lambda d: abs(x + w / 2 - d))
+                for cx, cy in ((x, y), (x + w, y), (x, y + h), (x + w, y + h)):
+                    self.assertTrue(inside(P.CARRIER_OUTLINE, cx, cy, xo), (kind, n, cx, cy))
+        old = ((-26, 40), (-26, -30), (0, -44), (26, -30), (26, 40))
+        self.assertFalse(inside(old, -12, -38))   # pad 7's top left corner, outside the old bow
+        self.assertEqual(P.where("fleet", 7)["map"]["outline"], [list(p) for p in P.CARRIER_OUTLINE])
 
     def test_spoken(self):
         """The green lights at a starport when asked for; never at a carrier (no slot)."""

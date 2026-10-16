@@ -1762,8 +1762,13 @@ const releasePayloads = async () => {
       o.map = [(document.querySelector("#nowBody .now-where") || {}).textContent || null, !!svg && svg.querySelectorAll("circle.pm-pad").length,
                !!svg && svg.querySelectorAll("circle.pm-me").length, !!svg && !!svg.querySelector(".pm-green") && !!svg.querySelector(".pm-red")];
       data.docking = {pad: 7, station: "G0X-85Z", where: "port side, toward the bow", layout: "fleet", map: {kind: "fleet", pad: 7,
-        pads: Array.from({length: 16}, (_, i) => [i, i, 10, 16])}, ts: new Date().toISOString()}; renderNow();
-      o.carrier = [...document.querySelectorAll("#nowBody svg.now-padmap rect")].map(r => r.getAttribute("class")).filter(c => c === "pm-me").length;
+        pads: Array.from({length: 16}, (_, i) => [i, i, 10, 16]), outline: [[-26, 40], [-26, -34], [0, -46], [26, -34], [26, 40]]},
+        ts: new Date().toISOString()}; renderNow();
+      // the deck's outline as the server sends it (Kurbo26, 2026-10-15: pads 7 and 8 poked out of the old one), the bow's
+      // peak inside the picture
+      const deck = document.querySelector("#nowBody svg.now-padmap polygon.pm-out");
+      o.carrier = [[...document.querySelectorAll("#nowBody svg.now-padmap rect")].map(r => r.getAttribute("class")).filter(c => c === "pm-me").length,
+                   deck ? deck.getAttribute("points").split(" ").length : 0, deck ? Number(deck.getAttribute("points").split(" ")[2].split(",")[1]) : null];
       // sized by its height, never its width (Kurbo26: a carrier overflowed a 1920x1200 tablet's Now)
       o.size = (st => [st.height, st.width])(getComputedStyle(document.querySelector("#nowBody svg.now-padmap")));
       // #13: a carrier's marker before its name, by the layout's kind (a squadron carrier's own)
@@ -1794,7 +1799,7 @@ const releasePayloads = async () => {
       data.docking = JSON.parse(d0).docking; data.moments = m0; renderNow();
       return JSON.stringify(o); })()`));
     const want = {now: "PAD 34Jameson Memorial", denied: "🛬 Docking denied at Jameson Memorial: no pad free for your ship: try again shortly",
-                  gone: true, map: ["at the back · up on your right", 44, 1, true], carrier: 1, size: ["245.76px", "auto"], marker: ["[fleet-carrier]G0X-85Z", "[squadron-carrier]ABCD"],
+                  gone: true, map: ["at the back · up on your right", 44, 1, true], carrier: [1, 5, 2.6], size: ["245.76px", "auto"], marker: ["[fleet-carrier]G0X-85Z", "[squadron-carrier]ABCD"],
                   plain: true, setting: true,
                   said: ["Pad 7. Port side, toward the bow.", "Denied: your ship is too big for this station's pads."], row: true};
     const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;

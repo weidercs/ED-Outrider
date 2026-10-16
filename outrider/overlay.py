@@ -28,6 +28,7 @@ import sys
 import time
 
 from . import ROOT
+from . import pads as outrider_pads
 from .riches import left_words, survey_kind
 
 CANVAS_W, CANVAS_H = 1280, 960
@@ -954,7 +955,7 @@ def pad_map_items(m, pal, x0, y0, w):
     """The pad diagram (#12) as draw items in a box `w` wide from (x0, y0), and its height: a starport seen from the slot
     looking in (12 wall sectors, 3 depths, outside near the slot; the slot's lights across the far wall, green on the
     right as the words assume) or a carrier from above, bow up (a squadron carrier's two decks side by side), your pad
-    filled in. m: outrider.pads.where's map ({kind, pad, pads})."""
+    filled in. m: outrider.pads.where's map ({kind, pad, pads, outline: a carrier deck's})."""
     items, pad = [], m.get("pad")
     if m.get("kind") == "starport":
         import outrider.pads as P
@@ -990,12 +991,12 @@ def pad_map_items(m, pal, x0, y0, w):
     span = 52 * len(decks) + 4
     u = min(2.6, (w - 8) / span)
     cx, top = x0 + w / 2, y0 + LINE_H["small"]
-    cy = top + 44 * u
+    outline = m.get("outline") or [list(p) for p in outrider_pads.CARRIER_OUTLINE]
+    cy = top + 46 * u
     items.append(runs(cx, y0, [("bow ▲", pal["muted"], "small", False)], align="center"))
     for xo in decks:
         hx = cx + xo * u
-        items.append(line([(hx - 26 * u, cy + 40 * u), (hx - 26 * u, cy - 30 * u), (hx, cy - 44 * u), (hx + 26 * u, cy - 30 * u),
-                           (hx + 26 * u, cy + 40 * u), (hx - 26 * u, cy + 40 * u)], pal["muted"], 1))
+        items.append(line([(hx + px * u, cy + py * u) for px, py in [*outline, outline[0]]], pal["muted"], 1))
     for n, (x, y, bw, bh) in enumerate(boxes, 1):
         me = n == pad
         items.append(rect(cx + x * u, cy + y * u, bw * u, bh * u, pal["good"] if me else pal["frame"], pal["good"] if me else None,
@@ -1003,7 +1004,7 @@ def pad_map_items(m, pal, x0, y0, w):
         if me or bw >= 7:   # the small pads are too small to number, but yours
             items.append(runs(cx + (x + bw / 2) * u, cy + (y + bh / 2) * u - 8,
                               [(str(n), pal["panel"] if me else pal["muted"], "small", me)], align="center"))
-    return items, LINE_H["small"] + 84 * u + 4
+    return items, LINE_H["small"] + 86 * u + 4
 
 
 def pad_panel(d, pal, size="normal", pid="radar"):

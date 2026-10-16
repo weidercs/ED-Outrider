@@ -1143,15 +1143,16 @@ function padMapSvg(m) {
     });
     return `<svg class="now-padmap" viewBox="0 0 232 232" role="img" aria-label="pad ${pad}, seen from the slot looking in">${parts.join("")}</svg>`;
   }
-  const decks = m.kind === "squadron" ? [26, -26] : [0], u = 2.6, w = (52 * decks.length + 4) * u, cx = w / 2, cy = 46 * u;
+  // the deck's outline from the server (outrider/pads.py CARRIER_OUTLINE: bow at -46, stern at 40)
+  const decks = m.kind === "squadron" ? [26, -26] : [0], u = 2.6, w = (52 * decks.length + 4) * u, cx = w / 2, cy = 47 * u;
   decks.forEach(xo => { const hx = cx + xo * u;
-    parts.push(`<polygon class="pm-out" points="${[[-26, 40], [-26, -30], [0, -44], [26, -30], [26, 40]].map(([x, y]) => `${f(hx + x * u)},${f(cy + y * u)}`).join(" ")}"/>`); });
+    parts.push(`<polygon class="pm-out" points="${(m.outline || []).map(([x, y]) => `${f(hx + x * u)},${f(cy + y * u)}`).join(" ")}"/>`); });
   (m.pads || []).forEach(([x, y, bw, bh], i) => {
     const me = i + 1 === pad;
     parts.push(`<rect class="${me ? "pm-me" : "pm-box"}" x="${f(cx + x * u)}" y="${f(cy + y * u)}" width="${f(bw * u)}" height="${f(bh * u)}"/>`);
     if (me || bw >= 7) parts.push(`<text class="${me ? "pm-num" : "pm-lbl"}" x="${f(cx + (x + bw / 2) * u)}" y="${f(cy + (y + bh / 2) * u + 4)}">${i + 1}</text>`);
   });
-  return `<svg class="now-padmap" viewBox="0 0 ${f(w)} ${f(90 * u)}" role="img" aria-label="pad ${pad}, the carrier from above, bow up">${parts.join("")}</svg>`;
+  return `<svg class="now-padmap" viewBox="0 0 ${f(w)} ${f(88 * u)}" role="img" aria-label="pad ${pad}, the carrier from above, bow up">${parts.join("")}</svg>`;
 }
 // ---- Now mode: five big lines for a second monitor, readable from the chair ----
 function renderNow() {

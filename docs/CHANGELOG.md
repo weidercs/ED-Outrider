@@ -2,6 +2,12 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-15 · The fleet carrier diagram: pads 7 and 8 inside the bow
+- Kurbo26 (discussion #3) saw pads 7 and 8's outer corners poke out of the carrier's outline: its bow ran from (0, -44)
+  to (26, -30), crossing x = 12 at y = -37.5, above the pads' top at -38. One outline now, `pads.CARRIER_OUTLINE` (the
+  bow at -46, the shoulders at -34), sent with the map and drawn by Now and the overlay alike; a test keeps every pad of
+  every carrier layout inside it by a unit.
+
 ## 2026-10-15 · A flaky uploads test made steady
 - tests/test_uploads.py made up system addresses with `hash(name) % 1000`, and Python seeds a str's hash per process: in
   about one run in a thousand two names shared an address (seed 1311: "Before" and "There"), so a jump's signals
