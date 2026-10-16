@@ -26,6 +26,7 @@ import argparse
 import http.client
 import json
 import logging
+import math
 import os
 import sys
 import threading
@@ -160,6 +161,34 @@ def win_exstyle(style, through):
     while clicks pass to the game, taken away again for Arrange mode (it was only ever added: the window never got
     the mouse on Windows)."""
     return (style | WS_EX_LAYERED | WS_EX_TRANSPARENT) if through else (style & ~WS_EX_TRANSPARENT)
+
+
+MASK_PAD = 6   # px around each panel in the "fit" trial's window shape, so a panel's edge is drawn whole
+
+
+def trials(data):
+    """#1's mouse-lock trials switched on in Settings (outrider.overlay.TRIALS), from the feed."""
+    return {t for t in ((data or {}).get("trial") or []) if t in O.TRIALS}
+
+
+def fit_rects(geoms, win_w, win_h, pad=MASK_PAD):
+    """The "fit" trial: the window's shape, the panels as drawn (geoms: [(id, (x, y, w, h))]) each grown by `pad` and kept
+    inside the window, as whole pixels (x, y, w, h); one pixel in the corner when nothing is drawn (an empty shape is no
+    shape at all: the whole window). The middle of the game, where the locked cursor lives, is then Elite's alone."""
+    out = []
+    for _pid, (x, y, w, h) in geoms:
+        x0, y0 = max(0, math.floor(x - pad)), max(0, math.floor(y - pad))
+        x1, y1 = min(win_w, math.ceil(x + w + pad)), min(win_h, math.ceil(y + h + pad))
+        if x1 > x0 and y1 > y0:
+            out.append((x0, y0, x1 - x0, y1 - y0))
+    return out or [(0, 0, 1, 1)]
+
+
+def empty_hidden(data, arranging):
+    """The "hide_empty" trial: the window taken off the screen while it has no panel to draw (the DSS, the FSS...);
+    never in Arrange mode or with the test panels."""
+    d = data or {}
+    return "hide_empty" in trials(d) and not arranging and not d.get("test") and not d.get("panels")
 
 
 def should_show(st, data, active=False):
@@ -531,7 +560,7 @@ def render_png(data, path, win_w=1920, win_h=1080, arrange=False):
 def run_window(client, title_hint=None):   # pragma: no cover - needs a display; checked by hand
     """The overlay window: follows Elite's window, paints the feed's panels, passes clicks through."""
     from PyQt6.QtCore import Qt, QTimer
-    from PyQt6.QtGui import QGuiApplication, QPainter
+    from PyQt6.QtGui import QGuiApplication, QPainter, QRegion
     from PyQt6.QtWidgets import QApplication, QWidget
     from . import overlay_tracking
 
@@ -571,6 +600,7 @@ def run_window(client, title_hint=None):   # pragma: no cover - needs a display;
             self.setWindowTitle("ED Outrider overlay")
             self.seq = -1
             self.click_through = True
+            self.mask_now = None   # the "fit" trial's shape as set (fit_rects), None: no shape
             # Arrange mode: the panels as drawn (for hit tests), the drag under way, the edits not saved yet
             # dirty: an edit not sent yet (kept over Outrider's answers until it is); saved_at: the feed's seq when the
             # last edit was sent (the next answer carries it, and the local copy can go)
@@ -686,17 +716,35 @@ def run_window(client, title_hint=None):   # pragma: no cover - needs a display;
             feed.track = track_code(tracker, st, shown)
             rect = overlay_tracking.native_rect_to_qt((st.x, st.y, st.width, st.height), screen_of(st)) if st else None
             feed.height = round(rect[3]) if rect else None   # the game window's height, as paint sees it
-            if not shown:
+            if not shown or empty_hidden(feed.data, arranging):
                 if self.isVisible():
                     self.hide()
                 return
             x, y, w, h = rect
             if (self.x(), self.y(), self.width(), self.height()) != (x, y, w, h):
                 self.setGeometry(x, y, w, h)
-            if not self.isVisible():
+            was = self.isVisible()
+            if not was:
                 self.show()
                 self.apply_click_through(self.click_through)
-            self.raise_()
+            if not was or "no_raise" not in trials(feed.data):   # the "no_raise" trial: raised only as it shows
+                self.raise_()
+
+        def apply_fit(self):
+            """The "fit" trial: the window shaped to the panels as last drawn (none in Arrange mode: it takes the mouse)."""
+            rects = fit_rects(self.geoms, self.width(), self.height()) \
+                if "fit" in trials(feed.data) and not self.arranging() else None
+            if rects == self.mask_now:
+                return
+            self.mask_now = rects
+            if rects is None:
+                self.clearMask()
+            else:
+                region = QRegion()
+                for r in rects:
+                    region = region.united(QRegion(*r))
+                self.setMask(region)
+            self.update()   # drawn again inside the new shape (the last paint was clipped to the old one)
 
         def tick(self):
             if feed.seq != self.seq:
@@ -716,6 +764,7 @@ def run_window(client, title_hint=None):   # pragma: no cover - needs a display;
                                    all_pct=self.all_pct)
             finally:
                 p.end()
+            QTimer.singleShot(0, self.apply_fit)   # not inside the paint
 
     win = Overlay()
     follow = QTimer(win)

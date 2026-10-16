@@ -2,6 +2,17 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-15 · The overlay and the game's mouse lock (#1): trials to find the fix in game
+- The author's tests (GNOME on Wayland, Elite under Proton): with the overlay on, the mouse is not captured on foot or
+  in the DSS (the camera turns until the cursor leaves the monitor onto the next one); off, it is. The overlay window
+  covers the whole game window and stays mapped in the DSS with nothing drawn; its X input shape is empty (clicks
+  pass), so the likely cause is Wayland's pointer lock, given only over the focused game's own surface.
+- **Settings → In-game overlay → Mouse-lock trials**, live only (POST /api/overlay {trial}, in GET /api/overlay; never
+  written to the config, forgotten at a restart): **fit** shapes the window to its panels (`fit_rects`: each panel
+  as drawn plus 6 px; the middle of the game is Elite's alone), **no_raise** raises it only as it shows,
+  **hide_empty** takes it away while it has no panel (`empty_hidden`). The one that keeps the lock becomes the default
+  and the switches go.
+
 ## 2026-10-15 · Sweep fixes: the CMDR tab's places after a re-read, Nearby's Focus/Lock, crew checks, two page fixes
 A Fable sweep of everything since the last one (70156ee..c5ea3c2, 7 areas, each finding verified): 6 confirmed, 0
 refuted; all fixed here, with the Nearest dialog's labels.

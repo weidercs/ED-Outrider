@@ -5294,7 +5294,14 @@ const releasePayloads = async () => {
     await sleep(50);
     all.value = ""; all.dispatchEvent(new w.Event("change", {bubbles: true}));   // emptied: nothing sent
     await sleep(50);
+    // #1: the mouse-lock trials, their whole list sent as the boxes say
+    const trialKeys = [...box.querySelectorAll("[data-ovtrial]")].map(x => x.dataset.ovtrial).join(" ");
+    for (const k of ["hide_empty", "fit"]) {
+      const tb = box.querySelector(`[data-ovtrial="${k}"]`); tb.checked = true; tb.dispatchEvent(new w.Event("change", {bubbles: true}));
+      await sleep(50);
+    }
     got.posted = posted;
+    got.trials = trialKeys;
     w.fetch = real;
     // the PyQt6 install's popup: shown while installing, then the outcome, then gone (a state it never had: hidden)
     const pop = d.getElementById("ovInstalling"), shown = () => pop.hidden ? "" : pop.textContent;
@@ -5316,8 +5323,9 @@ const releasePayloads = async () => {
                   dimmed: true, wrapped: true, help: true, alerts: true, analysisAfter: "system bio", dockedAfter: "system body now", note: true, themeNote: true,
                   posted: [["overlay/layout", {radar: {x: 0.3}}], ["overlay", {analysis_only: ["system", "bio"]}],
                            ["overlay", {hide_docked: ["system", "body", "now"]}], ["overlay", {test: true}],
-                           ["overlay", {theme: "default"}], ["overlay/layout", {body: {text: "small"}}], ["overlay", {panel_scale: 40}]],
-                  venv: true, popup: ["", "⟳Installing", "✓ installed", "⟳Installing", "Installing failed", ""]};
+                           ["overlay", {theme: "default"}], ["overlay/layout", {body: {text: "small"}}], ["overlay", {panel_scale: 40}],
+                           ["overlay", {trial: ["hide_empty"]}], ["overlay", {trial: ["fit", "hide_empty"]}]],
+                  trials: "fit no_raise hide_empty", venv: true, popup: ["", "⟳Installing", "✓ installed", "⟳Installing", "Installing failed", ""]};
     const ok = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && ok;
     console.log(ok ? "OK" : "FAIL", "| settings: in-game overlay |", ok ? "switches, panels' places, a change and the test button posted" : JSON.stringify(got), errors.slice(before));

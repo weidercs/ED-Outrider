@@ -11292,6 +11292,10 @@ document.getElementById("uploadsBox").addEventListener("click", async e => {
 // panels and Arrange mode, and each panel's place, size and transparency (POST api/overlay, api/overlay/layout)
 const OV_THEMES = ["default", "lcars", "elite", "babylon5", "narn", "minbari", "centauri", "vorlon", "shadow", "sith", "alliance", "dark"];
 // "body" is the Target panel (D1): its id stayed, so the Body panel's place and size carry over
+// #1, the game's mouse lock (2026-10-15): the overlay window's trial ways (outrider.overlay.TRIALS), live only, never saved
+const OV_TRIALS = [["fit", "fit the window to the panels", "the overlay window shaped to its panels: the rest of the game window, its middle too, is Elite's alone"],
+                   ["no_raise", "don't keep raising it", "the overlay window raised over the game only as it shows, not twice a second"],
+                   ["hide_empty", "hide it when empty", "the overlay window taken away while it has no panel to draw (the DSS, the FSS...)"]];
 const OV_PANELS = [["system", "System", "the bodies worth your time, in supercruise"],
                    ["body", "Target", "the body you are near or have targeted, else the system targeted (also over the galaxy map)"],
                    ["radar", "Surface radar", "on a body's surface: samples, colony rings, the ship"],
@@ -11379,6 +11383,9 @@ function overlayHtml(o) {
     // #12: the pad diagram while docking at a starport or carrier, in the Surface radar's place and on Now
     `<label class="mod"><input type="checkbox" data-ov="pad_diagram"${o.pad_diagram !== false ? " checked" : ""}> Show the pad diagram while docking ` +
     `<span class="hint">at a starport or carrier, under PAD 34 in the Surface radar's place and on Now (off: the number and where it is, in words)</span></label>` +
+    `<div class="mod" data-find="overlay mouse lock trial"><b>Mouse-lock trials:</b> ` +
+    OV_TRIALS.map(([k, t, title]) => `<label title="${esc(title)}"><input type="checkbox" data-ovtrial="${k}"${(o.trial || []).includes(k) ? " checked" : ""}> ${esc(t)}</label>`).join(" ") +
+    ` <span class="hint">temporary, forgotten when Outrider restarts: tick one, then try on foot or in the DSS</span></div>` +
     // one control row (the author, 2026-10-14): "All Panels: Theme [ ] Text Size [ ] Scale [100 %]", the two buttons on
     // a line of their own under it, at its left (page.css .ovbtns)
     `<div class="mod ovctl" data-find="overlay.theme overlay.text_size overlay.panel_scale text size all panels"><b>All Panels:</b> <label>Theme <select data-ov="theme">${opt(OV_THEMES, o.theme)}</select></label>` +
@@ -11447,6 +11454,7 @@ document.getElementById("overlayBox").addEventListener("change", e => {
   else if (t.dataset.ovpanel) overlayPost("api/overlay", {panels: {[t.dataset.ovpanel]: t.checked}});
   // analysis only: the whole list, as the boxes now say
   else if (t.dataset.ovanalysis) overlayPost("api/overlay", {analysis_only: [...e.currentTarget.querySelectorAll("[data-ovanalysis]:checked")].map(x => x.dataset.ovanalysis)});
+  else if (t.dataset.ovtrial) overlayPost("api/overlay", {trial: [...e.currentTarget.querySelectorAll("[data-ovtrial]:checked")].map(x => x.dataset.ovtrial)});
   else if (t.dataset.ovdocked) overlayPost("api/overlay", {hide_docked: [...e.currentTarget.querySelectorAll("[data-ovdocked]:checked")].map(x => x.dataset.ovdocked)});
   else if (t.dataset.ovlay) {
     const k = t.dataset.k, word = k === "corner" || k === "text", v = word ? t.value : Number(t.value) / 100;

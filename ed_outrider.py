@@ -7109,6 +7109,7 @@ class State:
         self.overlay_alerts = []   # the Alerts panel's (S26): the last few alerts the page posted, oldest first (in memory)
         self.overlay_test_until = 0.0
         self.overlay_arrange_until = 0.0
+        self.overlay_trial = []   # #1's mouse-lock trials switched on (outrider.overlay.TRIALS): live only, never saved
         self.overlay_seen = 0.0
         self.overlay_runner = None   # outrider.overlay_runner.OverlayRunner on the game PC (run() makes it; None in tests)
         # the overlay pill (S8): what the window last said it sees (its GET's &w=: outrider.overlay.TRACK_CODES), when
@@ -8757,7 +8758,7 @@ class State:
                "test": now < self.overlay_test_until, "show_inactive": bool(self.overlay_cfg.get("show_inactive")),
                "panel_scale": self.overlay_cfg.get("panel_scale", 100),
                "canvas": [outrider.overlay.CANVAS_W, outrider.overlay.CANVAS_H],
-               "layout": self.overlay_layout(), "panels": self.overlay_panels(now)}
+               "layout": self.overlay_layout(), "panels": self.overlay_panels(now), "trial": list(self.overlay_trial)}
         version = hashlib.sha1(json.dumps(out, sort_keys=True).encode()).hexdigest()[:16]
         if since and since == version:
             return {"same": True, "version": version}
@@ -8848,7 +8849,7 @@ class State:
                 "panels": {p: bool(cfg.get(f"{p}_panel" if p != "radar" else "radar")) for p in outrider.overlay.PANELS},
                 "analysis_only": list(cfg.get("analysis_only") or []), "hide_docked": list(cfg.get("hide_docked") or []),
                 "show_inactive": bool(cfg.get("show_inactive")), "pad_diagram": bool(cfg.get("pad_diagram", True)),
-                "window": window, "layout": layout,
+                "trial": list(self.overlay_trial), "window": window, "layout": layout,
                 "test": max(0, round(self.overlay_test_until - now)), "arrange": max(0, round(self.overlay_arrange_until - now)),
                 # Outrider runs the window itself on the game PC: its state; None on a server (the window runs elsewhere)
                 "runner": self.overlay_runner.status() if self.overlay_runner else None,
@@ -8857,7 +8858,7 @@ class State:
     def overlay_set(self, body, now=None):
         """POST /api/overlay {enabled?, theme?, text_size?, panel_scale?: %, panels?: {system|body|radar|strip|now|bio|alerts: bool},
         analysis_only?: [panel ids], hide_docked?: [panel ids but radar], show_inactive?: bool, pad_diagram?: bool, test?: bool,
-        arrange?: bool}: the
+        arrange?: bool, trial?: [outrider.overlay.TRIALS]}: the
         switches, applied at once and written into [overlay] for the next start (panel_scale clamped to
         outrider.overlay.PANEL_SCALE_LIMITS); test panels for
         TEST_SECONDS; Arrange mode (the window takes the mouse to move and size the panels) until it is switched off or
@@ -8886,12 +8887,16 @@ class State:
                 changes["hide_docked"] = O.docked_list(val)   # the whole list too
             elif key in ("test", "arrange") and isinstance(val, bool):
                 pass
+            elif key == "trial" and isinstance(val, list) and all(isinstance(t, str) and t in O.TRIALS for t in val):
+                pass   # #1's trials: the whole list, live only (never in the config)
             else:
                 return {"error": f"{key}: not a setting, or not a valid value for it"}, 400
         if "test" in body:
             self.overlay_test_until = now + O.TEST_SECONDS if body["test"] else 0.0
         if "arrange" in body:
             self.overlay_arrange_until = now + O.ARRANGE_SECONDS if body["arrange"] else 0.0
+        if "trial" in body:
+            self.overlay_trial = [t for t in O.TRIALS if t in body["trial"]]
         note = None
         if changes:
             self.overlay_cfg.update(changes)

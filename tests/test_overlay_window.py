@@ -200,6 +200,32 @@ class Arranging(unittest.TestCase):
         self.assertEqual(tiny["scale"], O.LIMITS["scale"][0])
 
 
+class MouseLockTrials(unittest.TestCase):
+    """#1: the overlay window's trial ways (pure parts; the window itself is checked by hand in the game)."""
+
+    def test_trials_from_the_feed(self):
+        self.assertEqual(W.trials({"trial": ["fit", "nope", "no_raise"]}), {"fit", "no_raise"})
+        self.assertEqual(W.trials(None), set())
+        self.assertEqual(set(O.TRIALS), {"fit", "no_raise", "hide_empty"})
+
+    def test_fit_rects(self):
+        """Each panel as drawn, grown by MASK_PAD, inside the window, whole pixels; one corner pixel when none."""
+        geoms = [("system", (10.4, 20.0, 300.2, 200.0)), ("strip", (0.0, 0.0, 1920.0, 30.0)), ("now", (1900.0, 1070.0, 50.0, 50.0))]
+        self.assertEqual(W.fit_rects(geoms, 1920, 1080, pad=6),
+                         [(4, 14, 313, 212), (0, 0, 1920, 36), (1894, 1064, 26, 16)])
+        self.assertEqual(W.fit_rects([], 1920, 1080), [(0, 0, 1, 1)])
+        self.assertEqual(W.fit_rects([("x", (2000.0, 10.0, 50.0, 50.0))], 1920, 1080), [(0, 0, 1, 1)])   # off the window
+
+    def test_empty_hidden(self):
+        """Hidden only with the trial on, no panels, not arranging, no test panels."""
+        on = {"trial": ["hide_empty"], "panels": []}
+        self.assertTrue(W.empty_hidden(on, False))
+        self.assertFalse(W.empty_hidden(dict(on, panels=[{"id": "radar"}]), False))
+        self.assertFalse(W.empty_hidden(on, True))
+        self.assertFalse(W.empty_hidden(dict(on, test=True), False))
+        self.assertFalse(W.empty_hidden({"panels": []}, False))
+
+
 class Tracking(unittest.TestCase):
     WMCTRL = ("0x04400003  0 0    0    2560 1440 steam_app_359320.steam_app_359320  pc Elite - Dangerous (CLIENT)\n"
               "0x03000007  0 100  100  800  600  firefox.Firefox  pc Elite - Dangerous wiki - Mozilla Firefox\n"

@@ -41,6 +41,9 @@ CORNERS = ("nw", "ne", "sw", "se", "n", "s")
 SIZES = ("small", "normal", "large")
 THEMES = ("default", "lcars", "elite", "babylon5", "narn", "minbari", "centauri", "vorlon", "shadow", "sith", "alliance", "dark")
 TEST_SECONDS = 60       # "Show test panels": how long they stay (shown whether or not the game is in front)
+# #1, the game's mouse lock (2026-10-15): trials of the overlay window's ways, switched in Settings while playing, never
+# saved (Outrider forgets them at a restart); the one that keeps the lock becomes the default and the switches go
+TRIALS = ("fit", "no_raise", "hide_empty")
 ARRANGE_SECONDS = 600   # Arrange mode ends by itself after this, so the overlay never stays in the way of the mouse
 
 # [overlay] hide_docked (the author, 2026-10-14): the panels hidden while docked (the ship docked, or on foot in a station,
