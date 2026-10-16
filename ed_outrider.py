@@ -218,6 +218,7 @@ import outrider.overlay_runner  # Outrider runs that window itself on the game P
 import outrider.ggg        # potential green gas giants: the community's seven-layer ladder model (pure)
 import outrider.serverlog  # Outrider's own log: the terminal's lines kept for Show log and in <db dir>/outrider.log
 import outrider.notices    # the notices banner: start-up problems shown on every page until fixed or dismissed
+import outrider.chatter    # space chatter (#15): its keys and topics, where you are for it (pure; the page talks)
 import outrider.pads       # where your landing pad is: starport and carrier layouts, the words, the diagrams (#12; pure)
 import outrider.boxel      # boxel exploration: the cube a procedural name places a system in, its systems, its id64s (pure)
 import outrider.codex_bodies  # star and planet types as codex entries: what a body would log (pure)
@@ -480,7 +481,7 @@ SHUTDOWN_LIVE_S = 300      # s: a Shutdown older than this is a journal being ca
 # Page settings saved on the server for browsers that have not set them ("use these for new browsers"):
 # only these localStorage keys, at most this size. Per-device keys (the view, layouts, the search form, which
 # screen speaks) stay out. The page has the same list (SETTINGS_KEYS in page.js).
-BROWSER_SETTINGS = ("alerts", "alertSound", "alertSpeak", "speech", "speechStyles", "speechNames", "speechSpeed",
+BROWSER_SETTINGS = ("alerts", "alertSound", "alertSpeak", "speech", "speechStyles", "speechNames", "chatterNames", "speechSpeed",
                     "speechProfanity", "speechProfanityPct", "speechDangerBusiness", "speechShift", "sayBio", "sayGeo", "sayHazard",
                     "sayMapped", "honkAnnounce", "sound", "unsoldCfg", "highlightCfg", "bioMinCfg", "maxBonus", "codexNewCounts",
                     "highG", "streakCfg", "skipFloor", "sort", "sorts", "showVisited", "showExplored", "oneJump", "map",
@@ -6963,6 +6964,8 @@ class State:
         self.sounds = outrider.tts.SoundBank()   # static/sounds.json rendered to WAV for it
         self.speech = None         # outrider.speech.SpeechLines, set at start (None in tests)
         self.crew_noted = set()    # (voice or personality, why) a crew fill-in was logged for: once each per run
+        # space chatter (#15): where you are for it, what keeps it quiet, and since when you have been there (time.time())
+        self._chatter = {"where": None, "why_not": None, "since": None}
         self.honker = None         # outrider.honk.Honker, set at start (None in tests)
         self.simulate = False      # --simulate: the panels act as if the game were running (shown_status)
         self.game_pc = True        # [server] game_pc: False on a server away from the game PC (no keys, devices, clipboard, PC sound)
@@ -7264,6 +7267,7 @@ class State:
             "tts": self.speaker.info() if self.speaker else None,
             "style_picks": self.style_picks(),   # S40: each personality's voice and speaker picked in Settings
             "crew": self.crew_summary(),          # the crew: who speaks each alert row, and who cannot (the XO speaks for it)
+            "chatter": self.chatter_summary(),    # space chatter (#15): its settings, where you are for it
             "pad_delay": self.journals.pad_delay,   # [speech] pad_delay: Settings -> Voice
             "voice_memory": self.voice_memory(),  # the voices besides the main one in use, their memory and how many are kept
             "sound_files": self.sounds.info() if self.sounds and self.sounds.own_dir else None,   # your own sounds (S16)
@@ -14395,6 +14399,60 @@ class State:
     # crewMember / crewVoice); the server says which members cannot speak (crew_fill: the XO speaks for them) and logs it.
     CREW_NAME_MAX = 40
 
+    # ---- space chatter (#15): settings in meta chatter (live-only like meta crew: a re-read keeps it, backups carry it) ----
+
+    def chatter_raw(self):
+        """meta chatter as kept: {on (default off), level (outrider.chatter.LEVELS), off: [roles that take no part]}."""
+        raw = meta_get(self.db, "chatter")
+        raw = raw if isinstance(raw, dict) else {}
+        level = raw.get("level") if raw.get("level") in outrider.chatter.LEVELS else outrider.chatter.LEVEL_DEFAULT
+        off = [r for r in outrider.speech.CREW_IDS if r in (raw.get("off") if isinstance(raw.get("off"), list) else ())]
+        return {"on": raw.get("on") is True, "level": level, "off": off}
+
+    def set_chatter(self, body):
+        """POST /api/voice/chatter: one change ({on}, {level} or {role, takes_part}), for every browser and the tablet.
+        (answer, status): {ok, chatter} (the payload's chatter)."""
+        if not isinstance(body, dict) or not body:
+            return {"error": "expected {on}, {level} or {role, takes_part}"}, 400
+        c = self.chatter_raw()
+        if "on" in body:
+            if not isinstance(body["on"], bool):
+                return {"error": "on must be true or false"}, 400
+            c["on"] = body["on"]
+        elif "level" in body:
+            if body["level"] not in outrider.chatter.LEVELS:
+                return {"error": f"level must be one of {', '.join(outrider.chatter.LEVELS)}"}, 400
+            c["level"] = body["level"]
+        elif "role" in body:
+            role, part = body.get("role"), body.get("takes_part")
+            if not isinstance(role, str) or role not in outrider.speech.CREW_IDS or not isinstance(part, bool):
+                return {"error": "expected {role: a crew station, takes_part: true or false}"}, 400
+            off = (set(c["off"]) - {role}) | (set() if part else {role})
+            c["off"] = [r for r in outrider.speech.CREW_IDS if r in off]
+        else:
+            return {"error": "expected {on}, {level} or {role, takes_part}"}, 400
+        meta_set(self.db, "chatter", c)
+        self.db.commit()
+        self.bump()
+        return {"ok": True, "chatter": self.chatter_summary()}, 200
+
+    def chatter_watch(self, now=None):
+        """Where you are for chatter from the live Status.json (outrider.chatter.where); since when, kept for the
+        page's grace after entering supercruise or stepping out on a planet. Whether that changed (the payload says it)."""
+        st = self.journals.status_json or {}
+        place, why = outrider.chatter.where(st.get("flags"), st.get("flags2"), st.get("gui_focus")) if st.get("live") else (None, None)
+        c = self._chatter
+        if (place, why) == (c["where"], c["why_not"]):
+            return False
+        if place != c["where"]:
+            c["since"] = (time.time() if now is None else now) if place else None
+        c["where"], c["why_not"] = place, why
+        return True
+
+    def chatter_summary(self):
+        """The payload's chatter: the settings and where you are for it ({on, level, off, where, why_not, since})."""
+        return {**self.chatter_raw(), **self._chatter}
+
     def crew_raw(self):
         """meta crew as kept, the malformed left out: {on (default off), danger (default on), members, rows}."""
         raw = meta_get(self.db, "crew")
@@ -17112,7 +17170,7 @@ class State:
                     gist = lambda st: st and (round(st.get("fuel_main") or 0, 1), st.get("flags"), st.get("flags2"),
                                               st.get("body"), json.dumps(st.get("destination")), st.get("live"),
                                               st.get("selected_weapon"))
-                    if gist(self.journals.status_json) != gist(before):
+                    if gist(self.journals.status_json) != gist(before) or self.chatter_watch():
                         self.bump()
                     sm = self.sampling_summary()
                     skey = sm and (sm.get("clear"), (sm.get("to_go") or 0) // 10, sm.get("samples"), bool(sm.get("elsewhere")))
@@ -19222,6 +19280,15 @@ def make_app(state, hosts=None):
         out, status = state.set_crew(body)
         return web.json_response(out, status=status)
 
+    async def voice_chatter_view(request):
+        """POST /api/voice/chatter (#15): one change to space chatter for every browser and the tablet ({on}, {level} or
+        {role, takes_part}: State.set_chatter). Behind request_guard and the sign-in like POST /api/voice/crew."""
+        body = await json_object(request)
+        if body is None:
+            return web.json_response({"error": "expected a JSON object"}, status=400)
+        out, status = state.set_chatter(body)
+        return web.json_response(out, status=status)
+
     async def speaker_audio_view(request):
         """POST /api/speaker/audio {blocked}: the speaking window's browser holds audio back until a click (true) or
         plays again (false). The payload's speaker_audio_blocked tells the tablet, which asks for that click."""
@@ -19575,6 +19642,7 @@ def make_app(state, hosts=None):
     app.router.add_post("/api/voice", voice_view)
     app.router.add_post("/api/voice/style", voice_style_view)
     app.router.add_post("/api/voice/crew", voice_crew_view)
+    app.router.add_post("/api/voice/chatter", voice_chatter_view)
     app.router.add_get("/api/voices/catalogue", voice_catalogue_view)
     app.router.add_get("/api/voices/speakers", voice_speakers_view)
     app.router.add_post("/api/voices/download", voice_download_view)

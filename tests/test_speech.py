@@ -17,6 +17,7 @@ import outrider.bio  # noqa: E402
 import ed_outrider  # noqa: E402
 import outrider.unsold  # noqa: E402
 import outrider.speech  # noqa: E402
+import outrider.chatter  # noqa: E402
 
 
 class Speech(unittest.TestCase):
@@ -265,9 +266,11 @@ class Speech(unittest.TestCase):
         with open(os.path.join(here, "resources", "speech.json"), encoding="utf-8") as f:
             doc = json.load(f)
         self.assertEqual(outrider.speech.check(doc), [])
-        for key in outrider.speech.KEYS:
+        # space chatter's keys (#15) only once its lines are written (outrider.chatter.LINES_WRITTEN)
+        required = [k for k in outrider.speech.KEYS if outrider.chatter.LINES_WRITTEN or k not in outrider.speech.CHATTER_KEYS]
+        for key in required:
             for style in list(doc["styles"]) + [s + "_profane" for s in ("sarcastic", "sweet")]:
-                self.assertGreaterEqual(len(doc["lines"][key].get(style, [])), 10, f"{key}/{style}")
+                self.assertGreaterEqual(len(doc["lines"].get(key, {}).get(style, [])), 10, f"{key}/{style}")
         # every shipped personality file (resources/personalities/) is clean and covers every alert as the base ones do,
         # its swearing list too when it has one; none takes a base personality's name
         folder = os.path.join(here, "resources", "personalities")
@@ -278,7 +281,7 @@ class Speech(unittest.TestCase):
             for sid in pdoc["styles"]:
                 self.assertNotIn(sid, doc["styles"], name)
                 swears = any(sid + "_profane" in e for e in pdoc["lines"].values())
-                for key in outrider.speech.KEYS:
+                for key in required:
                     for lst in [sid] + ([sid + "_profane"] if swears else []):
                         self.assertGreaterEqual(len(pdoc["lines"].get(key, {}).get(lst, [])), 10, f"{name}: {key}/{lst}")
             doc["lines"] = {k: {**v, **pdoc["lines"].get(k, {})} for k, v in doc["lines"].items()}   # for the checks below
@@ -289,13 +292,19 @@ class Speech(unittest.TestCase):
             js = f.read()
         import re
         used = set(re.findall(r'line\("(\w+)"', js)) | set(re.findall(r'"(unsold_\w+)"', js))
-        # every key is spoken by the page (RESERVED would list any with lines written ahead of their trigger)
-        self.assertEqual(used, set(outrider.speech.KEYS) - set(outrider.speech.RESERVED))
+        # every key is spoken by the page (RESERVED would list any with lines written ahead of their trigger); the
+        # chatter's by their names (the monologues, the last word) and the topics' asks and answers from the server's list
+        chatter = set(outrider.speech.CHATTER_KEYS)
+        for key in ("chatter_space", "chatter_planet_orbit", "chatter_planet_landed", "chatter_react"):
+            self.assertIn(f'"{key}"', js, key)
+        self.assertIn("`chat_${topic}_ask`", js)
+        self.assertIn("`chat_${topic}_answer`", js)
+        self.assertEqual(used - chatter, set(outrider.speech.KEYS) - chatter - set(outrider.speech.RESERVED))
         self.assertLessEqual(set(outrider.speech.RESERVED), set(outrider.speech.KEYS))
         samples = js[js.index("const LINE_SAMPLES = {"):]
         samples = samples[:samples.index("\n};")]
-        for key in outrider.speech.KEYS:   # the ▶ try button has sample values for every alert
-            self.assertRegex(samples, r"\b%s: \{" % key, key)
+        for key in set(outrider.speech.KEYS) - chatter:   # the ▶ try button has sample values for every alert
+            self.assertRegex(samples, r"\b%s: \{" % key, key)   # (the chatter's come with the lines: speechLib.chatter)
 
 
 class PersonalityFiles(unittest.TestCase):

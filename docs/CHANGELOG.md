@@ -2,6 +2,34 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-16 · Space chatter, the code (#15; the lines come later)
+- **Settings → Voice → Space chatter** (off by default):
+  - Talk in quiet moments, and how often (rare, normal, chatty).
+  - With the crew on, the stations that take part.
+  - Say who is talking in the captions (per browser).
+  - ▶ Try chatter.
+  - The server keeps the settings in meta `chatter` (POST `/api/voice/chatter`).
+- **`outrider/chatter.py`:**
+  - `where()`: supercruise in your ship, or on foot or in the SRV on a planet; quiet in danger, heat, low fuel, the
+    FSD, suit trouble, or with a map, the FSS, the DSS or the codex open. Never for unsold data.
+  - The timings and the topics: 12 station topics, 6 personal ones, who asks and who answers.
+  - The speech keys: `chatter_space`, `chatter_planet_orbit` / `_landed`, `chatter_react`, and
+    `chat_<topic>_ask` / `_answer`.
+- **The server** follows Status.json for it: where you are, what keeps it quiet, since when.
+- **The page** keeps two clocks in the speaking window:
+  - no alert for N minutes, and N to 2N since the last chatter;
+  - a minute's grace after entering supercruise or stepping out on a planet;
+  - rare stops at 3 an hour.
+- **What it says:**
+  - A monologue, or with the crew on, a dialogue: an ask, an answer, sometimes a last word back.
+  - Two stations of one personality or one voice never talk to each other.
+  - It is last in the queue and never talks over anything; an alert drops the rest of a dialogue.
+  - A line that is missing a value is never said.
+- **No lines yet:** they are written per personality once the author has listened to the personalities.
+  `LINES_WRITTEN` stays False until then, and the shipped-lines test does not ask for them.
+- **Tests:** `tests/test_chatter.py` and the smoke test's "space chatter" block.
+- **Docs:** the guide's Space chatter section and DESIGN_NOTES.
+
 ## 2026-10-16 · Two fixes from Kurbo26: a tagged plant walked away from, and the tablet's Map pill
 - **The surface map:** a plant tagged with the composition scanner, of a species you had not sampled yet, vanished
   from the map (and its legend row) once you were over 3 km from it; it came back at the rim only after you sampled

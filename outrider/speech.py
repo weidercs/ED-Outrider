@@ -31,6 +31,7 @@ import os
 import re
 
 from . import DATA_DIR, RESOURCES_DIR
+from . import chatter as _chatter
 
 # every line the page speaks, and the {placeholders} it fills for it. Always available: {name} (one of the
 # names you asked to be called, at random: game commander names are often unpronounceable), {cmdr} (the
@@ -136,6 +137,9 @@ KEYS = {
                  "completed samples still unsold after a Vista Genomics sale: {text} (e.g. 'Sold 50 systems for 14.8 million. "
                  "43 systems are still unsold, 2 million, 270 first discoveries: sell the next page.')",
 }
+# space chatter's lines (outrider/chatter.py, #15): the monologues, a dialogue's asks and answers per topic, the last word
+KEYS.update(_chatter.KEYS)
+CHATTER_KEYS = tuple(_chatter.KEYS)
 # keys with lines in speech.json that nothing speaks yet (the shipped-lines test allows them); none now
 RESERVED = ()
 ALWAYS = ("name", "cmdr", "ship", "here")
@@ -532,7 +536,8 @@ class SpeechLines:
                 "version": self.version(), "error": self.error, "problems": (self.problems + self.file_problems())[:20],
                 # the personality files merged in: {id, file, source (shipped or yours), covers, of} each
                 "personalities": list(self.info_list),
-                "crew_roles": crew_roles_info()}   # the crew's roles and their alert rows, for the page
+                "crew_roles": crew_roles_info(),   # the crew's roles and their alert rows, for the page
+                "chatter": _chatter.page_info()}   # space chatter's topics, timings and sample values (#15)
 
     def set_ban(self, alert, template, ban=True):
         """Ban (or unban) one line of an alert: (HTTP status, answer). Only a line that is in the speech file is
@@ -631,6 +636,7 @@ SAMPLES = {
                           "The nearest lost system is Drojau LL-O b26-3, 42 light-years."},
     "sale_left": {"text": "Sold 50 systems for 14.8M. 43 systems are still unsold, 2.0M, 270 first discoveries: "
                           "sell the next page."},
+    **_chatter.SAMPLES,
 }
 # The crew (the author's plan of 2026-10-13): the spoken alerts split among crew members, each with its own personality
 # and voice, so you know who is talking (and so what about) before the sentence ends. Each alert row of Settings ->

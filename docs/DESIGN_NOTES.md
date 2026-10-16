@@ -1292,6 +1292,17 @@ upstream project's choices, not rules of the game.
   `uinput` module, `/dev/uinput` writable, Primary Fire's keyboard binding), with the fix. It never creates the virtual
   keyboard to find out: that is exactly what could press a key. The udev `uaccess` rule is the fix offered first; the
   `input` group works too but lets every program read every keyboard. GET `/api/autohonk/check` is game-PC only.
+- **Space chatter** (#15, `outrider/chatter.py`): the server only says where you are for it (`where()` from
+  Status.json's flags and GuiFocus: "space" in supercruise in your ship, "planet" on foot or in the SRV on a planet)
+  and what keeps it quiet; the speaking window keeps the clocks and picks the lines, so a page that is not speaking
+  never chatters and no chatter crosses to another window. It is not an alert: no alert row, no cooldown, no 🗣 tick;
+  it goes last in the queue (`speechPrio` 4), never over anything queued or playing, and a dialogue's later lines go
+  if an alert came in after it started. Its lines live in the speech files beside the alerts' (keys `chatter_*` and
+  `chat_<topic>_ask/answer`), so personality files, bans and the checks work on them unchanged; a chatter line with
+  a value it cannot fill is never said (`lineStrict`), unlike an alert's last resort. Unsold data is never a blocker
+  (the author always carries a lot). Two stations of one personality ("as the XO" counts as the XO's) or of one voice
+  and person never talk to each other, or it would sound like one person talking to themselves. The topics are mostly
+  the stations' own work (`PERSONAL_SHARE` 0.25).
 
 ## Known limits
 
@@ -1365,6 +1376,8 @@ confirmed while playing. Treat reports about them as likely real.
 - `CarrierBuy`, `CarrierDecommission` and `CarrierCancelDecommission`: written to Frontier's journal manual, never seen
   in the author's journals (the carrier was bought before them).
 - Status.json Flags2 on-foot-in-station bits (3, 13, 14) counting as docked.
+- Space chatter's places and blockers (`outrider.chatter.where`): the on-foot-on-planet and SRV bits, GuiFocus
+  values and the suit warnings, from Frontier's journal manual only.
 - Auto honk end to end since it reads the binding from the controls preset; the fire-group and combat-mode waits.
 - The co-pilot button on a real device (`python3 -m outrider.button --listen`), including rig marking in a live Rhino,
   and its tap targeting the next route system in a live game (the slow double tap's cancel included).

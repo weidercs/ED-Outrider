@@ -9000,6 +9000,137 @@ const releasePayloads = async () => {
     console.log(goodTL ? "OK" : "FAIL", "| header tiles shown |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "Settings → Display ticks the tiles this device shows: left out of the row and the one line, a column each, at least one stays, the fold modes kept", errors.slice(before));
   }
+  // Space chatter (#15): who may talk to whom (never two stations of one personality, or of one voice and person; a
+  // personal topic about a quarter of the time), a dialogue said in order with names in the captions (or not, with the
+  // toggle off) and dropped after an alert, a monologue in space and on a planet (landed or in orbit), a line missing a
+  // value never said; the two clocks, the grace, the rare cap, quiet while something is queued or the game has a
+  // screen open; Settings' controls posting their changes
+  {
+    holdPayloads();
+    const w = dom.window, d = w.document, before = errors.length, got = {}, posts = [];
+    const served = await (await fetch(base + "api/speech")).json();
+    const realFetch = w.fetch;
+    w.fetch = (u, o) => {
+      if (String(u) !== "api/voice/chatter") return realFetch(u, o);
+      const body = JSON.parse(o.body); posts.push(body);
+      const chatter = w.eval("JSON.parse(JSON.stringify(data.chatter))");
+      if ("on" in body) chatter.on = body.on;
+      if (body.role) chatter.off = body.takes_part ? chatter.off.filter(r => r !== body.role) : [...chatter.off, body.role];
+      return Promise.resolve(new Response(JSON.stringify({ok: true, chatter}), {status: 200, headers: {"Content-Type": "application/json"}}));
+    };
+    const title = id => served.crew_roles.find(r => r.id === id).short;
+    w.eval(`window.__chat = {crew: data.crew, chatter: data.chatter, lib: speechLib, speak, pos: data.position, surface: data.surface,
+        flags: [speechOn, isSpeaker], hush: hushState, alert: lastAlert, CHAT: JSON.stringify(CHAT), random: Math.random,
+        items: speechItems, caps: captions.splice(0), store: ["speechStyles", "chatterNames", "speechHeard"].map(k => [k, localStorage.getItem(k)])};
+      window.__spoken = [];
+      speechLib = {version: "chat", banned: {}, crew_roles: ${JSON.stringify(served.crew_roles)},
+        styles: {business: "Business", sarcastic: "Sarcastic", sweet: "Sweet"},
+        lines: {chatter_space: {business: ["Quiet in {system}."]},
+                chatter_planet_landed: {business: ["The ship is {ship_dist} away on {body}."]},
+                chatter_planet_orbit: {business: ["The ship is up there over {body}."]},
+                chat_fuel_ask: {sarcastic: ["{to}, fuel?"]}, chat_fuel_answer: {sweet: ["Plenty, {to}."]},
+                chatter_react: {sarcastic: ["Thanks, {to}."]}},
+        chatter: Object.assign({}, ${JSON.stringify(served.chatter)}, {topics: [{id: "fuel", kind: "station", ask: ["navigator"], answer: ["engineer"]}]})};
+      localStorage.removeItem("speechHeard"); store.set("speechStyles", ["business"]); store.set("chatterNames", true);
+      speechOn = true; isSpeaker = true; hushState = null; lastAlert = null; speechItems = [];
+      const m = (name, personality, voice) => ({name, personality, voice, speaker: null, fill: null});
+      data.crew = {on: true, danger: true, rows: {}, members: {xo: m(null, null, null), navigator: m("Ada", "sarcastic", "en_GB-a"),
+        engineer: m("Mira", "sweet", "en_GB-b"), tactical: m(null, "sarcastic", "en_GB-c"), comms: m(null, "business", "en_GB-b")}};
+      data.chatter = {on: true, level: "normal", off: ["science", "exobiologist", "quartermaster", "mining"], where: "space", why_not: null, since: Date.now() / 1000 - 600};
+      data.position = Object.assign({}, data.position, {name: "Sol"});
+      speak = (t, o) => window.__spoken.push({t, kind: o.kind, tag: o.tag, voice: o.voice || null, role: o.role || null, still: o.still});
+      window.__said = () => JSON.stringify(__spoken.splice(0).map(s => [s.t, s.kind, s.voice, s.role]));`);
+    try {
+      // who may talk to whom
+      got.pairs = JSON.parse(w.eval(`(() => { const s = chatSpeakers(), r = id => s.find(m => m.role === id);
+        return JSON.stringify([s.map(m => m.role), chatMayTalk(r("navigator"), r("engineer")), chatMayTalk(r("navigator"), r("tactical")),
+          chatMayTalk(r("engineer"), r("comms")), chatMayTalk(r("xo"), r("navigator")), chatMayTalk(r("xo"), r("navigator")) && chatMayTalk(r("navigator"), r("navigator"))]); })()`));
+      got.dialogue = JSON.parse(w.eval(`(() => { const s = chatSpeakers(), r = id => s.find(m => m.role === id);
+        const info = {personal: 0.25, topics: [{id: "fuel", kind: "station", ask: ["navigator"], answer: ["engineer"]},
+                                               {id: "home", kind: "personal", ask: ["navigator"], answer: ["tactical", "engineer"]}]};
+        const pick = (members, x) => { const p = chatDialogue(members, info, () => x); return p && [p[0].role, p[1].role, p[2]]; };
+        return JSON.stringify([pick(s, 0.9), pick(s, 0.1), pick([r("navigator"), r("tactical")], 0.1), pick([r("engineer")], 0.9)]); })()`));
+      // a dialogue: ask, answer, a last word; the captions say who; an alert since drops the rest
+      w.eval(`Math.random = () => 0; speechLib.chatter.dialogue = 1; speechLib.chatter.third = 1`);
+      got.talk = [w.eval("chatterNow()"), JSON.parse(w.eval("__said()")), JSON.parse(w.eval("JSON.stringify(captions.map(c => c.shown))"))];
+      w.eval(`chatterNow(); window.__still = __spoken.map(s => s.still); __spoken.length = 0`);
+      got.alive = w.eval(`(() => { const a = __still.every(f => f()); lastAlert = {at: Date.now() + 1000}; const b = __still.some(f => f()); lastAlert = null; return [a, b]; })()`);
+      // the toggle off: the words alone
+      w.eval(`store.set("chatterNames", false); captions.length = 0; chatterNow(); __spoken.length = 0`);
+      got.noNames = JSON.parse(w.eval("JSON.stringify(captions.map(c => c.shown))"));
+      // a monologue: the crew off (the main voice), in space; a line missing its value is not said; on a planet
+      w.eval(`data.crew.on = false; speechLib.chatter.dialogue = 0; captions.length = 0`);
+      got.space = [w.eval("chatterNow()"), JSON.parse(w.eval("__said()"))];
+      w.eval(`data.position = Object.assign({}, data.position, {name: null})`);
+      got.strict = [w.eval("chatterNow()"), JSON.parse(w.eval("__said()"))];
+      w.eval(`data.chatter.where = "planet"; data.surface = {body: "B 7", ship: {dist: 300}}`);
+      got.landed = JSON.parse(w.eval("chatterNow(), __said()"));
+      w.eval(`data.surface = {body: "B 7", ship: null}`);
+      got.orbit = JSON.parse(w.eval("chatterNow(), __said()"));
+      // the clocks (chatterTick(now)): due once both have run out, past the grace, under the rare cap, nothing queued
+      w.eval(`data.chatter.where = "space"; data.position = Object.assign({}, data.position, {name: "Sol"}); Math.random = window.__chat.random`);
+      got.ticks = JSON.parse(w.eval(`(() => { const t = Date.now(), c = data.chatter, out = {};
+        const due = () => { CHAT.lastAt = t - 5000; CHAT.gap = 4000; CHAT.said = []; };
+        due(); c.on = false; out.off = chatterTick(t); c.on = true;
+        due(); c.since = t / 1000 - 30; out.grace = chatterTick(t); c.since = t / 1000 - 600;
+        due(); lastAlert = {at: t - 60000}; out.alert = chatterTick(t); lastAlert = null;
+        due(); CHAT.lastAt = t - 1000; out.gap = chatterTick(t);
+        due(); c.why_not = "the FSS"; out.fss = chatterTick(t); c.why_not = null;
+        due(); speechItems = [{}]; out.queued = chatterTick(t); speechItems = [];
+        due(); c.level = "rare"; CHAT.said = [t - 1, t - 2, t - 3]; out.rare = chatterTick(t); c.level = "normal";
+        due(); out.due = chatterTick(t); out.spoken = __spoken.length; out.next = chatterTick(t + 1);
+        out.gapRange = CHAT.gap >= 7 * 60000 && CHAT.gap <= 14 * 60000;
+        __spoken.length = 0; return JSON.stringify(out); })()`));
+      // Settings: drawn from data.chatter, the switches post
+      w.eval(`data.crew.on = true; data.chatter = Object.assign({}, data.chatter, {on: true, level: "chatty", off: ["comms"]}); drawChatter()`);
+      const box = d.getElementById("chatRoles"), cb = r => box.querySelector(`[data-chatrole="${r}"]`);
+      got.drawn = [d.getElementById("chatOn").checked, d.getElementById("chatLevel").value, box.hidden,
+                   box.querySelectorAll("[data-chatrole]").length, cb("comms").checked, cb("tactical").checked, d.getElementById("chatNames").checked];
+      const change = el => el.dispatchEvent(new w.Event("change", {bubbles: true}));
+      d.getElementById("chatOn").checked = false; change(d.getElementById("chatOn"));
+      await sleep(50);
+      cb("tactical").checked = false; change(cb("tactical"));
+      await sleep(50);
+      d.getElementById("chatNames").checked = true; change(d.getElementById("chatNames"));
+      got.posted = [posts, w.eval("JSON.stringify(data.chatter.off)"), d.getElementById("chatOn").checked, !cb("tactical").checked, w.eval(`store.get("chatterNames")`)];
+      w.eval(`data.crew.on = false; drawChatter()`);
+      got.crewOff = box.hidden;
+      w.eval(`speechLib.lines = {}`);
+      d.getElementById("chatTry").click();
+      got.tryEmpty = d.getElementById("chatMsg").textContent;
+    } finally {
+      w.eval(`const k = window.__chat; Object.assign(data, {crew: k.crew, chatter: k.chatter, position: k.pos, surface: k.surface});
+        speechLib = k.lib; speak = k.speak; [speechOn, isSpeaker] = k.flags; hushState = k.hush; lastAlert = k.alert;
+        Object.assign(CHAT, JSON.parse(k.CHAT)); Math.random = k.random; speechItems = k.items; captions.length = 0; captions.push(...k.caps);
+        for (const [key, v] of k.store) { if (v === null) localStorage.removeItem(key); else localStorage.setItem(key, v); }
+        drawChatter(); delete window.__chat; delete window.__spoken; delete window.__said; delete window.__still;`);
+      w.fetch = realFetch;
+      await releasePayloads();
+    }
+    const nav = `${title("navigator")} (Ada)`, eng = `${title("engineer")} (Mira)`;
+    const want = {
+      pairs: [["xo", "navigator", "engineer", "comms", "tactical"], true, false, false, true, false],
+      dialogue: [["navigator", "engineer", "fuel"], ["navigator", "engineer", "home"], null, null],
+      talk: [true, [["Mira, fuel?", "chatter", "en_GB-a", "navigator"], ["Plenty, Ada.", "chatter", "en_GB-b", "engineer"], ["Thanks, Mira.", "chatter", "en_GB-a", "navigator"]],
+             [`${nav}: Mira, fuel?`, `${eng}: Plenty, Ada.`, `${nav}: Thanks, Mira.`]],
+      alive: [true, false],
+      noNames: ["Mira, fuel?", "Plenty, Ada.", "Thanks, Mira."],
+      space: [true, [["Quiet in Sol.", "chatter", null, null]]],
+      strict: ["no chatter lines yet: they come in a later update", []],
+      landed: [["The ship is 300 m away on B 7.", "chatter", null, null]],
+      orbit: [["The ship is up there over B 7.", "chatter", null, null]],
+      ticks: {off: false, grace: false, alert: false, gap: false, fss: false, queued: false, rare: false, due: true, spoken: 1, next: false, gapRange: true},
+      drawn: [true, "chatty", false, 9, false, true, false],
+      posted: [[{on: false}, {role: "tactical", takes_part: false}], JSON.stringify(["comms", "tactical"]), false, true, true],
+      crewOff: true,
+      tryEmpty: "no chatter lines yet: they come in a later update",
+    };
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    const goodCH = !bad.length && errors.length === before;
+    allOk = allOk && goodCH;
+    console.log(goodCH ? "OK" : "FAIL", "| space chatter |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
+      : "who may talk to whom, a dialogue in order with names in the captions (dropped after an alert), monologues in space, landed and in orbit, no half-filled line, the clocks and what keeps it quiet, Settings posting", errors.slice(before));
+  }
   // another site's POST is refused before any handler runs (radius: harmless even if it got through with {})
   const post = origin => fetch(base + "api/radius", {method: "POST", body: "{}",
     headers: Object.assign({"Content-Type": "application/json"}, origin ? {Origin: origin} : {})}).then(r => r.status);

@@ -316,6 +316,28 @@ the sentence ends:
   Outrider. No alerts until it is back." in your Piper voice (made in advance while the link was up; without Piper,
   the alert sound), and "Back in contact" when it returns.
 
+**Space chatter**
+
+Off by default. Tick **Talk in quiet moments** in ⚙ Settings → Voice → Space chatter and, after a while with no alert,
+someone says something: in supercruise, or while you are on foot or in the SRV on a planet.
+
+- **Not yet:** the switch and the timing are in, but the chatter lines themselves come in a later update. Until then
+  **▶ Try chatter** says so.
+- **When:** never while you are docked or on foot in a station, in a taxi or multicrew, in danger, overheating, low on fuel, charging the
+  FSD, with your suit in trouble, or with a map, the FSS, the DSS or the codex open. The data you carry never stops
+  it. It waits a minute after you enter supercruise or step out on a planet. It never talks over anything said or
+  waiting to be said, and an alert always comes first.
+- **How often** (rare, normal or chatty) sets the quiet before it talks: no alert for 15, 7 or 4 minutes, and 15 to
+  30, 7 to 14 or 4 to 8 minutes since the last chatter. Rare also stops at 3 an hour.
+- **With the crew on,** the stations talk among themselves. Now and then one asks another about its work (fuel, the
+  route, the stars, the money, the life you sample...) or, about a quarter of the time, something personal, and
+  gets an answer, sometimes with a last word back. Two stations of the same personality, or with the same voice,
+  never talk to each other. They call each other by name when you gave one, else by station. **Stations that take
+  part** leaves any of them out.
+- **Say who is talking in the captions** (per browser) puts "Engineer (Mira):" before each line.
+- If an alert comes in mid-conversation, the rest of the conversation is dropped. Chatter lines can be banned in
+  Spoken lines like any other.
+
 **Spoken lines: what was said, and banning lines**
 
 Open ⚙ Settings and its **Spoken lines** section. It lists this

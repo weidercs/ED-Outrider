@@ -646,6 +646,16 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         <input type="number" id="padDelay" min="0" max="20" step="1" style="width:4em" aria-label="seconds after docking is granted"> s after docking is granted
         <span class="hint">after the station's own voice (some talk longer); with a docking computer fitted, 12 s unless it takes over</span>
         <span id="padDelayMsg" class="hint" role="status"></span></label>
+      <div id="chatBox" class="mod" data-find-block="space chatter">
+        <h4 class="vmhead">Space chatter</h4>
+        <label class="mod"><input type="checkbox" id="chatOn"> Talk in quiet moments
+          <span class="hint">in supercruise, or while you are on foot or in the SRV on a planet, after a while with no alert; never in
+          danger, during a jump, or with the FSS, the DSS or a map open. With the crew on, its stations talk among themselves now and then</span></label>
+        <label class="mod">How often <select id="chatLevel" aria-label="how often"><option value="rare">rare</option><option value="normal">normal</option><option value="chatty">chatty</option></select></label>
+        <div id="chatRoles" class="mod inlineopts" hidden></div>
+        <label class="mod"><input type="checkbox" id="chatNames"> Say who is talking in the captions</label>
+        <div class="mod"><button type="button" class="try" id="chatTry">▶ Try chatter</button> <span id="chatMsg" class="hint" role="status"></span></div>
+      </div>
       <div id="crewBox" class="crewbox" data-find-block="crew">
         <h4 class="crewhead">Crew</h4>
         <div class="mod inlineopts crewsw"><label><input type="checkbox" id="crewOn"> <b>Split the alerts among a crew</b></label>

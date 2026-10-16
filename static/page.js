@@ -3,7 +3,7 @@
 // the config file's [defaults] (data.defaults) where the page asks for one. Only SETTINGS_KEYS are shared:
 // per-device ones (the view, layouts, the search form, which screen speaks) never are. ed_outrider.py has the
 // same list (BROWSER_SETTINGS).
-const SETTINGS_KEYS = ["alerts", "alertSound", "alertSpeak", "speech", "speechStyles", "speechNames", "speechSpeed",
+const SETTINGS_KEYS = ["alerts", "alertSound", "alertSpeak", "speech", "speechStyles", "speechNames", "chatterNames", "speechSpeed",
   "speechProfanity", "speechProfanityPct", "speechDangerBusiness", "speechShift", "sayBio", "sayGeo", "sayHazard",
   "sayMapped", "honkAnnounce", "sound", "unsoldCfg", "highlightCfg", "bioMinCfg", "maxBonus", "codexNewCounts",
   "highG", "streakCfg", "skipFloor", "sort", "sorts", "showVisited", "showExplored", "oneJump", "map",
@@ -1244,7 +1244,7 @@ function renderNow() {
   if (lastAlert && Date.now() - lastAlert.at < 15000)
     lines.push(`<div class="now-card alert">${esc(lastAlert.title)}${lastAlert.body ? ` <span class="unk">${esc(lastAlert.body)}</span>` : ""}</div>`);
   if (captions.length) lines.push(`<div class="now-caps">${captions.slice().reverse().map(c =>
-    `<div class="now-cap" data-words="${esc(c.words)}" title="say it again (through the window that is speaking)">▶ ${esc(c.words)} <span class="unk">${agoText(c.at)}</span></div>`).join("")}</div>`);
+    `<div class="now-cap" data-words="${esc(c.words)}" title="say it again (through the window that is speaking)">▶ ${esc(c.shown || c.words)} <span class="unk">${agoText(c.at)}</span></div>`).join("")}</div>`);
   if (nowHintUntil && Date.now() < nowHintUntil && !window.OutriderApp)   // the Android app keeps the screen on itself
     lines.push(`<div class="now-line now-small now-hint">screen may sleep: set the tablet's screen timeout, or open over localhost/HTTPS</div>`);
   el.innerHTML = lines.join("");
@@ -1637,9 +1637,10 @@ const captions = [];
 // shown as written ("Smojooe ZC-D c12-2"), not in the voice's spelling ("Smojooe Z C D, c 12 2"; found on the tablet):
 // only markup and symbols go. `said` is the spoken form, to match the line last said for its voice and pace.
 const captionText = t => String(t).replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
-function addCaption(words) {
+// `who`: space chatter's speaker ("Engineer (Mira)"), shown before the words when chatterNames is on (#15)
+function addCaption(words, who = null) {
   const w = captionText(words || ""); if (!w) return;
-  captions.push({words: w, said: spokenText(w), at: Date.now()});
+  captions.push({words: w, shown: who && chatterNames() ? `${who}: ${w}` : w, said: spokenText(w), at: Date.now()});
   if (captions.length > 3) captions.shift();
   if (view === "now" && data) renderNow();
   drawLastSaid();
@@ -1652,7 +1653,7 @@ function drawLastSaid() {
   el.hidden = !c;
   if (!c) return;
   const t = document.getElementById("lastSaidText");
-  t.textContent = c.words; t.title = `${c.words} (${agoText(c.at)})`;
+  t.textContent = c.shown || c.words; t.title = `${c.shown || c.words} (${agoText(c.at)})`;
 }
 document.getElementById("lastSaidBtn").onclick = () => {
   const c = captions[captions.length - 1];
@@ -2249,10 +2250,11 @@ const JUMP_LINE_WAIT = 8000;   // ms: the jump line's latest start after the cha
 // ms after Status.json says "in the tunnel" (it says so about 2 s before the countdown ends): the line then starts
 // with the tunnel itself (the author's timing, in game 2026-10-03)
 const JUMP_TUNNEL_DELAY = 2500;
-const SPEECH_SYS_BOUND = new Set(["find", "signals", "jump", "honk", "brief", "fss", "mapped", "approach", "bodybrief", "jumponium", "phenomena", "ggg", "rare_star", "surface_site", "signal_poi", "curious", "highway", "refuelshort", "lastscoop", "riches", "exo", "trade", "autotarget", "wrongtarget", "docking"]);
+const SPEECH_SYS_BOUND = new Set(["chatter", "find", "signals", "jump", "honk", "brief", "fss", "mapped", "approach", "bodybrief", "jumponium", "phenomena", "ggg", "rare_star", "surface_site", "signal_poi", "curious", "highway", "refuelshort", "lastscoop", "riches", "exo", "trade", "autotarget", "wrongtarget", "docking"]);
 // a rig confirmation answers your own press, like a line asked for; so does the docking pad (#3: your request's answer,
 // wanted at once)
 const speechPrio = (kind, tag) => DANGER.has(tag) || kind === "hull" || kind === "fuel" ? 0 : kind === "manual" || kind === "rigs" || kind === "docking" ? 1
+  : kind === "chatter" ? 4   // space chatter (#15): after everything else
   : ["find", "signals", "codex", "phenomena", "ggg", "rare_star", "surface_site", "signal_poi", "bodybrief", "supercharge", "jumponium"].includes(kind) ? 3 : 2;
 // the queue without what went stale by `now` with the ship at `pos`
 const speechExpire = (items, now, pos) => items.filter(it => now - it.notBefore <= SPEECH_MAX_AGE
@@ -2585,7 +2587,7 @@ function line(key, vars = {}, plain = "") {
   // the crew (when on): the row's crew member speaks in its own personality, when it has lines for this alert (else
   // as the XO: the ticked ones); "as the XO" is the ticked ones too, the shift included. A line naming a crew member
   // ({engineer}) only while the crew is on, and never by the member it names (crewLineOk)
-  const crew = lineCrew = crewMember(lineRow, key), mine = crew && crew.personality;
+  const crew = lineCrew = lineCrewForce !== undefined ? lineCrewForce : crewMember(lineRow, key), mine = crew && crew.personality;
   const listOf = name => !entry || typeof entry !== "object" || !Array.isArray(entry[name]) ? []
     : entry[name].filter(x => typeof x === "string" && x.trim() && crewLineOk(x, crew));
   // a danger line: business alone (a custom speech.json without business lines falls back to the ticked ones)
@@ -2606,6 +2608,7 @@ function line(key, vars = {}, plain = "") {
   if (!pool.length) return plain;
   const all = lineVars(vars), whole = pool.filter(x => allFilled(x[1], all));
   if (whole.length) pool = whole;   // a line that needs a value this alert lacks only as a last resort
+  else if (lineStrict) return plain;   // (never, for chatter: a half-filled line says nothing worth hearing)
   // Drawn from the lines not heard yet. With none left in this pool (the pool changes with the profanity roll, the
   // shift, danger-business, ticks and bans, so it is what is left of it that counts), only this pool's lines start
   // again, and the newest few of them stay held back so the reset cannot repeat the line just said.
@@ -2641,6 +2644,9 @@ let lineKey = null, lineTemplate = null;   // and its alert and speech.json word
 // lines (DANGER) are Tactical's while the Danger switch is on. The voice lab never goes through it.
 let lineRow = null;   // the alert row whose line line() is picking (alertOut sets it): its crew member chooses
 let lineCrew = null;  // the crew member line() picked the last line for (crewMember), null with the crew off
+// space chatter (#15) picks its speaker itself: line() takes this member (null: the main voice) instead of the row's,
+// and with lineStrict says nothing rather than a line missing a value
+let lineCrewForce = undefined, lineStrict = false;
 let crewUi = false;   // Settings' crew table and memory note are set up (drawCrew may run: crew batch 2, further down)
 const crewRoles = () => Array.isArray(speechLib.crew_roles) ? speechLib.crew_roles : [];
 const crewTitle = id => (crewRoles().find(r => r.id === id) || {}).short || id;
@@ -9506,6 +9512,7 @@ function drawTts() {
     + ((sf.problems || []).length ? ` Not used: ${sf.problems.join("; ")}.` : "");
   drawServerPlay();
   drawPadDelay();
+  drawChatter();
   drawStyleVoices();
   if (crewUi) { drawCrew(); drawVoiceMemory(); }
   drawSpeechBtn();
@@ -9695,6 +9702,152 @@ document.getElementById("padDelay").onchange = async e => {
 };
 document.getElementById("vmKeep").onchange = e => { if (e.target.value) vmPost("voices_loaded", e.target.value); else drawVmKeep(); };
 document.getElementById("vmPreload").onchange = e => vmPost("voices_preload", e.target.checked);
+
+// ---- space chatter (#15, outrider/chatter.py): idle talk in quiet supercruise, or while you are on foot or in the SRV on
+// a planet. Off by default (Settings -> Voice -> Space chatter: the server's meta chatter, every browser's). Two clocks: no
+// alert for N minutes (alertOut's lastAlert) and N to 2N since the last chatter (a dialogue counts once), N by the
+// chattiness; a grace after entering supercruise or stepping out on a planet; "rare" at most a few an hour. The speaking
+// window only, never over anything queued, and last in the queue; a dialogue's later lines go if an alert came in
+// between. With the crew on, a station that takes part says a monologue, or now and then asks another about one of
+// its topics and gets an answer (sometimes a last word back); two stations of the same personality ("as the XO" is the
+// XO's), or of the same voice and person, never talk to each other. With the crew off, the main voice alone.
+const chatterNames = () => store.get("chatterNames", true) !== false;   // captions say who talks (per browser)
+const CHAT = {lastAt: Date.now(), gap: null, said: []};
+const chatInfo = () => (speechLib && speechLib.chatter) || null;
+// a station as chatter's speaker ({role, personality, voice, speaker}), or null when it cannot speak itself (for an
+// alert the XO stands in; chatter leaves it out)
+function chatMember(role) {
+  const c = data && data.crew;
+  if (!c || !c.on) return null;
+  if (role === "xo") return {role: "xo", personality: null, voice: null, speaker: null, fill: null, for: null};
+  const m = (c.members && c.members[role]) || {};
+  if (m.fill || (m.personality && !(m.personality in (speechLib.styles || {})))) return null;
+  return {role, personality: m.personality || null, voice: m.voice || null, speaker: spkNum(m.speaker), fill: null, for: null};
+}
+// the stations that may chatter now: the crew's, ticked to take part and able to speak; none with the crew off
+function chatSpeakers() {
+  const off = new Set((data && data.chatter && data.chatter.off) || []);
+  return crewOn() ? crewRoles().map(r => r.id).filter(id => !off.has(id)).map(chatMember).filter(Boolean) : [];
+}
+const chatPersona = m => m.personality || "xo";
+const chatVoiceKey = m => { const v = crewVoice(m, m.personality); return `${v.voice || "main"}#${v.speaker ?? ""}`; };
+const chatMayTalk = (a, b) => a.role !== b.role && chatPersona(a) !== chatPersona(b) && chatVoiceKey(a) !== chatVoiceKey(b);
+// how a station is addressed: its name, else its station ("Engineer"); in captions "Engineer (Mira)"
+const chatTo = m => crewName(m.role) || crewTitle(m.role);
+const chatWho = m => crewName(m.role) ? `${crewTitle(m.role)} (${crewName(m.role)})` : crewTitle(m.role);
+// a dialogue [asker, answerer, topic id] among `members`, or null: a personal topic about info.personal of the time
+function chatDialogue(members, info, rnd = Math.random) {
+  const topics = (info && info.topics) || [];
+  const kinds = rnd() < (info.personal ?? 0.25) ? ["personal", "station"] : ["station", "personal"];
+  for (const kind of kinds) {
+    const options = [];
+    for (const t of topics.filter(t => t.kind === kind))
+      for (const a of members) for (const b of members)
+        if (t.ask.includes(a.role) && t.answer.includes(b.role) && chatMayTalk(a, b)) options.push([a, b, t.id]);
+    if (options.length) return options[Math.floor(rnd() * options.length)];
+  }
+  return null;
+}
+// the values a chatter line may fill (a line needing one that is not known is not said: lineStrict)
+function chatVars(c, extra = {}) {
+  const ts = data && data.this_session, s = data && data.surface;
+  return Object.assign({system: data && data.position && data.position.name,
+    minutes: c && c.where === "space" && c.since ? Math.max(1, Math.round((Date.now() / 1000 - c.since) / 60)) : null,
+    jumps: (ts && ts.jumps) || null, firsts: (ts && ts.firsts) || null,
+    body: (s && s.body) || null, ship_dist: s && s.ship && s.ship.dist != null ? surfDist(s.ship.dist) : null}, extra);
+}
+// a chatter line's words by `m` (null: the main voice), picked but not said yet: {key, words, style, template, m} or null
+function chatPick(key, m, vars) {
+  lineStyle = lineKey = lineTemplate = null; lineCrewForce = m; lineStrict = true;
+  let words;
+  try { words = line(key, vars, ""); } finally { lineCrewForce = undefined; lineStrict = false; }
+  return words ? {key, words, style: lineStyle, template: lineTemplate, m} : null;
+}
+function chatSpeak(p, still) {
+  const entry = logSpeech({kind: "chatter", tag: p.key, words: p.words});
+  entry.style = p.style; entry.key = p.key; entry.template = p.template;
+  speak(p.words, {kind: "chatter", tag: p.key, still, log: entry, ...crewVoice(p.m, p.style)});
+  addCaption(p.words, p.m ? chatWho(p.m) : null);
+}
+// say something now: a dialogue (with two stations that may talk, info.dialogue of the time; `force`: half) or a
+// monologue. true, or why nothing was said.
+function chatterNow({force = false} = {}) {
+  const c = data && data.chatter, info = chatInfo();
+  if (!c || !info) return "Outrider has not sent its chatter settings yet";
+  const where = c.where || (force ? "space" : null);
+  if (!where) return "nothing to chat about here";
+  const started = Date.now(), alive = () => !(lastAlert && lastAlert.at > started);   // an alert since: the rest goes
+  const speakers = chatSpeakers();
+  if (speakers.length >= 2 && Math.random() < (force ? 0.5 : info.dialogue)) {
+    const d = chatDialogue(speakers, info);
+    if (d) {
+      const [a, b, topic] = d;
+      const ask = chatPick(`chat_${topic}_ask`, a, chatVars(c, {to: chatTo(b)}));
+      const answer = ask && chatPick(`chat_${topic}_answer`, b, chatVars(c, {to: chatTo(a)}));
+      if (ask && answer) {
+        chatSpeak(ask, alive); chatSpeak(answer, alive);
+        const react = Math.random() < info.third && chatPick("chatter_react", a, chatVars(c, {to: chatTo(b)}));
+        if (react) chatSpeak(react, alive);
+        return true;
+      }
+    }
+  }
+  const m = speakers.length ? speakers[Math.floor(Math.random() * speakers.length)] : null, s = data && data.surface;
+  const key = where === "planet" ? (s && s.ship ? "chatter_planet_landed" : "chatter_planet_orbit") : "chatter_space";
+  const p = chatPick(key, m, chatVars(c));
+  if (!p) return info.written ? "nothing to say right now" : "no chatter lines yet: they come in a later update";
+  chatSpeak(p, alive);
+  return true;
+}
+// every few seconds in the speaking window: whether both clocks have run out, and then say something
+function chatterTick(now = Date.now()) {
+  const c = data && data.chatter, info = chatInfo();
+  if (!c || !c.on || !info || !c.where || c.why_not || !speakerHere() || !speechOn || hushed()) return false;
+  const N = (info.levels[c.level] || 7) * 60000;
+  if (CHAT.gap == null) CHAT.gap = N * (1 + Math.random());
+  if (!c.since || now - c.since * 1000 < info.grace * 1000) return false;
+  if (lastAlert && now - lastAlert.at < N) return false;
+  if (now - CHAT.lastAt < CHAT.gap) return false;
+  CHAT.said = CHAT.said.filter(t => now - t < 3600000);
+  if (c.level === "rare" && CHAT.said.length >= info.rare_per_hour) return false;
+  if (speechBusy || speechItems.length) return false;   // never over something said or waiting
+  CHAT.lastAt = now; CHAT.gap = N * (1 + Math.random()); CHAT.said.push(now);
+  chatterNow();
+  return true;
+}
+setInterval(() => { try { chatterTick(); } catch (err) { console.warn("chatter:", err); } }, 5000);
+// Settings -> Voice -> Space chatter
+function drawChatter() {
+  const box = document.getElementById("chatBox");
+  if (!box) return;
+  const c = (data && data.chatter) || {on: false, level: "normal", off: []};
+  const on = document.getElementById("chatOn"), lv = document.getElementById("chatLevel");
+  on.checked = !!c.on;
+  if (document.activeElement !== lv) lv.value = c.level || "normal";
+  document.getElementById("chatNames").checked = chatterNames();
+  const roles = document.getElementById("chatRoles"), html = crewOn() ? "Stations that take part: " + crewRoles().map(r =>
+    `<label><input type="checkbox" data-chatrole="${esc(r.id)}"${(c.off || []).includes(r.id) ? "" : " checked"}> ${esc(r.short || r.id)}</label>`).join(" ") : "";
+  roles.hidden = !html;
+  if (roles.dataset.drawn !== html) { roles.innerHTML = html; roles.dataset.drawn = html; }
+}
+async function chatPost(body) {
+  const m = document.getElementById("chatMsg");
+  let r;
+  try { r = await apiJson("api/voice/chatter", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}); }
+  catch { r = {error: "Outrider not reachable"}; }
+  r = r || {error: "?"};
+  if (!r.error && data && r.chatter) data.chatter = r.chatter;
+  m.textContent = r.error ? `Not saved: ${r.error}` : ""; m.className = r.error ? "hint warnc" : "hint";
+  drawChatter();
+}
+document.getElementById("chatOn").onchange = e => chatPost({on: e.target.checked});
+document.getElementById("chatLevel").onchange = e => { e.target.blur(); chatPost({level: e.target.value}); };
+document.getElementById("chatRoles").onchange = e => { const r = e.target.dataset.chatrole; if (r) chatPost({role: r, takes_part: e.target.checked}); };
+document.getElementById("chatNames").onchange = e => { store.set("chatterNames", e.target.checked); };
+document.getElementById("chatTry").onclick = () => {
+  const r = chatterNow({force: true}), m = document.getElementById("chatMsg");
+  m.textContent = r === true ? "" : r; m.className = "hint";
+};
 
 // ---- the crew in Settings (crew batch 2): its switches, the table (Role · Name · Personality · Voice · Speaker · Speaks
 // for · ▶ · ↺, the XO first), the XO note, Settings > Alerts' Crew column and the voice lab's Assign and "by crew"
@@ -12818,7 +12971,7 @@ function tabDrawCaption() {
   const text = disconnected ? "Reconnecting: old alerts will not replay"
     : audioIsBlocked ? "🔇 Tap anywhere to let Outrider speak here"
     : data && data.speaker_audio_blocked ? "🔇 Outrider's voice is waiting: click the Outrider page on the PC to allow audio"
-    : c ? c.words : "";
+    : c ? c.shown || c.words : "";
   if (el.textContent !== text) el.textContent = text;
 }
 // an alert: a banner over the page for a while (danger longer, and red), tap to dismiss
