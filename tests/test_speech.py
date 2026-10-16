@@ -268,6 +268,20 @@ class Speech(unittest.TestCase):
         for key in outrider.speech.KEYS:
             for style in list(doc["styles"]) + [s + "_profane" for s in ("sarcastic", "sweet")]:
                 self.assertGreaterEqual(len(doc["lines"][key].get(style, [])), 10, f"{key}/{style}")
+        # every shipped personality file (resources/personalities/) is clean and covers every alert as the base ones do,
+        # its swearing list too when it has one; none takes a base personality's name
+        folder = os.path.join(here, "resources", "personalities")
+        for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+            with open(os.path.join(folder, name), encoding="utf-8") as f:
+                pdoc = json.load(f)
+            self.assertEqual(outrider.speech.check(pdoc), [], name)
+            for sid in pdoc["styles"]:
+                self.assertNotIn(sid, doc["styles"], name)
+                swears = any(sid + "_profane" in e for e in pdoc["lines"].values())
+                for key in outrider.speech.KEYS:
+                    for lst in [sid] + ([sid + "_profane"] if swears else []):
+                        self.assertGreaterEqual(len(pdoc["lines"].get(key, {}).get(lst, [])), 10, f"{name}: {key}/{lst}")
+            doc["lines"] = {k: {**v, **pdoc["lines"].get(k, {})} for k, v in doc["lines"].items()}   # for the checks below
         # the voice calls you by your chosen names ({name}): commander names are often unpronounceable
         said = [x for e in doc["lines"].values() for k, v in e.items() if k != "when" for x in v]
         self.assertEqual([x for x in said if "{cmdr}" in x], [])
@@ -282,6 +296,147 @@ class Speech(unittest.TestCase):
         samples = samples[:samples.index("\n};")]
         for key in outrider.speech.KEYS:   # the ▶ try button has sample values for every alert
             self.assertRegex(samples, r"\b%s: \{" % key, key)
+
+
+class PersonalityFiles(unittest.TestCase):
+    """Drop-in personalities (the author, 2026-10-16): one file each, in speech.json's format, from
+    resources/personalities/ (shipped) and personalities/ beside the bans (yours), merged into the base lines."""
+
+    BASE = {"styles": {"business": "Business"},
+            "lines": {"hull": {"when": "hull below 50%", "business": ["Hull {pct} percent."]},
+                      "heat": {"business": ["Heat {pct} percent."]}}}
+
+    @staticmethod
+    def naval(**over):
+        doc = {"styles": {"naval": {"label": "Naval", "names": ["Captain", "Sir"]}},
+               "lines": {"hull": {"naval": ["Hull integrity {pct} percent, {name}."], "naval_profane": ["Hull's at {pct}, damn it."]}}}
+        doc.update(over)
+        return doc
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        d = self.tmp.name
+        self.base = os.path.join(d, "speech.json")
+        self.write(self.base, self.BASE)
+        self.shipped, self.yours = os.path.join(d, "shipped"), os.path.join(d, "personalities")
+        os.makedirs(self.shipped)
+        self.sl = outrider.speech.SpeechLines(self.base, dirs=(self.shipped, self.yours))
+
+    @staticmethod
+    def write(path, doc):
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(doc if isinstance(doc, str) else json.dumps(doc))
+        os.utime(path, ns=(time.time_ns(), time.time_ns()))
+
+    def test_merged(self):
+        """A personality file joins styles and each alert it has; the base keeps its own; its coverage is counted."""
+        merged, notes, info = outrider.speech.merge_personalities(self.BASE, [("shipped", "naval.json", self.naval())])
+        self.assertEqual(list(merged["styles"]), ["business", "naval"])
+        self.assertEqual(sorted(merged["lines"]["hull"]), ["business", "naval", "naval_profane", "when"])
+        self.assertEqual(merged["lines"]["heat"], {"business": ["Heat {pct} percent."]})
+        self.assertEqual((notes, info), ([], [{"id": "naval", "file": "naval.json", "source": "shipped", "covers": 1,
+                                               "of": len(outrider.speech.KEYS)}]))
+        self.assertNotIn("naval", self.BASE["styles"])   # the base document is left as it was
+        self.assertEqual(sorted(self.BASE["lines"]["hull"]), ["business", "when"])
+
+    def test_who_wins(self):
+        """Yours replaces a shipped one of the same name; a base personality is never replaced; a name taken twice in
+        one folder is taken once; lists for other personalities or unknown alerts are left out."""
+        mine = self.naval(lines={"hull": {"naval": ["Mine, {name}."]}})
+        merged, notes, info = outrider.speech.merge_personalities(self.BASE, [
+            ("shipped", "naval.json", self.naval()), ("shipped", "naval2.json", self.naval()),
+            ("shipped", "bad.json", {"styles": {"business": "Mine"}, "lines": {"hull": {"business": ["Hijacked."]}}}),
+            ("yours", "naval.json", mine),
+            ("yours", "odd.json", {"styles": {"odd": "Odd"}, "lines": {"hull": {"odd": ["Odd."], "naval": ["Sneaky."]},
+                                                                       "nope": {"odd": ["Not an alert."]}}})])
+        self.assertEqual(merged["lines"]["hull"]["naval"], ["Mine, {name}."])
+        self.assertNotIn("naval_profane", merged["lines"]["hull"])                 # yours replaces the shipped one whole
+        self.assertEqual(merged["lines"]["hull"]["business"], ["Hull {pct} percent."])
+        self.assertEqual(merged["styles"]["business"], "Business")
+        self.assertEqual(merged["lines"]["hull"]["odd"], ["Odd."])
+        self.assertNotIn("nope", merged["lines"])
+        self.assertEqual(notes, ['naval2.json: "naval" is already in naval.json: left out',
+                                 'bad.json: "business" is one of the base personalities: left out'])
+        self.assertEqual([(i["id"], i["file"], i["source"]) for i in info], [("naval", "naval.json", "yours"), ("odd", "odd.json", "yours")])
+
+    def test_files_read_and_reread(self):
+        """Picked up when added, edited or removed (the version moves); a broken edit keeps its last good copy; a file
+        that is not a personality file is left out, said; bans work on its lines."""
+        v0 = self.sl.version()
+        self.assertEqual(self.sl.lines()["personalities"], [])
+        self.write(os.path.join(self.shipped, "naval.json"), self.naval())
+        lines = self.sl.lines()
+        self.assertNotEqual(lines["version"], v0)
+        self.assertEqual(lines["lines"]["hull"]["naval"], ["Hull integrity {pct} percent, {name}."])
+        self.assertEqual(lines["styles"]["naval"]["names"], ["Captain", "Sir"])
+        self.assertEqual(lines["personalities"][0]["covers"], 1)
+        os.makedirs(self.yours)
+        self.write(os.path.join(self.yours, "naval.json"), "{ broken")
+        info = self.sl.info()
+        self.assertTrue(any("naval.json could not be read" in p and "left out" in p for p in info["problems"]), info)
+        self.assertEqual(self.sl.lines()["lines"]["hull"]["naval"], ["Hull integrity {pct} percent, {name}."])   # the shipped one
+        self.write(os.path.join(self.shipped, "naval.json"), "{ broken too")
+        self.assertTrue(any("last good copy" in p for p in self.sl.info()["problems"]))
+        self.assertIn("naval", self.sl.lines()["styles"])
+        self.write(os.path.join(self.shipped, "naval.json"), self.naval(lines={"hull": {"naval": ["One.", "Two."]}}))
+        self.assertEqual(self.sl.lines()["lines"]["hull"]["naval"], ["One.", "Two."])
+        self.assertEqual(self.sl.set_ban("hull", "One.")[0], 200)                    # a ban on a personality file's line
+        self.assertEqual(self.sl.lines()["lines"]["hull"]["naval"], ["Two."])
+        self.write(os.path.join(self.yours, "list.json"), "[1, 2]")
+        self.assertTrue(any("list.json: not a personality file" in p for p in self.sl.info()["problems"]))
+        os.remove(os.path.join(self.shipped, "naval.json")); os.remove(os.path.join(self.yours, "naval.json"))
+        self.assertNotIn("naval", self.sl.lines()["styles"])
+
+    def test_the_naval_sample(self):
+        """tests/fixtures/personalities/naval-sample.json (four alerts, for trying the format): a clean personality file
+        that merges, says "Captain" or "Sir", and swears in its own list only."""
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "personalities", "naval-sample.json")
+        with open(path, encoding="utf-8") as f:
+            doc = json.load(f)
+        self.assertEqual(outrider.speech.check(doc), [])
+        self.assertEqual(outrider.speech.style_names(doc["styles"]["naval"]), ["Captain", "Sir"])
+        with open(os.path.join(outrider.RESOURCES_DIR, "speech.json"), encoding="utf-8") as f:
+            base = json.load(f)
+        merged, notes, info = outrider.speech.merge_personalities(base, [("yours", "naval-sample.json", doc)])
+        self.assertEqual((notes, info[0]["covers"]), ([], 4))
+        self.assertTrue(all(len(merged["lines"][k]["naval"]) == 5 and len(merged["lines"][k]["naval_profane"]) == 5
+                            for k in ("game_start", "arrival_undiscovered", "hull", "fuel_low")))
+
+    def test_names(self):
+        """A personality's "names": a list of words, checked; style_names reads them (none for a plain label)."""
+        sn = outrider.speech.style_names
+        self.assertEqual([sn({"names": ["Captain", " Sir "]}), sn("Naval"), sn({"label": "x"}), sn({"names": []}),
+                          sn({"names": ["Captain", 5]}), sn({"names": "Captain"})], [["Captain", "Sir"], None, None, None, None, None])
+        self.assertEqual(outrider.speech.check(self.naval()), [])
+        probs = outrider.speech.check(self.naval(styles={"naval": {"label": "Naval", "names": "Captain"}}))
+        self.assertTrue(any('"names" must be a list' in p for p in probs), probs)
+
+    def test_the_folders(self):
+        """Shipped: resources/personalities/; yours: personalities/ where the bans go (data/ for the shipped file)."""
+        shipped, yours = outrider.speech.personality_dirs(os.path.join(outrider.RESOURCES_DIR, "speech.json"))
+        self.assertEqual((shipped, yours), (os.path.join(outrider.RESOURCES_DIR, "personalities"),
+                                            os.path.join(outrider.DATA_DIR, "personalities")))
+        self.assertEqual(outrider.speech.personality_dirs(self.base)[1], self.yours)
+        with open(os.path.join(os.path.dirname(outrider.RESOURCES_DIR), ".gitignore"), encoding="utf-8") as f:
+            self.assertIn("data/", f.read())   # yours are never in the repository
+
+    def test_served_gzipped(self):
+        """GET /api/speech gzipped when the browser takes it (1 MB and more; about a fifth gzipped)."""
+        import asyncio
+        import types
+        from aiohttp.test_utils import TestClient, TestServer
+        db = ed_outrider.open_db(":memory:")
+        self.addCleanup(db.close)
+        state = ed_outrider.State(db, ed_outrider.Journals(db), types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        state.speech = self.sl
+
+        async def go():
+            async with TestClient(TestServer(ed_outrider.make_app(state))) as c:
+                r = await c.get("/api/speech", headers={"Accept-Encoding": "gzip"})
+                return r.status, r.headers.get("Content-Encoding"), (await r.json())["lines"]["hull"]["business"]
+        self.assertEqual(asyncio.run(go()), (200, "gzip", ["Hull {pct} percent."]))
 
 
 class Batch6Voice(unittest.TestCase):

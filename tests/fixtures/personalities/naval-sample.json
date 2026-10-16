@@ -1,0 +1,38 @@
+{
+ "_readme": "A sample personality file (2026-10-16): four alerts only, for trying the format. Copy it into data/personalities/ to hear it (Settings -> Voice: Naval, sample). The real naval personality replaces it.",
+ "styles": {"naval": {"label": "Naval, sample", "names": ["Captain", "Sir"]}},
+ "lines": {
+  "game_start": {
+   "naval": ["All stations manned and ready, {name}.", "Ship's company reports ready for duty, {name}.",
+             "Systems nominal. Standing by for your orders, {name}.", "Bridge is yours, {name}. All departments report ready.",
+             "Watch set. Awaiting your orders, {name}."],
+   "naval_profane": ["All hands at their damn stations, {name}.", "Ship's ready, {name}. Let's get this bloody watch started.",
+                     "Everything's green and nobody's screwed it up yet, {name}.", "Bridge is yours, {name}. Try not to scratch the damn paint.",
+                     "Crew's awake, coffee's foul, ship's ready. Orders, {name}?"]
+  },
+  "arrival_undiscovered": {
+   "naval": ["Contact: uncharted system, {name}. No record on file. Logging it as ours.", "First survey of {system}, {name}. Nobody has charted these waters.",
+             "Plot is clean, {name}. No prior survey of this system on record.", "Uncharted territory, {name}. Mark the log: first ship in.",
+             "New system, {name}. Ours to chart."],
+   "naval_profane": ["Well, damn, {name}. Nobody's charted this one. It's ours.", "Uncharted, {name}. First ship in, and it's bloody well us.",
+                     "No record of {system} anywhere, {name}. Hell of a find.", "Fresh water, {name}. Nobody's dropped anchor here. Damn fine.",
+                     "Nobody's been here, {name}. Put our damn name on it."]
+  },
+  "hull": {
+   "naval": ["Hull integrity {pct} percent, {name}.", "Damage report: hull at {pct} percent, {name}.",
+             "Hull down to {pct} percent. Recommend we break off, {name}.", "{name}, hull integrity {pct} percent and falling.",
+             "Damage control reports hull at {pct} percent, {name}."],
+   "naval_profane": ["Hull's at {pct} percent, {name}, and that's not bloody good.", "Damn it, {name}, hull's down to {pct} percent.",
+                     "{pct} percent hull, {name}. We're taking a hell of a beating.", "Hull at {pct}, {name}. Get us the hell out of here.",
+                     "She's hurting, {name}. Hull {pct} percent, damn it."]
+  },
+  "fuel_low": {
+   "naval": ["Fuel state low, {name}: {pct} percent.", "{name}, fuel at {pct} percent. Recommend we refuel at the next star.",
+             "Fuel {pct} percent, {name}. Plot a course for a scoopable star.", "Low fuel, {name}. {pct} percent in the tanks.",
+             "Fuel state critical soon, {name}. {pct} percent remaining."],
+   "naval_profane": ["Fuel's at {pct} percent, {name}. Find us a damn star.", "{name}, {pct} percent fuel. We're running on fumes, damn it.",
+                     "Tanks at {pct}, {name}. Don't strand us out here, for God's sake.", "{pct} percent fuel, {name}. Scoop something, damn it.",
+                     "Low fuel, {name}, {pct} percent. Bloody well refuel."]
+  }
+ }
+}

@@ -162,9 +162,21 @@ Sound: Allow; Firefox: Autoplay: Allow Audio and Video).
   **With profanity** uses the swearing versions the share of the time you set (50% by default). **One personality per system** holds one character a system.
 - **Danger alerts always down to business** (on by default): danger is said plainly, never sworn.
 - **Your names.** Commander names are often unpronounceable, so the voice calls you by the names in
-  **Call me** (default "Boss, Hefay, Sir").
+  **Call me** (default "Boss, Hefay, Sir"); a personality with forms of address of its own (a naval one's "Captain")
+  uses those instead.
 - **Speed.** 1× is the voice's own pace. Some Piper voices respond to it less than others.
-- **Your own lines.** Edit `resources/speech.json` (or a copy named by `speech_file`) to change lines or add a personality; no restart needed.
+- **Your own lines.** Edit `resources/speech.json` (or a copy named by `speech_file`) to change lines; no restart needed.
+- <a id="your-own-personality"></a>**Your own personality.** A personality is a file of its own, in the same format
+  as `speech.json` but holding one personality: its entry under `"styles"` (a label, and optionally `"names"`: how it
+  calls you, e.g. `["Captain", "Sir"]`, plus a voice of its own as below) and, under `"lines"`, its lists for each
+  alert: `"pirate"` and, if it swears, `"pirate_profane"`. Each alert's `"when"` in `speech.json` says when it is spoken
+  and which `{placeholders}` it can fill. Put the file in `data/personalities/` (beside a speech file of your own:
+  `personalities/` next to it). It shows in Settings → Voice at once, with how many of the alerts it covers while
+  it is incomplete (the other personalities ticked, else business, say the rest), and in the voice lab, where you can
+  hear its lines and cut the ones you don't like. Outrider's own personality files are in `resources/personalities/`:
+  a copy of one in `data/personalities/` under the same name replaces it, so an update never overwrites your changes.
+  A problem in a file is shown in Settings, and the file's last good copy stays in use. To share a personality, share
+  its file.
 - **A voice per personality.** ⚙ Settings → Voice → **Personality voices** gives each personality a voice of its own,
   or another person of a several-person voice: pick the voice (and the speaker, for a voice of many people), **▶** to
   hear one of its lines, **reset** for what the lines file says again. Outrider keeps them, so every browser and the

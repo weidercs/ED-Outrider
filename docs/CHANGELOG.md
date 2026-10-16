@@ -2,6 +2,19 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-16 · Personalities as drop-in files, and the speech lines compressed
+- A personality can now be a file of its own (speech.json's format, one personality): `resources/personalities/` for
+  Outrider's, `data/personalities/` (beside the bans) for your own; merged into the lines (`merge_personalities`),
+  re-read when added, edited or removed, a broken file keeping its last good copy. Yours replaces a shipped one of the
+  same name; the base three cannot be replaced. Settings → Voice shows an incomplete one's coverage ("1/60 alerts"),
+  and an alert none of the ticked personalities has is said by business. Problems show where speech.json's do.
+- A personality's own forms of address: `"names"` in its styles entry (`["Captain", "Sir"]`) say its {name}, in
+  alerts and the voice lab; the "Call me" names otherwise.
+- GET /api/speech gzipped (1.05 MB, about 230 KB gzipped).
+- tests/fixtures/personalities/naval-sample.json: four alerts in a naval voice, for trying the format (copy it into
+  data/personalities/ to hear it). The guide: "Your own personality". Plan: the naval, Vulcan, Ivanova (Station
+  Cmdr), southern, space pirate and Klingon personalities follow, one at a time.
+
 ## 2026-10-16 · Screenshots back at 1600x1000, the Overview also on a 27-inch monitor
 - Every full-page desktop shot in `docs/images/` retaken at 1600x1000: the README shows them 900 px wide, where a
   2560x1440 shot's text came out about 4.5 px (unreadable) and a 1600 one's about 7 px; most players' screens are
