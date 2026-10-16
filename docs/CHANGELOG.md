@@ -2,6 +2,21 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-16 · Two southern personalities: Good Ol' Boy and Southern Belle
+- `resources/personalities/good_ol_boy.json` ("Good Ol' Boy", 5,998 lines) and `southern_belle.json` ("Southern
+  Belle", 5,987 lines): every alert, ~50 clean and ~50 swearing versions each, from one brief:
+  - **Positive southern:** slang, contractions and style (y'all, fixin' to, ain't, reckon, bless your heart). Never
+    "redneck" or "hick", nothing racist, political or demeaning (the Confederacy, poverty, drinking and disability
+    jokes are left out). The one exception, the author's pick: "happier than a tornado in a trailer park", twice
+    each.
+  - **Temper:** slow to anger and slow to joke, very playful, wordy; everyone is a friend.
+  - **Stories and food:** Grandma and Grandpa, the old days, and tall tales in famous Elite places; food comparisons
+    everywhere (biscuits and gravy, cornbread, grits, sweet tea).
+  - **Address:** Sir, "y'all" and "hey you"; endearments by personality (buddy, partner, pal; sugar, darlin',
+    honey). Rare in danger alerts, most in conversation.
+  - **Swearing:** the clean list keeps to minced oaths (dang, dadgum, shoot, Lord have mercy); the swearing list
+    swears on about a third of its lines, when riled or excited.
+
 ## 2026-10-16 · Ivanova (Station Cmdr), a personality
 - `resources/personalities/ivanova.json` ("Ivanova (Station Cmdr)"): every alert, ~50 clean and ~50 swearing versions
   each (5,916 lines), after research into the Babylon 5 character and the author's brief:
