@@ -2,6 +2,19 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-16 · Version 2026.10.25, a bug fix release
+- Released from d5c1f9d plus the install guide's Updating section (the personalities on main wait for the next release).
+- Since 2026.10.24:
+  - the overlay no longer breaks the game's mouse lock on Linux (a window per panel, none while nothing is drawn),
+    with Foot boxes and "Hide the overlay on foot and in the DSS";
+  - the landing pad's delay as a setting;
+  - the carrier diagram's pads 7 and 8;
+  - Nearby's middle fit step; Settings wider, in two columns;
+  - the Fable sweep's fixes;
+  - the install guide's Updating section;
+  - screenshots back at 1600x1000.
+- What's new has its section. No journal re-read.
+
 ## 2026-10-16 · A Scoundrel personality
 - `resources/personalities/scoundrel.json` ("Scoundrel"): every alert, ~50 clean and ~50 swearing versions each (5,948
   lines), from the author's brief:
