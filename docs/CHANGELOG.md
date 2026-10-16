@@ -2,6 +2,11 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-16 · The install guide: updating a plain install
+- docs/guide/install.md "Updating": what an update never touches (`data/`, which holds the EDSM and Inara keys, and
+  `ed_outrider.toml`), and the steps for a `git clone` and for a downloaded ZIP (a new folder of the old name, `data` and
+  the config copied over). Only Docker had update steps before (a player's question).
+
 ## 2026-10-16 · A Klingon personality
 - `resources/personalities/klingon.json` ("Klingon"): every alert, ~50 clean and ~50 swearing versions each (5,977
   lines), after research into Klingon culture and the author's brief:
