@@ -658,6 +658,19 @@ const releasePayloads = async () => {
       localStorage.removeItem("speechStyles"); speechLib = lib;
       return [t, sv.voice, sv.pace, plain.voice, plain.pace].join(); })()`);
     got.styled = styled;
+    // personality files (the author, 2026-10-16): a personality's own "names" say {name}, its coverage shows in Settings,
+    // and an alert it has no line for is said by business (with "business for danger" off, so danger lines are its own)
+    got.pers = w.eval(`(() => { const lib = speechLib, keep = ["speechStyles", "speechNames", "speechDangerBusiness"].map(k => [k, localStorage.getItem(k)]);
+      speechLib = {styles: {business: "Business", naval: {label: "Naval", names: ["Captain"]}},
+        lines: {hull: {business: ["B {name}"], naval: ["N {name} {pct}"]}, heat: {business: ["B heat {name}"]}},
+        personalities: [{id: "naval", file: "naval.json", source: "shipped", covers: 1, of: 60}]};
+      localStorage.setItem("speechStyles", '["naval"]'); localStorage.setItem("speechNames", '"Boss"'); localStorage.setItem("speechDangerBusiness", "false");
+      const out = [line("hull", {pct: 40}), line("heat", {})];
+      drawSpeechStyles();
+      out.push(document.querySelector('#speechStyles [data-sstyle="naval"]').closest("label").textContent.includes("(1/60 alerts)"));
+      for (const [k, v] of keep) v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v);
+      speechLib = lib; drawSpeechStyles();
+      return out.join("|"); })()`);
     const want = {
       worth: ["", "A 3, terraformable high metal content world, 1.9M to map and biology on C 2, up to 19.0M"],
       g: [{gravity: "2.6", value: "480.0M", rebuys: "3.2"}, null, null],
@@ -669,6 +682,7 @@ const releasePayloads = async () => {
       hazard: ["Neutron star ahead: throttle down on arrival, mind the jet cone.", ""],
       arx: [null, "", 1087554],
       styled: "Hi,en_US-ryan-high,1.2,,1",
+      pers: "N Captain 40|B heat Boss|true",
     };
     const wantSaid = ["Undiscovered. 14 bodies. Scoopable K star.", "All 3 found. Nothing worth staying for.",
       "All 3 found. Worth it: A 3, terraformable high metal content world, 1.9M to map and biology on C 2, up to 19.0M.",

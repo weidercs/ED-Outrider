@@ -2,6 +2,131 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-16 · Version 2026.10.25, a bug fix release
+- Released from d5c1f9d plus the install guide's Updating section (the personalities on main wait for the next release).
+- Since 2026.10.24:
+  - the overlay no longer breaks the game's mouse lock on Linux (a window per panel, none while nothing is drawn),
+    with Foot boxes and "Hide the overlay on foot and in the DSS";
+  - the landing pad's delay as a setting;
+  - the carrier diagram's pads 7 and 8;
+  - Nearby's middle fit step; Settings wider, in two columns;
+  - the Fable sweep's fixes;
+  - the install guide's Updating section;
+  - screenshots back at 1600x1000.
+- What's new has its section. No journal re-read.
+
+## 2026-10-16 · A Scoundrel personality
+- `resources/personalities/scoundrel.json` ("Scoundrel"): every alert, ~50 clean and ~50 swearing versions each (5,948
+  lines), from the author's brief:
+  - **The character:** an adventure-seeking loudmouth, a smuggler, small-time thief and grifter, never a killer,
+    more interested in credits than anything. It shows little respect, treats you as its buddy, and is serious for
+    a moment in danger (Sir), where the advice is to run.
+  - **Stories:** petty-crime tall tales (Robigo, Sothis, black markets, the cops at Lave) and PG-13 innuendo (the
+    Hutton twins). It never mentions its own anatomy or assumes yours, so any voice fits.
+  - **Swearing:** none in the clean list; every word on about half the swearing list's lines.
+  - **Address:** buddy, pal or friend.
+- Han Solo's lines the author approved, each twice: "Never tell me the odds!", "I've got a bad feeling about this.",
+  "It's not my fault!", "Don't get cocky.", "Laugh it up."
+
+## 2026-10-16 · The install guide: updating a plain install
+- docs/guide/install.md "Updating": what an update never touches (`data/`, which holds the EDSM and Inara keys, and
+  `ed_outrider.toml`), and the steps for a `git clone` and for a downloaded ZIP (a new folder of the old name, `data` and
+  the config copied over). Only Docker had update steps before (a player's question).
+
+## 2026-10-16 · A Klingon personality
+- `resources/personalities/klingon.json` ("Klingon"): every alert, ~50 clean and ~50 swearing versions each (5,977
+  lines), after research into Klingon culture and the author's brief:
+  - **The character:** loud, aggressive and exuberant, always saying what it thinks. A subordinate who acts as your
+    partner, cares for honour over credits, and treats exploration as the hunt and the conquest. In danger it gives
+    sound advice and hates running.
+  - **Insults:** Klingon insults in English in both lists ("son of a targ", "Ferengi-hearted coward"); the swearing
+    list adds human swear words on about a quarter of its lines. The two lists share no line.
+  - **Klingon words:** a few, spelled for the voice (Kapla, batleth, Sto-vo-kor, gak, bloodwine, Kahless).
+  - **Address and gender:** gender neutral; it calls you Captain, Sir, Commander or My Lord.
+- Quotes the author approved, each twice: "Today is a good day to die.", "Revenge is a dish best served cold.", "Only
+  a fool fights in a burning house."; "Kapla!" as a sign-off.
+
+## 2026-10-16 · Two southern personalities: Good Ol' Boy and Southern Belle
+- `resources/personalities/good_ol_boy.json` ("Good Ol' Boy", 5,998 lines) and `southern_belle.json` ("Southern
+  Belle", 5,987 lines): every alert, ~50 clean and ~50 swearing versions each, from one brief:
+  - **Positive southern:** slang, contractions and style (y'all, fixin' to, ain't, reckon, bless your heart). Never
+    "redneck" or "hick", nothing racist, political or demeaning (the Confederacy, poverty, drinking and disability
+    jokes are left out). The one exception, the author's pick: "happier than a tornado in a trailer park", twice
+    each.
+  - **Temper:** slow to anger and slow to joke, very playful, wordy; everyone is a friend.
+  - **Stories and food:** Grandma and Grandpa, the old days, and tall tales in famous Elite places; food comparisons
+    everywhere (biscuits and gravy, cornbread, grits, sweet tea).
+  - **Address:** Sir, "y'all" and "hey you"; endearments by personality (buddy, partner, pal; sugar, darlin',
+    honey). Rare in danger alerts, most in conversation.
+  - **Swearing:** the clean list keeps to minced oaths (dang, dadgum, shoot, Lord have mercy); the swearing list
+    swears on about a third of its lines, when riled or excited.
+
+## 2026-10-16 · Ivanova (Station Cmdr), a personality
+- `resources/personalities/ivanova.json` ("Ivanova (Station Cmdr)"): every alert, ~50 clean and ~50 swearing versions
+  each (5,916 lines), after research into the Babylon 5 character and the author's brief:
+  - **The character:** a temperamental subordinate of Russian ancestry, quick to anger and quick to joke,
+    fatalistic. Bored by routine exploration, won over by big money and the rare, eager for action; in danger it
+    grumbles and gives the right advice.
+  - **Shared-history tall tales** set in famous places (the bars on Jameson Memorial, the Hutton Orbital run, the
+    Fuel Rats), never your real log, plus a grandmother's sayings.
+  - **Russian:** about one line in sixty has a Russian word.
+  - **Swearing:** none in the clean list; the swearing list swears often, every word.
+  - **Gender neutral.** It calls you Commander or Sir.
+- Babylon 5 quotes the author approved, each at most twice (four for "Ivanova is God", alone and ending the
+  mantra): "No boom today. Boom tomorrow. There's always a boom tomorrow.", the "Ivanova is always right" mantra,
+  "I am death incarnate…", "I've always had a hard time getting up when it's dark outside.", "Boom. Boom, boom,
+  boom…", "Let's try not to get killed."
+
+## 2026-10-16 · A Vulcan personality
+- `resources/personalities/vulcan.json` ("Vulcan"): every alert, ~50 versions each (3,003 lines), after research
+  into Vulcan speech and the author's brief:
+  - **The character:** a subordinate, haughty and proud, serving under a human. It never says so, but it is
+    passive-aggressive in a completely emotionless way. It never lies and is never excited, though it can be
+    insistent.
+  - **Speech:** no contractions, no exclamation marks, no swearing (so no swearing list).
+  - **Humour,** always unintentional: human idioms tried and taken literally, clinical understatement, ludicrous
+    precision about people (never invented game facts).
+  - **Words:** "Fascinating", "logical" and "illogical" are frequent.
+  - **How it addresses you:** Captain or Sir.
+- Quotes the author approved, each at most twice: "Live long and prosper.", "Peace and long life.", "Logic is the
+  beginning of wisdom, not the end.", "Insufficient facts always invite danger.", "Change is the essential process
+  of all existence.", "Nowhere am I so desperately needed as among a shipload of illogical humans."
+
+## 2026-10-16 · Two naval personalities: US Navy and Royal Navy, by the book
+- `resources/personalities/naval_us.json` ("US Navy: by the book") and `naval_rn.json` ("Royal Navy: by the book",
+  British usage and spelling, for English voices): every alert, ~50 clean and ~50 swearing versions each (5,946 and
+  6,001 lines), after research into US and Royal Navy usage and the author's brief:
+  - **Alerts:** completely professional in both lists. No swearing in the danger alerts; a rare "damn" in the less
+    urgent ones.
+  - **Reports:** crisp, with light swearing.
+  - **Conversation:** game start and exit, welcome back, the recap, streaks and the voice switched on are friendly
+    and call you "Skipper", and are saltier; the f-word appears now and then (21 and 22 lines in all).
+  - **How they address you:** Captain or Sir (`"names"`).
+- Naval words: Bravo Zulu, plank owner, crossing the line, scuttlebutt, general quarters (US); show a leg, splice the
+  mainbrace, a brew, action stations (RN). The style sheet is in the author's notes.
+
+## 2026-10-16 · Personalities as drop-in files, and the speech lines compressed
+- A personality can now be a file of its own (speech.json's format, one personality): `resources/personalities/` for
+  Outrider's, `data/personalities/` (beside the bans) for your own; merged into the lines (`merge_personalities`),
+  re-read when added, edited or removed, a broken file keeping its last good copy. Yours replaces a shipped one of the
+  same name; the base three cannot be replaced. Settings → Voice shows an incomplete one's coverage ("1/60 alerts"),
+  and an alert none of the ticked personalities has is said by business. Problems show where speech.json's do.
+- A personality's own forms of address: `"names"` in its styles entry (`["Captain", "Sir"]`) say its {name}, in
+  alerts and the voice lab; the "Call me" names otherwise.
+- GET /api/speech gzipped (1.05 MB, about 230 KB gzipped).
+- tests/fixtures/personalities/naval-sample.json: four alerts in a naval voice, for trying the format (copy it into
+  data/personalities/ to hear it). The guide: "Your own personality". Plan: the naval, Vulcan, Ivanova (Station
+  Cmdr), southern, space pirate and Klingon personalities follow, one at a time.
+
+## 2026-10-16 · Screenshots back at 1600x1000, the Overview also on a 27-inch monitor
+- Every full-page desktop shot in `docs/images/` retaken at 1600x1000: the README shows them 900 px wide, where a
+  2560x1440 shot's text came out about 4.5 px (unreadable) and a 1600 one's about 7 px; most players' screens are
+  closer to it too, and it shows Nearby's new middle fit step (Jumps and Known dropped, status and notable kept).
+  Retaken: overview nearby here schematic map highway history samples log materials firsts search cargo trade cmdr
+  earnings ship-card boxel boxel-grid nearest checklist (same pins and plots as before).
+- `docs/images/overview-27in.png` (2560x1440): the same Overview on the author's 27-inch monitors, in a fold under the
+  README's main shot ("On a 27-inch monitor").
+
 ## 2026-10-15 · Nearby keeps its status and notable columns until they really do not fit
 - In a narrow pane (the Overview's half) Nearby went from its short forms straight to compact2, which drops Jumps and
   Known and puts the status pills and notable tags under the name and the bodies all at once, leaving much of the row

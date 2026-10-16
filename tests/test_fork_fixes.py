@@ -33,6 +33,23 @@ class SpeechStamp(unittest.TestCase):
             os.utime(path, ns=(stamp, stamp))
             self.assertEqual(sl.lines()["lines"]["hull"]["business"], ["Hull {pct}.", "Hull new."])
 
+    def test_a_personality_rewritten_in_the_same_tick_is_read(self):
+        """A personality file (upstream's drop-ins, 2026-10-25) is read again when its size changes, not only its time."""
+        with tempfile.TemporaryDirectory() as d:
+            path, mine = os.path.join(d, "speech.json"), os.path.join(d, "personalities")
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump({"styles": {"business": "B"}, "lines": {"hull": {"business": ["Hull {pct}."]}}}, f)
+            os.makedirs(mine)
+            p = os.path.join(mine, "naval.json")
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump({"styles": {"naval": "N"}, "lines": {"hull": {"naval": ["Hull at {pct}."]}}}, f)
+            sl = S.SpeechLines(path, dirs=(os.path.join(d, "none"), mine))
+            self.assertEqual(sl.lines()["lines"]["hull"]["naval"], ["Hull at {pct}."])
+            stamp = os.stat(p).st_mtime_ns
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump({"styles": {"naval": "N"}, "lines": {"hull": {"naval": ["Hull at {pct}, sir."]}}}, f)
+            os.utime(p, ns=(stamp, stamp))                                      # the same tick
+            self.assertEqual(sl.lines()["lines"]["hull"]["naval"], ["Hull at {pct}, sir."])
 
 
 class NewerDatabase(unittest.TestCase):

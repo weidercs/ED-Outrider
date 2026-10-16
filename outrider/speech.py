@@ -12,12 +12,20 @@ plain wording.
 
 The file is re-read whenever it changes, so an edit takes effect without restarting Outrider.
 
+More personalities come as files of their own, one each, in the same format (a small speech.json holding one
+personality: its "styles" entry and its lists under each alert, no "when" notes): resources/personalities/ for the
+shipped ones, and personalities/ beside the bans (data/personalities/ for the shipped speech.json) for your own, which
+an update never touches. They are merged into the lines here (merge_personalities): one of your own with a shipped
+one's name replaces it; none can replace a base personality. A personality's "names" ({"label", "names": ["Captain",
+"Sir"]}) are how it calls you: its {name}, else one of yours from "Call me".
+
 Lines you never want to hear again go in data/speech_banned.json, or next to a speech file of your own
 ({alert: [line, ...]}, written by the 👎 in the page's "Spoken lines" list and the voice lab's "✂ Cut this line").
 They are left out here, so the page (and its voice lab) gets the trimmed lists; a ban never empties a list (the last line of one cannot be banned, and a
 list whose every line is banned by hand is used whole), nor leaves it only lines that name a crew member (said only
 while the crew is on): its last plain line cannot be banned either.
 """
+import hashlib
 import json
 import os
 import re
@@ -183,6 +191,14 @@ def style_speaker(styles, style):
     return speaker_number(st.get("speaker")) if isinstance(st, dict) else None
 
 
+def style_names(st):
+    """A personality's own forms of address ({"names": ["Captain", "Sir"]}): the list, or None when it has none (a
+    plain label, no "names") or they are not a list of words."""
+    v = st.get("names") if isinstance(st, dict) else None
+    names = [x.strip() for x in v if isinstance(x, str) and x.strip()] if isinstance(v, list) else []
+    return names if names and len(names) == len(v) else None
+
+
 def fills(key):
     """The placeholders a line of alert `key` may hold: its own (KEYS), the ones always there and the crew's."""
     return set(PLACEHOLDER.findall(KEYS.get(key, ""))) | set(ALWAYS) | set(CREW_WORDS)
@@ -210,6 +226,8 @@ def check(doc):
             problems.append(f'"styles" / "{name}": "speed" must be a number from 0.5 to 2')
         if "speaker" in st and speaker_number(st["speaker"]) is None:
             problems.append(f'"styles" / "{name}": "speaker" must be a whole number from 0 (one person of a several-person voice)')
+        if "names" in st and style_names(st) is None:
+            problems.append(f'"styles" / "{name}": "names" must be a list of what it calls you, e.g. ["Captain", "Sir"]')
     if not isinstance(lines, dict):
         return problems + ['"lines" must map each alert to its versions']
     known_lists = set(styles) | {s + "_profane" for s in styles}
@@ -321,16 +339,65 @@ def _stamp(path):
     return st.st_mtime_ns, st.st_size
 
 
+PERSONALITIES = "personalities"   # the folder of personality files, in resources/ (shipped) and beside the bans (yours)
+
+
+def personality_dirs(speech_path, resources=RESOURCES_DIR):
+    """(shipped, yours): resources/personalities/, and personalities/ where the speech file's bans live (data/ for the
+    shipped speech.json, beside a speech file of your own: a test or scratch server keeps its own)."""
+    return (os.path.join(resources, PERSONALITIES),
+            os.path.join(os.path.dirname(banned_path(speech_path)), PERSONALITIES))
+
+
+def merge_personalities(base, addons):
+    """The base speech document with the personality files merged in: (doc, notes, info). `addons`: [(source "shipped"
+    or "yours", file name, doc)], the shipped first, each a usable document (shape_ok). A file's personality joins
+    "styles" and its lists ("<id>", "<id>_profane") join each alert it has; anything else in it is left out (check()
+    reports it). One of your own replaces a shipped one of the same name; a base personality is never replaced, and a
+    name already taken in the same folder is not taken again (each said in `notes`). `info`: [{id, file, source,
+    covers, of}] per personality merged, `covers` the alerts it has a line for."""
+    styles = dict(base.get("styles") or {})
+    lines = dict(base.get("lines") or {})
+    owner, notes = {}, []
+    for source, fname, doc in addons:   # who owns each name: your own after the shipped replaces it
+        for sid in doc.get("styles") or {}:
+            if sid in styles:
+                notes.append(f'{fname}: "{sid}" is one of the base personalities: left out')
+            elif sid in owner and owner[sid][0] == source:
+                notes.append(f'{fname}: "{sid}" is already in {owner[sid][1]}: left out')
+            else:
+                owner[sid] = (source, fname)
+    info = []
+    for source, fname, doc in addons:
+        for sid in [k for k, o in owner.items() if o == (source, fname)]:
+            styles[sid] = doc["styles"][sid]
+            for key, entry in (doc.get("lines") or {}).items():
+                got = {k: v for k, v in entry.items() if k in (sid, sid + "_profane")} if isinstance(entry, dict) else {}
+                if key not in KEYS or not got:
+                    continue
+                lines[key] = {**(lines.get(key) if isinstance(lines.get(key), dict) else {}), **got}
+            covers = sum(1 for k in KEYS if isinstance(lines.get(k), dict)
+                         and any(lines[k].get(lst) for lst in (sid, sid + "_profane")))
+            info.append({"id": sid, "file": fname, "source": source, "covers": covers, "of": len(KEYS)})
+    return dict(base, styles=styles, lines=lines), notes, info
+
+
 class SpeechLines:
     """speech.json, re-read when its modification time changes. A broken edit keeps the last good copy
     in use and reports what is wrong, so a typo never silences the alerts. Its speech_banned.json (see banned_path) is
-    re-read the same way, and its lines are left out of lines()."""
+    re-read the same way, and its lines are left out of lines(). The personality files in `dirs` (personality_dirs:
+    shipped, yours) are merged in (merge_personalities), each re-read on its own the same way; one added or removed
+    counts as a change too."""
 
-    def __init__(self, path):
+    def __init__(self, path, dirs=None):
         self.path = path
         self.doc, self.error, self.problems, self._mtime = None, None, [], None
         self.bans_path = banned_path(path)
         self.bans, self._bans_mtime, self._bans_gen = {}, None, 0
+        self.dirs = tuple(dirs) if dirs is not None else personality_dirs(path)
+        # each personality file: {path: {mtime, doc (its last good copy), error, problems}}; the listing's signature
+        self._files, self._files_sig = {}, None
+        self.merged, self.notes, self.info_list, self._merged_for = None, [], [], None
 
     def _refresh_bans(self):
         try:
@@ -341,8 +408,81 @@ class SpeechLines:
             self._bans_mtime = mtime
             self.bans = read_bans(self.bans_path) if mtime is not None else {}
 
+    def _listing(self):
+        """[(source, path, mtime)] of the personality files now: the shipped folder's, then yours, by name."""
+        out = []
+        for source, folder in zip(("shipped", "yours"), self.dirs):
+            try:
+                names = sorted(n for n in os.listdir(folder) if n.endswith(".json") and not n.startswith("."))
+            except OSError:
+                continue
+            for n in names:
+                path = os.path.join(folder, n)
+                try:
+                    out.append((source, path, _stamp(path)))   # this fork: time and size
+                except OSError:
+                    continue
+        return out
+
+    def _refresh_files(self):
+        listing = self._listing()
+        sig = tuple(listing)
+        if sig == self._files_sig:
+            return False
+        self._files_sig = sig
+        files = {}
+        for _source, path, mtime in listing:
+            old = self._files.get(path)
+            if old and old["mtime"] == mtime:
+                files[path] = old
+                continue
+            f = {"mtime": mtime, "doc": (old or {}).get("doc"), "error": None, "problems": []}
+            name = os.path.basename(path)
+            try:
+                with open(path, encoding="utf-8") as fh:
+                    doc = json.load(fh)
+            except (OSError, ValueError) as e:
+                f["error"] = f"{name} could not be read ({e}); " + \
+                    ("its last good copy is still in use" if f["doc"] else "its personality is left out")
+            else:
+                f["problems"] = [f"{name}: {p}" for p in check(doc)]
+                if shape_ok(doc):
+                    f["doc"] = doc
+                else:
+                    f["error"] = f"{name}: not a personality file (\"styles\" and \"lines\" as in speech.json); " + \
+                        ("its last good copy is still in use" if f["doc"] else "its personality is left out")
+            files[path] = f
+        self._files = files
+        return True
+
+    def _merge(self):
+        """The base document with the personality files merged in, worked out again only when either changed."""
+        key = (self._mtime, self._files_sig)
+        if self.doc is None:
+            self.merged, self.notes, self.info_list = None, [], []
+        elif key != self._merged_for:
+            addons = [(source, os.path.basename(path), self._files[path]["doc"])
+                      for source, path, _m in self._files_sig or () if self._files.get(path, {}).get("doc")]
+            self.merged, self.notes, self.info_list = merge_personalities(self.doc, addons)
+        self._merged_for = key
+
+    def _doc(self):
+        return self.merged or self.doc or {}
+
+    def file_problems(self):
+        """The personality files' problems and errors, and the merge's notes, as readable strings."""
+        out = []
+        for f in self._files.values():
+            out += ([f["error"]] if f["error"] else []) + f["problems"]
+        return out + self.notes
+
     def refresh(self):
         self._refresh_bans()
+        self._refresh_files()
+        self._refresh_base()
+        self._merge()
+
+    def _refresh_base(self):
         try:
             mtime = _stamp(self.path)
         except OSError:
@@ -367,19 +507,21 @@ class SpeechLines:
 
     def version(self):
         self.refresh()
-        # the bans are part of it: a 👎 (or the voice lab's ✂) makes every page fetch the trimmed lines
-        return f"{self._mtime}-{self._bans_mtime}-{self._bans_gen}" if self.doc else None
+        # the bans are part of it: a 👎 (or the voice lab's ✂) makes every page fetch the trimmed lines; and the
+        # personality files (a hash of their listing: one added, edited or removed, even while Outrider was stopped)
+        files = hashlib.sha1(repr(self._files_sig).encode()).hexdigest()[:10]
+        return f"{self._mtime}-{self._bans_mtime}-{self._bans_gen}-{files}" if self.doc else None
 
     def info(self):
         """The payload's small summary: the page fetches the lines themselves when the version changes."""
         self.refresh()
-        return {"version": self.version(), "error": self.error, "problems": self.problems[:20],
+        return {"version": self.version(), "error": self.error, "problems": (self.problems + self.file_problems())[:20],
                 "file": os.path.basename(self.path)}
 
     def banned(self):
         """The bans that still match a line in the speech file, {alert: [line, ...]} (an edited line's old ban does
         nothing, so it is not listed)."""
-        lines = (self.doc or {}).get("lines") or {}
+        lines = self._doc().get("lines") or {}
         out = {}
         for key, cut in self.bans.items():
             entry = lines.get(key)
@@ -391,17 +533,19 @@ class SpeechLines:
 
     def lines(self):
         self.refresh()
-        trimmed, whole = apply_bans((self.doc or {}).get("lines") or {}, self.bans)
-        return {"styles": (self.doc or {}).get("styles") or {}, "lines": trimmed,
+        trimmed, whole = apply_bans(self._doc().get("lines") or {}, self.bans)
+        return {"styles": self._doc().get("styles") or {}, "lines": trimmed,
                 "banned": self.banned(), "banned_whole": whole,
-                "version": self.version(), "error": self.error, "problems": self.problems[:20],
+                "version": self.version(), "error": self.error, "problems": (self.problems + self.file_problems())[:20],
+                # the personality files merged in: {id, file, source (shipped or yours), covers, of} each
+                "personalities": list(self.info_list),
                 "crew_roles": crew_roles_info()}   # the crew's roles and their alert rows, for the page
 
     def set_ban(self, alert, template, ban=True):
         """Ban (or unban) one line of an alert: (HTTP status, answer). Only a line that is in the speech file is
         accepted, and a ban that would leave one of its lists empty is refused (409)."""
         self.refresh()
-        entry = ((self.doc or {}).get("lines") or {}).get(alert)
+        entry = (self._doc().get("lines") or {}).get(alert)
         if not isinstance(alert, str) or not isinstance(template, str) or not isinstance(entry, dict):
             return 400, {"error": "no such alert in the speech file"}
         homes = [vs for st, vs in entry.items() if _is_list(st, vs) and template in vs]

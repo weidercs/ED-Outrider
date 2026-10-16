@@ -155,6 +155,13 @@ Beside upstream's ([DESIGN_NOTES.md](DESIGN_NOTES.md)):
 
 Newest first. Upstream's is [CHANGELOG.md](CHANGELOG.md).
 
+## 2026-10-16 · This fork: upstream's 2026.10.25 merged in
+- Upstream's personalities as drop-in files (`resources/personalities/`, yours in `data/personalities/`), with eight
+  new ones, the install guide's updating section, the screenshots.
+- `outrider/speech.py` conflicted only where both sides added functions (the fork's `_stamp`, upstream's
+  `personality_dirs`/`merge_personalities`): both kept. Upstream's personality files are stamped with `_stamp` too
+  (time and size), so one rewritten in the same timestamp tick on Windows is read again (`tests/test_fork_fixes.py`).
+
 ## 2026-10-16 · This fork: Locate, EDCoPilot's Location search
 - A **Locate** tab (Navigate group on the tablet, after Plot Route) with EDCoPilot's tiles: Interstellar Factors,
   the raw, encoded and manufactured material traders, Mining, Commodities, Ship outfitting, Shipyards, Best local

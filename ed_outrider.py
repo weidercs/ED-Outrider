@@ -19429,11 +19429,15 @@ def make_app(state, hosts=None):
             return web.json_response({"error": "no such sound file"}, status=404)
         return web.Response(body=data, content_type="audio/wav", headers={"Cache-Control": "no-store"})
 
-    async def speech_view(_):
-        """The spoken alerts' lines (speech.json, less the banned ones): the page asks again when the payload's
-        version changes."""
-        return web.json_response(state.speech.lines() if state.speech else
+    async def speech_view(request):
+        """The spoken alerts' lines (speech.json and the personality files, less the banned ones): the page asks again
+        when the payload's version changes. Gzipped when the browser takes it, as the payload is (1 MB and more with
+        the personality files; about a fifth of that gzipped)."""
+        resp = web.json_response(state.speech.lines() if state.speech else
                                  {"styles": {}, "lines": {}, "version": None, "crew_roles": outrider.speech.crew_roles_info()})
+        if "gzip" in request.headers.get("Accept-Encoding", "").lower():
+            resp.enable_compression(web.ContentCoding.gzip)
+        return resp
 
     async def speech_ban_view(request):
         """{alert, template}: /api/speech/ban leaves that line out from now on (in data/speech_banned.json, or next to

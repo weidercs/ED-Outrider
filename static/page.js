@@ -2550,6 +2550,13 @@ function fillLine(text, all) {
   }
   return out + text.slice(last);
 }
+// a personality's own forms of address (its file's "names": naval's "Captain, Sir"), else null: the "Call me" names
+const styleNames = style => { const v = speechLib.styles && speechLib.styles[String(style || "").replace(/_profane$/, "")];
+  const n = v && typeof v === "object" && Array.isArray(v.names) ? v.names.filter(x => typeof x === "string" && x.trim()) : [];
+  return n.length ? n : null; };
+// {name} as personality `style` says it: one of its own names, picked afresh each time, else one of yours
+const nameFor = (all, style) => { const own = styleNames(style);
+  return own ? {...all, name: () => own[Math.floor(Math.random() * own.length)]} : all; };
 const allFilled = (text, all) => [...text.matchAll(/\{(\w+)\}/g)].every(m => all[m[1]] != null);
 // Danger lines: a joke at 20% hull costs clarity, so with "Danger alerts always down to business" ticked (the
 // default) these come only from the business lists and never swear, whatever personalities are ticked.
@@ -2590,7 +2597,9 @@ function line(key, vars = {}, plain = "") {
   const lists = suffix => styles.flatMap(st => listOf(st + suffix).map(x => [st, x]));   // [personality, line]
   // with profanity on, roll first: the swearing versions this share of the time, the clean ones otherwise
   // (whichever side has nothing for this alert gives way to the other)
-  const clean = lists(""), rude = speechProfane() && !serious ? lists("_profane") : [];
+  let clean = lists(""), rude = speechProfane() && !serious ? lists("_profane") : [];
+  // nothing for this alert in any personality ticked (a personality file that has not got to it yet): business says it
+  if (!clean.length && !rude.length) clean = listOf("business").map(x => ["business", x]);
   let pool = rude.length && (!clean.length || Math.random() * 100 < speechProfanePct()) ? rude : clean;
   if (!pool.length) return plain;
   const all = lineVars(vars), whole = pool.filter(x => allFilled(x[1], all));
@@ -2612,7 +2621,7 @@ function line(key, vars = {}, plain = "") {
     store.set("speechHeard", recentLines);
   }
   lineStyle = style; lineKey = key; lineTemplate = pick;
-  return fillLine(pick, all);
+  return fillLine(pick, nameFor(all, style));
 }
 // The personality of the line line() picked last, and the voice it asks for: a style in speech.json may be
 // {label, voice, speed, speaker}, a Piper voice of its own (only if installed; it wins over the dialog's voice), one
@@ -9606,7 +9615,10 @@ function drawSpeechStyles() {
   const styles = Object.entries(speechLib.styles || {});
   const inst = data && data.tts && data.tts.voices;
   box.innerHTML = styles.map(([k, v]) => { const sv = styleVoice(k), own = sv.voice || sv.speaker != null;
-    return `<label${own ? ` title="this personality speaks in its own voice when it is installed (${sv.picked ? "picked in Personality voices below" : "set in speech.json"})"` : ""}><input type="checkbox" data-sstyle="${esc(k)}"${on.includes(k) ? " checked" : ""}> ${esc(typeof v === "string" ? v : (v && v.label) || k)}` +
+    // a personality file that does not cover every alert says how many it has (the others' lines fill in)
+    const pf = (speechLib.personalities || []).find(x => x.id === k), part = pf && pf.covers < pf.of
+      ? ` <span class="unk" title="${esc(pf.file)} has lines for ${pf.covers} of the ${pf.of} alerts: the other personalities ticked say the rest (else business)">(${pf.covers}/${pf.of} alerts)</span>` : "";
+    return `<label${own ? ` title="this personality speaks in its own voice when it is installed (${sv.picked ? "picked in Personality voices below" : "set in speech.json"})"` : ""}><input type="checkbox" data-sstyle="${esc(k)}"${on.includes(k) ? " checked" : ""}> ${esc(typeof v === "string" ? v : (v && v.label) || k)}${part}` +
     `${own ? ` <span class="unk">(${esc(voiceWords(sv))}${sv.voice && inst && !inst.includes(sv.voice) ? ", not installed" : ""})</span>` : ""}</label>`; }).join(" ");
   box.querySelectorAll("[data-sstyle]").forEach(cb => cb.onchange = () => {
     store.set("speechStyles", [...box.querySelectorAll("[data-sstyle]:checked")].map(x => x.dataset.sstyle)); shiftStyle = null; drawSpeechStyles();
@@ -10338,7 +10350,7 @@ function labLine(key, style, opts = {}) {
   const pool = styles.flatMap(st => (Array.isArray(e[st]) ? e[st] : []).filter(x => typeof x === "string" && x.trim() && keep(x)).map(x => [st, x]));
   if (!pool.length) return null;
   const [st, template] = pool[Math.floor(Math.random() * pool.length)];
-  return {key, style: st, template, text: fillLine(template, lineVars({...(opts.names || {}), ...(LINE_SAMPLES[key] || {})}))};
+  return {key, style: st, template, text: fillLine(template, nameFor(lineVars({...(opts.names || {}), ...(LINE_SAMPLES[key] || {})}), st))};
 }
 // play a line: as its personality is heard (S40) when it has a voice or speaker of its own (picked in Personality voices,
 // else speech.json's; an uninstalled voice is the main voice, as in the alerts), else in the voice part's voice and

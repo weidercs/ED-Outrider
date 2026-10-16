@@ -11,6 +11,43 @@ Outrider behaves. When a new release is out, a small **⬆ Update** pill appears
 
 ---
 
+## 2026.10.25 · 16 October 2026 · bug fix release
+
+**The overlay no longer breaks the game's mouse lock, fixes from a code review, and a few small improvements.**
+
+### 🖥 The overlay
+
+- **The mouse stays captured on foot and in the DSS** (Linux). The overlay window used to lie over the whole game, and
+  then Elite could not lock the mouse: the cursor ran off onto the next monitor. Now each panel has a small window of
+  its own, and there is none at all while nothing is drawn, so the middle of the screen stays Elite's. (A panel you
+  drag to the middle of the screen would still be in the way.)
+- **Hide the overlay on foot and in the DSS** (Settings → In-game overlay), if the mouse lock still breaks for you.
+- **A Foot box for each panel** under Hide in mode: hidden on foot, in a station or on a planet's surface (say, Now).
+
+### 🛬 Docking
+
+- **How long before your pad is said:** Settings → Voice → **Say your landing pad … s after docking is granted**
+  (0 to 20 s, 5 to start), for stations whose controllers talk longer.
+- The fleet carrier diagram: pads 7 and 8 no longer poke out of the bow.
+
+### 🔭 And more
+
+- **Nearby in a narrow pane** (the Overview's half): it drops Jumps and Known first, and keeps the status and notable
+  tags in their columns until there is really no room.
+- **Settings** uses more of a big screen: 80 % of its width, in two columns (three on a 4K screen).
+- **Updating a plain install** without losing your keys: the [install guide](install.md#updating) has the steps for a
+  `git clone` and for a downloaded ZIP (keep `data` and `ed_outrider.toml`).
+- **Fixes from a code review:**
+  - after the 2026.10.24 journal re-read, ships and modules you stored could show at the wrong station until your
+    next shipyard visit;
+  - Nearby's Focus/Lock on your carrier kept saying "doesn't know where" after it found out;
+  - CMDR → Engineering's material link now filters an open Materials tab;
+  - Focus/Lock no longer shows on the Overview in Boxel mode;
+  - the Nearest dialog's "shipyard" and "material trader" labels are spaced.
+- The screenshots in the guide are back at 1600×1000, with the Overview also shown on a 27-inch monitor.
+
+---
+
 ## 2026.10.24 · 15 October 2026
 
 **Every credit you earned exploring, sampling and mining, the CMDR tab, your landing pad big and spoken (and where it

@@ -650,6 +650,17 @@ upstream project's choices, not rules of the game.
   overlay away there altogether, and `hide_on_foot` hides chosen panels on foot. Linux only (`FIT_WINDOW`): the Windows
   overlay was confirmed working with one window over the whole game and this was not tried there; with nothing to draw
   its window hides too.
+- **Personalities as drop-in files** (the author, 2026-10-16): `resources/speech.json` stays the base (business,
+  sarcastic, sweet); every other personality is a file of its own in the same format, `resources/personalities/`
+  shipped and `personalities/` beside the bans yours (`data/personalities/`, never in the repository).
+  `merge_personalities` folds them in:
+  - a file of yours with a shipped one's name replaces it (edits survive an update);
+  - a base personality is never replaced, and a name is taken once per folder;
+  - each file is checked and re-read on its own, keeping its last good copy.
+
+  A personality's forms of address are in its file (`"names"`), not in Settings: personalities are edited in their
+  files. An alert a personality has no line for is said by the others ticked, else business. "Business for danger"
+  is the player's choice and decides for every personality alike. /api/speech is gzipped (1 MB and growing).
 - **The overlay's Alerts panel comes from the page** (S26, the author's defaults 2026-10-12): the alerts are worded
   and switched in the browser (speech.json's personality lines, each kind's notify / sound / speak ticks in
   localStorage), so the page posts each alert it shows (POST `/api/overlay/alert`, `pc_only`) and the server keeps the
