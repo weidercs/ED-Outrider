@@ -2,6 +2,13 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-15 · Mouse lock (#1): a "small" trial, the window only as big as its panels
+- The author's first trial (in the DSS): only **hide_empty** keeps the lock; **fit** does not, although in the DSS it
+  shaped the window to one corner pixel. So either XWayland counts a window's whole rectangle whatever its shape, or any
+  mapped overlay window breaks the lock. A fourth trial, **small** (`small_rect`: the window's own rectangle only
+  around its panels, painted at the game window's layout through an offset; 1x1 in the corner with none), tells the
+  two apart, and is the candidate for on foot, where the radar keeps the window up.
+
 ## 2026-10-15 · The overlay and the game's mouse lock (#1): trials to find the fix in game
 - The author's tests (GNOME on Wayland, Elite under Proton): with the overlay on, the mouse is not captured on foot or
   in the DSS (the camera turns until the cursor leaves the monitor onto the next one); off, it is. The overlay window

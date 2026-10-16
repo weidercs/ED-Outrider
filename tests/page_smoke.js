@@ -5325,7 +5325,7 @@ const releasePayloads = async () => {
                            ["overlay", {hide_docked: ["system", "body", "now"]}], ["overlay", {test: true}],
                            ["overlay", {theme: "default"}], ["overlay/layout", {body: {text: "small"}}], ["overlay", {panel_scale: 40}],
                            ["overlay", {trial: ["hide_empty"]}], ["overlay", {trial: ["fit", "hide_empty"]}]],
-                  trials: "fit no_raise hide_empty", venv: true, popup: ["", "⟳Installing", "✓ installed", "⟳Installing", "Installing failed", ""]};
+                  trials: "fit small no_raise hide_empty", venv: true, popup: ["", "⟳Installing", "✓ installed", "⟳Installing", "Installing failed", ""]};
     const ok = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && ok;
     console.log(ok ? "OK" : "FAIL", "| settings: in-game overlay |", ok ? "switches, panels' places, a change and the test button posted" : JSON.stringify(got), errors.slice(before));

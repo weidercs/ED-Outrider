@@ -206,7 +206,14 @@ class MouseLockTrials(unittest.TestCase):
     def test_trials_from_the_feed(self):
         self.assertEqual(W.trials({"trial": ["fit", "nope", "no_raise"]}), {"fit", "no_raise"})
         self.assertEqual(W.trials(None), set())
-        self.assertEqual(set(O.TRIALS), {"fit", "no_raise", "hide_empty"})
+        self.assertEqual(set(O.TRIALS), {"fit", "small", "no_raise", "hide_empty"})
+
+    def test_small_rect(self):
+        """The panels' bounding box (each grown by MASK_PAD), inside the game window; one corner pixel when none."""
+        geoms = [("radar", (1500.0, 800.0, 300.0, 200.0)), ("strip", (100.0, 0.0, 1700.0, 30.0))]
+        self.assertEqual(W.small_rect(geoms, 1920, 1080, pad=6), (94, 0, 1712, 1006))
+        self.assertEqual(W.small_rect(geoms[:1], 1920, 1080, pad=6), (1494, 794, 312, 212))
+        self.assertEqual(W.small_rect([], 1920, 1080), (0, 0, 1, 1))
 
     def test_fit_rects(self):
         """Each panel as drawn, grown by MASK_PAD, inside the window, whole pixels; one corner pixel when none."""

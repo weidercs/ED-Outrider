@@ -11294,6 +11294,7 @@ const OV_THEMES = ["default", "lcars", "elite", "babylon5", "narn", "minbari", "
 // "body" is the Target panel (D1): its id stayed, so the Body panel's place and size carry over
 // #1, the game's mouse lock (2026-10-15): the overlay window's trial ways (outrider.overlay.TRIALS), live only, never saved
 const OV_TRIALS = [["fit", "fit the window to the panels", "the overlay window shaped to its panels: the rest of the game window, its middle too, is Elite's alone"],
+                   ["small", "shrink the window to the panels", "the overlay window only as big as its panels together (on foot, the radar alone): the rest of the game window is not covered at all"],
                    ["no_raise", "don't keep raising it", "the overlay window raised over the game only as it shows, not twice a second"],
                    ["hide_empty", "hide it when empty", "the overlay window taken away while it has no panel to draw (the DSS, the FSS...)"]];
 const OV_PANELS = [["system", "System", "the bodies worth your time, in supercruise"],

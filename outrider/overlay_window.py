@@ -184,6 +184,16 @@ def fit_rects(geoms, win_w, win_h, pad=MASK_PAD):
     return out or [(0, 0, 1, 1)]
 
 
+def small_rect(geoms, win_w, win_h, pad=MASK_PAD):
+    """The "small" trial: the window's own rectangle (x, y, w, h) inside the game window, just big enough for every panel
+    as drawn (fit_rects' bounding box): Elite's window is left uncovered, not merely shaped away (XWayland seems to count
+    a window's whole rectangle, whatever its shape)."""
+    rs = fit_rects(geoms, win_w, win_h, pad)
+    x0, y0 = min(r[0] for r in rs), min(r[1] for r in rs)
+    x1, y1 = max(r[0] + r[2] for r in rs), max(r[1] + r[3] for r in rs)
+    return x0, y0, x1 - x0, y1 - y0
+
+
 def empty_hidden(data, arranging):
     """The "hide_empty" trial: the window taken off the screen while it has no panel to draw (the DSS, the FSS...);
     never in Arrange mode or with the test panels."""
@@ -601,6 +611,9 @@ def run_window(client, title_hint=None):   # pragma: no cover - needs a display;
             self.seq = -1
             self.click_through = True
             self.mask_now = None   # the "fit" trial's shape as set (fit_rects), None: no shape
+            # the game window's size (the panels' layout is in it) and where this window sits in it: (0, 0) and the same
+            # size but with the "small" trial, where the window holds only the panels
+            self.game, self.off = None, (0, 0)
             # Arrange mode: the panels as drawn (for hit tests), the drag under way, the edits not saved yet
             # dirty: an edit not sent yet (kept over Outrider's answers until it is); saved_at: the feed's seq when the
             # last edit was sent (the next answer carries it, and the local copy can go)
@@ -720,9 +733,14 @@ def run_window(client, title_hint=None):   # pragma: no cover - needs a display;
                 if self.isVisible():
                     self.hide()
                 return
-            x, y, w, h = rect
-            if (self.x(), self.y(), self.width(), self.height()) != (x, y, w, h):
-                self.setGeometry(x, y, w, h)
+            x, y, w, h = (round(v) for v in rect)
+            self.game = (w, h)
+            ox, oy, ww, wh = small_rect(self.geoms, w, h) if "small" in trials(feed.data) and not arranging else (0, 0, w, h)
+            if self.off != (ox, oy):
+                self.off = (ox, oy)
+                self.update()
+            if (self.x(), self.y(), self.width(), self.height()) != (x + ox, y + oy, ww, wh):
+                self.setGeometry(x + ox, y + oy, ww, wh)
             was = self.isVisible()
             if not was:
                 self.show()
@@ -732,7 +750,8 @@ def run_window(client, title_hint=None):   # pragma: no cover - needs a display;
 
         def apply_fit(self):
             """The "fit" trial: the window shaped to the panels as last drawn (none in Arrange mode: it takes the mouse)."""
-            rects = fit_rects(self.geoms, self.width(), self.height()) \
+            gw, gh = self.game or (self.width(), self.height())
+            rects = [(rx - self.off[0], ry - self.off[1], rw, rh) for rx, ry, rw, rh in fit_rects(self.geoms, gw, gh)] \
                 if "fit" in trials(feed.data) and not self.arranging() else None
             if rects == self.mask_now:
                 return
@@ -760,7 +779,9 @@ def run_window(client, title_hint=None):   # pragma: no cover - needs a display;
         def paintEvent(self, _event):
             p = QPainter(self)
             try:
-                self.geoms = paint(p, feed.data, self.width(), self.height(), arrange=self.arranging(), override=self.override,
+                gw, gh = self.game or (self.width(), self.height())
+                p.translate(-self.off[0], -self.off[1])   # the panels laid out in the game window, this window a part of it
+                self.geoms = paint(p, feed.data, gw, gh, arrange=self.arranging(), override=self.override,
                                    all_pct=self.all_pct)
             finally:
                 p.end()
