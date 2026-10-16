@@ -31,6 +31,14 @@ also run 24/7 on a home server in Docker.
   <img src="docs/images/overview.png" alt="The Overview: the neighbourhood on the left, the system you're in on the right" width="900">
 </p>
 
+<details>
+<summary>On a 27-inch monitor (2560×1440)</summary>
+<p align="center">
+  <img src="docs/images/overview-27in.png" alt="The same Overview on a 2560x1440 screen: every column of the neighbourhood list in full" width="900">
+  <br><sub>The same view on a 2560×1440 screen: every column in full (click for full size)</sub>
+</p>
+</details>
+
 ## ✨ At a glance
 
 | | |

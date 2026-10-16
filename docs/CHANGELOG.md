@@ -2,6 +2,15 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-16 · Screenshots back at 1600x1000, the Overview also on a 27-inch monitor
+- Every full-page desktop shot in `docs/images/` retaken at 1600x1000: the README shows them 900 px wide, where a
+  2560x1440 shot's text came out about 4.5 px (unreadable) and a 1600 one's about 7 px; most players' screens are
+  closer to it too, and it shows Nearby's new middle fit step (Jumps and Known dropped, status and notable kept).
+  Retaken: overview nearby here schematic map highway history samples log materials firsts search cargo trade cmdr
+  earnings ship-card boxel boxel-grid nearest checklist (same pins and plots as before).
+- `docs/images/overview-27in.png` (2560x1440): the same Overview on the author's 27-inch monitors, in a fold under the
+  README's main shot ("On a 27-inch monitor").
+
 ## 2026-10-15 · Nearby keeps its status and notable columns until they really do not fit
 - In a narrow pane (the Overview's half) Nearby went from its short forms straight to compact2, which drops Jumps and
   Known and puts the status pills and notable tags under the name and the bodies all at once, leaving much of the row
