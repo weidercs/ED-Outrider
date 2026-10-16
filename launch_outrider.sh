@@ -126,8 +126,5 @@ clipboard_hint
 
 # shellcheck disable=SC1091
 source "$VENV/bin/activate"
-# Settings -> Server's Restart starts this script again in Outrider's place (same process, terminal and Ctrl-C; the
-# setup above runs again, so requirements changed by a git pull are installed)
-export OUTRIDER_LAUNCHER="$HERE/$(basename "$0")"
 cd "$CALLER"
 exec python "$HERE/ed_outrider.py" "$@"

@@ -351,9 +351,8 @@ class Curiosities(unittest.TestCase):
         self.assertEqual(ed_outrider.curiosities({"name": "5", "type": "Planet", "subtype": "Rocky body"}), [])
 
     def test_system_pair_not_close_orbit(self):
-        # two planets round a barycentre that circles the star: no curiosity at all (the author, 2026-10-12: shared
-        # centres are common, a "planet pair" alert was noise), and never a "close orbit" of the star (their small
-        # orbit is around the shared centre, not the star's surface)
+        # two planets round a barycentre that circles the star: a pair, and never a "close orbit" of the star
+        # (their small orbit is around the shared centre, not the star's surface)
         star = {"name": "A", "type": "Star", "radius_km": 700000, "body_id": 1, "parents_full": []}
         via = [{"kind": "Null", "id": 7}, {"kind": "Star", "id": 1}]
         p5 = {"name": "5", "type": "Planet", "body_id": 8, "sma_ls": 1.0, "radius_km": 3000, "parents_full": via}
@@ -361,9 +360,12 @@ class Curiosities(unittest.TestCase):
         moon = {"name": "6 a", "type": "Planet", "body_id": 10, "sma_ls": 0.02,
                 "parents_full": [{"kind": "Planet", "id": 9}] + via}
         got = ed_outrider.system_curiosities("S", [star, p5, p6, moon])
-        self.assertNotIn("5", got)
-        self.assertNotIn("6", got)
+        self.assertEqual([t for t, _ in got["5"]], ["planet pair"])
+        self.assertEqual([t for t, _ in got["6"]], ["planet pair"])
         self.assertEqual([t for t, _ in got["6 a"]], ["close orbit"])   # 6 a really does hug planet 6
+        # a star sharing the centre stops it being a planet pair
+        s2 = {"name": "B", "type": "Star", "body_id": 11, "parents_full": [{"kind": "Null", "id": 7}]}
+        self.assertNotIn("5", ed_outrider.system_curiosities("S", [star, p5, s2]))
 
 
 class BioColours(unittest.TestCase):
@@ -607,18 +609,6 @@ class SampleSpacing(unittest.TestCase):
         self.at("2026-01-02T00:00:00Z", 0.0, 0.0)                        # today's reading...
         self.codex("2026-01-01T00:10:00Z")                               # ...is not where yesterday's tag was made
         self.assertEqual(self.db.execute("SELECT count(*) FROM bio_tags").fetchone()[0], 0)
-
-    def test_what_the_run_pays_from_sample_1(self):
-        """S62: the run's value is known at sample 1, the species' own with the x5 first footfall apart (no double x5)."""
-        import outrider.bio
-        self.at("2026-01-01T00:10:00Z", 0.0, 0.0)
-        self.organic("2026-01-01T00:10:00Z", "Log")
-        s = self.state.sampling_summary()
-        self.assertEqual((s["samples"], s["value"], s["factor"]), (1, outrider.bio.species_value("Tussock Pennata"), 1))
-        self.assertTrue(s["value"])
-        self.db.execute("INSERT INTO own_firsts (system, body_id, name, bio_x5) VALUES (1, 4, 'Sys 4', 1)")
-        s = self.state.sampling_summary()
-        self.assertEqual((s["value"], s["factor"]), (outrider.bio.species_value("Tussock Pennata"), 5))
 
     def test_no_position_from_an_old_line(self):
         self.at("2026-01-02T00:00:00Z", 0.0, 0.0)                         # today's reading...
@@ -955,122 +945,6 @@ class RulesDownload(unittest.TestCase):
             outrider.bio.update_rules(self.path, log=self.log.append, versions=dict(self.V))
         with unittest.mock.patch.object(outrider.bio, "remote_versions", return_value=dict(self.V)):
             self.assertFalse(outrider.bio.update_if_newer(self.path, log=self.log.append))   # both there: current
-
-
-class ColourTablesRetry(unittest.TestCase):
-    """S7: ExploData's colour tables missing after the first start (their download failed): a banner card and Retry
-    (POST /api/bio/colours), which fetches only those tables (every fetch mocked: resources/ is never touched)."""
-
-    V = {"bioscan": "b1", "regionmap": "r1", "explodata": "e1"}
-    CATALOG = ('catalog = {"$Codex_Ent_Bacterial_Genus_Name;": {"$Codex_Ent_Bacterial_01_Name;": '
-               '{"name": "Bacterium Aurasus", "value": 1000000, "rulesets": []}}}')
-    GENUS = ('data = {"$Codex_Ent_Bacterial_Genus_Name;": {"colors": {"species": '
-             '{"$Codex_Ent_Bacterial_01_Name;": {"star": {"F": "Teal"}}}}}}')
-
-    def setUp(self):
-        import tempfile
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.addCleanup(lambda: outrider.bio.load_rules(outrider.bio.RULES_FILE, force=True))   # the shipped copy again
-        self.path = os.path.join(self.tmp.name, "rules.json")
-        self.fetched = []
-
-    def get(self, genus=None, fail=()):
-        base = RulesDownload.fake_get(None)
-
-        def get(url):
-            self.fetched.append(url)
-            if any(f in url for f in fail):
-                raise OSError("timed out")
-            if "rulesets/" in url:
-                return self.CATALOG
-            return (genus or self.GENUS) if "genus.py" in url else base(url)
-        return get
-
-    def first_start_without_colours(self):
-        with unittest.mock.patch.object(outrider.bio, "_get", self.get(fail=("genus.py",))):
-            outrider.bio.update_rules(self.path, log=lambda *_: None, versions=dict(self.V))
-        outrider.bio.load_rules(self.path, force=True)
-
-    def test_a_failed_first_fetch_writes_no_colour_file(self):
-        """The trap: a failed first fetch wrote bio_colours.json with no colours in it; written only when they arrived."""
-        self.first_start_without_colours()
-        self.assertFalse(os.path.exists(outrider.bio.colours_path(self.path)))
-        self.assertFalse(outrider.bio.colours_available())
-        self.assertIs(outrider.bio.rules_info()["colours"], False)
-
-    def test_update_colours_fetches_only_the_tables(self):
-        self.first_start_without_colours()
-        self.fetched.clear()
-        with unittest.mock.patch.object(outrider.bio, "_get", self.get(genus="data = {}")), self.assertRaises(ValueError):
-            outrider.bio.update_colours(log=lambda *_: None)                     # none at all: not "done"
-        self.assertFalse(os.path.exists(outrider.bio.colours_path(self.path)))
-        with unittest.mock.patch.object(outrider.bio, "_get", self.get(genus="data = build()")), self.assertRaises(ValueError):
-            outrider.bio.update_colours(log=lambda *_: None)
-        self.fetched.clear()
-        with unittest.mock.patch.object(outrider.bio, "_get", self.get()):
-            self.assertEqual(outrider.bio.update_colours(log=lambda *_: None), 1)
-        self.assertEqual(self.fetched, [outrider.bio.EXPLODATA])                # one request, not the whole update
-        self.assertTrue(outrider.bio.colours_available())                        # loaded again with them
-        self.assertEqual([sp["colors"] for sp in outrider.bio.load_rules()["species"]], [{"star": {"F": "Teal"}}])
-        with open(self.path) as fh:
-            self.assertEqual(json.load(fh)["versions"]["explodata"], "")        # the next start still checks ExploData
-
-    def test_the_banner_and_retry(self):
-        import asyncio
-        import contextlib
-        import io
-        from aiohttp.test_utils import TestClient, TestServer
-        self.first_start_without_colours()
-        db = ed_outrider.open_db(":memory:")
-        self.addCleanup(db.close)
-        state = ed_outrider.State(db, ed_outrider.Journals(db), None, 25)
-        state.bases = {7: {}}
-        state.bio_colours_check()
-        [n] = state.notices.active()
-        self.assertEqual((n["key"], n["action"]), ("bio_colours", "retry:bio_colours"))
-        self.assertIn("not downloaded", n["text"])
-        self.assertEqual(state.payload()["bio_rules"]["colours_job"], {"state": "idle", "why": None})
-        self.assertIs(state.payload()["bio_rules"]["colours"], False)
-
-        import threading
-
-        async def go(get):
-            # the download waits until both requests are in: a fresh event each run (a shared one, set by the first
-            # run, let the second run's download finish before its second POST, which then started another: flaky)
-            out, hold = {}, threading.Event()
-
-            def slow(url):
-                hold.wait(5)
-                return get(url)
-            async with TestClient(TestServer(ed_outrider.make_app(state))) as c:
-                with unittest.mock.patch.object(outrider.bio, "_get", slow):
-                    r = await c.post("/api/bio/colours", json={})
-                    out["first"] = (r.status, (await r.json())["colours_job"]["state"])
-                    out["shown"] = [x["text"] for x in state.notices.active()]
-                    out["again"] = (await c.post("/api/bio/colours", json={})).status   # one at a time
-                    hold.set()
-                    await state.bio_colours_task
-            return out
-        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            out = asyncio.run(go(self.get(fail=("genus.py",))))
-        self.assertEqual((out["first"], out["again"]), ((202, "running"), 409))
-        self.assertEqual(out["shown"], ["Downloading the exobiology colour tables…"])
-        self.assertEqual(state.bio_colours_job, {"state": "failed", "why": "OSError: timed out"})
-        [n] = state.notices.active()
-        self.assertTrue(n["text"].startswith("The exobiology colour tables could not be downloaded (OSError: timed out)"))
-        self.assertEqual(n["action"], "retry:bio_colours")
-        gen = state.bio_rules_gen
-        state.journals.dirty = set()
-        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            out = asyncio.run(go(self.get()))
-        self.assertEqual((out["first"], out["again"]), ((202, "running"), 409))  # one at a time on the Retry too
-        self.assertEqual(state.bio_colours_job["state"], "done")
-        self.assertEqual(state.notices.active(), [])                              # the card goes
-        self.assertTrue(outrider.bio.colours_available())
-        # the variant guesses are worked out again at once (the Fable review: not colourless until a restart)
-        self.assertEqual((state.bio_rules_gen, state.journals.dirty), (gen + 1, {7}))
-        self.assertIs(state.payload()["bio_rules"]["colours"], True)
 
 
 class BatchS1(unittest.TestCase):

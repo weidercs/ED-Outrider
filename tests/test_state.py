@@ -3,9 +3,7 @@
 Run all: python3 -m unittest discover tests (or scripts/verify.sh).
 """
 import argparse
-import contextlib
 import datetime as dt
-import io
 import json
 import os
 import tempfile
@@ -227,94 +225,6 @@ class LogTailRace(unittest.TestCase):
         self.assertEqual([r["system"] for r in t1["rows"] + t2["rows"]], ["S1"])
 
 
-class QuickScan(unittest.TestCase):
-    """S18: the tick's scan of a journal folder over a network share stats only the files still changing and the newest
-    two; every file once a minute."""
-
-    def setUp(self):
-        import shutil
-        self.dir = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, self.dir)
-        self.db = ed_outrider.open_db(":memory:")
-        self.addCleanup(self.db.close)
-        self.j = ed_outrider.Journals(self.db)
-        self.now = 1000.0
-        self.j.clock = lambda: self.now
-        self.paths = [self.write(n, "A") for n in range(1, 6)]
-
-    def write(self, n, system, end="\n"):
-        p = os.path.join(self.dir, f"Journal.2026-01-0{n}T000000.01.log")
-        with open(p, "a", encoding="utf-8") as f:
-            f.write(json.dumps({"timestamp": f"2026-01-0{n}T00:00:00Z", "event": "FSDJump", "StarSystem": system,
-                                "SystemAddress": n, "StarPos": [n, 0, 0]}) + end)
-        return p
-
-    def scan(self, step=1):
-        """One quick scan `step` seconds after the last: the paths it stat'd."""
-        self.now += step
-        seen, real = [], os.path.getsize
-        with unittest.mock.patch("os.path.getsize", lambda p: seen.append(p) or real(p)):
-            self.j.scan_dir(self.dir, quick=True)
-        return seen
-
-    def test_settled_files_wait_for_the_full_check(self):
-        self.assertEqual(self.scan(), self.paths)                        # the first scan stats every file
-        for _ in range(ed_outrider.JOURNAL_SETTLE_STATS):
-            self.scan()
-        self.assertEqual(self.j.settled, set(self.paths))
-        self.assertEqual(self.scan(), self.paths[-2:])                   # settled: only the newest two
-        new = self.write(7, "B")                                         # a new journal is listed and read at once
-        self.assertEqual(self.scan(), self.paths[-1:] + [new])
-        self.assertEqual(self.j.offsets[new], os.path.getsize(new))
-        self.write(1, "C")                                               # a sync tool adds to an old one: not yet...
-        self.assertNotIn(self.paths[0], self.scan())
-        self.assertEqual(self.scan(ed_outrider.JOURNAL_FULL_CHECK_S), self.paths + [new])   # ...but within the minute
-        self.assertEqual(self.j.offsets[self.paths[0]], os.path.getsize(self.paths[0]))
-        self.assertNotIn(self.paths[0], self.j.settled)                  # it changed: settles again from scratch
-
-    def test_a_file_cut_short_settles_and_a_bad_one_never(self):
-        cut = self.write(2, "Half", end="")                              # its last line never finished
-        real = self.j.read_file
-
-        def read(path):
-            if path == self.paths[2]:
-                raise PermissionError(13, "Permission denied")
-            return real(path)
-        with unittest.mock.patch.object(self.j, "read_file", read), \
-                unittest.mock.patch("sys.stderr", io.StringIO()):
-            for _ in range(ed_outrider.JOURNAL_SETTLE_STATS + 1):
-                self.scan()
-            self.assertLess(self.j.offsets[cut], os.path.getsize(cut))      # size never reaches the offset...
-            self.assertIn(cut, self.j.settled)                               # ...but it stopped changing
-            self.assertNotIn(self.paths[2], self.j.settled)                  # unreadable: tried every time
-            self.assertIn(self.paths[2], self.scan())
-
-    def test_reload_forgets_what_settled(self):
-        for _ in range(ed_outrider.JOURNAL_SETTLE_STATS + 1):
-            self.scan()
-        self.assertTrue(self.j.settled)
-        self.j.reload()                                                   # a rolled-back tick: offsets went back
-        self.assertEqual(self.j.settled, set())
-        self.assertEqual(self.scan(), self.paths)
-
-    def test_the_tick_scans_quick(self):
-        import types
-        state = ed_outrider.State(self.db, self.j, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
-        calls = []
-        later = ("watch_status", "maybe_refresh", "apply_own_changes", "maybe_classify_target", "maybe_unsold",
-                 "maybe_sale_left", "maybe_curious", "maybe_locate_carrier", "maybe_find_sellers", "maybe_backup_on_quit",
-                 "highway_copy_next", "riches_copy_next", "highway_heavy_check", "maybe_autotarget",
-                 "maybe_boxel_autotarget")
-        with contextlib.ExitStack() as stack:
-            for name in later:
-                stack.enter_context(unittest.mock.patch.object(state, name, lambda *a: None))
-            stack.enter_context(unittest.mock.patch.object(ed_outrider, "LIVE_DIRS", [self.dir]))
-            stack.enter_context(unittest.mock.patch.object(self.j, "scan_dir", lambda d, **kw: calls.append(kw) and 0))
-            state.tick({})
-        self.assertIsNone(state.tail_error)
-        self.assertEqual(calls, [{"upload": "live", "quick": True}])
-
-
 class NamedBodyPanel(unittest.TestCase):
     def test_named_body_finds_its_scan(self):
         import asyncio, types
@@ -384,7 +294,6 @@ class Batch1Server(unittest.TestCase):
         self.j.handle(ev)
         self.db.commit()
         l = self.state.leaving_summary(1)
-        self.assertEqual(l["id64"], "1")   # S30: the system it is about (the first stop you picked applies there only)
         u = l["unmapped"][0]
         self.assertEqual(u["body"], "4")
         self.assertFalse(u["special"])
@@ -399,57 +308,6 @@ class Batch1Server(unittest.TestCase):
         self.db.commit()
         u5 = next(x for x in self.state.leaving_summary(1)["unmapped"] if x["body"] == "5")
         self.assertEqual(u5["value_mapped_bonus"], u5["value_mapped"])
-
-    def test_leaving_summary_cached_until_its_data_changes(self):   # S17
-        """The payload asks for the target's leaving summary on every poll: worked out once until the journal writes
-        something it reads (data_seq: scans, deaths, sales), the system's place changes, the bio rules are updated or a
-        tick is rolled back; each caller gets its own copy."""
-        ev = scan("2026-01-01T00:05:00Z", "Sys", 1, 4, "Sys 4", disc=True)[2]
-        ev.update(PlanetClass="Sudarsky class II gas giant", MassEM=300)
-        self.j.handle(ev)
-        self.j.handle({"event": "SAAScanComplete", "timestamp": "2026-01-01T00:06:00Z", "SystemAddress": 1, "BodyID": 4,
-                       "BodyName": "Sys 4", "ProbesUsed": 5, "EfficiencyTarget": 6})
-        self.db.commit()
-        calls, real = [], ed_outrider.bio_context
-        unmapped = lambda: [u["body"] for u in self.state.leaving_summary(1)["unmapped"]]
-        with unittest.mock.patch.object(ed_outrider, "bio_context", lambda *a, **k: calls.append(1) or real(*a, **k)):
-            first = self.state.leaving_summary(1)
-            self.assertEqual(first["unmapped"], [])                     # mapped
-            first["unmapped"].append("changed by its caller")         # system_detail adds to its copy
-            self.assertEqual(unmapped(), [])
-            self.assertEqual(len(calls), 1)                             # worked out once
-            for _, _, e in death("2026-01-01T00:07:00Z"):             # the map died with the ship: to do again
-                self.j.handle(e)
-            self.assertEqual(unmapped(), ["4"])
-            self.assertEqual(len(calls), 2)
-            self.j.handle(sale("2026-01-01T00:08:00Z", ["Sys"])[2])  # a sale (no dirty system) moves it too
-            unmapped()
-            self.assertEqual(len(calls), 3)
-            self.j.handle(scan("2026-01-01T00:09:00Z", "Sys", 1, 5, "Sys 5")[2])
-            self.assertEqual(self.state.leaving_summary(1)["scanned"], 2)
-            self.assertEqual(len(calls), 4)
-            self.state.bio_rules_gen += 1                               # check_bio_rules installed new rules
-            unmapped()
-            self.assertEqual(len(calls), 5)
-            self.state.bases[1] = ("spansh", {"name": "Sys", "x": 1.0, "y": 2.0, "z": 3.0})   # a new place: the region
-            unmapped()
-            self.assertEqual(len(calls), 6)
-            self.j.reload()                                             # a rolled-back tick
-            unmapped()
-            self.assertEqual(len(calls), 7)
-            unmapped()
-            self.assertEqual(len(calls), 7)
-
-    def test_updated_bio_rules_count_a_generation(self):   # S17: leaving_summary's cache key
-        import asyncio
-        with unittest.mock.patch.object(outrider.bio, "update_if_newer", lambda log=print: True), \
-                unittest.mock.patch.object(outrider.bio, "rules_info", lambda: {"species": 1, "generated": ""}), \
-                unittest.mock.patch("sys.stdout", io.StringIO()):
-            asyncio.run(ed_outrider.check_bio_rules(self.state))
-            self.assertEqual(self.state.bio_rules_gen, 1)
-            with unittest.mock.patch.object(outrider.bio, "update_if_newer", lambda log=print: False):
-                asyncio.run(ed_outrider.check_bio_rules(self.state))   # up to date: the same rules
-            self.assertEqual(self.state.bio_rules_gen, 1)
 
     def test_mapped_by_someone_else_is_flagged(self):
         """The author (2026-10-09): a body someone else mapped (WasMapped) is never pointed out. The leaving list and the
@@ -1262,35 +1120,6 @@ class Batch3Server(unittest.TestCase):
         self.assertEqual([s["mapped"] for s in h["sessions"]], [1, 2])   # newest first; together = all time
         self.assertEqual(h["all_time"]["mapped"], 3)
 
-    def test_history_sold_and_deaths(self):   # S63
-        """Each session's sold (every sale, cartographics and exobiology) and its deaths with the Resurrect choice;
-        the all-time row counts the deaths and the ships lost. A Resurrect has History ask again."""
-        self.jump("2026-01-01T10:00:00Z", 1, 0)
-        self.j.handle({"event": "MultiSellExplorationData", "timestamp": "2026-01-01T10:10:00Z", "TotalEarnings": 300,
-                       "BaseValue": 300, "Bonus": 0, "Discovered": []})
-        self.j.handle({"event": "SellOrganicData", "timestamp": "2026-01-01T10:20:00Z", "MarketID": 1,
-                       "BioData": [{"Genus": "$Codex_Ent_Bacterial_Genus_Name;", "Species": "$Codex_Ent_Bacterial_01_Name;",
-                                    "Value": 1000, "Bonus": 4000}]})
-        self.j.handle({"event": "Died", "timestamp": "2026-01-01T10:30:00Z"})
-        self.j.handle({"event": "Resurrect", "timestamp": "2026-01-01T10:31:00Z", "Option": "rebuy", "Cost": 1, "Bankrupt": False})
-        self.j.handle({"event": "Died", "timestamp": "2026-01-01T10:40:00Z"})
-        self.j.handle({"event": "Resurrect", "timestamp": "2026-01-01T10:41:00Z", "Option": "recover", "Cost": 0, "Bankrupt": False})
-        self.jump("2026-01-02T10:00:00Z", 2, 10)
-        self.j.handle({"event": "Died", "timestamp": "2026-01-02T10:05:00Z"})   # no Resurrect yet: counted as a loss
-        h = self.state.history(3650 * 3)
-        new, old = h["sessions"]
-        self.assertEqual((old["sold"], new["sold"]), (5300, 0))
-        self.assertEqual([(d["ts"][11:16], d["option"], d["ship"]) for d in old["deaths"]],
-                         [("10:30", "rebuy", True), ("10:40", "recover", False)])
-        self.assertEqual([(d["option"], d["ship"]) for d in new["deaths"]], [(None, True)])
-        self.assertEqual((h["all_time"]["sold"], h["all_time"]["died"], h["all_time"]["lost"]), (5300, 3, 2))
-        self.state.apply_own_changes()
-        v = self.state.history_version
-        self.j.handle({"event": "Resurrect", "timestamp": "2026-01-02T10:06:00Z", "Option": "recover", "Cost": 0, "Bankrupt": False})
-        self.state.apply_own_changes()
-        self.assertEqual(self.state.history_version, v + 1)
-        self.assertFalse(self.state.history(3650 * 3)["sessions"][0]["deaths"][0]["ship"])
-
     def test_trip_hours_clip_sessions_at_the_sale(self):   # F16
         # one session: 3 h flying home, a sale, 1 h more exploring (jumps every 30 min keep it one session)
         t0 = ed_outrider.ts_seconds("2026-01-01T00:00:00Z")
@@ -1356,7 +1185,7 @@ class Batch3Server(unittest.TestCase):
         self.assertEqual(ed_outrider.system_curiosities("S", [p1, p2]), {})   # stars B and C not scanned
         moons = [{"name": f"BC 1 {m}", "type": "Planet", "body_id": 30 + i, "parents_full": [{"kind": "Null", "id": 29}] + via}
                  for i, m in enumerate("ab")]
-        self.assertEqual(ed_outrider.system_curiosities("S", moons), {})   # nor is a pair of moons (2026-10-12: no pairs at all)
+        self.assertEqual(set(ed_outrider.system_curiosities("S", moons)), {"BC 1 a", "BC 1 b"})   # a real pair of moons
 
     def test_bio_left_after_a_finished_genus(self):   # F20b
         self.jump("2026-01-01T00:00:00Z", 1, 0)
@@ -1901,7 +1730,7 @@ class BatchAIntegrity(unittest.TestCase):
         cancelled at shutdown, so it ran on into the closed Spansh session and database."""
         import types
         names = ("refresh_task", "target_task", "unsold_task", "seller_task", "carrier_task", "honk_test_task",
-                 "highway_task", "riches_task", "autotarget_task", "autotarget_test_task", "reported_task")
+                 "highway_task", "riches_task", "autotarget_task", "autotarget_test_task")
         for n in names:
             setattr(self.state, n, n)
         self.state.searcher = types.SimpleNamespace(task="searcher")
@@ -2150,7 +1979,6 @@ class BatchBState(unittest.TestCase):
             db = ed_outrider.open_db(path)
             ed_outrider.meta_set(db, "pos", {"id64": 3, "ts": "2026-01-01T02:00:00Z"})
             ed_outrider.meta_set(db, "next_stop", {"id64": 2, "name": "S2", "x": 10, "y": 0, "z": 0})   # from before set_ts
-            ed_outrider.meta_set(db, "plan_first", {"id64": "3", "body": "S3 1"})   # S30's first stop, from before set_ts too
             db.commit()
             db.close()
             db = ed_outrider.open_db(path, rescan=True)
@@ -2158,15 +1986,13 @@ class BatchBState(unittest.TestCase):
             for ts, i in (("2026-01-01T00:00:00Z", 1), ("2026-01-01T01:00:00Z", 2), ("2026-01-01T02:00:00Z", 3)):
                 j.handle({"event": "FSDJump", "timestamp": ts, "StarSystem": f"S{i}", "SystemAddress": i, "StarPos": [i, 0, 0]})
             self.assertEqual(ed_outrider.meta_get(db, "next_stop")["id64"], 2)
-            self.assertEqual(ed_outrider.meta_get(db, "plan_first")["body"], "S3 1")   # the re-read's older arrivals keep it
             j.handle({"event": "FSDJump", "timestamp": "2026-01-01T03:00:00Z", "StarSystem": "S2", "SystemAddress": 2,
                       "StarPos": [10, 0, 0]})
             self.assertIsNone(ed_outrider.meta_get(db, "next_stop"))   # arriving after it was chosen clears it
-            self.assertIsNone(ed_outrider.meta_get(db, "plan_first"))   # and leaving S3 forgets its first stop
             db.close()
 
     # ---- G3.3 / F8: the Nearby refresh ----
-    def refresh(self, sphere, bad=None, retry=False):
+    def refresh(self, sphere, bad=None):
         import asyncio, types
 
         async def fail(*a):
@@ -2184,56 +2010,15 @@ class BatchBState(unittest.TestCase):
             return real(id64)
         self.state.row = row
         self.state.center = self.j.pos
-        asyncio.run(self.state._refresh(self.j.pos, retry))
-
-    def test_a_retry_that_fails_again_sends_no_payload(self):
-        """Network down: each retry failing at once changed nothing on the page, but bumped the payload twice (its
-        "asking again" and the status back), so every open page redrew at every retry. A slow retry still says so."""
-        import asyncio, contextlib, io
-        from unittest import mock
-
-        async def down(pos, r):
-            raise OSError("Spansh down")
-        with contextlib.redirect_stderr(io.StringIO()):
-            self.refresh(down)
-            self.assertEqual(self.state.status, "Spansh unavailable")
-            v, rows = self.state.version, self.state.systems
-            self.refresh(down, retry=True)
-            self.assertEqual(self.state.version, v)                  # nothing changed: no payload
-            self.assertEqual(self.state.systems, rows)
-            self.assertEqual(self.state.status, "Spansh unavailable")
-
-            async def slow(pos, r):   # a network that swallows the request: "asking again" shows while it waits
-                await asyncio.sleep(0.05)
-                seen.append((self.state.version, self.state.status))
-                raise OSError("Spansh down")
-            seen = []
-            with mock.patch.object(ed_outrider, "RETRY_SAY_S", 0.01):
-                self.refresh(slow, retry=True)
-            self.assertEqual(seen[0][0], v + 1)
-            self.assertTrue(seen[0][1].startswith("asking Spansh again"))
-            self.assertEqual(self.state.version, v + 2)              # and the status back afterwards
-            self.assertEqual(self.state.status, "Spansh unavailable")
-
-        async def found(pos, r):
-            return [{"id64": 11, "name": "N11", "x": 1, "y": 0, "z": 0, "distance": 1, "bodies": []}]
-        self.refresh(found, retry=True)                             # Spansh back: the new rows go out
-        self.assertGreater(self.state.version, v + 2)
-        self.assertEqual(self.state.status, "ok")
-        self.assertIn(11, self.state.systems)
+        asyncio.run(self.state._refresh(self.j.pos))
 
     def test_failed_search_drops_the_old_sphere_cut(self):   # G3.3
         async def down(pos, r):
             raise OSError("Spansh down")
-        import contextlib, io
         self.state.sphere_cut = 11.8
-        err = io.StringIO()
-        with contextlib.redirect_stderr(err):
-            self.refresh(down)
+        self.refresh(down)
         self.assertIsNone(self.state.sphere_cut)
-        # S42: the page's status is the short form, the error itself goes to the log
-        self.assertEqual(self.state.status, "Spansh unavailable")
-        self.assertIn("Spansh search failed (OSError: Spansh down)", err.getvalue())
+        self.assertIn("Spansh search failed", self.state.status)
 
     def test_one_bad_row_does_not_stop_the_refresh(self):   # F8
         import contextlib, io
@@ -2284,7 +2069,7 @@ class BatchBState(unittest.TestCase):
             for name in later:
                 stack.enter_context(unittest.mock.patch.object(self.state, name, lambda *a: None))
             stack.enter_context(unittest.mock.patch.object(
-                self.j, "scan_dir", lambda d, **kw: self.j.moment("supercharged", "2026-01-01T00:01:00Z", mult=4.0) and False))
+                self.j, "scan_dir", lambda d: self.j.moment("supercharged", "2026-01-01T00:01:00Z", mult=4.0) and False))
             v = self.state.version
             self.state.tick({})
         self.assertGreater(self.state.version, v)
@@ -2878,15 +2663,14 @@ class FableServer(unittest.TestCase):
                                                    {"name": "S7 2", "type": "Planet", "subType": "Icy body", "bodyId": 2}]}}
 
     def test_spansh_down_keeps_cached_spansh_records_as_spansh(self):   # F27
-        import asyncio, contextlib, io
+        import asyncio
         sp, calls, fail = self.spansh2(self.DUMP2)
         asyncio.run(self.state._refresh(self.j.pos))
         sp.store(8, None, ed_outrider.base_from_edsm({"name": "S8", "coords": {"x": 2, "y": 0, "z": 0},
                                                        "primaryStar": {"type": "K", "isScoopable": True}}))
         self.db.commit()
         fail["sphere"] = True
-        with contextlib.redirect_stderr(io.StringIO()):   # "Spansh search failed (...)": the log's line
-            asyncio.run(self.state._refresh(self.j.pos))
+        asyncio.run(self.state._refresh(self.j.pos))
         self.assertEqual((self.state.bases[7][0], self.state.systems[7]["in_spansh"]), ("spansh", True))
         self.assertEqual(self.state.bases[8][0], "edsm")   # an EDSM record stays EDSM's
 
@@ -3076,8 +2860,6 @@ class JournalsRegistry(unittest.TestCase):
         "highway": "live-only: the Highway route (DESIGN_NOTES), cannot be rebuilt from journals",
         "riches": "live-only: the Road to Riches route (Spansh's plot), cannot be rebuilt from journals",
         "next_stop": "live-only: the player's chosen next stop (stamp_next_stop keeps it through the re-read)",
-        "plan_first": "live-only: the first stop picked where you are (S30); an arrival elsewhere after it clears it, "
-                      "the re-read's older ones do not (stamp_next_stop)",
         "docked": "kept so the docked state is not blank while the re-read runs: older Docked/Undocked lines leave it "
                   "(fresh()), but an older Docked at your carrier still sets the carrier's services",
         "last_event_ts": "only ever raised (written when a line is newer), so replayed older lines leave it right",

@@ -26,17 +26,6 @@ outrider.uploads.edmc_uploads = lambda home=None, **kw: _edmc_uploads(home=home,
 # ...nor the player's fetched picture list (data/codex_images.json): the shipped one, or a test's own
 import outrider.codex_images  # noqa: E402
 outrider.codex_images.CACHE = os.path.join(tempfile.mkdtemp(prefix="outrider-test-images-"), "codex_images.json")
-# ...nor the player's ~/.config/systemd/user or Startup folder (S70's service), nor systemctl itself: a scratch folder,
-# and a runner that refuses (a test that wants systemctl's answers sets its own fake)
-import outrider.service  # noqa: E402
-outrider.service.TARGET_DIR = tempfile.mkdtemp(prefix="outrider-test-service-")
-
-
-def _no_systemctl(cmd, **kw):
-    raise OSError(f"tests never run {cmd[0]}")
-
-
-outrider.service.RUNNER = _no_systemctl
 
 
 def user_docs():
@@ -269,11 +258,8 @@ class _HwSession:
 
     def post(self, url, data=None, json=None):
         """A job submitted with form fields (Road to Riches), or a JSON search: recorded as ("POST", url, fields or
-        the JSON body), answered like get(). A repeated form field (data as a list of pairs) is recorded as a list."""
-        fields = {}
-        for k, v in (data.items() if isinstance(data, dict) else data or []):
-            fields[k] = (fields[k] if isinstance(fields[k], list) else [fields[k]]) + [v] if k in fields else v
-        self.calls.append(("POST", url, json if json is not None else fields))
+        the JSON body), answered like get()."""
+        self.calls.append(("POST", url, json if json is not None else dict(data or {})))
         item = self.script.pop(0) if len(self.script) > 1 else self.script[0]
         if isinstance(item, Exception):
             raise item
@@ -449,41 +435,6 @@ class FakeGame:
 
     def close(self):
         self.closed = True
-
-
-class FakeDesktop:
-    """Stands in for the X desktop behind wmctrl and xprop (outrider/game_window.py through the overlay's X11 tracker):
-    its windows {id: title}, the active one, and whether `wmctrl -i -a` is obeyed (a compositor that ignores X11
-    activation: obeys False). Records every command; nothing reaches a real display, window or key."""
-    GAME, BROWSER = 0x3c00007, 0x2a00003
-
-    def __init__(self, windows=None, active=None, obeys=True):
-        self.windows = dict(windows) if windows is not None else {
-            self.GAME: "Elite - Dangerous (CLIENT)", self.BROWSER: "ED Outrider \u2014 Mozilla Firefox"}
-        self.active = self.BROWSER if active is None else active
-        self.obeys, self.calls = obeys, []
-
-    def run(self, cmd, **_kw):
-        import types
-        self.calls.append(list(cmd))
-        out = ""
-        if cmd[:2] == ["wmctrl", "-lGx"]:
-            out = "".join(f"0x{i:08x}  0 0 0 1920 1080 steam_app_359320.steam_app_359320  host {t}\n"
-                          for i, t in self.windows.items())
-        elif cmd[:2] == ["xprop", "-root"]:
-            out = f"_NET_ACTIVE_WINDOW(WINDOW): window id # 0x{self.active:x}\n"
-        elif cmd[:3] == ["wmctrl", "-i", "-a"] and self.obeys and int(cmd[3], 16) in self.windows:
-            self.active = int(cmd[3], 16)
-        return types.SimpleNamespace(returncode=0, stdout=out, stderr="")
-
-    def activations(self):
-        return [c[3] for c in self.calls if c[:3] == ["wmctrl", "-i", "-a"]]
-
-    def window(self, tools=("wmctrl", "xprop"), **kw):
-        """A GameWindow on this desktop (Linux, a display, the tools given installed)."""
-        import outrider.game_window
-        return outrider.game_window.GameWindow(platform="linux", run=self.run, environ={"DISPLAY": ":0"},
-                                               which=lambda t: f"/usr/bin/{t}" if t in tools else None, **kw)
 
 
 def outrider_honk():

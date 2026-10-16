@@ -377,11 +377,17 @@ def update_rules(path=None, log=print, versions=None):
     grid = tables(REGIONMAP, "regions", "regionmap")
     kept = None   # (genus id, species id) -> colours from the current file, when ExploData did not arrive
     try:
-        genus_data = _explodata_table()
-        arrived = True
+        # its table as code (data = build_colours()) fails like a failed fetch: the colours already there are kept and
+        # its version is not recorded, so the next start tries again (Codex, 2026-10-09)
+        got = tables(EXPLODATA, "data")
+        # and with no table called data at all (renamed or moved upstream): not "no colours" either (the Fable review
+        # of 2026-10-10, #9)
+        if "data" not in got:
+            raise ValueError("bio rules: genus.py has no data table any more")
+        genus_data = got["data"] or {}
         log("bio rules: colour variants")
     except Exception as e:  # noqa: BLE001 -- without them species are simply not ruled out by colour
-        genus_data, arrived = {}, False
+        genus_data = {}
         versions["explodata"] = ""   # still retried at the next start
         # Keep the colour tables already downloaded rather than turning the colour check off until then.
         kept = _read_colours(colours_path(path))
@@ -389,9 +395,15 @@ def update_rules(path=None, log=print, versions=None):
             + (f"; keeping the {len(kept)} colour tables already there" if kept else ""))
 
     def colours(genus_id, species_id):
+        """{"star": {class: colour}} or {"element": {material: colour}} for a species, or None (no check)."""
         if kept is not None:
             return kept.get((genus_id, species_id))
-        return _species_colours(genus_data, genus_id, species_id)
+        c = (genus_data.get(genus_id) or {}).get("colors")
+        if not c:
+            return None
+        if "species" in c:
+            return c["species"].get(species_id)
+        return {"star": c["star"]} if "star" in c else None
 
     species = []
     for genus_id, members in catalog.items():
@@ -399,11 +411,16 @@ def update_rules(path=None, log=print, versions=None):
             species.append({"id": species_id, "genus_id": genus_id, "genus": _genus_name(genus_id, d["name"]),
                             "name": d["name"], "value": d.get("value"), "rulesets": d.get("rulesets") or [],
                             "colors": colours(genus_id, species_id)})
-    # the colours apart (never shipped: see COLOURS_NAME); written only when ExploData's arrived, else the file there
-    # stays (a failed first fetch used to write one with no colours at all: S7)
-    if arrived:
-        _write_colours(path, {(sp["genus_id"], sp["id"]): sp["colors"] for sp in species if sp.get("colors")},
-                       versions.get("explodata", ""))
+    # the colours apart (never shipped: see COLOURS_NAME); written only when ExploData's arrived, else the file stays
+    if kept is None:
+        cfile = colours_path(path)
+        cdoc = {"generated": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+                "source": {"name": "EDMC-ExploData", "url": "https://github.com/Silarn/EDMC-ExploData",
+                           "commit": versions.get("explodata", ""), "licence": "GPL-2.0"},
+                "colors": {f"{sp['genus_id']}|{sp['id']}": sp["colors"] for sp in species if sp.get("colors")}}
+        with open(cfile + ".tmp", "w", encoding="utf-8") as fh:
+            json.dump(cdoc, fh, separators=(",", ":"))
+        os.replace(cfile + ".tmp", cfile)
     species = [dict(sp, colors=None) for sp in species]
     data = {
         "generated": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
@@ -434,66 +451,6 @@ def update_rules(path=None, log=print, versions=None):
     os.replace(tmp, path)
     log(f"bio rules: {len(species)} species written to {path}")
     return load_rules(path, force=True)
-
-
-def _explodata_table():
-    """ExploData's colour table (genus.py's `data`), fetched. Its table written as code (data = build_colours()) fails
-    like a failed fetch, so the colours already there are kept and its version is not recorded (the next start tries
-    again: Codex, 2026-10-09); so does no table called data at all (renamed or moved upstream: the Fable review of
-    2026-10-10, #9)."""
-    failed = []
-    got = _literals(_get(EXPLODATA), failed)
-    if "data" in failed:
-        raise ValueError("bio rules: genus.py's data no longer a plain literal")
-    if "data" not in got:
-        raise ValueError("bio rules: genus.py has no data table any more")
-    return got["data"] or {}
-
-
-def _species_colours(genus_data, genus_id, species_id):
-    """{"star": {class: colour}} or {"element": {material: colour}} for a species from ExploData's table, or None (no
-    check)."""
-    c = (genus_data.get(genus_id) or {}).get("colors")
-    if not c:
-        return None
-    if "species" in c:
-        return c["species"].get(species_id)
-    return {"star": c["star"]} if "star" in c else None
-
-
-def _write_colours(path, colours, commit):
-    """bio_colours.json beside the rules file `path`: {(genus id, species id): colours}, atomically."""
-    cfile = colours_path(path)
-    cdoc = {"generated": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-            "source": {"name": "EDMC-ExploData", "url": "https://github.com/Silarn/EDMC-ExploData",
-                       "commit": commit, "licence": "GPL-2.0"},
-            "colors": {f"{g}|{s}": c for (g, s), c in colours.items()}}
-    with open(cfile + ".tmp", "w", encoding="utf-8") as fh:
-        json.dump(cdoc, fh, separators=(",", ":"))
-    os.replace(cfile + ".tmp", cfile)
-
-
-def update_colours(path=None, log=print):
-    """Only ExploData's colour tables (S7: the Retry when the first start's download failed): one request, not the
-    whole rules update. The species are the rules file's; the tables go beside it and the rules are loaded again with
-    them. -> how many species have a colour table. Raises when they did not arrive or gave no colours at all (a file
-    there is left as it is). The rules file's ExploData version is not touched: the next start's check still sees
-    whether ExploData changed."""
-    path = path or _rules_path or RULES_FILE
-    with open(path, encoding="utf-8") as fh:
-        species = json.load(fh).get("species") or []
-    genus_data = _explodata_table()
-    colours = {}
-    for sp in species:
-        c = _species_colours(genus_data, sp.get("genus_id"), sp.get("id"))
-        if c:
-            colours[(sp["genus_id"], sp["id"])] = c
-    if not colours:
-        raise ValueError("ExploData's table has no colours")
-    _write_colours(path, colours, "")
-    log(f"bio rules: colour variants for {len(colours)} species written beside {path}")
-    load_rules(path, force=True)
-    return len(colours)
 
 
 # --------------------------------------------------------------------------
@@ -582,13 +539,12 @@ def available():
 
 
 def rules_info():
-    """{"generated", "species", "sources", "path", "colours"} for the page and the log, or None. `colours`: whether
-    ExploData's colour tables are loaded (False: the page's "colours unavailable" note and the banner's Retry, S7)."""
+    """{"generated", "species", "sources"} for the page and the log, or None."""
     r = load_rules()
     if not r:
         return None
     return {"generated": r.get("generated"), "species": len(r["species"]), "sources": r.get("sources"),
-            "path": _rules_path, "colours": bool(r.get("colours"))}
+            "path": _rules_path}
 
 
 # --------------------------------------------------------------------------
@@ -1108,73 +1064,6 @@ def by_genus(candidates, genera=None):
     return sorted(groups.values(), key=lambda gr: -(gr["value"] or 0))
 
 
-# --------------------------------------------------------------------------
-# Your own runs on bodies like this one (S24)
-# --------------------------------------------------------------------------
-
-# Which species of a genus your completed runs found on bodies of the same class, atmosphere and temperature band, in
-# the same region once it holds HISTORY_REGION_MIN runs of that genus there (else in every region). Shown in the guess's
-# hover only: the pick stays the likeliest by value. HISTORY_PICK (off) would make it the pick: `--backtest` prints how
-# often each pick was right, replaying your runs in time order (each run ranked only by the runs before it).
-HISTORY_BAND_K = 25
-HISTORY_REGION_MIN = 5
-HISTORY_PICK = False
-ATMOSPHERE_SHORT = {"carbondioxide": "CO2", "carbondioxiderich": "CO2-rich", "nitrogen": "N2", "ammonia": "NH3",
-                    "methane": "CH4", "methanerich": "CH4-rich", "sulphurdioxide": "SO2", "water": "H2O",
-                    "waterrich": "H2O-rich", "argon": "Ar", "argonrich": "Ar-rich", "neon": "Ne", "neonrich": "Ne-rich",
-                    "helium": "He", "oxygen": "O2"}
-
-
-def history_shape(body_class, atmosphere, temperature):
-    """(class, atmosphere, temperature band) a body's runs are grouped by, or None (not a landable class, or no
-    temperature known). The journal's and Spansh's spellings give the same shape."""
-    cls = landable_class(body_class)
-    if not cls or not isinstance(temperature, (int, float)) or isinstance(temperature, bool) or not math.isfinite(temperature):
-        return None
-    return cls, norm_atmosphere(atmosphere), int(temperature // HISTORY_BAND_K)
-
-
-def history_label(shape, region=None):
-    """"Icy body, thin N2, 75–100 K, Inner Orion Spur" (the region left out when the counts are every region's)."""
-    cls, atmo, band = shape
-    words = "no atmosphere" if atmo == "none" else f"thin {ATMOSPHERE_SHORT.get(atmo, atmo)}"
-    return ", ".join([cls, words, f"{band * HISTORY_BAND_K}–{(band + 1) * HISTORY_BAND_K} K"] + ([region] if region else []))
-
-
-class SpeciesHistory:
-    """Your completed runs counted by (genus, class, atmosphere, band, region) and by the same without the region."""
-
-    def __init__(self):
-        self.counts = {}
-
-    def add(self, genus, species, shape, region=None):
-        if not genus or not species or not shape:
-            return
-        for reg in ((region, None) if region else (None,)):
-            self.counts.setdefault((genus, *shape, reg), collections.Counter())[species] += 1
-
-    def rank(self, genus, shape, region=None):
-        """{label, total, species: [[short name, runs], ...] most runs first, region (None: every region's)} for a
-        genus on a body of `shape` in `region`, or None when none of your runs is like it."""
-        if not genus or not shape:
-            return None
-        c = self.counts.get((genus, *shape, region)) if region else None
-        if not c or sum(c.values()) < HISTORY_REGION_MIN:
-            c, region = self.counts.get((genus, *shape, None)), None
-        if not c:
-            return None
-        return {"label": history_label(shape, region), "total": sum(c.values()), "region": region,
-                "species": [[short_species(s, genus), n] for s, n in sorted(c.items(), key=lambda kv: (-kv[1], kv[0]))]}
-
-    def pick(self, genus, shape, region, names):
-        """The candidate (full name) your runs found most often on bodies like this, or None (none of them found)."""
-        r = self.rank(genus, shape, region)
-        if not r:
-            return None
-        by_short = {short_species(n, genus): n for n in names}
-        return next((by_short[s] for s, _ in r["species"] if s in by_short), None)
-
-
 def body_from_scan(ev, star=None, star_types=None):
     """Journal Scan event -> predict() body. `star_types`: {BodyID: StarType} to resolve Parents."""
     g = ev.get("SurfaceGravity")
@@ -1244,7 +1133,8 @@ def backtest(dirs, verbose=False, since=None):
                         ev = _json_line(line)
                         if ev is None:
                             continue
-                        analysed.append(ev)   # every one: the runs before `since` still rank the species (S24)
+                        if not since or ev.get("timestamp", "") >= since:
+                            analysed.append(ev)
                     elif '"event":"SAASignalsFound"' in line and "Genuses" in line:
                         ev = _json_line(line)
                         if ev is None:
@@ -1274,10 +1164,6 @@ def backtest(dirs, verbose=False, since=None):
     v_total = v_set = v_hit = v_size = 0   # colour variants: logged, predicted (a candidate set), right
     misses = collections.Counter()
     ranks = []
-    # S24: your runs replayed in time order (the folders were read one after another), each ranked by the runs before
-    # it: how often the likeliest by value and your runs' favourite were right where the genus had several candidates
-    history, picks = SpeciesHistory(), {"value": 0, "history": 0, "asked": 0, "total": 0}
-    analysed.sort(key=lambda o: o.get("timestamp") or "")
     for o in analysed:
         key = (o["SystemAddress"], o["Body"], o["Species_Localised"])
         if key in seen:
@@ -1289,19 +1175,6 @@ def backtest(dirs, verbose=False, since=None):
         system, star_types = context(o["SystemAddress"])
         cands = predict(body_from_scan(sc, star_types=star_types), system)
         names = [c["name"] for c in cands]
-        shape = history_shape(sc.get("PlanetClass"), sc.get("AtmosphereType"), sc.get("SurfaceTemperature"))
-        region = region_name(system.get("x"), system.get("y"), system.get("z"))
-        same = [c["name"] for c in cands if c["genus"] == o.get("Genus_Localised")]
-        scored = not since or o.get("timestamp", "") >= since
-        if scored and len(same) > 1 and o.get("Species_Localised") in same:
-            by_runs = history.pick(o.get("Genus_Localised"), shape, region, same)
-            picks["total"] += 1
-            picks["asked"] += by_runs is not None
-            picks["value"] += same[0] == o["Species_Localised"]
-            picks["history"] += (by_runs or same[0]) == o["Species_Localised"]
-        history.add(o.get("Genus_Localised"), o.get("Species_Localised"), shape, region)
-        if not scored:
-            continue
         sp_total += 1
         if o["Species_Localised"] in names:
             sp_hit += 1
@@ -1339,10 +1212,6 @@ def backtest(dirs, verbose=False, since=None):
         top = sum(1 for r in ranks if r == 1)
         print(f"         when the genus was right, the actual species was the top-valued candidate of that genus "
               f"{top}/{len(ranks)} times; candidates per genus: {sum(ranks) / len(ranks):.1f} avg rank")
-    if picks["total"]:
-        print(f"picks:   where the genus had several candidates, the likeliest by value was right {picks['value']}/{picks['total']} "
-              f"times, your runs' favourite on bodies like it (by value when you had none, {picks['total'] - picks['asked']} "
-              f"times) {picks['history']}/{picks['total']}; HISTORY_PICK is {'on' if HISTORY_PICK else 'off'}")
     if v_total:
         print(f"variants: a colour was predicted for {v_set}/{v_total} of those samples; the logged variant was in the "
               f"set {v_hit}/{v_set} times ({100 * v_hit / max(v_set, 1):.0f}%), {v_size / max(v_set, 1):.2f} per set; "

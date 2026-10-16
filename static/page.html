@@ -17,15 +17,15 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
 <header>
   <div class="topbar">
     <h1>ED Outrider</h1>
-    <span class="views"><button data-view="overview">Overview</button><button data-view="near">Nearby</button><button data-view="here">Here</button><button data-view="bio" title="exobiology and geology: your sample runs, the Exo-Biology checklist and the Geology one">Bio/Geo</button><button data-view="bm" id="bmViewBtn">Bookmarks</button><button data-view="search">Search</button><button data-view="map">Map</button><button data-view="hwy" title="plot a route with Spansh (the Neutron Highway, or a Road to Riches) and follow it as you fly">Plot Route</button><button data-view="hist">History</button><button data-view="log">Log</button><button data-view="mat">Materials</button><button data-view="ship" title="the ship you fly: its figures and every module with its engineering, from the journal's Loadout">Ship</button><button data-view="cmdr" title="what you own, what engineering takes, the missions you hold, your combat and mining sessions">Commander</button><button data-view="firsts">My firsts</button><button data-view="galnet" title="GalNet News: the game's latest news article, and earlier ones">GalNet</button><button data-view="now" title="big text for a second monitor (or open the page with ?mode=now)">Now</button><button id="nowPop" title="open Now in a window of its own, to drag to another monitor (it stays on Now)">↗</button></span><button type="button" id="viewWinBack" class="viewback" hidden title="back to this window's own view"></button>
-    <span class="icons"><button type="button" id="audioPill" class="audiopill" hidden title="the browser holds back Outrider's voice and sounds until you click on the page: click here">🔇 Click Here To Allow Audio</button><button type="button" id="updPill" class="updpill" hidden title="a newer Outrider is out: click for what's new and how to update">⬆ Update</button><span id="linkPill" class="linkpill" role="status" title="the page's link to Outrider"></span><span id="ovPill" class="linkpill ovpill pcOnly" role="status" hidden></span><button id="sound" class="icon" title="sounds">🔊</button><button id="speechBtn" class="icon" title="spoken alerts">🗣</button><span class="hushwrap"><button id="hushBtn" class="icon hushbtn" title="hush the voice for a while (danger lines still speak)" aria-haspopup="true">▾</button><span id="hushLbl" class="hushlbl" hidden></span>
+    <span class="views"><button data-view="overview">Overview</button><button data-view="near">Nearby</button><button data-view="here">Here</button><button data-view="bio" title="exobiology and geology: your sample runs, the Exo-Biology checklist and the Geology one">Bio/Geo</button><button data-view="bm" id="bmViewBtn">Bookmarks</button><button data-view="search">Search</button><button data-view="map">Map</button><button data-view="hwy" title="plot a route with Spansh (the Neutron Highway, or a Road to Riches) and follow it as you fly">Plot Route</button><button data-view="hist">History</button><button data-view="log">Log</button><button data-view="mat">Materials</button><button data-view="ship" title="the ship you fly: its figures and every module with its engineering, from the journal's Loadout">Ship</button><button data-view="cmdr" title="what you own, what engineering takes, the missions you hold, your combat and mining sessions">Commander</button><button data-view="firsts">My firsts</button><button data-view="galnet" title="GalNet News: the game's latest news article, and earlier ones">GalNet</button><button data-view="now" title="big text for a second monitor (or open the page with ?mode=now)">Now</button><button id="nowPop" title="open Now in a window of its own, to drag to another monitor (it stays on Now)">↗</button></span>
+    <span class="icons"><button type="button" id="audioPill" class="audiopill" hidden title="the browser holds back Outrider's voice and sounds until you click on the page: click here">🔇 Click Here To Allow Audio</button><button type="button" id="updPill" class="updpill" hidden title="a newer Outrider is out: click for what's new and how to update">⬆ Update</button><span id="linkPill" class="linkpill" role="status" title="the page's link to Outrider"></span><button id="sound" class="icon" title="sounds">🔊</button><button id="speechBtn" class="icon" title="spoken alerts">🗣</button><span class="hushwrap"><button id="hushBtn" class="icon hushbtn" title="hush the voice for a while (danger lines still speak)" aria-haspopup="true">▾</button><span id="hushLbl" class="hushlbl" hidden></span>
       <span id="hushMenu" class="hushmenu" hidden><b>Hush the voice</b><button type="button" data-hush="10m">10 minutes</button><button type="button" data-hush="30m">30 minutes</button><button type="button" data-hush="jump">until the next jump</button><button type="button" data-hush="off">cancel the hush</button><span class="unk">hull, heat, interdiction and fuel still speak, and what you ask for</span></span></span><button id="alertsBtn" class="icon" title="settings: alerts, voice, thresholds, the server">⚙</button><span id="lastSaidLine" class="lastsaid" hidden><button type="button" id="lastSaidBtn" class="icon" title="say it again">▶</button><span id="lastSaidText"></span></span></span>
   </div>
   <div class="tilewrap">
   <div class="tiles" id="tiles">
     <div class="tile" id="tWhere"><div class="lbl">Where I Am Currently:</div><div class="val" id="here">loading…</div><div class="ln" id="refLn" title="distance from Sol and from Colonia (Eol Prou RS-T d3-94)"></div>
       <div class="ln" id="sub"><b id="subKnown">…</b> known within <select id="radiusSel" title="how far around you Nearby lists systems (a bigger sphere takes longer to fill in the first time)"></select> ly · <b id="subUnvisited">…</b> not visited<span id="subCut"></span></div>
-      <div class="ln" id="whereLn"></div><div class="ln" id="streakLn"></div><div class="ln" id="nextStopLn"></div></div>
+      <div class="ln" id="subJump"></div><div class="ln" id="whereLn"></div><div class="ln" id="streakLn"></div><div class="ln" id="horizonLn"></div><div class="ln" id="nextStopLn"></div></div>
     <div class="tile" id="tCmdr"><div class="lbl" id="cmdrLbl">Commander</div><div id="cmdrLine"></div></div>
     <div class="tile" id="tFuel" data-fuel><div class="lbl">Fuel</div><div id="fuelLine"></div></div>
     <div class="tile" id="tCarrier"><div class="lbl">Carrier</div><div id="carrierLine"></div></div>
@@ -43,8 +43,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
   <div id="obMap" hidden><canvas id="obMapCanvas" aria-label="surface map"></canvas><div id="obMapLine" class="smap-line"></div></div>
   <div id="arrival"></div>
   <div id="sell"></div>
-  <div id="noticeBar" class="noticebar" role="status" aria-live="polite" hidden></div>
-  <div id="updateLine" class="updline" role="status" hidden>Outrider has been updated: restart it to finish (this page then reloads by itself). <button type="button" class="try" id="updRestart" data-restart hidden>Restart now</button></div>
+  <div id="updateLine" class="updline" role="status" hidden>Outrider has been updated: restart it to finish (this page then reloads by itself).</div>
 </header>
 <section id="nowView" hidden>
   <div id="nowBar"><button type="button" id="nowSpeech" title="spoken alerts on or off (this browser, as 🗣 in the header)">🗣</button><button type="button" id="nowHush" title="hush the voice for 30 minutes (danger lines still speak), wherever it is speaking">hush 30 min</button><button type="button" id="nowStatus" title="the co-pilot's status report, said by the window that is speaking">status report</button><button type="button" id="nowBack" title="back to the page (or double-tap)">✕ back</button></div>
@@ -129,7 +128,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
 <section id="firstsView" hidden>
   <div class="srow"><span id="fStatus"></span>
     <label><input type="checkbox" id="fShowLost"> show lost</label>
-    <label title="with show lost: only the systems with lost data to rescan within this many ly of you, nearest first (empty: no limit)">within <input type="number" id="fWithin" min="1" step="any" placeholder="any" inputmode="decimal"> ly</label><span class="swbar"><button type="button" class="mini swbtn" hidden></button><button type="button" class="mini swclear" hidden title="untick every system ticked for a sweep">✕ untick all</button><span class="swmsg" role="status"></span></span><span class="grow"></span>
+    <label title="with show lost: only the systems with lost data to rescan within this many ly of you, nearest first (empty: no limit)">within <input type="number" id="fWithin" min="1" step="any" placeholder="any" inputmode="decimal"> ly</label><span class="grow"></span>
     <span class="exports">Export: <a href="api/export?what=firsts&format=csv" download>CSV</a> · <a href="api/export?what=firsts&format=json" download>JSON</a></span></div>
   <div class="pane" id="firstsPane">
   <table id="firstsTable">
@@ -144,7 +143,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     to scan and to map again (with the bonuses you earned, no efficiency bonus; a map counts what it adds on top of the scan), so the two add up.
     Seen by others: someone else has scanned this since you (checked on Spansh once a day per system, most valuable first; <code>[spansh] watch_firsts</code> turns it off).</div>
   <h3 class="subhead">Left behind <span class="unk">· visited systems within
-    <select id="lbRadius"><option>50</option><option selected>100</option><option>200</option></select> ly with work worth going back for</span> <span class="swbar"><button type="button" class="mini swbtn" hidden></button><button type="button" class="mini swclear" hidden title="untick every system ticked for a sweep">✕ untick all</button><span class="swmsg" role="status"></span></span></h3>
+    <select id="lbRadius"><option>50</option><option selected>100</option><option>200</option></select> ly with work worth going back for</span></h3>
   <div class="hint">Bodies the honk counted that you never found, genera the DSS found that you never sampled, bio signals on bodies you never
     probed (priced before the DSS, so an upper bound), and planets worth mapping; by your bio threshold and highlight level.</div>
   <table id="leftTable">
@@ -170,7 +169,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
   <div class="pane" id="histPane">
   <table id="histTable">
     <thead><tr><th>Session</th><th class="num">Jumps</th><th class="num">ly</th><th class="num hide-sm c2hide">Max from Sol</th>
-      <th class="num">🏁 systems</th><th class="num hide-sm c2hide">bodies</th><th class="num">mapped</th><th class="num hide-sm">👣</th><th class="num">🧬</th><th class="num c2hide" title="what Universal Cartographics and Vista Genomics paid">sold</th><th class="num hide-sm c2hide">📖</th></tr></thead>
+      <th class="num">🏁 systems</th><th class="num hide-sm c2hide">bodies</th><th class="num">mapped</th><th class="num hide-sm">👣</th><th class="num">🧬</th><th class="num hide-sm c2hide">📖</th></tr></thead>
     <tbody id="histAll"></tbody>
     <tbody id="histRows"></tbody>
   </table>
@@ -200,7 +199,6 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       <label><input type="checkbox" value="other" checked> • other</label>
     </span>
     <label><input type="checkbox" id="lNoise"> show noise</label>
-    <label id="lUnsentBox" hidden title="only the lines an upload has not sent: waiting, on hold or refused (the last 7 days, whatever the category boxes say)"><input type="checkbox" id="lUnsent"> not sent</label>
     <label>Last <select id="lDays"><option value="1">day</option><option value="7" selected>7 days</option><option value="30">30 days</option>
       <option value="90">90 days</option><option value="365">year</option><option value="3650">everything</option></select></label>
     <input type="search" id="lFilter" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="search events" class="filter">
@@ -214,8 +212,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
   <div class="btns"><button type="button" id="lMore" hidden>More</button></div>
   <div class="hint">Every journal event, newest first, read straight from your journal files; new events appear as they happen.
     Click a row for the raw event. <b>Noise</b> is chatter, music, inventory snapshots and signal-source pings.
-    Click a system to copy it, ⌖ to open it in Here, 🔍 to open that body.
-    With uploads on, a line shows what each made of it: ✓ sent, ⏳ waiting, ⏸ on hold, ✗ not taken (hover for why); upload marks cover the last 7 days.</div>
+    Click a system to copy it, ⌖ to open it in Here, 🔍 to open that body.</div>
   </div>
 </section>
 <section id="matView" hidden>
@@ -276,8 +273,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
   </div>
 </section>
 <section id="bmView" hidden>
-<div id="bmTools" hidden class="srow"><span class="swbar"><button type="button" class="mini swbtn" hidden></button><button type="button" class="mini swclear" hidden title="untick every system ticked for a sweep">✕ untick all</button><span class="swmsg" role="status"></span></span><span class="grow"></span><span class="exports">Export: <a href="api/export?what=bookmarks&format=csv" download>CSV</a> · <a href="api/export?what=bookmarks&format=json" download>JSON</a></span>
-  <button type="button" class="mini" id="bmImport" title="add the bookmarks in a file (Outrider's CSV or JSON export) to yours; a system already bookmarked here keeps its own note">Import…</button><input type="file" id="bmFile" accept=".csv,.json,text/csv,application/json" hidden><span id="bmImportMsg" role="status"></span></div>
+<div id="bmTools" hidden class="srow"><span class="grow"></span><span class="exports">Export: <a href="api/export?what=bookmarks&format=csv" download>CSV</a> · <a href="api/export?what=bookmarks&format=json" download>JSON</a></span></div>
 <div class="pane" id="bmPane">
 <table id="bmTable" hidden>
   <thead><tr>
@@ -305,7 +301,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
   </div>
   <div id="mapWrap"><canvas id="mapCanvas"></canvas></div>
   <div id="mLegend"></div>
-  <div class="hint">Left-drag to rotate · right-drag to move · scroll to zoom · hover for details · click a system to <span id="mClickWhat">copy its name</span>.
+  <div class="hint">Left-drag to rotate · right-drag to move · scroll to zoom · hover for details · click a system to copy its name.
     The grid is the galactic plane through your position; stalks drop each system onto it.</div>
 </section>
 <section id="hwyView" hidden>
@@ -345,7 +341,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       <summary>Plot a route</summary>
       <form id="hwyForm" autocomplete="off">
         <div class="srow">
-          <span class="seg" role="radiogroup" aria-label="plotter"><label title="every jump with its fuel, from your ship's own figures (Spansh's galaxy plotter)"><input type="radio" name="hwyPlotter" value="exact" checked>Exact</label><label title="neutron stars as boosts, waypoints only (Spansh's neutron plotter): any ship, from its range"><input type="radio" name="hwyPlotter" value="neutron">Neutron</label><label title="a chain of systems whose planets are worth scanning (and mapping), from where you are (Spansh's Road to Riches): stop, scan, move on"><input type="radio" name="hwyPlotter" value="riches">Road to Riches</label><label title="a chain of systems with valuable life already reported on their bodies (Spansh's Expressway to Exomastery): land, sample, move on. Known life: first footfall is unlikely"><input type="radio" name="hwyPlotter" value="exo">Exomastery</label><label title="a chain of systems with Earth-like worlds nobody has mapped yet, from where you are (Spansh's Road to Riches, Earth-like worlds only): scan and map each one"><input type="radio" name="hwyPlotter" value="elw">Earth-like</label><label title="a chain of systems with ammonia worlds nobody has mapped yet, from where you are (Spansh's Road to Riches, ammonia worlds only): scan and map each one"><input type="radio" name="hwyPlotter" value="aw">Ammonia</label><label title="station to station: what to buy at each and where to sell it (Spansh's trade planner), from the station you start at"><input type="radio" name="hwyPlotter" value="trade">Trade</label><label title="a chain of systems nobody has reported a body of, picked by how likely their kind is to hold life (the mass code in their name, counted from your own scans), each hop as close to your jump range as there is one"><input type="radio" name="hwyPlotter" value="unscanned">Unscanned (bio)</label></span>
+          <span class="seg" role="radiogroup" aria-label="plotter"><label title="every jump with its fuel, from your ship's own figures (Spansh's galaxy plotter)"><input type="radio" name="hwyPlotter" value="exact" checked>Exact</label><label title="neutron stars as boosts, waypoints only (Spansh's neutron plotter): any ship, from its range"><input type="radio" name="hwyPlotter" value="neutron">Neutron</label><label title="a chain of systems whose planets are worth scanning (and mapping), from where you are (Spansh's Road to Riches): stop, scan, move on"><input type="radio" name="hwyPlotter" value="riches">Road to Riches</label><label title="a chain of systems with valuable life already reported on their bodies (Spansh's Expressway to Exomastery): land, sample, move on. Known life: first footfall is unlikely"><input type="radio" name="hwyPlotter" value="exo">Exomastery</label><label title="station to station: what to buy at each and where to sell it (Spansh's trade planner), from the station you start at"><input type="radio" name="hwyPlotter" value="trade">Trade</label><label title="a chain of systems nobody has reported a body of, picked by how likely their kind is to hold life (the mass code in their name, counted from your own scans), each hop as close to your jump range as there is one"><input type="radio" name="hwyPlotter" value="unscanned">Unscanned (bio)</label></span>
           <label>From <input type="text" id="hwyFrom" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100" placeholder="where you are" list="hwyFromNames"></label>
           <label class="hwyto">To <input type="text" id="hwyTo" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100" placeholder="destination system" list="hwyNames"><button type="button" id="hwyNearest" class="mini nearbtn" title="the nearest station or fleet carrier you can dock at and use: pick one to plot there">📍 Nearest…</button></label>
           <datalist id="hwyNames"></datalist><datalist id="hwyFromNames"></datalist>
@@ -397,15 +393,15 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
           <label title="plot with regular jumps only: no neutron star boosts on the way"><input type="checkbox" id="hwyNoNeu"> no neutron boosts</label>
         </div>
         <div class="srow hwy-ropt" hidden>
-          <label data-field="radius" title="how far from the route a system may be to be included (ly)">Radius <input type="number" id="richRadius" min="1" max="1000" step="any" inputmode="decimal"> ly</label>
-          <label data-field="max_results" title="how many systems the route has">Systems <input type="number" id="richMax" min="1" max="500" step="1" inputmode="numeric"></label>
-          <label data-field="max_distance" title="ignore bodies farther than this from the arrival star (ls)">Max distance <input type="number" id="richDist" min="1" max="1000000" step="any" inputmode="decimal"> ls</label>
-          <label data-field="min_value" title="the least a body must be worth to count (credits)">Min value <input type="number" id="richMin" min="0" max="1000000000" step="1" inputmode="numeric"> cr</label>
+          <label title="how far from the route a system may be to be included (ly)">Radius <input type="number" id="richRadius" min="1" max="1000" step="any" inputmode="decimal"> ly</label>
+          <label title="how many systems the route has">Systems <input type="number" id="richMax" min="1" max="500" step="1" inputmode="numeric"></label>
+          <label title="ignore bodies farther than this from the arrival star (ls)">Max distance <input type="number" id="richDist" min="1" max="1000000" step="any" inputmode="decimal"> ls</label>
+          <label title="the least a body must be worth to count (credits)">Min value <input type="number" id="richMin" min="0" max="1000000000" step="1" inputmode="numeric"> cr</label>
         </div>
         <div class="srow hwy-ropt" hidden>
-          <label data-field="use_mapping_value" title="count the detailed-surface-scan bonus as well as the scan"><input type="checkbox" id="richMapping"> include mapping value</label>
-          <label data-field="avoid_thargoids"><input type="checkbox" id="richThargoid"> avoid Thargoid-hit systems</label>
-          <label data-field="loop" title="end the route where it began"><input type="checkbox" id="richLoop"> loop back to the start</label>
+          <label class="rich-only" title="count the detailed-surface-scan bonus as well as the scan"><input type="checkbox" id="richMapping"> include mapping value</label>
+          <label class="rich-only"><input type="checkbox" id="richThargoid"> avoid Thargoid-hit systems</label>
+          <label title="end the route where it began"><input type="checkbox" id="richLoop"> loop back to the start</label>
         </div>
         <div class="srow">
           <button type="submit" id="hwyGo" class="go">Plot</button>
@@ -420,15 +416,13 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       <div class="srow">
         <label title="after an FSD supercharge on the route, press keys in the galaxy map to make the next route system the target (Linux, Windows experimental; the same keyboard as auto honk)"><input type="checkbox" id="hwyAutoOn"> Auto-target after a supercharge</label>
         <label title="seconds after the supercharge before the keys are pressed">after <input type="number" id="hwyAutoDelay" min="0" max="60" step="any" inputmode="decimal"> s</label>
-        <button type="button" class="try" id="hwyAutoTest" title="one run against the nearest known system a plain jump away (no route needed): Outrider brings the game to the front where it can, else 5 seconds from now: click into the game meanwhile">▶ test now</button>
-        <button type="button" class="try" id="hwyAutoNext" data-aim="next" title="target the next route system now (off the route: the closest one): Outrider brings the game to the front where it can, else 5 seconds from now: click into the game meanwhile. Works with auto-target off">🎯 target next</button>
+        <button type="button" class="try" id="hwyAutoTest" title="one run against the nearest known system a plain jump away (no route needed), 5 seconds from now: click into the game meanwhile">▶ test now</button>
+        <button type="button" class="try" id="hwyAutoNext" data-aim="next" title="target the next route system now (off the route: the closest one), 5 seconds from now: click into the game meanwhile. Works with auto-target off">🎯 target next</button>
         <span id="hwyAutoTestMsg" role="status"></span>
       </div>
-      <div id="hwyAutoFront" class="unk"></div>
       <div id="hwyAutoLast"></div>
       <div id="hwyAutoMissing" class="warnc" hidden></div>
-      <div class="hint">The keys go to the window that has focus: Outrider brings the game to the front first where it can
-        (wmctrl on Linux) and then presses no key unless Elite is the active window (the line above says whether it can). Stay in the game until it is done. It opens the galaxy map,
+      <div class="hint">The keys go to whichever window has focus: stay in the game until it is done. It opens the galaxy map,
         searches for the next system, plots the route, closes the map and checks the target in Status.json; it stops if
         anything else opens, a step takes too long or you jump. The plot-route keys must be confirmed in game
         ([highway] autotarget_plot). Results are spoken under "Auto-target" in Settings.</div>
@@ -449,13 +443,12 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     <label>Find a system by name <input type="search" id="findName" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100" placeholder="e.g. Synuefe XR-H d11-102"
       autocomplete="off"></label>
     <button type="submit">Find</button>
-    <span class="hint" id="findStatus">opens it in Here: whether you have been there, its bodies and your firsts; ☆ there bookmarks it or makes it the next stop. Unknown here? EDSM is asked, then Spansh.</span>
+    <span class="hint" id="findStatus">opens it in Here: whether you have been there, its bodies and your firsts; ☆ there bookmarks it or makes it the next stop. Unknown here? EDSM is asked.</span>
   </form>
   <form id="searchForm">
     <div class="srow">
-      <label>Within <input type="number" id="sRadius" value="100" min="1" max="5000" step="any"> ly of</label>
-      <select id="sAround" aria-label="Search around" title="the system the search looks around: the distances are from there (a result's hover says how far it is from you)"></select>
-      <input type="text" id="sAroundName" placeholder="system name" size="18" aria-label="The system to search around" hidden>
+      <label>Within <input type="number" id="sRadius" value="100" min="1" max="5000" step="any"> ly of
+        <b id="sFrom">—</b></label>
       <span class="seg" role="radiogroup" aria-label="Search source">
         <label><input type="radio" name="sSource" value="local" checked> Local database</label>
         <label><input type="radio" name="sSource" value="spansh"> Spansh (online)</label>
@@ -615,8 +608,6 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
 <dialog id="alertDialog" class="settingsdlg" aria-labelledby="settingsTitle">
   <form method="dialog">
     <div class="sethead"><h3 id="settingsTitle">Settings</h3>
-      <span class="setfind"><input type="search" id="setFind" placeholder="Find a setting…" aria-label="find a setting" autocomplete="off"
-        title="a word of a setting's name, its help or its config key: only what matches shows"> <span id="setFindMsg" class="hint" role="status"></span></span>
       <span class="setlinks"><a href="https://github.com/weslocke/ED-Outrider" target="_blank" rel="noopener" title="ED Outrider on GitHub: the source, releases, the README and issues">GitHub ↗</a> <span id="setVersion" class="unk"></span></span>
       <span class="setfold"><button type="button" id="setOpenAll" title="open every section">open all</button><button type="button" id="setCloseAll" title="close every section">close all</button></span>
       <button type="button" data-close class="primary">Done</button>
@@ -625,69 +616,43 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     <details class="setsec" data-sec-key="alerts" data-chip="Alerts"><summary>Alerts <span class="sum-note">what happens for each alert</span></summary>
       <label class="master"><input type="checkbox" data-alert="enabled"> Desktop notifications (the browser will ask permission once)</label>
       <table id="alertTable" class="alerttable"><thead><tr><th>Alert</th><th title="desktop notification">notify</th>
-        <th title="its sound (when 🔊 is on)">sound</th><th title="spoken (when 🗣 is on)">speak</th>
-        <th class="acrew" hidden title="the crew member who says it (Settings → Voice → Crew)">crew</th></tr></thead><tbody id="alertOpts"></tbody></table>
+        <th title="its sound (when 🔊 is on)">sound</th><th title="spoken (when 🗣 is on)">speak</th></tr></thead><tbody id="alertOpts"></tbody></table>
       <div class="hint">Alerts only fire for something out of the ordinary. The tab title also carries the current state, so a background tab still tells you something.</div>
     </details>
     <details class="setsec" data-sec-key="voice" data-chip="Voice"><summary>Voice <span id="ttsEngine" class="unk"></span> <span class="sum-note">the voice, its personality, pace and volume, which screen speaks</span></summary>
-      <label data-find="defaults.voice defaults.voice_fallback" class="mod">Main voice<b id="ttsXo" hidden> = XO</b> <select id="ttsVoice"></select>
+      <label class="mod">Voice <select id="ttsVoice"></select>
         <span id="ttsSpkWrap" hidden>speaker <select id="ttsSpk" aria-label="speaker"></select></span>
-        <span id="ttsStatus" class="hint"></span>
-        <span id="ttsXoHint" class="hint" hidden>the XO's voice: answers, status reports, the co-pilot, and the stand-in for everyone</span></label>
+        <span id="ttsStatus" class="hint"></span></label>
       <div class="hint" id="ttsHint"></div>
       <div class="mod"><button type="button" class="try" id="labOpen">🎙 Voice lab…</button>
         <span class="hint">hear voices, their speakers and every alert's lines before you choose; download more voices</span></div>
-      <div data-find="defaults.speech_styles defaults.speech_profanity defaults.speech_profanity_pct" class="mod inlineopts">Personality: <span id="speechStyles" class="sstyles"></span>
+      <div class="mod inlineopts">Personality: <span id="speechStyles" class="sstyles"></span>
         <span class="profrow"><label><input type="checkbox" id="speechProfanity"> with profanity <span id="speechProfanityWho" class="unk"></span></label>
         <label title="how often a line comes from the swearing versions instead of the clean ones"><input type="number" id="speechProfanityPct" min="0" max="100" step="5" style="width:4.5em">% of the time</label></span></div>
-      <div id="vmBox" class="vmbox" data-find-block="voices kept loaded" hidden>
-        <h4 class="vmhead">Voices kept loaded</h4>
-        <div id="vmNote" class="vmnote" role="status"></div>
-        <div data-find="speech.voices_loaded" class="mod inlineopts vmkeep">Keep loaded <select id="vmKeep" aria-label="voices kept loaded"></select>
-          <span id="vmKeepOf"></span> <span id="vmCost" class="hint"></span></div>
-        <label data-find="speech.voices_preload" class="vmpre"><input type="checkbox" id="vmPreload"> Load them at start
-          <span class="hint">(off: each loads the first time it speaks, about a second)</span></label>
-        <span id="vmMsg" class="hint" role="status"></span>
-      </div>
-      <div id="crewBox" class="crewbox" data-find-block="crew">
-        <h4 class="crewhead">Crew</h4>
-        <div class="mod inlineopts crewsw"><label><input type="checkbox" id="crewOn"> <b>Split the alerts among a crew</b></label>
-          <label id="crewDangerWrap" hidden><input type="checkbox" id="crewDanger"> Danger lines always in Tactical's voice</label>
-          <button type="button" class="try" id="crewAudition" hidden title="each crew member says one of its own lines in its own voice and personality (here, in this browser)">▶ Audition: by crew</button>
-          <button type="button" class="try" id="crewLinesAudition" hidden title="one line naming another crew member for each alert that has them, in each personality, with the names given here (made-up ones for a member without); here, in this browser">▶ Audition: crew lines</button>
-          <span class="hint">each alert said by a crew member in its own personality and voice, so you know who is talking (and what about) before the sentence ends; who says which alert is in Settings → Alerts; off: one voice for everything</span></div>
-        <table id="crewTable" class="crewtable" hidden><thead><tr><th>Role</th><th>Name</th><th>Personality</th><th>Voice</th><th>Speaker</th><th class="cfor">Speaks for</th><th></th><th></th></tr></thead><tbody></tbody></table>
-        <div id="crewXoNote" class="crewnote" hidden>The XO is your main voice: every crew member left "as the XO" speaks in it, and the XO steps in for any crew member whose voice cannot speak (not installed, failed to load), so no line is ever lost. A name is said when another crew member mentions that member ("ask Mira"); without one, its role ("ask the Engineer").</div>
-        <span id="crewMsg" class="hint" role="status"></span>
-      </div>
-      <div class="mod" id="styleVoicesRow" data-find-block="personality voices" hidden>Personality voices <span id="styleVoicesCrew" class="hint" hidden>(used by crew members whose voice is "as the personality")</span>
-        <span class="hint">each personality in a voice of its own, or as another person of a several-person voice (the voice lab's Give to this personality does the same); Outrider keeps them for every browser and the tablet</span>
-        <table id="styleVoices" class="stylevoices"><thead><tr><th>Personality</th><th>Voice</th><th>Speaker</th><th></th><th></th></tr></thead><tbody></tbody></table>
-        <span id="styleVoicesMsg" class="hint" role="status"></span></div>
       <label class="mod"><input type="checkbox" id="speechShift"> One personality per system
         <span class="hint">the personality (and its own voice) changes at each arrival and at game start, not at every line; with one personality ticked it changes nothing</span></label>
-      <label data-find="defaults.speech_danger_business" class="mod"><input type="checkbox" id="speechDangerBusiness"> Danger alerts always down to business
+      <label class="mod"><input type="checkbox" id="speechDangerBusiness"> Danger alerts always down to business
         <span class="hint">hull, heat, interdiction, low fuel or an unscoopable star, your carrier leaving without you, the ship-loss debrief: only the business lines, never swearing</span></label>
       <div class="mod inlineopts">This screen speaks: <select id="speakMode">
           <option value="auto">auto: one window at a time</option><option value="always">always</option><option value="never">never</option></select>
         <span id="speakerStatus" class="hint"></span> <button type="button" class="try" id="speakerClaim" hidden>speak from this window</button>
         <div class="hint">With the page open in several windows (a second screen at ?mode=now), auto lets only one of them speak and play the alert sounds; every window still shows the alerts. Remembered per browser: always makes every window of it speak, never keeps this browser quiet. The ▶ try buttons always work.</div></div>
-      <label data-find="speech.server_player" class="mod pcOnly"><input type="checkbox" id="serverPlay"> Play speech and sounds on this PC <span id="serverPlayStatus" class="unk"></span>
+      <label class="mod pcOnly"><input type="checkbox" id="serverPlay"> Play speech and sounds on this PC <span id="serverPlayStatus" class="unk"></span>
         <span class="hint">the PC running Outrider plays the spoken lines (Piper) and the alert sounds through its own player, so the page needs no click to allow audio; a page must still be open, since it chooses what to say. Whatever the PC cannot play, this browser plays instead. Per browser; Linux only</span></label>
-      <label data-find="defaults.speech_speed" class="mod">Speed <input type="range" id="speechSpeed" min="0.5" max="2" step="0.05" style="width:12em;vertical-align:middle">
+      <label class="mod">Speed <input type="range" id="speechSpeed" min="0.5" max="2" step="0.05" style="width:12em;vertical-align:middle">
         <span id="speechSpeedOut"></span><span class="reset" data-reset="speechSpeed">reset</span>
         <span class="hint">1× is the voice's own pace; reset goes back to the config file's speech_speed</span></label>
-      <div data-find="speech.sound_dir" class="hint" id="soundFiles"></div>
+      <div class="hint" id="soundFiles"></div>
       <label class="mod">Volume <input type="range" id="speechVolume" min="0" max="100" step="5" style="width:12em;vertical-align:middle">
         <span id="speechVolumeOut"></span>
         <span class="hint">Outrider's own voice and alert sounds, on this device (or on the PC when it plays them); the game's sound is its own</span></label>
-      <label data-find="defaults.speech_names" class="mod">Call me <input type="text" id="speechNames" style="width:18em" placeholder="Boss, Hefay, Sir">
+      <label class="mod">Call me <input type="text" id="speechNames" style="width:18em" placeholder="Boss, Hefay, Sir">
         <span class="hint">comma separated; each line uses one at random, in place of your commander name (which a voice often cannot say); empty goes back to the default</span></label>
       <div class="hint" id="speechHint"></div>
       <div class="hint" id="speechTried"></div>
     </details>
     <details class="setsec" data-sec-key="said" data-chip="What is said"><summary>What is said <span class="sum-note">signals, routine systems, hazards, mapping</span></summary>
-      <div data-find="defaults.speak_bio_signals defaults.speak_geo_signals" class="mod inlineopts">Say signals as the FSS finds them:
+      <div class="mod inlineopts">Say signals as the FSS finds them:
         <label><input type="checkbox" id="sayBio"> biological</label>
         <label><input type="checkbox" id="sayGeo"> geological</label>
         <span class="hint">"2 Biological and 1 Geological Signals found on body A 3" (when 🗣 is on)</span></div>
@@ -695,11 +660,11 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         <span class="hint">arriving somewhere known with every body already found, a scoopable star, and nothing over your body or bio levels: a soft two-note sound instead of the arrival briefing (and of "nothing worth staying for" after the FSS); the card stays</span></label>
       <label class="mod"><input type="checkbox" id="sayHazard"> Say the hazard when the FSD charges for a neutron star, white dwarf or black hole
         <span class="hint">"… Neutron star ahead: throttle down on arrival, mind the jet cone" (part of the jump line)</span></label>
-      <label data-find="defaults.speak_mapped" class="mod"><input type="checkbox" id="sayMapped"> Say when a planet is mapped
+      <label class="mod"><input type="checkbox" id="sayMapped"> Say when a planet is mapped
         <span class="hint">"A 2 mapped efficiently, 3.4M. Next: biology on C 2, up to 19M." after each DSS mapping (or "2 probes over target, no efficiency bonus"; or "Nothing else here over your levels"); its row in the table above chooses the card, notification and voice. Off by default ([defaults] speak_mapped)</span></label>
     </details>
     <details class="setsec" data-sec-key="sounds" data-chip="Sounds"><summary>Sounds <span class="sum-note">try each alert sound</span></summary>
-      <div data-find="defaults.sounds" class="opts inline">Try them:
+      <div class="opts inline">Try them:
         <button type="button" class="try" data-try="fanfare" title="a brand-new discovery">▶ new</button>
         <button type="button" class="try" data-try="upbeat" title="known but not fully scanned">▶ unscanned</button>
         <button type="button" class="try" data-try="thud" title="visited or fully scanned">▶ known</button>
@@ -713,19 +678,19 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       </div>
     </details>
     <details class="setsec" data-sec-key="values" data-chip="Values"><summary>What is worth stopping for <span class="sum-note">these also drive the header colours and the leaving warning</span></summary>
-      <label data-find="defaults.bio_min" class="mod">Exobiology: only count a body as unfinished if it could pay over
+      <label class="mod">Exobiology: only count a body as unfinished if it could pay over
         <input type="number" id="bioMin" min="0" step="1000000" style="width:9em"> cr<span class="reset" data-reset="bioMin">reset</span>
         <span class="hint">straight Vista Genomics payout, no first-log bonus; sampling you have already started always counts; a body the rules cannot price always counts</span></label>
       <div class="hint" id="bioRules"></div>
-      <label data-find="defaults.codex_interesting" class="mod"><input type="checkbox" id="codexNewCounts"> Codex finds count: a body whose likeliest species is new to your codex in this region (✦) is worth stopping for whatever its value (Now's next stops, the leaving warnings; [defaults] codex_interesting)
+      <label class="mod"><input type="checkbox" id="codexNewCounts"> Codex finds count: a body whose likeliest species is new to your codex in this region (✦) is worth stopping for whatever its value (Now's next stops, the leaving warnings; [defaults] codex_interesting)
         <span class="hint">codex entries earn vouchers and are per region and per colour variant; where the colour can be told (the surface materials, or the parent star once every star in the system is known and agrees) a new colour of a logged species is flagged too, otherwise only a new species is</span></label>
-      <label data-find="defaults.body_highlight_level" class="mod">Highlight a body in Here when its scan + map data pays over
+      <label class="mod">Highlight a body in Here when its scan + map data pays over
         <input type="number" id="hlBody" min="0" step="100000" style="width:9em"> cr<span class="reset" data-reset="hlBody">reset</span>
         <span class="hint">the row turns green; straight Universal Cartographics value, no first-discovery, first-mapped or efficiency bonus</span></label>
-      <label data-find="defaults.biology_highlight_value" class="mod">Highlight a body's bio when its species could pay over
+      <label class="mod">Highlight a body's bio when its species could pay over
         <input type="number" id="hlBio" min="0" step="1000000" style="width:9em"> cr<span class="reset" data-reset="hlBio">reset</span>
         <span class="hint">the Bio cell and the body name turn violet; straight Vista Genomics value, no first-footfall ×5</span></label>
-      <label data-find="defaults.body_max_value_include_bonus" class="mod"><input type="checkbox" id="maxBonus"> Here's <b>Max</b> column counts first-discovery, first-mapped and first-footfall bonuses<span class="reset" data-reset="maxBonus">reset</span>
+      <label class="mod"><input type="checkbox" id="maxBonus"> Here's <b>Max</b> column counts first-discovery, first-mapped and first-footfall bonuses<span class="reset" data-reset="maxBonus">reset</span>
         <span class="hint">off shows plain payouts, for comparing bodies on their own merits; <b>Now</b> always includes the bonuses you have earned, since that is what a sale pays</span></label>
       <label class="mod">Here's suggested order: mark an item "skip?" under
         <input type="number" id="skipFloor" min="0" step="10000" style="width:8em"> cr per minute of supercruise<span class="reset" data-reset="skipFloor">reset</span>
@@ -736,17 +701,17 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         <input type="number" id="rebuyWarn" min="0" step="1" style="width:5em">× , red at
         <input type="number" id="rebuyUrgent" min="0" step="1" style="width:5em">× your rebuy <span class="reset" data-reset="rebuy">reset</span>
         <span class="hint">blank = off; either rule can turn the header amber or red (a cheap ship carrying a fortune is the risk). Not for a ship whose hull has no credit value (bought with Arx): its rebuy covers the modules only, so no "× rebuy" is shown for it</span></label>
-      <label data-find="defaults.high_gravity" class="mod">Approach warning: a landable body of
+      <label class="mod">Approach warning: a landable body of
         <input type="number" id="highG" min="0" step="0.1" style="width:5em"> g or more<span class="reset" data-reset="highG">reset</span>
         <span class="hint">said when you drop into orbital cruise there with unsold data over the amber level or the rebuy multiple below ("2.6 g, 480 million aboard, 3.2 rebuys"); the approach alert above switches it off</span></label>
-      <label data-find="defaults.module_warn" class="mod">Core modules: show them next to hull under
+      <label class="mod">Core modules: show them next to hull under
         <input type="number" id="moduleWarn" min="1" max="100" step="1" style="width:4.5em"> % health<span class="reset" data-reset="moduleWarn">reset</span>
         <span class="hint">FSD, power plant, thrusters, life support, sensors, fuel scoop and the AFMU, as of their last reading in the journal (a Loadout, an AFMU repair or a repair at a station),
           with the jet-cone boosts since; also in the welcome back and the co-pilot's status report. Nothing shows while all are over it. Blank = the config file's <code>module_warn</code> (80).</span></label>
       <label class="mod">Fuel alerts: also warn under
         <input type="number" id="fuelJumps" min="0" max="99" step="1" style="width:4.5em"> jumps of fuel left<span class="reset" data-reset="fuelJumps">reset</span>
         <span class="hint">blank = off (the default). Once when the jumps left at your pace fall under it (said like the game's low fuel warning), and the low-fuel warnings for an unscoopable arrival star or target then count it as well as under 30%; it also becomes the level for the "top up here" warning, which otherwise asks for two of your usual gaps between scoopable stars (at least 4 jumps)</span></label>
-      <label data-find="defaults.unsold_warn defaults.unsold_urgent" class="mod">Unsold data on board: amber "worth selling soon" at
+      <label class="mod">Unsold data on board: amber "worth selling soon" at
         <input type="number" id="unsoldWarn" min="0" step="10000000" style="width:10em"> cr<span class="reset" data-reset="unsoldWarn">reset</span>, red "go sell" at
         <input type="number" id="unsoldUrgent" min="0" step="10000000" style="width:10em"> cr<span class="reset" data-reset="unsoldUrgent">reset</span>
         <span class="hint">compared with the header total: cartographics after any NPC crew cut plus the exobiology estimate; crossing a level also sends a notification. Blank = default.</span></label>
@@ -756,7 +721,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         <span class="hint">once per streak, as part of the arrival alert ("10 known systems in a row, maybe change heading"; the new-streak line replaces "undiscovered"); a system with unreported bodies or one you visited before ends a known run; 0 = off, and the smallest streak is 2</span></label>
     </details>
     <details class="setsec" data-sec-key="surface" data-chip="Surface map"><summary>Surface map</summary>
-      <label data-find="defaults.surface_alt defaults.rig_spacing defaults.surface_map_min defaults.rig_warn" class="mod">Surface map (Now): show it below
+      <label class="mod">Surface map (Now): show it below
         <input type="number" id="surfAlt" min="10" step="100" style="width:6em"> m, never narrower than
         <input type="number" id="surfMin" min="50" step="100" style="width:6em"> m across, rig spacing ring
         <input type="number" id="surfSpacing" min="0" step="1" style="width:5em"> m, a rig far away at
@@ -764,14 +729,13 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         <span class="hint">the map shows while you are on the ground, or flying below the altitude (it hides again 100 m higher). The rig ring is an estimate
           (rigs closer than about 50 m may not deploy; 0 = no ring). A rig past the far distance turns red on the map and in the legend; the spoken
           warning for it uses the config file's <code>rig_warn</code>, since the server says it for every window. Blank = the config file's value.</span></label>
-      <label data-find="defaults.surface_map_strip" class="mod"><input type="checkbox" id="surfStrip"> Also a small copy of the surface map in the on-body strip (under the header), with a one-line legend</label>
+      <label class="mod"><input type="checkbox" id="surfStrip"> Also a small copy of the surface map in the on-body strip (under the header), with a one-line legend</label>
     </details>
-    <details class="setsec pcOnly" data-sec-key="honk" data-chip="Auto honk" id="honkSettings"><summary>Auto honk and the co-pilot button</summary>
-      <div id="autoHonkReady" class="honkready" role="status"><span class="hint">checking whether auto honk can work here…</span></div>
-      <label data-find="autohonk.enabled" class="mod"><input type="checkbox" id="autoHonk"> Honk automatically on arriving in a system by hyperspace
+    <details class="setsec pcOnly" data-sec-key="honk" data-chip="Auto honk"><summary>Auto honk and the co-pilot button</summary>
+      <label class="mod"><input type="checkbox" id="autoHonk"> Honk automatically on arriving in a system by hyperspace
         <span id="autoHonkStatus" class="hint"></span></label>
       <label class="mod pcOnly" title="after an auto honk that found its discovery scan, open the galaxy map and target the next system of the route you follow in Plot Route (the same run as Target next: it needs the keys auto-target needs). Nothing happens without a route"><input type="checkbox" id="autoHonkTarget"> Then target the next route system, <input type="number" id="autoHonkTargetDelay" min="0" max="60" step="0.5" inputmode="decimal" style="width:4.5em"> s after the honk <span id="autoHonkTargetNote" class="warnc small"></span></label>
-      <label data-find="autohonk.announce" class="mod"><input type="checkbox" id="autoHonkSay"> When it completes, say how many bodies it found
+      <label class="mod"><input type="checkbox" id="autoHonkSay"> When it completes, say how many bodies it found
         <span class="hint">"System Scan Completed, 12 Bodies discovered", or "System scan complete, and all bodies were found" when the honk found everything</span></label>
       <div class="hint"><b>The Discovery Scanner must be on primary fire</b> in the fire group that is active when you jump.
         Outrider presses Primary Fire's keyboard binding from your controls preset (<b id="autoHonkKey"></b>); give Primary
@@ -798,9 +762,6 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         <li><b>Play Elite borderless or windowed.</b> The window sits over the game and lets every click through.</li>
         <li><b>Arrange panels</b> right over the game: drag to move, drag the corner to resize, mouse wheel for the
           background's transparency, Shift + wheel for the whole panel's. <b>Done</b> there or here ends it.</li>
-        <li><b>Alerts</b> shows each alert switched on in Settings → Alerts (notify, sound or speak ticked) for a few
-          seconds, danger longer and in red. The alerts are worded by this page: with no Outrider page open anywhere
-          (a browser or the tablet), the panel stays empty.</li>
       </ul>
     </details>
     <details class="setsec" data-sec-key="display" data-chip="Display"><summary>Display <span class="sum-note">this device: theme, header tiles</span></summary>
@@ -827,17 +788,9 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       </div>
       <div class="hint" id="settingsHint">Thresholds, alert choices, personalities, "Call me" names, speed, sorts and filters live in this browser.
         Export them to a file (Import on another browser or after clearing the cache), or save them on the server so a new browser (a tablet running Now) starts with them.
-        The view, layouts, the search form and which screen speaks stay per device. The voice (and each personality's) is kept by the server already.</div>
+        The view, layouts, the search form and which screen speaks stay per device. The voice is kept by the server already.</div>
     </details>
     <details class="setsec" data-sec-key="server" data-chip="Server" id="serverSettings"><summary>Server settings <span class="sum-note">the config file: network, password, paths, backups, Spansh, the Highway, the voice's AI and more</span></summary>
-      <div class="srvtop"><b>Outrider <span id="srvVersion"></span></b> · <button type="button" id="srvLogBtn" title="what Outrider has printed in its terminal since it started (and saved beside its database)">Show log</button>
-        · <button type="button" id="srvRestartBtn" data-restart>Restart</button> <span id="srvRestartMsg" class="hint" role="status"></span></div>
-      <details class="srvbk" id="srvBackups" data-find-block="backups"><summary>Backups <span class="sum-note">the zips Outrider made, and the command that puts one back</span></summary>
-        <div id="srvBackupsBody"><div class="hint">loading…</div></div>
-      </details>
-      <details class="srvbk" id="srvService" data-find-block="start with this computer service"><summary>Start with this computer <span class="sum-note">Outrider as a service: no terminal to keep open</span></summary>
-        <div id="srvServiceBody"><div class="hint">loading…</div></div>
-      </details>
       <div id="serverSettingsBody" class="srvset"><div class="hint">loading…</div></div>
     </details>
     <details id="speechLogBox" class="speechlog setsec" data-sec-key="log" data-chip="Spoken lines"><summary>Spoken lines <span class="sum-note">the last 100 alerts in this window and what became of each</span></summary>
@@ -848,20 +801,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       <div id="speechTally" class="hint"></div>
       <div id="speechBans" class="hint"></div>
       <div id="speechLog"></div></details>
-    <details id="askLogBox" class="speechlog setsec" data-sec-key="asked" data-chip="Questions asked"><summary>Questions asked <span class="sum-note">what the voice heard, what it matched and what it answered</span></summary>
-      <div class="hint">Newest first, from every device that asks (the tablet app's voice): the words heard, the phrase they matched
-        (or that none did, and what the AI made of it), and the answer. Outrider keeps the last 50 in its memory only: a restart starts afresh.
-        <button type="button" class="try" id="askLogCopy">copy</button></div>
-      <div id="askLog"></div></details>
     </div>
-  </form>
-</dialog>
-<dialog id="logDlg" class="logdlg" aria-labelledby="logTitle">
-  <form method="dialog">
-    <h3 id="logTitle">Outrider's log <span id="logCount" class="unk"></span></h3>
-    <div id="logLines" class="loglines" tabindex="0" aria-label="Outrider's log, newest at the bottom"></div>
-    <div id="logFoot" class="hint"></div>
-    <div class="btns"><button type="button" id="logCopy">Copy</button><span class="grow"></span><button type="button" data-close>Close</button></div>
   </form>
 </dialog>
 <dialog id="nearDlg" class="neardlg" aria-labelledby="nearTitle">
@@ -870,7 +810,6 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     <div class="nearbar">
       <span class="grp"><span class="lbl">Show</span><label><input type="checkbox" data-nf="stations"> stations</label><label><input type="checkbox" data-nf="carriers"> fleet carriers</label></span>
       <span class="grp"><span class="lbl">Must have</span><span id="nearNeeds"></span></span>
-      <span class="grp"><span class="lbl">Around</span><select data-nf="around" aria-label="Around" title="the system to look around: the distances are from there (a row's hover says how far it is from you)"></select><input type="text" data-nf="aroundName" placeholder="system name" size="16" aria-label="The system to look around" hidden></span>
       <span class="grp"><span class="lbl">Pad</span><span id="nearPad"></span></span>
       <span class="grp"><span class="lbl">Data under</span><input type="number" min="1" max="3650" step="1" data-nf="age"> days</span>
       <span class="grp"><label title="systems that need a permit (left out unless ticked)"><input type="checkbox" data-nf="permit"> permit systems</label></span>
@@ -893,10 +832,6 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       <button type="button" id="labHear">▶ Hear it</button>
       <button type="button" id="labUse" class="primary" title="Outrider speaks in this voice (and speaker, and speed) from now on">Use this voice</button>
       <span id="labInUse" class="hint"></span></div>
-    <div class="mod inlineopts"><select id="labGiveStyle" aria-label="personality"></select>
-      <button type="button" id="labGive" title="this personality speaks in this voice (and speaker) from now on, in every browser; its pace stays the lines file's">Give to this personality</button>
-      <select id="labCrewRole" aria-label="crew member"></select>
-      <button type="button" id="labAssign" title="this crew member speaks in this voice (and speaker) from now on, in every browser (Settings → Voice → Crew)">Assign to a crew member</button></div>
       <details id="moreVoices" class="morevoices"><summary>More voices <span class="sum-note">any of Piper's, downloaded where Outrider runs when you pick one</span></summary>
         <div class="mod inlineopts">Language <select id="mvLang" aria-label="language"></select>
           sorted by <select id="mvSort" aria-label="sort the voices"><option value="name">name</option><option value="quality">quality, best first</option>
@@ -908,8 +843,6 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     <div class="mod inlineopts"><select id="labAlert" aria-label="alert"></select> <select id="labStyle" aria-label="personality"></select></div>
     <div class="mod inlineopts"><button type="button" id="labLine">▶ Random line</button>
       <button type="button" id="labAudition" title="eight key alerts in a row, in each personality (or the one picked)">▶ Audition</button>
-      <button type="button" id="labCrewAudition" title="each crew member says one of its own lines in its own voice and personality">▶ Audition: by crew</button>
-      <button type="button" id="labCrewLines" title="one line naming another crew member for each alert that has them, in each personality (or the one picked), with the crew's names (made-up ones for a member without)">▶ Audition: crew lines</button>
       <button type="button" id="labCut" disabled title="never say the line just played again (every browser)">✂ Cut this line</button></div>
     <div id="labWords" class="labwords hint"></div>
     <h4>Your own words</h4>
@@ -942,7 +875,6 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     <h3 id="recountTitle">Recount your carrier</h3>
     <p class="hint" id="recountHint"></p>
     <table id="recountRows"></table>
-    <p class="hint warnc" id="recountMsg" hidden></p>
     <div class="btns">
       <button type="button" id="recountAdd" title="a commodity Outrider has not seen at your carrier">+ Add a commodity</button>
       <span class="grow"></span>

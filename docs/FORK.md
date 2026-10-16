@@ -42,7 +42,7 @@ runs `scripts/verify.sh`; with a PASS, `git push`. What to expect:
   resources/bio_rules.json`, merge, then `--skip-worktree` again.
 
 Where the fork still touches upstream's files (each a place a merge can conflict): `ed_outrider.py` (settings, State
-methods, routes), `static/page.html`, `page.js` (new page code: `static/fork.js`) and `page.css`, `tests/page_smoke.js`,
+methods, routes), `static/page.html`, `page.js` (new page code: `static/fork.js`) and `page.css`, `tests/page_smoke.js`, `resources/speech.json`,
 `outrider/overlay.py`, `outrider/ask.py`, the guide's pages for the features above and Windows fixes in a few tests.
 New fork code goes in its own module and its own test file wherever it can; in a shared file, add it as its own
 block (a new line, not an edit in the middle of upstream's line).
@@ -151,6 +151,15 @@ Beside upstream's ([DESIGN_NOTES.md](DESIGN_NOTES.md)):
 ## Changelog
 
 Newest first. Upstream's is [CHANGELOG.md](CHANGELOG.md).
+
+## 2026-10-15 · This fork: upstream's tweak-update taken back out
+- At the player's wish, the merge of upstream's `tweak-update` (2026.10.23) is reverted (a revert commit: the
+  history is kept, nothing is force-pushed). The fork is upstream as of its 2026-10-12 merge again, with the fork's
+  own work since kept: Rocky's removal, the speech files' size check, and Commander → Engineering's engineers (their
+  systems, distances, Copy and a Plot route of the fork's own: upstream's 🎯/Plot route buttons came with
+  tweak-update).
+- **Before the next upstream merge:** git counts tweak-update as merged, so merging `upstream/main` would leave its
+  changes out. Revert this revert first (`git revert <this commit>`), then merge.
 
 ## 2026-10-14 · This fork: Commander → Engineering names each engineer's system
 - **Engineers' systems** in Commander → Engineering: every engineer (ship, and suit and weapon) with the system of

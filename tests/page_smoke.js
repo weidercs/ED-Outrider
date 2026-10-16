@@ -28,17 +28,6 @@ const settle = async maxMs => {
     await sleep(25);
   }
 };
-// A block that injects state into the page's `data` (or what a payload redraws: hereData, the Uploads box...) and then
-// waits must not have it replaced by a payload landing meanwhile (the scratch server's own changes: a backup or a job a
-// block before started finishing): holdPayloads() holds every long-poll answer until releasePayloads(), which lets
-// them through (the page applies them then, as if the server had answered late) and, when one was held, waits for the
-// page to draw it before the next block starts. Only for blocks that need no payload of their own.
-let held = false, heldAnswers = 0;
-const holdPayloads = () => { held = true; };
-const releasePayloads = async () => {
-  held = false;
-  if (heldAnswers) { heldAnswers = 0; await sleep(100); await settle(2000); }
-};
 (async () => {
   const html = await (await fetch(base)).text(); const errors = [];
   const dom = new JSDOM(html, {url: base, runScripts: "dangerously", resources: "usable", pretendToBeVisual: true,
@@ -48,15 +37,8 @@ const releasePayloads = async () => {
       w.AbortController = AbortController;
       w.fetch = (u, o) => {
         const poll = /api\/nearby\?since=/.test(String(u));
-        if (poll) return fetch(new URL(u, base), o).then(async r => {
-          if (!held) return r;
-          // the body read now: the page's poll timeout (40 s) would cut one left unread while it is held
-          const body = await r.arrayBuffer(); heldAnswers++;
-          while (held) await sleep(25);
-          return new Response([204, 304].includes(r.status) ? null : body, {status: r.status, statusText: r.statusText, headers: r.headers});
-        });
-        inflight++; lastNet = Date.now();
-        return fetch(new URL(u, base), o).finally(() => { inflight--; lastNet = Date.now(); });
+        if (!poll) { inflight++; lastNet = Date.now(); }
+        return fetch(new URL(u, base), o).finally(() => { if (!poll) { inflight--; lastNet = Date.now(); } });
       };
       w.addEventListener("error", e => errors.push(e.message));
       w.localStorage.clear();
@@ -64,14 +46,6 @@ const releasePayloads = async () => {
       w.HTMLCanvasElement.prototype.getContext = () => null;   // no canvas in jsdom: the page draws nothing and says nothing
     }});
   const d = dom.window.document;
-  // One rule for every 🎯 (the author, 2026-10-14): a 🎯 shows only where auto-target can work (canAim), which the
-  // scratch server (no virtual keyboard) never has. A block that checks 🎯 makes it so, and puts it back with what
-  // this returns; with payloads held whenever it waits (a payload brings the server's own autotarget back)
-  const aimReady = () => {
-    dom.window.eval(`(window.__aimKeep = window.__aimKeep || []).push({pc: data.game_pc, at: data.autotarget}); data.game_pc = true;
-      data.autotarget = Object.assign({}, data.autotarget, {available: true, missing: []});`);
-    return () => dom.window.eval(`(() => { const k = __aimKeep.pop(); data.game_pc = k.pc; data.autotarget = k.at; })()`);
-  };
   for (let i = 0; i < 60 && !d.querySelector("#sub") ; i++) await sleep(500);
   await settle(3000);
   const ok = errors.length === 0 && /known within/.test(d.querySelector("#sub").textContent);
@@ -99,7 +73,6 @@ const releasePayloads = async () => {
   // the exobiology checklist: Bio/Geo -> Exo-Biology shows genus boxes from api/checklist, a click opens the species'
   // panel (its colours; the map needs a canvas, which jsdom has not), and Runs comes back
   {
-    holdPayloads();
     if (!d.getElementById("nowView").hidden) { d.getElementById("nowBack").click(); await sleep(500); }
     const before = errors.length;
     d.querySelector('[data-view="bio"]').click(); await settle(800);
@@ -182,7 +155,6 @@ const releasePayloads = async () => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| exobiology checklist |", `${boxes} genus boxes, ${options} region choices, panel ${side && side.textContent}, geology ${geo} (${geoFirst}), counts ${countsOk || JSON.stringify(counts)}, genus ticks ${ticksOk || JSON.stringify(ticks)}, keyboard ${keyOk}, region race ${raceOk || JSON.stringify(race)}, back to runs ${back}`,
                 status.slice(0, 80), errors.slice(before));
-    await releasePayloads();
   }
   // the map reopened while its request was on its way asks again with the same key: the older request's failure
   // must not throw the newer answer away (#7 of the Fable review, 2026-10-10)
@@ -249,25 +221,6 @@ const releasePayloads = async () => {
     w.fetch = realFetch; w.console.error = consoleError;
     w.eval(`data = ${good}; render()`);   // the bad payload stays until the next change: the tests below need a good one
   }
-  // holdPayloads (the blocks below that inject state): a payload the server sends meanwhile waits and the injected state
-  // stays; releasePayloads lets it in
-  {
-    const w = dom.window, before = errors.length;
-    await settle(1000);
-    holdPayloads();
-    const v0 = w.eval("version");
-    w.eval("data.heldMark = true");
-    // a hush ended when none is on: nothing changes but the payload's version, which the page would otherwise fetch
-    await fetch(base + "api/hush", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({mode: "off"})});
-    await sleep(800);
-    const kept = [w.eval("version") === v0, w.eval("data.heldMark === true")];
-    await releasePayloads();
-    for (let i = 0; i < 40 && w.eval("version") === v0; i++) await sleep(50);
-    const let_in = [w.eval("version") > v0, w.eval("data.heldMark === undefined")];
-    const good = kept.every(Boolean) && let_in.every(Boolean) && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| payload hold |", good ? "held while a block injects state, let in afterwards" : JSON.stringify({kept, let_in}), errors.slice(before));
-  }
   // values: a logged species is priced as itself (x5 on a first footfall), a lost one says so, a genus with
   // samples under way is listed once, and a jet-cone charge boosts only the first jump of a trip
   {
@@ -327,7 +280,6 @@ const releasePayloads = async () => {
   // robustness: an errored system lookup is asked again once due, a search whose polls keep failing stops
   // saying 'searching…', the unsold thresholds show the configured values, Materials refetches after a jump
   {
-    holdPayloads();
     const w = dom.window, realFetch = w.fetch, realST = w.setTimeout, before = errors.length, asked = [];
     let sysFail = true;
     w.fetch = (u, o) => {
@@ -361,12 +313,10 @@ const releasePayloads = async () => {
     const goodR = goodS && goodP && goodT && goodM && errors.length === before;
     allOk = allOk && goodR;
     console.log(goodR ? "OK" : "FAIL", "| retries |", `system retried ${goodS}, search stops ${goodP} (${sr.status}), thresholds ${th.join("/")}, materials refetched ${goodM}`, errors.slice(before));
-    await releasePayloads();
   }
   // the speech queue: danger jumps ahead of queued finds (and cuts short the one playing), a find about a system
   // you have left is dropped, heat is said once per cooldown; the pure pick/expire rules too
   {
-    holdPayloads();
     const w = dom.window, before = errors.length, spoken = [], stopped = [];
     const realSay = w.sayNow, savedPos = w.eval("data.position && JSON.stringify([data.position.id64, data.position.id])");
     const savedFlags = w.eval("[speechOn, isSpeaker]");
@@ -377,19 +327,23 @@ const releasePayloads = async () => {
       if (cur.stopped) stopped.push(item.words);
       w.eval("speechNow = null");
     };
-    // finds are tied to the system you are in (the payloads are held: one arriving mid-test would replace the position)
-    spoken.length = stopped.length = 0;
-    w.eval(`speechItems = []; speechLast = {}; data.position.id64 = 42; data.position.id = "42"`);
-    for (const t of ["Find one.", "Find two.", "Find three."]) w.eval(`speak(${JSON.stringify(t)}, {kind: "find"})`);
-    w.eval('speak("Hull at 40 percent.", {kind: "hull", tag: "hull"})');
-    await sleep(400);
-    const goodPrio = spoken.join("|") === "Find one.|Hull at 40 percent.|Find two.|Find three." && stopped.join() === "Find one.";
-    spoken.length = 0;
-    w.eval('speak("Something you asked for.")');                  // holds the voice while the ship moves
-    w.eval('speak("Find on the old system.", {kind: "find"})');
-    w.eval(`data.position.id64 = 43; data.position.id = "43"`);
-    await sleep(300);
-    const goodStale = spoken.join("|") === "Something you asked for.";
+    // finds are tied to the system you are in: a live payload arriving mid-test replaces the position, so try again
+    let goodPrio = false, goodStale = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const d0 = w.eval("data"); spoken.length = stopped.length = 0;
+      w.eval(`speechItems = []; speechLast = {}; data.position.id64 = 42; data.position.id = "42"`);
+      for (const t of ["Find one.", "Find two.", "Find three."]) w.eval(`speak(${JSON.stringify(t)}, {kind: "find"})`);
+      w.eval('speak("Hull at 40 percent.", {kind: "hull", tag: "hull"})');
+      await sleep(400);
+      goodPrio = spoken.join("|") === "Find one.|Hull at 40 percent.|Find two.|Find three." && stopped.join() === "Find one.";
+      spoken.length = 0;
+      w.eval('speak("Something you asked for.")');                  // holds the voice while the ship moves
+      w.eval('speak("Find on the old system.", {kind: "find"})');
+      w.eval(`data.position.id64 = 43; data.position.id = "43"`);
+      await sleep(300);
+      goodStale = spoken.join("|") === "Something you asked for.";
+      if (w.eval("data") === d0) break;
+    }
     spoken.length = 0;
     w.eval('speak("Heat damage.", {kind: "hull", tag: "heat"}); speak("Heat damage.", {kind: "hull", tag: "heat"})');
     await sleep(300);
@@ -406,7 +360,6 @@ const releasePayloads = async () => {
     const goodQ = goodPrio && goodStale && goodCool && goodPure && errors.length === before;
     allOk = allOk && goodQ;
     console.log(goodQ ? "OK" : "FAIL", "| speech queue |", `priority ${goodPrio}, stale dropped ${goodStale}, cooldown ${goodCool}, pick/expire ${pure}`, errors.slice(before));
-    await releasePayloads();
   }
   // a jump clears the queue: lines queued (and the one playing) about the old system go, the FSD line is said,
   // danger lines and lines asked for by hand stay
@@ -484,7 +437,6 @@ const releasePayloads = async () => {
   // a body someone else mapped (the author, 2026-10-09): no find alert for it; one "already mapped" line per system
   // instead; never in the leaving list
   {
-    holdPayloads();
     const w = dom.window, before = errors.length, said = [];
     const realPlay = w.play, realSpeak = w.speak;
     w.speak = (t, o) => said.push((o || {}).kind || ""); w.play = () => {};
@@ -506,7 +458,6 @@ const releasePayloads = async () => {
     w.speak = realSpeak; w.play = realPlay;
     const ok = said.length === 2 && res.said && JSON.stringify(res.maps) === '["4"]' && errors.length === before;
     console.log(ok ? "OK" : "FAIL", "| mapped by someone else |", said.length, JSON.stringify(res), errors.slice(before));
-    await releasePayloads();
   }
   // one speaker: a window that is not the speaker still shows the alert but plays and says nothing; the
   // ▶ voice button still speaks; a danger line comes only from business and never swears
@@ -729,7 +680,6 @@ const releasePayloads = async () => {
   }
   // Batch C (the page): what each fix changed, checked on the live page with made-up data
   {
-    holdPayloads();
     const w = dom.window, before = errors.length, said = [], toasts = [];
     const realSpeak = w.speak, realPlay = w.play, realToast = w.toast, realFetch = w.fetch;
     w.speak = (t, o) => said.push([t, o || {}]); w.play = () => {}; w.toast = t => toasts.push(t);
@@ -912,7 +862,6 @@ const releasePayloads = async () => {
                 JSON.stringify(got2) === JSON.stringify(want2) ? "moments ok" : JSON.stringify(got2),
                 JSON.stringify(words) === JSON.stringify(wantWords) ? `spoken ${words.length}` : JSON.stringify(words), `delays ${delays.join("/")}, leads ${leads}, browser speech ${g11.join("/")}`,
                 `slept ${slept}, hush ${hush}, keyable ${keyable}, focus ${focus}, toasts ${JSON.stringify(toasts)}, tail ${tail.join()}, trip ${/→ now/.test(trip)}`, errors.slice(before));
-    await releasePayloads();
   }
   // F62: a refused search POST says so instead of showing the previous search's results as the new ones, and an
   // older result (a poll sent before the POST) is not taken for the search just started
@@ -945,7 +894,6 @@ const releasePayloads = async () => {
   }
   // Batch 3 (review 2026-09-30b): the page's fixes, each on made-up data, everything restored afterwards
   {
-    holdPayloads();
     const w = dom.window, realFetch = w.fetch, before = errors.length, said = [];
     const realSpeak = w.speak, realPlay = w.play;
     w.speak = t => said.push(t); w.play = () => {};
@@ -979,13 +927,13 @@ const releasePayloads = async () => {
       o.region = bodyPopHtml({name: "B 1", type: "Planet", bio: 1, genera: [], organics: [], bio_guess: [],
         bio_options: {low: 1, high: 2, genera: [{genus: "Bacterium", value: 2, species: ["Aurasus"], codex_new: true}]}}, "Norma Arm").includes("new to your codex in Norma Arm");
       // --simulate: the game reads as running with an hours-old journal, which is no fault (no red Data tile)
-      const fz = data.freshness, fst = data.status, fh = data.health, oldJ = new Date(Date.now() - 5 * 3600000).toISOString();
-      data.status = ""; data.health = null;   // offline here: "Spansh unavailable" would colour the tile whatever the journal's age
+      const fz = data.freshness, fst = data.status, oldJ = new Date(Date.now() - 5 * 3600000).toISOString();
+      data.status = "";   // offline here: "Spansh failed" would colour the tile whatever the journal's age
       data.freshness = Object.assign({}, fz, {journal: oldJ, live: true, simulated: true}); renderStrip();
       const simCls = document.getElementById("tData").className;
       data.freshness = Object.assign({}, fz, {journal: oldJ, live: true, simulated: false}); renderStrip();
       o.simFresh = !/urgent/.test(simCls) && /urgent/.test(document.getElementById("tData").className);
-      data.freshness = fz; data.status = fst; data.health = fh; renderStrip();
+      data.freshness = fz; data.status = fst; renderStrip();
       // F30, F33: a run under way prices the logged species; gravity reds at your high-g level
       const hd = hereData, hk = hereKey, hg = localStorage.getItem("highG");
       if (hd && !hd.error) {
@@ -1142,7 +1090,6 @@ const releasePayloads = async () => {
     allOk = allOk && goodH;
     console.log(goodH ? "OK" : "FAIL", "| batch 3 page |", JSON.stringify(out) === JSON.stringify(want) ? "pure ok" : JSON.stringify(out),
                 JSON.stringify(out2) === JSON.stringify(want2) ? "fetches ok" : JSON.stringify(out2), `said ${JSON.stringify(said)}, search ${refused}`, errors.slice(before));
-    await releasePayloads();
   }
   // Suggestions batch S1: first footfall x5 and gravity in the suggested order and the leaving alert, signals never
   // DSS'd in Left behind, bodies not on Spansh, Now's heading-to line, and what the backup zip holds
@@ -1217,7 +1164,6 @@ const releasePayloads = async () => {
   // batch S2 (the voice): procedural names spoken letter by letter, one personality per system, the welcome back
   // and ship-loss texts (ship_lost business-only), and the spoken-line transcript with each line's fate
   {
-    holdPayloads();
     const w = dom.window, before = errors.length, got = {}, bad = [];
     got.names = w.eval(`["Drojau LL-O b26-3 is undiscovered.", "Docked at Jaques Station.", "Out Of The Blue (K7F-3XZ)", "Syreadiae JX-F c0, 42 ly"].map(spokenText)`);
     got.shift = JSON.parse(w.eval(`(() => { const lib = speechLib, st = localStorage.getItem("speechStyles");
@@ -1285,7 +1231,6 @@ const releasePayloads = async () => {
     const goodS2 = !bad.length && errors.length === before;
     allOk = allOk && goodS2;
     console.log(goodS2 ? "OK" : "FAIL", "| batch S2 |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(got)}` : `names, one personality per system, welcome back, ship lost, transcript (${got.fates.length} lines) ok`, errors.slice(before));
-    await releasePayloads();
   }
   // batch S2b: a sale that left data aboard: the facts line (cartographics and samples), its card under the header
   // (a new sale clears it) and the spoken line wrapping the facts
@@ -1361,8 +1306,6 @@ const releasePayloads = async () => {
   // in the tab's list; with a Highway route too, a switch picks the route shown; Clear route clears the one shown.
   // Every request is answered here.
   {
-    const aimBack = aimReady();   // its 🎯 need auto-target to work (canAim)
-    holdPayloads();
     const w = dom.window, d = w.document, before = errors.length, realFetch = w.fetch, calls = [];
     const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), {status, headers: {"Content-Type": "application/json"}}));
     const body = (name, scan, o = {}) => Object.assign({name, type: "Planet", subtype: "Water world", ls: 1200, scan, map: scan * 3,
@@ -1385,7 +1328,7 @@ const releasePayloads = async () => {
       return realFetch(u, o);
     };
     const got = {};
-    got.noTab = !d.querySelector('[data-view="rich"]') && d.querySelector('.views [data-view="hwy"]').firstChild.textContent;   // S37: its ↗ is a child of its own
+    got.noTab = !d.querySelector('[data-view="rich"]') && d.querySelector('.views [data-view="hwy"]').textContent;
     if (!d.getElementById("nowView").hidden) { d.getElementById("nowBack").click(); await sleep(300); }
     w.localStorage.removeItem("hwyShow");
     d.querySelector('[data-view="hwy"]').click(); await sleep(300);
@@ -1405,15 +1348,7 @@ const releasePayloads = async () => {
     got.form = [vis(".hwy-ropt").join(), vis(".hwy-nonly").join(), vis(".hwy-xopt").join(), vis(".hwy-cons").join(), d.getElementById("hwyTo").placeholder];
     // Exomastery: the same options but Road to Riches' own; the Plot button says it replaces the slot's route
     pick("exo");
-    got.exoForm = [vis(".hwy-ropt").join(), vis('[data-field="use_mapping_value"], [data-field="avoid_thargoids"]').join(), d.getElementById("hwyGo").textContent];
-    // S52: Earth-like worlds: Spansh's own fields for it (no minimum value, no mapping box: the map always counts), the
-    // request the form makes, and the words while Spansh works on it
-    pick("elw");
-    got.elwForm = [vis(".hwy-ropt").join(), vis(".hwy-ropt [data-field]").join(), d.getElementById("hwyTo").placeholder,
-      w.eval(`Object.keys(richBody("elw")).filter(k => !["from", "to", "range"].includes(k)).join()`)];
-    w.eval(`R.data.plotting = {state: "running", kind: "aw", from: "Rich B"}; drawHwyStatus()`);
-    got.awAsking = d.getElementById("hwyStatus").textContent.replace(/ \d+ s$/, "");
-    w.eval(`R.data.plotting = null; drawHwyStatus()`);
+    got.exoForm = [vis(".hwy-ropt").join(), vis(".rich-only").join(), d.getElementById("hwyGo").textContent];
     // an Exomastery route in the list: each body's species, ✓ sampled, ✦ new to your codex
     w.eval(`R.data = Object.assign({}, R.data, {route: Object.assign({}, R.data.route, {kind: "exo", systems: R.data.route.systems.map(s =>
       Object.assign({}, s, {bodies: s.i === 1 ? [{name: "Rich B 2", ls: 900, done: false, left: 1, species: [
@@ -1459,8 +1394,6 @@ const releasePayloads = async () => {
     d.querySelector('[data-view="overview"]').click(); await sleep(200);
     const want = {noTab: "Plot Route", shown: [true, true, true], systems: "done:0,at:1,next:2", bodies: 3, marks: "✔||",
       exoForm: ["true,true", "false,false", "Plot (replaces your Road to Riches route)"],
-      elwForm: ["true,true", "true,true,true,false,false,true,true", "optional: where to end", "radius,max_results,max_distance,avoid_thargoids,loop"],
-      awAsking: "Asking Spansh for an ammonia world route from Rich B…",
       exoRows: "✓ Frutexa Flammasis 10.3M · Tubus Rosarium 2.6M ✦", exoHead: true,
       aims: "survey:0,survey:2", formFolded: true, form: ["true,true", "false,false", "false", "false", "optional: where to end"],
       plotBody: {to: "Far Away", range: 61.5, radius: 25, max_results: 25, max_distance: 50000, min_value: 100000,
@@ -1470,18 +1403,15 @@ const releasePayloads = async () => {
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
     if (!(/To Rich C/.test(got.head) && /you are at system 2 of 3/.test(got.head) && /Next: Rich C/.test(got.head))) bad.push("head");
     if (!/^Asking Spansh/.test(got.running)) bad.push("running");
-    if (!(got.done[0] && /Plotted: a Road to Riches route of 3 systems/.test(got.done[1]))) bad.push("done");
+    if (!(got.done[0] && /Plotted: a Road to Riches of 3 systems/.test(got.done[1]))) bad.push("done");
     const goodRC = !bad.length && errors.length === before;
     allOk = allOk && goodRC;
-    aimBack();
     console.log(goodRC ? "OK" : "FAIL", "| riches in plot route |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "no tab of its own, the plotter switch and its options, plot and polling, systems/bodies/marks, the both-routes switch, clear", errors.slice(before));
-    await releasePayloads();
   }
   // a trade route in the slot (Spansh's trade planner): the Trade plotter's own options (no destination, ship or range),
   // its stops with what to sell and buy, its own heading row, the line under the tiles with the station, its alert
   {
-    holdPayloads();
     const w = dom.window, d = w.document, before = errors.length;
     d.querySelector('[data-view="hwy"]').click(); await sleep(100);
     const stop = (i, station, system, extra) => Object.assign({i, system, station, id: String(900 + i), x: i * 20, y: 0, z: 0, jumps: null,
@@ -1528,12 +1458,10 @@ const releasePayloads = async () => {
     allOk = allOk && goodTR;
     console.log(goodTR ? "OK" : "FAIL", "| trade route |", goodTR ? "the Trade plotter's options, the stops and their goods, the heading row, the line, the alert" :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
-    await releasePayloads();
   }
   // the line under the tiles for every route (the author, 2026-10-07): a survey route's own (💰 Road to Riches, 🧬
   // Exomastery), the Highway's, and with both the one Plot Route shows (this device's choice, else the newer)
   {
-    const aimBack = aimReady();   // its 🎯 need auto-target to work (canAim)
     const w = dom.window, d = w.document, before = errors.length, got = {};
     const line = () => d.getElementById("hwyLine").textContent.replace(/\s+/g, " ").trim();
     const keep = w.eval("[data.highway, data.survey, view]");
@@ -1559,7 +1487,6 @@ const releasePayloads = async () => {
     const bad = Object.keys(want).filter(k => !String(got[k]).startsWith(want[k]));
     const goodRL = !bad.length && errors.length === before;
     allOk = allOk && goodRL;
-    aimBack();
     console.log(goodRL ? "OK" : "FAIL", "| route line |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(got)}` : "a survey route's line (💰, 🧬), the Highway's, the one shown with both, complete", errors.slice(before));
   }
   // the game's own route (NavRoute.json) is labelled "In-Game Route:" (the author, 2026-10-12): Outrider's route is the
@@ -1576,20 +1503,6 @@ const releasePayloads = async () => {
     allOk = allOk && goodIG;
     console.log(goodIG ? "OK" : "FAIL", "| in-game route |", goodIG ? 'the game\'s route is "In-Game Route:"' : got, errors.slice(before));
   }
-  // the game logged a plot but wrote no NavRoute.json (2026-10-14): the payload's minimal form, said in words, no chips
-  {
-    const w = dom.window, before = errors.length;
-    const got = JSON.parse(w.eval(`(() => { const saved = data.route, el = document.getElementById("routeStrip");
-      data.route = {minimal: true, hops: [], jumps_left: 2, destination: "Smojooe SJ-I b23-0", ts: "2026-10-14T09:11:58Z"};
-      renderRoute(); const o = {text: el.textContent, chips: el.querySelectorAll(".hop").length, tip: /did not write NavRoute.json/.test(el.innerHTML)};
-      data.route = Object.assign({}, data.route, {jumps_left: 1, destination: null}); renderRoute(); o.one = el.textContent;
-      data.route = saved; renderRoute(); return JSON.stringify(o); })()`));
-    const want = {text: "In-Game Route: 2 jumps left to Smojooe SJ-I b23-0 · the game didn't write the route's stars", chips: 0, tip: true,
-                  one: "In-Game Route: 1 jump left · the game didn't write the route's stars"};
-    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| in-game route, not written |", good ? "jumps left and the end in words, no stars" : JSON.stringify(got), errors.slice(before));
-  }
   // Settings links to the project on GitHub, with the version running (desktop at the top; the tablet's sheet too)
   {
     const w = dom.window, d = w.document, before = errors.length;
@@ -1605,7 +1518,6 @@ const releasePayloads = async () => {
   // Cargo: the Carrier tile's tritium only with a tritium sell order (else as before, one line); the Materials tab's
   // Cargo (the ship with what you paid, the carrier's marks and its sync line); Recount lists only what is not confirmed
   {
-    const aimBack = aimReady();   // its 🎯 need auto-target to work (canAim)
     const w = dom.window, d = w.document, before = errors.length;
     const got = w.eval(`(() => {
       const saved = data.carrier, o = {};
@@ -1671,90 +1583,7 @@ const releasePayloads = async () => {
     if (got.recount !== "water,metaalloys" || !/Total 13,544 t · the carrier reports 16,085 t · 2,541 t short/.test(got.total)) bad.push("recount");
     const goodCG = !bad.length && errors.length === before;
     allOk = allOk && goodCG;
-    aimBack();
     console.log(goodCG ? "OK" : "FAIL", "| cargo |", goodCG ? "the tile's tritium (and without), the ship's Avg, the carrier's marks, Recount's lines" :
-      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
-  }
-  // The Carrier tile's trip to you (S13 A: red short, amber when the hold covers it), a booked jump's burn, a suspended
-  // service in red (S55 B), the balance and weeks of upkeep (S61: amber under 4, "as of" when old); your carrier among
-  // the nearest places to sell with its carrier jumps (S55 A)
-  {
-    const w = dom.window, before = errors.length;
-    const got = w.eval(`(() => {
-      const saved = data.carrier, savedS = data.sellers, o = {}, line = () => document.getElementById("carrierLine");
-      const iso = ms => new Date(ms).toISOString().slice(0, 19) + "Z";
-      data.carrier = {name: "Out Of The Blue", callsign: "G0X-85Z", system: "Home", aboard: false, here: false, distance: 1200,
-                      has_uc: false, has_vista: true, suspended: ["UC", "Redemption office"], fuel: 668, jump_range: 500,
-                      trip: {jumps: 3, burn: 1300, depot: 668, short: 632, depot_after: 0, hold: null, covered: false},
-                      planned: {system: "Far", departure: iso(Date.now() + 3600e3), jump_ly: 432, burn: 96, depot_after: 572},
-                      finance: {balance: 1328648923, reserve: 1000001263, available: 328647660, ts: iso(Date.now() - 3600e3),
-                                upkeep: 13700000, weeks: 96.9, warn: false, rates: "published"}};
-      renderCarrier();
-      o.trip = line().textContent;
-      // a suspended service: its name and a red ✗, "suspended" on hover (the author, 2026-10-14)
-      o.red = [...line().querySelectorAll(".noscoop")].map(x => (x.textContent === "✗" ? x.previousSibling.textContent.split("·").pop().trim() + " " : "") + x.textContent +
-                                                              (x.textContent === "✗" && /^suspended/.test(x.title) ? " (hover: suspended)" : ""));
-      o.fin = [document.getElementById("carrierFin").textContent, document.getElementById("carrierFin").className, /published rates/.test(document.getElementById("carrierFin").title)];
-      data.carrier = Object.assign({}, data.carrier, {trip: Object.assign({}, data.carrier.trip, {hold: 5000, covered: true}),
-        finance: Object.assign({}, data.carrier.finance, {balance: 40000000, weeks: 2.9, warn: true, ts: "2026-09-27T12:00:00Z"})});
-      renderCarrier();
-      o.amber = [...line().querySelectorAll(".warnc")].map(x => x.textContent).filter(t => /depot|balance/.test(t));   // not the tank's
-      o.asOf = line().textContent;
-      // more than one top-up gives (the depot holds 1,000 t): covered only by topping up again on the way
-      data.carrier = Object.assign({}, data.carrier, {trip: Object.assign({}, data.carrier.trip, {top_up: "on_the_way"})});
-      renderCarrier();
-      o.onTheWay = [...line().querySelectorAll(".warnc")].filter(x => /depot/.test(x.textContent)).map(x => [x.textContent, /again on the way/.test(x.title)]);
-      data.sellers = {from: "Here", moved: 0, vista: {nearest: null, fresh: null, station: null},
-                      uc: {nearest: {name: "G0X-85Z", system: "Home", distance: 1200, carrier: true, yours: true, carrier_jumps: 3, age_days: null},
-                           fresh: null, station: null}};
-      o.sell = unsoldHtml({total: 1, carto: {bodies: 1, systems: 1, estimated_value: 1, first_discoveries: 0, mapped: 0},
-                           bio: {samples: 0, estimated_value: 0, unknown_species: []}, species: [], computed: "now"});
-      data.carrier = saved; data.sellers = savedS; renderCarrier();
-      return o;
-    })()`);
-    const bad = [];
-    if (!/it → you ≈ 3 carrier jumps · ≈ 1,300 t tritium · depot 668 t: 632 t short/.test(got.trip)) bad.push("trip " + got.trip);
-    if (!/\(432 ly jump ≈ 96 t; depot after ≈ 572 t\)/.test(got.trip)) bad.push("booked jump");
-    if (JSON.stringify(got.red) !== JSON.stringify(["depot 668 t: 632 t short", "UC ✗ (hover: suspended)", "Redemption office ✗ (hover: suspended)"])) bad.push("red " + JSON.stringify(got.red));
-    if (!/Vista ✓/.test(got.trip)) bad.push("vista");
-    if (got.fin[0] !== "balance 1.33B · ~96 weeks of upkeep" || got.fin[1] !== "" || !got.fin[2] || /as of/.test(got.trip)) bad.push("finance " + JSON.stringify(got.fin));
-    if (JSON.stringify(got.amber) !== JSON.stringify(["depot 668 t: 632 t short, enough after topping up", "balance 40.0M · ~2.9 weeks of upkeep"])) bad.push("amber " + JSON.stringify(got.amber));
-    if (!/\(as of (Sep 27|27 Sep)\)/.test(got.asOf)) bad.push("as of");
-    if (JSON.stringify(got.onTheWay) !== JSON.stringify([["depot 668 t: 632 t short, enough if topped up on the way", true]])) bad.push("on the way " + JSON.stringify(got.onTheWay));
-    if (!/G0X-85Z \(your carrier\) · Home · 1,200 ly.* · ≈ 3 carrier jumps to you/.test(got.sell)) bad.push("seller");
-    const goodCT = !bad.length && errors.length === before;
-    allOk = allOk && goodCT;
-    console.log(goodCT ? "OK" : "FAIL", "| carrier trip |", goodCT ? "the trip's tritium (short, covered), a booked jump's burn, suspended services, balance and upkeep, your carrier as a seller" :
-      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
-  }
-  // S13 B: the trip's and a booked jump's tritium say whether the carrier's own measured jumps scale the formula
-  {
-    const w = dom.window, before = errors.length;
-    const got = w.eval(`(() => {
-      const saved = data.carrier, o = {}, line = () => document.getElementById("carrierLine");
-      const titles = () => [...line().querySelectorAll("span[title]")].map(x => x.title).filter(t => /fuel formula/.test(t));
-      data.carrier = {name: "Out Of The Blue", callsign: "G0X-85Z", system: "Home", aboard: false, here: false, distance: 1200,
-                      has_uc: true, has_vista: true, suspended: [], fuel: 668, jump_range: 500, burn_factor: null,
-                      trip: {jumps: 3, burn: 1300, depot: 668, short: 632, depot_after: 0, hold: null, covered: false},
-                      planned: {system: "Far", departure: new Date(Date.now() + 3600e3).toISOString(), jump_ly: 432, burn: 96, depot_after: 572}};
-      renderCarrier(); o.none = titles();
-      data.carrier = Object.assign({}, data.carrier, {burn_factor: {k: 1.05, n: 12, raw: 1.05}});
-      renderCarrier(); o.scaled = titles();
-      data.carrier = Object.assign({}, data.carrier, {burn_factor: {k: 1.2, n: 5, raw: 1.4}});
-      renderCarrier(); o.held = titles();
-      data.carrier = Object.assign({}, data.carrier, {burn_factor: {k: 1, n: 12, raw: 1}});
-      renderCarrier(); o.one = titles();
-      data.carrier = saved; renderCarrier();
-      return o;
-    })()`);
-    const bad = [];
-    if (got.none.length !== 2 || !got.none.every(t => /own jumps check it once 3 are measured/.test(t))) bad.push("none");
-    if (got.scaled.length !== 2 || !got.scaled.every(t => /checked against your carrier's last 12 jumps: scaled ×1\.05 \(tritium other players donate/.test(t))) bad.push("scaled");
-    if (!got.held.every(t => /last 5 jumps: scaled ×1\.2 \(they measured ×1\.4, held to 0\.8–1\.2\)/.test(t))) bad.push("held");
-    if (!got.one.every(t => /last 12 jumps: no correction needed \(/.test(t))) bad.push("one");
-    const goodKB = !bad.length && errors.length === before;
-    allOk = allOk && goodKB;
-    console.log(goodKB ? "OK" : "FAIL", "| carrier burn factor |", goodKB ? "the tritium's title says the carrier's own jumps' scale, held, or none yet" :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
   }
   // The Sell / Buy lookup: a line's Sell asks the server (stubbed here: the scratch server has no Spansh) with that
@@ -1807,115 +1636,6 @@ const releasePayloads = async () => {
     console.log(goodLK ? "OK" : "FAIL", "| cargo lookup |", goodLK ? "Sell asks for the line, the answer and an opened row, Closest and carriers ask again" :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
   }
-  // S58: a confirmed count says how old it is ("✓ 9 d" from a day on, amber over 7) and, past 7 days, the carrier's heading
-  // asks for a market read; S56: a line bigger than the ship's hold can be asked as one shipload (hold capacity), not
-  // before a Loadout says the hold; S57: Recount refuses a name that is no commodity with "Did you mean" buttons
-  {
-    const w = dom.window, d = w.document, before = errors.length;
-    w.eval(`window.__s5Asked = []; window.__s5Real = apiJson; window.__s5Recount = []; window.__s5Cargo = cargoData;
-      apiJson = async (u, o) => {
-        const s = String(u);
-        if (s.startsWith("api/cargo/recount")) { __s5Recount.push(o.body);
-          return /Titanum/.test(o.body) ? {error: "Not a commodity: 'Titanum'. Did you mean: Titanium, Tritium?", name: "Titanum",
-                                            suggestions: ["Titanium", "Tritium"], journal_only: false} : {ok: true, saved: 1, skipped: [], cargo: cargoData}; }
-        if (!s.startsWith("api/cargo/lookup")) return __s5Real(u, o);
-        __s5Asked.push(s);
-        return {commodity: "Tritium", mode: "sell", tons: 1, from: "carrier", where: "X", avg: null, sort: "price", within: 500, age: 14,
-                carriers: false, pad: "L", pad_known: true, count: 0, rows: []};
-      };`);
-    const got = JSON.parse(w.eval(`(() => {
-      const o = {}, ago = days => new Date(Date.now() - days * 86400000 - 3600000).toISOString();
-      const cg = (days, cap) => ({ship: {name: "Hauler", capacity: cap, lines: []},
-        carrier: {name: "C", total: 16010, reported: 16010, gap: 0, market_ts: ago(days), lines: [
-          {id: "tritium", name: "Tritium", count: 16000, state: "confirmed", ts: ago(days), moves: []},
-          {id: "water", name: "Water", count: 10, state: "seen", ts: ago(40), moves: []}]}});
-      const line = () => document.querySelector('#cargoList tr[data-cid="tritium"] td').textContent.trim();
-      const age = () => { const x = document.querySelector('#cargoList tr[data-cid="tritium"] .cage'); return x ? x.className : null; };
-      const note = () => (document.querySelector("#cargoList .cstale") || {}).textContent || null;
-      renderCargo(cg(9, 720)); o.old = [line(), age(), note()];
-      o.seenAge = !document.querySelector('#cargoList tr[data-cid="water"] .cage');
-      renderCargo(cg(3, 720)); o.recent = [line(), age(), note()];
-      renderCargo(cg(0, 720)); o.today = [line(), age(), note()];
-      return JSON.stringify(o); })()`));
-    const bad = [];
-    if (got.old[0] !== "✓ 9 d Tritium" || !/warnc/.test(got.old[1]) ||
-        got.old[2] !== "Sell-order counts read 9 days ago: open your carrier's commodity market while docked there to refresh them.") bad.push("9 days");
-    if (!got.seenAge) bad.push("a seen line has no age");
-    if (got.recent[0] !== "✓ 3 d Tritium" || /warnc/.test(got.recent[1]) || got.recent[2] !== null) bad.push("3 days");
-    if (got.today[0] !== "✓ Tritium" || got.today[1] !== null || got.today[2] !== null) bad.push("today");
-    // S56: the carrier's 16,000 t, a 720 t hold
-    d.querySelector('#cargoList tr[data-cid="tritium"] [data-look="sell"]').click(); await sleep(50);
-    const look = d.getElementById("cargoLook");
-    const all = {head: look.querySelector(".lookhead").textContent, bar: look.querySelector(".lookbar").textContent};
-    look.querySelector('[data-lk="ship"]').click(); await sleep(50);
-    const one = {head: look.querySelector(".lookhead").textContent, on: (look.querySelector(".lookload .on") || {}).textContent,
-                 bar: look.querySelector(".lookbar").textContent};
-    look.querySelector('[data-lk="all"]').click(); await sleep(50);
-    const asked = w.eval("__s5Asked.slice()").map(u => new URLSearchParams(u.split("?")[1]).get("tons"));
-    w.eval(`renderCargo(Object.assign({}, cargoData, {ship: {name: "Hauler", capacity: null, lines: []}})); renderLook();`);
-    const noLoadout = !look.querySelector(".lookload") && /^Sell 16,000 t Tritium/.test(look.querySelector(".lookhead").textContent);
-    look.querySelector('[data-lk="close"]').click();
-    if (!/^Sell 16,000 t Tritium/.test(all.head) || !/All 16,000 tOne shipload 720 t/.test(all.bar) || !/≈ 23 shiploads for all of it/.test(all.bar)) bad.push("all");
-    if (!/^Sell 720 t of 16,000 t Tritium/.test(one.head) || one.on !== "One shipload 720 t" || !/where they take all 720 t/.test(one.bar)) bad.push("one shipload");
-    if (JSON.stringify(asked) !== JSON.stringify(["16000", "720", "16000"])) bad.push("asked " + JSON.stringify(asked));
-    if (!noLoadout) bad.push("no Loadout: no switch");
-    // S57: Recount's new row with a typo
-    w.eval(`openRecount(); document.getElementById("recountAdd").click();
-      const r = [...document.querySelectorAll("#recountRows tr")].pop(); r.querySelector(".rcname").value = "Titanum";
-      r.querySelector("input[data-rc]").value = "5";`);
-    d.getElementById("recountSave").click(); await sleep(50);
-    const msg = d.getElementById("recountMsg");
-    const typo = {open: d.getElementById("recountDlg").open, msg: msg.hidden ? null : msg.textContent.trim(),
-                  bad: !!d.querySelector("#recountRows .rcname.bad")};
-    msg.querySelector('[data-rcfix="Titanium"]').click();
-    const fixed = {name: d.querySelector("#recountRows .rcname").value, hidden: msg.hidden, bad: !!d.querySelector("#recountRows .rcname.bad")};
-    d.getElementById("recountSave").click(); await sleep(50);
-    const sent = w.eval("__s5Recount.slice()");
-    w.eval(`tabClose(document.getElementById("recountDlg")); apiJson = __s5Real; renderCargo(__s5Cargo)`);
-    if (!typo.open || typo.msg !== "Not a commodity: “Titanum”. Did you mean: Titanium Tritium" || !typo.bad) bad.push("typo " + JSON.stringify(typo));
-    if (fixed.name !== "Titanium" || !fixed.hidden || fixed.bad) bad.push("fixed " + JSON.stringify(fixed));
-    if (sent.length !== 2 || !/"Titanium":5/.test(sent[1]) || d.getElementById("recountDlg").open) bad.push("saved " + JSON.stringify(sent));
-    const goodS5 = !bad.length && errors.length === before;
-    allOk = allOk && goodS5;
-    console.log(goodS5 ? "OK" : "FAIL", "| S58 S56 S57 cargo |", goodS5 ? "✓ 9 d and the stale note, One shipload asks 720 t of 16,000 t, Recount's Did you mean" :
-      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
-  }
-  // S63: History's sold column after 🧬 and the ✗ in a session's cell, its hover saying each death and what it was
-  {
-    const w = dom.window, before = errors.length;
-    const got = JSON.parse(w.eval(`(() => {
-      const h = histData, open = new Set(openSessions), o = {};
-      const sess = (start, deaths, sold) => ({start, end: start.slice(0, 11) + "23:00:00Z", from: start, until: null, jumps: 3, ly: 40, max_sol: 100,
-        firsts: 1, bodies_first: 2, mapped: 1, footfalls: 0, samples: 2, codex_new: 0, sold, died: deaths.length, lost: 0, deaths, systems: []});
-      histData = {sessions: [sess("2026-10-02T14:00:00Z", [{ts: "2026-10-02T14:32:00Z", option: "rebuy", ship: true},
-                                                          {ts: "2026-10-02T15:10:00Z", option: "recover", ship: false}], 52300000),
-                             sess("2026-10-01T14:00:00Z", [], 0)],
-                  all_time: {jumps: 6, ly: 80, max_sol: 100, sessions: 2, since: "2026-10-01T14:00:00Z", firsts: 2, bodies_first: 4, mapped: 2,
-                             footfalls: 0, samples: 4, codex_new: 0, sold: 52300000, died: 2, lost: 1}, ledger: {trips: [], losses: []}};
-      openSessions.clear(); openSessions.add("2026-10-01T14:00:00Z"); renderHistory();
-      const rows = [...document.querySelectorAll("#histRows tr")];
-      o.heads = [...document.querySelectorAll("#histTable thead th")].map(t => t.textContent);
-      o.cells = rows.map(r => r.cells.length);
-      o.colspan = rows[2].cells[0].colSpan;
-      o.x = (rows[0].querySelector(".lost") || {}).title || null;
-      o.xText = (rows[0].querySelector(".lost") || {}).textContent || null;
-      o.none = !rows[1].querySelector(".lost");
-      o.sold = [rows[0].cells[9].textContent, rows[1].cells[9].textContent];
-      const all = document.querySelector("#histAll tr.alltime");
-      o.all = [all.cells.length, all.cells[9].textContent, (all.querySelector(".lost") || {}).title || null];
-      openSessions.clear(); open.forEach(x => openSessions.add(x)); histData = h; if (h) renderHistory();
-      return JSON.stringify(o); })()`));
-    const bad = [];
-    if (got.heads.length !== 11 || got.heads[8] !== "🧬" || got.heads[9] !== "sold") bad.push("heading");
-    if (JSON.stringify(got.cells) !== "[11,11,1]" || got.colspan !== 11) bad.push("cells");
-    if (got.x !== "died 14:32: ship lost (rebuy)\ndied 15:10: the ship survived (recover)" || got.xText !== "✗2" || !got.none) bad.push("✗");
-    if (JSON.stringify(got.sold) !== '["52.3M",""]') bad.push("sold");
-    if (got.all[0] !== 11 || got.all[1] !== "52.3M" || got.all[2] !== "2 deaths, 1 ship lost") bad.push("all time");
-    const goodS63 = !bad.length && errors.length === before;
-    allOk = allOk && goodS63;
-    console.log(goodS63 ? "OK" : "FAIL", "| S63 history |", goodS63 ? "sold after 🧬, ✗ with each death's time and what it was, 11 columns" :
-      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
-  }
   // Nearest place to dock: the finder beside To asks api/nearest (stubbed: the scratch server has no Spansh), shows the
   // rows with the DSSA badge and the docking warnings, asks again when a filter changes (remembered per device), and
   // Plot here fills To and posts the plot
@@ -1962,69 +1682,6 @@ const releasePayloads = async () => {
     const goodNR = !bad.length && errors.length === before;
     allOk = allOk && goodNR;
     console.log(goodNR ? "OK" : "FAIL", "| nearest dock |", goodNR ? "the finder's rows, the DSSA badge and warnings, a filter asks again (kept), Plot here plots" :
-      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
-  }
-  // S54: material traders. A short material on the Materials tab offers "⇄ nearest raw trader"; it opens the finder
-  // with that trader asked for (the select shows it) without touching the saved filter; the rows say each trader's
-  // kind; a later plain opening asks with the saved filter again; Plot here from there brings Plot Route forward
-  {
-    const w = dom.window, d = w.document, before = errors.length;
-    w.eval(`window.__tAsked = []; window.__tReal = apiJson; window.__tKeep = {need: NR.need, md: matData, v0: view};
-      NR.need = ["UC"]; saveNearest();
-      apiJson = async (u, o) => {
-        const s = String(u);
-        if (s.startsWith("api/highway/plot")) { __tAsked.push(s); return {ok: true, plotting: {state: "running", from: "Here", to: "X", started: new Date().toISOString()}}; }
-        if (!s.startsWith("api/nearest")) return __tReal(u, o);
-        __tAsked.push(s);
-        const need = new URLSearchParams(s.split("?")[1]).get("need").split(",").filter(Boolean);
-        return {where: "Sol", pad: "L", ship: "explorer_nx", age: 30, need, more: 0, hidden: {old: 0, pad: 0, permit: 0, service: 7},
-                errors: [], dssa: {count: 0}, rows: [
-          {kind: "station", name: "Broglie Terminal", station_type: "Ocellus Starport", system: "61 Cygni", ly: 11.4, jumps: 1, ls: 1200,
-           services: ["UC", "Repair", "Trader", "Raw"], pads: "L M S", warn: [], source: "Spansh", age_s: 3600},
-          {kind: "station", name: "The Divine Apparatus", station_type: "Planetary Outpost", system: "Deriso", ly: 22000, jumps: 300, ls: 50,
-           services: ["Trader"], pads: "M S", warn: [], source: "Spansh", age_s: 3600}]};
-      };
-      matData = {rows: [{id: "polonium", name: "Polonium", category: "Raw", grade: 4, count: 0, cap: 150}], snapshot_ts: "2026-01-01T00:00:00Z",
-        ts: "2026-01-01T00:00:00Z", mining_sites: [], sources: {polonium: []}, synthesis: [
-          {name: "FSD injection premium", group: "fsd", craftable: 0, verified: false, learned: null, materials: [
-            {id: "polonium", name: "Polonium", category: "Raw", have: 0, need: 1}, {id: "arsenic", name: "Arsenic", category: "Raw", have: 9, need: 1},
-            {id: "chemicalmanipulators", name: "Chemical Manipulators", category: "Manufactured", have: 0, need: 1}]}]};
-      renderMat();`);
-    const got = {};
-    got.srcBtn = (d.querySelector("#matSources [data-trader]") || {}).textContent;
-    got.cardBtns = [...d.querySelectorAll("#matSynth .synth [data-trader]")].map(b => b.dataset.trader + ":" + b.textContent);
-    d.querySelector("#matSources [data-trader]").click(); await sleep(60);
-    const dlg = d.getElementById("nearDlg");
-    got.open = dlg.open;
-    got.select = dlg.querySelector("[data-ntrader]").value;
-    got.ucTicked = dlg.querySelector('[data-nneed="UC"]').checked;
-    got.has = [...d.querySelectorAll("#nearRows td.has")].map(t => t.textContent.replace(/\s+/g, " ").trim());
-    got.foot = d.getElementById("nearFoot").textContent;
-    const sel = dlg.querySelector("[data-ntrader]"); sel.value = "Encoded"; sel.dispatchEvent(new w.Event("change", {bubbles: true})); await sleep(60);
-    got.stored = w.localStorage.getItem("nearest");
-    d.querySelector('#nearRows [data-nplot="61 Cygni"]').click(); await sleep(80);
-    got.view = w.eval("view");
-    d.getElementById("hwyNearest").click(); await sleep(60);   // a plain opening: the saved filter again
-    got.select2 = dlg.querySelector("[data-ntrader]").value;
-    got.asked = w.eval("__tAsked.slice()");
-    dlg.querySelector("[data-close]").click(); await sleep(20);
-    w.eval(`apiJson = __tReal; NR.need = __tKeep.need; saveNearest(); localStorage.removeItem("nearest");
-      matData = __tKeep.md; matKey = null; document.querySelector('[data-view="' + __tKeep.v0 + '"]').click(); if (matData) renderMat();`);
-    d.getElementById("hwyTo").value = "";
-    const q = got.asked.filter(u => u.startsWith("api/nearest")).map(u => new URLSearchParams(u.split("?")[1]).get("need"));
-    const bad = [];
-    if (got.srcBtn !== "⇄ nearest raw trader") bad.push("sources button");
-    if (JSON.stringify(got.cardBtns) !== JSON.stringify(["Raw:⇄", "Manufactured:⇄"])) bad.push("card buttons");   // the short ones only
-    if (!got.open || got.select !== "Raw" || got.ucTicked) bad.push("opened with the trader");
-    if (!/⇄ raw$/.test(got.has[0] || "") || !/⇄ trader$/.test(got.has[1] || "")) bad.push("kinds shown");
-    if (!/7 without a raw material trader/.test(got.foot)) bad.push("foot");
-    if (JSON.stringify(q) !== JSON.stringify(["Raw", "Encoded", "UC"])) bad.push("asked");
-    if (!/"need":\["UC"\]/.test(got.stored || "")) bad.push("saved filter untouched");
-    if (got.view !== "hwy" || !got.asked.some(u => u.startsWith("api/highway/plot"))) bad.push("plot here");
-    if (got.select2 !== "") bad.push("plain opening");
-    const goodTR = !bad.length && errors.length === before;
-    allOk = allOk && goodTR;
-    console.log(goodTR ? "OK" : "FAIL", "| S54 material traders |", goodTR ? "⇄ on short materials opens the finder with the trader (filter not saved), kinds shown, Plot here shows Plot Route" :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
   }
   // G2.2, F48, F64: a bad server copy (a list that is not a list, a null object, a number for 'saved') does not stop
@@ -2252,7 +1909,6 @@ const releasePayloads = async () => {
   // captions filled in a window that is not speaking, a caption tap posting a replay without leaving Now, the bar,
   // ✕ back and a double tap; a ?mode=now window stays on Now with its URL; ↗ opens ?mode=now (once)
   {
-    holdPayloads();
     const w = dom.window, before = errors.length, got = {}, bad = [], realFetch = w.fetch, posted = [];
     const savedData = w.eval("JSON.stringify(data)"), flags = w.eval("[speechOn, isSpeaker, alertSpeak.sampling]");
     got.risk = JSON.parse(w.eval(`(() => {
@@ -2328,7 +1984,6 @@ const releasePayloads = async () => {
     const goodC = !bad.length && errors.length === before;
     allOk = allOk && goodC;
     console.log(goodC ? "OK" : "FAIL", "| batch C now |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(got)}` : "at-risk line (3 states), captions in a quiet window, caption tap replays, bar, ✕ back, double tap, ?mode=now stays, ↗", errors.slice(before));
-    await releasePayloads();
   }
   // Batch D: the widened fuel_target (a top-up at a scoopable star; one card when both rules match; once per system),
   // the in-system scoopable star's wording (said only when one is known), "under N jumps", the fuel tile and the target cost
@@ -2382,7 +2037,7 @@ const releasePayloads = async () => {
     got.tile = [/scoopable: 6 of last 20 · 3 dry in a row/.test(fl.textContent), !!fl.querySelector(".warnc"), /scoopable here: B \(K\) · 1,240 ls/.test(fl.textContent),
                 /\(484 ly\)/.test(fl.textContent)];
     got.target = /Costed · 38\.2 ly · 2\.9 t · leaves 3 max jumps/.test(d.getElementById("target").textContent);
-    got.laden = /78\.0 laden/.test(d.getElementById("cmdrLine").textContent);   // under the ship (S75)
+    got.laden = /78\.0 laden/.test(d.getElementById("subJump").textContent);
     // R14: a jump the tank can't pay for reads out of range, with what it needs; R15: the jumps still to make
     w.eval(`data.target = Object.assign({}, data.target, {hop: {ly: 75.6, fuel: 4.02, left: 0, reach: false}}); render()`);
     const tt = d.getElementById("target").textContent;
@@ -2432,9 +2087,6 @@ const releasePayloads = async () => {
                      w.eval(`elsewhereText({species: "Fungoida Setisis", samples: 1, body: "B 2", value: 1e6})`),
                      w.eval(`elsewhereText({species: "Stratum Tectonicas", samples: 1, body: "C 1", system: "Far Away", value: 95e6})`)];
     got.strip = w.eval(`data.sampling = {elsewhere: {species: "Fungoida Setisis", samples: 2, body: "B 2", value: 1e6}}; samplingHtml().replace(/<[^>]+>/g, "")`);
-    // S62: what the run pays from sample 1, the x5 apart; without the bonus the value alone
-    got.pays = [w.eval(`data.sampling = {genus: "Bacterium", species: "Bacterium Aurasus", samples: 1, need: 500, points: 1, nearest: 0, to_go: 500, clear: false, value: 1e6, factor: 5}; samplingHtml().replace(/<[^>]+>/g, "")`),
-                w.eval(`data.sampling.factor = 1; samplingHtml().replace(/<[^>]+>/g, "")`)];
     got.dropped = run({kind: "bio_dropped", system: 1, body: "B 2", species: "Fungoida Setisis", genus: "Fungoida", elsewhere: false});
     // the region: with the briefing spoken, it waits for the briefing, which opens with it
     const sys = w.eval("posId()");
@@ -2475,8 +2127,6 @@ const releasePayloads = async () => {
       elsewhere: ["In progress elsewhere: Fungoida Setisis 2/3 on B 2. A new species discards it.", "",
                   "In progress elsewhere: Stratum Tectonicas 1/3 on C 1 (Far Away). A new species discards it."],
       strip: "In progress elsewhere: Fungoida Setisis 2/3 on B 2. A new species discards it.",
-      pays: ["🧬 Bacterium Aurasus · 1.0M (×5: 5.0M) · sample 1/3 · 500 m to go (0 of 500 m)",
-             "🧬 Bacterium Aurasus · 1.0M · sample 1/3 · 500 m to go (0 of 500 m)"],
       dropped: [["sampling", "Fungoida Setisis 2/3 discarded", null, null, "a card only: never spoken"]],
       regionWait: [], regionToast: ["Entering Norma Arm"],
       briefOpens: [["brief", "Entering the Norma Arm. Undiscovered. 5 bodies. Scoopable K star."]], pendingCleared: true,
@@ -2489,7 +2139,7 @@ const releasePayloads = async () => {
     for (const k of Object.keys(want)) if (JSON.stringify(got[k]) !== JSON.stringify(want[k])) bad.push(k);
     const goodE = !bad.length && errors.length === before;
     allOk = allOk && goodE;
-    console.log(goodE ? "OK" : "FAIL", "| batch E exobio |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}` : "x5 runs line, sale check line, elsewhere strip + discard card, a run's pay from sample 1, region folded or alone, jumponium off by default / folded / alone", errors.slice(before));
+    console.log(goodE ? "OK" : "FAIL", "| batch E exobio |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}` : "x5 runs line, sale check line, elsewhere strip + discard card, region folded or alone, jumponium off by default / folded / alone", errors.slice(before));
   }
   {   // batch F: the pre-Odyssey mark (Nearby, Left behind, Here) and the firsts watch (My firsts, the Unsold tile)
     const w = dom.window, d = w.document, before = errors.length, bad = [], got = {};
@@ -2857,11 +2507,11 @@ const releasePayloads = async () => {
       o.three = worthSaying(L([b8, b5, bb("3", 1000000)]));
       o.run = leavingSaid(L([b8, bb("5", 1680000, {partial: {Stratum: 1}})]));
       if (keep === null) localStorage.removeItem("codexNewCounts"); else localStorage.setItem("codexNewCounts", keep);
-      render(); o.hz = document.getElementById("tWhere").textContent;   // the horizon left the tile (S75)
+      render(); o.hz = document.getElementById("horizonLn").textContent;
       return JSON.stringify(o);
     })()`));
     const want = [/biology on A 3, new to your codex here, up to 5\.0M with first footfall/.test(got.said),
-      /biology on A 3, new to your codex here/.test(got.worth), got.saidOff === "", !got.hz.includes("nearest known unvisited"),
+      /biology on A 3, new to your codex here/.test(got.worth), got.saidOff === "", !got.hz.includes(" — "),
       got.planOff === 0, JSON.stringify(got.cfgOff) === "[false,0]", JSON.stringify(got.cfgOn) === "[true,1]",
       got.two === "biology on 8, up to 38.9M, and on 5, up to 8.4M; both new to your codex here, with first footfall",
       got.twoSaid === "biology on 8, up to 38.9 million, and on 5, up to 8.4 million; both new to your codex here, with first footfall",
@@ -2871,7 +2521,7 @@ const releasePayloads = async () => {
       got.three === "biology on 8, up to 38.9M, on 5, up to 8.4M, and on 3, up to 5.0M; all new to your codex here, with first footfall",
       got.run === "biology on 5 (Stratum 1 of 3), up to 8.4M, and on 8, up to 38.9M; both new to your codex here, with first footfall"];
     const good = want.every(Boolean) && errors.length === before;
-    console.log(good ? "OK" : "FAIL", "| codex finds say why |", good ? "leaving and debrief lines name the codex find, biology and shared attributes said once; no horizon in the Where tile" : JSON.stringify({want, got}), errors.slice(before));
+    console.log(good ? "OK" : "FAIL", "| codex finds say why |", good ? "leaving and debrief lines name the codex find, biology and shared attributes said once; Where line keeps only the star" : JSON.stringify({want, got}), errors.slice(before));
   }
 
   // Batch A (review 2026-10-01): R27 the N and the rim tags centred on every frame (a stand-in canvas whose
@@ -2949,50 +2599,6 @@ const releasePayloads = async () => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| R13 trip under way |", good ? "bio sales since the last carto sale drawn with their x5 check" : JSON.stringify(got), errors.slice(before));
   }
-  // S15: the Materials tab's synthesis: the FSD injections' cards open, Ship upkeep / SRV / Other folded into one line
-  // each (grades as B×4 S×1 P×0), a recipe of your own ✓ with its date, the fold kept per device ("synthOpen")
-  {
-    const w = dom.window, before = errors.length;
-    const got = JSON.parse(w.eval(`(() => {
-      const o = {}, md = matData, keep = store.get("synthOpen", []);
-      const card = (name, group, family, grade, n, extra) => Object.assign({name, group, family, grade, craftable: n, verified: false, learned: null,
-        materials: [{id: "iron", name: "Iron", need: 2, have: 2 * n}]}, extra || {});
-      store.set("synthOpen", []);
-      matData = {rows: [], snapshot_ts: "2026-01-01T00:00:00Z", ts: "2026-01-01T00:00:00Z", sources: {}, mining_sites: [], synthesis: [
-        card("FSD injection basic", "fsd", "FSD injection basic", null, 5, {boost: "+25%"}),
-        card("AFMU refill basic", "ship", "AFMU refill", "basic", 4), card("AFMU refill standard", "ship", "AFMU refill", "standard", 1),
-        card("AFMU refill premium", "ship", "AFMU refill", "premium", 0),
-        card("Life support", "ship", "Life support", null, 7, {verified: true, learned: {ts: "2026-09-30T10:00:00Z", n: 3, differs: false}}),
-        card("SRV refuel basic", "srv", "SRV refuel", null, 9),
-        card("Ammo Basic", "other", "Ammo Basic", null, 2, {verified: true, learned: {ts: "2026-08-01T00:00:00Z", n: 1, differs: false}})]};
-      renderMat();
-      const el = document.getElementById("matSynth");
-      o.fsdOpen = [...el.children].filter(x => x.classList.contains("synth")).map(x => x.querySelector("b").textContent);
-      o.groups = [...el.querySelectorAll("details.synthGroup")].map(d => [d.dataset.sgroup, d.open, d.querySelector("summary").textContent]);
-      const life = [...el.querySelectorAll(".synth")].find(x => /Life support/.test(x.textContent));
-      o.life = [life.title, !!life.querySelector(".learned")];
-      const ship = el.querySelector('[data-sgroup="ship"]');
-      ship.open = true; ship.dispatchEvent(new window.Event("toggle"));
-      o.stored = store.get("synthOpen", []);
-      renderMat();
-      o.reopened = el.querySelector('[data-sgroup="ship"]').open && !el.querySelector('[data-sgroup="srv"]').open;
-      store.set("synthOpen", keep); matData = md; matKey = null; if (md) renderMat();
-      return JSON.stringify(o);
-    })()`));
-    const bad = [];
-    if (JSON.stringify(got.fsdOpen) !== JSON.stringify(["FSD injection basic"])) bad.push("fsd");
-    const g = Object.fromEntries(got.groups.map(([k, open, text]) => [k, [open, text.replace(/\s+/g, " ").trim()]]));
-    if (JSON.stringify(Object.keys(g)) !== JSON.stringify(["ship", "srv", "other"]) || Object.values(g).some(x => x[0])) bad.push("folded");
-    if (g.ship && g.ship[1] !== "Ship upkeep ▸ AFMU refill B×4 S×1 P×0 · Life support ×7") bad.push("ship line");
-    if (g.srv && g.srv[1] !== "SRV ▸ SRV refuel ×9") bad.push("srv line");
-    if (g.other && g.other[1] !== "Other recipes you have made ▸ Ammo Basic ×2") bad.push("other line");
-    if (!/^✓ checked against your synthesis on 2026-09-30 \(made 3×\)$/.test(got.life[0]) || !got.life[1]) bad.push("learned");
-    if (JSON.stringify(got.stored) !== JSON.stringify(["ship"]) || !got.reopened) bad.push("fold kept");
-    const goodSY = !bad.length && errors.length === before;
-    allOk = allOk && goodSY;
-    console.log(goodSY ? "OK" : "FAIL", "| synthesis groups |", goodSY ? "FSD cards open, the other groups folded to one line each, yours ✓, the fold kept" :
-      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
-  }
   // M3: Materials' Mining sites (one row per body, open in Here, forget after a confirm) and the rig restock recipe
   {
     const w = dom.window, before = errors.length;
@@ -3004,7 +2610,7 @@ const releasePayloads = async () => {
     const got = JSON.parse(await w.eval(`(async () => {
       const o = {}, md = matData, cf = window.confirm, v0 = view;
       matData = {rows: [], snapshot_ts: "2026-01-01T00:00:00Z", ts: "2026-01-01T00:00:00Z", sources: {},
-        synthesis: [{name: "Mining rig restock", group: "srv", family: "Mining rig restock", craftable: 2, verified: false, materials: [{name: "Iron", have: 10, need: 3},
+        synthesis: [{name: "Mining rig restock", craftable: 2, verified: false, materials: [{name: "Iron", have: 10, need: 3},
           {name: "Nickel", have: 5, need: 2}, {name: "Mechanical Equipment", have: 4, need: 1}]}],
         mining_sites: [{system: "Smojooe AR-E b25-8", id: "18207037532889", body_id: 19, body: "ABC 3 d", body_name: "Smojooe AR-E b25-8 ABC 3 d",
           minerals: [{name: "Water", tons: 10}, {name: "Methanol Monohydrate Crystals", tons: 20}], tons: 30, rigs: 2, unmarked: 1,
@@ -3045,7 +2651,6 @@ const releasePayloads = async () => {
   // line of a pool before a repeat, kept across a reload, and ▶ voice samples not counted; S8 the mapped call-out's
   // words and its tick; S9 the session tally and its 🔇 (the grid's tick kept in step) with an undo
   {
-    holdPayloads();
     const w = dom.window, before = errors.length, got = {}, bad = [], realFetch = w.fetch;
     const flags = w.eval("[speechOn, isSpeaker]"), savedData = w.eval("JSON.stringify(data)"), savedLib = w.eval("JSON.stringify(speechLib)");
     const savedAs = w.eval("JSON.stringify(alertSpeak)"), savedServer = w.localStorage.getItem("speakOnServer");
@@ -3191,7 +2796,6 @@ const releasePayloads = async () => {
     const goodD = !bad.length && errors.length === before;
     allOk = allOk && goodD;
     console.log(goodD ? "OK" : "FAIL", "| batch D voice |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}` : "capped line cut, beacon on pagehide, status leads with the target, no repeats across a reload, mapped call-out, session tally and mute", errors.slice(before));
-    await releasePayloads();
   }
   // Batch F (review 2026-10-01): S4 Search's mining section (the form, a hit that opens Here) and Nearby's ⛏ count on the
   // row and in the pop-up; S5 core modules under the level (the hull-area line, the dialog's level, welcome back, status
@@ -3553,8 +3157,6 @@ const releasePayloads = async () => {
     position: {name: "Hwy Stop 37", id: "7000000037", x: 630, y: 0, z: 3480},
     clipboard: {enabled: true, available: false, tool: null, why: "neither", last: null}, autotarget: {enabled: false}, defaults: {efficiency: 60}});
   {
-    const aimBack = aimReady();   // its 🎯 need auto-target to work (canAim)
-    holdPayloads();
     const w = dom.window, before = errors.length, realFetch = w.fetch, realCopy = w.copyText, calls = [], copied = [];
     const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), {status, headers: {"Content-Type": "application/json"}}));
     let answer = () => json(hwyPayload(hwyFixture()));
@@ -3723,16 +3325,13 @@ const releasePayloads = async () => {
           && JSON.stringify(p.back) === "[33,44]" && JSON.stringify(p.nice) === "[100,5000,2]")) bad.push("proj");
     const goodHW = !bad.length && errors.length === before;
     allOk = allOk && goodHW;
-    aimBack();
     console.log(goodHW ? "OK" : "FAIL", "| highway tab |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "200 of 400 ahead, done folded and grey, the next highlighted; form from the fleet, range override, plotters' fields; plot body and polled to done; errors; clear; projection; the line in three states with copy", errors.slice(before));
-    await releasePayloads();
   }
   // the plot form follows the current ship and cargo (review F3); only the newest answer of a loader counts (Codex F11:
   // Highway and Left behind); a failed region map is asked again after a back-off, a missing one never (review F14).
   // Every request is answered here: nothing reaches the server
   {
-    holdPayloads();
     const w = dom.window, before = errors.length, realFetch = w.fetch, got = {};
     const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), {status, headers: {"Content-Type": "application/json"}}));
     let calls = 0, payload = Object.assign(hwyPayload(null), {ship_id: 7, cargo: 4});
@@ -3805,12 +3404,10 @@ const releasePayloads = async () => {
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| highway form and late answers |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "the form follows a ship swap and new cargo; an older Highway or Left answer is dropped; the region map retries after a failure, never after a 404", errors.slice(before));
-    await releasePayloads();
   }
   // the Highway tab's auto-target box: the toggle and the delay (POSTed), "test now" with its countdown and a refusal in
   // its words, the last result, missing bindings, the steps. Every request is answered here: nothing reaches the server
   {
-    holdPayloads();
     const w = dom.window, before = errors.length, realFetch = w.fetch, calls = [], got = {};
     const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), {status, headers: {"Content-Type": "application/json"}}));
     const at = {enabled: false, delay: 5, available: true, status: "off", entry: "type", dry_run: false, running: false, countdown: 5,
@@ -3834,7 +3431,7 @@ const releasePayloads = async () => {
     got.last = txt("hwyAutoLast");
     got.missing = [d.getElementById("hwyAutoMissing").hidden, txt("hwyAutoMissing")];
     got.steps = d.querySelectorAll("#hwyAutoSteps li").length;
-    got.hint = /keys go to the window that has focus: Outrider brings the game to the front first/.test(txt("hwyAuto"));
+    got.hint = /keys go to whichever window has focus/.test(txt("hwyAuto"));
     const on = d.getElementById("hwyAutoOn");
     on.checked = true; on.dispatchEvent(new w.Event("change")); await sleep(150);
     const dl = d.getElementById("hwyAutoDelay");
@@ -3869,7 +3466,6 @@ const releasePayloads = async () => {
     allOk = allOk && goodAT;
     console.log(goodAT ? "OK" : "FAIL", "| highway auto-target box |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "toggle and delay posted (a bad delay refused here), test refused in its words, countdown, done, last result, missing bindings, steps", errors.slice(before));
-    await releasePayloads();
   }
   // review batch 6 on the page: Here follows the in-game target without a scan (F4); the fuel tile when the first
   // reading is on foot or in the SRV (F9); no "still aboard" on an undock from an estimate made before the sale (F39)
@@ -3919,7 +3515,6 @@ const releasePayloads = async () => {
   // hidden row (F17), a browser-voice error not "said" (F44), a dropped heat line does not cool the next (F46), the
   // (A+B)+(C+D) schematic (F40), exact string ids (Codex C2)
   {
-    holdPayloads();
     const w = dom.window, before = errors.length;
     const got = JSON.parse(w.eval(`(() => {
       const o = {}, saved = {carrier: data.carrier, position: data.position, systems: data.systems};
@@ -3991,7 +3586,6 @@ const releasePayloads = async () => {
     console.log(goodB8 ? "OK" : "FAIL", "| batch 8 page fixes |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "carrier's last minute, loss link, hidden row, browser voice error, heat cooldown, nested star pairs, exact ids", errors.slice(before));
     if (w.eval("view") === "firsts") { d.querySelector('[data-view="overview"]').click(); await sleep(300); }
-    await releasePayloads();
   }
   // S13: Outrider gone quiet: said once after the grace, in the browser's voice; said again when it is back
   {
@@ -4129,7 +3723,7 @@ const releasePayloads = async () => {
     const want = {colony: [500, null, " · 1,000 m"], sortTh: ["dist", "grav", "now", "max"], sortCycle: ["dist", "-dist rev", "max"],
       nearCycle: ["value", "-value", "distance"], treeSort: "max", halves: [true, true, true], halvesOff: false, matRow: true, link: ["linked", "linked"],
       nogame: ["linked · no game", "linked"], stale: ["unlinked · retrying", "stale"], none: ["unlinked · retrying", "none"], pill: true,
-      chips: ["Alerts", "Voice", "What is said", "Sounds", "Values", "Risk & warnings", "Surface map", "Auto honk", "Uploads", "In-game overlay", "Display", "Sharing", "Server", "Spoken lines", "Questions asked"],
+      chips: ["Alerts", "Voice", "What is said", "Sounds", "Values", "Risk & warnings", "Surface map", "Auto honk", "Uploads", "In-game overlay", "Display", "Sharing", "Server", "Spoken lines"],
       autoSmall: true, autoBig: false, line: true, cut: true};
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
     const goodB12 = !bad.length && errors.length === before;
@@ -4158,7 +3752,6 @@ const releasePayloads = async () => {
   // tab not opened, the name not copied), a row's Retry while the failed run's row is still the one to target; and
   // the Highway in the spoken status report and welcome (S2). Every request is answered here: nothing reaches the server
   {
-    holdPayloads();
     const w = dom.window, before = errors.length, realFetch = w.fetch, realCopy = w.copyText, calls = [], copied = [], got = {};
     const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), {status, headers: {"Content-Type": "application/json"}}));
     const fx = hwyFixture(), txt = id => d.getElementById(id).textContent.replace(/\s+/g, " ").trim();
@@ -4218,50 +3811,6 @@ const releasePayloads = async () => {
     allOk = allOk && goodTN;
     console.log(goodTN ? "OK" : "FAIL", "| highway target next |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "line and box buttons post with a countdown (no tab, no copy), refusal in its words, Retry on the failed row only, the Highway spoken in the report and welcome", errors.slice(before));
-    await releasePayloads();
-  }
-  // S74: a run that brings the game to the front itself (no countdown: "bringing the game to the front"), the server's
-  // countdown after all when the game did not come (its reason on the box and the button), and the box's line saying
-  // whether it brings the game forward or why not. Every request is answered here: nothing reaches the server
-  {
-    holdPayloads();
-    const w = dom.window, before = errors.length, realFetch = w.fetch, got = {};
-    const json = o => Promise.resolve(new Response(JSON.stringify(o), {status: 200, headers: {"Content-Type": "application/json"}}));
-    const fx = hwyFixture(), txt = id => d.getElementById(id).textContent.replace(/\s+/g, " ").trim();
-    w.fetch = (u, o) => {
-      const url = String(u);
-      if (url === "api/highway/target") return json({system: "Hwy Stop 38", in: 0, seq: 21, dry_run: false, kind: "next", front: true});
-      if (url.startsWith("api/highway")) return json(hwyPayload(fx));
-      return realFetch(u, o);
-    };
-    const at = {enabled: false, delay: 5, available: true, status: "off", running: false, countdown: 5, last: null, test: null,
-                missing: [], steps: [], front: {front: true, why: null}};
-    w.eval(`hwyRun = null; data.autotarget = ${JSON.stringify(at)}; data.highway = ${JSON.stringify(fx.summary)}; view = "hwy"; render()`);
-    await sleep(300);
-    got.line = [txt("hwyAutoFront"), d.getElementById("hwyAutoFront").className, d.getElementById("hwyAutoNext").title.includes("brings the game to the front")];
-    d.getElementById("hwyAutoNext").click(); await sleep(150);
-    got.front = [txt("hwyAutoTestMsg"), w.eval("hwyRun.front && hwyRun.n")];
-    w.eval(`data.autotarget = Object.assign({}, data.autotarget, {test: {seq: 21, kind: "next", state: "counting", in: 5,
-      note: "Elite is not the active window: click into the game", system: "Hwy Stop 38", why: null}}); render()`);
-    await sleep(100);
-    got.counting = [txt("hwyAutoTestMsg"), w.eval("hwyRun.n")];
-    w.eval(`data.autotarget = Object.assign({}, data.autotarget, {test: {seq: 21, kind: "next", state: "done", system: "Hwy Stop 38", why: null},
-      front: {front: false, why: "wmctrl is not installed"}}); render()`);
-    got.done = txt("hwyAutoTestMsg");
-    got.cannot = [txt("hwyAutoFront"), d.getElementById("hwyAutoFront").className];
-    w.fetch = realFetch;
-    w.eval(`hwyRun = null; data.autotarget = null; data.highway = null`);
-    const want = {line: ["Brings the game to the front itself: no countdown, and no key unless Elite is the active window.", "unk", true],
-      front: ["bringing the game to the front: targeting Hwy Stop 38…", 0],
-      counting: ["Elite is not the active window: click into the game · targeting Hwy Stop 38 in 5 s", 4],
-      done: "target next done: targeted Hwy Stop 38",
-      cannot: ["Does not bring the game to the front (wmctrl is not installed): click into the game during the countdown.", "warnc"]};
-    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
-    const goodS74 = !bad.length && errors.length === before;
-    allOk = allOk && goodS74;
-    console.log(goodS74 ? "OK" : "FAIL", "| target brings the game forward |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
-      : "no countdown when it brings the game forward, the server's countdown with its reason when not, the box says which", errors.slice(before));
-    await releasePayloads();
   }
   // Ship (this fork): the ship you fly from its Loadout: figures, modules by group with class and rating, engineering
   // and the engineered stats with their change from stock, and the EDSY / Coriolis links
@@ -4501,8 +4050,6 @@ const releasePayloads = async () => {
   // (off by default, [highway] defaults when this browser has none, the note, the plot body, saved per browser) and
   // the header's "conservative −5 ly"
   {
-    const aimBack = aimReady();   // its 🎯 need auto-target to work (canAim)
-    holdPayloads();
     const w = dom.window, before = errors.length, realFetch = w.fetch, got = {}, calls = [];
     const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), {status, headers: {"Content-Type": "application/json"}}));
     const fx = hwyFixture();
@@ -4552,16 +4099,13 @@ const releasePayloads = async () => {
     if (!(got.saved && got.saved.conservative === true && got.saved.conservative_ly === 4)) bad.push("saved");
     const ok = !bad.length && errors.length === before;
     allOk = allOk && ok;
-    aimBack();
     console.log(ok ? "OK" : "FAIL", "| highway too heavy and conservative range |", bad.length
       ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "the warning in the strip and the header; the tick off by default, the note per supercharge, the body, saved, [highway] defaults", errors.slice(before));
-    await releasePayloads();
   }
   // off route: the Highway list marks the nearest route system (from the live summary, so it follows each jump without
   // a fetch) and scrolls it into view in the pane, never the window; a nearest among the done rows shows while folded
   {
-    holdPayloads();
     const w = dom.window, before = errors.length, realFetch = w.fetch, got = {};
     const off = hwyFixture({off: true});
     w.fetch = (u, o) => String(u).startsWith("api/highway") ? Promise.resolve(new Response(JSON.stringify(hwyPayload(off)),
@@ -4602,13 +4146,11 @@ const releasePayloads = async () => {
     allOk = allOk && goodHN;
     console.log(goodHN ? "OK" : "FAIL", "| highway nearest off route |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "the nearest route system marked and scrolled into view in the pane (not the window); a done one shown while folded; gone back on the route", errors.slice(before));
-    await releasePayloads();
   }
   // the Highway map's background: the region layer from api/regions decoded as the server reads it, the landmarks'
   // projection, the corner toggles (per device), and the drawing order on a recording canvas: image, regions, names and
   // landmarks under the route, which still draws on top
   {
-    holdPayloads();
     const w = dom.window, before = errors.length, realFetch = w.fetch, got = {};
     if (!d.getElementById("nowView").hidden) { d.getElementById("nowBack").click(); await sleep(300); }
     const fx = hwyFixture();
@@ -4689,13 +4231,11 @@ const releasePayloads = async () => {
     allOk = allOk && goodBG;
     console.log(goodBG ? "OK" : "FAIL", "| highway map background |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "42 regions decoded as the server reads them; landmarks projected; toggles per device; image, regions, names and landmarks under the route", errors.slice(before));
-    await releasePayloads();
   }
   // ---- the tablet layout (GET /tablet, PLAN-tablet phase 3): the same page in its own shell. The desktop page above
   // never shows the shell; the tablet opens on Now, shows every page from its nav, never speaks or plays sounds, goes to
   // Now while the surface map shows and back after, says the link in words, and opens a row's facts in a sheet.
   {
-    holdPayloads();
     const desk = [!d.body.classList.contains("tablet"), d.getElementById("tabNav").hidden, d.getElementById("tabMain").hidden,
                   !d.documentElement.dataset.theme];
     const terr = [];
@@ -5015,7 +4555,6 @@ const releasePayloads = async () => {
     console.log(goodT ? "OK" : "FAIL", "| tablet layout |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "shell shown, every page from its nav, silent, map switch to Now and back, link in words, banner, row sheet, no countdown, Enter saves the rail, pinch, settings, the app's screens, Play alerts here", terr);
     tw.close();
-    await releasePayloads();
   }
   // Settings (was the alerts dialog): folding sections remembered per device, open/close all, and Server settings drawn
   // from the config file (GET api/config) with only the keys you change sent; never saved here (no POST)
@@ -5047,7 +4586,7 @@ const releasePayloads = async () => {
     await sleep(100);
     got.push(w.eval(`JSON.stringify(Object.values(JSON.parse(localStorage.getItem("settingsOpen"))).some(Boolean))`));
     w.eval(`document.getElementById("alertDialog").close ? document.getElementById("alertDialog").close() : document.getElementById("alertDialog").removeAttribute("open")`);
-    const want = ["Settings", true, 15, ["alerts"], true, '[true,true,true,"","auto true false","1"]', JSON.stringify({server: {port: "9999"}, autohonk: {enabled: true}}), "false"];
+    const want = ["Settings", true, 14, ["alerts"], true, '[true,true,true,"","auto true false","1"]', JSON.stringify({server: {port: "9999"}, autohonk: {enabled: true}}), "false"];
     const goodS = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodS;
     console.log(goodS ? "OK" : "FAIL", "| settings |", goodS ? "12 folding sections, remembered; server settings from the config file (choices as a list); only changes sent" : JSON.stringify(got), errors.slice(before));
@@ -5117,7 +4656,6 @@ const releasePayloads = async () => {
   }
   // Settings > In-game overlay: the switches and each panel's place from data.overlay; a change posts it (stubbed)
   {
-    holdPayloads();
     const w = dom.window, before = errors.length, real = w.fetch, posted = [];
     const json = body => Promise.resolve({ok: true, status: 200, headers: {get: () => "application/json"}, json: async () => body});
     // as the server answers: api/overlay/layout the layout, api/overlay the whole state (its layout too), with a note
@@ -5128,7 +4666,7 @@ const releasePayloads = async () => {
               : Object.assign({}, w.eval("data.overlay"), JSON.parse(o.body), ovNote ? {note: ovNote} : {}))) : real(u, o);
     const saved = w.eval("JSON.stringify(data.overlay || null)");
     w.eval(`data.overlay = {enabled: true, theme: "elite", text_size: "normal", panels: {system: true, body: false, radar: true},
-      analysis_only: ["bio"], hide_docked: ["system", "body", "now", "bio"], window: false, test: 0, arrange: 0, runner: {state: "no_qt", why: null}, layout: {system: {corner: "nw", x: 0.02, y: 0.16, scale: 1, bg: 0.65, alpha: 1},
+      window: false, test: 0, arrange: 0, runner: {state: "no_qt", why: null}, layout: {system: {corner: "nw", x: 0.02, y: 0.16, scale: 1, bg: 0.65, alpha: 1},
       body: {corner: "ne", x: 0.02, y: 0.16, scale: 1.2, bg: 0.5, alpha: 0.8}, radar: {corner: "se", x: 0.02, y: 0.1, scale: 1, bg: 0.5, alpha: 1}}};
       overlayDrawn = ""; renderOverlay();`);
     const d = w.document, box = d.getElementById("overlayBox");
@@ -5144,36 +4682,12 @@ const releasePayloads = async () => {
                  route: [/^\s*Route\s*$/.test(box.querySelector('[data-ovpanel="route"]').closest("label").textContent),
                          box.querySelector('[data-ovpanel="route"]').checked, /the game's own route/.test(box.querySelector('[data-ovpanel="route"]').closest("label").title),
                          !!box.querySelector('[data-ovlay="route"][data-k="corner"]')].join(),
-                 // D1: the Body panel is the Target panel (its id, so its place, kept); D2a: an Analysis only box per row
-                 target: /^\s*Target$/.test(box.querySelector('[data-ovpanel="body"]').parentNode.textContent) &&
-                   /galaxy map/.test(box.querySelector('[data-ovpanel="body"]').closest("label").title),
-                 analysis: [...box.querySelectorAll("[data-ovanalysis]")].map(x => x.dataset.ovanalysis + (x.checked ? "✓" : "")).join(" "),
-                 // the author, 2026-10-14: a Docked box per panel but the radar (a dash), the defaults ticked; short
-                 // headings with the full words on hover; Find a setting finds the boxes by their keys
-                 docked: [...box.querySelectorAll("table.ovlay tbody tr")].map(tr => { const b = tr.querySelector("[data-ovdocked]");
-                   return b ? b.dataset.ovdocked + (b.checked ? "✓" : "") : "–" + tr.querySelector("[data-ovpanel]").dataset.ovpanel; }).join(" "),
-                 heads: [...box.querySelectorAll("table.ovlay thead th")].map(th => th.textContent + (th.title || !th.textContent ? "" : "(no title)")).join("|"),
-                 headTips: /combat mode/.test(box.querySelector("table.ovlay thead tr:nth-child(2) th").title) &&
-                   /docked/.test(box.querySelector("table.ovlay thead tr:nth-child(2) th:nth-child(2)").title),
-                 finds: [box.querySelector("[data-ovanalysis]").dataset.find, box.querySelector("[data-ovdocked]").dataset.find].join(" "),
                  dimmed: box.querySelector('[data-ovpanel="body"]').closest("tr").classList.contains("ovoff"),
                  // the help under it: three short points, no button it no longer has
                  wrapped: !!box.querySelector(".ovwrap > table.ovlay"),   // scrolled inside its section, never spilling out
-                 help: d.querySelectorAll("ul.ovhelp li").length === 4 && !/button/.test(d.querySelector("ul.ovhelp").textContent),
-                 // S26: the Alerts panel's row, what it shows on hover
-                 alerts: /^\s*Alerts$/.test(box.querySelector('[data-ovpanel="alerts"]').parentNode.textContent) &&
-                   /switched on in Settings → Alerts/.test(box.querySelector('[data-ovpanel="alerts"]').closest("label").title)};
+                 help: d.querySelectorAll("ul.ovhelp li").length === 3 && !/button/.test(d.querySelector("ul.ovhelp").textContent)};
     const x = box.querySelector('[data-ovlay="radar"][data-k="x"]');
     x.value = "30"; x.dispatchEvent(new w.Event("change", {bubbles: true}));
-    await sleep(50);
-    const an = box.querySelector('[data-ovanalysis="system"]');
-    an.checked = true; an.dispatchEvent(new w.Event("change", {bubbles: true}));
-    await sleep(50);
-    got.analysisAfter = [...box.querySelectorAll("[data-ovanalysis]:checked")].map(x => x.dataset.ovanalysis).join(" ");
-    const dk = box.querySelector('[data-ovdocked="bio"]');
-    dk.checked = false; dk.dispatchEvent(new w.Event("change", {bubbles: true}));
-    await sleep(50);
-    got.dockedAfter = [...box.querySelectorAll("[data-ovdocked]:checked")].map(x => x.dataset.ovdocked).join(" ");
     box.querySelector('[data-ovact="test"]').click();
     await sleep(100);
     got.note = /cannot run yet/.test(w.eval("overlayNote"));   // nothing can draw yet: the button says why
@@ -5194,108 +4708,16 @@ const releasePayloads = async () => {
     got.popup = [step("off"), step("installing"), step("starting"), step("installing"), step("install_failed"), step("off")]
       .map(t => t.replace(/ .*/, "") + (/installed/.test(t) ? " installed" : /failed/.test(t) ? " failed" : ""));
     w.eval(`data.overlay = JSON.parse(${JSON.stringify(saved)}); overlayNote = ""; overlayDrawn = ""; renderOverlay();`);
-    const want = {rows: 8, body: "120", off: true, theme: "elite", nowin: true, nowName: true, inRows: true, tip: true, route: "true,false,true,true",
-                  target: true, analysis: "system body radar strip now bio✓ alerts route",
-                  docked: "system✓ body✓ –radar strip now✓ bio✓ alerts route",
-                  heads: "Panel|Hide when mode|Corner|X %|Y %|Size %|BG %|Opac. %||Combat|Docked", headTips: true,
-                  finds: "overlay.analysis_only overlay.hide_docked",
-                  dimmed: true, wrapped: true, help: true, alerts: true, analysisAfter: "system bio", dockedAfter: "system body now", note: true, themeNote: true,
-                  posted: [["overlay/layout", {radar: {x: 0.3}}], ["overlay", {analysis_only: ["system", "bio"]}],
-                           ["overlay", {hide_docked: ["system", "body", "now"]}], ["overlay", {test: true}],
-                           ["overlay", {theme: "default"}]],
+    const want = {rows: 7, body: "120", off: true, theme: "elite", nowin: true, nowName: true, inRows: true, tip: true, route: "true,false,true,true", dimmed: true, wrapped: true, help: true, note: true, themeNote: true,
+                  posted: [["overlay/layout", {radar: {x: 0.3}}], ["overlay", {test: true}], ["overlay", {theme: "default"}]],
                   venv: true, popup: ["", "⟳Installing", "✓ installed", "⟳Installing", "Installing failed", ""]};
     const ok = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && ok;
     console.log(ok ? "OK" : "FAIL", "| settings: in-game overlay |", ok ? "switches, panels' places, a change and the test button posted" : JSON.stringify(got), errors.slice(before));
-    await releasePayloads();
-  }
-  // S8: the overlay pill beside the link pill: data.overlay.pill in three words, the reason on hover; "not the active
-  // window" amber only while this page has the focus, red otherwise; none with no pill or on a server; the tablet's
-  // link line adds it; Settings says the same. S25: "Keep showing when Elite is not the active window" posts.
-  {
-    holdPayloads();
-    const w = dom.window, before = errors.length, real = w.fetch, posted = [];
-    const json = body => Promise.resolve({ok: true, status: 200, headers: {get: () => "application/json"}, json: async () => body});
-    w.fetch = (u, o) => /api\/overlay$/.test(String(u)) && o && o.method === "POST"
-      ? (posted.push(JSON.parse(o.body)), json(Object.assign({}, w.eval("data.overlay"), JSON.parse(o.body)))) : real(u, o);
-    const saved = w.eval("JSON.stringify(data.overlay || null)"), savedPc = w.eval("JSON.stringify(data.game_pc)");
-    const got = JSON.parse(w.eval(`(() => {
-      const el = document.getElementById("ovPill");
-      const draw = pill => { data.overlay = Object.assign({}, data.overlay || {}, {pill}); drawOvPill();
-        return el.hidden ? "hidden" : [el.textContent, el.className.replace("linkpill ovpill pcOnly ", ""), el.title].join("|"); };
-      const drawn = [draw(null), draw({state: "ok", code: "drawing", why: "drawing over Elite"}),
-                     draw({state: "wait", code: "no_game", why: "Elite is not running"}),
-                     draw({state: "bad", code: "no_wmctrl", why: "wmctrl not installed: the overlay cannot find Elite's window"})];
-      const behind = {pill: {state: "wait", code: "behind", why: "Elite is not the active window"}};
-      const focus = [ovPillState(behind, true), ovPillState(behind, false)].map(p => [p.text, p.cls, p.why].join("|"));
-      draw({state: "ok", code: "drawing", why: "drawing over Elite"});
-      const tab = tabLinkText({text: "linked"}), after = el.previousElementSibling.id;
-      const settings = overlayStatusHtml({runner: {state: "running", why: null}, pill: {state: "bad", code: "no_window", why: "Elite's window cannot be found"}});
-      data.game_pc = false; const server = draw({state: "ok", code: "drawing", why: "x"});
-      return JSON.stringify({drawn, focus, tab, after, settings: /class="bad">overlay ✗: Elite's window cannot be found/.test(settings), server}); })()`));
-    w.eval(`data.game_pc = ${savedPc}; data.overlay = {enabled: true, theme: "default", text_size: "normal", panels: {}, analysis_only: [],
-      show_inactive: false, window: true, test: 0, arrange: 0, runner: {state: "running", why: null}, layout: {}, pill: null};
-      overlayDrawn = ""; renderOverlay();`);
-    const box = w.document.getElementById("overlayBox"), keep = box.querySelector('[data-ov="show_inactive"]');
-    got.toggle = !!keep && !keep.checked && /Keep showing when Elite is not the active window/.test(keep.closest("label").textContent);
-    keep.checked = true; keep.dispatchEvent(new w.Event("change", {bubbles: true}));
-    await sleep(100);
-    got.posted = posted;
-    got.checked = box.querySelector('[data-ov="show_inactive"]').checked;
-    w.fetch = real;
-    w.eval(`data.overlay = JSON.parse(${JSON.stringify(saved)}); data.game_pc = ${savedPc}; overlayNote = ""; overlayDrawn = ""; renderOverlay(); drawOvPill();`);
-    const want = {drawn: ["hidden", "overlay ✓|ok|the in-game overlay: drawing over Elite", "overlay …|stale|the in-game overlay: Elite is not running",
-                          "overlay ✗|none|the in-game overlay: wmctrl not installed: the overlay cannot find Elite's window"],
-                  focus: ["overlay …|stale|Elite is behind this page", "overlay ✗|none|Elite is not the active window"],
-                  tab: "linked · overlay ✓", after: "linkPill", settings: true, server: "hidden",
-                  toggle: true, posted: [{show_inactive: true}], checked: true};
-    const ok = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
-    allOk = allOk && ok;
-    console.log(ok ? "OK" : "FAIL", "| overlay pill |", ok ? "three words, the reason on hover, behind this page amber, the keep-showing switch" : JSON.stringify(got), errors.slice(before));
-    await releasePayloads();
-  }
-  // S26: the overlay's Alerts panel: every alert the page shows is posted (api/overlay/alert, stubbed) while the
-  // overlay and its Alerts panel are on, on the game PC, and the kind is switched on in this browser (any of notify
-  // with notifications on, its sound, speak); danger by the speech queue's rank or the danger sound
-  {
-    const w = dom.window, before = errors.length, real = w.fetch, posted = [];
-    w.fetch = (u, o) => /api\/overlay\/alert$/.test(String(u)) && o && o.method === "POST"
-      ? (posted.push(JSON.parse(o.body)), Promise.resolve({ok: true, status: 200, json: async () => ({kept: true})})) : real(u, o);
-    const saved = w.eval("JSON.stringify([data.overlay || null, data.game_pc, alertCfg, alertSound, alertSpeak])");
-    const step = js => { w.eval(js); return posted.length; };
-    w.eval(`data.game_pc = true; data.overlay = Object.assign({}, data.overlay || {}, {enabled: true, panels: {alerts: true}});`);
-    const got = {counts: [
-      step(`alertOut("find", "B 1: Earth-like world", "2.4M cr scanned and mapped");
-            alertOut("hull", "Interdicted", "you submitted", {tag: "interdicted"});
-            alertOut("fuel", "Fuel low", "scoop at the next K star", {tag: "fuel_low"});
-            alertOut("rigleash", "Rig 3 is 4.2 km away", "");`),
-      // every tick of the kind off: not shown; its sound alone: shown
-      step(`alertSpeak.find = false; alertSound.find = false; alertCfg.find = false; alertOut("find", "C 2: Water world", "");`),
-      step(`alertSound.find = true; alertOut("find", "C 3: Water world", "");`),
-      // an upload outage: notify only (no sound, never spoken), so only with notifications on
-      step(`alertCfg.enabled = false; alertCfg.uploads = true; alertOut("uploads", "EDDN uploads are failing", "");`),
-      step(`alertCfg.enabled = true; alertOut("uploads", "EDDN uploads are failing", "");`),
-      // the panel off, a server, the overlay off: nothing posted
-      step(`data.overlay.panels = {alerts: false}; alertOut("hull", "Heat damage", "");`),
-      step(`data.overlay.panels = {alerts: true}; data.game_pc = false; alertOut("hull", "Heat damage", "");`),
-      step(`data.game_pc = true; data.overlay.enabled = false; alertOut("hull", "Heat damage", "");`)],
-      first: posted.slice(0, 4).map(b => [b.kind, b.title, b.body, b.danger].join("|")),
-      jumponium: w.eval(`jumponiumOn() === alertOn("jumponium")`)};
-    w.fetch = real;
-    w.eval(`(() => { const [o, pc, c, so, sp] = JSON.parse(${JSON.stringify(saved)}); data.overlay = o; data.game_pc = pc;
-      Object.assign(alertCfg, c); Object.assign(alertSound, so); Object.assign(alertSpeak, sp); })()`);
-    const want = {counts: [4, 4, 5, 5, 6, 6, 6, 6],
-                  first: ["find|B 1: Earth-like world|2.4M cr scanned and mapped|false", "hull|Interdicted|you submitted|true",
-                          "fuel|Fuel low|scoop at the next K star|true", "rigleash|Rig 3 is 4.2 km away||true"],
-                  jumponium: true};
-    const ok = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
-    allOk = allOk && ok;
-    console.log(ok ? "OK" : "FAIL", "| overlay alerts |", ok ? "posted when switched on here, danger marked, not with the panel off or on a server" : JSON.stringify(got), errors.slice(before));
   }
   // Settings > Voice > More voices: Piper's catalogue from the server (stubbed here: no network), one language at a time;
   // "Download and use" asks the server for that voice (POST api/voice, stubbed: nothing downloads)
   {
-    holdPayloads();
     const w = dom.window, before = errors.length, real = w.fetch, posted = [];
     const cat = {current: "en_GB-cori-medium", voices: [
       {name: "de_DE-thorsten-high", language: "de_DE", language_name: "German (Germany)", quality: "high", speakers: 1, size_mb: 114, installed: false},
@@ -5342,7 +4764,6 @@ const releasePayloads = async () => {
     const goodV = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodV;
     console.log(goodV ? "OK" : "FAIL", "| more voices |", goodV ? "Piper's catalogue by language, sorted by name, quality or size; ▶ sample plays Piper's recording; Download fetches it without switching, then it is picked in the lab" : JSON.stringify(got), errors.slice(before));
-    await releasePayloads();
   }
   // the desktop theme (Settings > Display): Default - Outrider and the tablet's nine; a choice is set on <html>, changes
   // the colours, is remembered for this browser; the Default again removes it
@@ -5662,7 +5083,6 @@ const releasePayloads = async () => {
   // review 2026-10-08 #15-#18: answers that arrive out of order. An older, slower request lands after a newer one:
   // its answer (or its failure) must not replace the newer one's
   {
-    holdPayloads();
     const w = dom.window, before = errors.length, realF = w.fetch, got = {};
     const here = w.eval("posId()");
     const sys = here ? await (await realF("api/system/" + here)).json() : null;
@@ -5740,7 +5160,6 @@ const releasePayloads = async () => {
     const goodO = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodO;
     console.log(goodO ? "OK" : "FAIL", "| answers out of order |", goodO ? "on-body strip, a pin's loading, Find, a failed older firsts, the map: the newest answer kept; the map asks again when reopened" : JSON.stringify(got), errors.slice(before));
-    await releasePayloads();
   }
   // the voice lab (2026-10-11; it was voice_lab.py): Settings > Voice shows a several-person voice's speaker; the lab
   // steps through speakers (each played, through api/say with the speaker), uses one, plays and cuts a line, saves a WAV
@@ -5810,9 +5229,7 @@ const releasePayloads = async () => {
       labEl("pronBox").open = false;
       tabClose(document.getElementById("labDlg"));
       speechLib = lib0;
-      labSound = sound0; URL.createObjectURL = cu; data.tts = t0;
-      // jsdom has no revokeObjectURL: Save's revoke runs 10 s later, inside whichever block is running then (batch 12)
-      URL.revokeObjectURL = ru || (() => {});
+      labSound = sound0; URL.createObjectURL = cu; URL.revokeObjectURL = ru; data.tts = t0;
       if (sp0 === null) store.set("speechSpeed", null); else store.set("speechSpeed", sp0);
       drawTts();
       return o; })()`);
@@ -5840,7 +5257,6 @@ const releasePayloads = async () => {
   // boxel exploration (2026-10-11): Nearby's Standard / Boxel switch shows the boxel's list (visited with your scans,
   // Spansh's, the ones to try), the warning, Target next and 🎯 by number, Keep, and the recommended boxels by mass code
   {
-    holdPayloads(); const aimBack = aimReady();   // its 🎯 need auto-target to work (canAim)
     const w = dom.window, realFetch = w.fetch, before = errors.length, posted = [];
     const view = {boxel: {prefix: "Drojau TF-H c13-", label: "Drojau TF-H c13", mc: "c", size: 40, kind: "K and M stars, some G", standard: true,
                           here: true, picked: false, center: {x: 0, y: 0, z: 0}, sector_index: [35, 31, 54], distance: 3},
@@ -5916,7 +5332,6 @@ const releasePayloads = async () => {
     got.posted = posted; got.asked = asked.filter(Boolean);
     const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
-    aimBack(); await releasePayloads();
     console.log(good ? "OK" : "FAIL", "| boxel mode |", good ? "the switch, the boxel's list and warning, Target next and 🎯 by number, Keep, the boxels nearby" : JSON.stringify({got, want}), errors.slice(before));
   }
   // green gas giants (2026-10-12): the ladder model's guess as a green planet with "?", a confirmed one without; on the
@@ -5944,270 +5359,6 @@ const releasePayloads = async () => {
     const good = JSON.stringify(g) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| green gas giants |", good ? "the guess with ?, the confirmed one, Now's line, Nearby's tag, the legend, the alert switch" : JSON.stringify({g, want}), errors.slice(before));
-  }
-  // S7 (batch 16): ExploData's colour tables missing: "colours unavailable · Retry" in Here's legend (with bio shown) and
-  // the Exo-Biology checklist's line, "downloading…" / "failed: <why>" while it runs or after, nothing once they are in;
-  // the banner's card has Retry, which posts api/bio/colours (the scratch server's ExploData is offline: it fails there)
-  {
-    holdPayloads();
-    const w = dom.window, before = errors.length;
-    const real = w.fetch, posted = [];
-    w.fetch = (u, o) => { if (o && o.method === "POST" && /bio\/colours/.test(String(u))) posted.push(String(u)); return real(u, o); };
-    const got = JSON.parse(w.eval(`(() => {
-      const o = {}, hd0 = hereData, v0 = view, br0 = data.bio_rules, cl0 = CL.data, n0 = data.notices;
-      const plain = () => bioColoursNote().replace(/<[^>]+>/g, "");
-      data.bio_rules = Object.assign({}, br0 || {species: 1, generated: ""}, {colours: false, colours_job: {state: "idle", why: null}});
-      o.idle = plain();
-      data.bio_rules.colours_job = {state: "running", why: null}; o.running = plain();
-      data.bio_rules.colours_job = {state: "failed", why: "OSError: timed out"}; o.failed = plain();
-      data.bio_rules.colours_job = {state: "idle", why: null};
-      hereData = {id64: posId(), name: "Bio", leaving: null, phenomena: [], tree: null,
-                  bodies: [{name: "B 1", body_id: 4, type: "Planet", subtype: "Rocky body", genera: ["Bacterium"], bio: 1, geo: 0, codex: [], curiosities: [],
-                            organics: [{genus: "Bacterium", species: "Bacterium Aurasus", samples: 1, value: 1e6}], bio_guess: [], value_parts: {bio_factor: 1}, mining: 0}]};
-      view = "here"; renderHere();
-      o.legend = /colours unavailable: tables not downloaded · Retry/.test(document.getElementById("hereLegend").textContent) &&
-        !!document.querySelector("#hereLegend [data-biocolours]");
-      CL.data = Object.assign({}, cl0 || {}, {kind: "bio", region: 1, region_name: "Galactic Centre", regions: (cl0 && cl0.regions) || [], genera: [],
-        summary: {possible: 0, sold: 0, aboard: 0, lost: 0, logged: 0, colours_found: 0, colours: 0, completion: 0, elsewhere: 0}});
-      renderChecklist();
-      o.checklist = /colours unavailable: tables not downloaded · Retry$/.test(document.getElementById("clStatus").textContent);
-      data.bio_rules.colours = true;
-      o.loaded = plain(); renderHere();
-      o.legendGone = !/colours unavailable/.test(document.getElementById("hereLegend").textContent);
-      data.bio_rules.colours = false;
-      data.notices = [{id: "bio_colours:1", key: "bio_colours", text: "The exobiology colour tables are not downloaded", level: "warn", action: "retry:bio_colours"}];
-      render();
-      const b = document.querySelector('#noticeBar [data-naction="retry:bio_colours"]');
-      o.button = b && b.textContent; if (b) b.click();
-      window.__s7 = {hd0, v0, br0, cl0, n0};
-      return JSON.stringify(o); })()`));
-    await settle(1500);
-    got.posted = posted.length;
-    w.eval(`(() => { const r = window.__s7; hereData = r.hd0; view = r.v0; data.bio_rules = r.br0; CL.data = r.cl0; data.notices = r.n0; render(); })()`);
-    w.fetch = real;
-    const want = {idle: "colours unavailable: tables not downloaded · Retry", running: "colours unavailable: downloading…",
-                  failed: "colours unavailable: failed: OSError: timed out · Retry", legend: true, checklist: true, loaded: "", legendGone: true,
-                  button: "Retry", posted: 1};
-    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| colour tables missing |", good ? "the note and Retry in Here's legend and the checklist, downloading / failed, the banner's Retry posts" : JSON.stringify({got, want}), errors.slice(before));
-    await releasePayloads();
-  }
-  // S6 (batch 16): someone else's scans of your unsold firsts: a card and a notification each time under its own alerts
-  // row, the days worded from the timestamps, "so far today", spoken only when the server says (at most once in 30 min)
-  {
-    const w = dom.window, before = errors.length;
-    const got = JSON.parse(w.eval(`(() => {
-      const o = {}, said = [], told = [], realSpeak = speak, realNotify = notify, m0 = data.moments;
-      const flags = [speechOn, isSpeaker, alertSpeak.firstsseen, alertCfg.firstsseen, lastMomentSeq];
-      speak = t => said.push(t); notify = (kind, title, body) => { told.push([kind, title, body]); return true; };
-      speechOn = true; isSpeaker = true; alertSpeak.firstsseen = true;
-      const day = 86400000, now = Date.now(), iso = t => new Date(t).toISOString(), s0 = lastMomentSeq;
-      const mk = (i, m) => Object.assign({seq: s0 + i, ts: iso(now), kind: "firsts_seen", id64: "9", bodies: 3, first_ts: iso(now - 15 * day),
-                                         reported_ts: iso(now - 3 * day), value: 14.2e6}, m);
-      data.moments = [mk(1, {system: "Drojau LL-O b26-3", today: 1, speak: true}), mk(2, {system: "Other", bodies: 1, today: 2, speak: false})];
-      onData();
-      speak = realSpeak; notify = realNotify; data.moments = m0;
-      [speechOn, isSpeaker, alertSpeak.firstsseen] = flags; lastMomentSeq = flags[4];
-      o.told = told; o.said = said.length;
-      o.row = ALERTS.some(a => a[0] === "firstsseen") && alertCfg.firstsseen === true && !!ALERT_SHORT.firstsseen && !!TAB_ALERT_NAMES.firstsseen &&
-        !UNSPOKEN.has("firstsseen") && !SPEECH_SYS_BOUND.has("firstsseen") && !!document.querySelector('#alertOpts [data-aspeak="firstsseen"]');
-      return JSON.stringify(o); })()`));
-    const want = {told: [["firstsseen", "👁 Someone else scanned your unsold Drojau LL-O b26-3", "3 bodies reached Spansh 12 days after you (your scan 15 days ago) · 14.2M cr at stake · see My firsts"],
-                         ["firstsseen", "👁 Someone else scanned your unsold Other", "1 body reached Spansh 12 days after you (your scan 15 days ago) · 14.2M cr at stake · 2 systems so far today · see My firsts"]],
-                  said: 1, row: true};
-    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| firsts scanned by others |", good ? "a card and a notification each time, days from the timestamps, so far today, spoken once" : JSON.stringify({got, want}), errors.slice(before));
-  }
-  // Batch 23: S1, one fuel window on an exact-plotter route (the line, its spoken clause, the overlay's copy of the words,
-  // its own alerts row and speech key, said in business as danger, silent at a refuel stop); S19, the target's jump cost
-  // and the scoopable share on Now, the same helpers as the header and the fuel tile
-  {
-    const w = dom.window, before = errors.length;
-    const got = JSON.parse(w.eval(`(() => {
-      const o = {}, said = [], told = [], realSpeak = speak, realNotify = notify, m0 = data.moments, d0 = JSON.stringify(data);
-      const sum = {id: "hw-s1", plotter: "exact", destination: "Colonia", total: 40, index: 5, at: 4, complete: false, off_route: false,
-                   refuel_in: 4, next: {name: "Dry A", id: "1", neutron: false, refuel: false, jumps: 1, distance: 70}};
-      const sh = {need_t: 24.3, max_t: 36.0, have_t: 10.0, refuel_at: "Refuel D", jumps: 4, end: "refuel", here_refuel: false};
-      const plain = h => h.replace(/<[^>]+>/g, "").replace(/\\s+/g, " ");
-      o.line = plain(hwyLineHtml(Object.assign({}, sum, {short: sh})));
-      o.red = /class="hwyheavy"/.test(hwyLineHtml(Object.assign({}, sum, {short: sh})));
-      o.atRefuel = plain(hwyLineHtml(Object.assign({}, sum, {refuel_here: true, short: Object.assign({}, sh, {here_refuel: true, max_t: null})})));
-      o.none = plain(hwyLineHtml(Object.assign({}, sum, {short: Object.assign({}, sh, {need_t: null, max_t: null, end: "end"})})));
-      o.later = plain(hwyLineHtml(Object.assign({}, sum, {heavy: {need_t: 36.07, have_t: 160, distance: 487.9, boost: 6, next: "Far C", hop: 3}})));
-      o.spoken = [hwySpoken(Object.assign({}, sum, {short: sh})), hwySpoken(Object.assign({}, sum, {refuel_here: true, short: Object.assign({}, sh, {here_refuel: true, max_t: null})}))];
-      // the moment: its own row, the fuel_short key, danger (business only by default)
-      const flags = [speechOn, isSpeaker, alertSpeak.refuelshort, lastMomentSeq], lib = speechLib;
-      speechLib = {styles: {business: "B", sarcastic: "S"}, lines: {fuel_short: {business: ["Short of {system}, {jumps}: {need}."], sarcastic: ["never, a danger line"]}}};
-      speak = (t, opt) => said.push([t, opt && opt.tag, opt && opt.log && opt.log.key]); notify = (kind, title, body) => { told.push([kind, title, body]); return true; };
-      speechOn = true; isSpeaker = true; alertSpeak.refuelshort = true;
-      data.moments = [{seq: lastMomentSeq + 1, ts: new Date().toISOString(), kind: "highway", what: "short", system: "Start", index: 0,
-                       refuel_at: "Refuel D", jumps: 4, end: "refuel", need_t: 24.3, max_t: null, have_t: 10.0}];
-      onData();
-      o.key = said.length ? said[0][2] : null; o.told = told; o.said = said.map(x => [x[1], x[0]]);
-      speak = realSpeak; notify = realNotify; data.moments = m0; speechLib = lib;
-      [speechOn, isSpeaker, alertSpeak.refuelshort] = flags; lastMomentSeq = flags[3];
-      o.row = ALERTS.some(a => a[0] === "refuelshort") && alertCfg.refuelshort === true && !!ALERT_SHORT.refuelshort && !!TAB_ALERT_NAMES.refuelshort &&
-        SPEECH_SYS_BOUND.has("refuelshort") && DANGER.has("fuel_short") && speechPrio("refuelshort", "fuel_short") === 0 &&
-        !!document.querySelector('#alertOpts [data-aspeak="refuelshort"]') && !!LINE_SAMPLES.fuel_short;
-      // S19: Now shows the jump's cost and the scoopable share with the header's and the tile's own words
-      data.target = {seq: lastSeq, fresh: false, id64: 7003, id: "7003", name: "Costed", star_class: "K", status: "partial", leaving: null,
-                     hop: {ly: 56.7, fuel: 0.9, left: 20, reach: true}};
-      data.fuel = {live: true, pct: 60, main: 30, capacity: 50, jumps_recent: 2, jumps_max: 2, since_scoop: 5,
-                   scoop_rate: {scoopable: 9, of: 20, dry_run: 0}, here_scoop: null, low_flag: false, in_ship: true};
-      renderNow();
-      const q = sel => { const e = document.querySelector(sel); return e ? e.textContent.replace(/\\s+/g, " ").trim() : null; };
-      o.nowHop = q("#nowBody .now-hop"); o.nowRate = q("#nowBody .now-rate");
-      o.nowWarn = !!document.querySelector("#nowBody .now-rate .warnc");
-      o.same = [hopCostHtml(data.target.hop) === document.querySelector("#nowBody .now-hop").innerHTML,
-                scoopRateWarn(data.fuel) === document.querySelector("#nowBody .now-rate").innerHTML];
-      o.outOfRange = plain(hopCostHtml({ly: 75.6, fuel: 4.02, left: 0, reach: false}));
-      o.noRate = scoopRateWarn({live: true}) === "";
-      data = JSON.parse(d0); renderNow();
-      return JSON.stringify(o); })()`));
-    const want = {
-      line: "🛣 Next: Dry A · 70.0 ly · 5 of 40 · refuel in 4 jumps · ⚠ fuel won't reach the refuel stop: Refuel D in 4 jumps · scoop to ≥ 24.3 t, at most 36.0 t",
-      red: true,
-      atRefuel: "🛣 Next: Dry A · 70.0 ly · 5 of 40 · ⛽ refuel here · ⛽ scoop to ≥ 24.3 t to reach Refuel D in 4 jumps",
-      none: "🛣 Next: Dry A · 70.0 ly · 5 of 40 · refuel in 4 jumps · ⚠ fuel won't reach the destination: Refuel D in 4 jumps · no amount of fuel makes it",
-      later: "🛣 Next: Dry A · 70.0 ly · 5 of 40 · refuel in 4 jumps · ⚠ too much fuel for the jump to Far C: ≤ 36 t, you have 160 t",
-      spoken: ["Highway: fuel won't reach Refuel D, scoop to at least 25 tonnes, at most 36, then Dry A, 70 light-years, refuel in 4 jumps",
-               "Highway: scoop to at least 25 tonnes, then Dry A, 70 light-years, refuel here"],
-      key: "fuel_short", told: [["refuelshort", "Fuel won't reach Refuel D", "fuel won't reach the refuel stop: Refuel D in 4 jumps · scoop to ≥ 24.3 t"]],
-      said: [["fuel_short", "Short of Refuel D, 4 jumps: 25 tonnes."]], row: true,
-      nowHop: "56.7 ly · 0.9 t · leaves 20 max jumps", nowRate: "scoopable: 9 of last 20", nowWarn: true, same: [true, true],
-      outOfRange: "75.6 ly · out of range (needs 4.0 t)", noRate: true};
-    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| batch 23 fuel window and Now's jump cost |", good ? "the one-window line (short, at a refuel stop, no amount, a later hop too heavy), spoken clause, refuelshort row and fuel_short key, Now's cost and scoopable share" : JSON.stringify({got, want}), errors.slice(before));
-  }
-  // Batch 24: S2, the last scoopable star before a stretch the fuel won't cover: its own alerts row and speech key (the
-  // author's line, said in business as danger; one star and no amount in plain words), the bit on the In-Game Route
-  // strip (else on the route line under the header) and Now, and the top-up card quiet where it is said
-  {
-    const w = dom.window, before = errors.length;
-    const got = JSON.parse(w.eval(`(() => {
-      const o = {}, said = [], told = [], realSpeak = speak, realNotify = notify, m0 = data.moments, d0 = JSON.stringify(data), v0 = view;
-      const flags = [speechOn, isSpeaker, alertSpeak.lastscoop, alertSpeak.fuel, lastMomentSeq, lastSeq, fuelTargetSys], lib = speechLib;
-      speechLib = {styles: {business: "B", sarcastic: "S"}, lines: {fuel_last_scoop: {business: ["The next {count} stars on your route are not scoopable."], sarcastic: ["never, a danger line"]}}};
-      speak = (t, opt) => said.push([opt && opt.log && opt.log.key, t]); notify = (kind, title, body) => { told.push([kind, title, body]); return true; };
-      speechOn = true; isSpeaker = true; alertSpeak.lastscoop = true; alertSpeak.fuel = true;
-      const ws = {count: 3, system: "Start", next: "Kay D", need_t: 18.0, full: false, have_t: 10.0, source: "navroute", first: "401", said: true};
-      const at = (i, m) => Object.assign({seq: lastMomentSeq + i, ts: new Date().toISOString(), kind: "last_scoop"}, ws, m);
-      data.moments = [at(1, {}), at(2, {count: 1, next: null}), at(3, {count: 40, full: true, need_t: null})];
-      onData();
-      o.key = said.length ? said[0][0] : null; o.told = told.slice(); o.said = said.map(x => x[1]);
-      o.row = ALERTS.some(a => a[0] === "lastscoop") && alertCfg.lastscoop === true && !!ALERT_SHORT.lastscoop && !!TAB_ALERT_NAMES.lastscoop &&
-        SPEECH_SYS_BOUND.has("lastscoop") && DANGER.has("fuel_last_scoop") && speechPrio("lastscoop", "fuel_last_scoop") === 0 &&
-        !!document.querySelector('#alertOpts [data-aspeak="lastscoop"]') && !!LINE_SAMPLES.fuel_last_scoop;
-      // the strip's bit: on the In-Game Route strip, else on the route line; Now under the fuel
-      const q = sel => { const e = document.querySelector(sel); return e ? e.textContent.replace(/\\s+/g, " ").trim() : null; };
-      data.dry_stretch = ws;
-      data.route = {hops: [{id: "401", name: "Dwarf A", star_class: "DA", scoopable: false, ly: 70, visited: false, known: true}], ly: 70, longest_dry: 1, next_scoop: null};
-      data.highway = {id: "hw-s2", plotter: "neutron", destination: "Colonia", total: 40, index: 5, at: 4, complete: false, off_route: false,
-                      next: {name: "Dwarf A", id: "401", neutron: false, refuel: false, jumps: 1, distance: 70}};
-      view = "near"; renderRoute(); renderHwyLine();
-      o.strip = /⛽ last scoop before 3 dry/.test(q("#routeStrip")); o.lineWith = /last scoop/.test(q("#hwyLine"));
-      data.route = null; renderRoute(); renderHwyLine();
-      o.line = q("#hwyLine").replace(/^.*· (⛽)/, "$1");
-      data.fuel = {live: true, pct: 50, main: 10, capacity: 160, jumps_recent: 2, jumps_max: 2, since_scoop: 3, scoop_rate: null, here_scoop: null, low_flag: false, in_ship: true};
-      renderNow();
-      o.now = q("#nowBody .now-dry");
-      // the top-up card stays quiet where S2 says it, and comes back without it
-      data.moments = []; data.here_star = "K"; fuelTargetSys = null;
-      data.fuel.scoop_rate = {scoopable: 5, of: 20, dry_run: 2};
-      data.target = {seq: "s2-1", fresh: true, id64: 401, id: "401", name: "Dwarf A", star_class: "DA", status: "partial", leaving: null};
-      told.length = 0; onData();
-      o.topupQuiet = !told.some(t => t[0] === "fuel");
-      // the warning standing but not said on this stay (an earlier stay said it), or its row not speaking: the card
-      const topupWith = (dry, speaks) => {
-        data.dry_stretch = dry; alertSpeak.lastscoop = speaks; data.target = Object.assign({}, data.target, {seq: data.target.seq + "x"});
-        fuelTargetSys = null; told.length = 0; onData(); alertSpeak.lastscoop = true;
-        return told.some(t => t[0] === "fuel" && /^Top up here/.test(t[1]));
-      };
-      o.topupUnsaid = [topupWith(Object.assign({}, ws, {said: false}), true), topupWith(ws, false), topupWith(ws, true)];
-      data.dry_stretch = null; data.target = Object.assign({}, data.target, {seq: "s2-2"}); fuelTargetSys = null;
-      onData();
-      o.topupBack = told.some(t => t[0] === "fuel" && /^Top up here/.test(t[1]));
-      speak = realSpeak; notify = realNotify; speechLib = lib;
-      [speechOn, isSpeaker, alertSpeak.lastscoop, alertSpeak.fuel] = flags; lastMomentSeq = flags[4]; lastSeq = flags[5]; fuelTargetSys = flags[6];
-      data = JSON.parse(d0); data.moments = m0; view = v0; renderRoute(); renderHwyLine(); renderNow();
-      return JSON.stringify(o); })()`));
-    const want = {
-      key: "fuel_last_scoop",
-      told: [["lastscoop", "Last scoopable star: 3 unscoopable ahead", "the fuel aboard (10.0 t) won't cover them · scoop to ≥ 18.0 t to reach Kay D"],
-             ["lastscoop", "Last scoopable star: 1 unscoopable ahead", "the fuel aboard (10.0 t) won't cover it · scoop to ≥ 18.0 t"],
-             ["lastscoop", "Last scoopable star: 40 unscoopable ahead", "even a full tank won't cover them"]],
-      said: ["The next 3 stars on your route are not scoopable.",
-             "The next star on your route is not scoopable. This is your last chance to top off before you need to call the Fuel Rats.",
-             "The next 40 stars on your route are not scoopable, and even a full tank won't cover them."],
-      row: true, strip: true, lineWith: false, line: "⛽ last scoop before 3 dry",
-      now: "⛽ last scoop before 3 dry: the fuel aboard (10.0 t) won't cover them · scoop to ≥ 18.0 t to reach Kay D",
-      topupQuiet: true, topupUnsaid: [true, true, false], topupBack: true};
-    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| batch 24 last scoopable star |", good ? "the lastscoop row and fuel_last_scoop key (one star, no amount), the strip's bit, Now, the top-up card quiet" : JSON.stringify({got, want}), errors.slice(before));
-  }
-  // Batch 25: S12 (a survey route's next stop past the systems you finished: "skipping 2 done", their names in the
-  // hover) and S11 (the wrong-jump check on every copy of the route's line, its own alerts row, notify off by default,
-  // and the wrong_target key)
-  {
-    const aimBack = aimReady();   // its 🎯 need auto-target to work (canAim)
-    const w = dom.window, before = errors.length;
-    const got = JSON.parse(w.eval(`(() => {
-      const o = {}, said = [], told = [], realSpeak = speak, realNotify = notify, m0 = data.moments, d0 = JSON.stringify(data);
-      const flags = [speechOn, isSpeaker, alertSpeak.wrongtarget, lastMomentSeq], lib = speechLib;
-      const plain = h => h.replace(/<[^>]+>/g, "").replace(/\\s+/g, " ").trim();
-      const hw = {id: "hw-s11", plotter: "exact", destination: "Colonia", total: 40, index: 5, at: 4, complete: false, off_route: false,
-                  next: {name: "Neu A", id: "101", neutron: false, refuel: false, jumps: 1, distance: 50}};
-      const tc = (ok, name, ahead) => ({ok, name, id: "9", next: "Neu A", ahead});
-      o.hw = [tc(true, "Neu A", 0), tc(false, "Scoop C", 2), tc(false, "Elsewhere", 0)].map(t => plain(hwyLineHtml(Object.assign({}, hw, {target_check: t}), {short: true})));
-      o.hwTab = plain(hwyLineHtml(Object.assign({}, hw, {target_check: tc(false, "Elsewhere", 0)}), {glyph: false}));
-      o.wrongCls = /class="hwytgt wrong"/.test(hwyLineHtml(Object.assign({}, hw, {target_check: tc(false, "Elsewhere", 0)})));
-      o.none = plain(hwyLineHtml(hw, {short: true}));
-      const sv = {kind: "riches", id: "rc-s12", destination: "Far", total: 22, index: 6, at: 3, complete: false, off_route: false,
-                  left_here: 0, skipped: 2, skipped_names: ["Done One", "Done Two"], target_check: tc(true, "Pru Aim XY-Z d1", 0),
-                  next: {name: "Pru Aim XY-Z d1", id: "7", jumps: 3, distance: null}};
-      o.sv = plain(surveyLineHtml(sv, {short: true}));
-      o.svHover = (surveyLineHtml(sv).match(/title="(finished[^"]*)"/) || [])[1];
-      o.svMore = (surveyLineHtml(Object.assign({}, sv, {skipped: 12})).match(/title="(finished[^"]*)"/) || [])[1];
-      // the Plot Route tab's head: the live line's facts for the route shown
-      data.survey = sv;
-      const rt = {id: "rc-s12", kind: "riches", from: "Here", to: "Far", count: 23, at: 3, next: 6, options: {}, systems: [
-        {i: 6, system: "Pru Aim XY-Z d1", left: 2, value: 10, value_left: 10, bodies: []}]};
-      o.head = plain((richHeadHtml({route: rt}).match(/<div class="hwystate">.*?<\\/div>/) || [""])[0]);
-      o.headOther = /skipping/.test(richHeadHtml({route: Object.assign({}, rt, {id: "other"})}));
-      // the moment: its own row (notify off by default), the wrong_target key
-      speechLib = {styles: {business: "B"}, lines: {wrong_target: {business: ["Targeted {system}; next is {next}."]}}};
-      speak = (t, opt) => said.push([opt && opt.log && opt.log.key, t]); notify = (kind, title, body) => { told.push([kind, title, body]); return true; };
-      speechOn = true; isSpeaker = true; alertSpeak.wrongtarget = true;
-      data.moments = [{seq: lastMomentSeq + 1, ts: new Date().toISOString(), kind: "wrong_target", system: "Elsewhere", next: "Neu A", route: "highway"}];
-      onData();
-      o.told = told; o.said = said;
-      o.row = ALERTS.some(a => a[0] === "wrongtarget") && alertCfgBase().wrongtarget === false && alertSpeakBase().wrongtarget === true &&
-        !!ALERT_SHORT.wrongtarget && !!TAB_ALERT_NAMES.wrongtarget && SPEECH_SYS_BOUND.has("wrongtarget") &&
-        !!document.querySelector('#alertOpts [data-aspeak="wrongtarget"]') && !!LINE_SAMPLES.wrong_target;
-      speak = realSpeak; notify = realNotify; speechLib = lib;
-      [speechOn, isSpeaker, alertSpeak.wrongtarget] = flags; lastMomentSeq = flags[3];
-      data = JSON.parse(d0); data.moments = m0;
-      return JSON.stringify(o); })()`));
-    const want = {
-      hw: ["🛣 Next: Neu A 🎯 target · ✓ targeted · 50.0 ly · 5 of 40",
-           "🛣 Next: Neu A 🎯 target · ↷ targeted Scoop C, 2 stops ahead · 50.0 ly · 5 of 40",
-           "🛣 Next: Neu A 🎯 target · ⚠ targeted Elsewhere, not the next stop Neu A · 50.0 ly · 5 of 40"],
-      hwTab: "Next: Neu A · ⚠ targeted Elsewhere, not the next stop Neu A · 50.0 ly · 5 of 40",
-      wrongCls: true, none: "🛣 Next: Neu A 🎯 target · 50.0 ly · 5 of 40",
-      sv: "💰 Next: Pru Aim XY-Z d1 🎯 target · ✓ targeted · 3 jumps · 6 of 22 · skipping 2 done",
-      svHover: "finished already, passed over: Done One, Done Two",
-      svMore: "finished already, passed over: Done One, Done Two and 10 more",
-      head: "Next: Pru Aim XY-Z d1 · ✓ targeted · skipping 2 done · 2 to do there", headOther: false,
-      told: [["wrongtarget", "Targeted Elsewhere, not the next stop", "the next stop is Neu A"]],
-      said: [["wrong_target", "Targeted Elsewhere; next is Neu A."]], row: true};
-    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
-    allOk = allOk && good;
-    aimBack();
-    console.log(good ? "OK" : "FAIL", "| batch 25 wrong target and finished systems skipped |", good ? "✓ / stops ahead / ⚠ on the route line's copies and the tab, skipping N done with names, the wrongtarget row and wrong_target key" : JSON.stringify({got, want}), errors.slice(before));
   }
   // star and planet types new to your codex (2026-10-12): ✦ not in this region's codex, ✪ in none; Here's name cell,
   // Nearby's tag naming each, the legend; nothing at all without a single body type logged
@@ -6237,1829 +5388,6 @@ const releasePayloads = async () => {
     const good = JSON.stringify(g) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| codex body types |", good ? "✦ / ✪ in Here's name cell, Nearby's tag, the legend, nothing without a codex" : JSON.stringify({g, want}), errors.slice(before));
-  }
-  // S22 (2026-10-12): geology a body's volcanism could log, ✦ when any of its set is new to your codex here, ✪ when one
-  // is in it nowhere; its own legend row (the bio ✪ / ✦ rows are not lit by it); the approach card names them
-  {
-    const w = dom.window, before = errors.length;
-    const got = w.eval(`(() => {
-      const o = {}, hd0 = hereData, v0 = view, ct0 = data.codex_types;
-      const body = (name, geo, id) => ({name, body_id: id, type: "Planet", subtype: "Icy body", genera: [], bio: 0, geo: 2, organics: [],
-        codex: [], curiosities: [], bio_guess: [], value_parts: {bio_factor: 1}, mining: 0, codex_type: null, codex_geo: geo});
-      const fum = {id: 1400158, name: "Water Ice Fumarole"}, gey = {id: 1400258, name: "Water Ice Geyser"}, sv = {id: 1400414, name: "Silicate Vapour Gas Vent"};
-      data.codex_types = {"Inner Orion Spur": [1400158, 1400258], "Norma Expanse": [1400414]};
-      view = "here";
-      hereData = {id64: posId(), name: "Gx", region: "Inner Orion Spur", leaving: null, phenomena: [], tree: null,
-                  bodies: [body("A 1", [fum, gey], 1), body("A 2", [sv], 2), body("A 3", [fum, {id: 1400160, name: "Ammonia Ice Fumarole"}], 3), body("A 4", null, 4)]};
-      renderHere();
-      o.here = [...document.querySelectorAll("#hereRows tr[data-body]")].map(r => { const m = r.querySelector(".cxgeo"); return m ? m.textContent : "-"; });
-      o.title = (document.querySelector('#hereRows tr[data-body="A 3"] .cxgeo') || {}).title;
-      const lg = [...document.querySelectorAll("#hereLegend .lg")].map(e => e.textContent);
-      o.legend = lg.some(t => t.includes("geology its volcanism could show")) && !lg.some(t => t.includes("new to your codex anywhere"));
-      o.card = approachGeoText({system: posId(), body_id: 2});
-      o.none = approachGeoText({system: posId(), body_id: 1}) + approachGeoText({system: "1", body_id: 2});
-      data.codex_types = ct0; hereData = hd0; view = v0; render();
-      return JSON.stringify(o); })()`);
-    const g = JSON.parse(got);
-    const want = {here: ["-", "✦", "✪", "-"], title: "its volcanism could show geology new to your codex: Ammonia Ice Fumarole (anywhere) (logged when you scan one)",
-                  legend: true, card: "could show geology new to your codex: Silicate Vapour Gas Vent", none: ""};
-    const good = JSON.stringify(g) === JSON.stringify(want) && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| codex geology |", good ? "✦ / ✪ from each body's set, its legend row, the approach card" : JSON.stringify({g, want}), errors.slice(before));
-  }
-  // S23 (2026-10-12): species other commanders reported to Spansh, 👥 beside the guess (a fact, with its colour), a line
-  // of their own for a genus not named yet, none for a genus you analysed; the legend's row. S27: Search's planet option
-  {
-    const w = dom.window, before = errors.length;
-    const got = w.eval(`(() => {
-      const o = {}, hd0 = hereData, v0 = view;
-      const body = (name, id, extra) => Object.assign({name, body_id: id, type: "Planet", subtype: "Icy body", genera: ["Bacterium"], bio: 3, geo: 0,
-        organics: [], codex: [], curiosities: [], bio_guess: [], value_parts: {bio_factor: 1}, mining: 0, codex_type: null, codex_geo: null}, extra);
-      const ves = {genus: "Bacterium", species: "Bacterium Vesicula", variant: "Mulberry", value: 1000000};
-      const str = {genus: "Stratum", species: "Stratum Tectonicas", variant: null, value: 19010800};
-      view = "here";
-      hereData = {id64: posId(), name: "Rx", region: "Inner Orion Spur", leaving: null, phenomena: [], tree: null,
-                  bodies: [body("A 1", 1, {reported: [ves, str]}), body("A 2", 2, {reported: [ves], organics: [{genus: "Bacterium", species: "Bacterium Vesicula", variant: "Bacterium Vesicula - Mulberry", samples: 3, done: true, lost: false, value: 1000000}]}), body("A 3", 3, {})]};
-      renderHere();
-      const cell = n => { const td = document.querySelector('#hereRows tr[data-body="' + n + '"] td.bio'); return td ? [...td.querySelectorAll(".sp.rep")].map(e => e.textContent.replace(/\\s+/g, " ").trim()) : null; };
-      o.a1 = cell("A 1"); o.a2 = cell("A 2"); o.a3 = cell("A 3");
-      o.title = (document.querySelector("#hereRows .sp.rep") || {}).title;
-      o.legend = [...document.querySelectorAll("#hereLegend .lg")].some(e => e.textContent.includes("species reported to Spansh by other commanders"));
-      const g = document.querySelector('#sPlanets input[data-group="planets"][value="ggg"]');
-      o.ggg = !!g && g.closest("label").textContent.trim() === "Potential green gas giant";
-      hereData = hd0; view = v0; render();
-      return JSON.stringify(o); })()`);
-    const g = JSON.parse(got);
-    const want = {a1: ["👥 Bacterium Vesicula - MulberryVesicula 1.0M", "👥 Stratum TectonicasTectonicas 19.0M"], a2: [], a3: [],
-                  title: "reported to Spansh by commanders' uploads", legend: true, ggg: true};
-    const good = JSON.stringify(g) === JSON.stringify(want) && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| reported species |", good ? "👥 beside the guess, a line for an unnamed genus, none once analysed, the legend; Search's green gas giant box" : JSON.stringify({g, want}), errors.slice(before));
-  }
-  // S24 / S29 (batch 18): your runs on bodies like this in the guess's hover only (Here's, the body panel's "likely"), and
-  // the Exo-Biology checklist's 🔍 on a species and a colour not found: the nearest reported bodies in the side panel
-  // (api/checklist/find answered here), with ✓ visited, ☆ (opens the bookmark), Copy and ✕; none on a species found
-  {
-    holdPayloads(); const aimBack = aimReady();   // its 🎯 need auto-target to work (canAim)
-    const w = dom.window, before = errors.length;
-    const got = JSON.parse(await w.eval(`(async () => {
-      const o = {}, hd0 = hereData, v0 = view, real = apiJson, c0 = copyText, b0 = openBookmark, cl0 = Object.assign({}, CL);
-      const hist = {label: "Icy body, thin N2, 75–100 K, Inner Orion Spur", total: 14, region: "Inner Orion Spur",
-                    species: [["Informem", 11], ["Acies", 3]]};
-      const guess = {genus: "Bacterium", best: "Bacterium Acies", value: 1000000, min_value: 1000000, species: ["Acies", "Informem"],
-                     variants: [], variant: null, history: hist};
-      view = "here";
-      hereData = {id64: posId(), name: "Rx", region: "Inner Orion Spur", leaving: null, phenomena: [], tree: null,
-        bodies: [{name: "A 1", body_id: 1, type: "Planet", subtype: "Icy body", genera: ["Bacterium"], bio: 1, geo: 0, organics: [],
-                  codex: [], curiosities: [], bio_guess: [guess], value_parts: {bio_factor: 1}, mining: 0, codex_type: null, codex_geo: null}]};
-      renderHere();
-      o.here = (document.querySelector('#hereRows span.unk[title^="likeliest by value"]') || {}).title;
-      hereData = hd0; view = v0; render();
-      let copied = null, opened = null, asked = [];
-      copyText = t => { copied = t; }; openBookmark = (id, name) => { opened = [id, name]; };
-      apiJson = async url => {
-        if (!url.includes("api/checklist/find")) return real(url);
-        asked.push(url);
-        return {species: "Bacterium Vesicula", colour: url.includes("colour=") ? "Mulberry" : null, where: "Colonia", count: 144, radius: 20000,
-          rows: [{id: "89128321720906", system: "Eol Prou LW-L c8-324", body: "4 b", body_id: 32, ly: 7.17, gravity: 0.34,
-                  dist_ls: 1196, colours: ["Mulberry"], visited: true, bookmarked: false}]};
-      };
-      try {
-        const sp = (id, name, state, list) => ({id, name, short: name.split(" ")[1], possible: "yes", state, value: 1000000,
-                                               variants: {found: list.filter(v => v.state).length, total: list.length, list}});
-        CL.data = Object.assign({}, CL.data || {}, {kind: "bio", region: 18, region_name: "Inner Orion Spur", here: 18, regions: [],
-          summary: {possible: 2, sold: 1, aboard: 0, lost: 0, logged: 0, colours: 3, colours_found: 1, completion: 33, elsewhere: 0},
-          genera: [{genus: "Bacterium", species: [sp("ves", "Bacterium Vesicula", null, [{colour: "Mulberry", where: "K star", state: null}]),
-                                                  sp("acies", "Bacterium Acies", "sold", [{colour: "Teal", where: "F star", state: "sold"}])]}]});
-        CL.open = null; CL.find = null;
-        renderChecklist();
-        const btn = id => document.querySelector('#clGrid tr[data-cl="' + id + '"] [data-clfind]');
-        o.grid = [!!btn("ves") && btn("ves").textContent, !!btn("acies")];
-        btn("ves").click();
-        await new Promise(r => setTimeout(r, 50));
-        const side = document.getElementById("clSide");
-        o.open = CL.open;
-        o.rows = [...side.querySelectorAll(".clfindt tr")].map(tr => [...tr.cells].map(c => c.textContent.trim()));
-        o.head = side.querySelector(".clfindh span").textContent;
-        o.foot = (side.querySelector(".clfind > .unk") || {}).textContent;
-        side.querySelector("[data-bm]").click(); o.bm = opened;
-        side.querySelector("[data-clcopy]").click(); o.copied = copied;
-        // a colour not found: its row's 🔍 nearby asks for that colour
-        const cv = document.querySelector('#clGrid tr.clvar [data-clfind]');
-        o.colourBtn = cv && cv.textContent;
-        cv.click();
-        await new Promise(r => setTimeout(r, 50));
-        o.asked = asked.map(u => u.replace(/^.*\\?/, ""));
-        o.head2 = side.querySelector(".clfindh span").textContent;
-        side.querySelector("[data-clfindclose]").click();
-        o.closed = !side.querySelector(".clfind") && !!side.querySelector("[data-clfind]");
-      } finally {
-        apiJson = real; copyText = c0; openBookmark = b0; Object.assign(CL, cl0); CL.key = null;
-      }
-      return JSON.stringify(o); })()`));
-    const want = {here: "likeliest by value: Acies / Informem\nyours on bodies like this (Icy body, thin N2, 75–100 K, Inner Orion Spur): Informem 11 of 14, Acies 3 of 14",
-                  grid: ["🔍", false], open: "ves",
-                  rows: [["Eol Prou LW-L c8-324", "4 b", "7.2 ly", "0.34 g", "Mulberry", "✓", "☆", "Copy 🎯"]],   // S29's 🎯 (S31)
-                  head: "Nearest reported: Bacterium Vesicula", foot: "143 more further away · reported to Spansh by commanders' uploads; distances from Colonia",
-                  bm: ["89128321720906", "Eol Prou LW-L c8-324"], copied: "Eol Prou LW-L c8-324", colourBtn: "🔍 nearby",
-                  asked: ["species=ves", "species=ves&colour=Mulberry"], head2: "Nearest reported: Bacterium Vesicula - Mulberry", closed: true};
-    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
-    allOk = allOk && good;
-    aimBack(); await releasePayloads();
-    console.log(good ? "OK" : "FAIL", "| own runs, find nearby |", good ? "your runs in the guess's hover; 🔍 on a species and a colour not found, the nearest reported with ✓, ☆, Copy, ✕" : JSON.stringify({got, want}), errors.slice(before));
-  }
-  // S73 (2026-10-12): a click anywhere on a Nearby row shows the system in Here (again: closes it); the name still
-  // copies, ☆ still opens the bookmark, a drag that selected text opens nothing
-  {
-    const w = dom.window, before = errors.length;
-    const got = w.eval(`(() => {
-      const o = {}, v0 = view, c0 = copyText, b0 = openBookmark;
-      let copied = null, opened = null;
-      copyText = t => { copied = t; }; openBookmark = id => { opened = id; };
-      view = "near"; render();
-      const tr = [...document.querySelectorAll("#rows tr[data-id]")].find(r => r.dataset.id !== posId());
-      const id = tr.dataset.id, cell = sel => document.querySelector('#rows tr[data-id="' + id + '"] ' + sel);
-      o.row = !!tr;
-      cell("td.dist").click(); o.pinned = pinnedSystem === id;
-      cell("td.dist").click(); o.unpinned = pinnedSystem === null;
-      cell("td.name").click(); o.name = [pinnedSystem, copied === cell("td.name").dataset.name];
-      cell("[data-bm]").click(); o.bm = [pinnedSystem, opened === id];
-      const s = getSelection(); s.selectAllChildren(cell("td.dist"));
-      cell("td.dist").click(); o.drag = pinnedSystem; s.removeAllRanges();
-      cell("td.bodies").click(); o.bodies = pinnedSystem === id;
-      unpinSystem(); copyText = c0; openBookmark = b0; view = v0; render();
-      return JSON.stringify(o); })()`);
-    const g = JSON.parse(got);
-    const want = {row: true, pinned: true, unpinned: true, name: [null, true], bm: [null, true], drag: null, bodies: true};
-    const good = JSON.stringify(g) === JSON.stringify(want) && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| nearby row click |", good ? "a row opens the system, again closes it; the name copies, ☆ bookmarks, a drag opens nothing" : JSON.stringify({g, want}), errors.slice(before));
-  }
-  // 🎯 on Nearby's rows (the author, 2026-10-14): S31's route "system" by the row's exact id64 string, where auto-target
-  // can work (the game PC, available: as a Map click), none on your own system's row; a click targets without opening
-  // (S73) or copying the row; the tablet's row sheet offers 🎯 Target. The post is stubbed
-  {
-    holdPayloads();
-    const w = dom.window, before = errors.length, realFetch = w.fetch, sent = [];
-    w.fetch = (u, o) => {
-      if (/api\/highway\/target/.test(String(u))) { sent.push(o && o.body ? JSON.parse(o.body) : null);
-        return Promise.resolve({ok: false, status: 400, json: async () => ({error: "smoke"})}); }
-      return realFetch(u, o);
-    };
-    const got = JSON.parse(w.eval(`(() => {
-      const o = {}, keep = window.__nearAim = {pc: data.game_pc, at: data.autotarget, sys: data.systems, view, copy: copyText};
-      window.__nearCopied = null; copyText = t => { window.__nearCopied = t; };
-      data.game_pc = true; data.autotarget = Object.assign({}, data.autotarget, {available: true, missing: []}); hwyRun = null;
-      // your own system: Nearby lists no row for it (as a copy of another row in the list, so it would have one), and
-      // its 🎯 would be none anyway
-      const other = data.systems.find(s => sysId(s) !== posId()), mine = Object.assign({}, other, {id: posId(), id64: Number(posId()), distance: 0});
-      data.systems = data.systems.filter(s => sysId(s) !== posId()).concat([mine]);
-      view = "near"; render();
-      const tr = document.querySelector('#rows tr[data-id="' + other.id + '"]'), own = document.querySelector('#rows tr[data-id="' + posId() + '"]');
-      const aim = tr && tr.querySelector('td.name [data-aim][data-route="system"]');
-      o.aim = aim && aim.dataset.aimid === other.id;
-      o.own = [!!own, nearAimBtn(mine)];
-      // left of the name, in a slot every row has (the author, 2026-10-14: the 🎯 in one column, the names in line)
-      const cells = [...document.querySelectorAll("#rows td.name")];
-      o.left = !!aim && aim.parentNode === tr.querySelector("td.name").firstElementChild && aim.parentNode.classList.contains("nearaim") &&
-        cells.length > 1 && cells.every(td => td.firstElementChild && td.firstElementChild.classList.contains("nearaim"));
-      window.__nearAimId = other.id;
-      tabOpenRow(document.getElementById("nearTable"), tr);
-      const t = document.querySelector('#tabSheetActs [data-act="aim"]');
-      o.sheet = t && [t.dataset.route, t.dataset.aimid === other.id];
-      tabClose(document.getElementById("tabSheet"));
-      aim.click();
-      return JSON.stringify(o); })()`));
-    await settle(1000);
-    Object.assign(got, JSON.parse(w.eval(`(() => {
-      const o = {}, id = window.__nearAimId, has = () => !!document.querySelector('#rows tr[data-id="' + id + '"] [data-aim]');
-      o.clicked = [pinnedSystem, window.__nearCopied];
-      data.autotarget = Object.assign({}, data.autotarget, {available: false}); render(); o.unavailable = has() || !!document.querySelector("#rows .nearaim");
-      data.autotarget = Object.assign({}, data.autotarget, {available: true}); data.game_pc = false; render(); o.server = has();
-      const k = window.__nearAim; Object.assign(data, {game_pc: k.pc, autotarget: k.at, systems: k.sys}); copyText = k.copy;
-      hwyRun = null; view = k.view; render();
-      return JSON.stringify(o); })()`)));
-    w.fetch = realFetch;
-    got.sent = sent;
-    const id = w.eval("window.__nearAimId");
-    const want = {aim: true, own: [false, ""], left: true, sheet: ["system", true], clicked: [null, null], unavailable: false, server: false,
-                  sent: [{route: "system", id}]};
-    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| nearby 🎯 |", good ? "🎯 by the row's id64, none on your own row or where auto-target cannot work; it targets without opening or copying, the tablet's sheet offers it" : JSON.stringify({got, want}), errors.slice(before));
-    await releasePayloads();
-  }
-  // One rule for every 🎯 (the author, 2026-10-14): on the game PC with auto-target available and no binding missing,
-  // a route row's, the route line's, the carrier's, S31's (sysAimBtn), Nearby's and a failed row's Retry; otherwise none
-  {
-    const w = dom.window, before = errors.length;
-    const got = JSON.parse(w.eval(`(() => {
-      const keep = {pc: data.game_pc, at: data.autotarget, run: hwyRun}, out = {};
-      const other = data.systems.find(s => sysId(s) !== posId()) || {id: "123", name: "Other"};
-      const car = {system: "Far", aboard: false, here: false};
-      const each = () => [!!hwyAimBtn("A", "highway", 1, true), !!hwyAimBtn("B"), !!carrierAim(car), !!sysAimBtn("C", "555"),
-        !!nearAimBtn(other), /hwyretry/.test(hwyRowHtml({i: 2, system: "D", distance: 1}, "ahead", true))].map(x => x ? 1 : 0).join("");
-      hwyRun = null;
-      const states = {ready: [true, {available: true, missing: []}], missing: [true, {available: true, missing: [{key: "GalaxyMapOpen", why: "no key"}]}],
-                      unavailable: [true, {available: false, missing: []}], server: [false, {available: true, missing: []}]};
-      for (const [k, [pc, at]] of Object.entries(states)) {
-        data.game_pc = pc; data.autotarget = Object.assign({}, keep.at || {}, at);
-        out[k] = each();
-      }
-      data.game_pc = keep.pc; data.autotarget = keep.at; hwyRun = keep.run;
-      return JSON.stringify(out); })()`));
-    const want = {ready: "111111", missing: "000000", unavailable: "000000", server: "000000"};   // the Map's: S72's block
-    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| one 🎯 rule |", good ? "every 🎯 only where auto-target can work" : JSON.stringify(got), errors.slice(before));
-  }
-  // S75 (2026-10-12): the jump range under the ship in the Commander tile; "from X (Y ly)" beside the system's name
-  // (no "came"); no "nearest known unvisited" in the Where tile, while Now keeps it
-  {
-    const w = dom.window, before = errors.length;
-    const got = w.eval(`(() => {
-      const o = {}, keep = {ship: data.ship, previous: data.previous, jump_range: data.jump_range, jump_range_now: data.jump_range_now, boost: data.boost};
-      const p = data.position;
-      data.ship = data.ship || {name: null, type: "anaconda"};
-      data.previous = {name: "Smojooe YC-D c12-1", x: p.x + 3, y: p.y + 4, z: p.z};
-      Object.assign(data, {jump_range: 83, jump_range_now: 75.94, boost: null}); render();
-      const lines = [...document.querySelectorAll("#cmdrLine .ln")].map(l => l.textContent.trim());
-      const ship = lines.findIndex(l => l.startsWith(shipLabel(data.ship.name, data.ship.type)));
-      o.cmdr = [ship >= 0, lines[ship + 1]];
-      o.from = [document.getElementById("here").textContent.trim().endsWith("from Smojooe YC-D c12-1 (5.0 ly)"),
-                (document.querySelector("#here .from") || {}).title];
-      const where = document.getElementById("tWhere").textContent;
-      o.where = [/came|max jump/.test(where), where.includes("nearest known unvisited")];
-      data.boost = 4; render();
-      o.boosted = (document.querySelector("#cmdrLine .boosted") || {}).textContent;
-      data.boost = null;
-      const sys0 = data.systems, st0 = data.status, cut0 = data.sphere_cut, v0 = view;
-      data.systems = [{id: "990001", id64: 990001, name: "Hz Star", distance: 4.8, visited: false, source: "spansh"}];
-      data.status = "ready"; data.sphere_cut = null; view = "now"; renderNow();
-      o.now = document.getElementById("nowView").textContent.includes("nearest known unvisited: Hz Star 4.8 ly");
-      Object.assign(data, {systems: sys0, status: st0, sphere_cut: cut0}); view = v0; Object.assign(data, keep); render();
-      return JSON.stringify(o); })()`);
-    const g = JSON.parse(got);
-    const want = {cmdr: [true, "max jump 83.0 ly · 75.9 laden"], from: [true, "from Smojooe YC-D c12-1 (5.0 ly)"], where: [false, false],
-                  boosted: "boosted ×4 → 304 ly", now: true};
-    const good = JSON.stringify(g) === JSON.stringify(want) && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| header tiles S75 |", good ? `jump range under the ship, "from" beside the name, no horizon in the tile, Now keeps it` : JSON.stringify({g, want}), errors.slice(before));
-  }
-  // S5a / S5b (2026-10-12): the notices banner (the server's notices: escaped text, a known action's button, an
-  // unknown action left out, ✕ hides it here at once and tells the server) and Settings -> Server's Show log (what the
-  // scratch server printed, from GET api/serverlog, with where the file is)
-  {
-    holdPayloads();
-    const w = dom.window, before = errors.length;
-    if (!w.HTMLDialogElement.prototype.showModal) w.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
-    if (!w.Element.prototype.scrollIntoView) w.Element.prototype.scrollIntoView = function () {};   // jsdom lays nothing out
-    const real = w.fetch, posted = [];
-    w.fetch = (u, o) => { if (o && o.method === "POST" && /notices\/dismiss/.test(String(u))) posted.push(JSON.parse(o.body)); return real(u, o); };
-    const got = JSON.parse(w.eval(`(() => {
-      const o = {};
-      window.__n0 = data.notices;
-      data.notices = [{id: "config:abc", key: "config", text: "scratch.toml has 1 problem <b>x</b>", level: "warn", action: "open:server"},
-                      {id: "x:1", key: "x", text: "something else", level: "info", action: "launch:rockets"}];
-      render();
-      const bar = document.getElementById("noticeBar");
-      o.shown = !bar.hidden && bar.querySelectorAll(".notice").length;
-      o.escaped = bar.querySelector(".ntext").textContent;
-      o.buttons = [...bar.querySelectorAll(".nact")].map(b => b.textContent);
-      o.info = bar.querySelectorAll(".notice.info .nclose").length;
-      bar.querySelector('[data-ndismiss="x:1"]').click();
-      o.left = [...bar.querySelectorAll(".notice")].map(n => n.dataset.nid);
-      return JSON.stringify(o); })()`));
-    await settle(1000);
-    got.posted = posted.slice();
-    w.eval(`document.querySelector('#noticeBar [data-naction="open:server"]').click()`);
-    await settle(2500);
-    got.settings = JSON.parse(w.eval(`JSON.stringify([document.getElementById("alertDialog").open, document.getElementById("serverSettings").open,
-      document.getElementById("srvVersion").textContent === data.outrider, !!document.querySelector("#serverSettingsBody details.srvsec")])`));
-    w.eval(`document.getElementById("srvLogBtn").click()`);
-    await settle(2500);
-    got.log = JSON.parse(w.eval(`(() => { const t = document.getElementById("logLines").textContent;
-      return JSON.stringify([document.getElementById("logDlg").open, t.includes("ED Outrider "), t.includes("serving on http://127.0.0.1:"),
-        /^Saved in .*outrider\\.log/.test(document.getElementById("logFoot").textContent), /\\d+ lines/.test(document.getElementById("logCount").textContent),
-        logText().split("\\n")[0].includes("| ED Outrider")]); })()`));
-    w.eval(`for (const id of ["logDlg", "alertDialog"]) tabClose(document.getElementById(id));
-      data.notices = window.__n0; render();`);
-    w.fetch = real;
-    const want = {shown: 2, escaped: "scratch.toml has 1 problem <b>x</b>", buttons: ["Server settings"], info: 1, left: ["config:abc"],
-                  posted: [{id: "x:1"}], settings: [true, true, true, true], log: [true, true, true, true, true, true]};
-    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| notices and the log |", good ? "the banner (escaped, its action, ✕ in every window), Show log with the server's lines and its file" : JSON.stringify({got, want}), errors.slice(before));
-    await releasePayloads();
-  }
-  // S16 / S3 (batch 12): Settings -> Uploads' Recent list (merged successes, a failure's raw text and its next try, what
-  // it did at start), holds with Try again (POST api/uploads/retry; the scratch server answers "not on hold"), no hover-only
-  // "last error"; the outage moments notify under their own alerts row, never spoken; the card's Uploads button opens
-  // Settings at Uploads
-  {
-    holdPayloads();
-    const w = dom.window, before = errors.length;
-    if (!w.HTMLDialogElement.prototype.showModal) w.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
-    if (!w.Element.prototype.scrollIntoView) w.Element.prototype.scrollIntoView = function () {};
-    const real = w.fetch, posted = [];
-    w.fetch = (u, o) => { if (o && o.method === "POST" && /uploads\/retry/.test(String(u))) posted.push(JSON.parse(o.body)); return real(u, o); };
-    const got = JSON.parse(w.eval(`(() => {
-      const o = {}, t0 = new Date(2026, 9, 12, 12, 4).getTime() / 1000, hm = t => upTime(t);
-      window.__u0 = data.uploads;
-      const u = {eddn: {on: true, available: true, wanted: true, error: "ClientConnectorError: x", holds: [{schema: "commodity", why: "400 FAIL: Schema", since: t0, refusals: 3}],
-                        recent: [{state: "fail", first: t0 - 360, at: t0 - 120, rounds: 3, kind: "offline", error: "ClientConnectorError: Cannot connect to host eddn.edcd.io:4430", next: t0 + 60},
-                                 {state: "ok", first: t0 - 3600, at: t0 - 3240, rounds: 9, sent: 37, dropped: 2, dry: 0, note: "not sent: over an hour old"}],
-                        catchup: {at: t0 - 7200, why: "caught_up", count: 12, since: null}},
-                 edsm: {on: false, available: true, wanted: true, held: "203 EDSM refused the commander name or API key", key_held: "203 EDSM refused the commander name or API key",
-                        recent: [], catchup: {at: t0 - 7200, why: "other", who: "EDMC"}},
-                 inara: {on: true, available: true, wanted: true, recent: [], catchup: {at: t0 - 7200, why: "caught_up", count: 0}}};
-      const box = document.createElement("div"); box.innerHTML = uploadsHtml(u);
-      o.lines = [...box.querySelectorAll(".uprow")].map(r => r.textContent.replace(/\\s+/g, " ").trim());
-      o.want = ["On hold: commodity, refused 3 times in an hour (400 FAIL: Schema) Try again",
-                hm(t0 - 120) + " ✗ no network: ClientConnectorError: Cannot connect to host eddn.edcd.io:4430 · 3 tries since " + hm(t0 - 360) + " · trying again at " + hm(t0 + 60),
-                hm(t0 - 3240) + " sent 37 (" + hm(t0 - 3600) + "–" + hm(t0 - 3240) + ") · 2 not taken: not sent: over an hour old",
-                "At start " + hm(t0 - 7200) + ": 12 messages from while Outrider was off",
-                "On hold: 203 EDSM refused the commander name or API key Try again",
-                "At start " + hm(t0 - 7200) + ": EDMC was sending EDSM",
-                "At start " + hm(t0 - 7200) + ": nothing missed"];
-      o.buttons = [...box.querySelectorAll("[data-uretry]")].map(b => b.dataset.uretry + (b.dataset.schema ? ":" + b.dataset.schema : ""));
-      o.noLastError = !/last error/.test(box.textContent);
-      o.row = ALERTS.some(a => a[0] === "uploads") && alertCfg.uploads === true && UNSPOKEN.has("uploads") && !!ALERT_SHORT.uploads && !!TAB_ALERT_NAMES.uploads
-        && !document.querySelector('#alertOpts [data-aspeak="uploads"]') && !!document.querySelector('#alertOpts [data-alert="uploads"]');
-      // the moments: notified, never said (speech on, this window the speaker)
-      const said = [], told = [], realSpeak = speak, realNotify = notify, flags = [speechOn, isSpeaker, alertSpeak.uploads, lastMomentSeq], m0 = data.moments;
-      speak = (t, k) => said.push(t); notify = (kind, title, body) => { told.push([kind, title, body]); return true; };
-      speechOn = true; isSpeaker = true; alertSpeak.uploads = true;
-      const s0 = lastMomentSeq, mk = (i, m) => Object.assign({seq: s0 + i, ts: new Date().toISOString()}, m);
-      data.moments = [mk(1, {kind: "upload_down", service: "eddn", text: "EDDN unreachable for 15 min: 42 messages waiting, they drop after an hour (the oldest in 38 min)"}),
-                      mk(2, {kind: "upload_back", service: "eddn", text: "EDDN sending again after 37 min: sending the 40 waiting"})];
-      onData();
-      speak = realSpeak; notify = realNotify; data.moments = m0; [speechOn, isSpeaker, alertSpeak.uploads] = flags; lastMomentSeq = flags[3];
-      o.told = told; o.said = said.length;
-      // Try again in the real box: the scratch server's EDSM is not held
-      data.uploads = u; uploadsDrawn = ""; renderUploads();
-      document.querySelector('#uploadsBox [data-uretry="edsm"]').click();
-      return JSON.stringify(o); })()`));
-    await settle(1500);
-    got.note = w.eval(`document.getElementById("uploadsMsg").textContent`);
-    got.posted = posted.slice();
-    // the card's action opens Settings at Uploads
-    got.open = JSON.parse(w.eval(`(() => {
-      data.notices = [{id: "upload_down:eddn:1", key: "upload_down:eddn", text: "EDDN unreachable for 15 min", level: "warn", action: "open:uploads"}];
-      render();
-      const b = document.querySelector('#noticeBar [data-naction="open:uploads"]');
-      const label = b && b.textContent; if (b) b.click();
-      const sec = document.querySelector('#alertDialog [data-sec-key="uploads"]');
-      const out = [label, document.getElementById("alertDialog").open, !!(sec && sec.open)];
-      tabClose(document.getElementById("alertDialog")); data.notices = []; data.uploads = window.__u0; uploadsDrawn = ""; render();
-      return JSON.stringify(out); })()`));
-    w.fetch = real;
-    const good = JSON.stringify(got.lines) === JSON.stringify(got.want) && JSON.stringify(got.buttons) === JSON.stringify(["eddn:commodity", "edsm"]) &&
-      got.noLastError && got.row && got.said === 0 && JSON.stringify(got.told.map(t => t[0])) === JSON.stringify(["uploads", "uploads"]) &&
-      got.told[0][1].startsWith("EDDN unreachable for 15 min") && got.told[1][1].startsWith("EDDN sending again") &&
-      JSON.stringify(got.posted) === JSON.stringify([{service: "edsm"}]) && got.note === "EDSM is not on hold" &&
-      JSON.stringify(got.open) === JSON.stringify(["Uploads", true, true]) && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| uploads recent and outage |", good ? "Recent, catch-up, Try again, the outage notified not spoken, the card opens Uploads" : JSON.stringify(got), errors.slice(before));
-    await releasePayloads();
-  }
-  // S42 / S45 (batch 13): the Data tile keyed off the payload's health (the short form only: "Spansh unavailable", or "No
-  // internet connection"; a failed search's own status keeps the horizon quiet); the Check buttons beside the EDSM and
-  // Inara keys (EDSM's on the scratch server itself: offline, so "Couldn't reach EDSM", the typed key in the POST body;
-  // Inara's answer stubbed: ✓ with the profile link)
-  {
-    holdPayloads();
-    const w = dom.window, before = errors.length;
-    const real = w.fetch, posted = [];
-    w.fetch = (u, o) => {
-      if (o && o.method === "POST" && /uploads\/(edsm|inara)\/check/.test(String(u))) {
-        posted.push([String(u), JSON.parse(o.body)]);
-        if (/inara/.test(String(u))) return Promise.resolve(new Response(JSON.stringify({ok: true, text: "Inara: CMDR Sample Pilot",
-          // today at 12:04 (a fixed day read "Oct 12 12:04 PM" from the next day on: the check's time only shows a date then)
-          link: "https://inara.cz/elite/cmdr/1/", at: new Date().setHours(12, 4, 0, 0) / 1000, cleared: true}), {status: 200, headers: {"Content-Type": "application/json"}}));
-      }
-      return real(u, o);
-    };
-    const got = JSON.parse(w.eval(`(() => {
-      const o = {}, keep = {health: data.health, status: data.status, systems: data.systems, sphere_cut: data.sphere_cut, uploads: data.uploads};
-      const sl = () => document.getElementById("statusLine").textContent, cls = () => document.getElementById("tData").className;
-      data.health = {down: [{source: "spansh", name: "Spansh", since: 1, kind: "timeout", user_fix: false}], offline: false}; data.status = "ok";
-      renderStrip(); o.down = [sl(), /warn/.test(cls()), dataBit];
-      data.health = {down: [{source: "spansh", name: "Spansh", since: 1, kind: "dns", user_fix: true}, {source: "edsm", name: "EDSM", since: 1, kind: "dns", user_fix: true}], offline: true};
-      renderStrip(); o.offline = sl();
-      data.health = {down: [], offline: false}; data.status = "Spansh unavailable"; data.sphere_cut = null;
-      renderStrip(); o.failedSearch = [sl(), horizon(), emptyMessage([]).startsWith("Spansh unavailable — the list is incomplete")];
-      data.status = "ok (3 Spansh body lookups failed, retrying in 60s)"; renderStrip(); o.partial = [sl(), /warn/.test(cls())];
-      data.status = "ok"; renderStrip(); o.ok = [sl(), /warn/.test(cls())];
-      data.health = keep.health; data.status = keep.status; data.sphere_cut = keep.sphere_cut; renderStrip();
-      // the Check buttons
-      window.__u1 = keep.uploads;
-      data.uploads = Object.assign({}, keep.uploads, {edsm: Object.assign({}, (keep.uploads || {}).edsm, {accounts: [{commander: "Sample Pilot", name: "Sample Pilot", set: false, hint: null}]}),
-                                                     inara: Object.assign({}, (keep.uploads || {}).inara, {accounts: [{commander: "Sample Pilot", set: true, hint: "a1B2…k1L2 (24 characters)"}]})});
-      uploadsDrawn = ""; renderUploads();
-      const box = document.getElementById("uploadsBox");
-      o.buttons = [...box.querySelectorAll("[data-kcheck]")].map(b => b.dataset.kcheck + ":" + b.textContent);
-      box.querySelector(".edsmacc .edsmKey").value = "0123456789abcdef0123456789abcdef01234567";
-      box.querySelector('.edsmacc [data-kcheck="edsm"]').click();
-      o.busy = box.querySelector(".edsmacc .keycheck").textContent;
-      box.querySelector('.inaraacc [data-kcheck="inara"]').click();
-      return JSON.stringify(o); })()`));
-    await settle(3000);
-    Object.assign(got, JSON.parse(w.eval(`(() => {
-      const box = document.getElementById("uploadsBox");
-      const e = box.querySelector(".edsmacc .keycheck"), i = box.querySelector(".inaraacc .keycheck");
-      const out = {edsm: e && e.textContent, inara: i && i.textContent, link: i && i.querySelector("a") && i.querySelector("a").href,
-                   typedKept: box.querySelector(".edsmacc .edsmKey").value.length};
-      data.uploads = window.__u1; uploadsDrawn = ""; renderUploads();
-      return JSON.stringify(out); })()`)));
-    got.posted = posted.map(([u, b]) => [u.replace(/^.*api\//, ""), b.commander, b.api_key, b.name]);
-    w.fetch = real;
-    const want = {down: ["Spansh unavailable", true, "Spansh unavailable"], offline: "No internet connection",
-                  failedSearch: ["Spansh unavailable", null, true], partial: ["ok (3 Spansh body lookups failed, retrying in 60s)", false],
-                  ok: ["Spansh ok", false], buttons: ["edsm:Check", "inara:Check"], busy: "checking…"};
-    const good = Object.keys(want).every(k => JSON.stringify(got[k]) === JSON.stringify(want[k])) &&
-      /^✗ \d\d?:\d\d( [AP]M)? Couldn't reach EDSM: the connection was refused$/.test(got.edsm || "") &&
-      /^✓ \d\d?:\d\d( [AP]M)? Inara: CMDR Sample Pilot · profile · on hold no more/.test(got.inara || "") && got.link === "https://inara.cz/elite/cmdr/1/" &&
-      got.typedKept === 40 &&
-      JSON.stringify(got.posted) === JSON.stringify([["uploads/edsm/check", "Sample Pilot", "0123456789abcdef0123456789abcdef01234567", "Sample Pilot"],
-                                                    ["uploads/inara/check", "Sample Pilot", "", null]]) && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| lookups down and key checks |", good ? "the Data tile says only \"Spansh unavailable\" / \"No internet connection\", the horizon waits, Check for EDSM and Inara keys" : JSON.stringify(got), errors.slice(before));
-    await releasePayloads();
-  }
-  // S43 / S44 (2026-10-12): a first run with no journals (the Data tile says where to set the folder and opens Settings ->
-  // Server with [journals] live focused; Docker's words instead; no position yet: "No FSD jump yet"), and Settings ->
-  // Server -> Backups (Back up now on the scratch server, its zip listed with what made it, the restore command for
-  // this install, Copy)
-  {
-    holdPayloads();
-    const w = dom.window, before = errors.length;
-    const got = JSON.parse(w.eval(`(() => {
-      const o = {}, fr0 = data.freshness, pos0 = data.position, fl = document.getElementById("freshLine");
-      data.freshness = Object.assign({}, fr0, {journal: null, missing: true, install: "git"}); render();
-      o.git = [fl.textContent.includes("no journals found · set the journal folder"), !!fl.querySelector("[data-openjournals]"),
-               document.getElementById("tData").classList.contains("warn")];
-      data.freshness.install = "docker"; render();
-      o.docker = [fl.textContent.includes("no journals in /journals: is the game PC's journal folder mounted? (JOURNALS in .env)"),
-                  !!fl.querySelector("[data-openjournals]")];
-      data.freshness.install = "git"; data.position = null; render();
-      o.nojournals = document.getElementById("here").textContent;
-      data.freshness.missing = false; render();
-      o.nojump = document.getElementById("here").textContent;
-      data.position = pos0; data.freshness.missing = true; render();
-      fl.querySelector("[data-openjournals]").click();
-      window.__fr0 = fr0;
-      return JSON.stringify(o); })()`));
-    await settle(2500);
-    got.focus = JSON.parse(w.eval(`(() => { const a = document.activeElement;
-      return JSON.stringify([document.getElementById("alertDialog").open, document.getElementById("serverSettings").open,
-        a && a.id, !!(a && a.classList.contains("srvfocus")), !!(a && a.closest('details[data-srvsec="journals"][open]'))]); })()`));
-    w.eval(`data.freshness = window.__fr0; render(); document.getElementById("srvBackups").open = true; loadBackups();`);
-    await settle(2000);
-    got.empty = w.eval(`document.getElementById("srvBackupsBody").textContent.includes("No backups yet.")`);
-    w.eval(`document.getElementById("srvBackupBtn").click()`);
-    let n = 0;
-    for (let i = 0; i < 20 && !n; i++) {
-      await sleep(500);
-      w.eval(`loadBackups()`); await settle(1000);
-      n = w.eval(`(bk.list && bk.list.backups || []).length`);
-    }
-    const copied = [];
-    const realCopy = w.copyText;
-    w.copyText = (text, what) => copied.push([text, what]);
-    got.list = JSON.parse(w.eval(`(() => { const b = document.getElementById("srvBackupsBody");
-      const row = b.querySelector("tr[data-bk]"), cmd = (document.getElementById("bkCmd") || {}).textContent || "";
-      document.getElementById("bkCopy").click();
-      return JSON.stringify([b.querySelectorAll("tr[data-bk]").length, row.classList.contains("sel"), /^outrider-scratch-\\d{8}-\\d{6}Z\\.zip$/.test(row.dataset.bk),
-        (row.querySelector(".bkkind") || {}).textContent, /launch_outrider\\.(sh|bat) .*--db .*scratch\\.sqlite --restore outrider-scratch-/.test(cmd),
-        cmd === bk.list.backups[0].command, /stop Outrider, then run/.test(b.textContent)]); })()`));
-    got.copied = copied.length === 1 && copied[0][1] === "the restore command" && copied[0][0].includes("--restore outrider-scratch-");
-    w.copyText = realCopy;
-    w.eval(`document.getElementById("srvBackups").open = false; tabClose(document.getElementById("alertDialog"));`);
-    const want = {git: [true, true, true], docker: [true, false], nojournals: "no journals yet: see the Data tile",
-                  nojump: "No FSD jump yet: the page fills in after your first jump", focus: [true, true, "srv-journals-live", true, true],
-                  empty: true, list: [1, true, true, "by hand", true, true, true], copied: true};
-    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| first run and backups S43 S44 |", good ? "no journals: where to set the folder (focused), Docker's words, no jump yet; Backups listed with the restore command and Copy" : JSON.stringify({got, want}), errors.slice(before));
-    await releasePayloads();
-  }
-  // S10 / S69 (2026-10-12): Restart (Settings -> Server's top row: off with the reason on verify.sh's server, which runs
-  // as `python -`; with data.restart.can: a confirm, POST api/restart (answered here: nothing restarts), "Restarting…",
-  // the update line's Restart now, done on another run_id) and Auto honk's readiness (the scratch server's own answer,
-  // which only looks; then a not-ready one with its fix and Copy)
-  {
-    holdPayloads();
-    const w = dom.window, before = errors.length;
-    const realFetch = w.fetch, realConfirm = w.confirm, realCopy = w.copyText, posted = [], copied = [], asked = [];
-    const got = {};
-    got.off = JSON.parse(w.eval(`(() => { const b = document.getElementById("srvRestartBtn");
-      return JSON.stringify([data.restart.can, b.disabled, b.title.includes("not started as ed_outrider.py"),
-        document.getElementById("updRestart").hidden, document.getElementById("srvRestartMsg").textContent.startsWith("cannot restart from here")]); })()`));
-    w.fetch = (u, o) => {
-      if (/api\/restart/.test(String(u))) {
-        posted.push(o && o.method);
-        return Promise.resolve({ok: true, status: 202, headers: {get: () => "application/json"},
-                                json: async () => ({ok: true, how: "launcher", backup: true})});
-      }
-      return realFetch(u, o);
-    };
-    w.confirm = q => { asked.push(q); return asked.length > 1; };   // the first one is cancelled
-    w.copyText = (text, what) => copied.push([text, what]);
-    got.can = JSON.parse(w.eval(`(() => {
-      window.__rs0 = [data.restart, data.restart_needed, data.run_id];
-      data.restart = {can: true, how: "launcher", why: null, note: null, restarting: false}; data.restart_needed = true; render();
-      const u = document.getElementById("updRestart");
-      const o = [document.getElementById("updateLine").hidden, u.hidden, u.disabled, document.getElementById("srvRestartBtn").disabled];
-      u.click();
-      return JSON.stringify(o); })()`));
-    await settle(500);
-    got.cancelled = [asked.length, posted.length];
-    w.eval(`document.getElementById("srvRestartBtn").click()`);
-    await settle(500);
-    got.asked = JSON.parse(w.eval(`JSON.stringify([document.getElementById("srvRestartMsg").textContent,
-      document.getElementById("srvRestartBtn").disabled, document.getElementById("updRestart").disabled])`));
-    got.posted = posted.slice();
-    got.back = JSON.parse(w.eval(`(() => { data.run_id = data.run_id + 1; render();
-      const o = [document.getElementById("srvRestartMsg").textContent, document.getElementById("srvRestartBtn").disabled, rst.asked];
-      [data.restart, data.restart_needed, data.run_id] = window.__rs0; render();
-      return JSON.stringify(o); })()`));
-    w.fetch = realFetch; w.confirm = realConfirm;
-    w.eval(`loadHonkCheck()`);
-    await settle(1500);
-    got.honk = JSON.parse(w.eval(`(() => { const t = document.getElementById("autoHonkReady").textContent;
-      return JSON.stringify([/^(Ready|Not ready):/.test(t), t.includes("Primary Fire"), t.includes("check again")]); })()`));
-    got.notReady = JSON.parse(w.eval(`(() => { drawHonkCheck({ready: false, checks: [{id: "evdev", ok: true, label: "evdev", fix: null, commands: []},
-        {id: "uinput", ok: false, label: "/dev/uinput is missing", fix: "load <it>", commands: ["sudo modprobe uinput"]}]});
-      const b = document.getElementById("autoHonkReady");
-      b.querySelector("[data-copycmd]").click();
-      return JSON.stringify([b.querySelector(".hrhead").textContent, b.querySelectorAll(".hrno").length, b.querySelector(".hrfix").textContent.startsWith("Fix: load <it>"),
-        b.querySelector(".bkline code").textContent]); })()`));
-    got.copied = copied;
-    w.copyText = realCopy;
-    const want = {off: [false, true, true, true, true], can: [false, false, false, false], cancelled: [1, 0],
-                  asked: ["Restarting… (finishing a backup first)", true, true], posted: ["POST"], back: ["", false, null],
-                  honk: [true, true, true], notReady: ["Not ready:", 1, true, "sudo modprobe uinput"],
-                  copied: [["sudo modprobe uinput", "the command"]]};
-    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| restart and auto honk readiness S10 S69 |", good ? "Restart off with its reason, then confirm, POST, Restarting… and back; readiness from the server, a fix with Copy" : JSON.stringify({got, want}), errors.slice(before));
-    await releasePayloads();
-  }
-  // S70 / S9 (2026-10-12): Settings -> Server -> Start with this computer (the scratch server's own answer, from this PC;
-  // then injected ones: Install posts (answered here: nothing is ever installed from the smoke test), Remove asks first,
-  // another device gets the command with Copy, Docker / macOS the reason), Outrider starting again (503 "starting" from
-  // the poll: "starting · 41%", not "not connected", and Restarting… says what it is doing; a normal answer clears it),
-  // and the starting page itself (static/starting.html) in a window of its own, reloading once Outrider is ready
-  {
-    holdPayloads();
-    const w = dom.window, before = errors.length;
-    const realFetch = w.fetch, realConfirm = w.confirm, realCopy = w.copyText, posted = [], copied = [], asked = [];
-    const got = {};
-    w.eval(`document.getElementById("srvService").open = true; loadService();`);
-    await settle(2000);
-    got.real = w.eval(`(() => { const t = document.getElementById("srvServiceBody").textContent;
-      return !!(svc.info && svc.info.this_pc === true && (svc.info.can ? /Install as a service|Remove the service/.test(t) : t.startsWith("Not here:"))); })()`);
-    const json = body => Promise.resolve({ok: true, status: 200, headers: {get: () => "application/json"}, json: async () => body});
-    const installed = {kind: "systemd", can: true, why: null, installed: true, path: "/x/ed-outrider.service", running: false, this_pc: true,
-                       command: "cd /o && ./launch_outrider.sh --install-service --port 8026", remove: "cd /o && ./launch_outrider.sh --uninstall-service"};
-    w.fetch = (u, o) => {
-      if (/api\/service/.test(String(u)) && o && o.method === "POST") {
-        posted.push(JSON.parse(o.body).action);
-        return json({ok: true, lines: ["wrote /x/ed-outrider.service", "enabled: ED Outrider starts when you log in"], service: installed});
-      }
-      return realFetch(u, o);
-    };
-    w.confirm = q => { asked.push(q); return false; };
-    w.copyText = (text, what) => copied.push([text, what]);
-    w.__svc = installed;
-    got.install = JSON.parse(w.eval(`(() => { svc.info = Object.assign({}, window.__svc, {installed: false}); svc.lines = null; renderService();
-      const b = document.getElementById("svcBtn"), o = [b.textContent, document.getElementById("svcCmd").textContent];
-      b.click(); return JSON.stringify(o); })()`));
-    await settle(500);
-    got.installed = JSON.parse(w.eval(`(() => { const t = document.getElementById("srvServiceBody").textContent;
-      return JSON.stringify([t.includes("Installed as a systemd user service"), t.includes("enabled: ED Outrider starts when you log in"),
-        document.getElementById("svcBtn").textContent, document.getElementById("svcCmd").textContent]); })()`));
-    w.eval(`document.getElementById("svcBtn").click()`);   // Remove: asks first (cancelled here)
-    await settle(300);
-    got.removeAsked = [asked.length, posted.slice()];
-    got.otherDevice = JSON.parse(w.eval(`(() => { svc.info = Object.assign({}, window.__svc, {this_pc: false}); svc.lines = null; renderService();
-      document.getElementById("svcCopy").click();
-      return JSON.stringify([!!document.getElementById("svcBtn"), document.getElementById("srvServiceBody").textContent.includes("Only from this PC's own browser")]); })()`));
-    got.copied = copied.slice();
-    got.refused = w.eval(`(() => { svc.info = {kind: null, can: false, why: "not on macOS yet", this_pc: true}; renderService();
-      return document.getElementById("srvServiceBody").textContent; })()`);
-    w.eval(`document.getElementById("srvService").open = false;`);
-    // Outrider starting again: every /api/ call answered 503 "starting"
-    const starting = {phase: "journals", text: "Reading your journals: March 2024, 41%", pct: 41, why: null, since: 1};
-    w.fetch = (u, o) => /api\/nearby/.test(String(u))
-      ? Promise.resolve({ok: false, status: 503, headers: {get: () => "application/json"},
-                         json: async () => ({error: `Outrider is starting: ${starting.text}`, code: "starting", starting})})
-      : realFetch(u, o);
-    await w.eval(`poll(true)`);
-    got.starting = JSON.parse(w.eval(`(() => { rst.asked = {run: data.run_id, at: Date.now() - 600000, backup: false};
-      const o = [linkState().text, !!disconnected, restartText()]; rst.asked = null; return JSON.stringify(o); })()`));
-    w.fetch = (u, o) => /api\/nearby/.test(String(u)) ? Promise.resolve({ok: true, status: 204, headers: {get: () => ""}}) : realFetch(u, o);
-    await w.eval(`poll(true)`);
-    got.back = JSON.parse(w.eval(`JSON.stringify([pageStarting, linkState().text.startsWith("starting")])`));
-    // not back long after a Restart under systemd: the start limit may have left the unit failed (reset-failed)
-    got.slowSystemd = w.eval(`(() => { const keep = data.restart; data.restart = Object.assign({}, keep, {how: "systemd"});
-      rst.asked = {run: data.run_id, at: Date.now() - 600000, backup: false};
-      const t = restartText(); rst.asked = null; data.restart = keep; return t; })()`).includes("systemctl --user reset-failed ed-outrider");
-    w.fetch = realFetch; w.confirm = realConfirm; w.copyText = realCopy;
-    // the starting page, as served while Outrider reads the journals
-    const answers = [{status: 200, body: starting}, {status: 200, body: {phase: "ready"}}];
-    const sw = new JSDOM(await (await fetch(base + "static/starting.html")).text(), {url: base, runScripts: "dangerously",
-      beforeParse(x) {
-        x.fetch = () => { const a = answers.length > 1 && !x.__ready ? answers[0] : answers[1];
-          return Promise.resolve({ok: true, status: a.status, json: async () => a.body}); };
-        x.addEventListener("error", e => errors.push("starting page: " + e.message));
-      }}).window;
-    sw.eval(`reloadPage = () => { window.__reloaded = (window.__reloaded || 0) + 1; }`);
-    await sleep(300);
-    got.page = JSON.parse(sw.eval(`JSON.stringify([document.getElementById("text").textContent, document.querySelector("#bar > i").style.width,
-      document.getElementById("logBtn").hidden, window.__reloaded || 0])`));
-    sw.__ready = true;
-    await sleep(1500);
-    got.reloaded = sw.eval(`window.__reloaded || 0`);
-    sw.close();
-    const want = {real: true, install: ["Install as a service", "cd /o && ./launch_outrider.sh --install-service --port 8026"],
-                  installed: [true, true, "Remove the service", "cd /o && ./launch_outrider.sh --uninstall-service"],
-                  removeAsked: [1, ["install"]], otherDevice: [false, true],
-                  copied: [["cd /o && ./launch_outrider.sh --uninstall-service", "the command"]], refused: "Not here: not on macOS yet",
-                  starting: ["starting · 41%", false, "Restarting… Reading your journals: March 2024, 41%"], back: [null, false], slowSystemd: true,
-                  page: ["Reading your journals: March 2024, 41%", "41%", false, 0], reloaded: 1};
-    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| service and starting S70 S9 |", good ? "Start with this computer (install, remove asks, another device, refused); 503 starting is starting; the starting page reloads when ready" : JSON.stringify({got, want}), errors.slice(before));
-    await releasePayloads();
-  }
-  // S68 / S47 (batch 14): the Log's upload marks (✓ EDDN · ⏳ EDSM..., the reason in the hover) and "not sent" (offered
-  // while an upload is in use; ticked, the query asks the server for unsent lines and the category boxes dim); Settings ->
-  // Uploads' Fill gaps in EDSM's flight log (a Check fills from / to, Send only for the previewed range and after a
-  // confirm, Stop / Go on by the progress; the posts stubbed: nothing reaches EDSM)
-  {
-    holdPayloads();
-    const w = dom.window, before = errors.length, realFetch = w.fetch, realConfirm = w.confirm, posted = [], asked = [];
-    w.fetch = (u, o) => {
-      const url = String(u);
-      if (url.startsWith("api/log")) asked.push(url);
-      if (o && o.method === "POST" && /uploads\/edsm\/backfill/.test(url)) {
-        const b = JSON.parse(o.body); posted.push(b);
-        const pv = {commander: "Sample Pilot", start: "2026-10-09T21:14:06Z", end: "2026-10-11T08:00:00Z", files: 3, at: 1,
-                    summary: {events: 312, jumps: 41, requests: 2, seconds: 30, by_event: [["FSDJump", 41], ["Scan", 120]]}};
-        const answer = b.action === "preview" ? {progress: null, job: null, preview: pv, queued: 0, gap_s: 10}
-          : {progress: {state: "running", commander: "Sample Pilot", start: pv.start, end: pv.end, total: 312, counts: {stored: 200}}, job: null, preview: null, queued: 112, gap_s: 10};
-        return Promise.resolve(new Response(JSON.stringify(answer), {status: b.action === "send" ? 202 : 200, headers: {"Content-Type": "application/json"}}));
-      }
-      return realFetch(u, o);
-    };
-    const asks = [];
-    w.confirm = q => { asks.push(q); return true; };
-    const got = JSON.parse(w.eval(`(() => {
-      const o = {}, keep = {rows: L.rows, uploads: data.uploads};
-      L.rows = [{id: "J.log|0", at: 0, ts: new Date().toISOString(), event: "FSDJump", cat: "travel", summary: "Jumped to A", raw: {},
-                 up: [{service: "eddn", state: "sent", why: "200 OK"}, {service: "edsm", state: "dropped", why: "102 Message older than the stored one"}]},
-                {id: "J.log|1", at: 90, ts: new Date().toISOString(), event: "Music", cat: "noise", summary: "Music", raw: {}, up: []}];
-      renderLog();
-      const marks = [...document.querySelectorAll("#logRows .upm > span")];
-      o.marks = marks.map(m => [m.className, m.textContent, m.title]);
-      o.rowsWithMarks = document.querySelectorAll("#logRows .upm").length;
-      data.uploads = Object.assign({}, keep.uploads, {eddn: Object.assign({}, (keep.uploads || {}).eddn, {wanted: false, queued: 0}),
-        edsm: Object.assign({}, (keep.uploads || {}).edsm, {wanted: false, queued: 0}), inara: Object.assign({}, (keep.uploads || {}).inara, {wanted: false, queued: 0})});
-      logUnsentShow(); o.hiddenOff = document.getElementById("lUnsentBox").hidden;
-      data.uploads.edsm = Object.assign({}, data.uploads.edsm, {wanted: true});
-      logUnsentShow(); o.shownOn = !document.getElementById("lUnsentBox").hidden;
-      L.rows = keep.rows; data.uploads = keep.uploads;
-      return JSON.stringify(o); })()`));
-    // "not sent" ticked: the server's answer (the scratch server's outbox is empty) and the boxes dimmed
-    w.eval(`lUnsent.checked = true; lUnsent.onchange();`);
-    await settle(1500);
-    Object.assign(got, JSON.parse(w.eval(`JSON.stringify({dim: document.getElementById("lCats").classList.contains("dim"),
-      status: document.getElementById("lStatus").textContent, saved: store.get("log", {}).unsent})`)));
-    got.unsentAsked = asked.some(u => /unsent=1/.test(u));
-    w.eval(`lUnsent.checked = false; lUnsent.onchange();`);
-    await settle(1500);
-    got.undim = w.eval(`document.getElementById("lCats").classList.contains("dim")`);
-    // the backfill block
-    Object.assign(got, JSON.parse(w.eval(`(() => {
-      const o = {}, keep = data.uploads;
-      window.__u2 = keep;
-      const bf = {progress: null, preview: null, queued: 0, gap_s: 10, since: null,
-                  job: {kind: "check", state: "done", at: 2, text: "EDSM's flight log ends 2026-10-09 21:14 UTC at Sample Reach; since when Outrider has sent: unknown; your journals have 41 jumps between.",
-                        result: {start: "2026-10-09T21:14:06Z", end: "2026-10-11T08:00:00Z", jumps: 41}}};
-      data.uploads = Object.assign({}, keep, {edsm: Object.assign({}, (keep || {}).edsm, {backfill: bf, accounts: [{commander: "Sample Pilot", name: "Sample Pilot", set: true, hint: "0123…4567 (40 characters)"}]})});
-      BF.open = true; uploadsDrawn = ""; renderUploads();
-      const box = document.getElementById("uploadsBox"), q = s => box.querySelector(s);
-      o.filled = [q('[data-bf="start"]').value, q('[data-bf="end"]').value];
-      o.sendOff = q('[data-bfact="send"]').disabled;
-      o.jobLine = /^✓ .*your journals have 41 jumps between\\.$/.test([...box.querySelectorAll(".bfill .hint")].map(h => h.textContent.trim()).find(t => t.startsWith("✓")) || "");
-      q('[data-bfact="preview"]').click();
-      return JSON.stringify(o); })()`)));
-    await settle(1000);
-    Object.assign(got, JSON.parse(w.eval(`(() => {
-      const box = document.getElementById("uploadsBox"), q = s => box.querySelector(s);
-      const o = {sendOn: !q('[data-bfact="send"]').disabled, preview: [...box.querySelectorAll(".bfill .hint")].map(h => h.textContent).find(t => t.startsWith("Preview")) || ""};
-      q('[data-bfact="send"]').click();
-      return JSON.stringify(o); })()`)));
-    await settle(1000);
-    Object.assign(got, JSON.parse(w.eval(`(() => {
-      const box = document.getElementById("uploadsBox"), q = s => box.querySelector(s);
-      const o = {progress: [...box.querySelectorAll(".bfill .hint")].map(h => h.textContent).find(t => t.startsWith("Sending")) || "", stop: !!q('[data-bfact="stop"]'),
-                 checkOff: q('[data-bfact="check"]').disabled};
-      // running but paused here (--simulate, or another Outrider holds the EDSM lease): said beside the progress
-      data.uploads.edsm.backfill = Object.assign({}, data.uploads.edsm.backfill, {paused: "--simulate: nothing is sent"});
-      uploadsDrawn = ""; renderUploads();
-      o.paused = /Sending 200 of 312 .*· paused: --simulate: nothing is sent/.test([...box.querySelectorAll(".bfill .hint")].map(h => h.textContent).find(t => t.startsWith("Sending")) || "");
-      data.uploads.edsm.backfill = Object.assign({}, data.uploads.edsm.backfill, {paused: null, progress: {state: "held", commander: "Sample Pilot", start: "2026-10-09T21:14:06Z", end: "2026-10-11T08:00:00Z",
-        total: 312, counts: {stored: 200}, why: "203 EDSM refused the commander name or API key"}});
-      uploadsDrawn = ""; renderUploads();
-      o.held = [!!q('[data-bfact="resume"]'), !!q('[data-bfact="stop"]')];
-      // a Check waiting to ask EDSM again (its retries can take 20 min): said on its line, with a Stop of its own
-      data.uploads.edsm.backfill = Object.assign({}, data.uploads.edsm.backfill, {progress: null, job: {kind: "check", state: "running", at: 3,
-        text: "EDSM not answering: trying again at 21:30 (attempt 2 of 6)…"}});
-      uploadsDrawn = ""; renderUploads();
-      const jl = [...box.querySelectorAll(".bfill .hint")].find(h => h.textContent.includes("not answering"));
-      o.jobWait = [!!jl && /^… .*EDSM not answering: trying again at 21:30 \\(attempt 2 of 6\\)… Stop$/.test(jl.textContent.trim()),
-                   !!(jl && jl.querySelector('[data-bfact="stop"]')), q('[data-bfact="check"]').disabled];
-      BF.open = false; data.uploads = window.__u2; uploadsDrawn = ""; renderUploads();
-      return JSON.stringify(o); })()`)));
-    got.posted = posted.map(b => [b.action, b.commander, b.start, b.end]);
-    got.asks = asks.map(a => a.slice(0, 40));
-    w.fetch = realFetch; w.confirm = realConfirm;
-    const want = {marks: [["sent", "✓ EDDN", "EDDN: sent · 200 OK"], ["dropped", "✗ EDSM", "EDSM: not taken · 102 Message older than the stored one"]],
-                  rowsWithMarks: 1, hiddenOff: true, shownOn: true, dim: true, saved: true, unsentAsked: true, undim: false,
-                  filled: ["2026-10-09 21:14:06", "2026-10-11 08:00:00"], sendOff: true, jobLine: true, sendOn: true,
-                  progress: "Sending 200 of 312 (2026-10-09 21:14:06 to 2026-10-11 08:00:00, CMDR Sample Pilot): 200 stored Stop", stop: true, checkOff: true,
-                  paused: true, held: [true, true], jobWait: [true, true, true],
-                  posted: [["preview", "Sample Pilot", "2026-10-09 21:14:06", "2026-10-11 08:00:00"], ["send", "Sample Pilot", "2026-10-09 21:14:06", "2026-10-11 08:00:00"]],
-                  asks: ["Send 312 events to EDSM for CMDR Sample "]};
-    const good = Object.keys(want).every(k => JSON.stringify(got[k]) === JSON.stringify(want[k])) && /^0 not sent/.test(got.status) &&
-      got.preview.startsWith("Preview 2026-10-09 21:14:06 to 2026-10-11 08:00:00 UTC: 312 events (41 jumps) in 2 requests, about 30 s") && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| upload marks and EDSM backfill |", good ? "✓ / ✗ marks with their reason, not sent, Check fills the range, Preview then Send, Stop and Go on, a Check's retry and its Stop" : JSON.stringify(got), errors.slice(before));
-    await releasePayloads();
-  }
-  // S67 (batch 15): Settings -> Uploads' Import your EDSM flight log (Import posts the CMDR; while it runs, its week and
-  // Stop; once done, "N visits from EDSM, <from> to <to> · Remove them", a confirm, then remove); History's sessions
-  // "from EDSM" with no counts of what you did and the From EDSM line; the Map's hover says where the visit is from.
-  // The posts are stubbed: nothing reaches EDSM
-  {
-    holdPayloads();
-    const w = dom.window, before = errors.length, realFetch = w.fetch, realConfirm = w.confirm, posted = [], asks = [];
-    w.fetch = (u, o) => {
-      const url = String(u);
-      if (o && o.method === "POST" && /uploads\/edsm\/import/.test(url)) {
-        const b = JSON.parse(o.body); posted.push([b.action, b.commander]);
-        const answer = b.action === "remove" ? {progress: null, counted: null, stored: 0, gap_s: 10}
-          : {progress: {state: "running", commander: "Sample Pilot", weeks: 210, weeks_done: 2, entries: 340}, counted: null, stored: 340, gap_s: 10};
-        return Promise.resolve(new Response(JSON.stringify(answer), {status: b.action === "start" ? 202 : 200, headers: {"Content-Type": "application/json"}}));
-      }
-      return realFetch(u, o);
-    };
-    w.confirm = q => { asks.push(q.slice(0, 30)); return true; };
-    const got = JSON.parse(w.eval(`(() => {
-      const o = {}; window.__u3 = data.uploads;
-      data.uploads = Object.assign({}, window.__u3, {edsm: Object.assign({}, (window.__u3 || {}).edsm, {import: {progress: null, counted: null, stored: 0, gap_s: 10},
-        accounts: [{commander: "Sample Pilot", name: "Sample Pilot", set: true, hint: "0123…4567 (40 characters)"}]})});
-      IM.open = true; uploadsDrawn = ""; renderUploads();
-      const q = s => document.getElementById("uploadsBox").querySelector(s);
-      o.offered = !!q('[data-imact="start"]') && q(".imlog summary").textContent;
-      q('[data-imact="start"]').click();
-      return JSON.stringify(o); })()`));
-    await settle(1000);
-    Object.assign(got, JSON.parse(w.eval(`(() => {
-      const box = document.getElementById("uploadsBox"), q = s => box.querySelector(s);
-      const o = {running: [...box.querySelectorAll(".imlog .hint")].map(h => h.textContent).find(t => t.startsWith("Importing")) || "", importGone: !q('[data-imact="start"]')};
-      data.uploads.edsm.import = {progress: {state: "done", commander: "Sample Pilot", weeks: 210, weeks_done: 210, entries: 1290, finished: 0},
-        counted: {visits: 1288, systems: 1100, first: "2016-03-02T10:00:00Z", last: "2019-11-30T22:00:00Z"}, stored: 1290, gap_s: 10};
-      uploadsDrawn = ""; renderUploads();
-      o.after = q(".imafter").textContent; o.noImport = !q('[data-imact="start"]');
-      q('[data-imact="remove"]').click();
-      return JSON.stringify(o); })()`)));
-    await settle(1000);
-    Object.assign(got, JSON.parse(w.eval(`(() => {
-      const box = document.getElementById("uploadsBox"), q = s => box.querySelector(s);
-      const o = {afterRemove: [!q(".imafter"), !!q('[data-imact="start"]')]};
-      IM.open = false; data.uploads = window.__u3; uploadsDrawn = ""; renderUploads();
-      const keep = histData, s0 = {start: "2017-05-01T20:00:00Z", end: "2017-05-01T22:10:00Z", from: "2017-05-01T20:00:00Z", until: null, jumps: 12, ly: 340.5,
-        max_sol: 1200, systems: [{ts: "2017-05-01T20:00:00Z", id: "5", name: "Old Place", kind: "FSDJump"}], deaths: [], edsm: true,
-        firsts: 0, bodies_first: 0, mapped: 0, footfalls: 0, samples: 0, codex_new: 0, sold: 0};
-      histData = {days: 3650, sessions: [s0], all_time: null, ledger: {}, edsm: {sessions: 1, jumps: 12, ly: 340.5, since: s0.start, until: s0.end}};
-      renderHistory();
-      const row = document.querySelector("#histRows tr.fromedsm");
-      o.hist = [!!row && row.cells[0].textContent.includes("from EDSM"), row && row.cells[1].textContent, row && row.cells[4].textContent,
-                !!document.querySelector("#histAll tr.fromedsm")];
-      histData = keep; renderHistory();
-      const km = M.data; M.data = {center: {id: "1", x: 0, y: 0, z: 0}};
-      o.pop = mapPopHtml({id: "9", name: "Old Place", x: 3, y: 4, z: 0, visited: true, edsm: true, kind: "own"}).includes("visited (your EDSM flight log)");
-      M.data = km;
-      return JSON.stringify(o); })()`)));
-    got.posted = posted; got.asks = asks;
-    w.fetch = realFetch; w.confirm = realConfirm;
-    const want = {offered: "Import your EDSM flight log from before your journals", running: "Importing: week 2 of 210, 340 entries so far (CMDR Sample Pilot) Stop",
-                  importGone: true, after: "1,288 visits from EDSM, 2016-03-02 to 2019-11-30 (1,100 systems) · Remove them", noImport: true,
-                  afterRemove: [true, true], hist: [true, "12", "", true], pop: true,
-                  posted: [["start", "Sample Pilot"], ["remove", "Sample Pilot"]], asks: ["Forget every visit imported fr"]};
-    const good = Object.keys(want).every(k => JSON.stringify(got[k]) === JSON.stringify(want[k])) && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| EDSM flight log import |", good ? "Import, its week and Stop, the visits from EDSM and Remove them, History's from EDSM, the Map's hover" : JSON.stringify(got), errors.slice(before));
-    await releasePayloads();
-  }
-  // S30: numbered stops on Here's schematic (two on a body with mapping and bio, a stop under your cr/min level tinted),
-  // the faint path from the arrival star with rough leg times, the checklist numbered alike; a tap on a number makes
-  // that body the first stop (posted: one order for every window, Now and the voice), "↺ order" puts it back; a first
-  // stop of another system changes nothing. The posts are stubbed
-  {
-    holdPayloads();
-    const w = dom.window, before = errors.length, realFetch = w.fetch, posted = [];
-    w.fetch = (u, o) => {
-      if (o && o.method === "POST" && /api\/plan\/first/.test(String(u))) {
-        const b = JSON.parse(o.body); posted.push([b.id64 === w.eval("posId()"), b.body]);
-        return Promise.resolve(new Response(JSON.stringify({ok: true, plan_first: b.body ? {id64: b.id64, body: b.body} : null}),
-                                            {status: 200, headers: {"Content-Type": "application/json"}}));
-      }
-      return realFetch(u, o);
-    };
-    const got = JSON.parse(w.eval(`(() => {
-      const o = {};
-      window.__s30 = {hd: hereData, pf: data.plan_first, modes: JSON.stringify(hereModes), sel: selectedBody};
-      const hd0 = hereData, id = posId();
-      if (!hd0 || hd0.error || String(hd0.id64) !== id) return JSON.stringify({noHere: true});
-      const P = hd0.bodies.filter(b => b.type === "Planet").map(b => b.name);
-      window.__s30.P = P;
-      const L = {id64: id, body_count: 4, scanned: 4, unscanned: 0, honked: true, all_found: true, unmapped_valuable: [], clean: false,
-        unmapped: [{body: P[1], subtype: "Water world", increment: 900000, special: true, dist_ls: 980},
-                   {body: P[2], subtype: "Rocky body", increment: 510000, special: false, dist_ls: 90000}],
-        bio_pending: [{body: P[0], signals: 1, genera: ["Stratum"], partial: {}, potential: 19e6, codex_new: false, dist_ls: 420, factor: 1},
-                      {body: P[1], signals: 1, genera: [], partial: {Bacterium: 1}, potential: 1e6, codex_new: false, dist_ls: 980, factor: 1}]};
-      window.__s30.L = L;
-      hereData = Object.assign({}, hd0, {leaving: L}); data.plan_first = null;
-      setHereMode("schematic"); renderHere();
-      const sEl = document.getElementById("hereSchematic");
-      const stops = () => [...sEl.querySelectorAll(".sstop")].map(s => [s.closest(".sbody").dataset.body, s.textContent + (s.classList.contains("skip") ? "?" : "") + (s.classList.contains("first") ? "!" : "")]);
-      o.stops = stops();
-      o.want = [[P[0], "①"], [P[1], "②"], [P[1], "③"], [P[2], "④?"]];
-      const svg = sEl.querySelector("svg.spath");
-      o.path = svg && [svg.querySelector("polyline").getAttribute("points").split(" ").length, [...svg.querySelectorAll("text")].map(t => t.textContent)];
-      o.wantPath = [4, [scText(scSeconds(420)), scText(scSeconds(560)), scText(scSeconds(89020))]];
-      o.head = sEl.querySelector(".splan").textContent;
-      o.noReset = !sEl.querySelector("[data-planfirst]");
-      o.list = document.getElementById("hereLeaving").querySelectorAll(".stopn").length;
-      drawHereLegend();
-      const lg = document.getElementById("hereLegend").textContent;
-      o.legend = [lg.includes("a stop in the suggested order"), lg.includes("a stop not worth the trip")];
-      sEl.querySelector(".sstop.skip").click();
-      o.noOpen = selectedBody === window.__s30.sel;
-      return JSON.stringify(o); })()`));
-    await settle(1000);
-    Object.assign(got, JSON.parse(w.eval(`(() => {
-      const o = {}, sEl = document.getElementById("hereSchematic"), P = window.__s30.P, L = window.__s30.L;
-      o.firstStops = [...sEl.querySelectorAll(".sstop")].map(s => s.textContent + (s.classList.contains("first") ? "!" : "")).join("");
-      o.firstOf = sEl.querySelector(".sstop.first").closest(".sbody").dataset.body === P[2];
-      o.reset = !!sEl.querySelector(".splan [data-planfirst]") && !!document.getElementById("hereLeaving").querySelector("[data-planfirst]");
-      o.spoken = statusReportText().includes("Next: map " + P[2]);
-      o.elsewhere = planItems(Object.assign({}, L, {id64: "123"}))[0].body === P[0];   // another system's first stop: ignored
-      sEl.querySelector("[data-planfirst]").click();
-      return JSON.stringify(o); })()`)));
-    await settle(1000);
-    Object.assign(got, JSON.parse(w.eval(`(() => {
-      const sEl = document.getElementById("hereSchematic"), o = {back: [...sEl.querySelectorAll(".sstop")].map(s => s.textContent).join("")};
-      const s = window.__s30;
-      hereData = s.hd; data.plan_first = s.pf; Object.assign(hereModes, JSON.parse(s.modes)); store.set("hereModes", hereModes); renderHere();
-      return JSON.stringify(o); })()`)));
-    w.fetch = realFetch;
-    got.posted = posted.map(([same, b]) => [same, b === null ? null : b === got.want[3][0]]);
-    const want = {stops: got.want, path: got.wantPath, noReset: true, list: 4, legend: [true, true], noOpen: true,
-                  firstStops: "②③④①!", firstOf: true, reset: true, spoken: true, elsewhere: true, back: "①②③④", posted: [[true, true], [true, null]]};
-    const good = !got.noHere && Object.keys(want).every(k => JSON.stringify(got[k]) === JSON.stringify(want[k])) &&
-      /the suggested order ①–④/.test(got.head) && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| S30 schematic stops |", good ? "①②③④ with a tinted skip, the path's rough legs, a tap makes a body first, ↺ order undoes it" : JSON.stringify(got), errors.slice(before));
-    await releasePayloads();
-  }
-  // S31: 🎯 and Plot route anywhere (a bookmark, the header's next stop, a Nearest row, a checklist find: S29's 🎯), the
-  // id64 sent as its exact string (over 2^53); Plot route fills To and plots only when no route is followed. S72: a click
-  // on the Map targets the system when auto-target can work on this PC, else copies its name; the card and the hint under
-  // the map say which; your own system is copied; a touch card has 🎯 Target and Copy name. The posts are stubbed
-  {
-    holdPayloads();
-    const w = dom.window, d = w.document, before = errors.length, realFetch = w.fetch, sent = [];
-    w.fetch = (u, o) => {
-      const s = String(u);
-      if (/api\/highway\/(target|plot)/.test(s)) { sent.push([s.replace(/.*api\//, ""), o && o.body ? JSON.parse(o.body) : null]);
-        return Promise.resolve({ok: false, status: 400, json: async () => ({error: "smoke"})}); }
-      return realFetch(u, o);
-    };
-    const got = JSON.parse(w.eval(`(() => {
-      const o = {}, keep = window.__s31 = {bm: data.bookmarks, ns: data.next_stop, pc: data.game_pc, at: data.autotarget, hw: data.highway,
-        sv: data.survey, find: CL.find, md: M.data, copy: copyText, view, to: hEl("hwyTo").value};
-      data.game_pc = true; data.highway = null; data.survey = null;
-      data.autotarget = Object.assign({}, data.autotarget, {available: true, missing: []});   // every 🎯: canAim
-      data.bookmarks = [{id: "9007199254740993", name: "Far Out", distance: 12, note: "", created: ""}];
-      renderBookmarks(bmMap());
-      const aim = document.querySelector('#bmRows [data-aim][data-route="system"]');
-      o.bmAim = aim && aim.dataset.aimid;
-      o.bmPlot = !!document.querySelector('#bmRows [data-plotto="Far Out"]');
-      aim.click();
-      data.next_stop = {id: "4242", id64: 4242, name: "Chosen", distance: 40};
-      renderStrip();
-      o.nsAim = (document.querySelector('#nextStopLn [data-aim][data-route="system"]') || {dataset: {}}).dataset.aimid;
-      o.nsPlot = !!document.querySelector('#nextStopLn [data-plotto="Chosen"]');
-      const row = {kind: "station", name: "S", system: "Near Place", id64: "555", ly: 30, ls: 10, services: [], warn: [], source: "Spansh", age_s: 1};
-      o.nearAim = [/data-aimid="555"/.test(nearRowHtml(row)), /data-aim=/.test(nearRowHtml(Object.assign({}, row, {id64: null}))),
-                   /data-aim=/.test(nearRowHtml(Object.assign({}, row, {here: true})))];
-      CL.find = {id: "sp", colour: null, busy: false, answer: {rows: [{id: "777", system: "Bio Place", body: "A 1", ly: 3, gravity: 0.1, colours: [], visited: false}],
-        count: 1, radius: 100, where: "Sol"}};
-      o.findAim = /data-route="system" data-aimid="777"/.test(clFindHtml({id: "sp", name: "Bacterium"}));
-      data.game_pc = false; renderBookmarks(bmMap());
-      o.serverNoAim = !document.querySelector('#bmRows [data-aim]');
-      data.game_pc = true;
-      return JSON.stringify(o); })()`));
-    await settle(1000);
-    // Plot route: no route followed, so it plots; then with one followed, To only (and the form open)
-    d.querySelector('#nextStopLn [data-plotto="Chosen"]').click();
-    await settle(1000);
-    got.plotView = w.eval("view"); got.plotTo = d.getElementById("hwyTo").value;
-    w.eval(`data.highway = {complete: false, destination: "Somewhere", index: 1, total: 3}; renderBookmarks(bmMap());`);
-    d.querySelector('#bmRows [data-plotto="Far Out"]').click();
-    await settle(1000);
-    got.followTo = d.getElementById("hwyTo").value;
-    got.formOpen = d.getElementById("hwyPlot").open;
-    w.eval("data.highway = null");
-    Object.assign(got, JSON.parse(w.eval(`(() => {
-      const o = {}, copied = [];
-      copyText = t => copied.push(t);
-      M.data = {center: {id: "1", x: 0, y: 0, z: 0}, points: []};
-      const pt = {id: "9007199254740993", name: "Far Out", x: 3, y: 4, z: 0, kind: "known", scanned: true};
-      const here = {id: "1", name: "Home", x: 0, y: 0, z: 0, kind: "own", visited: true};
-      data.autotarget = Object.assign({}, data.autotarget, {available: true, missing: [], front: {front: false}, running: false, test: null});
-      hwyRun = null;
-      const last = h => { const m = h.match(/<div class="sec unk">([^<]*)<\\/div>$/); return m && m[1]; };
-      o.cardOn = [last(mapPopHtml(pt)), last(mapPopHtml(here))];
-      const touch = mapPopHtml(pt, true);
-      o.touchOn = [/data-aim="next" data-route="system" data-aimid="9007199254740993"/.test(touch), /data-mapcopy="Far Out"/.test(touch)];
-      mapClick(pt); mapClick(here);
-      hwyRun = {done: false}; mapClick(pt); hwyRun = null;   // a run under way: said, not started again
-      data.autotarget = Object.assign({}, data.autotarget, {available: false});
-      o.cardOff = last(mapPopHtml(pt));
-      o.touchOff = /data-aim/.test(mapPopHtml(pt, true));
-      mapClick(pt);
-      o.copied = copied;
-      return JSON.stringify(o); })()`)));
-    await settle(1000);
-    // the hint under the map follows: target (targeting on), copy (off)
-    w.eval(`data.autotarget = Object.assign({}, data.autotarget, {available: true, missing: []}); document.querySelector('[data-view="map"]').click();`);
-    got.hintOn = d.getElementById("mClickWhat").textContent;
-    w.eval(`data.autotarget = Object.assign({}, data.autotarget, {available: false}); render();`);
-    got.hintOff = d.getElementById("mClickWhat").textContent;
-    w.eval(`(() => { const k = window.__s31; data.bookmarks = k.bm; data.next_stop = k.ns; data.game_pc = k.pc; data.autotarget = k.at;
-      data.highway = k.hw; data.survey = k.sv; CL.find = k.find; M.data = k.md; copyText = k.copy; hwyRun = null; hEl("hwyTo").value = k.to;
-      document.querySelector('[data-view="' + k.view + '"]').click(); })()`);
-    await settle(1000);
-    w.fetch = realFetch;
-    got.sent = sent;
-    const big = "9007199254740993";
-    const want = {bmAim: big, bmPlot: true, nsAim: "4242", nsPlot: true, nearAim: [true, false, false], findAim: true, serverNoAim: true,
-                  plotView: "hwy", plotTo: "Chosen", followTo: "Far Out", formOpen: true,
-                  cardOn: ["click to target it in game (5 s)", "click to copy its name"], touchOn: [true, true],
-                  cardOff: "click to copy its name", touchOff: false, copied: ["Home", "Far Out"],
-                  hintOn: "target it in game (5 s) (your own system: copy its name)", hintOff: "copy its name",
-                  sent: [["highway/target", {route: "system", id: big}], ["highway/plot", "Chosen"], ["highway/target", {route: "system", id: big}]]};
-    got.sent = got.sent.map(([u, b]) => [u, u === "highway/plot" ? b && b.to : b]);
-    const good = Object.keys(want).every(k => JSON.stringify(got[k]) === JSON.stringify(want[k])) && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| S31 aim and plot anywhere, S72 map click |", good ? "🎯 on bookmarks, the next stop, Nearest and a find by the exact id64, Plot route plots only with no route followed, the Map's click targets or copies as its card and hint say" : JSON.stringify(got), errors.slice(before));
-    await releasePayloads();
-  }
-  // S49: Search and the Nearest finder around another system: the Around select (kept on this device), a typed name
-  // found by api/find first and sent as its exact id64, a name not found said without searching, the "from you" hover.
-  // S50: the Map draws the route (mapRouteMarks: dashed legs from you, ◎ the next stop, the legend's entries, the card's
-  // line) and asks again on a new plot. Every request is stubbed
-  {
-    holdPayloads();
-    const w = dom.window, d = w.document, realFetch = w.fetch, before = errors.length, asked = [], big = "9007199254740993";
-    const json = (body, status = 200) => Promise.resolve(new Response(JSON.stringify(body), {status, headers: {"Content-Type": "application/json"}}));
-    const route = {navroute: [{id: "2", name: "Hop One", x: 10, y: 0, z: 0}], kind: "highway",
-                   rows: [{id: "2", name: "Hop One", x: 10, y: 0, z: 0}, {id: big, name: "Far Row", x: 30, y: 0, z: 0}],
-                   next: {id: "2", name: "Hop One", x: 10, y: 0, z: 0, via: "route"}};
-    w.fetch = (u, o) => {
-      const s = String(u);
-      if (!/^api\/(find|search|nearest|map)\b/.test(s)) return realFetch(u, o);
-      asked.push([s, o && o.method === "POST" ? JSON.parse(o.body) : null]);
-      if (s.startsWith("api/find")) return /Nowhere/.test(s) ? json({error: "No system called 'Nowhere' is known here"}, 404) : json({id: big, name: "Far Out"});
-      if (s === "api/search") return json(o && o.method === "POST" ? {seq: 777} : {seq: 777, running: false, status: "1 system within 100 ly of Far Out",
-        origin: "Far Out", around: "system", results: [{id: "5", name: "Near Far", distance: 3, from_you: 1234.5, visited: false, matches: {}, firsts: null}]});
-      if (s.startsWith("api/nearest")) return json({where: "Far Out", around: "system", pad: null, age: 30, need: [], more: 0, hidden: {}, errors: [],
-        dssa: {}, laden: null, rows: [{kind: "station", name: "Far Dock", station_type: "Coriolis Starport", system: "Far Out", id64: big, ly: 2,
-        from_you: 1234.4, here: false, jumps: null, ls: 10, services: [], warn: [], source: "Spansh", age_s: 60}]});
-      return json({center: {id: "1", x: 0, y: 0, z: 0}, radius: 50, points: [], path: [], route});
-    };
-    const got = {};
-    const keep = w.eval(`window.__s49 = {search: store.get("search", null), near: store.get("nearest", null), around: NR.around, name: NR.aroundName,
-      view, md: M.data, mk: M.key, hw: data.highway}; 1`);
-    const sAr = d.getElementById("sAround"), sNm = d.getElementById("sAroundName");
-    const submit = () => d.getElementById("searchForm").dispatchEvent(new w.Event("submit", {cancelable: true}));
-    got.options = [...sAr.options].map(o => o.value);
-    sAr.value = "carrier"; sAr.dispatchEvent(new w.Event("change", {bubbles: true}));
-    got.nameHidden = sNm.hidden;
-    submit(); await sleep(300);
-    sAr.value = "system"; sAr.dispatchEvent(new w.Event("change", {bubbles: true}));
-    got.nameShown = !sNm.hidden;
-    sNm.value = "Nowhere"; submit(); await sleep(300);
-    got.notFound = w.eval("search.status");
-    sNm.value = "Far Out"; sNm.dispatchEvent(new w.Event("change", {bubbles: true})); submit(); await sleep(400);
-    got.searchTitle = (d.querySelector("#sRows td.dist") || {title: null}).title;
-    got.searchStored = JSON.parse(w.localStorage.getItem("search") || "{}");
-    // the Nearest finder: a system by name waits for its name, then is found and asked around
-    d.getElementById("hwyNearest").click(); await sleep(100);
-    const dlg = d.getElementById("nearDlg"), nSel = dlg.querySelector('[data-nf="around"]'), nNm = dlg.querySelector('[data-nf="aroundName"]');
-    w.eval("NR.aroundName = ''");
-    const nearAsks = () => asked.filter(([u]) => u.startsWith("api/nearest")).length;
-    const n0 = nearAsks();
-    nSel.value = "system"; nSel.dispatchEvent(new w.Event("change", {bubbles: true})); await sleep(100);
-    got.nearWaits = nearAsks() === n0 && !nNm.hidden;
-    nNm.value = "Far Out"; nNm.dispatchEvent(new w.Event("change", {bubbles: true})); await sleep(200);
-    const lastNear = asked.filter(([u]) => u.startsWith("api/nearest")).pop();
-    got.nearAround = lastNear && new URLSearchParams(lastNear[0].split("?")[1]).get("around");
-    got.nearTitle = (d.querySelector("#nearRows td.num") || {title: null}).title;
-    got.nearFoot = /straight lines from Far Out/.test(d.getElementById("nearFoot").textContent);
-    got.nearStored = JSON.parse(w.localStorage.getItem("nearest") || "{}");
-    dlg.querySelector("[data-close]").click(); await sleep(20);
-    // the Map: the route's marks (pure), the legend, the card, a new plot asks again
-    Object.assign(got, JSON.parse(w.eval(`(() => {
-      const o = {}, rm = mapRouteMarks({center: {id: "1", x: 0, y: 0, z: 0}, route: ${JSON.stringify(route)}});
-      o.legs = rm.legs.map(([a, b, k]) => [a.id, b.id, k]);
-      o.points = rm.points.map(p => p.what);
-      o.next = rm.next.what;
-      o.none = mapRouteMarks({center: {id: "1"}, route: null});
-      return JSON.stringify(o); })()`)));
-    d.querySelector('[data-view="map"]').click(); await sleep(300);
-    got.legend = d.getElementById("mLegend").textContent;
-    got.card = /on your Neutron Highway route/.test(w.eval(`mapPopHtml({id: "${big}", name: "Far Row", x: 30, y: 0, z: 0, onroute: "on your Neutron Highway route"})`));
-    const mapAsks = () => asked.filter(([u]) => u.startsWith("api/map")).length;
-    const m0 = mapAsks();
-    await w.eval(`(async () => { await loadMap(); data.highway = {id: "new plot", index: 1, complete: false, off_route: false}; await loadMap(); await loadMap();
-      data.highway = window.__s49.hw; })()`);
-    got.mapAsked = mapAsks() - m0;
-    w.fetch = realFetch;
-    w.eval(`(() => { const k = window.__s49; store.set("search", k.search); if (k.near) store.set("nearest", k.near); else localStorage.removeItem("nearest");
-      NR.around = k.around; NR.aroundName = k.name; loadForm(k.search || {radius: 100, source: "local", around: "here"}); search = null; searchWant = 0;
-      M.data = k.md; M.key = null; document.querySelector('[data-view="' + k.view + '"]').click(); })()`);
-    await settle(1000);
-    const posts = asked.filter(([u, b]) => u === "api/search" && b).map(([, b]) => b.around);
-    const finds = asked.filter(([u]) => u.startsWith("api/find")).map(([u]) => decodeURIComponent(u.split("name=")[1]));
-    const want = {options: ["here", "destination", "carrier", "next_stop", "system"], nameHidden: true, nameShown: true,
-                  notFound: "search failed: No system called 'Nowhere' is known here", searchTitle: "1234.50 ly from you",
-                  nearWaits: true, nearAround: big, nearTitle: "1,234 ly from you", nearFoot: true,
-                  legs: [["1", "2", "navroute"], ["2", big, "route"]],
-                  points: ["hop 1 of the route plotted in game", "on your Neutron Highway route", "on your Neutron Highway route"],
-                  next: "next stop of your Neutron Highway route", none: null, card: true, mapAsked: 1};
-    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
-    if (JSON.stringify(posts) !== JSON.stringify(["carrier", big]) || JSON.stringify(finds) !== JSON.stringify(["Nowhere", "Far Out", "Far Out"])) bad.push("requests");
-    if (got.searchStored.around !== "system" || got.searchStored.around_name !== "Far Out") bad.push("search kept");
-    if (got.nearStored.around !== "system" || got.nearStored.aroundName !== "Far Out") bad.push("nearest kept");
-    if (!/┄ route plotted in game/.test(got.legend) || !/┄ Neutron Highway route/.test(got.legend) || !/◎ next stop/.test(got.legend)) bad.push("legend");
-    const good = !bad.length && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| S49 around another system, S50 route on the map |", good ? "Search and Nearest around your carrier or a system found by name (its id64), from you in the hover; the Map's dashed route, ◎ next stop, legend, asked again on a new plot" :
-      `failed ${bad.join(", ")}: ${JSON.stringify(got)} ${JSON.stringify(posts)} ${JSON.stringify(finds)}`, errors.slice(before));
-    await releasePayloads();
-  }
-  // S51: a sweep: ticks in Bookmarks, Left behind and My firsts (lost systems only), one set across the three; "Plot a
-  // sweep (N)" posts them to api/riches/plot {kind: "sweep"} and Plot Route shows the route (its head: the systems ticked
-  // and those Spansh did not know); a refusal is said beside the button. G4: the line's glyph and words per kind. Stubbed
-  {
-    holdPayloads();
-    const w = dom.window, d = w.document, before = errors.length, realFetch = w.fetch, posts = [];
-    let plotAnswer = {ok: true, plotting: {state: "running", kind: "sweep", from: "Home", started: new Date().toISOString()}}, plotStatus = 202;
-    const route = {id: "sw1", kind: "sweep", from: "Home", to: "Left One", count: 3, first: 0, next: 1, at: 0, furthest: 0, off_route: null,
-      created_ts: "2999-01-01T00:00:00Z", options: {range: 30, loop: false, systems: 2, unknown: ["Fresh"]}, mapping: false, points: [[0, 0], [1, 1], [2, 2]],
-      systems: ["Home", "Book One", "Left One"].map((n, i) => ({i, system: n, id: String(20 + i), x: i, y: 0, z: i, jumps: i ? 1 : 0, left: 0, value: 0, value_left: 0, bodies: []}))};
-    w.fetch = (u, o) => {
-      const s = String(u);
-      if (s === "api/riches/plot") { posts.push(JSON.parse(o.body)); return Promise.resolve(new Response(JSON.stringify(plotAnswer), {status: plotStatus, headers: {"Content-Type": "application/json"}})); }
-      if (s === "api/riches") return Promise.resolve(new Response(JSON.stringify({route, plotting: {state: "done", kind: "sweep", from: "Home"}, position: null,
-        range: 30, defaults: {}, clipboard: {enabled: false, available: false}}), {status: 200, headers: {"Content-Type": "application/json"}}));
-      return realFetch(u, o);
-    };
-    const got = JSON.parse(w.eval(`(() => {
-      const o = {};
-      window.__s51 = {bm: data.bookmarks, left: leftData, firsts: firstsData, lost: fShowLost.checked, view, sv: data.survey};
-      data.survey = {kind: "riches", complete: false};
-      data.bookmarks = [{id: "21", name: "Book One", distance: 12, note: "", created: ""}];
-      renderBookmarks(bmMap());
-      leftData = {radius: 100, systems: [{name: "Left One", id: "22", distance: 5, unfound: 0, bio: [],
-        maps: [{body: "Left One 1", subtype: "Water world", increment: 1e9, terraformable: false}]}]};
-      renderLeft();
-      firstsData = {firsts: [{name: "Lost One", id: "23", state: "lost", distance: 3, value: 0},
-                             {name: "Unsold One", id: "24", state: "unsold", sale: "unsold", distance: 4, value: 5e5}]};
-      fShowLost.checked = true; renderFirsts();
-      o.ticks = ["bmRows", "leftRows", "firstsRows"].map(id => [...document.querySelectorAll("#" + id + " .swtick")].map(c => c.dataset.sweep).join());
-      o.hiddenFirst = [...document.querySelectorAll(".swbtn")].every(b => b.hidden);
-      return JSON.stringify(o); })()`));
-    const tick = (list, name) => { const c = d.querySelector(`#${list} .swtick[data-sweep="${name}"]`); c.checked = !c.checked; c.dispatchEvent(new w.Event("change", {bubbles: true})); };
-    tick("bmRows", "Book One"); tick("leftRows", "Left One"); tick("firstsRows", "Lost One"); tick("firstsRows", "Lost One");
-    got.buttons = [...d.querySelectorAll(".swbtn")].map(b => (b.hidden ? "hidden:" : "") + b.textContent);
-    got.slotTitle = /It replaces your Road to Riches route/.test(d.querySelector("#bmTools .swbtn").title);
-    w.eval(`renderBookmarks(bmMap())`);   // a redraw keeps the ticks
-    got.kept = d.querySelector('#bmRows .swtick[data-sweep="Book One"]').checked;
-    d.querySelector("#bmTools .swbtn").click();
-    await settle(3000); await sleep(1700); await settle(2000);
-    got.posted = posts.slice();
-    got.after = [w.eval("view"), w.eval("SW.names.size"), [...d.querySelectorAll(".swbtn")].every(b => b.hidden)];
-    got.head = d.getElementById("hwyHead").textContent.replace(/\s+/g, " ");
-    got.status = d.getElementById("hwyStatus").textContent;
-    // the line under the tiles: the sweep's glyph and name; an Earth-like route's
-    got.line = w.eval(`[surveyLineHtml({kind: "sweep", complete: true}), surveyLineHtml({kind: "elw", destination: "Far", left_here: 1})].map(h => { const e = document.createElement("div"); e.innerHTML = h; return e.textContent; })`);
-    // a refusal is said beside the button, the ticks kept
-    plotAnswer = {error: "smoke"}; plotStatus = 400;
-    w.eval(`document.querySelector('[data-view="bm"]').click()`); await settle(1000);
-    // the bookmark again (a payload may have come in since)
-    w.eval(`data.bookmarks = [{id: "21", name: "Book One", distance: 12, note: "", created: ""}]; renderBookmarks(bmMap())`);
-    tick("bmRows", "Book One");
-    d.querySelector("#bmTools .swbtn").click(); await settle(1000);
-    got.refused = [d.querySelector("#bmTools .swmsg").textContent, w.eval("SW.names.size")];
-    d.querySelector("#bmTools .swclear").click();
-    got.untick = [w.eval("SW.names.size"), d.querySelector('#bmRows .swtick[data-sweep="Book One"]').checked];
-    w.fetch = realFetch;
-    w.eval(`(() => { const k = window.__s51; data.bookmarks = k.bm; leftData = k.left; firstsData = k.firsts; fShowLost.checked = k.lost;
-      data.survey = k.sv; drawSweep({}); store.set("hwyShow", ""); document.querySelector('[data-view="' + k.view + '"]').click(); })()`);
-    await w.eval("loadRich(true)"); await settle(1000);
-    const want = {ticks: ["Book One", "Left One", "Lost One"], hiddenFirst: true, buttons: ["🧹 Plot a sweep (2)", "🧹 Plot a sweep (2)", "🧹 Plot a sweep (2)"],
-      slotTitle: true, kept: true, posted: [{kind: "sweep", systems: ["Book One", "Left One"]}], after: ["hwy", 0, true],
-      line: ["🧹 Sweep complete", "🌍 Earth-like worlds to Far · 1 body to do here"], refused: ["Could not plot the sweep: smoke.", 1], untick: [0, false]};
-    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
-    if (!/Sweep · 30 ly range · 2 systems ticked · left out \(not known to Spansh yet\): Fresh/.test(got.head) || !/you are at system 1 of 3/.test(got.head)) bad.push("head");
-    if (!/^Plotted: a sweep of 3 systems\./.test(got.status)) bad.push("status");
-    const good = !bad.length && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| S51 sweep, S52 kinds |", good ? "ticks in Bookmarks, Left behind and lost firsts, Plot a sweep (N) posts them and Plot Route shows it, a refusal said, the kinds' lines" :
-      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
-    await releasePayloads();
-  }
-  // S35: Settings' last section, Questions asked: two questions asked of the scratch server (a phrase, then none with the
-  // AI off), newest first, each with what it matched and the answer; it follows the payload's ask_seq while open; Copy
-  {
-    const w = dom.window, d = w.document, before = errors.length;
-    w.eval(`const dla = document.getElementById("alertDialog"); dla.showModal ? dla.showModal() : dla.setAttribute("open", "");
-      document.getElementById("askLogBox").open = true; loadAskLog()`);
-    await settle(1500);
-    const ask = text => w.fetch("api/ask", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({text, source: "smoke"})});
-    await ask("Vespa, status report"); await ask("what is the meaning of life");
-    for (let i = 0; i < 40 && !/meaning of life/.test(d.getElementById("askLog").textContent); i++) await sleep(250);   // the long poll's ask_seq
-    const rows = [...d.querySelectorAll("#askLog .alog")].slice(0, 2).map(r => [r.className, r.textContent.replace(/\s+/g, " ")]);
-    const copied = [], realCopy = w.copyText;
-    w.copyText = (text, what) => copied.push([text, what]);
-    d.getElementById("askLogCopy").click();
-    w.copyText = realCopy;
-    w.eval(`document.getElementById("askLogBox").open = false; const dlb = document.getElementById("alertDialog"); if (dlb.close) dlb.close(); else dlb.removeAttribute("open")`);
-    const got = {last: w.eval(`[...document.querySelectorAll("#alertChips button")].pop().textContent`),
-      none: rows[0] && rows[0][0] === "alog none" && /heard “what is the meaning of life” · smoke · \d+ ms/.test(rows[0][1]) &&
-        /no phrase matched \(AI off\)/.test(rows[0][1]) && /I only know a few questions/.test(rows[0][1]),
-      fixed: rows[1] && rows[1][0] === "alog fixed" && /heard “Vespa, status report”/.test(rows[1][1]) && /matched “status report” → a status report/.test(rows[1][1]),
-      copy: copied.length === 1 && /heard: what is the meaning of life/.test(copied[0][0]) && /matched “status report” → a status report/.test(copied[0][0])};
-    const want = {last: "Questions asked", none: true, fixed: true, copy: true};
-    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| S35 questions asked |", good ? "the last section: newest first, the phrase matched or none (AI off), the answer, Copy" : JSON.stringify({got, rows}), errors.slice(before));
-  }
-  // S37: any view in its own window: the ↗ in a tab's corner opens ?view=<it> in a named window (a second press brings
-  // it forward), the main window's view untouched; a window at ?view=bm shows Bookmarks without the tab row, never saves
-  // the view, sends ⌖ to the main window while it is open (else shows Here itself, with ↩ back); a bad view falls back
-  {
-    const w = dom.window, d = w.document, before = errors.length;
-    const opened = [], realOpen = w.open, view0 = w.eval("view"), stored0 = w.localStorage.getItem("view");
-    w.open = (u, n) => { opened.push([u, n]); return {closed: false, focus() { opened.push("focus"); }}; };
-    const pop = d.querySelector('.views [data-view="bm"] .tabpop');
-    pop.click(); pop.click();
-    w.open = realOpen; w.eval("for (const k in popWins) delete popWins[k]");
-    const got = {pop: [opened[0] && opened[0][0].endsWith("?view=bm"), opened[0] && opened[0][1], opened[1]],
-      main: [w.eval("view") === view0, w.localStorage.getItem("view") === stored0, !!d.querySelector('.views [data-view="now"] .tabpop'),
-             d.querySelectorAll(".views .tabpop").length === d.querySelectorAll(".views [data-view]").length - 1]};
-    const load = async search => {
-      const errs = [], html2 = await (await fetch(base + search)).text();
-      const dom2 = new JSDOM(html2, {url: base + search, runScripts: "dangerously", resources: "usable", pretendToBeVisual: true,
-        beforeParse(w2) { w2.AbortController = AbortController; w2.fetch = (u, o) => fetch(new URL(u, base), o); w2.addEventListener("error", e => errs.push(e.message));
-          w2.localStorage.clear(); w2.localStorage.setItem("view", JSON.stringify("near")); w2.scrollBy = () => {}; w2.HTMLCanvasElement.prototype.getContext = () => null; }});
-      for (let i = 0; i < 60 && !dom2.window.eval("typeof data !== 'undefined' && !!data"); i++) await sleep(250);   // the first payload drawn
-      return [dom2, errs];
-    };
-    const [vb, errsB] = await load("?view=bm"), wb = vb.window, db = wb.document;
-    got.win = [wb.eval("view"), db.body.classList.contains("viewwin"), wb.getComputedStyle(db.querySelector(".views")).display, wb.eval("nowWindow"),
-               /^Bookmarks · /.test(db.title), db.getElementById("viewWinBack").hidden];
-    // ⌖ with the main window open: it shows the system there; this window stays on Bookmarks
-    const sent = [];
-    wb.eval(`window.__opener = {closed: false, showInHere: id => window.__sent.push(["here", id]), openBodyIn: (id, n) => window.__sent.push(["body", id, n]), focus() { window.__sent.push("focus"); }}`);
-    wb.__sent = sent;
-    Object.defineProperty(wb, "opener", {value: wb.__opener, configurable: true, writable: true});
-    wb.eval(`showInHere("42"); openBodyIn("42", "Sys 1")`);
-    got.opener = [sent, wb.eval("view")];
-    // the main window gone: this window shows Here (unsaved) with ↩ back to Bookmarks
-    Object.defineProperty(wb, "opener", {value: null, configurable: true, writable: true});
-    wb.eval(`showInHere("42")`); await sleep(200);
-    got.alone = [wb.eval("view"), db.getElementById("viewWinBack").hidden, db.getElementById("viewWinBack").textContent, wb.localStorage.getItem("view")];
-    db.getElementById("viewWinBack").click(); await sleep(200);
-    got.back = [wb.eval("view"), db.getElementById("viewWinBack").hidden, wb.localStorage.getItem("view"), errsB];
-    vb.window.close();
-    const [vx, errsX] = await load("?view=nope"), [vn, errsN] = await load("?view=now");
-    got.bad = [vx.window.eval("view"), vx.window.document.body.classList.contains("viewwin"), vn.window.eval("[view, nowWindow]"), errsX, errsN];
-    vx.window.close(); vn.window.close();
-    const want = {pop: [true, "ed-outrider-view-bm", "focus"], main: [true, true, false, true],
-      win: ["bm", true, "none", false, true, true],
-      opener: [[["here", "42"], "focus", ["body", "42", "Sys 1"], "focus"], "bm"],
-      alone: ["here", false, "↩ Bookmarks", '"near"'], back: ["bm", true, '"near"', []],
-      bad: ["near", false, ["near", false], [], []]};
-    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
-    const good = !bad.length && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| S37 view windows |", good ? "↗ opens ?view=bm (once), the window has no tabs and saves no view, ⌖ goes to the main window, else ↩ back; a bad view falls back" :
-      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
-  }
-  // Review fixes: a hush asked by voice is said by its answer (the three lengths first when another time was asked),
-  // once, in place of the page's own news of the hush; a hush from the button still says the page's words
-  {
-    const w = dom.window, before = errors.length;
-    const got = JSON.parse(w.eval(`(() => {
-      const said = [], realSpeak = speak, flags = [speechOn, isSpeaker, lastCopilotSeq, hushState, hushKey], d0 = JSON.stringify(data);
-      speak = t => said.push(t); speechOn = true; isSpeaker = true;
-      const answer = "I can hush for 10 or 30 minutes, or until the next jump. Quiet for 10 minutes.", o = {};
-      data.hush = {mode: "10m", until: Date.now() / 1000 + 600, left: 600, sys: null};
-      data.copilot = Object.assign({}, data.copilot, {seq: lastCopilotSeq + 1, action: "say", words: answer, hush: "10m"});
-      onData(); o.asked = said.splice(0);
-      data.hush = {mode: "30m", until: Date.now() / 1000 + 1800, left: 1800, sys: null};   // the ▾ or the button: no answer
-      onData(); o.button = said.splice(0);
-      speak = realSpeak; [speechOn, isSpeaker, lastCopilotSeq, hushState, hushKey] = flags;
-      data = JSON.parse(d0); drawHush();
-      return JSON.stringify(o); })()`));
-    const want = {asked: ["I can hush for 10 or 30 minutes, or until the next jump. Quiet for 10 minutes."], button: ["Quiet for 30 minutes."]};
-    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| review hush answer |", good ? "a voice hush says its answer once, the button's hush the page's words" : JSON.stringify({got, want}), errors.slice(before));
-  }
-  // Review fixes: a view window (S37) given the voice while the main window that opened it waits in line (the main window
-  // reloaded) hands it back and queues again; taken on purpose (Speak from this window) it keeps it. Web Locks faked
-  {
-    const before = errors.length, errs = [];
-    // one lock, its queue in order; a steal rejects the holder's request; an aborted wait leaves the queue
-    const locks = {holder: null, queue: [],
-      request(name, opts, cb) {
-        return new Promise((resolve, reject) => {
-          const req = {cb, resolve, reject, opts};
-          if (opts.signal) opts.signal.addEventListener("abort", () => { const i = locks.queue.indexOf(req); if (i >= 0) { locks.queue.splice(i, 1); reject(new Error("AbortError")); } });
-          if (opts.steal) { const h = locks.holder; locks.holder = null; if (h) h.reject(new Error("AbortError")); locks.grant(req); }
-          else if (!locks.holder) locks.grant(req); else locks.queue.push(req);
-        });
-      },
-      grant(req) {
-        locks.holder = req;
-        Promise.resolve(req.cb()).then(v => { if (locks.holder !== req) return; locks.holder = null; req.resolve(v); const n = locks.queue.shift(); if (n) locks.grant(n); });
-      }};
-    // the main window that opened the view window, as its opener: in line while its request waits
-    const main = {waiting: false, holds: false, closed: false, speakerQueued() { return main.waiting; },
-      claim() { main.waiting = true; locks.request("ed-speaker", {}, () => { main.waiting = false; main.holds = true; return new Promise(() => {}); })
-        .catch(() => { main.holds = false; main.claim(); }); }};
-    const html2 = await (await fetch(base + "?view=bm")).text();
-    const dom2 = new JSDOM(html2, {url: base + "?view=bm", runScripts: "dangerously", resources: "usable", pretendToBeVisual: true,
-      beforeParse(w2) { w2.AbortController = AbortController; w2.fetch = (u, o) => fetch(new URL(u, base), o); w2.addEventListener("error", e => errs.push(e.message));
-        w2.localStorage.clear(); w2.scrollBy = () => {}; w2.HTMLCanvasElement.prototype.getContext = () => null;
-        Object.defineProperty(w2.navigator, "locks", {value: locks, configurable: true});
-        Object.defineProperty(w2, "opener", {value: main, configurable: true, writable: true}); }});
-    const wv = dom2.window, isSp = () => wv.eval("typeof isSpeaker !== 'undefined' && isSpeaker");
-    for (let i = 0; i < 60 && !isSp(); i++) await sleep(150);   // page.js loaded, then a second late, the voice free: this window has it
-    const got = {first: isSp()};
-    main.claim();   // the main window reloaded: in line behind the view window
-    for (let i = 0; i < 20 && isSp(); i++) await sleep(150);
-    got.handed = [isSp(), main.holds, locks.queue.length];   // handed back, and in line again behind it
-    wv.document.getElementById("speakerClaim").click();   // Speak from this window: taken on purpose
-    await sleep(50);
-    got.taken = [isSp(), main.holds, main.waiting];
-    await sleep(1600);
-    got.kept = [isSp(), main.holds];   // the main window in line does not get it back
-    dom2.window.close();
-    const want = {first: true, handed: [false, true, 1], taken: [true, false, true], kept: [true, false]};
-    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before && !errs.length;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| review view window voice |", good ? "a view window hands the voice back to its main window in line, keeps it when taken here" : JSON.stringify({got, want, errs}), errors.slice(before));
-  }
-  // S40: a speaker per personality. speech.json's voice and speaker, a speaker alone being the main voice's person, a pick
-  // in Settings winning over both (data.style_picks); a line queued with a speaker carries it to the PC's player, as the
-  // next line and "say again" do; Settings → Voice → Personality voices draws each personality's voice and speaker,
-  // posts a change, a speaker and a reset (api/voice/style, answered here), ▶ plays a line as it is heard; the voice
-  // lab's Give to this personality posts the lab's voice and person, and a line played there is in the personality's
-  {
-    holdPayloads();
-    const w = dom.window, d = w.document, realFetch = w.fetch, before = errors.length, said = [], posted = [], played = [];
-    const people = [{id: 0, name: "p225"}, {id: 1, name: "p226"}, {id: 2, name: "p227"}, {id: 3, name: "p228"}];
-    const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), {status, headers: {"Content-Type": "application/json"}}));
-    let picks = {};
-    w.fetch = (u, o) => {
-      const s = String(u);
-      if (s.startsWith("api/voices/speakers")) return json({voice: "x", speakers: s.includes("vctk") ? people : [], speaker: null});
-      if (s.startsWith("api/say?")) { said.push(Object.fromEntries(new URLSearchParams(s.slice(8)))); return Promise.resolve(new Response(new w.Blob(["RIFF"]), {status: 200, headers: {"Content-Type": "audio/wav"}})); }
-      if (s === "api/say/play") { played.push(JSON.parse(o.body)); return json({ok: true, stopped: false}); }
-      if (s === "api/voice/style") {
-        const b = JSON.parse(o.body); posted.push(b);
-        if (b.voice) picks[b.style] = {voice: b.voice, speaker: b.speaker ?? null}; else delete picks[b.style];
-        return json({ok: true, style_picks: JSON.parse(JSON.stringify(picks))});
-      }
-      return realFetch(u, o);
-    };
-    const savedServer = w.localStorage.getItem("speakOnServer");
-    w.eval(`window.__s40 = {tts: data.tts, picks: data.style_picks, lib: speechLib, sound: labSound, cu: URL.createObjectURL, ru: URL.revokeObjectURL,
-      flags: [speechOn, isSpeaker], lastSaid};
-      URL.createObjectURL = () => "blob:s40"; URL.revokeObjectURL = () => {};
-      labSound = () => ({done: Promise.resolve(), stop() {}});
-      data.tts = {engine: "piper", available: true, status: "ready", voices: ["en_GB-cori-medium", "en_GB-vctk-medium"], voice: "en_GB-cori-medium",
-                  speaker: null, speakers: 0};
-      speechLib = {version: "s40", banned: {}, styles: {business: "Down to business",
-          sarcastic: {label: "Sarcastic", voice: "en_GB-vctk-medium", speaker: 4, speed: 1.2}, sweet: {label: "Sweet", speaker: 7}},
-        lines: {game_start: {business: ["Hi."], sarcastic: ["Oh, you."], sweet: ["Hello, love."]}}};
-      for (const k of Object.keys(speakerLists)) delete speakerLists[k];
-      data.style_picks = {};`);
-    const got = {};
-    got.file = JSON.parse(w.eval(`JSON.stringify([styleVoice("sarcastic_profane"), heardVoice("sweet"), styleVoice("business")].map(v => [v.voice, v.speaker, v.pace]))`));
-    w.eval(`data.style_picks = {sarcastic: {voice: "en_GB-cori-medium", speaker: null}, business: {voice: "en_GB-vctk-medium", speaker: 2}}`);
-    picks = JSON.parse(w.eval("JSON.stringify(data.style_picks)"));
-    got.picked = JSON.parse(w.eval(`JSON.stringify([styleVoice("sarcastic"), styleVoice("business")].map(v => [v.voice, v.speaker, v.pace, v.picked]))`));
-    // the queue: said on the PC with the speaker, the next line riding along with its own; "say again" keeps it
-    w.localStorage.setItem("speakOnServer", "true");
-    w.eval(`speechOn = true; isSpeaker = true; speechItems = []; speechLast = {}; hushState = null;
-      speak("Second line.", {delay: 300, speaker: 5}); speak("First line.", {voice: "en_GB-vctk-medium", speaker: 2})`);
-    for (let i = 0; i < 40 && played.length < 2; i++) await sleep(50);
-    got.played = played.map(b => [b.text, b.voice, b.speaker, b.next ? [b.next.text, b.next.speaker] : null]);
-    got.again = JSON.parse(w.eval("JSON.stringify(lastSaid && [lastSaid.words, lastSaid.speaker])"));
-    // Settings → Voice → Personality voices
-    w.eval(`drawStyleVoices(true)`); await sleep(100);
-    const row = st => d.querySelector(`#styleVoices tr[data-svstyle="${st}"]`);
-    got.table = [!d.getElementById("styleVoicesRow").hidden, d.querySelectorAll("#styleVoices tbody tr").length,
-      row("business").querySelector("[data-svvoice]").value, row("business").querySelector("[data-svspk]").hidden, row("business").querySelector("[data-svspk]").value,
-      row("sarcastic").querySelector("[data-svvoice]").value, row("sarcastic").querySelector("[data-svspk]").hidden,
-      row("sweet").querySelector("[data-svvoice]").options[0].textContent, !!row("sweet").querySelector("[data-svreset]")];
-    const sel = row("sweet").querySelector("[data-svvoice]");
-    sel.value = "en_GB-vctk-medium"; sel.dispatchEvent(new w.Event("change", {bubbles: true})); await sleep(150);
-    const spk = row("sweet").querySelector("[data-svspk]");
-    got.sweet = [spk.hidden, spk.options.length];
-    spk.value = "1"; spk.dispatchEvent(new w.Event("change", {bubbles: true})); await sleep(100);
-    row("business").querySelector("[data-svreset]").click(); await sleep(100);
-    got.posted = posted.slice();
-    got.after = [w.eval("JSON.stringify(data.style_picks)"), d.getElementById("styleVoicesMsg").textContent, !!row("business").querySelector("[data-svreset]")];
-    said.length = 0;
-    row("sarcastic").querySelector("[data-svplay]").click(); await sleep(150);
-    got.play = said.map(x => [x.voice, x.speaker || null, x.speed, x.text]);
-    // the voice lab: Give to this personality, and a line in the personality's own voice and person
-    said.length = 0; posted.length = 0;
-    await w.eval(`(async () => { await labOpen();
-      labEl("labVoice").value = "en_GB-vctk-medium"; await labDrawSpeakers(); labEl("labSpk").value = "3";
-      labEl("labStyle").value = "sweet"; labEl("labStyle").dispatchEvent(new Event("change")); })()`);
-    await sleep(100);
-    got.giveStyle = d.getElementById("labGiveStyle").value;
-    d.getElementById("labGive").click(); await sleep(150);
-    got.give = [posted.slice(), d.getElementById("labMsg").textContent, d.getElementById("labInUse").textContent];
-    await w.eval(`labPlayLine(labLine("game_start", "sweet"))`);
-    await w.eval(`labPlayLine(labLine("game_start", "business"))`);   // no voice of its own: the lab's voice and person
-    got.lab = said.map(x => [x.voice, x.speaker || null]);
-    got.words = d.getElementById("labWords").textContent;
-    w.eval(`tabClose(document.getElementById("labDlg")); hushSpeech(true);
-      const k = window.__s40; data.tts = k.tts; data.style_picks = k.picks; speechLib = k.lib; labSound = k.sound; URL.createObjectURL = k.cu;
-      URL.revokeObjectURL = k.ru || (() => {}); [speechOn, isSpeaker] = k.flags; lastSaid = k.lastSaid; delete window.__s40;
-      for (const k2 of Object.keys(speakerLists)) delete speakerLists[k2]; drawTts(); drawSpeechStyles();`);
-    w.fetch = realFetch;
-    if (savedServer === null) w.localStorage.removeItem("speakOnServer"); else w.localStorage.setItem("speakOnServer", savedServer);
-    const want = {
-      file: [["en_GB-vctk-medium", 4, 1.2], ["en_GB-cori-medium", 7, 1], [null, null, 1]],
-      picked: [["en_GB-cori-medium", null, 1.2, true], ["en_GB-vctk-medium", 2, 1, true]],
-      played: [["Second line.", null, 5, ["First line.", 2]], ["First line.", "en_GB-vctk-medium", 2, null]],   // the older first
-      again: ["First line.", 2],
-      table: [true, 3, "en_GB-vctk-medium", false, "2", "en_GB-cori-medium", true, "as the lines file says: the main voice #7", false],
-      sweet: [false, 4],
-      posted: [{style: "sweet", voice: "en_GB-vctk-medium"}, {style: "sweet", voice: "en_GB-vctk-medium", speaker: 1}, {style: "business", voice: null}],
-      after: [JSON.stringify({sarcastic: {voice: "en_GB-cori-medium", speaker: null}, sweet: {voice: "en_GB-vctk-medium", speaker: 1}}),
-              "Down to business: as the lines file says", false],
-      play: [["en_GB-cori-medium", null, String(Math.round(w.eval("speechSpeed()") * 1.2 * 100) / 100), "Oh, you."]],
-      giveStyle: "sweet",
-      give: [[{style: "sweet", voice: "en_GB-vctk-medium", speaker: 3}], "Sweet speaks in en_GB-vctk-medium #3 from now on", "✓ Sweet"],
-      lab: [["en_GB-vctk-medium", "3"], ["en_GB-vctk-medium", "3"]],
-    };
-    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
-    if (!/^game_start · Down to business: /.test(got.words)) bad.push("words");
-    const good = !bad.length && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| S40 personality voices |", good ? "the file's voice and speaker, a pick wins, the speaker rides to the PC and the next line; the table, ▶, Give, the lab's lines" :
-      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
-    await releasePayloads();
-  }
-  // Crew batch 1: with the crew on, an alert row's line is said by its crew member (the table from api/speech's
-  // crew_roles): a tank-full line in the Engineer's personality, voice and person (its role riding to the PC's player),
-  // a fuel-low line by the Engineer with the Danger switch off and by Tactical with it on, a moved row by its new member;
-  // a member who cannot speak (data.crew's fill) and a row no role covers are the XO's (the main voice, as before);
-  // with the crew off the same lines are exactly as before (styleVoice, no role)
-  {
-    holdPayloads();
-    const w = dom.window, before = errors.length, played = [];
-    const realFetch = w.fetch, savedServer = w.localStorage.getItem("speakOnServer");
-    const served = await (await fetch(base + "api/speech")).json();   // the table, as the scratch server serves it
-    w.fetch = (u, o) => String(u) === "api/say/play" ? (played.push(JSON.parse(o.body)), Promise.resolve(new Response(JSON.stringify({ok: true}), {status: 200})))
-      : realFetch(u, o);
-    w.eval(`window.__crew = {tts: data.tts, crew: data.crew, lib: speechLib, speak, flags: [speechOn, isSpeaker, soundOn], hush: hushState,
-        styles: localStorage.getItem("speechStyles"), danger: localStorage.getItem("speechDangerBusiness")};
-      window.__spoken = [];
-      data.tts = {engine: "piper", available: true, status: "ready", voices: ["en_GB-cori-medium", "en_GB-vctk-medium", "en_GB-alan-low"], voice: "en_GB-cori-medium"};
-      speechLib = {version: "crew", banned: {}, crew_roles: ${JSON.stringify(served.crew_roles)}, styles: {business: "Down to business", sarcastic: "Sarcastic", sweet: "Sweet"},
-        lines: {tank_full: {business: ["Tank full."], sarcastic: ["Tank full, finally."], sweet: ["All topped up, love."]},
-                fuel_low: {business: ["Fuel low."], sarcastic: ["Fuel low, genius."], sweet: ["Fuel's low, dear."]},
-                fsd_charge: {business: ["Jumping."]}}};
-      store.set("speechStyles", ["business"]); store.set("speechDangerBusiness", false);
-      speechOn = true; isSpeaker = true; soundOn = false; hushState = null; speechLast = {};
-      const m = (personality, voice, speaker, fill) => ({name: null, personality, voice, speaker, fill: fill || null});
-      data.crew = {on: true, danger: false, rows: {},
-        members: {xo: m(null, "en_GB-cori-medium", null), engineer: m("sarcastic", "en_GB-vctk-medium", 2), tactical: m("sweet", "en_GB-alan-low", null),
-                  navigator: m(null, "en_GB-gone-low", null, "voice en_GB-gone-low not installed"), quartermaster: m(null, null, null)}};
-      speak = (t, o) => window.__spoken.push([t, o.voice || null, o.speaker ?? null, o.role || null, o.crew ? crewWords(o.crew) : null]);
-      window.__say = () => {
-        alertOut("scoop", "Tank full", "", {say: () => line("tank_full", {jumps: 8}, "Tank full.")});
-        alertOut("fuel", "Fuel 18%", "", {tag: "fuel_low", say: () => line("fuel_low", {pct: 18}, "Fuel low.")});
-        alertOut("jump", "Jumping", "", {say: () => line("fsd_charge", {system: "X"}, "Jumping.")});
-      };`);
-    const got = {};
-    got.roles = w.eval(`speechLib.crew_roles.map(r => r.id).join()`);
-    w.eval(`__say()`);
-    got.dangerOff = JSON.parse(w.eval(`JSON.stringify(__spoken.splice(0))`));
-    w.eval(`data.crew.danger = true; speechLast = {}; __say()`);
-    got.dangerOn = JSON.parse(w.eval(`JSON.stringify(__spoken.splice(0))`));
-    w.eval(`data.crew.rows = {scoop: "quartermaster"}; speechLast = {}; __say()`);   // moved: as the XO (its personality and voice)
-    got.moved = JSON.parse(w.eval(`JSON.stringify(__spoken.splice(0).slice(0, 1))`));
-    got.unowned = JSON.parse(w.eval(`JSON.stringify([crewMember("nosuchrow", "x"), crewMember(null, "speech_on")])`));
-    w.eval(`data.crew.on = false; data.crew.rows = {}; speechLast = {}; __say()`);
-    got.off = JSON.parse(w.eval(`JSON.stringify(__spoken.splice(0))`));
-    // the role rides to the PC's player with the Engineer's own voice
-    w.localStorage.setItem("speakOnServer", "true");
-    w.eval(`data.crew.on = true; speak = window.__crew.speak; speechItems = []; speechLast = {};
-      alertOut("scoop", "Tank full", "", {say: () => line("tank_full", {jumps: 8}, "Tank full.")})`);
-    for (let i = 0; i < 40 && !played.length; i++) await sleep(50);
-    got.played = played.map(b => [b.text, b.voice, b.speaker, b.role]);
-    w.eval(`hushSpeech(true); const k = window.__crew; data.tts = k.tts; data.crew = k.crew; speechLib = k.lib; speak = k.speak;
-      [speechOn, isSpeaker, soundOn] = k.flags; hushState = k.hush;
-      for (const [key, v] of [["speechStyles", k.styles], ["speechDangerBusiness", k.danger]]) if (v === null) localStorage.removeItem(key); else localStorage.setItem(key, v);
-      delete window.__crew; delete window.__spoken; delete window.__say;`);
-    w.fetch = realFetch;
-    if (savedServer === null) w.localStorage.removeItem("speakOnServer"); else w.localStorage.setItem("speakOnServer", savedServer);
-    const want = {
-      roles: "xo,navigator,science,exobiologist,engineer,quartermaster,comms,tactical,mining",
-      dangerOff: [["Tank full, finally.", "en_GB-vctk-medium", 2, "engineer", "Engineer"], ["Fuel low, genius.", "en_GB-vctk-medium", 2, "engineer", "Engineer"],
-                  ["Jumping.", null, null, null, "XO for Navigator: voice en_GB-gone-low not installed"]],
-      dangerOn: [["Tank full, finally.", "en_GB-vctk-medium", 2, "engineer", "Engineer"], ["Fuel's low, dear.", "en_GB-alan-low", null, "tactical", "Tactical"],
-                 ["Jumping.", null, null, null, "XO for Navigator: voice en_GB-gone-low not installed"]],
-      moved: [["Tank full.", null, null, null, "Quartermaster"]],
-      unowned: [{role: "xo", personality: null, voice: null, speaker: null, fill: "no crew member for the alert row nosuchrow", for: null},
-                {role: "xo", personality: null, voice: null, speaker: null, fill: null, for: null}],
-      off: [["Tank full.", null, null, null, null], ["Fuel low.", null, null, null, null], ["Jumping.", null, null, null, null]],
-      played: [["Tank full, finally.", "en_GB-vctk-medium", 2, "engineer"]],
-    };
-    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
-    const good = !bad.length && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| crew batch 1 |", good ? "a fuel line in the Engineer's voice, danger in Tactical's, a moved row, the XO for one who cannot speak and an unowned row, the role to the PC; off: as before" :
-      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
-    await releasePayloads();
-  }
-  // Crew batch 2: Settings → Voice's Voices kept loaded and crew table, Settings → Alerts' Crew column. The memory note's
-  // colour bands and numbers from a given voice_memory (plain under 500 MB, amber over, red over 1 GB, "on the server",
-  // hidden with no voice besides the main one); Keep loaded and Load them at start post their config keys and the figures
-  // follow the number picked; the table's nine rows (the XO first, highlighted, no ↺), a member's selects and speaker,
-  // Speaks for (Tactical's danger lines in red), ↺ and a name posting; the Alerts column (a danger row's "spoken by
-  // Tactical") and a moved row posting; all of it hidden with the crew off; Find a setting finds the new rows
-  {
-    holdPayloads();
-    const w = dom.window, d = w.document, before = errors.length, posted = [];
-    const realFetch = w.fetch;
-    const served = await (await fetch(base + "api/speech")).json();
-    const json = v => Promise.resolve(new Response(JSON.stringify(v), {status: 200, headers: {"Content-Type": "application/json"}}));
-    const m0 = () => ({name: null, personality: null, voice: null, speaker: null, fill: null});
-    const crew = {on: true, danger: true, rows: {}, members: {
-      xo: {name: "Vance", personality: null, voice: "en_GB-cori-medium", speaker: null, fill: null},
-      navigator: {name: "Okafor", personality: "business", voice: "en_GB-vctk-medium", speaker: 1, fill: null},
-      science: m0(), exobiologist: m0(), engineer: {name: "Mira", personality: "sarcastic", voice: "en_GB-alan-low", speaker: null, fill: null},
-      quartermaster: m0(), comms: m0(), tactical: {name: "Rook", personality: "business", voice: "en_GB-alan-low", speaker: null, fill: null}, mining: m0()}};
-    w.fetch = (u, o) => {
-      const s = String(u);
-      if (s === "api/config" && o && o.method === "POST") {
-        const b = JSON.parse(o.body); posted.push(b);
-        return json({ok: true, changed: 1, restart: false, live: Object.keys(b.speech || {}).map(k => "speech." + k), path: "/scratch/ed_outrider.toml"});
-      }
-      if (s === "api/voice/crew") {
-        const b = JSON.parse(o.body); posted.push(b);
-        if (b.reset) Object.assign(crew.members[b.role], {personality: null, voice: null, speaker: null});
-        if ("name" in b) crew.members[b.role].name = b.name || null;
-        if ("row" in b) crew.rows[b.row] = b.role;
-        return json({ok: true, crew: JSON.parse(JSON.stringify(crew))});
-      }
-      if (s.startsWith("api/voices/speakers")) return json({voice: "x", speaker: null,
-        speakers: s.includes("vctk") ? [{id: 0, name: "p225"}, {id: 1, name: "p226"}, {id: 2, name: "p227"}] : []});
-      return realFetch(u, o);
-    };
-    w.eval(`window.__c2 = {tts: data.tts, crew: data.crew, vm: data.voice_memory, lib: speechLib};
-      for (const k of Object.keys(speakerLists)) delete speakerLists[k];
-      data.tts = {engine: "piper", available: true, status: "ready", voices: ["en_GB-cori-medium", "en_GB-vctk-medium", "en_GB-alan-low"],
-                  voice: "en_GB-cori-medium", speaker: null, speakers: 0};
-      speechLib = Object.assign({}, speechLib, {crew_roles: ${JSON.stringify(served.crew_roles)},
-        styles: {business: "Down to business", sarcastic: "Sarcastic", sweet: "Sweet"}});
-      data.crew = ${JSON.stringify(crew)};
-      data.voice_memory = {voices: [{voice: "en_GB-alan-low", mb: 80}, {voice: "en_GB-vctk-medium", mb: 120}, {voice: "en_GB-cori-high", mb: 182}],
-        count: 3, mb: 382, loaded: null, default: 4, kept: 3, kept_mb: 382, set_aside: 0, preload: false, on_server: false};
-      drawCrew(true); drawVoiceMemory();`);
-    await sleep(150);
-    const got = {}, txt = id => d.getElementById(id).textContent.replace(/\s+/g, " ").trim();
-    const note = () => [d.getElementById("vmBox").hidden, d.getElementById("vmNote").className,
-      /different voices<\/b> besides (the XO|the main voice)/.exec(d.getElementById("vmNote").innerHTML)?.[1],
-      (txt("vmNote").match(/about ([\d,]+ MB) of memory (on this PC|on the server)/) || []).slice(1).join(" "), (txt("vmNote").match(/More than [^·]+/) || [""])[0].trim()];
-    got.plain = note();
-    got.keep = [d.getElementById("vmKeep").value, [...d.getElementById("vmKeep").options].map(o => o.textContent), txt("vmKeepOf"), txt("vmCost")];
-    w.eval(`data.voice_memory.mb = 640; drawVoiceMemory()`);
-    got.amber = note();
-    w.eval(`data.voice_memory.mb = 1300; data.voice_memory.on_server = true; drawVoiceMemory()`);
-    got.red = note();
-    w.eval(`data.voice_memory.count = 0; drawVoiceMemory()`);
-    got.none = d.getElementById("vmBox").hidden;
-    w.eval(`Object.assign(data.voice_memory, {count: 3, mb: 382, on_server: false}); drawVoiceMemory()`);
-    // Keep loaded and Load them at start: the config keys posted, the figures for the number picked
-    const keep = d.getElementById("vmKeep");
-    keep.value = "2"; keep.dispatchEvent(new w.Event("change")); await sleep(100);
-    got.kept = [keep.value, [...keep.options].map(o => o.value), txt("vmKeepOf"), txt("vmCost"), txt("vmMsg")];
-    const pre = d.getElementById("vmPreload");
-    pre.checked = true; pre.dispatchEvent(new w.Event("change")); await sleep(100);
-    got.posts = posted.splice(0);
-    // the crew table
-    const tr = role => d.querySelector(`#crewTable tr[data-crole="${role}"]`);
-    got.rows = [...d.querySelectorAll("#crewTable tbody tr")].map(r => r.dataset.crole);
-    got.xo = [tr("xo").classList.contains("xo"), !!tr("xo").querySelector("[data-creset]"), /the main voice/.test(tr("xo").textContent),
-      tr("xo").querySelector("[data-cname]").value, tr("xo").querySelector("[data-cvoice]").value, !!tr("xo").querySelector("[data-cpers]")];
-    got.nav = [tr("navigator").querySelector("[data-cpers]").value, tr("navigator").querySelector("[data-cvoice]").value,
-      tr("navigator").querySelector("[data-cspk]").hidden, tr("navigator").querySelector("[data-cspk]").value, /jumps/.test(tr("navigator").querySelector(".cfor").textContent)];
-    got.sci = [tr("science").querySelector("[data-cpers]").value, tr("science").querySelector("[data-cpers]").classList.contains("asxo"),
-      tr("science").querySelector("[data-cvoice]").options[0].textContent, tr("science").querySelector("[data-creset]").disabled,
-      tr("science").querySelector("[data-cname]").placeholder];
-    got.speaks = [(tr("tactical").querySelector(".cfor .badc") || {}).textContent, /their danger lines: Tactical/.test(tr("engineer").querySelector(".cfor").textContent),
-      /answers/.test(tr("xo").querySelector(".cfor").textContent)];
-    got.visible = [d.getElementById("crewTable").hidden, d.getElementById("crewXoNote").hidden, d.getElementById("crewDangerWrap").hidden,
-      d.getElementById("ttsXo").hidden, d.getElementById("crewOn").checked];
-    tr("engineer").querySelector("[data-creset]").click(); await sleep(100);
-    const nm = tr("science").querySelector("[data-cname]");
-    nm.value = "Ada"; nm.dispatchEvent(new w.Event("change", {bubbles: true})); await sleep(100);
-    got.reset = [tr("engineer").querySelector("[data-cpers]").value, tr("engineer").querySelector("[data-cvoice]").value, txt("crewMsg"),
-      tr("science").querySelector("[data-cname]").value];
-    // Settings → Alerts' Crew column
-    const cell = row => d.querySelector(`#alertOpts td[data-acrew="${row}"]`);
-    got.alerts = [d.querySelector("#alertTable th.acrew").hidden, cell("hull").querySelector("select").value, /spoken by Tactical \(danger\)/.test(cell("hull").textContent),
-      /its danger lines by Tactical/.test(cell("carrier").textContent), !!cell("jump").querySelector(".crewdanger"), cell("jump").querySelector("select").value,
-      cell("discovery").textContent.trim()];
-    const sc = cell("scoop").querySelector("select");
-    sc.value = "quartermaster"; sc.dispatchEvent(new w.Event("change", {bubbles: true})); await sleep(100);
-    got.moved = [cell("scoop").querySelector("select").value, /tank full/.test(tr("quartermaster").querySelector(".cfor").textContent)];
-    w.eval(`data.crew.danger = false; drawCrew(true)`);
-    got.dangerOff = [!!cell("hull").querySelector(".crewdanger"), !!tr("tactical").querySelector(".cfor .badc")];
-    got.crewPosts = posted.splice(0);
-    // Find a setting finds the new rows (with the crew on), and none of the hidden table's with it off
-    w.eval(`data.crew.danger = true; drawCrew(true)`);
-    const shows = el => !!el && !el.closest(".sfhide") && !el.closest("[hidden]");
-    const findIt = q => w.eval(`sfSet(${JSON.stringify(q)})`);
-    // a row matching shows its whole table, the matching rows marked: the Navigator's in the crew table, the jump
-    // alert's (its crew member) in the Alerts table, the rest of both shown unmarked
-    const marked = el => !!el && el.classList.contains("sfmark");
-    findIt("navigator"); got.findNav = [shows(tr("navigator")), shows(cell("jump").closest("tr")), shows(cell("hull").closest("tr")), shows(tr("science")),
-      marked(tr("navigator")), marked(cell("jump").closest("tr")), marked(cell("hull").closest("tr")), marked(tr("science"))];
-    // the block's heading word: the whole crew block (every member, the switches, the XO note), nothing marked
-    const crewRows = () => [...d.querySelectorAll("#crewTable tbody tr")];
-    findIt("crew"); got.findCrewAll = [crewRows().length, crewRows().filter(shows).length, shows(d.getElementById("crewOn")), shows(d.getElementById("crewXoNote")),
-      shows(d.getElementById("crewAudition")), crewRows().some(marked)];
-    findIt("tactical"); got.findTactical = [crewRows().filter(shows).length, crewRows().filter(marked).map(r => r.dataset.crole),
-      shows(d.getElementById("crewXoNote"))];
-    findIt("xo"); got.findXo = shows(tr("xo"));
-    findIt("keep loaded"); got.findKeep = [shows(keep), shows(d.getElementById("vmNote"))];
-    findIt("load at start"); got.findPre = shows(pre);
-    findIt("memory"); got.findMem = shows(d.getElementById("vmNote"));
-    findIt("voices_preload"); got.findKey = shows(pre);
-    findIt("crew"); got.findCrew = shows(d.getElementById("crewOn"));
-    w.eval(`data.crew.on = false; drawCrew(true); drawVoiceMemory()`);
-    findIt("navigator"); got.findOff = [...d.querySelectorAll("#crewTable tbody tr")].some(shows);
-    w.eval(`sfClear()`);
-    got.off = [d.getElementById("crewTable").hidden, d.getElementById("crewXoNote").hidden, d.getElementById("crewDangerWrap").hidden,
-      d.getElementById("crewAudition").hidden, d.querySelector("#alertTable th.acrew").hidden,
-      [...d.querySelectorAll("#alertOpts td.acrew")].every(td => td.hidden && !td.innerHTML), d.getElementById("ttsXo").hidden, d.getElementById("crewOn").checked,
-      /besides the main voice/.test(d.getElementById("vmNote").innerHTML)];
-    w.fetch = realFetch;
-    w.eval(`const k = window.__c2; data.tts = k.tts; data.crew = k.crew; data.voice_memory = k.vm; speechLib = k.lib; delete window.__c2;
-      for (const k2 of Object.keys(speakerLists)) delete speakerLists[k2]; drawTts(); drawCrew(true); drawVoiceMemory();`);
-    const want = {
-      plain: [false, "vmnote", "the XO", "382 MB on this PC", ""],
-      keep: ["", ["3 (the default)", "1", "2", "3", "all"], "of the 3 voices in use · about 382 MB", "nothing waits: every voice in use stays loaded"],
-      amber: [false, "vmnote warn", "the XO", "640 MB on this PC", "More than 500 MB"],
-      red: [false, "vmnote bad", "the XO", "1,300 MB on the server", "More than 1 GB"],
-      none: true,
-      kept: ["2", ["1", "2", "3", "all"], "of the 3 voices in use · about 302 MB",
-             "1 voice is set aside when not in use: its next line waits about a second while it loads again", "Saved in the config file ([speech] voices_loaded)"],
-      posts: [{speech: {voices_loaded: "2"}}, {speech: {voices_preload: true}}],
-      rows: ["xo", "navigator", "science", "exobiologist", "engineer", "quartermaster", "comms", "tactical", "mining"],
-      xo: [true, false, true, "Vance", "en_GB-cori-medium", false],
-      nav: ["business", "en_GB-vctk-medium", false, "1", true],
-      sci: ["", true, "as the XO", true, "no name"],
-      speaks: ["every danger line", true, true],
-      visible: [false, false, false, false, true],
-      reset: ["", "", "Science Officer (Ada): kept", "Ada"],
-      alerts: [false, "engineer", true, true, false, "navigator", "·"],
-      moved: ["quartermaster", true],
-      dangerOff: [false, false],
-      crewPosts: [{role: "engineer", reset: true}, {role: "science", name: "Ada"}, {row: "scoop", role: "quartermaster"}],
-      findNav: [true, true, true, true, true, true, false, false], findCrewAll: [9, 9, true, true, true, false], findTactical: [9, ["tactical"], false], findXo: true, findKeep: [true, false], findPre: true, findMem: true, findKey: true, findCrew: true,
-      findOff: false,
-      off: [true, true, true, true, true, true, true, false, true],
-    };
-    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
-    const good = !bad.length && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| crew batch 2 settings |", good ? "the memory note's bands and figures, Keep loaded and Load at start posted, the crew table, ↺ and a name, the Alerts Crew column and its danger hint, hidden when off, Find a setting" :
-      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
-    await releasePayloads();
-  }
-  // Crew batch 3: lines naming another crew member ({engineer}...). With the crew off one is never picked (the plain
-  // line, or the plain wording when an alert has only those); with it on {engineer} says "the Engineer" (a capital at a
-  // sentence's start, also after a filled {text}) or the member's name, "Mira"; a member never says a line naming itself (a
-  // row moved to the Engineer, the XO standing in); the voice lab's crew lines take made-up names for a member without,
-  // and Audition: crew lines plays one per alert in each personality
-  {
-    holdPayloads();
-    const w = dom.window, before = errors.length;
-    const served = await (await fetch(base + "api/speech")).json();
-    w.eval(`window.__c3 = {crew: data.crew, lib: speechLib, play: labPlayLine, styles: localStorage.getItem("speechStyles"), noRec: lineNoRecord,
-        heard: JSON.stringify(recentLines)};
-      lineNoRecord = true; for (const k of Object.keys(recentLines)) delete recentLines[k];   // every line fresh: the picks are at random
-      speechLib = {version: "crew3", banned: {}, crew_roles: ${JSON.stringify(served.crew_roles)}, styles: {business: "Down to business"},
-        lines: {tank_full: {business: ["Tank full.", "{navigator} can plot."]},
-                fsd_charge: {business: ["Jumping. Ask {engineer} about the drive."]},
-                arrival_brief: {business: ["{text} {engineer} agrees."]},
-                speech_on: {business: ["{xo} here."]}}};
-      store.set("speechStyles", ["business"]);
-      const m = name => ({name, personality: null, voice: null, speaker: null, fill: null});
-      data.crew = {on: false, danger: true, rows: {}, members: {xo: m(null), navigator: m(null), engineer: m(null), science: m(null)}};
-      window.__pick = (row, key, vars, plain, n = 1) => { const out = new Set();
-        for (let i = 0; i < n; i++) { lineRow = row; try { out.add(line(key, vars, plain)); } finally { lineRow = null; } }
-        return [...out].sort(); };`);
-    const pick = (row, key, vars, plain, n = 1) => JSON.parse(w.eval(`JSON.stringify(__pick(${JSON.stringify(row)}, "${key}", ${JSON.stringify(vars)}, ${JSON.stringify(plain)}, ${n}))`));
-    const got = {};
-    got.off = [pick("scoop", "tank_full", {}, "Tank.", 20), pick("jump", "fsd_charge", {system: "X"}, "Jumping.")];
-    w.eval(`data.crew.on = true`);
-    got.on = [pick("scoop", "tank_full", {}, "Tank.", 30), pick("jump", "fsd_charge", {system: "X"}, "Jumping."),
-              pick("brief", "arrival_brief", {text: "Known. 4 bodies."}, "Brief.")];
-    w.eval(`data.crew.members.engineer.name = "Mira"`);
-    got.named = [pick("jump", "fsd_charge", {system: "X"}, "Jumping."), pick("brief", "arrival_brief", {text: "Known. 4 bodies."}, "Brief.")];
-    w.eval(`data.crew.rows = {jump: "engineer"}`);   // moved to the Engineer: never its own name
-    got.moved = pick("jump", "fsd_charge", {system: "X"}, "Jumping.");
-    w.eval(`data.crew.rows = {}`);
-    got.xoFor = pick(null, "speech_on", {}, "On.");   // the XO's own line: never {xo}
-    // the voice lab: as the alerts (none with the crew off), "only" with made-up names, and the audition
-    got.lab = JSON.parse(w.eval(`data.crew.members.engineer.name = null;
-      const a = labLine("fsd_charge", "business"), b = labLine("fsd_charge", "business", {crew: "only", names: {engineer: "Mira"}});
-      data.crew.on = false; const c = labLine("fsd_charge", "business"), e = labLine("tank_full", "business", {crew: "only"});
-      JSON.stringify([a && a.text, b && b.text, c, e && e.text])`));
-    w.eval(`window.__aud = []; labPlayLine = async ln => (window.__aud.push([ln.key, ln.style, ln.text]), true);
-      speechLib.lines = {fsd_charge: speechLib.lines.fsd_charge, tank_full: {business: ["Tank full."]}};
-      data.crew.members.engineer.name = null; window.__audSaid = [];`);
-    await w.eval(`crewLinesAudition((t, bad) => window.__audSaid.push([t, bad]))`);
-    got.audition = JSON.parse(w.eval(`JSON.stringify([window.__aud, window.__audSaid.slice(-1)])`));
-    got.buttons = [!!w.document.getElementById("labCrewLines"), !!w.document.getElementById("crewLinesAudition")];
-    w.eval(`const k = window.__c3; data.crew = k.crew; speechLib = k.lib; labPlayLine = k.play; lineNoRecord = k.noRec;
-      Object.assign(recentLines, JSON.parse(k.heard));
-      if (k.styles === null) localStorage.removeItem("speechStyles"); else localStorage.setItem("speechStyles", k.styles);
-      delete window.__c3; delete window.__pick; delete window.__aud; delete window.__audSaid;`);
-    const want = {
-      off: [["Tank full."], ["Jumping."]],
-      on: [["Tank full.", "The Navigator can plot."], ["Jumping. Ask the Engineer about the drive."], ["Known. 4 bodies. The Engineer agrees."]],
-      named: [["Jumping. Ask Mira about the drive."], ["Known. 4 bodies. Mira agrees."]],
-      moved: ["Jumping."],
-      xoFor: ["On."],
-      lab: ["Jumping. Ask the Engineer about the drive.", "Jumping. Ask Mira about the drive.", null, "The Navigator can plot."],
-      audition: [[["fsd_charge", "business", "Jumping. Ask Mira about the drive."]], [["Audition done", false]]],
-      buttons: [true, true],
-    };
-    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
-    const good = !bad.length && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| crew batch 3 lines |", good ? "no crew line with the crew off, {engineer} as the Engineer or Mira, never a member's own name, the lab's crew lines and their audition" :
-      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
-    await releasePayloads();
-  }
-  // S39: Find a setting. A word leaves only the rows that match it (label, help, the config key a row defaults from, a
-  // Server settings key loaded without opening its section), opens their sections and says how many; every section is
-  // found by a word of its own rows and by its name; nothing matching says so; clearing puts every section back as it
-  // was, and settingsOpen is never written meanwhile
-  {
-    const w = dom.window, d = w.document, before = errors.length;
-    if (!w.HTMLDialogElement.prototype.showModal) w.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
-    w.localStorage.setItem("settingsOpen", JSON.stringify({alerts: false, voice: true}));
-    w.eval(`document.getElementById("alertsBtn").click()`);
-    await settle(1500);
-    const stored0 = w.localStorage.getItem("settingsOpen"), open0 = w.eval(`JSON.stringify(setSecs.map(s => s.open))`);
-    const find = async q => {
-      w.eval(`(() => { const b = document.getElementById("setFind"); b.value = ${JSON.stringify(q)}; b.dispatchEvent(new Event("input")); })()`);
-      await settle(2500); await sleep(250);   // Server settings arriving, then the observer's pass
-    };
-    const vis = sel => w.eval(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); return !!el && !el.closest(".sfhide"); })()`);
-    const secs = () => JSON.parse(w.eval(`JSON.stringify(setSecs.filter(s => !s.classList.contains("sfhide") && sfLaidOut(s)).map(s => s.dataset.secKey + (s.open ? "" : " (closed)")))`));
-    const msg = () => d.getElementById("setFindMsg").textContent;
-    const got = {};
-    await find("speed");
-    got.speed = [vis("#speechSpeed"), vis("#bioMin"), vis("#labOpen"), secs().includes("voice"), msg() === `${secs().length} sections match` || msg() === "1 section match"];
-    await find("password");
-    got.password = [vis('#serverSettingsBody [data-sec="server"][data-key="password"]'), vis('#serverSettingsBody [data-sec="server"][data-key="port"]'),
-      w.eval(`document.querySelector('#serverSettingsBody details[data-srvsec="server"]').open`), vis("#speechSpeed"), secs().includes("server")];
-    await find("body_highlight_level");   // the key alone: the Values row by its data-find, and the server's own row
-    got.key = [vis("#hlBody"), vis("#hlBio"), vis('#serverSettingsBody [data-key="body_highlight_level"]'), secs().sort().join()];
-    await find("speak voice");   // two words, one in the section's heading
-    got.two = [vis("#speechSpeed"), vis("#sayMapped")];
-    // a block's heading word in another section: the whole Backups fold, opened, its summary's words too; Start with
-    // this computer stays out; an upload service by its name: all of its block, its "no commander" line included
-    const fold = id => w.eval(`document.getElementById("${id}").open`), backups0 = fold("srvBackups");
-    await find("backups");
-    got.backups = [vis("#srvBackups"), fold("srvBackups"), vis("#srvBackupsBody"), vis("#srvService"), secs().includes("server")];
-    await find("zips");
-    got.zips = [vis("#srvBackupsBody"), fold("srvBackups")];
-    await find("inara");
-    got.inara = JSON.parse(w.eval(`(() => { const b = document.querySelector('#uploadsBox [data-find-block="Inara"]');
-      return JSON.stringify(!!b && !b.closest(".sfhide") && [...b.children].every(c => !c.classList.contains("sfhide"))); })()`));
-    await find("zzqxw");
-    got.none = [msg(), secs().length, w.eval(`[...document.querySelectorAll("#alertChips [data-sec]")].every(b => b.classList.contains("sfhide"))`)];
-    got.every = JSON.parse(w.eval(`(() => {
-      const out = [];
-      for (const sec of setSecs) {
-        if (!sfLaidOut(sec)) continue;
-        const {rows} = sfRows(sec), row = rows.find(r => sfLaidOut(r.el) && /[a-z]{5,}/.test(r.own));
-        const word = row ? row.own.match(/[a-z]{5,}/g).sort((a, b) => b.length - a.length)[0] : "zzqxw";
-        sfSet(word);
-        const byWord = !!row && !row.el.closest(".sfhide") && sec.open;
-        sfSet(sec.dataset.chip);
-        out.push([sec.dataset.secKey, byWord, !sec.classList.contains("sfhide") && sec.open && sfRows(sec).rows.filter(r => sfLaidOut(r.el)).every(r => !r.el.closest(".sfhide"))]);
-      }
-      return JSON.stringify(out); })()`));
-    await find("");
-    got.cleared = [d.querySelectorAll("#alertDialog .sfhide").length, w.eval(`JSON.stringify(setSecs.map(s => s.open))`) === open0, msg(),
-      w.localStorage.getItem("settingsOpen") === stored0, fold("srvBackups") === backups0, d.querySelectorAll("#alertDialog .sfmark").length];
-    w.eval(`const dls = document.getElementById("alertDialog"); if (dls.close) dls.close(); else dls.removeAttribute("open")`);
-    const want = {speed: [true, false, false, true, true], password: [true, false, true, false, true],
-      key: [true, false, true, w.eval(`[...new Set(["server", "values"])].sort().join()`)], two: [true, true],
-      backups: [true, true, true, false, true], zips: [true, true], inara: true,
-      none: ["Nothing matches", 0, true], cleared: [0, true, "", true, true, 0]};
-    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
-    if (got.every.length < 12 || !got.every.every(e => e[1] && e[2])) bad.push("every");
-    const good = !bad.length && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| S39 find a setting |", good ? `speed, a server key, a config key alone, two words, a block's heading (Backups, Inara), nothing; all ${got.every.length} sections found by a word and by name; cleared as before` :
-      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
-  }
-  // S53: Import… beside Bookmarks' Export: a picked CSV file goes to the scratch server, which merges it ("2 added, 0
-  // already there", a bad row said with its line); the rows arrive with the exact id64 above 2^53, a sweep tick and Plot
-  // route; the same file again adds nothing; a file it cannot read is said in red. The two bookmarks are removed after.
-  {
-    const w = dom.window, d = w.document, before = errors.length, view0 = w.eval("view");
-    w.eval(`document.querySelector('[data-view="bm"]').click()`);
-    await settle(800);
-    const input = d.getElementById("bmFile"), msg = () => d.getElementById("bmImportMsg");
-    let picked = 0;
-    input.click = () => { picked++; };
-    d.getElementById("bmImport").click();
-    const pick = async (text, name) => {
-      Object.defineProperty(input, "files", {value: [new w.File([text], name)], configurable: true});
-      input.dispatchEvent(new w.Event("change"));
-      for (let i = 0; i < 40 && /^(Importing…)?$/.test(msg().textContent); i++) await sleep(100);
-      const said = [msg().textContent, msg().className];
-      msg().textContent = "";
-      return said;
-    };
-    const csv = "id64,name,x,y,z,note,created_ts\r\n9007199254740993,Smoke Import One,10,0,10,from a file,2026-01-01T00:00:00Z\r\n" +
-      "12345,Smoke Import Two,20,0,20,,\r\n13,Smoke Import Bad,,0,0,,\r\n";
-    const got = {picked: 0, visible: !d.getElementById("bmTools").hidden && !d.getElementById("bmImport").hidden};
-    got.picked = picked;
-    got.first = await pick(csv, "bookmarks.csv");
-    for (let i = 0; i < 40 && !w.eval(`data.bookmarks.some(b => b.id === "9007199254740993")`); i++) await sleep(150);
-    w.eval("renderBookmarks(bmMap())");
-    const row = [...d.querySelectorAll("#bmRows tr")].find(r => /Smoke Import One/.test(r.textContent));
-    got.row = row ? [/from a file/.test(row.textContent), !!row.querySelector('.swtick[data-sweep="Smoke Import One"]'),
-      !!row.querySelector('[data-plotto="Smoke Import One"]'), /2026-01-01/.test(row.textContent)] : null;
-    got.again = await pick(csv, "bookmarks.csv");
-    got.unread = await pick("name,x,y,z\nA,1,2,3\n", "other.csv");
-    got.title = d.getElementById("bmImportMsg").title;
-    for (const id of ["9007199254740993", "12345"])
-      await w.fetch("api/bookmark", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({id, remove: true})});
-    delete input.files;
-    w.eval(`document.querySelector('[data-view="${view0}"]').click()`);
-    await settle(800);
-    const want = {picked: 1, visible: true, first: ["2 added, 0 already there, 1 left out: line 4: no x", ""], row: [true, true, true, true],
-      again: ["0 added, 2 already there, 1 left out: line 4: no x", ""],
-      unread: ["Not imported: no id64 column (Outrider's CSV export starts id64,name,x,y,z,note,created_ts).", "err"], title: ""};
-    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
-    const good = !bad.length && errors.length === before;
-    allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| S53 bookmarks import |", good ? "Import… picks a file, merged on the server (2 added, then 2 already there, a bad line said), the exact id64 with its tick and Plot route, an unreadable file in red" :
-      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
   }
   // The Commander view: its tabs drawn from the server's answers (made up here),
   // Last of the page's checks: a check added in the middle shifts the page's long poll into a later batch's window

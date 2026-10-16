@@ -1,5 +1,5 @@
 {
- "about": "How Outrider's Piper voice says the words espeak's English rules get wrong (outrider/pronounce.py): syllables joined by '-', the stressed one in capitals, or raw phonemes in [[ ]]. Mostly species names, and the crew's \"XO\" (espeak says \"zo\"). A first pass, by ear of the community's usual (anglicised) readings: your own data/pronounce.json goes on top (the voice lab's How is it said box).",
+ "about": "How Outrider's Piper voice says the words espeak's English rules get wrong (outrider/pronounce.py): syllables joined by '-', the stressed one in capitals, or raw phonemes in [[ ]]. A first pass, by ear of the community's usual (anglicised) readings: your own data/pronounce.json goes on top (the voice lab's How is it said box).",
  "words": {
   "Acies": "AY-see-eez",
   "Acus": "AY-kuss",
@@ -120,7 +120,6 @@
   "Violaceum": "vy-oh-LAY-see-um",
   "Virgam": "VER-gam",
   "Viride": "VEER-rih-day",
-  "Volu": "VOL-oo",
-  "XO": "ex-OH"
+  "Volu": "VOL-oo"
  }
 }

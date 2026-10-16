@@ -25,8 +25,8 @@ RUN chmod -R a+rwX /app/resources && mkdir -p /app/data /config && chmod a+rwx /
 
 EXPOSE 8025
 STOPSIGNAL SIGTERM
-# healthy as soon as Outrider answers: while it reads the journals (a while for years of them, the first start or a
-# re-read) its starting page and /api/version answer already (S9), so the start period only covers Python starting
-HEALTHCHECK --interval=60s --timeout=5s --start-period=2m --retries=3 \
+# start-period: the first start reads every journal before the server answers (a while for years of them); a success
+# ends the start period at once, so a quick start is not held back
+HEALTHCHECK --interval=60s --timeout=5s --start-period=30m --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8025/api/version', timeout=4)" || exit 1
 ENTRYPOINT ["docker/entrypoint.sh"]

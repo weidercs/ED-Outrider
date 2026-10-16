@@ -24,8 +24,7 @@ for this: see [Other devices on your network](install.md#-other-devices-on-your-
 - **The pages** are on the left in three groups of four: Explore (Now, Nearby, Here, Bio/Geo), Navigate (Bookmarks,
   Search, Map, Plot Route) and Records (History, Log, Materials, My firsts). There is no Overview.
 - **Tap a row** in a table for all of its facts, including the columns too narrow to show, with Show in Here,
-  Bookmark and, on a route's row, a bookmark or a Nearby row (game PC), 🎯 Target. On the galaxy map a tap on a system shows its card,
-  with 🎯 Target when auto-target works on the game PC, and Copy name.
+  Bookmark and, on a route's row (game PC), 🎯 Target.
 - **The maps by touch:** on the galaxy map one finger rotates, two fingers move it and a pinch zooms; on Plot Route's
   map two fingers move and pinch.
 - **On a planet** the tablet switches to Now when the surface map appears (the Now button says MAP) and back to your
@@ -38,8 +37,7 @@ for this: see [Other devices on your network](install.md#-other-devices-on-your-
   alerts the tablet says (🗣) and plays (🔊), apart from the PC's choices; it starts from what the PC saved as defaults
   for new browsers.
 - **Target next** on Plot Route and every 🎯 (a route's systems, a boxel's) run at once (no countdown), since
-  tapping the tablet leaves the game focused; Outrider still brings the game to the front first where it can, and
-  counts down 5 s when the game is not the active window (see [auto-target](plot-route.md)). Auto honk, auto-target's switch and test, backups and the voice
+  tapping the tablet leaves the game focused. Auto honk, auto-target's switch and test, backups and the voice
   settings stay on the PC.
 - **Settings** (bottom right): the theme, a dim switch, the theme's emblem, **Show the game controls** (off: no rail
   on this tablet and the pages take its width, for a second tablet), Play alerts here and Choose alerts…, the screen size in CSS

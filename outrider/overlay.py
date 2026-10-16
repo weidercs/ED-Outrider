@@ -25,17 +25,13 @@ import math
 import os
 import re
 import sys
-import time
 
 from . import ROOT
-from .riches import left_words, survey_kind
 
 CANVAS_W, CANVAS_H = 1280, 960
-PANELS = ("system", "body", "radar", "strip", "now", "bio", "alerts", "route")
-# "body" is the Target panel (D1): the body you are at or have targeted, else the system targeted. Its id, config key
-# (body_panel) and layout key stayed, so an arrangement and a config made for the Body panel carry over unchanged.
-PANEL_NAMES = {"system": "System", "body": "Target", "radar": "Surface radar", "strip": "System strip",
-               "now": "Now (To-Do & Info)", "bio": "Bio signals", "alerts": "Alerts", "route": "Route"}
+PANELS = ("system", "body", "radar", "strip", "now", "bio", "route")
+PANEL_NAMES = {"system": "System", "body": "Body", "radar": "Surface radar", "strip": "System strip",
+               "now": "Now (To-Do & Info)", "bio": "Bio signals", "route": "Route"}
 # a panel is placed from a corner of the game window, or centred along its top or bottom edge (n, s: x is not used)
 CORNERS = ("nw", "ne", "sw", "se", "n", "s")
 SIZES = ("small", "normal", "large")
@@ -43,14 +39,9 @@ THEMES = ("default", "lcars", "elite", "babylon5", "narn", "minbari", "centauri"
 TEST_SECONDS = 60       # "Show test panels": how long they stay (shown whether or not the game is in front)
 ARRANGE_SECONDS = 600   # Arrange mode ends by itself after this, so the overlay never stays in the way of the mouse
 
-# [overlay] hide_docked (the author, 2026-10-14): the panels hidden while docked (the ship docked, or on foot in a station,
-# hangar or social space). Every panel but the radar, which shows only on a body's surface; by default the ones about
-# flying (System, Target, Now, Bio): the strip and the alerts still say where you are and what happened
-DOCKED_PANELS = tuple(p for p in PANELS if p != "radar")
-HIDE_DOCKED_DEFAULT = ("system", "body", "now", "bio")
 DEFAULTS = {"enabled": False, "theme": "default", "text_size": "normal", "system_panel": True, "body_panel": True,
-            "radar": True, "strip_panel": False, "now_panel": False, "bio_panel": False, "alerts_panel": False, "route_panel": False, "system_seconds": 0,
-            "radar_range": 800, "analysis_only": [], "hide_docked": list(HIDE_DOCKED_DEFAULT), "show_inactive": False}
+            "radar": True, "strip_panel": False, "now_panel": False, "bio_panel": False, "route_panel": False, "system_seconds": 0,
+            "radar_range": 800}
 # where each panel starts: a corner of the game window, the offset from it as a share of the window's width (x) and
 # height (y), its size (1 = the canvas's own), its background's opacity (0: text only) and the whole panel's
 LAYOUT_DEFAULT = {"system": {"corner": "nw", "x": 0.02, "y": 0.16, "scale": 1.0, "bg": 0.65, "alpha": 1.0},
@@ -59,8 +50,6 @@ LAYOUT_DEFAULT = {"system": {"corner": "nw", "x": 0.02, "y": 0.16, "scale": 1.0,
                   "strip": {"corner": "n", "x": 0.0, "y": 0.005, "scale": 1.0, "bg": 0.5, "alpha": 1.0},
                   "now": {"corner": "sw", "x": 0.02, "y": 0.06, "scale": 1.0, "bg": 0.65, "alpha": 1.0},
                   "bio": {"corner": "nw", "x": 0.02, "y": 0.45, "scale": 1.0, "bg": 0.65, "alpha": 1.0},
-                  # under the system strip, centred (S26)
-                  "alerts": {"corner": "n", "x": 0.0, "y": 0.09, "scale": 1.0, "bg": 0.65, "alpha": 1.0},
                   "route": {"corner": "ne", "x": 0.02, "y": 0.45, "scale": 1.0, "bg": 0.65, "alpha": 1.0}}
 LIMITS = {"x": (0.0, 0.95), "y": (0.0, 0.95), "scale": (0.5, 2.5), "bg": (0.0, 1.0), "alpha": (0.1, 1.0)}
 
@@ -150,8 +139,7 @@ def overlay_settings(cfg):
     if "overlay" in cfg and not isinstance(cfg.get("overlay"), dict):
         _warn("must be a section (a table of settings); ignored")
     out = dict(DEFAULTS)
-    for key in ("enabled", "system_panel", "body_panel", "radar", "strip_panel", "now_panel", "bio_panel", "alerts_panel", "route_panel",
-                "show_inactive"):
+    for key in ("enabled", "system_panel", "body_panel", "radar", "strip_panel", "now_panel", "bio_panel", "route_panel"):
         v = o.get(key)
         if v is None:
             continue
@@ -175,122 +163,7 @@ def overlay_settings(cfg):
             out[key] = int(min(hi, max(lo, v)))
         else:
             _warn(f"{key} = {v!r} must be a number; using {DEFAULTS[key]}")
-    out["analysis_only"] = analysis_list(o.get("analysis_only"), _warn)
-    out["hide_docked"] = docked_list(o.get("hide_docked"), _warn)
     return {"overlay": out}
-
-
-def panel_list(key, v, warn=None, default=(), allowed=PANELS):
-    """One of [overlay]'s panel lists: panel ids in PANELS' order; an id not in `allowed` is dropped (said through
-    `warn`), missing or anything but a list of names is `default` (a fresh list each time)."""
-    if v is None:
-        return list(default)
-    if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
-        if warn:
-            warn(f"{key} = {v!r} must be a list of panel names ({', '.join(allowed)}); using {list(default)}")
-        return list(default)
-    unknown = [x for x in v if x.strip().lower() not in allowed]
-    if unknown and warn:
-        warn(f"{key}: {', '.join(repr(x) for x in unknown)} not a panel ({', '.join(allowed)}); left out")
-    names = {x.strip().lower() for x in v}
-    return [p for p in PANELS if p in names and p in allowed]
-
-
-def analysis_list(v, warn=None):
-    """[overlay] analysis_only (D2a): the panels shown in your ship only while the HUD is in analysis mode; none when
-    the key is missing."""
-    return panel_list("analysis_only", v, warn)
-
-
-def docked_list(v, warn=None):
-    """[overlay] hide_docked (the author, 2026-10-14): the panels hidden while docked, any of DOCKED_PANELS (the radar
-    is never one: it shows only on a body's surface); HIDE_DOCKED_DEFAULT when the key is missing, so a config written
-    before it hides what Outrider hid then (Now and the Target panel) and the System and Bio panels too."""
-    return panel_list("hide_docked", v, warn, HIDE_DOCKED_DEFAULT, DOCKED_PANELS)
-
-
-# ---- the page's overlay pill (S8): how the overlay is doing, in one word and a reason ----
-
-# what the overlay window sees, sent with each of its GETs as &w= (overlay_window.track_code)
-TRACK_CODES = ("drawing", "behind", "hidden", "covered", "no_window", "no_wmctrl", "no_xprop", "no_tracker")
-QUIET_S = 15   # s without a GET from a window that should be running: "not answering"
-TRACK_WHY = {"drawing": ("ok", "drawing over Elite"),
-             "behind": ("wait", "Elite is not the active window"),   # the page: "behind this page" while it has the focus
-             "hidden": ("wait", "Elite's window is minimised or on another desktop"),
-             "covered": ("wait", "another window covers Elite's"),
-             "no_window": ("bad", "Elite's window cannot be found (exclusive fullscreen, or Proton's native Wayland mode?)"),
-             "no_wmctrl": ("bad", "wmctrl not installed: the overlay cannot find Elite's window"),
-             "no_xprop": ("bad", "xprop not installed: the overlay cannot tell whether Elite is in front"),
-             "no_tracker": ("bad", "the overlay cannot follow the game's window on this system")}
-FULLSCREEN_WHY = ("Elite is set to exclusive fullscreen: nothing can draw over it; "
-                  "choose Borderless in the game's Options → Graphics → Display")
-
-
-def health(wanted, runner, track, quiet, started, live, loading, fullscreen=False):
-    """The page's overlay pill: {state: ok | wait | bad, code, why}, or None when there is nothing to say (the overlay
-    not wanted, or Outrider runs no window here: a server). runner: OverlayRunner.status(); track: the window's last
-    TRACK_CODES word (None: never said); quiet: s since the window last asked or was started, whichever is later (None:
-    neither); started: whether it asked since the runner last started it (state off: not started yet); live / loading: the game, from the journals; fullscreen: DisplaySettings.xml says
-    exclusive fullscreen. The tools the window lacks come first (a fix for the player), then the game, then the window."""
-    if not wanted or runner is None:
-        return None
-    state, why = runner.get("state"), runner.get("why")
-
-    def out(level, code, text):
-        return {"state": level, "code": code, "why": text}
-    if state == "installing":
-        return out("wait", "installing", "installing PyQt6 for the overlay window")
-    if state == "no_qt":
-        return out("wait", "no_qt", "the overlay window needs PyQt6: Outrider installs it")
-    if state == "install_failed":
-        return out("bad", "install_failed", f"installing PyQt6 failed: {why or '?'}")
-    if state == "failed":
-        return out("bad", "failed", f"the overlay window: {why or 'it stopped'}")
-    if state == "restarting":
-        return out("wait", "restarting", f"the overlay window {why or 'stopped'}")
-    quiet = float("inf") if quiet is None else quiet
-    if state == "starting" or (not started and (quiet <= QUIET_S or state == "off")):
-        return out("wait", "starting", "starting the overlay window")
-    if quiet > QUIET_S:
-        return out("bad", "quiet", "the overlay window is not answering")
-    if track in ("no_wmctrl", "no_xprop", "no_tracker"):
-        return out(TRACK_WHY[track][0], track, TRACK_WHY[track][1])
-    if loading:
-        return out("wait", "loading", "Elite is loading")
-    if not live:
-        return out("wait", "no_game", "Elite is not running")
-    if fullscreen:
-        return out("bad", "fullscreen", FULLSCREEN_WHY)
-    if track not in TRACK_WHY:
-        return out("wait", "starting", "starting the overlay window")
-    level, text = TRACK_WHY[track]
-    return out(level, track, text)
-
-
-# Elite's display mode, from its DisplaySettings.xml (S8): exclusive fullscreen hides anything drawn over the game
-DISPLAY_SETTINGS = ("AppData", "Local", "Frontier Developments", "Elite Dangerous", "Options", "Graphics",
-                    "DisplaySettings.xml")
-FULLSCREEN_MODES = {"0": "windowed", "1": "fullscreen", "2": "borderless"}   # <FullScreen>: published values, unchecked
-
-
-def display_settings_paths(journal_dirs, environ=None):
-    """Where DisplaySettings.xml should be for these journal folders: the journals are in <user>/Saved Games/Frontier
-    Developments/Elite Dangerous, the options in <user>/AppData/Local/... (on Windows and in a Proton prefix alike);
-    on Windows also %LOCALAPPDATA%'s. Each once, in that order."""
-    environ = os.environ if environ is None else environ
-    out = []
-    for d in journal_dirs or ():
-        user = os.path.dirname(os.path.dirname(os.path.dirname(os.path.normpath(d))))
-        out.append(os.path.join(user, *DISPLAY_SETTINGS))
-    if environ.get("LOCALAPPDATA"):
-        out.append(os.path.join(environ["LOCALAPPDATA"], *DISPLAY_SETTINGS[2:]))
-    return list(dict.fromkeys(out))
-
-
-def display_mode(text):
-    """DisplaySettings.xml's text -> "windowed", "fullscreen", "borderless", or None (no <FullScreen>, another value)."""
-    m = re.search(r"<FullScreen>\s*(\d+)\s*</FullScreen>", text or "")
-    return FULLSCREEN_MODES.get(m.group(1)) if m else None
 
 
 def _num(v, lo, hi):
@@ -464,28 +337,10 @@ def codex_mark(guesses):
     return ""
 
 
-def stop_glyph(n):
-    """A stop's number in the suggested order, as Here's schematic writes it (page.js stopGlyph): ① to ⑳, then (21)."""
-    return chr(0x245F + n) if 1 <= n <= 20 else f"({n})"
-
-
-def system_rows(detail, highlight, bio_min, codex=True, first=None):
-    """The system panel's bodies: what is left to do on each body worth it, then the valuable ones already done.
-    [{name, what, status, value, key (warn/accent/good), mark, todo, dist, stops}], the credits left in the whole
-    system, and how many bodies have something left that is under your levels (not listed; a body someone else mapped
-    is neither).
-    S30: the bodies you scanned are listed by the suggested order (plan_items, as Now and Here's schematic): `stops`
-    their numbers in it (two on a body with both mapping and bio), the rows by their first number. A body you have not
-    scanned (Spansh's record only: the order cannot know it yet) is listed by its value as before, unnumbered, after
-    them; the done ones last."""
-    plan = plan_items((detail or {}).get("leaving"), highlight, bio_min, codex, first)
-    stops = {}
-    for n, it in enumerate(plan, 1):
-        stops.setdefault(it["body"], {}).setdefault("n", []).append(n)
-        stops[it["body"]].setdefault("kinds", set()).add(it["kind"])
-    # mapped by someone else before you scanned it (your Scan's WasMapped): never a stop (the page's rule, plan_items),
-    # and not "under your levels" either, whatever its mapping would add
-    others = {u.get("body") for u in ((detail or {}).get("leaving") or {}).get("unmapped") or [] if u.get("mapped_before")}
+def system_rows(detail, highlight, bio_min):
+    """The system panel's bodies: what is left to do on each body worth it, nearest first, then the valuable ones
+    already done. [{name, what, status, value, key (warn/accent/good), mark, todo, dist}], the credits left in the
+    whole system, and how many bodies have something left that is under your levels (not listed)."""
     rows, left_all, under = [], 0, 0
     for b in (detail or {}).get("bodies") or []:
         if b.get("type") == "Star":
@@ -497,17 +352,11 @@ def system_rows(detail, highlight, bio_min, codex=True, first=None):
         partial = [o for o in organics if not o.get("done") and not o.get("lost")]
         mapped = bool(b.get("mapped") or b.get("first_mapped"))
         special = bool(b.get("notable") or b.get("terraformable"))
-        st = stops.get(b.get("name"))
-        if st:   # in the suggested order: what it holds there decides
-            to_map, to_land = "map" in st["kinds"], "bio" in st["kinds"]
-        elif b.get("scanned"):   # yours, and not in the order: under your levels (or nothing left)
-            to_map = to_land = False
-        else:
-            to_map = not mapped and b.get("type") == "Planet" and map_left > 0 and (map_left >= highlight or special)
-            to_land = bool(partial) or bio_left >= bio_min
+        to_map = not mapped and b.get("type") == "Planet" and map_left > 0 and (map_left >= highlight or special)
+        to_land = bool(partial) or bio_left >= bio_min
         base = {"name": b.get("name", "?"), "what": body_what(b), "mark": codex_mark(b.get("bio_guess")) if to_land else "",
-                "dist": b.get("dist_ls") if b.get("dist_ls") is not None else 1e12, "stops": st["n"] if st else []}
-        if partial and to_land:
+                "dist": b.get("dist_ls") if b.get("dist_ls") is not None else 1e12}
+        if partial:
             o = partial[0]
             rows.append(dict(base, status=f"{o.get('genus', 'bio')} {o.get('samples', 0)}/3", value=bio_left + (map_left if to_map else 0),
                              key="accent", todo=True))
@@ -517,23 +366,21 @@ def system_rows(detail, highlight, bio_min, codex=True, first=None):
         elif (mapped and (b.get("value_max") or 0) >= highlight) or (organics and all(o.get("done") for o in organics)
                                                                       and (b.get("value_max") or 0) >= bio_min):
             rows.append(dict(base, status="MAPPED" if mapped else "SAMPLED", value=None, key="good", todo=False))
-        if not to_land and not to_map and (bio_left or (map_left and not mapped and b.get("name") not in others)):
+        if not to_land and not to_map and (bio_left or (map_left and not mapped)):
             under += 1
-    rows.sort(key=lambda r: (not r["todo"], not r["stops"], r["stops"][0] if r["stops"] else 0, r["dist"]))
+    rows.sort(key=lambda r: (not r["todo"], r["dist"]))
     return rows, left_all, under
 
 
-def system_panel(detail, pal, size="normal", highlight=500_000, bio_min=10_000_000, max_rows=8, codex=True, first=None):
-    """The system panel ("worth your time"): None when no body is worth listing. codex, first: as plan_items (the
-    config's codex_interesting, the first stop you picked here)."""
-    rows, left_all, under = system_rows(detail, highlight, bio_min, codex, first)
+def system_panel(detail, pal, size="normal", highlight=500_000, bio_min=10_000_000, max_rows=8):
+    """The system panel ("worth your time"): None when no body is worth listing."""
+    rows, left_all, under = system_rows(detail, highlight, bio_min)
     if not rows:
         return None
     shown = rows[:max_rows]
     lines = []
     for r in shown:
-        left = ([("".join(stop_glyph(n) for n in r["stops"]) + " ", "accent")] if r["stops"] else []) + \
-            [(r["name"] + " ", "title"), (r["what"], "text" if r["todo"] else "muted")]
+        left = [(r["name"] + " ", "title"), (r["what"], "text" if r["todo"] else "muted")]
         if r["mark"]:
             left.append(("  " + r["mark"], "good" if r["mark"].startswith("✪") else "accent"))
         right = f"{r['status']} {credits(r['value'])}" if r["value"] else r["status"]
@@ -553,15 +400,8 @@ def system_panel(detail, pal, size="normal", highlight=500_000, bio_min=10_000_0
                       subtitle=f"{n} bod{'y' if n == 1 else 'ies'}")
 
 
-def run_pays(value, factor=1):
-    """What a sample run pays, known from sample 1 (S62; page.js `runPays`): "1.0M (×5: 5.0M)" with the first footfall
-    bonus, else "1.0M"; "" when unknown. `value` is the species' own, never one with the ×5 already in."""
-    if not value:
-        return ""
-    return f"{credits(value)} (×{factor}: {credits(value * factor)})" if factor and factor > 1 else credits(value)
-
 def body_panel(b, pal, size="normal", high_gravity=2.0, colony=None):
-    """The Target panel's body (D1; it was the body panel): what the body is, what mapping it is worth, and its life (each likely species with its codex
+    """The body panel: what the body is, what mapping it is worth, and its life (each likely species with its codex
     mark, colony distance and value, or what it could be before the DSS), and whether it is worth landing. None for
     a star or nothing known."""
     if not b or b.get("type") == "Star":
@@ -604,7 +444,7 @@ def body_panel(b, pal, size="normal", high_gravity=2.0, colony=None):
         else:
             bio_rows.append({"left": [(o.get("species") or o.get("genus") or "?", "text"), (f"  {o.get('samples', 0)}/3", "accent")]
                              + ([(f" · {colony[o['genus'].lower()]} m", "muted")] if o.get("genus") and colony.get(o["genus"].lower()) else []),
-                             "right": (run_pays(o.get("value"), factor) or credits(0), "accent")})
+                             "right": (credits((o.get("value") or 0) * factor), "accent")})
     for g in b.get("bio_guess") or []:
         if g.get("genus") in running:
             continue
@@ -778,83 +618,6 @@ def strip_panel(info, pal, size="normal"):
             "style": pal.get("style", "rounded"), "accent": pal["title"], "items": items}
 
 
-def star_hazard(code):
-    """What to mind arriving at this star (page.js hazardNote: throttle down on arrival): "neutron star", "white dwarf",
-    "black hole", or "" for an ordinary star."""
-    c = str(code or "")
-    return "neutron star" if c == "N" else "white dwarf" if c.startswith("D") \
-        else "black hole" if c in ("H", "SupermassiveBlackHole") else ""
-
-
-def fuel_t(x):
-    """Tonnes of fuel as the page writes them (page.js fuelT): a short hop burns a few kilograms."""
-    return f"{x:.1g}" if x < 0.1 else f"{x:.1f}"
-
-
-NOTABLE_WORDS = ("ELW", "WW", "AW", "T")   # Nearby's notable bodies, in its order (page.js notable)
-TARGET_W = 420
-
-
-def target_system_panel(t, pal, size="normal"):
-    """The Target panel's system (D1): the system targeted in game (in the galaxy map, or the next jump of a route
-    plotted there) when no body is. What is known of it (TARGET_WORDS, Spansh's bodies of its count, EDSM's), its star
-    (⛽, or ✕ not scoopable; ⚠ throttle down at a neutron star, white dwarf or black hole), the jump (the distance, its
-    fuel and the max-range jumps left after it, or out of range) and, in the Nearby sphere, what it could pay and its
-    notable bodies. t: {name, status (None while the lookup runs: "checking…"), source, known, count, edsm, star_class,
-    hop: {ly, fuel, left, reach}, distance, value: {carto, bio}, notable, remaining (the route's jumps left, this one
-    included), route_check (S11: the followed route's target_check, its one overlay place)}. None without a name."""
-    if not t or not t.get("name"):
-        return None
-    room, rows = TARGET_W - 2 * PAD, []
-    left = t.get("remaining")   # with a route plotted in game, the target is its next jump
-    if isinstance(left, int) and not isinstance(left, bool) and left > 1:
-        rows.append([("next jump of your route · ", "muted"), (f"{left} to go", "text")])
-    tc = route_check_parts(t.get("route_check"))
-    if tc:
-        rows += flow(tc, room, size)
-    status = t.get("status")
-    if status is None:
-        rows.append([("checking…", "muted")])
-    else:
-        words, key = TARGET_WORDS.get(status, (status, "muted"))
-        row = [(words + (" (known to EDSM only)" if t.get("source") == "edsm" else ""), key)]
-        if t.get("count"):
-            row.append((f" · {t.get('known') or 0}/{t['count']} known", "muted"))
-        elif t.get("known"):
-            row.append((f" · {t['known']} known", "muted"))
-        e = t.get("edsm")
-        if e:
-            row.append((" · EDSM: not logged" if e.get("missing") else
-                        f" · EDSM {e.get('known') or 0}" + (f"/{e['count']}" if e.get("count") else ""), "muted"))
-        rows += flow(row, room, size)
-    sc = t.get("star_class")
-    if sc:
-        scoop = bool(re.match(r"^[OBAFGKM](_|$)", sc))
-        row = [(star_words(sc), "good" if scoop else "text")] + ([] if scoop else [(" · ✕ not scoopable", "warn")])
-        if star_hazard(sc):
-            row.append((" · ⚠ throttle down", "bad"))
-        rows += flow(row, room, size)
-    hop = t.get("hop") or {}
-    ly = hop.get("ly") if hop.get("ly") is not None else t.get("distance")
-    if isinstance(ly, (int, float)):
-        row = [(f"{ly:.1f} ly", "text")]
-        if hop.get("reach") is False:
-            row.append((" · out of range" + (f" (needs {fuel_t(hop['fuel'])} t)" if hop.get("fuel") is not None else ""), "bad"))
-        elif hop.get("fuel") is not None:
-            left = hop.get("left") or 0
-            row.append((f" · {fuel_t(hop['fuel'])} t · leaves {left} max jump{'' if left == 1 else 's'}", "muted"))
-        rows += flow(row, room, size)
-    v, n = t.get("value") or {}, t.get("notable") or {}
-    row = ([(f"~{credits(v['carto'])} scan+map", "accent")] if v.get("carto") else []) \
-        + ([(" · " if v.get("carto") else "", "muted"), (f"bio up to {credits(v['bio'])}", "accent")] if v.get("bio") else [])
-    marks = [k + (f"×{n[k]}" if n[k] > 1 else "") for k in NOTABLE_WORDS if n.get(k)]
-    if marks:
-        row.append(((" · " if row else "") + " ".join(marks), "good"))
-    if row:
-        rows += flow(row, room, size)
-    return text_panel("body", "➜ " + t["name"], rows, pal, width=TARGET_W, size=size)
-
-
 # ---- the Now panel: the page's Now view, condensed (the author, 2026-10-10) ----
 
 # supercruise seconds from the arrival star on the page's community curve (page.js scSeconds): a rough guide
@@ -880,30 +643,19 @@ def sc_text(sec):
     return f"~{max(10, _half_up(sec / 5) * 5)} s" if sec < 90 else f"~{_half_up(sec / 60)} min"
 
 
-def route_check_parts(tc):
-    """S11's mark for the Target panel (page.js targetCheckHtml's words): the followed route's next stop targeted, a
-    later stop of it, or another system. [] without a check."""
-    if not tc or not tc.get("next"):
-        return []
-    if tc.get("ok"):
-        return [("✓ the next stop of your route", "good")]
-    n = tc.get("ahead") or 0
-    if n > 0:
-        return [(f"↷ {n} stop{'' if n == 1 else 's'} ahead on your route", "muted")]
-    return [("⚠ not the next stop: ", "bad"), (tc["next"], "text")]
+SURVEY_WORDS = {"riches": ("💰", "Road to Riches", lambda n: f"{n} {'body' if n == 1 else 'bodies'} to do here"),
+                "exo": ("🧬", "Exomastery", lambda n: f"{n} species to sample here"),
+                "trade": ("💱", "Trade route", lambda n: f"{n} trade{'' if n == 1 else 's'} to make here")}
 
 
 def route_parts(route):
     """The route's next stop as Now gives it (page.js hwyLineHtml / surveyLineHtml, short): {kind: "highway" |
-    "riches" (the survey slot), summary: highway_summary() or survey_summary()} -> (text, colour key) parts, or []
-    with nothing to say."""
+    "riches", summary: highway_summary() or survey_summary()} -> (text, colour key) parts, or [] with nothing to say."""
     s = (route or {}).get("summary")
     if not s:
         return []
     hw = route.get("kind") == "highway"
-    k = None if hw else survey_kind(s.get("kind"))   # the survey slot's kinds: outrider.riches.SURVEY_KINDS
-    glyph, name = ("🛣", "Highway") if hw else (k.glyph, k.name)
-    left = None if hw else (lambda n: left_words(s.get("kind"), n))
+    glyph, name, left = ("🛣", "Highway", None) if hw else SURVEY_WORDS.get(s.get("kind"), SURVEY_WORDS["riches"])
     head = [(glyph + " ", "accent")]
     if s.get("complete"):
         return head + [(f"{name} complete", "good")]
@@ -924,32 +676,14 @@ def route_parts(route):
     if isinstance(n.get("distance"), (int, float)):
         parts.append((f" · {n['distance']:.1f} ly", "muted"))
     parts.append((f" · {s.get('index')} of {s.get('total')}", "muted"))
-    if not hw and s.get("skipped"):   # S12: finished systems the next stop passes over
-        parts.append((f" · skipping {s['skipped']} done", "muted"))
     if hw and s.get("refuel_here"):
         parts.append((" · ⛽ refuel here", "warn"))
     elif hw and s.get("refuel_in") is not None:
         parts.append((f" · refuel in {s['refuel_in']} jump{'' if s['refuel_in'] == 1 else 's'}", "muted"))
     hv = s.get("heavy") if hw else None
     if hv and isinstance(hv.get("need_t"), (int, float)) and isinstance(hv.get("have_t"), (int, float)):
-        jump = f"the jump to {hv.get('next')}" if (hv.get("hop") or 1) > 1 else "the next jump"
-        parts.append((f" · ⚠ too much fuel for {jump}: ≤ {math.floor(hv['need_t'])} t, you have {_half_up(hv['have_t'])} t", "bad"))
-    sh = s.get("short") if hw else None
-    if sh and isinstance(sh.get("jumps"), int) and sh.get("refuel_at"):
-        parts.append((f" · {'⛽' if sh.get('here_refuel') else '⚠'} {short_text(sh)}", "warn" if sh.get("here_refuel") else "bad"))
+        parts.append((f" · ⚠ too much fuel for the next jump: ≤ {math.floor(hv['need_t'])} t, you have {_half_up(hv['have_t'])} t", "bad"))
     return parts + here
-
-
-def short_text(sh):
-    """S1's words (page.js hwyShortText): the fuel won't reach the refuel stop, or at one, how much to scoop."""
-    where = {"refuel": "the refuel stop", "end": "the destination"}.get(sh.get("end"), "the stretch ahead")
-    n = sh["jumps"]
-    need, top = sh.get("need_t"), sh.get("max_t")
-    fix = "no amount of fuel makes it" if not isinstance(need, (int, float)) else \
-        f"scoop to ≥ {need:.1f} t" + (f", at most {top:.1f} t" if isinstance(top, (int, float)) else "")
-    if sh.get("here_refuel") and isinstance(need, (int, float)):
-        return f"{fix} to reach {sh['refuel_at']} in {n} jump{'' if n == 1 else 's'}"
-    return f"fuel won't reach {where}: {sh['refuel_at']} in {n} jump{'' if n == 1 else 's'} · {fix}"
 
 
 def boxel_known_words(bx):
@@ -979,12 +713,10 @@ def boxel_parts(bx):
                    (" · " + (boxel_known_words(bx) if bx.get("spansh") else "to try"), "muted")]
 
 
-def plan_items(leaving, highlight, bio_min, codex=True, first=None):
+def plan_items(leaving, highlight, bio_min, codex=True):
     """Now's suggested order (page.js worthLeavingFor + planItems) with the config's levels: the mapping over the
     highlight level (or special) and the bio over bio_min (or started, unpriced, or new to your codex), nearest to the
-    arrival star first, then the best value per minute of supercruise. [{kind, body, dist, value, sec, per_min, u|b}].
-    first: the body you made the first stop (S30, State.plan_first_body): its items lead, `first` True; a body not in
-    the list changes nothing."""
+    arrival star first, then the best value per minute of supercruise. [{kind, body, dist, value, sec, per_min, u|b}]."""
     if not leaving:
         return []
     bio = [b for b in leaving.get("bio_pending") or [] if b.get("partial") or b.get("potential") is None
@@ -997,13 +729,8 @@ def plan_items(leaving, highlight, bio_min, codex=True, first=None):
     for it in items:
         it["sec"] = sc_seconds(it["dist"])
         it["per_min"] = it["value"] / (it["sec"] / 60) if it["sec"] and it["value"] else None
-    items = sorted(items, key=lambda it: (it["dist"] is None, it["dist"] or 0,
-                                          -(it["per_min"] if it["per_min"] is not None else -1)))
-    if first:
-        for it in items:
-            it["first"] = it["body"] == first
-        items.sort(key=lambda it: not it["first"])   # stable: the rest keep their order
-    return items
+    return sorted(items, key=lambda it: (it["dist"] is None, it["dist"] or 0,
+                                         -(it["per_min"] if it["per_min"] is not None else -1)))
 
 
 def map_totals(u):
@@ -1131,16 +858,13 @@ def on_body_parts(ob, b, sampling, room=500, size="normal"):
         rows += wrap(bits, room, size, "  ·  ") or [[("no bio or geo signals known", "muted")]]
     sm = sampling or {}
     if sm.get("samples") and sm["samples"] < 3 and not sm.get("elsewhere"):
-        head = [(f"{sm.get('genus') or ''} {sm['samples']}/3 · ", "text")]
-        pays = run_pays(sm.get("value"), sm.get("factor") or 1)   # from sample 1 (S62)
-        if pays:
-            head.append((pays + " · ", "accent"))
+        head = (f"{sm.get('genus') or ''} {sm['samples']}/3 · ", "text")
         if sm.get("to_go") is None:
-            rows.append([*head, (f"need {sm['need']} m from the last sample" if sm.get("need") else "spacing unknown", "muted")])
+            rows.append([head, (f"need {sm['need']} m from the last sample" if sm.get("need") else "spacing unknown", "muted")])
         elif sm.get("clear"):
-            rows.append([*head, ("✓ clear to sample", "good"), (f" ({sm.get('nearest')} of {sm.get('need')} m)", "muted")])
+            rows.append([head, ("✓ clear to sample", "good"), (f" ({sm.get('nearest')} of {sm.get('need')} m)", "muted")])
         else:
-            rows.append([*head, (f"{sm['to_go']} m to go", "warn"), (f" ({sm.get('nearest')} of {sm.get('need')} m)", "muted")])
+            rows.append([head, (f"{sm['to_go']} m to go", "warn"), (f" ({sm.get('nearest')} of {sm.get('need')} m)", "muted")])
     elif (sm.get("elsewhere") or {}).get("species") and sm["elsewhere"].get("samples") == 2:
         e = sm["elsewhere"]
         rows.append([("In progress elsewhere: ", "warn"), (f"{e['species']} 2/3 on {e.get('body') or 'another body'}", "text")])
@@ -1188,7 +912,7 @@ def now_panel(info, pal, size="normal", highlight=500_000, bio_min=10_000_000, h
         if sc:
             scoop = bool(re.match(r"^[OBAFGKM](_|$)", sc))
             row.append((f" · {sc}{' ⛽' if scoop else ' ✕'}", "good" if scoop else "warn"))
-            if star_hazard(sc):   # neutron star, white dwarf, black hole: throttle down on arrival
+            if sc == "N" or sc.startswith("D"):
                 row.append((" ⚠", "bad"))
         rows.append(row)
     for parts in (route_parts(info.get("route")), boxel_parts(info.get("boxel"))):   # where the next jump goes
@@ -1226,7 +950,7 @@ def now_panel(info, pal, size="normal", highlight=500_000, bio_min=10_000_000, h
         rows += on_body_parts(ob, info.get("body"), info.get("sampling"), NOW_W - 2 * PAD, size)
     else:
         l = info.get("leaving")
-        plan = plan_items(l, highlight, bio_min, codex, info.get("plan_first")) if info.get("detail_ready") else []
+        plan = plan_items(l, highlight, bio_min, codex) if info.get("detail_ready") else []
         dest = info.get("destination")
         dest_next = bool(dest and plan and plan[0]["body"] == dest)
         right = (f"{credits(info['value_now'])} here", "muted") if info.get("value_now") else None
@@ -1386,89 +1110,6 @@ def bio_panel(detail, pal, size="normal", bio_min=10_000_000, high_gravity=2.0, 
                       subtitle=f"{len(blocks)} bod{'y' if len(blocks) == 1 else 'ies'} · {tot['signals']} signal{'' if tot['signals'] == 1 else 's'}")
 
 
-# ---- the Alerts panel (S26): the page's alert cards, for a few seconds ----
-
-# The alerts are worded and switched in the browser (speech.json's lines, each kind's notify / sound / speak ticks):
-# the page posts each one it shows (POST /api/overlay/alert) and the server keeps the last few in memory. No page open
-# anywhere: no alerts on the overlay (DESIGN_NOTES).
-ALERT_SECONDS = 8            # how long an alert stays on the panel
-ALERT_DANGER_SECONDS = 15    # a danger alert (hull, heat, interdiction, fuel, the carrier leaving without you...): longer
-ALERT_KEEP = 6               # alerts kept (the newest)
-ALERT_SHOWN = 3              # at most this many on the panel, newest first
-ALERT_SAME_S = 10            # the same title and text again within this: dropped (every page window posts it)
-ALERT_TITLE_MAX, ALERT_BODY_MAX = 200, 300
-ALERT_KIND = re.compile(r"[a-z][a-z_]{0,31}")   # the page's alert kinds (page.js ALERTS: "find", "rare_star"...)
-ALERT_W = 460
-ALERT_BODY_ROWS = 2          # an alert's text wraps to at most this many rows
-
-
-def alert_entry(body, now):
-    """POST /api/overlay/alert's body {kind, title, body?, danger?} checked: ({kind, title, body, danger, t}, None),
-    or (None, why)."""
-    if not isinstance(body, dict):
-        return None, "expected {kind, title, body, danger}"
-    kind, title, text, danger = body.get("kind"), body.get("title"), body.get("body", ""), body.get("danger", False)
-    if not isinstance(kind, str) or not ALERT_KIND.fullmatch(kind):
-        return None, "kind: an alert kind (lower-case letters and _)"
-    if not isinstance(title, str) or not title.strip() or len(title) > ALERT_TITLE_MAX:
-        return None, f"title: text, 1 to {ALERT_TITLE_MAX} characters"
-    if text is None:
-        text = ""
-    if not isinstance(text, str) or len(text) > ALERT_BODY_MAX:
-        return None, f"body: text, at most {ALERT_BODY_MAX} characters"
-    if not isinstance(danger, bool):
-        return None, "danger: true or false"
-    if set(body) - {"kind", "title", "body", "danger"}:
-        return None, f"unknown keys: {', '.join(sorted(set(body) - {'kind', 'title', 'body', 'danger'}))}"
-    return {"kind": kind, "title": " ".join(title.split()), "body": " ".join(text.split()), "danger": danger, "t": now}, None
-
-
-def alert_add(alerts, entry):
-    """`alerts` (oldest first) with `entry` added: the same title and text within ALERT_SAME_S is dropped (each page
-    window posts every alert it shows, the tablet too); at most ALERT_KEEP kept. -> whether it was added."""
-    if any(a["title"] == entry["title"] and a["body"] == entry["body"] and 0 <= entry["t"] - a["t"] < ALERT_SAME_S
-           for a in alerts):
-        return False
-    alerts.append(entry)
-    del alerts[:-ALERT_KEEP]
-    return True
-
-
-def alert_live(a, now):
-    """Whether an alert is still on the panel: ALERT_SECONDS after it came, ALERT_DANGER_SECONDS for danger."""
-    return 0 <= now - a["t"] < (ALERT_DANGER_SECONDS if a.get("danger") else ALERT_SECONDS)
-
-
-def alerts_panel(alerts, pal, size="normal", now=None):
-    """The Alerts panel: the alerts still live (`alerts` oldest first, as kept), newest first, at most ALERT_SHOWN; each
-    its title (bold) and its text (muted, wrapped to ALERT_BODY_ROWS). A danger alert's title is red inside a red frame,
-    and the panel's frame turns red. None when none is live."""
-    now = time.time() if now is None else now
-    shown = [a for a in reversed(alerts or []) if alert_live(a, now)][:ALERT_SHOWN]
-    if not shown:
-        return None
-    lh, room, items, y = LINE_H.get(size, 20), ALERT_W - 2 * PAD, [], PAD
-    for i, a in enumerate(shown):
-        if i:
-            y += 4
-        top = y
-        items.append(runs(PAD, y, [(fit(a["title"], room, size), pal["bad"] if a["danger"] else pal["text"], size, True)]))
-        y += lh
-        rows = ["".join(t for t, _ in row) for row in wrap([(w, "muted") for w in a["body"].split()], room, size, sep=" ")]
-        if len(rows) > ALERT_BODY_ROWS:   # the rest joins the last row, cut there with …
-            rows = rows[:ALERT_BODY_ROWS - 1] + [" ".join(rows[ALERT_BODY_ROWS - 1:])]
-        for s in rows:
-            items.append(runs(PAD, y, [(fit(s, room, size), pal["muted"], size, False)]))
-            y += lh
-        if a["danger"]:
-            items.append(rect(PAD / 2, top - 3, ALERT_W - PAD, y - top + 4, c=pal["bad"], lw=2))
-            y += 2
-    danger = any(a["danger"] for a in shown)
-    return {"id": "alerts", "w": ALERT_W, "h": round(y + PAD - 4), "bg": pal["panel"],
-            "frame": pal["bad"] if danger else pal["frame"], "style": pal.get("style", "rounded"),
-            "accent": pal["bad"] if danger else pal["title"], "items": items}
-
-
 # ---- the test panels: every panel with sample data, to arrange them before flying ----
 
 # ---- the Route panel (this fork): the route in the game's own computer, and the one Outrider follows ----
@@ -1568,12 +1209,14 @@ def test_panels(pal, size="normal", radar_range=800):
         "rule",
         [("Left here: ", "muted"), ("21.4M", "accent"), (" · 9 bodies not listed", "muted")],
     ], pal, width=420, size=size, subtitle="test panel")
-    # the Target panel's system (a body you are at or have targeted shows as the body panel did)
-    body = target_system_panel({"name": "Test Sector AB-C d1-3", "status": "partial", "known": 3, "count": 12,
-                                "edsm": {"known": 5, "count": 12}, "star_class": "N", "remaining": 4,
-                                "hop": {"ly": 38.2, "fuel": 2.9, "left": 3, "reach": True},
-                                "value": {"carto": 12_300_000, "bio": 40_000_000}, "notable": {"WW": 1, "T": 2}}, pal, size)
-    body["items"][0]["runs"].append(["  test panel", pal["muted"], size, False])
+    body = text_panel("body", "B 1", [
+        [("Icy body · landable · ", "text"), ("0.42 g", "good"), (" · thin neon", "text")],
+        [("Mapped: ", "muted"), ("1.2M", "text"), (" · first discovered", "muted")],
+        "rule",
+        {"left": [("Stratum Tectonicas ", "text"), ("✪ Lime", "good")], "right": ("19.0M", "accent")},
+        {"left": [("Bacterium Acies ", "text"), ("✦ Cobalt", "accent")], "right": ("1.0M", "text")},
+        [("Worth landing: up to 20.0M (×5 first footfall)", "good")],
+    ], pal, width=400, size=size, subtitle="test panel")
     strip = strip_panel({"name": "Test Sector AB-C d1-2", "region": "Inner Orion Spur", "sol_ly": 5411, "star": "K",
                          "found": 12, "total": 14, "honked": True, "value_now": 2_100_000, "value_max": 35_100_000,
                          "first": True, "firsts": 12, "mapped": 3, "planets": 11, "in_spansh": False}, pal, size)
@@ -1613,10 +1256,7 @@ def test_panels(pal, size="normal", radar_range=800):
         "highway": {"destination": "Test End", "next": {"name": "Test Stop 38", "neutron": True, "distance": 4.2},
                     "jumps_left": 361, "ly_left": 21500, "refuel_in": 3, "off_route": False, "complete": False}}, pal, size)
     route["items"][0]["runs"].append(["  test panel", pal["muted"], size, False])
-    alerts = alerts_panel([{"kind": "find", "title": "B 1: Earth-like world (test panel)", "body": "2.4M cr scanned and mapped",
-                            "danger": False, "t": 0},
-                           {"kind": "hull", "title": "Interdicted", "body": "you submitted", "danger": True, "t": 0}], pal, size, now=0)
-    return [system, body, radar_test(pal, size, radar_range), strip, now, bio, alerts, route]
+    return [system, body, radar_test(pal, size, radar_range), strip, now, bio, route]
 
 
 def radar_test(pal, size="normal", radar_range=800):

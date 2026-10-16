@@ -316,8 +316,6 @@ class Exposure(Base):
         self.assertEqual(W("0.0.0.0", "pw", ["mypc.lan", "tablet", "box.local", "nas.home.arpa", "192.168.1.9", "10.0.0.2:8025",
                                              "[fd00::1]", "pc.internal", "pc.home"]), [])
         self.assertTrue(any("password" in w for w in W("0.0.0.0", "", [])))
-        # what a device on the network can do with no password, not only read and edit bookmarks (the review)
-        self.assertTrue(any(all(x in w for x in ("settings", "restart", "EDSM", "press keys")) for w in W("0.0.0.0", "", [])))
         self.assertEqual((W("127.0.0.1", "", []), W("0.0.0.0", "pw", [])), ([], []))
 
 

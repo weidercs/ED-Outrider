@@ -1,1 +1,0 @@
-{ "timestamp":"2026-10-14T09:13:06Z", "event":"Status", "Flags":16777232, "Flags2":0, "Pips":[4,8,0], "FireGroup":0, "GuiFocus":0, "Fuel":{ "FuelMain":18.0, "FuelReservoir":0.5 }, "Cargo":0.0, "LegalState":"Clean", "Balance":1000000, "Destination":{ "System":904, "Body":0, "Name":"Smojooe SJ-I b23-0" } }

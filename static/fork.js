@@ -143,6 +143,16 @@ function cmdrDistHtml(system, dist) {
   if (v != null) return `${Number(v).toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})} ly`;
   return `<span class="unk" title="${esc(!dist.from ? "no position yet: after your first jump" : dist.error || "Spansh does not know this system")}">?</span>`;
 }
+// "Plot route" beside a system: it goes in Plot Route's To and the tab opens there (press Plot to plot it). Pure.
+const forkPlotBtn = name => ` <button type="button" class="mini" data-plotto="${esc(name)}" title="put ${esc(name)} in Plot Route's To">Plot route</button>`;
+document.addEventListener("click", e => {
+  const b = e.target.closest && e.target.closest("[data-plotto]");
+  if (!b || typeof hEl !== "function") return;
+  e.preventDefault();
+  hEl("hwyTo").value = b.dataset.plotto;
+  const v = document.querySelector('[data-view="hwy"]'); if (v) v.click();
+  toast(`Plot Route: to ${b.dataset.plotto}`);
+});
 // the engineers: where each works, with Copy and Plot route (and how far you are with them). Pure.
 function cmdrEngineersHtml(eng) {
   if (!eng.length) return "";
@@ -151,7 +161,7 @@ function cmdrEngineersHtml(eng) {
   const row = e => `<tr><td><b>${esc(e.name)}</b>${e.kind && e.kind !== "ship" ? ` <span class="unk">${esc(e.kind)}</span>` : ""}</td><td>${status(e)}</td>` +
     `<td>${e.system ? `${esc(e.system)}${e.region === "Colonia" ? ` <span class="unk">Colonia</span>` : ""}` : `<span class="unk">not known</span>`}</td>` +
     `<td class="num">${cmdrDistHtml(e.system, CM.dist)}</td>` +
-    `<td class="num">${e.system ? `<button type="button" class="mini" data-cmcopy="${esc(e.system)}" title="copy ${esc(e.system)} for the galaxy map">Copy</button>${plotBtn(e.system)}` : ""}</td></tr>`;
+    `<td class="num">${e.system ? `<button type="button" class="mini" data-cmcopy="${esc(e.system)}" title="copy ${esc(e.system)} for the galaxy map">Copy</button>${forkPlotBtn(e.system)}` : ""}</td></tr>`;
   const open = CM.open.__engineers !== false;
   return `<details class="cmengs" data-cmmod="__engineers"${open ? " open" : ""}><summary><b>Engineers</b> <span class="unk">where each works: copy the system or plot a route there</span></summary>` +
     `<table class="cmengtable"><thead><tr><th>Engineer</th><th>With you</th><th>System</th><th class="num" title="light years from where you are">Distance</th><th></th></tr></thead><tbody>${eng.map(row).join("")}</tbody></table></details>`;

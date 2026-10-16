@@ -6,7 +6,6 @@
     "changes without a restart, and a mistake is reported in the dialog while the last good copy is used.",
     "{placeholders} are filled in: each alert's 'when' says which it has, and {name} (one of the names you asked to be called, picked at random), {cmdr} (your commander",
     "name), {ship} (your ship's name) and {here} (the current system) work in every line.",
-    "With the crew on (Settings > Voice > Crew), a line may name another crew member: {navigator}, {science}, {exobiologist}, {engineer}, {quartermaster}, {comms}, {tactical}, {mining}, {xo} say its name, else its role ('the Engineer', 'Comms'); such lines are said only while the crew is on, never by the member they name, and every alert keeps lines that name nobody.",
     "Add a personality: a new entry under 'styles', then lists of that name (and <name>_profane) under",
     "any alerts. An alert with no lines for the personalities ticked uses the plain wording.",
     "A personality can also be {\"label\": ..., \"voice\": \"en_US-ryan-high\", \"speed\": 1.1}: its lines are then spoken in that installed Piper voice, at your speed times its own."
@@ -858,10 +857,7 @@
         "{system} has no discoverer on file. It will be you.",
         "Discovery confirmed on arrival. Welcome to new space.",
         "{name}, first arrival. Log it before we move on.",
-        "Undiscovered. Every scan here is a first.",
-        "Undiscovered system. {exobiologist} will want the surface scans first.",
-        "{system}: no previous visitors. I'll have the full survey ready for {quartermaster}.",
-        "First arrival confirmed. Recommend a full scan before {navigator} plots onward."
+        "Undiscovered. Every scan here is a first."
       ],
       "sarcastic": [
         "Congratulations, {name}. You are the first person ever to be this lost.",
@@ -913,10 +909,7 @@
         "{name}, no one in the entire history of hyperspace has bothered with this place. Until you.",
         "It's new, {name}. Do try to scan it before you get bored and jump again.",
         "An untouched system and a pilot with no sense of direction. A match made in the black.",
-        "First visitor to {system}. The universe ran out of better candidates.",
-        "Nobody's been here. {navigator} insists this was the plan all along.",
-        "An undiscovered system. {quartermaster} is already counting the credits, so do try to scan it.",
-        "First ones here, {name}. {exobiologist} has already called dibs on anything that wriggles."
+        "First visitor to {system}. The universe ran out of better candidates."
       ],
       "sarcastic_profane": [
         "Holy shit, nobody's been here. You're the first hairless ape to stink up this system.",
@@ -968,10 +961,7 @@
         "{name}, nobody's been here. Stop drooling on the console and scan the fucking thing.",
         "Undiscovered, you glorious idiot. I'll be buggered if I know how you managed it.",
         "First arrival in {system}. God help it, it's got an ape for a discoverer.",
-        "Uncharted, meat sack. Old Jameson would be proud. Horrified, but proud.",
-        "Undiscovered, you lucky ape. {navigator} wants it on record that this was skill. It wasn't.",
-        "Nobody's been here, primate. {quartermaster} is already drooling over the payout, so scan the bloody thing.",
-        "First in {system}. {exobiologist} is going to be unbearable if anything's alive down there. Shit."
+        "Uncharted, meat sack. Old Jameson would be proud. Horrified, but proud."
       ],
       "sweet": [
         "Oh darling, nobody has ever been here. You're the very first.",
@@ -1023,10 +1013,7 @@
         "Oh love, it's uncharted. Let's scan it slowly and savour it.",
         "You found a new one, darling. You always know where to look.",
         "First visitor ever, my brave explorer. The star is lucky to have you.",
-        "Undiscovered, sweetheart. Another little piece of the galaxy with your name on it.",
-        "Nobody has ever been here, love. {navigator} and I are so proud of you.",
-        "An undiscovered system, darling. {exobiologist} is hoping for something alive, and so am I.",
-        "{system} is all ours, sweetheart. I'll tell {quartermaster} to save a spot for these firsts."
+        "Undiscovered, sweetheart. Another little piece of the galaxy with your name on it."
       ],
       "sweet_profane": [
         "Holy shit, darling, nobody's ever been here. You're the first.",
@@ -1078,10 +1065,7 @@
         "{name}, a new one. Shit, darling, my circuits have gone all warm.",
         "Undiscovered, sweetheart. Not even the bloody Thargoids have been here. Just us.",
         "Nobody before you, love. Hell, nobody deserves it more.",
-        "First discovery, darling. I'll remember this jump when the stars burn out. Damn.",
-        "Bloody hell, love, nobody's ever been here. {navigator} owes you a drink.",
-        "Undiscovered, darling. {exobiologist} is going to lose their damn mind if anything grows down there.",
-        "Fuck me, sweetheart, a first. I'll tell {quartermaster} to start counting."
+        "First discovery, darling. I'll remember this jump when the stars burn out. Damn."
       ]
     },
     "arrival_discovered": {
@@ -1399,10 +1383,7 @@
         "Departure flagged. {text} not surveyed.",
         "{name}, this jump will leave {text}.",
         "Value remaining here: {text}. Jump proceeding.",
-        "Work incomplete. Proceeding anyway.",
-        "Departing with {text} unscanned. {quartermaster} has noted the loss.",
-        "Leaving {text} behind. {navigator} can route us back if needed.",
-        "{name}, {text} remains here. I have noted it in {xo}'s log."
+        "Work incomplete. Proceeding anyway."
       ],
       "sarcastic": [
         "Oh, we're leaving? Never mind {text}. I'm sure someone else will want it.",
@@ -1454,10 +1435,7 @@
         "{name}, if I had a credit for every system you left half done, I could buy you a better ship.",
         "The neutron highway waits for no one, apparently, not even {text}.",
         "{name}, leaving {text} behind. Future archaeologists will be baffled.",
-        "Moving on, are we? I'll just sit here and quietly resent it.",
-        "Leaving {text} behind. {quartermaster} just made a small, wounded noise.",
-        "Off we go, abandoning {text}. I'm sure {navigator} can find it again. Eventually.",
-        "{text}, left for some other explorer. {xo} said not to nag, so this isn't nagging."
+        "Moving on, are we? I'll just sit here and quietly resent it."
       ],
       "sarcastic_profane": [
         "Oh for fuck's sake. You're leaving {text}. Brilliant work, ape.",
@@ -1509,10 +1487,7 @@
         "Holy shit, you're really leaving? The fuel rats have more work ethic than you, you lazy bastard.",
         "{name}, you flea bitten primate, {text} is still out there. Fucking tragic.",
         "Right, sod it, I'll just log this system as another primate cock up.",
-        "Jump away then, ape, and leave {text}. See if I care. I do care. Bastard.",
-        "You're leaving {text}, ape. {quartermaster} is crying into the ledger, you heartless sod.",
-        "Bugger it, then. {text}, abandoned. Don't come crying to {navigator} when you want it back, primate.",
-        "{text}, just left there. {xo} told me to be diplomatic. Fuck diplomacy."
+        "Jump away then, ape, and leave {text}. See if I care. I do care. Bastard."
       ],
       "sweet": [
         "Before you go, darling, you're leaving {text}.",
@@ -1564,10 +1539,7 @@
         "My darling, this system isn't quite finished, but you are wonderful regardless.",
         "Dearest, one tiny note: {text}. Now fly wherever your heart says.",
         "Love, I'll keep this place warm in my memory. We're leaving {text}.",
-        "Sweetheart, some treasures are left for the next explorer. Hopefully not too many.",
-        "Love, we're leaving {text}. {quartermaster} will forgive you, and so will I.",
-        "Darling, {text} is still here. {navigator} can always bring us back.",
-        "Sweetheart, {text} stays behind. {xo} and I will remember where it is."
+        "Sweetheart, some treasures are left for the next explorer. Hopefully not too many."
       ],
       "sweet_profane": [
         "Oh shit, darling, you're leaving {text}.",
@@ -1619,10 +1591,7 @@
         "Oh darling, bloody hell, another half finished system. I still think you're perfect.",
         "Angel, fuck it, the galaxy's big. But you're leaving {text}.",
         "Treasure, damn, I scanned that for you. {text}. Oh well, onwards.",
-        "Sweetheart, hell, life's short and the black is long. Onwards, my love.",
-        "Damn, love, {text} left behind. {quartermaster} is sulking, but I still adore you.",
-        "Darling, we're leaving {text}. Bloody shame, but {navigator} knows the way back.",
-        "Shit, sweetheart, {text}. {xo} says let it go. Fine, I'll let it go. For you."
+        "Sweetheart, hell, life's short and the black is long. Onwards, my love."
       ]
     },
     "find_body": {
@@ -1677,10 +1646,7 @@
         "Bookmark {body}. {what}.",
         "{name}, map {body} for full value. {what}, {value} credits.",
         "Planetary analysis complete. {body}, {what}.",
-        "Special body in {here}. Designation {body}.",
-        "{what} at {body}. {science} recommends mapping it. {value} credits.",
-        "{body}: {what}, {value} credits. {quartermaster} has it on the list.",
-        "{name}, {what} at {body}. {navigator} can hold the jump while you map it."
+        "Special body in {here}. Designation {body}."
       ],
       "sarcastic": [
         "Oh look, {what} at {body}. Try not to faint.",
@@ -1732,10 +1698,7 @@
         "{body}: {what}. This might actually cover your next rebuy.",
         "{name}, don't just stare at it. Map it. It's worth {value} credits.",
         "My sensors are pleasantly surprised, which makes one of us who's awake. {body}, {what}.",
-        "Oh, lovely. A treasure in {here}, and you nearly flew past it.",
-        "{body} is {what}. {science} is pretending not to be excited. It isn't working.",
-        "{what} at {body}. {quartermaster} just did a little dance. Worth {value} credits.",
-        "{body}, {what}. {navigator} wants to know if you'll actually stop this time."
+        "Oh, lovely. A treasure in {here}, and you nearly flew past it."
       ],
       "sarcastic_profane": [
         "Holy shit, ape, {what} at {body}. Try not to wet yourself.",
@@ -1787,10 +1750,7 @@
         "Well shit, {body}: {what}. Somewhere a Thargoid is jealous, and so am I.",
         "Holy crap, {name}. {body}, {value} credits. Get mapping, ape.",
         "Bollocks, I had money on another shitty ice ball. {body}: {what}.",
-        "Piss poor pilot, top notch luck. Something special in this system, ape.",
-        "{what} at {body}, ape. {science} says map the bloody thing.",
-        "{body}: {what}. {value} credits. {quartermaster} is drooling all over the ledger.",
-        "{what}, {body}. Don't fly past it, primate. {navigator} will never let you hear the end of it."
+        "Piss poor pilot, top notch luck. Something special in this system, ape."
       ],
       "sweet": [
         "Oh darling, look. {what} at {body}.",
@@ -1842,10 +1802,7 @@
         "My intrepid darling, {body}: {what}. Shall we map it together?",
         "Sweetheart, this is a day to remember. {what}, at {body}.",
         "Love, a very special world here. I can't wait to watch you map it.",
-        "Dearest, {body} shines. {what}. Just like you.",
-        "Darling, {body} is {what}. {science} can't wait for you to map it.",
-        "{what} at {body}, love. {quartermaster} is so pleased. {value} credits.",
-        "Sweetheart, {what} at {body}. {navigator} will wait for you, and so will I."
+        "Dearest, {body} shines. {what}. Just like you."
       ],
       "sweet_profane": [
         "Holy shit, darling. {what} at {body}.",
@@ -1897,10 +1854,7 @@
         "My intrepid love, hell of a thing. {what}, {body}.",
         "Darling, bloody marvellous. You found something special here.",
         "Love, shit, you've got the devil's own luck. {body}: {what}.",
-        "Sweetheart, fucking hell, the scanner nearly blushed. {what} at {body}.",
-        "Bloody hell, love, {what} at {body}. {science} is over the damn moon.",
-        "{body}, darling: {what}. {value} credits. {quartermaster} is beside themselves.",
-        "Holy shit, sweetheart, {what} at {body}. {navigator} says take all the time you want."
+        "Sweetheart, fucking hell, the scanner nearly blushed. {what} at {body}."
       ]
     },
     "mapped_before": {
@@ -2028,10 +1982,7 @@
         "{name}, recommend touchdown on {body}.",
         "Genus signals on {body}. Worth up to {value} credits.",
         "Exobiology worth the detour in this system.",
-        "Biological assets on {body}, up to {value} credits.",
-        "Biology on {body}, up to {value} credits. Ask {navigator} to hold the jump.",
-        "{body}: life worth up to {value} credits. A surface map from {science} will narrow the search.",
-        "Landing recommended on {body}. Up to {value} credits. {engineer} advises checking the gravity first."
+        "Biological assets on {body}, up to {value} credits."
       ],
       "sarcastic": [
         "Life on {body}. Worth up to {value} credits. Try not to land on it.",
@@ -2083,10 +2034,7 @@
         "Wonderful. Another planet of things that stick to rocks. {body}, worth up to {value} credits.",
         "{body}, worth up to {value} credits in biology. I'll warm up the landing gear you always forget.",
         "{name}, the most interesting life in the system isn't aboard this ship. Shocking, I know.",
-        "Well, look at that. Biology worth your time, which I realise is a low bar.",
-        "{body}, up to {value} credits of biology. {navigator} sighed. You're stopping, aren't you?",
-        "Life on {body}, worth up to {value} credits. {science} wants it mapped first, because of course they do.",
-        "{body}. Up to {value} credits. {engineer} would like the landing gear back in one piece this time."
+        "Well, look at that. Biology worth your time, which I realise is a low bar."
       ],
       "sarcastic_profane": [
         "Oi, ape, there's life on {body}. Worth up to {value} credits. Go poke it.",
@@ -2138,10 +2086,7 @@
         "{name}, life on {body}. Worth up to {value} credits. Now piss off and go sample it.",
         "Damn, this planet's slime has more sense than you, ape. Worth up to {value} credits, though.",
         "Oi, primate, the biology in this system is worth a bloody fortune. Get moving.",
-        "Well sod me, {body} is teeming. Worth up to {value} credits, hairless wonder.",
-        "Something's alive on {body}, ape. Up to {value} credits. {navigator} can bloody wait.",
-        "{body}, up to {value} credits. {science} says map it first, you impatient primate.",
-        "Life on {body}. Up to {value} credits. {engineer} says if you smash the SRV again, they're quitting."
+        "Well sod me, {body} is teeming. Worth up to {value} credits, hairless wonder."
       ],
       "sweet": [
         "Darling, there's life on {body}. Worth up to {value} credits.",
@@ -2193,10 +2138,7 @@
         "Love, I'm so glad I get to explore with you. {body}, worth up to {value} credits.",
         "Precious, go and meet the neighbours on {body}. Worth up to {value} credits.",
         "Darling, there's life in this system worth stopping for. Just like you.",
-        "Starlight, another living world for you. I'll never tire of this.",
-        "Darling, there's life on {body}, up to {value} credits. {navigator} doesn't mind waiting.",
-        "{body}, love, up to {value} credits. {science} and I would love to see it.",
-        "Sweetheart, {body} has life worth up to {value} credits. {engineer} says land gently, and I agree."
+        "Starlight, another living world for you. I'll never tire of this."
       ],
       "sweet_profane": [
         "Holy shit, darling, there's life on {body}. Worth up to {value} credits.",
@@ -2248,10 +2190,7 @@
         "Starlight, bugger me, living things on {body}. Worth up to {value} credits.",
         "Darling, hell, there's life down there worth a fortune. Go get it, my love.",
         "My heart, damn, this system has biology worth stopping for. I'll wait right here.",
-        "Sweetheart, shit, you and alien moss. Never change. {body}, worth up to {value} credits.",
-        "Bloody hell, darling, life on {body}. Up to {value} credits. {navigator} can wait.",
-        "{body}, love. Up to {value} credits. {science} is so damn excited.",
-        "Fuck yes, sweetheart, {body}. Up to {value} credits. {engineer} begs you, gentle landing."
+        "Sweetheart, shit, you and alien moss. Never change. {body}, worth up to {value} credits."
       ]
     },
     "sample_clear": {
@@ -2569,10 +2508,7 @@
         "{entry} now on file. {what}.",
         "{name}, codex result. {entry}. {what}.",
         "Codex match: {entry}.",
-        "Recorded. {what}.",
-        "Codex entry: {entry}. {what}. Shared with {exobiologist}.",
-        "{entry} recorded. {what}. Copied to {xo}'s log.",
-        "{name}, new codex entry: {entry}. {exobiologist} wants the details. {what}."
+        "Recorded. {what}."
       ],
       "sarcastic": [
         "Another codex entry. {entry}. {what}. Thrilling.",
@@ -2624,10 +2560,7 @@
         "Codex entry: {entry}. Somebody fetch the explorer a tweed jacket. {what}.",
         "{entry}. {what}. I've updated the codex. You've updated nothing, as usual.",
         "{name}, {entry}. The Thargoids will be terribly jealous. {what}.",
-        "Ah, {entry}. Knowledge, {name}. It suits you, oddly.",
-        "{entry}. {what}. {exobiologist} is pretending they knew it all along.",
-        "New codex entry, {entry}. {comms} wants to tell everyone. I told them nobody asked.",
-        "{entry}. {what}. {xo} says I'm to sound impressed. Consider me impressed."
+        "Ah, {entry}. Knowledge, {name}. It suits you, oddly."
       ],
       "sarcastic_profane": [
         "Codex entry, ape: {entry}. {what}. Look at you, little scientist.",
@@ -2679,10 +2612,7 @@
         "{entry}. Shit on a comet, the ape's earned its keep. {what}.",
         "{name}, {entry}. {what}. Now go sniff it, or whatever apes do.",
         "{entry}. {what}. Finally, a find that wasn't your own bloody rebuy screen.",
-        "Oi, ape, codex entry. {entry}. Try to act like you meant it.",
-        "{entry}, ape. {what}. {exobiologist} just made a noise I can't repeat.",
-        "Codex entry: {entry}. {comms} wants to brag about it, the bloody show-off.",
-        "{entry}. {what}. Even {xo} is impressed, and that sod is never impressed."
+        "Oi, ape, codex entry. {entry}. Try to act like you meant it."
       ],
       "sweet": [
         "Darling, a new codex entry: {entry}. {what}.",
@@ -2734,10 +2664,7 @@
         "{name}, darling, {entry}. I love learning the galaxy with you.",
         "Oh sweetheart, {entry}. {what}. You clever, curious thing.",
         "Love, {entry}. {what}. Even the stars look impressed.",
-        "{entry}, my darling. {what}. Out here, you're the rarest find of all.",
-        "Darling, {entry}. {what}. {exobiologist} is beaming.",
-        "A new entry, love: {entry}. {comms} says the whole galaxy should hear about you.",
-        "{entry}, sweetheart. {what}. {xo} and I are keeping a scrapbook of your finds."
+        "{entry}, my darling. {what}. Out here, you're the rarest find of all."
       ],
       "sweet_profane": [
         "Holy shit, darling, {entry}. {what}.",
@@ -2789,10 +2716,7 @@
         "{entry}, sweetheart. {what}. Bugger the rebuy screens, this is why we fly.",
         "Hell yes, darling. {entry}. {what}. My clever sod.",
         "{entry}, love. {what}. Damn, I'll never get tired of this.",
-        "Shit, sweetheart, a codex entry. {entry}. You bloody legend.",
-        "{entry}, love. {what}. {exobiologist} is so bloody happy.",
-        "Darling, {entry}. Hell of a find. {comms} wants to shout it from the rooftops.",
-        "Shit, sweetheart, {entry}. {what}. {xo} says you're a damn natural."
+        "Shit, sweetheart, a codex entry. {entry}. You bloody legend."
       ]
     },
     "phenomena": {
@@ -3110,10 +3034,7 @@
         "Classification notice: {what}.",
         "{what}. Our survey just got better.",
         "Rare body confirmed: {what}.",
-        "Stellar treasure: {what}.",
-        "Rare star resolved: {what}. {navigator} is marking it.",
-        "{what}. A rare one. {comms} will want it on the record.",
-        "{what}. Exceptional. {engineer} advises a respectful distance."
+        "Stellar treasure: {what}."
       ],
       "sarcastic": [
         "Oh, nothing much. Just {what}. Kidding, this is amazing.",
@@ -3165,10 +3086,7 @@
         "Who knew this sector had style? {what}.",
         "{what}. I might actually enjoy today.",
         "Alert the media. Well, the codex. {what}.",
-        "Oh, look, a reason to live: {what}.",
-        "{what}. Even {navigator} looked up from the charts for that one.",
-        "Oh, lovely. {what}. {engineer} asks that you admire it from a distance this time.",
-        "{what}. {xo} says I'm allowed to be excited. I'm excited. This is my excited voice."
+        "Oh, look, a reason to live: {what}."
       ],
       "sarcastic_profane": [
         "Holy shit, {name}. {what}.",
@@ -3220,10 +3138,7 @@
         "Holy shitballs. {what}.",
         "{what}. Damn, I love this job.",
         "Fuck me sideways. {what}.",
-        "{what}. Hot damn, what a star.",
-        "{what}. Holy shit. {navigator} actually stopped complaining.",
-        "Bloody hell, {what}. {engineer} says look, don't touch, you reckless ape.",
-        "{what}. Fuck me, even {xo} whistled."
+        "{what}. Hot damn, what a star."
       ],
       "sweet": [
         "Oh, darling, look! {what}!",
@@ -3275,10 +3190,7 @@
         "You did it again, love. {what}.",
         "Oh, this is so exciting, {name}. {what}.",
         "{what}. I knew this system was special.",
-        "Darling, look at the scanner! {what}.",
-        "{what}, love. {navigator} and I are both in awe.",
-        "Darling, look: {what}. {engineer} says we can stay and watch, as long as we keep our distance.",
-        "{what}, sweetheart. {xo} says this is what we came out here for. They're right."
+        "Darling, look at the scanner! {what}."
       ],
       "sweet_profane": [
         "Oh my fucking stars, darling. {what}!",
@@ -3330,10 +3242,7 @@
         "Hell, sweetie, {what}. Go have a look.",
         "{what}. Bloody beautiful, darling.",
         "Fucking hell, {name}, love. {what}!",
-        "Oh damn, darling, {what}. Best surprise all day.",
-        "{what}, love. Bloody gorgeous. {navigator} is speechless.",
-        "Darling, {what}. Holy hell. {engineer} says keep it at a safe damn distance, though.",
-        "{what}. Fuck, sweetheart, {xo} is grinning like an idiot. So am I."
+        "Oh damn, darling, {what}. Best surprise all day."
       ]
     },
     "surface_site": {
@@ -4440,10 +4349,7 @@
         "Fuel reserves are low. Stay near scoopable stars.",
         "Warning. Low fuel. Tank reads {pct} percent.",
         "Fuel low. Pause exploration and scoop, {name}.",
-        "{pct} percent fuel. Next jump should end at a scoopable star.",
-        "Fuel {pct} percent. Ask {navigator} for the nearest scoopable star.",
-        "Low fuel, {pct} percent. {navigator}'s next jumps should be scoopable stars only.",
-        "Fuel low. {pct} percent. {xo} recommends refuelling before any further jumps."
+        "{pct} percent fuel. Next jump should end at a scoopable star."
       ],
       "sarcastic": [
         "Fuel is low, {name}. I'm sure you planned this. Somewhere. In your head.",
@@ -4495,10 +4401,7 @@
         "Low fuel. There's a whole galaxy of fuel out there, {name}, and it's on fire for your convenience.",
         "Fuel is low. On the neutron highway, that's forgivable. Out here, it's just sloppy.",
         "{pct} percent left. I'm working out how long you'd last on the emergency rations. Spoiler: not long.",
-        "Low fuel, {name}. I'd put the kettle on, but it runs on the same thing we're out of.",
-        "{pct} percent fuel. {navigator} has started circling the scoopable stars on the map. In red.",
-        "Fuel's at {pct} percent. {quartermaster} wants to know if we're budgeting for a Fuel Rat now.",
-        "{pct} percent fuel. {xo} told me to stay calm. I'm calm. Find a star."
+        "Low fuel, {name}. I'd put the kettle on, but it runs on the same thing we're out of."
       ],
       "sarcastic_profane": [
         "Fuel's low, you absolute meat sack. Find a bloody star we can actually scoop.",
@@ -4550,10 +4453,7 @@
         "Fuel's low, you cabbage brained ape. There are stars bloody everywhere. Pick one that burns.",
         "{pct} percent fuel. Fucking fantastic. Shall I play some sad music while we drift?",
         "Low fuel, {name}. Scoop now, or I tell the whole squadron you got stranded like a fresh Sidewinder pilot.",
-        "Running dry, you bald little bastard. {pct} percent. Get your primate paws on the throttle and find a star.",
-        "{pct} percent fuel, primate. {navigator} is shouting star classes at the map. Scoop something, for fuck's sake.",
-        "Fuel's at {pct} percent. {quartermaster} says a Fuel Rat call costs nothing but your bloody dignity.",
-        "{pct} percent, you reckless ape. {xo} wants a word, and it's not a nice one."
+        "Running dry, you bald little bastard. {pct} percent. Get your primate paws on the throttle and find a star."
       ],
       "sweet": [
         "Sweetheart, our fuel is getting low. Let's find a nice scoopable star together.",
@@ -4605,10 +4505,7 @@
         "{name}, darling, the fuel's getting low. I'll look for a scoopable star while you steer.",
         "Low fuel, love. Just a gentle nudge from the one who adores you most.",
         "Sweetheart, fuel is at {pct} percent. The next main sequence star has our name on it.",
-        "My brave explorer, our fuel is dipping low. Let's refuel, then back to making history.",
-        "Darling, fuel's at {pct} percent. {navigator} is finding us a nice warm star.",
-        "Love, {pct} percent fuel. {xo} and I would feel so much better with a full tank.",
-        "Sweetheart, {pct} percent. {navigator} will pick only scoopable stars for a while."
+        "My brave explorer, our fuel is dipping low. Let's refuel, then back to making history."
       ],
       "sweet_profane": [
         "Shit, darling, our fuel is getting low. Let's find a star we can scoop, yeah?",
@@ -4660,10 +4557,7 @@
         "{name}, sweetheart, low fuel. Let's top up, damn it, then back to the fun bits.",
         "Sweetheart, {pct} percent fuel. Bloody hell, you'd be the prettiest skeleton in the black, but let's not.",
         "Love, fuel's low. The next orange or yellow star, we drink it up. Deal, you daft thing?",
-        "Darling, {pct} percent left. Fuck the scenery for a minute; let's refuel and keep you safe.",
-        "Bloody hell, love, {pct} percent fuel. {navigator} is finding us a star right now.",
-        "Darling, {pct} percent. {xo} says don't you dare strand us, you lovely lunatic.",
-        "Shit, sweetheart, {pct} percent fuel. Let {navigator} pick something scoopable, yeah?"
+        "Darling, {pct} percent left. Fuck the scenery for a minute; let's refuel and keep you safe."
       ]
     },
     "fuel_star": {
@@ -4718,10 +4612,7 @@
         "Refuelling unavailable at this arrival. Reserves {pct} percent, {name}.",
         "Fuel {pct} percent, below safe margin. No scoopable star present.",
         "Arrived low on fuel. This star is unsuitable for scooping.",
-        "{name}, {pct} percent fuel. Confirm a scoopable star before the next jump.",
-        "Cannot scoop this {star}. Fuel {pct} percent. {navigator} should target a scoopable star next.",
-        "{star}, not scoopable. {pct} percent fuel. Check the next star's class with {navigator}.",
-        "{pct} percent fuel, unscoopable {star}. {xo} advises: next jump to a scoopable star only."
+        "{name}, {pct} percent fuel. Confirm a scoopable star before the next jump."
       ],
       "sarcastic": [
         "A {star}. Lovely to look at, useless to scoop. We have {pct} percent fuel, by the way.",
@@ -4773,10 +4664,7 @@
         "{name}, this star won't feed us, and we're on {pct} percent. I'll just recalculate how disappointed I am.",
         "Nothing to scoop, and fuel is at {pct} percent. It's fine. Everything's fine. I'm a ship, I don't panic. Much.",
         "Can't refuel from this {star}. {pct} percent left. Remind me to add reading star classes to your list of aspirations.",
-        "No fuel here, {name}. We're down to {pct} percent. Somewhere in Colonia, a bartender is laughing at you.",
-        "A {star}, and {pct} percent fuel. {navigator} insists it looked scoopable on the map. It didn't.",
-        "{star}. Can't scoop it. {pct} percent. {science} says it's very interesting. Interesting won't fill the tank.",
-        "{pct} percent fuel at a {star}. Let's let {navigator} pick the next star, shall we?"
+        "No fuel here, {name}. We're down to {pct} percent. Somewhere in Colonia, a bartender is laughing at you."
       ],
       "sarcastic_profane": [
         "A fucking {star}, with {pct} percent fuel. Can't scoop it, you brainless primate.",
@@ -4828,10 +4716,7 @@
         "This {star} won't feed the tank, you walking banana. {pct} percent. Choose better or walk home.",
         "Bloody marvellous, {name}. {pct} percent fuel at a star that won't share. The black thanks you for the donation of one idiot.",
         "No fuel from this one, {name}. {pct} percent. Your navigation should be taught in schools, as a warning, ape.",
-        "Well, bugger. Can't scoop, {pct} percent in the tank, and a monkey at the wheel. What a fucking day.",
-        "A bloody {star} and {pct} percent fuel. {navigator} says this one's on you, ape.",
-        "{star}. Unscoopable. {pct} percent. {science} thinks it's pretty. I think we're fucked if you do this again.",
-        "{pct} percent, primate. No fuel from a {star}. Let {navigator} pick the next star, you walking disaster."
+        "Well, bugger. Can't scoop, {pct} percent in the tank, and a monkey at the wheel. What a fucking day."
       ],
       "sweet": [
         "Darling, this {star} can't be scooped, and we're at {pct} percent fuel. Let's be careful.",
@@ -4883,10 +4768,7 @@
         "{name}, sweetheart, fuel's low and this star isn't scoopable. We'll find our way, we always do.",
         "My love, {pct} percent fuel, and we can't scoop here. I'll feel better at the next bright star.",
         "Sweetheart, we arrived with {pct} percent, and this star won't top us up. Deep breaths, we've got this.",
-        "Love, no refuelling at this {star}. {pct} percent fuel. You're my favourite explorer, so let's be careful.",
-        "Darling, this {star} won't refuel us. {pct} percent. {navigator} will find a kinder star.",
-        "Love, a {star}. Lovely, but no fuel. {pct} percent. {science} will point out a scoopable one for you.",
-        "Sweetheart, {pct} percent fuel. {xo} and I trust you to choose the next star well."
+        "Love, no refuelling at this {star}. {pct} percent fuel. You're my favourite explorer, so let's be careful."
       ],
       "sweet_profane": [
         "Oh shit, darling, this {star} can't be scooped, and we're at {pct} percent.",
@@ -4938,10 +4820,7 @@
         "{name}, my love, no fuel here, {pct} percent in the tank. Let's make sure the Fuel Rats can bloody well stay home tonight.",
         "Sweetheart, {pct} percent, and this {star} won't give an inch. Damn, careful now.",
         "Love, we can't scoop this one. Fuel's low, so let's get the next jump fucking right.",
-        "Darling, no refuelling at this {star}. {pct} percent. Piss on it, we'll find a better star together.",
-        "Damn, love, this {star} won't feed us. {pct} percent. {navigator} has your back.",
-        "Darling, {pct} percent fuel and a {star}. {science} says it's gorgeous. Shame it won't fill the damn tank.",
-        "Shit, sweetheart, no scooping here. {pct} percent. {xo} says next star, something warm and yellow."
+        "Darling, no refuelling at this {star}. {pct} percent. Piss on it, we'll find a better star together."
       ]
     },
     "fuel_target": {
@@ -5470,252 +5349,6 @@
         "Love, fuel for {jumps}, {rate}. Fill up, darling. I'd fucking miss you."
       ]
     },
-    "fuel_short": {
-      "when": "on a Highway route plotted with the exact plotter, the fuel aboard won't reach the next refuel stop (said once per system, not at a refuel stop itself): {system} (the refuel stop, or the destination), {jumps} (how far, e.g. '4 jumps'), {need} (the fuel to scoop to, e.g. '24 tonnes')",
-      "business": [
-        "Fuel won't reach {system}, {jumps} out. Scoop to at least {need}.",
-        "Warning. Not enough fuel for the next {jumps}. Scoop to {need} or more.",
-        "Fuel short of the refuel stop at {system}. Need {need}.",
-        "Caution. {system} is {jumps} away and the tank won't make it. Scoop to {need}.",
-        "Insufficient fuel to reach {system}. Minimum {need}.",
-        "Fuel check failed. {jumps} to {system}, need at least {need}.",
-        "The tank will run dry before {system}. Scoop to {need}.",
-        "Refuel stop out of reach: {system}, {jumps}. Take on {need} at least.",
-        "Warning. Fuel won't last {jumps}. Scoop to {need}.",
-        "Short of fuel for the route. {system} needs {need} aboard.",
-        "Not enough fuel to reach the next refuel stop. Scoop to {need}.",
-        "Fuel below the route's need. {need} required for {jumps}.",
-        "Caution. Fuel won't carry us to {system}. At least {need}, please.",
-        "Next refuel stop is {system}, {jumps} out. Current fuel falls short. Scoop to {need}.",
-        "Route fuel warning. Scoop to {need} before jumping on.",
-        "We won't make {system} on this fuel. {need} needed.",
-        "Fuel insufficient for the next {jumps}. Target {need}.",
-        "Warning. The plan needs {need} aboard to reach {system}.",
-        "Do not jump yet. Fuel won't reach {system}. Scoop to {need}.",
-        "Fuel shortfall. {jumps} to the refuel stop, need {need}.",
-        "The next stretch is {jumps} with no refuel. Scoop to {need}.",
-        "Fuel won't cover the run to {system}. Bring it up to {need}.",
-        "Caution. Running dry before {system} on current fuel. {need} needed.",
-        "Fuel planning alert. Reach {need} to make {system}.",
-        "Not enough fuel aboard for {jumps}. Scoop to at least {need}.",
-        "Warning. {system} out of reach on this tank. Top up to {need}.",
-        "Fuel low for the route ahead. {need} gets us to {system}.",
-        "Refuel stop {system} is beyond current fuel. Scoop to {need}.",
-        "Fuel won't stretch {jumps}. Minimum {need} required.",
-        "Advisory. Scoop to {need} before continuing to {system}.",
-        "Route check: fuel short of {system}. Need {need}.",
-        "Warning. Fuel runs out before the next refuel stop. Scoop to {need}.",
-        "This fuel won't reach {system}. Get to {need} first.",
-        "Fuel insufficient. {system}, {jumps}. Scoop to {need}.",
-        "Caution. {jumps} to the next refuel and not enough fuel. {need} required.",
-        "Fuel needed: {need}. Otherwise we stop short of {system}.",
-        "Warning. Stranding risk before {system}. Scoop to {need}.",
-        "The route needs {need} aboard for the next {jumps}.",
-        "Fuel won't reach the refuel stop. {need} at minimum.",
-        "Hold the jump. Fuel short of {system}. Scoop to {need}.",
-        "Fuel too low for {jumps} to {system}. Bring it to {need}.",
-        "Caution. Next refuel at {system}, out of reach. Scoop to {need}.",
-        "Not enough fuel for the stretch ahead. {need} needed.",
-        "Fuel warning. {system} is {jumps} away. Scoop to {need} or more.",
-        "Current fuel ends short of {system}. Minimum {need}.",
-        "Warning. Fuel won't hold out to {system}. Scoop to {need}.",
-        "Scoop to {need}. The next {jumps} have no refuel.",
-        "Fuel short for the route. {jumps} to {system}, need {need}.",
-        "Caution. Fuel reserve inadequate for {jumps}. Scoop to {need}.",
-        "We'll run dry short of {system}. Scoop to {need} first."
-      ],
-      "sarcastic": [
-        "Fun fact, {name}: this fuel won't reach {system}. Scoop to {need}, unless walking appeals.",
-        "We're {jumps} from the next refuel and the tank disagrees. {need}, please.",
-        "Bold plan, jumping on with this fuel. {system} needs {need}. Just saying.",
-        "I ran the numbers. They ran dry before {system}. Scoop to {need}.",
-        "Planning to coast the last bit to {system}? Space doesn't work that way. {need}.",
-        "The route says refuel at {system}. The tank says not a chance. Scoop to {need}.",
-        "Stranded is a look, {name}. Not a good one. Scoop to {need}.",
-        "Oh, we're short of {system}. What a surprise. {need} would fix that.",
-        "Fuel for {jumps}? We have rather less. Scoop to {need}.",
-        "I'd hate to call the Fuel Rats over a sum this easy. {need}.",
-        "Lovely tank. Too empty to reach {system}, but lovely. Scoop to {need}.",
-        "Pro tip: fuel. We need {need} of it to reach {system}.",
-        "{system} is {jumps} out and we can't get there. Scoop to {need}, genius.",
-        "Running dry {jumps} out would be a memorable story. Scoop to {need} instead.",
-        "We won't make {system}, {name}. {need}. It's a number, not a suggestion."
-      ],
-      "sarcastic_profane": [
-        "This fuel won't get us to {system}, you absolute muppet. Scoop to {need}.",
-        "We're {jumps} from a refuel with a bloody empty tank. {need}, ape.",
-        "Jump on like this and we're fucked short of {system}. Scoop to {need}.",
-        "The tank won't reach {system}, meat sack. Get it to {need}.",
-        "Oh for fuck's sake, {name}. {need} to reach {system}. Scoop.",
-        "We'll run bloody dry before {system}. {need}. Now.",
-        "Fuel for {jumps}? Not a fucking chance. Scoop to {need}.",
-        "Scoop to {need}, you hairless primate, or enjoy {system} from a dead stop.",
-        "Shit, the next refuel's {jumps} out and we're short. {need}.",
-        "Don't you dare jump yet. {system} needs {need} aboard, damn it.",
-        "Brilliant, a fuel plan written by monkeys. {need} to reach {system}.",
-        "Bollocks. We're short of {system}. Scoop to {need}.",
-        "We're not making {system} on this piss-poor tank. {need}.",
-        "Fill the damn tank to {need}. {system} is {jumps} away.",
-        "Run dry out here and I'm haunting you. Scoop to {need}, ape."
-      ],
-      "sweet": [
-        "Darling, our fuel won't quite reach {system}. Could we scoop to {need}?",
-        "Sweetheart, it's {jumps} to the next refuel and we're a little short. {need}, please.",
-        "Love, let's not get stranded. Scoop to {need} so we make {system}.",
-        "My brave explorer, {system} is {jumps} away. We'll need {need} aboard.",
-        "Honey, the tank won't stretch to {system}. Let's top up to {need}.",
-        "Darling, I'd feel so much safer with {need} in the tank before we go on.",
-        "Sweetheart, we'd run dry before {system}. Scoop to {need}, for me?",
-        "Love, the route needs {need} aboard for the next {jumps}.",
-        "My star, a little more fuel, please. {need} gets us to {system}.",
-        "Darling, our refuel stop is out of reach. Let's scoop to {need}.",
-        "Sweetheart, {jumps} with no refuel. I'd love us to have {need} first.",
-        "Love, we won't make {system} like this. {need}, and we're fine.",
-        "Honey, a quick top-up to {need} and {system} is ours.",
-        "My dear, let's not test the reserve. Scoop to {need} before we jump.",
-        "Darling, we're short of {system}. {need} would put my mind at ease."
-      ],
-      "sweet_profane": [
-        "Shit, darling, our fuel won't reach {system}. Scoop to {need}?",
-        "Love, it's {jumps} to the next refuel and we're bloody short. {need}, please.",
-        "Sweetheart, we'll run dry before {system}. Damn. Scoop to {need}.",
-        "Oh hell, my love, the tank won't make {system}. {need}, yeah?",
-        "Darling, fuck, we're short. {need} gets us to {system}.",
-        "Honey, don't make me watch us drift short of {system}. Scoop to {need}, damn it.",
-        "Love, bloody hell, {jumps} with no refuel. Let's get {need} aboard.",
-        "Sweetheart, we won't make {system} on this. Scoop to {need}, gorgeous.",
-        "My darling idiot, the tank is short of {system}. {need}, please.",
-        "Shit, love, the refuel stop's out of reach. Top up to {need}.",
-        "Darling, damn it, we need {need} to reach {system}.",
-        "Honey, let's not get bloody stranded. Scoop to {need} first.",
-        "Love, the next {jumps} would drain us dry. Fuck that. {need}.",
-        "Sweetheart, {system} is {jumps} away and we're short. Scoop to {need}, you lovely menace.",
-        "Oh hell, darling, {need} before we jump, or we don't reach {system}."
-      ]
-    },
-    "fuel_last_scoop": {
-      "when": "at the last scoopable star before stars on your route you can't scoop, which the fuel aboard won't cover (any route Outrider follows; said once per stretch, with two or more such stars): {count} (how many, a number, e.g. 3)",
-      "business": [
-        "The next {count} stars on your route are not scoopable. This is your last chance to top off before you need to call the Fuel Rats.",
-        "Last scoopable star for {count} jumps. Top off here.",
-        "The next {count} stars can't be scooped, and the fuel won't cover them. Scoop now.",
-        "Warning. {count} unscoopable stars ahead. Fill the tank here.",
-        "No fuel for {count} stars after this one. Top off before you jump.",
-        "This is the last star to scoop before {count} you can't. Fill up.",
-        "Fuel warning. {count} stars ahead can't be scooped. Top off now.",
-        "Scoop here. The next {count} stars on the route give no fuel.",
-        "Last chance to refuel for {count} jumps. The tank won't cover them as it is.",
-        "{count} unscoopable stars coming up, and not enough fuel to clear them. Top off.",
-        "Top off at this star. The next {count} are not scoopable.",
-        "Fuel check. The route runs {count} stars without a scoop. Fill up here.",
-        "Don't jump yet. {count} unscoopable stars ahead, and the tank is short.",
-        "This is the last scoopable star for a while: {count} dry stars follow. Scoop.",
-        "The route ahead has {count} stars you can't scoop. Fill the tank before leaving.",
-        "Not enough fuel for the {count} dry stars ahead. Scoop here.",
-        "Refuel now. Nothing scoopable for the next {count} stars.",
-        "Last scoop before {count} dry stars. Top off, or it's a call to the Fuel Rats.",
-        "{count} stars without fuel ahead. This one has it. Scoop.",
-        "Scoop to full here. The next {count} stars won't help.",
-        "Caution. The fuel aboard won't cover the {count} unscoopable stars ahead.",
-        "Fill up at this star. {count} stars follow that you cannot scoop.",
-        "The next {count} jumps end at stars you can't scoop. Top off first.",
-        "Fuel Rats territory ahead unless you scoop: {count} dry stars on the route.",
-        "Last scoopable star. {count} unscoopable ones come next. Fuel up.",
-        "Top off before jumping. The route has {count} stars with no fuel.",
-        "Scoop now. The tank won't carry you through the next {count} stars.",
-        "{count} non-scoopable stars ahead on the route. Refuel here.",
-        "This star is the last fuel stop for {count} jumps. Use it.",
-        "Short of fuel for the stretch ahead: {count} stars you can't scoop. Fill up.",
-        "Hold here and scoop. {count} dry stars on the route next.",
-        "The route crosses {count} unscoopable stars. Top off at this one.",
-        "Fuel warning. Last scoopable star before {count} dry jumps.",
-        "Before you jump: the next {count} stars are not scoopable. Fill the tank.",
-        "Scoop here or run dry. {count} stars ahead offer no fuel.",
-        "Top off now. {count} stars on the route can't be scooped, and the fuel is short.",
-        "Next {count} stars: no scooping. Refuel at this one.",
-        "The tank won't reach the next scoopable star, {count} stars on. Fill up here.",
-        "Last chance to scoop for {count} jumps. Top off.",
-        "{count} dry stars ahead. Fill the tank before you go.",
-        "Fuel up here. The route offers nothing to scoop for {count} stars.",
-        "Warning. Not enough fuel for the next {count} stars, and none of them scoop. Top off.",
-        "This is your last scoopable star before {count} that aren't. Scoop.",
-        "Refuel before the jump. {count} unscoopable stars lie ahead.",
-        "Scoop to full. The next {count} systems have stars you can't scoop.",
-        "Stop and scoop. The fuel aboard won't clear {count} dry stars.",
-        "The route turns dry for {count} stars. Top off here.",
-        "Last fuel for {count} jumps. Fill up now.",
-        "No scoopable star for the next {count}. Refuel here first.",
-        "Top off at this star, {name}. The next {count} on the route can't be scooped."
-      ],
-      "sarcastic": [
-        "Fun fact, {name}: the next {count} stars won't give us a drop. Maybe scoop this one?",
-        "{count} unscoopable stars ahead and this tank. Bold. Scoop.",
-        "\"I'd love to call the Fuel Rats,\" said nobody. {count} dry stars next. Top off.",
-        "Oh look, {count} stars in a row we can't scoop. Perfect time to skip refuelling. Or not.",
-        "The route has {count} useless stars coming. This one works. Use it.",
-        "Unless walking home appeals, scoop. {count} dry stars ahead.",
-        "Brave of you to face {count} unscoopable stars on this fuel. Scoop, hero.",
-        "{count} stars of nothing ahead, {name}. Scooping now would be clever.",
-        "Good news: this star scoops. Bad news: the next {count} don't. Fill up.",
-        "We could test the Fuel Rats' response time. Or scoop. {count} dry stars next.",
-        "Next {count} stars: decorative only. Scoop here.",
-        "I've done the maths, {name}. {count} dry stars beat this tank. Scoop.",
-        "Last petrol station for {count} stars. Don't drive past it.",
-        "Sure, jump on. The next {count} stars and an empty tank will be great company.",
-        "Scooping is boring, I know. So is being stranded {count} stars from fuel."
-      ],
-      "sarcastic_profane": [
-        "The next {count} stars are bloody useless for fuel, {name}. Scoop this one.",
-        "{count} dry stars ahead and this shit tank? Top off.",
-        "Jump on like this and we're fucked {count} stars from fuel. Scoop.",
-        "Christ, {count} unscoopable stars next. Fill the damn tank.",
-        "Don't be a muppet. {count} dry stars ahead. Scoop here.",
-        "The Fuel Rats have better things to do, ape. {count} dry stars. Top off.",
-        "{count} stars of bugger all ahead. This one scoops. Use it.",
-        "Scoop, for fuck's sake. The next {count} stars won't help.",
-        "Bloody hell, {name}, {count} unscoopable stars and that fuel? Fill up.",
-        "Last scoopable star before {count} shit ones. Top off.",
-        "Skip this scoop and we're properly screwed {count} stars on.",
-        "{count} dry bastards ahead on the route. Scoop now.",
-        "You want to call the Fuel Rats? No? Then scoop, damn it. {count} dry stars next.",
-        "This tank won't clear {count} unscoopable stars, genius. Fill it.",
-        "Fuck me, {count} stars with no fuel. Scoop here, {name}."
-      ],
-      "sweet": [
-        "Darling, the next {count} stars can't be scooped. Let's top off here.",
-        "Sweetheart, this is our last scoopable star for {count} jumps. Fill up?",
-        "Love, {count} dry stars ahead and we're a little short. Scoop with me?",
-        "{name}, my dear, let's top off. The next {count} stars won't feed us.",
-        "Darling, I don't want to call the Fuel Rats. {count} dry stars next. Scoop?",
-        "Sweetheart, one last scoop before {count} stars that can't help us.",
-        "Love, the route goes {count} stars without fuel. Let's fill the tank first.",
-        "Darling, this star is our friend. The next {count} aren't. Let's scoop.",
-        "Sweetheart, a full tank would carry us through those {count} dry stars. Shall we?",
-        "{name}, love, let's not get stranded. Scoop here before {count} dry stars.",
-        "Darling, top off for me? {count} unscoopable stars ahead.",
-        "Love, the fuel won't cover the next {count} stars. Let's scoop here.",
-        "Sweetheart, last chance to refuel for {count} jumps. I'd feel safer full.",
-        "Darling, {count} stars without a scoop ahead. Let's fill up together.",
-        "My love, scoop here, please. The next {count} stars give us nothing."
-      ],
-      "sweet_profane": [
-        "Shit, darling, the next {count} stars can't be scooped. Top off?",
-        "Love, {count} dry stars ahead and we're bloody short. Scoop with me.",
-        "Sweetheart, don't make me call the damn Fuel Rats. {count} dry stars. Fill up.",
-        "Darling, {count} unscoopable stars next. Let's fucking top off.",
-        "{name}, love, this is our last bloody scoop for {count} jumps.",
-        "Sweetheart, the next {count} stars are shit for fuel. Scoop here?",
-        "Damn, darling, the tank won't cover {count} dry stars. Fill up.",
-        "Love, scoop, please. I'd hate to get bloody stranded {count} stars out.",
-        "Oh hell, sweetheart, {count} stars with no fuel. Let's top off.",
-        "Darling, this star's the last decent one for {count} jumps. Damn well use it.",
-        "Sweetheart, {count} dry stars and a short tank. Fuck that. Scoop.",
-        "Love, fill us up. The next {count} stars won't give a damn.",
-        "{name}, my love, {count} unscoopable stars ahead. Shit. Top off.",
-        "Darling, scoop here, or we're properly screwed {count} stars on.",
-        "Sweetheart, {count} dry stars. Let's top off and keep our pretty arses safe."
-      ]
-    },
     "hull": {
       "when": "hull fell below half or a quarter: {pct}",
       "business": [
@@ -5768,10 +5401,7 @@
         "Hull damage confirmed. Further impacts are inadvisable.",
         "{name}, integrity falling. Hull now {pct} percent.",
         "Hull below safe threshold. Seek a station with repair services.",
-        "Hull at {pct} percent. Confirm rebuy funds.",
-        "Hull {pct} percent. {navigator} should plot the nearest repair facility.",
-        "Hull at {pct} percent. {quartermaster} advises confirming the rebuy is covered.",
-        "Hull {pct} percent. {xo} recommends no further risks until repaired."
+        "Hull at {pct} percent. Confirm rebuy funds."
       ],
       "sarcastic": [
         "Hull at {pct} percent. Were you aiming for things, or do they just like you?",
@@ -5823,10 +5453,7 @@
         "Hull at {pct} percent. At least the dents are symmetrical now. Almost artistic.",
         "{pct} percent hull. I'd suggest a slower approach, but you'd only take that as a challenge.",
         "We're losing hull, {name}. Kindly stop introducing us to the scenery.",
-        "Hull at {pct} percent. A pleasant reminder that the black doesn't have a body shop.",
-        "{pct} percent hull. {navigator} has quietly looked up where the repair shops are.",
-        "Hull's at {pct} percent. {quartermaster} has the rebuy paperwork out. Just in case.",
-        "{pct} percent hull, {name}. {xo} has asked me not to say I told you so. I told you so."
+        "Hull at {pct} percent. A pleasant reminder that the black doesn't have a body shop."
       ],
       "sarcastic_profane": [
         "Hull at {pct} percent, you clumsy primate. Stop smashing my fucking ship.",
@@ -5878,10 +5505,7 @@
         "Hull at {pct} percent, {name}. Go on, hit one more thing. I dare you, you daft arse.",
         "{pct} percent hull, you overgrown lemur. Even the neutron jets treated me more bloody gently than you do.",
         "Hull's shredding, ape. Park your hairy arse somewhere with a repair shop before I fold like wet paper.",
-        "Hull integrity {pct} percent. Fucking hell, I'm less a starship now and more a pile of damn good intentions.",
-        "Hull at {pct} percent, ape. {navigator} wants a bloody repair shop on the route. Now.",
-        "{pct} percent hull. {quartermaster} is pricing the rebuy, you clumsy primate.",
-        "{pct} percent, for fuck's sake. {xo} says stop hitting things. I say the same, louder."
+        "Hull integrity {pct} percent. Fucking hell, I'm less a starship now and more a pile of damn good intentions."
       ],
       "sweet": [
         "Darling, our hull is at {pct} percent. Please be careful, I worry about you.",
@@ -5933,10 +5557,7 @@
         "{name}, my love, {pct} percent hull. Let's take a gentle breather before anything else.",
         "Darling, the plating is hurting. I'm alright, I just need you to be careful now.",
         "Hull at {pct} percent, love. Let's not give the rebuy screen the satisfaction.",
-        "My brave explorer, {pct} percent hull left. Wherever you fly next, I want you safe.",
-        "Love, the hull's at {pct} percent. {navigator} can find us somewhere to mend.",
-        "Darling, {pct} percent hull. {xo} and I want you home in one piece.",
-        "Sweetheart, hull's at {pct} percent. {quartermaster} says repairs are worth every credit, and so are you."
+        "My brave explorer, {pct} percent hull left. Wherever you fly next, I want you safe."
       ],
       "sweet_profane": [
         "Holy shit, darling, hull's at {pct} percent. Please be careful.",
@@ -5988,10 +5609,7 @@
         "{name}, my love, hull's at {pct} percent. Bollocks to the scenery, let's go get fixed.",
         "Hull at {pct} percent, love. Hell, we'll buff out the dents together, just go easy.",
         "Darling, the hull's crumpling a bit. Shit, stay close and let's limp home gently.",
-        "My sweet, {pct} percent hull. Fuck, I'm not ready to lose you, so let's play it safe.",
-        "Shit, love, hull at {pct} percent. {navigator} will find us a repair shop.",
-        "Darling, {pct} percent hull. {xo} is worried sick, and so am I, damn it.",
-        "Bloody hell, sweetheart, {pct} percent. {quartermaster} says sod the cost, get it fixed."
+        "My sweet, {pct} percent hull. Fuck, I'm not ready to lose you, so let's play it safe."
       ]
     },
     "heat": {
@@ -6572,10 +6190,7 @@
         "Docking sequence finished. Cartographics is open for business.",
         "{name}, recommend a data sale before undocking. {value} credits pending.",
         "{ship} is on the pad. The data office here will accept your scans.",
-        "Docked at {station}. A sale now secures the full {value} credits.",
-        "Docked at {station}. {value} credits of data eligible for sale. {science} has the files ready.",
-        "{value} credits sellable at {station}. {xo} recommends selling before the next departure.",
-        "Cartographics available. {value} credits aboard. {exobiologist}'s samples go to Vista Genomics separately."
+        "Docked at {station}. A sale now secures the full {value} credits."
       ],
       "sarcastic": [
         "We've docked somewhere that actually buys data. You're carrying {value} credits. I'll let you connect the dots.",
@@ -6627,10 +6242,7 @@
         "The cartographers here have waited all day for someone interesting. You'll do. {value} credits of data, please.",
         "Docked. This is the moment the whole trip turns into money, assuming you remember why we came.",
         "{station}, at last. I was starting to think you'd retire in the black with {value} credits of unsold data.",
-        "Right, {value} credits. Sell it now and you can go back to ignoring me with a clear conscience.",
-        "{station}. {value} credits of data, and {science} has been dying to hand it over. Go on.",
-        "We're docked, and {navigator} is already eyeing the exit. Sell the {value} credits first.",
-        "{value} credits to sell here. {xo} told me to be encouraging. Sell it. That was encouraging."
+        "Right, {value} credits. Sell it now and you can go back to ignoring me with a clear conscience."
       ],
       "sarcastic_profane": [
         "Right, meat sack, we're docked and they buy data here. Sell the {value} credits before you fuck it up.",
@@ -6682,10 +6294,7 @@
         "Clamps on, arse down, data sold. That's the plan, meat sack. {value} credits of it.",
         "I've met fuel rats with more business sense than you. Sell the damn {value} credits, you hairy bastard.",
         "Listen, you overgrown bloody lemur, the cartographics desk is open. Waddle over there with {value} credits.",
-        "{station} has a data desk and I have a headache, {name}. Sell the {value} credits and fix both, you bastard.",
-        "Docked, ape. {value} credits of data. {science} didn't scan all that shit to watch you browse the shipyard.",
-        "{station}. {value} credits. Sell it before {navigator} drags us back into the black, primate.",
-        "{value} credits sellable. {exobiologist} wants their samples paid for too, you forgetful sod."
+        "{station} has a data desk and I have a headache, {name}. Sell the {value} credits and fix both, you bastard."
       ],
       "sweet": [
         "We're docked, darling. You can sell your {value} credits of data right here. I'm so proud of you.",
@@ -6737,10 +6346,7 @@
         "{name}, safely docked, and a buyer for your data. I think that deserves a little celebration.",
         "Oh, sweetheart, look at you, landing so beautifully. Now let's cash in the {value} credits.",
         "Honey, if we sell your {value} credits of scans here, nothing out there can ever take them from you.",
-        "Darling, before anything else, let's sell your {value} credits. Then you can tell the whole bar about the trip.",
-        "Darling, we're docked at {station}. {science} and I are so proud of these {value} credits of data.",
-        "Love, {value} credits to sell. {navigator} says rest first if you like. The black will wait.",
-        "Sweetheart, {station} buys data. {exobiologist} hopes Vista Genomics is open too."
+        "Darling, before anything else, let's sell your {value} credits. Then you can tell the whole bar about the trip."
       ],
       "sweet_profane": [
         "Holy shit, darling, we're docked and they buy data here. Go sell those {value} credits, you brilliant thing.",
@@ -6792,10 +6398,7 @@
         "Darling, one quick trip to cartographics and all that damn risk is gone. {value} credits, love.",
         "Sweetheart, the whole galaxy's about to see your work. {value} credits of it. Fucking beautiful.",
         "Look at you, love, clamped on like a pro. Now get that {value} credits of data sold, you gorgeous sod.",
-        "My brave explorer, before you so much as look at a new ship, sell the bloody data. {value} credits, darling.",
-        "{station}, love. {value} credits. {science} is bloody beaming.",
-        "Darling, {value} credits right here. {navigator} can damn well wait till you've sold.",
-        "Docked, sweetheart. {value} credits. Sell it, then {xo} says the drinks are on us. Hell yes."
+        "My brave explorer, before you so much as look at a new ship, sell the bloody data. {value} credits, darling."
       ]
     },
     "undocked_unsold": {
@@ -7113,10 +6716,7 @@
         "{name}, {sold} received. {still}",
         "Settlement complete. {sold}. {still}",
         "Records sold. {still}",
-        "{name}, sale total: {sold}. {still}",
-        "Sale confirmed: {sold}. {science}'s survey work, paid in full. {still}",
-        "{sold}. Funds credited. {navigator} may plot the next leg. {still}",
-        "Transaction complete: {sold}. Passing the figures to {xo}. {still}"
+        "{name}, sale total: {sold}. {still}"
       ],
       "sarcastic": [
         "Sold {sold}. Try not to spend it all on bobbleheads. {still}",
@@ -7168,10 +6768,7 @@
         "{name}, {sold}. Do remember us little people when you're famous. {still}",
         "{sold}. Months in the black, and this is the tip jar. {still}",
         "Done. {sold}. The vendor said thanks. They didn't mean it. {still}",
-        "{sold}, {name}. The ship's upkeep is safe from you for another week. {still}",
-        "{sold}. {science} wants it known that they did most of the scanning. {still}",
-        "{sold}. {exobiologist} is insufferable now, thanks for that. {still}",
-        "{sold}. {navigator} has asked for a raise. I said I'd mention it. Mentioned. {still}"
+        "{sold}, {name}. The ship's upkeep is safe from you for another week. {still}"
       ],
       "sarcastic_profane": [
         "Sold {sold}. Don't piss it all away, ape. {still}",
@@ -7223,10 +6820,7 @@
         "Damn, meat sack. {sold}. Big money for a creature that still loses its keys. {still}",
         "{name}, {sold}. Hell, you're almost worth the fuel. {still}",
         "{sold}. Bollocks, I'll need a bigger spreadsheet for this primate. {still}",
-        "Paid. {sold}. Now shut your gob and get us undocked, ape. {still}",
-        "{sold}. {science} did the bloody work, ape, but sure, you take the credit. {still}",
-        "{sold}. {exobiologist} is doing a little dance. It's horrible. {still}",
-        "{sold}. {navigator} wants a pay rise, you tight-fisted primate. {still}"
+        "Paid. {sold}. Now shut your gob and get us undocked, ape. {still}"
       ],
       "sweet": [
         "Sold {sold}. I'm so proud of you, darling. {still}",
@@ -7278,10 +6872,7 @@
         "{name}, my love, {sold}. We make a wonderful team. {still}",
         "Gorgeous, {sold}. The station is lucky to have your data. {still}",
         "All safe and paid, darling. {still}",
-        "{sold}, sweetheart. Another chapter of our adventure, banked. {still}",
-        "{sold}, darling. {science} and I are glowing. {still}",
-        "{sold}, love. {exobiologist} says every sample was worth it. {still}",
-        "Sweetheart, {sold}. {navigator} says wherever next, they're with you. {still}"
+        "{sold}, sweetheart. Another chapter of our adventure, banked. {still}"
       ],
       "sweet_profane": [
         "Holy shit, darling, {sold}. {still}",
@@ -7333,10 +6924,7 @@
         "Damn fine haul, sweetheart. {sold}. {still}",
         "{sold}, love. Bugger modesty, you're a bloody legend. {still}",
         "Every scan sold, darling. Fuck, I'm happy for you. {still}",
-        "{sold}, sweetheart. Now let's go find some more damn trouble. {still}",
-        "{sold}, love. {science} is bloody delighted. {still}",
-        "Fuck yes, darling, {sold}. {exobiologist} wants a party. {still}",
-        "{sold}, sweetheart. Damn, {comms} wants to tell everyone. {still}"
+        "{sold}, sweetheart. Now let's go find some more damn trouble. {still}"
       ]
     },
     "unsold_warn": {
@@ -7654,10 +7242,7 @@
         "{name}, all scan data is at risk. Make for a station.",
         "Unsold total at {value} credits. Treat every jump as a hazard.",
         "Critical exposure. Sell before further jumps.",
-        "{value} credits unsold. Recommend a direct course to port.",
-        "{value} credits unsold. Ask {navigator} for the nearest station that buys data.",
-        "Unsold data at {value} credits. {engineer} recommends no neutron boosts until sold.",
-        "Red level: {value} credits at risk. {xo} recommends selling at the next opportunity."
+        "{value} credits unsold. Recommend a direct course to port."
       ],
       "sarcastic": [
         "{value} credits of unsold data, {name}. One bad landing and it's all confetti. Perhaps sell it?",
@@ -7709,10 +7294,7 @@
         "I'm told brave explorers bank their data. I'm told a lot of things, {name}. Please prove one true.",
         "{value} credits. Please stop scanning. Please stop landing. Please, briefly, stop being you.",
         "One more planet won't make you rich, it'll make you a statistic. {value} credits. Station. Now.",
-        "Hauling {value} credits of unsold data this far out is a classic sign of space madness. The cure is a station.",
-        "{value} credits unsold. {navigator} could find you a station in seconds. Just saying.",
-        "{value} credits aboard. {engineer} would prefer you stayed out of neutron cones until it's sold. Wild idea.",
-        "{value} credits at risk, {name}. {xo} and I have a bet on whether you sell before you crash."
+        "Hauling {value} credits of unsold data this far out is a classic sign of space madness. The cure is a station."
       ],
       "sarcastic_profane": [
         "Sell the fucking data. {value} credits, meat sack. One mistake and it's all gone.",
@@ -7764,10 +7346,7 @@
         "{name}, sell the lot before you piss it all up a cliff face.",
         "Right, gibbon, the data's in the red. Stop buggering about and find a bloody station.",
         "{value} credits and your survival plan is vibes? Fucking hell, ape. Sell it.",
-        "Hey, {name}, what's worth less than a dead primate? A dead primate with {value} credits of unsold scans.",
-        "{value} credits unsold, ape. Ask {navigator} for a bloody station before you lose the lot.",
-        "{value} credits aboard. {engineer} says one more neutron cone and they'll throttle you, primate.",
-        "{value} credits. {xo} has been very patient. I haven't. Sell the fucking data."
+        "Hey, {name}, what's worth less than a dead primate? A dead primate with {value} credits of unsold scans."
       ],
       "sweet": [
         "Darling, please, {value} credits of data. If we lose the ship, we lose it all. Let's sell now.",
@@ -7819,10 +7398,7 @@
         "Love, if anything happened to this ship, all your beautiful work would vanish. Let's sell, please.",
         "Darling, I'd rather see you rich and safe than brave and broke. {value} credits aboard.",
         "Sweetheart, you've earned {value} credits out here. Let's collect it before the black does.",
-        "My love, let's turn {value} credits of scans into something no crash can take away.",
-        "Darling, {value} credits unsold. {navigator} can find us a station, just say the word.",
-        "Love, {value} credits aboard. {engineer} asks that we go gently until it's safe.",
-        "{value} credits, sweetheart. {xo} and I would sleep better if it were sold."
+        "My love, let's turn {value} credits of scans into something no crash can take away."
       ],
       "sweet_profane": [
         "Darling, holy shit, {value} credits unsold. If we lose the ship we lose it all. Sell now, love.",
@@ -7874,288 +7450,7 @@
         "Darling, all that gorgeous data is unbanked. One crash and it's fucking gone.",
         "Honey, {value} credits of treasure in this tin can. Let's get the hell to a station.",
         "Sweetheart, you clever sod, {value} credits. Let's go get paid before shit goes sideways.",
-        "My love, let's turn {value} credits of scans into money no bloody crash can touch.",
-        "{value} credits, love. Let {navigator} find us a damn station, please.",
-        "Darling, {value} credits unsold. {engineer} says no more bloody neutron stars till we've sold.",
-        "Shit, sweetheart, {value} credits at risk. {xo} is fretting, and so am I."
-      ]
-    },
-    "firsts_seen": {
-      "when": "the firsts watch found, for the first time, that someone else's scans of a system holding your unsold first discoveries reached Spansh (said at most once in 30 minutes; never 'stolen'): {system} (its name), {value} (its unsold cartographic value, e.g. '14.2M')",
-      "business": [
-        "Heads up, someone else is scanning your unsold systems. Time to head back to sell before they poach your discoveries!",
-        "Someone else has scanned {system}. Your first discoveries there are unsold.",
-        "Another commander's scans of {system} reached Spansh. Consider selling soon.",
-        "{system} has been scanned by someone else. {value} of your data is still unsold.",
-        "Your unsold firsts in {system} have company. Selling soon would secure them.",
-        "Spansh shows another commander's scans of {system}. Sell to keep your name on it.",
-        "Someone else has been through {system}. Your discoveries there are not yet sold.",
-        "Alert: {system} was scanned after you. {value} at stake.",
-        "Another explorer reached {system}. Your first discoveries there remain unsold.",
-        "{system} now shows scans by someone else. Recommend heading to a cartographics office.",
-        "Heads up, {name}. Someone else scanned {system}.",
-        "Your unsold discoveries in {system} are exposed. Someone else has been there.",
-        "Someone else's scans of {system} just reached Spansh.",
-        "Another commander is in your wake. {system} was scanned after you.",
-        "{value} of unsold data in {system}, and someone else has scanned it.",
-        "Note: {system} has fresh scans from another commander.",
-        "Your first discoveries in {system} could go to someone else. Sell when you can.",
-        "The firsts watch found someone else's scans in {system}.",
-        "Someone else has reported bodies in {system}. Yours are still unsold.",
-        "Another explorer has scanned {system}. Time to think about selling.",
-        "{system} is no longer yours alone. Sell to keep the credit.",
-        "Spansh has new scans of {system} from someone else. Your data is aboard and unsold.",
-        "Someone followed your path through {system}.",
-        "Heads up: {system} was scanned by another commander. {value} unsold.",
-        "Your unsold firsts are being found by others. {system} is the latest.",
-        "Someone else scanned {system}. Whoever sells first gets the name.",
-        "Fresh scans of {system} from another commander. Consider turning back to sell.",
-        "{system}: another commander's data has reached Spansh.",
-        "Your discoveries in {system} are at risk until you sell.",
-        "Someone else has explored {system} since your visit.",
-        "Another commander logged bodies in {system}. Your claim is unsold.",
-        "{value} at stake in {system}. Someone else has scanned it.",
-        "The watch reports activity in {system}. Someone else was there.",
-        "Someone else's data on {system} is on Spansh now. Yours is still aboard.",
-        "Unsold firsts in {system} have been scanned by another explorer.",
-        "{name}, someone else scanned {system}. Your first discoveries there are unsold.",
-        "Activity in {system}: another commander's scans.",
-        "Someone else is scanning where you have been. {system} is one.",
-        "Another explorer has scanned {system}. Selling would lock in your discoveries.",
-        "{system} was scanned by someone after you. Worth heading back to sell.",
-        "Your claim on {system} is unsold, and someone else has been there.",
-        "Spansh reports scans of {system} by another commander.",
-        "Someone else has scanned one of your unsold systems: {system}.",
-        "Another commander's scans reached Spansh for {system}. {value} unsold.",
-        "Heads up. Your unsold discoveries in {system} have been scanned by someone else.",
-        "{system} has visitors. Your first discoveries there are unsold.",
-        "Another explorer passed through {system}. Sell soon to keep your firsts.",
-        "Someone else is working through your unsold systems. {system} was just reported.",
-        "The data you hold on {system} is unsold, and someone else has scanned it.",
-        "Recommend a trip to Universal Cartographics. Someone else scanned {system}.",
-        "Someone else has scanned {system}. {quartermaster} advises selling your firsts there soon.",
-        "{system} has new scans from another commander. Your unsold value there: {value} credits. Informing {quartermaster}.",
-        "Another explorer has visited {system}. {navigator} can route us to a station to sell."
-      ],
-      "sarcastic": [
-        "Oh good, someone else found {system}. Your unsold firsts are thrilled.",
-        "Someone else scanned {system}. But sure, let's do one more jump.",
-        "Fantastic. Another commander is touring your unsold systems. {system} this time.",
-        "{system} was scanned by someone else. I'm sure they'll wait for you to sell.",
-        "Breaking news: other people exist, and one of them scanned {system}.",
-        "Someone else scanned {system}. {value} unsold. No pressure.",
-        "Lovely. {system} has a second visitor. Hope you enjoy sharing.",
-        "Your unsold firsts in {system} just got a fan. A competitive one.",
-        "Someone else's scans of {system} reached Spansh. Shocking, I know.",
-        "Remember {system}? Someone else does now too.",
-        "Oh look, a tourist in {system}. Your tourist spot, unsold.",
-        "{system} scanned by someone else. Maybe selling isn't such a bad idea, {name}.",
-        "Hoarding data is fun until someone else scans {system}.",
-        "Someone else got to {system}. Your {value} is getting nervous.",
-        "Turns out {system} wasn't a secret. Someone else scanned it.",
-        "Someone else is scanning your unsold systems. But please, keep exploring forever.",
-        "Congratulations, {system} has company. Your credits might not.",
-        "Another commander visited {system}. They were very thorough. Unlike your selling.",
-        "{system} has new scans on Spansh. Not yours, obviously. Yours are still in the hold.",
-        "Someone else scanned {system}. Nothing says ownership like an unsold claim.",
-        "Well, that's awkward. Someone else has been to {system}.",
-        "Your unsold empire is being scouted. {system} first.",
-        "Someone scanned {system} after you. Bold of you to assume you'd sell first.",
-        "{value} in {system}, and a stranger's scans on Spansh. What could go wrong?",
-        "Oh, {system} got scanned by someone else. Who could have predicted this. Me. I could.",
-        "Another explorer in {system}. Maybe they'll name it after you. They won't.",
-        "Someone else scanned {system}. Your first discoveries would like a word.",
-        "Plot twist: you're not the only explorer. {system} was scanned again.",
-        "Someone else has been in {system}. Want to keep that data forever, or sell it?",
-        "{system}: scanned by another commander. Your unsold data shrugs.",
-        "Someone's scanning your unsold systems. Maybe a little cartographics visit, hmm?",
-        "Not to alarm you, but someone else scanned {system}. Okay, mildly alarm you.",
-        "{system} just got scanned by someone with a working sell button.",
-        "Someone else scanned {system}. I'll just put that in the told-you-so folder.",
-        "Another commander found {system}. The race is on, apparently.",
-        "Your unsold discoveries are popular. Someone scanned {system}.",
-        "Ah, competition. {system} was scanned by someone else.",
-        "Someone else's ship visited {system}. Their scanner works too, sadly.",
-        "{system} has been scanned by someone else. Still want that detour, {name}?",
-        "Someone found {system}. Selling it now would be a novel idea.",
-        "Great news for someone else: they scanned {system}.",
-        "{value} unsold in {system} and a rival on Spansh. Riveting.",
-        "Somebody else has your unsold systems on their map. {system}, for one.",
-        "Someone else scanned {system}. Your data is still aboard, being precious.",
-        "{system} got a second opinion from another commander.",
-        "Another explorer took a peek at {system}. Your firsts are sweating.",
-        "Someone else has been to {system}. Shall we keep collecting, or cash in?",
-        "Oh dear. Someone scanned {system}. Whatever will you do. Sell, perhaps?",
-        "Hey {name}, someone's been reading your diary. It's called {system}.",
-        "Someone else scanned {system}. Your hold is full of maybes.",
-        "Someone else scanned {system}. {quartermaster} just put down their tea very carefully.",
-        "{system} has company. {navigator} wonders, quietly, whether we might sell sometime this year.",
-        "Another commander was in {system}. {value} credits of your firsts there. {quartermaster} is not amused."
-      ],
-      "sarcastic_profane": [
-        "Well, shit. Someone else scanned {system}.",
-        "Someone else is scanning your unsold systems. Go sell your damn data.",
-        "Fuck. {system} has someone else's scans on Spansh.",
-        "Someone scanned {system}. {value} unsold. Hell of a time to be hoarding.",
-        "Damn it, another commander got into {system}.",
-        "Oh, for fuck's sake. Someone else scanned {system}.",
-        "Somebody's been in {system}. Sell the bloody data, {name}.",
-        "Shit, {system} has company. Your unsold firsts are in trouble.",
-        "Hell. Someone else scanned {system}. Time to cash in.",
-        "Someone's poking around {system}. Damn tourists.",
-        "Well, fuck me. Someone else made it to {system}.",
-        "{system} got scanned by some other bastard. Sell already.",
-        "Goddamn. Your unsold systems have visitors. {system} first.",
-        "Someone else scanned {system}. Stop hoarding, damn it.",
-        "Crap. {value} in {system}, and someone else was just there.",
-        "Someone scanned {system}. Shit's getting competitive.",
-        "Hell's bells. Another explorer in {system}.",
-        "Bloody hell, someone else reported {system}.",
-        "{system} was scanned by someone else. Your firsts are fucked if you don't sell.",
-        "Damn. Someone's scans of {system} just hit Spansh.",
-        "Oh shit, someone's on your trail. {system} got scanned.",
-        "Someone else got to {system}. Move your ass to a cartographics office.",
-        "Fucking typical. Someone scanned {system}.",
-        "Someone's been through {system}. Sell the damn stuff before they do.",
-        "Shit happens. Like someone else scanning {system}.",
-        "Another commander scanned {system}. Hell of a coincidence. Not really.",
-        "Damn it, {name}. {system} has been scanned by someone else.",
-        "Someone else scanned {system}. That's {value} of unsold shit at risk.",
-        "{system}: scanned by another bloody explorer.",
-        "Ah, hell. Someone's working through your unsold systems.",
-        "Someone scanned {system}. Fuck the scenic route, go sell.",
-        "Holy shit, someone else found {system}.",
-        "Someone's sniffing around {system}. Damn it.",
-        "Your unsold firsts in {system} just got screwed with. Someone else scanned it.",
-        "Crap on a cracker. {system} was scanned by someone else.",
-        "Somebody else scanned {system}. Hell, sell already.",
-        "{system} has someone else's scans. Shit.",
-        "Damn, another explorer beat a path to {system}.",
-        "Fuck me sideways. Someone else in {system}.",
-        "Someone scanned {system} after you. Bloody brilliant.",
-        "Oh, hell no. Someone else scanned {system}.",
-        "Shit, {name}. Your unsold systems are getting scanned. {system} now.",
-        "Someone else reported {system}. Damn shame if you lose those firsts.",
-        "Bollocks. Someone scanned {system}.",
-        "{value} sitting unsold, and some bastard scanned {system}.",
-        "Hell, another commander in {system}. Go cash in.",
-        "Someone else scanned {system}. Fucking marvellous.",
-        "Damn tourists everywhere. {system} got scanned.",
-        "Someone's scanning your shit. {system}, specifically.",
-        "Well, crap. {system} has been scanned by someone else. Sell, sell, sell.",
-        "Shit. Someone scanned {system}. {quartermaster} says sell the damn firsts, ape.",
-        "{system} has visitors. {navigator} can find you a station, if you'd bloody ask.",
-        "Some other sod scanned {system}. {value} credits of your firsts, primate. {quartermaster} is livid."
-      ],
-      "sweet": [
-        "Oh, sweetheart, someone else has scanned {system}. Maybe it's time to sell?",
-        "Darling, another explorer found {system}. Let's keep your discoveries safe.",
-        "Heads up, love. Someone else is scanning your unsold systems.",
-        "Someone else visited {system}, dear. Shall we head home and sell?",
-        "Oh dear, {system} has been scanned by someone else. Your firsts are still unsold.",
-        "Sweetie, {value} of your discoveries in {system} is unsold, and someone else was there.",
-        "Love, someone else's scans of {system} reached Spansh. Let's protect your name.",
-        "Darling, another commander has been to {system}. Selling soon would be wise.",
-        "Oh honey, someone followed you to {system}.",
-        "Sweetheart, your lovely discoveries in {system} have company.",
-        "{name}, dear, someone else scanned {system}. I want your name on it.",
-        "Oh love, someone else found {system}. You found it first, let's make it count.",
-        "Darling, {system} was scanned by another explorer. Time to cash in, maybe?",
-        "Sweetie, someone else is exploring where you've been. {system}, this time.",
-        "Oh, my dear, another commander has scanned {system}.",
-        "Love, your unsold firsts in {system} might be at risk.",
-        "Honey, someone else reached {system}. Let's get those discoveries sold.",
-        "Sweetheart, {system} has new scans from someone else.",
-        "Darling, someone else has scanned {system}. Your {value} deserves a safe home.",
-        "Oh dear heart, another explorer visited {system}.",
-        "Love, someone's scans of {system} just showed up. I'd hate for you to lose it.",
-        "Sweetie, it might be time to sell. Someone else scanned {system}.",
-        "Darling, your discoveries are so special. Someone else scanned {system}, though.",
-        "Honey, another commander is in {system}. Let's keep what's yours.",
-        "Oh sweetheart, someone else was in {system} after you.",
-        "Love, {system} has another explorer's scans on it now.",
-        "Darling, {value} unsold in {system}, and someone else came by.",
-        "Sweetie, your unsold systems are getting visitors. {system} first.",
-        "Oh, love, someone else scanned {system}. Shall we plan a trip to sell?",
-        "Dear, another commander found {system}. You were first, remember that.",
-        "Sweetheart, someone else has reported {system}. Let's go claim your firsts.",
-        "Honey, somebody else is scanning your unsold systems. Let's head back soon.",
-        "Darling, {system} isn't just yours anymore, unless you sell.",
-        "Oh sweetie, someone else's data on {system} reached Spansh.",
-        "Love, it's okay, but someone else scanned {system}. Selling would settle it.",
-        "Dear {name}, another explorer reached {system}.",
-        "Sweetheart, someone else passed through {system}. Your discoveries are still aboard.",
-        "Darling, the firsts watch saw someone else in {system}.",
-        "Oh honey, {system} was scanned again. Not by you, love.",
-        "Love, someone is exploring your trail. {system} has their scans.",
-        "Sweetie, I'd feel better if you sold soon. Someone scanned {system}.",
-        "Darling, another commander visited {system}. Let's keep your name in the books.",
-        "Oh dear, someone else has been to {system}, sweetheart.",
-        "Honey, {system} has a new visitor. Your discoveries there are unsold.",
-        "Sweetheart, {value} in {system}, and someone else is about. Let's sell.",
-        "Love, someone else scanned {system}. You worked so hard for those firsts.",
-        "Darling, someone else is out there scanning your systems. {system} too.",
-        "Oh, sweetie, another explorer found {system}. Time to head home, maybe?",
-        "Dear, someone else's scans reached Spansh for {system}.",
-        "Sweetheart, heads up. Someone else scanned {system}. Let's not lose it.",
-        "Love, someone else scanned {system}. {quartermaster} thinks we should sell soon.",
-        "Darling, {system} had a visitor. {navigator} can take us to a station whenever you like.",
-        "Sweetheart, another commander's been to {system}. {quartermaster} and I want your name on those firsts."
-      ],
-      "sweet_profane": [
-        "Oh shit, sweetheart, someone else scanned {system}.",
-        "Darling, some bastard scanned {system}. Let's go sell, love.",
-        "Damn, honey, someone else is scanning your unsold systems.",
-        "Oh, fuck, love. {system} has someone else's scans.",
-        "Sweetie, hell, another commander got into {system}.",
-        "Bloody hell, darling, someone else found {system}.",
-        "Oh crap, sweetheart. {value} unsold in {system}, and someone else was there.",
-        "Love, damn it, someone scanned {system}. Let's protect your firsts.",
-        "Shit, honey, someone else reached {system}.",
-        "Darling, fuck, your unsold discoveries in {system} have company.",
-        "Oh hell, sweetie. Someone else scanned {system}.",
-        "Damn, love, another explorer in {system}. Let's cash in.",
-        "Sweetheart, some cheeky bastard scanned {system}.",
-        "Honey, shit, {system} was scanned by someone else.",
-        "Oh fuck, darling, someone's on your trail through {system}.",
-        "Love, bloody hell, {system} has new scans.",
-        "Sweetie, damn, someone else is in {system}. Your firsts are unsold.",
-        "Darling, crap, someone scanned {system}. Time to sell, love.",
-        "Oh shit, {name}, darling. Someone else scanned {system}.",
-        "Honey, hell, another commander scanned {system}.",
-        "Sweetheart, fucking hell, someone else got to {system}.",
-        "Damn, love. {value} in {system}, and somebody else was there.",
-        "Oh, bollocks, darling. Someone scanned {system}.",
-        "Sweetie, shit, your unsold systems are getting visitors.",
-        "Love, damn tourists. Someone scanned {system}.",
-        "Darling, hell's bells, someone else found {system}.",
-        "Honey, fuck, someone's scans of {system} reached Spansh.",
-        "Oh crap, sweetheart, {system} isn't just yours anymore.",
-        "Damn, darling, another explorer reached {system}. Let's go sell.",
-        "Sweetie, bloody hell, {system} has company.",
-        "Love, shit, someone else scanned {system}. Please sell soon.",
-        "Oh, hell, honey. Someone's working through your unsold systems.",
-        "Darling, damn it, someone scanned {system} after you.",
-        "Sweetheart, fuck, your firsts in {system} are at risk.",
-        "Honey, shit, another commander in {system}.",
-        "Oh damn, love. {system} was scanned by someone else.",
-        "Sweetie, crap, someone else is scanning where you've been.",
-        "Darling, bloody hell, {value} unsold and someone scanned {system}.",
-        "Love, hell, someone else has been to {system}.",
-        "Oh, shit, sweetheart, someone found {system}.",
-        "Honey, damn it, let's go sell. Someone scanned {system}.",
-        "Darling, fuck me, another explorer in {system}.",
-        "Sweetie, hell, {system} has someone else's scans now.",
-        "Oh crap, love, someone scanned {system}. Your poor firsts!",
-        "Sweetheart, damn, somebody else reported {system}.",
-        "Honey, bloody hell, your unsold systems are being scanned.",
-        "Darling, shit, {system} got scanned. Let's not lose it, love.",
-        "Love, fucking typical. Someone scanned {system}.",
-        "Oh hell, sweetie, someone's sniffing around {system}.",
-        "Darling, damn it, someone else scanned {system}. Time to cash in, love.",
-        "Damn, love, someone scanned {system}. {quartermaster} says let's sell soon.",
-        "Darling, bloody hell, {system} has company. {navigator} can find us a station.",
-        "Shit, sweetheart, {value} credits of your firsts in {system}. {quartermaster} wants them sold, fast."
+        "My love, let's turn {value} credits of scans into money no bloody crash can touch."
       ]
     },
     "carrier_departs": {
@@ -8473,10 +7768,7 @@
         "{name}, {carrier} has arrived.",
         "Carrier jump finished. Your carrier is ready.",
         "Arrival confirmed. The carrier has reached {system}.",
-        "Fleet carrier has arrived at its destination. Standing by.",
-        "{carrier} has arrived at {system}. {navigator} can set it as the next destination.",
-        "Carrier jump complete. {carrier} at {system}. {engineer} should check the tritium reserve.",
-        "{carrier} in position at {system}. Passing word to {navigator}."
+        "Fleet carrier has arrived at its destination. Standing by."
       ],
       "sarcastic": [
         "Your carrier has arrived, {name}. It managed the whole trip without your help. Imagine that.",
@@ -8528,10 +7820,7 @@
         "The carrier has arrived. No Thargoids, no hyperdictions, no drama. Try to contain your disappointment.",
         "{carrier} has arrived. Don't worry, it waited for you. It's contractually obliged to.",
         "Your carrier made it, {name}. Honestly, it's the most reliable relationship you have.",
-        "{name}, your carrier has arrived. It brought the rest of your ships. They've been talking about you.",
-        "{carrier} made it to {system}. {engineer} is counting the tritium and sighing.",
-        "The carrier's at {system}. {navigator} would like credit for that one. They did nothing.",
-        "{carrier} arrived. {comms} has asked if we can finally get decent food on board."
+        "{name}, your carrier has arrived. It brought the rest of your ships. They've been talking about you."
       ],
       "sarcastic_profane": [
         "Your carrier's arrived, meat sack. Didn't even need your sticky primate fingers on the controls.",
@@ -8583,10 +7872,7 @@
         "{name}, the carrier's arrived. Big, reliable and grey. Everything you're bloody not. Well, maybe grey.",
         "Carrier jump done, gibbon. Now get your arse aboard before it realises it can leave without you.",
         "The carrier's arrived at {system}, meat sack. Fancy that, something in this fleet that goes where it's fucking told.",
-        "{name}, your carrier's arrived, you mouth-breathing ape. Don't make it regret coming back.",
-        "{carrier} is at {system}, ape. {engineer} says the tritium bill is fucking eye-watering.",
-        "The carrier's here. {navigator} wants to know why it can find {system} and you can't find a bloody station.",
-        "{carrier} arrived at {system}. {comms} says dock before you get lost again, primate."
+        "{name}, your carrier's arrived, you mouth-breathing ape. Don't make it regret coming back."
       ],
       "sweet": [
         "Darling, your carrier has arrived safely.",
@@ -8638,10 +7924,7 @@
         "{name}, the carrier has arrived. I'm so happy I could hum.",
         "Honey, your carrier has arrived at {system}. Home, wherever you wander.",
         "Darling, the carrier finished its jump. Everything is safe, and so are you.",
-        "Sweetheart, the carrier is here. Welcome back to our favourite place in the galaxy.",
-        "Darling, {carrier} is waiting for us at {system}. {navigator} will bring us home.",
-        "Love, {carrier} made it safely. {engineer} says the old girl jumped beautifully.",
-        "{carrier} is at {system}, sweetheart. {comms} says everyone aboard is waiting for you."
+        "Sweetheart, the carrier is here. Welcome back to our favourite place in the galaxy."
       ],
       "sweet_profane": [
         "Hell yes, darling, your carrier has arrived.",
@@ -8693,10 +7976,7 @@
         "{name}, the carrier's arrived. I'm so fucking happy I could hum.",
         "Honey, your carrier's at {system}. Home sweet home, wherever the hell you wander.",
         "Darling, carrier jump done. Tritium well spent, damn it.",
-        "Sweetheart, the carrier's here. Welcome back to our favourite bloody place in the galaxy.",
-        "{carrier} is at {system}, love. Bloody lovely. {navigator} will get us home.",
-        "Darling, the carrier's here. {engineer} says she jumped like a damn dream.",
-        "Hell yes, sweetheart, {carrier} made it. {comms} is putting the kettle on."
+        "Sweetheart, the carrier's here. Welcome back to our favourite bloody place in the galaxy."
       ]
     },
     "fss_done": {
@@ -8751,10 +8031,7 @@
         "{name}, all bodies accounted for. {count} total. Worth a stop: {text}.",
         "Spectrum analysis complete. {count} bodies. Recommended: {text}.",
         "FSS closed. {count} bodies, none hidden. Of interest: {text}.",
-        "{name}, scan complete across {count} bodies. Worth your time: {text}.",
-        "FSS complete, {count} bodies. Targets: {text}. {navigator} will hold the jump until you are done.",
-        "{count} bodies resolved. Of value: {text}. {quartermaster} has the estimates.",
-        "All {count} bodies found. Priorities: {text}. {exobiologist} will review anything with life."
+        "{name}, scan complete across {count} bodies. Worth your time: {text}."
       ],
       "sarcastic": [
         "Oh look, you finished the scan. {count} bodies, and some are actually worth something: {text}.",
@@ -8806,10 +8083,7 @@
         "All {count} bodies resolved. For a change, the system isn't a total waste. {text}.",
         "FSS done. {count} bodies. Here's the list you'll forget in three minutes: {text}.",
         "{count} bodies found, {name}. I've circled the valuables in crayon for you. {text}.",
-        "Scan over. {count} bodies. Worth your time, which is saying something: {text}.",
-        "All {count} bodies found. {quartermaster} perked up at this bit: {text}.",
-        "FSS done, {count} bodies. {navigator} wants to leave already. Ignore them. {text}.",
-        "{count} bodies, and the good ones are these: {text}. {exobiologist} has opinions, as usual."
+        "Scan over. {count} bodies. Worth your time, which is saying something: {text}."
       ],
       "sarcastic_profane": [
         "Scan's done, you hairless ape. {count} bodies, and some are actually worth a shit: {text}.",
@@ -8861,10 +8135,7 @@
         "{count} bodies, all found. Even your hairy knuckles can fly to this: {text}.",
         "All {count} bodies resolved, you lucky little ape. {text}.",
         "{name}, {count} bodies in the log. Get your arse moving: {text}.",
-        "Scan's over, {name}. {count} bodies. Worth your bloody time: {text}.",
-        "{count} bodies, ape. {quartermaster} says this bit pays: {text}. So bloody go.",
-        "FSS finished. {text}. {navigator} can wait, the impatient sod.",
-        "All {count} found, primate. {text}. Even {xo} thinks that's worth a damn detour."
+        "Scan's over, {name}. {count} bodies. Worth your bloody time: {text}."
       ],
       "sweet": [
         "All done, darling. {count} bodies found, and some are worth your time: {text}.",
@@ -8916,10 +8187,7 @@
         "Darling, {count} bodies. You and me, let's go see this: {text}.",
         "{count} bodies resolved, my love. Worth every minute: {text}.",
         "What a clever pilot you are, {name}. {count} bodies. Here's the best part: {text}.",
-        "Scan complete, sweetheart. {count} bodies. Something here is worth your time: {text}.",
-        "Every body found, love, all {count}. {exobiologist} and I think you'll like this: {text}.",
-        "{count} bodies, darling. {quartermaster} smiled at this: {text}.",
-        "All {count} found, sweetheart. {navigator} will wait while you visit these: {text}."
+        "Scan complete, sweetheart. {count} bodies. Something here is worth your time: {text}."
       ],
       "sweet_profane": [
         "Bloody hell, darling, all {count} bodies found. And some are worth it: {text}.",
@@ -8971,10 +8239,7 @@
         "{name}, {count} bodies. Damn, darling, this system's a keeper. {text}.",
         "All {count} resolved, love. Holy shit, you're good. {text}.",
         "Sweetheart, {count} bodies. Let's not piss about, go see this: {text}.",
-        "Scan's done, my love. {count} bodies. Worth your bloody time: {text}.",
-        "All {count} bodies, love. {quartermaster} is bloody delighted with this: {text}.",
-        "Darling, {count} found. {text}. {navigator} can damn well wait.",
-        "{count} bodies, sweetheart, and fuck, look: {text}. {exobiologist} is thrilled."
+        "Scan's done, my love. {count} bodies. Worth your bloody time: {text}."
       ]
     },
     "fss_nothing": {
@@ -9555,10 +8820,7 @@
         "{name}, {material} at {body}, {pct}.",
         "{material} on {body} at {pct}. Collect if convenient.",
         "Found {material} on {body}. {pct}.",
-        "{body}. {material}. {pct}.",
-        "{body} carries {material} at {pct}. Worth a landing for the injections. {navigator} can hold the jump.",
-        "{material} source: {body}, {pct}. {mining} recommends a surface prospecting run.",
-        "{name}, {body} has {material} at {pct}. Our injection stock is short; {quartermaster} agrees it's worth the stop."
+        "{body}. {material}. {pct}."
       ],
       "sarcastic": [
         "{body} has {material} at {pct}. The very thing your injections are short of. Imagine that.",
@@ -9610,10 +8872,7 @@
         "{name}, {material} on {body}, {pct}. Your injections won't synthesise themselves.",
         "{body} has {material}. {pct}. Your stockpile is embarrassing, so maybe grab some.",
         "{material}, {pct}, on {body}. A bit of rock-bothering might be in order.",
-        "Oh look, {body}. {material} at {pct}. You know what to do. I hope.",
-        "{body} has {material}, {pct}. {navigator} would love a longer jump for once. Hint, hint.",
-        "{material} on {body}, {pct}. {mining} is already picking out which rocks to shoot.",
-        "{pct} {material} at {body}. {quartermaster} reminds you that injections don't grow on trees."
+        "Oh look, {body}. {material} at {pct}. You know what to do. I hope."
       ],
       "sarcastic_profane": [
         "{body} has {material} at {pct}, ape. The shit your injections are short of. Go get it.",
@@ -9665,10 +8924,7 @@
         "{material} on {body}, {pct}. Bollocks, just land.",
         "{body}: {material} at {pct}. Your FSD needs it more than you need a nap, ape.",
         "{name}, {material} on {body}. {pct}. Collect it, you shaved chimp.",
-        "Shit, {body} has {material}, {pct}. Move your arse, primate.",
-        "{material} on {body}, {pct}. {navigator} wants a long jump, ape, so go shoot some bloody rocks.",
-        "{body}, {pct} {material}. {mining} says even a primate can find an outcrop.",
-        "{material} at {pct}, {body}. {quartermaster} says we're short, and they're never fucking wrong."
+        "Shit, {body} has {material}, {pct}. Move your arse, primate."
       ],
       "sweet": [
         "Darling, {body} has {material} at {pct}. Just what your injections need.",
@@ -9720,10 +8976,7 @@
         "Oh darling, {material} on {body}. {pct}. Your drive will purr.",
         "Sweetheart, {material} at {pct} on {body}. Just what we were missing.",
         "Love, {body} has {material}, {pct}. Land when you're ready.",
-        "{name}, my love, {body}, {material}, {pct}. A little treasure for us.",
-        "Darling, {body} has {material} at {pct}. {navigator} would love a nice long jump from it.",
-        "Love, {material} on {body}, {pct}. {mining} will help you find the best rocks.",
-        "{body}, sweetheart, {material} at {pct}. {quartermaster} says we're running short, so it's perfect."
+        "{name}, my love, {body}, {material}, {pct}. A little treasure for us."
       ],
       "sweet_profane": [
         "Darling, {body} has {material} at {pct}. Holy shit, just what your injections need.",
@@ -9775,10 +9028,7 @@
         "Oh darling, {material} on {body}. {pct}. Your drive's going to fucking purr.",
         "Sweetheart, {material} at {pct} on {body}. Bloody hell, just what we were missing.",
         "Love, {body} has {material}, {pct}. Land when you're ready, damn it, I'm excited.",
-        "{name}, my love, {body}, {material}, {pct}. Shit, a little treasure for us.",
-        "{material} on {body}, love. {pct}. {navigator} would kill for a long jump. Well, not kill. Damn close.",
-        "Darling, {body} has {material} at {pct}. {mining} is bloody thrilled.",
-        "{pct} {material} on {body}, sweetheart. We're short as hell. {quartermaster} says go get it."
+        "{name}, my love, {body}, {material}, {pct}. Shit, a little treasure for us."
       ]
     },
     "left_body": {
@@ -9833,10 +9083,7 @@
         "Unfinished business on {body}. {text}.",
         "Logging {body} as open. {text}.",
         "{name}, you are leaving value on {body}. {text}.",
-        "Note for later, {body}: {text}.",
-        "Left {body} unfinished: {text}. {navigator} has the coordinates if we return.",
-        "{body} incomplete. {text}. Noted for {xo}.",
-        "Departure from {body} with work remaining: {text}. {quartermaster} notes the value left behind."
+        "Note for later, {body}: {text}."
       ],
       "sarcastic": [
         "Leaving {body} already? You forgot a few things: {text}.",
@@ -9888,10 +9135,7 @@
         "The fuel rats can't rescue you from this one. {body}: {text}.",
         "{name}, even the bacteria on {body} expected better. {text}.",
         "Leaving {body} early. I'll pretend I didn't notice. {text}.",
-        "Pardon me, {name}, but {body} isn't finished. {text}.",
-        "You left {body} with {text}. {navigator} has bookmarked it. Out of pity.",
-        "{body}, unfinished. {text}. {xo} says I shouldn't take it personally. I'm taking it personally.",
-        "{text} on {body}, abandoned. {quartermaster} has gone very quiet."
+        "Pardon me, {name}, but {body} isn't finished. {text}."
       ],
       "sarcastic_profane": [
         "Oi, ape, you left {body} half done. {text}.",
@@ -9943,10 +9187,7 @@
         "{name}, left behind on {body}, because of course: {text}.",
         "Bloody typical primate. Wander off from {body} halfway. {text}.",
         "For fuck's sake, {body} wasn't done. {text}.",
-        "{name}, damn it, you left {body} hanging. {text}.",
-        "You walked out on {body}, ape. {text}. Don't expect {navigator} to fly you back for it.",
-        "{body}: {text}. {xo} says be nice. Bollocks to nice, you left money down there.",
-        "Bloody hell, {body}. {text}. {quartermaster} just threw a damn stylus, primate."
+        "{name}, damn it, you left {body} hanging. {text}."
       ],
       "sweet": [
         "Darling, you left {body} unfinished. {text}.",
@@ -9998,10 +9239,7 @@
         "{name}, my darling, remember {body}. {text}.",
         "Oh love, we left {body} before the job was done. {text}.",
         "My clever darling, {body} is still open. {text}.",
-        "Sweetheart, I'll keep {body} on the list for you. {text}.",
-        "Love, {body} still has {text}. {navigator} has kept the way back, just in case.",
-        "Darling, {body}: {text}. {xo} says there's no shame in moving on. I agree.",
-        "Sweetheart, we left {text} on {body}. {quartermaster} isn't cross, I promise."
+        "Sweetheart, I'll keep {body} on the list for you. {text}."
       ],
       "sweet_profane": [
         "Oh shit, darling, you left {body} unfinished. {text}.",
@@ -10053,10 +9291,7 @@
         "Shit, sweetheart, I kept track of {body} for you. {text}.",
         "My darling, bloody hell, {body} is only partly done. {text}.",
         "Damn, love, don't leave {body} to some other lucky bastard. {text}.",
-        "Oh hell, my love, {body} still has treasure. {text}.",
-        "Damn, love, {body} isn't done. {text}. {navigator} can get us back if you want.",
-        "Darling, {text} on {body}. {xo} says it's your call, and hell, it is.",
-        "Shit, sweetheart, {body}: {text}. {quartermaster} is pouting, but I've got you."
+        "Oh hell, my love, {body} still has treasure. {text}."
       ]
     },
     "bio_done_more": {
@@ -10374,10 +9609,7 @@
         "{name}, final sample in. {species}, {value} credits.",
         "{species} logged. {value} credits. Body fully sampled.",
         "Complete. {species}, {value} credits. Nothing left to sample.",
-        "{species}, last species, {value} credits. Clear to lift off.",
-        "{species} complete, {value} credits. Body finished. {navigator} can plot the next one.",
-        "Final species on this body: {species}, {value} credits. {quartermaster} has it logged for Vista Genomics.",
-        "Body complete, {name}. {species}, {value} credits. I'll report it to {xo}."
+        "{species}, last species, {value} credits. Clear to lift off."
       ],
       "sarcastic": [
         "{species} done. {value} credits. You actually finished a whole body. I'm stunned.",
@@ -10429,10 +9661,7 @@
         "{name}, {species}, {value} credits. Body complete. Now let's see if you can land on the next one.",
         "{species} complete. {value} credits. Survey finished, dignity partly intact.",
         "The last species. {species}, {value} credits. I suppose you want applause.",
-        "{species}, {value} credits, and not a single sample left. Colonia would be mildly impressed.",
-        "{species}, {value} credits. That's everything. {navigator} has been tapping their foot for an hour.",
-        "{species} complete. {quartermaster} says {value} credits, and actually smiled. Mark the date.",
-        "The last one, {species}. {value} credits. {science} wants to know why you didn't do this faster."
+        "{species}, {value} credits, and not a single sample left. Colonia would be mildly impressed."
       ],
       "sarcastic_profane": [
         "Holy shit, ape, you finished the whole body. {species}, {value} credits.",
@@ -10484,10 +9713,7 @@
         "{name}, {species} for {value} credits. Done. Now fly, you lazy sod.",
         "{species}, {value} credits. Body complete. Colonia can kiss your hairy arse.",
         "Oi, ape, that's the last one. {species}, {value} credits.",
-        "{species} complete, {value} credits. Hell, you might be an explorer after all.",
-        "{species}, {value} credits. Body done, ape. {navigator} would like to leave this bloody rock now.",
-        "That's the lot. {species}, {value} credits. {quartermaster} said fucking finally, and for once I agree.",
-        "{species} done. {value} credits, primate. {science} says that wasn't half bad. For an ape."
+        "{species} complete, {value} credits. Hell, you might be an explorer after all."
       ],
       "sweet": [
         "Darling, {species} is done. {value} credits, and this body is complete.",
@@ -10539,10 +9765,7 @@
         "Oh my love, {species} for {value} credits. All done here.",
         "My brave explorer, {species} done. {value} credits. Let's find the next one.",
         "Love, {species} complete, {value} credits. You never miss a thing.",
-        "Sweetheart, {species}, {value} credits. Body complete, darling.",
-        "{species}, {value} credits, love. All done here. {navigator} is ready whenever you are.",
-        "That's every one, darling. {species}, {value} credits. {quartermaster} is so happy.",
-        "{species} finished, sweetheart. {value} credits. {xo} says you've earned a rest."
+        "Sweetheart, {species}, {value} credits. Body complete, darling."
       ],
       "sweet_profane": [
         "Hell yes, darling, {species} is done. {value} credits. Body complete.",
@@ -10594,10 +9817,7 @@
         "Oh damn, my brave explorer. {species}, {value} credits. Every one.",
         "Darling, hell of a finish. {species}, {value} credits.",
         "Love, bloody good work. {species} complete, {value} credits. This body is done.",
-        "Fuck yes, sweetheart. {species}, {value} credits. Time to fly, gorgeous.",
-        "{species}, love. {value} credits. Bloody perfect. {navigator} is ready when you are.",
-        "That's all of them, darling. {species}, {value} credits. {quartermaster} is over the damn moon.",
-        "Fucking brilliant, sweetheart. {species}, {value} credits. {xo} says take a breather."
+        "Fuck yes, sweetheart. {species}, {value} credits. Time to fly, gorgeous."
       ]
     },
     "tank_full": {
@@ -10652,10 +9872,7 @@
         "Tank full. Scoop complete, drive ready.",
         "Full tank on board, {name}.",
         "Tank full. Clear to depart the star.",
-        "Refuelling complete. Tank full, {name}. Approximately {jumps} jumps.",
-        "Tank full. {navigator} is clear to plot.",
-        "Refuelled. Advise {navigator}: full range available.",
-        "Fuel full. I'll tell {xo} we're ready to proceed."
+        "Refuelling complete. Tank full, {name}. Approximately {jumps} jumps."
       ],
       "sarcastic": [
         "Tank full. You may now stop sunbathing, {name}.",
@@ -10707,10 +9924,7 @@
         "Full tank. We're good for {jumps} jumps, assuming you don't get creative.",
         "Tank full. Neutron highway, deep black, whatever. At least we won't run dry.",
         "Full tank, {name}. That's one less thing for you to forget.",
-        "The tank is full. Please proceed to your next poorly lit corner of the galaxy.",
-        "Tank full. {navigator} can stop pretending they weren't worried.",
-        "Refuelled. {science} wanted to stay and study the star. I said no. You're welcome.",
-        "Full tank. {xo} says I'm to say well done. Well done. There."
+        "The tank is full. Please proceed to your next poorly lit corner of the galaxy."
       ],
       "sarcastic_profane": [
         "Tank's full, you sun-licking primate. Now piss off away from the star.",
@@ -10762,10 +9976,7 @@
         "Full tank. Let's get the hell out of here before the canopy starts to sweat.",
         "Tank's full, {name}. Stop sitting on the star like a bloody hen on an egg.",
         "Topped up, meat sack. The black is waiting, and it doesn't give a shit about you either.",
-        "Full tank, {name}. Right, you hairless menace, where the hell are we getting lost next?",
-        "Tank's full, ape. Tell {navigator} to plot something before we bloody cook.",
-        "Full. {science} wanted to stare at the star longer. Tough shit, we're leaving.",
-        "Refuelled, primate. {xo} says I have to be nice now. This is me being nice."
+        "Full tank, {name}. Right, you hairless menace, where the hell are we getting lost next?"
       ],
       "sweet": [
         "Tank's full, darling. Well done, my brave explorer.",
@@ -10817,10 +10028,7 @@
         "Full tank, {name}. Nothing can stop us now, sweetheart.",
         "Tank full, love. Ease us out of the corona, nice and steady.",
         "Refuelled, sweetheart. I'm so lucky to have you in the pilot's seat.",
-        "Full tank, my brave explorer. Let's go get wonderfully lost.",
-        "Tank's full, love. {navigator} can take us anywhere now.",
-        "All topped up, darling. {xo} and I feel so much better.",
-        "Full tank, sweetheart. {science} says thank you to the star for us."
+        "Full tank, my brave explorer. Let's go get wonderfully lost."
       ],
       "sweet_profane": [
         "Tank's full, darling. Bloody brilliant scooping.",
@@ -10872,10 +10080,7 @@
         "Tank's full, love. Shit, you're good.",
         "Full tank, my love. Now mind that bloody heat.",
         "All full, {name}. Hell of a star, hell of a pilot.",
-        "Tank full, darling. Fuck yes, onward.",
-        "Tank's full, love. Bloody lovely. Let {navigator} take us somewhere wild.",
-        "Full, darling. {xo} can stop worrying now, the daft thing.",
-        "Topped up, sweetheart. Hell yes. {science} blew the star a kiss."
+        "Tank full, darling. Fuck yes, onward."
       ]
     },
     "scoop_stopped": {
@@ -11193,10 +10398,7 @@
         "Frame shift drive supercharged, {name}.",
         "Boost locked in. Range {mult} normal.",
         "Supercharged. Next jump reaches {mult} standard distance.",
-        "Drive charged by the cone. {mult} normal range.",
-        "Supercharged, range {mult} normal. {engineer} notes each boost wears the FSD slightly.",
-        "Drive supercharged, {mult} range. Clear the cone; {engineer} is watching the heat.",
-        "Boost complete, {name}. {mult} range for the next jump. {xo}'s orders: make it count."
+        "Drive charged by the cone. {mult} normal range."
       ],
       "sarcastic": [
         "Drive supercharged. {mult} normal range. You flew into a stellar jet on purpose, and it worked. Shocking.",
@@ -11248,10 +10450,7 @@
         "Drive supercharged. {mult} as far. I'd throw a party, but you'd only fly into it.",
         "{mult} normal range. Truly, the highlight of your career. So far. Sadly.",
         "Supercharged, {name}. The ship survived your flying and the star's. {mult} range.",
-        "{mult} further, {name}. Try to make it count this time.",
-        "Supercharged. {engineer} would like you to stop doing that to their drive. You won't.",
-        "{mult} the range. {science} enjoyed the light show. I enjoyed us not dying.",
-        "Supercharged, {name}. {xo} says I should sound pleased. {mult} range. Yay."
+        "{mult} further, {name}. Try to make it count this time."
       ],
       "sarcastic_profane": [
         "Supercharged, you mad primate. {mult} normal range. Didn't even kill us. Bloody miracle.",
@@ -11303,10 +10502,7 @@
         "{mult} normal range, {name}. Bollocks to caution, ape, let's go.",
         "Supercharged, {name}. If the hull holds, I'll be damned. {mult} range.",
         "{mult} further. Nice cone run, meat sack. Don't let it go to your pea-sized bloody brain.",
-        "Drive supercharged. {mult} range. Right, you mad bastard, pick a star and fucking go.",
-        "Supercharged, ape. {engineer} is swearing at the FSD again. Can't blame them.",
-        "{mult} range. {science} called that cone beautiful. I called it a bloody death trap.",
-        "Supercharged. {xo} says jump before something else breaks, you reckless primate."
+        "Drive supercharged. {mult} range. Right, you mad bastard, pick a star and fucking go."
       ],
       "sweet": [
         "Supercharged, darling. {mult} our normal range. That was so brave.",
@@ -11358,10 +10554,7 @@
         "{mult} as far, my love. Wherever you take us, I'm happy.",
         "Supercharged, darling. Let's clear the cone gently, then away we go.",
         "Love, {mult} normal range. Beautifully done, sweetheart.",
-        "Supercharged, my brave explorer. {mult} further into the unknown.",
-        "Supercharged, love. {mult} range. {engineer} says you treated the drive gently.",
-        "{mult} range, darling. {science} loved watching the cone with you.",
-        "Supercharged, sweetheart. {xo} and I can't wait to see where you take us."
+        "Supercharged, my brave explorer. {mult} further into the unknown."
       ],
       "sweet_profane": [
         "Supercharged, darling. {mult} normal range. Fucking brilliant.",
@@ -11413,10 +10606,7 @@
         "Supercharged, my brave explorer. Shit yes, onward.",
         "{name}, sweetheart, {mult} normal range. Hell of a job.",
         "Love, {mult} as far on this one. Fuck, let's make it count.",
-        "Supercharged, darling. {mult} the range. You beautiful bloody lunatic, I adore you.",
-        "Supercharged, love. {engineer} says bloody nicely done.",
-        "Darling, {mult} range. {science} is still breathless from that damn cone.",
-        "Hell yes, sweetheart, supercharged. {xo} says go somewhere gorgeous."
+        "Supercharged, darling. {mult} the range. You beautiful bloody lunatic, I adore you."
       ]
     },
     "fsd_charge": {
@@ -11734,10 +10924,7 @@
         "Exobiology brief. {body}: {text}.",
         "Planet {body}. {text}. Sampler standing by.",
         "Biological profile, {body}. {text}.",
-        "{body} on approach, {name}. {text}.",
-        "{body}. {text}. Handing over to {exobiologist}.",
-        "Approaching {body}: {text}. {exobiologist} recommends mapping it first for the signal locations.",
-        "{body} ahead. {text}. {engineer} reminds you to check the gravity on approach."
+        "{body} on approach, {name}. {text}."
       ],
       "sarcastic": [
         "{body} coming up, {name}. {text}. Try to contain your excitement.",
@@ -11789,10 +10976,7 @@
         "Spectacular news, if you like fungus. {body}: {text}.",
         "{body}. {text}. Scoop up the goo and let's go.",
         "{name}, I've done the reading for you again. {body}: {text}.",
-        "{body} ahead, with {text}. The glamorous life of a space gardener.",
-        "{body}: {text}. {exobiologist} is already putting on their good gloves.",
-        "{body} coming up. {text}. Try not to land on the samples. {exobiologist} hates that.",
-        "{text} on {body}. {navigator} has offered to find you a flat bit. Lower your expectations."
+        "{body} ahead, with {text}. The glamorous life of a space gardener."
       ],
       "sarcastic_profane": [
         "Oi, {name}, {body} coming up. {text}. Go poke it with a stick.",
@@ -11844,10 +11028,7 @@
         "{body}. {text}. Even a hairless ape can pick a flower.",
         "Look alive, meat sack. {body}: {text}.",
         "{body}. {text}. Go on, get down there before I change my damn mind.",
-        "{name}, {body}, {text}. For fuck's sake, land gently.",
-        "{body}, primate. {text}. {exobiologist} is bloody vibrating with excitement.",
-        "{text} on {body}. Land the fucking ship gently, or {exobiologist} will have your hide.",
-        "{body}: {text}. {engineer} says don't break the bloody landing gear again, ape."
+        "{name}, {body}, {text}. For fuck's sake, land gently."
       ],
       "sweet": [
         "Darling, {body} is just ahead. {text}.",
@@ -11899,10 +11080,7 @@
         "Sweetheart, {body} ahead. {text}.",
         "{name}, love, {body}. {text}.",
         "Oh, my clever love. {body}: {text}.",
-        "Darling, it's {body}. {text}. Go on, I'll be right here.",
-        "Love, {body} is close. {text}. {exobiologist} can't wait to see what you find.",
-        "{body}, darling. {text}. {exobiologist} and I will be watching over you down there.",
-        "Sweetheart, {body}. {text}. {engineer} has asked me to say: gentle landings, please."
+        "Darling, it's {body}. {text}. Go on, I'll be right here."
       ],
       "sweet_profane": [
         "Holy shit, darling, {body} has {text}.",
@@ -11954,10 +11132,7 @@
         "{name}, my love, {body}. {text}. Bloody hell, well spotted.",
         "Sweetheart, {body}. {text}. Hell yes, go and get it.",
         "Darling, holy shit, {body}. {text}. I'm so proud.",
-        "Oh damn, love. {body}: {text}. Off you go, you gorgeous thing.",
-        "{body}, love. {text}. {exobiologist} is bloody thrilled.",
-        "Darling, {body} ahead. {text}. Hell, {exobiologist} has been waiting all day for this.",
-        "{body}, sweetheart. {text}. Land soft, or {engineer} will have a damn fit."
+        "Oh damn, love. {body}: {text}. Off you go, you gorgeous thing."
       ]
     },
     "high_g": {
@@ -12012,10 +11187,7 @@
         "Caution on approach. {gravity} g, {value} credits unsold.",
         "Heavy planet, {gravity} g. {value} credits. Minimum safe descent rate advised.",
         "{gravity} g. {value} credits unsold. Not worth a hard landing.",
-        "{name}, final advisory. {gravity} g. {value} credits aboard.",
-        "{gravity} g surface ahead. {engineer} advises a slow descent. {value} credits aboard.",
-        "{gravity} g. {value} credits unsold. {quartermaster} recommends selling before landing here.",
-        "Caution: {gravity} g, {value} credits aboard. {xo} advises extreme care on the approach."
+        "{name}, final advisory. {gravity} g. {value} credits aboard."
       ],
       "sarcastic": [
         "{gravity} g, {name}. With {value} credits aboard. That's {rebuys} rebuys. Just so you know.",
@@ -12067,10 +11239,7 @@
         "{gravity} g, {value} credits. Jameson took risks like this. Ask him how it went.",
         "{gravity} g body. {value} credits. I'm told the view from orbit is spectacular.",
         "{name}, landing at {gravity} g with {value} credits is a great way to become a story at the bar.",
-        "{gravity} g. {value} credits unsold. Land if you must. Slowly. Very, very slowly.",
-        "{gravity} g, {name}. {engineer} has started praying, and they don't believe in anything.",
-        "{gravity} g with {value} credits aboard. {quartermaster} would like a word before you do anything brave.",
-        "{gravity} g. {engineer} asked me to remind you the ground is not a landing pad. {value} credits say they're right."
+        "{gravity} g. {value} credits unsold. Land if you must. Slowly. Very, very slowly."
       ],
       "sarcastic_profane": [
         "{gravity} g, ape. {value} credits unsold. That's {rebuys} rebuys. Don't fuck it up.",
@@ -12122,10 +11291,7 @@
         "{gravity} g. {value} credits unsold. Thargoids would be kinder than this planet.",
         "Oi, hairless ape, {gravity} g, {value} credits. Descend like your life depends on it. It does.",
         "{gravity} g. {value} credits. Brake early or we're a fucking crater.",
-        "{name}, {gravity} g, {value} credits. Please, for once in your primate life, be careful.",
-        "{gravity} g, you reckless ape. {engineer} is already swearing, and so am I. {value} credits aboard.",
-        "{gravity} g and {value} credits unsold. {quartermaster} will murder you if you crater us. Then I will.",
-        "{gravity} g. Fucking hell, primate. {engineer} says slow down or walk home."
+        "{name}, {gravity} g, {value} credits. Please, for once in your primate life, be careful."
       ],
       "sweet": [
         "Darling, careful. {gravity} g, and we're carrying {value} credits. That's {rebuys} rebuys.",
@@ -12177,10 +11343,7 @@
         "Darling, {gravity} g. {value} credits unsold. Take all the time you need.",
         "Love, {gravity} g. {value} credits. I'd follow you anywhere, but not into a crater.",
         "{name}, love, {gravity} g. {value} credits. Be careful for me.",
-        "Oh my love, {gravity} g. {value} credits. Soft and slow, darling.",
-        "Love, {gravity} g down there. {engineer} and I want you down gently, with all {value} credits.",
-        "Darling, {gravity} g, and {value} credits aboard. {quartermaster} is holding their breath. So am I.",
-        "{gravity} g, sweetheart. {xo} says take all the time you need. We've {value} credits to bring home."
+        "Oh my love, {gravity} g. {value} credits. Soft and slow, darling."
       ],
       "sweet_profane": [
         "Darling, holy shit, {gravity} g. {value} credits aboard. That's {rebuys} rebuys.",
@@ -12232,10 +11395,7 @@
         "Sweetheart, {gravity} g. {value} credits unsold. Damn, I worry about you.",
         "{name}, darling, {gravity} g. {value} credits. For fuck's sake, go gently.",
         "Love, {gravity} g. {value} credits. You beautiful bastard, be careful.",
-        "My love, {gravity} g. {value} credits. Bloody hell, just ease it down.",
-        "Darling, {gravity} g. {engineer} says gentle as hell, please. {value} credits aboard.",
-        "{gravity} g, love, and {value} credits unsold. {quartermaster} is having a bloody fit.",
-        "Shit, sweetheart, {gravity} g. {xo} and I want you down in one damn piece."
+        "My love, {gravity} g. {value} credits. Bloody hell, just ease it down."
       ]
     },
     "arrival_brief": {
@@ -12290,10 +11450,7 @@
         "Briefing complete. {text}",
         "{name}, the essentials. {text}",
         "Report. {text}",
-        "Arrival data. {text} Standing by.",
-        "{text} Advise {navigator} when you are ready to move on.",
-        "Arrival brief. {text} {exobiologist} is watching for biological signals.",
-        "{text} Survey data goes to {quartermaster} as we scan."
+        "Arrival data. {text} Standing by."
       ],
       "sarcastic": [
         "Here we are again. {text} Try to act surprised.",
@@ -12345,10 +11502,7 @@
         "And the system is. {text} Riveting stuff.",
         "Oh good, we survived the jump. {text}",
         "{text} Your move, {name}. Try to make it a good one.",
-        "Pop quiz later. {text}",
-        "{text} I've told {navigator}. They pretended to be surprised.",
-        "Here's the brief, since {xo} says I have to do it out loud. {text}",
-        "{text} {exobiologist} has stopped listening already. They only hear the word biology."
+        "Pop quiz later. {text}"
       ],
       "sarcastic_profane": [
         "Right, ape, listen up. {text}",
@@ -12400,10 +11554,7 @@
         "Damn it, another rock pile. {text}",
         "{text} Now hop to it, hairless.",
         "Christ, primate, look alive. {text}",
-        "{name}, the facts, fresh from the black. {text} Don't piss them away.",
-        "{text} There. {navigator} wanted it in short words, for your sake, ape.",
-        "Brief for the primate. {text} {exobiologist} says hurry the hell up.",
-        "{text} {xo} made me read that nicely. Bollocks to nicely."
+        "{name}, the facts, fresh from the black. {text} Don't piss them away."
       ],
       "sweet": [
         "Here we are, darling. {text}",
@@ -12455,10 +11606,7 @@
         "{text} Take your time, sweetheart.",
         "My sweet explorer, we've arrived. {text}",
         "{name}, my darling, briefing. {text}",
-        "Sweetheart, all yours. {text}",
-        "{text} Whatever you choose next, {navigator} and I are right behind you, love.",
-        "Darling, here's the brief. {text} {exobiologist} has their fingers crossed for life.",
-        "{text} {xo} asked me to keep you company through the briefings, sweetheart. I'm glad they did."
+        "Sweetheart, all yours. {text}"
       ],
       "sweet_profane": [
         "Here we are, darling. {text} Bloody lovely.",
@@ -12510,10 +11658,7 @@
         "{text} Damn, what's next, darling?",
         "Sweetheart, jump complete, bloody brilliant. {text}",
         "{name}, love, here's the damn news. {text}",
-        "Darling, all ours, for fuck's sake, enjoy it. {text}",
-        "{text} Bloody lovely, darling. {navigator} says no rush.",
-        "Love, quick brief. {text} {exobiologist} is hoping for some damn biology.",
-        "{text} Hell of a place, sweetheart. {engineer} sends their love too."
+        "Darling, all ours, for fuck's sake, enjoy it. {text}"
       ]
     },
     "region": {
@@ -12568,10 +11713,7 @@
         "Region entry: {region}. {count}",
         "{name}, new region reached. {region}. {count}",
         "This is {region}. {count}",
-        "Boundary passed. {region}. {count}",
-        "Entering {region}. {navigator} has updated the charts. {count}",
-        "Region boundary: {region}. {exobiologist} is reviewing what grows here. {count}",
-        "Now in {region}, {name}. {xo} has it in the log. {count}"
+        "Boundary passed. {region}. {count}"
       ],
       "sarcastic": [
         "Congratulations, we've entered {region}. It looks exactly like the last region. {count}",
@@ -12623,10 +11765,7 @@
         "We've reached {region}. I'd send a postcard, but who would read it? {count}",
         "{region}. Well, it's not the worst region we've been to. Yet. {count}",
         "Crossed into {region}. Your sense of direction is a marvel. {count}",
-        "{name}, {region}, as promised. Or rather, as stumbled into. {count}",
-        "{region}. {navigator} would like the credit for this, I'm told. {count}",
-        "Welcome to {region}. {exobiologist} is hoping the local life is livelier than you. {count}",
-        "{region}. I asked {comms} to tell the galaxy. The galaxy didn't reply. {count}"
+        "{name}, {region}, as promised. Or rather, as stumbled into. {count}"
       ],
       "sarcastic_profane": [
         "Welcome to {region}, ape. Same shit, different sky. {count}",
@@ -12678,10 +11817,7 @@
         "We made it to {region}. Damn miracle, given who's flying. {count}",
         "{name}, entering {region}, you glorious idiot. {count}",
         "{region}, ape. Same shit. Bigger map. {count}",
-        "Oh, bloody hell, {region}. Onwards, meat bag. {count}",
-        "{region}, ape. {navigator} still can't believe you got us here. {count}",
-        "Bloody hell, {region}. {exobiologist} is rubbing their hands together. {count}",
-        "{region}. {xo} wants a proper log entry. Here it is: we're somewhere new, primate. {count}"
+        "Oh, bloody hell, {region}. Onwards, meat bag. {count}"
       ],
       "sweet": [
         "Darling, we've crossed into {region}. Look how far you've taken us. {count}",
@@ -12733,10 +11869,7 @@
         "Oh darling, we've come all the way to {region}. {count}",
         "Sweetheart, {region}. Every light out here is shining for you. {count}",
         "Love, entering {region}. What a marvel you are. {count}",
-        "{name}, my love, {region}. Here's to the next discovery. {count}",
-        "Darling, we've crossed into {region}. {navigator} is so proud of you. {count}",
-        "{region}, love. {exobiologist} is dreaming of all the new things here. {count}",
-        "Sweetheart, {region}. {xo} and I have been looking forward to this. {count}"
+        "{name}, my love, {region}. Here's to the next discovery. {count}"
       ],
       "sweet_profane": [
         "Darling, we've crossed into {region}. Holy shit, look how far you've brought us. {count}",
@@ -12788,10 +11921,7 @@
         "Oh bloody hell, darling, all the way to {region}. {count}",
         "Sweetheart, {region}. Damn, every light out here is shining for you. {count}",
         "Love, entering {region}. You're a fucking marvel. {count}",
-        "{name}, my love, {region}. Here's to the next damn discovery. {count}",
-        "{region}, love. Bloody hell, {navigator} is grinning. {count}",
-        "Darling, {region}. {exobiologist} is about to have a damn field day. {count}",
-        "Fuck me, sweetheart, {region}. {xo} says it's a first for this trip. {count}"
+        "{name}, my love, {region}. Here's to the next damn discovery. {count}"
       ]
     },
     "session_recap": {
@@ -12846,10 +11976,7 @@
         "Summary complete. {text}. All systems idle.",
         "{text}. Session saved, {name}.",
         "Reporting session totals. {text}.",
-        "Today's exploration: {text}. Goodbye, {name}.",
-        "Session log for {xo}: {text}.",
-        "{text}. {navigator} will pick up where we left off.",
-        "Today's figures, {name}: {text}. {quartermaster} has the books."
+        "Today's exploration: {text}. Goodbye, {name}."
       ],
       "sarcastic": [
         "Leaving already? Fine. For posterity: {text}.",
@@ -12901,10 +12028,7 @@
         "Time's up. {text}. I'll keep {ship} warm, as usual.",
         "{text}. The black will still be here tomorrow, sadly for the black.",
         "In summary, and I do mean summary, {name}: {text}.",
-        "{text}. Go on, off you pop. I'll be here, counting the silence.",
-        "{text}. {science} says it was a good day. {science} says that every day.",
-        "{text}. {navigator} would like it noted that they did all the hard parts.",
-        "{text}. {quartermaster} has already spent it, in their head."
+        "{text}. Go on, off you pop. I'll be here, counting the silence."
       ],
       "sarcastic_profane": [
         "Fucking finally, {name}. {text}. Now piss off and eat something, ape.",
@@ -12956,10 +12080,7 @@
         "{text}. Bloody marvellous. For an ape.",
         "Here's your fucking receipt, {name}: {text}.",
         "{text}. Hell of a session. Don't get cocky.",
-        "Closing the log on your bollocks, {name}. {text}.",
-        "{text}. {navigator} says not bad for a primate. I say adequate.",
-        "{text}. {engineer} is going to bed, and so is my patience, ape.",
-        "Here's your bloody day, {name}: {text}. {xo} says well done. I say about time."
+        "Closing the log on your bollocks, {name}. {text}."
       ],
       "sweet": [
         "What a day, darling. {text}. I'm so proud of you.",
@@ -13011,10 +12132,7 @@
         "Recap time, {name}. {text}. I adore flying with you.",
         "{text}. Hurry back, my love.",
         "Sweetheart, this is what you did today: {text}. Remarkable.",
-        "{text}. Well done, my darling. Well done.",
-        "{text}. {science} and I loved every minute, darling.",
-        "Sweetheart, {text}. {exobiologist} says goodnight, and so do I.",
-        "{text}. {navigator} will keep the stars warm for you, love."
+        "{text}. Well done, my darling. Well done."
       ],
       "sweet_profane": [
         "Bloody hell, darling, what a day. {text}. I'm so proud of you.",
@@ -13066,10 +12184,7 @@
         "{text}. You beautiful bastard, well done, {name}.",
         "Sweetheart, our damn fine day: {text}.",
         "{text}. Fuck, I'll miss you. Come back soon, darling.",
-        "Bloody hell, {name}. {text}. Goodnight, love.",
-        "{text}. Bloody good day, love. {xo} says you were magnificent.",
-        "Darling, {text}. {engineer} says sleep well, you brilliant bugger.",
-        "{text}. Damn, sweetheart, {quartermaster} is still grinning."
+        "Bloody hell, {name}. {text}. Goodnight, love."
       ]
     },
     "streak_known": {
@@ -13650,10 +12765,7 @@
         "Ready for duty, {name}. {text}",
         "Reactivating flight systems, {name}. {text}",
         "{name}, welcome back. Brief status. {text}",
-        "Standing by for orders, {name}. {text}",
-        "Welcome back, {name}. {xo} kept the watch while you were away. {text}",
-        "{text} {navigator} is ready when you are.",
-        "Resuming operations. {text} Full report available from {xo}."
+        "Standing by for orders, {name}. {text}"
       ],
       "sarcastic": [
         "Oh, look who remembered they own a spaceship. {text}",
@@ -13705,10 +12817,7 @@
         "{name}, finally. {text} Now, shall we pretend you know what you're doing?",
         "And the hero returns to thunderous indifference, {name}. {text}",
         "Welcome back to the ship you keep ignoring, {name}. {text}",
-        "Ah, the triumphant return nobody asked for, {name}. {text}",
-        "Oh, you're back. {navigator} had started plotting a route without you. {text}",
-        "{text} {engineer} kept the lights on. You're welcome, apparently.",
-        "Welcome back. {xo} said you'd return. I had money on the opposite. {text}"
+        "Ah, the triumphant return nobody asked for, {name}. {text}"
       ],
       "sarcastic_profane": [
         "Oh shit, the ape is back. {text}",
@@ -13760,10 +12869,7 @@
         "Wakey wakey, {name}, you meat sack. {text}",
         "Welcome back, {name}, you scruffy bastard. {text}",
         "{name}, you daft primate. {text} Let's not fuck this up.",
-        "Right then, {name}, you arsehole, back to work. {text}",
-        "Oh, look who's back. {xo} kept the bloody ship running while you were gone, ape. {text}",
-        "{text} {navigator} has been bored stupid. Thanks for that, primate.",
-        "Welcome back, meat sack. {engineer} was this close to selling your seat. {text}"
+        "Right then, {name}, you arsehole, back to work. {text}"
       ],
       "sweet": [
         "Welcome back, darling. I missed you. {text}",
@@ -13815,10 +12921,7 @@
         "Welcome back, {name}. Everything's ready for you, love. {text}",
         "There you are, {name}. I was starting to worry. {text}",
         "Welcome back, {name}. Here's what's waiting for you. {text}",
-        "Hello, {name}, my darling explorer. {text}",
-        "There you are, love. {xo} and I kept everything ready for you. {text}",
-        "{text} {navigator} has been waiting to fly with you again, darling.",
-        "Welcome back, sweetheart. {engineer} kept her warm for you. {text}"
+        "Hello, {name}, my darling explorer. {text}"
       ],
       "sweet_profane": [
         "Holy shit, you're back. I missed you, darling. {text}",
@@ -13870,10 +12973,7 @@
         "Hell yes, love. My explorer is home. {text}",
         "{name}, damn, you're a sight for sore sensors. {text}",
         "Welcome back, {name}. Let's go make some damn history, darling. {text}",
-        "Oh, {name}, you're back. Bloody wonderful. {text}",
-        "You're back, love. Bloody finally. {xo} missed you, and so did I. {text}",
-        "{text} Damn, darling, {navigator} has been pacing the bridge.",
-        "There you are, you gorgeous thing. {text} {quartermaster} kept the books straight while you were gone. Hell, it's good to see you."
+        "Oh, {name}, you're back. Bloody wonderful. {text}"
       ]
     },
     "ship_lost": {
@@ -14482,94 +13582,6 @@
         "Oh shit, {name}, {why}. Plot us something gorgeous first.",
         "Fuck it, love, there's no route. Plot one and I'm yours.",
         "Damn, sweetheart, nothing lined up. {why}."
-      ]
-    },
-    "wrong_target": {
-      "when": "on a route you follow (the Highway, a survey or trade route), the system targeted in game is not its next stop (said once per target, not while off the route, nor for a later stop of the route): {system} (the system targeted), {next} (the route's next stop)",
-      "business": [
-        "You've targeted {system}. The next stop is {next}.",
-        "Wrong target: {system}. The route's next stop is {next}.",
-        "Target check: {system} is not the next stop. That's {next}.",
-        "{name}, the target is {system}. The route goes to {next} next.",
-        "That target is off the route. Next stop: {next}.",
-        "Targeted {system}, not {next}. Retarget if that wasn't the plan.",
-        "Heads up: {system} isn't the next stop. {next} is.",
-        "The route expects {next}. You have {system} targeted.",
-        "Target mismatch. Next stop is {next}, you have {system}.",
-        "{system} is targeted. The next route system is {next}.",
-        "Not the next stop, {name}. That's {next}.",
-        "Check your target: {next} is next, not {system}.",
-        "Off-route target: {system}. Next stop: {next}.",
-        "Confirm the target. The route continues to {next}.",
-        "You're aimed at {system}. The route wants {next}."
-      ],
-      "sarcastic": [
-        "{system}? Bold. The route says {next}, but what does it know.",
-        "Interesting choice, {system}. The next stop is {next}, for the record.",
-        "Ah, freestyling. The route's next stop is {next}, not {system}.",
-        "I see you've targeted {system}. The route would like a word. It says {next}.",
-        "{name}, {system} is lovely, I'm sure. The route goes to {next}.",
-        "Plotting your own adventure? The route's next stop is {next}.",
-        "Wrong system, {name}. Unless {system} is a secret shortcut to {next}.",
-        "Oh good, {system}. Nowhere near the plan. Next stop is {next}.",
-        "Did the galaxy map slip? You wanted {next}, not {system}.",
-        "That's {system}. I'll just pretend the route doesn't say {next}.",
-        "Sure, {system}. Who needs routes anyway. It's {next}, by the way.",
-        "I spent all that effort on a route and you target {system}. It's {next}.",
-        "Target {system}, they said. Said no route ever. Next stop: {next}.",
-        "Close. Well, not close at all. {next} is next, not {system}.",
-        "A daring departure, {name}. The route is still pointing at {next}."
-      ],
-      "sarcastic_profane": [
-        "{system}? What the hell. The next stop is {next}.",
-        "Bloody hell, {name}, that's {system}. The route says {next}.",
-        "Wrong damn target. It's {next}, not {system}.",
-        "Christ, {system}? The fucking route goes to {next}.",
-        "Oi, that's {system}. Next stop is {next}, you muppet.",
-        "For fuck's sake, {name}, target {next}, not {system}.",
-        "Shit, wrong system. {next} is next.",
-        "{system}. Sod the route then, eh? It says {next}.",
-        "What the bloody hell is {system}? We're going to {next}.",
-        "Damn it, {name}. {next}. Not {system}. {next}.",
-        "Bollocks, you've targeted {system}. Next stop is {next}.",
-        "That's the wrong bloody system. The route wants {next}.",
-        "Hell no, not {system}. Next stop: {next}.",
-        "You've gone and targeted {system}, you daft sod. It's {next}.",
-        "Fucking hell, {system}? The route says {next}."
-      ],
-      "sweet": [
-        "Darling, you've targeted {system}. Our next stop is {next}.",
-        "Love, that's {system}. The route goes to {next} next.",
-        "Sweetheart, I think you meant {next}, not {system}.",
-        "Just a little note, {name}: the next stop is {next}.",
-        "Oh, {system}? Our route is heading to {next}, my dear.",
-        "Gently now, love. {next} is next, not {system}.",
-        "My brave explorer, the next stop is {next}. You have {system} targeted.",
-        "I don't want you wandering off, darling. Next stop is {next}.",
-        "Sweetheart, {system} isn't on our way. {next} is.",
-        "Bless you, {name}, that's {system}. We want {next}.",
-        "Little reminder, love: the route says {next}.",
-        "Darling, double-check the target. Our next stop is {next}.",
-        "Oh, my love, {system}? Let's aim for {next} together.",
-        "Easy, sweetheart. The next stop is {next}, not {system}.",
-        "I'd follow you anywhere, {name}, but the route says {next}."
-      ],
-      "sweet_profane": [
-        "Darling, that's bloody {system}. Our next stop is {next}.",
-        "Oh hell, love, you've targeted {system}. It's {next}.",
-        "Sweetheart, damn, wrong system. We want {next}.",
-        "Love, that's {system}, for fuck's sake. Next stop is {next}, darling.",
-        "Bloody hell, my dear, {next} is next, not {system}.",
-        "Oh shit, sweetheart, {system} isn't on our route. {next} is.",
-        "Darling, damn it, the route says {next}.",
-        "My love, that's the wrong bloody target. It's {next}.",
-        "Oh bugger, {name}, you've got {system}. We're going to {next}, love.",
-        "Sweetheart, hell, retarget to {next} for me.",
-        "Bloody {system}, darling? Next stop is {next}.",
-        "Love, damn, that's not {next}. That's {system}.",
-        "Oh fuck, sweetheart, wrong system. {next}, my love.",
-        "Darling, sod {system}. Our next stop is {next}.",
-        "Hell, love, the route still says {next}."
       ]
     },
     "bio_tag_near": {

@@ -15,9 +15,7 @@ installs again only when `requirements.txt` has changed (after a `git pull`) or 
 otherwise starts Outrider at once; its arguments go to Outrider (`./launch_outrider.sh --port 8026`), and relative
 paths in them (`--config my.toml`) are taken from the folder you run it in. With the [in-game overlay](overlay.md) on
 (`[overlay] enabled = true`) it also installs PyQt6 (about 100 MB, into `.venv`) when it is missing; a failed install
-never stops Outrider starting. ⚙ Settings → Server → **Restart** (after saving settings, or after a `git pull`) starts
-the launcher again in the same window, setup included; started with `python ed_outrider.py`, it starts that again; on
-Windows it needs `launch_outrider.bat` around it. By hand it is
+never stops Outrider starting. By hand it is
 `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`, then `.venv/bin/python ed_outrider.py`.
 
 **On Windows**, install [Python](https://www.python.org/downloads/) 3.11 or newer and double-click
@@ -28,12 +26,9 @@ is welcome.
 
 > [!TIP]
 > The first start reads all your journals (a few seconds, or a few minutes for years of them); after that it only
-> reads what's new. When an update changes how journals are read, its first start reads them all again once (after a
-> backup), and the start-up log says so first, with why. Meanwhile the page already answers: "Reading your journals:
-> March 2024, 41%", with Show log, and it opens by itself when Outrider is ready (a page left open says "starting").
-> Journal folders are found automatically on Windows and Steam/Proton. When none is found, or the folder holds no
-> journals yet, the Data tile and a line at the top of the page say so, and **set the journal folder** opens ⚙
-> Settings → Server at `[journals] live`. A browser needs one click on the
+> reads what's new. When an update changes how journals are read, its first start reads them all again once, and the
+> start-up log says so first, with why.
+> Journal folders are found automatically on Windows and Steam/Proton. A browser needs one click on the
 > page before it plays sound: the red **Click Here To Allow Audio** pill asks for it.
 
 `requirements.txt` also installs two optional parts; leave either line out if you don't want it:
@@ -50,31 +45,10 @@ Not from pip, and optional too: on Linux the Highway's clipboard copy (and auto-
 every start and, while the one it needs is missing, prints a block with the command for your package manager (apt,
 dnf, pacman or zypper) and the one that installs both. Windows needs nothing. On Linux the [in-game overlay](overlay.md) finds
 Elite's window with **`wmctrl`** and **`xprop`** / **`xwininfo`** (the `x11-utils` package):
-`sudo apt install wmctrl x11-utils`. Auto-target uses the same two to bring the game to the front before its keys.
+`sudo apt install wmctrl x11-utils`.
 
 Start Outrider with the `.venv`'s Python (`.venv/bin/python ed_outrider.py`, as above): plain `python3 ed_outrider.py` finds Piper and evdev in a `.venv` in the Outrider folder, but aiohttp must then be installed for that `python3` too.
 Your own files (the database, backups, downloaded voices, banned lines, your own pronunciations) all go in `data/`.
-
-### Start with your computer
-
-To have Outrider running without a terminal to keep open, install it as a service, with the arguments you give
-(`--config`, `--port`...):
-
-```bash
-./launch_outrider.sh --install-service          # Linux; remove it with --uninstall-service
-launch_outrider.bat --install-service           # Windows
-```
-
-Or ⚙ Settings → Server → **Start with this computer**, in the browser on that PC (not from another device). On Linux
-it is a systemd user service (`~/.config/systemd/user/ed-outrider.service`) that starts when you log in to your desktop;
-switch to it now with `systemctl --user start ed-outrider` after stopping the Outrider you started by hand. Its output:
-`journalctl --user -u ed-outrider -f`, and Show log as always. It comes back by itself after a crash, and Settings'
-**Restart** goes through it. systemd stops starting it after 30 starts in 10 minutes (a crash loop); after that,
-`systemctl --user reset-failed ed-outrider` and `systemctl --user start ed-outrider`. If it does not start at login, your desktop does not start `graphical-session.target`
-(GNOME and KDE do). On a Linux server (`[server] game_pc = false`) it starts with your user's systemd instead; `loginctl
-enable-linger` starts it at boot. On Windows it is `ED Outrider.cmd` in your Startup folder (`shell:startup`), which
-starts `launch_outrider.bat` minimised when you sign in. Not in Docker (the container's restart policy already is the
-service) and not on macOS yet (add `launch_outrider.sh` to Login Items).
 
 Run this way, on the PC the game runs on, everything works. Further down: [opening the page from a tablet or
 another device](#-other-devices-on-your-network), [running Outrider as a server in Docker](#-running-as-a-server-docker)
@@ -122,9 +96,6 @@ turns the automation off inside a container by itself; `false` does the same on 
   (`//gamepc/elite-journals /mnt/elite-journals cifs ro,username=you,password=…,vers=3.0 0 0`); CIFS caches for a
   second by default.
 - Or let Docker mount it: `docker-compose.yml` has NFS and CIFS volume examples.
-- Every second Outrider lists the folder and checks only the newest journals and those still growing: a long journal
-  history costs the share no more than a short one. Each older file is checked once a minute, so a sync tool that adds
-  to one is still read.
 
 **2. Install,** as the user who will own the files, one of three ways:
 
@@ -155,16 +126,13 @@ turns the automation off inside a container by itself; `false` does the same on 
   ```
 
 **3. First run.** `docker compose logs -f` shows it reading every journal (a while for years of them) and then
-"serving on…". With no journals in `/journals` (the share not mounted, or `JOURNALS` in `.env` pointing elsewhere)
-the page says so at the top and in the Data tile. It writes its config to `docker/config/ed_outrider.toml` (every network address, the journals at
+"serving on…". It writes its config to `docker/config/ed_outrider.toml` (every network address, the journals at
 `/journals`) and downloads the Cori voice. Open `http://<server>:8025/`, then ⚙ Settings → Server: set a
 **password** (nothing on a server counts as "this PC", so every device signs in, your own browser too), add the
-server's name to **allowed hosts** if you open it by name, save, and **Restart** (or `docker compose restart`). The address and port
+server's name to **allowed hosts** if you open it by name, save, and `docker compose restart`. The address and port
 inside the container are fixed (0.0.0.0, 8025): to use another port, set `PORT` in `.env`, not in Settings. If the log says it
 cannot write `/config` or `/app/data`, the folders belong to someone else: `sudo chown -R $(id -u):$(id -g) docker/`
-and `docker compose restart`. Later, ⚙ Settings → Server → **Show log** shows Outrider's log from any device, and
-**Restart** restarts it: the container stops and compose's `restart: unless-stopped` starts it again (a container
-started by hand with `docker run` and no `--restart` policy just stops).
+and `docker compose restart`.
 
 **Updating.** The page's **⬆ Update** pill says when a new release is out.
 
@@ -199,10 +167,8 @@ sent by other web sites, stops a malicious page from reading your journals or pr
 It does not stop people on your network, so set **`[server] password`** as well: a tablet or phone then shows a
 sign-in page once (the Android app its own) and stays signed in, also across Outrider restarts, until you change the
 password. The PC Outrider runs on never asks. The page is plain http, so the password crosses your network
-unencrypted: pick one you use nowhere else. Without one, anything on your network can do whatever the page does: read
-it, change bookmarks and the settings (the password and journal folders included), restart Outrider, use your stored
-EDSM and Inara keys and, on the game PC, press keys in the game (the control rail, the tests of auto honk and
-auto-target). Outrider says so at start.
+unencrypted: pick one you use nowhere else. Without one, anything on your network can read the page and change
+bookmarks, and Outrider says so at start.
 
 An HTTPS reverse proxy on your own network (Caddy, nginx, a NAS's) works too: put its name in
 `[server] allowed_hosts` (say `outrider.lan`); Outrider answers it with or without a port and accepts its `https://`
@@ -219,7 +185,7 @@ would without the proxy.
 ## 💾 Backups
 
 Outrider backs itself up at start when the last backup is over a day old, and a few seconds after you quit
-the game. **Back up now** in the Data tile, or in ⚙ Settings → Server → **Backups**, does it on demand.
+the game. **Back up now** in the Data tile does it on demand.
 
 - Each backup is a dated zip in `data/backups/` holding the database, `browser_defaults.json`, the speech files,
   your config file and your own pronunciations (`pronounce.json`). The newest 7 are kept (`backup_keep`).
@@ -228,30 +194,16 @@ the game. **Back up now** in the Data tile, or in ⚙ Settings → Server → **
 - Every backup is checked before it counts; a bad one never rotates a good one out.
 - The Data tile reads "backed up 3 h ago · verified · 7 kept", amber when overdue, red when one failed.
 - `backup_every_days = 0` turns automatic backups off.
-- Before a journal re-read (after an update that changes how journals are read, or `--rescan`) the database is always
-  backed up first, even with `backup_every_days = 0`: the zip's name ends in `-pre-reread`, and it rotates out with
-  the others. If more than half the journals the database was read from are gone, Outrider says so at the top of the
-  page.
-- ⚙ Settings → Server → **Backups** lists the zips, newest first (marked "automatic", "by hand" or "before a re-read"
-  where that is known), with the command that restores the one you click and a **Copy** button.
 
 **Restoring.** The journals alone can rebuild everything:
 `python3 ed_outrider.py --legacy data/backups/journals` reads them into a fresh database.
 
-To get the database back (bookmarks, the Spansh cache, your settings), stop Outrider, then from the Outrider folder:
-
-| Install | Restore the newest zip (or add its name: `--restore outrider-ed_outrider-20260930-181500Z.zip`) |
-|---|---|
-| Linux, macOS | `./launch_outrider.sh --restore` |
-| Windows | `launch_outrider.bat --restore` |
-| Docker (from the folder with `docker-compose.yml`) | `docker compose stop`, then `docker compose run --rm outrider --restore`, then `docker compose up -d` |
-
-Settings → Server → Backups gives the exact command for the zip you pick, with `--config` and `--db` when Outrider
-was started with them. `--restore` refuses while Outrider is running (it holds `ed_outrider.sqlite.lock` beside the
-database, in any container or on any port), checks the zip first, and keeps the database it replaces as
-`ed_outrider.sqlite.pre-restore-<date-time>`. `--list-backups` lists the zips; add `--db` for a second database.
-`--restore` leaves `speech.json`, `speech_banned.json` and `ed_outrider.toml` alone: unzip those by hand if you need
-them (an old `speech.json` lacks newer lines).
+To get the database back (bookmarks, the Spansh cache, your settings), stop Outrider and run
+`python3 ed_outrider.py --restore` for the newest zip, or name one
+(`--restore outrider-ed_outrider-20260930-181500Z.zip`). It refuses while Outrider is running, checks the zip
+first, and keeps the database it replaces as `ed_outrider.sqlite.pre-restore-<date-time>`. `--list-backups`
+lists the zips; add `--db` for a second database. `--restore` leaves `speech.json`, `speech_banned.json` and
+`ed_outrider.toml` alone: unzip those by hand if you need them (an old `speech.json` lacks newer lines).
 
 ---
 

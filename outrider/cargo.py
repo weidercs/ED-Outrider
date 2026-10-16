@@ -67,79 +67,6 @@ def norm(name):
     return re.sub(r"[^a-z0-9]", "", str(name or "").lower())
 
 
-# Spansh's commodity names (EDCD's, the game market's) whose letters are not the journal's id: "Occupied Escape Pod" is
-# $OccupiedCryoPod_Name;. From EDCD's FDevIDs commodity.csv and rare_commodity.csv, the pairs whose name in Spansh's list
-# (tests/fixtures/spansh_commodities.json, 2026-10-13) does not reduce to the symbol. Every other Spansh name's letters
-# are the journal's id. Recount (S57) stores a name the journal has not given yet under the id this gives.
-SPANSH_IDS = {"Aepyornis Egg": "cetiaepyornisegg", "Agri-Medicines": "agriculturalmedicines",
-              "Albino Quechua Mammoth Meat": "albinoquechuamammoth", "Alya Body Soap": "alyabodilysoap",
-              "Ancient Artefact": "usscargoancientartefact", "Anomaly Particles": "p_particulatesample",
-              "Atmospheric Processors": "atmosphericextractors", "Azure Milk": "bluemilk",
-              "Black Box": "usscargoblackbox", "Bone Fragments": "thargoidbonefragments",
-              "Caustic Tissue Sample": "thargoidgeneratortissuesample", "CD-75 Kitten Brand Coffee": "cd75catcoffee",
-              "Commercial Samples": "comercialsamples", "Crom Silver Fesh": "animaleffigies",
-              "Curated Commodity Package": "curatedcommodity", "Cyst Specimen": "thargoidcystspecimen",
-              "Eden Apples of Aerial": "aerialedenapple", "Encrypted Data Storage": "encripteddatastorage",
-              "Energy Grid Assembly": "powergridassembly", "Experimental Chemicals": "usscargoexperimentalchemicals",
-              "Guardian Casket": "ancientcasket", "Guardian Orb": "ancientorb", "Guardian Relic": "ancientrelic",
-              "Guardian Tablet": "ancienttablet", "Guardian Totem": "ancienttotem", "Guardian Urn": "ancienturn",
-              "H.E. Suits": "hazardousenvironmentsuits", "Haiden Black Brew": "haidneblackbrew",
-              "Hardware Diagnostic Sensor": "diagnosticsensor", "HIP Proto-Squid": "hip41181squid",
-              "Hostages": "hostage", "Impure Spire Mineral": "unknownmineral",
-              "Kachirigin Filter Leeches": "kachiriginleaches", "Kinago Violins": "kinagoinstruments",
-              "Koro Kung Pellets": "korrokungpellets", "Land Enrichment Systems": "terrainenrichmentsystems",
-              "Large Survey Data Cache": "largeexplorationdatacash", "Leathery Eggs": "alieneggs",
-              "Low Temperature Diamonds": "lowtemperaturediamond", "Lucan Onionhead": "transgeniconionhead",
-              "Marine Equipment": "marinesupplies", "Micro-weave Cooling Hoses": "coolinghoses",
-              "Microbial Furnaces": "heliostaticfurnaces", "Military Plans": "usscargomilitaryplans",
-              "Mollusc Brain Tissue": "m_tissuesample_nerves", "Mollusc Fluid": "m_tissuesample_fluid",
-              "Mollusc Membrane": "m3_tissuesample_membrane", "Mollusc Mycelium": "m3_tissuesample_mycelium",
-              "Mollusc Soft Tissue": "m_tissuesample_soft", "Mollusc Spores": "m3_tissuesample_spores",
-              "Muon Imager": "mutomimager", "Narcotics": "basicnarcotics", "Occupied Escape Pod": "occupiedcryopod",
-              "Onionhead Alpha Strain": "onionheada", "Onionhead Beta Strain": "onionheadb",
-              "Onionhead Gamma Strain": "onionheadc", "Ophiuch Exino Artefacts": "ophiuchiexinoartefacts",
-              "Organ Sample": "thargoidorgansample", "Platinum Alloy": "platinumaloy",
-              "Pod Core Tissue": "s_tissuesample_cells", "Pod Dead Tissue": "s_tissuesample_surface",
-              "Pod Mesoglea": "s6_tissuesample_mesoglea", "Pod Outer Tissue": "s6_tissuesample_cells",
-              "Pod Shell Tissue": "s6_tissuesample_coenosarc", "Pod Surface Tissue": "s_tissuesample_core",
-              "Pod Tissue": "s9_tissuesample_shell", "Political Prisoners": "politicalprisoner",
-              "Power Transfer Bus": "powertransferconduits", "Protective Membrane Scrap": "unknownsack",
-              "Prototype Tech": "usscargoprototypetech", "Rajukru Multi-Stoves": "rajukrustoves",
-              "Rare Artwork": "usscargorareartwork", "Rebel Transmissions": "usscargorebeltransmissions",
-              "Sanuma Decorative Meat": "sanumameat", "Semi-Refined Spire Mineral": "unknownrefinedmineral",
-              "Skimmer Components": "skimercomponents", "Small Survey Data Cache": "smallexplorationdatacash",
-              "Tarach Spice": "tarachtorspice", "Technical Blueprints": "usscargotechnicalblueprints",
-              "Thargoid Basilisk Tissue Sample": "thargoidtissuesampletype2",
-              "Thargoid Biological Matter": "unknownbiologicalmatter",
-              "Thargoid Cyclops Tissue Sample": "thargoidtissuesampletype1",
-              "Thargoid Glaive Tissue Sample": "thargoidtissuesampletype6",
-              "Thargoid Hydra Tissue Sample": "thargoidtissuesampletype4", "Thargoid Link": "unknownartifact3",
-              "Thargoid Medusa Tissue Sample": "thargoidtissuesampletype3",
-              "Thargoid Orthrus Tissue Sample": "thargoidtissuesampletype5", "Thargoid Probe": "unknownartifact2",
-              "Thargoid Resin": "unknownresin", "Thargoid Scythe Tissue Sample": "thargoidtissuesampletype7",
-              "Thargoid Sensor": "unknownartifact", "Thargoid Technology Samples": "unknowntechnologysamples",
-              "The Waters of Shintara": "watersofshintara", "Titan Deep Tissue Sample": "thargoidtissuesampletype9a",
-              "Titan Drive Component": "thargoidtitandrivecomponent",
-              "Titan Maw Deep Tissue Sample": "thargoidtissuesampletype10a",
-              "Titan Maw Partial Tissue Sample": "thargoidtissuesampletype10c",
-              "Titan Maw Tissue Sample": "thargoidtissuesampletype10b",
-              "Titan Partial Tissue Sample": "thargoidtissuesampletype9c",
-              "Titan Tissue Sample": "thargoidtissuesampletype9b", "Trade Data": "usscargotradedata",
-              "Trinkets of Hidden Fortune": "trinketsoffortune", "Ultra-Compact Processor Prototypes": "advert1",
-              "Unclassified Relic": "ancientrelictg", "Unoccupied Escape Pod": "unocuppiedescapepod",
-              "Utgaroar Millennial Eggs": "utgaroarmillenialeggs", "Vanayequi Ceratomorpha Fur": "vanayequirhinofur",
-              "Void Extract Coffee": "lftvoidextractcoffee", "Void Opal": "opal", "Wolf Fesh": "wolf1301fesh",
-              "Xenobiological Prison Pod": "thargoidpod", "Xihe Biomorphic Companions": "xihecompanions",
-              "Zeessze Ant Grub Glue": "zeesszeantglue"}
-_SPANSH_BY_NORM = {norm(k): v for k, v in SPANSH_IDS.items()}
-
-
-def spansh_id(name):
-    """The journal's commodity id for a Spansh commodity name: SPANSH_IDS' when its letters differ, else its letters."""
-    k = norm(name)
-    return _SPANSH_BY_NORM.get(k, k)
-
-
 def learn(names, ev):
     """Keep the display names an event gives (Type_Localised, Name_Localised, Commodity_Localised). True if new."""
     new = False
@@ -291,13 +218,6 @@ def avg_text(line):
 # What a carrier line's moves are called (the page's hover text)
 MOVE_WORDS = {"to_carrier": "moved from your ship", "to_ship": "moved to your ship", "bought": "you bought it there",
               "sold": "you sold it there", "others": "sold to your carrier by other players"}
-# CarrierCrewServices' Operation -> the role's state after it ("Replace" hires another crew member: no change)
-CREW_OPERATIONS = {"Activate": "on", "Resume": "on", "Pause": "suspended", "Deactivate": "off"}
-# the carrier's services by CarrierStats' CrewRole, as the tile says them (Exploration is Universal Cartographics)
-CREW_LABELS = {"Exploration": "UC", "VistaGenomics": "Vista", "Refuel": "Refuel", "Repair": "Repair", "Rearm": "Rearm",
-               "Shipyard": "Shipyard", "Outfitting": "Outfitting", "Commodities": "Market", "CarrierFuel": "Tritium depot",
-               "VoucherRedemption": "Redemption office", "BlackMarket": "Secure warehouse",
-               "PioneerSupplies": "Pioneer supplies", "Bartender": "Bar", "Captain": "Captain"}
 
 
 def carrier_fold(carrier_id, events, markets=(), counts=()):
@@ -310,10 +230,8 @@ def carrier_fold(carrier_id, events, markets=(), counts=()):
     Returns {lines: id -> {count, state: confirmed | seen | entered, ts (that state's time), moves: [[ts, delta,
     why]]}, orders: id -> {kind: sell | buy, amount, price}, stats: {cargo, used, depot, ts} (the latest CarrierStats),
     after_stats (the tons your own journaled moves added since it: its total now is cargo + after_stats), market_ts,
-    names (learned from the events), finance: {balance, reserve, available, ts} (the latest CarrierStats' Finance),
-    crew: {roles: role -> on | suspended | off, ts} (its Crew, then each CarrierCrewServices since)}."""
-    st = {"lines": {}, "orders": {}, "stats": None, "after_stats": 0, "market_ts": None, "names": {}, "finance": None,
-          "crew": None}
+    names (learned from the events)}."""
+    st = {"lines": {}, "orders": {}, "stats": None, "after_stats": 0, "market_ts": None, "names": {}}
     if carrier_id is None:
         return st
     feed = [(ts, 0, "ev", ev) for ts, ev in events] + [(ts, 1, "market", items) for ts, items in markets] + \
@@ -362,25 +280,6 @@ def _carrier_event(st, carrier_id, ev, ts):
             if su.get("TotalCapacity") else None
         st["stats"] = {"cargo": su.get("Cargo"), "used": used, "depot": ev.get("FuelLevel"), "ts": ts}
         st["after_stats"] = 0
-        fin = ev.get("Finance")
-        if isinstance(fin, dict) and isinstance(fin.get("CarrierBalance"), int):
-            # AvailableBalance is the balance less the reserve, and can be negative (seen: -1,051,595,783)
-            st["finance"] = {"balance": fin["CarrierBalance"], "reserve": fin.get("ReserveBalance"),
-                             "available": fin.get("AvailableBalance"), "ts": ts}
-        if isinstance(ev.get("Crew"), list):
-            roles = {}
-            for c in ev["Crew"]:
-                if isinstance(c, dict) and isinstance(c.get("CrewRole"), str):
-                    # an inactive role has no Enabled; Activated with Enabled false is a suspended service
-                    roles[c["CrewRole"]] = "off" if not c.get("Activated") else "on" if c.get("Enabled", True) else "suspended"
-            st["crew"] = {"roles": roles, "ts": ts}
-    elif name == "CarrierCrewServices":
-        # a service switched on or off, paused or resumed in the carrier's management, between two CarrierStats
-        state = CREW_OPERATIONS.get(ev.get("Operation"))
-        if ev.get("CarrierID") != carrier_id or not state or not isinstance(ev.get("CrewRole"), str):
-            return
-        crew = st["crew"] or {"roles": {}}
-        st["crew"] = {"roles": dict(crew["roles"], **{ev["CrewRole"]: state}), "ts": ts}
     elif name == "CarrierTradeOrder":
         if ev.get("CarrierID") != carrier_id or ev.get("BlackMarket"):
             return
@@ -514,14 +413,14 @@ def carrier_burn(ly, used, depot):
     return round(5 + ly * (25000 + used + depot) / 200000)
 
 
-def carrier_jumps(depot, hold, used, ly=CARRIER_JUMP_LY, k=1.0):
+def carrier_jumps(depot, hold, used, ly=CARRIER_JUMP_LY):
     """How many jumps of `ly` all the carrier's tritium gives: its depot, topped up from `hold` (the tritium in its
-    cargo, part of `used`) whenever the next jump needs more. Each burn lightens the next jump. k: carrier_trip's."""
+    cargo, part of `used`) whenever the next jump needs more. Each burn lightens the next jump."""
     if not isinstance(depot, (int, float)) or not isinstance(used, (int, float)):
         return None
     depot, hold, used, n = int(depot), int(hold or 0), int(used), 0
     while n < 100000:
-        burn = round(k * carrier_burn(ly, used, depot))
+        burn = carrier_burn(ly, used, depot)
         if depot < burn:
             top = min(CARRIER_DEPOT_MAX - depot, hold)
             depot, hold, used = depot + top, hold - top, used - top   # cargo into the tank: the mass stays
@@ -530,167 +429,6 @@ def carrier_jumps(depot, hold, used, ly=CARRIER_JUMP_LY, k=1.0):
         depot -= burn
         n += 1
     return n
-
-
-def carrier_trip(ly, depot, used, jump_ly=CARRIER_JUMP_LY, k=1.0):
-    """The tritium a trip of `ly` takes (S13): equal legs of at most `jump_ly`, each burned by carrier_burn (scaled by
-    `k`, the carrier's own history when there is one), each lighter than the last by what the legs before burned
-    (topping the depot up from the hold moves weight, it adds none). depot: the tritium in its tank; used: the capacity
-    in use (carrier_burn's). Returns {jumps, burn, depot, short (what the depot lacks), depot_after}, or None."""
-    if not ly or ly <= 0 or not isinstance(depot, (int, float)) or not isinstance(used, (int, float)):
-        return None
-    jumps = max(1, math.ceil(ly / jump_ly - 1e-9))
-    leg, burn = ly / jumps, 0
-    for _ in range(jumps):
-        burn += round(k * carrier_burn(leg, used, max(depot - burn, 0)))
-    return {"jumps": jumps, "burn": burn, "depot": int(depot), "short": max(0, burn - int(depot)),
-            "depot_after": max(0, int(depot) - burn)}
-
-
-def trip_top_up(trip, ly, hold, used, k=1.0):
-    """How the tritium in the hold (`hold` t, part of `used`) covers what carrier_trip's `trip` of `ly` lacks: "before"
-    (moved into the depot before the jumps; the depot holds CARRIER_DEPOT_MAX), "on_the_way" (only by topping the depot
-    up again as it runs down: carrier_jumps), or None (it does not, or nothing is short)."""
-    short = trip["short"]
-    if not short or not hold:
-        return None
-    if short <= min(hold, CARRIER_DEPOT_MAX - trip["depot"]):
-        return "before"
-    if hold >= short and (carrier_jumps(trip["depot"], hold, used, ly=ly / trip["jumps"], k=k) or 0) >= trip["jumps"]:
-        return "on_the_way"
-    return None
-
-
-BURN_SAMPLES = 12          # the factor is the median of the carrier's last this many measured jumps
-BURN_MIN_SAMPLES = 3       # fewer measured jumps than this: no factor (the formula alone, k 1)
-BURN_K_RANGE = (0.8, 1.2)  # the factor is held to this: history scales the formula, it never replaces it
-
-
-def carrier_burns(carrier_id, events, where=None):
-    """Your carrier's measured jumps (S13 B): what each burned against what carrier_burn says, from its history in time
-    order (cargo_events: [(ts, event dict)]). A move is a CarrierJumpRequest not cancelled before a CarrierLocation or
-    CarrierJump in the system it booked (CarrierJump is written only when you are aboard, CarrierLocation at the
-    departure and every login). The depot is read by CarrierStats (FuelLevel) and CarrierDepositFuel (Total - Amount
-    before it, Total after); a jump with exactly one depot reading on each side and no other move between them is a
-    sample: burned = the reading before - the reading after. The mass is the capacity in use when it left: the last
-    CarrierStats' plus your own journaled moves since (carrier_fold's). Distances from the CarrierJumps' StarPos, else `where(id64)` ->
-    (x, y, z) or None. Tritium others donate writes nothing in your journal: such a jump reads low (the median helps).
-    Returns [{ts, ly, burned, formula, k}] oldest first."""
-    pos, readings, moves, mass = {}, [], [], []   # mass: [(ts, capacity in use from then on)]
-    used, system, pending = None, None, None
-    for ts, ev in events:
-        name = ev.get("event")
-        if name == "CarrierJump":
-            if ev.get("MarketID") != carrier_id:
-                continue
-            sp = ev.get("StarPos")
-            if isinstance(sp, list) and len(sp) == 3 and ev.get("SystemAddress") is not None:
-                pos[ev["SystemAddress"]] = tuple(sp)
-        elif name in ("CargoTransfer", "MarketBuy", "MarketSell"):
-            if used is None or (ev.get("_at") if name == "CargoTransfer" else ev.get("MarketID")) != carrier_id:
-                continue
-            if name == "CargoTransfer":
-                for t in ev.get("Transfers") or []:
-                    if isinstance(t, dict):
-                        n = _n(t.get("Count"))
-                        used += n if t.get("Direction") == "tocarrier" else -n if t.get("Direction") == "toship" else 0
-            else:
-                used += _n(ev.get("Count")) * (-1 if name == "MarketBuy" else 1)
-            mass.append((ts, used))
-            continue
-        elif ev.get("CarrierID") != carrier_id:
-            continue
-        if name == "CarrierStats":
-            su = ev.get("SpaceUsage") or {}
-            if su.get("TotalCapacity"):
-                used = su["TotalCapacity"] - (su.get("FreeSpace") or 0) - (su.get("CargoSpaceReserved") or 0)
-                mass.append((ts, used))
-            if isinstance(ev.get("FuelLevel"), int):
-                readings.append((ts, ev["FuelLevel"], ev["FuelLevel"]))
-        elif name == "CarrierDepositFuel":
-            total, amount = ev.get("Total"), ev.get("Amount")
-            if isinstance(total, int) and isinstance(amount, int):
-                readings.append((ts, total - amount, total))
-        elif name == "CarrierJumpRequest":
-            dep = ev.get("DepartureTime")
-            pending = {"id64": ev.get("SystemAddress"), "ts": dep if isinstance(dep, str) and dep >= ts else ts}
-            continue
-        elif name == "CarrierJumpCancelled":
-            pending = None
-            continue
-        if name in ("CarrierLocation", "CarrierJump") and ev.get("SystemAddress") is not None:
-            here = ev["SystemAddress"]
-            if pending and pending["id64"] == here and system is not None and system != here:
-                moves.append((min(pending["ts"], ts), system, here))
-            if pending and pending["id64"] == here:
-                pending = None
-            system = here
-    out = []
-    readings.sort(key=lambda r: r[0])
-    move_ts = sorted(m[0] for m in moves)
-    for ts, a, b in moves:
-        before = [r for r in readings if r[0] <= ts]
-        after = [r for r in readings if r[0] > ts]
-        if not before or not after:
-            continue
-        r1, r2 = before[-1], after[0]
-        if sum(1 for t in move_ts if r1[0] < t <= r2[0]) != 1:
-            continue   # another jump between the two readings
-        pa, pb = pos.get(a) or (where(a) if where else None), pos.get(b) or (where(b) if where else None)
-        used = next((u for t, u in reversed(mass) if t <= ts), None)   # the mass when it left
-        if not pa or not pb or used is None:
-            continue
-        ly = math.dist(pa, pb)
-        burned, formula = r1[2] - r2[1], carrier_burn(ly, used, r1[2])
-        if not 0 < ly <= CARRIER_JUMP_LY + 1 or burned <= 0 or formula <= 0:
-            continue   # longer than a carrier can jump: a move between the two was missed
-        out.append({"ts": ts, "ly": round(ly, 2), "burned": burned, "formula": formula, "k": burned / formula})
-    return out
-
-
-def burn_factor(samples):
-    """The carrier's own factor on carrier_burn (S13 B): the median of its last BURN_SAMPLES measured jumps' burned ÷
-    formula, held to BURN_K_RANGE; {k, n (the jumps it is from), raw (the median before the hold)} or None with fewer
-    than BURN_MIN_SAMPLES."""
-    ks = sorted(s["k"] for s in samples[-BURN_SAMPLES:])
-    if len(ks) < BURN_MIN_SAMPLES:
-        return None
-    mid = len(ks) // 2
-    raw = ks[mid] if len(ks) % 2 else (ks[mid - 1] + ks[mid]) / 2
-    lo, hi = BURN_K_RANGE
-    return {"k": round(min(hi, max(lo, raw)), 3), "n": len(ks), "raw": round(raw, 3)}
-
-
-# ---- the carrier's upkeep ----
-
-# Weekly upkeep in credits: the core (the captain, the market, the tritium depot) and each optional service by its
-# CarrierStats CrewRole, (active, suspended). PUBLISHED figures (the community wiki's), NOT yet checked against the
-# game's carrier Finance screen: the page says "published rates" until they are (the journal has no upkeep figure)
-CARRIER_CORE_UPKEEP = 5_000_000
-CARRIER_UPKEEP = {"Refuel": (1_500_000, 750_000), "Repair": (1_500_000, 750_000), "Rearm": (1_500_000, 750_000),
-                  "Shipyard": (6_500_000, 1_800_000), "Outfitting": (5_000_000, 1_500_000),
-                  "BlackMarket": (2_000_000, 1_250_000), "Exploration": (1_850_000, 700_000),
-                  "VistaGenomics": (1_500_000, 700_000), "Bartender": (1_750_000, 1_250_000),
-                  "VoucherRedemption": (1_850_000, 850_000), "PioneerSupplies": (5_000_000, 1_500_000)}
-UPKEEP_WARN_WEEKS = 4   # the tile's balance line is amber under this many weeks of upkeep (the author's default)
-
-
-def carrier_upkeep(roles):
-    """A week's upkeep from the carrier's crew (carrier_fold's crew roles: role -> on | suspended | off): the core plus
-    each service at its active or suspended rate. A role not in CARRIER_UPKEEP costs nothing extra (the core's own)."""
-    total = CARRIER_CORE_UPKEEP
-    for role, state in (roles or {}).items():
-        rates = CARRIER_UPKEEP.get(role)
-        if rates and state in ("on", "suspended"):
-            total += rates[0 if state == "on" else 1]
-    return total
-
-
-def upkeep_weeks(balance, upkeep):
-    """How many weeks of upkeep the carrier's balance pays (one decimal), None without either."""
-    if not isinstance(balance, (int, float)) or not upkeep:
-        return None
-    return max(0.0, math.floor(balance / upkeep * 10) / 10)
 
 
 def jumps_estimate(ly, laden_range):

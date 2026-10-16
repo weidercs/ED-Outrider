@@ -25,15 +25,9 @@ SEARCH_LY = 10000            # how far the station search reaches
 SEARCH_SIZE = 50             # stations and carriers each, nearest first
 DEFAULT_AGE_DAYS = 30
 FAR_LS = 5000
-# "Trader": any material trader; "Raw", "Manufactured", "Encoded": a trader of that kind (S54)
-SERVICES = ("UC", "Vista", "Repair", "Refuel", "Shipyard", "Outfitting", "Trader", "Raw", "Manufactured", "Encoded")
+SERVICES = ("UC", "Vista", "Repair", "Refuel", "Shipyard", "Outfitting")
 SPANSH_SERVICES = {"Universal Cartographics": "UC", "Vista Genomics": "Vista", "Repair": "Repair", "Refuel": "Refuel",
-                   "Shipyard": "Shipyard", "Outfitting": "Outfitting", "Material Trader": "Trader"}
-# A material trader's kind is Spansh's `material_trader` field, spelled as here, and its station search filters on it
-# (scripts/trader_probe.py, 2026-10-12: tests/fixtures/spansh_traders.json). 7 of the galaxy's 1,639 traders (Colonia's
-# outposts, a megaship) list the service with no kind: they are a "Trader" of no kind, never one guessed from the
-# economy (a Colony economy says nothing). Fleet carriers never have one.
-TRADER_KINDS = ("Raw", "Manufactured", "Encoded")
+                   "Shipyard": "Shipyard", "Outfitting": "Outfitting"}
 # Docking access as Spansh spells it -> the warning the row shows ("All" and your own carrier need none)
 ACCESS = {"Friends": "friends only", "Squadron": "squadron only", "Squadron Friends": "squadron and friends only",
           "None": "closed to visitors", None: "docking not reported"}
@@ -105,10 +99,6 @@ def spansh_rows(results):
         carrier = r.get("type") == CARRIER_TYPE
         services = {SPANSH_SERVICES[s.get("name")] for s in r.get("services") or []
                     if isinstance(s, dict) and s.get("name") in SPANSH_SERVICES}
-        if carrier:
-            services.discard("Trader")
-        elif r.get("material_trader") in TRADER_KINDS:
-            services |= {"Trader", r["material_trader"]}
         xyz = [_num(r.get(k)) for k in ("system_x", "system_y", "system_z")]
         if None in xyz:
             xyz = [None] * 3   # one coordinate missing: no place to measure from (review 2026-10-08 #20)
@@ -138,9 +128,10 @@ def own_row(carrier):
     services = {name for sid, name in (("exploration", "UC"), ("vistagenomics", "Vista"), ("repair", "Repair"),
                                         ("refuel", "Refuel"), ("shipyard", "Shipyard"), ("outfitting", "Outfitting"))
                 if sid in ids}
-    for key, name in (("has_uc", "UC"), ("has_vista", "Vista")):
-        if key in c:   # the carrier summary's word: the newer of its last Docked and its crew (a paused service is off)
-            (services.add if c[key] else services.discard)(name)
+    if c.get("has_uc"):
+        services.add("UC")
+    if c.get("has_vista"):
+        services.add("Vista")
     return {"kind": "carrier", "callsign": str(c.get("callsign") or "").upper(), "name": c.get("name") or "",
             "system": c.get("system"), "id64": c.get("id64"), "x": c["x"], "y": c["y"], "z": c["z"], "ls": 0,
             "services": services, "pads": "L M", "large": True, "medium": True, "access": "yours",
@@ -218,28 +209,14 @@ def nearest(rows, pos, need=(), stations=True, carriers=True, pad=None, age_days
     return {"rows": kept[:limit], "hidden": hidden, "more": max(0, len(kept) - limit)}
 
 
-def trader_need(need):
-    """The material trader a list of services asks for: "Raw", "Manufactured", "Encoded", "Trader" (any kind), or None."""
-    kinds = [n for n in need if n in TRADER_KINDS]
-    return kinds[0] if kinds else "Trader" if "Trader" in need else None
-
-
-def trader_words(trader):
-    """'raw material trader', 'material trader' (any kind)."""
-    return f"{trader.lower()} material trader" if trader in TRADER_KINDS else "material trader"
-
-
 def spoken(result, need=(), kind=None):
-    """The voice's answer ("nearest station", "nearest Vista", "nearest raw material trader"... asked of Outrider): the
-    nearest place and what to know about it, in one sentence or two. kind: "station" or "carrier" when the question named
-    one."""
+    """The voice's answer ("nearest station", "nearest Vista"... asked of Outrider): the nearest place and what to know
+    about it, in one sentence or two. kind: "station" or "carrier" when the question named one."""
     # your own carrier where you are is no answer (you are at it); any other place in this system is the nearest of
     # all, so it stays (review 2026-10-08 #4: every place in your system was skipped)
     rows = [r for r in result["rows"] if not (r.get("here") and r.get("own"))]
-    trader = trader_need(need)
-    what = " and ".join({"UC": "Universal Cartographics", "Vista": "Vista Genomics"}.get(n, n.lower()) for n in need
-                        if n != "Trader" and n not in TRADER_KINDS)
-    place = trader_words(trader) if trader else kind or "place to dock"
+    what = " and ".join({"UC": "Universal Cartographics", "Vista": "Vista Genomics"}.get(n, n.lower()) for n in need)
+    place = kind or "place to dock"
     if not rows:
         return f"No {place} {'with ' + what + ' ' if what else ''}is known nearby with recent enough reports."
     r = rows[0]
@@ -247,10 +224,7 @@ def spoken(result, need=(), kind=None):
     name = r["name"] or r["callsign"]
     where = (f", here in {r['system']}" if r["system"] else ", in this system") if r.get("here") else \
         f", {round(r['ly']):,} light years away{', in ' + r['system'] if r['system'] else ''}"
-    if trader == "Trader":   # any kind asked for: which one this is
-        kinds = [k for k in TRADER_KINDS if k in r["services"]]
-        sort += f" trading {kinds[0].lower()} materials" if kinds else " whose trader's kind is not reported"
-    out = (f"Nearest {place}{' with ' + what if what else ''}: {name}, {'an' if sort[:1] in 'aeiou' else 'a'} {sort}"
+    out = (f"Nearest {place}{' with ' + what if what else ''}: {name}, a {sort}"
            f"{' of the Deep Space Support Array' if r.get('dssa') else ''}{where}.")
     if r["warn"]:
         out += " Careful: " + ", ".join(r["warn"]) + "."

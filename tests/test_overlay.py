@@ -3,7 +3,6 @@ window on the game PC is never opened here (its pure parts are tested in test_ov
 
 Run all: python3 -m unittest discover tests (or scripts/verify.sh).
 """
-import asyncio
 import contextlib
 import io
 import math
@@ -30,55 +29,14 @@ class Settings(unittest.TestCase):
         # no url or password: the overlay is a game-PC feature, drawn from this PC's Outrider only (the author, 2026-10-10)
         self.assertNotIn("url", O.overlay_settings({"overlay": {"url": "http://erangel:8025"}})["overlay"])
 
-    def test_analysis_only_list(self):
-        """D2a: [overlay] analysis_only, the overlay's one list: panel ids kept in PANELS' order, unknown ones dropped
-        with a warning, anything but a list of names the default []."""
-        err = io.StringIO()
-        with contextlib.redirect_stderr(err):
-            got = O.overlay_settings({"overlay": {"analysis_only": ["Bio", "system", "moon", "system"]}})["overlay"]
-        self.assertEqual(got["analysis_only"], ["system", "bio"])
-        self.assertIn("'moon' not a panel", err.getvalue())
-        for bad in ("system", [1], {"system": True}):
-            with contextlib.redirect_stderr(io.StringIO()) as e:
-                self.assertEqual(O.overlay_settings({"overlay": {"analysis_only": bad}})["overlay"]["analysis_only"], [])
-            self.assertIn("analysis_only", e.getvalue())
-        a = O.overlay_settings({})["overlay"]
-        a["analysis_only"].append("now")                                     # one config's list is never another's
-        self.assertEqual(O.overlay_settings({})["overlay"]["analysis_only"], [])
-
-    def test_hide_docked_list(self):
-        """[overlay] hide_docked (the author, 2026-10-14): missing, the default (System, Target, Now, Bio: what Outrider
-        hid before, Now and the Target panel, and the System and Bio panels); a list kept in PANELS' order; the radar is
-        never one (it shows only on a body's surface); anything but a list of names the default, with a warning."""
-        self.assertEqual(O.overlay_settings({})["overlay"]["hide_docked"], ["system", "body", "now", "bio"])
-        self.assertEqual(O.overlay_settings({"overlay": {"hide_docked": []}})["overlay"]["hide_docked"], [])
-        with contextlib.redirect_stderr(io.StringIO()) as e:
-            got = O.overlay_settings({"overlay": {"hide_docked": ["Alerts", "strip", "radar", "moon"]}})["overlay"]["hide_docked"]
-        self.assertEqual(got, ["strip", "alerts"])
-        self.assertIn("'radar', 'moon' not a panel", e.getvalue())
-        for bad in ("now", [1]):
-            with contextlib.redirect_stderr(io.StringIO()) as e:
-                self.assertEqual(O.overlay_settings({"overlay": {"hide_docked": bad}})["overlay"]["hide_docked"],
-                                 list(O.HIDE_DOCKED_DEFAULT))
-            self.assertIn("hide_docked", e.getvalue())
-        a = O.overlay_settings({})["overlay"]
-        a["hide_docked"].append("strip")                                       # one config's list is never another's
-        self.assertEqual(O.overlay_settings({})["overlay"]["hide_docked"], ["system", "body", "now", "bio"])
-        self.assertNotIn("radar", O.DOCKED_PANELS)
-
     def test_written_and_read_back(self):
         """--write-config writes [overlay] with every key, and the file reads back to the same settings."""
         import tomllib
         args = types.SimpleNamespace(**{k: None for k in ("journals", "legacy", "host", "port", "db", "radius")})
-        st = ed_outrider.settings_from({"overlay": {"enabled": True, "theme": "lcars", "radar_range": 1200,
-                                                    "analysis_only": ["now", "bio"], "hide_docked": ["strip", "bio"]}}, args)
+        st = ed_outrider.settings_from({"overlay": {"enabled": True, "theme": "lcars", "radar_range": 1200}}, args)
         text = ed_outrider.config_text(st)
         back = tomllib.loads(text)["overlay"]
-        self.assertEqual((back["enabled"], back["theme"], back["radar_range"], back["analysis_only"], back["hide_docked"]),
-                         (True, "lcars", 1200, ["now", "bio"], ["strip", "bio"]))
-        # a config written before hide_docked: the default, written out as such
-        back = tomllib.loads(ed_outrider.config_text(ed_outrider.settings_from({"overlay": {}}, args)))["overlay"]
-        self.assertEqual(back["hide_docked"], ["system", "body", "now", "bio"])
+        self.assertEqual((back["enabled"], back["theme"], back["radar_range"]), (True, "lcars", 1200))
         self.assertEqual(set(back), set(O.DEFAULTS))
 
 
@@ -181,81 +139,6 @@ class SystemPanel(unittest.TestCase):
                          ["1.0M", "1.0M", "1.00B", "1.25B", "1k", "3k"])
 
 
-# S30: a system you scanned, with its suggested order (the leaving summary): the panel numbers its stops
-LEAVING_PLAN = {"id64": "77", "honked": True, "unscanned": 0, "body_count": 7, "scanned": 6, "bio_pending": [
-    {"body": "B 2", "signals": 1, "genera": ["Fonticulua"], "partial": {}, "potential": 2_000_000, "factor": 1, "dist_ls": 40,
-     "codex_new": True},                                                                         # new to your codex: in the order
-    {"body": "A 3", "signals": 1, "genera": ["Stratum"], "partial": {}, "potential": 19_000_000, "factor": 1, "dist_ls": 600},
-    {"body": "B 1", "signals": 2, "genera": ["Stratum"], "partial": {"Bacterium": 1}, "potential": 19_000_000, "factor": 1,
-     "dist_ls": 900}],
-    "unmapped": [
-    {"body": "A 2", "subtype": "Icy body", "increment": 1_721, "dist_ls": 20},                     # under the 500k level
-    {"body": "A 3", "subtype": "Water world", "terraformable": True, "increment": 900_000, "special": True, "dist_ls": 600}]}
-DETAIL_PLAN = {"name": "Test Sector AB-C d1-2", "leaving": LEAVING_PLAN, "bodies": [
-    {"name": "A", "body_id": 0, "type": "Star", "subtype": "K (Yellow-Orange) Star", "dist_ls": 0, "value_parts": {}, "scanned": True},
-    body("A 2", 20, body_id=4, subtype="Icy body", scanned=True, value_parts={"carto_left": 1_721}),
-    body("B 2", 40, body_id=13, subtype="Rocky body", scanned=True, value_parts={"bio_left": 2_000_000}),
-    body("A 3", 600, body_id=9, notable="WW", terraformable=True, subtype="Water world", scanned=True,
-         value_parts={"carto_left": 2_400_000, "bio_left": 19_000_000}),
-    body("B 1", 900, body_id=12, subtype="Icy body", scanned=True, value_parts={"bio_left": 19_000_000}, organics=[
-        {"genus": "Bacterium", "samples": 1, "done": False, "lost": False}]),
-    body("D 1", 30, body_id=30, value_parts={"carto_left": 2_000_000}),                            # Spansh's only: not yours yet
-    body("C 1", 20, body_id=20, mapped=True, scanned=True, value_max=3_000_000, value_parts={"carto_left": 0}),
-]}
-
-
-class NumberedStops(unittest.TestCase):
-    """S30 (overlay): the system panel numbers the suggested order's stops as Here's schematic does."""
-
-    def test_glyphs(self):
-        self.assertEqual([O.stop_glyph(n) for n in (1, 2, 10, 20, 21, 35)], ["①", "②", "⑩", "⑳", "(21)", "(35)"])
-
-    def test_rows_in_the_order(self):
-        rows, left, under = O.system_rows(DETAIL_PLAN, 500_000, 10_000_000)
-        got = [(r["name"], r["stops"], r["status"], r["value"]) for r in rows]
-        self.assertEqual(got, [("B 2", [1], "TO LAND", 2_000_000),                  # nearest, new to your codex
-                               ("A 3", [2, 3], "MAP + LAND", 21_400_000),           # two stops: bio, then the map
-                               ("B 1", [4], "Bacterium 1/3", 19_000_000),
-                               ("D 1", [], "TO MAP", 2_000_000),                    # not yours: by its value, unnumbered
-                               ("C 1", [], "MAPPED", None)])                         # done: unnumbered, below
-        self.assertEqual(under, 1)                                                  # A 2's 1.7k of mapping
-        # golden parity with plan_items (the page's planItems): the numbers run 1..n in its order
-        plan = O.plan_items(LEAVING_PLAN, 500_000, 10_000_000)
-        self.assertEqual([(it["kind"], it["body"]) for it in plan], [("bio", "B 2"), ("bio", "A 3"), ("map", "A 3"), ("bio", "B 1")])
-        self.assertEqual([n for r in rows for n in r["stops"]], list(range(1, len(plan) + 1)))
-        rows, _, under = O.system_rows(DETAIL_PLAN, 500_000, 10_000_000, codex=False)   # codex finds not counted
-        self.assertEqual([(r["name"], r["stops"]) for r in rows if r["stops"]], [("A 3", [1, 2]), ("B 1", [3])])
-        self.assertEqual(under, 2)                                                  # B 2 is under your levels now
-
-    def test_mapped_by_others_is_not_under_your_levels(self):
-        """A planet you scanned that someone else had mapped (leaving.unmapped's mapped_before): never a stop, as on the
-        page, and not counted "under your levels" either though its mapping would add 2M (over the 500k level)."""
-        leaving = dict(LEAVING_PLAN, unmapped=LEAVING_PLAN["unmapped"] + [
-            {"body": "E 1", "subtype": "High metal content body", "increment": 2_000_000, "dist_ls": 50, "mapped_before": True}])
-        detail = dict(DETAIL_PLAN, leaving=leaving, bodies=DETAIL_PLAN["bodies"] + [
-            body("E 1", 50, body_id=40, scanned=True, value_parts={"carto_left": 2_000_000})])
-        rows, left, under = O.system_rows(detail, 500_000, 10_000_000)
-        self.assertNotIn("E 1", [r["name"] for r in rows])
-        self.assertEqual(under, 1)                                                  # A 2's 1.7k of mapping only
-        foot = [t for t in texts(O.system_panel(detail, O.palette())) if "under your levels" in t]
-        self.assertEqual(len(foot), 1)
-        self.assertIn(" · 1 under your levels", foot[0])
-
-    def test_first_stop(self):
-        plan = O.plan_items(LEAVING_PLAN, 500_000, 10_000_000, first="A 3")
-        self.assertEqual([(it["body"], it["first"]) for it in plan], [("A 3", True), ("A 3", True), ("B 2", False), ("B 1", False)])
-        self.assertEqual([it["body"] for it in O.plan_items(LEAVING_PLAN, 500_000, 10_000_000, first="A 2")],   # not in the list
-                         ["B 2", "A 3", "A 3", "B 1"])
-        rows, _, _ = O.system_rows(DETAIL_PLAN, 500_000, 10_000_000, first="B 1")
-        self.assertEqual([(r["name"], r["stops"]) for r in rows if r["stops"]], [("B 1", [1]), ("B 2", [2]), ("A 3", [3, 4])])
-        p = O.system_panel(DETAIL_PLAN, O.palette(), first="B 1")
-        lines = texts(p)
-        self.assertEqual(lines[1:5], ["Bacterium 1/3 19.0M", "① B 1 Icy", "TO LAND 2.0M", "② B 2 Rocky"])   # (the right column first)
-        self.assertEqual(colour_of(p, "①"), O.palette()["accent"])
-        info = dict(NowPanel.INFO, leaving=LEAVING_PLAN, plan_first="B 1")
-        self.assertIn("Next: bio on B 1: Bacterium 1/3, Stratum", texts(O.now_panel(info, O.palette())))
-
-
 class BodyPanel(unittest.TestCase):
     B = body("B 1", 50, body_id=12, subtype="Icy body", landable=True, gravity=0.42, atmosphere="Thin Neon atmosphere", temperature=27.4,
              first_discovered=True, geo=2, value_parts={"carto_left": 1_200_000, "bio_left": 20_000_000, "bio_factor": 5},
@@ -277,7 +160,6 @@ class BodyPanel(unittest.TestCase):
         self.assertTrue(any(x.startswith("Bacterium Acies") and "2/3" in x and "500 m" in x for x in t))     # the run under way
         self.assertTrue(any(x.startswith("Stratum Tectonicas") and "✪ Lime" in x for x in t))
         self.assertIn("≤19.0M", t)                                                                       # x5: nobody's foot here
-        self.assertIn("1.0M (×5: 5.0M)", t)                                       # the run under way pays, the x5 apart (S62)
         self.assertTrue(any(x.startswith("Worth landing: up to") and "20.0M" in x and "×5" in x for x in t))
 
     def test_heavy_and_undecided(self):
@@ -296,55 +178,6 @@ class BodyPanel(unittest.TestCase):
         self.assertFalse(any(x.startswith("Worth landing") for x in t))
         self.assertIsNone(O.body_panel({"name": "A", "type": "Star"}, O.palette()))
         self.assertIsNone(O.body_panel(None, O.palette()))
-
-
-class TargetPanel(unittest.TestCase):
-    """D1: the Target panel's system (outrider.overlay.target_system_panel)."""
-    def test_system(self):
-        t = {"name": "Ossia", "status": "unreported", "star_class": "K", "hop": {"ly": 21.04, "fuel": 1.234, "left": 1, "reach": True}}
-        p = O.target_system_panel(t, O.palette())
-        self.assertEqual(p["id"], "body")                                    # the Body panel's place and size
-        self.assertEqual(texts(p), ["➜ Ossia", "never reported", "K star ⛽", "21.0 ly · 1.2 t · leaves 1 max jump"])
-        self.assertEqual(colour_of(p, "never reported"), O.palette()["good"])
-        t.update(status="no bodies", source="edsm", edsm={"known": 0, "count": None, "missing": True}, star_class="DA",
-                 hop={"ly": 60.0, "fuel": 0.05, "left": 0, "reach": False}, remaining=7)
-        got = texts(O.target_system_panel(t, O.palette()))
-        self.assertEqual(got, ["➜ Ossia", "next jump of your route · 7 to go", "no scan data (known to EDSM only)", "EDSM: not logged",
-                               "white dwarf ⚡ · ✕ not scoopable", "⚠ throttle down", "60.0 ly · out of range (needs 0.05 t)"])
-        t.update(hop=None, distance=12.345, status="lookup failed", edsm=None, source="spansh", known=4, count=None, star_class=None,
-                 remaining=None)
-        self.assertEqual(texts(O.target_system_panel(t, O.palette()))[1:], ["lookup failed · 4 known", "12.3 ly"])
-        self.assertIsNone(O.target_system_panel({"name": None}, O.palette()))
-        self.assertIsNone(O.target_system_panel(None, O.palette()))
-
-    def test_route_check(self):
-        """S11's one overlay place (the plan-wide review): the followed route's next stop against the game's target, on
-        the Target panel under "next jump of your route": the next stop, a later stop of it, or another system."""
-        t = {"name": "Ossia", "status": "unreported", "remaining": 3,
-             "route_check": {"ok": True, "name": "Pru Aim", "id": "5", "next": "Pru Aim", "ahead": 0}}
-        pal = O.palette()
-        p = O.target_system_panel(t, pal)
-        self.assertEqual(texts(p)[1:3], ["next jump of your route · 3 to go", "✓ the next stop of your route"])
-        self.assertEqual(colour_of(p, "✓ the next stop"), pal["good"])
-        t["route_check"] = {"ok": False, "name": "Ossia", "id": "9", "next": "Pru Aim", "ahead": 2}
-        self.assertEqual(texts(O.target_system_panel(t, pal))[2], "↷ 2 stops ahead on your route")
-        t["route_check"] = {"ok": False, "name": "Ossia", "id": "9", "next": "Pru Aim", "ahead": 0}
-        p = O.target_system_panel(t, pal)
-        self.assertEqual(texts(p)[2], "⚠ not the next stop: Pru Aim")
-        self.assertEqual(colour_of(p, "⚠ not the next stop"), pal["bad"])
-        t["route_check"] = None
-        self.assertEqual(texts(O.target_system_panel(t, pal))[1:], ["next jump of your route · 3 to go", "never reported"])
-
-    def test_hazard_as_the_page(self):
-        """page.js hazardNote: a neutron star, a white dwarf, a black hole (the overlay's Now left out the black hole)."""
-        self.assertEqual([O.star_hazard(c) for c in ("N", "DAV", "H", "SupermassiveBlackHole", "K", "", None)],
-                         ["neutron star", "white dwarf", "black hole", "black hole", "", "", ""])
-        now = O.now_panel({"name": "X", "target": {"name": "Ossia", "status": "visited", "star_class": "H"}}, O.palette())
-        self.assertTrue(any(t.startswith("➜ Ossia") and t.endswith("H ✕ ⚠") for t in texts(now)))
-
-    def test_test_panel_is_the_target(self):
-        body = next(p for p in O.test_panels(O.palette()) if p["id"] == "body")
-        self.assertEqual(texts(body)[:2], ["➜ Test Sector AB-C d1-3  test panel", "next jump of your route · 4 to go"])
 
 
 class Radar(unittest.TestCase):
@@ -423,9 +256,8 @@ class Themes(unittest.TestCase):
 
 
 class FakeProc:
-    def __init__(self, cmd, cwd=None, output=None, **kw):
-        self.cmd, self.cwd, self.code, self.pid, self.signals, self.kw = cmd, cwd, None, 4242, [], kw
-        self.stdout = io.BytesIO(output) if output is not None else None   # the window's piped output (S5b)
+    def __init__(self, cmd, cwd=None):
+        self.cmd, self.cwd, self.code, self.pid, self.signals = cmd, cwd, None, 4242, []
 
     def poll(self):
         return self.code
@@ -456,28 +288,10 @@ class Runner(unittest.TestCase):
         self.pips.append(cmd)
         return types.SimpleNamespace(returncode=self.pip_answer[0], stdout="", stderr=self.pip_answer[1])
 
-    def popen(self, cmd, cwd=None, **kw):
-        p = FakeProc(cmd, cwd, **kw)
+    def popen(self, cmd, cwd=None):
+        p = FakeProc(cmd, cwd)
         self.started.append(p)
         return p
-
-    def test_the_windows_output_reaches_outriders_log(self):
-        """S5b: the window's output is piped (stdout and stderr together, unbuffered, UTF-8) and passed on as Outrider's
-        own lines, so Show log and outrider.log have it; its last words are read before "it stopped" is said."""
-        import subprocess
-        said = []
-        self.run.log = said.append
-        self.run.popen = lambda cmd, cwd=None, **kw: self.popen(cmd, cwd, output="drawing\nTraceback: boom ✗\n".encode(), **kw)
-        self.run.tick(True)
-        p = self.started[0]
-        self.assertEqual((p.kw["stdout"], p.kw["stderr"]), (subprocess.PIPE, subprocess.STDOUT))
-        self.assertEqual((p.kw["env"]["PYTHONUNBUFFERED"], p.kw["env"]["PYTHONIOENCODING"]), ("1", "utf-8"))
-        p.code = 1
-        self.run.tick(True)
-        self.assertEqual(said, ["overlay window: started (pid 4242)", "overlay window: drawing",
-                                "overlay window: Traceback: boom ✗", "overlay window: it stopped (exit 1)"])
-        self.assertTrue(p.stdout.closed)
-        self.assertIsNone(self.run.drain)
 
     def test_runs_while_wanted(self):
         self.run.tick(False)
@@ -689,21 +503,8 @@ class NowPanel(unittest.TestCase):
         self.assertEqual(join(O.route_parts({"kind": "highway", "summary": dict(hw, off_route=True, nearest={"name": "Stop 12", "distance": 8.04})})),
                          "🛣 Off Route: Detour · nearest Stop 12 8.0 ly")
         self.assertEqual(join(O.route_parts({"kind": "highway", "summary": dict(hw, complete=True)})), "🛣 Highway complete")
-        # S1: short of the refuel stop, in red; at a refuel stop, how much to scoop; a later hop's too-heavy jump named
-        short = {"need_t": 24.3, "max_t": 36.0, "have_t": 10.0, "refuel_at": "Stop 42", "jumps": 4, "end": "refuel", "here_refuel": False}
-        p = O.route_parts({"kind": "highway", "summary": dict(hw, short=short)})
-        self.assertEqual(p[-1], (" · ⚠ fuel won't reach the refuel stop: Stop 42 in 4 jumps · scoop to ≥ 24.3 t, at most 36.0 t", "bad"))
-        p = O.route_parts({"kind": "highway", "summary": dict(hw, short=dict(short, here_refuel=True, max_t=None, jumps=1, end="end"))})
-        self.assertEqual(p[-1], (" · ⛽ scoop to ≥ 24.3 t to reach Stop 42 in 1 jump", "warn"))
-        p = O.route_parts({"kind": "highway", "summary": dict(hw, short=dict(short, need_t=None, max_t=None))})
-        self.assertTrue(join(p).endswith("Stop 42 in 4 jumps · no amount of fuel makes it"))
-        p = O.route_parts({"kind": "highway", "summary": dict(hw, heavy={"need_t": 36.07, "have_t": 160, "next": "Far C", "hop": 3})})
-        self.assertEqual(p[-1], (" · ⚠ too much fuel for the jump to Far C: ≤ 36 t, you have 160 t", "bad"))
-        rc ={"kind": "exo", "index": 2, "at": 1, "total": 9, "left_here": 2, "next": {"name": "Pru Aim", "jumps": 3, "distance": None}}
+        rc = {"kind": "exo", "index": 2, "at": 1, "total": 9, "left_here": 2, "next": {"name": "Pru Aim", "jumps": 3, "distance": None}}
         self.assertEqual(join(O.route_parts({"kind": "riches", "summary": rc})), "🧬 Next: Pru Aim · 3 jumps · 2 of 9 · 2 species to sample here")
-        # S12: finished systems the next stop passes over (a survey route only); S11's mark is the Target panel's alone
-        self.assertEqual(join(O.route_parts({"kind": "riches", "summary": dict(rc, skipped=2, target_check={"ok": True, "next": "Pru Aim"})})),
-                         "🧬 Next: Pru Aim · 3 jumps · 2 of 9 · skipping 2 done · 2 species to sample here")
         self.assertEqual(O.route_parts(None), [])
         bx = {"label": "Smojooe KL-P d5", "name": "Smojooe KL-P d5-41", "n": 41, "spansh": False}
         self.assertEqual(join(O.boxel_parts(bx)), "▦ Boxel: next Smojooe KL-P d5-41 · to try")
@@ -769,10 +570,6 @@ class NowPanel(unittest.TestCase):
         self.assertFalse(any(t.startswith("Next") for t in lines))             # the body's card instead of Next
         clear = texts(O.now_panel(dict(info, sampling=dict(info["sampling"], clear=True, to_go=0, nearest=540)), pal))
         self.assertIn("Bacterium 2/3 · ✓ clear to sample (540 of 500 m)", clear)
-        # S62: what the run pays from sample 1, the x5 first footfall apart
-        pays = texts(O.now_panel(dict(info, sampling=dict(info["sampling"], samples=1, value=1_000_000, factor=5)), pal))
-        self.assertIn("Bacterium 1/3 · 1.0M (×5: 5.0M) · 180 m to go (320 of 500 m)", pays)
-        self.assertEqual((O.run_pays(1_000_000, 5), O.run_pays(1_000_000, 1), O.run_pays(None, 5)), ("1.0M (×5: 5.0M)", "1.0M", ""))
 
 
 BIO_DETAIL = {"name": "Drojau BJ-A a41-3", "bodies": [
@@ -966,69 +763,6 @@ class RoutePanel(unittest.TestCase):
         self.assertEqual(O.PANEL_NAMES["route"], "Route")
         test = O.test_panels(O.palette())[-1]
         self.assertEqual((test["id"], texts(test)[0]), ("route", "Route  to Test Sector AB-C d1-9  test panel"))
-def alert(title, t, body="", danger=False, kind="find"):
-    return {"kind": kind, "title": title, "body": body, "danger": danger, "t": t}
-
-
-class AlertsPanel(unittest.TestCase):
-    """S26: the page's alerts on the overlay for a few seconds (the author: 8 s, 15 s for danger, placed in Arrange
-    mode like the other panels)."""
-
-    def test_entry_checked(self):
-        e, why = O.alert_entry({"kind": "rare_star", "title": " ⭐ A  black hole ", "body": "the main star", "danger": False}, 50)
-        self.assertIsNone(why)
-        self.assertEqual(e, {"kind": "rare_star", "title": "⭐ A black hole", "body": "the main star", "danger": False, "t": 50})
-        self.assertEqual(O.alert_entry({"kind": "fuel", "title": "Fuel low"}, 1)[0]["body"], "")   # body and danger optional
-        for bad in (None, [], {"title": "x"}, {"kind": "Find!", "title": "x"}, {"kind": "find", "title": ""},
-                    {"kind": "find", "title": "x" * (O.ALERT_TITLE_MAX + 1)}, {"kind": "find", "title": "x", "body": 3},
-                    {"kind": "find", "title": "x", "body": "y" * (O.ALERT_BODY_MAX + 1)},
-                    {"kind": "find", "title": "x", "danger": "yes"}, {"kind": "find", "title": "x", "sound": "chime"}):
-            self.assertIsNone(O.alert_entry(bad, 1)[0], bad)
-
-    def test_kept_and_deduped(self):
-        """Every page window posts each alert (the tablet too): the same title and text within ALERT_SAME_S counts once;
-        the newest ALERT_KEEP are kept."""
-        kept = []
-        self.assertTrue(O.alert_add(kept, alert("Fuel low", 100)))
-        self.assertFalse(O.alert_add(kept, alert("Fuel low", 100 + O.ALERT_SAME_S - 1)))   # another window's copy
-        self.assertTrue(O.alert_add(kept, alert("Fuel low", 100, body="2 jumps left")))     # other text: another alert
-        self.assertTrue(O.alert_add(kept, alert("Fuel low", 100 + O.ALERT_SAME_S)))         # later: again
-        for i in range(10):
-            O.alert_add(kept, alert(f"Find {i}", 200 + i))
-        self.assertEqual([a["title"] for a in kept], [f"Find {i}" for i in range(10 - O.ALERT_KEEP, 10)])
-
-    def test_panel(self):
-        pal = O.palette()
-        kept = [alert("Oldest", 100), alert("Interdicted", 101, "you submitted", danger=True), alert("Second", 102),
-                alert("Newest", 103, "a long text " * 30)]
-        p = O.alerts_panel(kept, pal, now=104)
-        lines = texts(p)
-        self.assertEqual([lines[0], lines[1], lines[-2], lines[-1]], ["Newest", lines[1], "Interdicted", "you submitted"])
-        self.assertNotIn("Oldest", lines)                                          # three at most, newest first
-        self.assertEqual(lines[1 + O.ALERT_BODY_ROWS], "Second")                  # the long text wrapped to two rows,
-        self.assertTrue(lines[O.ALERT_BODY_ROWS].endswith("…"))                    # then cut
-        self.assertTrue(all(O.text_width(t) <= O.ALERT_W - 2 * O.PAD for t in lines))
-        self.assertEqual((p["id"], p["frame"], colour_of(p, "Interdicted")), ("alerts", pal["bad"], pal["bad"]))
-        self.assertEqual(colour_of(p, "Newest"), pal["text"])
-        [box] = [i for i in p["items"] if i["t"] == "rect"]                        # the danger alert framed in red
-        self.assertEqual(box["c"], pal["bad"])
-        self.assertTrue(all(0 <= i.get("y", 0) <= p["h"] for i in p["items"]))
-        # 8 s each, 15 for danger
-        after = O.alerts_panel(kept, pal, now=101 + O.ALERT_SECONDS + 2)
-        self.assertEqual(texts(after), ["Interdicted", "you submitted"])
-        self.assertIsNone(O.alerts_panel(kept, pal, now=101 + O.ALERT_DANGER_SECONDS))
-        self.assertEqual(O.alerts_panel([alert("Calm", 100)], pal, now=101)["frame"], pal["frame"])
-        self.assertIsNone(O.alerts_panel([], pal, now=1))
-
-    def test_setting_and_place(self):
-        self.assertFalse(O.overlay_settings({})["overlay"]["alerts_panel"])           # optional: off by default
-        self.assertTrue(O.overlay_settings({"overlay": {"alerts_panel": True}})["overlay"]["alerts_panel"])
-        lay = O.clean_layout({"strip": {"y": 0.01}})                                 # a layout from before: filled in
-        self.assertEqual(lay["alerts"]["corner"], "n")                              # top centre, under the strip
-        self.assertGreater(lay["alerts"]["y"], lay["strip"]["y"])
-        self.assertEqual(O.layout_update(None, {"alerts": {"y": 0.2}})[0]["alerts"]["y"], 0.2)
-        self.assertEqual(O.analysis_list(["alerts"]), ["alerts"])
-        self.assertEqual(O.PANEL_NAMES["alerts"], "Alerts")
 
 
 class Server(unittest.TestCase):
@@ -1106,9 +840,10 @@ class Server(unittest.TestCase):
     def test_switches(self):
         out, status = self.state.overlay_set({"enabled": True, "theme": "elite", "panels": {"radar": False}, "test": True}, now=50)
         self.assertEqual(status, 200)
-        self.assertEqual((out["enabled"], out["theme"], out["panels"], out["test"], out["analysis_only"]),
+        self.assertEqual((out["enabled"], out["theme"], out["panels"], out["test"]),
                          (True, "elite", {"system": True, "body": True, "radar": False, "strip": False, "now": False, "bio": False,
-                                          "alerts": False, "route": False}, O.TEST_SECONDS, []))
+                                          "route": False},
+                          O.TEST_SECONDS))
         with open(self.state.config_path, encoding="utf-8") as f:   # written for the next start
             text = f.read()
         for line in ('enabled = true', 'theme = "elite"', 'radar = false'):
@@ -1122,19 +857,8 @@ class Server(unittest.TestCase):
         self.state.overlay_set({"arrange": True}, now=200)
         self.state.overlay_set({"arrange": False}, now=201)
         self.assertFalse(self.state.overlay_view(now=202)["arrange"])
-        out, _ = self.state.overlay_set({"analysis_only": ["bio", "system"]}, now=250)   # D2a: the whole list
-        self.assertEqual((out["analysis_only"], self.state.overlay_cfg["analysis_only"]), (["system", "bio"], ["system", "bio"]))
-        with open(self.state.config_path, encoding="utf-8") as f:
-            self.assertIn('analysis_only = ["system", "bio"]', f.read())
-        self.assertEqual(self.state.overlay_set({"analysis_only": []}, now=251)[0]["analysis_only"], [])
-        self.assertEqual(out["hide_docked"], ["system", "body", "now", "bio"])          # the default, as the page shows it
-        out, _ = self.state.overlay_set({"hide_docked": ["alerts", "now"]}, now=252)  # the whole list
-        self.assertEqual((out["hide_docked"], self.state.overlay_cfg["hide_docked"]), (["now", "alerts"], ["now", "alerts"]))
-        with open(self.state.config_path, encoding="utf-8") as f:
-            self.assertIn('hide_docked = ["now", "alerts"]', f.read())
         for bad in (None, {}, {"enabled": "yes"}, {"theme": "neon"}, {"panels": {"map": True}}, {"panels": {}}, {"test": 1},
-                    {"volume": 3}, {"analysis_only": ["map"]}, {"analysis_only": "bio"}, {"analysis_only": [True]},
-                    {"hide_docked": ["radar"]}, {"hide_docked": "now"}):
+                    {"volume": 3}):
             self.assertEqual(self.state.overlay_set(bad, now=300)[1], 400, bad)
 
     def test_system_panel_shows_in_supercruise(self):
@@ -1160,50 +884,6 @@ class Server(unittest.TestCase):
         self.assertEqual(self.state.overlay_panels(now=1010), [])
         self.state.overlay_cfg.update(system_panel=True, enabled=False)
         self.assertEqual(self.state.overlay_panels(now=1010), [])
-
-    def test_first_stop_for_every_window(self):
-        """S30: the first stop picked on Here's schematic (POST /api/plan/first) is kept on the server, for the system
-        you are in only: the overlay's system and Now panels follow it, another system ignores it."""
-        from aiohttp.test_utils import TestClient, TestServer
-        self.state.journals.handle({"event": "FSDJump", "timestamp": ed_outrider.iso_ts(1000), "StarSystem": "Test Sector AB-C d1-2",
-                                    "SystemAddress": 77, "StarPos": [0, 0, 0]})
-        self.state.system_detail = lambda id64: DETAIL_PLAN if id64 == 77 else None
-        self.state.overlay_cfg.update(enabled=True, now_panel=True)
-        self.state.journals.status_json = {"live": True, "flags": ed_outrider.FLAG_SUPERCRUISE, "gui_focus": 0}
-        panel = lambda pid: next(texts(p) for p in self.state.overlay_panels(now=1010) if p["id"] == pid)
-        self.assertIn("① B 2 Rocky", panel("system"))
-
-        async def go():
-            async with TestClient(TestServer(ed_outrider.make_app(self.state))) as c:
-                post = lambda body: c.post("/api/plan/first", json=body)
-                out = [(await post({"id64": "77", "body": "B 1"})).status]
-                out.append(self.state.plan_first())
-                out += [(await post(b)).status for b in ({"id64": "78", "body": "B 1"}, {"id64": "77", "body": 5}, {"body": "B 1"},
-                                                         {"id64": "77", "body": "x" * 101})]
-                return out
-        ok, kept, elsewhere, bad, no_id, long = asyncio.run(go())
-        self.assertEqual((ok, kept, elsewhere, bad, no_id, long), (200, {"id64": "77", "body": "B 1"}, 409, 400, 400, 400))
-        self.assertEqual(self.state.payload()["plan_first"], {"id64": "77", "body": "B 1"})
-        self.assertEqual(panel("system")[2:5], ["① B 1 Icy", "TO LAND 2.0M", "② B 2 Rocky"])
-        self.assertTrue(any(t.startswith("Next: bio on B 1") for t in panel("now")))
-        self.assertTrue(self.state.set_plan_first(77, None))                         # ↺ order: the suggested order again
-        self.assertIsNone(self.state.plan_first())
-        self.assertIn("① B 2 Rocky", panel("system"))
-        self.state.set_plan_first(77, "B 1")
-        self.state.journals.handle({"event": "FSDJump", "timestamp": ed_outrider.iso_ts(2000), "StarSystem": "Elsewhere",
-                                    "SystemAddress": 78, "StarPos": [5, 0, 0]})
-        self.assertIsNone(self.state.plan_first())                                   # another system: forgotten
-        self.state.journals.handle({"event": "FSDJump", "timestamp": ed_outrider.iso_ts(3000), "StarSystem": "Test Sector AB-C d1-2",
-                                    "SystemAddress": 77, "StarPos": [0, 0, 0]})
-        self.assertIsNone(self.state.plan_first())                                   # and back again: still forgotten
-        self.state.set_plan_first(77, "B 1")
-        self.state.journals.handle({"event": "Location", "timestamp": ed_outrider.iso_ts(3100), "StarSystem": "Test Sector AB-C d1-2",
-                                    "SystemAddress": 77, "StarPos": [0, 0, 0]})
-        self.assertEqual(self.state.plan_first_body(), "B 1")                        # a relog here keeps it
-        self.state.journals.handle({"event": "FSDJump", "timestamp": ed_outrider.iso_ts(1500), "StarSystem": "Elsewhere",
-                                    "SystemAddress": 78, "StarPos": [5, 0, 0]})
-        self.assertEqual(self.state.plan_first_body(), "B 1")                        # an older arrival read late: kept
-        self.assertNotIn("plan_first", ed_outrider.RESET_JOURNAL_DATA)              # live-only: a re-read keeps it
 
     def test_nothing_while_the_game_loads(self):
         """After a crash the old Status.json still says live: the relaunched game's loading screens, before the menu
@@ -1231,99 +911,26 @@ class Server(unittest.TestCase):
                   "SystemAddress": 77, "StarPos": [0, 0, 0]})   # the same second as the LoadGame: loaded
         self.assertEqual(shown(), ["system"])
 
-    def target_setup(self):
+    def test_body_panel_shows_flying_near_or_heading_to(self):
         self.state.journals.handle({"event": "FSDJump", "timestamp": ed_outrider.iso_ts(1000), "StarSystem": "Test Sector AB-C d1-2",
                                     "SystemAddress": 77, "StarPos": [0, 0, 0]})
         self.state.system_detail = lambda id64: DETAIL if id64 == 77 else None
         self.state.overlay_cfg.update(enabled=True, system_panel=False)
-        st = {"live": True, "flags": ed_outrider.FLAG_IN_MAIN_SHIP | ed_outrider.FLAG_SUPERCRUISE, "gui_focus": 0}
+        ship = ed_outrider.FLAG_IN_MAIN_SHIP
+        st = {"live": True, "flags": ship, "gui_focus": 0, "body": "Test Sector AB-C d1-2 B 1"}
         self.state.journals.status_json = st
-        return st
-
-    def target(self, now=1010):
-        """The Target panel's title, or None when it is not shown."""
-        got = [p for p in self.state.overlay_panels(now=now) if p["id"] == "body"]
-        return got[0]["items"][0]["runs"][0][0] if got else None
-
-    def test_target_panel_body_targeted_else_system(self):
-        """D1: outside a body's zone the Target panel shows the body targeted in this system, else the system targeted,
-        else nothing (no "body you fly near" fallback); its id stays "body", so the Body panel's place and size apply."""
-        st = self.target_setup()
-        self.assertEqual(O.PANEL_NAMES["body"], "Target")
-        self.assertIsNone(self.target())                                            # nothing targeted: hidden
-        st["body"] = "Test Sector AB-C d1-2 B 1"                                   # near a body, no altitude: no zone
-        self.assertIsNone(self.target())
+        self.assertEqual([p["items"][0]["runs"][0][0] for p in self.state.overlay_panels(now=1010)], ["B 1"])   # near it
         st.update(destination={"System": 77, "Body": 9, "Name": "Test Sector AB-C d1-2 A 3"})
-        self.assertEqual(self.target(), "A 3")                                      # the body targeted
+        self.assertEqual([p["items"][0]["runs"][0][0] for p in self.state.overlay_panels(now=1010)], ["A 3"])   # targeted wins
+        # a station or a mining site targeted is no body: the one you are near stays (review 2026-10-11)
+        st.update(destination={"System": 77, "Body": 40, "Name": "Harper Dock"})
+        self.assertEqual([p["items"][0]["runs"][0][0] for p in self.state.overlay_panels(now=1010)], ["B 1"])
         st.update(destination={"System": 77, "Body": 13, "Name": "$SAA_Unknown_Signal:#type=$PlanetaryMiningLocation_Name;:#index=3;"})
-        self.assertEqual(self.target(), "B 2")                                      # a mining site: its planet
-        self.state.journals.handle({"event": "FSDTarget", "timestamp": ed_outrider.iso_ts(1005), "Name": "Ossia",
-                                    "SystemAddress": 99, "StarClass": "H", "RemainingJumpsInRoute": 4})
-        self.assertEqual(self.state.journals.target["remaining"], 4)                # kept for "next jump · 4 to go"
-        self.assertEqual(self.target(), "B 2")                                      # a body targeted beats the system
-        st.update(destination={"System": 77, "Body": 40, "Name": "Harper Dock"})   # a station is no body: the system
-        p = next(p for p in self.state.overlay_panels(now=1010) if p["id"] == "body")
-        self.assertEqual(texts(p)[:3], ["➜ Ossia", "next jump of your route · 4 to go", "checking…"])   # lookup not in yet
-        self.assertIn("black hole · ✕ not scoopable · ⚠ throttle down", texts(p))
-        # the lookup lands for this target: its verdict, counts and EDSM's; the Nearby row's value and notables
-        self.state.target = dict(self.state.journals.target, status="partial", known=3, count=12, source="spansh",
-                                 edsm={"known": 5, "count": 12})
-        self.state.systems[99] = {"distance": 38.24, "notable": {"WW": 2, "T": 1},
-                                  "value_parts": {"carto_now": 0, "carto_left": 12_300_000, "bio_now": 0, "bio_left": 40_000_000}}
-        t = texts(next(p for p in self.state.overlay_panels(now=1010) if p["id"] == "body"))
-        self.assertEqual(t[2:], ["partly scanned · 3/12 known · EDSM 5/12", "black hole · ✕ not scoopable · ⚠ throttle down",
-                                 "38.2 ly", "~12.3M scan+map · bio up to 40.0M · WW×2 T"])
-        self.state.target = dict(self.state.target, ts="older")                    # a verdict for an older target: checking
-        self.assertIn("checking…", texts(next(p for p in self.state.overlay_panels(now=1010) if p["id"] == "body")))
-        st["flags"] |= ed_outrider.FLAG_DOCKED                                       # docked: hidden (outside the galaxy map)
-        self.assertIsNone(self.target())
-        st["flags"] = ed_outrider.FLAG_IN_MAIN_SHIP | ed_outrider.FLAG_LANDED       # landed: the radar's
-        self.assertIsNone(self.target())
-        st["flags"] = ed_outrider.FLAG_IN_MAIN_SHIP
-        self.state.journals.handle({"event": "FSDJump", "timestamp": ed_outrider.iso_ts(1100), "StarSystem": "Ossia",
-                                    "SystemAddress": 99, "StarPos": [30, 0, 0]})
-        self.assertIsNone(self.target(now=1110))                                    # arrived: the target is gone
-
-    def test_target_panel_near_body_zone(self):
-        """D1 (the author's final rule): inside the near-body zone (Status.json names the body and gives an altitude)
-        the panel shows that body, even over a target; after leaving it the target again, but only once 5 s out of the
-        zone (its edge bounces)."""
-        st = self.target_setup()
+        self.assertEqual([p["items"][0]["runs"][0][0] for p in self.state.overlay_panels(now=1010)], ["B 2"])   # its planet
         st.update(destination={"System": 77, "Body": 9, "Name": "Test Sector AB-C d1-2 A 3"})
-        self.assertEqual(self.target(now=1010), "A 3")
-        st.update(body="Test Sector AB-C d1-2 B 1", alt=480_000)                  # in B 1's zone (ApproachBody's point)
-        self.assertEqual(self.target(now=1011), "B 1")                              # at once, over the target
-        st.update(body=None, alt=None)                                              # out of the zone
-        self.assertEqual(self.target(now=1012), "B 1")                              # kept for a while
-        self.assertEqual(self.target(now=1011 + ed_outrider.TARGET_ZONE_LINGER_S - 0.5), "B 1")
-        self.assertEqual(self.target(now=1011 + ed_outrider.TARGET_ZONE_LINGER_S), "A 3")   # then the target again
-        st.update(body="Test Sector AB-C d1-2 B 1", alt=60_000)                   # back in: at once
-        self.assertEqual(self.target(now=1030), "B 1")
-        st.update(body="Test Sector AB-C d1-2 C 9", alt=1000)                     # a body nothing is known of: the target
-        self.assertEqual(self.target(now=1031), "A 3")
-        st.update(body=None, alt=None, destination=None)
-        self.state.journals.handle({"event": "FSDJump", "timestamp": ed_outrider.iso_ts(1032), "StarSystem": "Elsewhere",
-                                    "SystemAddress": 78, "StarPos": [5, 0, 0]})
-        self.state.overlay_zone = {"system": 77, "body": "B 1", "t": 1032}          # left in another system: never kept
-        self.assertIsNone(self.target(now=1033))
-
-    def test_target_panel_over_the_galaxy_map(self):
-        """D1: the galaxy map is the one screen the overlay does not leave: the Target panel alone, with the system
-        targeted there (even docked, even in a body's zone); the system map and the rest still hide every panel."""
-        st = self.target_setup()
-        self.state.overlay_cfg.update(system_panel=True, strip_panel=True, now_panel=True, bio_panel=True)
-        st.update(body="Test Sector AB-C d1-2 B 1", alt=2000, destination={"System": 77, "Body": 9, "Name": "A 3"},
-                  gui_focus=ed_outrider.OVERLAY_GALAXY_MAP, flags=ed_outrider.FLAG_IN_MAIN_SHIP | ed_outrider.FLAG_DOCKED)
-        self.assertEqual(self.state.overlay_panels(now=1010), [])                  # no system targeted: nothing
-        self.state.journals.handle({"event": "FSDTarget", "timestamp": ed_outrider.iso_ts(1005), "Name": "Ossia",
-                                    "SystemAddress": 99, "StarClass": "K", "RemainingJumpsInRoute": 1})
-        got = self.state.overlay_panels(now=1010)
-        self.assertEqual([(p["id"], p["items"][0]["runs"][0][0]) for p in got], [("body", "➜ Ossia")])
-        self.assertFalse(any("next jump" in x for x in texts(got[0])))              # a lone target: no route words
-        self.state.overlay_cfg.update(body_panel=False)
+        st["flags"] = ship | ed_outrider.FLAG_LANDED                                                    # landed: the radar's
         self.assertEqual(self.state.overlay_panels(now=1010), [])
-        self.state.overlay_cfg.update(body_panel=True)
-        st["gui_focus"] = 7                                                         # the system map: nothing
+        st.update(flags=ship, destination=None, body=None)                                             # nothing near
         self.assertEqual(self.state.overlay_panels(now=1010), [])
 
     def test_now_heads_only_for_a_body_of_this_system(self):
@@ -1341,95 +948,6 @@ class Server(unittest.TestCase):
         self.assertEqual((info()["destination"], info()["destination_ls"]), ("B 2", 70))   # the site's planet
         st["destination"] = {"System": 77, "Body": 9, "Name": "Test Sector AB-C d1-2 A 3"}
         self.assertEqual((info()["destination"], info()["destination_ls"]), ("A 3", 900))
-
-    def test_analysis_only_panels(self):
-        """D2a: a panel marked analysis only shows in your ship only with the HUD in analysis mode; in the SRV, on foot,
-        over the galaxy map and for the test panels the mark is ignored."""
-        st = self.target_setup()
-        self.state.overlay_cfg.update(system_panel=True, strip_panel=True, analysis_only=["system"])
-        ship, sc, hud = ed_outrider.FLAG_IN_MAIN_SHIP, ed_outrider.FLAG_SUPERCRUISE, ed_outrider.FLAG_HUD_ANALYSIS
-        shown = lambda: [p["id"] for p in self.state.overlay_panels(now=1010)]
-        st["flags"] = ship | sc                                                     # combat mode: the system panel off
-        self.assertEqual(shown(), ["strip"])
-        st["flags"] = ship | sc | hud                                               # analysis mode: on
-        self.assertEqual(shown(), ["system", "strip"])
-        self.state.overlay_cfg.update(analysis_only=["strip"])
-        st.update(flags=ed_outrider.FLAG_IN_SRV, flags2=0)                          # the SRV has no HUD modes: shown
-        self.assertEqual(shown(), ["strip"])
-        st.update(flags=0, flags2=1)                                                # on foot: shown
-        self.assertEqual(shown(), ["strip"])
-        self.state.overlay_cfg.update(analysis_only=["body"])
-        self.state.journals.handle({"event": "FSDTarget", "timestamp": ed_outrider.iso_ts(1005), "Name": "Ossia",
-                                    "SystemAddress": 99, "StarClass": "K"})
-        st.update(flags=ship, flags2=0, gui_focus=ed_outrider.OVERLAY_GALAXY_MAP)  # the galaxy map: the target shows
-        self.assertEqual(shown(), ["body"])
-        st["gui_focus"] = 0
-        self.assertEqual(shown(), ["strip"])
-        self.state.overlay_set({"test": True}, now=1000)                            # the test panels: all of them
-        self.assertEqual(shown(), list(O.PANELS))
-
-    def test_hidden_while_docked(self):
-        """[overlay] hide_docked (the author, 2026-10-14): each panel docked (the ship's flag, or on foot in a station)
-        shows or hides as its box says; by default System, Target, Now and Bio hide, Strip and Alerts show; the Target
-        panel still shows over the galaxy map, docked; undocked nothing is hidden by it."""
-        st = self.target_setup()
-        self.state.journals.handle({"event": "FSDTarget", "timestamp": ed_outrider.iso_ts(1005), "Name": "Ossia",
-                                    "SystemAddress": 99, "StarClass": "K"})
-        self.state.overlay_cfg.update(strip_panel=True, now_panel=True, bio_panel=True, alerts_panel=True)
-        self.state.overlay_alert({"kind": "find", "title": "B 1: Earth-like world"}, now=1009)
-        shown = lambda: [p["id"] for p in self.state.overlay_panels(now=1010)]
-        ship = ed_outrider.FLAG_IN_MAIN_SHIP
-        self.assertEqual(shown(), ["body", "strip", "now", "bio", "alerts"])         # flying: all of them
-        st["flags"] = ship | ed_outrider.FLAG_DOCKED
-        self.assertEqual(shown(), ["strip", "alerts"])                               # docked, the defaults
-        st.update(flags=0, flags2=1 | (1 << 13))                                     # on foot in a hangar: the same
-        self.assertEqual(shown(), ["strip", "alerts"])
-        st.update(flags=ship | ed_outrider.FLAG_DOCKED, flags2=0)
-        for p in ("body", "strip", "now", "bio", "alerts"):                          # each box on its own
-            others = [x for x in ("body", "strip", "now", "bio", "alerts") if x != p]
-            self.state.overlay_cfg["hide_docked"] = others
-            self.assertEqual(shown(), [p], p)
-        self.state.overlay_cfg["hide_docked"] = []                                   # nothing ticked: all of them docked
-        self.assertEqual(shown(), ["body", "strip", "now", "bio", "alerts"])
-        self.state.overlay_cfg["hide_docked"] = list(O.HIDE_DOCKED_DEFAULT)
-        st["gui_focus"] = ed_outrider.OVERLAY_GALAXY_MAP                             # the galaxy map: the Target panel shows
-        self.assertEqual(shown(), ["body", "alerts"])
-        st.update(gui_focus=0, flags=ship | ed_outrider.FLAG_SUPERCRUISE)            # the system panel: hidden docked only
-        self.state.overlay_cfg.update(system_panel=True)
-        self.assertEqual(shown()[0], "system")
-
-    def test_alerts_panel(self):
-        """S26: an alert the page posts shows on the Alerts panel for ALERT_SECONDS wherever the overlay shows panels
-        (docked, on foot, over the galaxy map beside the Target panel), never over the system map; kept only while
-        the overlay and the panel are on; analysis only applies to it as to the others."""
-        st = self.target_setup()
-        shown = lambda now=1010: [p["id"] for p in self.state.overlay_panels(now=now)]
-        post = lambda title, now=1010, **kw: self.state.overlay_alert(dict({"kind": "find", "title": title}, **kw), now=now)
-        self.assertEqual(post("Off"), ({"kept": False, "why": "the overlay or its Alerts panel is off"}, 200))
-        self.assertEqual(self.state.overlay_alerts, [])
-        self.state.overlay_cfg.update(alerts_panel=True)
-        self.assertEqual(post("B 1: Earth-like world", body="2.4M cr"), ({"kept": True}, 200))
-        self.assertEqual(post("B 1: Earth-like world", now=1011, body="2.4M cr"), ({"kept": False}, 200))   # another window's
-        self.assertEqual(post(""), ({"error": f"title: text, 1 to {O.ALERT_TITLE_MAX} characters"}, 400))
-        self.assertEqual(shown(), ["alerts"])
-        st["flags"] = ed_outrider.FLAG_IN_MAIN_SHIP | ed_outrider.FLAG_DOCKED            # docked: still shown
-        self.assertEqual(shown(), ["alerts"])
-        st.update(flags=0, flags2=1)                                                    # on foot
-        self.assertEqual(shown(), ["alerts"])
-        self.state.journals.handle({"event": "FSDTarget", "timestamp": ed_outrider.iso_ts(1005), "Name": "Ossia",
-                                    "SystemAddress": 99, "StarClass": "K"})
-        st.update(flags=ed_outrider.FLAG_IN_MAIN_SHIP, flags2=0, gui_focus=ed_outrider.OVERLAY_GALAXY_MAP)
-        self.assertEqual(shown(), ["body", "alerts"])                                  # over the galaxy map too
-        st["gui_focus"] = 7
-        self.assertEqual(shown(), [])                                                  # the system map: nothing
-        st["gui_focus"] = 0
-        self.assertEqual(shown(1010 + O.ALERT_SECONDS), ["body"])                      # gone after 8 s
-        self.state.overlay_cfg.update(analysis_only=["alerts"])
-        self.assertEqual(shown(), ["body"])                                            # combat mode: off
-        st["flags"] |= ed_outrider.FLAG_HUD_ANALYSIS
-        self.assertEqual(shown(), ["body", "alerts"])
-        self.state.overlay_cfg.update(alerts_panel=False)
-        self.assertEqual(shown(), ["body"])
 
     def test_radar_on_a_body(self):
         self.state.overlay_cfg.update(enabled=True, system_panel=False, body_panel=False)
@@ -1500,11 +1018,9 @@ class Server(unittest.TestCase):
         self.assertIn("Next: bio on B 2: Fonticulua", texts(now))                # the config's levels (bio_min 10M)
         st["gui_focus"] = 6                                                       # the galaxy map: nothing
         self.assertEqual(self.state.overlay_panels(now=1010), [])
-        st.update(gui_focus=0, flags=ed_outrider.FLAG_DOCKED | ed_outrider.FLAG_IN_MAIN_SHIP)     # docked: neither (hide_docked's default)
-        self.assertEqual([p["id"] for p in self.state.overlay_panels(now=1010)], [])
-        st.update(flags=0, flags2=1 | (1 << 3))                                   # on foot in the station: neither
-        self.assertEqual([p["id"] for p in self.state.overlay_panels(now=1010)], [])
-        self.state.overlay_cfg.update(hide_docked=["now"])                        # Bio unticked: it shows docked
+        st.update(gui_focus=0, flags=ed_outrider.FLAG_DOCKED | ed_outrider.FLAG_IN_MAIN_SHIP)     # docked: no Now
+        self.assertEqual([p["id"] for p in self.state.overlay_panels(now=1010)], ["bio"])
+        st.update(flags=0, flags2=1 | (1 << 3))                                   # on foot in the station: no Now
         self.assertEqual([p["id"] for p in self.state.overlay_panels(now=1010)], ["bio"])
         st.update(flags=ed_outrider.FLAG_SUPERCRUISE | ed_outrider.FLAG_IN_MAIN_SHIP, flags2=0)  # undocked: back
         self.assertEqual([p["id"] for p in self.state.overlay_panels(now=1010)], ["now", "bio"])
@@ -1552,185 +1068,9 @@ class Server(unittest.TestCase):
                                                                         ("/api/overlay/layout", {"system": {"y": 0.5}}))]
                 self.assertEqual(server, [409, 409])
                 self.state.game_pc = True
-                # S26: the page's alerts, pc_only like the rest; checked, capped, refused from another site
-                self.state.overlay_cfg.update(enabled=True, alerts_panel=True)
-                one = {"kind": "hull", "title": "Interdicted", "body": "you submitted", "danger": True}
-                alerts = [await (await c.post("/api/overlay/alert", json=one)).json(),
-                          (await c.post("/api/overlay/alert", json=dict(one, body="x" * 400))).status,
-                          (await c.post("/api/overlay/alert", data="[1]", headers={"Content-Type": "application/json"})).status,
-                          (await c.post("/api/overlay/alert", json=dict(one, title="Other"),
-                                        headers={"Origin": "http://evil.example"})).status]
-                self.state.game_pc = False
-                alerts.append((await c.post("/api/overlay/alert", json=one)).status)
-                self.state.game_pc = True
-                self.assertEqual(alerts, [{"kept": True}, 400, 400, 403, 409])
-                self.assertEqual([a["title"] for a in self.state.overlay_alerts], ["Interdicted"])
                 return (first, same, bad, ok, lay.status, (await lay.json())["layout"]["system"]["y"], lay_bad, cross,
                         seen_by_visitor, seen_by_window)
         first, same, bad, ok, lay, y, lay_bad, cross, by_visitor, by_window = asyncio.run(go())
         self.assertEqual((by_visitor, by_window), (False, True))   # only the overlay window counts as drawing
         self.assertEqual((first["panels"], same["same"], bad, ok["test"], lay, y, lay_bad, cross),
                          ([], True, 400, O.TEST_SECONDS, 200, 0.5, 400, 403))
-
-
-class FakeRunner:
-    """OverlayRunner's face to the State (status, tick, proc): starts at "off", "starting" on the first wanted tick,
-    "running" after; never a process."""
-
-    def __init__(self, state="off", why=None):
-        self.state, self.why, self.proc, self.wants = state, why, None, []
-
-    def status(self):
-        return {"state": self.state, "why": self.why}
-
-    def tick(self, want):
-        self.wants.append(want)
-        self.state = ("starting" if self.state == "off" else "running") if want else "off"
-
-
-class Pill(unittest.TestCase):
-    """S8: the page's overlay pill, from the runner, the window's word (&w=), the game and DisplaySettings.xml."""
-
-    def test_health(self):
-        run = {"state": "running", "why": None}
-        h = lambda **kw: O.health(**dict(dict(wanted=True, runner=run, track="drawing", quiet=1, started=True, live=True,
-                                              loading=False), **kw))
-        self.assertEqual(h(), {"state": "ok", "code": "drawing", "why": "drawing over Elite"})
-        self.assertIsNone(h(wanted=False))                     # the overlay off: no pill
-        self.assertIsNone(h(runner=None))                      # no window run here (a server)
-        word = lambda **kw: (h(**kw)["state"], h(**kw)["code"])
-        self.assertEqual(word(runner={"state": "installing", "why": None}), ("wait", "installing"))
-        self.assertEqual(word(runner={"state": "install_failed", "why": "no network"}), ("bad", "install_failed"))
-        self.assertIn("no network", h(runner={"state": "install_failed", "why": "no network"})["why"])
-        self.assertEqual(word(runner={"state": "failed", "why": "it stopped 5 times"}), ("bad", "failed"))
-        self.assertEqual(word(runner={"state": "restarting", "why": "stopped"}), ("wait", "restarting"))
-        self.assertEqual(word(runner={"state": "starting", "why": None}), ("wait", "starting"))
-        self.assertEqual(word(started=False, quiet=3), ("wait", "starting"))           # started, not asked yet
-        self.assertEqual(word(started=False, quiet=O.QUIET_S + 1), ("bad", "quiet"))    # started and never asked
-        self.assertEqual(word(quiet=O.QUIET_S + 1), ("bad", "quiet"))                  # asked, then went quiet
-        self.assertEqual(word(quiet=None, started=False, runner={"state": "off", "why": None}), ("wait", "starting"))
-        # the tools first (a fix for the player, whatever the game does), then the game, then the window's word
-        self.assertEqual(word(track="no_wmctrl", live=False), ("bad", "no_wmctrl"))
-        self.assertIn("wmctrl not installed", h(track="no_wmctrl")["why"])
-        self.assertEqual(word(track="no_xprop"), ("bad", "no_xprop"))
-        self.assertEqual(word(track="no_window", loading=True), ("wait", "loading"))
-        self.assertEqual(word(track="no_window", live=False), ("wait", "no_game"))
-        self.assertEqual(word(track="no_window"), ("bad", "no_window"))
-        self.assertEqual(word(fullscreen=True), ("bad", "fullscreen"))
-        self.assertIn("Borderless", h(fullscreen=True)["why"])
-        for code, level in (("behind", "wait"), ("hidden", "wait"), ("covered", "wait"), ("no_tracker", "bad")):
-            self.assertEqual(word(track=code), (level, code))
-        self.assertEqual(word(track=None), ("wait", "starting"))
-        self.assertEqual(set(O.TRACK_WHY), set(O.TRACK_CODES))
-
-    def test_display_settings(self):
-        """Exclusive fullscreen from the game's DisplaySettings.xml, found from the journal folder (Proton or Windows)."""
-        j = os.path.join("pfx", "drive_c", "users", "steamuser", "Saved Games", "Frontier Developments", "Elite Dangerous")
-        got = O.display_settings_paths([j, j + os.sep], {"LOCALAPPDATA": "L"})
-        self.assertEqual(got, [os.path.join("pfx", "drive_c", "users", "steamuser", "AppData", "Local", "Frontier Developments",
-                                            "Elite Dangerous", "Options", "Graphics", "DisplaySettings.xml"),
-                               os.path.join("L", "Frontier Developments", "Elite Dangerous", "Options", "Graphics",
-                                            "DisplaySettings.xml")])
-        xml = "<?xml version=\"1.0\"?>\n<DisplayConfig>\n\t<ScreenWidth>2560</ScreenWidth>\n\t<FullScreen>{}</FullScreen>\n</DisplayConfig>\n"
-        self.assertEqual([O.display_mode(xml.format(v)) for v in ("0", "1", "2", "7")], ["windowed", "fullscreen", "borderless", None])
-        self.assertIsNone(O.display_mode("<DisplayConfig/>"))
-
-    def setUp(self):
-        self.db = ed_outrider.open_db(":memory:")
-        self.addCleanup(self.db.close)
-        self.state = ed_outrider.State(self.db, ed_outrider.Journals(self.db), types.SimpleNamespace(cached=lambda i: (None, None)), 25)
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        self.tmp = tmp.name
-        self.state.config_path = os.path.join(tmp.name, "ed_outrider.toml")
-        live = ed_outrider.LIVE_DIRS
-        ed_outrider.LIVE_DIRS = []
-        self.addCleanup(setattr, ed_outrider, "LIVE_DIRS", live)
-
-    def test_the_windows_word(self):
-        """The window's &w= is kept from its own GETs only, a known word only; the page is woken when it changes."""
-        s = self.state
-        s.overlay_view(now=10, window=False, track="behind")       # another visitor: not the window
-        self.assertIsNone(s.overlay_track)
-        v0 = s.version
-        s.overlay_view(now=11, track="behind")
-        self.assertEqual((s.overlay_track, s.version), ("behind", v0 + 1))
-        s.overlay_view(now=12, track="behind")                      # the same word: nothing to wake the page for
-        s.overlay_view(now=13, track="nonsense")                    # not a word: ignored
-        self.assertEqual((s.overlay_track, s.version), ("behind", v0 + 1))
-        s.overlay_view(now=14, track="drawing")
-        self.assertEqual((s.overlay_track, s.version), ("drawing", v0 + 2))
-
-    def test_pill_from_the_server(self):
-        s = self.state
-        self.assertIsNone(s.overlay_info(now=100)["pill"])           # no runner (a server, tests): no pill
-        s.overlay_runner = FakeRunner()
-        self.assertIsNone(s.overlay_info(now=100)["pill"])           # the overlay off
-        s.overlay_cfg.update(enabled=True)
-        last = s.overlay_window_tick(None, now=100)                   # the runner starts the window
-        self.assertEqual((s.overlay_started, s.overlay_info(now=100)["pill"]["code"]), (100, "starting"))
-        s.overlay_window_tick(last, now=102)                          # running, not asked yet
-        self.assertEqual(s.overlay_pill(now=103)["code"], "starting")
-        self.assertEqual(s.overlay_pill(now=100 + O.QUIET_S + 1)["code"], "quiet")   # never asked
-        s.overlay_view(now=104, track="drawing")
-        self.assertEqual(s.overlay_pill(now=105)["code"], "no_game")  # Elite not running (no live Status.json)
-        s.journals.status_json = {"live": True, "flags": 0}
-        self.assertEqual(s.overlay_pill(now=105), {"state": "ok", "code": "drawing", "why": "drawing over Elite"})
-        # a window gone quiet changes the pill with nothing else happening: the watcher's tick wakes the page
-        last = s.overlay_window_tick(None, now=105)
-        v0 = s.version
-        last = s.overlay_window_tick(last, now=106)
-        self.assertEqual(s.version, v0)
-        last = s.overlay_window_tick(last, now=104 + O.QUIET_S + 1)
-        self.assertEqual((s.version, last[1]["code"]), (v0 + 1, "quiet"))
-
-    def test_exclusive_fullscreen(self):
-        s = self.state
-        user = os.path.join(self.tmp, "steamuser")
-        jdir = os.path.join(user, "Saved Games", "Frontier Developments", "Elite Dangerous")
-        gdir = os.path.join(user, "AppData", "Local", "Frontier Developments", "Elite Dangerous", "Options", "Graphics")
-        os.makedirs(jdir)
-        os.makedirs(gdir)
-        with open(os.path.join(gdir, "DisplaySettings.xml"), "w", encoding="utf-8") as f:
-            f.write("<DisplayConfig><FullScreen>1</FullScreen></DisplayConfig>")
-        ed_outrider.LIVE_DIRS = [jdir]
-        s.overlay_runner = FakeRunner("running")
-        s.overlay_cfg.update(enabled=True)
-        s.journals.status_json = {"live": True, "flags": 0}
-        s.overlay_view(now=200, track="drawing")
-        self.assertEqual(s.overlay_pill(now=201)["code"], "fullscreen")
-        with open(os.path.join(gdir, "DisplaySettings.xml"), "w", encoding="utf-8") as f:
-            f.write("<DisplayConfig><FullScreen>2</FullScreen></DisplayConfig>")
-        self.assertEqual(s.overlay_pill(now=202)["code"], "fullscreen")                     # looked at now and then
-        later = 200 + ed_outrider.OVERLAY_DISPLAY_CHECK_S + 2
-        s.overlay_view(now=later, track="drawing")
-        self.assertEqual(s.overlay_pill(now=later)["code"], "drawing")
-
-    def test_show_inactive(self):
-        """S25: [overlay] show_inactive, switched from Settings, written for the next start, in the window's answer."""
-        s = self.state
-        self.assertFalse(s.overlay_view(now=1)["show_inactive"])
-        out, status = s.overlay_set({"show_inactive": True}, now=2)
-        self.assertEqual((status, out["show_inactive"]), (200, True))
-        self.assertTrue(s.overlay_view(now=3)["show_inactive"])
-        with open(s.config_path, encoding="utf-8") as f:
-            self.assertIn("show_inactive = true", f.read())
-        self.assertEqual(s.overlay_set({"show_inactive": "yes"}, now=4)[1], 400)
-
-    def test_show_inactive_setting(self):
-        self.assertFalse(O.overlay_settings({})["overlay"]["show_inactive"])
-        self.assertTrue(O.overlay_settings({"overlay": {"show_inactive": True}})["overlay"]["show_inactive"])
-        with contextlib.redirect_stderr(io.StringIO()) as e:
-            self.assertFalse(O.overlay_settings({"overlay": {"show_inactive": "on"}})["overlay"]["show_inactive"])
-        self.assertIn("show_inactive", e.getvalue())
-
-    def test_the_word_through_the_route(self):
-        from aiohttp.test_utils import TestClient, TestServer
-
-        async def go():
-            async with TestClient(TestServer(ed_outrider.make_app(self.state))) as c:
-                await c.get("/api/overlay", params={"w": "covered"})                       # a visitor's word: ignored
-                visitor = self.state.overlay_track
-                await c.get("/api/overlay", params={"w": "covered"}, headers={"User-Agent": "outrider-overlay"})
-                return visitor, self.state.overlay_track
-        self.assertEqual(asyncio.run(go()), (None, "covered"))

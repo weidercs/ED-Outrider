@@ -497,56 +497,6 @@ class Honker:
             self.stop.wait(min(0.05, left))
 
 
-UINPUT = "/dev/uinput"
-# the udev rule that gives the logged-in user /dev/uinput (Steam's controller rule, the steam-devices package, has the same)
-UACCESS_RULE = 'KERNEL=="uinput", SUBSYSTEM=="misc", OPTIONS+="static_node=uinput", TAG+="uaccess"'
-UACCESS_FILE = "/etc/udev/rules.d/60-ed-outrider-uinput.rules"
-
-
-def readiness(backend, combo, platform=None, uinput=UINPUT, exists=os.path.exists,
-              writable=lambda p: os.access(p, os.W_OK), off=None):
-    """Whether auto honk can work here, said up front (Settings -> Auto honk, GET /api/autohonk/check; S69), WITHOUT
-    pressing anything: no virtual keyboard is created and no device opened, only looked at. backend: what
-    keyboard_backend() gave (None: missing); combo: () -> (keys or None, text), Honker.combo (reads the controls preset
-    only); off: why the keyboard is switched off on purpose (--simulate). -> {ready, checks: [{id, ok, label, fix,
-    commands}]}: each check in order, a failed one with its fix in words and the commands that do it."""
-    platform = sys.platform if platform is None else platform
-    checks = []
-
-    def check(cid, ok, label, fix=None, commands=()):
-        checks.append({"id": cid, "ok": bool(ok), "label": label, "fix": None if ok else fix,
-                       "commands": [] if ok else list(commands)})
-    if off:
-        check("off", False, f"the virtual keyboard is off ({off})", "start Outrider without --simulate")
-    elif platform.startswith("win"):
-        check("backend", backend is not None, "Windows key presses (SendInput, experimental)",
-              "Outrider's Windows key presses could not load: say so in an issue on GitHub")
-    elif not platform.startswith("linux"):
-        check("platform", False, "auto honk runs on Linux and Windows only", "run Outrider on the game PC under Linux or Windows")
-    else:
-        check("evdev", backend is not None, "evdev" if backend is not None else "evdev is not installed",
-              "Outrider's environment lacks the python evdev package: run ./launch_outrider.sh, which installs "
-              "requirements.txt (building evdev needs your Python's headers: python3-dev on Debian and Ubuntu), or "
-              "install it by hand in the Outrider folder", [".venv/bin/pip install evdev"])
-        there = exists(uinput)
-        check("uinput", there, f"{uinput}" if there else f"{uinput} is missing",
-              "the kernel's uinput module is not loaded: load it now, and at every boot with the second command",
-              ["sudo modprobe uinput", "echo uinput | sudo tee /etc/modules-load.d/uinput.conf"])
-        if there:
-            ok = writable(uinput)
-            check("uinput_writable", ok, f"{uinput} writable" if ok else f"{uinput} is not writable for you",
-                  "give the logged-in user access with a udev rule (Steam's controller rule, the steam-devices package, "
-                  "is the same), then log out and in. The input group works too (sudo usermod -aG input $USER), but "
-                  "lets every program you run read every keyboard",
-                  [f"echo '{UACCESS_RULE}' | sudo tee {UACCESS_FILE}",
-                   "sudo udevadm control --reload-rules && sudo udevadm trigger"])
-    keys, what = combo()
-    check("binding", keys, f"Primary Fire: {' + '.join(key_label(k) for k in keys)}" if keys else f"Primary Fire: {what}",
-          "give Primary Fire a keyboard key in Elite's controls (as its second binding, keeping your trigger as the "
-          "first), in a custom preset; or set [autohonk] key")
-    return {"ready": all(c["ok"] for c in checks), "checks": checks}
-
-
 def main(argv=None):
     import argparse
     p = argparse.ArgumentParser(description="Auto honk helper: show or test Primary Fire's keyboard binding.")

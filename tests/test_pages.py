@@ -69,8 +69,6 @@ class Log(unittest.TestCase):
         self.assertEqual(outrider.log.summary(self.SAMPLES[0]), "→ Sys · 32.10 ly · 2.40 t · boosted")
         self.assertEqual(outrider.log.summary({"event": "FSDTarget", "Name": "Sys", "StarClass": "M", "RemainingJumpsInRoute": 1}),
                          "Targeted Sys (M) · 1 jump left")
-        self.assertEqual(outrider.log.summary({"event": "CarrierCrewServices", "CrewRole": "Exploration", "Operation": "Pause"}),
-                         "Carrier service Exploration: suspended")   # S55
         self.assertIn("🏁 undiscovered", outrider.log.summary(self.SAMPLES[10]))
         self.assertIn("landable 0.19 g", outrider.log.summary(self.SAMPLES[10]))
         self.assertEqual(outrider.log.summary(self.SAMPLES[21], {(1, 7): "B 7"}), "Log: Bacterium Cerbrus on B 7")
@@ -209,61 +207,6 @@ class Materials(unittest.TestCase):
         inv = outrider.materials.inventory(None)
         carbon = next(r for r in inv["rows"] if r["id"] == "carbon")
         self.assertEqual((carbon["name"], carbon["grade"], carbon["cap"]), ("Carbon", 1, 300))
-
-    def synth(self, ts, name, **mats):
-        return {"event": "Synthesis", "timestamp": ts, "Name": name, "Materials": [{"Name": k, "Count": v} for k, v in mats.items()]}
-
-    def test_recipes_learned(self):
-        """S15: each Synthesis keeps its recipe (the latest materials, how often made), even one older than the counts'
-        snapshot (its counts are in that snapshot, its recipe is not); a learned recipe overrides the table and checks it
-        (✓ with its date); a name the table lacks goes to "Other recipes you have made"; the oldest journals' object form
-        of Materials reads too."""
-        st = outrider.materials.new_state()
-        outrider.materials.apply(st, self.snap("2026-01-02T00:00:00Z", iron=30, nickel=20, sulphur=9))
-        self.assertTrue(outrider.materials.apply(st, self.synth("2026-01-01T00:00:00Z", "Limpet Basic", iron=10, nickel=10)))
-        self.assertEqual(st["counts"]["iron"], 30)   # before the snapshot: counted there already
-        outrider.materials.apply(st, self.synth("2026-01-02T00:01:00Z", "limpet basic", iron=10, nickel=10))
-        outrider.materials.apply(st, self.synth("2026-01-02T00:02:00Z", "Ammo Basic", iron=2, nickel=1, sulphur=2))
-        outrider.materials.apply(st, {"event": "Synthesis", "timestamp": "2026-01-02T00:03:00Z", "Name": "Life Support Basic",
-                                      "Materials": {"iron": 2, "nickel": 2}})   # the object form; the table says 1 nickel
-        self.assertEqual(st["counts"], {"iron": 16, "nickel": 7, "sulphur": 7})
-        self.assertEqual(st["recipes"]["Limpet Basic"], {"materials": {"iron": 10, "nickel": 10}, "ts": "2026-01-02T00:01:00Z", "n": 2})
-        inv = {r["name"]: r for r in outrider.materials.inventory(st)["synthesis"]}
-        limpet = inv["Limpet basic"]   # "Limpet Basic" and "limpet basic": one recipe, the table's matched without regard to case
-        self.assertEqual((limpet["group"], limpet["verified"], limpet["learned"]["n"], limpet["learned"]["differs"]),
-                         ("ship", True, 2, False))
-        life = inv["Life support"]
-        self.assertEqual((life["learned"]["differs"], [(m["id"], m["need"]) for m in life["materials"]], life["craftable"]),
-                         (True, [("iron", 2), ("nickel", 2)], 3))   # yours wins over the published recipe
-        other = inv["Ammo Basic"]
-        self.assertEqual((other["group"], other["journal"], other["craftable"], other["learned"]["ts"]),
-                         ("other", "Ammo Basic", 3, "2026-01-02T00:02:00Z"))
-        afmu = inv["AFMU refill basic"]   # published, not made: no ✓
-        self.assertEqual((afmu["group"], afmu["family"], afmu["grade"], afmu["verified"], afmu["learned"]),
-                         ("ship", "AFMU refill", "basic", False, None))
-        self.assertTrue(all(r["group"] in outrider.materials.SYNTH_GROUPS for r in inv.values()))
-        self.assertEqual([r["name"] for r in inv.values() if r["group"] == "fsd"],
-                         ["FSD injection basic", "FSD injection standard", "FSD injection premium"])
-        # a Synthesis with no materials (or no name) teaches nothing
-        self.assertFalse(outrider.materials.learn_recipe(st, {"event": "Synthesis", "timestamp": "2026-01-03T00:00:00Z", "Name": "X"}))
-
-    def test_published_recipes_use_known_materials(self):
-        """Every table recipe names materials the inventory knows (a typo would never be craftable), and a journal name."""
-        for name, r in outrider.materials.SYNTH.items():
-            self.assertTrue(r["name"] and r["group"] in outrider.materials.SYNTH_GROUPS, name)
-            for m in r["materials"]:
-                self.assertIn(m, outrider.materials.MATERIALS, name)
-
-    def test_recipes_through_the_reader(self):
-        """The reader keeps the recipes in meta materials (journal-derived: a re-read, PARSER_VERSION 50, fills them)."""
-        db = ed_outrider.open_db(":memory:")
-        self.addCleanup(db.close)
-        j = ed_outrider.Journals(db)
-        j.handle(self.snap(iron=30, nickel=20))
-        j.handle(self.synth("2026-01-01T00:01:00Z", "Limpet Basic", iron=10, nickel=10))
-        self.assertTrue(j.materials_changed)
-        self.assertEqual(ed_outrider.meta_get(db, "materials")["recipes"]["Limpet Basic"]["n"], 1)
-        self.assertGreaterEqual(ed_outrider.PARSER_VERSION, 50)
 
 
 class Schematic(unittest.TestCase):

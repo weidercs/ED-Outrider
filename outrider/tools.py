@@ -13,12 +13,9 @@ Answers are trimmed to what answers the question, lists capped at max_rows with 
 import re
 import urllib.parse
 
-import outrider.dock as dock
-
 # the GET routes a tool may read (path prefixes); /api/find is left out on purpose: it can store an EDSM hit
 READ_ROUTES = ("/api/status", "/api/nearby", "/api/system/", "/api/body", "/api/firsts", "/api/left", "/api/highway",
-               "/api/history", "/api/materials", "/api/nearest",   # /api/nearest only ever with cached=1 (no DSSA fetch)
-               "/api/ggg")   # S27: Outrider's cache only, never Spansh
+               "/api/history", "/api/materials", "/api/nearest")   # /api/nearest only ever with cached=1 (no DSSA fetch)
 DEFAULT_ROWS = 25
 NOT_RUNNING = "Outrider isn't running (start it, then ask again)"
 
@@ -87,12 +84,11 @@ def _int(args, key, default, lo, hi):
 # ---- the tools ----
 
 @tool("current_status", "Where the commander is now: system, region, fuel and jumps left, jump range, the target, "
-      "unsold data value, the body they are on (or flying near, or have targeted in this system) and any exobiology "
-      "sample under way, and their carrier.")
+      "unsold data value, the body they are on and any exobiology sample under way, and their carrier.")
 async def current_status(get, args, rows):
     s = await get("/api/status")
     return {k: s.get(k) for k in ("system", "region", "fuel_pct", "fuel_jumps", "jump_range", "boost", "target", "unsold",
-                                  "on_body", "near_body", "target_body", "sampling", "carrier")}
+                                  "on_body", "sampling", "carrier")}
 
 
 def _body_brief(b):
@@ -166,11 +162,9 @@ async def nearest_unvisited(get, args, rows):
 
 @tool("nearest_dock", "The nearest stations and fleet carriers the commander can dock at (pad size, docking access, "
       "recent reports), from Spansh, the Deep Space Support Array's list and their own carrier; optionally only those "
-      "with given services, a material trader among them.",
-      {"need": {"type": "array", "items": {"type": "string", "enum": list(dock.SERVICES)},
-                "description": "services every place must have (UC: Universal Cartographics, Vista: Vista Genomics; "
-                               "Trader: a material trader of any kind, Raw / Manufactured / Encoded: a material trader of "
-                               "that kind, at stations only)"},
+      "with given services.",
+      {"need": {"type": "array", "items": {"type": "string", "enum": ["UC", "Vista", "Repair", "Refuel", "Shipyard", "Outfitting"]},
+                "description": "services every place must have (UC: Universal Cartographics, Vista: Vista Genomics)"},
        "kind": {"type": "string", "enum": ["any", "station", "carrier"], "description": "stations, carriers or both (default)"},
        "age_days": {"type": "integer", "description": "leave out reports older than this (default 30)"}})
 async def nearest_dock(get, args, rows):
@@ -194,22 +188,6 @@ async def nearest_dock(get, args, rows):
     # so the answer can say so rather than call a far carrier the nearest place
     return {"hidden": d.get("hidden"), "pad": d.get("pad"), "errors": d.get("errors") or None,
             **capped(map(brief, d.get("rows") or []), min(rows, 10), "places")}
-
-
-@tool("nearest_ggg", "The nearest potential green gas giants in what Outrider has cached (Spansh's records and the "
-      "commander's scans): the community's ladder model on each giant's temperature, mass and radius, a guess to check "
-      "in the system map, never a fact.",
-      {"radius_ly": {"type": "integer", "description": "how far to look in light years (default 500, at most 1000)"}})
-async def nearest_ggg(get, args, rows):
-    d = await get("/api/ggg", {"radius": str(_int(args, "radius_ly", 500, 1, 1000))})
-    if d.get("error"):
-        return {"error": d["error"]}
-    giants = [{"system": b.get("system"), "body": b.get("body"), "distance_ly": rnd(b.get("distance")), "chance": b.get("chance")}
-              for b in d.get("bodies") or []]
-    out = {"radius_ly": d.get("radius"), "systems_searched": d.get("searched"), **capped(giants, min(rows, 10), "giants")}
-    if d.get("more"):
-        out["more"] = out.get("more", 0) + d["more"]
-    return out
 
 
 @tool("body_detail", "One body in the current system (or another system by its id64): its values, signals, biology "
@@ -263,23 +241,15 @@ async def unsold_data(get, args, rows):
                      rows, "unsold_firsts")}
 
 
-@tool("left_behind", "Visited systems within a radius that still have work worth going back for, nearest first: bodies "
-      "never found, biology never sampled (with what it could pay, an upper bound), planets worth mapping (with what "
-      "mapping adds), and each system's worth (those values added up).",
+@tool("left_behind", "Visited systems within a radius that still have work worth going back for: bodies never found, "
+      "biology never sampled, planets worth mapping.",
       {"radius_ly": {"type": "integer", "minimum": 10, "maximum": 500, "description": "how far around (default 100)"}})
 async def left_behind(get, args, rows):
     r = _int(args, "radius_ly", 100, 10, 500)
     d = await get("/api/left", {"radius": str(r)})
-    xs = []
-    for x in d.get("systems") or []:
-        # S14: the values /api/left carries per item, passed on (the voice filters them at the server's thresholds)
-        bio = [{"body": b.get("body"), "up_to": b.get("value") or 0} if isinstance(b, dict) else {"body": b, "up_to": 0}
-               for b in x.get("bio") or []]
-        maps = [{"body": m.get("body"), "type": m.get("subtype"), "adds": m.get("increment") or 0}
-                for m in x.get("maps") or [] if isinstance(m, dict)]
-        xs.append({"name": x.get("name"), "distance_ly": rnd(x.get("distance"), 1), "bodies_not_found": x.get("unfound") or None,
-                   "bio": bio or None, "map": maps or None, "worth_mapping": x.get("maps_total") or None,
-                   "worth": sum(b["up_to"] for b in bio) + sum(m["adds"] for m in maps)})
+    xs = [{"name": x.get("name"), "distance_ly": rnd(x.get("distance"), 1), "bodies_not_found": x.get("unfound") or None,
+           "bio": [b.get("body") if isinstance(b, dict) else b for b in x.get("bio") or []] or None,
+           "worth_mapping": x.get("maps_total") or None} for x in d.get("systems") or []]
     return {"radius_ly": r, **capped(({k: v for k, v in x.items() if v is not None} for x in xs), rows, "systems")}
 
 
@@ -326,10 +296,9 @@ async def materials(get, args, rows):
     if want:
         held = [r for r in held if want in (r.get("name") or "").lower()]
     held.sort(key=lambda r: -((r.get("count") or 0) / (r.get("cap") or 1)))
-    # group and grade: the voice's "FSD injections" picks the three by group (S14), never by a recipe's name
-    return {"synthesis": [{"name": s.get("name"), "group": s.get("group"), "grade": s.get("grade"), "can_make": s.get("craftable"),
-                           "limited_by": s.get("limit") or None} for s in d.get("synthesis") or []],
-            "counts_from": d.get("snapshot_ts"), "stale": d.get("stale") or None,
+    return {"synthesis": [{"name": s.get("name"), "can_make": s.get("craftable"), "limited_by": s.get("limit") or None}
+                          for s in d.get("synthesis") or []],
+            "stale": d.get("stale") or None,
             **capped(({"name": r.get("name"), "grade": r.get("grade"), "category": r.get("category"), "count": r.get("count"),
                        "cap": r.get("cap")} for r in held), rows, "held")}
 
