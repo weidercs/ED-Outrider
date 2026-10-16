@@ -2,6 +2,22 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-16 · Ivanova (Station Cmdr), a personality
+- `resources/personalities/ivanova.json` ("Ivanova (Station Cmdr)"): every alert, ~50 clean and ~50 swearing versions
+  each (5,916 lines), after research into the Babylon 5 character and the author's brief:
+  - **The character:** a temperamental subordinate of Russian ancestry, quick to anger and quick to joke,
+    fatalistic. Bored by routine exploration, won over by big money and the rare, eager for action; in danger it
+    grumbles and gives the right advice.
+  - **Shared-history tall tales** set in famous places (the bars on Jameson Memorial, the Hutton Orbital run, the
+    Fuel Rats), never your real log, plus a grandmother's sayings.
+  - **Russian:** about one line in sixty has a Russian word.
+  - **Swearing:** none in the clean list; the swearing list swears often, every word.
+  - **Gender neutral.** It calls you Commander or Sir.
+- Babylon 5 quotes the author approved, each at most twice (four for "Ivanova is God", alone and ending the
+  mantra): "No boom today. Boom tomorrow. There's always a boom tomorrow.", the "Ivanova is always right" mantra,
+  "I am death incarnate…", "I've always had a hard time getting up when it's dark outside.", "Boom. Boom, boom,
+  boom…", "Let's try not to get killed."
+
 ## 2026-10-16 · A Vulcan personality
 - `resources/personalities/vulcan.json` ("Vulcan"): every alert, ~50 versions each (3,003 lines), after research
   into Vulcan speech and the author's brief:

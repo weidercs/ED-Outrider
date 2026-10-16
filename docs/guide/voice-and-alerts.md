@@ -160,7 +160,8 @@ Sound: Allow; Firefox: Autoplay: Allow Audio and Video).
 - **Personalities.** Down to business, sarcastic and sweet, up to fifty lines per alert each (fifty for most), and
   **US Navy** and **Royal Navy** ("by the book": professional alerts, crisp reports, a friendlier "Skipper" between
   watches; they call you Captain or Sir), and **Vulcan** (dry, precise, never excited, never swears, a little
-  disappointed in its human captain); tick any mix.
+  disappointed in its human captain), and **Ivanova (Station Cmdr)** (temperamental, fatalistic, bored by routine
+  exploration and eager for action, full of tall tales; it calls you Commander or Sir); tick any mix.
   **With profanity** uses the swearing versions the share of the time you set (50% by default). **One personality per system** holds one character a system.
 - **Danger alerts always down to business** (on by default): danger is said plainly, never sworn.
 - **Your names.** Commander names are often unpronounceable, so the voice calls you by the names in
