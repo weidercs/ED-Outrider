@@ -2,6 +2,21 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-16 · A Vulcan personality
+- `resources/personalities/vulcan.json` ("Vulcan"): every alert, ~50 versions each (3,003 lines), after research
+  into Vulcan speech and the author's brief:
+  - **The character:** a subordinate, haughty and proud, serving under a human. It never says so, but it is
+    passive-aggressive in a completely emotionless way. It never lies and is never excited, though it can be
+    insistent.
+  - **Speech:** no contractions, no exclamation marks, no swearing (so no swearing list).
+  - **Humour,** always unintentional: human idioms tried and taken literally, clinical understatement, ludicrous
+    precision about people (never invented game facts).
+  - **Words:** "Fascinating", "logical" and "illogical" are frequent.
+  - **How it addresses you:** Captain or Sir.
+- Quotes the author approved, each at most twice: "Live long and prosper.", "Peace and long life.", "Logic is the
+  beginning of wisdom, not the end.", "Insufficient facts always invite danger.", "Change is the essential process
+  of all existence.", "Nowhere am I so desperately needed as among a shipload of illogical humans."
+
 ## 2026-10-16 · Two naval personalities: US Navy and Royal Navy, by the book
 - `resources/personalities/naval_us.json` ("US Navy: by the book") and `naval_rn.json` ("Royal Navy: by the book",
   British usage and spelling, for English voices): every alert, ~50 clean and ~50 swearing versions each (5,946 and
