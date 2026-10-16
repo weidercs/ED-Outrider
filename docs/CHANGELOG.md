@@ -2,6 +2,19 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-16 · A Klingon personality
+- `resources/personalities/klingon.json` ("Klingon"): every alert, ~50 clean and ~50 swearing versions each (5,977
+  lines), after research into Klingon culture and the author's brief:
+  - **The character:** loud, aggressive and exuberant, always saying what it thinks. A subordinate who acts as your
+    partner, cares for honour over credits, and treats exploration as the hunt and the conquest. In danger it gives
+    sound advice and hates running.
+  - **Insults:** Klingon insults in English in both lists ("son of a targ", "Ferengi-hearted coward"); the swearing
+    list adds human swear words on about a quarter of its lines. The two lists share no line.
+  - **Klingon words:** a few, spelled for the voice (Kapla, batleth, Sto-vo-kor, gak, bloodwine, Kahless).
+  - **Address and gender:** gender neutral; it calls you Captain, Sir, Commander or My Lord.
+- Quotes the author approved, each twice: "Today is a good day to die.", "Revenge is a dish best served cold.", "Only
+  a fool fights in a burning house."; "Kapla!" as a sign-off.
+
 ## 2026-10-16 · Two southern personalities: Good Ol' Boy and Southern Belle
 - `resources/personalities/good_ol_boy.json` ("Good Ol' Boy", 5,998 lines) and `southern_belle.json` ("Southern
   Belle", 5,987 lines): every alert, ~50 clean and ~50 swearing versions each, from one brief:
