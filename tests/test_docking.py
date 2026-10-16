@@ -205,6 +205,22 @@ class Docking(unittest.TestCase):
         self.ev("SendText", -1, To="local", Message="!sppad 3", Sent=True)   # a test: said at once whatever is fitted
         self.assertEqual(len(self.granted()), 2)
 
+    def test_the_delay_is_a_setting(self):
+        """[speech] pad_delay (Kurbo26, 2026-10-15: some stations' controllers talk for up to 13 s): read and kept to 0-20 s,
+        5 unset; the next grant waits that long (the docking computer's wait is its own)."""
+        args = types.SimpleNamespace(**{k: None for k in ("journals", "legacy", "host", "port", "db", "radius")})
+        read = lambda spk: ed_outrider.settings_from({"speech": spk}, args)["pad_delay"]
+        self.assertEqual([read({}), read({"pad_delay": 12}), read({"pad_delay": 99}), read({"pad_delay": -3})], [5, 12, 20, 0])
+        self.assertIn("pad_delay = 12", ed_outrider.config_text(ed_outrider.settings_from({"speech": {"pad_delay": 12}}, args)))
+        self.fit("int_fuelscoop_size5_class5")
+        self.j.pad_delay = 12
+        self.ev("DockingGranted", -2, LandingPad=7, StationName="G0X-85Z", StationType="FleetCarrier")
+        self.assertFalse(self.state.docking_release(time.time() - 2 + 6))    # the old 5 s: not yet
+        self.assertTrue(self.state.docking_release(time.time() - 2 + 12))
+        self.j.pad_delay = 0
+        self.ev("DockingGranted", -1, LandingPad=8, StationName="G0X-85Z", StationType="FleetCarrier")
+        self.assertTrue(self.state.docking_release(time.time()))              # 0: at once
+
     def test_a_dock_or_leaving_drops_the_hold(self):
         self.fit("int_dockingcomputer_advanced")
         self.ev("DockingGranted", -6, LandingPad=34, StationName="Jameson Memorial", StationType="Orbis")

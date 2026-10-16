@@ -1026,6 +1026,7 @@ def settings_from(cfg, args, env_journals=None, detected=((), ())):
         "voices_loaded": VOICES_LOADED if spk.get("voices_loaded") is None else
         num("speech", spk, "voices_loaded", _config_voices_loaded, outrider.tts.VOICES_LOADED_DEFAULT),
         "voices_preload": flag("speech", spk, "voices_preload", VOICES_PRELOAD),
+        "pad_delay": int(min(PAD_DELAY_MAX, max(0, num("speech", spk, "pad_delay", int, GRANT_SAY_DELAY_S)))),
         # your own alert sounds: <name>.wav files replacing sounds.json's (review S16); "" for none
         "sound_dir": os.path.join(SCRIPT_DIR, os.path.expanduser(str(spk["sound_dir"])))
                      if isinstance(spk.get("sound_dir"), str) and spk["sound_dir"].strip() else "",
@@ -1171,6 +1172,7 @@ watch_firsts = {"true" if st["watch_firsts"] else "false"}   # check your unsold
 server_player = {q(st["server_player"])}   # auto (the first of pw-play, paplay, aplay, ffplay found), one of those, or off (Linux)
 {"" if st["sound_dir"] else "# "}sound_dir = {p(_root_relative(st["sound_dir"]) if st["sound_dir"] else "my-sounds")}   # your own alert sounds: <name>.wav (fanfare, thud, chime, alert...), up to 3 s each
 {"# " if st["voices_loaded"] is None else ""}voices_loaded = {q(st["voices_loaded"]) if st["voices_loaded"] == "all" else st["voices_loaded"] or outrider.tts.VOICES_LOADED_DEFAULT}   # voices kept loaded beside the main one (each about 1.6 times its file's size in memory: ~100 MB for a medium voice): a number, or "all"; unset, the voices in use up to 4
+pad_delay = {st["pad_delay"]}   # s: your landing pad is said this long after docking is granted, after the station's own voice (0 to {PAD_DELAY_MAX}; with a docking computer fitted: {AUTO_DOCK_WAIT_S} s, unless it takes over)
 voices_preload = {"true" if st["voices_preload"] else "false"}   # load those voices when Outrider starts (one at a time, after the journals are read), so even the first line of each starts at once; off: each loads the first time it speaks (about a second)
 
 [autohonk]   # hold Primary Fire on arriving by hyperspace, so the Discovery Scanner fires (Linux; Windows experimental; see outrider/honk.py)
@@ -1327,8 +1329,10 @@ DOCKING_WATCH = frozenset(DOCKING_EVENTS) | {"Docked", "SupercruiseEntry", "FSDJ
 # is shown at once but said only if it has not taken over within this many seconds (the author: no audio on auto-dock)
 AUTO_DOCK_WAIT_S = 12
 # with no docking computer fitted the pad is said this long after the grant, so it does not talk over the station's
-# own voice reading the grant out (Kurbo26, GitHub discussion #3; the author, 2026-10-15)
+# own voice reading the grant out (Kurbo26, GitHub discussion #3; the author, 2026-10-15); [speech] pad_delay sets it
+# (Settings -> Voice: some stations' controllers talk longer; Kurbo26 needed up to 13 s in EDCopilot), up to PAD_DELAY_MAX
 GRANT_SAY_DELAY_S = 5
+PAD_DELAY_MAX = 20
 # the In-Game Route's ⛽: a hop counts as made only while it leaves this share of the tank aboard (the author,
 # 2026-10-15: his Caspian "made" a 27-jump route with 0.1 t left)
 FUEL_REACH_RESERVE = 0.05
@@ -2590,6 +2594,7 @@ class Journals:
         # the FSS's notable stellar phenomena as they come (several lines in one moment): {system, t, counts, new, seq}
         self.nsp_burst = None
         self.docking_hold = None   # #12: a grant's moment held while the docking computer may take over (State.docking_release)
+        self.pad_delay = GRANT_SAY_DELAY_S   # s: [speech] pad_delay, set by run() and Settings -> Voice
         # a live sale still coming in (a 'Sell all' writes a page every 10 s to a minute or so): State.maybe_sale_left
         # says what it left aboard once the pages stop. {carto, systems, bio, species, read_at (wall clock)}
         self.sale_run = None
@@ -3714,9 +3719,9 @@ class Journals:
                 self.docking_hold = None
                 self.moment("docking", ts, **said)
             else:
-                # held: said by State.docking_release after the station's own voice (GRANT_SAY_DELAY_S), or with a
+                # held: said by State.docking_release after the station's own voice ([speech] pad_delay), or with a
                 # docking computer fitted after AUTO_DOCK_WAIT_S unless it takes over first (a Music line: never said)
-                wait = AUTO_DOCK_WAIT_S if self.docking_computer() else GRANT_SAY_DELAY_S
+                wait = AUTO_DOCK_WAIT_S if self.docking_computer() else self.pad_delay
                 self.docking_hold = {"until": ts_seconds(ts) + wait, "moment": said}
             return
         if name == "DockingDenied" and DENIED_WORDS.get(ev.get("Reason")):
@@ -7259,6 +7264,7 @@ class State:
             "tts": self.speaker.info() if self.speaker else None,
             "style_picks": self.style_picks(),   # S40: each personality's voice and speaker picked in Settings
             "crew": self.crew_summary(),          # the crew: who speaks each alert row, and who cannot (the XO speaks for it)
+            "pad_delay": self.journals.pad_delay,   # [speech] pad_delay: Settings -> Voice
             "voice_memory": self.voice_memory(),  # the voices besides the main one in use, their memory and how many are kept
             "sound_files": self.sounds.info() if self.sounds and self.sounds.own_dir else None,   # your own sounds (S16)
             "player": self.player.info() if self.player else None,
@@ -7456,14 +7462,16 @@ class State:
                 "restart": n > len(live), "live": live}, 200
 
     # config keys config_save also applies at once: Settings -> Voice's Keep loaded and Load them at start (crew batch 2)
-    LIVE_CONFIG = {("speech", "voices_loaded"), ("speech", "voices_preload")}
+    LIVE_CONFIG = {("speech", "voices_loaded"), ("speech", "voices_preload"), ("speech", "pad_delay")}
 
     def config_live(self, st, keys):
         """The LIVE_CONFIG keys among `keys` ((section, key) just written) set on the running Outrider from the saved
         settings `st`: the voices kept loaded beside the main one (the loaded ones over the new number set aside now) and
-        whether they load at start (used at the next start; the payload's voice_memory says it at once). The keys
-        applied, as "section.key"."""
+        whether they load at start (used at the next start; the payload's voice_memory says it at once), and how long
+        after a docking grant the pad is said (pad_delay: the next grant). The keys applied, as "section.key"."""
         done = sorted({f"{s}.{k}" for s, k in keys if (s, k) in self.LIVE_CONFIG})
+        if "speech.pad_delay" in done:
+            self.journals.pad_delay = st["pad_delay"]
         sp = self.speaker
         if done and sp is not None:
             if "speech.voices_loaded" in done:
@@ -20364,6 +20372,7 @@ async def run(args, st):
                                    on_speaker=lambda chosen: loop.call_soon_threadsafe(state.remember_speakers, chosen))
     # the voices kept loaded beside the main one, and whether they load now ([speech] voices_loaded / voices_preload)
     state.speaker.voices_loaded, state.speaker.voices_preload = st["voices_loaded"], st["voices_preload"]
+    state.journals.pad_delay = st["pad_delay"]   # [speech] pad_delay: the landing pad said after the station's voice
     print("spoken alerts: " + ("Piper found, preparing a voice" if state.speaker.available else
                                "Piper not installed, the page uses browser speech (see outrider/tts.py)"))
     state.speaker.start()

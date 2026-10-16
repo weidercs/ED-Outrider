@@ -9485,6 +9485,7 @@ function drawTts() {
   document.getElementById("soundFiles").textContent = !sf ? "" : (own.length ? `Your own sounds: ${own.join(", ")}.` : "No sound files of your own found.")
     + ((sf.problems || []).length ? ` Not used: ${sf.problems.join("; ")}.` : "");
   drawServerPlay();
+  drawPadDelay();
   drawStyleVoices();
   if (crewUi) { drawCrew(); drawVoiceMemory(); }
   drawSpeechBtn();
@@ -9655,6 +9656,23 @@ async function vmPost(key, value) {
   drawVoiceMemory();
   return r;
 }
+// how long after a docking grant the pad is said ([speech] pad_delay: the server holds the line; Kurbo26, 2026-10-15)
+function drawPadDelay() {
+  const el = document.getElementById("padDelay");
+  if (el && data && data.pad_delay != null && document.activeElement !== el) el.value = data.pad_delay;
+}
+document.getElementById("padDelay").onchange = async e => {
+  const v = Number(e.target.value), m = document.getElementById("padDelayMsg");
+  if (e.target.value === "" || !Number.isInteger(v) || v < 0 || v > 20) { m.textContent = "a whole number of seconds, 0 to 20"; m.className = "hint warnc"; return; }
+  let r;
+  try { r = await apiJson("api/config", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({speech: {pad_delay: v}})}); }
+  catch { r = {error: "Outrider not reachable"}; }
+  r = r || {error: "?"};
+  if (!r.error && data) data.pad_delay = v;
+  m.textContent = r.error ? `Not saved: ${r.error}` : "Saved in the config file ([speech] pad_delay)";
+  m.className = r.error ? "hint warnc" : "hint";
+  e.target.blur();
+};
 document.getElementById("vmKeep").onchange = e => { if (e.target.value) vmPost("voices_loaded", e.target.value); else drawVmKeep(); };
 document.getElementById("vmPreload").onchange = e => vmPost("voices_preload", e.target.checked);
 

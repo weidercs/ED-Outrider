@@ -642,6 +642,10 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
           <span class="hint">(off: each loads the first time it speaks, about a second)</span></label>
         <span id="vmMsg" class="hint" role="status"></span>
       </div>
+      <label data-find="speech.pad_delay" class="mod">Say your landing pad
+        <input type="number" id="padDelay" min="0" max="20" step="1" style="width:4em" aria-label="seconds after docking is granted"> s after docking is granted
+        <span class="hint">after the station's own voice (some talk longer); with a docking computer fitted, 12 s unless it takes over</span>
+        <span id="padDelayMsg" class="hint" role="status"></span></label>
       <div id="crewBox" class="crewbox" data-find-block="crew">
         <h4 class="crewhead">Crew</h4>
         <div class="mod inlineopts crewsw"><label><input type="checkbox" id="crewOn"> <b>Split the alerts among a crew</b></label>

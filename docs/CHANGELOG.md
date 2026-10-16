@@ -2,6 +2,12 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-15 · The landing pad's delay after a docking grant is a setting
+- Kurbo26 (discussion #3): 5 s suits him, but with EDCopilot some stations' controllers needed up to 13 s. **Settings →
+  Voice → Say your landing pad [5] s after docking is granted** (`[speech] pad_delay`, 0 to 20, `PAD_DELAY_MAX`):
+  written to the config and applied to the next grant at once (`LIVE_CONFIG` → `Journals.pad_delay`), in the payload as
+  `pad_delay`. With a docking computer fitted the wait stays AUTO_DOCK_WAIT_S (12 s) unless it takes over.
+
 ## 2026-10-15 · The fleet carrier diagram: pads 7 and 8 inside the bow
 - Kurbo26 (discussion #3) saw pads 7 and 8's outer corners poke out of the carrier's outline: its bow ran from (0, -44)
   to (26, -30), crossing x = 12 at y = -37.5, above the pads' top at -38. One outline now, `pads.CARRIER_OUTLINE` (the

@@ -8060,6 +8060,14 @@ const releasePayloads = async () => {
     got.kept = [keep.value, [...keep.options].map(o => o.value), txt("vmKeepOf"), txt("vmCost"), txt("vmMsg")];
     const pre = d.getElementById("vmPreload");
     pre.checked = true; pre.dispatchEvent(new w.Event("change")); await sleep(100);
+    // the landing pad's delay after a docking grant (Kurbo26, 2026-10-15): the server's value shown, a change posted
+    w.eval(`data.pad_delay = 7; drawPadDelay()`);
+    const pd = d.getElementById("padDelay");
+    got.padDelay = [pd.value];
+    pd.value = "13"; pd.dispatchEvent(new w.Event("change")); await sleep(100);
+    got.padDelay.push(txt("padDelayMsg"));
+    pd.value = "30"; pd.dispatchEvent(new w.Event("change")); await sleep(100);   // out of range: not sent
+    got.padDelay.push(txt("padDelayMsg"));
     got.posts = posted.splice(0);
     // the crew table
     const tr = role => d.querySelector(`#crewTable tr[data-crole="${role}"]`);
@@ -8130,7 +8138,8 @@ const releasePayloads = async () => {
       none: true,
       kept: ["2", ["1", "2", "3", "all"], "of the 3 voices in use · about 302 MB",
              "1 voice is set aside when not in use: its next line waits about a second while it loads again", "Saved in the config file ([speech] voices_loaded)"],
-      posts: [{speech: {voices_loaded: "2"}}, {speech: {voices_preload: true}}],
+      padDelay: ["7", "Saved in the config file ([speech] pad_delay)", "a whole number of seconds, 0 to 20"],
+      posts: [{speech: {voices_loaded: "2"}}, {speech: {voices_preload: true}}, {speech: {pad_delay: 13}}],
       rows: ["xo", "navigator", "science", "exobiologist", "engineer", "quartermaster", "comms", "tactical", "mining"],
       xo: [true, false, true, "Vance", "en_GB-cori-medium", false],
       nav: ["business", "en_GB-vctk-medium", false, "1", true],

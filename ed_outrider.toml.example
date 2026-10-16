@@ -165,6 +165,8 @@
 # main voice is always loaded and not counted. A voice set aside waits about a second while it loads again.
 # voices_loaded = 4        # how many to keep loaded beside the main one: a number, or "all"; unset, the voices in use
 #                          # up to 4 (a value Outrider cannot read: 4, said at start)
+# pad_delay = 5            # s: your landing pad is said this long after docking is granted, after the station's own
+#                          # voice (0 to 20; Settings -> Voice); with a docking computer fitted: 12 s, unless it takes over
 # voices_preload = false   # true: load them when Outrider starts (one at a time, after the journals are read), so
 #                          # even the first line of each starts at once; false: each loads the first time it speaks
 

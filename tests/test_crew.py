@@ -191,6 +191,15 @@ class KeepLoadedSaved(unittest.TestCase):
             return out
         return asyncio.run(go())
 
+    def test_pad_delay_applied_at_once(self):
+        """Settings -> Voice's landing pad delay ([speech] pad_delay): written to the config, applied to the next grant at
+        once, in the payload; anything but 0-20 s refused by the config's own checks."""
+        (status, answer), = self.post({"speech": {"pad_delay": 12}})
+        self.assertEqual((status, answer["live"]), (200, ["speech.pad_delay"]))
+        self.assertEqual((self.state.journals.pad_delay, self.state.payload()["pad_delay"]), (12, 12))
+        with open(self.path, encoding="utf-8") as f:
+            self.assertEqual(__import__("tomllib").loads(f.read())["speech"]["pad_delay"], 12)
+
     def test_applied_at_once(self):
         ed_outrider.meta_set(self.db, "crew", {"on": True, "members": {"navigator": {"voice": "en_GB-alan-low"}}})
         self.sp.size_extra(self.state.voices_in_use())   # the sarcastic personality's voice and the Navigator's
